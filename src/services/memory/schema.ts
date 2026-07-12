@@ -4,7 +4,7 @@
 // Schema for the new single-thread memory primitives:
 //   • memory_entities  — canonical entity registry (alias rollup)
 //   • memory_facts     — bi-temporal facts (Graphiti-style supersession)
-//   • memory_blocks    — Letta-style char-capped, agent-editable blocks
+//   • memory_working_blocks — scoped, code-owned structural working state
 //
 // These are the canonical memory tables in kavi-memory.db.
 // ---------------------------------------------------------------------------
@@ -30,6 +30,8 @@ export function ensureFactSchema(): void {
   if (schemaReady) return;
   const db = getMemoryDb();
   db.execSync(`
+    DROP TABLE IF EXISTS memory_blocks;
+
     CREATE TABLE IF NOT EXISTS memory_entities (
       id TEXT PRIMARY KEY,
       canonical_name TEXT NOT NULL,
@@ -130,18 +132,6 @@ export function ensureFactSchema(): void {
            AND memory_kind = OLD.memory_kind
            AND fact_count <= 0;
       END;
-
-    CREATE TABLE IF NOT EXISTS memory_blocks (
-      label TEXT PRIMARY KEY,
-      content TEXT NOT NULL DEFAULT '',
-      char_limit INTEGER NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      pinned INTEGER NOT NULL DEFAULT 0,
-      persona_id TEXT,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_blocks_persona
-      ON memory_blocks(persona_id);
 
     CREATE TABLE IF NOT EXISTS memory_working_blocks (
       label TEXT NOT NULL,

@@ -1,6 +1,5 @@
 import type { Message } from '../types/message';
 import { clearOldToolResults } from '../services/context/compaction';
-import { buildPostCompactionSystemContent } from '../services/context/postCompactionReinject';
 import type { CompactResult, CompactionTier } from '../services/context/types';
 import { estimateMessageTokens } from '../services/context/tokenCounter';
 
@@ -27,9 +26,6 @@ export function estimateWorkingMessageTokens(messages: Message[]): number {
 export function applyCompactionResultToWorkingMessages(
   messages: Message[],
   compactResult: CompactResult,
-  reinject?: {
-    profileSections?: ReadonlyArray<string>;
-  },
 ): OrchestratorCompactionEvent {
   if (!compactResult.compacted || !compactResult.result) {
     return {
@@ -59,10 +55,7 @@ export function applyCompactionResultToWorkingMessages(
   const firstKeptId = compactResult.result.firstKeptEntryId;
   const keptIdx = firstKeptId ? messages.findIndex((message) => message.id === firstKeptId) : -1;
   const kept = keptIdx >= 0 ? messages.slice(keptIdx) : messages.slice(-4);
-  const systemContent = buildPostCompactionSystemContent({
-    summary,
-    profileSections: reinject?.profileSections,
-  });
+  const systemContent = summary.trim();
 
   return {
     notice:

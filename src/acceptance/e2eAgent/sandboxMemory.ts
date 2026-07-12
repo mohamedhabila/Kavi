@@ -5,11 +5,6 @@
 import { closeMemoryDb, getMemoryDb } from '../../services/memory/database';
 import { closeExecutionJournalDb } from '../../services/executionJournal/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../services/memory/schema';
-import {
-  DEFAULT_MEMORY_BLOCKS,
-  ensureDefaultBlocks,
-  listBlocks,
-} from '../../services/memory/blocks';
 import { countEpisodes } from '../../services/memory/episodes/queries';
 import { countCompletedIngestionJobsForThread } from '../../services/memory/ingestionQueue';
 import { listFacts } from '../../services/memory/facts/queries';
@@ -32,7 +27,6 @@ export function resetE2EMemorySandbox(): void {
   getExpoSqliteMock().__resetExpoSqliteForTests?.();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
 }
 
 export const E2E_RESETTABLE_MEMORY_TABLES = [
@@ -61,28 +55,6 @@ export function assertE2EMemorySandboxReset(): void {
     const count = Number(row?.count ?? 0);
     if (count !== 0) {
       throw new Error(`E2E memory reset left ${count} row(s) in ${table}.`);
-    }
-  }
-  const blocks = listBlocks().sort((left, right) => left.label.localeCompare(right.label));
-  const defaults = [...DEFAULT_MEMORY_BLOCKS].sort((left, right) =>
-    left.label.localeCompare(right.label),
-  );
-  if (blocks.length !== defaults.length) {
-    throw new Error('E2E memory reset left a non-default memory block catalog.');
-  }
-  for (const [index, definition] of defaults.entries()) {
-    const block = blocks[index];
-    if (
-      block.label !== definition.label ||
-      block.content !== '' ||
-      block.charLimit !== definition.charLimit ||
-      block.description !== definition.description ||
-      block.pinned !== Boolean(definition.pinned) ||
-      block.personaId !== null ||
-      !Number.isSafeInteger(block.updatedAt) ||
-      block.updatedAt < 0
-    ) {
-      throw new Error(`E2E memory reset left non-canonical ${definition.label} block state.`);
     }
   }
 }

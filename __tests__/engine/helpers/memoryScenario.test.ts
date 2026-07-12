@@ -3,7 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import { ensureFactSchema } from '../../../src/services/memory/schema';
 import { recordCompletedTurnForMemory } from '../../../src/services/memory/lifecycle';
 import { readMemoryScenarioWorkingBlock, resetMemoryScenario } from './memoryScenario';
@@ -15,7 +14,6 @@ describe('memoryScenario helper', () => {
   beforeEach(() => {
     resetMemoryScenario(() => expoSqlite.__resetExpoSqliteForTests());
     ensureFactSchema();
-    ensureDefaultBlocks();
   });
 
   it('reads working memory after a completed turn is recorded', async () => {
@@ -26,7 +24,7 @@ describe('memoryScenario helper', () => {
     ];
 
     await recordCompletedTurnForMemory({
-      conversationId,
+      threadId: conversationId,
       messages,
       completedMessageId: 'a1',
     });

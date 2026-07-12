@@ -751,10 +751,9 @@ export const es: TranslationMap = mergeTranslations(en, {
     overviewConsolidationTitle: 'Consolidación',
     overviewLoading: 'Cargando resumen de memoria…',
     factsTab: 'Hechos',
-    blocksTab: 'Bloques',
     clearTitle: 'Borrar toda la memoria',
     clearConfirm:
-      'Esto eliminará permanentemente todos los hechos, episodios, tareas y bloques de memoria guardados. No se puede deshacer.',
+      'Esto eliminará permanentemente todos los hechos, episodios y tareas guardados. No se puede deshacer.',
     clearAction: 'Borrar todo',
     refreshing: 'Actualizando memoria…',
     lastSynced: 'Última sincronización a las {time}',
@@ -775,9 +774,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     factForgetFailedMessage: 'Vuelve a cargar la memoria e inténtalo de nuevo.',
     factPin: 'Fijar',
     factUnpin: 'Desfijar',
-    blocksEmpty: 'No hay bloques de memoria definidos.',
-    blockChars: '{used} / {limit} caracteres',
-    blockSave: 'Guardar bloque',
     disableLongTermMemory: 'Desactivar memoria a largo plazo',
     disableLongTermMemoryHint:
       'Cuando está activada, las conversaciones permanecen sin estado y no se recuerdan datos entre chats.',

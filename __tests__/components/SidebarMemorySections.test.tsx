@@ -14,13 +14,6 @@ import {
 } from '../../src/components/sidebar/SidebarMemorySections';
 
 // Mock memory readers used by the components.
-jest.mock('../../src/services/memory/blocks', () => ({
-  __mockGetBlock: jest.fn(),
-  getBlock: (label: string) => {
-    const fn = require('../../src/services/memory/blocks').__mockGetBlock;
-    return fn(label);
-  },
-}));
 jest.mock('../../src/services/memory/facts/queries', () => ({
   __mockListFacts: jest.fn(() => []),
   __mockCountFacts: jest.fn(() => 0),
@@ -67,13 +60,12 @@ let memoryListener: ((event: { updatedAt: number }) => void) | null = null;
 jest.mock('../../src/services/memory/changeNotifications', () => ({
   __mockSubscribeToMemoryChanges: jest.fn(),
   subscribeToMemoryChanges: (listener: typeof memoryListener) => {
-    const fn = require('../../src/services/memory/changeNotifications')
-      .__mockSubscribeToMemoryChanges;
+    const fn =
+      require('../../src/services/memory/changeNotifications').__mockSubscribeToMemoryChanges;
     return fn(listener);
   },
 }));
 
-const blocksMock = require('../../src/services/memory/blocks');
 const factsMock = require('../../src/services/memory/facts/queries');
 const episodesMock = require('../../src/services/memory/episodes/queries');
 const taskStackMock = require('../../src/services/memory/taskStack');
@@ -124,8 +116,6 @@ const colors = {
 
 beforeEach(() => {
   memoryListener = null;
-  blocksMock.__mockGetBlock.mockReset();
-  blocksMock.__mockGetBlock.mockReturnValue(null);
   factsMock.__mockListFacts.mockReset();
   factsMock.__mockListFacts.mockReturnValue([]);
   factsMock.__mockCountFacts.mockReset();
@@ -192,10 +182,7 @@ describe('bucketConversationsByTime', () => {
 
   it('falls back to createdAt when updatedAt is missing', () => {
     const now = new Date('2026-04-29T12:00:00Z').getTime();
-    const buckets = bucketConversationsByTime(
-      [{ id: 'x', createdAt: now } as any],
-      now,
-    );
+    const buckets = bucketConversationsByTime([{ id: 'x', createdAt: now } as any], now);
     expect(buckets.today.map((c) => c.id)).toEqual(['x']);
   });
 
@@ -210,20 +197,18 @@ describe('bucketConversationsByTime', () => {
 describe('TodaysFocusTile', () => {
   it('shows the empty hint when no active_focus block exists', () => {
     const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
-    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
-      'Nothing in focus yet.',
-    );
+    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe('Nothing in focus yet.');
   });
 
   it('renders the active_focus content', () => {
-    blocksMock.__mockGetBlock.mockReturnValue({
-      label: 'active_focus',
-      content: 'Ship Chunk L tonight.',
-    });
+    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
+      {
+        label: 'active_focus',
+        content: 'Ship Chunk L tonight.',
+      },
+    ]);
     const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
-    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
-      'Ship Chunk L tonight.',
-    );
+    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe('Ship Chunk L tonight.');
   });
 
   it('prefers the scoped active focus for the active conversation over unrelated recent focus', () => {
@@ -241,9 +226,7 @@ describe('TodaysFocusTile', () => {
       { content: 'Stale focus from another thread.' },
     ]);
 
-    const { getByTestId } = render(
-      <TodaysFocusTile colors={colors} conversationId="conv-side" />,
-    );
+    const { getByTestId } = render(<TodaysFocusTile colors={colors} conversationId="conv-side" />);
     expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
       'Scoped side-thread focus.',
     );
@@ -252,9 +235,7 @@ describe('TodaysFocusTile', () => {
   it('refreshes when structured memory changes', () => {
     workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValueOnce([]);
     const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
-    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
-      'Nothing in focus yet.',
-    );
+    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe('Nothing in focus yet.');
 
     workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
       { content: 'Fresh focus from the completed turn.' },
@@ -269,33 +250,26 @@ describe('TodaysFocusTile', () => {
   });
 
   it('invokes onPress when there is focus content', () => {
-    blocksMock.__mockGetBlock.mockReturnValue({ content: 'Focus' });
+    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([{ content: 'Focus' }]);
     const onPress = jest.fn();
-    const { getByTestId } = render(
-      <TodaysFocusTile colors={colors} onPress={onPress} />,
-    );
+    const { getByTestId } = render(<TodaysFocusTile colors={colors} onPress={onPress} />);
     fireEvent.press(getByTestId('sidebar-todays-focus'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
   it('does not invoke onPress when the focus block is empty (disabled)', () => {
-    blocksMock.__mockGetBlock.mockReturnValue(null);
     const onPress = jest.fn();
-    const { getByTestId } = render(
-      <TodaysFocusTile colors={colors} onPress={onPress} />,
-    );
+    const { getByTestId } = render(<TodaysFocusTile colors={colors} onPress={onPress} />);
     fireEvent.press(getByTestId('sidebar-todays-focus'));
     expect(onPress).not.toHaveBeenCalled();
   });
 
   it('survives a memory read failure by rendering the empty state', () => {
-    blocksMock.__mockGetBlock.mockImplementation(() => {
+    workingBlocksMock.__mockListRecentWorkingBlocks.mockImplementation(() => {
       throw new Error('boom');
     });
     const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
-    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
-      'Nothing in focus yet.',
-    );
+    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe('Nothing in focus yet.');
   });
 });
 
@@ -308,13 +282,13 @@ describe('OpenThreadsChips', () => {
   });
 
   it('renders one chip per parsed line and forwards selection', () => {
-    blocksMock.__mockGetBlock.mockReturnValue({
-      content: '- alpha\n- beta\n- gamma',
-    });
+    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
+      {
+        content: '- alpha\n- beta\n- gamma',
+      },
+    ]);
     const onSelect = jest.fn();
-    const { getByTestId } = render(
-      <OpenThreadsChips colors={colors} onSelect={onSelect} />,
-    );
+    const { getByTestId } = render(<OpenThreadsChips colors={colors} onSelect={onSelect} />);
     fireEvent.press(getByTestId('sidebar-open-thread-beta'));
     expect(onSelect).toHaveBeenCalledWith('beta');
   });
@@ -358,9 +332,7 @@ describe('PinnedMoments', () => {
       { id: 'f2', predicate: 'works at', objectText: 'Acme' },
     ]);
     const onSelect = jest.fn();
-    const { getByTestId } = render(
-      <PinnedMoments colors={colors} onSelect={onSelect} />,
-    );
+    const { getByTestId } = render(<PinnedMoments colors={colors} onSelect={onSelect} />);
     fireEvent.press(getByTestId('sidebar-pinned-moment-f1'));
     expect(onSelect).toHaveBeenCalledWith('f1');
     expect(getByTestId('sidebar-pinned-moment-f2')).toBeTruthy();
@@ -385,9 +357,7 @@ describe('PinnedMoments', () => {
 describe('RecallSearchInput', () => {
   it('submits the trimmed query and clears the input', () => {
     const onSubmit = jest.fn();
-    const { getByTestId } = render(
-      <RecallSearchInput colors={colors} onSubmit={onSubmit} />,
-    );
+    const { getByTestId } = render(<RecallSearchInput colors={colors} onSubmit={onSubmit} />);
     const input = getByTestId('sidebar-recall-input');
     fireEvent.changeText(input, '  beach trip  ');
     fireEvent(input, 'submitEditing');
@@ -396,9 +366,7 @@ describe('RecallSearchInput', () => {
 
   it('does not call onSubmit when the input is blank', () => {
     const onSubmit = jest.fn();
-    const { getByTestId } = render(
-      <RecallSearchInput colors={colors} onSubmit={onSubmit} />,
-    );
+    const { getByTestId } = render(<RecallSearchInput colors={colors} onSubmit={onSubmit} />);
     const input = getByTestId('sidebar-recall-input');
     fireEvent.changeText(input, '   ');
     fireEvent(input, 'submitEditing');
@@ -421,9 +389,7 @@ describe('MemoryStats', () => {
   it('renders active task when one exists', () => {
     taskStackMock.__mockGetActiveTaskTitle.mockReturnValue('Build API');
 
-    const { getByTestId } = render(
-      <MemoryStats colors={colors} conversationId="conv-1" />,
-    );
+    const { getByTestId } = render(<MemoryStats colors={colors} conversationId="conv-1" />);
     expect(getByTestId('sidebar-memory-task').props.children).toBe('Active: Build API');
   });
 
@@ -440,17 +406,13 @@ describe('MemoryStats', () => {
   });
 
   it('does not render active task line when none exists', () => {
-    const { queryByTestId } = render(
-      <MemoryStats colors={colors} conversationId="conv-1" />,
-    );
+    const { queryByTestId } = render(<MemoryStats colors={colors} conversationId="conv-1" />);
     expect(queryByTestId('sidebar-memory-task')).toBeNull();
   });
 
   it('calls onPress when tapped', () => {
     const onPress = jest.fn();
-    const { getByTestId } = render(
-      <MemoryStats colors={colors} onPress={onPress} />,
-    );
+    const { getByTestId } = render(<MemoryStats colors={colors} onPress={onPress} />);
     fireEvent.press(getByTestId('sidebar-memory-stats'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });

@@ -3,7 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import { getFactById } from '../../../src/services/memory/facts/queries';
@@ -31,7 +30,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
   initializeMemoryPolicyObservation();
 });

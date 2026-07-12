@@ -216,75 +216,6 @@ export const MEMORY_MANAGE_TOOL: ToolDefinition = {
   },
 };
 
-export const MEMORY_BLOCK_READ_TOOL: ToolDefinition = {
-  name: 'memory_block_read',
-  description:
-    'Read one or all editable memory blocks. Blocks are short, model-editable scratch surfaces (persona, scratchpad, etc.) that always appear in the focus header. Omit label to list all blocks.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      label: {
-        type: 'string',
-        description: 'Block label (e.g. "persona", "scratchpad"). Omit to list all blocks.',
-      },
-    },
-    required: [],
-  },
-};
-
-export const MEMORY_BLOCK_EDIT_TOOL: ToolDefinition = {
-  name: 'memory_block_edit',
-  description:
-    'Edit a memory block. With replace=true (default) the block content is overwritten; with replace=false the new content is appended on a new line. Block content is truncated at the block char limit.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      label: { type: 'string' },
-      content: { type: 'string' },
-      replace: { type: 'boolean', description: 'Default true (overwrite).' },
-    },
-    required: ['label', 'content'],
-  },
-};
-
-export const MEMORY_BLOCK_TOOL: ToolDefinition = {
-  name: 'memory_block',
-  description:
-    'Read or edit an editable memory block. ' +
-    'Use action=read (omit label to list all blocks) to fetch block contents, ' +
-    'or action=edit to overwrite (replace=true, default) or append (replace=false) content.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      action: {
-        type: 'string',
-        enum: ['read', 'edit'],
-        description: 'Operation to perform.',
-      },
-      label: {
-        type: 'string',
-        description:
-          'Block label (e.g. "persona", "scratchpad"). Required for action=edit; optional for action=read.',
-      },
-      content: { type: 'string', description: 'New content. Required for action=edit.' },
-      replace: {
-        type: 'boolean',
-        description: 'For action=edit: true (default) overwrites, false appends on a new line.',
-      },
-    },
-    required: ['action'],
-  },
-  contract: {
-    category: 'memory_block',
-    capabilities: ['read', 'write'],
-    resourceKinds: ['memory_block'],
-    sideEffects: ['local_artifact'],
-    riskHints: ['idempotent'],
-    providesEvidence: ['verification'],
-    workflowStages: ['inspect_resource', 'persist_artifact', 'verify_evidence'],
-  },
-};
-
 export const BUILTIN_MEMORY_TOOL_DEFINITIONS: ToolDefinition[] = [
   MEMORY_SEARCH_TOOL,
   MEMORY_RECALL_TOOL,
@@ -293,9 +224,6 @@ export const BUILTIN_MEMORY_TOOL_DEFINITIONS: ToolDefinition[] = [
   MEMORY_UNPIN_TOOL,
   MEMORY_FORGET_TOOL,
   MEMORY_MANAGE_TOOL,
-  MEMORY_BLOCK_READ_TOOL,
-  MEMORY_BLOCK_EDIT_TOOL,
-  MEMORY_BLOCK_TOOL,
 ];
 
 export const BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -304,5 +232,4 @@ export const BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS: ToolDefinition[] = [
   MEMORY_REMEMBER_TOOL,
   MEMORY_FORGET_TOOL,
   MEMORY_MANAGE_TOOL,
-  MEMORY_BLOCK_TOOL,
 ];

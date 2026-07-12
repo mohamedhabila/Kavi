@@ -20,9 +20,8 @@ import {
   writeWorkspaceRelativeFile,
 } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
 import { recordE2ENativeMobileInvocation } from '../../src/acceptance/e2eAgent/e2eNativeMobileEvidence';
-import { listBlocks } from '../../src/services/memory/blocks';
-import { editBlock } from '../../src/services/memory/blocks';
 import { listFacts } from '../../src/services/memory/facts/queries';
+import { editPromptEligibleWorkingBlock } from '../../src/services/memory/workingBlocks';
 import { executeMemoryRemember } from '../../src/services/memory/memoryTools';
 import { getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
@@ -49,14 +48,17 @@ describe('paired E2E state isolation', () => {
     ]);
   });
 
-  it('rejects contaminated default prompt blocks as an incomplete reset', () => {
+  it('rejects contaminated scoped working state as an incomplete reset', () => {
     resetAndVerifyE2EScenarioSandboxes();
-    editBlock('profile', 'PRIVATE-CONTAMINATED-PROFILE', { replace: true });
-    expect(() => assertE2EMemorySandboxReset()).toThrow('non-canonical profile block state');
+    editPromptEligibleWorkingBlock('active_focus', 'PRIVATE-CONTAMINATED-FOCUS', {
+      conversationId: 'contaminated-conversation',
+      threadId: 'contaminated-thread',
+    });
+    expect(() => assertE2EMemorySandboxReset()).toThrow('memory_working_blocks');
     resetAndVerifyE2EScenarioSandboxes();
   });
 
-  it('clears workspace, SQLite memory, and native state while reseeding default blocks', () => {
+  it('clears workspace, SQLite memory, and native state', () => {
     resetAndVerifyE2EScenarioSandboxes();
     writeWorkspaceRelativeFile('state-isolation', 'private.txt', 'PRIVATE-WORKSPACE');
     expect(
@@ -82,7 +84,6 @@ describe('paired E2E state isolation', () => {
     expect(listWorkspaceRelativePaths('state-isolation')).toEqual([]);
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
     expect(getE2ENativeMobileInvocationSnapshots()).toEqual([]);
-    expect(listBlocks().length).toBeGreaterThan(0);
   });
 
   it('clears memory as well as chat before every paired condition', async () => {

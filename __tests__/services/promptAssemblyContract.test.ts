@@ -12,10 +12,7 @@
 // splittable into a stable cacheable prefix + a per-turn dynamic tail.
 // If anyone ever changes the field names or ordering, this test fails fast.
 
-import {
-  assemblePrompt,
-  type SystemPromptSection,
-} from '../../src/services/memory/promptAssembly';
+import { assemblePrompt, type SystemPromptSection } from '../../src/services/memory/promptAssembly';
 import { splitCacheableSystemPromptSections } from '../../src/services/llm/core/systemPromptSections';
 
 // Structural mirror of LlmService's private splitter — kept tiny on purpose.
@@ -43,19 +40,6 @@ function splitCacheable(sections: SystemPromptSection[]): {
 describe('promptAssembly ↔ LlmService contract', () => {
   const baseInput = {
     basePrompt: 'You are Kavi, the user assistant.',
-    blocks: [
-      {
-        id: 'b-profile',
-        label: 'profile',
-        description: 'User facts',
-        content: 'Name: Alice. Timezone: America/Los_Angeles.',
-        charLimit: 800,
-        pinned: 1 as const,
-        readOnly: 0 as const,
-        updatedAt: 1,
-        updatedBy: 'consolidator' as const,
-      },
-    ],
     focusBlock: 'picking up the conversation',
     retrievedFacts: [],
   };
@@ -82,8 +66,6 @@ describe('promptAssembly ↔ LlmService contract', () => {
     const split = splitCacheable(sections);
     const serviceSplit = splitCacheableSystemPromptSections(sections);
     expect(split.cacheableText).toContain('You are Kavi');
-    expect(split.cacheableText).not.toContain('Name: Alice');
-    expect(split.dynamicText).toContain('Name: Alice');
     expect(split.dynamicText).toContain('picking up the conversation');
     expect(serviceSplit).toEqual(split);
   });
@@ -106,9 +88,7 @@ describe('promptAssembly ↔ LlmService contract', () => {
       focusBlock: 'back after a short break (~12m)',
     });
     expect(a.cacheableSignature).toBe(b.cacheableSignature);
-    expect(splitCacheable(a.sections).cacheableText).toBe(
-      splitCacheable(b.sections).cacheableText,
-    );
+    expect(splitCacheable(a.sections).cacheableText).toBe(splitCacheable(b.sections).cacheableText);
   });
 
   it('changing a cacheable layer rotates the cacheable signature', () => {

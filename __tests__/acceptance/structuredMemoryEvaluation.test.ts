@@ -28,10 +28,7 @@ afterEach(() => {
   closeMemoryDb();
 });
 
-function insertEntity(
-  database: StructuredMemoryEvaluationDatabase,
-  id: string,
-): void {
+function insertEntity(database: StructuredMemoryEvaluationDatabase, id: string): void {
   database.runSync(
     `INSERT INTO memory_entities
        (id, canonical_name, type, aliases, attributes, first_seen_at, last_seen_at, deleted_at)
@@ -53,10 +50,10 @@ describe('isolated structured memory evaluation', () => {
       }),
     ).rejects.toThrow('forced isolation operation failure');
     await expect(
-      runInIsolatedStructuredMemoryEvaluation((database) =>
-        database.getFirstSync<{ count: number }>(
-          'SELECT COUNT(*) AS count FROM memory_entities',
-        )?.count,
+      runInIsolatedStructuredMemoryEvaluation(
+        (database) =>
+          database.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_entities')
+            ?.count,
       ),
     ).resolves.toBe(0);
   });
@@ -65,13 +62,12 @@ describe('isolated structured memory evaluation', () => {
     await runInIsolatedStructuredMemoryEvaluation(async (database) => {
       insertEntity(database, 'active-evaluation-entity');
 
-      await expect(
-        runInIsolatedStructuredMemoryEvaluation(() => undefined),
-      ).rejects.toThrow('already active');
+      await expect(runInIsolatedStructuredMemoryEvaluation(() => undefined)).rejects.toThrow(
+        'already active',
+      );
       expect(
-        database.getFirstSync<{ count: number }>(
-          'SELECT COUNT(*) AS count FROM memory_entities',
-        )?.count,
+        database.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_entities')
+          ?.count,
       ).toBe(1);
     });
   });
@@ -80,10 +76,14 @@ describe('isolated structured memory evaluation', () => {
     const evaluationDatabase = getMemoryDb();
     insertEntity(evaluationDatabase, 'atomic-cleanup-entity');
     evaluationDatabase.runSync(
-      `INSERT INTO memory_blocks
-         (label, content, char_limit, description, pinned, persona_id, updated_at)
-       VALUES (?, ?, ?, ?, 0, NULL, ?)`,
-      'atomic-cleanup-block',
+      `INSERT INTO memory_working_blocks
+         (label, scope_key, conversation_id, thread_id, task_id, content, char_limit,
+          description, prompt_eligibility, updated_at)
+       VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 'trusted_structural', ?)`,
+      'active_focus',
+      'conversation:atomic-cleanup',
+      'atomic-cleanup',
+      'atomic-cleanup',
       'must survive rollback',
       100,
       'rollback probe',
@@ -92,11 +92,11 @@ describe('isolated structured memory evaluation', () => {
 
     expect(() =>
       runMemoryDatabaseSavepoint(evaluationDatabase, (database) => {
-        database.runSync('DELETE FROM memory_blocks');
+        database.runSync('DELETE FROM memory_working_blocks');
         database.runSync('DELETE FROM memory_entities');
         expect(
           database.getFirstSync<{ count: number }>(
-            'SELECT COUNT(*) AS count FROM memory_blocks',
+            'SELECT COUNT(*) AS count FROM memory_working_blocks',
           )?.count,
         ).toBe(0);
         throw new Error('forced exact-handle cleanup failure');
@@ -109,7 +109,7 @@ describe('isolated structured memory evaluation', () => {
     ).toBe(1);
     expect(
       evaluationDatabase.getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_blocks',
+        'SELECT COUNT(*) AS count FROM memory_working_blocks',
       )?.count,
     ).toBe(1);
     clearStructuredMemoryDatabase(evaluationDatabase);
@@ -122,9 +122,9 @@ describe('isolated structured memory evaluation', () => {
       INSERT INTO memory_unclassified_probe (id) VALUES ('must-survive-refusal');
     `);
 
-    await expect(
-      runInIsolatedStructuredMemoryEvaluation(() => undefined),
-    ).rejects.toThrow('unclassified memory tables: memory_unclassified_probe');
+    await expect(runInIsolatedStructuredMemoryEvaluation(() => undefined)).rejects.toThrow(
+      'unclassified memory tables: memory_unclassified_probe',
+    );
     expect(
       database.getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM memory_unclassified_probe',
@@ -160,9 +160,8 @@ describe('isolated structured memory evaluation', () => {
       )?.owner_id,
     ).toBe(ownerBefore);
     expect(
-      database.getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_entities',
-      )?.count,
+      database.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_entities')
+        ?.count,
     ).toBe(0);
     database.execSync('DROP TABLE memory_vault_identity');
   });

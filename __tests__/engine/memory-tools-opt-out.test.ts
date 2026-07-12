@@ -21,7 +21,6 @@ jest.mock('../../src/services/remote/approvalStore', () => {
 
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useChatStore } from '../../src/store/useChatStore';
@@ -36,9 +35,6 @@ const MEMORY_TOOLS = [
   'memory_remember',
   'memory_pin',
   'memory_unpin',
-  'memory_block_read',
-  'memory_block_edit',
-  'memory_block',
 ];
 
 beforeEach(() => {
@@ -46,7 +42,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   useSettingsStore.setState({ disableLongTermMemory: false });
   useChatStore.setState({ conversations: [] } as never);
 });
@@ -56,7 +51,7 @@ afterEach(() => {
   useChatStore.setState({ conversations: [] } as never);
 });
 
-describe('raw memory tool executor — opt-out gate', () => {
+describe('structured memory tool executor — opt-out gate', () => {
   it.each(MEMORY_TOOLS)(
     'returns permission_denied for %s when disableLongTermMemory is true',
     async (toolName) => {
@@ -75,11 +70,18 @@ describe('raw memory tool executor — opt-out gate', () => {
         'memory_remember',
         JSON.stringify({
           subject: 'user',
-          predicate: 'private_code',
-          value: 'secret-42',
+          subjectType: 'self',
+          predicate: 'usual architecture review duration',
+          value: '30 minutes',
           scope: 'global',
         }),
         'conv-1',
+        {
+          currentUserMessage: {
+            id: 'user-review-duration-withdrawal',
+            text: 'I usually keep architecture reviews to 30 minutes.',
+          },
+        },
       ),
     );
     useSettingsStore.setState({ disableLongTermMemory: true });
@@ -92,7 +94,7 @@ describe('raw memory tool executor — opt-out gate', () => {
     const result = JSON.parse(raw);
 
     expect(result).toEqual(expect.objectContaining({ ok: true, action: 'withdrawal' }));
-    expect(JSON.stringify(result)).not.toContain('secret-42');
+    expect(JSON.stringify(result)).not.toContain('30 minutes');
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
   });
 
@@ -102,11 +104,18 @@ describe('raw memory tool executor — opt-out gate', () => {
         'memory_remember',
         JSON.stringify({
           subject: 'user',
-          predicate: 'private_code',
-          value: 'secret-43',
+          subjectType: 'self',
+          predicate: 'usual architecture review duration',
+          value: '45 minutes',
           scope: 'global',
         }),
         'conv-1',
+        {
+          currentUserMessage: {
+            id: 'user-review-duration-manage',
+            text: 'I usually keep architecture reviews to 45 minutes.',
+          },
+        },
       ),
     );
     useSettingsStore.setState({ disableLongTermMemory: true });
@@ -156,11 +165,7 @@ describe('raw memory tool executor — opt-out gate', () => {
 
   it('does NOT short-circuit when disableLongTermMemory is false', async () => {
     useSettingsStore.setState({ disableLongTermMemory: false });
-    const raw = await executeTool(
-      'memory_block_read',
-      JSON.stringify({ label: 'profile' }),
-      'conv-1',
-    );
+    const raw = await executeTool('memory_recall', JSON.stringify({ all: true }), 'conv-1');
     const parsed = JSON.parse(raw);
     expect(parsed.code).not.toBe('permission_denied');
   });

@@ -1,8 +1,13 @@
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { __resetMemoryLifecycleForTests } from '../../../src/services/memory/lifecycle';
-import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
+import {
+  getWorkingBlock,
+  type WorkingBlockLabel,
+} from '../../../src/services/memory/workingBlocks';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
@@ -11,7 +16,6 @@ export function resetMemoryScenario(resetSqlite?: () => void): void {
   resetSqlite?.();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   __resetMemoryLifecycleForTests();
   useSettingsStore.setState({
     disableLongTermMemory: false,
@@ -23,8 +27,11 @@ export function resetMemoryScenario(resetSqlite?: () => void): void {
 
 export async function readMemoryScenarioWorkingBlock(
   conversationId: string,
-  blockType: string,
+  blockType: WorkingBlockLabel,
 ): Promise<string | null> {
-  const block = await getWorkingBlock(conversationId, blockType);
+  const block = getWorkingBlock(blockType, {
+    conversationId,
+    threadId: conversationId,
+  });
   return block?.content ?? null;
 }

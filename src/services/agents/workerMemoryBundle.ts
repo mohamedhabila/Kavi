@@ -57,10 +57,7 @@ const MEMORY_TOOL_NAMES = new Set([
   'memory_pin',
   'memory_unpin',
   'memory_forget',
-  'memory_block_read',
-  'memory_block_edit',
   'memory_manage',
-  'memory_block',
 ]);
 
 const PROMPT_PREFIX = [

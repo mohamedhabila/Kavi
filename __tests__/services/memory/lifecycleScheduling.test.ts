@@ -19,7 +19,6 @@ jest.mock('../../../src/services/llm/LlmService', () => ({
   })),
 }));
 
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -42,7 +41,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   __resetMemoryLifecycleForTests();
   __resetOnDeviceGuardsForTests();
   __resetIngestionQueueForTests();

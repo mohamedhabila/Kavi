@@ -4,7 +4,7 @@
 // After the v6→v7 single-thread collapse migration runs, every prior
 // conversation that was flagged `archivedFromMigration: true` is preserved
 // verbatim in the conversation store but does not yet contribute to the
-// new `memory_facts` / `memory_blocks` store. This module walks each
+// structured memory store. This module walks each
 // archived conversation, pairs adjacent (user → assistant) turns, and feeds
 // them into the existing `consolidateTurn` pipeline so that long-lived
 // information surfaces in the unified memory.

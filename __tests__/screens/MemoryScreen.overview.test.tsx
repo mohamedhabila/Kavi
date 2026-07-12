@@ -75,8 +75,6 @@ jest.mock('../../src/services/memory/memoryTools', () => ({
   queryMemoryFactsForManagement: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
   forgetMemoryFactForManagement: jest.fn(),
   setMemoryFactPinnedForManagement: jest.fn(),
-  executeMemoryBlockRead: jest.fn(() => ({ ok: true, blocks: [] })),
-  executeMemoryBlockEdit: jest.fn(),
 }));
 
 jest.mock('../../src/services/memory/episodeRecall', () => ({

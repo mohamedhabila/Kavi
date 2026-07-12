@@ -736,10 +736,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
     overviewConsolidationTitle: 'التوطيد',
     overviewLoading: 'جارٍ تحميل نظرة الذاكرة…',
     factsTab: 'حقائق',
-    blocksTab: 'كتل',
     clearTitle: 'مسح كل الذاكرة',
     clearConfirm:
-      'سيؤدي هذا إلى حذف جميع الحقائق والتجارب والمهام وكتل الذاكرة المحفوظة نهائيًا. لا يمكن التراجع عن ذلك.',
+      'سيؤدي هذا إلى حذف جميع الحقائق والتجارب والمهام المحفوظة نهائيًا. لا يمكن التراجع عن ذلك.',
     clearAction: 'مسح الكل',
     refreshing: 'جارٍ تحديث الذاكرة…',
     lastSynced: 'آخر مزامنة في {time}',
@@ -760,9 +759,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     factForgetFailedMessage: 'أعد تحميل الذاكرة وحاول مرة أخرى.',
     factPin: 'تثبيت',
     factUnpin: 'إلغاء التثبيت',
-    blocksEmpty: 'لم يتم تعريف أي كتل ذاكرة.',
-    blockChars: '{used} / {limit} حرف',
-    blockSave: 'حفظ الكتلة',
     disableLongTermMemory: 'تعطيل الذاكرة طويلة الأمد',
     disableLongTermMemoryHint:
       'عند التفعيل، تبقى المحادثات بدون ذاكرة ولا تُحفظ أي معلومات بين المحادثات.',

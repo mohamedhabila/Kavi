@@ -5,8 +5,6 @@ import {
   executeMemoryUnpin as unpinFact,
   executeMemoryForget as forgetFact,
   executeMemoryInvalidate as invalidateFact,
-  executeMemoryBlockRead as readMemoryBlock,
-  executeMemoryBlockEdit as editMemoryBlock,
   type MemoryRecallArgs,
   type MemoryRecallExecutionContext,
   type MemoryRememberArgs,
@@ -15,8 +13,6 @@ import {
   type MemoryFactActionExecutionContext,
   type MemoryForgetArgs,
   type MemoryInvalidateArgs,
-  type MemoryBlockReadArgs,
-  type MemoryBlockEditArgs,
 } from '../../services/memory/memoryTools';
 import { markFactsRecalled } from '../../services/memory/facts/mutations';
 import { getEntityById } from '../../services/memory/entities';
@@ -266,7 +262,7 @@ export async function executeMemorySearch(
 }
 
 // ---------------------------------------------------------------------------
-// Living-memory fact/block tool wrappers.
+// Living-memory fact tool wrappers.
 //
 // These are thin adapters over `services/memory/memoryTools.ts` that:
 //   • return JSON strings (matching the rest of the builtin executor convention)
@@ -318,12 +314,4 @@ export function executeMemoryInvalidate(
   context: MemoryFactActionExecutionContext,
 ): string {
   return wrapMemoryToolResult(invalidateFact(args, context));
-}
-
-export function executeMemoryBlockRead(args: MemoryBlockReadArgs = {}): string {
-  return wrapMemoryToolResult(readMemoryBlock(args));
-}
-
-export function executeMemoryBlockEdit(args: MemoryBlockEditArgs): string {
-  return wrapMemoryToolResult(editMemoryBlock(args));
 }

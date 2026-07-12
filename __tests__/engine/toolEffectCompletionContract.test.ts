@@ -38,15 +38,6 @@ describe('tool effect completion contracts', () => {
     ).resolves.toEqual({ kind: 'operational', toolName: 'mcp__docs__fetch' });
   });
 
-  it('classifies the read branch of a mixed memory tool as effect-free', async () => {
-    await expect(
-      resolveToolEffectCompletionRequirement({
-        toolName: 'memory_block',
-        argumentsText: JSON.stringify({ action: 'read' }),
-      }),
-    ).resolves.toEqual({ kind: 'effect_free', toolName: 'memory_block' });
-  });
-
   it.each(['phone_call', 'share_text'])(
     'keeps the handed-off %s action operational and non-completing',
     async (toolName) => {

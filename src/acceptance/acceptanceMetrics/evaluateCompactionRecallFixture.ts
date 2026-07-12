@@ -2,7 +2,6 @@
 // Kavi — Compaction recall fixture evaluator
 // ---------------------------------------------------------------------------
 
-import { buildPostCompactionSystemContent } from '../../services/context/postCompactionReinject';
 import { applyCompactionResultToWorkingMessages } from '../../engine/orchestratorCompaction';
 import { buildAgentTurnPromptBundle } from '../../engine/graph/agentTurnPromptBundle';
 import type { CompactResult } from '../../services/context/types';
@@ -30,11 +29,6 @@ function countOccurrences(content: string, marker: string): number {
 export function evaluateCompactionRecallFixture(
   fixture: CompactionRecallFixture,
 ): AcceptanceFixtureOutcome {
-  const reinjectedContent = buildPostCompactionSystemContent({
-    summary: '[Conversation Summary]\n\n## Task Overview\nLong transcript compacted.',
-    profileSections: fixture.profileSections,
-  });
-
   const currentTurnPrompt = buildAgentTurnPromptBundle({
     effectiveForceTextThisTurn: false,
     goalsPromptSection: fixture.goalsPromptSection,
@@ -67,26 +61,6 @@ export function evaluateCompactionRecallFixture(
     };
   }
 
-  const missingFromReinjection = hasMarkers(reinjectedContent, fixture.requiredProfileMarkers);
-  if (missingFromReinjection) {
-    return {
-      fixtureId: fixture.id,
-      passed: false,
-      detail: `post-compaction builder missing profile marker: ${missingFromReinjection}`,
-    };
-  }
-
-  const staleBuilderGoalMarker = fixture.requiredGoalMarkers.find((marker) =>
-    reinjectedContent.includes(marker),
-  );
-  if (staleBuilderGoalMarker) {
-    return {
-      fixtureId: fixture.id,
-      passed: false,
-      detail: `post-compaction builder retained stale graph marker: ${staleBuilderGoalMarker}`,
-    };
-  }
-
   const priorMessages: Message[] = [
     { id: 'user-1', role: 'user', content: 'Start task', timestamp: 1 },
     { id: 'assistant-1', role: 'assistant', content: 'Working...', timestamp: 2 },
@@ -105,18 +79,16 @@ export function evaluateCompactionRecallFixture(
     },
   };
 
-  const applied = applyCompactionResultToWorkingMessages(priorMessages, compactResult, {
-    profileSections: fixture.profileSections,
-  });
+  const applied = applyCompactionResultToWorkingMessages(priorMessages, compactResult);
   const systemMessage = applied.messages.find((message) => message.role === 'system');
   const systemContent = typeof systemMessage?.content === 'string' ? systemMessage.content : '';
 
-  const missingFromTranscript = hasMarkers(systemContent, fixture.requiredProfileMarkers);
+  const missingFromTranscript = hasMarkers(systemContent, fixture.requiredSummaryMarkers);
   if (missingFromTranscript) {
     return {
       fixtureId: fixture.id,
       passed: false,
-      detail: `compacted transcript missing marker: ${missingFromTranscript}`,
+      detail: `compacted transcript missing summary marker: ${missingFromTranscript}`,
     };
   }
 

@@ -752,10 +752,9 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     overviewConsolidationTitle: 'Consolidação',
     overviewLoading: 'Carregando visão geral da memória…',
     factsTab: 'Fatos',
-    blocksTab: 'Blocos',
     clearTitle: 'Limpar toda a memória',
     clearConfirm:
-      'Isso excluirá permanentemente todos os fatos, episódios, tarefas e blocos de memória salvos. Essa ação não pode ser desfeita.',
+      'Isso excluirá permanentemente todos os fatos, episódios e tarefas salvos. Essa ação não pode ser desfeita.',
     clearAction: 'Limpar tudo',
     refreshing: 'Atualizando memória…',
     lastSynced: 'Última sincronização às {time}',
@@ -776,9 +775,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     factForgetFailedMessage: 'Recarregue a memória e tente novamente.',
     factPin: 'Fixar',
     factUnpin: 'Desafixar',
-    blocksEmpty: 'Nenhum bloco de memória definido.',
-    blockChars: '{used} / {limit} caracteres',
-    blockSave: 'Salvar bloco',
     disableLongTermMemory: 'Desativar memória de longo prazo',
     disableLongTermMemoryHint:
       'Quando ativado, as conversas permanecem sem estado e nenhum fato é lembrado entre conversas.',

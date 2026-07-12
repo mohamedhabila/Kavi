@@ -7,7 +7,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { editBlock, ensureDefaultBlocks, getBlock } from '../../../src/services/memory/blocks';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -27,7 +26,10 @@ import {
   MIGRATION_CLAIM_LEASE_MS,
 } from '../../../src/services/memory/migrationStateStore';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
-import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
+import {
+  editPromptEligibleWorkingBlock,
+  getWorkingBlock,
+} from '../../../src/services/memory/workingBlocks';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
@@ -40,7 +42,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   initializeMemoryPolicyObservation();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
 });
@@ -329,9 +330,12 @@ describe('seedConversation', () => {
     expect(PASSING_EXTRACTOR).not.toHaveBeenCalled();
   });
 
-  it('does not advance or clear global working memory on malformed enrichment', async () => {
+  it('does not advance or clear another conversation on malformed enrichment', async () => {
     const conv = buildConversation('malformed', 1);
-    editBlock('open_threads', 'global sentinel', { replace: true });
+    editPromptEligibleWorkingBlock('open_threads', 'other conversation sentinel', {
+      conversationId: 'other-conversation',
+      threadId: 'other-thread',
+    });
 
     const result = await seedConversation({
       conversation: conv,
@@ -344,12 +348,20 @@ describe('seedConversation', () => {
       error: 'invalid_json',
     });
     expect(getMigrationState(conv.id)?.lastSeededMessageId).toBeNull();
-    expect(getBlock('open_threads')?.content).toBe('global sentinel');
+    expect(
+      getWorkingBlock('open_threads', {
+        conversationId: 'other-conversation',
+        threadId: 'other-thread',
+      })?.content,
+    ).toBe('other conversation sentinel');
   });
 
   it('writes migration working memory only in the source conversation namespace', async () => {
     const conv = buildConversation('scoped-migration', 1);
-    editBlock('open_threads', 'global sentinel', { replace: true });
+    editPromptEligibleWorkingBlock('open_threads', 'other conversation sentinel', {
+      conversationId: 'other-conversation',
+      threadId: 'other-thread',
+    });
     const extractor = async () =>
       JSON.stringify({
         new_facts: [],
@@ -361,7 +373,12 @@ describe('seedConversation', () => {
 
     await seedConversation({ conversation: conv, extractor });
 
-    expect(getBlock('open_threads')?.content).toBe('global sentinel');
+    expect(
+      getWorkingBlock('open_threads', {
+        conversationId: 'other-conversation',
+        threadId: 'other-thread',
+      })?.content,
+    ).toBe('other conversation sentinel');
     expect(
       getWorkingBlock('open_threads', {
         conversationId: conv.id,

@@ -116,7 +116,7 @@ export function evaluateCompactionRecallOutcomes(
 ): AcceptanceMetricSummary {
   return buildPassRateSummary({
     metricId: 'compaction-recall',
-    label: 'Goals and profile blocks survive aggressive compaction',
+    label: 'Compacted summaries survive while graph goals stay current-turn only',
     outcomes,
     targetRate: COMPACTION_RECALL_MIN_PASS_RATE,
     comparator: 'min',

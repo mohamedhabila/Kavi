@@ -7,23 +7,9 @@ import {
   flattenPromptSections,
   type AssemblePromptInput,
 } from '../../src/services/memory/promptAssembly';
-import type { MemoryBlock } from '../../src/services/memory/blocks';
 import type { MemoryEpisode } from '../../src/services/memory/episodes/types';
 import { EPISODE_PROMPT_SECTION_LIMIT } from '../../src/services/memory/episodes/promptRendering';
 import type { MemoryFact, MemoryFactKind } from '../../src/services/memory/facts/types';
-
-function makeBlock(overrides: Partial<MemoryBlock> = {}): MemoryBlock {
-  return {
-    label: 'profile',
-    description: 'Stable facts about the user.',
-    content: 'Name: Mo\nRole: Engineer',
-    charLimit: 1500,
-    pinned: true,
-    personaId: null,
-    updatedAt: 1,
-    ...overrides,
-  };
-}
 
 function makeFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
   return {
@@ -114,21 +100,18 @@ const baseInput: AssemblePromptInput = {
 };
 
 describe('assemblePrompt - layer ordering', () => {
-  it('emits L1 first, L2 second, L3 last', () => {
+  it('emits stable policy before dynamic turn context', () => {
     const out = assemblePrompt({
       basePrompt: 'BASE',
-      blocks: [makeBlock({ content: 'BLOCK' })],
       focusBlock: '<focus>FOCUS</focus>',
     });
     const text = flattenPromptSections(out.sections);
-    expect(text.indexOf('## Identity & Style')).toBeLessThan(text.indexOf('## Persistent Memory'));
-    expect(text.indexOf('## Persistent Memory')).toBeLessThan(text.indexOf('## This Turn'));
+    expect(text.indexOf('## Identity & Style')).toBeLessThan(text.indexOf('## This Turn'));
   });
 
   it('only marks stable base policy as cacheable', () => {
     const out = assemblePrompt({
       ...baseInput,
-      blocks: [makeBlock()],
       retrievedFacts: [makeFact()],
     });
     expect(out.sections.filter((section) => section.cacheable)).toHaveLength(1);

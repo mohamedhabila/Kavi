@@ -1,7 +1,6 @@
 const mockClearStructuredMemory = jest.fn();
 const mockClearEmbeddingCache = jest.fn();
 const mockGetEmbeddingCacheEntryCount = jest.fn();
-const mockEnsureDefaultBlocks = jest.fn();
 const mockNotifyStructuredMemoryChanged = jest.fn();
 
 jest.mock('../../../src/services/memory/schema', () => ({
@@ -11,10 +10,6 @@ jest.mock('../../../src/services/memory/schema', () => ({
 jest.mock('../../../src/services/memory/embeddings', () => ({
   clearEmbeddingCache: () => mockClearEmbeddingCache(),
   getEmbeddingCacheEntryCount: () => mockGetEmbeddingCacheEntryCount(),
-}));
-
-jest.mock('../../../src/services/memory/blocks', () => ({
-  ensureDefaultBlocks: (now: number) => mockEnsureDefaultBlocks(now),
 }));
 
 jest.mock('../../../src/services/memory/changeNotifications', () => ({
@@ -29,12 +24,11 @@ describe('canonical memory reset', () => {
     mockGetEmbeddingCacheEntryCount.mockReturnValue(0);
   });
 
-  it('clears canonical state, restores blocks, and publishes the change', () => {
-    resetCanonicalMemoryForManagement(1_234);
+  it('clears canonical state and publishes the change', () => {
+    resetCanonicalMemoryForManagement();
 
     expect(mockClearStructuredMemory).toHaveBeenCalledTimes(1);
     expect(mockClearEmbeddingCache).toHaveBeenCalledTimes(1);
-    expect(mockEnsureDefaultBlocks).toHaveBeenCalledWith(1_234);
     expect(mockNotifyStructuredMemoryChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -44,7 +38,6 @@ describe('canonical memory reset', () => {
     expect(() => resetCanonicalMemoryForManagement()).toThrow(
       'memory_reset_embedding_cache_residual',
     );
-    expect(mockEnsureDefaultBlocks).not.toHaveBeenCalled();
     expect(mockNotifyStructuredMemoryChanged).not.toHaveBeenCalled();
   });
 });

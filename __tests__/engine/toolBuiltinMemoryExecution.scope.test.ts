@@ -38,8 +38,6 @@ jest.mock('../../src/engine/tools/builtin-memory', () => ({
   executeMemoryUnpin: (...args: unknown[]) => mockExecuteMemoryUnpin(...args),
   executeMemoryForget: (...args: unknown[]) => mockExecuteMemoryForget(...args),
   executeMemoryInvalidate: (...args: unknown[]) => mockExecuteMemoryInvalidate(...args),
-  executeMemoryBlockRead: jest.fn(),
-  executeMemoryBlockEdit: jest.fn(),
 }));
 
 import { executeBuiltinMemoryTool } from '../../src/engine/tools/toolBuiltinMemoryExecution';

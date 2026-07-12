@@ -18,6 +18,7 @@ const productionSourceRoots = [
 
 const bannedFiles = [
   'src/services/memory/store.ts',
+  'src/services/memory/blocks.ts',
   'src/services/memory/ranking/chunkIndex.ts',
   'src/services/memory/productExperienceObservationSchema.ts',
   'src/services/memory/productExperienceObservationStore.ts',
@@ -26,6 +27,17 @@ const bannedFiles = [
 ];
 
 const bannedPatterns = [
+  {
+    label: 'retired provider-editable raw memory table',
+    pattern: String.raw`\bmemory_blocks\b`,
+    allowedMatch: ({ filePath, content }) =>
+      filePath === 'src/services/memory/schema.ts' &&
+      content === 'DROP TABLE IF EXISTS memory_blocks;',
+  },
+  {
+    label: 'retired provider-editable raw memory API',
+    pattern: String.raw`\b(?:memory_block|memory_block_read|memory_block_edit|ensureDefaultBlocks|DEFAULT_MEMORY_BLOCKS|executeMemoryBlockRead|executeMemoryBlockEdit)\b`,
+  },
   {
     label: 'retired product-experience table',
     pattern: String.raw`\bmemory_product_experience_observations\b`,

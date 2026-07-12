@@ -11,7 +11,6 @@ export const CLEARED_STRUCTURED_MEMORY_TABLES = [
   'memory_episode_access_policies',
   'memory_episodes',
   'memory_facts',
-  'memory_blocks',
   'memory_working_blocks',
   'memory_consolidation_state',
   'memory_migration_state',

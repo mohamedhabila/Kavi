@@ -15,6 +15,7 @@ import { partializeChatPersistState } from './chatPersistence';
 import { createAgentRunStoreActions } from './agentRuns/storeActions';
 import { createConversationStoreActions } from './chatStoreConversationActions';
 import { createMessageStoreActions } from './chatStoreMessageActions';
+import { CHAT_STORE_VERSION, migrateRetiredChatMemory } from './chatStoreMigrations';
 import { normalizePersistedChatState } from './chatStoreNormalization';
 import { createUsageStoreActions } from './chatStoreUsageActions';
 import type { ChatState } from './chatStoreTypes';
@@ -36,10 +37,10 @@ export const useChatStore = create<ChatState>()(
     {
       name: STORAGE_KEYS.CONVERSATIONS,
       storage: createThrottledJSONStorage(),
-      version: 7,
-      migrate: (persistedState: unknown) => {
+      version: CHAT_STORE_VERSION,
+      migrate: (persistedState: unknown, persistedVersion: number) => {
         const normalized = normalizePersistedChatState(
-          persistedState as Partial<ChatState> | undefined,
+          migrateRetiredChatMemory(persistedState, persistedVersion),
         );
         return partializeChatPersistState(normalized);
       },

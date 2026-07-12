@@ -28,7 +28,6 @@ import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/servic
 import { recordFactWithApplicability } from '../../src/services/memory/facts/mutations';
 import { getFactById, listFacts } from '../../src/services/memory/facts/queries';
 import { upsertEntity } from '../../src/services/memory/entities';
-import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { getWorkingBlock } from '../../src/services/memory/workingBlocks';
 import {
   DEFAULT_TURN_THRESHOLD,
@@ -62,7 +61,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
 });
 
 afterEach(() => {
@@ -83,7 +81,7 @@ function buildLongThread(turnPairs: number, baseTs: number): Message[] {
     // recall surfaces it later (the fact is recorded via the extractor).
     const userContent =
       i === 7
-        ? 'I just deployed the dashboard service to production at acme-prod-cluster.'
+        ? 'My preferred server is acme-prod-cluster.'
         : `Question ${i}: how do I tune the consolidator throughput?`;
     const asstContent =
       i === 7
@@ -117,18 +115,17 @@ function makeExtractor(): jest.Mock {
         new_facts: [
           {
             subject: 'user',
-            predicate: 'deploys_to',
+            predicate: 'preferred_server',
             value: 'acme-prod-cluster',
             confidence: 0.9,
             scope: 'conversation',
             operation: 'replace_current',
             assertion_class: 'current_direct',
             evidence_message_ids: ['u-7'],
-            evidence_quote:
-              'I just deployed the dashboard service to production at acme-prod-cluster.',
+            evidence_quote: 'My preferred server is acme-prod-cluster.',
           },
         ],
-        episode_summary: 'Deployed the dashboard service to acme-prod-cluster.',
+        episode_summary: 'The user prefers acme-prod-cluster as a server.',
         active_focus: 'User is shipping the dashboard service to acme-prod-cluster.',
         open_threads: ['monitor acme-prod-cluster after deploy'],
         notable: ['Production target: acme-prod-cluster'],
@@ -185,9 +182,9 @@ describe('memory integration: 200-message thread', () => {
       // The deployment fact should have been recorded exactly once even though
       // many trigger boundaries fire (extractor returns it only for the
       // deployment turn).
-      const deployFacts = listFacts({ predicate: 'deploys_to', limit: 50 });
-      expect(deployFacts).toHaveLength(1);
-      expect(deployFacts[0].objectText).toBe('acme-prod-cluster');
+      const preferenceFacts = listFacts({ predicate: 'preferred_server', limit: 50 });
+      expect(preferenceFacts).toHaveLength(1);
+      expect(preferenceFacts[0].objectText).toBe('acme-prod-cluster');
 
       // active_focus should be scoped to this thread, not written globally.
       const focus = getWorkingBlock('active_focus', {
@@ -225,7 +222,6 @@ describe('memory integration: 200-message thread', () => {
       });
       const assembled = assemblePrompt({
         basePrompt: "You are Kavi, the user's personal assistant.",
-        blocks: [],
         focusBlock: focusOut.text,
         retrievedFacts: recalled,
       });

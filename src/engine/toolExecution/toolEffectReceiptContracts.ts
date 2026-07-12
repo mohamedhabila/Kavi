@@ -240,21 +240,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         completion: { resource: selector('memory_fact', 'arguments', ['factId']) },
       },
     ),
-    memory_block: effectful(
-      'memory.write',
-      {
-        read: outcome('none', 'not_applicable', 'observation.read'),
-        edited: VERIFIED,
-        rejected: FAILED,
-      },
-      {
-        resource: selector('memory_block', 'result', ['resourceId']),
-        completion: {
-          resource: selector('memory_block', 'arguments', ['label']),
-          effectFreeWhen: { argumentPath: ['action'], values: ['read'] },
-        },
-      },
-    ),
     // Image persistence checks file existence and exact byte count before
     // these results are emitted, so the local artifact is independently verified.
     image_generate: effectful(

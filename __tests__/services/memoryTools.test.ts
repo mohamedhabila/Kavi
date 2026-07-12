@@ -9,7 +9,6 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { findEntityByName } from '../../src/services/memory/entities';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
@@ -22,8 +21,6 @@ import {
   executeMemoryInvalidate,
   setMemoryFactPinnedForManagement,
   forgetMemoryFactForManagement,
-  executeMemoryBlockRead,
-  executeMemoryBlockEdit,
 } from '../../src/services/memory/memoryTools';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -40,7 +37,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   useSettingsStore.setState({ disableLongTermMemory: false });
 });
 
@@ -459,57 +455,5 @@ describe('executeMemoryForget', () => {
       action: 'withdrawal',
       factId: created.fact.id,
     });
-  });
-});
-
-describe('executeMemoryBlockRead / executeMemoryBlockEdit', () => {
-  it('lists all default blocks when no label given', () => {
-    const result = executeMemoryBlockRead({});
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      const labels = result.blocks.map((b) => b.label);
-      expect(labels).toEqual(expect.arrayContaining(['profile', 'persona', 'active_focus']));
-    }
-  });
-
-  it('returns unknown_block for missing label', () => {
-    const result = executeMemoryBlockRead({ label: 'does_not_exist' });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe('unknown_block');
-  });
-
-  it('replaces block content by default', () => {
-    const result = executeMemoryBlockEdit({ label: 'profile', content: 'Name: Mo' });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.block.content).toBe('Name: Mo');
-
-    const reread = executeMemoryBlockRead({ label: 'profile' });
-    if (reread.ok) expect(reread.blocks[0].content).toBe('Name: Mo');
-  });
-
-  it('appends with newline when replace=false', () => {
-    executeMemoryBlockEdit({ label: 'open_threads', content: 'find a SIM card' });
-    executeMemoryBlockEdit({
-      label: 'open_threads',
-      content: 'register address',
-      replace: false,
-    });
-    const result = executeMemoryBlockRead({ label: 'open_threads' });
-    if (result.ok) {
-      expect(result.blocks[0].content).toBe('find a SIM card\nregister address');
-    }
-  });
-
-  it('returns block_overflow when content exceeds limit', () => {
-    const long = 'x'.repeat(5000);
-    const result = executeMemoryBlockEdit({ label: 'profile', content: long });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe('block_overflow');
-  });
-
-  it('returns invalid_args when content is missing', () => {
-    const result = executeMemoryBlockEdit({ label: 'profile' } as any);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe('invalid_args');
   });
 });

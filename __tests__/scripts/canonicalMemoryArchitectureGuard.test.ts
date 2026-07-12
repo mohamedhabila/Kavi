@@ -126,6 +126,27 @@ describe('canonical memory architecture guard', () => {
     );
   });
 
+  it('allows only the one-way raw-block table drop and rejects restoring its store or tools', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/schema.ts',
+      'DROP TABLE IF EXISTS memory_blocks;\n',
+    );
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual([]);
+
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/blocks.ts',
+      "export function ensureDefaultBlocks() { return 'memory_block_read'; }\n",
+    );
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('restores a retired memory implementation'),
+        expect.stringContaining('uses retired provider-editable raw memory API'),
+      ]),
+    );
+  });
+
   it('is wired into the standard verification gate', () => {
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'),

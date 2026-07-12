@@ -750,10 +750,9 @@ export const fr: TranslationMap = mergeTranslations(en, {
     overviewConsolidationTitle: 'Consolidation',
     overviewLoading: 'Chargement de l’aperçu mémoire…',
     factsTab: 'Faits',
-    blocksTab: 'Blocs',
     clearTitle: 'Effacer toute la mémoire',
     clearConfirm:
-      'Cela supprimera définitivement tous les faits, épisodes, tâches et blocs de mémoire enregistrés. Cette action est irréversible.',
+      'Cela supprimera définitivement tous les faits, épisodes et tâches enregistrés. Cette action est irréversible.',
     clearAction: 'Tout effacer',
     refreshing: 'Actualisation de la mémoire…',
     lastSynced: 'Dernière synchronisation à {time}',
@@ -775,9 +774,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     factForgetFailedMessage: 'Rechargez la mémoire et réessayez.',
     factPin: 'Épingler',
     factUnpin: 'Désépingler',
-    blocksEmpty: 'Aucun bloc de mémoire défini.',
-    blockChars: '{used} / {limit} caractères',
-    blockSave: 'Enregistrer le bloc',
     disableLongTermMemory: 'Désactiver la mémoire à long terme',
     disableLongTermMemoryHint:
       'Si activé, les conversations restent sans état et aucun fait n’est mémorisé entre les discussions.',

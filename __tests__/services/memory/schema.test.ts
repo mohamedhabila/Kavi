@@ -55,6 +55,42 @@ function indexedColumns(index: string): string[] {
 }
 
 describe('ensureFactSchema', () => {
+  it('destroys legacy provider-editable raw blocks without recreating the table', () => {
+    const db = getMemoryDb();
+    db.execSync(`
+      CREATE TABLE memory_blocks (
+        label TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        char_limit INTEGER NOT NULL,
+        description TEXT NOT NULL,
+        pinned INTEGER NOT NULL,
+        persona_id TEXT,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO memory_blocks (
+        label, content, char_limit, description, pinned, persona_id, updated_at
+      ) VALUES (
+        'profile', 'PRIVATE-LEGACY-BLOCK-SENTINEL', 1000, 'legacy raw profile', 1, NULL, 1
+      );
+    `);
+
+    ensureFactSchema();
+
+    expect(
+      db.getFirstSync(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_blocks'",
+      ),
+    ).toBeNull();
+
+    resetFactSchemaCacheForTests();
+    ensureFactSchema();
+    expect(
+      db.getFirstSync(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_blocks'",
+      ),
+    ).toBeNull();
+  });
+
   it('renames the retired retrieval similarity columns in place', () => {
     ensureFactSchema();
     const db = getMemoryDb();

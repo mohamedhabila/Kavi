@@ -19,7 +19,6 @@ import {
   setFactPinned,
 } from '../../../src/services/memory/facts/mutations';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
-import { ensureDefaultBlocks, editBlock } from '../../../src/services/memory/blocks';
 import { editPromptEligibleWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import { pushTask, completeTask } from '../../../src/services/memory/taskStack';
@@ -32,7 +31,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
 });
 
 function userMessage(content: string, timestamp: number): Message {
@@ -79,33 +77,6 @@ describe('buildLivingMemorySections', () => {
     expect(out.recalledFactCount).toBe(0);
     expect(out.openThreadLabels).toEqual([]);
     expect(out.idleSinceLastTurnMs).toBeUndefined();
-  });
-
-  it('emits a dynamic L2 section for pinned blocks with content', async () => {
-    editBlock('profile', 'Berlin-based developer named Sam.', { replace: true });
-
-    const out = await buildLivingMemorySections({
-      ...memoryScope('conv-profile-block'),
-      messages: [userMessage('hello', 1_000)],
-      now: 2_000,
-    });
-
-    expect(out.sections.length).toBeGreaterThan(0);
-    expect(out.sections.some((s) => s.cacheable === true)).toBe(false);
-    const rendered = out.sections.map((s) => s.text).join('\n');
-    expect(rendered).toContain('<block label="profile">');
-    expect(rendered).toContain('Berlin-based developer');
-  });
-
-  it('omits empty memory blocks from the L2 prefix', async () => {
-    // Default blocks are seeded but empty — no L2 section should appear.
-    const out = await buildLivingMemorySections({
-      ...memoryScope('conv-empty-blocks'),
-      messages: [userMessage('hello', 1_000)],
-      now: 2_000,
-    });
-    const cacheable = out.sections.filter((s) => s.cacheable === true);
-    expect(cacheable).toEqual([]);
   });
 
   it('renders a focus block (L3) reflecting the gap since the last assistant turn', async () => {
@@ -167,7 +138,12 @@ describe('buildLivingMemorySections', () => {
 
   it('uses scoped working focus/open threads when a conversation id is supplied', async () => {
     const now = 5_000_000;
-    editBlock('active_focus', 'Global focus should not leak.', { replace: true });
+    editPromptEligibleWorkingBlock(
+      'active_focus',
+      'Other conversation focus should not leak.',
+      { conversationId: 'conv-other', threadId: 'conv-other' },
+      { now },
+    );
     editPromptEligibleWorkingBlock(
       'active_focus',
       'Scoped focus for conversation alpha.',
@@ -194,29 +170,7 @@ describe('buildLivingMemorySections', () => {
       .map((s) => s.text)
       .join('\n');
     expect(dynamicText).toContain('Scoped focus for conversation alpha.');
-    expect(dynamicText).not.toContain('Global focus should not leak.');
-  });
-
-  it('uses a custom block reader when supplied (test seam)', async () => {
-    const out = await buildLivingMemorySections({
-      ...memoryScope('conv-custom-reader'),
-      messages: [userMessage('hello', 1_000)],
-      now: 2_000,
-      readBlocks: () => [
-        {
-          label: 'profile',
-          content: 'Custom reader content.',
-          charLimit: 100,
-          description: 'desc',
-          pinned: true,
-          personaId: null,
-          updatedAt: 0,
-        },
-      ],
-    });
-
-    expect(out.sections.some((s) => s.cacheable === true)).toBe(false);
-    expect(out.sections.map((s) => s.text).join('\n')).toContain('Custom reader content');
+    expect(dynamicText).not.toContain('Other conversation focus should not leak.');
   });
 
   it('falls back to lastUserAt for idle gap when no assistant turn exists', async () => {
@@ -228,8 +182,7 @@ describe('buildLivingMemorySections', () => {
     expect(out.idleSinceLastTurnMs).toBe(3_000);
   });
 
-  it('returns the empty bridge when disableLongTermMemory is true even with persisted blocks/facts', async () => {
-    editBlock('profile', 'Berlin-based developer named Sam.', { replace: true });
+  it('returns the empty bridge when disableLongTermMemory is true even with persisted facts', async () => {
     const sam = upsertEntity({ name: 'sam', type: 'person' });
     const fact = recordFact({
       subjectId: sam.id,

@@ -123,7 +123,7 @@ describe('agent control graph model turn execution', () => {
       {
         id: 'compact_prior-memory',
         role: 'system',
-        content: 'Summary\n\n## Persistent Context\nPRIVATE LIVING MEMORY',
+        content: 'Summary containing PRIVATE LIVING MEMORY',
         timestamp: 0,
       },
       ...safeWorkingMessages,
@@ -202,7 +202,7 @@ describe('agent control graph model turn execution', () => {
         {
           id: 'compact-private',
           role: 'system',
-          content: 'Summary\n\n## Persistent Context\nPRIVATE LIVING MEMORY',
+          content: 'Summary containing PRIVATE LIVING MEMORY',
           timestamp: 1,
         },
         ...workingMessages,
@@ -300,9 +300,7 @@ describe('agent control graph model turn execution', () => {
 
     expect(result.fullContent).toBe('Memory-free response.');
     expect(llm.streamMessage).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(llm.streamMessage.mock.calls[0]?.[0])).toContain(
-      'PRIVATE REPLAY MEMORY',
-    );
+    expect(JSON.stringify(llm.streamMessage.mock.calls[0]?.[0])).toContain('PRIVATE REPLAY MEMORY');
     expect(JSON.stringify(llm.streamMessage.mock.calls[1]?.[0])).not.toContain(
       'PRIVATE REPLAY MEMORY',
     );

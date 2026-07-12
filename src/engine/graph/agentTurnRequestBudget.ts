@@ -2,7 +2,6 @@ import { recordBudgetAuditEntry } from '../../services/context/budgetAudit';
 import { enforceContextBudget, inspectContextBudget } from '../../services/context/budgetManager';
 import { compressToolDefinitions } from '../tools/toolManagerTokenBudget';
 import { buildToolSurfaceTokenAudit, type ToolSurfaceTokenAudit } from './toolSurfaceTokenAudit';
-import { collectCacheableProfileSections } from '../../services/context/postCompactionReinject';
 import type { ContextEngine, ForcedCompactionTier } from '../../services/context/types';
 import { estimateTokens, getWorkingContextWindow } from '../../services/context/tokenCounter';
 import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
@@ -53,7 +52,6 @@ export interface CompactAgentTurnWorkingMessagesParams {
   currentMessages: Message[];
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
-  profileSections?: ReadonlyArray<string>;
   currentTokenCount?: number;
   tokenBudget?: number;
   forceTier?: ForcedCompactionTier;
@@ -69,17 +67,6 @@ function extractGoalsPromptSection(
   }
   const goalsSection = sections.find((section) => section.text.includes('## Current Goals'));
   return goalsSection?.text ?? null;
-}
-
-function resolveCompactionProfileSections(params: {
-  livingMemory?: LivingMemoryBridgeOutput | null;
-  profileSections?: ReadonlyArray<string>;
-  promptSections?: ReadonlyArray<{ text: string; cacheable?: boolean }>;
-}): string[] {
-  const profileSections =
-    params.profileSections ??
-    collectCacheableProfileSections(params.livingMemory?.sections ?? params.promptSections);
-  return [...profileSections];
 }
 
 function buildLivingMemoryCompactionHints(
@@ -121,13 +108,7 @@ export async function compactAgentTurnWorkingMessages(
       return { messages: params.currentMessages, compacted: false };
     }
 
-    const profileSections = resolveCompactionProfileSections({
-      livingMemory: params.livingMemory,
-      profileSections: params.profileSections,
-    });
-    const applied = applyCompactionResultToWorkingMessages(params.currentMessages, compactResult, {
-      profileSections,
-    });
+    const applied = applyCompactionResultToWorkingMessages(params.currentMessages, compactResult);
     params.onCompaction?.(applied);
     return { messages: applied.messages, compacted: true };
   } catch (compactionError: unknown) {
@@ -239,10 +220,6 @@ export async function prepareAgentTurnRequestBudget(
   const contextWindow = getWorkingContextWindow(params.requestModel);
   let workingMessages = repairModelVisibleToolResultTranscript(params.workingMessages);
   const toolsForIteration = [...(params.toolsForIteration ?? [])];
-  const compactionProfileSections = resolveCompactionProfileSections({
-    livingMemory: params.livingMemory,
-    promptSections: params.enrichedSystemPromptSections,
-  });
   const currentGoalsPromptSection = extractGoalsPromptSection(params.enrichedSystemPromptSections);
   let compactionApplied = false;
 
@@ -270,7 +247,6 @@ export async function prepareAgentTurnRequestBudget(
         currentMessages: workingMessages,
         livingMemory: params.livingMemory,
         onCompaction: params.onCompaction,
-        profileSections: compactionProfileSections,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages),
         forceTier,
         failureLabel: 'Pre-flight compaction failed, continuing without compaction',
@@ -342,10 +318,9 @@ export async function prepareAgentTurnRequestBudget(
         })
       : undefined;
 
-  const memoryCacheableTokens = compactionProfileSections.reduce(
-    (sum, section) => sum + estimateTokens(section),
-    0,
-  );
+  const memoryCacheableTokens = (params.livingMemory?.sections ?? [])
+    .filter((section) => section.cacheable === true)
+    .reduce((sum, section) => sum + estimateTokens(section.text), 0);
   const goalsTokens = estimateTokens(currentGoalsPromptSection ?? '');
   const memoryDynamicTokens = Math.max(
     0,

@@ -8,7 +8,6 @@
 // risks, summaries, and durable facts without domain-specific prompt rules.
 // ---------------------------------------------------------------------------
 
-import type { MemoryBlock } from './blocks';
 import {
   renderEpisodePromptSection,
   type EpisodePromptSelection,
@@ -44,12 +43,6 @@ export interface AssemblePromptInput {
   /** L1 - optional fixed addenda (tool style, capability discovery, etc.). */
   baseAddenda?: string[];
   /**
-   * L2 - Letta-style memory blocks. Always rendered in a stable order
-   * (pinned first, then alphabetical). Empty blocks are omitted. The block
-   * description is rendered as a one-liner above each block.
-   */
-  blocks?: MemoryBlock[];
-  /**
    * L2 - optional entity dossier (canonical "who's who" snippet). The
    * caller picks which entities are worth surfacing for this request.
    */
@@ -75,7 +68,6 @@ export interface AssemblePromptInput {
 }
 
 const L1_HEADER = '## Identity & Style';
-const L2_BLOCKS_HEADER = '## Persistent Memory';
 const L2_DOSSIER_HEADER = '## Known Entities';
 const L3_HEADER = '## This Turn';
 const L3_REFLECTION_HEADER = '### Day Focus';
@@ -118,20 +110,6 @@ function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): st
     .join(sep);
 }
 
-function sortBlocksDeterministically(blocks: MemoryBlock[]): MemoryBlock[] {
-  return [...blocks].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    return a.label.localeCompare(b.label);
-  });
-}
-function renderBlock(block: MemoryBlock): string {
-  const description = block.description.trim();
-  const content = block.content.trim();
-  if (!content) return '';
-  const head = description ? `${block.label} - ${description}` : block.label;
-  return `<block label="${block.label}">\n${head}\n${content}\n</block>`;
-}
-
 function renderL1(input: AssemblePromptInput): string {
   const base = input.basePrompt.trim();
   if (!base && (!input.baseAddenda || input.baseAddenda.length === 0)) return '';
@@ -140,14 +118,8 @@ function renderL1(input: AssemblePromptInput): string {
 }
 
 function renderL2(input: AssemblePromptInput): string {
-  const blocks = sortBlocksDeterministically(input.blocks ?? [])
-    .map(renderBlock)
-    .filter((rendered) => rendered.length > 0);
   const dossier = (input.entityDossier ?? '').trim();
-  const sections: string[] = [];
-  if (blocks.length > 0) sections.push(`${L2_BLOCKS_HEADER}\n${blocks.join('\n\n')}`);
-  if (dossier) sections.push(`${L2_DOSSIER_HEADER}\n${dossier}`);
-  return sections.join('\n\n');
+  return dossier ? `${L2_DOSSIER_HEADER}\n${dossier}` : '';
 }
 
 function fitText(value: string, maxChars: number): string {

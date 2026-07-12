@@ -5,10 +5,7 @@ import {
   MEMORY_PIN_TOOL,
   MEMORY_UNPIN_TOOL,
   MEMORY_FORGET_TOOL,
-  MEMORY_BLOCK_READ_TOOL,
-  MEMORY_BLOCK_EDIT_TOOL,
   MEMORY_MANAGE_TOOL,
-  MEMORY_BLOCK_TOOL,
 } from '../../src/engine/tools/builtin-definitions';
 import {
   executeMemoryRecall,
@@ -17,8 +14,6 @@ import {
   executeMemoryUnpin,
   executeMemoryForget,
   executeMemoryInvalidate,
-  executeMemoryBlockRead,
-  executeMemoryBlockEdit,
 } from '../../src/engine/tools/builtin-memory';
 
 import { executeToolCatalog } from '../../src/engine/tools/builtin-tool-catalog';
@@ -30,7 +25,6 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 
 const MEMORY_EXECUTION_SCOPE = {
   memoryConversationId: 'memory-tools-conversation',
@@ -59,8 +53,6 @@ const NEW_MEMORY_TOOL_NAMES = [
   'memory_pin',
   'memory_unpin',
   'memory_forget',
-  'memory_block_read',
-  'memory_block_edit',
 ];
 
 const REGISTERED_MEMORY_TOOL_NAMES = [
@@ -68,7 +60,6 @@ const REGISTERED_MEMORY_TOOL_NAMES = [
   'memory_remember',
   'memory_forget',
   'memory_manage',
-  'memory_block',
 ];
 
 const STRUCTURED_MEMORY_CATALOG_TOOL_NAMES = [
@@ -85,7 +76,6 @@ describe('living-memory tool wiring', () => {
     expoSqlite.__resetExpoSqliteForTests();
     resetFactSchemaCacheForTests();
     ensureFactSchema();
-    ensureDefaultBlocks();
   });
 
   afterEach(() => {
@@ -100,12 +90,9 @@ describe('living-memory tool wiring', () => {
       MEMORY_PIN_TOOL,
       MEMORY_UNPIN_TOOL,
       MEMORY_FORGET_TOOL,
-      MEMORY_BLOCK_READ_TOOL,
-      MEMORY_BLOCK_EDIT_TOOL,
       MEMORY_MANAGE_TOOL,
-      MEMORY_BLOCK_TOOL,
     ];
-    const expected = [...NEW_MEMORY_TOOL_NAMES, 'memory_manage', 'memory_block'].sort();
+    const expected = [...NEW_MEMORY_TOOL_NAMES, 'memory_manage'].sort();
     expect(defs.map((d) => d.name).sort()).toEqual(expected);
     for (const def of defs) {
       expect(typeof def.description).toBe('string');
@@ -177,7 +164,6 @@ describe('living-memory tool wiring', () => {
     for (const name of STRUCTURED_MEMORY_CATALOG_TOOL_NAMES) {
       expect(seen).toContain(name);
     }
-    expect(seen).not.toContain('memory_block');
   });
 
   it('memory_remember → memory_recall round-trip via the wrapper executors', () => {
@@ -213,8 +199,17 @@ describe('living-memory tool wiring', () => {
   it('memory_recall can list all valid facts without a subject hint', () => {
     JSON.parse(
       executeMemoryRemember(
-        { subject: 'user', predicate: 'tz', value: 'UTC+1', scope: 'global' },
-        groundedRequest('user-timezone', 'My timezone is UTC+1.'),
+        {
+          subject: 'user',
+          subjectType: 'self',
+          predicate: 'usual architecture review duration',
+          value: '30 minutes',
+          scope: 'global',
+        },
+        groundedRequest(
+          'user-review-duration',
+          'I usually keep architecture reviews to 30 minutes.',
+        ),
       ),
     );
     JSON.parse(
@@ -287,24 +282,6 @@ describe('living-memory tool wiring', () => {
     expect(invalidated).toEqual(
       expect.objectContaining({ ok: true, action: 'invalidation', status: 'invalidated' }),
     );
-  });
-
-  it('memory_block_read returns blocks; memory_block_edit replaces content', () => {
-    const initial = JSON.parse(executeMemoryBlockRead({}));
-    expect(initial.ok).toBe(true);
-    expect(Array.isArray(initial.blocks)).toBe(true);
-
-    const target = initial.blocks[0]?.label;
-    expect(typeof target).toBe('string');
-
-    const edited = JSON.parse(
-      executeMemoryBlockEdit({ label: target, content: 'hello world', replace: true }),
-    );
-    expect(edited.ok).toBe(true);
-    expect(edited.block.content).toBe('hello world');
-
-    const reread = JSON.parse(executeMemoryBlockRead({ label: target }));
-    expect(reread.blocks[0].content).toBe('hello world');
   });
 
   it('returns structured errors as JSON instead of throwing', () => {

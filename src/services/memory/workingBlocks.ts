@@ -1,9 +1,8 @@
 // ---------------------------------------------------------------------------
 // Kavi — Scoped working memory blocks
 // ---------------------------------------------------------------------------
-// `profile`, `persona`, and `preferences` remain global memory blocks. Rolling
-// state such as `active_focus` and `open_threads` is conversation/task scoped
-// so one thread cannot bleed into another thread's prompt.
+// Rolling state such as `active_focus` and `open_threads` is code-owned and
+// conversation/task scoped so one thread cannot bleed into another prompt.
 // ---------------------------------------------------------------------------
 
 import { getMany, getOne, runMemoryStatement } from './access/crud';

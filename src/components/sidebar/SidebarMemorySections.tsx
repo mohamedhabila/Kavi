@@ -17,22 +17,10 @@ import { Compass, Pin, Search, Hash, Brain } from 'lucide-react-native';
 import { AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 import type { Conversation } from '../../types/conversation';
-import type { MemoryBlock } from '../../services/memory/blocks';
 import type { MemoryFact } from '../../services/memory/facts/types';
 import { subscribeToMemoryChanges } from '../../services/memory/changeNotifications';
 
 // ── Memory readers (guarded) ────────────────────────────────────────────────
-
-function safeGetBlock(label: string): MemoryBlock | null {
-  try {
-    // Lazy require so test harnesses that don't mock SQLite still load the
-    // sidebar module without crashing at import time.
-    const { getBlock } = require('../../services/memory/blocks');
-    return getBlock(label) ?? null;
-  } catch {
-    return null;
-  }
-}
 
 function safeGetWorkingBlockContent(
   label: 'active_focus' | 'open_threads',
@@ -54,9 +42,9 @@ function safeGetWorkingBlockContent(
     const block = listRecentWorkingBlocks(label, 1)?.[0];
     if (block?.content) return block.content;
   } catch {
-    // fall back below
+    return null;
   }
-  return options?.conversationId ? null : (safeGetBlock(label)?.content ?? null);
+  return null;
 }
 
 function safeListPinnedFacts(limit: number): MemoryFact[] {

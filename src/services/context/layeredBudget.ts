@@ -4,7 +4,7 @@
 // Per the single-thread memory redesign, the prompt is a 4-layer stack:
 //
 //   L1 Tools          15%  (cap 12,000 tok)
-//   L2 System         65%  (base + persona + profile blocks + summary +
+//   L2 System         65%  (base + persona + summary +
 //                            buffer-tail of older messages)
 //   L3 Active focus + retrieved memory    5%  (cap 1,800 tok)
 //   L4 Last 1–2 turns + new user message 15%  (cap 8,000 tok)
@@ -13,9 +13,8 @@
 // When pressure exceeds budget the cascade is applied in order:
 //   (1) drop optional retrieved facts
 //   (2) window L2 buffer-tail
-//   (3) compress profile/active_focus blocks
-//   (4) tier-2 compaction (selective summarization)
-//   (5) tier-3 compaction (aggressive summarization)
+//   (3) tier-2 compaction (selective summarization)
+//   (4) tier-3 compaction (aggressive summarization)
 //
 // This module is intentionally **pure** — it computes budgets and recommends
 // adjustments. It never mutates the underlying stores or runs the LLM
@@ -26,7 +25,6 @@
 import { estimateTokens, getWorkingContextWindow } from './tokenCounter';
 import { MIN_OUTPUT_RESERVE } from './budgetManager';
 import { resolveModelOutputTokenBudget } from './outputTokenBudget';
-import type { MemoryBlock } from '../memory/blocks';
 import type { MemoryFact } from '../memory/facts/types';
 
 // ── Layer shares (fractions of the working context window) ───────────────
@@ -75,17 +73,11 @@ export interface LayeredCascadeInput {
    * trailing facts to fit the L3 cap; pinned facts are never dropped.
    */
   retrievedFacts?: MemoryFact[];
-  /**
-   * Optional memory blocks contributing to L2. The cascade may flag profile
-   * blocks for compression; pinned blocks are flagged last.
-   */
-  l2Blocks?: MemoryBlock[];
 }
 
 export type LayeredCascadeAction =
   | 'drop_retrieved_facts'
   | 'window_buffer_tail'
-  | 'compress_l2_blocks'
   | 'tier2_compaction'
   | 'tier3_compaction';
 
@@ -255,15 +247,7 @@ export function applyMemoryCascade(input: LayeredCascadeInput): LayeredCascadeRe
     });
   }
 
-  // Step 3: compress L2 profile / active_focus blocks.
-  if (rawOvershoot > 0 && (input.l2Blocks?.length ?? 0) > 0) {
-    recommendations.push({
-      action: 'compress_l2_blocks',
-      reason: 'Compress profile/active_focus blocks to recover L2 headroom',
-    });
-  }
-
-  // Step 4: tier-2 (selective) compaction. Triggered when:
+  // Step 3: tier-2 (selective) compaction. Triggered when:
   //  - L2 buffer windowing alone cannot close the gap (overshoot remains
   //    after crediting the easy L2 savings), OR
   //  - the absolute overshoot is non-trivial (>10% of the working budget),
@@ -277,7 +261,7 @@ export function applyMemoryCascade(input: LayeredCascadeInput): LayeredCascadeRe
     });
   }
 
-  // Step 5: tier-3 (aggressive) compaction — only when overshoot is large
+  // Step 4: tier-3 (aggressive) compaction — only when overshoot is large
   // enough that tier-2 alone is unlikely to recover the gap.
   const tier3Floor = Math.max(1, Math.floor(budget.totalAvailable * 0.5));
   if (remainingOvershoot > Math.floor(budget.l2System * 0.25) || rawOvershoot > tier3Floor) {

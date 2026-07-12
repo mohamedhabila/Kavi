@@ -18,14 +18,11 @@ import {
   queryMemoryFactsForManagement,
   forgetMemoryFactForManagement,
   setMemoryFactPinnedForManagement,
-  executeMemoryBlockRead,
-  executeMemoryBlockEdit,
 } from '../services/memory/memoryTools';
 import { recallRecentEpisodes } from '../services/memory/episodeRecall';
 import { useAppTheme } from '../theme/useAppTheme';
 import { MemoryScreenView } from './memory/MemoryScreenView';
 import type {
-  MemoryBlockRow as BlockRow,
   MemoryDiagnostics,
   MemoryEpisodeRow as MemoryEpisode,
   MemoryFactRow as FactRow,
@@ -37,7 +34,6 @@ import { useTranslation } from '../i18n/useTranslation';
 import { useBackToChat } from '../navigation/useBackToChat';
 
 function resolveRouteTab(tabParam: unknown): Tab {
-  if (tabParam === 'blocks') return 'blocks';
   if (tabParam === 'facts') return 'facts';
   return 'overview';
 }
@@ -65,10 +61,6 @@ export const MemoryScreen: React.FC = () => {
   const [factsPinnedOnly, setFactsPinnedOnly] = useState(false);
   const [episodes, setEpisodes] = useState<MemoryEpisode[]>([]);
 
-  // Blocks tab state.
-  const [blocks, setBlocks] = useState<BlockRow[]>([]);
-  const [blockDrafts, setBlockDrafts] = useState<Record<string, string>>({});
-
   const overviewRequestEpochRef = useRef(0);
 
   useEffect(() => {
@@ -94,25 +86,6 @@ export const MemoryScreen: React.FC = () => {
       setFacts([]);
     }
   }, [factsFilter, factsPinnedOnly]);
-
-  const loadBlocks = useCallback(() => {
-    const result = executeMemoryBlockRead({});
-    if ('ok' in result && result.ok) {
-      setBlocks(result.blocks);
-      setBlockDrafts((prev) => {
-        // Preserve in-flight edits; only seed labels we don't yet have a draft for.
-        const next = { ...prev };
-        for (const block of result.blocks) {
-          if (next[block.label] === undefined) {
-            next[block.label] = block.content;
-          }
-        }
-        return next;
-      });
-    } else {
-      setBlocks([]);
-    }
-  }, []);
 
   const loadEpisodes = useCallback(() => {
     try {
@@ -159,21 +132,17 @@ export const MemoryScreen: React.FC = () => {
     }
   }, []);
 
-  const refreshMemory = useCallback(
-    async () => {
-      setIsRefreshing(true);
-      try {
-        await loadOverviewSnapshot();
-        loadFacts();
-        loadBlocks();
-        loadEpisodes();
-        setLastSyncedAt(Date.now());
-      } finally {
-        setIsRefreshing(false);
-      }
-    },
-    [loadOverviewSnapshot, loadFacts, loadBlocks, loadEpisodes],
-  );
+  const refreshMemory = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await loadOverviewSnapshot();
+      loadFacts();
+      loadEpisodes();
+      setLastSyncedAt(Date.now());
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadOverviewSnapshot, loadFacts, loadEpisodes]);
 
   useEffect(() => {
     if (tab !== 'overview') return;
@@ -199,21 +168,12 @@ export const MemoryScreen: React.FC = () => {
         loadOverviewFacts(overviewSearch);
       }
       loadFacts();
-      loadBlocks();
       loadEpisodes();
       setLastSyncedAt(event.updatedAt);
     });
 
     return unsubscribe;
-  }, [
-    loadOverviewSnapshot,
-    loadOverviewFacts,
-    loadFacts,
-    loadBlocks,
-    loadEpisodes,
-    tab,
-    overviewSearch,
-  ]);
+  }, [loadOverviewSnapshot, loadOverviewFacts, loadFacts, loadEpisodes, tab, overviewSearch]);
 
   const handleClearAll = useCallback(() => {
     Alert.alert(t('memory.clearTitle'), t('memory.clearConfirm'), [
@@ -274,21 +234,6 @@ export const MemoryScreen: React.FC = () => {
     [loadFacts, t],
   );
 
-  const handleBlockDraftChange = useCallback((label: string, content: string) => {
-    setBlockDrafts((prev) => ({ ...prev, [label]: content }));
-  }, []);
-
-  const handleBlockSave = useCallback(
-    (label: string) => {
-      const draft = blockDrafts[label] ?? '';
-      const result = executeMemoryBlockEdit({ label, content: draft, replace: true });
-      if ('ok' in result && result.ok) {
-        loadBlocks();
-      }
-    },
-    [blockDrafts, loadBlocks],
-  );
-
   const memoryStatus = isRefreshing
     ? t('memory.refreshing')
     : lastSyncedAt
@@ -297,8 +242,6 @@ export const MemoryScreen: React.FC = () => {
 
   return (
     <MemoryScreenView
-      blockDrafts={blockDrafts}
-      blocks={blocks}
       colors={colors}
       diagnostics={diagnostics}
       episodes={episodes}
@@ -306,12 +249,9 @@ export const MemoryScreen: React.FC = () => {
       factsFilter={factsFilter}
       factsPinnedOnly={factsPinnedOnly}
       handleBack={handleBack}
-      handleBlockDraftChange={handleBlockDraftChange}
-      handleBlockSave={handleBlockSave}
       handleClearAll={handleClearAll}
       handleFactForget={handleFactForget}
       handleFactToggleStar={handleFactToggleStar}
-      loadBlocks={loadBlocks}
       loadFacts={loadFacts}
       loadOverviewFacts={loadOverviewFacts}
       memoryStatus={memoryStatus}

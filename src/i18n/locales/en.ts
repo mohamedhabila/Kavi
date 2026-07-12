@@ -759,10 +759,9 @@ export const en: TranslationMap = {
     overviewConsolidationTitle: 'Consolidation',
     overviewLoading: 'Loading memory overview…',
     factsTab: 'Facts',
-    blocksTab: 'Blocks',
     clearTitle: 'Clear All Memory',
     clearConfirm:
-      'This permanently deletes all remembered facts, episodes, tasks, and memory blocks. This cannot be undone.',
+      'This permanently deletes all remembered facts, episodes, and tasks. This cannot be undone.',
     clearAction: 'Clear All',
     refreshing: 'Refreshing memory…',
     lastSynced: 'Last synced at {time}',
@@ -783,9 +782,6 @@ export const en: TranslationMap = {
     factForgetFailedMessage: 'Reload memory and try again.',
     factPin: 'Pin',
     factUnpin: 'Unpin',
-    blocksEmpty: 'No memory blocks defined.',
-    blockChars: '{used} / {limit} chars',
-    blockSave: 'Save block',
     disableLongTermMemory: 'Disable long-term memory',
     disableLongTermMemoryHint:
       'When on, conversations stay stateless and no facts are remembered across chats.',

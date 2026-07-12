@@ -755,10 +755,9 @@ export const de: TranslationMap = mergeTranslations(en, {
     overviewConsolidationTitle: 'Konsolidierung',
     overviewLoading: 'Speicherübersicht wird geladen…',
     factsTab: 'Fakten',
-    blocksTab: 'Blöcke',
     clearTitle: 'Gesamten Speicher löschen',
     clearConfirm:
-      'Dadurch werden alle gespeicherten Fakten, Episoden, Aufgaben und Speicherblöcke dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.',
+      'Dadurch werden alle gespeicherten Fakten, Episoden und Aufgaben dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.',
     clearAction: 'Alle löschen',
     refreshing: 'Speicher wird aktualisiert…',
     lastSynced: 'Zuletzt synchronisiert um {time}',
@@ -779,9 +778,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     factForgetFailedMessage: 'Lade den Speicher neu und versuche es erneut.',
     factPin: 'Anheften',
     factUnpin: 'Lösen',
-    blocksEmpty: 'Keine Speicherblöcke definiert.',
-    blockChars: '{used} / {limit} Zeichen',
-    blockSave: 'Block speichern',
     disableLongTermMemory: 'Langzeitspeicher deaktivieren',
     disableLongTermMemoryHint:
       'Wenn aktiviert, bleiben Unterhaltungen zustandslos und es werden keine Fakten zwischen Chats gespeichert.',

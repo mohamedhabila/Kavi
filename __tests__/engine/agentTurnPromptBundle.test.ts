@@ -57,7 +57,7 @@ describe('buildAgentTurnPromptBundle', () => {
     const bundle = buildAgentTurnPromptBundle({
       ...baseParams,
       livingMemorySections: [
-        { text: '## Persistent Memory\nUser prefers concise updates.' },
+        { text: '## This Turn\n### Retrieved Memory\nUser prefers concise updates.' },
         { text: '## Stable Addendum\nInvariant policy.', cacheable: true },
       ],
       goalsPromptSection: '## Current Goals\n- Finish the task.',
@@ -73,7 +73,7 @@ describe('buildAgentTurnPromptBundle', () => {
     expect(lastCacheableIndex).toBeGreaterThan(-1);
     expect(lastCacheableIndex).toBeLessThan(firstDynamicIndex);
     expect(bundle.enrichedSystemPrompt).toMatch(
-      /## Stable Addendum\nInvariant policy\.[\s\S]*## Persistent Memory[\s\S]*## Current Goals/,
+      /## Stable Addendum\nInvariant policy\.[\s\S]*## This Turn[\s\S]*## Current Goals/,
     );
     expect(bundle.enrichedSystemPrompt).not.toContain('Runtime context:');
   });
@@ -96,7 +96,9 @@ describe('buildAgentTurnPromptBundle', () => {
 
     expect(
       splitCacheableSystemPromptSections(withoutTools.enrichedSystemPromptSections).cacheableText,
-    ).toBe(splitCacheableSystemPromptSections(withTools.enrichedSystemPromptSections).cacheableText);
+    ).toBe(
+      splitCacheableSystemPromptSections(withTools.enrichedSystemPromptSections).cacheableText,
+    );
     expect(
       splitCacheableSystemPromptSections(withoutTools.enrichedSystemPromptSections).dynamicText,
     ).toContain('Execution mode for this turn: no registered executable tools');

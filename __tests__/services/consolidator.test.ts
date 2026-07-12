@@ -9,7 +9,6 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { ensureDefaultBlocks, getBlock } from '../../src/services/memory/blocks';
 import { editWorkingBlock, getWorkingBlock } from '../../src/services/memory/workingBlocks';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { findEntityByName } from '../../src/services/memory/entities';
@@ -27,7 +26,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
 });
 
 afterEach(() => {
@@ -385,7 +383,6 @@ describe('applyThreadLocalConsolidatorResult', () => {
     expect(facts[0].importance).toBe(0.8);
     expect(listFactEvidence(facts[0].id)).toHaveLength(1);
 
-    expect(getBlock('active_focus')?.content).toBe('');
     const focusBlock = getWorkingBlock('active_focus', {
       conversationId: 'conv-1',
       threadId: 'conv-1',
@@ -658,7 +655,6 @@ describe('applyThreadLocalConsolidatorResult', () => {
       { now: 1 },
     );
     expect(result.activeFocusUpdated).toBe(false);
-    expect(getBlock('active_focus')?.content).toBe('');
   });
 
   it('does not throw when active_focus would overflow', () => {

@@ -744,10 +744,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     overviewConsolidationTitle: '統合',
     overviewLoading: 'メモリー概要を読み込み中…',
     factsTab: 'ファクト',
-    blocksTab: 'ブロック',
     clearTitle: 'すべてのメモリーをクリア',
     clearConfirm:
-      '保存されたすべてのファクト、エピソード、タスク、メモリーブロックが完全に削除されます。この操作は元に戻せません。',
+      '保存されたすべてのファクト、エピソード、タスクが完全に削除されます。この操作は元に戻せません。',
     clearAction: 'すべてクリア',
     refreshing: 'メモリーを更新中…',
     lastSynced: '最終同期: {time}',
@@ -768,9 +767,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     factForgetFailedMessage: '記憶を再読み込みして、もう一度お試しください。',
     factPin: 'ピン留め',
     factUnpin: 'ピン解除',
-    blocksEmpty: 'メモリーブロックが定義されていません。',
-    blockChars: '{used} / {limit} 文字',
-    blockSave: 'ブロックを保存',
     disableLongTermMemory: '長期記憶を無効化',
     disableLongTermMemoryHint:
       '有効にすると、会話はステートレスとなり、チャット間で事実が記憶されません。',

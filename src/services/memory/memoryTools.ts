@@ -13,8 +13,6 @@
 //   • memory_pin         — pin an existing fact so retrieval always shows it.
 //   • memory_unpin       — opposite of memory_pin.
 //   • memory_forget      — withdraw a fact and its derived memory.
-//   • memory_block_edit  — replace/append a memory block's content.
-//   • memory_block_read  — read one or all memory blocks (no args = all).
 //
 // `memory_search` is implemented in `builtin-memory.ts` over the same
 // structured living-memory fact store.
@@ -27,7 +25,6 @@ import { listFacts, listFactsForRecallEligibleScan } from './facts/queries';
 import { requireMemoryFactScope, type MemoryFactScope } from './facts/types';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
-import { editBlock, ensureDefaultBlocks, getBlock, listBlocks, BlockOverflowError } from './blocks';
 import { ensureFactSchema } from './schema';
 import {
   canReadLongTermMemory,
@@ -36,15 +33,11 @@ import {
   isMemoryReadEpochCurrent,
 } from './policy';
 import type {
-  MemoryBlockEditResult,
-  MemoryBlockReadResult,
   MemoryRememberResult,
   MemorySupersessionReceipt,
   SerializedMemoryFact,
 } from './memoryToolResultTypes';
 export type {
-  MemoryBlockEditResult,
-  MemoryBlockReadResult,
   MemoryForgetResult,
   MemoryInvalidateResult,
   MemoryPinResult,
@@ -106,8 +99,6 @@ export interface MemoryToolError {
     | 'invalid_args'
     | 'not_found'
     | 'memory_disabled'
-    | 'block_overflow'
-    | 'unknown_block'
     | 'grounding_required'
     | 'conflict'
     | 'permission_denied'
@@ -557,86 +548,5 @@ export function executeMemoryRemember(
     };
   } catch (e) {
     return err('internal', e instanceof Error ? e.message : 'memory_remember failed');
-  }
-}
-
-// ── memory_block_read ────────────────────────────────────────────────────
-
-export interface MemoryBlockReadArgs {
-  /** Omit to return all blocks. */
-  label?: string;
-}
-
-export function executeMemoryBlockRead(
-  args: MemoryBlockReadArgs = {},
-): MemoryBlockReadResult | MemoryToolError {
-  ensureFactSchema();
-  ensureDefaultBlocks();
-  const label = trimNonEmpty(args.label, 64);
-  const blocks = label
-    ? [getBlock(label)].filter((b): b is NonNullable<typeof b> => !!b)
-    : listBlocks();
-  if (label && blocks.length === 0) {
-    return err('unknown_block', `block "${label}" not found`);
-  }
-  return {
-    ok: true,
-    status: 'read',
-    resourceId: label ?? '*',
-    blocks: blocks.map((b) => ({
-      label: b.label,
-      content: b.content,
-      description: b.description,
-      pinned: b.pinned,
-      charLimit: b.charLimit,
-      charsUsed: b.content.length,
-    })),
-  };
-}
-
-// ── memory_block_edit ────────────────────────────────────────────────────
-
-export interface MemoryBlockEditArgs {
-  label: string;
-  content: string;
-  /** When true (default), content replaces the block. When false, appended with newline. */
-  replace?: boolean;
-}
-
-export function executeMemoryBlockEdit(
-  args: MemoryBlockEditArgs,
-): MemoryBlockEditResult | MemoryToolError {
-  ensureFactSchema();
-  ensureDefaultBlocks();
-  const label = trimNonEmpty(args.label, 64);
-  if (!label) return err('invalid_args', 'label is required');
-  if (typeof args.content !== 'string') {
-    return err('invalid_args', 'content is required');
-  }
-  const replace = args.replace !== false;
-  try {
-    const updated = editBlock(label, args.content, { replace });
-    return {
-      ok: true,
-      status: 'edited',
-      resourceId: updated.label,
-      block: {
-        label: updated.label,
-        content: updated.content,
-        charLimit: updated.charLimit,
-        charsUsed: updated.content.length,
-      },
-    };
-  } catch (e) {
-    if (e instanceof BlockOverflowError) {
-      return err(
-        'block_overflow',
-        `block "${e.label}" overflow: tried ${e.attemptedLength} chars, limit is ${e.charLimit}`,
-      );
-    }
-    if (e instanceof Error && e.message.includes('not found')) {
-      return err('unknown_block', e.message);
-    }
-    return err('internal', e instanceof Error ? e.message : 'block edit failed');
   }
 }

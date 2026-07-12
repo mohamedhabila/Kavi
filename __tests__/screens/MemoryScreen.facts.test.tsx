@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Tests — MemoryScreen Facts & Blocks tabs
+// Tests — MemoryScreen Facts & Episodes
 // ---------------------------------------------------------------------------
 //
 // The memoryTools executors are mocked so the structured UI contract is
@@ -13,8 +13,6 @@ import { MemoryScreen } from '../../src/screens/MemoryScreen';
 const mockExecuteMemoryRecall = jest.fn();
 const mockSetMemoryFactPinnedForManagement = jest.fn();
 const mockExecuteMemoryForget = jest.fn();
-const mockExecuteMemoryBlockRead = jest.fn();
-const mockExecuteMemoryBlockEdit = jest.fn();
 const mockSubscribeToMemoryChanges = jest.fn();
 let mockRouteParams: Record<string, unknown> = {};
 let memoryListener: ((event: { updatedAt: number }) => void) | null = null;
@@ -118,8 +116,6 @@ jest.mock('../../src/services/memory/memoryTools', () => ({
   setMemoryFactPinnedForManagement: (...args: any[]) =>
     mockSetMemoryFactPinnedForManagement(...args),
   forgetMemoryFactForManagement: (...args: any[]) => mockExecuteMemoryForget(...args),
-  executeMemoryBlockRead: (...args: any[]) => mockExecuteMemoryBlockRead(...args),
-  executeMemoryBlockEdit: (...args: any[]) => mockExecuteMemoryBlockEdit(...args),
 }));
 
 const sampleFact = (overrides: Partial<any> = {}) => ({
@@ -133,17 +129,7 @@ const sampleFact = (overrides: Partial<any> = {}) => ({
   ...overrides,
 });
 
-const sampleBlock = (overrides: Partial<any> = {}) => ({
-  label: 'persona',
-  description: 'How the assistant behaves',
-  content: 'Friendly and concise',
-  pinned: true,
-  charLimit: 1000,
-  charsUsed: 20,
-  ...overrides,
-});
-
-describe('MemoryScreen — Facts & Blocks tabs', () => {
+describe('MemoryScreen — Facts & Episodes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {};
@@ -154,7 +140,6 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
       return jest.fn();
     });
     mockExecuteMemoryRecall.mockReturnValue({ ok: true, subject: null, facts: [] });
-    mockExecuteMemoryBlockRead.mockReturnValue({ ok: true, blocks: [] });
     mockSetMemoryFactPinnedForManagement.mockImplementation((_args, pinned) => ({
       ok: true,
       fact: sampleFact({ pinned }),
@@ -170,7 +155,6 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
         counts: {},
       },
     });
-    mockExecuteMemoryBlockEdit.mockReturnValue({ ok: true, block: sampleBlock() });
   });
 
   it('renders the Facts tab and shows the empty state when no facts match', async () => {
@@ -219,10 +203,7 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     mockExecuteMemoryRecall.mockClear();
     fireEvent.press(getByTestId('memory-fact-pin-fact-1'));
 
-    expect(mockSetMemoryFactPinnedForManagement).toHaveBeenCalledWith(
-      { factId: 'fact-1' },
-      true,
-    );
+    expect(mockSetMemoryFactPinnedForManagement).toHaveBeenCalledWith({ factId: 'fact-1' }, true);
     // Reload happens after a successful pin/unpin.
     expect(mockExecuteMemoryRecall).toHaveBeenCalled();
   });
@@ -240,10 +221,7 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     await waitFor(() => expect(getByTestId('memory-fact-pin-fact-1')).toBeTruthy());
 
     fireEvent.press(getByTestId('memory-fact-pin-fact-1'));
-    expect(mockSetMemoryFactPinnedForManagement).toHaveBeenCalledWith(
-      { factId: 'fact-1' },
-      false,
-    );
+    expect(mockSetMemoryFactPinnedForManagement).toHaveBeenCalledWith({ factId: 'fact-1' }, false);
   });
 
   it('Forget confirmation cancels safely and executes withdrawal exactly once on confirm', async () => {
@@ -353,51 +331,6 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     await waitFor(() => {
       expect(getByText('Fresh fact')).toBeTruthy();
     });
-  });
-
-  it('renders the Blocks tab and lists blocks returned by executeMemoryBlockRead', async () => {
-    mockExecuteMemoryBlockRead.mockReturnValue({
-      ok: true,
-      blocks: [sampleBlock(), sampleBlock({ label: 'preferences', content: 'Likes brevity' })],
-    });
-
-    const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Blocks'));
-
-    await waitFor(() => {
-      expect(getByTestId('memory-blocks-tab')).toBeTruthy();
-      expect(getByTestId('memory-block-persona')).toBeTruthy();
-      expect(getByTestId('memory-block-preferences')).toBeTruthy();
-    });
-  });
-
-  it('editing a block draft and pressing Save calls executeMemoryBlockEdit', async () => {
-    mockExecuteMemoryBlockRead.mockReturnValue({
-      ok: true,
-      blocks: [sampleBlock()],
-    });
-
-    const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Blocks'));
-
-    await waitFor(() => expect(getByTestId('memory-block-editor-persona')).toBeTruthy());
-
-    fireEvent.changeText(getByTestId('memory-block-editor-persona'), 'Curious and witty');
-    fireEvent.press(getByTestId('memory-block-save-persona'));
-
-    expect(mockExecuteMemoryBlockEdit).toHaveBeenCalledWith({
-      label: 'persona',
-      content: 'Curious and witty',
-      replace: true,
-    });
-  });
-
-  it('Blocks tab shows empty state when no blocks are defined', async () => {
-    const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Blocks'));
-
-    await waitFor(() => expect(getByTestId('memory-blocks-tab')).toBeTruthy());
-    expect(getByText('No memory blocks defined.')).toBeTruthy();
   });
 
   // ── Episodes section ──────────────────────────────────────────────────────

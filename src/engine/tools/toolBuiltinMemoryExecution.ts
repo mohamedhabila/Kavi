@@ -3,8 +3,6 @@ import { useChatStore } from '../../store/useChatStore';
 import { resolveCodeOwnedMemoryPersonaId } from '../../services/memory/memoryScopeIdentity';
 import { resolveGraphTaskId } from '../goals/graphTaskScope';
 import {
-  executeMemoryBlockEdit,
-  executeMemoryBlockRead,
   executeMemoryForget,
   executeMemoryInvalidate,
   executeMemoryPin,
@@ -31,10 +29,7 @@ export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
   'memory_pin',
   'memory_unpin',
   'memory_forget',
-  'memory_block_read',
-  'memory_block_edit',
   'memory_manage',
-  'memory_block',
 ]);
 
 const MEMORY_MANAGE_KEYS = new Set(['action', 'factId']);
@@ -253,25 +248,6 @@ export async function executeBuiltinMemoryTool(
   if (name === 'memory_remember') {
     const request = withExecutionMemoryContext(args, conversationId, memoryConversationId, context);
     return executeMemoryRemember(request.args, request.context);
-  }
-  if (name === 'memory_block_read') return executeMemoryBlockRead(args);
-  if (name === 'memory_block_edit') return executeMemoryBlockEdit(args);
-  if (name === 'memory_block') {
-    const action = args && typeof args.action === 'string' ? String(args.action).toLowerCase() : '';
-    if (action === 'read') {
-      return executeMemoryBlockRead({ label: args?.label });
-    }
-    if (action === 'edit') {
-      return executeMemoryBlockEdit({
-        label: args?.label as string,
-        content: args?.content as string,
-        replace: args?.replace,
-      });
-    }
-    return JSON.stringify({
-      ok: false,
-      error: 'memory_block: action must be one of read, edit.',
-    });
   }
   const executionMemoryContext = resolveExecutionMemoryContext(
     conversationId,

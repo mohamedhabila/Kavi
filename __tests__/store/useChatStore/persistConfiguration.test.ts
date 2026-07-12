@@ -6,6 +6,79 @@ import { useChatStore } from '../../helpers/chatStoreHarness';
 
 describe('useChatStore', () => {
   describe('Persist Configuration', () => {
+    it('removes retired profile context from persisted compaction messages once', async () => {
+      const persistOptions = (useChatStore as any).persist.getOptions();
+      const retiredSecret = 'RAW-PROFILE-SECRET-MUST-BE-DESTROYED';
+      const summary = '[Conversation Summary]\n\n## Task Overview\nPlan dinner';
+      const retiredSuffix = `\n\n## Persistent Context\n${retiredSecret}`;
+      const migrated = await persistOptions.migrate(
+        {
+          conversations: [
+            {
+              id: 'conv-retired-profile-context',
+              title: 'Retired profile context',
+              messages: [
+                {
+                  id: 'compact_summary',
+                  role: 'system',
+                  content: `${summary}${retiredSuffix}`,
+                  timestamp: 1,
+                },
+                {
+                  id: 'compact_empty',
+                  role: 'system',
+                  content: retiredSuffix,
+                  timestamp: 2,
+                },
+                {
+                  id: 'ordinary-system',
+                  role: 'system',
+                  content: 'Keep this\n\n## Persistent Context\nNON-SYNTHETIC-CONTEXT',
+                  timestamp: 3,
+                },
+                {
+                  id: 'compact_user-authored',
+                  role: 'user',
+                  content: 'Keep this\n\n## Persistent Context\nUSER-CONTEXT',
+                  timestamp: 4,
+                },
+                {
+                  id: 'compact_without-retired-suffix',
+                  role: 'system',
+                  content: 'Keep this summary unchanged.',
+                  timestamp: 5,
+                },
+              ],
+              createdAt: 1,
+              updatedAt: 5,
+              providerId: 'p1',
+              systemPrompt: 'sys',
+            },
+          ],
+          activeConversationId: 'conv-retired-profile-context',
+        },
+        7,
+      );
+
+      expect(persistOptions.version).toBe(8);
+      expect(migrated.conversations[0].messages).toEqual([
+        expect.objectContaining({ id: 'compact_summary', content: summary }),
+        expect.objectContaining({
+          id: 'ordinary-system',
+          content: 'Keep this\n\n## Persistent Context\nNON-SYNTHETIC-CONTEXT',
+        }),
+        expect.objectContaining({
+          id: 'compact_user-authored',
+          content: 'Keep this\n\n## Persistent Context\nUSER-CONTEXT',
+        }),
+        expect.objectContaining({
+          id: 'compact_without-retired-suffix',
+          content: 'Keep this summary unchanged.',
+        }),
+      ]);
+      expect(JSON.stringify(migrated)).not.toContain(retiredSecret);
+    });
+
     it('collapses pre-v7 conversations into one canonical thread per persona', async () => {
       const persistOptions = (useChatStore as any).persist.getOptions();
       const migrated = await persistOptions.migrate(

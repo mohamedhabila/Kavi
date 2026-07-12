@@ -14,7 +14,6 @@ import {
   setFactPinned,
 } from '../../../src/services/memory/facts/mutations';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
-import { ensureDefaultBlocks, editBlock } from '../../../src/services/memory/blocks';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
@@ -28,7 +27,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
 });
 
 function userMessage(content: string, timestamp: number): Message {
@@ -414,8 +412,6 @@ describe('living memory recall', () => {
   });
 
   it('produces a stable cacheableSignature for the same inputs (cache hit safety)', async () => {
-    editBlock('profile', 'Stable profile content.', { replace: true });
-
     const messages = [
       userMessage('hello', 1_000),
       assistantMessage('hi', 2_000),

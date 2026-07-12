@@ -23,7 +23,6 @@ jest.mock('../../../src/services/llm/LlmService', () => ({
   })),
 }));
 
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import { getConsolidationState } from '../../../src/services/memory/consolidatorScheduler';
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import { listFacts } from '../../../src/services/memory/facts/queries';
@@ -54,7 +53,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   __resetMemoryLifecycleForTests();
   __resetOnDeviceGuardsForTests();
   __resetIngestionQueueForTests();

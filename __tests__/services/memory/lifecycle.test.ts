@@ -23,14 +23,12 @@ jest.mock('../../../src/services/llm/LlmService', () => ({
   })),
 }));
 
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import { getConsolidationState } from '../../../src/services/memory/consolidatorScheduler';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { findEntityByName } from '../../../src/services/memory/entities';
-import { getBlock } from '../../../src/services/memory/blocks';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import { executeMemoryRemember } from '../../../src/services/memory/memoryTools';
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
@@ -62,7 +60,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   __resetMemoryLifecycleForTests();
   __resetOnDeviceGuardsForTests();
   __resetIngestionQueueForTests();
@@ -662,7 +659,6 @@ describe('recordCompletedTurnForMemory', () => {
     expect(result.processed).toBe(false);
     expect(result.skipped).toBe('opt_out');
     expect(getConsolidationState('conv-disabled')).toBeNull();
-    expect(getBlock('active_focus')?.content).toBe('');
     expect(
       getWorkingBlock('active_focus', {
         conversationId: 'conv-disabled',

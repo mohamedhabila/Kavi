@@ -1,13 +1,11 @@
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { ArrowLeft, Brain, Compass, Layers, RefreshCw, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Brain, Compass, RefreshCw, Trash2 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BlocksSection } from './BlocksSection';
 import { FactsSection } from './FactsSection';
 import { OverviewSection } from './OverviewSection';
 import type {
-  MemoryBlockRow,
   MemoryDiagnostics,
   MemoryEpisodeRow,
   MemoryFactRow,
@@ -19,8 +17,6 @@ import type {
 } from './memoryScreenTypes';
 
 type MemoryScreenViewProps = {
-  blockDrafts: Record<string, string>;
-  blocks: MemoryBlockRow[];
   colors: MemoryScreenPalette;
   diagnostics: MemoryDiagnostics | null;
   episodes: MemoryEpisodeRow[];
@@ -28,12 +24,9 @@ type MemoryScreenViewProps = {
   factsFilter: string;
   factsPinnedOnly: boolean;
   handleBack: () => void;
-  handleBlockDraftChange: (label: string, content: string) => void;
-  handleBlockSave: (label: string) => void;
   handleClearAll: () => void;
   handleFactForget: (fact: MemoryFactRow) => void;
   handleFactToggleStar: (fact: MemoryFactRow) => void;
-  loadBlocks: () => void;
   loadFacts: () => void;
   loadOverviewFacts: (query: string) => void;
   memoryStatus: string;
@@ -51,8 +44,6 @@ type MemoryScreenViewProps = {
 };
 
 export function MemoryScreenView({
-  blockDrafts,
-  blocks,
   colors,
   diagnostics,
   episodes,
@@ -60,12 +51,9 @@ export function MemoryScreenView({
   factsFilter,
   factsPinnedOnly,
   handleBack,
-  handleBlockDraftChange,
-  handleBlockSave,
   handleClearAll,
   handleFactForget,
   handleFactToggleStar,
-  loadBlocks,
   loadFacts,
   loadOverviewFacts,
   memoryStatus,
@@ -135,19 +123,6 @@ export function MemoryScreenView({
             {t('memory.factsTab')}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'blocks' && styles.tabActive]}
-          onPress={() => {
-            setTab('blocks');
-            loadBlocks();
-          }}
-          accessibilityLabel={t('memory.blocksTab')}
-        >
-          <Layers size={16} color={tab === 'blocks' ? colors.primary : colors.textSecondary} />
-          <Text style={[styles.tabText, tab === 'blocks' && styles.tabTextActive]}>
-            {t('memory.blocksTab')}
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {tab === 'overview' ? (
@@ -163,7 +138,7 @@ export function MemoryScreenView({
           styles={styles}
           t={t}
         />
-      ) : tab === 'facts' ? (
+      ) : (
         <FactsSection
           colors={colors}
           episodes={episodes}
@@ -174,16 +149,6 @@ export function MemoryScreenView({
           handleFactToggleStar={handleFactToggleStar}
           setFactsFilter={setFactsFilter}
           setFactsPinnedOnly={setFactsPinnedOnly}
-          styles={styles}
-          t={t}
-        />
-      ) : (
-        <BlocksSection
-          blockDrafts={blockDrafts}
-          blocks={blocks}
-          colors={colors}
-          handleBlockDraftChange={handleBlockDraftChange}
-          handleBlockSave={handleBlockSave}
           styles={styles}
           t={t}
         />

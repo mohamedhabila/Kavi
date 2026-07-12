@@ -62,29 +62,3 @@ export interface MemoryInvalidateResult {
   invalidatedAt: number;
   status: 'invalidated';
 }
-
-export interface MemoryBlockReadResult {
-  ok: true;
-  status: 'read';
-  resourceId: string;
-  blocks: Array<{
-    label: string;
-    content: string;
-    description: string;
-    pinned: boolean;
-    charLimit: number;
-    charsUsed: number;
-  }>;
-}
-
-export interface MemoryBlockEditResult {
-  ok: true;
-  status: 'edited';
-  resourceId: string;
-  block: {
-    label: string;
-    content: string;
-    charLimit: number;
-    charsUsed: number;
-  };
-}

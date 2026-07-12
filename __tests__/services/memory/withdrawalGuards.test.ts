@@ -20,12 +20,9 @@ import {
   getEmbeddingCached,
 } from '../../../src/services/memory/embeddings';
 import {
-  DEFAULT_MEMORY_BLOCKS,
-  editBlock,
-  ensureDefaultBlocks,
-  getBlock,
-  upsertBlock,
-} from '../../../src/services/memory/blocks';
+  editPromptEligibleWorkingBlock,
+  getWorkingBlock,
+} from '../../../src/services/memory/workingBlocks';
 import { forgetMemoryFactForManagement } from '../../../src/services/memory/memoryTools';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { EMPTY_MEMORY_WITHDRAWAL_COUNTS } from '../../../src/services/memory/withdrawalTypes';
@@ -176,20 +173,13 @@ describe('memory withdrawal guards', () => {
     expect(clearEmbeddingCache()).toBe(1);
   });
 
-  it('preserves independently edited global blocks while deleting exact linked memory', () => {
-    ensureDefaultBlocks(100);
-    for (const block of DEFAULT_MEMORY_BLOCKS) {
-      editBlock(block.label, `independent block ${block.label}`, { replace: true, now: 200 });
-    }
-    upsertBlock({
-      label: 'extension-owned-block',
-      content: 'retained extension content',
-      charLimit: 500,
-      description: 'Not part of the core prompt catalog.',
-      pinned: false,
-      personaId: null,
-      now: 200,
-    });
+  it('preserves independently scoped working state while deleting exact linked memory', () => {
+    editPromptEligibleWorkingBlock(
+      'active_focus',
+      'independent working focus',
+      { conversationId: 'independent-conversation', threadId: 'independent-thread' },
+      { now: 200 },
+    );
     const entity = upsertEntity({ name: 'global-user', type: 'self', now: 100 });
     const fact = recordFact({
       subjectId: entity.id,
@@ -224,10 +214,12 @@ describe('memory withdrawal guards', () => {
     expect(result.receipt.counts).toEqual(
       expect.objectContaining({ facts: 1, factEvidence: 1, episodes: 1 }),
     );
-    for (const block of DEFAULT_MEMORY_BLOCKS) {
-      expect(getBlock(block.label)?.content).toBe(`independent block ${block.label}`);
-    }
-    expect(getBlock('extension-owned-block')?.content).toBe('retained extension content');
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'independent-conversation',
+        threadId: 'independent-thread',
+      })?.content,
+    ).toBe('independent working focus');
     expect(
       getMemoryDb().getFirstSync('SELECT id FROM memory_facts WHERE id = ?', fact.id),
     ).toBeNull();

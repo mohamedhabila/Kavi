@@ -85,28 +85,6 @@ describe('tool effect completion receipts', () => {
         resource: { kind: 'memory_fact', id: 'fact-1' },
       },
     ],
-    [
-      'memory_block',
-      '{"action":"read"}',
-      { status: 'read', resourceId: '*' },
-      {
-        effectKind: 'observation.read',
-        effectState: 'none',
-        verificationState: 'not_applicable',
-        resource: { kind: 'memory_block', id: '*' },
-      },
-    ],
-    [
-      'memory_block',
-      '{"action":"edit","label":"scratchpad","content":"note"}',
-      { status: 'edited', resourceId: 'scratchpad' },
-      {
-        effectKind: 'memory.write',
-        effectState: 'applied',
-        verificationState: 'verified',
-        resource: { kind: 'memory_block', id: 'scratchpad' },
-      },
-    ],
   ])(
     'maps %s memory results to verified code-owned state',
     async (toolName, argumentsText, result, expected) => {

@@ -355,7 +355,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('tool_catalog')).toBe(false);
   });
 
-  it('keeps memory tools as core without adding memory-block tools from unscoped goals', () => {
+  it('keeps structured memory tools as core for unscoped goals', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
       goals: [
@@ -381,47 +381,6 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('update_goals')).toBe(true);
     expect(names.has('memory_remember')).toBe(true);
     expect(names.has('memory_recall')).toBe(true);
-    expect(names.has('memory_block')).toBe(false);
-  });
-
-  it('does not treat memory block editing as structured fact-memory grounding', () => {
-    const memoryBlockTool: ToolDefinition = {
-      name: 'memory_block',
-      description: 'Read or edit model-editable memory blocks.',
-      input_schema: { type: 'object', properties: {} },
-      contract: {
-        category: 'memory_block',
-        capabilities: ['read', 'write'],
-        resourceKinds: ['memory_block'],
-        sideEffects: ['local_artifact'],
-      },
-    };
-    const surface = resolveTurnToolSurface({
-      allTools: [...discoveryTools, memoryBlockTool],
-      goals: [
-        {
-          id: 'memory-state',
-          title: 'Track durable memory',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write', 'read'],
-          requiredResourceKinds: ['memory'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const names = selectedNames(surface);
-    expect(names.has('memory_remember')).toBe(true);
-    expect(names.has('memory_recall')).toBe(true);
-    expect(names.has('memory_block')).toBe(false);
   });
 
   it('surfaces workspace writers from active artifact success criteria', () => {

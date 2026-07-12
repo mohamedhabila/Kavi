@@ -146,39 +146,6 @@ afterEach(() => {
 });
 
 describe('production tool lifecycle durable effect wiring', () => {
-  it('bypasses the journal for a code-owned invocation proven effect-free by arguments', async () => {
-    mockedNeedsApproval.mockReturnValue(false);
-    mockedExecuteToolInner.mockResolvedValue(
-      JSON.stringify({ status: 'read', resourceId: 'memory-block-user-profile' }),
-    );
-    const captureEffectReceipt = jest.fn();
-    const finalizeEffectReceiptCapture = jest.fn();
-
-    const result = await executeTool(
-      'memory_block',
-      JSON.stringify({ action: 'read', label: 'user-profile' }),
-      'conversation-1',
-      {
-        toolCallId: 'tool-call-memory-read',
-        executionRunId: 'execution-run-memory-read',
-        captureEffectReceipt,
-        finalizeEffectReceiptCapture,
-      },
-    );
-
-    expect(result).toContain('"status":"read"');
-    expect(mockedExecuteToolInner).toHaveBeenCalledTimes(1);
-    expect(captureEffectReceipt).toHaveBeenCalledWith(
-      expect.objectContaining({ effectState: 'none', verificationState: 'not_applicable' }),
-    );
-    expect(finalizeEffectReceiptCapture).toHaveBeenCalledTimes(1);
-    expect(
-      getExecutionJournalDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM execution_runs',
-      ),
-    ).toEqual({ count: 0 });
-  });
-
   it('records a definitive memory rejection without inventing an ambiguous side effect', async () => {
     mockedNeedsApproval.mockReturnValue(false);
     mockedExecuteToolInner.mockResolvedValue(
@@ -212,10 +179,7 @@ describe('production tool lifecycle durable effect wiring', () => {
       ok: false,
       code: 'grounding_required',
     });
-    expect(JSON.parse(result)).not.toHaveProperty(
-      'code',
-      'tool_effect_reconciliation_required',
-    );
+    expect(JSON.parse(result)).not.toHaveProperty('code', 'tool_effect_reconciliation_required');
     expect(captureEffectReceipt).toHaveBeenCalledWith(
       expect.objectContaining({
         effectKind: 'memory.write',

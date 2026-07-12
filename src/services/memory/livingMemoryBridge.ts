@@ -1,14 +1,13 @@
 // ---------------------------------------------------------------------------
 // Living Memory bridge
 // ---------------------------------------------------------------------------
-// Threads the memory blocks, focus block and per-turn fact recall through
+// Threads scoped working state and per-turn fact recall through
 // `assemblePrompt()` and surfaces the result in a shape that the orchestrator
 // can splice into its existing system-prompt sections + compaction calls
 // without touching the legacy file-backed memory pipe.
 //
 // The bridge is intentionally defensive:
 //
-//   - Block reads tolerate a missing schema (returns empty list).
 //   - Recall failures degrade to "no facts" — never throws.
 //   - Empty inputs produce zero sections so callers can blindly append.
 // ---------------------------------------------------------------------------
@@ -16,7 +15,6 @@
 import type { Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
-import { listBlocks, type MemoryBlock } from './blocks';
 import { getEntityById } from './entities';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
@@ -66,14 +64,6 @@ const logger = createLogger('memory.livingMemoryBridge');
 const FOCUS_BLOCK_LABEL = 'active_focus';
 const OPEN_THREADS_LABEL = 'open_threads';
 
-const SAFE_BLOCK_LABELS_FOR_PROMPT = new Set<string>([
-  'profile',
-  'persona',
-  'preferences',
-  // active_focus content is funnelled through the focus block instead.
-  // open_threads is used for compaction summary, not the L2 prompt blob.
-]);
-
 export interface BuildLivingMemorySectionsOptions {
   /** Working messages (after enrichment). Used for last-assistant timestamp + recall query. */
   messages: Message[];
@@ -94,13 +84,11 @@ export interface BuildLivingMemorySectionsOptions {
   disableRecall?: boolean;
   /**
    * When the user has opted out of long-term memory,
-   * the bridge returns the empty output so no blocks, focus header or
+   * the bridge returns the empty output so no working state, focus header or
    * retrieved facts ever enter the prompt. The orchestrator forwards the
    * `disableLongTermMemory` setting from `useSettingsStore`.
    */
   disableLongTermMemory?: boolean;
-  /** Override block reader (test seam). */
-  readBlocks?: () => MemoryBlock[];
   /** Override scoped working block reader (test seam). */
   readWorkingBlock?: (label: 'active_focus' | 'open_threads') => WorkingMemoryBlock | null;
   /** Override reflection reader (test seam). */
@@ -163,7 +151,6 @@ export interface LivingMemoryBridgeOutput {
 
 export interface LivingMemoryBridgeTimings {
   taskStackMs: number;
-  blockReadMs: number;
   workingBlockMs: number;
   focusRenderMs: number;
   retrievalMs: number;
@@ -186,22 +173,6 @@ const EMPTY_OUTPUT: LivingMemoryBridgeOutput = {
   recalledEpisodeCount: 0,
   applicabilityPolicy: emptyMemoryApplicabilitySummary('disabled'),
 };
-
-function safeListBlocks(reader?: () => MemoryBlock[]): MemoryBlock[] {
-  try {
-    return reader ? reader() : listBlocks();
-  } catch (error) {
-    logger.devWarn(
-      'livingMemoryBridge.listBlocks failed:',
-      error instanceof Error ? error.message : String(error),
-    );
-    return [];
-  }
-}
-
-function findBlock(blocks: MemoryBlock[], label: string): MemoryBlock | undefined {
-  return blocks.find((b) => b.label === label);
-}
 
 function safeGetWorkingBlock(
   label: 'active_focus' | 'open_threads',
@@ -294,7 +265,6 @@ export async function buildLivingMemorySections(
   const totalStarted = Date.now();
   const timings: LivingMemoryBridgeTimings = {
     taskStackMs: 0,
-    blockReadMs: 0,
     workingBlockMs: 0,
     focusRenderMs: 0,
     retrievalMs: 0,
@@ -317,7 +287,6 @@ export async function buildLivingMemorySections(
     sourceThreadId,
     taskId,
     personaId,
-    readBlocks,
     readWorkingBlock,
     readLatestReflection: readLatestReflectionOverride,
     goals,
@@ -338,7 +307,7 @@ export async function buildLivingMemorySections(
     return EMPTY_OUTPUT;
   }
 
-  // When the user has opted out of long-term memory, we bail BEFORE any block read or recall query
+  // When the user has opted out of long-term memory, bail before any working-state or recall query
   // so the SQLite path is not touched and the prompt stays stateless.
   if (
     disableLongTermMemory ||
@@ -371,11 +340,6 @@ export async function buildLivingMemorySections(
     taskId,
   });
 
-  const blockStarted = Date.now();
-  const blocks = safeListBlocks(readBlocks);
-  timings.blockReadMs += Date.now() - blockStarted;
-  const promptBlocks = blocks.filter((block) => SAFE_BLOCK_LABELS_FOR_PROMPT.has(block.label));
-
   const workingBlockStarted = Date.now();
   const scopedFocusBlock = safeGetWorkingBlock(FOCUS_BLOCK_LABEL, {
     conversationId,
@@ -383,9 +347,7 @@ export async function buildLivingMemorySections(
     taskId: resolvedTaskId,
     readWorkingBlock,
   });
-  const focusBlockSource =
-    scopedFocusBlock ?? (!conversationId ? findBlock(blocks, FOCUS_BLOCK_LABEL) : null);
-  const focusBlockText = (focusBlockSource?.content ?? '').trim();
+  const focusBlockText = (scopedFocusBlock?.content ?? '').trim();
 
   const scopedOpenThreads = safeGetWorkingBlock(OPEN_THREADS_LABEL, {
     conversationId,
@@ -393,9 +355,7 @@ export async function buildLivingMemorySections(
     taskId: resolvedTaskId,
     readWorkingBlock,
   });
-  const openThreadsSource =
-    scopedOpenThreads ?? (!conversationId ? findBlock(blocks, OPEN_THREADS_LABEL) : null);
-  const openThreadLabels = splitThreadLabels(openThreadsSource?.content ?? '');
+  const openThreadLabels = splitThreadLabels(scopedOpenThreads?.content ?? '');
   timings.workingBlockMs += Date.now() - workingBlockStarted;
 
   const lastAssistantAt = lastTimestamp(messages, 'assistant');
@@ -425,9 +385,7 @@ export async function buildLivingMemorySections(
   let retrievalTimings: RetrievalOrchestratorTimings | undefined;
   let retrievalState: PromptAssemblyRetrievalState = disableRecall ? 'disabled' : 'completed';
   const factSelector = !disableRecall
-    ? createLlmMemoryFactSelector(
-        retrievalLlm ? { ...retrievalLlm, memoryReadEpoch } : undefined,
-      )
+    ? createLlmMemoryFactSelector(retrievalLlm ? { ...retrievalLlm, memoryReadEpoch } : undefined)
     : null;
   if (!disableRecall) {
     const retrievalStarted = Date.now();
@@ -571,7 +529,6 @@ export async function buildLivingMemorySections(
   const assembleStarted = Date.now();
   const assembled = assemblePrompt({
     basePrompt: '',
-    blocks: promptBlocks,
     focusBlock: focusRendered.text,
     reflectionBlock: reflectionBlock.trim() || undefined,
     retrievedFacts: factsForPrompt,

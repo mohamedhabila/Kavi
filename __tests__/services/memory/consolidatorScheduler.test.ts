@@ -12,7 +12,6 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import {
   countNewTurns,
   evaluateTrigger,
@@ -34,7 +33,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureDefaultBlocks();
   useSettingsStore.setState({
     disableLongTermMemory: false,
     memoryConsolidationMode: 'off',
