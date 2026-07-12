@@ -78,7 +78,7 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
   description:
     'Record a structured fact (subject, predicate, value) in the living-memory fact store. ' +
     'Preserve user-supplied subject, predicate, and value labels exactly, especially opaque ids, snake_case predicates, codes, contact names, and tokens; do not rename predicates or translate values. ' +
-    'A canonical user fact requires one code-owned, unquoted, non-negated current-user clause that binds the user, proposed relation, and exact value. A non-user fact requires the exact subject label and value in the code-owned current user message. Otherwise the write fails without changing current memory. Use distinct subjects or predicates for parallel valid values. ' +
+    'For an I/my/me statement, use subject "user" with subjectType "self"; never put the preference topic in the subject field. Self candidates are canonicalized to "user" only after one code-owned, unquoted, non-negated current-user clause binds the user, proposed relation, and exact value. A non-user fact requires the exact subject label and value in the code-owned current user message. Otherwise the write fails without changing current memory. Use distinct subjects or predicates for parallel valid values. ' +
     'Use a high confidence (≥ 0.85) only when you have direct user confirmation; otherwise leave confidence at the default to mark the fact as a candidate.',
   input_schema: {
     type: 'object',
@@ -90,7 +90,8 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
       subjectType: {
         type: 'string',
         enum: ['self', 'person', 'project', 'concept', 'system'],
-        description: 'Defaults to "self" when subject is "user", otherwise "concept".',
+        description:
+          'Use "self" only for an I/my/me fact and pair it with subject "user"; otherwise use the actual entity type.',
       },
       predicate: {
         type: 'string',

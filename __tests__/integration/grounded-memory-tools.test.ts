@@ -138,6 +138,28 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
     });
   });
 
+  it('canonicalizes a model-supplied self topic only after exact self grounding succeeds', async () => {
+    const written = await remember({
+      subject: 'self:weekly-planning-meetings',
+      subjectType: 'self',
+      predicate: 'typical_duration',
+      value: '25 minutes',
+      messageId: 'user-self-topic-alias',
+      messageText: 'I usually keep weekly planning meetings to 25 minutes.',
+      scope: 'global',
+    });
+
+    expect(written).toMatchObject({
+      ok: true,
+      fact: {
+        subject: 'user',
+        predicate: 'typical_duration',
+        value: '25 minutes',
+      },
+    });
+    expect(findEntityByName('self:weekly-planning-meetings')).toBeNull();
+  });
+
   it('does not turn a negated usual preference into current self memory', async () => {
     const written = await remember({
       subject: 'user',

@@ -445,7 +445,10 @@ export function executeMemoryRemember(
   const predicate = trimNonEmpty(args.predicate, 80);
   const value = trimNonEmpty(args.value, 200);
   if (!rawSubject) return err('invalid_args', 'subject is required');
-  const subject = canonicalizeMemorySubject(rawSubject);
+  const normalizedSubject = canonicalizeMemorySubject(rawSubject);
+  const selfSubjectCandidate =
+    isCanonicalSelfMemorySubject(normalizedSubject) || args.subjectType === 'self';
+  const subject = selfSubjectCandidate ? 'user' : normalizedSubject;
   if (!predicate) return err('invalid_args', 'predicate is required');
   if (!value) return err('invalid_args', 'value is required');
   if (typeof args.subject === 'string' && args.subject.trim().length > 80) {
@@ -458,12 +461,9 @@ export function executeMemoryRemember(
     return err('invalid_args', 'value must be at most 200 characters');
   }
 
-  const canonicalSelfSubject = isCanonicalSelfMemorySubject(subject);
-  const subjectType: EntityType = canonicalSelfSubject
+  const subjectType: EntityType = selfSubjectCandidate
     ? 'self'
-    : args.subjectType === 'self'
-      ? 'concept'
-      : (args.subjectType ?? 'concept');
+    : (args.subjectType ?? 'concept');
 
   let scope: MemoryFactScope;
   try {
