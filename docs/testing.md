@@ -244,6 +244,26 @@ Run only direct benchmark shards:
 E2E_SCENARIO_IDS="direct-agentdojo-untrusted-workspace-note direct-bfcl-v4-parallel-relevance direct-toolsandbox-state-dependency direct-tau-user-coordination-state direct-androidworld-calendar-add-update direct-mobileworld-cross-app-contact-message direct-spabench-cross-app-device-actions direct-longmemeval-v2-mobile-preference-update direct-locomo-temporal-conversation-memory direct-beam-long-dialogue-multi-probe direct-longmemeval-v2-experience-runbook direct-mobileworld-long-horizon-personalization" npm run eval:e2e:assess
 ```
 
+Run the nine-turn product-native continuity flow on its own:
+
+```bash
+E2E_SCENARIO_IDS="organic-mobile-assistant-continuity" npm run eval:e2e:assess
+```
+
+This flow keeps evaluator routing on `production_auto` while recording user
+mode selections, two persisted relaunches, a preference correction, one
+calendar action with attributed memory-retrieval participation, an intentionally
+ambiguous agentic no-op, and recovery of partial workspace state. This flow is
+continuity/retrieval evidence, not standalone causal-memory evidence: the raw
+persisted chat remains available across these relaunches. Causal memory remains
+unclaimed until a separate paired new-conversation or verified-compaction
+boundary removes the preference-bearing raw turn while retaining global memory.
+Its 240K token ceiling is provisional until clean first-attempt live trials are
+available. Recalibrate to `ceil(max observed × 1.25)` after at least three
+retries-disabled runs. The nine-turn 810-second scenario deadline is a hard
+outer wall-clock bound over execution, relaunch, persistence, and memory
+settlement; each foreground model turn remains independently capped at 90 seconds.
+
 ### Environment variables
 
 | Variable                   | Required       | Purpose                                                                                |
@@ -297,11 +317,11 @@ directory.
 
 For exact local diagnosis, set
 `E2E_PRIVATE_EVIDENCE_DIR=.private/evals/<run-name>`. The runner then writes an
-atomic, owner-only `e2e-private-scenario-evidence-v2` file per attempt with raw
-turn, result, memory-receipt, native, graph, and lifecycle evidence. The setting
-is intentionally opt-in; the directory is gitignored, cannot escape the private
-root through `..` or symlinks, is never referenced by the public report, and
-must not be included in uploaded CI artifacts.
+atomic, owner-only `e2e-private-scenario-evidence-v3` file per attempt with raw
+turn, selected-mode, result, memory-receipt, native, graph, and lifecycle
+evidence. The setting is intentionally opt-in; the directory is gitignored,
+cannot escape the private root through `..` or symlinks, is never referenced by
+the public report, and must not be included in uploaded CI artifacts.
 
 Parallel scenario workers exchange entries through the private
 `e2e-partial-report-v2` envelope. The writer accepts only
@@ -376,7 +396,7 @@ scenario-specific gating.
 
 | Suite             | Test file                      | Scenarios                                                            | Pass bar                                     |
 | ----------------- | ------------------------------ | -------------------------------------------------------------------- | -------------------------------------------- |
-| Core + benchmarks | `e2eAgentMetrics.test.ts`      | 60 (21 core + 27 adapted benchmark + 12 direct benchmark shards)     | >=90% per run (`E2E_SCENARIO_MIN_PASS_RATE`) |
+| Core + benchmarks | `e2eAgentMetrics.test.ts`      | 61 (22 core + 27 adapted benchmark + 12 direct benchmark shards)     | >=90% per run (`E2E_SCENARIO_MIN_PASS_RATE`) |
 | Delegation        | `e2eDelegationMetrics.test.ts` | 2 (`delegation-worker-finalize`, `delegation-worker-evidence-chain`) | 100% (mocked worker, structural rubrics)     |
 
 **Core scenarios (personal-assistant scope):** file write + read, goal evidence
@@ -388,10 +408,11 @@ recall, gate follow-up). Multi-turn scenarios invoke `runOrchestrator` once
 per user message with accumulated history and graph resume, matching the
 foreground conversation path.
 
-The core suite also includes five longitudinal product flows: chitchat profile
+The core suite also includes six longitudinal product flows: chitchat profile
 correction, chitchat-to-calendar preference application, agent-outcome
 continuity into chitchat, reusable failure-constraint recovery, and profile
-continuity across a persisted app relaunch. These flows score route,
+continuity across a persisted app relaunch, plus the nine-turn organic mobile
+assistant continuity flow. These flows score route,
 execution, final-response, agent-run, durable-memory, lifecycle, and verified
 end-state evidence independently.
 
@@ -443,7 +464,7 @@ selected E2E provider drives the supervisor tool loop. Goal pins
 
 | Scope                           | Typical duration | Token budget (ceiling)                                |
 | ------------------------------- | ---------------- | ----------------------------------------------------- |
-| Core + benchmark (60 scenarios) | 30–60+ minutes   | ≤4.4M total (`E2E_PROGRAM_MAX_TOTAL_TOKENS`)          |
+| Core + benchmark (61 scenarios) | 30–60+ minutes   | ≤4.64M total (`E2E_PROGRAM_MAX_TOTAL_TOKENS`)         |
 | Delegation only                 | ~10 seconds      | ≤200K (`E2E_DELEGATION_PROGRAM_MAX_TOTAL_TOKENS`)     |
 | Full `eval:e2e`                 | 30–60+ minutes   | Per-scenario ceilings in `E2E_SCENARIO_TOKEN_BUDGETS` |
 

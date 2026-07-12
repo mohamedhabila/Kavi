@@ -296,6 +296,17 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
     benchmarkFamilies: ['kavi-core', 'longmem-adapted', 'memory-agent-bench-adapted'],
     assessmentDimensions: ['memory', 'task_understanding', 'task_completion'],
   },
+  'organic-mobile-assistant-continuity': {
+    benchmarkFamilies: ['kavi-core'],
+    assessmentDimensions: [
+      'memory',
+      'task_understanding',
+      'task_completion',
+      'control_graph',
+      'mobile_native',
+      'outcome_validators',
+    ],
+  },
   'multi-turn-gate-followup': {
     benchmarkFamilies: ['kavi-core'],
     assessmentDimensions: ['control_graph', 'outcome_validators', 'task_completion'],

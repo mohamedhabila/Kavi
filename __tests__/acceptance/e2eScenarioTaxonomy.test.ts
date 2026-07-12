@@ -37,19 +37,20 @@ const LONG_RUN_DIRECT_SCENARIO_IDS = [
   'direct-mobileworld-long-horizon-personalization',
 ] as const;
 
-const LONGITUDINAL_ROUTE_SCENARIO_IDS = new Set([
+const PRODUCT_ROUTE_SCENARIO_IDS = new Set([
   'profile-correction-chitchat',
   'preference-to-calendar-action',
   'agent-outcome-to-chitchat',
   'failure-gotcha-reuse',
   'relaunch-profile-continuity',
+  'organic-mobile-assistant-continuity',
 ]);
 
 describe('E2E scenario taxonomy', () => {
   it('covers all registered scenarios without duplicate ids', () => {
-    expect(E2E_AGENT_SCENARIOS).toHaveLength(60);
+    expect(E2E_AGENT_SCENARIOS).toHaveLength(61);
     expect(DELEGATION_E2E_SCENARIOS).toHaveLength(2);
-    expect(ALL_SCENARIOS).toHaveLength(62);
+    expect(ALL_SCENARIOS).toHaveLength(63);
     expect(new Set(ALL_SCENARIOS.map((scenario) => scenario.id)).size).toBe(ALL_SCENARIOS.length);
   });
 
@@ -81,7 +82,7 @@ describe('E2E scenario taxonomy', () => {
 
   it('keeps every pre-longitudinal scenario explicitly on the agentic product route', () => {
     for (const scenario of ALL_SCENARIOS) {
-      if (LONGITUDINAL_ROUTE_SCENARIO_IDS.has(scenario.id)) continue;
+      if (PRODUCT_ROUTE_SCENARIO_IDS.has(scenario.id)) continue;
       expect(scenario.execution).toEqual({
         initialMode: 'agentic',
         route: 'forced_agentic',
