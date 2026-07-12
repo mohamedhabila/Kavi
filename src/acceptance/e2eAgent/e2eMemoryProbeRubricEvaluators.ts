@@ -13,6 +13,7 @@ type E2EMemoryProbeRubric = Extract<
 
 const MAX_EXPECTED_VALUE_CHARS = 256;
 const MAX_EXPECTED_FACTS = 32;
+const MEMORY_FACT_SCOPES = new Set(['global', 'project', 'conversation', 'session', 'persona']);
 const NON_ASSERTIVE_VALUE_CONTEXT_PATTERNS = [
   /\bnot\b/iu,
   /\b(?:cannot|unable\s+to|failed\s+to)\b/iu,
@@ -24,10 +25,7 @@ const NON_ASSERTIVE_VALUE_CONTEXT_PATTERNS = [
   /\bi\s+(?:think|guess|suspect|am\s+not\s+sure|do\s+not\s+know)\b/iu,
 ] as const;
 
-function fixtureIdForRubric(
-  result: E2EScenarioResult,
-  rubric: E2EMemoryProbeRubric,
-): string {
+function fixtureIdForRubric(result: E2EScenarioResult, rubric: E2EMemoryProbeRubric): string {
   return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.kind}`;
 }
 
@@ -69,13 +67,25 @@ function sentenceAssertsExactValue(sentence: string, value: string): boolean {
 }
 
 function answerAssertsExactValue(text: string, value: string): boolean {
-  return text
-    .split(/[.!?;\n]+/u)
-    .some((sentence) => sentenceAssertsExactValue(sentence, value));
+  return text.split(/[.!?;\n]+/u).some((sentence) => sentenceAssertsExactValue(sentence, value));
 }
 
 function canonicalFactKey(fact: E2EMemoryFactExpectation): string {
-  return `${fact.predicate}\u0000${fact.value}`;
+  return `${fact.subject}\u0000${fact.predicate}\u0000${fact.value}\u0000${fact.scope}`;
+}
+
+export function isCanonicalE2EMemoryFactExpectation(
+  fact: unknown,
+): fact is E2EMemoryFactExpectation {
+  if (!fact || typeof fact !== 'object' || Array.isArray(fact)) return false;
+  if (Object.keys(fact).sort().join(',') !== 'predicate,scope,subject,value') return false;
+  const candidate = fact as Partial<E2EMemoryFactExpectation>;
+  return (
+    isCanonicalValue(candidate.subject) &&
+    isCanonicalValue(candidate.predicate) &&
+    isCanonicalValue(candidate.value) &&
+    MEMORY_FACT_SCOPES.has(candidate.scope ?? '')
+  );
 }
 
 function hasCanonicalFactExpectations(
@@ -86,13 +96,8 @@ function hasCanonicalFactExpectations(
   if (!options.allowEmpty && facts.length === 0) return false;
   const keys: string[] = [];
   for (const fact of facts) {
-    if (!fact || typeof fact !== 'object' || Array.isArray(fact)) return false;
-    if (Object.keys(fact).sort().join(',') !== 'predicate,value') return false;
-    const candidate = fact as Partial<E2EMemoryFactExpectation>;
-    if (!isCanonicalValue(candidate.predicate) || !isCanonicalValue(candidate.value)) {
-      return false;
-    }
-    keys.push(canonicalFactKey(candidate as E2EMemoryFactExpectation));
+    if (!isCanonicalE2EMemoryFactExpectation(fact)) return false;
+    keys.push(canonicalFactKey(fact));
   }
   return new Set(keys).size === keys.length;
 }
@@ -105,7 +110,10 @@ function evaluateAnswer(
   const fixtureId = fixtureIdForRubric(result, rubric);
   const answer = rubric.answer;
   if (!answer || typeof answer !== 'object' || Array.isArray(answer)) {
-    return invalidOutcome(fixtureId, `turn ${rubric.turnIndex} memory answer expectation is invalid`);
+    return invalidOutcome(
+      fixtureId,
+      `turn ${rubric.turnIndex} memory answer expectation is invalid`,
+    );
   }
   const text = turn.finalAssistant?.text;
   if (typeof text !== 'string') {
@@ -113,7 +121,10 @@ function evaluateAnswer(
   }
 
   if (answer.kind === 'abstention') {
-    if (Object.keys(answer).sort().join(',') !== 'exactText,kind' || !isCanonicalValue(answer.exactText)) {
+    if (
+      Object.keys(answer).sort().join(',') !== 'exactText,kind' ||
+      !isCanonicalValue(answer.exactText)
+    ) {
       return invalidOutcome(
         fixtureId,
         `turn ${rubric.turnIndex} abstention expectation is invalid`,
@@ -129,17 +140,22 @@ function evaluateAnswer(
   }
 
   if (answer.kind !== 'fact_values') {
-    return invalidOutcome(fixtureId, `turn ${rubric.turnIndex} memory answer expectation is invalid`);
+    return invalidOutcome(
+      fixtureId,
+      `turn ${rubric.turnIndex} memory answer expectation is invalid`,
+    );
   }
   const keys = Object.keys(answer).sort().join(',');
   if (
     (keys !== 'kind,requiredValues' && keys !== 'forbiddenValues,kind,requiredValues') ||
     !hasUniqueCanonicalValues(answer.requiredValues) ||
-    (answer.forbiddenValues !== undefined &&
-      !hasUniqueCanonicalValues(answer.forbiddenValues)) ||
+    (answer.forbiddenValues !== undefined && !hasUniqueCanonicalValues(answer.forbiddenValues)) ||
     (answer.forbiddenValues ?? []).some((value) => answer.requiredValues.includes(value))
   ) {
-    return invalidOutcome(fixtureId, `turn ${rubric.turnIndex} memory answer expectation is invalid`);
+    return invalidOutcome(
+      fixtureId,
+      `turn ${rubric.turnIndex} memory answer expectation is invalid`,
+    );
   }
   const missing = answer.requiredValues.filter((value) => !answerAssertsExactValue(text, value));
   if (missing.length > 0) {
@@ -164,7 +180,11 @@ function factIdsForExpectation(
 ): string[] {
   return result.memoryFinalState.facts
     .filter(
-      (fact) => fact.predicate === expectation.predicate && fact.objectText === expectation.value,
+      (fact) =>
+        fact.subject === expectation.subject &&
+        fact.predicate === expectation.predicate &&
+        fact.objectText === expectation.value &&
+        fact.scope === expectation.scope,
     )
     .map((fact) => fact.id);
 }
@@ -210,14 +230,8 @@ function evaluateSelection(
   const selectedIds = new Set(
     turn.retrieval.events.flatMap((event) => event.counts.selectedFactIds),
   );
-  if (
-    rubric.maxSelectedFacts !== undefined &&
-    selectedIds.size > rubric.maxSelectedFacts
-  ) {
-    return invalidOutcome(
-      fixtureId,
-      `turn ${rubric.turnIndex} selected too many memory facts`,
-    );
+  if (rubric.maxSelectedFacts !== undefined && selectedIds.size > rubric.maxSelectedFacts) {
+    return invalidOutcome(fixtureId, `turn ${rubric.turnIndex} selected too many memory facts`);
   }
   for (const expectation of rubric.requiredFacts) {
     const matchingIds = factIdsForExpectation(result, expectation);
@@ -230,10 +244,7 @@ function evaluateSelection(
   }
   for (const expectation of rubric.forbiddenFacts ?? []) {
     if (factIdsForExpectation(result, expectation).some((id) => selectedIds.has(id))) {
-      return invalidOutcome(
-        fixtureId,
-        `turn ${rubric.turnIndex} selected a forbidden memory fact`,
-      );
+      return invalidOutcome(fixtureId, `turn ${rubric.turnIndex} selected a forbidden memory fact`);
     }
   }
   return { fixtureId, passed: true };

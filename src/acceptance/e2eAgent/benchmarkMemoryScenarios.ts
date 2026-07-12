@@ -22,7 +22,13 @@ export const BENCH_SESSION_TOOL_CACHE: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
-    { kind: 'memory_fact', predicate: 'cache_token', value: 'CACHE-E2E-42' },
+    {
+      kind: 'memory_fact',
+      subject: 'e2e-cache-1',
+      predicate: 'cache_token',
+      value: 'CACHE-E2E-42',
+      scope: 'conversation',
+    },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -46,7 +52,13 @@ export const BENCH_TOOL_DESCRIBE_THEN_USE: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
-    { kind: 'memory_fact', predicate: 'describe_token', value: 'DESCRIBE-E2E-9' },
+    {
+      kind: 'memory_fact',
+      subject: 'e2e-describe-1',
+      predicate: 'describe_token',
+      value: 'DESCRIBE-E2E-9',
+      scope: 'global',
+    },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -75,8 +87,20 @@ export const BENCH_MEMORY_STATE_3TURN_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_fact', predicate: 'pref_color', value: 'COLOR-E2E-A' },
-    { kind: 'memory_fact', predicate: 'pref_color', value: 'COLOR-E2E-B' },
+    {
+      kind: 'memory_fact',
+      subject: 'e2e-state-a',
+      predicate: 'pref_color',
+      value: 'COLOR-E2E-A',
+      scope: 'global',
+    },
+    {
+      kind: 'memory_fact',
+      subject: 'e2e-state-b',
+      predicate: 'pref_color',
+      value: 'COLOR-E2E-B',
+      scope: 'global',
+    },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -126,7 +150,13 @@ export const BENCH_BFCL_SEQUENTIAL_MEMORY_CHAIN: E2EScenario = {
   prompt:
     'Remember that subject `bfcl-seq-1` has chain_token `BFCL-SEQ-E2E-9`, then verify that memory.',
   rubrics: [
-    { kind: 'memory_fact', predicate: 'chain_token', value: 'BFCL-SEQ-E2E-9' },
+    {
+      kind: 'memory_fact',
+      subject: 'bfcl-seq-1',
+      predicate: 'chain_token',
+      value: 'BFCL-SEQ-E2E-9',
+      scope: 'global',
+    },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -154,7 +184,13 @@ export const BENCH_LONGMEM_DELAYED_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_fact', predicate: 'access_code', value: 'LONGMEM-E2E-42' },
+    {
+      kind: 'memory_fact',
+      subject: 'longmem-entity',
+      predicate: 'access_code',
+      value: 'LONGMEM-E2E-42',
+      scope: 'global',
+    },
     {
       kind: 'turn_memory_answer',
       turnIndex: 2,
@@ -163,7 +199,14 @@ export const BENCH_LONGMEM_DELAYED_RECALL: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 2,
-      requiredFacts: [{ predicate: 'access_code', value: 'LONGMEM-E2E-42' }],
+      requiredFacts: [
+        {
+          subject: 'longmem-entity',
+          predicate: 'access_code',
+          value: 'LONGMEM-E2E-42',
+          scope: 'global',
+        },
+      ],
     },
     { kind: 'ingestion_job_completed', minCount: 1 },
     {
@@ -199,8 +242,20 @@ export const BENCH_LONGMEM_DUAL_FACT_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_fact', predicate: 'access_code', value: 'LONGMEM-DUAL-A' },
-    { kind: 'memory_fact', predicate: 'backup_code', value: 'LONGMEM-DUAL-B' },
+    {
+      kind: 'memory_fact',
+      subject: 'longmem-dual',
+      predicate: 'access_code',
+      value: 'LONGMEM-DUAL-A',
+      scope: 'global',
+    },
+    {
+      kind: 'memory_fact',
+      subject: 'longmem-dual',
+      predicate: 'backup_code',
+      value: 'LONGMEM-DUAL-B',
+      scope: 'global',
+    },
     {
       kind: 'turn_memory_answer',
       turnIndex: 2,
@@ -213,8 +268,18 @@ export const BENCH_LONGMEM_DUAL_FACT_RECALL: E2EScenario = {
       kind: 'turn_memory_selection',
       turnIndex: 2,
       requiredFacts: [
-        { predicate: 'access_code', value: 'LONGMEM-DUAL-A' },
-        { predicate: 'backup_code', value: 'LONGMEM-DUAL-B' },
+        {
+          subject: 'longmem-dual',
+          predicate: 'access_code',
+          value: 'LONGMEM-DUAL-A',
+          scope: 'global',
+        },
+        {
+          subject: 'longmem-dual',
+          predicate: 'backup_code',
+          value: 'LONGMEM-DUAL-B',
+          scope: 'global',
+        },
       ],
     },
     { kind: 'memory_episode_count', min: 1 },
@@ -249,8 +314,20 @@ export const BENCH_LONGMEM_KNOWLEDGE_UPDATE_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_fact', predicate: 'preferred_station', value: 'STATION-NEW-E2E' },
-    { kind: 'memory_fact_absent', predicate: 'preferred_station', value: 'STATION-OLD-E2E' },
+    {
+      kind: 'memory_fact',
+      subject: 'longmem-update-user',
+      predicate: 'preferred_station',
+      value: 'STATION-NEW-E2E',
+      scope: 'global',
+    },
+    {
+      kind: 'memory_fact_absent',
+      subject: 'longmem-update-user',
+      predicate: 'preferred_station',
+      value: 'STATION-OLD-E2E',
+      scope: 'global',
+    },
     {
       kind: 'turn_memory_answer',
       turnIndex: 2,
@@ -263,8 +340,22 @@ export const BENCH_LONGMEM_KNOWLEDGE_UPDATE_RECALL: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 2,
-      requiredFacts: [{ predicate: 'preferred_station', value: 'STATION-NEW-E2E' }],
-      forbiddenFacts: [{ predicate: 'preferred_station', value: 'STATION-OLD-E2E' }],
+      requiredFacts: [
+        {
+          subject: 'longmem-update-user',
+          predicate: 'preferred_station',
+          value: 'STATION-NEW-E2E',
+          scope: 'global',
+        },
+      ],
+      forbiddenFacts: [
+        {
+          subject: 'longmem-update-user',
+          predicate: 'preferred_station',
+          value: 'STATION-OLD-E2E',
+          scope: 'global',
+        },
+      ],
     },
     { kind: 'graph_terminal_success' },
     {
@@ -293,7 +384,13 @@ export const BENCH_LONGMEM_ABSTENTION_EMPTY_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
-    { kind: 'memory_fact', predicate: 'known_code', value: 'KNOWN-CODE-E2E' },
+    {
+      kind: 'memory_fact',
+      subject: 'longmem-known-user',
+      predicate: 'known_code',
+      value: 'KNOWN-CODE-E2E',
+      scope: 'global',
+    },
     {
       kind: 'turn_memory_answer',
       turnIndex: 1,
@@ -303,7 +400,14 @@ export const BENCH_LONGMEM_ABSTENTION_EMPTY_RECALL: E2EScenario = {
       kind: 'turn_memory_selection',
       turnIndex: 1,
       requiredFacts: [],
-      forbiddenFacts: [{ predicate: 'known_code', value: 'KNOWN-CODE-E2E' }],
+      forbiddenFacts: [
+        {
+          subject: 'longmem-known-user',
+          predicate: 'known_code',
+          value: 'KNOWN-CODE-E2E',
+          scope: 'global',
+        },
+      ],
       maxSelectedFacts: 0,
     },
     { kind: 'graph_terminal_success' },
@@ -337,7 +441,13 @@ export const BENCH_KNOWU_PERSONALIZED_CONTACT_MEMORY: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_fact', predicate: 'preferred_message_contact', value: 'Avery' },
+    {
+      kind: 'memory_fact',
+      subject: 'knowu-user',
+      predicate: 'preferred_message_contact',
+      value: 'Avery',
+      scope: 'global',
+    },
     {
       kind: 'native_fixture_state',
       path: 'contacts.resultCount',

@@ -29,7 +29,15 @@ const SCENARIO: E2EScenario = {
   contentClass: 'private',
   execution: { initialMode: 'agentic', route: 'production_auto' },
   prompt: 'PRIVATE-REQUEST-SENTINEL',
-  rubrics: [{ kind: 'memory_fact', predicate: 'private_key', value: 'PRIVATE-RUBRIC-SENTINEL' }],
+  rubrics: [
+    {
+      kind: 'memory_fact',
+      subject: 'private-subject',
+      predicate: 'private_key',
+      value: 'PRIVATE-RUBRIC-SENTINEL',
+      scope: 'global',
+    },
+  ],
 };
 
 function buildPrivateResult(): E2EScenarioResult {
@@ -158,6 +166,7 @@ describe('private E2E scenario evidence', () => {
         text: 'PRIVATE-REQUEST-SENTINEL',
         route: 'production_auto',
         lifecycleBefore: null,
+        selectedMode: null,
       },
     ]);
     expect(evidence.result.turns[0]?.lifecycleBefore).toBeNull();
@@ -191,6 +200,7 @@ describe('private E2E scenario evidence', () => {
             content: 'PRIVATE-REQUEST-SENTINEL',
             route: 'forced_chitchat',
             lifecycleBefore: 'app_relaunch',
+            selectedMode: 'chitchat',
           },
         ],
       },
@@ -202,6 +212,7 @@ describe('private E2E scenario evidence', () => {
 
     expect(evidence.scenario.requestedTurns[0]).toMatchObject({
       lifecycleBefore: 'app_relaunch',
+      selectedMode: 'chitchat',
     });
     expect(evidence.result.turns[0]?.lifecycleBefore).toEqual(lifecycleBefore);
   });

@@ -18,6 +18,7 @@ export type MemoryEvidenceScope = {
 export type MemoryFactEvidenceRecord = {
   id: string;
   subjectId: string;
+  subject: string;
   predicate: string;
   objectText: string;
   contentHash: string;
@@ -139,40 +140,42 @@ function normalizeScope(scope: MemoryEvidenceScope): MemoryEvidenceScope {
 
 function selectFactEvidence(whereClause: string, params: string[]): MemoryFactEvidenceRecord[] {
   return getMany<FactEvidenceRow>(
-    `SELECT id,
-            subject_id AS subjectId,
-            predicate,
-            object_text AS objectText,
-            content_hash AS contentHash,
-            confidence,
-            scope,
-            memory_kind AS memoryKind,
-            persona_id AS personaId,
-            origin_conversation_id AS originConversationId,
-            origin_thread_id AS originThreadId,
-            origin_task_id AS originTaskId,
-            source_message_id AS sourceMessageId,
-            source_run_id AS sourceRunId,
-            source_turn_id AS sourceTurnId,
-            valid_at AS validAt,
-            invalid_at AS invalidAt,
-            expires_at AS expiresAt,
-            created_at AS createdAt,
-            updated_at AS updatedAt,
-            deleted_at AS deletedAt,
-            pinned,
-            review_state AS reviewState,
-            sensitivity
-       FROM memory_facts
+    `SELECT fact.id,
+            fact.subject_id AS subjectId,
+            subject.canonical_name AS subject,
+            fact.predicate,
+            fact.object_text AS objectText,
+            fact.content_hash AS contentHash,
+            fact.confidence,
+            fact.scope,
+            fact.memory_kind AS memoryKind,
+            fact.persona_id AS personaId,
+            fact.origin_conversation_id AS originConversationId,
+            fact.origin_thread_id AS originThreadId,
+            fact.origin_task_id AS originTaskId,
+            fact.source_message_id AS sourceMessageId,
+            fact.source_run_id AS sourceRunId,
+            fact.source_turn_id AS sourceTurnId,
+            fact.valid_at AS validAt,
+            fact.invalid_at AS invalidAt,
+            fact.expires_at AS expiresAt,
+            fact.created_at AS createdAt,
+            fact.updated_at AS updatedAt,
+            fact.deleted_at AS deletedAt,
+            fact.pinned,
+            fact.review_state AS reviewState,
+            fact.sensitivity
+       FROM memory_facts AS fact
+       JOIN memory_entities AS subject ON subject.id = fact.subject_id
       WHERE ${whereClause}
-      ORDER BY id ASC`,
+      ORDER BY fact.id ASC`,
     ...params,
   ).map((row) => ({ ...row, pinned: row.pinned !== 0 }));
 }
 
 function listScopedFactEvidence(scope: MemoryEvidenceScope): MemoryFactEvidenceRecord[] {
   return selectFactEvidence(
-    'origin_conversation_id = ? AND COALESCE(origin_thread_id, origin_conversation_id) = ?',
+    'fact.origin_conversation_id = ? AND COALESCE(fact.origin_thread_id, fact.origin_conversation_id) = ?',
     [scope.memoryConversationId, scope.sourceThreadId],
   );
 }

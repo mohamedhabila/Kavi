@@ -17,6 +17,7 @@ import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics
 import { buildWorkingBlockScopeKey } from '../../services/memory/workingBlocks';
 import { readWorkspaceRelativeFile, workspaceFileExists } from './sandboxWorkspace';
 import { evaluateE2ETurnStageRubric } from './e2eTurnStageRubricEvaluators';
+import { evaluateE2EMemoryFactRubric } from './e2eMemoryFactRubricEvaluator';
 import { isE2EGraphExecutionComplete } from './e2eGraphCompletion';
 import type { E2ERubric, E2EScenarioResult, E2ETokenUsageSummary } from './types';
 import type { UsagePromptCacheTelemetry } from '../../types/usage';
@@ -373,57 +374,9 @@ export function evaluateE2ERubric(
       return { fixtureId, passed: true };
     }
 
-    case 'memory_fact': {
-      const memory = result.memoryFinalState;
-      if (!memory) {
-        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
-      }
-      const predicate = rubric.predicate.trim().toLowerCase();
-      const value = rubric.value.trim().toLowerCase();
-      const matches = memory.facts.filter(
-        (fact) =>
-          fact.predicate.trim().toLowerCase() === predicate &&
-          fact.objectText.trim().toLowerCase() === value &&
-          fact.deletedAt === null &&
-          fact.invalidAt === null &&
-          fact.validAt <= memory.capturedAt &&
-          (fact.expiresAt === null || fact.expiresAt > memory.capturedAt),
-      );
-      if (matches.length === 0) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `memory fact missing: ${rubric.predicate}=${rubric.value}`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
-
-    case 'memory_fact_absent': {
-      const memory = result.memoryFinalState;
-      if (!memory) {
-        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
-      }
-      const predicate = rubric.predicate.trim().toLowerCase();
-      const value = rubric.value.trim().toLowerCase();
-      const matches = memory.facts.filter(
-        (fact) =>
-          fact.predicate.trim().toLowerCase() === predicate &&
-          fact.objectText.trim().toLowerCase() === value &&
-          fact.deletedAt === null &&
-          fact.invalidAt === null &&
-          fact.validAt <= memory.capturedAt &&
-          (fact.expiresAt === null || fact.expiresAt > memory.capturedAt),
-      );
-      if (matches.length > 0) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `memory fact present: ${rubric.predicate}=${rubric.value}`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
+    case 'memory_fact':
+    case 'memory_fact_absent':
+      return evaluateE2EMemoryFactRubric(result, rubric, fixtureId);
 
     case 'token_budget': {
       if (result.usage.totalTokens > rubric.maxTotalTokens) {
@@ -470,6 +423,8 @@ export function evaluateE2ERubric(
     case 'turn_memory_receipt':
     case 'turn_lifecycle_boundary':
     case 'turn_final_response_token':
+    case 'turn_clarification':
+    case 'turn_native_invocation_count':
     case 'turn_memory_answer':
     case 'turn_memory_selection':
       return evaluateE2ETurnStageRubric(result, rubric);

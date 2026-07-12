@@ -556,10 +556,30 @@ describe('evaluateE2ERubric', () => {
     resetE2EMemorySandbox();
     const outcome = evaluateE2ERubric(result, {
       kind: 'memory_fact',
+      subject: 'e2e-entity-i1',
       predicate: 'artifact_token',
       value: 'E2E-MEM-42',
+      scope: 'conversation',
     });
     expect(outcome.passed).toBe(true);
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'memory_fact',
+        subject: 'wrong-subject',
+        predicate: 'artifact_token',
+        value: 'E2E-MEM-42',
+        scope: 'conversation',
+      }),
+    ).toMatchObject({ passed: false });
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'memory_fact',
+        subject: 'e2e-entity-i1',
+        predicate: 'artifact_token',
+        value: 'E2E-MEM-42',
+        scope: 'global',
+      }),
+    ).toMatchObject({ passed: false });
   });
   it('checks memory_fact_absent from currently valid sqlite facts', () => {
     const conversationId = 'conv-memory-fact-update';
@@ -600,13 +620,17 @@ describe('evaluateE2ERubric', () => {
     const result = buildResultWithMemoryEvidence(conversationId);
     const absent = evaluateE2ERubric(result, {
       kind: 'memory_fact_absent',
+      subject: 'e2e-entity-update',
       predicate: 'artifact_token',
       value: 'E2E-OLD',
+      scope: 'conversation',
     });
     const present = evaluateE2ERubric(result, {
       kind: 'memory_fact_absent',
+      subject: 'e2e-entity-update',
       predicate: 'artifact_token',
       value: 'E2E-NEW',
+      scope: 'conversation',
     });
 
     expect(absent.passed).toBe(true);
@@ -633,15 +657,19 @@ describe('evaluateE2ERubric', () => {
     expect(
       evaluateE2ERubric(result, {
         kind: 'memory_fact',
+        subject: 'e2e-expired-subject',
         predicate: 'temporary_code',
         value: 'EXPIRED-CODE',
+        scope: 'global',
       }),
     ).toMatchObject({ passed: false });
     expect(
       evaluateE2ERubric(result, {
         kind: 'memory_fact_absent',
+        subject: 'e2e-expired-subject',
         predicate: 'temporary_code',
         value: 'EXPIRED-CODE',
+        scope: 'global',
       }),
     ).toMatchObject({ passed: true });
   });

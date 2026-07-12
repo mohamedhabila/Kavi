@@ -6,7 +6,7 @@ import { atomicWriteFileSync } from '../../../scripts/e2eReport/fileTransaction'
 import type { E2EScenario, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 
 export const E2E_PRIVATE_EVIDENCE_DIR_ENV = 'E2E_PRIVATE_EVIDENCE_DIR';
-export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v2';
+export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v3';
 
 export type E2EPrivateScenarioEvidence = {
   schemaVersion: typeof E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION;
@@ -20,6 +20,7 @@ export type E2EPrivateScenarioEvidence = {
       text: string;
       route: E2EScenario['execution']['route'];
       lifecycleBefore: 'app_relaunch' | null;
+      selectedMode: E2EScenario['execution']['initialMode'] | null;
     }>;
     rubrics: E2EScenario['rubrics'];
   };
@@ -62,6 +63,7 @@ function requestedTurns(
     text: turn.content,
     route: turn.route ?? scenario.execution.route,
     lifecycleBefore: turn.lifecycleBefore ?? null,
+    selectedMode: turn.selectedMode ?? null,
   }));
 }
 

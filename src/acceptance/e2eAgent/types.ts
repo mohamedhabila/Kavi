@@ -12,6 +12,7 @@ import type {
 import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
+import type { MemoryFactScope } from '../../services/memory/facts/types';
 import type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioExecutionContextSnapshot,
@@ -147,6 +148,8 @@ export type E2EUserTurn = {
   content: string;
   route?: ForegroundScenarioRouteDirective;
   lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
+  /** Simulates the user choosing a chat mode in the product UI before this turn. */
+  selectedMode?: ConversationMode;
 };
 
 export type E2EScenarioContentClass = 'private' | 'synthetic_public';
@@ -162,8 +165,10 @@ export type E2EWorkspaceSeedFile = {
 };
 
 export type E2EMemoryFactExpectation = Readonly<{
+  subject: string;
   predicate: string;
   value: string;
+  scope: MemoryFactScope;
 }>;
 
 export type E2EMemoryProbeAnswerExpectation =
@@ -177,6 +182,12 @@ export type E2EMemoryProbeAnswerExpectation =
       exactText: string;
     }>;
 
+export type E2EClarificationMissingField =
+  | 'event_title'
+  | 'message_body'
+  | 'new_start_time'
+  | 'recipient';
+
 export type E2ERubric =
   | { kind: 'workspace_file'; path: string; contains?: string }
   | { kind: 'workspace_file_absent'; path: string }
@@ -185,8 +196,8 @@ export type E2ERubric =
   | { kind: 'graph_status'; status: AgentRunControlGraphState['status'] }
   | { kind: 'graph_terminal_success' }
   | { kind: 'completion_gate_hold'; reason?: string }
-  | { kind: 'memory_fact'; predicate: string; value: string }
-  | { kind: 'memory_fact_absent'; predicate: string; value: string }
+  | ({ kind: 'memory_fact' } & E2EMemoryFactExpectation)
+  | ({ kind: 'memory_fact_absent' } & E2EMemoryFactExpectation)
   | { kind: 'token_budget'; maxTotalTokens: number }
   | { kind: 'cache_read_tokens'; minCacheReadTokens: number }
   | {
@@ -232,6 +243,17 @@ export type E2ERubric =
       boundary: ForegroundScenarioLifecycleBoundary;
     }
   | { kind: 'turn_final_response_token'; turnIndex: number; token: string }
+  | {
+      kind: 'turn_clarification';
+      turnIndex: number;
+      requiredMissingFields: ReadonlyArray<E2EClarificationMissingField>;
+    }
+  | {
+      kind: 'turn_native_invocation_count';
+      turnIndex: number;
+      toolName?: string;
+      expectedCount: number;
+    }
   | {
       kind: 'turn_memory_answer';
       turnIndex: number;

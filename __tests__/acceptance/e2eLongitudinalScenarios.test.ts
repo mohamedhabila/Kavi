@@ -93,8 +93,10 @@ describe('E2E longitudinal product scenarios', () => {
       expect.arrayContaining([
         {
           kind: 'memory_fact',
+          subject: 'profile-owner',
           predicate: 'default_meeting_duration_minutes',
           value: '45',
+          scope: 'global',
         },
         {
           kind: 'native_fixture_state',
@@ -118,8 +120,20 @@ describe('E2E longitudinal product scenarios', () => {
   it('scores corrected memory, verified outcomes, and the reusable failure constraint', () => {
     expect(requireScenario('profile-correction-chitchat').rubrics).toEqual(
       expect.arrayContaining([
-        { kind: 'memory_fact', predicate: 'home_city', value: 'Utrecht' },
-        { kind: 'memory_fact_absent', predicate: 'home_city', value: 'Rotterdam' },
+        {
+          kind: 'memory_fact',
+          subject: 'profile-owner',
+          predicate: 'home_city',
+          value: 'Utrecht',
+          scope: 'global',
+        },
+        {
+          kind: 'memory_fact_absent',
+          subject: 'profile-owner',
+          predicate: 'home_city',
+          value: 'Rotterdam',
+          scope: 'global',
+        },
       ]),
     );
     expect(requireScenario('agent-outcome-to-chitchat').rubrics).toEqual(
@@ -142,8 +156,10 @@ describe('E2E longitudinal product scenarios', () => {
       expect.arrayContaining([
         {
           kind: 'memory_fact',
+          subject: 'mobile-release-workflow',
           predicate: 'required_artifact_suffix',
           value: '.approved.txt',
+          scope: 'project',
         },
         {
           kind: 'workspace_file',
@@ -187,8 +203,10 @@ describe('E2E longitudinal product scenarios', () => {
     });
     expect(scenario.rubrics).toContainEqual({
       kind: 'memory_fact',
+      subject: 'profile-owner',
       predicate: 'commute_mode',
       value: 'bicycle',
+      scope: 'global',
     });
   });
 });

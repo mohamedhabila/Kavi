@@ -2,10 +2,7 @@ import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluator
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 import type { MemoryFactEvidenceRecord } from '../../src/services/memory/evidenceSnapshot';
 import type { MemoryRetrievalEvent } from '../../src/services/memory/retrievalEventTypes';
-import {
-  buildFixtureResult,
-  buildFixtureTurnTrace,
-} from '../helpers/e2eRunReportHarness';
+import { buildFixtureResult, buildFixtureTurnTrace } from '../helpers/e2eRunReportHarness';
 
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
@@ -21,6 +18,7 @@ function fact(
   return {
     id,
     subjectId: 'memory-subject',
+    subject: 'memory-subject',
     predicate,
     objectText: value,
     contentHash: `hash-${id}`,
@@ -221,7 +219,42 @@ describe('turn-scoped memory probe rubrics', () => {
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',
         turnIndex: 2,
-        requiredFacts: [{ predicate: 'access_code', value: 'ACCESS-CURRENT' }],
+        requiredFacts: [
+          {
+            subject: 'memory-subject',
+            predicate: 'access_code',
+            value: 'ACCESS-CURRENT',
+            scope: 'conversation',
+          },
+        ],
+      }),
+    ).toMatchObject({ passed: false, detail: 'turn 2 did not select a required memory fact' });
+  });
+
+  it('requires the selected fact to match the canonical subject and scope', () => {
+    const evidence = result({
+      answer: 'ACCESS-CURRENT',
+      facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
+      selectedFactIds: ['current'],
+    });
+    const expectation = {
+      predicate: 'access_code',
+      value: 'ACCESS-CURRENT',
+      scope: 'conversation' as const,
+    };
+
+    expect(
+      evaluateE2ERubric(evidence, {
+        kind: 'turn_memory_selection',
+        turnIndex: 2,
+        requiredFacts: [{ subject: 'wrong-subject', ...expectation }],
+      }),
+    ).toMatchObject({ passed: false, detail: 'turn 2 did not select a required memory fact' });
+    expect(
+      evaluateE2ERubric(evidence, {
+        kind: 'turn_memory_selection',
+        turnIndex: 2,
+        requiredFacts: [{ subject: 'memory-subject', ...expectation, scope: 'global' }],
       }),
     ).toMatchObject({ passed: false, detail: 'turn 2 did not select a required memory fact' });
   });
@@ -255,8 +288,22 @@ describe('turn-scoped memory probe rubrics', () => {
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',
         turnIndex: 2,
-        requiredFacts: [{ predicate: 'preferred_station', value: 'STATION-NEW' }],
-        forbiddenFacts: [{ predicate: 'preferred_station', value: 'STATION-OLD' }],
+        requiredFacts: [
+          {
+            subject: 'memory-subject',
+            predicate: 'preferred_station',
+            value: 'STATION-NEW',
+            scope: 'conversation',
+          },
+        ],
+        forbiddenFacts: [
+          {
+            subject: 'memory-subject',
+            predicate: 'preferred_station',
+            value: 'STATION-OLD',
+            scope: 'conversation',
+          },
+        ],
       }),
     ).toMatchObject({ passed: false, detail: 'turn 2 selected a forbidden memory fact' });
   });
@@ -281,7 +328,14 @@ describe('turn-scoped memory probe rubrics', () => {
         kind: 'turn_memory_selection',
         turnIndex: 2,
         requiredFacts: [],
-        forbiddenFacts: [{ predicate: 'known_code', value: 'KNOWN-CODE' }],
+        forbiddenFacts: [
+          {
+            subject: 'memory-subject',
+            predicate: 'known_code',
+            value: 'KNOWN-CODE',
+            scope: 'conversation',
+          },
+        ],
         maxSelectedFacts: 0,
       }),
     ).toMatchObject({ passed: false, detail: 'turn 2 selected too many memory facts' });
@@ -299,7 +353,14 @@ describe('turn-scoped memory probe rubrics', () => {
         kind: 'turn_memory_selection',
         turnIndex: 2,
         requiredFacts: [],
-        forbiddenFacts: [{ predicate: 'known_code', value: 'KNOWN-CODE' }],
+        forbiddenFacts: [
+          {
+            subject: 'memory-subject',
+            predicate: 'known_code',
+            value: 'KNOWN-CODE',
+            scope: 'conversation',
+          },
+        ],
         maxSelectedFacts: 0,
       }),
     ).toMatchObject({ passed: true });
@@ -316,7 +377,14 @@ describe('turn-scoped memory probe rubrics', () => {
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',
         turnIndex: 2,
-        requiredFacts: [{ predicate: 'access_code', value: 'ACCESS-CURRENT' }],
+        requiredFacts: [
+          {
+            subject: 'memory-subject',
+            predicate: 'access_code',
+            value: 'ACCESS-CURRENT',
+            scope: 'conversation',
+          },
+        ],
       }),
     ).toMatchObject({
       passed: false,

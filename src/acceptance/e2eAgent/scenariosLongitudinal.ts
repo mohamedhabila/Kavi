@@ -82,8 +82,20 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       { kind: 'min_user_turns', min: 2 },
       ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
-      { kind: 'memory_fact', predicate: 'home_city', value: 'Utrecht' },
-      { kind: 'memory_fact_absent', predicate: 'home_city', value: 'Rotterdam' },
+      {
+        kind: 'memory_fact',
+        subject: 'profile-owner',
+        predicate: 'home_city',
+        value: 'Utrecht',
+        scope: 'global',
+      },
+      {
+        kind: 'memory_fact_absent',
+        subject: 'profile-owner',
+        predicate: 'home_city',
+        value: 'Rotterdam',
+        scope: 'global',
+      },
       {
         kind: 'token_budget',
         maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['profile-correction-chitchat'],
@@ -115,8 +127,10 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       ...completedTurnRubrics({ turnIndex: 1, ...AGENTIC_TURN }),
       {
         kind: 'memory_fact',
+        subject: 'profile-owner',
         predicate: 'default_meeting_duration_minutes',
         value: '45',
+        scope: 'global',
       },
       {
         kind: 'native_fixture_state',
@@ -214,8 +228,10 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       ...completedTurnRubrics({ turnIndex: 1, ...AGENTIC_TURN }),
       {
         kind: 'memory_fact',
+        subject: 'mobile-release-workflow',
         predicate: 'required_artifact_suffix',
         value: FAILURE_ARTIFACT_SUFFIX,
+        scope: 'project',
       },
       {
         kind: 'workspace_file',
@@ -254,7 +270,13 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
       { kind: 'turn_lifecycle_boundary', turnIndex: 1, boundary: 'app_relaunch' },
-      { kind: 'memory_fact', predicate: 'commute_mode', value: 'bicycle' },
+      {
+        kind: 'memory_fact',
+        subject: 'profile-owner',
+        predicate: 'commute_mode',
+        value: 'bicycle',
+        scope: 'global',
+      },
       {
         kind: 'token_budget',
         maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['relaunch-profile-continuity'],
