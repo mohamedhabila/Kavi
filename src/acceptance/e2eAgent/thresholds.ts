@@ -25,7 +25,7 @@ export const E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS = 4_096;
 
 export const E2E_PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
 
-export const E2E_SCENARIO_MANIFEST_VERSION = '2026-07-12.organic-flow-v3';
+export const E2E_SCENARIO_MANIFEST_VERSION = '2026-07-11.organic-flow-v3';
 
 export const E2E_NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 

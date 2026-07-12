@@ -24,7 +24,7 @@ import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2ERubric, E2EScenario, E2EUserTurn } from './types';
 import { assertE2EScenarioArtifactTargetsObservable } from './e2eScenarioArtifactContract';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-12.organic-flow-v6';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-11.organic-flow-v6';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-14';
 
 type E2ERubricKind = E2ERubric['kind'];
