@@ -16,10 +16,11 @@ import { isNonRetryableProviderRequestError } from '../../../services/llm/suppor
 import { useChatStore } from '../../../store/useChatStore';
 import { ResolvedFinalizationProviderContext } from './contracts';
 import { getReviewableSubAgentsForRun } from '../../../services/agents/subAgentRunTracking';
-
-function hasIncompleteGoals(goals: ReadonlyArray<{ status: string }>): boolean {
-  return goals.some((goal) => goal.status === 'active' || goal.status === 'pending');
-}
+import {
+  hasBlockedBlockingGoals,
+  hasResumableBlockingGoals,
+  isBlockingGoal,
+} from '../../goals/types';
 
 export async function resolveForegroundInterruptedResponseOutcome(params: {
   assertNotAborted: () => void;
@@ -82,10 +83,18 @@ export async function resolveForegroundInterruptedResponseOutcome(params: {
 
   params.assertNotAborted();
 
-  if (hasIncompleteGoals(goals)) {
-    const activeGoals = goals.filter((goal) => goal.status === 'active').map((goal) => goal.title);
+  if (hasBlockedBlockingGoals(goals)) {
+    return buildAgentControlGraphInterruptedTurnFailedOutcome(
+      `The interrupted run has blocked required goals and cannot be completed: ${params.error.message}`,
+    );
+  }
+
+  if (hasResumableBlockingGoals(goals)) {
+    const activeGoals = goals
+      .filter((goal) => isBlockingGoal(goal) && goal.status === 'active')
+      .map((goal) => goal.title);
     const pendingGoals = goals
-      .filter((goal) => goal.status === 'pending')
+      .filter((goal) => isBlockingGoal(goal) && goal.status === 'pending')
       .map((goal) => goal.title);
     return buildAgentControlGraphInterruptedGoalsResumeOutcome({
       checkpointTitle: 'Goals still open',

@@ -164,6 +164,7 @@ async function runTerminalBackgroundReview(params: {
       setAgentRunPhase: params.setAgentRunPhase,
       signal: operation.signal,
       updateAgentRunAsyncWork: params.updateAgentRunAsyncWork,
+      updateAgentRunControlGraph: params.updateAgentRunControlGraph,
       updateAgentRunSummary: params.updateAgentRunSummary,
       updateMessageAssistantMetadata: params.updateMessageAssistantMetadata,
     });

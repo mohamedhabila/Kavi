@@ -8,15 +8,44 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentGoalMutation } from '../goals/types';
-import {
-  normalizeGoalCompletionPolicy,
-  type AgentGoalStatus,
-} from '../goals/types';
+import { normalizeGoalCompletionPolicy, type AgentGoalStatus } from '../goals/types';
 
-function parseStringList(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string')
-    : [];
+const ALLOWED_UPDATE_GOALS_ROOT_FIELDS = new Set([
+  'action',
+  'blockedReason',
+  'completionPolicy',
+  'dependencies',
+  'description',
+  'id',
+  'name',
+  'owner',
+  'requiredCapabilities',
+  'requiredResourceKinds',
+  'retainCurrentUserConstraint',
+  'status',
+  'successCriteria',
+]);
+
+const OPTIONAL_STRING_FIELDS = ['blockedReason', 'description', 'owner'] as const;
+const OPTIONAL_STRING_LIST_FIELDS = [
+  'dependencies',
+  'requiredCapabilities',
+  'requiredResourceKinds',
+  'successCriteria',
+] as const;
+
+function omitAdapterNullOptionals(args: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...args };
+  for (const field of ALLOWED_UPDATE_GOALS_ROOT_FIELDS) {
+    if (field !== 'action' && field !== 'id' && field !== 'name' && normalized[field] === null) {
+      delete normalized[field];
+    }
+  }
+  return normalized;
+}
+
+function readStringList(value: unknown): string[] | undefined {
+  return Array.isArray(value) ? (value as string[]).slice() : undefined;
 }
 
 function parseGoalStatus(value: unknown): AgentGoalStatus | undefined {
@@ -25,14 +54,14 @@ function parseGoalStatus(value: unknown): AgentGoalStatus | undefined {
     : undefined;
 }
 
-function normalizeParsedGoal(item: Record<string, unknown>): AgentGoalMutation['goals'][number] {
+function normalizeParsedGoal(
+  item: Record<string, unknown>,
+  retainCurrentUserConstraint: true | undefined,
+): AgentGoalMutation['goals'][number] {
   const completionPolicy = normalizeGoalCompletionPolicy(item.completionPolicy);
   const explicitTitle = typeof item.name === 'string' ? item.name : undefined;
   const status = parseGoalStatus(item.status);
-  const successCriteria = parseStringList(item.successCriteria).filter(
-    (criterion) => criterion.trim().length > 0,
-  );
-  const storedSuccessCriteria = completionPolicy === 'persistent' ? [] : successCriteria;
+  const successCriteria = readStringList(item.successCriteria);
 
   return {
     ...(typeof item.id === 'string' ? { id: item.id } : {}),
@@ -40,30 +69,107 @@ function normalizeParsedGoal(item: Record<string, unknown>): AgentGoalMutation['
     ...(typeof item.description === 'string' ? { description: item.description } : {}),
     ...(status ? { status } : {}),
     ...(completionPolicy ? { completionPolicy } : {}),
-    ...(Array.isArray(item.dependencies)
-      ? { dependencies: item.dependencies.filter((d): d is string => typeof d === 'string') }
+    ...(readStringList(item.dependencies) !== undefined
+      ? { dependencies: readStringList(item.dependencies) }
       : {}),
-    ...(Array.isArray(item.evidence)
-      ? { evidence: item.evidence.filter((e): e is string => typeof e === 'string') }
+    ...(readStringList(item.requiredCapabilities) !== undefined
+      ? { requiredCapabilities: readStringList(item.requiredCapabilities) }
       : {}),
-    ...(Array.isArray(item.requiredCapabilities)
-      ? {
-          requiredCapabilities: item.requiredCapabilities.filter(
-            (c): c is string => typeof c === 'string',
-          ),
-        }
-      : {}),
-    ...(Array.isArray(item.requiredResourceKinds)
-      ? {
-          requiredResourceKinds: item.requiredResourceKinds.filter(
-            (r): r is string => typeof r === 'string',
-          ),
-        }
+    ...(readStringList(item.requiredResourceKinds) !== undefined
+      ? { requiredResourceKinds: readStringList(item.requiredResourceKinds) }
       : {}),
     ...(typeof item.owner === 'string' ? { owner: item.owner } : {}),
-    ...(storedSuccessCriteria.length > 0 ? { successCriteria: storedSuccessCriteria } : {}),
+    ...(successCriteria !== undefined ? { successCriteria } : {}),
+    ...(retainCurrentUserConstraint ? { retainCurrentUserConstraint } : {}),
     ...(typeof item.blockedReason === 'string' ? { blockedReason: item.blockedReason } : {}),
   };
+}
+
+function validateUpdateGoalsRootShape(args: Record<string, unknown>): string[] {
+  const unknownFields = Object.keys(args).filter(
+    (field) => !ALLOWED_UPDATE_GOALS_ROOT_FIELDS.has(field),
+  );
+  if (unknownFields.length > 0) {
+    return [`Unsupported update_goals field(s): ${unknownFields.sort().join(', ')}.`];
+  }
+  if (typeof args.id !== 'string' || !args.id.trim()) {
+    return ['id is required for update_goals and must be a non-empty string.'];
+  }
+  if (typeof args.name !== 'string' || !args.name.trim()) {
+    return ['name is required for update_goals and must be a non-empty string.'];
+  }
+  for (const field of OPTIONAL_STRING_FIELDS) {
+    if (args[field] !== undefined && typeof args[field] !== 'string') {
+      return [`${field} must be a string when supplied.`];
+    }
+  }
+  for (const field of OPTIONAL_STRING_LIST_FIELDS) {
+    if (
+      args[field] !== undefined &&
+      (!Array.isArray(args[field]) ||
+        !(args[field] as unknown[]).every((entry) => typeof entry === 'string'))
+    ) {
+      return [`${field} must be an array containing only strings.`];
+    }
+  }
+  if (args.status !== undefined && parseGoalStatus(args.status) === undefined) {
+    return ['status must be one of: pending, active, completed, blocked.'];
+  }
+  if (
+    args.completionPolicy !== undefined &&
+    normalizeGoalCompletionPolicy(args.completionPolicy) === undefined
+  ) {
+    return ['completionPolicy must be either blocking or persistent.'];
+  }
+  return [];
+}
+
+function parseUserConstraintRetention(params: {
+  args: Record<string, unknown>;
+  action: AgentGoalMutation['action'];
+  completionPolicy: AgentGoalMutation['goals'][number]['completionPolicy'];
+}): { retain?: true; errors: string[] } {
+  for (const unsupported of [
+    'userConstraints',
+    'sourceMessageId',
+    'userConstraintTexts',
+    'groundedUserConstraints',
+    'userConstraintIntegrity',
+    'userConstraintDeliveryPending',
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(params.args, unsupported)) {
+      return {
+        errors: [
+          `${unsupported} is unsupported. Supply only retainCurrentUserConstraint: true; source identity and retained text are code-owned.`,
+        ],
+      };
+    }
+  }
+  if (!Object.prototype.hasOwnProperty.call(params.args, 'retainCurrentUserConstraint')) {
+    return { errors: [] };
+  }
+  if (params.args.retainCurrentUserConstraint !== true) {
+    return { errors: ['retainCurrentUserConstraint must be true when supplied.'] };
+  }
+  if (params.action !== 'add' && params.action !== 'update') {
+    return {
+      errors: [
+        'retainCurrentUserConstraint is supported only for add or update actions on blocking goals.',
+      ],
+    };
+  }
+  if (params.args.status === 'completed') {
+    return { errors: ['Completed goals cannot retain the current user statement.'] };
+  }
+  if (params.completionPolicy === 'persistent') {
+    return { errors: ['Persistent goals cannot retain current user constraint statements.'] };
+  }
+  if (params.action === 'add' && params.completionPolicy !== 'blocking') {
+    return {
+      errors: ['retainCurrentUserConstraint on add requires completionPolicy "blocking".'],
+    };
+  }
+  return { retain: true, errors: [] };
 }
 
 export function buildUpdateGoalsResult(params: {
@@ -102,7 +208,8 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   mutation: AgentGoalMutation;
   errors: string[];
 } {
-  const action = args.action;
+  const normalizedArgs = omitAdapterNullOptionals(args);
+  const action = normalizedArgs.action;
   if (
     action !== 'add' &&
     action !== 'complete' &&
@@ -119,13 +226,38 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
     };
   }
 
-  const parsedGoal = normalizeParsedGoal(args);
-  if (!parsedGoal.id?.trim()) {
+  const completionPolicy = normalizeGoalCompletionPolicy(normalizedArgs.completionPolicy);
+  if (Object.prototype.hasOwnProperty.call(normalizedArgs, 'evidence')) {
     return {
       mutation: { action, goals: [] },
-      errors: ['id is required for update_goals. Provide the goal fields at the tool argument root.'],
+      errors: ['evidence is code-owned and cannot be supplied by update_goals.'],
     };
   }
+  const constraints = parseUserConstraintRetention({
+    args: normalizedArgs,
+    action,
+    completionPolicy,
+  });
+  if (constraints.errors.length > 0) {
+    return { mutation: { action, goals: [] }, errors: constraints.errors };
+  }
+  const shapeErrors = validateUpdateGoalsRootShape(normalizedArgs);
+  if (shapeErrors.length > 0) {
+    return { mutation: { action, goals: [] }, errors: shapeErrors };
+  }
+  if (completionPolicy === 'persistent' && normalizedArgs.successCriteria !== undefined) {
+    return {
+      mutation: { action, goals: [] },
+      errors: ['Persistent goals must omit successCriteria.'],
+    };
+  }
+  if ((action === 'add' || action === 'update') && normalizedArgs.status === 'completed') {
+    return {
+      mutation: { action, goals: [] },
+      errors: ['Use action "complete" for the canonical goal completion transition.'],
+    };
+  }
+  const parsedGoal = normalizeParsedGoal(normalizedArgs, constraints.retain);
 
   const mutation: AgentGoalMutation = {
     action,

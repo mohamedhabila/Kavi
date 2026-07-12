@@ -4,6 +4,7 @@ import type {
   ToolCall,
 } from '../../types/message';
 import { emitSessionEvent } from '../../services/events/bus';
+import { hasSettledFinalAssistantMetadata } from '../../utils/assistantMessageMetadata';
 import type { AgentControlGraphEvent, AgentControlGraphSnapshot } from './agentControlGraph';
 import type { RuntimeCallbacks, TerminalGraphEvent } from './agentControlGraphRuntimeTypes';
 
@@ -42,14 +43,40 @@ export function createAgentControlGraphRuntimeTerminal(params: {
     };
     error?: Error;
   }): Promise<void> => {
-    params.applyEvents([args.graphEvent]);
-    if (args.assistant) {
+    const deliveredAssistant = args.assistant
+      ? {
+          id: 'agent-control-terminal-delivery',
+          role: 'assistant' as const,
+          content: args.assistant.content,
+          timestamp: Date.now(),
+          toolCalls: args.assistant.toolCalls,
+          assistantMetadata: args.assistant.metadata,
+        }
+      : undefined;
+    const acknowledgesConstraintDelivery =
+      args.graphEvent.type === 'FINALIZED' &&
+      args.graphEvent.reason !== 'max_iterations' &&
+      deliveredAssistant?.assistantMetadata?.completionStatus === 'complete' &&
+      deliveredAssistant.assistantMetadata.terminalReason !== 'max_iterations' &&
+      hasSettledFinalAssistantMetadata(deliveredAssistant);
+    if (acknowledgesConstraintDelivery && args.assistant) {
       params.callbacks.onAssistantMessage(
         args.assistant.content,
         args.assistant.toolCalls ?? [],
         args.assistant.providerReplay,
         args.assistant.metadata,
       );
+      params.applyEvents([{ type: 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED' }, args.graphEvent]);
+    } else {
+      params.applyEvents([args.graphEvent]);
+      if (args.assistant) {
+        params.callbacks.onAssistantMessage(
+          args.assistant.content,
+          args.assistant.toolCalls ?? [],
+          args.assistant.providerReplay,
+          args.assistant.metadata,
+        );
+      }
     }
     params.callbacks.onStateChange(args.state);
     await emitTerminalSessionEnd(args.sessionEndReason);

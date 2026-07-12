@@ -1,13 +1,12 @@
 // ---------------------------------------------------------------------------
 // Kavi — Post-compaction reinject
 // ---------------------------------------------------------------------------
-// Reattaches stable profile blocks and active goals after compaction so the
-// working transcript retains graph-owned context (mobile has no AGENTS.md).
+// Reattaches only stable profile blocks after compaction. Graph goals remain
+// current-turn state so stale constraints cannot survive in transcript history.
 // ---------------------------------------------------------------------------
 
 export function buildPostCompactionSystemContent(params: {
   summary: string;
-  goalsPromptSection?: string | null;
   profileSections?: ReadonlyArray<string>;
 }): string {
   const sections: string[] = [];
@@ -21,11 +20,6 @@ export function buildPostCompactionSystemContent(params: {
     .filter((section) => section.length > 0);
   if (profileSections.length > 0) {
     sections.push(`## Persistent Context\n${profileSections.join('\n\n')}`);
-  }
-
-  const goals = params.goalsPromptSection?.trim();
-  if (goals) {
-    sections.push(goals);
   }
 
   return sections.join('\n\n');

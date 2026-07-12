@@ -70,26 +70,50 @@ const conversation: Conversation = {
   agentRuns: [run],
 };
 
-function invoke(recordConversationTurnMemory: jest.Mock): Promise<void> {
+function invoke(
+  recordConversationTurnMemory: jest.Mock,
+  options?: {
+    candidateStatus?: 'completed' | 'failed';
+    ensureAgentRunFinalResponse?: jest.Mock;
+    targetRun?: AgentRun;
+    resumeAgentRun?: jest.Mock;
+  },
+): Promise<void> {
   const controller = new AbortController();
+  const ensureAgentRunFinalResponse =
+    options?.ensureAgentRunFinalResponse ??
+    jest.fn().mockImplementation(async () => {
+      useChatStore.getState().addMessage(conversation.id, {
+        id: 'final-1',
+        role: 'assistant',
+        content: 'Final answer',
+        timestamp: 9,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      });
+      return 'Final answer';
+    });
   return handleTerminalBackgroundReview({
     appendConversationLog: jest.fn(),
     assertNotAborted: jest.fn(),
     completeAgentRun: jest.fn(),
     conversationId: conversation.id,
     context: {
-      conversation,
-      targetRun: run,
+      conversation: options?.targetRun
+        ? { ...conversation, agentRuns: [options.targetRun] }
+        : conversation,
+      targetRun: options?.targetRun ?? run,
       candidateSummary: 'Worker completed.',
-      candidateStatus: 'completed',
+      candidateStatus: options?.candidateStatus ?? 'completed',
     },
-    ensureAgentRunFinalResponse: jest.fn().mockResolvedValue('Final answer'),
+    ensureAgentRunFinalResponse,
     recordConversationTurnMemory,
+    resumeAgentRun: options?.resumeAgentRun,
     reviewTimestamp: 10,
     runId: run.id,
     signal: controller.signal,
     setAgentRunPhase: jest.fn(),
     updateAgentRunAsyncWork: jest.fn(),
+    updateAgentRunControlGraph: jest.fn(),
     updateAgentRunSummary: jest.fn(),
     updateMessageAssistantMetadata: jest.fn(),
   });
@@ -116,6 +140,9 @@ describe('terminal background review memory closeout', () => {
       memoryConversationId: conversation.id,
       sourceRunId: run.id,
     });
+    expect(completeTerminalBackgroundReviewRun).toHaveBeenCalledWith(
+      expect.objectContaining({ updateAgentRunControlGraph: expect.any(Function) }),
+    );
   });
 
   it('does not record memory after losing the terminal compare-and-set race', async () => {
@@ -126,4 +153,71 @@ describe('terminal background review memory closeout', () => {
 
     expect(recordConversationTurnMemory).not.toHaveBeenCalled();
   });
+
+  it('does not transition a completed review when final delivery was not persisted', async () => {
+    const recordConversationTurnMemory = jest.fn();
+    const ensureAgentRunFinalResponse = jest.fn().mockResolvedValue('Unpersisted preview');
+
+    await invoke(recordConversationTurnMemory, { ensureAgentRunFinalResponse });
+
+    expect(ensureAgentRunFinalResponse).toHaveBeenCalledTimes(1);
+    expect(completeTerminalBackgroundReviewRun).not.toHaveBeenCalled();
+    expect(recordConversationTurnMemory).not.toHaveBeenCalled();
+  });
+
+  it('does not transition a failed review when its final report was not persisted', async () => {
+    const recordConversationTurnMemory = jest.fn();
+    const ensureAgentRunFinalResponse = jest.fn().mockResolvedValue('Unpersisted failure');
+
+    await invoke(recordConversationTurnMemory, {
+      candidateStatus: 'failed',
+      ensureAgentRunFinalResponse,
+    });
+
+    expect(ensureAgentRunFinalResponse).toHaveBeenCalledTimes(1);
+    expect(completeTerminalBackgroundReviewRun).not.toHaveBeenCalled();
+    expect(recordConversationTurnMemory).not.toHaveBeenCalled();
+  });
+
+  it.each(['user_constraint_state_conflict', 'goal_evidence_incomplete'])(
+    'fails blocked required goals without resuming them (%s)',
+    async (blockedReason) => {
+      jest.mocked(completeTerminalBackgroundReviewRun).mockReturnValue(true);
+      const blockedRun: AgentRun = {
+        ...run,
+        controlGraph: {
+          ...run.controlGraph!,
+          goals: [
+            {
+              id: 'blocked-goal',
+              title: 'Required result',
+              status: 'blocked',
+              dependencies: [],
+              evidence: [],
+              successCriteria: ['evidence.tool:read_file'],
+              completionPolicy: 'blocking',
+              blockedReason,
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        },
+      };
+      useChatStore.setState({
+        conversations: [{ ...conversation, agentRuns: [blockedRun] }],
+        activeConversationId: conversation.id,
+        isLoading: false,
+      });
+      const resumeAgentRun = jest.fn();
+
+      await invoke(jest.fn(), { targetRun: blockedRun, resumeAgentRun });
+
+      expect(resumeAgentRun).not.toHaveBeenCalled();
+      expect(completeTerminalBackgroundReviewRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          completion: expect.objectContaining({ status: 'failed' }),
+        }),
+      );
+    },
+  );
 });

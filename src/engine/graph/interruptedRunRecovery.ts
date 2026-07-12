@@ -10,6 +10,11 @@ import {
   getAgentRunPendingAsyncOperations,
   isAgentRunAwaitingBackgroundWorkers,
 } from '../../services/agents/agentRunAsyncState';
+import {
+  hasBlockedBlockingGoals,
+  hasResumableBlockingGoals,
+} from '../goals/types';
+import { isAgentControlGraphAtPersistedFinalDeliveryBoundary } from './persistedFinalDelivery';
 
 const APP_RESTART_INTERRUPTION_MARKER = 'app restarted before completion';
 
@@ -40,6 +45,32 @@ export function buildRecoveredAgentRunStateAfterAppRestart(params: {
   run: AgentRun;
   subAgents: SubAgentSnapshot[];
 }): RecoveredAgentRunState {
+  const persistedGraphStatus = params.run.controlGraph?.status;
+  if (persistedGraphStatus === 'cancelled') {
+    const latestSummary =
+      params.run.controlGraph?.terminalReason ||
+      'The control graph recorded cancellation before the run projection was persisted.';
+    return {
+      status: 'cancelled',
+      latestSummary,
+      checkpointTitle: 'Recovered cancelled run',
+      checkpointDetail: latestSummary,
+    };
+  }
+
+  if (persistedGraphStatus === 'failed' || persistedGraphStatus === 'blocked') {
+    const latestSummary =
+      params.run.controlGraph?.terminalReason ||
+      'The control graph recorded a terminal failure before the run projection was persisted.';
+    return {
+      status: 'failed',
+      latestSummary,
+      checkpointTitle:
+        persistedGraphStatus === 'blocked' ? 'Recovered blocked run' : 'Recovered failed run',
+      checkpointDetail: latestSummary,
+    };
+  }
+
   if (params.subAgents.some((agent) => agent.status === 'running')) {
     return undefined;
   }
@@ -49,12 +80,48 @@ export function buildRecoveredAgentRunStateAfterAppRestart(params: {
     params.messages,
     runMessageScope,
   );
-  if (preservedFinalResponse) {
+  if (
+    preservedFinalResponse &&
+    params.run.controlGraph &&
+    isAgentControlGraphAtPersistedFinalDeliveryBoundary(params.run.controlGraph)
+  ) {
+    const goals = params.run.controlGraph?.goals ?? [];
+    if (hasBlockedBlockingGoals(goals)) {
+      return {
+        status: 'failed',
+        latestSummary: 'A required goal remained blocked when the app restarted.',
+        checkpointTitle: 'Blocked goal prevented completion',
+        checkpointDetail:
+          'The persisted response cannot mark the run complete while a required goal is blocked.',
+      };
+    }
+    if (hasResumableBlockingGoals(goals)) {
+      return {
+        status: 'running',
+        latestSummary: 'A final response was persisted, but required goals still need work.',
+        checkpointTitle: 'Recovered open goals',
+        checkpointDetail:
+          'The run remains active because required goals were not completed before restart.',
+        phase: 'review',
+      };
+    }
     return {
       status: 'completed',
       latestSummary: preservedFinalResponse,
       checkpointTitle: 'Recovered delivered response',
       checkpointDetail: 'The final response was durably persisted before the app restarted.',
+    };
+  }
+
+  if (preservedFinalResponse && params.run.controlGraph?.status === 'recovering') {
+    const latestSummary =
+      'A final response was preserved, but the interrupted recovery boundary still requires review.';
+    return {
+      status: 'running',
+      latestSummary,
+      checkpointTitle: 'Recovered completion requires review',
+      checkpointDetail: latestSummary,
+      phase: 'review',
     };
   }
 
@@ -86,10 +153,12 @@ export function buildRecoveredAgentRunStateAfterAppRestart(params: {
       const latestSummary =
         'Background workers finished before the app restarted. Recovering the final response from verified results.';
       return {
-        status: 'completed',
+        status: 'running',
         latestSummary,
         checkpointTitle: 'Recovered background completion',
         checkpointDetail: latestSummary,
+        awaitingBackgroundWorkers: true,
+        phase: 'review',
       };
     }
 

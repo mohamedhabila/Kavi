@@ -1,4 +1,12 @@
 import type { RequestUnderstandingSnapshot } from './requestUnderstanding';
+import type { AgentGoal } from '../engine/goals/types';
+
+export type {
+  AgentGoal,
+  AgentGoalCompletionPolicy,
+  AgentGoalStatus,
+  AgentGoalUserConstraint,
+} from '../engine/goals/types';
 
 export type AgentRunTaskOwner = 'supervisor' | 'worker' | 'either';
 
@@ -31,27 +39,6 @@ export interface AgentRunPlan {
   workstreams: AgentRunWorkstream[];
   rawPlan?: string;
   updatedAt: number;
-}
-
-export type AgentGoalStatus = 'pending' | 'active' | 'completed' | 'blocked';
-export type AgentGoalCompletionPolicy = 'blocking' | 'persistent';
-
-export interface AgentGoal {
-  id: string;
-  title: string;
-  description?: string;
-  status: AgentGoalStatus;
-  dependencies: string[];
-  evidence: string[];
-  createdAt: number;
-  updatedAt: number;
-  completedAt?: number;
-  owner?: 'supervisor' | string;
-  requiredCapabilities?: string[];
-  requiredResourceKinds?: string[];
-  successCriteria?: string[];
-  completionPolicy?: AgentGoalCompletionPolicy;
-  blockedReason?: string;
 }
 
 export type AgentRunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
@@ -225,6 +212,8 @@ export interface AgentRunControlGraphTurnDirectives {
   maxTokensOverride?: number;
   incompleteFinalTextRecoveryCount: number;
   incompleteFinalTextContinuationPrefix?: string;
+  /** Persisted across automatic resumes so recovery cannot loop indefinitely. */
+  automaticRecoveryAttemptCount?: number;
 }
 
 export interface AgentRunControlGraphAsyncWorkState {

@@ -19,16 +19,19 @@ jest.mock('../../src/engine/graph/iterationReadyTurnExecution', () => ({
 const mockedPrepareModelTurn = jest.mocked(prepareAgentControlGraphModelTurn);
 const mockedExecutePreparedTurn = jest.mocked(executePreparedAgentControlGraphTurn);
 
-function params(iteration: number, goals = [
-  createGoal({
-    id: 'current-goal',
-    title: 'Keep the verified constraint',
-    status: 'active',
-    completionPolicy: 'blocking',
-    successCriteria: ['evidence.tool:write_file'],
-    now: 1,
-  }),
-]) {
+function params(
+  iteration: number,
+  goals = [
+    createGoal({
+      id: 'current-goal',
+      title: 'Keep the verified constraint',
+      status: 'active',
+      completionPolicy: 'blocking',
+      successCriteria: ['evidence.tool:write_file'],
+      now: 1,
+    }),
+  ],
+) {
   const runtime = {
     activeModel: 'test-model',
     activeProvider: { id: 'provider', name: 'Provider', enabled: true },
@@ -121,11 +124,11 @@ describe('iteration request understanding continuity', () => {
         type: 'REQUEST_UNDERSTANDING_PROJECTED',
         iteration: 2,
         projection: expect.objectContaining({
-          version: 1,
+          version: 2,
           integrity: 'valid',
           declaredObjectives: { status: 'known', count: 1, omittedCount: 0 },
           structuredSuccessConditions: { status: 'known', count: 1, omittedCount: 0 },
-          userConstraints: { status: 'unknown' },
+          userConstraints: { status: 'unknown', count: 0, omittedCount: 0 },
           effectAuthorization: { status: 'unknown' },
         }),
       }),
@@ -135,14 +138,12 @@ describe('iteration request understanding continuity', () => {
         goals: input.graph.getGraphSnapshot().goals,
         promptContextSupport: expect.objectContaining({
           graphGoals: input.graph.getGraphSnapshot().goals,
-          runtimeContext: expect.stringContaining('## Request Understanding Projection (v1)'),
+          runtimeContext: expect.stringContaining('## Request Understanding Projection (v2)'),
         }),
       }),
     );
     const preparation = mockedPrepareModelTurn.mock.calls[0]?.[0];
-    expect(preparation?.promptContextSupport.runtimeContext).toContain(
-      'evidence.tool:write_file',
-    );
+    expect(preparation?.promptContextSupport.runtimeContext).toContain('evidence.tool:write_file');
     expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
       'PRIVATE-REQUEST-TEXT-NEVER-PROJECT',
     );
@@ -170,6 +171,49 @@ describe('iteration request understanding continuity', () => {
     );
   });
 
+  it('preserves an exact structured user constraint on a later iteration', async () => {
+    const goal = createGoal({
+      id: 'constraint-goal',
+      title: 'Respect the user constraint',
+      status: 'active',
+      completionPolicy: 'blocking',
+      successCriteria: ['evidence.tool:write_file'],
+      userConstraints: [
+        {
+          text: 'Do not notify anyone before I review the draft.',
+          sourceMessageId: 'private-source-message-id',
+        },
+      ],
+      now: 1,
+    });
+    const input = params(3, [goal]);
+
+    await executeAgentControlGraphIteration(input);
+
+    expect(input.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
+      expect.objectContaining({
+        type: 'REQUEST_UNDERSTANDING_PROJECTED',
+        iteration: 3,
+        projection: expect.objectContaining({
+          userConstraints: { status: 'known', count: 1, omittedCount: 0 },
+        }),
+      }),
+    ]);
+    const preparation = mockedPrepareModelTurn.mock.calls[0]?.[0];
+    expect(preparation?.promptContextSupport.runtimeContext).toContain(
+      'status=known; count=1; omitted=0',
+    );
+    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
+      'Do not notify anyone before I review the draft.',
+    );
+    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
+      'private-source-message-id',
+    );
+    expect(preparation?.promptContextSupport.graphGoals?.[0]?.userConstraints).toEqual(
+      goal.userConstraints,
+    );
+  });
+
   it('does not write an unchanged projection again', async () => {
     const input = params(3);
     const goals = input.graph.getGraphSnapshot().goals;
@@ -183,8 +227,6 @@ describe('iteration request understanding continuity', () => {
     await executeAgentControlGraphIteration(input);
 
     expect(input.graph.applyAgentControlGraphEvents).not.toHaveBeenCalled();
-    expect(mockedPrepareModelTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ goals }),
-    );
+    expect(mockedPrepareModelTurn).toHaveBeenCalledWith(expect.objectContaining({ goals }));
   });
 });

@@ -11,17 +11,50 @@ import {
   skipRemainingAgentRunPhases,
   transitionAgentRunPhases,
 } from '../../services/agents/agentRunStateModel';
-import { updateAgentRunControlGraphAsyncWorkState } from '../../services/agents/agentControlGraphState';
+import {
+  isAgentRunControlGraphTerminal,
+  prepareAgentRunControlGraphForResume,
+  updateAgentRunControlGraphAsyncWorkState,
+} from '../../services/agents/agentControlGraphState';
 import { buildRecoveredAgentRunStateAfterAppRestart } from '../../engine/graph/interruptedRunRecovery';
 import type { ResolveToolEffectRestartDisposition } from '../../services/executionJournal/toolEffectRestartDisposition';
 import { appendAgentCheckpoint } from './shared';
-import { recoverActiveToolCallsAfterRestart } from './toolCalls';
+import {
+  recoverActiveToolCallsAfterRestart,
+  settleActiveToolCallsInAgentRunMessages,
+} from './toolCalls';
+import { buildAgentControlGraphAfterPersistedFinalDelivery } from '../../engine/graph/persistedFinalDelivery';
+import { reduceAgentControlGraph } from '../../engine/graph/agentControlGraph';
+import { buildAgentControlGraphTerminalEventForCompletion } from '../../engine/graph/runCompletion';
 
 const INTERRUPTED_TOOL_CALL_ERROR =
   'Tool call was interrupted because the app restarted before completion.';
 const EFFECT_RECONCILIATION_PENDING_SUMMARY =
   'Waiting for durable tool-effect reconciliation after app restart. No tool or model execution will be replayed.';
 const EFFECT_RECONCILIATION_PENDING_TITLE = 'Tool effect reconciliation pending';
+
+function controlGraphMatchesRecoveredTerminalStatus(
+  controlGraph: AgentRun['controlGraph'],
+  status: Extract<AgentRun['status'], 'cancelled' | 'failed'>,
+): boolean {
+  if (!controlGraph) return false;
+  return status === 'cancelled'
+    ? controlGraph.status === 'cancelled'
+    : controlGraph.status === 'failed' || controlGraph.status === 'blocked';
+}
+
+function prepareControlGraphForRecoveredFailure(params: {
+  controlGraph: AgentRun['controlGraph'];
+  timestamp: number;
+}): AgentRun['controlGraph'] {
+  const graph = params.controlGraph;
+  if (!graph || !isAgentRunControlGraphTerminal(graph)) return graph;
+
+  return prepareAgentRunControlGraphForResume(graph, {
+    reason: 'reconciling a mismatched persisted terminal graph after app restart',
+    updatedAt: params.timestamp,
+  });
+}
 
 export function recoverInterruptedAgentRunsInConversation(
   conversation: Conversation,
@@ -42,17 +75,32 @@ export function recoverInterruptedAgentRunsInConversation(
     }
 
     const recoveredWorkers = getSubAgentsForAgentRun(conversation, run.id, activeSubAgents);
-    const interruptedToolUpdate = recoverActiveToolCallsAfterRestart({
-      conversationId: conversation.id,
-      executionRunId: params?.executionRunIdByConversationAndAgentRun
-        ?.get(conversation.id)
-        ?.get(run.id),
-      messages: nextMessages,
-      run,
-      timestamp,
-      interruptedErrorMessage: INTERRUPTED_TOOL_CALL_ERROR,
-      resolveToolEffect: params?.resolveToolEffect ?? (() => ({ kind: 'not_dispatched' })),
-    });
+    const interruptedToolUpdate = isAgentRunControlGraphTerminal(run.controlGraph)
+      ? (() => {
+          const settled = settleActiveToolCallsInAgentRunMessages({
+            messages: nextMessages,
+            run,
+            timestamp,
+            errorMessage: INTERRUPTED_TOOL_CALL_ERROR,
+          });
+          return {
+            messages: settled.messages,
+            completedCount: 0,
+            failedCount: settled.settledCount,
+            reconciliationPendingCount: 0,
+          };
+        })()
+      : recoverActiveToolCallsAfterRestart({
+          conversationId: conversation.id,
+          executionRunId: params?.executionRunIdByConversationAndAgentRun
+            ?.get(conversation.id)
+            ?.get(run.id),
+          messages: nextMessages,
+          run,
+          timestamp,
+          interruptedErrorMessage: INTERRUPTED_TOOL_CALL_ERROR,
+          resolveToolEffect: params?.resolveToolEffect ?? (() => ({ kind: 'not_dispatched' })),
+        });
     const recoveredCompletedToolCount = interruptedToolUpdate.completedCount;
     const interruptedToolCount = interruptedToolUpdate.failedCount;
     const didRecoverTool = recoveredCompletedToolCount > 0 || interruptedToolCount > 0;
@@ -174,7 +222,7 @@ export function recoverInterruptedAgentRunsInConversation(
       );
     }
 
-    const terminalRecoveredState =
+    let terminalRecoveredState =
       recoveredState.status === 'completed' && interruptedToolCount > 0
         ? {
             ...recoveredState,
@@ -187,12 +235,53 @@ export function recoverInterruptedAgentRunsInConversation(
           }
         : recoveredState;
 
+    let nextControlGraph = run.controlGraph;
+    if (terminalRecoveredState.status === 'completed') {
+      const finalizedControlGraph = nextControlGraph
+        ? buildAgentControlGraphAfterPersistedFinalDelivery({
+            messages: nextMessages,
+            run: { ...run, controlGraph: nextControlGraph },
+          })
+        : undefined;
+      if (finalizedControlGraph) {
+        nextControlGraph = finalizedControlGraph;
+      } else {
+        terminalRecoveredState = {
+          ...terminalRecoveredState,
+          status: 'failed',
+          latestSummary:
+            'A final response was preserved, but its graph completion boundary could not be verified after restart.',
+          checkpointTitle: 'Run completion requires recovery',
+          checkpointDetail:
+            'The persisted delivery could not be reconciled with required goals and constraint state.',
+        };
+      }
+    }
+
+    if (terminalRecoveredState.status !== 'completed') {
+      const graphTerminalStatus =
+        terminalRecoveredState.status === 'cancelled' ? 'cancelled' : 'failed';
+      if (!controlGraphMatchesRecoveredTerminalStatus(nextControlGraph, graphTerminalStatus)) {
+        const terminalEvent = buildAgentControlGraphTerminalEventForCompletion({
+          status: graphTerminalStatus,
+          terminalReason: run.terminalReason,
+        });
+        nextControlGraph = reduceAgentControlGraph(
+          prepareControlGraphForRecoveredFailure({
+            controlGraph: nextControlGraph,
+            timestamp,
+          }),
+          [
+            {
+              ...terminalEvent,
+              reason: terminalRecoveredState.latestSummary,
+              timestamp,
+            },
+          ],
+        );
+      }
+    }
     const finalPhase = terminalRecoveredState.status === 'completed' ? 'deliver' : run.currentPhase;
-    const nextControlGraph = updateAgentRunControlGraphAsyncWorkState(run.controlGraph, {
-      awaitingBackgroundWorkers: false,
-      pendingOperations: [],
-      updatedAt: timestamp,
-    });
     let nextRun: AgentRun = {
       ...run,
       status: terminalRecoveredState.status,

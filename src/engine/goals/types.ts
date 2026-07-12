@@ -13,8 +13,16 @@
 //   - Human-memory analogy: goals = intention stack; evidence = associative links
 // ---------------------------------------------------------------------------
 
+import {
+  readPersistedAgentGoalUserConstraintState,
+  type AgentGoalUserConstraint,
+  type AgentGoalUserConstraintIntegrity,
+} from './userConstraints';
+
 export type AgentGoalStatus = 'pending' | 'active' | 'completed' | 'blocked';
 export type AgentGoalCompletionPolicy = 'blocking' | 'persistent';
+
+export type { AgentGoalUserConstraint, AgentGoalUserConstraintIntegrity } from './userConstraints';
 
 export interface AgentGoal {
   id: string;
@@ -30,6 +38,10 @@ export interface AgentGoal {
   requiredCapabilities?: string[];
   requiredResourceKinds?: string[];
   successCriteria?: string[];
+  userConstraints?: AgentGoalUserConstraint[];
+  userConstraintIntegrity?: AgentGoalUserConstraintIntegrity;
+  /** Code-owned carryover until the constrained result is delivered to the user. */
+  userConstraintDeliveryPending?: true;
   completionPolicy?: AgentGoalCompletionPolicy;
   blockedReason?: string;
 }
@@ -47,6 +59,8 @@ export interface AgentGoalMutation {
     requiredResourceKinds?: string[];
     owner?: 'supervisor' | string;
     successCriteria?: string[];
+    /** Provider intent only; graph code captures the entire current user message. */
+    retainCurrentUserConstraint?: true;
     completionPolicy?: AgentGoalCompletionPolicy;
     blockedReason?: string;
   }>;
@@ -69,25 +83,36 @@ export function createGoal(params: {
   requiredCapabilities?: string[];
   requiredResourceKinds?: string[];
   successCriteria?: string[];
+  userConstraints?: AgentGoalUserConstraint[];
   completionPolicy?: AgentGoalCompletionPolicy;
   blockedReason?: string;
   now?: number;
 }): AgentGoal {
   const now = params.now ?? Date.now();
+  const status = params.status ?? 'pending';
   const completionPolicy = params.completionPolicy ?? resolveDefaultGoalCompletionPolicy(params);
   const successCriteria = resolveStoredSuccessCriteria({
     completionPolicy,
     successCriteria: params.successCriteria,
   });
+  const userConstraintState = readPersistedAgentGoalUserConstraintState({
+    value: params.userConstraints,
+    allowedOnGoal: completionPolicy === 'blocking',
+  });
+  const hasCompletedConstraintConflict =
+    status === 'completed' &&
+    (userConstraintState.state === 'conflict' ||
+      (userConstraintState.state === 'canonical' && userConstraintState.constraints.length > 0));
   return {
     id: params.id?.trim() || generateGoalId(),
     title: params.title.trim(),
     ...(params.description?.trim() ? { description: params.description.trim() } : {}),
-    status: params.status ?? 'pending',
+    status,
     dependencies: Array.from(new Set(params.dependencies ?? [])),
     evidence: Array.from(new Set(params.evidence ?? [])),
     createdAt: now,
     updatedAt: now,
+    ...(status === 'completed' ? { completedAt: now } : {}),
     ...(params.owner ? { owner: params.owner } : {}),
     ...(params.requiredCapabilities?.length
       ? { requiredCapabilities: params.requiredCapabilities }
@@ -96,6 +121,13 @@ export function createGoal(params: {
       ? { requiredResourceKinds: params.requiredResourceKinds }
       : {}),
     ...(successCriteria?.length ? { successCriteria } : {}),
+    ...(userConstraintState.state === 'canonical' && !hasCompletedConstraintConflict
+      ? { userConstraints: userConstraintState.constraints }
+      : {}),
+    ...(userConstraintState.state === 'conflict' || hasCompletedConstraintConflict
+      ? { userConstraintIntegrity: 'conflict' as const }
+      : {}),
+    ...(hasCompletedConstraintConflict ? { userConstraintDeliveryPending: true as const } : {}),
     completionPolicy,
     ...(params.blockedReason?.trim() ? { blockedReason: params.blockedReason.trim() } : {}),
   };
@@ -135,8 +167,7 @@ function resolveStoredSuccessCriteria(params: {
   completionPolicy?: AgentGoalCompletionPolicy;
   successCriteria?: string[];
 }): string[] | undefined {
-  const completionPolicy =
-    params.completionPolicy ?? resolveDefaultGoalCompletionPolicy(params);
+  const completionPolicy = params.completionPolicy ?? resolveDefaultGoalCompletionPolicy(params);
   return completionPolicy === 'blocking' && params.successCriteria?.length
     ? params.successCriteria
     : undefined;
@@ -152,6 +183,20 @@ export function isBlockingGoal(
   goal: Pick<AgentGoal, 'completionPolicy' | 'successCriteria'>,
 ): boolean {
   return resolveGoalCompletionPolicy(goal) === 'blocking';
+}
+
+export function hasResumableBlockingGoals(goals: ReadonlyArray<AgentGoal>): boolean {
+  return goals.some(
+    (goal) => isBlockingGoal(goal) && (goal.status === 'active' || goal.status === 'pending'),
+  );
+}
+
+export function hasBlockedBlockingGoals(goals: ReadonlyArray<AgentGoal>): boolean {
+  return goals.some((goal) => isBlockingGoal(goal) && goal.status === 'blocked');
+}
+
+export function hasIncompleteBlockingGoals(goals: ReadonlyArray<AgentGoal>): boolean {
+  return hasResumableBlockingGoals(goals) || hasBlockedBlockingGoals(goals);
 }
 
 export function normalizeGoal(value: unknown): AgentGoal | null {
@@ -202,6 +247,13 @@ export function normalizeGoal(value: unknown): AgentGoal | null {
     completionPolicy,
     successCriteria,
   });
+  const userConstraintState =
+    v.userConstraintIntegrity !== undefined
+      ? ({ state: 'conflict' } as const)
+      : readPersistedAgentGoalUserConstraintState({
+          value: v.userConstraints,
+          allowedOnGoal: completionPolicy === 'blocking',
+        });
 
   const blockedReason =
     typeof v.blockedReason === 'string' && v.blockedReason.trim().length > 0
@@ -216,6 +268,20 @@ export function normalizeGoal(value: unknown): AgentGoal | null {
     status === 'completed' && typeof v.completedAt === 'number' && Number.isFinite(v.completedAt)
       ? v.completedAt
       : undefined;
+  const hasCanonicalUserConstraints =
+    userConstraintState.state === 'canonical' && userConstraintState.constraints.length > 0;
+  const hasCompletedConstraintObligation =
+    status === 'completed' &&
+    (hasCanonicalUserConstraints ||
+      userConstraintState.state === 'conflict' ||
+      v.userConstraintDeliveryPending === true);
+  const hasCanonicalPendingConstraintDelivery =
+    status === 'completed' &&
+    v.userConstraintDeliveryPending === true &&
+    hasCanonicalUserConstraints;
+  const hasUserConstraintConflict =
+    userConstraintState.state === 'conflict' ||
+    (hasCompletedConstraintObligation && !hasCanonicalPendingConstraintDelivery);
 
   return {
     id,
@@ -231,6 +297,15 @@ export function normalizeGoal(value: unknown): AgentGoal | null {
     ...(requiredCapabilities?.length ? { requiredCapabilities } : {}),
     ...(requiredResourceKinds?.length ? { requiredResourceKinds } : {}),
     ...(storedSuccessCriteria?.length ? { successCriteria: storedSuccessCriteria } : {}),
+    ...(userConstraintState.state === 'canonical' && !hasUserConstraintConflict
+      ? { userConstraints: userConstraintState.constraints }
+      : {}),
+    ...(hasUserConstraintConflict
+      ? { userConstraintIntegrity: 'conflict' as const }
+      : {}),
+    ...(hasCompletedConstraintObligation
+      ? { userConstraintDeliveryPending: true as const }
+      : {}),
     completionPolicy,
     ...(blockedReason ? { blockedReason } : {}),
   };

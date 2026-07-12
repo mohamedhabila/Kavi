@@ -1,7 +1,7 @@
 import type { AgentControlGraphTerminalBackgroundReviewContext } from '../engine/graph/terminalBackgroundReviewContext';
 import {
   buildAgentRunMessageScope,
-  hasDeliveredFinalAssistantResponse,
+  getLatestAssistantProjectionFinalResponsePreview,
 } from '../services/agents/lifecycle/agentRunStateMachine';
 import { useChatStore } from '../store/useChatStore';
 import { ConversationLogEntry } from '../types/conversation';
@@ -13,12 +13,12 @@ import {
 } from '../engine/graph/foregroundRun/contracts';
 import { completeTerminalBackgroundReviewRun } from './terminalBackgroundCompletion';
 import type { RecordConversationTurnMemory } from './chatTurnMemory';
+import {
+  hasIncompleteBlockingGoals,
+  hasResumableBlockingGoals,
+} from '../engine/goals/types';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
-
-function hasIncompleteGoals(goals: ReadonlyArray<{ status: string }> | undefined): boolean {
-  return (goals ?? []).some((goal) => goal.status === 'active' || goal.status === 'pending');
-}
 
 export async function handleTerminalBackgroundReview(params: {
   appendConversationLog: ChatStore['addConversationLog'];
@@ -34,13 +34,14 @@ export async function handleTerminalBackgroundReview(params: {
   signal: AbortSignal;
   setAgentRunPhase: ChatStore['setAgentRunPhase'];
   updateAgentRunAsyncWork: ChatStore['updateAgentRunAsyncWork'];
+  updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
   updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
   updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
 }): Promise<void> {
   const { conversation, targetRun, candidateSummary, candidateStatus } = params.context;
   const goals = targetRun.controlGraph?.goals ?? [];
 
-  if (hasIncompleteGoals(goals) && params.resumeAgentRun) {
+  if (hasResumableBlockingGoals(goals) && params.resumeAgentRun) {
     params.setAgentRunPhase(
       params.conversationId,
       'work',
@@ -63,13 +64,17 @@ export async function handleTerminalBackgroundReview(params: {
   }
 
   const status =
-    candidateStatus === 'completed' && !hasIncompleteGoals(goals) ? 'completed' : 'failed';
+    candidateStatus === 'completed' && !hasIncompleteBlockingGoals(goals)
+      ? 'completed'
+      : 'failed';
   const checkpointTitle =
     status === 'completed' ? 'Background workers finished' : 'Background worker review failed';
   const runMessageScope = buildAgentRunMessageScope(targetRun);
   let latestSummary = candidateSummary;
 
-  if (!hasDeliveredFinalAssistantResponse(conversation.messages, runMessageScope)) {
+  if (
+    !getLatestAssistantProjectionFinalResponsePreview(conversation.messages, runMessageScope)
+  ) {
     const preferredAssistantMessageId = findLatestPreferredAgentRunAssistantMessageId(
       conversation.messages,
       runMessageScope,
@@ -88,6 +93,21 @@ export async function handleTerminalBackgroundReview(params: {
     }
   }
 
+  const settledConversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === params.conversationId);
+  const settledRun = settledConversation?.agentRuns?.find(
+    (candidate) => candidate.id === params.runId,
+  );
+  if (!settledConversation || !settledRun) return;
+  const settledRunMessageScope = buildAgentRunMessageScope(settledRun);
+  const settledFinalResponse = getLatestAssistantProjectionFinalResponsePreview(
+    settledConversation.messages,
+    settledRunMessageScope,
+  );
+  if (!settledFinalResponse) return;
+  latestSummary = settledFinalResponse;
+
   const completed = completeTerminalBackgroundReviewRun({
     appendConversationLog: params.appendConversationLog,
     completeAgentRun: params.completeAgentRun,
@@ -104,6 +124,7 @@ export async function handleTerminalBackgroundReview(params: {
     reviewTimestamp: params.reviewTimestamp,
     runId: params.runId,
     targetRun,
+    updateAgentRunControlGraph: params.updateAgentRunControlGraph,
   });
   if (!completed) return;
   const workspaceTarget = resolveConversationWorkspaceTarget({

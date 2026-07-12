@@ -21,6 +21,19 @@ export function buildPreparedModelTurnPrompt(params: {
     memoryReadEpoch !== undefined && isMemoryReadEpochCurrent(memoryReadEpoch)
       ? params.promptContextSupport.livingMemorySections
       : undefined;
+  const forcedConstraintGoals = (params.promptContextSupport.graphGoals ?? []).filter((goal) => {
+    const live = goal.status === 'active' || goal.status === 'blocked' || goal.status === 'pending';
+    return (
+      (live &&
+        (goal.userConstraintIntegrity === 'conflict' || (goal.userConstraints?.length ?? 0) > 0)) ||
+      goal.userConstraintDeliveryPending === true
+    );
+  });
+  const turnGraphGoals = params.actionablePromptTurn
+    ? params.promptContextSupport.graphGoals
+    : forcedConstraintGoals.length > 0
+      ? forcedConstraintGoals
+      : undefined;
   const prepare = (sections: PromptContextSupport['livingMemorySections']) =>
     prepareAgentTurn({
       allowSessionCoordinationTools: params.allowSessionCoordinationTools,
@@ -29,7 +42,7 @@ export function buildPreparedModelTurnPrompt(params: {
       pinnedToolNames: params.pinnedToolNames,
       promptBundleContext: {
         effectiveForceTextReasonThisTurn: params.effectiveForceTextReasonThisTurn,
-        graphGoals: params.actionablePromptTurn ? params.promptContextSupport.graphGoals : undefined,
+        graphGoals: turnGraphGoals,
         goalsPromptSection: params.actionablePromptTurn
           ? params.promptContextSupport.goalsPromptSection
           : null,

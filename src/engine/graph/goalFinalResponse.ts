@@ -1,4 +1,5 @@
 import type { AgentGoal, AgentRun } from '../../types/agentRun';
+import { readPendingGoalUserConstraintDelivery } from '../goals/userConstraintFinalDelivery';
 
 function normalizeText(value: string | undefined): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
@@ -26,6 +27,12 @@ export function readGraphExpectedFinalResponse(
 ): string | undefined {
   const goals = run.controlGraph?.goals ?? [];
   if (goals.length === 0) {
+    return undefined;
+  }
+
+  // A raw evidence excerpt cannot prove that an exact delivery constraint was
+  // honored. Constraint-bearing recovery must go through bounded synthesis.
+  if (readPendingGoalUserConstraintDelivery(goals).state !== 'absent') {
     return undefined;
   }
 

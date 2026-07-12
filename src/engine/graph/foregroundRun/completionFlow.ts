@@ -24,7 +24,7 @@ export async function handleForegroundRunCompletionFlow(params: {
   enterAsyncMonitoringPhase: (detail: string, checkpointTitle?: string) => void;
   finalizeCompletion: (
     completion: Extract<ForegroundRunCompletionReviewResult, { handled: false }>,
-  ) => void;
+  ) => boolean;
   recordConversationTurnMemory: () => void;
   reviewCompletion: () => Promise<ForegroundRunCompletionReviewResult>;
   forceTerminalReview?: boolean;
@@ -59,7 +59,9 @@ export async function handleForegroundRunCompletionFlow(params: {
     return;
   }
 
-  params.finalizeCompletion(completionReview);
+  if (!params.finalizeCompletion(completionReview)) {
+    return;
+  }
   params.appendConversationLog({
     kind: 'state',
     level: completionReview.completionLogLevel,

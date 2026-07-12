@@ -1,4 +1,4 @@
-export const REQUEST_UNDERSTANDING_PROJECTION_VERSION = 1 as const;
+export const REQUEST_UNDERSTANDING_PROJECTION_VERSION = 2 as const;
 
 export type RequestUnderstandingUnknownReason =
   | 'request_state_unavailable'
@@ -13,6 +13,7 @@ export type RequestUnderstandingConflictReason =
   | 'duplicate_goal_id'
   | 'duplicate_required_information_key'
   | 'goal_contract_conflict'
+  | 'user_constraint_state_conflict'
   | 'authority_state_conflict';
 
 export type RequestUnderstandingUnknown = Readonly<{
@@ -77,6 +78,11 @@ export type RequestUnderstandingExecutionRequirement = Readonly<{
   valueTruncated: boolean;
 }>;
 
+export type RequestUnderstandingUserConstraint = Readonly<{
+  goalId: string;
+  text: string;
+}>;
+
 export type RequestUnderstandingRequiredInformation = Readonly<{
   key: string;
   authority: 'user' | 'memory' | 'tool' | 'policy';
@@ -120,8 +126,9 @@ export interface RequestUnderstandingProjection {
   executionRequirements: RequestUnderstandingField<
     RequestUnderstandingBoundedList<RequestUnderstandingExecutionRequirement>
   >;
-  /** No typed user-constraint extraction contract exists yet. Never synthesize this list. */
-  userConstraints: RequestUnderstandingUnknown;
+  userConstraints: RequestUnderstandingField<
+    RequestUnderstandingBoundedList<RequestUnderstandingUserConstraint>
+  >;
   registeredRequiredInformation: RequestUnderstandingField<
     RequestUnderstandingBoundedList<RequestUnderstandingRequiredInformation>
   >;
@@ -160,7 +167,11 @@ export interface RequestUnderstandingSnapshot {
     count: number;
     omittedCount: number;
   }>;
-  userConstraints: Readonly<{ status: 'unknown' }>;
+  userConstraints: Readonly<{
+    status: RequestUnderstandingFieldStatus;
+    count: number;
+    omittedCount: number;
+  }>;
   registeredRequiredInformation: Readonly<{
     status: RequestUnderstandingFieldStatus;
     count: number;

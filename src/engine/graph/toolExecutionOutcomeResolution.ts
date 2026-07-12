@@ -34,6 +34,7 @@ import {
   canonicalizeToolExecutionOutcome,
   type CanonicalToolExecutionOutcome,
 } from './toolExecutionOutcomeCanonicalization';
+import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 
 export interface ToolExecutionOutcome {
   index: number;
@@ -184,6 +185,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   lastPendingAsyncSignature: string;
   contextWindow: number;
   conversationId: string;
+  currentUserMessage?: CodeOwnedCurrentUserMessage;
   compactionEngine: AgentTurnCompactionEngine;
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
@@ -256,6 +258,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         getGraphSnapshot: params.getGraphSnapshot,
         applyGraphEvents: params.applyGraphEvents,
         conversationId: params.conversationId,
+        currentUserMessage: params.currentUserMessage,
         warn: params.warn,
       });
     }

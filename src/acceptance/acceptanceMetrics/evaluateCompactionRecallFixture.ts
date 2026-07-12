@@ -4,6 +4,7 @@
 
 import { buildPostCompactionSystemContent } from '../../services/context/postCompactionReinject';
 import { applyCompactionResultToWorkingMessages } from '../../engine/orchestratorCompaction';
+import { buildAgentTurnPromptBundle } from '../../engine/graph/agentTurnPromptBundle';
 import type { CompactResult } from '../../services/context/types';
 import type { Message } from '../../types/message';
 import type { AcceptanceFixtureOutcome } from './types';
@@ -18,24 +19,71 @@ function hasMarkers(content: string, markers: ReadonlyArray<string>): string | u
   return undefined;
 }
 
+function countOccurrences(content: string, marker: string): number {
+  if (marker.length === 0) {
+    return 0;
+  }
+
+  return content.split(marker).length - 1;
+}
+
 export function evaluateCompactionRecallFixture(
   fixture: CompactionRecallFixture,
 ): AcceptanceFixtureOutcome {
   const reinjectedContent = buildPostCompactionSystemContent({
     summary: '[Conversation Summary]\n\n## Task Overview\nLong transcript compacted.',
-    goalsPromptSection: fixture.goalsPromptSection,
     profileSections: fixture.profileSections,
   });
 
-  const missingFromBuilder = hasMarkers(reinjectedContent, [
-    ...fixture.requiredGoalMarkers,
-    ...fixture.requiredProfileMarkers,
-  ]);
-  if (missingFromBuilder) {
+  const currentTurnPrompt = buildAgentTurnPromptBundle({
+    effectiveForceTextThisTurn: false,
+    goalsPromptSection: fixture.goalsPromptSection,
+    groundedRequestScopedTools: [],
+    iteration: 1,
+    maxToolIterations: 8,
+    resolvedPrompt: 'You are Kavi, a helpful mobile assistant.',
+    selectedTools: [],
+    skillPrompts: '',
+    toolingEnabledForProvider: false,
+  }).enrichedSystemPrompt;
+
+  const missingFromCurrentPrompt = hasMarkers(currentTurnPrompt, fixture.requiredGoalMarkers);
+  if (missingFromCurrentPrompt) {
     return {
       fixtureId: fixture.id,
       passed: false,
-      detail: `post-compaction builder missing marker: ${missingFromBuilder}`,
+      detail: `current-turn prompt missing graph marker: ${missingFromCurrentPrompt}`,
+    };
+  }
+
+  const duplicatedCurrentGoalMarker = fixture.requiredGoalMarkers.find(
+    (marker) => countOccurrences(currentTurnPrompt, marker) !== 1,
+  );
+  if (duplicatedCurrentGoalMarker) {
+    return {
+      fixtureId: fixture.id,
+      passed: false,
+      detail: `current-turn prompt graph marker must occur exactly once: ${duplicatedCurrentGoalMarker}`,
+    };
+  }
+
+  const missingFromReinjection = hasMarkers(reinjectedContent, fixture.requiredProfileMarkers);
+  if (missingFromReinjection) {
+    return {
+      fixtureId: fixture.id,
+      passed: false,
+      detail: `post-compaction builder missing profile marker: ${missingFromReinjection}`,
+    };
+  }
+
+  const staleBuilderGoalMarker = fixture.requiredGoalMarkers.find((marker) =>
+    reinjectedContent.includes(marker),
+  );
+  if (staleBuilderGoalMarker) {
+    return {
+      fixtureId: fixture.id,
+      passed: false,
+      detail: `post-compaction builder retained stale graph marker: ${staleBuilderGoalMarker}`,
     };
   }
 
@@ -58,21 +106,28 @@ export function evaluateCompactionRecallFixture(
   };
 
   const applied = applyCompactionResultToWorkingMessages(priorMessages, compactResult, {
-    goalsPromptSection: fixture.goalsPromptSection,
     profileSections: fixture.profileSections,
   });
   const systemMessage = applied.messages.find((message) => message.role === 'system');
   const systemContent = typeof systemMessage?.content === 'string' ? systemMessage.content : '';
 
-  const missingFromTranscript = hasMarkers(systemContent, [
-    ...fixture.requiredGoalMarkers,
-    ...fixture.requiredProfileMarkers,
-  ]);
+  const missingFromTranscript = hasMarkers(systemContent, fixture.requiredProfileMarkers);
   if (missingFromTranscript) {
     return {
       fixtureId: fixture.id,
       passed: false,
       detail: `compacted transcript missing marker: ${missingFromTranscript}`,
+    };
+  }
+
+  const staleGoalMarker = fixture.requiredGoalMarkers.find((marker) =>
+    systemContent.includes(marker),
+  );
+  if (staleGoalMarker) {
+    return {
+      fixtureId: fixture.id,
+      passed: false,
+      detail: `compacted transcript retained stale graph marker: ${staleGoalMarker}`,
     };
   }
 

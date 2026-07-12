@@ -22,6 +22,7 @@ import { createRecordAsyncWaitingAction } from './agentControlGraphAsyncActions'
 import { addGoalEvidence } from '../goals/graphState';
 import { getActiveGoal } from '../goals/types';
 import { normalizeRequestUnderstandingSnapshot } from '../../services/agents/requestUnderstandingProjection';
+import { acknowledgeGoalUserConstraintDelivery } from '../goals/userConstraintDelivery';
 
 export function createAgentControlGraphActions() {
   return {
@@ -149,6 +150,16 @@ export function createAgentControlGraphActions() {
         audit: appendAudit(context.audit, event, event.reason),
       };
     }),
+    recordUserConstraintDeliveryAcknowledged: assignAgentControlGraph(
+      ({ context, event }: AgentControlGraphAssignArgs) => {
+        if (event.type !== 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED') return {};
+        return {
+          goals: acknowledgeGoalUserConstraintDelivery(context.goals),
+          updatedAt: getTimestamp(event),
+          audit: appendAudit(context.audit, event),
+        };
+      },
+    ),
     recordRequestUnderstandingProjected: assignAgentControlGraph(
       ({ context, event }: AgentControlGraphAssignArgs) => {
         if (event.type !== 'REQUEST_UNDERSTANDING_PROJECTED') {

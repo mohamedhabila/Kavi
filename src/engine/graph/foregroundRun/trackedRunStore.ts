@@ -145,10 +145,12 @@ export function createForegroundTrackedRunStore(params: {
     terminalReason?: AgentRunTerminalReason,
   ) => {
     if (!params.runId) {
-      return;
+      // Chitchat turns have no persisted AgentRun to compare-and-set. Reaching
+      // this boundary means the foreground generation itself closed cleanly.
+      return true;
     }
 
-    applyConversationRunCompletionEffect({
+    return applyConversationRunCompletionEffect({
       actions: params.actions,
       conversationId: params.conversationId,
       effect: buildForegroundAgentRunCompletionEffect({

@@ -84,6 +84,7 @@ describe('tool execution outcome resolution', () => {
         arguments: JSON.stringify({
           action: 'block',
           id: 'calendar-mutation',
+          name: 'calendar-mutation',
           blockedReason: 'gate:calendar-mutation:evidence.json_field:status:updated',
         }),
       },
@@ -156,9 +157,7 @@ describe('tool execution outcome resolution', () => {
     const parsed = JSON.parse(params.workingMessages[0].content);
     expect(parsed.status).toBe('error');
     expect(parsed.structuredErrors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'invalid_success_criteria' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ code: 'invalid_success_criteria' })]),
     );
   });
 
@@ -200,9 +199,7 @@ describe('tool execution outcome resolution', () => {
     const parsed = JSON.parse(params.workingMessages[0].content);
     expect(parsed.status).toBe('error');
     expect(parsed.structuredErrors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'invalid_success_criteria' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ code: 'invalid_success_criteria' })]),
     );
   });
 
@@ -254,9 +251,7 @@ describe('tool execution outcome resolution', () => {
     if (goalsUpdatedEvent?.type !== 'GOALS_UPDATED') {
       throw new Error('Expected GOALS_UPDATED');
     }
-    expect(goalsUpdatedEvent.goals.find((goal) => goal.id === 'scope-a')?.status).toBe(
-      'pending',
-    );
+    expect(goalsUpdatedEvent.goals.find((goal) => goal.id === 'scope-a')?.status).toBe('pending');
     expect(goalsUpdatedEvent.goals.find((goal) => goal.id === 'scope-b')).toEqual(
       expect.objectContaining({
         status: 'active',
@@ -274,7 +269,7 @@ describe('tool execution outcome resolution', () => {
     );
   });
 
-  it('records evidence for persistent focus completion attempts without blocking recovery', async () => {
+  it('keeps persistent focus completion attempts active without invented evidence', async () => {
     const params = buildBaseParams();
     params.getGraphSnapshot = jest.fn().mockReturnValue({
       goals: [
@@ -293,7 +288,6 @@ describe('tool execution outcome resolution', () => {
           action: 'complete',
           id: 'scope-a',
           name: 'scope-a-planning',
-          evidence: ['user_turn:SCOPE-A-E2E-42'],
         }),
       },
     ];
@@ -322,7 +316,7 @@ describe('tool execution outcome resolution', () => {
       expect.objectContaining({
         id: 'scope-a',
         status: 'active',
-        evidence: ['user_turn:SCOPE-A-E2E-42'],
+        evidence: [],
       }),
     );
 
@@ -398,6 +392,7 @@ describe('tool execution outcome resolution', () => {
         arguments: JSON.stringify({
           action: 'complete',
           id: 'missing-goal',
+          name: 'Missing goal',
         }),
       },
     ];
@@ -448,10 +443,7 @@ describe('tool execution outcome resolution', () => {
           name: 'stale memory update',
           status: 'active',
           completionPolicy: 'blocking',
-          successCriteria: [
-            'evidence.tool:memory_set',
-            'evidence.tool:default_api:memory_delete',
-          ],
+          successCriteria: ['evidence.tool:memory_set', 'evidence.tool:default_api:memory_delete'],
         }),
       },
     ];
@@ -477,9 +469,7 @@ describe('tool execution outcome resolution', () => {
     const parsed = JSON.parse(params.workingMessages[0].content);
     expect(parsed.status).toBe('error');
     expect(parsed.structuredErrors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'invalid_success_criteria' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ code: 'invalid_success_criteria' })]),
     );
     expect(params.workingMessages[0].content).toContain('registered tools');
   });

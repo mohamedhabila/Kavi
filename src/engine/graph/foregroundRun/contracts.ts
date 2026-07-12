@@ -38,6 +38,13 @@ export type EnsureAgentRunFinalResponse = (params: {
   signal?: AbortSignal;
 }) => Promise<string | undefined>;
 
+export type RecoverAgentRunFinalPreview = (
+  status: Exclude<AgentRun['status'], 'running'>,
+  timestamp?: number,
+  preferredAssistantMessageId?: string,
+  signal?: AbortSignal,
+) => Promise<{ preview?: string; recovered: boolean; delivered: boolean }>;
+
 export type ResumeAgentRun = (params: {
   conversationId: string;
   runId: string;

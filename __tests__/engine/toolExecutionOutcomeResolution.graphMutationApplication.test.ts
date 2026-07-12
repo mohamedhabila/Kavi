@@ -108,6 +108,7 @@ describe('tool execution outcome resolution', () => {
         arguments: JSON.stringify({
           action: 'complete',
           id: 'goal-a',
+          name: 'Collect sources',
         }),
       },
     ];
@@ -121,6 +122,7 @@ describe('tool execution outcome resolution', () => {
           arguments: JSON.stringify({
             action: 'complete',
             id: 'goal-a',
+            name: 'Collect sources',
           }),
           content: '{"status":"ok","goals":[{"id":"goal-a","status":"active"}]}',
           toolCallOverrides: {
@@ -319,6 +321,7 @@ describe('tool execution outcome resolution', () => {
         arguments: JSON.stringify({
           action: 'activate',
           id: 'scope-a',
+          name: 'Scope A',
         }),
       },
       {

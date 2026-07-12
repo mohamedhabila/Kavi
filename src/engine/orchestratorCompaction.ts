@@ -28,7 +28,6 @@ export function applyCompactionResultToWorkingMessages(
   messages: Message[],
   compactResult: CompactResult,
   reinject?: {
-    goalsPromptSection?: string | null;
     profileSections?: ReadonlyArray<string>;
   },
 ): OrchestratorCompactionEvent {
@@ -62,7 +61,6 @@ export function applyCompactionResultToWorkingMessages(
   const kept = keptIdx >= 0 ? messages.slice(keptIdx) : messages.slice(-4);
   const systemContent = buildPostCompactionSystemContent({
     summary,
-    goalsPromptSection: reinject?.goalsPromptSection,
     profileSections: reinject?.profileSections,
   });
 

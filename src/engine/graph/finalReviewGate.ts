@@ -8,6 +8,7 @@ export const AGENT_CONTROL_GRAPH_FINAL_REVIEW_RECOVERY_DETAIL =
 export type AgentControlGraphFinalReviewRecoveryReason =
   | 'missing_final_candidate'
   | 'non_plain_final_candidate'
+  | 'incomplete_final_candidate'
   | 'empty_final_candidate'
   | 'placeholder_final_candidate';
 
@@ -31,6 +32,8 @@ function buildFinalReviewRecoveryDetail(
       return AGENT_CONTROL_GRAPH_FINAL_REVIEW_RECOVERY_DETAIL;
     case 'non_plain_final_candidate':
       return 'Final review is deferred because the latest candidate is not a user-facing assistant answer.';
+    case 'incomplete_final_candidate':
+      return 'Final review is deferred because the latest assistant response is not a complete final answer.';
     case 'empty_final_candidate':
       return 'Final review is deferred because the latest final answer has no visible text.';
     case 'placeholder_final_candidate':
@@ -78,13 +81,24 @@ export function buildAgentControlGraphFinalReviewGate(params: {
     return buildRecoverGate('missing_final_candidate');
   }
 
-  if (candidate.role !== 'assistant' || !!candidate.subAgentEvent) {
+  if (
+    candidate.role !== 'assistant' ||
+    !!candidate.subAgentEvent ||
+    (candidate.toolCalls?.length ?? 0) > 0
+  ) {
     return buildRecoverGate('non_plain_final_candidate');
   }
 
   const candidatePreview = candidate.content.trim();
   if (!candidatePreview) {
     return buildRecoverGate('empty_final_candidate');
+  }
+
+  if (
+    candidate.assistantMetadata?.kind !== 'final' ||
+    candidate.assistantMetadata.completionStatus !== 'complete'
+  ) {
+    return buildRecoverGate('incomplete_final_candidate');
   }
 
   if (isAssistantFinalResponsePlaceholder(candidate as Message)) {

@@ -1,6 +1,7 @@
 import type { Message } from '../../../types/message';
 import { runOrchestrator } from '../../orchestrator';
 import { resolveConversationWorkspaceTarget } from '../../../services/conversationWorkspace/ownership';
+import { isAbortErrorLike } from '../../../services/agents/agentRunCancellation';
 import { supersedeForegroundConversationRun } from '../foregroundConversationCancellation';
 import { prepareAgentRunResumeForOrchestrator } from '../runResumePreparation';
 import { deduplicateToolResults, ensureToolResultPairing } from '../../toolResultPairingGuard';
@@ -288,6 +289,7 @@ async function executeReservedForegroundConversationRun(
   ) => Promise<void> = async () => {
     throw new Error('foreground_model_journal_handoff_not_ready');
   };
+  let completedHandoffStatus: 'succeeded' | 'failed' | null = null;
 
   const runtime = createForegroundConversationRunRuntime({
     bootstrapResult,
@@ -450,7 +452,10 @@ async function executeReservedForegroundConversationRun(
       throw error;
     }
   };
-  closeModelGenerationForHandoff = (status) => closeModelGeneration(status);
+  closeModelGenerationForHandoff = async (status) => {
+    await closeModelGeneration(status);
+    completedHandoffStatus = status;
+  };
 
   try {
     executionLease = await context.durability.createModelExecution({
@@ -578,6 +583,16 @@ async function executeReservedForegroundConversationRun(
       terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
     } catch (error: unknown) {
       if (
+        completedHandoffStatus &&
+        journalTerminal &&
+        projectionReleased &&
+        isAbortErrorLike(error)
+      ) {
+        // A controlled recovery closes and releases this generation before the
+        // nested resume replaces its foreground request. The resulting abort
+        // belongs to the completed handoff, not to response ownership loss.
+        terminalStatus = completedHandoffStatus;
+      } else if (
         projectionOwner &&
         !context.durability.ownsModelProjection(conversationId, projectionOwner)
       ) {

@@ -43,6 +43,7 @@ describe('ChatScreen run interruption recovery', () => {
             goal: params.goal,
             latestSummary: 'Synthesizing final answer from verified worker results.',
             controlGraph: createAgentRunControlGraphState({
+              status: 'awaiting_review',
               goals: [
                 {
                   id: 'goal-1',
@@ -124,6 +125,9 @@ describe('ChatScreen run interruption recovery', () => {
             userMessageId: params.userMessageId,
             goal: params.goal,
             latestSummary: 'Final verification loop still in progress.',
+            controlGraph: createAgentRunControlGraphState({
+              status: 'awaiting_review',
+            }),
             summary: {
               assistantTurns: 1,
               startedTools: 4,
@@ -220,6 +224,7 @@ describe('ChatScreen run interruption recovery', () => {
             userMessageId: params.userMessageId,
             goal: params.goal,
             controlGraph: createAgentRunControlGraphState({
+              status: 'awaiting_review',
               goals: [
                 {
                   id: 'workstream-1',

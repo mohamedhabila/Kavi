@@ -15,6 +15,10 @@ import {
   normalizeGoalCompletionPolicy,
   resolveDefaultGoalCompletionPolicy,
 } from '../../engine/goals/types';
+import {
+  MAX_AGENT_GOAL_USER_CONSTRAINTS,
+  readPersistedAgentGoalUserConstraintState,
+} from '../../engine/goals/userConstraints';
 import { normalizeToolNameList } from '../../engine/tools/toolNameNormalization';
 import {
   normalizeAgentRunControlGraphAsyncWorkState,
@@ -217,6 +221,10 @@ export function normalizeAgentRunControlGraphGoals(
 
   const seen = new Set<string>();
   const normalized: AgentGoal[] = [];
+  const constraintLineageEntries: Array<{
+    goalId: string;
+    constraints: Array<{ text: string; sourceMessageId: string }>;
+  }> = [];
 
   for (const g of goals) {
     if (!g || typeof g !== 'object') continue;
@@ -267,6 +275,13 @@ export function normalizeAgentRunControlGraphGoals(
     const completionPolicy =
       normalizeGoalCompletionPolicy(g.completionPolicy) ??
       resolveDefaultGoalCompletionPolicy({ successCriteria });
+    const userConstraintState =
+      g.userConstraintIntegrity !== undefined
+        ? ({ state: 'conflict' } as const)
+        : readPersistedAgentGoalUserConstraintState({
+            value: g.userConstraints,
+            allowedOnGoal: completionPolicy === 'blocking',
+          });
 
     const blockedReason =
       typeof g.blockedReason === 'string' && g.blockedReason.trim().length > 0
@@ -282,6 +297,26 @@ export function normalizeAgentRunControlGraphGoals(
       status === 'completed' && typeof g.completedAt === 'number' && Number.isFinite(g.completedAt)
         ? g.completedAt
         : undefined;
+    const hasCanonicalUserConstraints =
+      userConstraintState.state === 'canonical' && userConstraintState.constraints.length > 0;
+    const hasCompletedConstraintObligation =
+      status === 'completed' &&
+      (hasCanonicalUserConstraints ||
+        userConstraintState.state === 'conflict' ||
+        g.userConstraintDeliveryPending === true);
+    const hasCanonicalPendingConstraintDelivery =
+      status === 'completed' &&
+      g.userConstraintDeliveryPending === true &&
+      hasCanonicalUserConstraints;
+    const hasUserConstraintConflict =
+      userConstraintState.state === 'conflict' ||
+      (hasCompletedConstraintObligation && !hasCanonicalPendingConstraintDelivery);
+    if (userConstraintState.state === 'canonical') {
+      constraintLineageEntries.push({
+        goalId: finalId,
+        constraints: userConstraintState.constraints,
+      });
+    }
 
     normalized.push({
       id: finalId,
@@ -299,12 +334,66 @@ export function normalizeAgentRunControlGraphGoals(
       ...(requiredCapabilities?.length ? { requiredCapabilities } : {}),
       ...(requiredResourceKinds?.length ? { requiredResourceKinds } : {}),
       ...(successCriteria?.length ? { successCriteria } : {}),
+      ...(userConstraintState.state === 'canonical' && !hasUserConstraintConflict
+        ? { userConstraints: userConstraintState.constraints }
+        : {}),
+      ...(hasUserConstraintConflict
+        ? { userConstraintIntegrity: 'conflict' as const }
+        : {}),
+      ...(hasCompletedConstraintObligation
+        ? { userConstraintDeliveryPending: true as const }
+        : {}),
       completionPolicy,
       ...(blockedReason ? { blockedReason } : {}),
     });
   }
 
-  return normalized;
+  const constraintBearingGoals = normalized.filter(
+    (goal) =>
+      (goal.status === 'active' ||
+        goal.status === 'blocked' ||
+        goal.status === 'pending' ||
+        goal.userConstraintDeliveryPending === true) &&
+      (goal.userConstraints?.length ?? 0) > 0,
+  );
+  const retainedStatementCount = constraintBearingGoals.reduce(
+    (count, goal) => count + (goal.userConstraints?.length ?? 0),
+    0,
+  );
+  const conflictingGoalIds = new Set(
+    normalized
+      .filter((goal) => goal.userConstraintIntegrity === 'conflict')
+      .map((goal) => goal.id),
+  );
+  if (retainedStatementCount > MAX_AGENT_GOAL_USER_CONSTRAINTS) {
+    for (const goal of constraintBearingGoals) conflictingGoalIds.add(goal.id);
+  }
+  const sourceLineage = new Map<string, { texts: Set<string>; goalIds: Set<string> }>();
+  for (const entry of constraintLineageEntries) {
+    for (const constraint of entry.constraints) {
+      const existing = sourceLineage.get(constraint.sourceMessageId);
+      if (!existing) {
+        sourceLineage.set(constraint.sourceMessageId, {
+          texts: new Set([constraint.text]),
+          goalIds: new Set([entry.goalId]),
+        });
+        continue;
+      }
+      existing.goalIds.add(entry.goalId);
+      existing.texts.add(constraint.text);
+    }
+  }
+  for (const lineage of sourceLineage.values()) {
+    if (lineage.texts.size <= 1) continue;
+    for (const goalId of lineage.goalIds) conflictingGoalIds.add(goalId);
+  }
+  if (conflictingGoalIds.size === 0) return normalized;
+  return normalized.map((goal) => {
+    if (!conflictingGoalIds.has(goal.id)) return goal;
+    const conflicted = { ...goal, userConstraintIntegrity: 'conflict' as const };
+    delete conflicted.userConstraints;
+    return conflicted;
+  });
 }
 
 export function normalizeAgentRunControlGraphTurnDirectives(
@@ -316,6 +405,9 @@ export function normalizeAgentRunControlGraphTurnDirectives(
   const incompleteFinalTextContinuationPrefix = normalizeOptionalNonEmptyString(
     directives?.incompleteFinalTextContinuationPrefix,
   );
+  const automaticRecoveryAttemptCount = normalizeNonNegativeInteger(
+    directives?.automaticRecoveryAttemptCount,
+  );
 
   return {
     forceFinalText,
@@ -326,6 +418,7 @@ export function normalizeAgentRunControlGraphTurnDirectives(
       directives?.incompleteFinalTextRecoveryCount,
     ),
     ...(incompleteFinalTextContinuationPrefix ? { incompleteFinalTextContinuationPrefix } : {}),
+    ...(automaticRecoveryAttemptCount > 0 ? { automaticRecoveryAttemptCount } : {}),
   };
 }
 
@@ -351,9 +444,7 @@ export function createInitialAgentRunControlGraphState(
   const sessionActivatedToolNames = normalizeAgentRunControlGraphSessionActivatedToolNames(
     state.sessionActivatedToolNames,
   );
-  const requestUnderstanding = normalizeRequestUnderstandingSnapshot(
-    state.requestUnderstanding,
-  );
+  const requestUnderstanding = normalizeRequestUnderstandingSnapshot(state.requestUnderstanding);
 
   return {
     version: AGENT_RUN_CONTROL_GRAPH_VERSION,
@@ -419,8 +510,18 @@ export function prepareAgentRunControlGraphForResume(
 
   const timestamp = params.updatedAt ?? Date.now();
   const previousStatus = normalized.status;
+  const clearsPendingDelivery = previousStatus === 'cancelled';
   return {
     ...normalized,
+    goals: clearsPendingDelivery
+      ? normalized.goals?.map((goal) => {
+          const next = { ...goal };
+          delete next.userConstraintDeliveryPending;
+          delete next.userConstraints;
+          delete next.userConstraintIntegrity;
+          return next;
+        })
+      : normalized.goals,
     status: 'ready',
     expectedToolCalls: [],
     observedToolResults: [],
@@ -432,7 +533,10 @@ export function prepareAgentRunControlGraphForResume(
     }),
     finalizationHoldReason: undefined,
     terminalReason: undefined,
-    turnDirectives: normalizeAgentRunControlGraphTurnDirectives(undefined),
+    turnDirectives: normalizeAgentRunControlGraphTurnDirectives({
+      automaticRecoveryAttemptCount:
+        normalized.turnDirectives.automaticRecoveryAttemptCount,
+    }),
     audit: appendControlGraphAuditEvent(normalized.audit, {
       type: 'RUN_RESUMED_FROM_TERMINAL_GRAPH',
       timestamp,

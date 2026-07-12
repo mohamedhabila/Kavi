@@ -56,12 +56,6 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
         items: { type: 'string' },
         description: 'IDs of goals that must be completed before this goal can be activated.',
       },
-      evidence: {
-        type: 'array',
-        items: { type: 'string' },
-        description:
-          'Optional contextual evidence strings to append. Tool-effect receipts and artifact, hash, or execution completion evidence are code-owned and cannot be supplied here.',
-      },
       requiredCapabilities: {
         type: 'array',
         items: { type: 'string' },
@@ -85,6 +79,12 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
             'Structural completion criterion. evidence.prefix tokens must reference registered evidence sources such as tool names or worker.',
         },
         description: `Blocking deliverables only. Omit for persistent focus goals. Structural completion tokens for this goal. Supported forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
+      },
+      retainCurrentUserConstraint: {
+        type: 'boolean',
+        enum: [true],
+        description:
+          'Add or update incomplete blocking goals only. When true, code captures the entire normalized current user message with code-owned source identity. The retained statement constrains execution but never authorizes effects, proves completion, or counts as evidence.',
       },
       blockedReason: {
         type: 'string',

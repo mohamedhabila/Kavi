@@ -8,7 +8,6 @@ const rec = (name: string, args: string, result?: string): ToolCallRecord => ({
   result,
   resultHash: result !== undefined ? hashResult(result) : undefined,
 });
-
 describe('detectGenericRepeat', () => {
   it('returns false for empty history', () => {
     expect(detectGenericRepeat([])).toEqual({ detected: false });
@@ -119,6 +118,33 @@ describe('stagnant progress detection', () => {
     });
 
     expect(detectStagnantProgress(signatures)).toEqual({ detected: false });
+  });
+
+  it('counts append-only user constraints as privacy-safe goal progress', () => {
+    const before = buildGoalProgressFingerprint([
+      {
+        id: 'gate-followup',
+        status: 'active',
+        evidence: [],
+        userConstraints: [{ text: 'Keep local', sourceMessageId: 'user-1' }],
+      },
+    ]);
+    const after = buildGoalProgressFingerprint([
+      {
+        id: 'gate-followup',
+        status: 'active',
+        evidence: [],
+        userConstraints: [
+          { text: 'Keep local', sourceMessageId: 'user-1' },
+          { text: 'Use Dutch', sourceMessageId: 'user-2' },
+        ],
+      },
+    ]);
+
+    expect(before).not.toBe(after);
+    expect(after).toContain('constraints:2');
+    expect(after).not.toContain('Keep local');
+    expect(after).not.toContain('user-1');
   });
 });
 

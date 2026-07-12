@@ -90,6 +90,7 @@ const PUBLIC_GRAPH_AUDIT_TYPES = [
   'TOOL_SURFACE_TOKEN_AUDIT',
   'TURN_DIRECTIVES_CONSUMED',
   'TURN_DIRECTIVES_RECORDED',
+  'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED',
   'YIELDED',
 ] as const;
 
@@ -177,7 +178,8 @@ function buildAuditEventTrace(event: AgentRunControlGraphAuditEvent): E2ERedacte
     ? (event.type as E2ERedactedGraphAuditType)
     : 'OTHER';
   const typeHash = type === 'OTHER' ? hashString(event.type) : undefined;
-  const detailHash = optionalHash(event.detail);
+  const detailHash =
+    event.type === 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED' ? undefined : optionalHash(event.detail);
   return {
     type,
     ...(typeHash ? { typeHash } : {}),
@@ -209,9 +211,7 @@ export function buildGraphSnapshotTrace(
   const sessionActivatedToolNames = buildRedactedToolNameList(
     snapshot.sessionActivatedToolNames ?? [],
   );
-  const requestUnderstanding = normalizeRequestUnderstandingSnapshot(
-    snapshot.requestUnderstanding,
-  );
+  const requestUnderstanding = normalizeRequestUnderstandingSnapshot(snapshot.requestUnderstanding);
   return {
     status: snapshot.status,
     iteration: snapshot.iteration ?? 0,

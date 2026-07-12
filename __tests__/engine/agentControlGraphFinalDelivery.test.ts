@@ -44,7 +44,7 @@ describe('agent control graph final delivery helpers', () => {
     );
   });
 
-  it('allows final review for any user-facing assistant candidate with visible text', () => {
+  it('allows final review only for a complete plain final assistant candidate', () => {
     expect(
       buildAgentControlGraphFinalReviewGate({
         candidateMessage: {
@@ -64,8 +64,27 @@ describe('agent control graph final delivery helpers', () => {
           assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
         },
       }),
-    ).toEqual({ type: 'ready', candidatePreview: 'Draft answer from a tool turn.' });
+    ).toEqual(expect.objectContaining({ type: 'recover', reason: 'non_plain_final_candidate' }));
   });
+
+  it.each(['response_failed', 'content_filter'])(
+    'defers final review for an incomplete %s response',
+    (finishReason) => {
+      expect(
+        buildAgentControlGraphFinalReviewGate({
+          candidateMessage: {
+            role: 'assistant',
+            content: 'Partial response.',
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'incomplete',
+              finishReason,
+            },
+          },
+        }),
+      ).toEqual(expect.objectContaining({ type: 'recover', reason: 'incomplete_final_candidate' }));
+    },
+  );
 
   it('defers final review when the final candidate is missing or empty', () => {
     expect(buildAgentControlGraphFinalReviewGate({}).type).toBe('recover');

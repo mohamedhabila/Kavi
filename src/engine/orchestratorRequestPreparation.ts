@@ -3,10 +3,7 @@ import { runMediaUnderstanding } from '../services/media/service';
 import { type LivingMemoryBridgeOutput } from '../services/memory/livingMemoryBridge';
 import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
 import { excludeTrailingInternalUserMessages } from '../services/context/messageScoping';
-import type {
-  RequestContinuation,
-  RequestFrame,
-} from '../services/agents/requestFrame';
+import type { RequestContinuation, RequestFrame } from '../services/agents/requestFrame';
 import { getSkillSystemPrompts } from '../services/skills/manager';
 import type { AgentRunControlGraphState } from '../types/agentRun';
 import type { LlmProviderConfig } from '../types/provider';
@@ -292,7 +289,9 @@ export async function prepareOrchestratorRequestBundle(params: {
       ? {
           currentUserMessage: {
             id: requestContext.requestContextLastUserMessage.id,
-            text: requestContext.requestContextLastUserMessage.content,
+            text: stripRuntimeContextFromUserContent(
+              requestContext.requestContextLastUserMessage.content,
+            ),
           },
         }
       : {}),

@@ -8,13 +8,14 @@ export function resolvePreferredAgentRunFinalResponseMessageId(params: {
   preferredAssistantMessageId?: string;
   run: AgentRun;
 }): string | undefined {
-  const explicitMessageId = params.preferredAssistantMessageId?.trim();
-  if (explicitMessageId) {
-    return explicitMessageId;
-  }
-
-  return findLatestPreferredAgentRunAssistantMessageId(
+  const latestPreferredMessageId = findLatestPreferredAgentRunAssistantMessageId(
     params.messages,
     buildAgentRunMessageScope(params.run),
   );
+  const explicitMessageId = params.preferredAssistantMessageId?.trim();
+  if (explicitMessageId) {
+    return explicitMessageId === latestPreferredMessageId ? explicitMessageId : undefined;
+  }
+
+  return latestPreferredMessageId;
 }

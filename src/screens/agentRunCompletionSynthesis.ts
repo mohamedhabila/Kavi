@@ -13,6 +13,7 @@ import { throwIfAbortSignalTriggered } from '../services/agents/agentRunCancella
 import { getLiveSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 import { ResolvedFinalizationProviderContext } from '../engine/graph/foregroundRun/contracts';
 import { buildAgentRunMessageScope } from '../services/agents/lifecycle/agentRunStateMachine';
+import { readPendingGoalUserConstraintDelivery } from '../engine/goals/userConstraintFinalDelivery';
 
 type Conversation = ReturnType<typeof useChatStore.getState>['conversations'][number];
 
@@ -32,11 +33,21 @@ export async function synthesizeAgentRunCompletion(params: {
   ) => Promise<ResolvedFinalizationProviderContext | undefined>;
   signal?: AbortSignal;
 }): Promise<SynthesizedAgentRunCompletion> {
+  const pendingConstraintDelivery = readPendingGoalUserConstraintDelivery(
+    params.run.controlGraph?.goals,
+  );
+  const requiresConstraintAwareSynthesis =
+    params.status === 'completed' && pendingConstraintDelivery.state === 'canonical';
+  if (params.status === 'completed' && pendingConstraintDelivery.state === 'conflict') {
+    return { source: 'none' };
+  }
+
   const conversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === params.conversationId);
 
   if (!conversation) {
+    if (requiresConstraintAwareSynthesis) return { source: 'none' };
     return {
       output: buildMissingFinalResponseFallback(params.status),
       source: 'fallback',
@@ -85,6 +96,7 @@ export async function synthesizeAgentRunCompletion(params: {
     (hasVerifiedFinalizationEvidence(evidence) ||
       evidence.lastNonEmptyAssistantContent.trim().length > 0);
   if (!providerContext || !canSynthesize) {
+    if (requiresConstraintAwareSynthesis) return { source: 'none' };
     return {
       output: fallbackOutput,
       source: fallbackOutput ? 'fallback' : 'none',
@@ -99,6 +111,9 @@ export async function synthesizeAgentRunCompletion(params: {
     model: providerContext.model,
     systemPrompt: providerContext.systemPromptText,
     evidence,
+    ...(pendingConstraintDelivery.state === 'canonical'
+      ? { pendingUserConstraints: pendingConstraintDelivery.entries }
+      : {}),
     signal: params.signal,
   });
 
@@ -114,7 +129,7 @@ export async function synthesizeAgentRunCompletion(params: {
   }
 
   return {
-    output: fallbackOutput,
-    source: fallbackOutput ? 'fallback' : 'none',
+    ...(requiresConstraintAwareSynthesis ? {} : { output: fallbackOutput }),
+    source: requiresConstraintAwareSynthesis ? 'none' : fallbackOutput ? 'fallback' : 'none',
   };
 }

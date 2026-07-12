@@ -26,6 +26,7 @@ import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { Conversation } from '../../src/types/conversation';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
+import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(),
@@ -196,6 +197,9 @@ describe('runForegroundScenario', () => {
         undefined,
         undefined,
         buildAssistantMessageMetadata('final'),
+      );
+      callbacks.onAgentControlGraphStateChange(
+        createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
       );
       callbacks.onUsage?.({
         inputTokens: 10,

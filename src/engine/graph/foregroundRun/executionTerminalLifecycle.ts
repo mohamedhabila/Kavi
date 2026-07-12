@@ -165,6 +165,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         currentAssistantMessageId,
         errorMessage: error.message,
         finalizeTrackedRun: trackedRunStore.finalizeRun,
+        flushChatState: shared.durability.flushChatState,
         markCurrentAssistantDraftIncomplete: (content, finishReason) => {
           applyForegroundAssistantDraftIncomplete({
             finishReason,
@@ -184,6 +185,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         setChatError: shared.helpers.setChatError,
         signal: abort.signal,
         updateAgentRunAsyncWork: shared.store.updateAgentRunAsyncWork,
+        updateAgentRunControlGraph: shared.store.updateAgentRunControlGraph,
         updateAgentRunSummary: shared.store.updateAgentRunSummary,
         updateMessage: shared.store.updateMessage,
         updateMessageAssistantMetadata: shared.store.updateMessageAssistantMetadata,
@@ -214,7 +216,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         enterAsyncMonitoringPhase: trackedRunStore.enterWorkPhase,
         forceTerminalReview,
         finalizeCompletion: (completionReview) => {
-          trackedRunStore.finalizeRun(
+          return trackedRunStore.finalizeRun(
             completionReview.completionStatus,
             completionReview.latestSummary,
             completionReview.checkpointTitle,
@@ -237,6 +239,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
             assertNotAborted: () => throwIfAbortSignalTriggered(abort.signal),
             conversationId,
             finalizeTrackedRun: trackedRunStore.finalizeRun,
+            flushChatState: shared.durability.flushChatState,
             recoverAgentRunFinalPreview,
             resumeAgentRun: wrapResumeAgentRun(shared.helpers.getResumeAgentRun(), 'succeeded'),
             runId,

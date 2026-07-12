@@ -2,10 +2,11 @@ import { AGENT_CONTROL_GRAPH_FINAL_RESPONSE_CHECKPOINT_TITLE } from '../finalDel
 import { useChatStore } from '../../../store/useChatStore';
 import { AgentRun, AgentRunTerminalReason } from '../../../types/agentRun';
 import { ConversationLogEntry } from '../../../types/conversation';
-import { ResumeAgentRun } from './contracts';
+import { RecoverAgentRunFinalPreview, ResumeAgentRun } from './contracts';
 import { handleForegroundRunReviewFinalDelivery } from './reviewFinalDelivery';
 import { buildForegroundRunReviewContext } from './reviewContext';
 import { buildAgentControlGraphTerminalReviewCompletion } from './completionReviewTerminal';
+import { hasBlockedBlockingGoals } from '../../goals/types';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -26,14 +27,7 @@ type FinalizeTrackedRun = (
   checkpointTitle: string,
   checkpointDetail?: string,
   terminalReason?: AgentRunTerminalReason,
-) => void;
-
-type RecoverAgentRunFinalPreview = (
-  status: Exclude<AgentRun['status'], 'running'>,
-  timestamp?: number,
-  preferredAssistantMessageId?: string,
-  signal?: AbortSignal,
-) => Promise<{ preview?: string; recovered: boolean }>;
+) => boolean;
 
 export type ForegroundRunCompletionReviewResult =
   | { handled: true; terminalized: boolean }
@@ -54,6 +48,7 @@ export async function reviewForegroundRunCompletion(params: {
   assertNotAborted: () => void;
   conversationId: string;
   finalizeTrackedRun: FinalizeTrackedRun;
+  flushChatState: () => Promise<void>;
   recoverAgentRunFinalPreview: RecoverAgentRunFinalPreview;
   resumeAgentRun?: ResumeAgentRun | null;
   runId?: string;
@@ -98,20 +93,22 @@ export async function reviewForegroundRunCompletion(params: {
     reviewContext.reviewRun.controlGraph,
   );
   if (terminalCompletion) {
-    params.finalizeTrackedRun(
+    const terminalized = params.finalizeTrackedRun(
       terminalCompletion.status,
       terminalCompletion.latestSummary,
       terminalCompletion.checkpointTitle,
       terminalCompletion.checkpointDetail,
       terminalCompletion.terminalReason,
     );
-    params.appendConversationLog(params.conversationId, {
-      kind: 'state',
-      level: terminalCompletion.logLevel,
-      title: terminalCompletion.logTitle,
-      detail: terminalCompletion.logDetail,
-    });
-    return { handled: true, terminalized: true };
+    if (terminalized) {
+      params.appendConversationLog(params.conversationId, {
+        kind: 'state',
+        level: terminalCompletion.logLevel,
+        title: terminalCompletion.logTitle,
+        detail: terminalCompletion.logDetail,
+      });
+    }
+    return { handled: true, terminalized };
   }
 
   const finalDeliveryResult = await handleForegroundRunReviewFinalDelivery({
@@ -119,6 +116,7 @@ export async function reviewForegroundRunCompletion(params: {
     assertNotAborted: params.assertNotAborted,
     conversationId: params.conversationId,
     finalizeTrackedRun: params.finalizeTrackedRun,
+    flushChatState: params.flushChatState,
     getLatestConversation: () =>
       useChatStore
         .getState()
@@ -128,6 +126,7 @@ export async function reviewForegroundRunCompletion(params: {
     runId: params.runId,
     signal: params.signal,
     setAgentRunPhase: params.setAgentRunPhase,
+    updateAgentRunControlGraph: params.updateAgentRunControlGraph,
     updateAgentRunSummary: params.updateAgentRunSummary,
     context: reviewContext,
   });
@@ -147,6 +146,22 @@ function buildForegroundRunDirectCompletion(
 ): ForegroundRunCompletionReviewResult | undefined {
   if (reviewContext.finalReviewGate.type !== 'ready') {
     return undefined;
+  }
+
+  if (hasBlockedBlockingGoals(reviewContext.reviewRun.controlGraph?.goals ?? [])) {
+    const detail =
+      'The workflow delivered a blocker report, but a required goal remains blocked.';
+    return {
+      handled: false,
+      completionStatus: 'failed',
+      latestSummary: reviewContext.finalReviewGate.candidatePreview,
+      checkpointTitle: 'Run blocked',
+      checkpointDetail: detail,
+      completionTerminalReason: 'terminal_blocked',
+      completionLogLevel: 'error',
+      completionLogTitle: 'Run blocked',
+      completionLogDetail: detail,
+    };
   }
 
   return {

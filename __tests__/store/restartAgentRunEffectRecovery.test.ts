@@ -2,6 +2,8 @@ import {
   createInitialAgentRunControlGraphState,
   updateAgentRunControlGraphAsyncWorkState,
 } from '../../src/services/agents/agentControlGraphState';
+import { reduceAgentControlGraph } from '../../src/engine/graph/agentControlGraph';
+import { prepareAgentRunResumeForOrchestrator } from '../../src/engine/graph/runResumePreparation';
 import { recoverInterruptedAgentRunsInConversation } from '../../src/store/agentRuns/recovery';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
@@ -29,6 +31,13 @@ function run(): AgentRun {
 }
 
 function conversation(options: { completeFinal?: boolean } = {}): Conversation {
+  const agentRun = run();
+  if (options.completeFinal) {
+    agentRun.controlGraph = createInitialAgentRunControlGraphState({
+      status: 'awaiting_review',
+      updatedAt: 2,
+    });
+  }
   return {
     id: 'conversation-1',
     title: 'Conversation',
@@ -37,7 +46,7 @@ function conversation(options: { completeFinal?: boolean } = {}): Conversation {
     createdAt: 1,
     updatedAt: 2,
     activeAgentRunId: 'run-1',
-    agentRuns: [run()],
+    agentRuns: [agentRun],
     messages: [
       { id: 'user-1', role: 'user', content: 'Create it.', timestamp: 1 },
       {
@@ -72,6 +81,25 @@ function conversation(options: { completeFinal?: boolean } = {}): Conversation {
         : []),
     ],
   };
+}
+
+function preservedFinalConversationAtUnsafeGraphBoundary(
+  status: 'awaiting_tool_results' | 'model_turn',
+): Conversation {
+  const chat = conversation({ completeFinal: true });
+  chat.messages[1] = { ...chat.messages[1], toolCalls: undefined };
+  chat.agentRuns![0] = {
+    ...chat.agentRuns![0],
+    controlGraph: createInitialAgentRunControlGraphState({
+      status,
+      expectedToolCalls:
+        status === 'awaiting_tool_results'
+          ? [{ id: 'unsettled-tool-call', name: 'calendar_create_event' }]
+          : [],
+      updatedAt: 2,
+    }),
+  };
+  return chat;
 }
 
 const executionRunOwners = new Map([
@@ -155,12 +183,157 @@ describe('agent-run restart effect reconciliation', () => {
 
     expect(recovered.agentRuns?.[0]).toMatchObject({
       status: 'completed',
+      controlGraph: { status: 'finalized' },
       latestSummary: 'Created.',
       summary: { completedTools: 1, failedTools: 0 },
     });
   });
 
-  it('keeps a preserved completion pending until the linked effect is verified', () => {
+  it('fails both the run and graph when a preserved final is newer than an unsafe model turn', () => {
+    const recovered = recoverInterruptedAgentRunsInConversation(
+      preservedFinalConversationAtUnsafeGraphBoundary('model_turn'),
+      [],
+      { timestamp: 200 },
+    );
+    const recoveredRun = recovered.agentRuns?.[0];
+
+    expect(recoveredRun).toMatchObject({
+      status: 'failed',
+      controlGraph: {
+        status: 'failed',
+        expectedToolCalls: [],
+        observedToolResults: [],
+        pendingAsyncCount: 0,
+        asyncWork: { awaitingBackgroundWorkers: false, pendingOperations: [] },
+      },
+    });
+    expect(recoveredRun?.controlGraph?.audit.at(-1)).toMatchObject({
+      type: 'FAILED',
+      timestamp: 200,
+    });
+
+    const resumed = prepareAgentRunResumeForOrchestrator({
+      existingRun: recoveredRun,
+      messages: recovered.messages,
+      updatedAt: 201,
+    });
+    expect(resumed.initialAgentControlGraphState).toMatchObject({
+      status: 'ready',
+      terminalReason: undefined,
+    });
+  });
+
+  it('fails both the run and graph when a preserved final has unsettled tool results', () => {
+    const recovered = recoverInterruptedAgentRunsInConversation(
+      preservedFinalConversationAtUnsafeGraphBoundary('awaiting_tool_results'),
+      [],
+      { timestamp: 200 },
+    );
+
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'failed',
+      controlGraph: {
+        status: 'failed',
+        expectedToolCalls: [],
+        observedToolResults: [],
+        pendingAsyncCount: 0,
+        asyncWork: { awaitingBackgroundWorkers: false, pendingOperations: [] },
+      },
+    });
+    expect(recovered.agentRuns?.[0]?.controlGraph?.audit.at(-1)).toMatchObject({
+      type: 'FAILED',
+      timestamp: 200,
+    });
+  });
+
+  it('preserves a graph cancellation that was persisted before its run projection', () => {
+    const chat = conversation();
+    const cancelledGraph = reduceAgentControlGraph(chat.agentRuns?.[0]?.controlGraph, [
+      { type: 'CANCELLED', reason: 'User stopped the run.', timestamp: 150 },
+    ]);
+    chat.agentRuns![0] = { ...chat.agentRuns![0], controlGraph: cancelledGraph };
+
+    const recovered = recoverInterruptedAgentRunsInConversation(chat, [], { timestamp: 200 });
+
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'cancelled',
+      completedAt: 200,
+      latestSummary: 'User stopped the run.',
+      controlGraph: { status: 'cancelled' },
+    });
+    expect(recovered.agentRuns?.[0]?.controlGraph).toEqual(cancelledGraph);
+    expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({ status: 'failed' });
+    expect(recovered.activeAgentRunId).toBeUndefined();
+  });
+
+  it.each(['failed', 'blocked'] as const)(
+    'preserves a %s graph that was persisted before its failed run projection',
+    (graphStatus) => {
+      const chat = conversation();
+      const terminalGraph = reduceAgentControlGraph(chat.agentRuns?.[0]?.controlGraph, [
+        graphStatus === 'failed'
+          ? { type: 'FAILED', reason: 'Provider execution failed.', timestamp: 150 }
+          : { type: 'BLOCKED', reason: 'Required authority is unavailable.', timestamp: 150 },
+      ]);
+      chat.agentRuns![0] = { ...chat.agentRuns![0], controlGraph: terminalGraph };
+
+      const recovered = recoverInterruptedAgentRunsInConversation(chat, [], { timestamp: 200 });
+
+      expect(recovered.agentRuns?.[0]).toMatchObject({
+        status: 'failed',
+        completedAt: 200,
+        controlGraph: { status: graphStatus },
+      });
+      expect(recovered.agentRuns?.[0]?.controlGraph).toEqual(terminalGraph);
+      expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({ status: 'failed' });
+      expect(recovered.activeAgentRunId).toBeUndefined();
+    },
+  );
+
+  it('fails the graph when persisted completion reconciliation fails closed', () => {
+    const chat = conversation({ completeFinal: true });
+    chat.messages[1] = { ...chat.messages[1], toolCalls: undefined };
+    chat.agentRuns![0] = {
+      ...chat.agentRuns![0],
+      controlGraph: createInitialAgentRunControlGraphState({
+        status: 'awaiting_review',
+        goals: [
+          {
+            id: 'deliver',
+            title: 'Deliver the verified result',
+            status: 'completed',
+            dependencies: [],
+            evidence: ['verified'],
+            successCriteria: ['evidence.tool:calendar_create_event'],
+            completionPolicy: 'blocking',
+            userConstraintDeliveryPending: true,
+            userConstraintIntegrity: 'conflict',
+            createdAt: 1,
+            updatedAt: 2,
+            completedAt: 2,
+          },
+        ],
+        updatedAt: 2,
+      }),
+    };
+
+    const recovered = recoverInterruptedAgentRunsInConversation(chat, [], { timestamp: 200 });
+
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'failed',
+      latestSummary: expect.stringContaining('completion boundary could not be verified'),
+      controlGraph: {
+        status: 'failed',
+        terminalReason: expect.stringContaining('completion boundary could not be verified'),
+      },
+    });
+    expect(recovered.agentRuns?.[0]?.controlGraph?.audit.at(-1)).toMatchObject({
+      type: 'FAILED',
+      timestamp: 200,
+    });
+  });
+
+  it('requires a fresh review boundary after an ambiguous effect is later verified', () => {
     const recovered = recoverInterruptedAgentRunsInConversation(
       conversation({ completeFinal: true }),
       [],
@@ -187,8 +360,10 @@ describe('agent-run restart effect reconciliation', () => {
       resolveToolEffect: () => ({ kind: 'verified', observedAt: 250 }),
     });
     expect(verified.agentRuns?.[0]).toMatchObject({
-      status: 'completed',
-      latestSummary: 'Created.',
+      status: 'running',
+      currentPhase: 'review',
+      latestSummary: expect.stringContaining('recovery boundary still requires review'),
+      controlGraph: { status: 'recovering' },
       summary: { completedTools: 1, failedTools: 0 },
     });
     expect(verified.messages[1]?.toolCalls?.[0]).toMatchObject({

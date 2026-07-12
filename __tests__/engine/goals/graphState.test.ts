@@ -344,7 +344,7 @@ describe('goal graph state', () => {
       expect(goals.find((goal) => goal.id === 'scope-a')?.status).toBe('active');
     });
 
-    it('clears stale completion criteria when updating a goal to persistent', () => {
+    it('rejects converting a blocking goal to persistent', () => {
       const goal = createGoal({
         id: 'deliverable',
         title: 'Deliverable',
@@ -361,9 +361,8 @@ describe('goal graph state', () => {
         now,
       );
 
-      expect(errors).toHaveLength(0);
-      expect(goals[0].completionPolicy).toBe('persistent');
-      expect(goals[0].successCriteria).toBeUndefined();
+      expect(errors.join(' ')).toContain('cannot be converted to persistent');
+      expect(goals).toEqual([goal]);
     });
 
     it('rejects add without an explicit completion policy', () => {
@@ -468,7 +467,7 @@ describe('goal graph state', () => {
         id: 'g1',
         title: 'Stuck',
         status: 'active',
-        successCriteria: ['evidence.min:1'],
+        successCriteria: ['evidence.tool:read_file', 'evidence.min:1'],
       });
       const { goals, errors } = applyGoalMutation(
         [g],
@@ -534,7 +533,7 @@ describe('goal graph state', () => {
         id: 'g1',
         title: 'A',
         status: 'active',
-        successCriteria: ['evidence.min:1'],
+        successCriteria: ['evidence.tool:read_file', 'evidence.min:1'],
       });
       const { goals, errors } = applyGoalMutation(
         [g],

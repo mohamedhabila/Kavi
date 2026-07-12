@@ -116,7 +116,7 @@ export function supersedeForegroundConversationRun(params: {
 
   cancelAgentRunOperations(params.conversationId, params.runId, supersedeEffect.operationReason);
   params.actions.clearPendingRunState(params.conversationId, params.runId);
-  applyConversationRunCompletionEffect({
+  const terminalized = applyConversationRunCompletionEffect({
     actions: params.actions,
     conversationId: params.conversationId,
     effect: supersedeEffect.completion,
@@ -124,7 +124,12 @@ export function supersedeForegroundConversationRun(params: {
     runId: params.runId,
   });
   cancelRunningSubAgentsForRun(params.conversation, params.runId, supersedeEffect.workerReason);
-  params.actions.appendConversationLog(params.conversationId, supersedeEffect.logEntry);
+  const latestRun = params.actions
+    .getLatestConversation(params.conversationId)
+    ?.agentRuns?.find((run) => run.id === params.runId);
+  if (terminalized || latestRun?.status === 'cancelled') {
+    params.actions.appendConversationLog(params.conversationId, supersedeEffect.logEntry);
+  }
 }
 
 export function stopForegroundConversationRuns(params: {
@@ -137,7 +142,10 @@ export function stopForegroundConversationRuns(params: {
   const runsToCancel = params.conversation
     ? getRunningConversationRunsForCancellation(params.conversation)
     : [];
-  params.abortForegroundRequestForConversation(params.conversationId, USER_STOP_REASON);
+  const didAbortForegroundRequest = params.abortForegroundRequestForConversation(
+    params.conversationId,
+    USER_STOP_REASON,
+  );
   params.actions.clearForegroundRequestForConversation?.(params.conversationId);
 
   const fencedRuns = runsToCancel.map((run) => {
@@ -155,8 +163,9 @@ export function stopForegroundConversationRuns(params: {
   });
 
   return fencedRuns
-    .reduce<Promise<number>>(async (countPromise, fencedRun) => {
-      const count = await countPromise;
+    .reduce<Promise<{ cancelledRunCount: number; cancelledWorkerCount: number }>>(
+      async (countPromise, fencedRun) => {
+      const counts = await countPromise;
       const { cancellationEffect, run, runWorkers } = fencedRun;
 
       let durableCancellation: CancelOwnedExternalRecoveriesResult;
@@ -186,7 +195,7 @@ export function stopForegroundConversationRuns(params: {
       }
 
       params.actions.clearPendingRunState(params.conversationId, run.id);
-      applyConversationRunCompletionEffect({
+      const terminalized = applyConversationRunCompletionEffect({
         actions: params.actions,
         conversationId: params.conversationId,
         effect: cancellationEffect,
@@ -194,37 +203,49 @@ export function stopForegroundConversationRuns(params: {
         runId: run.id,
       });
       clearAgentRunCancellation(params.conversationId, run.id);
-      const workspaceTarget = resolveConversationWorkspaceTarget({
-        conversationId: params.conversationId,
-        conversations: params.conversation ? [params.conversation] : [],
-      });
-      void params.actions
-        .ensureAgentRunFinalResponse?.({
+      const latestRun = params.actions
+        .getLatestConversation(params.conversationId)
+        ?.agentRuns?.find((candidate) => candidate.id === run.id);
+      const cancellationSettled = terminalized || latestRun?.status === 'cancelled';
+      if (cancellationSettled) {
+        const workspaceTarget = resolveConversationWorkspaceTarget({
           conversationId: params.conversationId,
-          runId: run.id,
-          status: 'cancelled',
-          memoryConversationId: workspaceTarget.workspaceConversationId,
-          timestamp: Date.now(),
-        })
-        .catch((error: unknown) => {
-          if (isAbortErrorLike(error)) {
-            return;
-          }
-          const detail = error instanceof Error ? error.message : String(error);
-          params.actions.appendConversationLog(params.conversationId, {
-            kind: 'error',
-            level: 'error',
-            title: 'Cancellation report failed',
-            detail,
-          });
+          conversations: params.conversation ? [params.conversation] : [],
         });
-      return count + runWorkers.length;
-    }, Promise.resolve(0))
-    .then((cancelledWorkerCount) => {
+        void params.actions
+          .ensureAgentRunFinalResponse?.({
+            conversationId: params.conversationId,
+            runId: run.id,
+            status: 'cancelled',
+            memoryConversationId: workspaceTarget.workspaceConversationId,
+            timestamp: Date.now(),
+          })
+          .catch((error: unknown) => {
+            if (isAbortErrorLike(error)) {
+              return;
+            }
+            const detail = error instanceof Error ? error.message : String(error);
+            params.actions.appendConversationLog(params.conversationId, {
+              kind: 'error',
+              level: 'error',
+              title: 'Cancellation report failed',
+              detail,
+            });
+          });
+      }
+      return {
+        cancelledRunCount: counts.cancelledRunCount + (cancellationSettled ? 1 : 0),
+        cancelledWorkerCount: counts.cancelledWorkerCount + runWorkers.length,
+      };
+    }, Promise.resolve({ cancelledRunCount: 0, cancelledWorkerCount: 0 }))
+    .then(({ cancelledRunCount, cancelledWorkerCount }) => {
+      if (cancelledRunCount === 0 && !(runsToCancel.length === 0 && didAbortForegroundRequest)) {
+        return;
+      }
       params.actions.appendConversationLog(
         params.conversationId,
         buildForegroundRunUserStopLogEntry({
-          cancelledRunCount: runsToCancel.length,
+          cancelledRunCount,
           cancelledWorkerCount,
         }),
       );

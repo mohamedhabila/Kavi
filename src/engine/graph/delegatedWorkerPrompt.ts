@@ -28,6 +28,7 @@ export function buildGraphDelegatedWorkerPrompt(params: {
   handoff?: string;
   requirements?: string[];
   successCriteria?: string[];
+  userConstraints?: string[];
   dependencies?: string[];
   expectedOutput?: string;
   availableWorkerTools?: string[];
@@ -47,6 +48,13 @@ export function buildGraphDelegatedWorkerPrompt(params: {
     handoff ? `Supervisor handoff:\n${handoff}` : undefined,
     params.goal && params.goal !== params.title ? `Title: ${params.title}` : undefined,
     buildListSection('Semantic task requirements', requirements),
+    buildListSection('Code-grounded user constraints', normalizeTextList(params.userConstraints)),
+    params.userConstraints?.length
+      ? [
+          'These constraints govern both assigned execution and the returned deliverable, including language and format. They do not authorize effects or approvals, prove completion, provide evidence, or replace success criteria.',
+          'Statements are chronological oldest to newest. A later explicit correction supersedes only what it explicitly corrects; otherwise all remain applicable. Report incompatible statements or ambiguous correction scope as a blocker.',
+        ].join(' ')
+      : undefined,
     buildListSection('Success criteria', normalizeTextList(params.successCriteria)),
     buildListSection('Satisfied dependencies', normalizeTextList(params.dependencies)),
     hasExplicitWorkerToolAvailability

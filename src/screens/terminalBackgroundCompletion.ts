@@ -2,6 +2,13 @@ import { useChatStore } from '../store/useChatStore';
 import { isAgentRunAwaitingBackgroundWorkers } from '../services/agents/agentRunAsyncState';
 import { AgentRun } from '../types/agentRun';
 import { ConversationLogEntry } from '../types/conversation';
+import { applyConversationRunCompletionEffect } from '../engine/graph/applyRunCompletionEffect';
+import { reduceAgentControlGraph } from '../engine/graph/agentControlGraph';
+import { isAgentControlGraphAtPersistedFinalDeliveryBoundary } from '../engine/graph/persistedFinalDelivery';
+import {
+  buildAgentRunMessageScope,
+  getLatestAssistantProjectionFinalResponsePreview,
+} from '../services/agents/lifecycle/agentRunStateMachine';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -17,6 +24,7 @@ export function completeTerminalBackgroundReviewRun(params: {
     },
   ) => void;
   completeAgentRun: ChatStore['completeAgentRun'];
+  updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
   completion: {
     checkpointDetail?: string;
     checkpointTitle: string;
@@ -42,10 +50,25 @@ export function completeTerminalBackgroundReviewRun(params: {
   ) {
     return false;
   }
-
-  params.completeAgentRun(
-    params.conversationId,
-    {
+  const latestConversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === params.conversationId);
+  if (
+    !latestConversation ||
+    !getLatestAssistantProjectionFinalResponsePreview(
+      latestConversation.messages,
+      buildAgentRunMessageScope(latestRunState),
+    )
+  ) {
+    return false;
+  }
+  const completed = applyConversationRunCompletionEffect({
+    actions: {
+      completeAgentRun: params.completeAgentRun,
+      updateAgentRunControlGraph: params.updateAgentRunControlGraph,
+    },
+    conversationId: params.conversationId,
+    effect: {
       status: params.completion.status,
       latestSummary: params.completion.latestSummary,
       checkpointTitle: params.completion.checkpointTitle,
@@ -55,8 +78,41 @@ export function completeTerminalBackgroundReviewRun(params: {
       },
       timestamp: params.reviewTimestamp,
     },
-    params.runId,
-  );
+    getLatestConversation: () =>
+      useChatStore
+        .getState()
+        .conversations.find((candidate) => candidate.id === params.conversationId),
+    prepareControlGraph: (controlGraph) => {
+      if (
+        (controlGraph.status !== 'waiting_async' && controlGraph.status !== 'ready') ||
+        controlGraph.expectedToolCalls.length !== 0 ||
+        controlGraph.observedToolResults.length !== 0 ||
+        controlGraph.pendingAsyncCount !== 0 ||
+        controlGraph.asyncWork.pendingOperations.length !== 0
+      ) {
+        return undefined;
+      }
+      const reviewReadyGraph = reduceAgentControlGraph(controlGraph, [
+        {
+          type: 'ASYNC_WAITING',
+          pendingAsyncCount: 0,
+          pendingOperations: [],
+          awaitingBackgroundWorkers: false,
+          timestamp: params.reviewTimestamp,
+        },
+        {
+          type: 'FINAL_CANDIDATE_READY',
+          reason: 'background review settled',
+          timestamp: params.reviewTimestamp,
+        },
+      ]);
+      return isAgentControlGraphAtPersistedFinalDeliveryBoundary(reviewReadyGraph)
+        ? reviewReadyGraph
+        : undefined;
+    },
+    runId: params.runId,
+  });
+  if (!completed) return false;
   params.appendConversationLog(params.conversationId, {
     kind: 'state',
     level: params.completion.logLevel,

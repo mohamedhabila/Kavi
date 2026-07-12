@@ -10,7 +10,7 @@ import {
   evaluateRequiredEffectEvidenceGaps,
   type GoalEvidenceGap,
 } from '../goals/completionEvidence';
-import { isBlockingGoal } from '../goals/types';
+import { hasResumableBlockingGoals, isBlockingGoal } from '../goals/types';
 import type { ToolCallRecord } from '../loopDetection';
 import type { AgentControlTurnDirectives } from './agentControlGraph';
 import {
@@ -21,12 +21,6 @@ import {
 import type { CompletionGateDecision } from './completionGateTypes';
 import { renderGoalFocusLines, renderPendingGoalFocusLines } from './goalFocusPrompt';
 import { extractRecentToolRepairHints } from './toolRepairHints';
-
-function hasIncompleteGoals(goals: ReadonlyArray<AgentGoal>): boolean {
-  return goals.some(
-    (goal) => isBlockingGoal(goal) && (goal.status === 'active' || goal.status === 'pending'),
-  );
-}
 
 function buildGoalHoldPrompt(goals: ReadonlyArray<AgentGoal>): string {
   const blockingGoals = goals.filter(isBlockingGoal);
@@ -156,7 +150,7 @@ export function evaluateGoalsIncompleteHold(params: {
     !params.toolingEnabledForProvider ||
     params.selectedToolCount <= 0 ||
     params.forceTextThisTurn ||
-    !hasIncompleteGoals(params.goals)
+    !hasResumableBlockingGoals(params.goals)
   ) {
     return null;
   }

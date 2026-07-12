@@ -10,7 +10,10 @@ import {
   resetInFlightChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState, updateMockConversation } from '../../../testSupport/chatScreen/state';
-import { createRunningAgentRun } from '../../../testSupport/chatScreen/fixtures';
+import {
+  createAgentRunControlGraphState,
+  createRunningAgentRun,
+} from '../../../testSupport/chatScreen/fixtures';
 import {
   mockUpdateMessage,
   mockStartAgentRun,
@@ -51,6 +54,9 @@ describe('ChatScreen run finalization guards', () => {
         completionStatus: 'complete',
         finishReason: 'task_complete',
       });
+      callbacks.onAgentControlGraphStateChange(
+        createAgentRunControlGraphState({ status: 'awaiting_review' }),
+      );
       callbacks.onDone();
       callbacks.onDone();
       return { terminalDisposition: 'final_candidate' };
@@ -126,7 +132,7 @@ describe('ChatScreen run finalization guards', () => {
     );
   });
 
-  it('reuses the streamed draft when the API fails mid-stream', async () => {
+  it('does not promote the streamed draft when the API fails mid-stream', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -173,26 +179,24 @@ describe('ChatScreen run finalization guards', () => {
     });
 
     await waitFor(() => {
-      const assistantMessages = mockChatScreenState.conversations[0].messages.filter(
-        (message: any) =>
-          message.role === 'assistant' && message.content.includes('Interrupted draft answer'),
-      );
+      const latestAssistantMessage = [...mockChatScreenState.conversations[0].messages]
+        .reverse()
+        .find((message: any) => message.role === 'assistant');
 
-      expect(assistantMessages).toHaveLength(1);
-      expect(assistantMessages[0]).toEqual(
+      expect(latestAssistantMessage).toEqual(
         expect.objectContaining({
-          content: 'Interrupted draft answer',
+          content: 'Missing final response (failed)',
           assistantMetadata: expect.objectContaining({
             kind: 'final',
             completionStatus: 'complete',
-            finishReason: 'graph_finalized',
+            finishReason: 'fallback_from_evidence',
           }),
         }),
       );
     });
   });
 
-  it('preserves the streamed draft when the transport throws after tokens', async () => {
+  it('does not promote the streamed draft when the transport throws after tokens', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -230,19 +234,17 @@ describe('ChatScreen run finalization guards', () => {
     fireEvent.press(getByTestId('icon-Send').parent || getByTestId('icon-Send'));
 
     await waitFor(() => {
-      const assistantMessages = mockChatScreenState.conversations[0].messages.filter(
-        (message: any) =>
-          message.role === 'assistant' && message.content.includes('Interrupted draft answer'),
-      );
+      const latestAssistantMessage = [...mockChatScreenState.conversations[0].messages]
+        .reverse()
+        .find((message: any) => message.role === 'assistant');
 
-      expect(assistantMessages).toHaveLength(1);
-      expect(assistantMessages[0]).toEqual(
+      expect(latestAssistantMessage).toEqual(
         expect.objectContaining({
-          content: 'Interrupted draft answer',
+          content: 'Missing final response (failed)',
           assistantMetadata: expect.objectContaining({
             kind: 'final',
             completionStatus: 'complete',
-            finishReason: 'graph_finalized',
+            finishReason: 'fallback_from_evidence',
           }),
         }),
       );

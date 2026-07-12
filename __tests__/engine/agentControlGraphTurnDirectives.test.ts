@@ -149,6 +149,7 @@ describe('agent control graph turn directives boundary', () => {
           maxTokensOverride: 8192,
           incompleteFinalTextRecoveryCount: 1,
           incompleteFinalTextContinuationPrefix: 'partial answer',
+          automaticRecoveryAttemptCount: 1,
         },
         'model_turn_setup',
       ),
@@ -161,5 +162,6 @@ describe('agent control graph turn directives boundary', () => {
     expect(directives.maxTokensOverride).toBeUndefined();
     expect(directives.incompleteFinalTextRecoveryCount).toBe(1);
     expect(directives.incompleteFinalTextContinuationPrefix).toBe('partial answer');
+    expect(directives.automaticRecoveryAttemptCount).toBe(1);
   });
 });

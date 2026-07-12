@@ -318,6 +318,7 @@ export async function executeAgentControlGraphToolTurn(
     lastPendingAsyncSignature: params.lastPendingAsyncSignature,
     contextWindow: params.contextWindow,
     conversationId: params.conversationId,
+    currentUserMessage: params.currentUserMessage,
     compactionEngine: params.compactionEngine,
     livingMemory: params.livingMemory,
     onCompaction: params.onCompaction,

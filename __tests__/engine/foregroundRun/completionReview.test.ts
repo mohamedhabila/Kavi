@@ -124,6 +124,7 @@ describe('foregroundRun completion review', () => {
       assertNotAborted: jest.fn(),
       conversationId: 'conversation-1',
       finalizeTrackedRun: jest.fn(),
+      flushChatState: jest.fn().mockResolvedValue(undefined),
       recoverAgentRunFinalPreview: jest.fn(async () => ({ recovered: false })),
       resumeAgentRun: null,
       runId: 'run-1',
@@ -140,6 +141,82 @@ describe('foregroundRun completion review', () => {
         completionStatus: 'completed',
         latestSummary: finalAnswer,
         checkpointTitle: 'Final response delivered',
+      }),
+    );
+  });
+
+  it('classifies a delivered blocker report as failed while a blocking goal remains blocked', async () => {
+    const run = buildRun();
+    run.controlGraph = {
+      ...run.controlGraph!,
+      status: 'awaiting_review',
+      goals: [
+        {
+          id: 'blocked-goal',
+          title: 'Send the requested report',
+          status: 'blocked',
+          completionPolicy: 'blocking',
+          dependencies: [],
+          evidence: [],
+          successCriteria: ['evidence.tool:send_email'],
+          blockedReason: 'Recipient address is unavailable.',
+          createdAt: 10,
+          updatedAt: 50,
+        },
+      ],
+    };
+    const messages: Message[] = [
+      buildMessage({
+        id: 'msg-user',
+        role: 'user',
+        content: 'Send the report.',
+        timestamp: 10,
+      }),
+      buildMessage({
+        id: 'msg-assistant-final',
+        content: 'I could not send it because the recipient address is missing.',
+        timestamp: 50,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      }),
+    ];
+    useChatStore.setState((state) => ({
+      ...state,
+      conversations: [
+        {
+          id: 'conversation-1',
+          title: 'Blocked send',
+          messages,
+          createdAt: 10,
+          updatedAt: 50,
+          logs: [],
+          agentRuns: [run],
+        } as never,
+      ],
+      activeConversationId: 'conversation-1',
+    }));
+
+    await expect(
+      reviewForegroundRunCompletion({
+        appendConversationLog: jest.fn(),
+        assertNotAborted: jest.fn(),
+        conversationId: 'conversation-1',
+        finalizeTrackedRun: jest.fn().mockReturnValue(true),
+        flushChatState: jest.fn().mockResolvedValue(undefined),
+        recoverAgentRunFinalPreview: jest.fn(async () => ({ recovered: false })),
+        resumeAgentRun: null,
+        runId: 'run-1',
+        signal: new AbortController().signal,
+        turnSummary: 'Blocked',
+        updateAgentRunControlGraph: jest.fn(),
+        updateAgentRunSummary: jest.fn(),
+        setAgentRunPhase: jest.fn(),
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        handled: false,
+        completionStatus: 'failed',
+        completionTerminalReason: 'terminal_blocked',
+        checkpointTitle: 'Run blocked',
       }),
     );
   });

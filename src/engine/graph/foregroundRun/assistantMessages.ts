@@ -9,6 +9,16 @@ export function isReusableAgentRunAssistantMessage(message: Message): boolean {
   return message.role === 'assistant' && !message.subAgentEvent;
 }
 
+function isPreferredAgentRunFinalCandidate(message: Message): boolean {
+  const metadata = message.assistantMetadata;
+  return (
+    metadata?.kind === 'final' &&
+    (metadata.completionStatus === 'complete' ||
+      (metadata.completionStatus === 'incomplete' &&
+        metadata.finishReason === 'terminal_review_pending'))
+  );
+}
+
 function shouldSkipAgentRunAssistantLookupMessage(message: Message): boolean {
   return message.role === 'tool' || (message.role === 'assistant' && !!message.subAgentEvent);
 }
@@ -42,7 +52,7 @@ export function findLatestAgentRunAssistantMessageId(
 
     if (isReusableAgentRunAssistantMessage(message)) {
       if (!hasVisibleAssistantOutput(message)) {
-        continue;
+        return undefined;
       }
 
       return message.id;
@@ -72,11 +82,15 @@ export function findLatestPreferredAgentRunAssistantMessageId(
 
     if (isReusableAgentRunAssistantMessage(message)) {
       if (!hasVisibleAssistantOutput(message)) {
-        continue;
+        return undefined;
       }
 
       if (isAssistantFinalResponsePlaceholder(message)) {
-        continue;
+        return undefined;
+      }
+
+      if (!isPreferredAgentRunFinalCandidate(message)) {
+        return undefined;
       }
 
       return message.id;
@@ -101,12 +115,7 @@ export function findAgentRunReplaceableAssistantMessageId(
     }
 
     if (isReusableAgentRunAssistantMessage(message)) {
-      const visibleOutput = hasVisibleAssistantOutput(message);
-      if (!visibleOutput) {
-        return message.id;
-      }
-
-      return message.id;
+      return (message.toolCalls?.length ?? 0) === 0 ? message.id : undefined;
     }
 
     return undefined;
@@ -139,7 +148,7 @@ export function findLatestIncompleteAgentRunAssistantMessage(
       }
 
       if (!visibleOutput) {
-        continue;
+        return undefined;
       }
 
       return undefined;

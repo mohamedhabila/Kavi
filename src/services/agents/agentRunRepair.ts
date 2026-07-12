@@ -24,6 +24,8 @@ import {
   hasNewerRunningAgentRun,
   hasDeliveredFinalAssistantResponse,
 } from './lifecycle/agentRunStateMachine';
+import { readPendingGoalUserConstraintDelivery } from '../../engine/goals/userConstraintFinalDelivery';
+import { buildAgentControlGraphAfterPersistedFinalDelivery } from '../../engine/graph/persistedFinalDelivery';
 
 const FINAL_RESPONSE_CHECKPOINT_TITLE = 'Final response delivered';
 const MAX_LOG_DETAIL_CHARS = 320;
@@ -113,9 +115,7 @@ async function resolveConversationFinalizationContextBeforeDeadline(params: {
 
   let resolution = params.cache.get(params.conversation.id);
   if (!resolution) {
-    resolution = resolveConversationFinalizationContext(params.conversation).catch(
-      () => undefined,
-    );
+    resolution = resolveConversationFinalizationContext(params.conversation).catch(() => undefined);
     params.cache.set(params.conversation.id, resolution);
   }
 
@@ -143,6 +143,15 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
   providerReplay?: Message['providerReplay'];
   source: 'synthesized' | 'fallback' | 'none';
 }> {
+  const pendingConstraintDelivery = readPendingGoalUserConstraintDelivery(
+    params.run.controlGraph?.goals,
+  );
+  const requiresConstraintAwareSynthesis =
+    params.run.status === 'completed' && pendingConstraintDelivery.state === 'canonical';
+  if (params.run.status === 'completed' && pendingConstraintDelivery.state === 'conflict') {
+    return { source: 'none' };
+  }
+
   const evidence = collectAgentRunFinalizationEvidence(
     params.conversation.messages,
     buildAgentRunMessageScope(params.run),
@@ -171,6 +180,7 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
       evidence.resultPreviews.length > 0 ||
       evidence.lastSubstantiveResult.trim().length > 0);
   if (!hasRecoverableEvidence) {
+    if (requiresConstraintAwareSynthesis) return { source: 'none' };
     return {
       output: fallbackOutput,
       source: 'fallback',
@@ -178,6 +188,7 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
   }
 
   if (Date.now() >= params.synthesisDeadlineAt) {
+    if (requiresConstraintAwareSynthesis) return { source: 'none' };
     return {
       output: fallbackOutput,
       source: fallbackOutput ? 'fallback' : 'none',
@@ -191,6 +202,7 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
   });
   const remainingSynthesisBudgetMs = params.synthesisDeadlineAt - Date.now();
   if (!providerContext || remainingSynthesisBudgetMs <= 0) {
+    if (requiresConstraintAwareSynthesis) return { source: 'none' };
     return {
       output: fallbackOutput,
       source: fallbackOutput ? 'fallback' : 'none',
@@ -203,6 +215,9 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
     model: providerContext.model,
     systemPrompt: providerContext.systemPromptText,
     evidence,
+    ...(pendingConstraintDelivery.state === 'canonical'
+      ? { pendingUserConstraints: pendingConstraintDelivery.entries }
+      : {}),
     timeoutMs: remainingSynthesisBudgetMs,
   });
 
@@ -216,9 +231,49 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
   }
 
   return {
-    output: fallbackOutput,
-    source: fallbackOutput ? 'fallback' : 'none',
+    ...(requiresConstraintAwareSynthesis ? {} : { output: fallbackOutput }),
+    source: requiresConstraintAwareSynthesis ? 'none' : fallbackOutput ? 'fallback' : 'none',
   };
+}
+
+function reconcilePersistedCompletedRunGraph(params: {
+  conversationId: string;
+  runId: string;
+}): boolean {
+  const store = useChatStore.getState();
+  const conversation = store.conversations.find(
+    (candidate) => candidate.id === params.conversationId,
+  );
+  const run = conversation?.agentRuns?.find((candidate) => candidate.id === params.runId);
+  if (
+    !conversation ||
+    !run ||
+    run.status !== 'completed' ||
+    !run.controlGraph
+  ) {
+    return false;
+  }
+  const reconciledGraph = buildAgentControlGraphAfterPersistedFinalDelivery({
+    messages: conversation.messages,
+    run,
+    terminalReason: run.controlGraph.terminalReason,
+  });
+  if (!reconciledGraph || reconciledGraph === run.controlGraph) return false;
+
+  store.updateAgentRunControlGraph(
+    params.conversationId,
+    reconciledGraph,
+    params.runId,
+  );
+  const updatedRun = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === params.conversationId)
+    ?.agentRuns?.find((candidate) => candidate.id === params.runId);
+  return (
+    updatedRun?.status === 'completed' &&
+    updatedRun.controlGraph?.status === 'finalized' &&
+    readPendingGoalUserConstraintDelivery(updatedRun.controlGraph.goals).state === 'absent'
+  );
 }
 
 export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
@@ -226,6 +281,7 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
   synthesisSweepBudgetMs?: number;
 }): Promise<string[]> {
   const repairedRunIds: string[] = [];
+  let repairedConstraintDelivery = false;
   const activeSubAgents = params?.activeSubAgents ?? listActiveSubAgents();
   const providerContextCache = new Map<string, ProviderContextResolution>();
   const configuredSynthesisSweepBudgetMs = params?.synthesisSweepBudgetMs;
@@ -256,6 +312,11 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
 
       const terminalRunMessageScope = buildAgentRunMessageScope(terminalRun);
       if (hasDeliveredFinalAssistantResponse(conversation.messages, terminalRunMessageScope)) {
+        repairedConstraintDelivery =
+          reconcilePersistedCompletedRunGraph({
+            conversationId: conversation.id,
+            runId: terminalRun.id,
+          }) || repairedConstraintDelivery;
         continue;
       }
 
@@ -333,6 +394,37 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
         });
       }
 
+      const requiresConstraintDeliveryAcknowledgement =
+        latestRun.status === 'completed' &&
+        readPendingGoalUserConstraintDelivery(latestRun.controlGraph?.goals).state === 'canonical';
+      if (requiresConstraintDeliveryAcknowledgement) {
+        // Persist the answer before clearing its durable delivery obligation.
+        await flushChatStorePersistenceNow();
+      }
+      const persistedConversation = useChatStore
+        .getState()
+        .conversations.find((candidate) => candidate.id === conversation.id);
+      const persistedRun = persistedConversation?.agentRuns?.find(
+        (candidate) => candidate.id === latestRun.id,
+      );
+      if (
+        !persistedConversation ||
+        !persistedRun ||
+        !hasDeliveredFinalAssistantResponse(
+          persistedConversation.messages,
+          buildAgentRunMessageScope(persistedRun),
+        )
+      ) {
+        continue;
+      }
+      if (requiresConstraintDeliveryAcknowledgement) {
+        repairedConstraintDelivery =
+          reconcilePersistedCompletedRunGraph({
+            conversationId: conversation.id,
+            runId: latestRun.id,
+          }) || repairedConstraintDelivery;
+      }
+
       const deliveredTimestamp = Date.now();
       const preview = truncateLogDetail(output) || output;
       latestStore.appendAgentRunCheckpoint(
@@ -369,7 +461,7 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
     }
   }
 
-  if (repairedRunIds.length > 0) {
+  if (repairedRunIds.length > 0 || repairedConstraintDelivery) {
     await flushChatStorePersistenceNow();
   }
 

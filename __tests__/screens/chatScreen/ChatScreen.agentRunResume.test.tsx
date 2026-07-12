@@ -238,6 +238,9 @@ describe('ChatScreen agent run resume', () => {
         status: 'completed',
         result: JSON.stringify({ status: 'running', sessionId: 'sub-spawn-lag-1' }),
       });
+      callbacks.onAgentControlGraphStateChange(
+        createAgentRunControlGraphState({ status: 'awaiting_review' }),
+      );
       callbacks.onDone();
     });
     await waitFor(() => {

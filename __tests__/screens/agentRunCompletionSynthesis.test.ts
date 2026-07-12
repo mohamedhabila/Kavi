@@ -192,4 +192,214 @@ describe('agentRunCompletionSynthesis', () => {
     });
     expect(synthesizeAgentRunFinalAnswer).not.toHaveBeenCalled();
   });
+
+  it('synthesizes completed recovery with exact scoped pending constraints instead of raw graph evidence', async () => {
+    const run = buildRun();
+    run.controlGraph!.goals = [
+      {
+        id: 'language',
+        title: 'Deliver in Dutch',
+        status: 'completed',
+        dependencies: [],
+        evidence: ['RAW_GRAPH_EVIDENCE'],
+        successCriteria: ['Deliver the verified result in Dutch.'],
+        completionPolicy: 'blocking',
+        userConstraints: [{ text: 'Answer in Dutch.', sourceMessageId: 'msg-user' }],
+        userConstraintDeliveryPending: true,
+        createdAt: 10,
+        updatedAt: 60,
+        completedAt: 60,
+      },
+      {
+        id: 'format',
+        title: 'Use requested format',
+        status: 'completed',
+        dependencies: [],
+        evidence: ['RAW_FORMAT_EVIDENCE'],
+        successCriteria: ['Deliver exactly three bullets.'],
+        completionPolicy: 'blocking',
+        userConstraints: [{ text: 'Return exactly three bullets.', sourceMessageId: 'msg-format' }],
+        userConstraintDeliveryPending: true,
+        createdAt: 11,
+        updatedAt: 61,
+        completedAt: 61,
+      },
+    ];
+    const messages: Message[] = [
+      buildMessage({
+        id: 'msg-user',
+        role: 'user',
+        content: 'Produce the verified report.',
+        timestamp: 10,
+      }),
+      buildMessage({
+        id: 'assistant-evidence',
+        content: 'The report was verified from the completed worker output.',
+        timestamp: 50,
+      }),
+    ];
+    useChatStore.setState((state) => ({
+      ...state,
+      conversations: [
+        {
+          id: 'conversation-1',
+          title: 'Constraint recovery',
+          messages,
+          providerId: 'provider-1',
+          createdAt: 10,
+          updatedAt: 61,
+          usage: {
+            entries: [],
+            totalInput: 0,
+            totalOutput: 0,
+            totalCacheRead: 0,
+            totalCacheWrite: 0,
+            totalTokens: 0,
+            totalCost: 0,
+            totalCalls: 0,
+          },
+          logs: [],
+          agentRuns: [run],
+        } as any,
+      ],
+      activeConversationId: 'conversation-1',
+    }));
+    jest.mocked(synthesizeAgentRunFinalAnswer).mockResolvedValue({
+      output: '- Een\n- Twee\n- Drie',
+    });
+
+    const completion = await synthesizeAgentRunCompletion({
+      conversationId: 'conversation-1',
+      run,
+      status: 'completed',
+      providerContext: {
+        provider: {
+          id: 'provider-1',
+          name: 'Provider',
+          baseUrl: 'https://example.test',
+          apiKey: 'test',
+          model: 'model-1',
+          enabled: true,
+        },
+        model: 'model-1',
+        systemPromptText: 'Be helpful.',
+        conversationId: 'conversation-1',
+      },
+    });
+
+    expect(completion).toEqual({ output: '- Een\n- Twee\n- Drie', source: 'synthesized' });
+    expect(completion.output).not.toContain('RAW_GRAPH_EVIDENCE');
+    expect(synthesizeAgentRunFinalAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingUserConstraints: [
+          { goalId: 'language', text: 'Answer in Dutch.' },
+          { goalId: 'format', text: 'Return exactly three bullets.' },
+        ],
+      }),
+    );
+    expect(JSON.stringify(jest.mocked(synthesizeAgentRunFinalAnswer).mock.calls[0])).not.toContain(
+      'msg-format',
+    );
+  });
+
+  it('returns no completed fallback when pending constraints cannot be synthesized', async () => {
+    const run = buildRun();
+    run.controlGraph!.goals = [
+      {
+        id: 'format',
+        title: 'Use exact format',
+        status: 'completed',
+        dependencies: [],
+        evidence: ['Raw evidence must not escape.'],
+        successCriteria: ['Use the requested format.'],
+        completionPolicy: 'blocking',
+        userConstraints: [{ text: 'Return JSON only.', sourceMessageId: 'msg-user' }],
+        userConstraintDeliveryPending: true,
+        createdAt: 10,
+        updatedAt: 60,
+        completedAt: 60,
+      },
+    ];
+    useChatStore.setState((state) => ({
+      ...state,
+      conversations: [
+        {
+          id: 'conversation-1',
+          title: 'Constraint recovery',
+          messages: [
+            buildMessage({
+              id: 'msg-user',
+              role: 'user',
+              content: 'Return JSON only.',
+              timestamp: 10,
+            }),
+            buildMessage({ id: 'draft', content: 'A draft exists.', timestamp: 20 }),
+          ],
+          createdAt: 10,
+          updatedAt: 60,
+          logs: [],
+          agentRuns: [run],
+        } as any,
+      ],
+      activeConversationId: 'conversation-1',
+    }));
+
+    await expect(
+      synthesizeAgentRunCompletion({
+        conversationId: 'conversation-1',
+        run,
+        status: 'completed',
+      }),
+    ).resolves.toEqual({ source: 'none' });
+  });
+
+  it('does not let a settled historical conflict suppress an unconstrained graph final', async () => {
+    const run = buildRun();
+    run.controlGraph!.goals = [
+      {
+        id: 'historical',
+        title: 'Historical goal',
+        status: 'completed',
+        dependencies: [],
+        evidence: [],
+        userConstraintIntegrity: 'conflict',
+        createdAt: 1,
+        updatedAt: 2,
+        completedAt: 2,
+      },
+      {
+        id: 'current',
+        title: 'Current delivery',
+        status: 'completed',
+        dependencies: [],
+        evidence: ['CURRENT_GRAPH_FINAL'],
+        createdAt: 10,
+        updatedAt: 70,
+        completedAt: 70,
+      },
+    ];
+    useChatStore.setState((state) => ({
+      ...state,
+      conversations: [
+        {
+          id: 'conversation-1',
+          title: 'Historical conflict',
+          messages: [],
+          createdAt: 1,
+          updatedAt: 70,
+          logs: [],
+          agentRuns: [run],
+        } as any,
+      ],
+      activeConversationId: 'conversation-1',
+    }));
+
+    await expect(
+      synthesizeAgentRunCompletion({
+        conversationId: 'conversation-1',
+        run,
+        status: 'completed',
+      }),
+    ).resolves.toEqual({ output: 'CURRENT_GRAPH_FINAL', source: 'graph' });
+  });
 });

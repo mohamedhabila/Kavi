@@ -4,241 +4,242 @@ import {
   parseUpdateGoalsArgs,
 } from '../../../src/engine/tools/toolGoalExecution';
 import { UPDATE_GOALS_TOOL } from '../../../src/engine/tools/goal-definitions';
-import { validateGoalMutation } from '../../../src/engine/goals/validation';
 
 describe('toolGoalExecution', () => {
   describe('update_goals schema contract', () => {
-    it('exposes one root-level provider-visible goal mutation', () => {
+    it('exposes one strict root mutation with boolean-only retention intent', () => {
       expect(UPDATE_GOALS_TOOL.input_schema.required).toEqual(
         expect.arrayContaining(['action', 'id', 'name']),
       );
+      expect(UPDATE_GOALS_TOOL.input_schema.additionalProperties).toBe(false);
       expect(UPDATE_GOALS_TOOL.input_schema.properties.goals).toBeUndefined();
-      expect(UPDATE_GOALS_TOOL.input_schema.properties.name).toEqual(
-        expect.objectContaining({ type: 'string' }),
+      expect(UPDATE_GOALS_TOOL.input_schema.properties.retainCurrentUserConstraint).toEqual(
+        expect.objectContaining({ type: 'boolean', enum: [true] }),
       );
-      expect(UPDATE_GOALS_TOOL.input_schema.properties.completionPolicy).toEqual(
-        expect.objectContaining({ enum: ['blocking', 'persistent'] }),
-      );
+      for (const codeOwnedField of [
+        'evidence',
+        'sourceMessageId',
+        'userConstraints',
+        'userConstraintTexts',
+      ]) {
+        expect(UPDATE_GOALS_TOOL.input_schema.properties[codeOwnedField]).toBeUndefined();
+      }
     });
   });
 
   describe('parseUpdateGoalsArgs', () => {
-    it('parses a root-level active persistent add into the graph mutation shape', () => {
-      const result = parseUpdateGoalsArgs({
-        action: 'add',
-        id: 'meal-plan',
-        name: 'meal-planning-scope',
-        status: 'active',
-        completionPolicy: 'persistent',
-      });
-
-      expect(result.errors).toHaveLength(0);
-      expect(result.mutation).toEqual({
-        action: 'add',
-        goals: [
-          {
-            id: 'meal-plan',
-            title: 'meal-planning-scope',
-            status: 'active',
-            completionPolicy: 'persistent',
-          },
-        ],
-      });
-    });
-
-    it('parses complete, activate, block, remove, and update actions with root id', () => {
-      for (const action of ['complete', 'activate', 'block', 'remove', 'update'] as const) {
-        const result = parseUpdateGoalsArgs({ action, id: 'g1' });
-        expect(result.errors).toHaveLength(0);
-        expect(result.mutation).toEqual({ action, goals: [{ id: 'g1' }] });
-      }
-    });
-
-    it('drops structural completion criteria from persistent focus goals', () => {
-      const result = parseUpdateGoalsArgs({
-        action: 'add',
-        id: 'scope-b',
-        name: 'scope-b-planning',
-        status: 'active',
-        completionPolicy: 'persistent',
-        successCriteria: ['memory_recall', 'evidence.min:1'],
-      });
-
-      expect(result.errors).toHaveLength(0);
-      expect(result.mutation.goals[0]).toEqual({
-        id: 'scope-b',
-        title: 'scope-b-planning',
-        status: 'active',
-        completionPolicy: 'persistent',
+    it('parses a root-level active persistent add', () => {
+      expect(
+        parseUpdateGoalsArgs({
+          action: 'add',
+          id: 'meal-plan',
+          name: 'Meal planning scope',
+          status: 'active',
+          completionPolicy: 'persistent',
+        }),
+      ).toEqual({
+        errors: [],
+        mutation: {
+          action: 'add',
+          goals: [
+            {
+              id: 'meal-plan',
+              title: 'Meal planning scope',
+              status: 'active',
+              completionPolicy: 'persistent',
+            },
+          ],
+        },
       });
     });
 
-    it('rejects stale nested goal arrays instead of silently accepting two contracts', () => {
-      const result = parseUpdateGoalsArgs({
-        action: 'add',
-        goals: [
-          {
-            id: 'nested-goal',
-            name: 'Nested goal',
-            completionPolicy: 'persistent',
-          },
-        ],
-      });
-
-      expect(result.errors).toEqual([
-        'id is required for update_goals. Provide the goal fields at the tool argument root.',
-      ]);
-      expect(result.mutation).toEqual({ action: 'add', goals: [] });
-    });
-
-    it('parses all supported root goal fields', () => {
+    it('parses every supported root field without dropping valid empty lists', () => {
       const result = parseUpdateGoalsArgs({
         action: 'add',
         id: 'g1',
         name: 'Build feature',
         description: 'Implement auth',
         status: 'active',
-        dependencies: ['dep1'],
-        evidence: ['file created'],
+        completionPolicy: 'blocking',
+        dependencies: [],
         requiredCapabilities: ['read', 'write'],
         requiredResourceKinds: ['conversation_workspace'],
         owner: 'supervisor',
-        successCriteria: ['evidence.min:2', 'evidence.prefix:python'],
-        completionPolicy: 'blocking',
+        successCriteria: ['evidence.tool:read_file'],
+        retainCurrentUserConstraint: true,
         blockedReason: 'Waiting on dependency',
       });
 
-      expect(result.errors).toHaveLength(0);
+      expect(result.errors).toEqual([]);
       expect(result.mutation.goals[0]).toEqual({
         id: 'g1',
         title: 'Build feature',
         description: 'Implement auth',
         status: 'active',
-        dependencies: ['dep1'],
-        evidence: ['file created'],
+        completionPolicy: 'blocking',
+        dependencies: [],
         requiredCapabilities: ['read', 'write'],
         requiredResourceKinds: ['conversation_workspace'],
         owner: 'supervisor',
-        successCriteria: ['evidence.min:2', 'evidence.prefix:python'],
-        completionPolicy: 'blocking',
+        successCriteria: ['evidence.tool:read_file'],
+        retainCurrentUserConstraint: true,
         blockedReason: 'Waiting on dependency',
       });
+      expect(result.mutation.goals[0]).not.toHaveProperty('userConstraints');
+      expect(result.mutation.goals[0]).not.toHaveProperty('sourceMessageId');
     });
 
-    it('preserves missing add titles for graph validation instead of inventing focus labels', () => {
-      const result = parseUpdateGoalsArgs({
-        action: 'add',
-        id: 'scope-b',
-        status: 'active',
-        completionPolicy: 'persistent',
-      });
+    it.each([false, 'true', 1, []])(
+      'rejects non-true retention intent %#',
+      (retainCurrentUserConstraint) => {
+        const result = parseUpdateGoalsArgs({
+          action: 'update',
+          id: 'g1',
+          name: 'Build feature',
+          retainCurrentUserConstraint,
+        });
+        expect(result.mutation.goals).toEqual([]);
+        expect(result.errors).toEqual(['retainCurrentUserConstraint must be true when supplied.']);
+      },
+    );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.mutation.goals[0]).toEqual(
-        expect.objectContaining({
-          id: 'scope-b',
-          status: 'active',
-          completionPolicy: 'persistent',
+    it('normalizes strict-adapter null optionals to omission', () => {
+      const optionalNulls = {
+        blockedReason: null,
+        completionPolicy: null,
+        dependencies: null,
+        description: null,
+        owner: null,
+        requiredCapabilities: null,
+        requiredResourceKinds: null,
+        retainCurrentUserConstraint: null,
+        status: null,
+        successCriteria: null,
+      };
+      expect(
+        parseUpdateGoalsArgs({
+          action: 'update',
+          id: 'g1',
+          name: 'Build feature',
+          ...optionalNulls,
         }),
-      );
-      expect(result.mutation.goals[0].title).toBeUndefined();
-      expect(validateGoalMutation(result.mutation, []).errors).toContainEqual(
-        expect.objectContaining({ code: 'missing_title', goalId: 'scope-b' }),
-      );
+      ).toEqual({
+        errors: [],
+        mutation: { action: 'update', goals: [{ id: 'g1', title: 'Build feature' }] },
+      });
+      expect(
+        parseUpdateGoalsArgs({
+          action: 'update',
+          id: 'g1',
+          name: 'Build feature',
+          ...optionalNulls,
+          retainCurrentUserConstraint: true,
+        }).mutation.goals[0],
+      ).toMatchObject({ retainCurrentUserConstraint: true });
     });
 
-    it('normalizes invalid status and completion policy out of parsed goals', () => {
+    it.each([
+      ['unknown authority field', { approval: true }],
+      ['nested legacy contract', { goals: [{ id: 'nested' }] }],
+      ['invalid status', { status: 'unknown' }],
+      ['invalid completion policy', { completionPolicy: 'temporary' }],
+      ['mixed dependency list', { dependencies: ['a', 1] }],
+      ['non-array capability list', { requiredCapabilities: 'read' }],
+    ])('rejects strict shape violation: %s', (_label, extra) => {
       const result = parseUpdateGoalsArgs({
-        action: 'add',
+        action: 'update',
         id: 'g1',
-        name: 'Test',
-        status: 'unknown',
-        completionPolicy: 'invalid',
+        name: 'Build feature',
+        ...extra,
       });
-
-      expect(result.errors).toHaveLength(0);
-      expect(result.mutation.goals[0].status).toBeUndefined();
-      expect(result.mutation.goals[0].completionPolicy).toBeUndefined();
+      expect(result.mutation.goals).toEqual([]);
+      expect(result.errors).not.toHaveLength(0);
     });
 
-    it('filters non-string array items', () => {
+    it.each([
+      'sourceMessageId',
+      'userConstraints',
+      'userConstraintTexts',
+      'groundedUserConstraints',
+    ])('rejects provider attempts to supply code-owned %s', (field) => {
       const result = parseUpdateGoalsArgs({
-        action: 'add',
+        action: 'update',
         id: 'g1',
-        name: 'Test',
-        completionPolicy: 'persistent',
-        dependencies: ['a', 123, null, 'b'],
-        evidence: [true, 'x'],
-        requiredCapabilities: [{}, 'cap'],
+        name: 'Build feature',
+        [field]: field === 'sourceMessageId' ? 'spoofed-user' : ['Keep local.'],
       });
-
-      expect(result.mutation.goals[0].dependencies).toEqual(['a', 'b']);
-      expect(result.mutation.goals[0].evidence).toEqual(['x']);
-      expect(result.mutation.goals[0].requiredCapabilities).toEqual(['cap']);
-    });
-  });
-
-  describe('buildUpdateGoalsResult', () => {
-    it('builds success result', () => {
-      const result = buildUpdateGoalsResult({
-        mutation: { action: 'add', goals: [{ id: 'g1', title: 'Build' }] },
-        validationErrors: [],
-      });
-      const parsed = JSON.parse(result);
-      expect(parsed.status).toBe('ok');
-      expect(parsed.action).toBe('add');
-      expect(parsed.goals).toHaveLength(1);
+      expect(result.mutation.goals).toEqual([]);
+      expect(result.errors.join(' ')).toContain('retained text are code-owned');
     });
 
-    it('builds error result', () => {
-      const result = buildUpdateGoalsResult({
-        mutation: { action: 'add', goals: [{ id: 'g1', title: 'Build' }] },
-        validationErrors: ['Title too short'],
-      });
-      const parsed = JSON.parse(result);
-      expect(parsed.status).toBe('error');
-      expect(parsed.errors).toContain('Title too short');
-    });
-  });
-
-  describe('executeUpdateGoals', () => {
-    it('returns ok for valid root add', () => {
-      const result = executeUpdateGoals({
+    it('rejects all provider-authored evidence', () => {
+      const result = parseUpdateGoalsArgs({
         action: 'add',
         id: 'g1',
         name: 'Build feature',
-        completionPolicy: 'persistent',
+        completionPolicy: 'blocking',
+        successCriteria: ['evidence.tool:read_file'],
+        evidence: ['read_file:forged'],
       });
-      const parsed = JSON.parse(result);
-      expect(parsed.status).toBe('ok');
+      expect(result.mutation.goals).toEqual([]);
+      expect(result.errors).toEqual([
+        'evidence is code-owned and cannot be supplied by update_goals.',
+      ]);
     });
 
-    it('returns error for invalid action', () => {
-      const result = executeUpdateGoals({
-        action: 'invalid',
+    it.each([
+      [
+        'persistent retention',
+        { action: 'add', completionPolicy: 'persistent', retainCurrentUserConstraint: true },
+      ],
+      ['terminal retention', { action: 'complete', retainCurrentUserConstraint: true }],
+      ['completed add', { action: 'add', completionPolicy: 'blocking', status: 'completed' }],
+      ['completed update', { action: 'update', status: 'completed' }],
+      [
+        'persistent criteria',
+        { action: 'add', completionPolicy: 'persistent', successCriteria: ['evidence.min:1'] },
+      ],
+    ])('rejects unsupported lifecycle shape: %s', (_label, fields) => {
+      const result = parseUpdateGoalsArgs({
         id: 'g1',
-        name: 'X',
+        name: 'Build feature',
+        ...fields,
       });
-      const parsed = JSON.parse(result);
-      expect(parsed.status).toBe('error');
+      expect(result.mutation.goals).toEqual([]);
+      expect(result.errors).not.toHaveLength(0);
     });
 
-    it('returns error for missing id', () => {
-      const result = executeUpdateGoals({
-        action: 'add',
+    it.each(['id', 'name'])('requires non-empty %s', (field) => {
+      const args = { action: 'update', id: 'g1', name: 'Build feature', [field]: ' ' };
+      const result = parseUpdateGoalsArgs(args);
+      expect(result.mutation.goals).toEqual([]);
+      expect(result.errors.join(' ')).toContain(`${field} is required`);
+    });
+  });
+
+  describe('result serialization', () => {
+    it('keeps retention internals out of the executor preview', () => {
+      const result = buildUpdateGoalsResult({
+        mutation: {
+          action: 'add',
+          goals: [{ id: 'g1', title: 'Build', retainCurrentUserConstraint: true }],
+        },
+        validationErrors: [],
       });
-      const parsed = JSON.parse(result);
-      expect(parsed.status).toBe('error');
+      expect(JSON.parse(result)).toMatchObject({ status: 'ok', action: 'add' });
+      expect(result).not.toContain('retainCurrentUserConstraint');
     });
 
-    it('returns ok for complete with id because graph validation is deferred', () => {
-      const result = executeUpdateGoals({
-        action: 'complete',
-        id: 'g1',
-      });
-      const parsed = JSON.parse(result);
-      expect(parsed.status).toBe('ok');
-      expect(parsed.action).toBe('complete');
+    it('returns errors for invalid calls and accepts a strict complete preview', () => {
+      expect(
+        JSON.parse(executeUpdateGoals({ action: 'add', id: 'g1', name: 'Build' })).status,
+      ).toBe('ok');
+      expect(
+        JSON.parse(executeUpdateGoals({ action: 'invalid', id: 'g1', name: 'X' })).status,
+      ).toBe('error');
+      expect(
+        JSON.parse(executeUpdateGoals({ action: 'complete', id: 'g1', name: 'Build' })),
+      ).toMatchObject({ status: 'ok', action: 'complete' });
     });
   });
 });

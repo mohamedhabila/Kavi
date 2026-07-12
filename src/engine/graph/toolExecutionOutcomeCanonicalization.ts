@@ -21,6 +21,7 @@ import { syncGoalTasksFromMutation } from '../../services/memory/tasks';
 import type { AgentControlGraphEvent } from './agentControlGraph';
 import type { ToolExecutionOutcome } from './toolExecutionOutcomeResolution';
 import type { ToolCallRecord } from '../loopDetection';
+import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 
 export type CanonicalToolExecutionOutcome = ToolExecutionOutcome & {
   canonicalized: boolean;
@@ -56,6 +57,7 @@ function buildCanonicalGoalResult(goal: AgentGoal): Record<string, unknown> {
     dependencies: goal.dependencies,
     evidence: goal.evidence,
     ...(goal.successCriteria?.length ? { successCriteria: goal.successCriteria } : {}),
+    ...(goal.userConstraints?.length ? { userConstraintCount: goal.userConstraints.length } : {}),
     ...(goal.requiredCapabilities?.length
       ? { requiredCapabilities: goal.requiredCapabilities }
       : {}),
@@ -88,6 +90,21 @@ function buildCanonicalUpdateGoalsContent(params: {
     null,
     2,
   );
+}
+
+function serializeParsedUpdateGoalsErrors(
+  errors: ReadonlyArray<string>,
+  args: unknown,
+): Array<Record<string, unknown>> {
+  const goalId =
+    args && typeof args === 'object' && typeof (args as Record<string, unknown>).id === 'string'
+      ? ((args as Record<string, unknown>).id as string).trim()
+      : '';
+  return errors.map((message) => ({
+    ...(goalId ? { goalId } : {}),
+    code: message.startsWith('name is required') ? 'missing_title' : 'invalid_lifecycle',
+    message,
+  }));
 }
 
 function buildUpdateGoalsRepair(params: {
@@ -254,10 +271,7 @@ function collectToolHistoryEvidence(history: ReadonlyArray<ToolCallRecord> | und
   );
 }
 
-function criteriaMatchEvidence(
-  criteria: ReadonlyArray<string>,
-  evidence: string,
-): boolean {
+function criteriaMatchEvidence(criteria: ReadonlyArray<string>, evidence: string): boolean {
   if (criteria.length === 0) {
     return false;
   }
@@ -274,7 +288,8 @@ function criteriaMatchEvidence(
     completionPolicy: 'blocking',
   };
   return criteria.some(
-    (criterion) => !isCountOnlySuccessCriterion(criterion) && isSuccessCriterionMet(hypotheticalGoal, criterion),
+    (criterion) =>
+      !isCountOnlySuccessCriterion(criterion) && isSuccessCriterionMet(hypotheticalGoal, criterion),
   );
 }
 
@@ -330,6 +345,7 @@ function buildAutoCompletedSatisfiedGoals(
       .filter(
         (goal) =>
           (goal.status === 'active' || goal.status === 'blocked') &&
+          goal.userConstraintIntegrity !== 'conflict' &&
           isBlockingGoal(goal) &&
           (goal.successCriteria?.length ?? 0) > 0 &&
           areGoalSuccessCriteriaSatisfied(goal),
@@ -348,6 +364,9 @@ function buildAutoCompletedSatisfiedGoals(
           updatedAt: now,
           completedAt: now,
           blockedReason: undefined,
+          ...((goal.userConstraints?.length ?? 0) > 0
+            ? { userConstraintDeliveryPending: true as const }
+            : {}),
         }
       : { ...goal },
   );
@@ -361,6 +380,7 @@ export function canonicalizeToolExecutionOutcome(params: {
   getGraphSnapshot: () => AgentRunControlGraphState;
   applyGraphEvents: (events: ReadonlyArray<AgentControlGraphEvent>) => void;
   conversationId: string;
+  currentUserMessage?: CodeOwnedCurrentUserMessage;
   warn: (message: string, error: unknown) => void;
 }): CanonicalToolExecutionOutcome {
   if (params.toolName !== 'update_goals' || params.outcome.toolMessage.isError) {
@@ -388,10 +408,7 @@ export function canonicalizeToolExecutionOutcome(params: {
         status: 'error',
         action: parsed.mutation.action,
         errors: parsed.errors,
-        structuredErrors: parsed.errors.map((message) => ({
-          code: 'invalid_lifecycle',
-          message,
-        })),
+        structuredErrors: serializeParsedUpdateGoalsErrors(parsed.errors, args),
       });
       return {
         ...cloneToolExecutionOutcomeWithContent(params.outcome, content),
@@ -434,9 +451,15 @@ export function canonicalizeToolExecutionOutcome(params: {
       };
     }
 
-    const { goals: nextGoals, errors } = applyGoalMutation(snapshot.goals ?? [], mutation);
+    const validationContext = { currentUserMessage: params.currentUserMessage };
+    const { goals: nextGoals, errors } = applyGoalMutation(
+      snapshot.goals ?? [],
+      mutation,
+      Date.now(),
+      validationContext,
+    );
     if (errors.length > 0) {
-      const validation = validateGoalMutation(mutation, snapshot.goals ?? []);
+      const validation = validateGoalMutation(mutation, snapshot.goals ?? [], validationContext);
       const content = buildCanonicalUpdateGoalsContent({
         status: 'error',
         action: mutation.action,

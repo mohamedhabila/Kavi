@@ -251,8 +251,9 @@ describe('useChatStore', () => {
       const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
       const run = conv.agentRuns?.find((candidate) => candidate.id === runId)!;
 
-      expect(conv.activeAgentRunId).toBeUndefined();
-      expect(run.status).toBe('completed');
+      expect(conv.activeAgentRunId).toBe(runId);
+      expect(run.status).toBe('running');
+      expect(run.controlGraph?.asyncWork.awaitingBackgroundWorkers).toBe(true);
       expect(run.latestSummary).toBe(
         'Background workers finished before the app restarted. Recovering the final response from verified results.',
       );
@@ -263,7 +264,7 @@ describe('useChatStore', () => {
       );
     });
 
-    it('should clear stale pending async operations when recovery terminalizes a run', () => {
+    it('does not treat a persisted final as proof that pending async work is stale', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-8b',
@@ -300,6 +301,13 @@ describe('useChatStore', () => {
         runId,
       );
 
+      useChatStore.getState().addMessage(convId, {
+        id: 'assistant-final-8b',
+        role: 'assistant',
+        content: 'The background result was verified and delivered.',
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      });
+
       useChatStore.getState().updateAgentRunAsyncWork(
         convId,
         {
@@ -334,14 +342,86 @@ describe('useChatStore', () => {
       const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
       const run = conv.agentRuns?.find((candidate) => candidate.id === runId)!;
 
-      expect(run.status).toBe('completed');
-      expect(run).not.toHaveProperty('pendingAsyncOperations');
+      expect(conv.activeAgentRunId).toBe(runId);
+      expect(run.status).toBe('running');
       expect(run.controlGraph?.asyncWork).toEqual(
         expect.objectContaining({
-          awaitingBackgroundWorkers: false,
-          pendingOperations: [],
+          awaitingBackgroundWorkers: true,
+          pendingOperations: [expect.objectContaining({ key: 'ssh-background-job:bg-stale' })],
         }),
       );
+    });
+
+    it('reconciles a persisted constrained final with graph ACK and FINALIZED on restart', () => {
+      const convId = useChatStore.getState().createConversation('p1', 's');
+      useChatStore.getState().addMessage(convId, {
+        id: 'msg-user-constrained-restart',
+        role: 'user',
+        content: 'Answer in Dutch.',
+      });
+      const runId = useChatStore.getState().startAgentRun(convId, {
+        userMessageId: 'msg-user-constrained-restart',
+        goal: 'Deliver the verified result in Dutch.',
+        timestamp: 1700000009200,
+      });
+      const runningRun = useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === convId)!
+        .agentRuns?.find((run) => run.id === runId)!;
+      useChatStore.getState().updateAgentRunControlGraph(
+        convId,
+        {
+          ...runningRun.controlGraph!,
+          status: 'awaiting_review',
+          goals: [
+            {
+              id: 'deliver',
+              title: 'Deliver verified result',
+              status: 'completed',
+              dependencies: [],
+              evidence: ['verified'],
+              successCriteria: ['evidence.tool:read_file'],
+              completionPolicy: 'blocking',
+              userConstraints: [
+                {
+                  text: 'Answer in Dutch.',
+                  sourceMessageId: 'msg-user-constrained-restart',
+                },
+              ],
+              userConstraintDeliveryPending: true,
+              createdAt: 1700000009200,
+              updatedAt: 1700000009250,
+              completedAt: 1700000009250,
+            },
+          ],
+        },
+        runId,
+      );
+      useChatStore.getState().addMessage(convId, {
+        id: 'assistant-final-constrained-restart',
+        role: 'assistant',
+        content: 'Het resultaat is geverifieerd.',
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      });
+
+      useChatStore.getState().recoverInterruptedAgentRuns([], {
+        timestamp: 1700000009300,
+      });
+
+      const recoveredRun = useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === convId)!
+        .agentRuns?.find((run) => run.id === runId)!;
+      expect(recoveredRun.status).toBe('completed');
+      expect(recoveredRun.controlGraph?.status).toBe('finalized');
+      expect(recoveredRun.controlGraph?.goals?.[0]).not.toHaveProperty('userConstraints');
+      expect(recoveredRun.controlGraph?.goals?.[0]).not.toHaveProperty(
+        'userConstraintDeliveryPending',
+      );
+      expect(recoveredRun.controlGraph?.audit.slice(-2).map((event) => event.type)).toEqual([
+        'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED',
+        'FINALIZED',
+      ]);
     });
   });
 });

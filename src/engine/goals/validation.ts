@@ -17,6 +17,15 @@ import type { AgentGoal, AgentGoalMutation, AgentGoalStatus } from './types';
 import { createGoal, isBlockingGoal } from './types';
 import { isRegisteredToolName } from '../tools/toolNameNormalization';
 import { EFFECT_RECEIPT_EVIDENCE_PREFIX } from './effectCompletionEvidence';
+import {
+  validateGoalConstraintMutationCapacity,
+  validateGoalConstraintRemoval,
+  validateGoalUserConstraints,
+  type GoalMutationValidationContext,
+} from './goalUserConstraintValidation';
+import { validateBlockingGoalUpdate } from './blockingGoalUpdateValidation';
+
+export type { GoalMutationValidationContext } from './goalUserConstraintValidation';
 
 const INTERNAL_DELIVERABLE_TOOL_NAMES = new Set([
   GOAL_BOOTSTRAP_TOOL_NAME,
@@ -42,7 +51,11 @@ export type GoalValidationErrorCode =
   | 'evidence_satisfied'
   | 'invalid_block'
   | 'invalid_update_action'
-  | 'invalid_add_status';
+  | 'invalid_add_status'
+  | 'invalid_user_constraints'
+  | 'duplicate_user_constraints'
+  | 'ungrounded_user_constraints'
+  | 'unsupported_user_constraints';
 
 export interface GoalValidationError {
   goalId?: string;
@@ -75,18 +88,6 @@ function goalMeetsCompletionRequirements(
     successCriteria: criteria,
   });
   return criteria.every((criterion) => isSuccessCriterionMet(hypotheticalGoal, criterion));
-}
-
-function goalPatchMeetsTerminalCompletionRequirements(
-  patch: AgentGoalMutation['goals'][number],
-): boolean {
-  return goalMeetsCompletionRequirements(
-    {
-      evidence: patch.evidence ?? [],
-      successCriteria: patch.successCriteria,
-    },
-    [],
-  );
 }
 
 function hasExplicitCompletionPolicy(patch: AgentGoalMutation['goals'][number]): boolean {
@@ -163,15 +164,13 @@ function findUnknownEvidencePrefixCriteria(
       const prefixToken = readEvidencePrefixCriterionToken(criterion);
       return Boolean(
         prefixToken &&
-          !REGISTERED_NON_TOOL_EVIDENCE_PREFIXES.has(prefixToken) &&
-          !isRegisteredToolName(prefixToken),
+        !REGISTERED_NON_TOOL_EVIDENCE_PREFIXES.has(prefixToken) &&
+        !isRegisteredToolName(prefixToken),
       );
     });
 }
 
-function findCodeOwnedEvidence(
-  patch: AgentGoalMutation['goals'][number],
-): ReadonlyArray<string> {
+function findCodeOwnedEvidence(patch: AgentGoalMutation['goals'][number]): ReadonlyArray<string> {
   return (patch.evidence ?? []).filter((evidence) =>
     CODE_OWNED_EVIDENCE_PREFIXES.some((prefix) => evidence.startsWith(prefix)),
   );
@@ -283,6 +282,19 @@ function validateGoalLifecycleTransition(
     return;
   }
 
+  if (
+    existing.status === 'completed' &&
+    (action === 'activate' ||
+      (action === 'update' && (nextStatus === 'active' || nextStatus === 'pending')))
+  ) {
+    errors.push({
+      goalId: normalizedId,
+      code: 'invalid_lifecycle',
+      message: 'Completed goals cannot be reactivated; create a new goal for repeated work.',
+    });
+    return;
+  }
+
   if (action === 'complete' || (action === 'update' && nextStatus === 'completed')) {
     const extraEvidence = action === 'complete' ? (patchEvidence ?? []) : [];
 
@@ -337,6 +349,7 @@ function validateGoalLifecycleTransition(
 export function validateGoalMutation(
   mutation: AgentGoalMutation,
   existingGoals: ReadonlyArray<AgentGoal>,
+  context: GoalMutationValidationContext = {},
 ): GoalValidationResult {
   const errors: GoalValidationError[] = [];
   const existingIds = new Set(existingGoals.map((g) => g.id));
@@ -350,12 +363,21 @@ export function validateGoalMutation(
 
   for (let i = 0; i < mutation.goals.length; i++) {
     const g = mutation.goals[i];
+    errors.push(
+      ...validateGoalUserConstraints({
+        action: mutation.action,
+        patch: g,
+        existingGoals,
+        context,
+      }),
+    );
     const codeOwnedEvidence = findCodeOwnedEvidence(g);
     if (codeOwnedEvidence.length > 0) {
       errors.push({
         goalId: g.id,
         code: 'invalid_evidence',
-        message: 'Tool effect receipt evidence is code-owned and cannot be supplied by update_goals.',
+        message:
+          'Tool effect receipt evidence is code-owned and cannot be supplied by update_goals.',
       });
     }
 
@@ -401,14 +423,18 @@ export function validateGoalMutation(
           message: `Goal ID "${g.id}" already exists.`,
         });
       }
-      if (g.status === 'completed' && !goalPatchMeetsTerminalCompletionRequirements(g)) {
+      if (g.status === 'completed') {
         errors.push({
           goalId: g.id,
-          code: 'evidence_required',
+          code: 'invalid_add_status',
           message:
-            'Cannot add a completed goal without satisfying structural evidence requirements.',
+            'Add goals as pending or active, then use complete for the canonical transition.',
         });
       }
+    }
+
+    if (mutation.action === 'update') {
+      errors.push(...validateBlockingGoalUpdate(g, existingGoals));
     }
 
     if (shouldValidateSuccessCriteria(g, existingGoals)) {
@@ -464,14 +490,6 @@ export function validateGoalMutation(
       errors,
     );
 
-    if (mutation.action === 'update' && g.status === 'active' && g.id?.trim()) {
-      errors.push({
-        goalId: g.id,
-        code: 'invalid_update_action',
-        message: 'Use activate instead of update to mark a goal active.',
-      });
-    }
-
     if (mutation.action === 'update' && g.status === 'completed' && g.id?.trim()) {
       errors.push({
         goalId: g.id,
@@ -518,6 +536,21 @@ export function validateGoalMutation(
       }
     }
   }
+
+  if (mutation.action === 'remove') {
+    for (const removalError of validateGoalConstraintRemoval(mutation, existingGoals)) {
+      if (
+        errors.some(
+          (error) => error.goalId === removalError.goalId && error.code === removalError.code,
+        )
+      ) {
+        continue;
+      }
+      errors.push(removalError);
+    }
+  }
+
+  errors.push(...validateGoalConstraintMutationCapacity(mutation, existingGoals));
 
   if (mutation.action === 'add') {
     const cycle = detectDependencyCycle(mutation.goals, existingGoals);
@@ -582,9 +615,7 @@ function detectDependencyCycle(
   return null;
 }
 
-export function validateGoalReferences(
-  goals: ReadonlyArray<AgentGoal>,
-): GoalValidationResult {
+export function validateGoalReferences(goals: ReadonlyArray<AgentGoal>): GoalValidationResult {
   const errors: GoalValidationError[] = [];
   const ids = new Set(goals.map((g) => g.id));
 

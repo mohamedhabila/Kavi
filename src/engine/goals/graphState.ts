@@ -22,6 +22,8 @@ import {
 } from './types';
 import { formatGoalValidationErrorMessage } from './mutationErrors';
 import { validateGoalMutation } from './validation';
+import type { GoalMutationValidationContext } from './validation';
+import { captureCurrentUserGoalConstraint } from './userConstraints';
 
 function activateGoalInList(
   goals: AgentGoal[],
@@ -108,10 +110,35 @@ function everyMutationGoal(
   return goals.length > 0 && goals.every(predicate);
 }
 
+function isActivationOnlyUpdate(
+  patch: AgentGoalMutation['goals'][number],
+  currentGoals: ReadonlyArray<AgentGoal>,
+): boolean {
+  if (patch.status !== 'active') return false;
+  const existing = patch.id?.trim() ? getGoalById(currentGoals, patch.id.trim()) : null;
+  const changesTitle = Boolean(
+    patch.title?.trim() && existing && patch.title.trim() !== existing.title,
+  );
+  return (
+    !changesTitle &&
+    patch.description === undefined &&
+    patch.dependencies === undefined &&
+    patch.evidence === undefined &&
+    patch.requiredCapabilities === undefined &&
+    patch.requiredResourceKinds === undefined &&
+    patch.owner === undefined &&
+    patch.successCriteria === undefined &&
+    patch.retainCurrentUserConstraint === undefined &&
+    patch.completionPolicy === undefined &&
+    patch.blockedReason === undefined
+  );
+}
+
 export function normalizeGoalMutationForApplication(
   currentGoals: ReadonlyArray<AgentGoal>,
-  mutation: AgentGoalMutation,
+  inputMutation: AgentGoalMutation,
 ): AgentGoalMutation {
+  const mutation = inputMutation;
   if (mutation.goals.length === 0) {
     return mutation;
   }
@@ -135,17 +162,22 @@ export function normalizeGoalMutationForApplication(
   if (
     mutation.action === 'activate' &&
     everyMutationGoal(mutation.goals, (patch) =>
-      Boolean(patch.id?.trim() && patch.title?.trim() && !getGoalById(currentGoals, patch.id.trim())),
+      Boolean(
+        patch.id?.trim() && patch.title?.trim() && !getGoalById(currentGoals, patch.id.trim()),
+      ),
     )
   ) {
     return {
       action: 'add',
       goals: mutation.goals.map((patch) =>
-        normalizeAddGoalPatch({
-          ...patch,
-          status: 'active',
-          completionPolicy: patch.completionPolicy ?? 'persistent',
-        }, { defaultCompletionPolicy: 'persistent' }),
+        normalizeAddGoalPatch(
+          {
+            ...patch,
+            status: 'active',
+            completionPolicy: patch.completionPolicy ?? 'persistent',
+          },
+          { defaultCompletionPolicy: 'persistent' },
+        ),
       ),
     };
   }
@@ -171,7 +203,7 @@ export function normalizeGoalMutationForApplication(
 
   if (
     mutation.action === 'update' &&
-    everyMutationGoal(mutation.goals, (patch) => patch.status === 'active')
+    everyMutationGoal(mutation.goals, (patch) => isActivationOnlyUpdate(patch, currentGoals))
   ) {
     return {
       action: 'activate',
@@ -205,9 +237,10 @@ export function applyGoalMutation(
   currentGoals: ReadonlyArray<AgentGoal>,
   mutation: AgentGoalMutation,
   now: number = Date.now(),
+  context: GoalMutationValidationContext = {},
 ): { goals: AgentGoal[]; errors: string[] } {
   const normalizedMutation = normalizeGoalMutationForApplication(currentGoals, mutation);
-  const validation = validateGoalMutation(normalizedMutation, currentGoals);
+  const validation = validateGoalMutation(normalizedMutation, currentGoals, context);
   if (!validation.valid) {
     return {
       goals: currentGoals.map((g) => ({ ...g })),
@@ -234,6 +267,7 @@ export function applyGoalMutation(
           requiredCapabilities: g.requiredCapabilities,
           requiredResourceKinds: g.requiredResourceKinds,
           successCriteria: g.successCriteria,
+          userConstraints: capturedUserConstraint(g, context),
           completionPolicy: normalizeGoalCompletionPolicy(g.completionPolicy),
           blockedReason: g.blockedReason,
           now,
@@ -272,6 +306,9 @@ export function applyGoalMutation(
             updatedAt: now,
             completedAt: now,
             blockedReason: undefined,
+            ...((existing.userConstraints?.length ?? 0) > 0
+              ? { userConstraintDeliveryPending: true as const }
+              : {}),
           };
         });
       }
@@ -331,6 +368,7 @@ export function applyGoalMutation(
     }
 
     case 'update': {
+      const activateGoalIds: string[] = [];
       for (const g of normalizedMutation.goals) {
         if (!g.id?.trim()) continue;
         goals = goals.map((existing) => {
@@ -339,7 +377,12 @@ export function applyGoalMutation(
           const nextCompletionPolicy = g.completionPolicy ?? resolveGoalCompletionPolicy(existing);
           if (g.title?.trim()) updates.title = g.title.trim();
           if (g.description !== undefined) updates.description = g.description.trim() || undefined;
-          if (g.status) updates.status = g.status;
+          if (g.status === 'active') {
+            updates.status = 'pending';
+            activateGoalIds.push(existing.id);
+          } else if (g.status) {
+            updates.status = g.status;
+          }
           if (g.dependencies) updates.dependencies = Array.from(new Set(g.dependencies));
           if (g.evidence?.length) {
             updates.evidence = Array.from(new Set([...existing.evidence, ...g.evidence]));
@@ -350,6 +393,13 @@ export function applyGoalMutation(
           if (g.successCriteria && nextCompletionPolicy === 'blocking') {
             updates.successCriteria = g.successCriteria;
           }
+          const appendedUserConstraints = capturedUserConstraint(g, context);
+          if (appendedUserConstraints?.length) {
+            updates.userConstraints = [
+              ...(existing.userConstraints ?? []),
+              ...appendedUserConstraints,
+            ];
+          }
           if (g.completionPolicy) updates.completionPolicy = g.completionPolicy;
           if (g.blockedReason !== undefined) {
             updates.blockedReason = g.blockedReason.trim() || undefined;
@@ -358,11 +408,32 @@ export function applyGoalMutation(
           return nextCompletionPolicy === 'persistent' ? removeSuccessCriteria(nextGoal) : nextGoal;
         });
       }
+      for (const goalId of activateGoalIds) {
+        const activated = activateGoalInList(goals, goalId, now);
+        if (activated.errors.length > 0) {
+          return {
+            goals: currentGoals.map((goal) => ({ ...goal })),
+            errors: activated.errors,
+          };
+        }
+        goals = activated.goals;
+      }
       break;
     }
   }
 
   return { goals, errors: [] };
+}
+
+function capturedUserConstraint(
+  patch: AgentGoalMutation['goals'][number],
+  context: GoalMutationValidationContext,
+): AgentGoal['userConstraints'] {
+  if (patch.retainCurrentUserConstraint !== true) return undefined;
+  const captured = captureCurrentUserGoalConstraint({
+    currentUserMessage: context.currentUserMessage,
+  });
+  return captured.captured ? [captured.constraint] : undefined;
 }
 
 export function addGoalEvidence(

@@ -4,17 +4,17 @@ import {
 } from '../../../src/services/context/postCompactionReinject';
 
 describe('postCompactionReinject', () => {
-  it('reinjects profile blocks and goals after compaction', () => {
+  it('reinjects stable profile context but never snapshots graph goals or constraints', () => {
     const content = buildPostCompactionSystemContent({
       summary: '[Conversation Summary]\n\n## Task Overview\nPlan dinner',
       profileSections: ['<block label="persona">Everyday assistant</block>'],
-      goalsPromptSection: '## Current Goals\n\n### Active\n- Cook dinner',
     });
 
     expect(content).toContain('[Conversation Summary]');
     expect(content).toContain('## Persistent Context');
     expect(content).toContain('persona');
-    expect(content).toContain('## Current Goals');
+    expect(content).not.toContain('## Current Goals');
+    expect(content).not.toContain('user quote=');
   });
 
   it('collects cacheable profile sections only', () => {

@@ -1,7 +1,5 @@
 import { createActor } from 'xstate';
-import {
-  normalizeAgentRunControlGraphTurnDirectives,
-} from '../../services/agents/agentControlGraphState';
+import { normalizeAgentRunControlGraphTurnDirectives } from '../../services/agents/agentControlGraphState';
 import { createAgentControlMachine, projectAgentControlGraphSnapshot } from './agentControlMachine';
 import {
   buildInitialContext,
@@ -75,6 +73,15 @@ export function getAgentControlGraphModelTurnBlocker(
   }
   if (snapshot.status === 'awaiting_review') {
     return 'Agent control graph is waiting for final review of the current candidate.';
+  }
+
+  const conflictedConstraintGoal = snapshot.goals?.find(
+    (goal) =>
+      goal.userConstraintIntegrity === 'conflict' &&
+      (goal.status !== 'completed' || goal.userConstraintDeliveryPending === true),
+  );
+  if (conflictedConstraintGoal) {
+    return `Agent control graph has conflicted user constraint state for live goal ${conflictedConstraintGoal.id}; cancel the run before further execution.`;
   }
 
   const missingToolResultIds = getMissingToolResultIds(snapshot);

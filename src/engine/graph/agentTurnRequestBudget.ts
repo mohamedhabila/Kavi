@@ -51,7 +51,6 @@ export interface CompactAgentTurnWorkingMessagesParams {
   compactionEngine: BudgetCompactionEngine;
   conversationId: string;
   currentMessages: Message[];
-  goalsPromptSection?: string | null;
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   profileSections?: ReadonlyArray<string>;
@@ -72,24 +71,15 @@ function extractGoalsPromptSection(
   return goalsSection?.text ?? null;
 }
 
-function resolveCompactionReinjectParams(params: {
-  goalsPromptSection?: string | null;
+function resolveCompactionProfileSections(params: {
   livingMemory?: LivingMemoryBridgeOutput | null;
   profileSections?: ReadonlyArray<string>;
   promptSections?: ReadonlyArray<{ text: string; cacheable?: boolean }>;
-}): {
-  goalsPromptSection?: string | null;
-  profileSections: string[];
-} {
+}): string[] {
   const profileSections =
     params.profileSections ??
     collectCacheableProfileSections(params.livingMemory?.sections ?? params.promptSections);
-  const goalsPromptSection =
-    params.goalsPromptSection ?? extractGoalsPromptSection(params.promptSections);
-  return {
-    goalsPromptSection,
-    profileSections: [...profileSections],
-  };
+  return [...profileSections];
 }
 
 function buildLivingMemoryCompactionHints(
@@ -131,16 +121,13 @@ export async function compactAgentTurnWorkingMessages(
       return { messages: params.currentMessages, compacted: false };
     }
 
-    const reinject = resolveCompactionReinjectParams({
-      goalsPromptSection: params.goalsPromptSection,
+    const profileSections = resolveCompactionProfileSections({
       livingMemory: params.livingMemory,
       profileSections: params.profileSections,
     });
-    const applied = applyCompactionResultToWorkingMessages(
-      params.currentMessages,
-      compactResult,
-      reinject,
-    );
+    const applied = applyCompactionResultToWorkingMessages(params.currentMessages, compactResult, {
+      profileSections,
+    });
     params.onCompaction?.(applied);
     return { messages: applied.messages, compacted: true };
   } catch (compactionError: unknown) {
@@ -252,10 +239,11 @@ export async function prepareAgentTurnRequestBudget(
   const contextWindow = getWorkingContextWindow(params.requestModel);
   let workingMessages = repairModelVisibleToolResultTranscript(params.workingMessages);
   const toolsForIteration = [...(params.toolsForIteration ?? [])];
-  const compactionReinject = resolveCompactionReinjectParams({
+  const compactionProfileSections = resolveCompactionProfileSections({
     livingMemory: params.livingMemory,
     promptSections: params.enrichedSystemPromptSections,
   });
+  const currentGoalsPromptSection = extractGoalsPromptSection(params.enrichedSystemPromptSections);
   let compactionApplied = false;
 
   let modelVisibleMessages = sanitizeModelVisibleWorkingMessages(workingMessages);
@@ -280,10 +268,9 @@ export async function prepareAgentTurnRequestBudget(
         compactionEngine: params.compactionEngine,
         conversationId: params.conversationId,
         currentMessages: workingMessages,
-        goalsPromptSection: compactionReinject.goalsPromptSection,
         livingMemory: params.livingMemory,
         onCompaction: params.onCompaction,
-        profileSections: compactionReinject.profileSections,
+        profileSections: compactionProfileSections,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages),
         forceTier,
         failureLabel: 'Pre-flight compaction failed, continuing without compaction',
@@ -355,11 +342,11 @@ export async function prepareAgentTurnRequestBudget(
         })
       : undefined;
 
-  const memoryCacheableTokens = compactionReinject.profileSections.reduce(
+  const memoryCacheableTokens = compactionProfileSections.reduce(
     (sum, section) => sum + estimateTokens(section),
     0,
   );
-  const goalsTokens = estimateTokens(compactionReinject.goalsPromptSection ?? '');
+  const goalsTokens = estimateTokens(currentGoalsPromptSection ?? '');
   const memoryDynamicTokens = Math.max(
     0,
     Math.round((params.livingMemory?.recalledFactCount ?? 0) * 48),

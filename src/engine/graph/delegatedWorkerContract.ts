@@ -44,6 +44,7 @@ export function buildGraphDelegatedWorkerContract(
       handoff: input.normalizedPrompt,
       requirements: goal.requiredCapabilities,
       successCriteria: goal.successCriteria,
+      userConstraints: goal.userConstraints?.map((constraint) => constraint.text),
       dependencies: goal.dependencies,
       availableWorkerTools,
     }),

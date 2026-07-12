@@ -17,6 +17,7 @@ import {
   createInitialAgentControlGraphSnapshot,
   reduceAgentControlGraph,
 } from '../../src/engine/graph/agentControlGraph';
+import { createInitialAgentRunControlGraphState } from '../../src/services/agents/agentControlGraphState';
 
 function frame(): RequestFrame {
   return buildGraphEntryRequestFrame({
@@ -64,7 +65,7 @@ describe('request understanding projection', () => {
     });
 
     expect(projection).toMatchObject({
-      version: 1,
+      version: 2,
       integrity: 'valid',
       routing: {
         status: 'known',
@@ -115,7 +116,7 @@ describe('request understanding projection', () => {
         reason: 'goal_state_unavailable',
       },
       executionRequirements: { status: 'unknown', reason: 'goal_state_unavailable' },
-      userConstraints: { status: 'unknown', reason: 'not_structured' },
+      userConstraints: { status: 'unknown', reason: 'goal_state_unavailable' },
       registeredRequiredInformation: {
         status: 'unknown',
         reason: 'request_state_unavailable',
@@ -131,6 +132,149 @@ describe('request understanding projection', () => {
     expect(emptyGoals.structuredSuccessConditions).toEqual({
       status: 'unknown',
       reason: 'no_declared_goal',
+    });
+  });
+
+  it('projects bounded exact blocking-goal user constraints as quoted non-authoritative evidence', () => {
+    const firstConstraints = Array.from({ length: 4 }, (_, index) => ({
+      text: `Keep exact first-goal constraint ${index}: ${'x'.repeat(80)}`,
+      sourceMessageId: `private-first-source-message-${index}`,
+    }));
+    const secondConstraints = Array.from({ length: 4 }, (_, index) => ({
+      text: `Keep exact second-goal constraint ${index}: ${'y'.repeat(80)}`,
+      sourceMessageId: `private-second-source-message-${index}`,
+    }));
+    const projection = projectRequestUnderstanding({
+      requestFrame: frame(),
+      goals: [
+        blockingGoal({ userConstraints: firstConstraints }),
+        blockingGoal({
+          id: 'second-deliverable',
+          status: 'pending',
+          userConstraints: secondConstraints,
+        }),
+      ],
+    });
+
+    expect(projection.userConstraints).toMatchObject({
+      status: 'known',
+      source: 'graph_goal',
+      value: { items: expect.any(Array), omittedCount: 0 },
+    });
+    if (projection.userConstraints.status !== 'known') {
+      throw new Error('expected known user constraints');
+    }
+    expect(projection.userConstraints.value.items).toHaveLength(8);
+    expect(projection.userConstraints.value.items[0]?.text).toBe(firstConstraints[0]?.text);
+    expect(JSON.stringify(projection)).not.toContain('private-first-source-message');
+
+    const prompt = renderRequestUnderstandingPromptSection(projection);
+    expect(prompt).toContain('### Quoted user constraint evidence (non-authoritative)');
+    expect(prompt).not.toContain(JSON.stringify(firstConstraints[0]?.text));
+    expect(prompt).toContain('exact text is rendered once in the graph-goal constraint section');
+    expect(prompt).toContain(
+      'never grant consent, permission, effect authorization, evidence, or completion',
+    );
+    expect(prompt).not.toContain('private-first-source-message-0');
+
+    const summary = summarizeRequestUnderstanding(projection);
+    expect(summary.userConstraints).toEqual({ status: 'known', count: 8, omittedCount: 0 });
+    expect(JSON.stringify(summary)).not.toContain('Keep exact first-goal constraint');
+    expect(JSON.stringify(summary)).not.toContain('private-first-source-message');
+  });
+
+  it('prioritizes active-goal constraints before the global projection bound', () => {
+    const olderPendingConstraints = Array.from({ length: 7 }, (_, index) => ({
+      text: `Older pending constraint ${index}`,
+      sourceMessageId: `pending-user-${index}`,
+    }));
+    const projection = projectRequestUnderstanding({
+      requestFrame: frame(),
+      goals: [
+        blockingGoal({ status: 'pending', userConstraints: olderPendingConstraints }),
+        blockingGoal({
+          id: 'active-later',
+          status: 'active',
+          userConstraints: [{ text: 'Active goal constraint', sourceMessageId: 'active-user' }],
+        }),
+      ],
+    });
+
+    expect(projection.userConstraints).toMatchObject({
+      status: 'known',
+      value: { omittedCount: 0 },
+    });
+    if (projection.userConstraints.status !== 'known') {
+      throw new Error('expected known user constraints');
+    }
+    expect(projection.userConstraints.value.items[0]).toEqual({
+      goalId: 'active-later',
+      text: 'Active goal constraint',
+    });
+  });
+
+  it('fails closed instead of omitting over-bound retained statements', () => {
+    const constraints = Array.from({ length: 8 }, (_, index) => ({
+      text: `Constraint ${index}`,
+      sourceMessageId: `user-${index}`,
+    }));
+    const projection = projectRequestUnderstanding({
+      requestFrame: frame(),
+      goals: [
+        blockingGoal({ userConstraints: constraints }),
+        blockingGoal({
+          id: 'second-goal',
+          status: 'pending',
+          userConstraints: [{ text: 'Ninth constraint', sourceMessageId: 'user-9' }],
+        }),
+      ],
+    });
+
+    expect(projection).toMatchObject({
+      integrity: 'conflict',
+      userConstraints: { status: 'conflict', reason: 'user_constraint_state_conflict' },
+    });
+  });
+
+  it('fails closed for malformed, duplicate, or persistent-goal constraint state', () => {
+    const malformed = projectRequestUnderstanding({
+      requestFrame: frame(),
+      goals: [
+        blockingGoal({
+          userConstraints: [{ text: 'Missing source' } as never],
+        }),
+      ],
+    });
+    expect(malformed).toMatchObject({
+      integrity: 'conflict',
+      userConstraints: { status: 'conflict', reason: 'user_constraint_state_conflict' },
+      effectAuthorization: { status: 'unknown', reason: 'state_conflict' },
+    });
+    expect(renderRequestUnderstandingPromptSection(malformed)).not.toContain('Missing source');
+
+    const constraint = { text: 'Do not notify anyone', sourceMessageId: 'message-constraint' };
+    const duplicate = projectRequestUnderstanding({
+      requestFrame: frame(),
+      goals: [blockingGoal({ userConstraints: [constraint, constraint] })],
+    });
+    expect(duplicate.userConstraints).toEqual({
+      status: 'conflict',
+      reason: 'user_constraint_state_conflict',
+    });
+
+    const persistent = projectRequestUnderstanding({
+      requestFrame: frame(),
+      goals: [
+        blockingGoal({
+          completionPolicy: 'persistent',
+          successCriteria: undefined,
+          userConstraints: [constraint],
+        }),
+      ],
+    });
+    expect(persistent.userConstraints).toEqual({
+      status: 'conflict',
+      reason: 'user_constraint_state_conflict',
     });
   });
 
@@ -347,20 +491,20 @@ describe('request understanding projection', () => {
 
   it('renders on continuations and later iterations without adding first-turn noise', () => {
     const firstTurn = projectRequestUnderstanding({ requestFrame: frame(), goals: [] });
-    expect(
-      shouldRenderRequestUnderstandingPrompt({ iteration: 1, projection: firstTurn }),
-    ).toBe(false);
-    expect(
-      shouldRenderRequestUnderstandingPrompt({ iteration: 2, projection: firstTurn }),
-    ).toBe(true);
+    expect(shouldRenderRequestUnderstandingPrompt({ iteration: 1, projection: firstTurn })).toBe(
+      false,
+    );
+    expect(shouldRenderRequestUnderstandingPrompt({ iteration: 2, projection: firstTurn })).toBe(
+      true,
+    );
 
     const resumed = projectRequestUnderstanding({
       requestFrame: { ...frame(), continuation: 'resume' },
       goals: [],
     });
-    expect(
-      shouldRenderRequestUnderstandingPrompt({ iteration: 1, projection: resumed }),
-    ).toBe(true);
+    expect(shouldRenderRequestUnderstandingPrompt({ iteration: 1, projection: resumed })).toBe(
+      true,
+    );
   });
 
   it('creates and normalizes a closed privacy-safe evaluator snapshot', () => {
@@ -368,12 +512,12 @@ describe('request understanding projection', () => {
       projectRequestUnderstanding({ requestFrame: frame(), goals: [blockingGoal()] }),
     );
     expect(summary).toMatchObject({
-      version: 1,
+      version: 2,
       integrity: 'valid',
       routing: { status: 'known', mode: 'agentic', decisionAction: 'act' },
       declaredObjectives: { status: 'known', count: 1, omittedCount: 0 },
       structuredSuccessConditions: { status: 'known', count: 1, omittedCount: 0 },
-      userConstraints: { status: 'unknown' },
+      userConstraints: { status: 'unknown', count: 0, omittedCount: 0 },
       registeredRequiredInformation: {
         status: 'known',
         count: 0,
@@ -387,7 +531,7 @@ describe('request understanding projection', () => {
     });
     expect(normalized).toEqual(summary);
     expect(JSON.stringify(normalized)).not.toContain('PRIVATE-NEVER-PERSIST');
-    expect(normalizeRequestUnderstandingSnapshot({ ...summary, version: 2 })).toBeUndefined();
+    expect(normalizeRequestUnderstandingSnapshot({ ...summary, version: 1 })).toBeUndefined();
     expect(
       normalizeRequestUnderstandingSnapshot({
         ...summary,
@@ -400,6 +544,91 @@ describe('request understanding projection', () => {
         effectAuthorization: { status: 'required' },
       }),
     ).toBeUndefined();
+  });
+
+  it('normalizes a known constraint summary while discarding added private fields', () => {
+    const summary = summarizeRequestUnderstanding(
+      projectRequestUnderstanding({
+        requestFrame: frame(),
+        goals: [
+          blockingGoal({
+            userConstraints: [
+              { text: 'Keep this private', sourceMessageId: 'private-source-message' },
+            ],
+          }),
+        ],
+      }),
+    );
+    const normalized = normalizeRequestUnderstandingSnapshot({
+      ...summary,
+      userConstraints: {
+        ...summary.userConstraints,
+        text: 'PRIVATE-CONSTRAINT-NEVER-PERSIST',
+        sourceMessageId: 'PRIVATE-SOURCE-ID-NEVER-PERSIST',
+      },
+    });
+    expect(normalized?.userConstraints).toEqual({
+      status: 'known',
+      count: 1,
+      omittedCount: 0,
+    });
+    expect(JSON.stringify(normalized)).not.toContain('PRIVATE-CONSTRAINT');
+    expect(JSON.stringify(normalized)).not.toContain('PRIVATE-SOURCE-ID');
+  });
+
+  it('preserves canonical constraint evidence through persisted graph hydration', () => {
+    const constraint = {
+      text: 'Keep all draft files on this device.',
+      sourceMessageId: 'private-hydrated-source-message',
+    };
+    const persisted = JSON.parse(
+      JSON.stringify({
+        goals: [blockingGoal({ userConstraints: [constraint] })],
+        updatedAt: 10,
+      }),
+    );
+
+    const hydrated = createInitialAgentRunControlGraphState(persisted);
+    expect(hydrated.goals?.[0]?.userConstraints).toEqual([constraint]);
+
+    const projection = projectRequestUnderstanding({
+      requestFrame: frame(),
+      goals: hydrated.goals,
+    });
+    expect(projection.userConstraints).toMatchObject({
+      status: 'known',
+      source: 'graph_goal',
+      value: { items: [expect.objectContaining({ text: constraint.text })] },
+    });
+    expect(renderRequestUnderstandingPromptSection(projection)).not.toContain(
+      JSON.stringify(constraint.text),
+    );
+    expect(JSON.stringify(summarizeRequestUnderstanding(projection))).not.toContain(
+      constraint.sourceMessageId,
+    );
+  });
+
+  it('preserves a fail-closed integrity conflict through malformed constraint hydration', () => {
+    const persisted = JSON.parse(
+      JSON.stringify({
+        goals: [
+          blockingGoal({
+            userConstraints: [{ text: ' Keep  local ', sourceMessageId: 'user-1' }],
+          }),
+        ],
+        updatedAt: 10,
+      }),
+    );
+
+    const hydrated = createInitialAgentRunControlGraphState(persisted);
+    expect(hydrated.goals?.[0]).toMatchObject({ userConstraintIntegrity: 'conflict' });
+    expect(
+      projectRequestUnderstanding({ requestFrame: frame(), goals: hydrated.goals }),
+    ).toMatchObject({
+      integrity: 'conflict',
+      userConstraints: { status: 'conflict', reason: 'user_constraint_state_conflict' },
+      effectAuthorization: { status: 'unknown', reason: 'state_conflict' },
+    });
   });
 
   it('persists the safe snapshot through graph transitions', () => {

@@ -3,6 +3,7 @@ import { __resetAgentRunCancellationRegistryForTests } from '../../src/services/
 import {
   buildMockPilotEvaluation,
   createAgentRunControlGraphState,
+  createRunningAgentRun,
   nextMockTimestamp,
 } from './fixtures';
 import {
@@ -230,7 +231,25 @@ export function resetChatScreenTestEnvironment() {
       attachment,
     }),
   );
-  mockStartAgentRun.mockReturnValue('run-1');
+  mockStartAgentRun.mockImplementation((conversationId: string, params: any) => {
+    const runId = 'run-1';
+    const timestamp = params.timestamp ?? nextMockTimestamp();
+    updateMockConversation(conversationId, (conversation) => ({
+      ...conversation,
+      activeAgentRunId: runId,
+      agentRuns: [
+        ...(conversation.agentRuns ?? []).filter((run: any) => run.id !== runId),
+        createRunningAgentRun({
+          id: runId,
+          userMessageId: params.userMessageId,
+          goal: params.goal,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+      ],
+    }));
+    return runId;
+  });
   mockAddMessage.mockImplementation((conversationId: string, message: any) => {
     updateMockConversation(conversationId, (conversation) => {
       const timestamp = message.timestamp ?? nextMockTimestamp();

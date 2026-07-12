@@ -20,6 +20,7 @@ import type {
   TerminalAgentControlGraphEvent,
   TerminalAgentControlGraphStatus,
 } from './agentControlGraphTypes';
+import { abandonGoalUserConstraintDelivery } from '../goals/userConstraintDelivery';
 
 export function normalizeToolCallRefs(
   calls: ReadonlyArray<AgentControlToolCallRef> | undefined,
@@ -71,6 +72,9 @@ export function buildTerminalAssignment(
 ): Partial<AgentControlGraphMachineContext> {
   const timestamp = getTimestamp(event);
   return {
+    ...(event.type === 'CANCELLED'
+      ? { goals: abandonGoalUserConstraintDelivery(context.goals) }
+      : {}),
     expectedToolCalls: [],
     observedToolResults: [],
     pendingAsyncCount: 0,

@@ -73,7 +73,7 @@ describe('final assistant response helpers', () => {
     );
   });
 
-  it('detects a delivered final response even when the user anchor was compacted away', () => {
+  it('rejects an older final when a newer owning projection remains incomplete after compaction', () => {
     const messages: Message[] = [
       {
         id: 'compact-1',
@@ -119,10 +119,8 @@ describe('final assistant response helpers', () => {
       runStartedAt: 90,
     };
 
-    expect(hasDeliveredFinalAssistantResponse(messages, runScope)).toBe(true);
-    expect(getLatestFinalAssistantResponsePreview(messages, runScope)).toBe(
-      'C653A C653B C653P C653W',
-    );
+    expect(hasDeliveredFinalAssistantResponse(messages, runScope)).toBe(false);
+    expect(getLatestFinalAssistantResponsePreview(messages, runScope)).toBeUndefined();
   });
 
   it('does not treat intermediate action text as the delivered final response', () => {
@@ -160,7 +158,7 @@ describe('final assistant response helpers', () => {
     expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
   });
 
-  it('keeps a delivered final response even when later tool or worker artifacts are appended', () => {
+  it('rejects an older final after a newer owning tool projection', () => {
     const messages: Message[] = [
       {
         id: 'msg-user',
@@ -211,9 +209,57 @@ describe('final assistant response helpers', () => {
       },
     ];
 
+    expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
+    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+  });
+
+  it('never treats worker event messages as the owning run final projection', () => {
+    const messages: Message[] = [
+      { id: 'msg-user', role: 'user', content: 'Finish the task', timestamp: 1 },
+      {
+        id: 'msg-worker',
+        role: 'assistant',
+        content: 'Worker completed the delegated task.',
+        timestamp: 2,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'completed',
+          snapshot: makeSnapshot({ status: 'completed', updatedAt: 2 }),
+        },
+      },
+    ];
+
+    expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
+    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+  });
+
+  it('does not let a later worker event supersede a settled owning projection', () => {
+    const messages: Message[] = [
+      { id: 'msg-user', role: 'user', content: 'Finish the task', timestamp: 1 },
+      {
+        id: 'msg-final',
+        role: 'assistant',
+        content: 'The owning response is complete.',
+        timestamp: 2,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      },
+      {
+        id: 'msg-worker',
+        role: 'assistant',
+        content: 'Worker event appended later.',
+        timestamp: 3,
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'completed',
+          snapshot: makeSnapshot({ status: 'completed', updatedAt: 3 }),
+        },
+      },
+    ];
+
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(true);
     expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBe(
-      'C661A C661B C661P C661W',
+      'The owning response is complete.',
     );
   });
 

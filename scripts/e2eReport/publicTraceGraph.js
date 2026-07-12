@@ -56,26 +56,16 @@ const SAFE_GRAPH_AUDIT_TYPES = new Set([
   'TOOL_SURFACE_TOKEN_AUDIT',
   'TURN_DIRECTIVES_CONSUMED',
   'TURN_DIRECTIVES_RECORDED',
+  'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED',
   'YIELDED',
 ]);
 
 const SAFE_REQUEST_UNDERSTANDING_FIELD_STATUSES = new Set(['known', 'unknown', 'conflict']);
 const SAFE_REQUEST_UNDERSTANDING_INTEGRITY = new Set(['valid', 'conflict']);
 const SAFE_REQUEST_MODES = new Set(['chitchat', 'agentic']);
-const SAFE_REQUEST_INPUT_KINDS = new Set([
-  'empty',
-  'text',
-  'attachments',
-  'text_and_attachments',
-]);
+const SAFE_REQUEST_INPUT_KINDS = new Set(['empty', 'text', 'attachments', 'text_and_attachments']);
 const SAFE_REQUEST_CONTINUATIONS = new Set(['new', 'resume', 'resume_waiting_async']);
-const SAFE_REQUEST_DECISION_ACTIONS = new Set([
-  'act',
-  'clarify',
-  'wait',
-  'decline',
-  'consent',
-]);
+const SAFE_REQUEST_DECISION_ACTIONS = new Set(['act', 'clarify', 'wait', 'decline', 'consent']);
 const SAFE_REQUEST_DECISION_REASONS = new Set([
   'actionable_input',
   'requirements_resolved',
@@ -159,7 +149,7 @@ function projectRequestUnderstandingRouting(value) {
 
 function projectRequestUnderstanding(value) {
   const source = asRecord(value);
-  if (!source || source.version !== 1) return undefined;
+  if (!source || source.version !== 2) return undefined;
   const integrity = safeEnum(source.integrity, SAFE_REQUEST_UNDERSTANDING_INTEGRITY);
   const routing = projectRequestUnderstandingRouting(source.routing);
   const declaredObjectives = projectRequestUnderstandingList(source.declaredObjectives);
@@ -167,11 +157,11 @@ function projectRequestUnderstanding(value) {
     source.structuredSuccessConditions,
   );
   const executionRequirements = projectRequestUnderstandingList(source.executionRequirements);
+  const userConstraints = projectRequestUnderstandingList(source.userConstraints);
   const registeredRequiredInformation = projectRequestUnderstandingList(
     source.registeredRequiredInformation,
     true,
   );
-  const userConstraints = asRecord(source.userConstraints);
   const effectAuthorization = asRecord(source.effectAuthorization);
   const effectAuthorizationStatus = effectAuthorization
     ? safeEnum(effectAuthorization.status, SAFE_EFFECT_AUTHORIZATION_STATUSES)
@@ -183,7 +173,7 @@ function projectRequestUnderstanding(value) {
     !structuredSuccessConditions ||
     !executionRequirements ||
     !registeredRequiredInformation ||
-    userConstraints?.status !== 'unknown' ||
+    !userConstraints ||
     !effectAuthorizationStatus
   ) {
     return undefined;
@@ -196,6 +186,7 @@ function projectRequestUnderstanding(value) {
     declaredObjectives.status,
     structuredSuccessConditions.status,
     executionRequirements.status,
+    userConstraints.status,
     registeredRequiredInformation.status,
   ];
   if (integrity === 'valid' && fieldStatuses.includes('conflict')) {
@@ -213,13 +204,13 @@ function projectRequestUnderstanding(value) {
     return undefined;
   }
   return {
-    version: 1,
+    version: 2,
     integrity,
     routing,
     declaredObjectives,
     structuredSuccessConditions,
     executionRequirements,
-    userConstraints: { status: 'unknown' },
+    userConstraints,
     registeredRequiredInformation,
     effectAuthorization: { status: effectAuthorizationStatus },
   };
@@ -246,7 +237,7 @@ function projectAuditEvent(value) {
     }
     projected.iteration = iteration;
   }
-  if (source.detailHash !== undefined) {
+  if (source.detailHash !== undefined && type !== 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED') {
     const detailHash = projectHash(source.detailHash);
     if (!detailHash) {
       return null;

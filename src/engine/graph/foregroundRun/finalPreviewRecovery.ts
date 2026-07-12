@@ -5,12 +5,13 @@ import {
 } from '../../../services/agents/lifecycle/finalizePhase';
 import {
   buildAgentRunMessageScope,
-  getLatestFinalAssistantResponsePreview,
+  getLatestAssistantProjectionFinalResponsePreview,
 } from '../../../services/agents/lifecycle/agentRunStateMachine';
 import { useChatStore } from '../../../store/useChatStore';
 import { AgentRun } from '../../../types/agentRun';
 import { truncateLogDetail } from '../../../utils/logDetail';
 import { EnsureAgentRunFinalResponse, ResolvedFinalizationProviderContext } from './contracts';
+import { inspectPersistedAgentRunFinalDelivery } from '../persistedFinalDelivery';
 
 export async function recoverForegroundAgentRunFinalPreview(params: {
   conversationId: string;
@@ -21,9 +22,9 @@ export async function recoverForegroundAgentRunFinalPreview(params: {
   signal?: AbortSignal;
   status: Exclude<AgentRun['status'], 'running'>;
   timestamp?: number;
-}): Promise<{ preview?: string; recovered: boolean }> {
+}): Promise<{ preview?: string; recovered: boolean; delivered: boolean }> {
   if (!params.runId) {
-    return { recovered: false };
+    return { recovered: false, delivered: false };
   }
 
   throwIfAbortSignalTriggered(params.signal);
@@ -35,18 +36,26 @@ export async function recoverForegroundAgentRunFinalPreview(params: {
     (candidate) => candidate.id === params.runId,
   );
   if (!latestConversation || !targetRun) {
-    return { recovered: false };
+    return { recovered: false, delivered: false };
   }
   const runMessageScope = buildAgentRunMessageScope(targetRun);
 
-  const existingPreview = getLatestFinalAssistantResponsePreview(
+  const existingPreview = getLatestAssistantProjectionFinalResponsePreview(
     latestConversation.messages,
     runMessageScope,
   );
-  if (existingPreview) {
+  const existingDelivery = inspectPersistedAgentRunFinalDelivery({
+    messages: latestConversation.messages,
+    run: targetRun,
+  });
+  if (
+    existingPreview &&
+    (params.status !== 'completed' || existingDelivery.state === 'settled')
+  ) {
     return {
       preview: truncateLogDetail(existingPreview) || existingPreview,
       recovered: false,
+      delivered: true,
     };
   }
 
@@ -63,10 +72,10 @@ export async function recoverForegroundAgentRunFinalPreview(params: {
       status: params.status,
     })
   ) {
-    return { recovered: false };
+    return { recovered: false, delivered: false };
   }
 
-  const finalResponsePreview = await params.ensureAgentRunFinalResponse({
+  await params.ensureAgentRunFinalResponse({
     conversationId: params.conversationId,
     runId: params.runId,
     status: params.status,
@@ -78,8 +87,29 @@ export async function recoverForegroundAgentRunFinalPreview(params: {
 
   throwIfAbortSignalTriggered(params.signal);
 
+  const settledConversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === params.conversationId);
+  const settledRun = settledConversation?.agentRuns?.find(
+    (candidate) => candidate.id === params.runId,
+  );
+  if (!settledConversation || !settledRun) {
+    return { recovered: false, delivered: false };
+  }
+  const settledPreview = getLatestAssistantProjectionFinalResponsePreview(
+    settledConversation.messages,
+    buildAgentRunMessageScope(settledRun),
+  );
+  const settledDelivery = inspectPersistedAgentRunFinalDelivery({
+    messages: settledConversation.messages,
+    run: settledRun,
+  });
+  const delivered =
+    !!settledPreview &&
+    (params.status !== 'completed' || settledDelivery.state === 'settled');
   return {
-    preview: finalResponsePreview,
-    recovered: !!finalResponsePreview,
+    ...(delivered ? { preview: truncateLogDetail(settledPreview) || settledPreview } : {}),
+    recovered: delivered,
+    delivered,
   };
 }

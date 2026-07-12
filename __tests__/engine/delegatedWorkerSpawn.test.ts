@@ -142,4 +142,80 @@ describe('resolveDelegatedWorkerSpawnPlan', () => {
       },
     });
   });
+
+  it.each([
+    {
+      label: 'explicit workstream',
+      request: { prompt: 'Run delegated research.', workstreamId: 'completed-goal' },
+    },
+    {
+      label: 'goal scope',
+      request: {
+        prompt: 'Run delegated research.',
+        goalScope: { goalIds: ['completed-goal'] },
+      },
+    },
+  ])('rejects a completed goal selected by $label', ({ request }) => {
+    const conversation = buildConversation([
+      {
+        id: 'completed-goal',
+        title: 'Completed work',
+        status: 'completed',
+        dependencies: [],
+        evidence: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]);
+
+    const plan = resolveDelegatedWorkerSpawnPlan({
+      request,
+      conversation,
+      parentConversationId: conversation.id,
+      agentRunId: conversation.activeAgentRunId,
+      liveWorkers: [],
+    });
+
+    expect(plan.status).toBe('error');
+    expect(plan.response).toMatchObject({
+      status: 'error',
+      code: 'invalid_goal_scope',
+      repair: { invalidFields: ['goalScope', 'workstreamId'] },
+    });
+  });
+
+  it('blocks a selected workstream with conflicted constraint state', () => {
+    const conversation = buildConversation([
+      {
+        id: 'worker-goal',
+        title: 'Delegated work',
+        status: 'active',
+        completionPolicy: 'blocking',
+        dependencies: [],
+        evidence: [],
+        successCriteria: ['evidence.tool:read_file'],
+        userConstraintIntegrity: 'conflict',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]);
+
+    const plan = resolveDelegatedWorkerSpawnPlan({
+      request: {
+        prompt: 'Run delegated research.',
+        workstreamId: 'worker-goal',
+      },
+      conversation,
+      parentConversationId: conversation.id,
+      agentRunId: conversation.activeAgentRunId,
+      liveWorkers: [],
+    });
+
+    expect(plan.status).toBe('blocked');
+    expect(plan.response).toEqual({
+      status: 'blocked',
+      code: 'user_constraint_state_conflict',
+      error: 'Goal "worker-goal" has conflicted user constraint state.',
+    });
+  });
 });

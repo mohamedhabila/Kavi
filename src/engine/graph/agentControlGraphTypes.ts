@@ -83,6 +83,10 @@ export type AgentControlGraphEvent =
       timestamp?: number;
     }
   | {
+      type: 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED';
+      timestamp?: number;
+    }
+  | {
       type: 'REQUEST_UNDERSTANDING_PROJECTED';
       projection: RequestUnderstandingSnapshot;
       iteration: number;

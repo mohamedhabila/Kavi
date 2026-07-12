@@ -1,16 +1,14 @@
 import type { OrchestratorCallbacks } from '../../../src/engine/orchestrator';
-import {
-  fireEvent,
-  render,
-  waitFor,
-  ChatScreen,
-} from '../../../testSupport/chatScreen/runtime';
+import { fireEvent, render, waitFor, ChatScreen } from '../../../testSupport/chatScreen/runtime';
 import {
   cleanupChatScreenTestEnvironment,
   resetChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState, updateMockConversation } from '../../../testSupport/chatScreen/state';
-import { createRunningAgentRun } from '../../../testSupport/chatScreen/fixtures';
+import {
+  createAgentRunControlGraphState,
+  createRunningAgentRun,
+} from '../../../testSupport/chatScreen/fixtures';
 import {
   mockAddMessage,
   mockUpdateMessage,
@@ -140,11 +138,23 @@ describe('ChatScreen agent callbacks', () => {
       ];
 
       await act(async () => {
-        callbacks.onAssistantMessage('final content', [], {
-          openaiResponseOutput: [
-            { id: 'msg_prev', type: 'message', role: 'assistant', content: [] },
-          ],
-        });
+        callbacks.onAssistantMessage(
+          'final content',
+          [],
+          {
+            openaiResponseOutput: [
+              { id: 'msg_prev', type: 'message', role: 'assistant', content: [] },
+            ],
+          },
+          {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'task_complete',
+          },
+        );
+        callbacks.onAgentControlGraphStateChange(
+          createAgentRunControlGraphState({ status: 'awaiting_review' }),
+        );
         callbacks.onToolMessage('tc1', JSON.stringify({ status: 'error', error: 'Tool failed' }));
         callbacks.onUsage({
           inputTokens: 40,

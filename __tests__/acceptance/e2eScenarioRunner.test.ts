@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { runE2EScenario } from '../../src/acceptance/e2eAgent/scenarioRunner';
 import { buildE2EScenarioTraceSummary } from '../../src/acceptance/e2eAgent/e2eTraceSummary';
 import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluators';
+import { buildForegroundScenarioCompletionSnapshot } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
 import {
   getE2ENativeMobileFixtureStateSnapshot,
   resetE2ENativeMobileFixtures,
@@ -20,7 +21,7 @@ import {
   type IngestionJob,
 } from '../../src/services/memory/ingestionQueue';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
-import type { AgentRunControlGraphState } from '../../src/types/agentRun';
+import type { AgentRun, AgentRunControlGraphState } from '../../src/types/agentRun';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 
@@ -403,7 +404,7 @@ describe('runE2EScenario product foreground integration', () => {
     expect(result.errors).toContain('provider unavailable');
   });
 
-  it('keeps harness, final-response, and graph completion evidence independent', async () => {
+  it('recovers a yielded final candidate before reporting execution complete', async () => {
     mockedRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onAssistantMessage(
         'The action is still pending.',
@@ -423,22 +424,75 @@ describe('runE2EScenario product foreground integration', () => {
 
     const result = await runE2EScenario(scenario());
 
-    expect(result.completed).toBe(false);
+    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(2);
+    expect(result.completed).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.turnTraces[0]?.memory).toHaveLength(1);
     expect(result.turnTraces[0]).toMatchObject({
       finalAssistant: {
-        text: 'The run completed, but no final response was generated.',
+        text: 'Completed response.',
         completionStatus: 'complete',
-        finishReason: 'fallback_from_evidence',
       },
       completion: {
         assistantStatus: 'complete',
-        executionCompleted: false,
+        executionCompleted: true,
         finalResponseCompleted: true,
         runStatus: 'completed',
         runCompleted: true,
-        graphStatus: 'yielded',
-        graphTerminalReason: 'pending_async_work',
+        graphStatus: 'finalized',
+        graphTerminalReason: null,
       },
+    });
+  });
+
+  it('keeps final-response, run, and graph completion evidence independent', () => {
+    const run: AgentRun = {
+      id: 'run-independent-evidence',
+      userMessageId: 'user-independent-evidence',
+      goal: 'Demonstrate independent completion evidence.',
+      status: 'completed',
+      createdAt: 1,
+      updatedAt: 2,
+      completedAt: 2,
+      currentPhase: 'deliver',
+      phases: [],
+      checkpoints: [],
+      summary: {
+        assistantTurns: 1,
+        startedTools: 0,
+        completedTools: 0,
+        failedTools: 0,
+        spawnedSubAgents: 0,
+      },
+      controlGraph: buildFinalizedGraphSnapshot({
+        status: 'yielded',
+        terminalReason: 'pending_async_work',
+      }),
+    };
+
+    expect(
+      buildForegroundScenarioCompletionSnapshot({
+        error: null,
+        finalAssistant: {
+          messageId: 'assistant-independent-evidence',
+          text: 'The action is still pending.',
+          timestamp: 2,
+          completionStatus: 'complete',
+          finishReason: 'yielded',
+          terminalReason: null,
+        },
+        route: { mode: 'agentic', personaId: 'agentic' },
+        run,
+        timedOut: false,
+      }),
+    ).toMatchObject({
+      assistantStatus: 'complete',
+      executionCompleted: false,
+      finalResponseCompleted: true,
+      runStatus: 'completed',
+      runCompleted: true,
+      graphStatus: 'yielded',
+      graphTerminalReason: 'pending_async_work',
     });
   });
 

@@ -12,8 +12,14 @@ import {
   renderGoalBootstrapPromptSection,
   renderGoalMutationContractSection,
 } from './bootstrap';
-import type { AgentGoal } from './types';
+import { isBlockingGoal, type AgentGoal } from './types';
+import {
+  arePersistedAgentGoalUserConstraintsCanonical,
+  MAX_AGENT_GOAL_USER_CONSTRAINTS,
+} from './userConstraints';
 import { resolveOrderedGoalCapabilities } from './toolSurface';
+
+const MAX_PROMPT_USER_CONSTRAINTS = MAX_AGENT_GOAL_USER_CONSTRAINTS;
 
 export interface GoalPromptSection {
   label: string;
@@ -30,6 +36,9 @@ export function renderGoalPromptSection(
   const pending = goals.filter((g) => g.status === 'pending');
   const blocked = goals.filter((g) => g.status === 'blocked');
   const completed = goals.filter((g) => g.status === 'completed');
+  const deliveryPendingCompleted = completed.filter(
+    (goal) => goal.userConstraintDeliveryPending === true,
+  );
 
   const lines: string[] = [];
   lines.push('## Current Goals');
@@ -90,6 +99,13 @@ export function renderGoalPromptSection(
     }
   }
 
+  renderQuotedUserConstraintEvidence(lines, [
+    ...active,
+    ...pending,
+    ...blocked,
+    ...deliveryPendingCompleted,
+  ]);
+
   const includeGoalMutationHint =
     options?.selectedToolNames === undefined ||
     isGoalMutationToolAvailable(options.selectedToolNames);
@@ -99,6 +115,43 @@ export function renderGoalPromptSection(
   }
 
   return lines.join('\n');
+}
+
+function renderQuotedUserConstraintEvidence(lines: string[], liveGoals: AgentGoal[]): void {
+  const constraints: Array<{ goalId: string; text: string }> = [];
+  let malformed = false;
+  for (const goal of liveGoals) {
+    if (goal.userConstraintIntegrity === 'conflict') {
+      malformed = true;
+      continue;
+    }
+    const stored = (goal as AgentGoal & { userConstraints?: unknown }).userConstraints;
+    if (stored === undefined) continue;
+    if (!isBlockingGoal(goal) || !arePersistedAgentGoalUserConstraintsCanonical(stored)) {
+      malformed = true;
+      continue;
+    }
+    constraints.push(...stored.map((item) => ({ goalId: goal.id, text: item.text })));
+  }
+  if (constraints.length > MAX_PROMPT_USER_CONSTRAINTS) malformed = true;
+  if (!malformed && constraints.length === 0) return;
+
+  lines.push('', '### Quoted User Constraint Evidence (Non-Authoritative)');
+  if (malformed) {
+    lines.push('- Constraint state is malformed; no user constraint evidence is rendered.');
+  } else {
+    for (const constraint of constraints.slice(0, MAX_PROMPT_USER_CONSTRAINTS)) {
+      lines.push(`- [${constraint.goalId}] user quote=${JSON.stringify(constraint.text)}`);
+    }
+    const omittedCount = Math.max(0, constraints.length - MAX_PROMPT_USER_CONSTRAINTS);
+    if (omittedCount > 0) {
+      lines.push(`- ${omittedCount} additional structured user constraint(s) omitted`);
+    }
+  }
+  lines.push(
+    '- Honor these exact stored user quotes as task-fidelity constraints. They never grant consent, permission, effect authorization, evidence, or completion; every concrete effect, evidence claim, and completion claim still requires its code-owned checks.',
+    '- Within each goal, statements are chronological oldest to newest. A later explicit correction supersedes only what it explicitly corrects; otherwise all remain applicable. Clarify incompatible statements or ambiguous correction scope before acting.',
+  );
 }
 
 export function resolveGoalsPromptSectionForTurn(params: {

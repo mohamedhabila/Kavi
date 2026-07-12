@@ -92,40 +92,14 @@ export function hasDeliveredFinalAssistantResponse(
   messages: Message[],
   scope: string | AgentRunMessageScope,
 ): boolean {
-  const runMessages = getAgentRunMessageSlice(messages, scope);
-  for (let index = runMessages.length - 1; index >= 0; index -= 1) {
-    if (
-      hasCompleteFinalAssistantMetadata(runMessages[index]) &&
-      !isAssistantFinalResponsePlaceholder(runMessages[index]) &&
-      hasVisibleFinalAssistantText(runMessages[index])
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  return getLatestAssistantProjectionFinalResponsePreview(messages, scope) !== undefined;
 }
 
 export function getLatestFinalAssistantResponsePreview(
   messages: Message[],
   scope: string | AgentRunMessageScope,
 ): string | undefined {
-  if (!hasDeliveredFinalAssistantResponse(messages, scope)) {
-    return undefined;
-  }
-
-  const runMessages = getAgentRunMessageSlice(messages, scope);
-  for (let index = runMessages.length - 1; index >= 0; index -= 1) {
-    if (
-      hasCompleteFinalAssistantMetadata(runMessages[index]) &&
-      !isAssistantFinalResponsePlaceholder(runMessages[index]) &&
-      hasVisibleFinalAssistantText(runMessages[index])
-    ) {
-      return runMessages[index].content.trim();
-    }
-  }
-
-  return undefined;
+  return getLatestAssistantProjectionFinalResponsePreview(messages, scope);
 }
 
 /**
@@ -140,9 +114,7 @@ export function getLatestAssistantProjectionFinalResponsePreview(
   const assistantMessages = getAgentRunMessageSlice(messages, scope).filter(
     (message) => message.role === 'assistant',
   );
-  const projection =
-    [...assistantMessages].reverse().find((message) => !message.subAgentEvent) ??
-    assistantMessages.at(-1);
+  const projection = [...assistantMessages].reverse().find((message) => !message.subAgentEvent);
   return projection &&
     hasCompleteFinalAssistantMetadata(projection) &&
     !isAssistantFinalResponsePlaceholder(projection) &&

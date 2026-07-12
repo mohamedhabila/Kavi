@@ -4,6 +4,8 @@ import {
   buildAssistantMessageMetadata,
   isAssistantFinalResponsePlaceholder,
 } from '../utils/assistantMessageMetadata';
+import { findLatestPreferredAgentRunAssistantMessageId } from '../engine/graph/foregroundRun/assistantMessages';
+import { buildAgentRunMessageScope } from '../services/agents/lifecycle/agentRunStateMachine';
 import {
   type FinalResponseDeliveryEffects,
   recordAgentRunFinalResponseDelivery,
@@ -30,6 +32,15 @@ export function tryDeliverPreferredFinalResponse(params: {
 }): string | undefined {
   const preferredAssistantMessageId = params.preferredAssistantMessageId?.trim();
   if (!preferredAssistantMessageId) {
+    return undefined;
+  }
+  if (
+    preferredAssistantMessageId !==
+    findLatestPreferredAgentRunAssistantMessageId(
+      params.conversation.messages,
+      buildAgentRunMessageScope(params.run),
+    )
+  ) {
     return undefined;
   }
 

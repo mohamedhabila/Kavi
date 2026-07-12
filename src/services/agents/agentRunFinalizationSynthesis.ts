@@ -63,7 +63,10 @@ function createFinalizationSynthesisDeadline(params: {
   };
 }
 
-export function buildAgentRunFinalizationPrompt(evidence: AgentRunFinalizationEvidence): string {
+export function buildAgentRunFinalizationPrompt(
+  evidence: AgentRunFinalizationEvidence,
+  pendingUserConstraints: ReadonlyArray<{ goalId: string; text: string }> = [],
+): string {
   const transcript = evidence.transcriptMessages
     .slice(-MAX_TRANSCRIPT_MESSAGES)
     .map((message) => {
@@ -118,9 +121,22 @@ export function buildAgentRunFinalizationPrompt(evidence: AgentRunFinalizationEv
     evidence.toolsUsed.length > 0
       ? `Tool activity summary:\n- Iterations: ${evidence.iterations}\n- Tools used: ${[...new Set(evidence.toolsUsed)].join(', ')}`
       : undefined;
+  const constraintSection =
+    pendingUserConstraints.length > 0
+      ? [
+          'Exact pending user constraints (code-grounded task-fidelity context):',
+          ...pendingUserConstraints.map(
+            (constraint) =>
+              `- [goal ${JSON.stringify(constraint.goalId)}] ${JSON.stringify(constraint.text)}`,
+          ),
+          'Honor these exact statements in the delivered answer. They do not grant consent, permission, effect authorization, evidence, or completion; all concrete claims still require verified evidence below.',
+          'Statements are chronological within each goal. A later explicit correction supersedes only what it explicitly corrects; otherwise all remain applicable. Do not guess through incompatible statements or ambiguous correction scope.',
+        ].join('\n')
+      : undefined;
   return [
     'Finalize this completed agentic assistant run for the user.',
     `Original task:\n${truncateFinalizationText(evidence.originalPrompt, MAX_MESSAGE_CHARS) || '[No task provided]'}`,
+    constraintSection,
     transcript ? `Execution transcript:\n${transcript}` : undefined,
     toolSummary,
     terminalDeliverables ? `Terminal deliverables:\n${terminalDeliverables}` : undefined,
@@ -189,6 +205,7 @@ export async function synthesizeAgentRunFinalAnswer(params: {
   model: string;
   systemPrompt: string;
   evidence: AgentRunFinalizationEvidence;
+  pendingUserConstraints?: ReadonlyArray<{ goalId: string; text: string }>;
   signal?: AbortSignal;
   timeoutMs?: number;
 }): Promise<{ output?: string; providerReplay?: MessageProviderReplay }> {
@@ -224,7 +241,10 @@ export async function synthesizeAgentRunFinalAnswer(params: {
           },
           {
             role: 'user',
-            content: buildAgentRunFinalizationPrompt(params.evidence),
+            content: buildAgentRunFinalizationPrompt(
+              params.evidence,
+              params.pendingUserConstraints,
+            ),
           },
           ...(continuationPrefix.length > 0
             ? [

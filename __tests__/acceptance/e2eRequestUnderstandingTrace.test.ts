@@ -17,6 +17,12 @@ describe('request understanding E2E trace', () => {
       status: 'active',
       completionPolicy: 'blocking',
       successCriteria: ['evidence.prefix:PRIVATE-CRITERION-NEVER-EXPORT'],
+      userConstraints: [
+        {
+          text: 'PRIVATE-CONSTRAINT-TEXT-NEVER-EXPORT',
+          sourceMessageId: 'PRIVATE-CONSTRAINT-SOURCE-NEVER-EXPORT',
+        },
+      ],
       now: 1,
     });
     const requestUnderstanding = summarizeRequestUnderstanding(
@@ -39,7 +45,7 @@ describe('request understanding E2E trace', () => {
     );
 
     expect(trace.requestUnderstanding).toMatchObject({
-      version: 1,
+      version: 2,
       integrity: 'valid',
       routing: {
         status: 'known',
@@ -49,7 +55,7 @@ describe('request understanding E2E trace', () => {
       },
       declaredObjectives: { status: 'known', count: 1, omittedCount: 0 },
       structuredSuccessConditions: { status: 'known', count: 1, omittedCount: 0 },
-      userConstraints: { status: 'unknown' },
+      userConstraints: { status: 'known', count: 1, omittedCount: 0 },
       effectAuthorization: { status: 'unknown' },
     });
     const serialized = JSON.stringify(trace.requestUnderstanding);
@@ -57,16 +63,27 @@ describe('request understanding E2E trace', () => {
     expect(serialized).not.toContain('PRIVATE-GOAL-TITLE-NEVER-EXPORT');
     expect(serialized).not.toContain('PRIVATE-CRITERION-NEVER-EXPORT');
     expect(serialized).not.toContain('PRIVATE-REQUEST-TEXT-NEVER-EXPORT');
+    expect(serialized).not.toContain('PRIVATE-CONSTRAINT-TEXT-NEVER-EXPORT');
+    expect(serialized).not.toContain('PRIVATE-CONSTRAINT-SOURCE-NEVER-EXPORT');
+    const fullTrace = JSON.stringify(trace);
+    expect(fullTrace).not.toContain('PRIVATE-CONSTRAINT-TEXT-NEVER-EXPORT');
+    expect(fullTrace).not.toContain('PRIVATE-CONSTRAINT-SOURCE-NEVER-EXPORT');
 
     const projected = projectGraphSnapshot({
       ...trace,
       requestUnderstanding: {
         ...trace.requestUnderstanding,
+        userConstraints: {
+          ...trace.requestUnderstanding?.userConstraints,
+          text: 'PRIVATE-ADDED-CONSTRAINT-TEXT-NEVER-EXPORT',
+          sourceMessageId: 'PRIVATE-ADDED-CONSTRAINT-SOURCE-NEVER-EXPORT',
+        },
         privateText: 'PRIVATE-ADDED-FIELD-NEVER-EXPORT',
       },
     });
     expect(projected.requestUnderstanding).toEqual(trace.requestUnderstanding);
     expect(JSON.stringify(projected)).not.toContain('PRIVATE-ADDED-FIELD-NEVER-EXPORT');
+    expect(JSON.stringify(projected)).not.toContain('PRIVATE-ADDED-CONSTRAINT');
   });
 
   it('rejects an invalid request-understanding enum instead of publishing it', () => {
@@ -76,13 +93,13 @@ describe('request understanding E2E trace', () => {
       projectGraphSnapshot({
         ...trace,
         requestUnderstanding: {
-          version: 1,
+          version: 2,
           integrity: 'valid',
           routing: { status: 'invented' },
           declaredObjectives: { status: 'unknown', count: 0, omittedCount: 0 },
           structuredSuccessConditions: { status: 'unknown', count: 0, omittedCount: 0 },
           executionRequirements: { status: 'unknown', count: 0, omittedCount: 0 },
-          userConstraints: { status: 'unknown' },
+          userConstraints: { status: 'unknown', count: 0, omittedCount: 0 },
           registeredRequiredInformation: {
             status: 'unknown',
             count: 0,

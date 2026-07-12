@@ -127,7 +127,7 @@ describe('agent control graph interrupted run recovery', () => {
     });
   });
 
-  it('preserves a completed final assistant response when background work already finished', () => {
+  it('keeps a persisted final open until completed background work reaches review', () => {
     const run = createRun({
       controlGraph: updateAgentRunControlGraphAsyncWorkState(
         createInitialAgentRunControlGraphState({ updatedAt: 2 }),
@@ -164,10 +164,14 @@ describe('agent control graph interrupted run recovery', () => {
         ],
       }),
     ).toEqual({
-      status: 'completed',
-      latestSummary: 'Finished result.',
-      checkpointTitle: 'Recovered delivered response',
-      checkpointDetail: 'The final response was durably persisted before the app restarted.',
+      status: 'running',
+      latestSummary:
+        'Background workers finished before the app restarted. Recovering the final response from verified results.',
+      checkpointTitle: 'Recovered background completion',
+      checkpointDetail:
+        'Background workers finished before the app restarted. Recovering the final response from verified results.',
+      awaitingBackgroundWorkers: true,
+      phase: 'review',
     });
   });
 
@@ -184,7 +188,12 @@ describe('agent control graph interrupted run recovery', () => {
             assistantMetadata: { kind: 'final', completionStatus: 'complete' },
           }),
         ],
-        run: createRun(),
+        run: createRun({
+          controlGraph: createInitialAgentRunControlGraphState({
+            status: 'awaiting_review',
+            updatedAt: 2,
+          }),
+        }),
         subAgents: [],
       }),
     ).toEqual({

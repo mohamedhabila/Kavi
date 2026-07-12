@@ -86,6 +86,24 @@ describe('goal types', () => {
       expect(goal.dependencies).toEqual(['a', 'b']);
       expect(goal.evidence).toEqual(['x']);
     });
+
+    it('cannot construct completed raw constraints as acknowledged history', () => {
+      const goal = createGoal({
+        title: 'Deliver result',
+        status: 'completed',
+        completionPolicy: 'blocking',
+        successCriteria: ['evidence.tool:read_file'],
+        userConstraints: [{ text: 'Answer in Dutch.', sourceMessageId: 'user-1' }],
+        now: 1000,
+      });
+
+      expect(goal).toMatchObject({
+        userConstraintIntegrity: 'conflict',
+        userConstraintDeliveryPending: true,
+        completedAt: 1000,
+      });
+      expect(goal).not.toHaveProperty('userConstraints');
+    });
   });
 
   describe('normalizeGoal', () => {
@@ -167,6 +185,26 @@ describe('goal types', () => {
 
       const completed = normalizeGoal({ title: 'Test', status: 'completed', completedAt: 1000 });
       expect(completed?.completedAt).toBe(1000);
+    });
+
+    it('fails closed on completed constraints that have no delivery marker', () => {
+      const result = normalizeGoal({
+        id: 'goal-1',
+        title: 'Deliver result',
+        status: 'completed',
+        completionPolicy: 'blocking',
+        successCriteria: ['evidence.tool:read_file'],
+        userConstraints: [{ text: 'Answer in Dutch.', sourceMessageId: 'user-1' }],
+        createdAt: 1,
+        updatedAt: 2,
+        completedAt: 2,
+      });
+
+      expect(result).toMatchObject({
+        userConstraintIntegrity: 'conflict',
+        userConstraintDeliveryPending: true,
+      });
+      expect(result).not.toHaveProperty('userConstraints');
     });
   });
 

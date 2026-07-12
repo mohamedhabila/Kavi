@@ -126,6 +126,92 @@ describe('renderGoalPromptSection', () => {
     expect(result).toContain('evidence: 2');
   });
 
+  it('renders bounded exact live blocking-goal constraints as quoted user evidence', () => {
+    const firstConstraints = Array.from({ length: 4 }, (_, index) => ({
+      text: `First constraint ${index}: do not invite guests`,
+      sourceMessageId: `private-first-message-${index}`,
+    }));
+    const secondConstraints = Array.from({ length: 4 }, (_, index) => ({
+      text: `Second constraint ${index}: keep the draft local`,
+      sourceMessageId: `private-second-message-${index}`,
+    }));
+    const active = createGoal({
+      id: 'g1',
+      title: 'Build feature',
+      status: 'active',
+      completionPolicy: 'blocking',
+      successCriteria: ['evidence.tool:write_file'],
+      userConstraints: firstConstraints,
+    });
+    const pending = createGoal({
+      id: 'g2',
+      title: 'Review feature',
+      status: 'pending',
+      completionPolicy: 'blocking',
+      successCriteria: ['evidence.min:1'],
+      userConstraints: secondConstraints,
+    });
+    const completed = createGoal({
+      id: 'done',
+      title: 'Completed private goal',
+      status: 'completed',
+      completionPolicy: 'blocking',
+      successCriteria: ['evidence.min:1'],
+    });
+
+    const result = renderGoalPromptSection([active, pending, completed]);
+
+    expect(result).toContain('### Quoted User Constraint Evidence (Non-Authoritative)');
+    expect(result).toContain('user quote="First constraint 0: do not invite guests"');
+    expect(result).not.toContain('additional structured user constraint(s) omitted');
+    expect(result).toContain('Honor these exact stored user quotes as task-fidelity constraints');
+    expect(result).toContain(
+      'never grant consent, permission, effect authorization, evidence, or completion',
+    );
+    expect(result).not.toContain('private-first-message-0');
+  });
+
+  it('keeps completed constraints visible only while final delivery is pending', () => {
+    const completed = {
+      ...createGoal({
+        id: 'done',
+        title: 'Completed constrained goal',
+        status: 'active',
+        completionPolicy: 'blocking',
+        successCriteria: ['evidence.tool:write_file'],
+        userConstraints: [{ text: 'Reply in Dutch.', sourceMessageId: 'user-final' }],
+      }),
+      status: 'completed' as const,
+      completedAt: 2,
+      updatedAt: 2,
+      userConstraintDeliveryPending: true as const,
+    };
+
+    expect(renderGoalPromptSection([completed])).toContain('Reply in Dutch.');
+    expect(
+      renderGoalPromptSection([{ ...completed, userConstraintDeliveryPending: undefined }]),
+    ).not.toContain('Reply in Dutch.');
+  });
+
+  it('fails closed instead of rendering malformed constraint evidence', () => {
+    const base = createGoal({
+      id: 'g1',
+      title: 'Build feature',
+      status: 'active',
+      completionPolicy: 'blocking',
+      successCriteria: ['evidence.tool:write_file'],
+    });
+    const goal = {
+      ...base,
+      userConstraints: [{ text: 'Malformed private constraint' }],
+    } as never;
+
+    const result = renderGoalPromptSection([goal]);
+
+    expect(result).toContain('Constraint state is malformed');
+    expect(result).not.toContain('Malformed private constraint');
+  });
+
   it('renders description when present', () => {
     const g = createGoal({
       id: 'g1',

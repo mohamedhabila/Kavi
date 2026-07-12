@@ -10,7 +10,10 @@ import {
   resetInFlightChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState, updateMockConversation } from '../../../testSupport/chatScreen/state';
-import { createRunningAgentRun } from '../../../testSupport/chatScreen/fixtures';
+import {
+  createAgentRunControlGraphState,
+  createRunningAgentRun,
+} from '../../../testSupport/chatScreen/fixtures';
 import {
   mockStartAgentRun,
   mockSetAgentRunPhase,
@@ -50,6 +53,9 @@ describe('ChatScreen agent run monitoring', () => {
     const [, callbacks] = mockRunOrchestrator.mock.calls[0];
 
     await act(async () => {
+      callbacks.onAgentControlGraphStateChange(
+        createAgentRunControlGraphState({ status: 'awaiting_review' }),
+      );
       callbacks.onDone();
       await Promise.resolve();
     });
@@ -67,7 +73,7 @@ describe('ChatScreen agent run monitoring', () => {
       'conv1',
       expect.objectContaining({
         status: 'completed',
-        checkpointTitle: 'Turn completed',
+        checkpointTitle: 'Final response delivered',
       }),
       'run-1',
     );
@@ -130,6 +136,9 @@ describe('ChatScreen agent run monitoring', () => {
           currentActivity: 'Inspecting repository files',
         }),
       });
+      callbacks.onAgentControlGraphStateChange(
+        createAgentRunControlGraphState({ status: 'awaiting_review' }),
+      );
     });
 
     await act(async () => {

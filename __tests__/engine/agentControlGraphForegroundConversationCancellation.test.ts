@@ -233,4 +233,115 @@ describe('foregroundConversationCancellation', () => {
       }),
     );
   });
+
+  it('does not report supersession after another path already completed the run', () => {
+    const appendConversationLog = jest.fn();
+    const completedConversation = {
+      id: 'conv1',
+      title: 'Test',
+      messages: [],
+      createdAt: 1,
+      updatedAt: 2,
+      agentRuns: [
+        {
+          id: 'run-1',
+          userMessageId: 'user-1',
+          goal: 'Finish',
+          status: 'completed',
+          createdAt: 1,
+          updatedAt: 2,
+          currentPhase: 'deliver',
+          phases: [],
+          checkpoints: [],
+          summary: {
+            assistantTurns: 1,
+            startedTools: 0,
+            completedTools: 0,
+            failedTools: 0,
+            spawnedSubAgents: 0,
+          },
+        },
+      ],
+    } as Conversation;
+
+    supersedeForegroundConversationRun({
+      actions: {
+        appendConversationLog,
+        clearPendingRunState: jest.fn(),
+        completeAgentRun: jest.fn(),
+        getLatestConversation: () => completedConversation,
+        updateAgentRunControlGraph: jest.fn(),
+      },
+      conversation: completedConversation,
+      conversationId: completedConversation.id,
+      runId: 'run-1',
+      runningWorkerCount: 0,
+    });
+
+    expect(appendConversationLog).not.toHaveBeenCalled();
+  });
+
+  it('does not generate or report cancellation after completion wins the durable wait race', async () => {
+    const initialConversation = {
+      id: 'conv1',
+      title: 'Test',
+      messages: [],
+      createdAt: 1,
+      updatedAt: 1,
+      activeAgentRunId: 'run-1',
+      agentRuns: [
+        {
+          id: 'run-1',
+          userMessageId: 'user-1',
+          goal: 'Finish',
+          status: 'running',
+          createdAt: 1,
+          updatedAt: 1,
+          currentPhase: 'work',
+          phases: [],
+          checkpoints: [],
+          summary: {
+            assistantTurns: 0,
+            startedTools: 0,
+            completedTools: 0,
+            failedTools: 0,
+            spawnedSubAgents: 0,
+          },
+        },
+      ],
+    } as Conversation;
+    let latestConversation = initialConversation;
+    const appendConversationLog = jest.fn();
+    const ensureAgentRunFinalResponse = jest.fn();
+
+    await stopForegroundConversationRuns({
+      abortForegroundRequestForConversation: jest.fn(() => true),
+      actions: {
+        appendConversationLog,
+        clearPendingRunState: jest.fn(),
+        completeAgentRun: jest.fn(),
+        ensureAgentRunFinalResponse,
+        getLatestConversation: () => latestConversation,
+        updateAgentRunControlGraph: jest.fn(),
+      },
+      cancelOwnedRecoveries: jest.fn(async () => {
+        latestConversation = {
+          ...initialConversation,
+          agentRuns: initialConversation.agentRuns?.map((run) => ({
+            ...run,
+            status: 'completed' as const,
+          })),
+        };
+        return { cancelledRunCount: 0, settledRunCount: 0, issues: [] };
+      }),
+      conversation: initialConversation,
+      conversationId: initialConversation.id,
+    });
+
+    expect(ensureAgentRunFinalResponse).not.toHaveBeenCalled();
+    expect(appendConversationLog).not.toHaveBeenCalledWith(
+      initialConversation.id,
+      expect.objectContaining({ title: expect.stringContaining('stopped') }),
+    );
+  });
 });

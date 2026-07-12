@@ -425,7 +425,7 @@ describe('goal validation', () => {
       expect(result.errors[0].message).toContain('Circular');
     });
 
-    it('rejects add with completed status when evidence requirements are not met', () => {
+    it('rejects add with completed status in favor of the canonical transition', () => {
       const result = validateGoalMutation(
         {
           action: 'add',
@@ -442,7 +442,7 @@ describe('goal validation', () => {
         [],
       );
       expect(result.valid).toBe(false);
-      expect(result.errors).toContainEqual(expect.objectContaining({ code: 'evidence_required' }));
+      expect(result.errors).toContainEqual(expect.objectContaining({ code: 'invalid_add_status' }));
     });
 
     it('rejects block for persistent goals', () => {
@@ -485,14 +485,13 @@ describe('goal validation', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('rejects update that sets active status without activate action', () => {
+    it('allows update with active status so application can route through activation invariants', () => {
       const pending = createGoal({ id: 'scope-b', title: 'scope-b-planning', status: 'pending' });
       const result = validateGoalMutation(
         { action: 'update', goals: [{ id: 'scope-b', status: 'active' }] },
         [pending],
       );
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].message).toContain('Use activate');
+      expect(result.valid).toBe(true);
     });
 
     it('rejects block on pending goals', () => {

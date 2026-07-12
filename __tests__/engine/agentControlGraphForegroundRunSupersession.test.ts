@@ -99,8 +99,6 @@ describe('foreground run supersession', () => {
     });
     useRealRequestRegistry(context);
     configureReadyPreflight(conversation, provider);
-    context.store.startAgentRun.mockReturnValueOnce('run-first').mockReturnValueOnce('run-second');
-    context.store.completeAgentRun = jest.fn();
     const defaultCreateModelExecution =
       context.durability.createModelExecution.getMockImplementation()!;
     let releaseFirstCreate = () => {};
@@ -144,7 +142,7 @@ describe('foreground run supersession', () => {
     expect(context.store.completeAgentRun).toHaveBeenCalledWith(
       conversation.id,
       expect.objectContaining({ status: 'cancelled' }),
-      'run-first',
+      'run-1',
     );
   });
 
