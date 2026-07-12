@@ -1,0 +1,52 @@
+import {
+  filterToolsForConversationMode,
+  isToolAllowedForConversationMode,
+} from '../../src/engine/tools/conversationModeToolAuthority';
+import type { ToolDefinition } from '../../src/types/tool';
+
+function tool(
+  name: string,
+  category?: NonNullable<ToolDefinition['contract']>['category'],
+): ToolDefinition {
+  return {
+    name,
+    description: name,
+    input_schema: { type: 'object', properties: {} },
+    ...(category ? { contract: { category } } : {}),
+  };
+}
+
+describe('conversation-mode tool authority', () => {
+  const ordinaryTools = [
+    tool('memory_recall', 'memory'),
+    tool('memory_remember', 'memory'),
+    tool('web_search', 'web'),
+    tool('calendar_create_event', 'calendar'),
+  ];
+  const orchestrationTools = [
+    tool('update_goals', 'goals'),
+    tool('sessions_spawn', 'sessions'),
+    tool('sessions_history', 'sessions'),
+    tool('custom_worker_control', 'sessions'),
+  ];
+
+  it('keeps ordinary assistant tools but removes graph and worker authority from chitchat', () => {
+    const filtered = filterToolsForConversationMode(
+      [...ordinaryTools, ...orchestrationTools],
+      'chitchat',
+    );
+
+    expect(filtered.map(({ name }) => name)).toEqual(ordinaryTools.map(({ name }) => name));
+  });
+
+  it('retains the complete tool inventory in agentic mode', () => {
+    const tools = [...ordinaryTools, ...orchestrationTools];
+
+    expect(filterToolsForConversationMode(tools, 'agentic')).toEqual(tools);
+  });
+
+  it('uses the canonical session-name boundary even when metadata is absent', () => {
+    expect(isToolAllowedForConversationMode(tool('sessions_wait'), 'chitchat')).toBe(false);
+    expect(isToolAllowedForConversationMode(tool('wait'), 'chitchat')).toBe(false);
+  });
+});

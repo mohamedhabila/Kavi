@@ -74,6 +74,16 @@ function isUnknownToolForPreflight(
   return !isRegisteredToolName(toolName);
 }
 
+function isOnGroundedToolSurface(
+  toolName: string,
+  tools: ToolExecutionLifecycleParams['groundedRequestScopedTools'],
+): boolean {
+  if (tools === undefined) {
+    return true;
+  }
+  return tools.some((tool) => resolveRegisteredToolName(tool.name) === toolName);
+}
+
 export function resolveToolCallPreflight(
   params: ToolExecutionLifecycleParams,
   effectiveToolCall: RuntimeToolCallInput,
@@ -96,6 +106,18 @@ export function resolveToolCallPreflight(
   }
 
   if (params.toolFilter && !params.toolFilter(canonicalToolCall.name)) {
+    return completePreflightFailure({
+      lifecycle: params,
+      effectiveToolCall: canonicalToolCall,
+      idPrefix: params.idPrefixes.filtered,
+      content: `Tool "${canonicalToolCall.name}" is not allowed in this context.`,
+      failureKind: 'tool_filter',
+      preflightBlockedKind: 'tool_filter',
+      notifyBlocked: true,
+    });
+  }
+
+  if (!isOnGroundedToolSurface(canonicalToolCall.name, params.groundedRequestScopedTools)) {
     return completePreflightFailure({
       lifecycle: params,
       effectiveToolCall: canonicalToolCall,

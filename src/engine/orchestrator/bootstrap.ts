@@ -32,6 +32,7 @@ import {
   clonePendingTrackedAsyncOperations,
 } from '../pendingAsyncOperations';
 import { buildToolDefinitions } from '../tools/definitions';
+import { filterToolsForConversationMode } from '../tools/conversationModeToolAuthority';
 import {
   filterToolsByRuntimeAvailability,
   getRuntimeToolAvailabilityContext,
@@ -235,9 +236,12 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   const mcpTools = mcpManager.getAllToolDefinitions();
   const skillTools = getSkillToolDefinitions();
   const runtimeToolAvailability = getRuntimeToolAvailabilityContext();
-  const allToolsUnfiltered = filterToolsByRuntimeAvailability(
-    filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
-    runtimeToolAvailability,
+  const allToolsUnfiltered = filterToolsForConversationMode(
+    filterToolsByRuntimeAvailability(
+      filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
+      runtimeToolAvailability,
+    ),
+    isSuperAgent ? 'agentic' : 'chitchat',
   );
   const allTools = params.toolFilter
     ? allToolsUnfiltered.filter((tool) => params.toolFilter?.(tool.name) !== false)

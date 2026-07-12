@@ -124,6 +124,23 @@ describe('resolveToolCallPreflight', () => {
     expect(lifecycle.callbacks.onToolCallComplete).not.toHaveBeenCalled();
   });
 
+  it('blocks a registered tool that was not exposed on the active grounded surface', () => {
+    const lifecycle = buildLifecycle({
+      groundedRequestScopedTools: [],
+    });
+    const result = resolveToolCallPreflight(lifecycle, {
+      id: 'tc-hidden-goals',
+      name: 'update_goals',
+      arguments: '{}',
+    });
+
+    expect(result?.toolMessage.content).toContain('not allowed');
+    expect(result?.toolMessage.isError).toBe(true);
+    expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('tool_filter');
+    expect(lifecycle.callbacks.onToolCallStart).not.toHaveBeenCalled();
+    expect(lifecycle.callbacks.onToolCallComplete).not.toHaveBeenCalled();
+  });
+
   it('applies filters to registered provider-prefixed aliases by canonical name', () => {
     const toolFilter = jest.fn((name: string) => name === 'update_goals');
     const lifecycle = buildLifecycle({ toolFilter });

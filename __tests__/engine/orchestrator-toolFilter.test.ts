@@ -76,6 +76,10 @@ jest.mock('../../src/services/agents/personas', () => ({
   })),
 }));
 
+jest.mock('../../src/services/agents/registry', () => ({
+  getPersona: jest.fn().mockReturnValue(undefined),
+}));
+
 jest.mock('../../src/services/storage/SecureStorage', () => ({
   getProviderApiKey: jest.fn().mockResolvedValue('sk-test'),
 }));
@@ -382,6 +386,53 @@ describe('Orchestrator — toolFilter', () => {
     );
     expect(callbacks.calls.onToolMessage).toHaveLength(1);
     expect(callbacks.calls.onToolMessage[0]?.result).toBe('tool result');
+  });
+
+  it('does not advertise or execute graph-control tools for a chitchat conversation', async () => {
+    mockStreamMessage
+      .mockReturnValueOnce(
+        makeStream([
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc-hidden-goals',
+              name: 'update_goals',
+              arguments: '{"action":"add","id":"chat-loop","name":"Chat loop"}',
+            },
+          },
+          { type: 'done', content: '' },
+        ]),
+      )
+      .mockReturnValueOnce(
+        makeStream([
+          { type: 'token', content: 'Conversational answer' },
+          { type: 'done', content: 'Conversational answer' },
+        ]),
+      );
+
+    const callbacks = makeCallbacks();
+    await runOrchestrator(
+      {
+        provider,
+        model: 'gpt-test',
+        conversationId: 'conv-chitchat-authority',
+        systemPrompt: 'Test',
+        messages: [makeMsg('user', 'Let us chat')],
+        personaId: 'default',
+      },
+      callbacks,
+    );
+
+    const [, firstStreamOptions] = mockStreamMessage.mock.calls[0];
+    expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
+      'update_goals',
+    );
+    expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
+      'sessions_spawn',
+    );
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(callbacks.calls.onToolMessage[0]?.result).toContain('not allowed');
+    expect(callbacks.calls.onDone).toHaveLength(1);
   });
 
   it('blocks tool but continues orchestration with next text response', async () => {
