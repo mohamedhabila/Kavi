@@ -60,6 +60,7 @@ export type {
 } from './foregroundScenarioDriverTypes';
 
 const DEFAULT_TURN_TIMEOUT_MS = 120_000;
+const SCENARIO_WALL_CLOCK_TIMEOUT_ERROR = 'Foreground scenario wall-clock deadline exceeded.';
 // Provider enrichment owns a 30-second request deadline; keep settlement
 // independently bounded while allowing persistence and polling to finish.
 const FOREGROUND_PRODUCT_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((tool) => tool.name));
@@ -78,6 +79,43 @@ function validatePositiveNumber(value: number | undefined, label: string): void 
   }
 }
 
+function validateRequiredPositiveNumber(value: number, label: string): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be a positive finite number.`);
+  }
+}
+
+function remainingScenarioTimeMs(deadline: number): number {
+  return Math.max(0, deadline - Date.now());
+}
+
+async function awaitBeforeScenarioDeadline<T>(
+  promise: Promise<T>,
+  deadline: number,
+  onTimeout?: () => void,
+): Promise<T> {
+  const remainingMs = remainingScenarioTimeMs(deadline);
+  if (remainingMs <= 0) {
+    onTimeout?.();
+    void promise.catch(() => undefined);
+    throw new Error(SCENARIO_WALL_CLOCK_TIMEOUT_ERROR);
+  }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          onTimeout?.();
+          reject(new Error(SCENARIO_WALL_CLOCK_TIMEOUT_ERROR));
+        }, remainingMs);
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
 function validateInput(input: ForegroundScenarioDriverInput): void {
   const conversationId = requireTrimmed(input.conversationId, 'conversationId');
   if (conversationId !== input.conversationId) {
@@ -92,6 +130,7 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
   if (!input.provider.enabled) throw new Error('provider must be enabled.');
   if (input.turns.length === 0) throw new Error('turns must contain at least one turn.');
   validatePositiveNumber(input.maxTokens, 'maxTokens');
+  validateRequiredPositiveNumber(input.scenarioTimeoutMs, 'scenarioTimeoutMs');
   validatePositiveNumber(input.timeoutMs, 'timeoutMs');
   validatePositiveNumber(input.memoryTimeoutMs, 'memoryTimeoutMs');
   if (
@@ -115,6 +154,9 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
     }
     validatePositiveNumber(turn.maxTokens, `turns[${index}].maxTokens`);
     validatePositiveNumber(turn.timeoutMs, `turns[${index}].timeoutMs`);
+    if (turn.selectedMode !== undefined && !['agentic', 'chitchat'].includes(turn.selectedMode)) {
+      throw new Error(`turns[${index}].selectedMode must be agentic or chitchat.`);
+    }
   }
 }
 
@@ -122,7 +164,8 @@ async function runScenarioIsolated(
   input: ForegroundScenarioDriverInput,
 ): Promise<ForegroundScenarioDriverResult> {
   validateInput(input);
-  await ensureForegroundScenarioStoresHydrated();
+  const scenarioDeadline = Date.now() + input.scenarioTimeoutMs;
+  await awaitBeforeScenarioDeadline(ensureForegroundScenarioStoresHydrated(), scenarioDeadline);
   const chatSnapshot = useChatStore.getState();
   const settingsSnapshot = useSettingsStore.getState();
   const memoryRecords: ForegroundScenarioMemoryRecord[] = [];
@@ -145,7 +188,7 @@ async function runScenarioIsolated(
       isLoading: false,
     });
     requestChatStorePersistenceCheckpoint(0);
-    await flushChatStorePersistenceNow();
+    await awaitBeforeScenarioDeadline(flushChatStorePersistenceNow(), scenarioDeadline);
 
     const memoryScope = {
       memoryConversationId: resolveConversationWorkspaceTarget({
@@ -154,33 +197,50 @@ async function runScenarioIsolated(
       }).workspaceConversationId,
       sourceThreadId: input.conversationId,
     };
-    await input.beforeTurns?.({
-      conversationId: input.conversationId,
-      workspaceConversationId: memoryScope.memoryConversationId,
-    });
+    if (input.beforeTurns) {
+      await awaitBeforeScenarioDeadline(
+        Promise.resolve(
+          input.beforeTurns({
+            conversationId: input.conversationId,
+            workspaceConversationId: memoryScope.memoryConversationId,
+          }),
+        ),
+        scenarioDeadline,
+      );
+    }
     let previousMemoryState = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
     let runtime = createForegroundScenarioRuntime(input, memoryRecords);
     const turnSnapshots: ForegroundScenarioTurnSnapshot[] = [];
     for (const [turnIndex, turn] of input.turns.entries()) {
       const startedAt = Date.now();
+      if (remainingScenarioTimeMs(scenarioDeadline) <= 0) {
+        throw new Error(SCENARIO_WALL_CLOCK_TIMEOUT_ERROR);
+      }
       const lifecycleBefore = turn.lifecycleBefore
-        ? await relaunchForegroundScenarioApp({
-            conversationId: input.conversationId,
-            memoryScope,
-            memoryStateBefore: previousMemoryState,
-          })
+        ? await awaitBeforeScenarioDeadline(
+            relaunchForegroundScenarioApp({
+              conversationId: input.conversationId,
+              memoryScope,
+              memoryStateBefore: previousMemoryState,
+            }),
+            scenarioDeadline,
+          )
         : null;
       if (lifecycleBefore) runtime = createForegroundScenarioRuntime(input, memoryRecords);
-      const retrievalCapture = await beginForegroundScenarioRetrievalCapture({
-        sourceThreadId: input.conversationId,
-        memoryOptOut: input.disableLongTermMemory === true,
-      });
+      const retrievalCapture = await awaitBeforeScenarioDeadline(
+        beginForegroundScenarioRetrievalCapture({
+          sourceThreadId: input.conversationId,
+          memoryOptOut: input.disableLongTermMemory === true,
+        }),
+        scenarioDeadline,
+      );
       const nativeStateBefore = getE2ENativeMobileFixtureStateSnapshot();
       const nativeInvocationStart = getE2ENativeMobileInvocationSnapshots().length;
       const route = applyForegroundScenarioRoute(
         input.conversationId,
         turn.route,
         input.defaultMode,
+        turn.selectedMode,
       );
       const before = useChatStore
         .getState()
@@ -201,36 +261,86 @@ async function runScenarioIsolated(
       runtime.resetChatError();
       runtime.setActiveTurnMaxTokens(turn.maxTokens ?? input.maxTokens);
       let timedOut = false;
-      const timeoutMs = turn.timeoutMs ?? input.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
-      const timeout = setTimeout(() => {
-        timedOut = true;
-        runtime.requests.abortCurrentOrNextForegroundRequest(
-          input.conversationId,
-          `Foreground scenario turn timed out after ${timeoutMs}ms.`,
-        );
-      }, timeoutMs);
+      let scenarioDeadlineExceeded = false;
+      const configuredTurnTimeoutMs = turn.timeoutMs ?? input.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
+      const scenarioRemainingBeforeExecution = remainingScenarioTimeMs(scenarioDeadline);
+      const timeoutMs = Math.min(configuredTurnTimeoutMs, scenarioRemainingBeforeExecution);
+      const scenarioDeadlineLimitsExecution =
+        scenarioRemainingBeforeExecution <= configuredTurnTimeoutMs;
+      const executionTimeoutMessage = scenarioDeadlineLimitsExecution
+        ? SCENARIO_WALL_CLOCK_TIMEOUT_ERROR
+        : `Foreground scenario turn timed out after ${timeoutMs}ms.`;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        await executeForegroundConversationRun({
-          conversationId: input.conversationId,
-          context: runtime.context,
-          options: {
-            maxTokens: turn.maxTokens ?? input.maxTokens,
-            ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
-            memoryRetrievalStrategy: input.memoryRetrievalStrategy,
-            memoryContextStrategy: input.memoryContextStrategy,
-            enableCompaction: input.enableCompaction,
-          },
-        });
+        await Promise.race([
+          executeForegroundConversationRun({
+            conversationId: input.conversationId,
+            context: runtime.context,
+            options: {
+              maxTokens: turn.maxTokens ?? input.maxTokens,
+              ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
+              memoryRetrievalStrategy: input.memoryRetrievalStrategy,
+              memoryContextStrategy: input.memoryContextStrategy,
+              enableCompaction: input.enableCompaction,
+            },
+          }),
+          new Promise<void>((_resolve, reject) => {
+            timeout = setTimeout(() => {
+              timedOut = true;
+              scenarioDeadlineExceeded = scenarioDeadlineLimitsExecution;
+              runtime.requests.abortCurrentOrNextForegroundRequest(
+                input.conversationId,
+                executionTimeoutMessage,
+              );
+              reject(new Error(executionTimeoutMessage));
+            }, timeoutMs);
+          }),
+        ]);
+      } catch (error) {
+        if (!timedOut) throw error;
       } finally {
-        clearTimeout(timeout);
+        if (timeout !== undefined) clearTimeout(timeout);
       }
 
       requestChatStorePersistenceCheckpoint(0);
-      await flushChatStorePersistenceNow();
-      const memory = await settleForegroundScenarioMemory(
-        memoryRecords.slice(memoryRecordStart),
-        input.memoryTimeoutMs ?? E2E_DEFAULT_MEMORY_TIMEOUT_MS,
-      );
+      try {
+        await awaitBeforeScenarioDeadline(flushChatStorePersistenceNow(), scenarioDeadline, () => {
+          scenarioDeadlineExceeded = true;
+          timedOut = true;
+          runtime.requests.abortCurrentOrNextForegroundRequest(
+            input.conversationId,
+            SCENARIO_WALL_CLOCK_TIMEOUT_ERROR,
+          );
+        });
+      } catch (error) {
+        if (!scenarioDeadlineExceeded) throw error;
+      }
+      let memory: Awaited<ReturnType<typeof settleForegroundScenarioMemory>> = [];
+      let memorySettlementError: string | null = null;
+      if (!scenarioDeadlineExceeded) {
+        const remainingBeforeMemory = remainingScenarioTimeMs(scenarioDeadline);
+        if (remainingBeforeMemory <= 0) {
+          scenarioDeadlineExceeded = true;
+          timedOut = true;
+        } else {
+          const configuredMemoryTimeoutMs = input.memoryTimeoutMs ?? E2E_DEFAULT_MEMORY_TIMEOUT_MS;
+          const memoryTimeoutMs = Math.min(configuredMemoryTimeoutMs, remainingBeforeMemory);
+          try {
+            memory = await settleForegroundScenarioMemory(
+              memoryRecords.slice(memoryRecordStart),
+              memoryTimeoutMs,
+            );
+          } catch (error) {
+            if (remainingScenarioTimeMs(scenarioDeadline) <= 0) {
+              scenarioDeadlineExceeded = true;
+              timedOut = true;
+            } else {
+              memorySettlementError =
+                error instanceof Error ? error.message : 'Foreground memory settlement failed.';
+            }
+          }
+        }
+      }
       const memoryStateAfter = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
       const conversation = useChatStore
         .getState()
@@ -250,12 +360,14 @@ async function runScenarioIsolated(
         getE2ENativeMobileInvocationSnapshots().slice(nativeInvocationStart);
       const chatError = runtime.getChatError();
       const memoryInvariantError =
-        !timedOut && !chatError && memory.length !== 1
+        !timedOut && !chatError && !memorySettlementError && memory.length !== 1
           ? `Foreground turn recorded ${memory.length} memory closeouts; expected exactly one.`
           : null;
-      const turnError = timedOut
-        ? `Foreground scenario turn timed out after ${timeoutMs}ms.`
-        : (chatError ?? memoryInvariantError);
+      const turnError = scenarioDeadlineExceeded
+        ? SCENARIO_WALL_CLOCK_TIMEOUT_ERROR
+        : timedOut
+          ? `Foreground scenario turn timed out after ${timeoutMs}ms.`
+          : (chatError ?? memorySettlementError ?? memoryInvariantError);
       const completion = buildForegroundScenarioCompletionSnapshot({
         error: turnError,
         finalAssistant,
@@ -310,11 +422,18 @@ async function runScenarioIsolated(
       turns: turnSnapshots,
     }) as ForegroundScenarioDriverResult;
   } finally {
-    await cancelScheduledIngestionDrain();
     useChatStore.setState(chatSnapshot, true);
     useSettingsStore.setState(settingsSnapshot, true);
     requestChatStorePersistenceCheckpoint(0);
-    await flushChatStorePersistenceNow();
+    const cleanup = Promise.allSettled([
+      cancelScheduledIngestionDrain(),
+      flushChatStorePersistenceNow(),
+    ]).then(() => undefined);
+    try {
+      await awaitBeforeScenarioDeadline(cleanup, scenarioDeadline);
+    } catch {
+      // Cleanup is best-effort once the hard scenario deadline has elapsed.
+    }
   }
 }
 

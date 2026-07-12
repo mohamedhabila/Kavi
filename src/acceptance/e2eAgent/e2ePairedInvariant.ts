@@ -31,6 +31,7 @@ export type E2EPairedInvariantConfig = Readonly<{
         content: string;
         route: NonNullable<E2EScenario['userTurns']>[number]['route'] | null;
         lifecycleBefore: NonNullable<E2EScenario['userTurns']>[number]['lifecycleBefore'] | null;
+        selectedMode: NonNullable<E2EScenario['userTurns']>[number]['selectedMode'] | null;
       }>
     >;
     rubrics: E2EScenario['rubrics'];
@@ -88,11 +89,7 @@ function requireHash(value: unknown, label: string): string {
   return value;
 }
 
-function requireExactKeys(
-  value: object,
-  expectedKeys: ReadonlyArray<string>,
-  label: string,
-): void {
+function requireExactKeys(value: object, expectedKeys: ReadonlyArray<string>, label: string): void {
   const actual = Object.keys(value).sort();
   const expected = [...expectedKeys].sort();
   if (stableStringify(actual) !== stableStringify(expected)) {
@@ -110,8 +107,8 @@ function canonicalToolSurface(values: ReadonlyArray<string>): string[] {
 
 function toolSurfaceDefinitionHash(toolSurface: ReadonlyArray<string>): string {
   const allowed = new Set(toolSurface);
-  const definitions = TOOL_DEFINITIONS.filter((tool) => allowed.has(tool.name)).sort((left, right) =>
-    left.name.localeCompare(right.name),
+  const definitions = TOOL_DEFINITIONS.filter((tool) => allowed.has(tool.name)).sort(
+    (left, right) => left.name.localeCompare(right.name),
   );
   if (definitions.length !== toolSurface.length) {
     throw new Error('toolSurface contains a tool outside the foreground product runtime.');
@@ -138,6 +135,7 @@ function canonicalScenarioInput(scenario: E2EScenario): E2EPairedInvariantConfig
       content: requireTrimmed(turn.content, `scenario.userTurns[${index}].content`, 100_000),
       route: turn.route ?? null,
       lifecycleBefore: turn.lifecycleBefore ?? null,
+      selectedMode: turn.selectedMode ?? null,
     })),
     rubrics: cloneJson(scenario.rubrics),
     initialMessages: cloneJson(scenario.initialMessages ?? []),
@@ -177,10 +175,7 @@ export function buildE2EPairedInvariantConfig(input: {
         input.perTurnTimeoutMs,
         'budget.perTurnTimeoutMs',
       ),
-      memoryTimeoutMs: requirePositiveSafeInteger(
-        input.memoryTimeoutMs,
-        'budget.memoryTimeoutMs',
-      ),
+      memoryTimeoutMs: requirePositiveSafeInteger(input.memoryTimeoutMs, 'budget.memoryTimeoutMs'),
     },
     seed: requireSeed(input.seed),
   };
@@ -273,16 +268,25 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
   for (const [index, turn] of config.userTurns.entries()) {
     requireExactKeys(
       turn,
-      ['content', 'route', 'lifecycleBefore'],
+      ['content', 'route', 'lifecycleBefore', 'selectedMode'],
       `invariantConfig.scenarioInput.userTurns[${index}]`,
     );
-    requireTrimmed(turn.content, `invariantConfig.scenarioInput.userTurns[${index}].content`, 100_000);
+    requireTrimmed(
+      turn.content,
+      `invariantConfig.scenarioInput.userTurns[${index}].content`,
+      100_000,
+    );
     if (turn.route !== null && !E2E_PAIRED_ROUTE_CONDITIONS.includes(turn.route)) {
       throw new Error(`invariantConfig.scenarioInput.userTurns[${index}].route is unsupported.`);
     }
     if (turn.lifecycleBefore !== null && turn.lifecycleBefore !== 'app_relaunch') {
       throw new Error(
         `invariantConfig.scenarioInput.userTurns[${index}].lifecycleBefore is unsupported.`,
+      );
+    }
+    if (turn.selectedMode !== null && !['agentic', 'chitchat'].includes(turn.selectedMode)) {
+      throw new Error(
+        `invariantConfig.scenarioInput.userTurns[${index}].selectedMode is unsupported.`,
       );
     }
   }

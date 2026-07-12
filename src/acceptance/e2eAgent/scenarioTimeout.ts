@@ -29,8 +29,7 @@ export function resolveE2EScenarioTimeoutMs(
   scenario: E2EScenario,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
-  const turnScaledTimeout =
-    resolveScenarioUserTurnCount(scenario) * E2E_PER_USER_TURN_TIMEOUT_MS;
+  const turnScaledTimeout = resolveScenarioUserTurnCount(scenario) * E2E_PER_USER_TURN_TIMEOUT_MS;
   const configuredTimeout = resolveConfiguredTimeoutMs(env);
 
   return Math.min(

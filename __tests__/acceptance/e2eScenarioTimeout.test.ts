@@ -36,6 +36,16 @@ describe('resolveE2EScenarioTimeoutMs', () => {
     expect(resolveE2EScenarioTimeoutMs(scenario)).toBe(5 * E2E_PER_USER_TURN_TIMEOUT_MS);
   });
 
+  it('preserves the per-turn deadline for a nine-turn organic conversation', () => {
+    const scenario = makeScenario({
+      userTurns: Array.from({ length: 9 }, (_, index) => ({
+        content: `Turn ${index + 1}`,
+      })),
+    });
+
+    expect(resolveE2EScenarioTimeoutMs(scenario)).toBe(9 * E2E_PER_USER_TURN_TIMEOUT_MS);
+  });
+
   it('caps very long scenarios at the maximum timeout', () => {
     const scenario = makeScenario({
       userTurns: Array.from({ length: 20 }, (_, index) => ({
@@ -71,7 +81,7 @@ describe('resolveE2EScenarioTimeoutMs', () => {
   it('caps configured timeouts at the maximum timeout', () => {
     expect(
       resolveE2EScenarioTimeoutMs(makeScenario(), {
-        [E2E_SCENARIO_TIMEOUT_MS_ENV]: '900000',
+        [E2E_SCENARIO_TIMEOUT_MS_ENV]: '3000000',
       } as NodeJS.ProcessEnv),
     ).toBe(E2E_MAX_SCENARIO_TIMEOUT_MS);
   });

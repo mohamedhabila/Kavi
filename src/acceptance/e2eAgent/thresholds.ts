@@ -18,17 +18,18 @@ export const E2E_PER_USER_TURN_TIMEOUT_MS = 90_000;
 
 export const E2E_DEFAULT_MEMORY_TIMEOUT_MS = 45_000;
 
-export const E2E_MAX_SCENARIO_TIMEOUT_MS = 600_000;
+/** The scenario-wide deadline covers the entire run, including durable memory settlement. */
+export const E2E_MAX_SCENARIO_TIMEOUT_MS = 15 * E2E_PER_USER_TURN_TIMEOUT_MS;
 
 export const E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS = 4_096;
 
 export const E2E_PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
 
-export const E2E_SCENARIO_MANIFEST_VERSION = '2026-07-10.longitudinal-v2';
+export const E2E_SCENARIO_MANIFEST_VERSION = '2026-07-12.organic-flow-v3';
 
 export const E2E_NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 
-/** Per-scenario total token ceilings (input + output), set from baseline runs with headroom. */
+/** Per-scenario total token ceilings (input + output). See provisional IDs below. */
 export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'file-write-read': 120_000,
   'goal-evidence-complete': 150_000,
@@ -53,6 +54,7 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'agent-outcome-to-chitchat': 220_000,
   'failure-gotcha-reuse': 260_000,
   'relaunch-profile-continuity': 200_000,
+  'organic-mobile-assistant-continuity': 240_000,
   'bench-gaia-file-hop-chain': 180_000,
   'bench-session-tool-cache': 200_000,
   'bench-prompt-cache-long-horizon': 500_000,
@@ -94,8 +96,13 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'direct-mobileworld-long-horizon-personalization': 420_000,
 };
 
+/** Conservative ceilings pending clean first-attempt live measurements and recalibration. */
+export const E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS: ReadonlySet<string> = new Set([
+  'organic-mobile-assistant-continuity',
+]);
+
 /** Program-level regression guard across all scenarios in one harness run. */
-export const E2E_PROGRAM_MAX_TOTAL_TOKENS = 4_400_000;
+export const E2E_PROGRAM_MAX_TOTAL_TOKENS = 4_640_000;
 
 /** Delegation scenario runs in a separate opt-in test file. */
 export const E2E_DELEGATION_PROGRAM_MAX_TOTAL_TOKENS = 200_000;

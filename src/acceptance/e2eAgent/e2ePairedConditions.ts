@@ -6,7 +6,7 @@ import {
 } from './e2ePairedInvariant';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 
-export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v1' as const;
+export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v2' as const;
 export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v2' as const;
 
 export const E2E_PAIRED_CONDITIONS = [
@@ -103,11 +103,7 @@ function requireTrimmed(value: string, label: string, maxLength = 10_000): strin
   return value;
 }
 
-function requireExactKeys(
-  value: object,
-  expectedKeys: ReadonlyArray<string>,
-  label: string,
-): void {
+function requireExactKeys(value: object, expectedKeys: ReadonlyArray<string>, label: string): void {
   const actual = Object.keys(value).sort();
   const expected = [...expectedKeys].sort();
   if (stableStringify(actual) !== stableStringify(expected)) {
@@ -122,11 +118,7 @@ function requireUnitInterval(value: unknown, label: string): number {
   return value;
 }
 
-function canonicalNullableString(
-  value: unknown,
-  label: string,
-  maxLength: number,
-): string | null {
+function canonicalNullableString(value: unknown, label: string, maxLength: number): string | null {
   if (value === null) return null;
   if (typeof value !== 'string') throw new Error(`${label} must be a string or null.`);
   return requireTrimmed(value, label, maxLength);
@@ -155,11 +147,7 @@ export function validateE2EOracleEvidenceDeclaration(
     }
     const canonicalFact: MemoryRememberArgs = {
       subject: requireTrimmed(fact.subject, `oracleEvidence.facts[${index}].subject`, 80),
-      predicate: requireTrimmed(
-        fact.predicate,
-        `oracleEvidence.facts[${index}].predicate`,
-        80,
-      ),
+      predicate: requireTrimmed(fact.predicate, `oracleEvidence.facts[${index}].predicate`, 80),
       value: requireTrimmed(fact.value, `oracleEvidence.facts[${index}].value`, 200),
       scope: 'global',
     };

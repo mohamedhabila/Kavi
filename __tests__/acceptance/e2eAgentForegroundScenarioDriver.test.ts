@@ -220,6 +220,7 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
       maxTokens: 777,
       turns: [
         { content: 'Hello there.', route: 'forced_chitchat', timestamp: 10 },
@@ -352,6 +353,7 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'agentic',
+      scenarioTimeoutMs: 60_000,
       turns: [
         {
           content: 'Create a calendar event tomorrow at noon.',
@@ -403,6 +405,7 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
       memoryRetrievalStrategy: 'lexical_only',
       memoryContextStrategy: 'full_context',
       enableCompaction: false,
@@ -442,6 +445,7 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
       disableLongTermMemory: true,
       allowedToolNames: ['memory_recall'],
       beforeTurns,
@@ -470,6 +474,7 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'chitchat' as const,
+      scenarioTimeoutMs: 60_000,
       turns: [{ content: 'How are you?', route: 'production_auto' as const }],
     };
     await expect(
@@ -503,6 +508,7 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
       turns: [{ content: 'Finish this.', route: 'production_auto' }],
     });
 
@@ -578,6 +584,7 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
       timeoutMs: 5,
       turns: [{ content: 'Wait forever.', route: 'production_auto' }],
     });
@@ -602,6 +609,7 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'agentic',
+      scenarioTimeoutMs: 60_000,
       turns: [
         { content: 'First turn.', route: 'production_auto' },
         { content: 'Must not run.', route: 'production_auto' },

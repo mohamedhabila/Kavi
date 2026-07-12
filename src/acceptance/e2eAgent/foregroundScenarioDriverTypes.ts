@@ -37,6 +37,7 @@ export type ForegroundScenarioTurnInput = {
   content: string;
   lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
   route: ForegroundScenarioRouteDirective;
+  selectedMode?: ConversationMode;
   maxTokens?: number;
   timeoutMs?: number;
   timestamp?: number;
@@ -49,6 +50,8 @@ export type ForegroundScenarioDriverInput = {
   systemPrompt: string;
   initialMessages?: ReadonlyArray<Message>;
   defaultMode: ConversationMode;
+  /** Hard outer wall-clock deadline for the complete scenario, including memory settlement. */
+  scenarioTimeoutMs: number;
   turns: ReadonlyArray<ForegroundScenarioTurnInput>;
   maxTokens?: number;
   timeoutMs?: number;

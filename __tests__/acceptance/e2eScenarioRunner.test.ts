@@ -283,6 +283,39 @@ describe('runE2EScenario product foreground integration', () => {
     expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(3);
   });
 
+  it('maps user-selected modes without replacing production_auto route evidence', async () => {
+    const result = await runE2EScenario(
+      scenario({
+        execution: { initialMode: 'chitchat', route: 'production_auto' },
+        userTurns: [
+          { content: 'Complete this task.', selectedMode: 'agentic' },
+          { content: 'Now return to chat.', selectedMode: 'chitchat' },
+        ],
+      }),
+    );
+
+    expect(result.turnTraces.map((turn) => turn.route)).toEqual([
+      { directive: 'production_auto', mode: 'agentic', personaId: 'super-agent' },
+      { directive: 'production_auto', mode: 'chitchat', personaId: 'default' },
+    ]);
+  });
+
+  it('keeps a forced diagnostic route authoritative over the invariant user mode choice', async () => {
+    const result = await runE2EScenario(
+      scenario({
+        execution: { initialMode: 'agentic', route: 'production_auto' },
+        userTurns: [{ content: 'Talk naturally.', selectedMode: 'chitchat' }],
+      }),
+      { routeOverride: 'forced_agentic' },
+    );
+
+    expect(result.turnTraces[0]?.route).toEqual({
+      directive: 'forced_agentic',
+      mode: 'agentic',
+      personaId: 'super-agent',
+    });
+  });
+
   it('seeds workspace files before invoking the product executor', async () => {
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
       expect(readWorkspaceRelativeFile(options.workspaceConversationId, 'inbox/seed.txt')).toBe(

@@ -11,7 +11,7 @@ import { buildE2EProvider, isE2EAgentEvalEnabled } from './providerConfig';
 import { seedE2EWorkspaceSandbox } from './sandboxWorkspace';
 import { mapForegroundScenarioResult } from './scenarioResultMapper';
 import { resolveE2EScenarioTimeoutMs } from './scenarioTimeout';
-import { E2E_DEFAULT_MAX_TOKENS } from './thresholds';
+import { E2E_DEFAULT_MAX_TOKENS, E2E_PER_USER_TURN_TIMEOUT_MS } from './thresholds';
 import type { E2EScenario, E2EScenarioContentClass, E2EScenarioResult, E2EUserTurn } from './types';
 import type { LlmProviderConfig } from '../../types/provider';
 import type {
@@ -105,7 +105,11 @@ export async function runE2EScenario(
   const userTurns = resolveScenarioUserTurns(scenario);
   const scenarioTimeoutMs = options.scenarioTimeoutMs ?? resolveE2EScenarioTimeoutMs(scenario);
   const perTurnTimeoutMs =
-    options.perTurnTimeoutMs ?? Math.max(1, Math.floor(scenarioTimeoutMs / userTurns.length));
+    options.perTurnTimeoutMs ??
+    Math.min(
+      E2E_PER_USER_TURN_TIMEOUT_MS,
+      Math.max(1, Math.floor(scenarioTimeoutMs / userTurns.length)),
+    );
   const uninstallScenarioEnvironment = installE2EScenarioEnvironment();
 
   try {
@@ -116,10 +120,12 @@ export async function runE2EScenario(
       systemPrompt: resolveE2EScenarioSystemPrompt(scenario),
       initialMessages: scenario.initialMessages,
       defaultMode: scenario.execution.initialMode,
+      scenarioTimeoutMs,
       turns: userTurns.map((turn) => ({
         content: turn.content,
         lifecycleBefore: turn.lifecycleBefore,
         route: options.routeOverride ?? turn.route ?? scenario.execution.route,
+        selectedMode: turn.selectedMode,
         timeoutMs: perTurnTimeoutMs,
       })),
       maxTokens: options.maxTokens ?? scenario.maxTokens ?? E2E_DEFAULT_MAX_TOKENS,

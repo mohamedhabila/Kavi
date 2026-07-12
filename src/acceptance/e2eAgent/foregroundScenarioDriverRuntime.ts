@@ -114,16 +114,32 @@ export function applyForegroundScenarioRoute(
   conversationId: string,
   directive: ForegroundScenarioRouteDirective,
   defaultMode: ConversationMode,
+  selectedMode?: ConversationMode,
 ): ForegroundScenarioExecutionContextSnapshot {
   const before = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === conversationId);
   if (!before) throw new Error(`Conversation ${conversationId} is unavailable.`);
 
+  if (selectedMode !== undefined) {
+    const store = useChatStore.getState();
+    store.updateModeInConversation(conversationId, selectedMode);
+    store.updatePersonaInConversation(
+      conversationId,
+      resolveConversationPersonaForMode({
+        conversationPersonaId: before.personaId,
+        nextMode: selectedMode,
+      }),
+    );
+  }
+
   if (directive !== 'production_auto') {
+    const selectedConversation = useChatStore
+      .getState()
+      .conversations.find((candidate) => candidate.id === conversationId);
     const mode = directive === 'forced_agentic' ? 'agentic' : 'chitchat';
     const personaId = resolveConversationPersonaForMode({
-      conversationPersonaId: before.personaId,
+      conversationPersonaId: selectedConversation?.personaId,
       nextMode: mode,
     });
     const store = useChatStore.getState();
@@ -277,6 +293,28 @@ function sleep(delayMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
+async function awaitMemorySettlementBeforeDeadline<T>(
+  promise: Promise<T>,
+  deadline: number,
+): Promise<T> {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) throw new Error('Timed out settling foreground scenario memory.');
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Timed out settling foreground scenario memory.')),
+          remainingMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
 async function awaitMemoryJob(jobId: string, deadline: number): Promise<IngestionJob> {
   let requestedDrain = false;
   let pollDelayMs = MEMORY_JOB_INITIAL_POLL_MS;
@@ -317,17 +355,23 @@ export async function settleForegroundScenarioMemory(
   records: ReadonlyArray<ForegroundScenarioMemoryRecord>,
   timeoutMs: number,
 ): Promise<ReadonlyArray<ForegroundScenarioMemorySnapshot>> {
-  const results = await Promise.all(records.map((record) => record.promise));
   const deadline = Date.now() + timeoutMs;
-  const snapshots = await Promise.all(
-    results.map(async (result) => {
-      const job = result.jobId ? await awaitMemoryJob(result.jobId, deadline) : null;
-      return {
-        lifecycle: result,
-        job,
-        receipts: result.jobId ? listIngestionPersistenceReceipts(result.jobId) : [],
-      };
-    }),
+  const results = await awaitMemorySettlementBeforeDeadline(
+    Promise.all(records.map((record) => record.promise)),
+    deadline,
+  );
+  const snapshots = await awaitMemorySettlementBeforeDeadline(
+    Promise.all(
+      results.map(async (result) => {
+        const job = result.jobId ? await awaitMemoryJob(result.jobId, deadline) : null;
+        return {
+          lifecycle: result,
+          job,
+          receipts: result.jobId ? listIngestionPersistenceReceipts(result.jobId) : [],
+        };
+      }),
+    ),
+    deadline,
   );
   return cloneAndFreeze(snapshots);
 }

@@ -15,6 +15,7 @@ import { resolveE2EScenarioTimeoutMs } from './scenarioTimeout';
 import {
   E2E_DEFAULT_MAX_TOKENS,
   E2E_DEFAULT_MEMORY_TIMEOUT_MS,
+  E2E_PER_USER_TURN_TIMEOUT_MS,
 } from './thresholds';
 import type { E2EScenario } from './types';
 
@@ -57,7 +58,10 @@ export function buildE2EPairedAssessmentPlan(input: {
     toolSurface: resolveDefaultE2EPairedToolSurface(),
     maxTokens: input.scenario.maxTokens ?? E2E_DEFAULT_MAX_TOKENS,
     scenarioTimeoutMs,
-    perTurnTimeoutMs: Math.max(1, Math.floor(scenarioTimeoutMs / scenarioTurnCount(input.scenario))),
+    perTurnTimeoutMs: Math.min(
+      E2E_PER_USER_TURN_TIMEOUT_MS,
+      Math.max(1, Math.floor(scenarioTimeoutMs / scenarioTurnCount(input.scenario))),
+    ),
     memoryTimeoutMs: E2E_DEFAULT_MEMORY_TIMEOUT_MS,
     seed: input.seed,
   });

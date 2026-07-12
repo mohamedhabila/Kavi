@@ -42,7 +42,11 @@ function makeScenario(overrides: Partial<E2EScenario> = {}): E2EScenario {
     threadTitle: 'Synthetic paired thread',
     prompt: 'Complete the paired scenario.',
     userTurns: [
-      { content: 'Remember the first constraint.', route: 'production_auto' },
+      {
+        content: 'Remember the first constraint.',
+        route: 'production_auto',
+        selectedMode: 'chitchat',
+      },
       {
         content: 'Use the constraint after relaunch.',
         route: 'production_auto',
@@ -110,9 +114,9 @@ describe('paired E2E condition contract', () => {
     expect(makeCondition('lexical_baseline', invariant).conditionConfig.retrievalMode).toBe(
       'lexical_only',
     );
-    expect(
-      makeCondition('diagnostic_full_context', invariant).conditionConfig.contextMode,
-    ).toBe('full_context');
+    expect(makeCondition('diagnostic_full_context', invariant).conditionConfig.contextMode).toBe(
+      'full_context',
+    );
   });
 
   it('canonicalizes the tool surface and freezes the entire invariant', () => {
@@ -123,6 +127,8 @@ describe('paired E2E condition contract', () => {
     expect(Object.isFrozen(invariant.provider)).toBe(true);
     expect(Object.isFrozen(invariant.scenarioInput.userTurns)).toBe(true);
     expect(Object.isFrozen(invariant.budget)).toBe(true);
+    expect(invariant.scenarioInput.userTurns[0]?.selectedMode).toBe('chitchat');
+    expect(invariant.scenarioInput.userTurns[1]?.selectedMode).toBeNull();
   });
 
   it('never serializes provider credentials, private endpoints, or local locators', () => {
