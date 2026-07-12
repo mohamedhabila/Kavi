@@ -3,7 +3,10 @@ import { upsertEntity } from './entities';
 import { runMemoryTransaction } from './access/transaction';
 import type { ConsolidatorFact } from './consolidator';
 import { addFactEvidence } from './episodes/mutations';
-import { resolveCurrentFactsForReplacement } from './facts/currentReplacementResolution';
+import {
+  resolveCurrentFactsForReplacement,
+  resolvePriorUserSelfCorrectionFacts,
+} from './facts/currentReplacementResolution';
 import { replaceCurrentFactWithApplicability } from './facts/exactReplacement';
 import { recordFactWithApplicability } from './facts/mutations';
 import type {
@@ -22,7 +25,9 @@ import {
   deriveExactNamedSubjectClaimEvidence,
   deriveExactSelfClaimEvidence,
 } from './exactSelfClaimEvidence';
+import { hasPotentialSelfCorrectionAnchor } from './exactSelfCorrectionStructure';
 import { isCanonicalSelfMemorySubject } from './memorySubjectIdentity';
+import { classifyMemoryFactSensitivity } from './memorySensitivityPolicy';
 
 export interface MemoryRememberPersistenceInput {
   subject: string;
@@ -46,6 +51,8 @@ export interface MemoryRememberRequestEvidence {
   taskId: string | null;
   userMessageId: string;
   userMessageText: string;
+  /** Code-owned immediately preceding user message in this conversation. */
+  priorUserMessageId?: string;
 }
 
 export interface MemoryRememberPersistenceContext {
@@ -59,6 +66,7 @@ export type MemoryRememberPersistenceResult =
       status: 'grounding_required';
       reason: GroundedReplacementRejection | 'scope_mismatch' | 'subject_not_grounded';
     }
+  | { status: 'restricted_content' }
   | { status: 'conflict'; conflict: ReplaceCurrentFactConflict };
 
 function evidenceOwnsWriteScope(
@@ -117,6 +125,18 @@ export function persistMemoryRemember(
   input: MemoryRememberPersistenceInput,
   context: MemoryRememberPersistenceContext,
 ): MemoryRememberPersistenceResult {
+  if (
+    classifyMemoryFactSensitivity({
+      subject: input.subject,
+      subjectType: input.subjectType,
+      predicate: input.predicate,
+      objectText: input.value,
+      sourceSummary: input.sourceSummary,
+      memoryKind: 'semantic_fact',
+    }) === 'restricted'
+  ) {
+    return { status: 'restricted_content' };
+  }
   const evidence = context.requestEvidence;
   const resolutionContext = {
     memoryConversationId: evidence?.memoryConversationId ?? input.originConversationId ?? '',
@@ -124,25 +144,17 @@ export function persistMemoryRemember(
     taskId: evidence?.taskId ?? input.originTaskId ?? null,
     personaId: context.personaId,
   };
-  const resolution = resolveCurrentFactsForReplacement(
+  const proposedResolution = resolveCurrentFactsForReplacement(
     { subject: input.subject, predicate: input.predicate, scope: input.scope },
     resolutionContext,
   );
-  const exactClaim = evidence
+  const directClaim = evidence
     ? isCanonicalSelfMemorySubject(input.subject)
-      ? (deriveExactSelfClaimEvidence({
+      ? deriveExactSelfClaimEvidence({
           userMessageText: evidence.userMessageText,
           predicate: input.predicate,
           value: input.value,
-        }) ??
-        (resolution.currentFacts.length === 1
-          ? deriveExactSelfCorrectionEvidence({
-              userMessageText: evidence.userMessageText,
-              predicate: input.predicate,
-              value: input.value,
-              currentValue: resolution.currentFacts[0]!.objectText,
-            })
-          : null))
+        })
       : deriveExactNamedSubjectClaimEvidence({
           userMessageText: evidence.userMessageText,
           subject: input.subject,
@@ -150,9 +162,77 @@ export function persistMemoryRemember(
           value: input.value,
         })
     : null;
+  const proposedPredicateCorrection =
+    evidence &&
+    isCanonicalSelfMemorySubject(input.subject) &&
+    proposedResolution.currentFacts.length === 1
+      ? deriveExactSelfCorrectionEvidence({
+          userMessageText: evidence.userMessageText,
+          predicate: input.predicate,
+          value: input.value,
+          currentValue: proposedResolution.currentFacts[0]!.objectText,
+        })
+      : null;
+  const exactPredicateCorrection =
+    proposedPredicateCorrection?.correctionTarget === 'direct_property'
+      ? proposedPredicateCorrection
+      : null;
+  const priorMessageFacts =
+    evidence?.priorUserMessageId &&
+    !exactPredicateCorrection &&
+    isCanonicalSelfMemorySubject(input.subject)
+      ? resolvePriorUserSelfCorrectionFacts(
+          {
+            subject: input.subject,
+            sourceMessageId: evidence.priorUserMessageId,
+            scope: input.scope,
+          },
+          resolutionContext,
+        )
+      : [];
+  const priorMessageCorrectionCandidates = priorMessageFacts.flatMap((fact) => {
+    const claim = deriveExactSelfCorrectionEvidence({
+      userMessageText: evidence?.userMessageText ?? '',
+      predicate: fact.predicate,
+      value: input.value,
+      currentValue: fact.objectText,
+    });
+    return claim ? [{ fact, claim }] : [];
+  });
+  const priorMessageCorrection =
+    priorMessageCorrectionCandidates.length === 1 ? priorMessageCorrectionCandidates[0]! : null;
+  const proposedCorrectionIntent = priorMessageFacts.some((fact) =>
+    hasPotentialSelfCorrectionAnchor({
+      text: evidence?.userMessageText ?? '',
+      value: input.value,
+      currentValue: fact.objectText,
+    }),
+  );
+  const exactPredicateCorrectionIntent =
+    Boolean(evidence) &&
+    isCanonicalSelfMemorySubject(input.subject) &&
+    proposedResolution.currentFacts.length === 1 &&
+    hasPotentialSelfCorrectionAnchor({
+      text: evidence?.userMessageText ?? '',
+      value: input.value,
+      currentValue: proposedResolution.currentFacts[0]!.objectText,
+    });
+  const priorMessageCorrectionIsUnresolved =
+    priorMessageCorrectionCandidates.length > 1 ||
+    (!exactPredicateCorrection &&
+      !priorMessageCorrection &&
+      (proposedCorrectionIntent || exactPredicateCorrectionIntent));
+  const predicate = priorMessageCorrection?.fact.predicate ?? input.predicate;
+  const resolution = priorMessageCorrection
+    ? { currentFacts: [priorMessageCorrection.fact], hasAnyCurrentFact: true }
+    : proposedResolution;
+  const exactClaim = priorMessageCorrectionIsUnresolved
+    ? null
+    : (exactPredicateCorrection ?? priorMessageCorrection?.claim ?? directClaim ?? null);
+  const writeInput = predicate === input.predicate ? input : { ...input, predicate };
   const proposal: ConsolidatorFact = {
     subject: input.subject,
-    predicate: input.predicate,
+    predicate,
     value: input.value,
     scope: input.scope,
     operation: 'replace_current',
@@ -160,18 +240,19 @@ export function persistMemoryRemember(
     evidenceMessageIds: evidence ? [evidence.userMessageId] : [],
     evidenceQuote: exactClaim?.evidenceQuote ?? input.value,
   };
-  const decision = !evidence || exactClaim
-    ? evaluateGroundedReplacement(proposal, {
-        currentUserMessageId: evidence?.userMessageId,
-        currentUserMessage: evidence?.userMessageText ?? '',
-        memoryConversationId: resolutionContext.memoryConversationId,
-        threadId: resolutionContext.sourceThreadId,
-        taskId: resolutionContext.taskId,
-        personaId: resolutionContext.personaId,
-        currentFacts: resolution.currentFacts,
-        hasAnyCurrentFact: resolution.hasAnyCurrentFact,
-      })
-    : ({ accepted: false, reason: 'subject_not_grounded' } as const);
+  const decision =
+    !evidence || exactClaim
+      ? evaluateGroundedReplacement(proposal, {
+          currentUserMessageId: evidence?.userMessageId,
+          currentUserMessage: evidence?.userMessageText ?? '',
+          memoryConversationId: resolutionContext.memoryConversationId,
+          threadId: resolutionContext.sourceThreadId,
+          taskId: resolutionContext.taskId,
+          personaId: resolutionContext.personaId,
+          currentFacts: resolution.currentFacts,
+          hasAnyCurrentFact: resolution.hasAnyCurrentFact,
+        })
+      : ({ accepted: false, reason: 'subject_not_grounded' } as const);
 
   if (!decision.accepted) {
     if (evidence || resolution.currentFacts.length > 0) {
@@ -203,9 +284,9 @@ export function persistMemoryRemember(
       },
       [{ sourceKind: 'message', sourceId: evidence.userMessageId }],
     );
-    const subject = upsertEntity({ name: input.subject, type: input.subjectType });
+    const subject = upsertEntity({ name: writeInput.subject, type: writeInput.subjectType });
     const recordInput = {
-      ...buildRecordInput(input, subject.id),
+      ...buildRecordInput(writeInput, subject.id),
       sourceMessageId: evidence.userMessageId,
       attributes: memoryWriteAttributes(decision.fact),
     };
@@ -216,7 +297,7 @@ export function persistMemoryRemember(
             {
               factClass: 'subjective_user',
               sourceAuthority: 'grounded_user',
-              ...(input.scope === 'persona' ? { personaId: context.personaId } : {}),
+              ...(writeInput.scope === 'persona' ? { personaId: context.personaId } : {}),
             },
           )
         : recordFactWithApplicability(
@@ -224,7 +305,7 @@ export function persistMemoryRemember(
             {
               factClass: 'subjective_user',
               sourceAuthority: 'grounded_user',
-              ...(input.scope === 'persona' ? { personaId: context.personaId } : {}),
+              ...(writeInput.scope === 'persona' ? { personaId: context.personaId } : {}),
             },
           );
     if (result.status === 'conflict') {

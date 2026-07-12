@@ -65,10 +65,12 @@ import {
   type MemoryRememberRequestEvidence,
 } from './memoryRememberPersistence';
 import { serializeMemoryFact } from './memoryFactSerialization';
+import { canonicalizeMemorySubject, isCanonicalSelfMemorySubject } from './memorySubjectIdentity';
 import {
-  canonicalizeMemorySubject,
-  isCanonicalSelfMemorySubject,
-} from './memorySubjectIdentity';
+  consumeExplicitMemoryRecallGrant,
+  discardExplicitMemoryRecallGrant,
+  type ExplicitMemoryRecallGrant,
+} from './explicitMemoryRecallGrant';
 export {
   executeMemoryForget,
   executeMemoryInvalidate,
@@ -202,6 +204,15 @@ export interface MemoryRecallExecutionContext {
   personaId: string;
   taskId: string | null;
   now?: number;
+  /** Raw request identity supplied by the orchestrator, never provider args. */
+  requestIdentity?: {
+    currentUserMessageId: string;
+    currentUserMessageText: string;
+    executionRunId: string;
+    agentRunId: string | null;
+  };
+  /** Ephemeral one-use authority created from requestIdentity by product code. */
+  explicitUserRequestGrant?: ExplicitMemoryRecallGrant;
 }
 
 export interface SerializedApplicableMemoryFact extends SerializedMemoryFact {
@@ -241,13 +252,17 @@ export function executeMemoryRecall(
   args: MemoryRecallArgs,
   execution: MemoryRecallExecutionContext,
 ): MemoryRecallResult | MemoryToolError {
+  const rejectRecall = (code: MemoryToolError['code'], message: string): MemoryToolError => {
+    discardExplicitMemoryRecallGrant(execution?.explicitUserRequestGrant);
+    return err(code, message);
+  };
   const memoryReadEpoch = captureMemoryReadEpoch();
   if (
     memoryReadEpoch === null ||
     !canReadLongTermMemory() ||
     !isMemoryReadEpochCurrent(memoryReadEpoch)
   ) {
-    return err('memory_disabled', 'Long-term memory is disabled.');
+    return rejectRecall('memory_disabled', 'Long-term memory is disabled.');
   }
   if (
     !args ||
@@ -255,7 +270,7 @@ export function executeMemoryRecall(
     Array.isArray(args) ||
     Object.keys(args).some((key) => !MEMORY_RECALL_ARG_KEYS.has(key))
   ) {
-    return err('invalid_args', 'memory_recall received unsupported arguments.');
+    return rejectRecall('invalid_args', 'memory_recall received unsupported arguments.');
   }
   if (
     !execution ||
@@ -264,33 +279,52 @@ export function executeMemoryRecall(
     !isExactMemoryScopeId(execution.personaId) ||
     (execution.taskId !== null && !isExactMemoryScopeId(execution.taskId))
   ) {
-    return err('invalid_args', 'memory_recall execution scope is invalid.');
+    return rejectRecall('invalid_args', 'memory_recall execution scope is invalid.');
   }
   const now = execution.now ?? Date.now();
   if (!Number.isSafeInteger(now) || now < 0) {
-    return err('invalid_args', 'memory_recall timestamp is invalid.');
+    return rejectRecall('invalid_args', 'memory_recall timestamp is invalid.');
   }
   let limit: number;
   try {
     limit = recallLimit(args.limit);
     if (args.scope !== undefined) requireMemoryFactScope(args.scope);
   } catch {
-    return err('invalid_args', 'memory_recall limit or scope is invalid.');
+    return rejectRecall('invalid_args', 'memory_recall limit or scope is invalid.');
   }
   const subject = trimNonEmpty(args.subject, 80);
   const predicate = trimNonEmpty(args.predicate, 80);
   if (!subject && !predicate && !args.scope && !args.pinnedOnly && args.all !== true) {
-    return err('invalid_args', 'Provide a filter or set all=true to list all facts.');
+    return rejectRecall('invalid_args', 'Provide a filter or set all=true to list all facts.');
   }
 
   try {
     ensureFactSchema();
+    const memoryScope = resolveLocalMemoryAccessScope({
+      memoryConversationId: execution.memoryConversationId,
+      sourceThreadId: execution.sourceThreadId,
+      personaId: execution.personaId,
+      taskId: execution.taskId,
+    });
+    const useIntent = consumeExplicitMemoryRecallGrant({
+      grant: execution.explicitUserRequestGrant,
+      currentUserMessageId: execution.requestIdentity?.currentUserMessageId,
+      currentUserMessageText: execution.requestIdentity?.currentUserMessageText,
+      executionRunId: execution.requestIdentity?.executionRunId,
+      agentRunId: execution.requestIdentity?.agentRunId,
+      scope: memoryScope,
+      subject: args.subject,
+      predicate: args.predicate,
+      all: args.all,
+    })
+      ? 'explicit_user_request'
+      : 'automatic_prompt';
     let subjectId: string | undefined;
     if (subject) {
       const entity = findEntityByName(subject);
       if (!entity) {
         if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
-          return err('memory_disabled', 'Long-term memory is disabled.');
+          return rejectRecall('memory_disabled', 'Long-term memory is disabled.');
         }
         return {
           ok: true,
@@ -302,12 +336,6 @@ export function executeMemoryRecall(
       }
       subjectId = entity.id;
     }
-    const memoryScope = resolveLocalMemoryAccessScope({
-      memoryConversationId: execution.memoryConversationId,
-      sourceThreadId: execution.sourceThreadId,
-      personaId: execution.personaId,
-      taskId: execution.taskId,
-    });
     const queryOptions = {
       ...(subjectId ? { subjectId } : {}),
       ...(predicate ? { predicate } : {}),
@@ -319,7 +347,7 @@ export function executeMemoryRecall(
       ...queryOptions,
       recallScopeIdentity: {
         ...memoryScope,
-        useIntent: 'explicit_user_request',
+        useIntent,
         candidateLane: 'direct_use',
       },
       limit,
@@ -328,7 +356,7 @@ export function executeMemoryRecall(
       ...queryOptions,
       recallScopeIdentity: {
         ...memoryScope,
-        useIntent: 'explicit_user_request',
+        useIntent,
         candidateLane: 'resolution',
       },
       limit: MEMORY_RECALL_RESOLUTION_LIMIT,
@@ -350,7 +378,7 @@ export function executeMemoryRecall(
       context: {
         enabled: true,
         now,
-        useIntent: 'explicit_user_request',
+        useIntent,
         scope: memoryScope,
         conflictObservationReadState,
         ...(persistedConflicts.length > 0 ? { externalEvidence: persistedConflicts } : {}),
@@ -387,14 +415,14 @@ export function executeMemoryRecall(
       promptBudgetDroppedFactCount: applicability.summary.promptVisibleFactCount - facts.length,
     };
     if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
-      return err('memory_disabled', 'Long-term memory is disabled.');
+      return rejectRecall('memory_disabled', 'Long-term memory is disabled.');
     }
     markFactsRecalled(
       selected.map((entry) => entry.id),
       now,
     );
     if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
-      return err('memory_disabled', 'Long-term memory is disabled.');
+      return rejectRecall('memory_disabled', 'Long-term memory is disabled.');
     }
     return {
       ok: true,
@@ -405,7 +433,7 @@ export function executeMemoryRecall(
       ...(applicabilityPolicy.state === 'degraded' ? { degraded: true } : {}),
     };
   } catch {
-    return err('internal', 'memory_recall failed.');
+    return rejectRecall('internal', 'memory_recall failed.');
   }
 }
 
@@ -461,9 +489,7 @@ export function executeMemoryRemember(
     return err('invalid_args', 'value must be at most 200 characters');
   }
 
-  const subjectType: EntityType = selfSubjectCandidate
-    ? 'self'
-    : (args.subjectType ?? 'concept');
+  const subjectType: EntityType = selfSubjectCandidate ? 'self' : (args.subjectType ?? 'concept');
 
   let scope: MemoryFactScope;
   try {
@@ -503,8 +529,14 @@ export function executeMemoryRemember(
         `memory_remember requires exact current-user grounding before changing this fact (${persisted.reason}).`,
       );
     }
+    if (persisted.status === 'restricted_content') {
+      return err('permission_denied', 'Credentials and authentication secrets are not stored.');
+    }
     if (persisted.status === 'conflict') {
-      return err('conflict', `memory_remember current fact changed (${persisted.conflict}); retry.`);
+      return err(
+        'conflict',
+        `memory_remember current fact changed (${persisted.conflict}); retry.`,
+      );
     }
     const result = persisted.result;
     return {

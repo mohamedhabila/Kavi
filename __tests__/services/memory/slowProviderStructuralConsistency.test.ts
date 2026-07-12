@@ -289,7 +289,8 @@ describe('slow provider structural consistency', () => {
       providerOutcome: 'valid',
     });
     const finalFacts = scopedFacts(job);
-    expect(finalFacts.some((fact) => fact.objectText === 'stable')).toBe(true);
+    expect(result.providerFactIds).toEqual([]);
+    expect(finalFacts.some((fact) => fact.objectText === 'stable')).toBe(false);
     expect(new Set(finalFacts.map((fact) => fact.id)).size).toBe(finalFacts.length);
     expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
   });

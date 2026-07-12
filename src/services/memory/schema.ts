@@ -397,6 +397,17 @@ export function ensureFactSchema(): void {
         deleted_at,
         invalid_at
       );
+    CREATE INDEX IF NOT EXISTS idx_facts_grounded_source
+      ON memory_facts(
+        memory_owner_id,
+        subject_id,
+        source_message_id,
+        scope,
+        fact_class,
+        source_authority,
+        invalid_at,
+        deleted_at
+      );
     CREATE INDEX IF NOT EXISTS idx_facts_local_similarity_current
       ON memory_facts(
         memory_owner_id,

@@ -76,6 +76,7 @@ export type IngestionJobEvidenceRecord = {
   memoryConversationId: string;
   taskId: string | null;
   sourceRunId: string | null;
+  priorUserMessageId: string | null;
   sourceStartMessageId: string | null;
   sourceEndMessageId: string;
   sourceAt: number;
@@ -142,7 +143,7 @@ function selectFactEvidence(whereClause: string, params: string[]): MemoryFactEv
   return getMany<FactEvidenceRow>(
     `SELECT fact.id,
             fact.subject_id AS subjectId,
-            subject.canonical_name AS subject,
+            COALESCE(subject.canonical_name, fact.subject_id) AS subject,
             fact.predicate,
             fact.object_text AS objectText,
             fact.content_hash AS contentHash,
@@ -166,7 +167,7 @@ function selectFactEvidence(whereClause: string, params: string[]): MemoryFactEv
             fact.review_state AS reviewState,
             fact.sensitivity
        FROM memory_facts AS fact
-       JOIN memory_entities AS subject ON subject.id = fact.subject_id
+       LEFT JOIN memory_entities AS subject ON subject.id = fact.subject_id
       WHERE ${whereClause}
       ORDER BY fact.id ASC`,
     ...params,
@@ -264,6 +265,7 @@ function listIngestionJobEvidence(scope: MemoryEvidenceScope): IngestionJobEvide
             memory_conversation_id AS memoryConversationId,
             task_id AS taskId,
             source_run_id AS sourceRunId,
+            prior_user_message_id AS priorUserMessageId,
             source_start_message_id AS sourceStartMessageId,
             source_end_message_id AS sourceEndMessageId,
             source_at AS sourceAt,

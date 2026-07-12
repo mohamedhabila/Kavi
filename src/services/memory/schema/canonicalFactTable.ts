@@ -109,6 +109,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'idx_facts_scope_kind_rank',
     'idx_facts_source_kind_rank',
     'idx_facts_applicability_scope',
+    'idx_facts_grounded_source',
     'idx_facts_local_similarity_current',
   ]);
   const schemaObjects = db.getAllSync<{ type: string; name: string; sql: string }>(

@@ -4,7 +4,8 @@ export const MEMORY_SEARCH_TOOL: ToolDefinition = {
   name: 'memory_search',
   description:
     'Search the structured living-memory fact store for conversation memory, global memory, or both. ' +
-    'Results label which scope each match came from and cite the fact/source record used as evidence.',
+    'Results label which scope each match came from and cite the fact/source record used as evidence. ' +
+    'This discovery tool never exposes sensitive or restricted facts.',
   input_schema: {
     type: 'object',
     properties: {
@@ -34,6 +35,7 @@ export const MEMORY_RECALL_TOOL: ToolDefinition = {
   description:
     'Recall structured facts from the living-memory fact store. Filter by subject (entity name), predicate (relation), or pinnedOnly. ' +
     'Returns only facts authorized for the exact current owner, workspace, thread, persona, and task. Each result has a binding use, ask, or abstain policy. ' +
+    'Sensitive facts require the current user message to request one exact subject and predicate; broad or model-initiated recall cannot expose them. Restricted facts are never returned. ' +
     'Use this when you need exact, structured recall of what is known about a subject; use memory_search when the subject or predicate is not known yet. ' +
     'If recall supports a same-turn request to write, create, send, update, open, or otherwise act, continue to the action tool with the recalled facts before final delivery.',
   input_schema: {

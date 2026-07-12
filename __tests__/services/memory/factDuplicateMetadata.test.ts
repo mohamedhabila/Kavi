@@ -113,11 +113,10 @@ describe('duplicate fact metadata transitions', () => {
     const first = recordFactWithApplicability(
       {
         subjectId: 'entity-user',
-        predicate: 'preference',
+        predicate: 'medical_preference',
         objectText: 'Concise answers',
         scope: 'global',
         reviewState: 'verified',
-        sensitivity: 'sensitive',
         sourceMessageId: 'message-1',
         now: 100,
       },
@@ -127,11 +126,10 @@ describe('duplicate fact metadata transitions', () => {
     const duplicate = recordFactWithApplicability(
       {
         subjectId: 'entity-user',
-        predicate: 'preference',
+        predicate: 'medical_preference',
         objectText: 'Concise answers',
         scope: 'global',
         reviewState: 'auto',
-        sensitivity: 'normal',
         sourceMessageId: 'message-2',
         now: 200,
       },
@@ -183,25 +181,30 @@ describe('duplicate fact metadata transitions', () => {
       scope: 'global' as const,
     };
     recordFactWithApplicability(
-      { ...base, reviewState: 'verified', sensitivity: 'normal', now: 100 },
+      { ...base, reviewState: 'verified', now: 100 },
       { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
     );
     const cautious = recordFactWithApplicability(
-      { ...base, reviewState: 'pending_review', sensitivity: 'restricted', now: 200 },
+      {
+        ...base,
+        reviewState: 'pending_review',
+        sourceSummary: 'Medical condition discussed.',
+        now: 200,
+      },
       { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
     );
     const attemptedRelaxation = recordFactWithApplicability(
-      { ...base, reviewState: 'verified', sensitivity: 'normal', now: 300 },
+      { ...base, reviewState: 'verified', now: 300 },
       { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
     );
 
     expect(cautious.fact).toMatchObject({
       reviewState: 'pending_review',
-      sensitivity: 'restricted',
+      sensitivity: 'sensitive',
     });
     expect(attemptedRelaxation.fact).toMatchObject({
       reviewState: 'pending_review',
-      sensitivity: 'restricted',
+      sensitivity: 'sensitive',
     });
   });
 });

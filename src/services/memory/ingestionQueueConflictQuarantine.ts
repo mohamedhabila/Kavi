@@ -14,6 +14,7 @@ interface PersistedIngestionIdentityRow {
   source_run_id: string | null;
   chat_provider_id: string | null;
   chat_model: string | null;
+  prior_user_message_id: string | null;
   source_start_message_id: string | null;
   source_end_message_id: string;
   source_at: number;
@@ -51,6 +52,7 @@ function hasSealedIngestionIdentity(row: PersistedIngestionIdentityRow): boolean
     validOptionalIdentity(row.source_run_id, isExactMemoryProvenanceId) &&
     validOptionalIdentity(row.chat_provider_id, isExactMemoryScopeId) &&
     validOptionalIdentity(row.chat_model, isExactMemoryProvenanceId) &&
+    validOptionalIdentity(row.prior_user_message_id, isExactMemoryProvenanceId) &&
     validOptionalIdentity(row.source_start_message_id, isExactMemoryProvenanceId) &&
     isExactMemoryProvenanceId(row.source_end_message_id) &&
     Number.isSafeInteger(row.source_at) &&
@@ -64,7 +66,8 @@ function hasSealedIngestionIdentity(row: PersistedIngestionIdentityRow): boolean
 export function failUnsealedActiveJobs(db: MemoryDb): void {
   const active = db.getAllSync<PersistedIngestionIdentityRow>(
     `SELECT id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
-            source_run_id, chat_provider_id, chat_model, source_start_message_id,
+            source_run_id, chat_provider_id, chat_model, prior_user_message_id,
+            source_start_message_id,
             source_end_message_id, source_at, reason, status, provider_enrichment, updated_at
        FROM memory_ingestion_jobs
       WHERE status IN ('pending', 'processing', 'retrying')`,
@@ -97,6 +100,7 @@ function ingestionIdentityKey(row: PersistedIngestionIdentityRow): string {
     row.source_run_id,
     row.chat_provider_id,
     row.chat_model,
+    row.prior_user_message_id,
     row.source_start_message_id,
     row.source_end_message_id,
     row.source_at,
@@ -343,7 +347,8 @@ function quarantineConflictingSourceArtifacts(
 export function quarantineConflictingSourceDuplicates(db: MemoryDb): void {
   const rows = db.getAllSync<PersistedIngestionIdentityRow>(
     `SELECT id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
-            source_run_id, chat_provider_id, chat_model, source_start_message_id,
+            source_run_id, chat_provider_id, chat_model, prior_user_message_id,
+            source_start_message_id,
             source_end_message_id, source_at, reason, status, provider_enrichment, updated_at
        FROM memory_ingestion_jobs
       ORDER BY thread_id, source_end_message_id, id`,

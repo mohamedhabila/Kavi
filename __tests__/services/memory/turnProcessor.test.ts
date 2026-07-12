@@ -430,7 +430,9 @@ describe('processIngestionTurn', () => {
       providerSignal: controller.signal,
     });
 
-    expect(result).toEqual(expect.objectContaining({ processed: false, skipped: 'provider_preempted' }));
+    expect(result).toEqual(
+      expect.objectContaining({ processed: false, skipped: 'provider_preempted' }),
+    );
     expect(mockApplyConsolidatorResult).toHaveBeenCalledWith(
       expect.objectContaining({ episodeSummary: 'Structural before preemption' }),
       expect.any(Object),
@@ -438,7 +440,7 @@ describe('processIngestionTurn', () => {
     expect(mockUpsertState).not.toHaveBeenCalled();
   });
 
-  it('deduplicates provider facts against structural facts by key', async () => {
+  it('rejects provider facts that are absent from the exact user evidence', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'S',
       facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
@@ -474,7 +476,7 @@ describe('processIngestionTurn', () => {
     });
 
     const persisted = mockApplyConsolidatorResult.mock.calls[1][0];
-    expect(persisted.newFacts).toEqual([{ subject: 'user', predicate: 'age', value: '30' }]);
+    expect(persisted.newFacts).toEqual([]);
   });
 
   it('preserves structural subject/predicate facts over provider variants in the same turn', async () => {
@@ -521,7 +523,7 @@ describe('processIngestionTurn', () => {
     ]);
   });
 
-  it('does not let provider enrichment supersede existing facts without structural memory evidence', async () => {
+  it('does not let provider enrichment supersede or invent facts without user evidence', async () => {
     mockFindEntityByName.mockImplementation((name: string) =>
       name === 'direct-longmem-user' ? { id: 'entity-direct-longmem-user' } : null,
     );
@@ -578,9 +580,7 @@ describe('processIngestionTurn', () => {
     });
 
     const persisted = mockApplyConsolidatorResult.mock.calls[1][0];
-    expect(persisted.newFacts).toEqual([
-      { subject: 'direct-longmem-user', predicate: 'last_sms_message', value: 'drafted' },
-    ]);
+    expect(persisted.newFacts).toEqual([]);
     expect(mockListFacts).toHaveBeenCalledWith(
       expect.objectContaining({
         subjectId: 'entity-direct-longmem-user',

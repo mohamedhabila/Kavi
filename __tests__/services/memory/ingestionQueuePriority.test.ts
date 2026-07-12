@@ -21,6 +21,7 @@ import {
   drainIngestionQueue,
   enqueueIngestionJob,
   getIngestionJob,
+  getNextPendingIngestionAttemptAt,
   INGESTION_RETRY_BASE_DELAY_MS,
   listPendingIngestionJobs,
 } from '../../../src/services/memory/ingestionQueue';
@@ -132,9 +133,7 @@ describe('ingestion queue structural priority', () => {
     expect(listPendingIngestionJobs(1, dueAt)).toEqual([
       expect.objectContaining({ id: newTurn.id, structuralCompletedAt: null }),
     ]);
-    mockedProcessIngestionTurn.mockResolvedValueOnce(
-      processResult({ status: 'not_requested' }),
-    );
+    mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'not_requested' }));
     await drainIngestionQueue({
       loadMessagesForThread: (threadId) =>
         closedTurn(threadId === newTurn.threadId ? 'new-turn' : 'enrichment-retry'),
@@ -146,5 +145,69 @@ describe('ingestion queue structural priority', () => {
     expect(getIngestionJob(enrichmentRetry.id)).toEqual(
       expect.objectContaining({ status: 'retrying', structuralCompletedAt: 100 }),
     );
+  });
+
+  it('does not let an adjacent correction overtake its retrying prior turn', async () => {
+    const threadId = 'conv-causal-retry';
+    const history = [...closedTurn('prior'), ...closedTurn('current')];
+    mockedProcessIngestionTurn.mockResolvedValueOnce(
+      processResult({ status: 'provider_error', code: 'provider_request_failed' }),
+    );
+    const prior = enqueueIngestionJob({
+      personaId: 'persona-before-switch',
+      threadId,
+      threadTitle: null,
+      memoryConversationId: threadId,
+      taskId: null,
+      sourceStartMessageId: 'user-prior',
+      sourceEndMessageId: 'assistant-prior',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 100,
+    })!;
+    await drainIngestionQueue({ loadMessagesForThread: () => history, now: 100 });
+    const dueAt = 100 + INGESTION_RETRY_BASE_DELAY_MS;
+    const correction = enqueueIngestionJob({
+      personaId: 'persona-after-switch',
+      threadId,
+      threadTitle: null,
+      memoryConversationId: threadId,
+      taskId: null,
+      priorUserMessageId: 'user-prior',
+      sourceStartMessageId: 'user-current',
+      sourceEndMessageId: 'assistant-current',
+      sourceRunId: null,
+      sourceAt: 101,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 101,
+    })!;
+
+    expect(listPendingIngestionJobs(3, 101)).toEqual([]);
+    expect(getNextPendingIngestionAttemptAt()).toBe(dueAt);
+    expect(listPendingIngestionJobs(3, dueAt)).toEqual([expect.objectContaining({ id: prior.id })]);
+
+    mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'valid' }));
+    await drainIngestionQueue({ loadMessagesForThread: () => history, maxJobs: 1, now: dueAt });
+
+    expect(getIngestionJob(prior.id)?.status).toBe('completed_enriched');
+    expect(listPendingIngestionJobs(3, dueAt)).toEqual([
+      expect.objectContaining({ id: correction.id }),
+    ]);
+
+    mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'not_requested' }));
+    await drainIngestionQueue({ loadMessagesForThread: () => history, maxJobs: 1, now: dueAt });
+
+    expect(getIngestionJob(correction.id)?.status).toBe('completed_structural');
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(3);
+    expect(
+      mockedProcessIngestionTurn.mock.calls[2]![0].messages.map((message) => message.id),
+    ).toEqual(['user-current', 'assistant-current']);
   });
 });

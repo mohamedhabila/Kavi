@@ -185,7 +185,7 @@ describe('living-memory tool wiring', () => {
       executeMemoryRemember(
         {
           subject: 'user',
-          predicate: 'prefers',
+          predicate: 'preference',
           value: 'dark mode',
           confidence: 0.9,
           scope: 'global',
@@ -196,12 +196,12 @@ describe('living-memory tool wiring', () => {
       ),
     );
     expect(remembered.ok).toBe(true);
-    expect(remembered.fact.predicate).toBe('prefers');
+    expect(remembered.fact.predicate).toBe('preference');
     expect(remembered.fact.scope).toBe('global');
     expect(remembered.fact.importance).toBe(0.8);
 
     const recalled = JSON.parse(
-      executeMemoryRecall({ subject: 'user', predicate: 'prefers' }, MEMORY_EXECUTION_SCOPE),
+      executeMemoryRecall({ subject: 'user', predicate: 'preference' }, MEMORY_EXECUTION_SCOPE),
     );
     expect(recalled.ok).toBe(true);
     expect(recalled.facts).toHaveLength(1);

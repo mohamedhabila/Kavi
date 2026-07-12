@@ -5,6 +5,10 @@ import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
+import {
+  classifyMemoryFactSensitivity,
+  maxMemoryFactSensitivity,
+} from '../memorySensitivityPolicy';
 import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { buildFactContentHash, hasExactFactContentIdentity } from './contentIdentity';
 import {
@@ -28,8 +32,8 @@ import {
   closedMemoryFactSensitivity,
   closedMemorySourceAuthority,
   requireMemoryFactReviewState,
-  requireMemoryFactSensitivity,
   resolveFactApplicabilityProvenance,
+  type MemoryFactSensitivity,
   type SealedFactApplicabilityProvenance,
 } from './applicabilityProvenance';
 import {
@@ -191,7 +195,19 @@ function recordFactInTransaction(
   const decayPolicy = normalizeDecayPolicy(input.decayPolicy);
   const memoryKind = normalizeFactKind(input.memoryKind);
   const reviewState = requireMemoryFactReviewState(input.reviewState ?? 'auto');
-  const sensitivity = requireMemoryFactSensitivity(input.sensitivity ?? 'normal');
+  const subject = db.getFirstSync<{ canonical_name: string; type: string }>(
+    'SELECT canonical_name, type FROM memory_entities WHERE id = ? LIMIT 1',
+    input.subjectId,
+  );
+  const sensitivity = classifyMemoryFactSensitivity({
+    subject: subject?.canonical_name,
+    subjectType: subject?.type,
+    predicate,
+    objectText,
+    attributes: input.attributes,
+    sourceSummary: input.sourceSummary,
+    memoryKind,
+  });
   const provenance = resolveFactApplicabilityProvenance({
     scope,
     memoryKind,
@@ -506,6 +522,22 @@ function recordFactInTransaction(
   replaceFactRetrievalTerms(fact);
   runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(fact.originConversationId));
   return { fact, status: 'created', superseded };
+}
+
+/** Apply a code-owned monotonic floor while an exact replacement transaction is active. */
+export function setFactSensitivityFloorInTransaction(
+  factId: string,
+  minimum: MemoryFactSensitivity,
+): MemoryFact {
+  const db = getSchemaReadyMemoryDb();
+  const row = db.getFirstSync<FactRow>('SELECT * FROM memory_facts WHERE id = ? LIMIT 1', factId);
+  if (!row) throw new Error('memory_fact_sensitivity_target_missing');
+  const existing = closedMemoryFactSensitivity(row.sensitivity) ?? 'restricted';
+  const sensitivity = maxMemoryFactSensitivity(existing, minimum);
+  if (sensitivity !== existing) {
+    db.runSync('UPDATE memory_facts SET sensitivity = ? WHERE id = ?', sensitivity, factId);
+  }
+  return rowToFact({ ...row, sensitivity });
 }
 
 export function markFactsRecalled(ids: string[], now = Date.now()): number {

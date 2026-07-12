@@ -30,6 +30,7 @@ function createDurableIngestionJobsTable(
       source_run_id TEXT,
       chat_provider_id TEXT,
       chat_model TEXT,
+      prior_user_message_id TEXT,
       source_start_message_id TEXT,
       source_end_message_id TEXT NOT NULL,
       source_at INTEGER NOT NULL,
@@ -192,6 +193,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     'source_run_id',
     'chat_provider_id',
     'chat_model',
+    'prior_user_message_id',
   ];
   const memoryConversationColumn = columns.find(
     (column) => column.name === 'memory_conversation_id',
@@ -229,6 +231,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
   ensureColumn(db, 'source_run_id', 'source_run_id TEXT');
   ensureColumn(db, 'chat_provider_id', 'chat_provider_id TEXT');
   ensureColumn(db, 'chat_model', 'chat_model TEXT');
+  ensureColumn(db, 'prior_user_message_id', 'prior_user_message_id TEXT');
 
   const invalidMigratedPersonaSql = `
     persona_id IS NULL
@@ -249,9 +252,13 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     OR provider_enrichment NOT IN (0, 1)
     OR ((chat_provider_id IS NULL) != (chat_model IS NULL))
   `;
+  const migratedPriorIdentityUnavailableSql = names.has('prior_user_message_id') ? '0' : '1';
   const invalidMigratedActiveIdentitySql = `
     status IN ('pending', 'processing', 'retrying')
-    AND (${invalidMigratedNormalizedIdentitySql})
+    AND (
+      ${migratedPriorIdentityUnavailableSql}
+      OR (${invalidMigratedNormalizedIdentitySql})
+    )
   `;
 
   db.execSync('BEGIN IMMEDIATE TRANSACTION');
@@ -261,7 +268,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     db.execSync(`
       INSERT INTO ${DURABLE_INGESTION_JOBS_TABLE} (
         id, thread_id, thread_title, memory_conversation_id, persona_id, task_id, source_run_id,
-        chat_provider_id, chat_model,
+        chat_provider_id, chat_model, prior_user_message_id,
         source_start_message_id, source_end_message_id, source_at, reason, status,
         attempt_count, provider_enrichment, provider_outcome, outcome_code,
         next_attempt_at, lease_expires_at, claim_token, structural_completed_at,
@@ -291,6 +298,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
             THEN chat_model
           ELSE NULL
         END,
+        prior_user_message_id,
         source_start_message_id,
         source_end_message_id,
         CASE
@@ -420,6 +428,14 @@ function ensureIndexes(db: MemoryDb): void {
       ON memory_ingestion_jobs(status, lease_expires_at);
     CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_evidence_scope
       ON memory_ingestion_jobs(memory_conversation_id, thread_id, created_at, id);
+    DROP INDEX IF EXISTS idx_ingestion_jobs_prior_dependency;
+    CREATE INDEX idx_ingestion_jobs_prior_dependency
+      ON memory_ingestion_jobs(
+        thread_id,
+        memory_conversation_id,
+        source_start_message_id,
+        status
+      );
   `);
 }
 

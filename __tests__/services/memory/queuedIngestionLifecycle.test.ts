@@ -76,6 +76,7 @@ it('consolidates each queued turn from its recorded source window', async () => 
     threadTitle: null,
     memoryConversationId: threadId,
     taskId: null,
+    priorUserMessageId: 'u-window-1',
     sourceStartMessageId: 'u-window-2',
     sourceEndMessageId: 'a-window-2',
     sourceRunId: null,
@@ -87,20 +88,35 @@ it('consolidates each queued turn from its recorded source window', async () => 
     now: 20,
   });
 
-  const result = await drainIngestionQueue({ loadMessagesForThread: () => transcript });
+  const firstResult = await drainIngestionQueue({ loadMessagesForThread: () => transcript });
+  const secondResult = await drainIngestionQueue({ loadMessagesForThread: () => transcript });
 
-  expect(result).toEqual({
-    attempted: 2,
-    completed: 2,
-    completedStructural: 2,
-    completedEnriched: 0,
-    retrying: 0,
-    degraded: 0,
-    deferred: 0,
-    sourceDeferred: 0,
-    resourceDeferred: 0,
-    failed: 0,
-  });
+  expect([firstResult, secondResult]).toEqual([
+    {
+      attempted: 1,
+      completed: 1,
+      completedStructural: 1,
+      completedEnriched: 0,
+      retrying: 0,
+      degraded: 0,
+      deferred: 0,
+      sourceDeferred: 0,
+      resourceDeferred: 0,
+      failed: 0,
+    },
+    {
+      attempted: 1,
+      completed: 1,
+      completedStructural: 1,
+      completedEnriched: 0,
+      retrying: 0,
+      degraded: 0,
+      deferred: 0,
+      sourceDeferred: 0,
+      resourceDeferred: 0,
+      failed: 0,
+    },
+  ]);
   expect(
     listEpisodes({ threadId }).map((episode) => ({
       messageIds: episode.messageIds,

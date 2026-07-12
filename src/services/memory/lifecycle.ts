@@ -186,7 +186,7 @@ export interface RecordCompletedTurnForMemoryResult {
   activeFocusUpdated: boolean;
   openThreadsUpdated: boolean;
   enriched: boolean;
-  skipped?: 'opt_out' | 'no_closed_turn';
+  skipped?: 'opt_out' | 'no_closed_turn' | 'source_identity_invalid';
 }
 
 function composeConversationFocusFromThreadTitle(
@@ -263,11 +263,6 @@ export async function recordCompletedTurnForMemory(
   const sourceRunId = input.sourceRunId ?? conversation?.activeAgentRunId ?? undefined;
   const chatProvider = input.activeChatProvider ?? resolveActiveMemoryChatProvider(conversation);
 
-  const conversationFocusUpdated = syncConversationFocusFromThreadTitle({
-    memoryConversationId,
-    threadTitle: input.threadTitle,
-    now: input.now,
-  });
   const syncResult = syncWorkingMemoryFromTurn({
     threadId: input.threadId,
     memoryConversationId,
@@ -277,6 +272,14 @@ export async function recordCompletedTurnForMemory(
     taskId: input.taskId,
     now: input.now,
   });
+  const conversationFocusUpdated =
+    syncResult.skipped === 'source_identity_invalid'
+      ? false
+      : syncConversationFocusFromThreadTitle({
+          memoryConversationId,
+          threadTitle: input.threadTitle,
+          now: input.now,
+        });
 
   if (!syncResult.processed || !syncResult.sourceEndMessageId) {
     return {
@@ -304,6 +307,7 @@ export async function recordCompletedTurnForMemory(
     personaId,
     sourceEndMessageId: syncResult.sourceEndMessageId,
     sourceAt,
+    priorUserMessageId: syncResult.priorUserMessageId,
     sourceStartMessageId: syncResult.sourceStartMessageId,
     taskId: input.taskId ?? null,
     sourceRunId: sourceRunId ?? null,

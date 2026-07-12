@@ -53,7 +53,6 @@ function seedFact(input: {
   predicate: string;
   value: string;
   reviewState?: 'auto' | 'verified' | 'pending_review' | 'stale' | 'conflicted' | 'rejected';
-  sensitivity?: 'normal' | 'personal' | 'sensitive' | 'restricted';
   sealedApplicability?: SealedFactApplicabilityProvenance;
   evidence?: string;
 }): string {
@@ -67,7 +66,6 @@ function seedFact(input: {
     originThreadId: SOURCE_THREAD_ID,
     sourceMessageId: `source-${input.predicate}`,
     reviewState: input.reviewState,
-    sensitivity: input.sensitivity,
     importance: 1,
     confidence: 0.95,
     now: 1_000,
@@ -112,9 +110,8 @@ describe('living memory applicability integration', () => {
       reviewState: 'stale',
     });
     const sensitiveId = seedFact({
-      predicate: 'sensitive_state',
+      predicate: 'medical_state',
       value: 'sensitive-memory-value',
-      sensitivity: 'sensitive',
       evidence: 'sensitive-local-evidence',
     });
     const objectiveId = seedFact({

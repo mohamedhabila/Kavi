@@ -284,9 +284,8 @@ describe('fact recall SQL scope identity', () => {
       reviewState: 'rejected',
     });
     const sensitive = add({
-      predicate: 'blocked_sensitive_automatic',
+      predicate: 'blocked_medical_status',
       scope: 'global',
-      sensitivity: 'sensitive',
     });
     const unsafeExpiry = add({ predicate: 'blocked_unsafe_expiry', scope: 'global' });
     invalidateFact(invalidated.fact.id, 500);
@@ -520,10 +519,9 @@ describe('fact recall SQL scope identity', () => {
     const sensitive = recordFactWithApplicability(
       {
         subjectId: subject.id,
-        predicate: 'sensitive_control',
+        predicate: 'medical_control',
         objectText: 'sensitive control value',
         scope: 'global',
-        sensitivity: 'sensitive',
         now: 100,
       },
       { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },

@@ -12,6 +12,7 @@ import { editWorkingBlock } from '../workingBlocks';
 import type { ConsolidatorFact, ConsolidatorResult } from '../consolidator';
 import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
 import { resolveCodeOwnedMemoryTaskId } from '../memoryScopeIdentity';
+import { classifyMemoryFactSensitivity } from '../memorySensitivityPolicy';
 
 const logger = createLogger('memory.consolidation.persistence');
 
@@ -164,7 +165,6 @@ function applyConsolidatorResultInTransaction(
   const invalidatedFactIds: string[] = [];
   for (const [inputIndex, fact] of result.newFacts.entries()) {
     const subjectType = fact.subject === 'user' ? 'self' : 'concept';
-    const subject = upsertEntity({ type: subjectType, name: fact.subject, now });
     const sourceMessageId =
       fact.evidenceMessageIds?.[0] ??
       options.sourceUserMessageId ??
@@ -186,6 +186,21 @@ function applyConsolidatorResultInTransaction(
       ...(fact.reason ? { reason: fact.reason } : {}),
       ...(memoryWrite ? { memoryWrite } : {}),
     };
+    const sourceSummary = fact.reason ?? episodeSummary ?? null;
+    if (
+      classifyMemoryFactSensitivity({
+        subject: fact.subject,
+        subjectType,
+        predicate: fact.predicate,
+        objectText: fact.value,
+        attributes,
+        sourceSummary,
+        memoryKind: 'semantic_fact',
+      }) === 'restricted'
+    ) {
+      continue;
+    }
+    const subject = upsertEntity({ type: subjectType, name: fact.subject, now });
     const scope = fact.scope ?? 'conversation';
     const factInput = {
       subjectId: subject.id,
@@ -203,7 +218,7 @@ function applyConsolidatorResultInTransaction(
       sourceRunId: options.sourceRunId ?? null,
       sourceMessageId: fact.admittedWrite?.evidenceMessageId ?? sourceMessageId,
       sourceTurnId: options.sourceAssistantMessageId ?? options.sourceUserMessageId ?? null,
-      sourceSummary: fact.reason ?? episodeSummary ?? null,
+      sourceSummary,
       importance: fact.importance ?? inferFactImportance(fact),
       attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
       now,

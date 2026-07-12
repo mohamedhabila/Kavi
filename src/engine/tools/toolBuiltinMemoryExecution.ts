@@ -18,6 +18,9 @@ import type {
   MemoryRememberExecutionContext,
   MemoryRecallExecutionContext,
 } from '../../services/memory/memoryTools';
+import { resolvePriorUserMessageIdentity } from '../../services/memory/priorUserMessageIdentity';
+import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
+import { createExplicitMemoryRecallGrant } from '../../services/memory/explicitMemoryRecallGrant';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
 import type { ToolExecutionContext } from './toolExecutionContext';
 
@@ -76,6 +79,42 @@ function resolveExecutionMemoryContext(
   };
 }
 
+function withRecallExecutionContext(
+  conversationId: string,
+  memoryConversationId: string,
+  context?: ToolExecutionContext,
+): MemoryRecallExecutionContext {
+  const execution = resolveExecutionMemoryContext(conversationId, memoryConversationId, context);
+  const currentUserMessage = context?.currentUserMessage;
+  const executionRunId = context?.executionRunId;
+  if (!currentUserMessage || !executionRunId) return execution;
+
+  const requestIdentity = {
+    currentUserMessageId: currentUserMessage.id,
+    currentUserMessageText: currentUserMessage.text,
+    executionRunId,
+    agentRunId: context?.agentRunId ?? null,
+  };
+  try {
+    const explicitUserRequestGrant = createExplicitMemoryRecallGrant({
+      ...requestIdentity,
+      scope: resolveLocalMemoryAccessScope({
+        memoryConversationId: execution.memoryConversationId,
+        sourceThreadId: execution.sourceThreadId,
+        personaId: execution.personaId,
+        taskId: execution.taskId,
+      }),
+    });
+    return {
+      ...execution,
+      requestIdentity,
+      ...(explicitUserRequestGrant ? { explicitUserRequestGrant } : {}),
+    };
+  } catch {
+    return execution;
+  }
+}
+
 function withExecutionMemoryContext(
   args: unknown,
   conversationId: string,
@@ -94,6 +133,16 @@ function withExecutionMemoryContext(
   );
   const taskId = executionMemoryContext.taskId;
   const currentUserMessage = context?.currentUserMessage;
+  const conversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === conversationId);
+  const priorUserIdentity = currentUserMessage
+    ? resolvePriorUserMessageIdentity(conversation?.messages ?? [], currentUserMessage.id)
+    : null;
+  const priorUserMessageId =
+    priorUserIdentity?.status === 'resolved'
+      ? (priorUserIdentity.priorUserMessageId ?? undefined)
+      : undefined;
   const rememberContext: MemoryRememberExecutionContext = {
     ...(currentUserMessage
       ? {
@@ -103,6 +152,7 @@ function withExecutionMemoryContext(
             taskId,
             userMessageId: currentUserMessage.id,
             userMessageText: currentUserMessage.text,
+            ...(priorUserMessageId ? { priorUserMessageId } : {}),
           },
         }
       : {}),
@@ -197,16 +247,11 @@ export async function executeBuiltinMemoryTool(
   if (name === 'memory_recall') {
     return executeMemoryRecall(
       args,
-      resolveExecutionMemoryContext(conversationId, memoryConversationId, context),
+      withRecallExecutionContext(conversationId, memoryConversationId, context),
     );
   }
   if (name === 'memory_remember') {
-    const request = withExecutionMemoryContext(
-      args,
-      conversationId,
-      memoryConversationId,
-      context,
-    );
+    const request = withExecutionMemoryContext(args, conversationId, memoryConversationId, context);
     return executeMemoryRemember(request.args, request.context);
   }
   if (name === 'memory_block_read') return executeMemoryBlockRead(args);
@@ -245,10 +290,7 @@ export async function executeBuiltinMemoryTool(
       return executeMemoryUnpin({ factId: args?.factId as string }, executionMemoryContext);
     }
     if (action === 'invalidate') {
-      return executeMemoryInvalidate(
-        { factId: args.factId as string },
-        executionMemoryContext,
-      );
+      return executeMemoryInvalidate({ factId: args.factId as string }, executionMemoryContext);
     }
   }
 

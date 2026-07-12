@@ -164,7 +164,8 @@ describe('durable memory enrichment retries', () => {
       {
         id: 'u-retry',
         role: 'user',
-        content: 'Create and remember the release artifact.',
+        content:
+          'release title is Production Mobile Release. Create and remember the release artifact.',
         timestamp: 1,
       },
       {
@@ -232,9 +233,9 @@ describe('durable memory enrichment retries', () => {
             content: JSON.stringify({
               new_facts: [
                 {
-                  subject: 'user',
-                  predicate: 'release_target',
-                  value: 'production mobile release',
+                  subject: 'release',
+                  predicate: 'release_title',
+                  value: 'Production Mobile Release',
                   scope: 'conversation',
                   confidence: 0.9,
                   evidence_message_ids: ['u-retry'],
@@ -256,7 +257,7 @@ describe('durable memory enrichment retries', () => {
     });
     const episodes = listEpisodes({ threadId: 'conv-provider-retry' });
     const facts = listFacts({ originConversationId: 'conv-provider-retry', limit: 20 });
-    const providerFacts = facts.filter((fact) => fact.predicate === 'release_target');
+    const providerFacts = facts.filter((fact) => fact.predicate === 'release_title');
     const structuralFacts = facts.filter((fact) => fact.predicate === 'file_operation');
     const evidenceCount = getMemoryDb().getFirstSync<{ count: number }>(
       'SELECT COUNT(*) AS count FROM memory_fact_evidence',

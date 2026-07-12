@@ -117,7 +117,7 @@ describe('paired oracle evidence seeding', () => {
       },
       userEvidence: {
         messageId: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
-        text: 'I preference tea.',
+        text: 'My preference is tea.',
       },
     });
     const serializedArgs = JSON.stringify(executeTool.mock.calls[0][0].args);
@@ -130,6 +130,51 @@ describe('paired oracle evidence seeding', () => {
     ]) {
       expect(serializedArgs).not.toContain(sentinel);
     }
+  });
+
+  it('preserves every predicate unit in synthetic grounding evidence', async () => {
+    let sourceMessageId = '';
+    const executeTool = jest.fn(async ({ userEvidence }) => {
+      sourceMessageId = userEvidence.messageId;
+      return JSON.stringify({
+        ok: true,
+        fact: {
+          id: 'oracle-fact-id',
+          scope: 'conversation',
+          originConversationId: 'isolated-workspace',
+          originThreadId: 'isolated-thread',
+          originTaskId: null,
+          sourceMessageId,
+        },
+      });
+    });
+
+    await seedE2EOracleEvidence({
+      declaration: {
+        interface: 'memory_remember',
+        allowSeeding: true,
+        facts: [
+          {
+            subject: 'user',
+            subjectType: 'self',
+            predicate: 'preferred_channel',
+            value: 'Signal',
+            scope: 'global',
+          },
+        ],
+      },
+      conversationId: 'isolated-thread',
+      workspaceConversationId: 'isolated-workspace',
+      executeTool,
+      readPersistedFact: () =>
+        persistedFact({
+          predicate: 'preferred_channel',
+          objectText: 'Signal',
+          sourceMessageId,
+        }),
+    });
+
+    expect(executeTool.mock.calls[0][0].userEvidence.text).toBe('My preferred channel is Signal.');
   });
 
   it('fails closed when the product result or persisted provenance is invalid', async () => {

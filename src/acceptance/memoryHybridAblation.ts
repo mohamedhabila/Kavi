@@ -118,7 +118,6 @@ function seedFixture(
         now: seed.now,
         ...(seed.validAt !== undefined ? { validAt: seed.validAt } : {}),
         ...(seed.expiresAt !== undefined ? { expiresAt: seed.expiresAt } : {}),
-        ...(seed.sensitivity ? { sensitivity: seed.sensitivity } : {}),
       },
       { factClass: 'workflow', sourceAuthority: 'tool_observed' },
     );

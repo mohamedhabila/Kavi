@@ -50,7 +50,11 @@ afterEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false });
 });
 
-function groundedRequest(userMessageId: string, userMessageText: string) {
+function groundedRequest(
+  userMessageId: string,
+  userMessageText: string,
+  priorUserMessageId?: string,
+) {
   return {
     requestEvidence: {
       memoryConversationId: 'conversation-request',
@@ -58,6 +62,7 @@ function groundedRequest(userMessageId: string, userMessageText: string) {
       taskId: null,
       userMessageId,
       userMessageText,
+      ...(priorUserMessageId ? { priorUserMessageId } : {}),
     },
   };
 }
@@ -103,11 +108,11 @@ describe('executeMemoryRemember', () => {
   });
 
   it('reports duplicate on identical re-record', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
+    rememberOk({ subject: 'user', predicate: 'residence', value: 'Berlin', scope: 'global' });
     const second = rememberOk(
       {
         subject: 'user',
-        predicate: 'lives_in',
+        predicate: 'residence',
         value: 'Berlin',
         scope: 'global',
       },
@@ -138,11 +143,11 @@ describe('executeMemoryRemember', () => {
   });
 
   it('supersedes an exact prior fact only from grounded current-user evidence', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
+    rememberOk({ subject: 'user', predicate: 'residence', value: 'Berlin', scope: 'global' });
     const next = rememberOk(
       {
         subject: 'user',
-        predicate: 'lives_in',
+        predicate: 'residence',
         value: 'Munich',
         scope: 'global',
       },
@@ -153,7 +158,7 @@ describe('executeMemoryRemember', () => {
     expect(next.superseded).toHaveLength(1);
     expect(next.superseded[0].value).toBe('Berlin');
 
-    const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'lives_in' });
+    const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'residence' });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
       expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
@@ -161,11 +166,11 @@ describe('executeMemoryRemember', () => {
   });
 
   it('ignores provider-supplied supersedePrior=false and keeps current state singular', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
+    rememberOk({ subject: 'user', predicate: 'residence', value: 'Berlin', scope: 'global' });
     const next = rememberOk(
       {
         subject: 'user',
-        predicate: 'lives_in',
+        predicate: 'residence',
         value: 'Munich',
         scope: 'global',
         supersedePrior: false,
@@ -177,7 +182,7 @@ describe('executeMemoryRemember', () => {
     expect(next.superseded).toHaveLength(1);
     expect(next.superseded[0].value).toBe('Berlin');
 
-    const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'lives_in' });
+    const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'residence' });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
       expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
@@ -442,7 +447,7 @@ describe('executeMemoryForget', () => {
   it('keeps whole-vault UI withdrawal on an explicit non-agent path', () => {
     const created = rememberOk({
       subject: 'ui-private-project',
-      predicate: 'secret',
+      predicate: 'private_note',
       value: 'remove-me',
       scope: 'conversation',
       originConversationId: 'other-root',

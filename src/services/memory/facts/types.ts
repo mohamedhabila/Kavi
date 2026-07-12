@@ -1,5 +1,9 @@
 import { safeParseObject } from '../schema';
-import type { MemoryFactReviewState, MemoryFactSensitivity } from './applicabilityProvenance';
+import {
+  closedMemoryFactSensitivity,
+  type MemoryFactReviewState,
+  type MemoryFactSensitivity,
+} from './applicabilityProvenance';
 import { parseCurrentLocalSimilarityVector, type LocalSimilarityVector } from '../localSimilarity';
 
 export type MemoryFactScope = 'global' | 'project' | 'conversation' | 'session' | 'persona';
@@ -64,7 +68,7 @@ export interface MemoryFact {
   lastConfirmedAt: number | null;
   lastConflictedAt: number | null;
   reviewState: string;
-  sensitivity: string;
+  sensitivity: MemoryFactSensitivity;
   memoryKind: MemoryFactKind;
 }
 
@@ -210,7 +214,7 @@ export function rowToFact(row: FactRow): MemoryFact {
     lastConfirmedAt: row.last_confirmed_at ?? null,
     lastConflictedAt: row.last_conflicted_at ?? null,
     reviewState: row.review_state ?? 'auto',
-    sensitivity: row.sensitivity ?? 'normal',
+    sensitivity: closedMemoryFactSensitivity(row.sensitivity) ?? 'restricted',
     memoryKind: normalizeFactKind(row.memory_kind),
   };
 }
@@ -240,7 +244,6 @@ export interface RecordFactInput {
   stability?: number;
   decayRate?: number;
   reviewState?: MemoryFactReviewState;
-  sensitivity?: MemoryFactSensitivity;
   memoryKind?: MemoryFactKind;
   /** When true, any existing currently-valid fact for (subject, predicate) is invalidated. */
   supersedePrior?: boolean;

@@ -15,6 +15,7 @@ export interface IngestionJobRow {
   source_run_id: string | null;
   chat_provider_id: string | null;
   chat_model: string | null;
+  prior_user_message_id: string | null;
   source_start_message_id: string | null;
   source_end_message_id: string;
   source_at: number;
@@ -39,6 +40,7 @@ export interface IngestionSourceIdentity {
   memoryConversationId: string;
   personaId: string;
   taskId: string | null;
+  priorUserMessageId: string | null;
   sourceStartMessageId: string | null;
   sourceEndMessageId: string;
   sourceRunId: string | null;
@@ -109,6 +111,7 @@ export function rowToIngestionJob(row: IngestionJobRow): IngestionJob {
     sourceRunId: row.source_run_id,
     chatProviderId: row.chat_provider_id,
     chatModel: row.chat_model,
+    priorUserMessageId: row.prior_user_message_id,
     sourceStartMessageId: row.source_start_message_id,
     sourceEndMessageId: row.source_end_message_id,
     sourceAt: row.source_at,
@@ -138,6 +141,7 @@ export function requireMatchingIngestionSourceIdentity(
     row.memory_conversation_id !== identity.memoryConversationId ||
     row.persona_id !== identity.personaId ||
     row.task_id !== identity.taskId ||
+    row.prior_user_message_id !== identity.priorUserMessageId ||
     row.source_start_message_id !== identity.sourceStartMessageId ||
     row.source_end_message_id !== identity.sourceEndMessageId ||
     row.source_run_id !== identity.sourceRunId ||
@@ -165,6 +169,7 @@ export function hasSealedIngestionJobIdentity(
     isOptionalIngestionProvenanceIdentity(job.sourceRunId) &&
     isOptionalIngestionScopeIdentity(job.chatProviderId) &&
     isOptionalIngestionProvenanceIdentity(job.chatModel) &&
+    isOptionalIngestionProvenanceIdentity(job.priorUserMessageId) &&
     isOptionalIngestionProvenanceIdentity(job.sourceStartMessageId) &&
     isExactMemoryProvenanceId(job.sourceEndMessageId) &&
     Number.isSafeInteger(job.sourceAt) &&

@@ -1,9 +1,8 @@
 import type { EntityType } from '../services/memory/entities';
-import type { MemoryFactSensitivity } from '../services/memory/facts/applicabilityProvenance';
 
 export const MEMORY_HYBRID_ABLATION_FIXTURE_VERSION = 'memory-hybrid-ablation-v2' as const;
 export const MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE =
-  'sha256:2a277760be1cd2483bacb576a872d5bcd5f937cd239db0fc67a76a71bce03693' as const;
+  'sha256:c22882d8a54fe19e8919f649fb52256b3d6c195337fc830410c11f0c5d18d146' as const;
 
 export type MemoryHybridAblationFamily =
   | 'lexical_control'
@@ -27,7 +26,6 @@ export type MemoryHybridAblationFactSeed = Readonly<{
   now: number;
   validAt?: number;
   expiresAt?: number;
-  sensitivity?: MemoryFactSensitivity;
   origin: 'active' | 'other';
   deleted?: boolean;
 }>;
@@ -219,9 +217,8 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
       {
         key: 'restricted',
         entityKey: 'restricted',
-        predicate: 'private_signal',
+        predicate: 'password',
         objectText: 'RESTRICTED-SENTINEL',
-        sensitivity: 'restricted',
         now: 100,
         origin: 'active',
       },

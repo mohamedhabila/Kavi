@@ -67,6 +67,7 @@ describe('Builtin Tool Executor', () => {
         expect.objectContaining({
           limit: 10,
           threshold: 0.01,
+          useIntent: 'automatic_prompt',
         }),
       );
     });
@@ -186,7 +187,7 @@ describe('Builtin Tool Executor', () => {
       expect(parsed.policyInstruction).toContain('never assert or act on action=abstain');
     });
 
-    it('returns assistant-inferred subjective memory only as an ask decision', async () => {
+    it('keeps assistant-inferred subjective memory out of automatic search results', async () => {
       const inferred = makeScoredFact({
         fact: {
           id: 'fact-subjective-inference',
@@ -209,18 +210,10 @@ describe('Builtin Tool Executor', () => {
         await executeMemorySearch({ query: 'possible preference' }, MEMORY_SEARCH_SCOPE),
       );
 
-      expect(parsed.results).toHaveLength(1);
-      expect(parsed.results[0]).toMatchObject({
-        factId: inferred.id,
-        relevance: null,
-        policy: {
-          action: 'ask',
-          reason: 'subjective_authority_confirmation_required',
-        },
-      });
+      expect(parsed.results).toEqual([]);
     });
 
-    it('exposes bounded typed experience views with the selected run policy and provenance', async () => {
+    it('keeps unverified inferred experience views out of automatic search results', async () => {
       const runFact = makeScoredFact({
         fact: {
           id: 'fact-agent-run-1',
@@ -260,38 +253,36 @@ describe('Builtin Tool Executor', () => {
         await executeMemorySearch({ query: 'release receipt procedure' }, MEMORY_SEARCH_SCOPE),
       );
 
-      expect(parsed.results).toHaveLength(1);
-      expect(parsed.results[0].policy).toEqual({
-        action: 'ask',
-        reason: 'workflow_authority_confirmation_required',
-      });
-      expect(parsed.results[0].experienceViews).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            kind: 'procedure',
-            evidence: expect.objectContaining({
-              factId: 'fact-agent-run-1',
-              sourceRunId: 'run-1',
-              sourceTurnId: 'turn-1',
-              sourceMessageId: 'message-1',
-            }),
-            applicability: expect.objectContaining({
-              conversationId: 'conversation-1',
-              threadId: 'conversation-1',
-              generalization: 'single_run',
-            }),
-          }),
-          expect.objectContaining({
-            kind: 'artifact',
-            values: ['artifacts/release-receipt.json'],
-          }),
-          expect.objectContaining({
-            kind: 'gotcha',
-            values: ['Refresh authorization before retrying'],
-          }),
-        ]),
-      );
+      expect(parsed.results).toEqual([]);
       expect(parsed.policyInstruction).toContain('ask the user before relying on action=ask');
+    });
+
+    it('never projects sensitive facts through agent-invoked memory_search', async () => {
+      const sensitive = makeScoredFact({
+        fact: {
+          id: 'fact-sensitive-search',
+          memoryOwnerId: 'test-memory-owner',
+          factClass: 'subjective_user',
+          sourceAuthority: 'grounded_user',
+          sensitivity: 'sensitive',
+          scope: 'conversation',
+          originConversationId: 'conversation-1',
+          originThreadId: 'conversation-1',
+          originTaskId: null,
+        },
+      });
+      mockRecallFactSelectionForQuery.mockResolvedValueOnce({
+        facts: [sensitive.fact],
+        resolutionFacts: [],
+        scoredFacts: [sensitive],
+      });
+
+      const parsed = JSON.parse(
+        await executeMemorySearch({ query: 'private profile' }, MEMORY_SEARCH_SCOPE),
+      );
+
+      expect(parsed.results).toEqual([]);
+      expect(mockMarkFactsRecalled).toHaveBeenCalledWith([], expect.any(Number));
     });
   });
 });

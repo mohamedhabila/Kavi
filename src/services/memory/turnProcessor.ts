@@ -22,8 +22,6 @@ import { extractProviderEnrichment } from './providerExtractor';
 import { ensureFactSchema } from './schema';
 import { editPromptEligibleWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
-import { resolveCurrentFactsForReplacement } from './facts/currentReplacementResolution';
-import { evaluateGroundedReplacement } from './groundedFactReplacement';
 import { canWriteLongTermMemory } from './policy';
 import { finalizeProviderTurn, persistStructuralTurn } from './turnPersistence';
 import type { EpisodeShareability } from './episodes/accessPolicyTypes';
@@ -31,6 +29,17 @@ import {
   resolveCodeOwnedMemoryConversationId,
   resolveCodeOwnedMemoryTaskId,
 } from './memoryScopeIdentity';
+import { mergeProviderIntoStructural } from './providerFactReconciliation';
+import {
+  resolveClosedTurnSourceIdentity,
+  resolveSealedPriorUserMessageIdentity,
+} from './priorUserMessageIdentity';
+import {
+  skippedSyncWorkingMemoryResult,
+  type SyncWorkingMemoryResult,
+} from './syncWorkingMemoryResult';
+
+export type { SyncWorkingMemoryResult } from './syncWorkingMemoryResult';
 
 const logger = createLogger('memory.turnProcessor');
 
@@ -46,6 +55,10 @@ export interface ProcessTurnInput {
   now?: number;
   extractor?: ConsolidatorExtractor;
   providerSignal?: AbortSignal;
+  /** Queue-sealed user message immediately preceding this turn-local window. */
+  sealedPriorUserMessageId?: string;
+  /** Code-owned provenance context used only to verify the sealed prior identity. */
+  priorIdentityMessages?: Message[];
   skipWorkingMemorySync?: boolean;
   episodeAccess?: {
     personaId: string;
@@ -77,8 +90,15 @@ export interface ProcessTurnResult {
   providerOutcome: TurnProviderOutcome;
   bridgedEvidenceFactIds: string[];
   agentRunMemoryFactIds: string[];
-  skipped?: 'opt_out' | 'no_closed_turn' | 'claim_lost' | 'provider_preempted';
+  skipped?: ProcessTurnSkipReason;
 }
+
+export type ProcessTurnSkipReason =
+  | 'opt_out'
+  | 'no_closed_turn'
+  | 'claim_lost'
+  | 'provider_preempted'
+  | 'source_identity_invalid';
 
 export type TurnProviderOutcome =
   | { status: 'not_requested' }
@@ -99,7 +119,7 @@ export interface TurnPersistenceReceipt {
 }
 
 function skippedProcessTurnResult(
-  skipped: 'opt_out' | 'no_closed_turn' | 'claim_lost' | 'provider_preempted',
+  skipped: ProcessTurnSkipReason,
   providerOutcome: TurnProviderOutcome = { status: 'not_requested' },
 ): ProcessTurnResult {
   return {
@@ -151,15 +171,6 @@ function summarizeProviderOutcome(outcome: ConsolidatorOutcome): TurnProviderOut
     return { status: outcome.status };
   }
   return outcome;
-}
-
-export interface SyncWorkingMemoryResult {
-  processed: boolean;
-  activeFocusUpdated: boolean;
-  openThreadsUpdated: boolean;
-  sourceEndMessageId: string | null;
-  sourceStartMessageId: string | null;
-  skipped?: 'opt_out' | 'no_closed_turn';
 }
 
 export function findLastClosedTurn(messages: Message[]): {
@@ -366,123 +377,22 @@ function applyWorkingMemoryFromStructural(
   return { activeFocusUpdated, openThreadsUpdated };
 }
 
-function mergeProviderIntoStructural(
-  structural: ReturnType<typeof extractStructuralMemory>,
-  provider: ConsolidatorResult,
-  context: {
-    currentUserMessageId?: string;
-    currentUserMessage: string;
-    memoryConversationId: string;
-    threadId: string;
-    taskId?: string;
-  },
-): ConsolidatorResult {
-  const episodeSummary = provider.episodeSummary ?? structural.episodeSummary;
-  const keyPart = (value: string) => value.normalize('NFKC').trim().toLowerCase();
-  const factKey = (fact: ConsolidatorResult['newFacts'][number]) =>
-    `${keyPart(fact.subject)}:${keyPart(fact.predicate)}:${keyPart(fact.value)}`;
-  const subjectPredicateKey = (fact: ConsolidatorResult['newFacts'][number]) =>
-    `${keyPart(fact.subject)}:${keyPart(fact.predicate)}`;
-  const seen = new Set(structural.facts.map(factKey));
-  const structuralSubjectsAndPredicates = new Set(structural.facts.map(subjectPredicateKey));
-  const replacementGroups = new Map<string, ConsolidatorResult['newFacts']>();
-  for (const fact of provider.newFacts) {
-    const groupKey = subjectPredicateKey(fact);
-    const group = replacementGroups.get(groupKey) ?? [];
-    group.push(fact);
-    replacementGroups.set(groupKey, group);
-  }
-  const ambiguousReplacementKeys = new Set<string>();
-  for (const [groupKey, facts] of replacementGroups) {
-    if (!facts.some((fact) => fact.operation === 'replace_current')) continue;
-    const signatures = new Set(
-      facts.map((fact) =>
-        JSON.stringify([
-          fact.value.normalize('NFKC').trim(),
-          fact.scope ?? 'conversation',
-          fact.operation ?? 'insert',
-        ]),
-      ),
-    );
-    if (signatures.size > 1) ambiguousReplacementKeys.add(groupKey);
-  }
-  const mergedFacts = [...structural.facts];
-  for (const fact of provider.newFacts) {
-    const key = factKey(fact);
-    const currentKey = subjectPredicateKey(fact);
-    if (
-      structuralSubjectsAndPredicates.has(currentKey) ||
-      ambiguousReplacementKeys.has(currentKey)
-    ) {
-      continue;
-    }
-    if (seen.has(key)) continue;
-
-    const resolution = resolveCurrentFactsForReplacement(
-      {
-        subject: fact.subject,
-        predicate: fact.predicate,
-        scope: fact.scope ?? 'conversation',
-      },
-      {
-        memoryConversationId: context.memoryConversationId,
-        sourceThreadId: context.threadId,
-        taskId: context.taskId,
-      },
-    );
-    if (!resolution.hasAnyCurrentFact && fact.operation !== 'replace_current') {
-      mergedFacts.push(fact);
-      seen.add(key);
-      continue;
-    }
-
-    const decision = evaluateGroundedReplacement(fact, {
-      ...context,
-      currentFacts: resolution.currentFacts,
-      hasAnyCurrentFact: resolution.hasAnyCurrentFact,
-    });
-    if (!decision.accepted) continue;
-    mergedFacts.push(decision.fact);
-    seen.add(key);
-  }
-  const threadSet = new Set(structural.openThreads);
-  for (const thread of provider.openThreads) threadSet.add(thread);
-
-  return {
-    episodeSummary: episodeSummary || null,
-    newFacts: mergedFacts,
-    activeFocus: provider.activeFocus ?? structural.activeFocus,
-    openThreads: Array.from(threadSet).slice(0, 5),
-    notable: provider.notable ?? [],
-  };
-}
-
 /**
  * Synchronous Layer-1 working-memory update. Never throws into the chat path.
  */
 export function syncWorkingMemoryFromTurn(input: ProcessTurnInput): SyncWorkingMemoryResult {
   ensureFactSchema();
   if (!canWriteLongTermMemory()) {
-    return {
-      processed: false,
-      activeFocusUpdated: false,
-      openThreadsUpdated: false,
-      sourceEndMessageId: null,
-      sourceStartMessageId: null,
-      skipped: 'opt_out',
-    };
+    return skippedSyncWorkingMemoryResult('opt_out');
   }
   const now = input.now ?? Date.now();
   const { user, assistant } = findLastClosedTurn(input.messages);
   if (!assistant) {
-    return {
-      processed: false,
-      activeFocusUpdated: false,
-      openThreadsUpdated: false,
-      sourceEndMessageId: null,
-      sourceStartMessageId: null,
-      skipped: 'no_closed_turn',
-    };
+    return skippedSyncWorkingMemoryResult('no_closed_turn');
+  }
+  const sourceIdentity = resolveClosedTurnSourceIdentity(input.messages, user?.id, assistant.id);
+  if (sourceIdentity.status === 'invalid') {
+    return skippedSyncWorkingMemoryResult('source_identity_invalid');
   }
 
   const structural = extractStructuralMemory(buildTurnInput(user, assistant, input));
@@ -492,8 +402,9 @@ export function syncWorkingMemoryFromTurn(input: ProcessTurnInput): SyncWorkingM
     processed: true,
     activeFocusUpdated: working.activeFocusUpdated,
     openThreadsUpdated: working.openThreadsUpdated,
-    sourceEndMessageId: assistant.id ?? null,
-    sourceStartMessageId: user?.id ?? null,
+    sourceEndMessageId: sourceIdentity.sourceEndMessageId,
+    sourceStartMessageId: sourceIdentity.sourceStartMessageId,
+    priorUserMessageId: sourceIdentity.priorUserMessageId,
   };
 }
 
@@ -517,7 +428,15 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   const turnInput = buildTurnInput(user, assistant, input);
   const structural = extractStructuralMemory(turnInput);
   const memoryConversationId = resolveMemoryConversationId(input);
-
+  const priorUserIdentity = resolveSealedPriorUserMessageIdentity(
+    input.priorIdentityMessages ?? input.messages,
+    user?.id,
+    input.sealedPriorUserMessageId,
+  );
+  if (priorUserIdentity.status === 'invalid') {
+    return skippedProcessTurnResult('source_identity_invalid');
+  }
+  const priorUserMessageId = priorUserIdentity.priorUserMessageId;
   if (!input.skipWorkingMemorySync) {
     applyWorkingMemoryFromStructural(structural, input, now);
   }
@@ -585,6 +504,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     const mergedResult = mergeProviderIntoStructural(structural, outcome.result, {
       currentUserMessageId: user?.id,
       currentUserMessage: user?.content ?? '',
+      priorUserMessageId,
       memoryConversationId,
       threadId: input.threadId,
       taskId: input.taskId,

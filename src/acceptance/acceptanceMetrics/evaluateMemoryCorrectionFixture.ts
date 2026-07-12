@@ -12,7 +12,7 @@ export async function evaluateMemoryCorrectionFixture(
 ): Promise<AcceptanceFixtureOutcome> {
   const threadId = `synthetic-${fixture.id}`;
   const userMessageId = `user-${fixture.id}`;
-  const user = upsertEntity({ name: 'synthetic-evaluation-user', type: 'self', now: now - 20 });
+  const user = upsertEntity({ name: 'user', type: 'self', now: now - 20 });
   const previous = recordFact({
     subjectId: user.id,
     predicate: fixture.predicate,
@@ -44,7 +44,7 @@ export async function evaluateMemoryCorrectionFixture(
       JSON.stringify({
         new_facts: [
           {
-            subject: 'synthetic-evaluation-user',
+            subject: 'user',
             predicate: fixture.predicate,
             value: fixture.proposedValue,
             scope: 'global',

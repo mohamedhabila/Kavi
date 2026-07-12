@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 describe('agent-facing memory_recall applicability', () => {
-  it('returns only exact-scope use and bounded resolution facts with binding policy', () => {
+  it('returns only exact-scope directly usable facts under the default automatic policy', () => {
     const subject = upsertEntity({ name: 'recall subject', type: 'concept', now: 100 });
     const supported = recordFactWithApplicability(
       {
@@ -94,12 +94,9 @@ describe('agent-facing memory_recall applicability', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.facts.map((fact) => fact.id)).toEqual([inferred.id, supported.id]);
-    expect(result.facts[0]?.policy).toEqual({
-      action: 'ask',
-      reason: 'subjective_authority_confirmation_required',
-    });
-    expect(result.facts[1]?.policy).toEqual({ action: 'use', reason: 'eligible' });
+    expect(result.facts.map((fact) => fact.id)).toEqual([supported.id]);
+    expect(result.facts[0]?.policy).toEqual({ action: 'use', reason: 'eligible' });
+    expect(result.facts.map((fact) => fact.id)).not.toContain(inferred.id);
     expect(result.facts.map((fact) => fact.id)).not.toContain(unknown.id);
     expect(result.facts.map((fact) => fact.id)).not.toContain(otherRoot.id);
     expect(result.policyInstruction).toContain('policy is binding');

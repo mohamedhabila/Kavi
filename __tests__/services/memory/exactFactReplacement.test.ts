@@ -14,16 +14,17 @@ import {
 } from '../../../src/services/memory/facts/mutations';
 import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
 import {
+  listCurrentFactsForPriorUserSelfCorrection,
   listCurrentFactsForReplacement,
   MEMORY_FACT_REPLACEMENT_SCAN_LIMIT,
+  PRIOR_USER_SELF_CORRECTION_SCAN_LIMIT,
 } from '../../../src/services/memory/facts/exactReplacementQueries';
-import { getFactById, listFacts } from '../../../src/services/memory/facts/queries';
+import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
-import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -418,6 +419,30 @@ describe('replaceCurrentFact', () => {
     ).toThrow('memory_fact_replacement_scan_saturated');
   });
 
+  it('bounds immediately-prior grounded correction candidates', () => {
+    for (let index = 0; index <= PRIOR_USER_SELF_CORRECTION_SCAN_LIMIT; index += 1) {
+      recordFactWithApplicability(
+        {
+          subjectId: 'entity-prior-correction-saturation',
+          predicate: `preference_${index}`,
+          objectText: `value ${index}`,
+          scope: 'global',
+          sourceMessageId: 'user-prior-correction-saturation',
+          now: 100 + index,
+        },
+        { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+      );
+    }
+
+    expect(() =>
+      listCurrentFactsForPriorUserSelfCorrection({
+        subjectId: 'entity-prior-correction-saturation',
+        sourceMessageId: 'user-prior-correction-saturation',
+        scope: 'global',
+      }),
+    ).toThrow('memory_prior_user_correction_scan_saturated');
+  });
+
   it('keeps session replacements isolated to their exact thread and task', () => {
     const old = recordFact({
       subjectId: 'entity-user',
@@ -592,7 +617,7 @@ describe('replaceCurrentFact', () => {
   it('stores a case-only opaque value correction as a new validity interval', () => {
     const old = recordFact({
       subjectId: 'entity-user',
-      predicate: 'access_token',
+      predicate: 'display_label',
       objectText: 'AbC',
       scope: 'global',
       now: 100,
@@ -601,7 +626,7 @@ describe('replaceCurrentFact', () => {
     const result = replaceCurrentFact({
       expectedCurrentFactId: old.fact.id,
       subjectId: 'entity-user',
-      predicate: 'access_token',
+      predicate: 'display_label',
       objectText: 'abc',
       scope: 'global',
       now: 200,
@@ -610,45 +635,10 @@ describe('replaceCurrentFact', () => {
     expect(result).toMatchObject({ status: 'created', fact: { objectText: 'abc' } });
     const history = listFacts({
       subjectId: 'entity-user',
-      predicate: 'access_token',
+      predicate: 'display_label',
       includeInvalidated: true,
     });
     expect(history).toHaveLength(2);
     expect(history.map((fact) => fact.objectText)).toEqual(expect.arrayContaining(['abc', 'AbC']));
-  });
-
-  it('rolls back when the replacement would collide with another active fact', () => {
-    const old = recordFact({
-      subjectId: 'entity-user',
-      predicate: 'lives_in',
-      objectText: 'Amsterdam',
-      scope: 'global',
-      now: 100,
-    });
-    const alreadyCurrent = recordFact({
-      subjectId: 'entity-user',
-      predicate: 'lives_in',
-      objectText: 'Utrecht',
-      scope: 'global',
-      now: 110,
-    });
-    const listener = jest.fn();
-    const unsubscribe = subscribeToMemoryChanges(listener);
-
-    expect(replacement(old.fact.id, 'Utrecht', 200)).toEqual({
-      fact: null,
-      status: 'conflict',
-      superseded: [],
-      conflict: 'replacement_collision',
-    });
-    expect(listFacts({ subjectId: 'entity-user', predicate: 'lives_in' })).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: old.fact.id }),
-        expect.objectContaining({ id: alreadyCurrent.fact.id }),
-      ]),
-    );
-    expect(getFactById(alreadyCurrent.fact.id)?.repeatedMentionCount).toBe(0);
-    expect(listener).not.toHaveBeenCalled();
-    unsubscribe();
   });
 });

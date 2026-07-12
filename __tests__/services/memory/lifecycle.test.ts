@@ -36,7 +36,6 @@ import { executeMemoryRemember } from '../../../src/services/memory/memoryTools'
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import { getEpisodeAccessPolicy } from '../../../src/services/memory/episodes/accessPolicyStore';
 import {
-  drainIngestionQueue,
   countPendingIngestionJobs,
   enqueueIngestionJob,
   getIngestionJob,
@@ -44,7 +43,6 @@ import {
 } from '../../../src/services/memory/ingestionQueue';
 import {
   __resetMemoryLifecycleForTests,
-  loadIngestionJobRuntimeContext,
   recordCompletedTurnForMemory,
   runMemoryBackgroundFlush,
 } from '../../../src/services/memory/lifecycle';
@@ -55,6 +53,7 @@ import { buildLivingMemorySections } from '../../../src/services/memory/livingMe
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
+import { drainRecordedTurn, messages } from './lifecycleTestSupport';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -76,32 +75,7 @@ beforeEach(() => {
   useChatStore.setState({ conversations: [] } as any);
 });
 
-async function drainRecordedTurn(
-  threadId: string,
-  messages: Message[],
-): Promise<Awaited<ReturnType<typeof drainIngestionQueue>>> {
-  const result = await drainIngestionQueue({
-    loadMessagesForThread: (id) => (id === threadId ? messages : []),
-    loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
-  });
-  for (let round = 0; round < 50 && countPendingIngestionJobs() > 0; round += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  return result;
-}
-
 describe('recordCompletedTurnForMemory', () => {
-  const messages: Message[] = [
-    { id: 'u-1', role: 'user', content: 'Please remember the release follow-up.', timestamp: 1 },
-    {
-      id: 'a-1',
-      role: 'assistant',
-      content: 'Done. Next: validate the Android release build.',
-      timestamp: 2,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
-    },
-  ];
-
   it('always processes turns and creates an episode even without a provider', async () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-live',
@@ -137,6 +111,32 @@ describe('recordCompletedTurnForMemory', () => {
 
     // Cursor advanced
     expect(getConsolidationState('conv-live')?.lastConsolidatedMessageId).toBe('a-1');
+  });
+
+  it.each([
+    ['current user', [messages[0]!, { ...messages[0]!, content: 'Duplicate' }, messages[1]!]],
+    ['source end', [...messages, { ...messages[1]!, content: 'Duplicate' }]],
+  ])('does not enqueue a turn with a duplicate %s identity', async (_label, duplicateMessages) => {
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-duplicate-source',
+      threadTitle: 'Must not be persisted',
+      messages: duplicateMessages,
+      now: 10,
+    });
+
+    expect(result).toMatchObject({
+      processed: false,
+      enqueued: false,
+      skipped: 'source_identity_invalid',
+      jobId: null,
+    });
+    expect(countPendingIngestionJobs()).toBe(0);
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-duplicate-source',
+        threadId: 'conv-duplicate-source',
+      }),
+    ).toBeNull();
   });
 
   it('creates structural facts from tool signals and file operations', async () => {
@@ -336,8 +336,8 @@ describe('recordCompletedTurnForMemory', () => {
               new_facts: [
                 {
                   subject: 'user',
-                  predicate: 'release_target',
-                  value: 'Android release build validation',
+                  predicate: 'project_title',
+                  value: 'Android Release Build Validation',
                   scope: 'conversation',
                   confidence: 0.9,
                   importance: 0.7,
@@ -368,7 +368,7 @@ describe('recordCompletedTurnForMemory', () => {
 
     const userEntity = findEntityByName('user');
     const facts = listFacts({ subjectId: userEntity!.id, limit: 20 });
-    expect(facts.some((fact) => fact.predicate === 'release_target')).toBe(true);
+    expect(facts.some((fact) => fact.predicate === 'project_title')).toBe(true);
     expect(
       getWorkingBlock('active_focus', {
         conversationId: 'conv-provider',

@@ -125,8 +125,19 @@ describe('ensureFactSchema', () => {
         'idx_facts_subject_predicate_nocase',
         'idx_facts_valid',
         'idx_facts_pinned',
+        'idx_facts_grounded_source',
       ]),
     );
+    expect(indexedColumns('idx_facts_grounded_source')).toEqual([
+      'memory_owner_id',
+      'subject_id',
+      'source_message_id',
+      'scope',
+      'fact_class',
+      'source_authority',
+      'invalid_at',
+      'deleted_at',
+    ]);
     expect(indexNames('memory_facts')).not.toContain('idx_facts_active_content_hash');
     expect(
       getMemoryDb().getFirstSync<{ id: string; predicate: string; content_hash: string }>(

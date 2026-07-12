@@ -1,10 +1,5 @@
-// ---------------------------------------------------------------------------
-// Kavi — Durable memory ingestion queue state
-// ---------------------------------------------------------------------------
-// Owns persistence, claiming, retry scheduling, stale-lease recovery, and
-// diagnostics for the post-turn ingestion queue. Processing orchestration
-// remains in ingestionQueue.ts.
-// ---------------------------------------------------------------------------
+// Durable ingestion persistence, claims, retries, recovery, and diagnostics.
+// Processing orchestration remains in ingestionQueue.ts.
 
 import { INGESTION_BATCH_LIMIT, MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
 import { runMemoryTransaction } from './access/transaction';
@@ -26,6 +21,9 @@ import {
   rowToIngestionJob,
 } from './ingestionQueueIdentity';
 import type { IngestionJobRow, IngestionSourceIdentity } from './ingestionQueueIdentity';
+import { NO_ACTIVE_PRIOR_DEPENDENCY_SQL } from './ingestionQueueDependencies';
+
+export { getNextPendingIngestionAttemptAt } from './ingestionQueueDependencies';
 
 export const INGESTION_RETRY_BASE_DELAY_MS = 15_000;
 export const INGESTION_RETRY_MAX_DELAY_MS = 5 * 60_000;
@@ -77,6 +75,7 @@ export interface IngestionJob {
   sourceRunId: string | null;
   chatProviderId: string | null;
   chatModel: string | null;
+  priorUserMessageId: string | null;
   sourceStartMessageId: string | null;
   sourceEndMessageId: string;
   sourceAt: number;
@@ -103,6 +102,7 @@ export interface EnqueueIngestionJobInput {
   sourceEndMessageId: string;
   sourceAt: number;
   sourceStartMessageId: string | null;
+  priorUserMessageId?: string | null;
   taskId: string | null;
   sourceRunId: string | null;
   chatProviderId: string | null;
@@ -136,6 +136,10 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   const sourceStartMessageId = optionalIngestionProvenanceIdentity(
     input.sourceStartMessageId,
     'memory_ingestion_source_start_invalid',
+  );
+  const priorUserMessageId = optionalIngestionProvenanceIdentity(
+    input.priorUserMessageId,
+    'memory_ingestion_prior_user_invalid',
   );
   const taskId = optionalIngestionScopeIdentity(
     input.taskId,
@@ -180,6 +184,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     memoryConversationId,
     personaId,
     taskId,
+    priorUserMessageId,
     sourceStartMessageId,
     sourceEndMessageId,
     sourceRunId,
@@ -216,10 +221,11 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   const inserted = db.runSync(
     `INSERT OR IGNORE INTO memory_ingestion_jobs
        (id, thread_id, thread_title, memory_conversation_id, persona_id, task_id, source_run_id,
-        chat_provider_id, chat_model, source_start_message_id, source_end_message_id,
+        chat_provider_id, chat_model, prior_user_message_id, source_start_message_id,
+        source_end_message_id,
         source_at, reason, status, attempt_count, provider_enrichment, provider_outcome, outcome_code,
         next_attempt_at, lease_expires_at, structural_completed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, ?, NULL, NULL, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, ?, NULL, NULL, ?, ?)`,
     id,
     threadId,
     threadTitle,
@@ -229,6 +235,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     sourceRunId,
     chatProviderId,
     chatModel,
+    priorUserMessageId,
     sourceStartMessageId,
     sourceEndMessageId,
     sourceAt,
@@ -258,6 +265,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     source_run_id: sourceRunId,
     chat_provider_id: chatProviderId,
     chat_model: chatModel,
+    prior_user_message_id: priorUserMessageId,
     source_start_message_id: sourceStartMessageId,
     source_end_message_id: sourceEndMessageId,
     source_at: sourceAt,
@@ -285,23 +293,6 @@ export function countPendingIngestionJobs(): number {
       WHERE status IN ('pending', 'processing', 'retrying')`,
   );
   return Math.max(0, row?.count ?? 0);
-}
-
-export function getNextPendingIngestionAttemptAt(): number | null {
-  ensureFactSchema();
-  const row = getMemoryDb().getFirstSync<{ next_attempt_at: number | null }>(
-    `SELECT MIN(wake_at) AS next_attempt_at
-       FROM (
-         SELECT next_attempt_at AS wake_at
-           FROM memory_ingestion_jobs
-          WHERE status IN ('pending', 'retrying')
-         UNION ALL
-         SELECT lease_expires_at AS wake_at
-           FROM memory_ingestion_jobs
-          WHERE status = 'processing'
-       )`,
-  );
-  return row?.next_attempt_at ?? null;
 }
 
 export function discardPendingIngestionJobs(): number {
@@ -395,12 +386,13 @@ export function listPendingIngestionJobs(
 ): IngestionJob[] {
   ensureFactSchema();
   const rows = getMemoryDb().getAllSync<IngestionJobRow>(
-    `SELECT * FROM memory_ingestion_jobs
-       WHERE status IN ('pending', 'retrying')
-         AND next_attempt_at <= ?
-       ORDER BY CASE WHEN structural_completed_at IS NULL THEN 0 ELSE 1 END ASC,
-                next_attempt_at ASC,
-                created_at ASC
+    `SELECT candidate.* FROM memory_ingestion_jobs AS candidate
+       WHERE candidate.status IN ('pending', 'retrying')
+         AND candidate.next_attempt_at <= ?
+         AND ${NO_ACTIVE_PRIOR_DEPENDENCY_SQL}
+       ORDER BY CASE WHEN candidate.structural_completed_at IS NULL THEN 0 ELSE 1 END ASC,
+                candidate.next_attempt_at ASC,
+                candidate.created_at ASC
        LIMIT ?`,
     now,
     Math.max(1, limit),
@@ -485,7 +477,7 @@ export function claimIngestionJob(jobId: string, now: number): string | null {
   }
   const claimToken = newId('ingestion_claim');
   const result = getMemoryDb().runSync(
-    `UPDATE memory_ingestion_jobs
+    `UPDATE memory_ingestion_jobs AS candidate
        SET status = 'processing',
            attempt_count = attempt_count + 1,
            provider_outcome = NULL,
@@ -495,10 +487,11 @@ export function claimIngestionJob(jobId: string, now: number): string | null {
            claim_token = ?,
            completed_at = NULL,
            updated_at = ?
-     WHERE id = ?
-       AND status IN ('pending', 'retrying')
-       AND next_attempt_at <= ?
-       AND attempt_count < ?`,
+     WHERE candidate.id = ?
+       AND candidate.status IN ('pending', 'retrying')
+       AND candidate.next_attempt_at <= ?
+       AND candidate.attempt_count < ?
+       AND ${NO_ACTIVE_PRIOR_DEPENDENCY_SQL}`,
     now + INGESTION_PROCESSING_LEASE_MS,
     claimToken,
     now,

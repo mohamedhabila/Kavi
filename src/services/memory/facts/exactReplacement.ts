@@ -6,12 +6,12 @@ import { safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import {
   closedMemoryFactClass,
+  closedMemoryFactSensitivity,
   closedMemorySourceAuthority,
   requireMemoryFactReviewState,
-  requireMemoryFactSensitivity,
   type SealedFactApplicabilityProvenance,
 } from './applicabilityProvenance';
-import { recordFactWithApplicability } from './mutations';
+import { recordFactWithApplicability, setFactSensitivityFloorInTransaction } from './mutations';
 import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
 import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { requireFactScopeIdentity } from './scopeIdentity';
@@ -252,9 +252,7 @@ function replaceCurrentFactInternal(
       const inheritedReviewState = requireMemoryFactReviewState(
         input.reviewState ?? current.review_state,
       );
-      const inheritedSensitivity = requireMemoryFactSensitivity(
-        input.sensitivity ?? current.sensitivity,
-      );
+      const inheritedSensitivity = closedMemoryFactSensitivity(current.sensitivity) ?? 'restricted';
       const inheritedFactClass = closedMemoryFactClass(current.fact_class);
       const inheritedSourceAuthority = closedMemorySourceAuthority(current.source_authority);
       if (!sealedApplicability && (!inheritedFactClass || !inheritedSourceAuthority)) {
@@ -273,7 +271,6 @@ function replaceCurrentFactInternal(
           predicate,
           objectText,
           pinned: input.pinned ?? current.pinned !== 0,
-          sensitivity: inheritedSensitivity,
           reviewState: inheritedReviewState,
           memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
           supersedePrior: false,
@@ -284,6 +281,10 @@ function replaceCurrentFactInternal(
       if (created.status !== 'created') {
         throw new ExactReplacementConflict('replacement_collision');
       }
+      const protectedCreated = setFactSensitivityFloorInTransaction(
+        created.fact.id,
+        inheritedSensitivity,
+      );
       const invalidated = db.runSync(
         `UPDATE memory_facts
            SET invalid_at = ?, updated_at = ?
@@ -296,7 +297,7 @@ function replaceCurrentFactInternal(
         throw new ExactReplacementConflict('target_changed');
       }
       const superseded = rowToFact({ ...current, invalid_at: now, updated_at: now });
-      return { fact: created.fact, status: 'created' as const, superseded: [superseded] };
+      return { fact: protectedCreated, status: 'created' as const, superseded: [superseded] };
     });
   } catch (error) {
     if (error instanceof ExactReplacementConflict) {

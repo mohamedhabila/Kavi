@@ -11,13 +11,13 @@ import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
 import { unrefTimerIfSupported } from '../../utils/timers';
 import { runConsolidation } from './consolidation/orchestrator';
-import { sliceClosedTurnMessages } from './deterministicExtractor';
 import { composeActiveFocusContent } from './focus';
 import {
   commitIngestionPersistenceReceipt,
   type IngestionReceiptProviderOutcomeCode,
 } from './ingestionReceiptStore';
 import { hasSealedIngestionJobIdentity } from './ingestionQueueIdentity';
+import { resolveJobSourceWindow } from './ingestionSourceWindow';
 import {
   claimIngestionJob,
   completeIngestionJob,
@@ -209,33 +209,6 @@ function classifyIngestionOutcome(
   };
 }
 
-function resolveJobSourceWindow(job: IngestionJob, messages: Message[]): Message[] | null {
-  const endIndex = messages.findIndex((message) => message.id === job.sourceEndMessageId);
-  if (endIndex < 0) {
-    return null;
-  }
-
-  if (job.sourceStartMessageId) {
-    const startIndex = messages.findIndex((message) => message.id === job.sourceStartMessageId);
-    if (startIndex < 0 || startIndex > endIndex) {
-      return null;
-    }
-  }
-
-  const window = sliceClosedTurnMessages(
-    messages,
-    job.sourceStartMessageId ?? undefined,
-    job.sourceEndMessageId,
-  );
-  if (window.at(-1)?.id !== job.sourceEndMessageId) {
-    return null;
-  }
-  if (job.sourceStartMessageId && window[0]?.id !== job.sourceStartMessageId) {
-    return null;
-  }
-  return window;
-}
-
 export async function processIngestionJob(input: ProcessIngestionJobInput): Promise<{
   processed: boolean;
   status?: IngestionJobStatus;
@@ -302,7 +275,9 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     const turnResult = await runConsolidation({
       threadId: job.threadId,
       memoryConversationId: job.memoryConversationId,
-      messages: sourceWindow,
+      messages: sourceWindow.turnMessages,
+      sealedPriorUserMessageId: job.priorUserMessageId ?? undefined,
+      priorIdentityMessages: sourceWindow.priorIdentityMessages,
       threadTitle: job.threadTitle ?? undefined,
       personaSummary: input.personaSummary,
       activeChatProvider: resolveSealedActiveChatProvider(job, input.activeChatProvider),

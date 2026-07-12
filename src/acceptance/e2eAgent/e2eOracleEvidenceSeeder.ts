@@ -55,6 +55,14 @@ function buildOracleUserEvidence(
   fact: Readonly<MemoryRememberArgs>,
   index: number,
 ): OracleUserEvidence {
+  const predicateUnits = Array.from(
+    fact.predicate.normalize('NFKC').matchAll(/[\p{L}\p{M}\p{N}]+/gu),
+    (match) => match[0],
+  );
+  if (predicateUnits.length === 0)
+    throw new Error(`Oracle memory_remember fact ${index} has no predicate units.`);
+  const predicateLabel = predicateUnits.join(' ');
+  const predicateHead = predicateUnits.at(-1)!;
   const canonical = stableStringify({
     index,
     subject: fact.subject,
@@ -64,8 +72,8 @@ function buildOracleUserEvidence(
   return {
     messageId: `e2e-oracle-evidence-${stableHash(canonical).slice('sha256:'.length)}`,
     text: isCanonicalSelfMemorySubject(fact.subject)
-      ? `I ${fact.predicate} ${fact.value}.`
-      : `${fact.subject} ${fact.predicate} ${fact.value}.`,
+      ? `My ${predicateLabel} is ${fact.value}.`
+      : `${fact.subject} ${predicateHead} is ${fact.value}.`,
   };
 }
 

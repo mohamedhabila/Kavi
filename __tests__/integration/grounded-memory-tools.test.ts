@@ -11,7 +11,6 @@ jest.mock('../../src/services/remote/approvalStore', () => {
   };
 });
 
-import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { findEntityByName } from '../../src/services/memory/entities';
 import { listFactEvidence } from '../../src/services/memory/episodes/queries';
 import { listFacts } from '../../src/services/memory/facts/queries';
@@ -19,6 +18,7 @@ import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/servic
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { recall, remember } from './grounded-memory-tools.helpers';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -36,56 +36,6 @@ afterEach(() => {
   useChatStore.setState({ conversations: [] } as never);
 });
 
-async function remember(input: {
-  subject: string;
-  predicate: string;
-  value: string;
-  messageId: string;
-  messageText: string;
-  subjectType?: 'self' | 'person' | 'project' | 'concept' | 'system';
-  scope?: 'global' | 'conversation';
-  threadId?: string;
-  memoryConversationId?: string;
-  extraArgs?: Record<string, unknown>;
-}) {
-  const threadId = input.threadId ?? 'thread-a';
-  const memoryConversationId = input.memoryConversationId ?? 'memory-root-a';
-  return JSON.parse(
-    await executeTool(
-      'memory_remember',
-      JSON.stringify({
-        subject: input.subject,
-        ...(input.subjectType ? { subjectType: input.subjectType } : {}),
-        predicate: input.predicate,
-        value: input.value,
-        scope: input.scope ?? 'conversation',
-        ...input.extraArgs,
-      }),
-      threadId,
-      {
-        memoryConversationId,
-        currentUserMessage: { id: input.messageId, text: input.messageText },
-      },
-    ),
-  ) as Record<string, any>;
-}
-
-async function recall(input: {
-  subject: string;
-  predicate: string;
-  threadId?: string;
-  memoryConversationId?: string;
-}) {
-  return JSON.parse(
-    await executeTool(
-      'memory_recall',
-      JSON.stringify({ subject: input.subject, predicate: input.predicate }),
-      input.threadId ?? 'thread-a',
-      { memoryConversationId: input.memoryConversationId ?? 'memory-root-a' },
-    ),
-  ) as Record<string, any>;
-}
-
 describe('raw memory tool executor grounded memory_remember writes', () => {
   it('grounds a direct canonical self claim as one exact subject-predicate-value assertion', async () => {
     const written = await remember({
@@ -94,7 +44,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       predicate: 'preferred_channel',
       value: 'Signal',
       messageId: 'user-self-direct',
-      messageText: 'I currently prefer Signal.',
+      messageText: 'My preferred channel is Signal.',
       scope: 'global',
     });
 
@@ -110,7 +60,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
     expect(listFactEvidence(written.fact.id)).toEqual([
       expect.objectContaining({
         messageId: 'user-self-direct',
-        quote: 'I currently prefer Signal',
+        quote: 'My preferred channel is Signal',
       }),
     ]);
   });
@@ -122,8 +72,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       predicate: 'planning meeting duration preference',
       value: '25 minutes',
       messageId: 'user-usual-meeting-duration',
-      messageText:
-        'Please remember that I usually keep weekly planning meetings to 25 minutes.',
+      messageText: 'Please remember that I usually keep weekly planning meetings to 25 minutes.',
       scope: 'global',
     });
 
@@ -142,10 +91,10 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
     const written = await remember({
       subject: 'self:weekly-planning-meetings',
       subjectType: 'self',
-      predicate: 'typical_duration',
+      predicate: 'usual_duration',
       value: '25 minutes',
       messageId: 'user-self-topic-alias',
-      messageText: 'I usually keep weekly planning meetings to 25 minutes.',
+      messageText: 'My usual duration is 25 minutes.',
       scope: 'global',
     });
 
@@ -153,7 +102,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       ok: true,
       fact: {
         subject: 'user',
-        predicate: 'typical_duration',
+        predicate: 'usual_duration',
         value: '25 minutes',
       },
     });
@@ -222,7 +171,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       predicate: 'preferred_channel',
       value: 'Signal',
       messageId: 'user-self-normalized-positive',
-      messageText: 'I prefer Signal.',
+      messageText: 'My preferred channel is Signal.',
       scope: 'global',
     });
 
@@ -240,10 +189,10 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       predicate: 'preferred_channel',
       value: 'Morgan',
       messageId: 'user-self-old',
-      messageText: 'I prefer Morgan.',
+      messageText: 'My preferred channel is Morgan.',
       scope: 'global',
     });
-    const correctionText = 'Correction: I prefer Avery now, not Morgan.';
+    const correctionText = 'Correction: my preferred channel is Avery going forward, not Morgan.';
     const rejectedOldValue = await remember({
       subject: 'user',
       subjectType: 'self',
@@ -287,6 +236,10 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       value: '35 minutes',
       messageId: 'user-anaphoric-duration-new',
       messageText: 'Actually, make that 35 minutes from now on, not 25.',
+      priorUserMessage: {
+        id: 'user-anaphoric-duration-old',
+        text: 'I usually keep planning meetings to 25 minutes.',
+      },
       scope: 'global',
     });
 
@@ -319,6 +272,10 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       value: '35 minutes',
       messageId: `user-anaphoric-${labelId}-new`,
       messageText,
+      priorUserMessage: {
+        id: `user-anaphoric-${labelId}-old`,
+        text: 'I usually keep planning meetings to 25 minutes.',
+      },
       scope: 'global',
     });
 
@@ -431,7 +388,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       predicate: 'preferred_channel',
       value: 'Signal',
       messageId: 'user-avery',
-      messageText: 'Avery prefers Signal.',
+      messageText: 'Avery preferred channel is Signal.',
     });
     const hostile = await remember({
       subject: 'Avery',
@@ -439,7 +396,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       predicate: 'preferred_channel',
       value: 'Signal',
       messageId: 'user-morgan',
-      messageText: 'Morgan prefers Signal.',
+      messageText: 'Morgan preferred channel is Signal.',
     });
 
     expect(hostile).toMatchObject({ ok: false, code: 'grounding_required' });
@@ -484,6 +441,12 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
       'suffix-conditional update bridge',
       'Update subject `Avery` so preferred_channel is now `Signal` if Avery confirms.',
     ],
+    ['missing predicate semantics', 'Avery prefers Signal.'],
+    ['quoted command labels', 'Remember that subject `Avery` has preferred_channel `Signal`.'],
+    [
+      'trailing replacement narrative',
+      'Update subject `Avery` so preferred_channel is now `Signal`, replacing the old channel.',
+    ],
     ['unbound predicate', 'Avery received Signal.'],
   ])('rejects a named-subject fact derived from a %s', async (label, messageText) => {
     const result = await remember({
@@ -501,13 +464,10 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
   });
 
   it.each([
-    'Avery prefers Signal.',
-    'Remember that Avery currently prefers Signal.',
+    'Avery preferred channel is Signal.',
     'Avery has preferred_channel Signal.',
     'Avery has the preferred_channel Signal.',
     'Avery is preferred_channel Signal.',
-    'Remember that subject `Avery` has preferred_channel `Signal`.',
-    'Update subject `Avery` so preferred_channel is now `Signal`, replacing the old channel.',
   ])('accepts a direct positive named-subject assertion: %s', async (messageText) => {
     const result = await remember({
       subject: 'Avery',

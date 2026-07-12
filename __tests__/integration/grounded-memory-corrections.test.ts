@@ -6,7 +6,7 @@ jest.mock('expo-sqlite', () => {
 import type { ConsolidatorAssertionClass } from '../../src/services/memory/consolidator';
 import { findEntityByName, upsertEntity } from '../../src/services/memory/entities';
 import { listFactEvidence } from '../../src/services/memory/episodes/queries';
-import { recordFact } from '../../src/services/memory/facts/mutations';
+import { recordFact, recordFactWithApplicability } from '../../src/services/memory/facts/mutations';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb } from '../../src/services/memory/database';
@@ -47,8 +47,28 @@ function seedCurrent(
   }).fact;
 }
 
-function messages(userContent: string, enrichedContent?: string): Message[] {
+function seedGroundedCurrent(predicate: string, value: string, sourceMessageId: string) {
+  const user = upsertEntity({ name: 'user', type: 'self', now: 10 });
+  return recordFactWithApplicability(
+    {
+      subjectId: user.id,
+      predicate,
+      objectText: value,
+      scope: 'global',
+      sourceMessageId,
+      now: 100,
+    },
+    { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+  ).fact;
+}
+
+function messages(
+  userContent: string,
+  enrichedContent?: string,
+  priorMessages: Message[] = [],
+): Message[] {
   return [
+    ...priorMessages,
     {
       id: 'user-current',
       role: 'user',
@@ -80,8 +100,9 @@ async function ingest(input: {
   assertionClass?: ConsolidatorAssertionClass;
   evidenceMessageIds?: string[];
   enrichedContent?: string;
+  priorMessages?: Message[];
 }) {
-  const turnMessages = messages(input.userContent, input.enrichedContent);
+  const turnMessages = messages(input.userContent, input.enrichedContent, input.priorMessages);
   return processIngestionTurn({
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: 'thread-1',
@@ -112,27 +133,42 @@ async function ingest(input: {
 }
 
 describe('grounded passive memory corrections', () => {
+  const priorTurn = (id = 'user-prior'): Message[] => [
+    { id, role: 'user', content: 'Prior user statement.', timestamp: 100 },
+    {
+      id: `${id}-assistant`,
+      role: 'assistant',
+      content: 'Understood.',
+      timestamp: 110,
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'stop',
+      },
+    },
+  ];
+
   it.each([
     {
       language: 'English',
-      predicate: 'lives_in',
+      predicate: 'residence',
       oldValue: 'Amsterdam',
-      message: 'I moved to Utrecht last week.',
+      message: 'I live in Utrecht.',
       value: 'Utrecht',
     },
     {
       language: 'Dutch',
-      predicate: 'preferred_name',
-      oldValue: 'Mohamed',
-      message: 'Noem me voortaan Sam',
-      value: 'Sam',
+      predicate: 'residence',
+      oldValue: 'Amsterdam',
+      message: 'Ik woon in Utrecht.',
+      value: 'Utrecht',
     },
     {
-      language: 'Arabic',
-      predicate: 'preferred_contact',
-      oldValue: 'البريد الإلكتروني',
-      message: 'أفضل التواصل عبر سيجنال الآن',
-      value: 'سيجنال',
+      language: 'Spanish',
+      predicate: 'residence',
+      oldValue: 'Barcelona',
+      message: 'Yo vivo en Madrid.',
+      value: 'Madrid',
     },
   ])('versions a direct current fact in $language', async (fixture) => {
     const old = seedCurrent(fixture.predicate, fixture.oldValue);
@@ -157,7 +193,7 @@ describe('grounded passive memory corrections', () => {
           evidenceMessageId: 'user-current',
           expectedCurrentFactId: old.id,
           assertionClass: 'current_direct',
-          evidenceQuote: fixture.message,
+          evidenceQuote: fixture.message.replace(/[.]$/u, ''),
         },
       },
     });
@@ -165,7 +201,10 @@ describe('grounded passive memory corrections', () => {
       expect.objectContaining({ id: old.id, objectText: fixture.oldValue }),
     ]);
     expect(listFactEvidence(current[0]!.id)).toEqual([
-      expect.objectContaining({ messageId: 'user-current', quote: fixture.message }),
+      expect.objectContaining({
+        messageId: 'user-current',
+        quote: fixture.message.replace(/[.]$/u, ''),
+      }),
     ]);
   });
 
@@ -288,7 +327,7 @@ describe('grounded passive memory corrections', () => {
     }).fact;
 
     await ingest({
-      userContent: 'Call me Mohamed now.',
+      userContent: 'Call me Mohamed.',
       predicate: 'preferred_name',
       value: 'Mohamed',
       scope: 'conversation',
@@ -350,6 +389,83 @@ describe('grounded passive memory corrections', () => {
     expect(current[0].attributes.memoryWrite).not.toHaveProperty('expectedCurrentFactId');
   });
 
+  it('preserves the persisted predicate across a direct self-bound correction', async () => {
+    const old = seedGroundedCurrent('usual_design_review_duration', '30 minutes', 'user-prior');
+
+    const result = await ingest({
+      userContent:
+        'Actually, make my usual design-review length 45 minutes from now on, not 30 minutes.',
+      predicate: 'design_review_default_duration_minutes',
+      value: '45 minutes',
+      priorMessages: priorTurn(),
+    });
+
+    expect(result.invalidatedFactIds).toEqual([old.id]);
+    expect(listFacts({ subjectId: old.subjectId, predicate: old.predicate })).toEqual([
+      expect.objectContaining({ objectText: '45 minutes', sourceMessageId: 'user-current' }),
+    ]);
+    expect(listFacts({ predicate: 'design_review_default_duration_minutes' })).toEqual([]);
+  });
+
+  it('does not guess a correction target from an older user message', async () => {
+    const old = seedGroundedCurrent('usual_design_review_duration', '30 minutes', 'user-older');
+
+    await ingest({
+      userContent:
+        'Actually, make my usual design-review length 45 minutes from now on, not 30 minutes.',
+      predicate: 'design_review_default_duration_minutes',
+      value: '45 minutes',
+      priorMessages: priorTurn('user-immediate'),
+    });
+
+    expect(listFacts({ subjectId: old.subjectId, predicate: old.predicate })).toEqual([
+      expect.objectContaining({ id: old.id, objectText: '30 minutes', invalidAt: null }),
+    ]);
+    expect(listFacts({ predicate: 'design_review_default_duration_minutes' })).toEqual([]);
+  });
+
+  it('rejects an ambiguous cross-predicate correction instead of choosing by order', async () => {
+    const first = seedGroundedCurrent('planning_review_duration', '25 minutes', 'user-prior');
+    const second = seedGroundedCurrent('retrospective_review_duration', '25 minutes', 'user-prior');
+
+    await ingest({
+      userContent:
+        'Actually, make my usual review duration 35 minutes from now on, not 25 minutes.',
+      predicate: 'review_default_minutes',
+      value: '35 minutes',
+      priorMessages: priorTurn(),
+    });
+
+    expect(listFacts({ subjectId: first.subjectId })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: first.id, invalidAt: null }),
+        expect.objectContaining({ id: second.id, invalidAt: null }),
+      ]),
+    );
+    expect(listFacts({ predicate: 'review_default_minutes' })).toEqual([]);
+  });
+
+  it.each([
+    'If I changed my usual design-review length to 45 minutes, not 30 minutes, I would leave earlier.',
+    'Alex said make my usual design-review length 45 minutes from now on, not 30 minutes.',
+    'The note says “make my usual design-review length 45 minutes from now on, not 30 minutes.”',
+    'Should I make my usual design-review length 45 minutes from now on, not 30 minutes?',
+  ])('rejects unsafe direct correction evidence: %s', async (userContent) => {
+    const old = seedGroundedCurrent('usual_design_review_duration', '30 minutes', 'user-prior');
+
+    await ingest({
+      userContent,
+      predicate: 'design_review_default_duration_minutes',
+      value: '45 minutes',
+      priorMessages: priorTurn(),
+    });
+
+    expect(listFacts({ subjectId: old.subjectId, predicate: old.predicate })).toEqual([
+      expect.objectContaining({ id: old.id, invalidAt: null }),
+    ]);
+    expect(listFacts({ predicate: 'design_review_default_duration_minutes' })).toEqual([]);
+  });
+
   it.each(['historical', 'hypothetical', 'quoted', 'third_party', 'uncertain'] as const)(
     'rejects a no-target %s replacement proposal',
     async (assertionClass) => {
@@ -364,16 +480,26 @@ describe('grounded passive memory corrections', () => {
   );
 
   it.each([
-    { evidenceMessageIds: ['assistant-current'], label: 'wrong source message' },
-    { quote: 'I moved to Paris.', label: 'quote absent from user text' },
-    { value: 'Paris', label: 'value absent from grounded quote' },
-  ])('rejects a no-target proposal with $label', async (overrides) => {
+    { evidenceMessageIds: ['assistant-current'], label: 'wrong provider source message' },
+    { quote: 'I moved to Paris.', label: 'provider quote absent from user text' },
+  ])('re-derives a no-target proposal despite a $label', async (overrides) => {
     await ingest({
       userContent: 'I moved to Utrecht.',
       predicate: 'lives_in',
-      value: overrides.value ?? 'Utrecht',
+      value: 'Utrecht',
       quote: overrides.quote,
       evidenceMessageIds: overrides.evidenceMessageIds,
+    });
+    expect(listFacts({ predicate: 'lives_in' })).toEqual([
+      expect.objectContaining({ objectText: 'Utrecht', sourceMessageId: 'user-current' }),
+    ]);
+  });
+
+  it('rejects a no-target proposal whose value is absent from user evidence', async () => {
+    await ingest({
+      userContent: 'I moved to Utrecht.',
+      predicate: 'lives_in',
+      value: 'Paris',
     });
     expect(findEntityByName('user')).toBeNull();
   });

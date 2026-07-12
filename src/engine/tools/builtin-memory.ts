@@ -32,10 +32,7 @@ import type {
   MemoryApplicabilitySummary,
 } from '../../services/memory/memoryApplicabilityTypes';
 import { projectAgentRunExperienceViews } from '../../services/memory/experienceRecords';
-import {
-  captureMemoryReadEpoch,
-  isMemoryReadEpochCurrent,
-} from '../../services/memory/policy';
+import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from '../../services/memory/policy';
 
 type MemorySearchScope = 'all' | 'conversation' | 'global';
 
@@ -198,7 +195,7 @@ export async function executeMemorySearch(
       limit: maxResults,
       threshold: 0.01,
       memoryScope,
-      useIntent: 'explicit_user_request',
+      useIntent: 'automatic_prompt',
       now,
       ...(scopeFilter ? { scopeFilter } : {}),
       memoryReadEpoch,
@@ -221,7 +218,7 @@ export async function executeMemorySearch(
       context: {
         enabled: true,
         now,
-        useIntent: 'explicit_user_request',
+        useIntent: 'automatic_prompt',
         scope: memoryScope,
         conflictObservationReadState,
         ...(persistedConflicts.length > 0 ? { externalEvidence: persistedConflicts } : {}),

@@ -1,8 +1,72 @@
+import {
+  ANAPHORIC_CORRECTION_TARGETS,
+  CORRECTION_ACTION_MARKERS,
+  CORRECTION_MARKERS,
+  hasAdmissibleDurableCorrection,
+  hasAdmissiblePriorAnchorSuffix,
+  hasCompatibleNumericAnchorUnits,
+  hasDistinguishingCorrectionTarget,
+  hasTrailingCorrectionContent,
+  hasUnsafeSelfClaimQualifier,
+} from './exactSelfCorrectionStructure';
+import {
+  evidenceClauseRange as clauseRange,
+  evidenceMorphologicalForms as morphologicalForms,
+  evidencePredicateUnits as predicateUnits,
+  evidenceQuoteMask as quoteMask,
+  evidenceRangeIsUnquoted as rangeIsUnquoted,
+  evidenceRelationForms as relationForms,
+  evidenceTokensForClause as tokensForClause,
+  exactEvidenceOccurrences as exactOccurrences,
+  hasAdmissibleEvidenceRawTokenEnvelope as hasAdmissibleRawTokenEnvelope,
+  isEvidenceRelationToken as isRelationToken,
+  isQuestionTerminated,
+  normalizeEvidenceText as normalizeText,
+  type ExactClaimTextToken as TextToken,
+} from './exactClaimEvidenceSupport';
+import {
+  hasAdmissibleCorrectionPrefix,
+  hasAdmissibleDirectSelfClaimShape,
+  hasAdmissibleExactSelfFactValue,
+  exactPropertyHeadStructuredNumericKind,
+  isLiteralFactUnit,
+  looksLikeTitleCaseLiteral,
+  matchAdmissibleCorrectionActionToValueSpan,
+  type ExactSelfClaimSubjectKind,
+} from './exactSelfClaimGrammar';
+import {
+  exactCompactAgeValueOccurrences,
+  isExactAgeImplicitSelfRelation,
+  splitExactCompactAgeTokens,
+} from './exactAgePhraseGrammar';
+import {
+  isTrustedSelfRelationContraction,
+  isTrustedSelfRelationSurface,
+} from './exactSelfRelationGrammar';
+import { hasAdmissibleExactFactSourceSpan } from './exactFactValueSource';
+import { hasUnambiguousExactCommonSelfPredicate } from './exactCommonSelfFactValues';
+import {
+  ALLOWED_POSSESSIVE_RELATION_GAP,
+  ALLOWED_SELF_RELATION_GAP,
+  ATTRIBUTION_MARKERS,
+  HYPOTHETICAL_MARKERS,
+  NEGATION_MARKERS,
+  OBJECT_SELF_MARKERS,
+  POSSESSIVE_SELF_MARKERS,
+  RESET_MARKERS,
+  SUBJECT_SELF_MARKERS,
+} from './exactSelfClaimLanguage';
+import { hasBoundNamedSubjectRelation } from './exactNamedSubjectClaimGrammar';
+
 export interface ExactSelfClaimEvidence {
   subject: 'user';
   predicate: string;
   value: string;
   evidenceQuote: string;
+}
+
+export interface ExactSelfCorrectionEvidence extends ExactSelfClaimEvidence {
+  correctionTarget: 'anaphoric' | 'direct_property';
 }
 
 export interface ExactNamedSubjectClaimEvidence {
@@ -12,376 +76,13 @@ export interface ExactNamedSubjectClaimEvidence {
   evidenceQuote: string;
 }
 
-interface TextToken {
-  value: string;
-  lower: string;
-  start: number;
-  end: number;
-  quoted: boolean;
-}
+const NON_LITERAL_STATE_PREDICATE_UNITS = new Set(
+  'active complete completed inactive open ready state status'.split(' '),
+);
+const VALUE_TOKEN_PATTERN = /[\p{L}\p{M}\p{N}_+-]+(?:['’][\p{L}\p{M}\p{N}_+-]+)*/gu;
 
-const TOKEN_PATTERN = /[\p{L}\p{M}\p{N}_+-]+(?:['’][\p{L}\p{M}\p{N}_+-]+)*/gu;
-const IDENTIFIER_PATTERN = /[\p{L}\p{M}\p{N}_]/u;
-const CLAUSE_BOUNDARY_PATTERN = /[.!?;\n\r]/u;
-
-const SUBJECT_SELF_MARKERS = new Set([
-  'i',
-  "i'm",
-  'im',
-  "i've",
-  'ive',
-  'ik',
-  'je',
-  "j'ai",
-  'ich',
-  'yo',
-  'eu',
-  'أنا',
-  'انا',
-  '私',
-  'わたし',
-  '僕',
-  '俺',
-  '我',
-]);
-
-const POSSESSIVE_SELF_MARKERS = new Set([
-  'my',
-  'mine',
-  'mijn',
-  'mon',
-  'ma',
-  'mes',
-  'mein',
-  'meine',
-  'mi',
-  'mis',
-  'meu',
-  'minha',
-  'لي',
-  'عندي',
-  'اسمي',
-  '我的',
-]);
-
-const OBJECT_SELF_MARKERS = new Set(['me', 'mij', 'moi', 'mich', 'mir']);
-
-const ALLOWED_SELF_RELATION_GAP = new Set([
-  'am',
-  'also',
-  'always',
-  'actually',
-  'currently',
-  'definitely',
-  'do',
-  'generally',
-  'have',
-  'just',
-  'now',
-  'personally',
-  'really',
-  'still',
-  'typically',
-  'usually',
-  'want',
-  'would',
-  'will',
-]);
-
-const ALLOWED_POSSESSIVE_RELATION_GAP = new Set([
-  'actual',
-  'current',
-  'default',
-  'favorite',
-  'favourite',
-  'new',
-  'preferred',
-  'primary',
-  'usual',
-]);
-
-const ATTRIBUTION_MARKERS = new Set([
-  'according',
-  'claimed',
-  'claims',
-  'noted',
-  'notes',
-  'quoted',
-  'quotes',
-  'said',
-  'says',
-  'stated',
-  'states',
-  'told',
-  'wrote',
-  'writes',
-]);
-
-const NEGATION_MARKERS = new Set([
-  'cannot',
-  "can't",
-  'cant',
-  'didnt',
-  "didn't",
-  'doesnt',
-  "doesn't",
-  'dont',
-  "don't",
-  'geen',
-  'never',
-  'niet',
-  'no',
-  'not',
-  'nunca',
-  'pas',
-  'kein',
-  'keine',
-  'nicht',
-  'لا',
-  'لم',
-  'لن',
-  'ليس',
-  '不',
-  '没',
-]);
-
-const RESET_MARKERS = new Set(['but', 'however', 'instead', 'maar', 'aber', 'pero', 'mas']);
-
-const HYPOTHETICAL_MARKERS = new Set([
-  'assuming',
-  'could',
-  'if',
-  'maybe',
-  'may',
-  'might',
-  'perhaps',
-  'possibly',
-  'should',
-  'suppose',
-  'supposing',
-  'would',
-]);
-
-const CORRECTION_MARKERS = new Set([
-  'actually',
-  'change',
-  'changed',
-  'correction',
-  'instead',
-  'make',
-  'replace',
-  'set',
-  'switch',
-  'update',
-  'updated',
-]);
-
-const ANAPHORIC_CORRECTION_TARGETS = new Set(['it', 'that', 'this']);
-const DURABLE_CORRECTION_MARKERS = new Set([
-  'default',
-  'preference',
-  'remember',
-  'usual',
-  'usually',
-]);
-
-const ALLOWED_NAMED_SUBJECT_RELATION_GAP = new Set([
-  'a',
-  'actually',
-  'also',
-  'always',
-  'an',
-  'are',
-  'currently',
-  'definitely',
-  'generally',
-  'has',
-  'have',
-  'is',
-  'now',
-  'really',
-  'so',
-  'still',
-  'the',
-  'typically',
-  'usually',
-]);
-
-const PREDICATE_STOP_UNITS = new Set([
-  'a',
-  'an',
-  'at',
-  'be',
-  'has',
-  'have',
-  'in',
-  'is',
-  'of',
-  'on',
-  'the',
-  'to',
-]);
-
-const RELATION_ALIASES: ReadonlyArray<ReadonlySet<string>> = [
-  new Set(['address', 'city', 'home', 'live', 'location', 'move', 'residence', 'reside']),
-  new Set(['call', 'called', 'name', 'named']),
-  new Set([
-    'channel',
-    'contact',
-    'default',
-    'favorite',
-    'favourite',
-    'generally',
-    'normally',
-    'prefer',
-    'preference',
-    'typical',
-    'typically',
-    'usual',
-    'usually',
-  ]),
-  new Set(['job', 'occupation', 'profession', 'role', 'work']),
-  new Set(['timezone', 'tz']),
-];
-
-function normalizeText(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
-}
-
-function isIdentifierCodePoint(value: string | undefined): boolean {
-  return value !== undefined && IDENTIFIER_PATTERN.test(value);
-}
-
-function exactOccurrences(text: string, value: string): number[] {
-  const indexes: number[] = [];
-  let offset = 0;
-  while (offset <= text.length - value.length) {
-    const index = text.indexOf(value, offset);
-    if (index < 0) break;
-    const before = Array.from(text.slice(0, index)).at(-1);
-    const after = Array.from(text.slice(index + value.length))[0];
-    if (!isIdentifierCodePoint(before) && !isIdentifierCodePoint(after)) indexes.push(index);
-    offset = index + Math.max(value.length, 1);
-  }
-  return indexes;
-}
-
-function quoteMask(text: string): boolean[] {
-  const mask = Array.from({ length: text.length }, () => false);
-  const closeForOpen: Record<string, string> = {
-    '"': '"',
-    "'": "'",
-    '“': '”',
-    '‘': '’',
-    '«': '»',
-    '‹': '›',
-    '「': '」',
-    '『': '』',
-  };
-  let closing: string | null = null;
-  let quoteStart = -1;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]!;
-    if (closing) {
-      mask[index] = true;
-      if (char === closing) {
-        for (let fill = quoteStart; fill <= index; fill += 1) mask[fill] = true;
-        closing = null;
-        quoteStart = -1;
-      }
-      continue;
-    }
-    const requestedClose = closeForOpen[char];
-    if (!requestedClose) continue;
-    const before = text[index - 1];
-    const after = text[index + 1];
-    if ((char === "'" || char === '’') && /[\p{L}\p{M}]/u.test(before ?? '') && /[\p{L}\p{M}]/u.test(after ?? '')) {
-      continue;
-    }
-    closing = requestedClose;
-    quoteStart = index;
-    mask[index] = true;
-  }
-  if (closing && quoteStart >= 0) {
-    for (let fill = quoteStart; fill < text.length; fill += 1) mask[fill] = true;
-  }
-  return mask;
-}
-
-function clauseRange(text: string, valueStart: number, valueEnd: number): { start: number; end: number } {
-  let start = valueStart;
-  while (start > 0 && !CLAUSE_BOUNDARY_PATTERN.test(text[start - 1]!)) start -= 1;
-  let end = valueEnd;
-  if (end > valueStart && CLAUSE_BOUNDARY_PATTERN.test(text[end - 1]!)) {
-    return { start, end };
-  }
-  while (end < text.length && !CLAUSE_BOUNDARY_PATTERN.test(text[end]!)) end += 1;
-  return { start, end };
-}
-
-function tokensForClause(text: string, start: number, end: number, mask: boolean[]): TextToken[] {
-  const clause = text.slice(start, end);
-  return Array.from(clause.matchAll(TOKEN_PATTERN), (match): TextToken => {
-    const tokenStart = start + (match.index ?? 0);
-    const tokenEnd = tokenStart + match[0].length;
-    return {
-      value: match[0],
-      lower: match[0].toLocaleLowerCase(),
-      start: tokenStart,
-      end: tokenEnd,
-      quoted: mask.slice(tokenStart, tokenEnd).some(Boolean),
-    };
-  });
-}
-
-function morphologicalForms(value: string): Set<string> {
-  const lower = value.toLocaleLowerCase();
-  const forms = new Set([lower]);
-  if (lower.length > 3 && lower.endsWith('s')) forms.add(lower.slice(0, -1));
-  if (lower.length > 4 && lower.endsWith('es')) forms.add(lower.slice(0, -2));
-  if (lower.length > 4 && lower.endsWith('ed')) {
-    const base = lower.slice(0, -2);
-    forms.add(base);
-    if (base.length > 2 && base.at(-1) === base.at(-2)) forms.add(base.slice(0, -1));
-  }
-  if (lower.length > 5 && lower.endsWith('ing')) {
-    const base = lower.slice(0, -3);
-    forms.add(base);
-    if (base.length > 2 && base.at(-1) === base.at(-2)) forms.add(base.slice(0, -1));
-  }
-  return forms;
-}
-
-function predicateUnits(predicate: string): Set<string> {
-  const separated = predicate
-    .normalize('NFKC')
-    .replace(/([\p{Ll}\p{N}])([\p{Lu}])/gu, '$1 $2')
-    .toLocaleLowerCase();
-  const units = new Set<string>();
-  for (const match of separated.matchAll(/[\p{L}\p{M}\p{N}]+/gu)) {
-    for (const form of morphologicalForms(match[0])) {
-      if (!PREDICATE_STOP_UNITS.has(form)) units.add(form);
-    }
-  }
-  return units;
-}
-
-function relationForms(units: ReadonlySet<string>): Set<string> {
-  const forms = new Set(units);
-  for (const aliases of RELATION_ALIASES) {
-    if (Array.from(aliases).some((alias) => forms.has(alias))) {
-      for (const alias of aliases) forms.add(alias);
-    }
-  }
-  return forms;
-}
-
-function isRelationToken(token: TextToken, allowedForms: ReadonlySet<string>): boolean {
-  if (token.quoted) return false;
-  return (
-    Array.from(morphologicalForms(token.lower)).some((form) => allowedForms.has(form)) ||
-    Array.from(predicateUnits(token.value)).some((form) => allowedForms.has(form))
-  );
+function predicateAllowsLiteralTarget(units: ReadonlySet<string>): boolean {
+  return !Array.from(units).some((unit) => NON_LITERAL_STATE_PREDICATE_UNITS.has(unit));
 }
 
 function resetStart(tokens: readonly TextToken[], beforeIndex: number): number {
@@ -420,12 +121,17 @@ function gapAllowed(
   return gap.length <= 4 && gap.every((token) => allowed.has(token.lower));
 }
 
-function hasBoundSelfRelation(
+interface BoundSelfRelation {
+  subjectIndex: number;
+  subjectKind: ExactSelfClaimSubjectKind;
+}
+
+function findBoundSelfRelation(
   tokens: readonly TextToken[],
   relationIndex: number,
   valueStart: number,
   predicateForms: ReadonlySet<string>,
-): boolean {
+): BoundSelfRelation | null {
   const relation = tokens[relationIndex]!;
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
@@ -433,26 +139,34 @@ function hasBoundSelfRelation(
     const lower = token.lower;
     if (SUBJECT_SELF_MARKERS.has(lower) || lower === 'user') {
       if (
-        index < relationIndex &&
-        gapAllowed(tokens, index, relationIndex, ALLOWED_SELF_RELATION_GAP) &&
+        ((index === relationIndex && isTrustedSelfRelationContraction(lower)) ||
+          (index < relationIndex &&
+            gapAllowed(tokens, index, relationIndex, ALLOWED_SELF_RELATION_GAP))) &&
         !hasUnsafeModifier(tokens, index, relationIndex, valueStart)
       ) {
-        return true;
+        return { subjectIndex: index, subjectKind: 'self' };
       }
+    }
+    if (
+      index === relationIndex &&
+      isExactAgeImplicitSelfRelation(lower) &&
+      !hasUnsafeModifier(tokens, index, relationIndex, valueStart)
+    ) {
+      return { subjectIndex: index, subjectKind: 'self' };
     }
     if (POSSESSIVE_SELF_MARKERS.has(lower)) {
       const gap = tokens.slice(index + 1, relationIndex).filter((entry) => !entry.quoted);
       if (
         index < relationIndex &&
-        gap.length <= 2 &&
+        gap.length <= 4 &&
         gap.every(
           (entry) =>
             ALLOWED_POSSESSIVE_RELATION_GAP.has(entry.lower) ||
-            Array.from(morphologicalForms(entry.lower)).some((form) => predicateForms.has(form)),
+            Array.from(predicateUnits(entry.value)).some((form) => predicateForms.has(form)),
         ) &&
         !hasUnsafeModifier(tokens, index, relationIndex, valueStart)
       ) {
-        return true;
+        return { subjectIndex: index, subjectKind: 'possessive' };
       }
     }
     if (OBJECT_SELF_MARKERS.has(lower) && index > relationIndex) {
@@ -463,49 +177,15 @@ function hasBoundSelfRelation(
         ) &&
         !hasUnsafeModifier(tokens, relationIndex, index, valueStart)
       ) {
-        return true;
+        return { subjectIndex: index, subjectKind: 'object' };
       }
     }
   }
-  return false;
+  return null;
 }
 
-function rangeIsUnquoted(mask: readonly boolean[], start: number, end: number): boolean {
-  return end > start && !mask.slice(start, end).some(Boolean);
-}
-
-function namedClaimHasUnsafeModifier(tokens: readonly TextToken[]): boolean {
-  for (const token of tokens) {
-    if (token.quoted) continue;
-    if (
-      ATTRIBUTION_MARKERS.has(token.lower) ||
-      NEGATION_MARKERS.has(token.lower) ||
-      HYPOTHETICAL_MARKERS.has(token.lower)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function hasBoundNamedSubjectRelation(input: {
-  tokens: readonly TextToken[];
-  subjectEnd: number;
-  relationIndex: number;
-  valueStart: number;
-  questionTerminated: boolean;
-}): boolean {
-  if (input.questionTerminated) return false;
-  const relation = input.tokens[input.relationIndex]!;
-  if (relation.start < input.subjectEnd || relation.end > input.valueStart) return false;
-  const gap = input.tokens.filter(
-    (token) => token.start >= input.subjectEnd && token.end <= relation.start && !token.quoted,
-  );
-  return (
-    gap.length <= 3 &&
-    gap.every((token) => ALLOWED_NAMED_SUBJECT_RELATION_GAP.has(token.lower)) &&
-    !namedClaimHasUnsafeModifier(input.tokens)
-  );
+function closingLiteralQuoteEnd(text: string, valueEnd: number, valueIsQuoted: boolean): number {
+  return valueIsQuoted && /^["'”’»›」』]$/u.test(text[valueEnd] ?? '') ? valueEnd + 1 : valueEnd;
 }
 
 /**
@@ -522,18 +202,73 @@ export function deriveExactSelfClaimEvidence(input: {
   const text = normalizeText(input.userMessageText);
   const predicate = normalizeText(input.predicate);
   const value = normalizeText(input.value);
-  if (!text || !predicate || !value) return null;
+  if (!text || !predicate || !value || !hasUnambiguousExactCommonSelfPredicate(predicate)) {
+    return null;
+  }
   const predicateForms = predicateUnits(predicate);
   if (predicateForms.size === 0) return null;
   const allowedRelationForms = relationForms(predicateForms);
   const mask = quoteMask(text);
 
-  for (const valueStart of exactOccurrences(text, value)) {
-    const range = clauseRange(text, valueStart, valueStart + value.length);
-    const tokens = tokensForClause(text, range.start, range.end, mask);
+  const valueOccurrences = Array.from(
+    new Set([...exactOccurrences(text, value), ...exactCompactAgeValueOccurrences(text, value)]),
+  ).sort((left, right) => left - right);
+  for (const valueStart of valueOccurrences) {
+    const valueEnd = valueStart + value.length;
+    const range = clauseRange(text, valueStart, valueEnd);
+    if (isQuestionTerminated(text, range)) continue;
+    const tokens = splitExactCompactAgeTokens({
+      text,
+      tokens: tokensForClause(text, range.start, range.end, mask),
+      value,
+      valueStart,
+      valueEnd,
+    });
+    if (
+      hasUnsafeSelfClaimQualifier({
+        tokens,
+        lowerText: text.slice(range.start, range.end).toLocaleLowerCase(),
+        valueStart,
+        valueEnd: valueStart + value.length,
+        isAttribution: (candidate) => ATTRIBUTION_MARKERS.has(candidate),
+        isHypothetical: (candidate) => HYPOTHETICAL_MARKERS.has(candidate),
+      })
+    ) {
+      continue;
+    }
     for (let relationIndex = 0; relationIndex < tokens.length; relationIndex += 1) {
-      if (!isRelationToken(tokens[relationIndex]!, allowedRelationForms)) continue;
-      if (!hasBoundSelfRelation(tokens, relationIndex, valueStart, predicateForms)) continue;
+      if (
+        !isRelationToken(tokens[relationIndex]!, allowedRelationForms) &&
+        !isTrustedSelfRelationSurface(tokens[relationIndex]!.lower)
+      ) {
+        continue;
+      }
+      const binding = findBoundSelfRelation(tokens, relationIndex, valueStart, predicateForms);
+      if (!binding) continue;
+      if (
+        !hasAdmissibleDirectSelfClaimShape({
+          text,
+          predicate,
+          value,
+          clauseStart: range.start,
+          clauseEnd: range.end,
+          tokens,
+          subjectIndex: binding.subjectIndex,
+          subjectKind: binding.subjectKind,
+          relationIndex,
+          valueStart,
+          valueEnd: valueStart + value.length,
+          allowLiteralTarget: predicateAllowsLiteralTarget(predicateForms),
+          isPredicateUnit: (candidate) =>
+            Array.from(predicateUnits(candidate)).some((form) => allowedRelationForms.has(form)),
+          isRelationUnit: (candidate) =>
+            Array.from(morphologicalForms(candidate)).some((form) =>
+              allowedRelationForms.has(form),
+            ),
+        })
+      ) {
+        continue;
+      }
       return {
         subject: 'user',
         predicate,
@@ -545,87 +280,227 @@ export function deriveExactSelfClaimEvidence(input: {
   return null;
 }
 
-/**
- * Admit an anaphoric self correction only when the same unquoted assertion
- * clause contains an explicit correction marker, a reference such as
- * "make that", the exact replacement value, and a negated token from the one
- * current value. The current-fact anchor keeps an unrelated "make that" from
- * gaining profile-write authority.
- */
+/** Admit only a durable, target-bound correction with an old-value anchor. */
 export function deriveExactSelfCorrectionEvidence(input: {
   userMessageText: string;
   predicate: string;
   value: string;
   currentValue: string;
-}): ExactSelfClaimEvidence | null {
+}): ExactSelfCorrectionEvidence | null {
   const text = normalizeText(input.userMessageText);
   const predicate = normalizeText(input.predicate);
   const value = normalizeText(input.value);
   const currentValue = normalizeText(input.currentValue);
-  if (!text || !predicate || !value || !currentValue || value === currentValue) return null;
+  if (!text || !predicate || !value || !currentValue || value === currentValue) {
+    return null;
+  }
+  if (!hasUnambiguousExactCommonSelfPredicate(predicate)) return null;
+  const predicateForms = predicateUnits(predicate);
+  if (predicateForms.size === 0) return null;
+  const correctionRelationForms = relationForms(predicateForms);
   const mask = quoteMask(text);
-  const currentTokens = Array.from(currentValue.matchAll(TOKEN_PATTERN), (match) =>
+  const currentTokens = Array.from(currentValue.matchAll(VALUE_TOKEN_PATTERN), (match) =>
     match[0].toLocaleLowerCase(),
   );
   if (currentTokens.length === 0) return null;
 
   for (const valueStart of exactOccurrences(text, value)) {
     const valueEnd = valueStart + value.length;
-    if (!rangeIsUnquoted(mask, valueStart, valueEnd)) continue;
     const range = clauseRange(text, valueStart, valueEnd);
-    if (text[range.end] === '?' || text[range.end - 1] === '?') continue;
+    if (isQuestionTerminated(text, range)) continue;
+    if (hasTrailingCorrectionContent(text, range.end)) continue;
     const tokens = tokensForClause(text, range.start, range.end, mask);
+    const valueMask = mask.slice(valueStart, valueEnd);
+    const valueIsUnquoted = !valueMask.some(Boolean);
+    const valueIsQuoted = valueMask.length > 0 && valueMask.every(Boolean);
+    if (!valueIsUnquoted && !valueIsQuoted) continue;
     const valueTokenIndexes = tokens.flatMap((token, index) =>
       token.start >= valueStart && token.end <= valueEnd ? [index] : [],
     );
     const valueTokenIndex = valueTokenIndexes[0] ?? -1;
     const valueTokenEndIndex = valueTokenIndexes.at(-1) ?? -1;
     if (valueTokenIndex < 0) continue;
-    const unquotedBeforeValue = tokens.slice(0, valueTokenIndex).filter((token) => !token.quoted);
     if (
-      unquotedBeforeValue.some(
-        (token) =>
-          ATTRIBUTION_MARKERS.has(token.lower) ||
-          HYPOTHETICAL_MARKERS.has(token.lower) ||
-          NEGATION_MARKERS.has(token.lower),
-      )
+      hasUnsafeSelfClaimQualifier({
+        tokens,
+        lowerText: text.slice(range.start, range.end).toLocaleLowerCase(),
+        valueStart,
+        valueEnd,
+        isAttribution: (candidate) => ATTRIBUTION_MARKERS.has(candidate),
+        isHypothetical: (candidate) => HYPOTHETICAL_MARKERS.has(candidate),
+      }) ||
+      tokens
+        .slice(0, valueTokenIndex)
+        .some((token) => !token.quoted && NEGATION_MARKERS.has(token.lower))
     ) {
       continue;
     }
-    const correctionIndex = unquotedBeforeValue.findIndex((token) =>
-      CORRECTION_MARKERS.has(token.lower),
-    );
-    if (correctionIndex < 0) continue;
-    const hasAnaphoricTarget = unquotedBeforeValue
-      .slice(correctionIndex + 1)
-      .some((token) => ANAPHORIC_CORRECTION_TARGETS.has(token.lower));
-    if (!hasAnaphoricTarget) continue;
 
-    const lowerClause = text.slice(range.start, range.end).toLocaleLowerCase();
-    const hasDurableIntent =
-      /\b(?:from\s+now\s+on|going\s+forward)\b/u.test(lowerClause) ||
-      tokens.some(
-        (token) => !token.quoted && DURABLE_CORRECTION_MARKERS.has(token.lower),
+    const correctionIndexes = tokens.flatMap((token, index) =>
+      !token.quoted && token.end <= valueStart && CORRECTION_MARKERS.has(token.lower)
+        ? [index]
+        : [],
+    );
+    const correctionMatches = correctionIndexes.flatMap((correctionIndex) => {
+      const span = matchAdmissibleCorrectionActionToValueSpan({
+        text,
+        predicate,
+        tokens,
+        correctionIndex,
+        valueStart,
+        valueIsQuoted,
+        valueLooksLikeTitle: looksLikeTitleCaseLiteral(value),
+        allowLiteralTarget: predicateAllowsLiteralTarget(predicateForms),
+        isCorrectionAction: (candidate) => CORRECTION_ACTION_MARKERS.has(candidate),
+        isAnaphoricTarget: (candidate) => ANAPHORIC_CORRECTION_TARGETS.has(candidate),
+        isPredicateUnit: (candidate) =>
+          Array.from(predicateUnits(candidate)).some((form) => correctionRelationForms.has(form)),
+      });
+      if (!span) return [];
+      if (
+        span.kind === 'direct_property' &&
+        !hasDistinguishingCorrectionTarget({
+          tokens,
+          predicate,
+          correctionIndex,
+          valueStart,
+          isPredicateRelation: (index) => isRelationToken(tokens[index]!, predicateForms),
+          isBoundPredicateRelation: (index) =>
+            findBoundSelfRelation(tokens, index, valueStart, predicateForms) !== null,
+        })
+      ) {
+        return [];
+      }
+      if (
+        !hasAdmissibleCorrectionPrefix({
+          text,
+          clauseStart: range.start,
+          tokens,
+          correctionIndex,
+          isPredicateUnit: (candidate) =>
+            Array.from(predicateUnits(candidate)).some((form) => predicateForms.has(form)),
+        })
+      ) {
+        return [];
+      }
+      return [{ correctionIndex, span }];
+    });
+    if (correctionMatches.length !== 1) continue;
+    const [{ span }] = correctionMatches;
+    const allowLiteralValue = span.allowLiteralValue;
+    if (
+      (!valueIsUnquoted && !allowLiteralValue) ||
+      !hasAdmissibleExactSelfFactValue(value, { allowLiteral: allowLiteralValue }) ||
+      !hasAdmissibleExactFactSourceSpan({
+        text,
+        valueStart,
+        valueEnd,
+        allowLiteral: allowLiteralValue,
+        structuredNumericKind: span.structuredNumericKind,
+      })
+    ) {
+      continue;
+    }
+    let priorAnchorStart = -1;
+    let priorAnchorEnd = -1;
+    exactOccurrences(text, currentValue).some((priorStart) => {
+      const priorEnd = priorStart + currentValue.length;
+      if (
+        priorStart < valueEnd ||
+        priorStart < range.start ||
+        priorEnd > range.end ||
+        !rangeIsUnquoted(mask, priorStart, priorEnd) ||
+        !hasAdmissibleExactFactSourceSpan({
+          text,
+          valueStart: priorStart,
+          valueEnd: priorEnd,
+          structuredNumericKind: span.structuredNumericKind,
+        })
+      ) {
+        return false;
+      }
+      const priorTokenIndexes = tokens.flatMap((token, index) =>
+        token.start >= priorStart && token.end <= priorEnd && !token.quoted ? [index] : [],
       );
-    if (!hasDurableIntent) continue;
-
-    const unquotedAfterValue = tokens
-      .slice(valueTokenEndIndex + 1)
-      .filter((token) => !token.quoted);
-    const priorAnchorIndex = unquotedAfterValue.findIndex((token) =>
-      currentTokens.includes(token.lower),
-    );
-    if (priorAnchorIndex < 0) continue;
-    const priorAnchorIsNegated = unquotedAfterValue
-      .slice(Math.max(0, priorAnchorIndex - 3), priorAnchorIndex)
-      .some((token) => NEGATION_MARKERS.has(token.lower));
-    if (!priorAnchorIsNegated) continue;
+      const priorTokenIndex = priorTokenIndexes[0] ?? -1;
+      const priorTokenEndIndex = priorTokenIndexes.at(-1) ?? -1;
+      const negated =
+        priorTokenIndex > valueTokenEndIndex &&
+        tokens
+          .slice(Math.max(valueTokenEndIndex + 1, priorTokenIndex - 3), priorTokenIndex)
+          .some((token) => !token.quoted && NEGATION_MARKERS.has(token.lower)) &&
+        hasAdmissiblePriorAnchorSuffix(tokens, priorTokenEndIndex);
+      if (negated) {
+        priorAnchorStart = priorStart;
+        priorAnchorEnd = priorEnd;
+      }
+      return negated;
+    });
+    if (priorAnchorStart < 0) {
+      if (!hasCompatibleNumericAnchorUnits(currentValue, value)) continue;
+      const numericAnchors = currentTokens.filter((token) =>
+        /^[+-]?\p{N}+(?:[.,]\p{N}+)?$/u.test(token),
+      );
+      if (numericAnchors.length !== 1) continue;
+      const partialAnchorIndex = tokens.findIndex(
+        (token, index) =>
+          index > valueTokenEndIndex &&
+          !token.quoted &&
+          token.lower === numericAnchors[0] &&
+          tokens
+            .slice(Math.max(valueTokenEndIndex + 1, index - 3), index)
+            .some((candidate) => !candidate.quoted && NEGATION_MARKERS.has(candidate.lower)) &&
+          hasAdmissiblePriorAnchorSuffix(tokens, index),
+      );
+      if (partialAnchorIndex < 0) continue;
+      priorAnchorStart = tokens[partialAnchorIndex]!.start;
+      priorAnchorEnd = tokens[partialAnchorIndex]!.end;
+      if (
+        !hasAdmissibleExactFactSourceSpan({
+          text,
+          valueStart: priorAnchorStart,
+          valueEnd: priorAnchorEnd,
+          structuredNumericKind: span.structuredNumericKind,
+        })
+      ) {
+        continue;
+      }
+    }
+    if (
+      priorAnchorEnd < priorAnchorStart ||
+      !hasAdmissibleRawTokenEnvelope({
+        text,
+        tokens,
+        start: closingLiteralQuoteEnd(text, valueEnd, allowLiteralValue && valueIsQuoted),
+        end: priorAnchorStart,
+        allowCommaOrColon: true,
+      }) ||
+      !hasAdmissibleRawTokenEnvelope({
+        text,
+        tokens,
+        start: priorAnchorEnd,
+        end: range.end,
+        allowCommaOrColon: true,
+      }) ||
+      !hasAdmissibleDurableCorrection({
+        text,
+        tokens,
+        intentStart: range.start,
+        valueStart,
+        valueEnd,
+        priorAnchorStart,
+        isNegation: (candidate) => NEGATION_MARKERS.has(candidate),
+      })
+    ) {
+      continue;
+    }
 
     return {
       subject: 'user',
       predicate,
       value,
       evidenceQuote: text.slice(range.start, range.end).trim(),
+      correctionTarget: span.kind,
     };
   }
   return null;
@@ -646,15 +521,27 @@ export function deriveExactNamedSubjectClaimEvidence(input: {
   const subject = normalizeText(input.subject);
   const predicate = normalizeText(input.predicate);
   const value = normalizeText(input.value);
-  if (!text || !subject || !predicate || !value) return null;
+  if (
+    !text ||
+    !subject ||
+    !predicate ||
+    !value ||
+    !hasUnambiguousExactCommonSelfPredicate(predicate)
+  ) {
+    return null;
+  }
   const predicateForms = predicateUnits(predicate);
   if (predicateForms.size === 0) return null;
   const allowedRelationForms = relationForms(predicateForms);
   const mask = quoteMask(text);
 
   for (const valueStart of exactOccurrences(text, value)) {
-    if (!rangeIsUnquoted(mask, valueStart, valueStart + value.length)) continue;
-    const range = clauseRange(text, valueStart, valueStart + value.length);
+    const valueEnd = valueStart + value.length;
+    const valueMask = mask.slice(valueStart, valueEnd);
+    const valueIsUnquoted = !valueMask.some(Boolean);
+    const valueIsQuoted = valueMask.length > 0 && valueMask.every(Boolean);
+    if (!valueIsUnquoted && !valueIsQuoted) continue;
+    const range = clauseRange(text, valueStart, valueEnd);
     const tokens = tokensForClause(text, range.start, range.end, mask);
     for (const subjectStart of exactOccurrences(text, subject)) {
       const subjectEnd = subjectStart + subject.length;
@@ -667,13 +554,37 @@ export function deriveExactNamedSubjectClaimEvidence(input: {
       }
       for (let relationIndex = 0; relationIndex < tokens.length; relationIndex += 1) {
         if (!isRelationToken(tokens[relationIndex]!, allowedRelationForms)) continue;
+        const allowLiteralValue =
+          predicateAllowsLiteralTarget(predicateForms) &&
+          isLiteralFactUnit(tokens[relationIndex]!.lower) &&
+          (valueIsQuoted || valueIsUnquoted);
+        const trailing = text.slice(valueEnd, range.end);
+        if (
+          (!valueIsUnquoted && !allowLiteralValue) ||
+          !hasAdmissibleExactSelfFactValue(value, { allowLiteral: allowLiteralValue }) ||
+          !hasAdmissibleExactFactSourceSpan({
+            text,
+            valueStart,
+            valueEnd,
+            allowLiteral: allowLiteralValue,
+            structuredNumericKind: exactPropertyHeadStructuredNumericKind(tokens[relationIndex]!),
+          }) ||
+          !(valueIsQuoted ? /^[\s"'”’»›」』]*$/u.test(trailing) : /^\s*$/u.test(trailing))
+        ) {
+          continue;
+        }
         if (
           !hasBoundNamedSubjectRelation({
+            text,
             tokens,
+            predicate,
+            subject,
             subjectEnd,
             relationIndex,
             valueStart,
-            questionTerminated: text[range.end] === '?' || text[range.end - 1] === '?',
+            valueEnd,
+            allowLiteralValue,
+            questionTerminated: isQuestionTerminated(text, range),
           })
         ) {
           continue;

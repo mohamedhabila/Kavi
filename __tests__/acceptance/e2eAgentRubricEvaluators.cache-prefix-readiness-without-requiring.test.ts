@@ -610,7 +610,7 @@ describe('evaluateE2ERubric', () => {
             sourceThreadId: conversationId,
             taskId: null,
             userMessageId: 'msg-memory-fact-update',
-            userMessageText: 'Correction: e2e-entity-update artifact_token is E2E-NEW.',
+            userMessageText: 'Correction: e2e-entity-update artifact token is E2E-NEW.',
           },
         },
       ),

@@ -87,6 +87,7 @@ describe('ingestion queue schema migration', () => {
         'source_run_id',
         'chat_provider_id',
         'chat_model',
+        'prior_user_message_id',
       ]),
     );
     expect(
@@ -323,8 +324,8 @@ describe('ingestion queue schema migration', () => {
       },
       {
         id: 'valid-pending',
-        status: 'pending',
-        outcome_code: null,
+        status: 'failed',
+        outcome_code: 'source_identity_invalid',
         memory_conversation_id: 'root-valid',
         source_at: 10,
         reason: 'turn_completed',

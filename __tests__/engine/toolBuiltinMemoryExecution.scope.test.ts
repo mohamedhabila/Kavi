@@ -23,6 +23,13 @@ jest.mock('../../src/engine/goals/graphTaskScope', () => ({
   resolveGraphTaskId: () => 'active-task',
 }));
 
+jest.mock('../../src/services/memory/memoryScopeStore', () => ({
+  resolveLocalMemoryAccessScope: (scope: Record<string, unknown>) => ({
+    memoryOwnerId: 'owner-local',
+    ...scope,
+  }),
+}));
+
 jest.mock('../../src/engine/tools/builtin-memory', () => ({
   executeMemoryRecall: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
   executeMemorySearch: (...args: unknown[]) => mockExecuteMemorySearch(...args),
@@ -36,6 +43,7 @@ jest.mock('../../src/engine/tools/builtin-memory', () => ({
 }));
 
 import { executeBuiltinMemoryTool } from '../../src/engine/tools/toolBuiltinMemoryExecution';
+import { consumeExplicitMemoryRecallGrant } from '../../src/services/memory/explicitMemoryRecallGrant';
 
 const BASE_PARAMS = {
   conversationId: 'child-thread',
@@ -131,6 +139,72 @@ describe('builtin memory execution scope', () => {
         personaId: 'coder',
         taskId: 'active-task',
       },
+    );
+  });
+
+  it('creates exact sensitive-recall authority only from code-owned request identity', async () => {
+    const args = { subject: 'user', predicate: 'medical_status' };
+    const currentUserMessage = {
+      id: 'user-message-sensitive',
+      text: 'What is my medical_status?',
+    };
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      context: {
+        ...BASE_PARAMS.context,
+        currentUserMessage,
+        executionRunId: 'execution-sensitive',
+        agentRunId: 'agent-sensitive',
+      },
+      name: 'memory_recall',
+      args,
+    });
+
+    const execution = mockExecuteMemoryRecall.mock.calls[0]?.[1];
+    expect(execution).toMatchObject({
+      requestIdentity: {
+        currentUserMessageId: currentUserMessage.id,
+        currentUserMessageText: currentUserMessage.text,
+        executionRunId: 'execution-sensitive',
+        agentRunId: 'agent-sensitive',
+      },
+      explicitUserRequestGrant: { kind: 'explicit_memory_recall_grant' },
+    });
+    const validation = {
+      grant: execution.explicitUserRequestGrant,
+      ...execution.requestIdentity,
+      scope: {
+        memoryOwnerId: 'owner-local',
+        memoryConversationId: 'delegated-memory-scope',
+        sourceThreadId: 'child-thread',
+        personaId: 'coder',
+        taskId: 'active-task',
+      },
+      ...args,
+      all: undefined,
+    };
+    expect(consumeExplicitMemoryRecallGrant(validation)).toBe(true);
+    expect(consumeExplicitMemoryRecallGrant(validation)).toBe(false);
+  });
+
+  it('does not create recall authority for a broad user message', async () => {
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      context: {
+        ...BASE_PARAMS.context,
+        currentUserMessage: {
+          id: 'user-message-broad',
+          text: 'Tell me everything you remember about me.',
+        },
+        executionRunId: 'execution-broad',
+        agentRunId: 'agent-broad',
+      },
+      name: 'memory_recall',
+      args: { all: true },
+    });
+
+    expect(mockExecuteMemoryRecall.mock.calls[0]?.[1]).not.toHaveProperty(
+      'explicitUserRequestGrant',
     );
   });
 });

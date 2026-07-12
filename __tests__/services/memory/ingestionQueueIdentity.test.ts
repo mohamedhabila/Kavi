@@ -280,6 +280,7 @@ describe('ingestion queue identity', () => {
     ['memory_conversation_id', ' corrupt-root '],
     ['task_id', ' corrupt-task '],
     ['source_run_id', 'corrupt\u0001run'],
+    ['prior_user_message_id', 'corrupt\u0001prior'],
     ['source_start_message_id', 'corrupt\u0001start'],
     ['source_end_message_id', 'corrupt\u0001end'],
     ['source_at', 1.5],
