@@ -353,6 +353,12 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
     return unknownResolvedOutcome(effectKind, unknownExecutionState);
   }
   if (params.resultIsError) {
+    if (outcome.effectState === 'failed' || outcome.effectState === 'cancelled') {
+      return {
+        effectKind: outcome.effectKind ?? effectKind,
+        ...outcome,
+      };
+    }
     const executionState =
       status === 'completed' && outcome.executionState === 'completed'
         ? unknownExecutionState

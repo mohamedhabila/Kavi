@@ -179,6 +179,58 @@ describe('production tool lifecycle durable effect wiring', () => {
     ).toEqual({ count: 0 });
   });
 
+  it('records a definitive memory rejection without inventing an ambiguous side effect', async () => {
+    mockedNeedsApproval.mockReturnValue(false);
+    mockedExecuteToolInner.mockResolvedValue(
+      JSON.stringify({
+        status: 'rejected',
+        ok: false,
+        code: 'grounding_required',
+        error: 'Exact current-user grounding is required.',
+      }),
+    );
+    const captureEffectReceipt = jest.fn();
+
+    const result = await executeTool(
+      'memory_remember',
+      JSON.stringify({
+        subject: 'user',
+        predicate: 'preferred_channel',
+        value: 'Signal',
+        scope: 'global',
+      }),
+      'conversation-1',
+      {
+        toolCallId: 'tool-call-memory-rejected',
+        executionRunId: 'execution-run-memory-rejected',
+        captureEffectReceipt,
+      },
+    );
+
+    expect(JSON.parse(result)).toMatchObject({
+      status: 'rejected',
+      ok: false,
+      code: 'grounding_required',
+    });
+    expect(JSON.parse(result)).not.toHaveProperty(
+      'code',
+      'tool_effect_reconciliation_required',
+    );
+    expect(captureEffectReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effectKind: 'memory.write',
+        effectState: 'failed',
+        verificationState: 'unverified',
+      }),
+    );
+    expect(
+      getExecutionJournalDb().getFirstSync(
+        `SELECT r.status AS run_status, e.status AS effect_status
+           FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
+      ),
+    ).toEqual({ run_status: 'failed', effect_status: 'failed' });
+  });
+
   it('fails closed for an effectful central dispatch without an execution-run identity', async () => {
     mockedNeedsApproval.mockReturnValue(false);
     mockedExecuteToolInner.mockResolvedValue('{}');

@@ -87,6 +87,7 @@ export type {
 // ── Common types ─────────────────────────────────────────────────────────
 
 export interface MemoryToolError {
+  status: 'rejected' | 'failed_unknown';
   ok: false;
   error: string;
   code:
@@ -102,7 +103,12 @@ export interface MemoryToolError {
 }
 
 function err(code: MemoryToolError['code'], message: string): MemoryToolError {
-  return { ok: false, code, error: message };
+  return {
+    status: code === 'internal' ? 'failed_unknown' : 'rejected',
+    ok: false,
+    code,
+    error: message,
+  };
 }
 
 function trimNonEmpty(value: unknown, max = 200): string | null {

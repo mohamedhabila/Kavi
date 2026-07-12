@@ -252,6 +252,16 @@ describe('ToolEffectReceipt', () => {
       },
     ],
     [
+      'definitive memory rejection',
+      'memory_remember',
+      { status: 'rejected', ok: false, code: 'grounding_required' },
+      {
+        effectKind: 'memory.write',
+        effectState: 'failed',
+        verificationState: 'unverified',
+      },
+    ],
+    [
       'scheduled notification',
       'notification_schedule',
       { status: 'notification_scheduled', id: 'notification-7' },
@@ -280,6 +290,7 @@ describe('ToolEffectReceipt', () => {
       argumentsText: '{}',
       resultText: JSON.stringify(result),
       transportState: 'returned',
+      resultIsError: 'ok' in result && result.ok === false,
       recordedAt: 225,
     });
 

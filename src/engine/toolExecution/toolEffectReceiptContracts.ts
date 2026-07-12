@@ -221,12 +221,12 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ),
     memory_remember: effectful(
       'memory.write',
-      { created: VERIFIED, duplicate: VERIFIED },
+      { created: VERIFIED, duplicate: VERIFIED, rejected: FAILED },
       { resource: selector('memory_fact', 'result', ['fact', 'id']) },
     ),
     memory_forget: effectful(
       'memory.delete',
-      { withdrawn: VERIFIED, already_withdrawn: VERIFIED },
+      { withdrawn: VERIFIED, already_withdrawn: VERIFIED, rejected: FAILED },
       {
         resource: selector('memory_fact', 'result', ['factId']),
         completion: { resource: selector('memory_fact', 'arguments', ['factId']) },
@@ -234,7 +234,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ),
     memory_manage: effectful(
       'memory.update',
-      { pinned: VERIFIED, unpinned: VERIFIED, invalidated: VERIFIED },
+      { pinned: VERIFIED, unpinned: VERIFIED, invalidated: VERIFIED, rejected: FAILED },
       {
         resource: selector('memory_fact', 'arguments', ['factId']),
         completion: { resource: selector('memory_fact', 'arguments', ['factId']) },
@@ -245,6 +245,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       {
         read: outcome('none', 'not_applicable', 'observation.read'),
         edited: VERIFIED,
+        rejected: FAILED,
       },
       {
         resource: selector('memory_block', 'result', ['resourceId']),
