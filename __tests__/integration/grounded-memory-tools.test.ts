@@ -250,6 +250,67 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
     });
   });
 
+  it('grounds an explicit anaphoric correction against exactly one current self fact', async () => {
+    const first = await remember({
+      subject: 'user',
+      predicate: 'planning meeting duration preference',
+      value: '25 minutes',
+      messageId: 'user-anaphoric-duration-old',
+      messageText: 'I usually keep planning meetings to 25 minutes.',
+      scope: 'global',
+    });
+    const corrected = await remember({
+      subject: 'user',
+      predicate: 'planning meeting duration preference',
+      value: '35 minutes',
+      messageId: 'user-anaphoric-duration-new',
+      messageText: 'Actually, make that 35 minutes from now on, not 25.',
+      scope: 'global',
+    });
+
+    expect(first.ok).toBe(true);
+    expect(corrected).toMatchObject({
+      ok: true,
+      fact: { value: '35 minutes', sourceMessageId: 'user-anaphoric-duration-new' },
+      superseded: [expect.objectContaining({ id: first.fact.id, value: '25 minutes' })],
+    });
+  });
+
+  it.each([
+    ['hypothetical', 'If the agenda grows, I might make that 35 minutes, not 25.'],
+    ['third-party', 'Morgan said make that 35 minutes, not 25.'],
+    ['missing prior-value anchor', 'Actually, make that 35 minutes from now on.'],
+    ['non-durable edit', 'Actually, make that 35 minutes, not 25.'],
+  ])('rejects an unsafe %s anaphoric correction', async (_label, messageText) => {
+    const labelId = _label.replace(/[^a-z0-9]+/gu, '-');
+    const first = await remember({
+      subject: 'user',
+      predicate: 'planning meeting duration preference',
+      value: '25 minutes',
+      messageId: `user-anaphoric-${labelId}-old`,
+      messageText: 'I usually keep planning meetings to 25 minutes.',
+      scope: 'global',
+    });
+    const rejected = await remember({
+      subject: 'user',
+      predicate: 'planning meeting duration preference',
+      value: '35 minutes',
+      messageId: `user-anaphoric-${labelId}-new`,
+      messageText,
+      scope: 'global',
+    });
+
+    expect(first.ok).toBe(true);
+    expect(rejected).toMatchObject({
+      status: 'rejected',
+      ok: false,
+      code: 'grounding_required',
+    });
+    expect(listFacts({ predicate: 'planning meeting duration preference' })).toEqual([
+      expect.objectContaining({ id: first.fact.id, objectText: '25 minutes', invalidAt: null }),
+    ]);
+  });
+
   it.each([
     {
       label: 'opaque identifier',

@@ -162,6 +162,29 @@ const HYPOTHETICAL_MARKERS = new Set([
   'would',
 ]);
 
+const CORRECTION_MARKERS = new Set([
+  'actually',
+  'change',
+  'changed',
+  'correction',
+  'instead',
+  'make',
+  'replace',
+  'set',
+  'switch',
+  'update',
+  'updated',
+]);
+
+const ANAPHORIC_CORRECTION_TARGETS = new Set(['it', 'that', 'this']);
+const DURABLE_CORRECTION_MARKERS = new Set([
+  'default',
+  'preference',
+  'remember',
+  'usual',
+  'usually',
+]);
+
 const ALLOWED_NAMED_SUBJECT_RELATION_GAP = new Set([
   'a',
   'actually',
@@ -518,6 +541,92 @@ export function deriveExactSelfClaimEvidence(input: {
         evidenceQuote: text.slice(range.start, range.end).trim(),
       };
     }
+  }
+  return null;
+}
+
+/**
+ * Admit an anaphoric self correction only when the same unquoted assertion
+ * clause contains an explicit correction marker, a reference such as
+ * "make that", the exact replacement value, and a negated token from the one
+ * current value. The current-fact anchor keeps an unrelated "make that" from
+ * gaining profile-write authority.
+ */
+export function deriveExactSelfCorrectionEvidence(input: {
+  userMessageText: string;
+  predicate: string;
+  value: string;
+  currentValue: string;
+}): ExactSelfClaimEvidence | null {
+  const text = normalizeText(input.userMessageText);
+  const predicate = normalizeText(input.predicate);
+  const value = normalizeText(input.value);
+  const currentValue = normalizeText(input.currentValue);
+  if (!text || !predicate || !value || !currentValue || value === currentValue) return null;
+  const mask = quoteMask(text);
+  const currentTokens = Array.from(currentValue.matchAll(TOKEN_PATTERN), (match) =>
+    match[0].toLocaleLowerCase(),
+  );
+  if (currentTokens.length === 0) return null;
+
+  for (const valueStart of exactOccurrences(text, value)) {
+    const valueEnd = valueStart + value.length;
+    if (!rangeIsUnquoted(mask, valueStart, valueEnd)) continue;
+    const range = clauseRange(text, valueStart, valueEnd);
+    if (text[range.end] === '?' || text[range.end - 1] === '?') continue;
+    const tokens = tokensForClause(text, range.start, range.end, mask);
+    const valueTokenIndexes = tokens.flatMap((token, index) =>
+      token.start >= valueStart && token.end <= valueEnd ? [index] : [],
+    );
+    const valueTokenIndex = valueTokenIndexes[0] ?? -1;
+    const valueTokenEndIndex = valueTokenIndexes.at(-1) ?? -1;
+    if (valueTokenIndex < 0) continue;
+    const unquotedBeforeValue = tokens.slice(0, valueTokenIndex).filter((token) => !token.quoted);
+    if (
+      unquotedBeforeValue.some(
+        (token) =>
+          ATTRIBUTION_MARKERS.has(token.lower) ||
+          HYPOTHETICAL_MARKERS.has(token.lower) ||
+          NEGATION_MARKERS.has(token.lower),
+      )
+    ) {
+      continue;
+    }
+    const correctionIndex = unquotedBeforeValue.findIndex((token) =>
+      CORRECTION_MARKERS.has(token.lower),
+    );
+    if (correctionIndex < 0) continue;
+    const hasAnaphoricTarget = unquotedBeforeValue
+      .slice(correctionIndex + 1)
+      .some((token) => ANAPHORIC_CORRECTION_TARGETS.has(token.lower));
+    if (!hasAnaphoricTarget) continue;
+
+    const lowerClause = text.slice(range.start, range.end).toLocaleLowerCase();
+    const hasDurableIntent =
+      /\b(?:from\s+now\s+on|going\s+forward)\b/u.test(lowerClause) ||
+      tokens.some(
+        (token) => !token.quoted && DURABLE_CORRECTION_MARKERS.has(token.lower),
+      );
+    if (!hasDurableIntent) continue;
+
+    const unquotedAfterValue = tokens
+      .slice(valueTokenEndIndex + 1)
+      .filter((token) => !token.quoted);
+    const priorAnchorIndex = unquotedAfterValue.findIndex((token) =>
+      currentTokens.includes(token.lower),
+    );
+    if (priorAnchorIndex < 0) continue;
+    const priorAnchorIsNegated = unquotedAfterValue
+      .slice(Math.max(0, priorAnchorIndex - 3), priorAnchorIndex)
+      .some((token) => NEGATION_MARKERS.has(token.lower));
+    if (!priorAnchorIsNegated) continue;
+
+    return {
+      subject: 'user',
+      predicate,
+      value,
+      evidenceQuote: text.slice(range.start, range.end).trim(),
+    };
   }
   return null;
 }

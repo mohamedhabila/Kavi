@@ -18,6 +18,7 @@ import {
 } from './groundedFactReplacement';
 import { assertMemoryPersistenceSourcesAreWritable } from './withdrawalFence';
 import {
+  deriveExactSelfCorrectionEvidence,
   deriveExactNamedSubjectClaimEvidence,
   deriveExactSelfClaimEvidence,
 } from './exactSelfClaimEvidence';
@@ -117,20 +118,6 @@ export function persistMemoryRemember(
   context: MemoryRememberPersistenceContext,
 ): MemoryRememberPersistenceResult {
   const evidence = context.requestEvidence;
-  const exactClaim = evidence
-    ? isCanonicalSelfMemorySubject(input.subject)
-      ? deriveExactSelfClaimEvidence({
-          userMessageText: evidence.userMessageText,
-          predicate: input.predicate,
-          value: input.value,
-        })
-      : deriveExactNamedSubjectClaimEvidence({
-          userMessageText: evidence.userMessageText,
-          subject: input.subject,
-          predicate: input.predicate,
-          value: input.value,
-        })
-    : null;
   const resolutionContext = {
     memoryConversationId: evidence?.memoryConversationId ?? input.originConversationId ?? '',
     sourceThreadId: evidence?.sourceThreadId ?? input.originThreadId ?? '',
@@ -141,6 +128,28 @@ export function persistMemoryRemember(
     { subject: input.subject, predicate: input.predicate, scope: input.scope },
     resolutionContext,
   );
+  const exactClaim = evidence
+    ? isCanonicalSelfMemorySubject(input.subject)
+      ? (deriveExactSelfClaimEvidence({
+          userMessageText: evidence.userMessageText,
+          predicate: input.predicate,
+          value: input.value,
+        }) ??
+        (resolution.currentFacts.length === 1
+          ? deriveExactSelfCorrectionEvidence({
+              userMessageText: evidence.userMessageText,
+              predicate: input.predicate,
+              value: input.value,
+              currentValue: resolution.currentFacts[0]!.objectText,
+            })
+          : null))
+      : deriveExactNamedSubjectClaimEvidence({
+          userMessageText: evidence.userMessageText,
+          subject: input.subject,
+          predicate: input.predicate,
+          value: input.value,
+        })
+    : null;
   const proposal: ConsolidatorFact = {
     subject: input.subject,
     predicate: input.predicate,
