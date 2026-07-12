@@ -95,7 +95,7 @@ it('derives prior user identity from chat state and reuses the grounded predicat
       predicate: 'usual architecture review duration',
       value: '45 minutes',
     },
-    superseded: [expect.objectContaining({ id: first.fact.id, value: '30 minutes' })],
+    superseded: [{ id: first.fact.id, invalidAt: expect.any(Number) }],
   });
   expect(listFacts({ predicate: 'architecture_review_default_duration_minutes' })).toEqual([]);
 });

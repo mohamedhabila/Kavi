@@ -217,7 +217,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
     expect(corrected).toMatchObject({
       ok: true,
       fact: { value: 'Avery' },
-      superseded: [expect.objectContaining({ id: first.fact.id, value: 'Morgan' })],
+      superseded: [{ id: first.fact.id, invalidAt: expect.any(Number) }],
     });
   });
 
@@ -247,7 +247,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
     expect(corrected).toMatchObject({
       ok: true,
       fact: { value: '35 minutes', sourceMessageId: 'user-anaphoric-duration-new' },
-      superseded: [expect.objectContaining({ id: first.fact.id, value: '25 minutes' })],
+      superseded: [{ id: first.fact.id, invalidAt: expect.any(Number) }],
     });
   });
 
@@ -366,7 +366,7 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
 
     expect(second).toMatchObject({
       ok: true,
-      superseded: [expect.objectContaining({ id: first.fact.id, value: 'QZ-904' })],
+      superseded: [{ id: first.fact.id, invalidAt: expect.any(Number) }],
     });
     expect(listFacts({ predicate: 'launch_code' })).toEqual([
       expect.objectContaining({ id: second.fact.id, objectText: 'QZ-905' }),

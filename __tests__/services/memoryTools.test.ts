@@ -155,8 +155,8 @@ describe('executeMemoryRemember', () => {
     );
 
     expect(next.status).toBe('created');
-    expect(next.superseded).toHaveLength(1);
-    expect(next.superseded[0].value).toBe('Berlin');
+    expect(next.superseded).toEqual([{ id: expect.any(String), invalidAt: expect.any(Number) }]);
+    expect(Object.keys(next.superseded[0]).sort()).toEqual(['id', 'invalidAt']);
 
     const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'residence' });
     expect(recall.ok).toBe(true);
@@ -179,8 +179,8 @@ describe('executeMemoryRemember', () => {
     );
 
     expect(next.status).toBe('created');
-    expect(next.superseded).toHaveLength(1);
-    expect(next.superseded[0].value).toBe('Berlin');
+    expect(next.superseded).toEqual([{ id: expect.any(String), invalidAt: expect.any(Number) }]);
+    expect(Object.keys(next.superseded[0]).sort()).toEqual(['id', 'invalidAt']);
 
     const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'residence' });
     expect(recall.ok).toBe(true);

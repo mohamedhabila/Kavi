@@ -85,9 +85,7 @@ it('reuses one immediately prior grounded predicate for an explicit anaphoric co
     predicate: 'sprint review duration preference',
     value: '30 minutes',
   });
-  expect(corrected.superseded).toEqual([
-    expect.objectContaining({ id: first.fact.id, value: '20 minutes' }),
-  ]);
+  expect(corrected.superseded).toEqual([{ id: first.fact.id, invalidAt: expect.any(Number) }]);
   expect(listFacts({ predicate: 'sprint_review_default_duration_minutes' })).toEqual([]);
 });
 
@@ -210,9 +208,7 @@ it('binds an anaphoric correction to the immediately prior user fact, not the pr
   );
 
   expect(corrected.fact).toMatchObject({ predicate: 'eye_color', value: 'green' });
-  expect(corrected.superseded).toEqual([
-    expect.objectContaining({ id: eyeColor.id, value: 'blue' }),
-  ]);
+  expect(corrected.superseded).toEqual([{ id: eyeColor.id, invalidAt: expect.any(Number) }]);
   expect(listFacts({ predicate: 'car_color' })).toEqual([
     expect.objectContaining({ id: carColor.id, objectText: 'blue', invalidAt: null }),
   ]);

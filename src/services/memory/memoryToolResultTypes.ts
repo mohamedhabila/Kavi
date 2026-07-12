@@ -33,7 +33,12 @@ export interface MemoryRememberResult {
   ok: true;
   fact: SerializedMemoryFact;
   status: 'created' | 'duplicate';
-  superseded: SerializedMemoryFact[];
+  superseded: MemorySupersessionReceipt[];
+}
+
+export interface MemorySupersessionReceipt {
+  id: string;
+  invalidAt: number;
 }
 
 export interface MemoryPinResult {

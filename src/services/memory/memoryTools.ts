@@ -39,6 +39,7 @@ import type {
   MemoryBlockEditResult,
   MemoryBlockReadResult,
   MemoryRememberResult,
+  MemorySupersessionReceipt,
   SerializedMemoryFact,
 } from './memoryToolResultTypes';
 export type {
@@ -48,6 +49,7 @@ export type {
   MemoryInvalidateResult,
   MemoryPinResult,
   MemoryRememberResult,
+  MemorySupersessionReceipt,
   SerializedMemoryFact,
 } from './memoryToolResultTypes';
 import { loadActiveMemoryFactConflictSignals } from './facts/observations';
@@ -85,6 +87,14 @@ export type {
   MemoryInvalidateArgs,
   MemoryPinArgs,
 } from './memoryFactActions';
+
+function serializeSupersessionReceipt(fact: {
+  id: string;
+  invalidAt: number | null;
+}): MemorySupersessionReceipt {
+  if (!Number.isFinite(fact.invalidAt)) throw new Error('memory_supersession_receipt_invalid');
+  return { id: fact.id, invalidAt: fact.invalidAt! };
+}
 
 // ── Common types ─────────────────────────────────────────────────────────
 
@@ -543,7 +553,7 @@ export function executeMemoryRemember(
       ok: true,
       fact: serializeMemoryFact(result.fact),
       status: result.status,
-      superseded: result.superseded.map(serializeMemoryFact),
+      superseded: result.superseded.map(serializeSupersessionReceipt),
     };
   } catch (e) {
     return err('internal', e instanceof Error ? e.message : 'memory_remember failed');
