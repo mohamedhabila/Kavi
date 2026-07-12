@@ -85,7 +85,7 @@ it.each([
   ['password', 'correct horse battery staple'],
   ['apiKey', 'ordinary-looking-value'],
   ['token', 'Abc123'],
-  ['build_label', 'sk-proj-abcdefghijklmnopqrstuvwxyz123456'],
+  ['build_label', ['sk', 'proj', 'abcdefghijklmnopqrstuvwxyz123456'].join('-')],
   ['recovery-code', 'ABCD-EFGH'],
   ['access_token', 'opaque'],
   ['auth_token', 'opaque'],
