@@ -8,6 +8,7 @@ import type { EpisodeRow } from './types';
 import {
   EPISODE_SENSITIVITY,
   EPISODE_SHAREABILITY,
+  type AutomaticPromptEpisodeAccessDecision,
   type CrossThreadEpisodeAccessDecision,
   type EpisodeAccessPolicy,
   type EpisodeAccessPolicyRow,
@@ -156,6 +157,25 @@ export function decideCrossThreadEpisodeAccess(input: {
   now: number;
   withdrawn?: boolean;
 }): CrossThreadEpisodeAccessDecision {
+  const decision = decideAutomaticPromptEpisodeAccess(input);
+  if (!decision.authorized) return decision;
+  if (decision.lane === 'current_thread') {
+    return { authorized: false, reason: 'current_thread' };
+  }
+  return { authorized: true, reason: 'eligible', policy: decision.policy };
+}
+
+/**
+ * Authorizes an episode for automatic model context. Both current-thread and
+ * cross-thread lanes use this boundary; management reads intentionally do not.
+ */
+export function decideAutomaticPromptEpisodeAccess(input: {
+  episode: EpisodeRow;
+  policyRow: EpisodeAccessPolicyRow;
+  currentScope: MemoryAccessScopeIdentity;
+  now: number;
+  withdrawn?: boolean;
+}): AutomaticPromptEpisodeAccessDecision {
   let currentScope;
   try {
     currentScope = requireMemoryAccessScopeIdentity(input.currentScope);
@@ -178,9 +198,6 @@ export function decideCrossThreadEpisodeAccess(input: {
   ) {
     return { authorized: false, reason: 'origin_mismatch' };
   }
-  if (input.episode.thread_id === currentScope.sourceThreadId) {
-    return { authorized: false, reason: 'current_thread' };
-  }
   if (policy.scope.memoryOwnerId !== currentScope.memoryOwnerId) {
     return { authorized: false, reason: 'owner_mismatch' };
   }
@@ -190,11 +207,7 @@ export function decideCrossThreadEpisodeAccess(input: {
   if (policy.scope.personaId !== currentScope.personaId) {
     return { authorized: false, reason: 'persona_mismatch' };
   }
-  if (policy.shareability !== 'session_threads') {
-    return { authorized: false, reason: 'thread_only' };
-  }
-  if (taskId !== null) return { authorized: false, reason: 'task_local' };
-  if (policy.sensitivity !== 'normal') {
+  if (input.episode.sensitivity !== 'normal' || policy.sensitivity !== 'normal') {
     return { authorized: false, reason: 'private_or_sensitive' };
   }
   if (policy.expiresAt !== null && policy.expiresAt <= input.now) {
@@ -203,11 +216,27 @@ export function decideCrossThreadEpisodeAccess(input: {
   if (policy.boundAt > input.now) {
     return { authorized: false, reason: 'policy_not_yet_bound' };
   }
+  if (policy.boundAt < Math.max(input.episode.created_at, input.episode.ended_at)) {
+    return { authorized: false, reason: 'invalid_policy' };
+  }
   if (!timeIsComplete(input.episode, input.now)) {
     return { authorized: false, reason: 'not_yet_complete' };
   }
   if (!hasCompleteEpisodeSource(input.episode)) {
     return { authorized: false, reason: 'malformed_source' };
   }
-  return { authorized: true, reason: 'eligible', policy };
+  if (input.episode.thread_id === currentScope.sourceThreadId) {
+    if (taskId !== currentScope.taskId) {
+      return { authorized: false, reason: 'task_local' };
+    }
+    if (policy.shareability === 'session_threads' && taskId !== null) {
+      return { authorized: false, reason: 'invalid_policy' };
+    }
+    return { authorized: true, reason: 'eligible', lane: 'current_thread', policy };
+  }
+  if (policy.shareability !== 'session_threads') {
+    return { authorized: false, reason: 'thread_only' };
+  }
+  if (taskId !== null) return { authorized: false, reason: 'task_local' };
+  return { authorized: true, reason: 'eligible', lane: 'cross_thread', policy };
 }

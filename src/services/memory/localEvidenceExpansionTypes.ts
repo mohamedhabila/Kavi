@@ -24,7 +24,7 @@ export interface LocalEvidenceExpansionScope {
   sourceThreadId: string;
 }
 
-type CurrentThreadLocalEvidenceSource = LocalEvidenceSource &
+type CurrentThreadLocalEvidenceSource = Exclude<LocalEvidenceSource, { kind: 'episode' }> &
   LocalEvidenceExpansionScope & {
     lane: 'current_thread';
     authorizedOrigin: null;
@@ -34,7 +34,7 @@ export type ScopedLocalEvidenceSource =
   | CurrentThreadLocalEvidenceSource
   | (Extract<LocalEvidenceSource, { kind: 'episode' }> &
       LocalEvidenceExpansionScope & {
-        lane: 'cross_thread';
+        lane: 'current_thread' | 'cross_thread';
         authorizedOrigin: AuthorizedEpisodeOrigin;
         accessDecision: Readonly<{ authorized: true; reason: 'eligible' }>;
         relevanceScore: number;

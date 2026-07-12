@@ -46,6 +46,7 @@ function rawEpisode(overrides: Partial<EpisodeRow> = {}): EpisodeRow {
     started_at: 10,
     ended_at: 20,
     summary: 'Reviewed the release checklist',
+    sensitivity: 'normal',
     entities_json: '[]',
     message_ids_json: '["message-start","message-end"]',
     tool_names_json: '["calendar"]',
@@ -85,14 +86,23 @@ const CURRENT_SCOPE = {
 };
 
 function recordCompleteEpisode(suffix: string, taskId: string | null = null) {
+  const sourceStartMessageId = `message-${suffix}-start`;
+  const sourceEndMessageId = `message-${suffix}-end`;
   const episode = recordThreadLocalEpisode({
     conversationId: 'session-root',
     threadId: `thread-${suffix}`,
     taskId,
     summary: `Completed episode ${suffix}`,
-    messageIds: [`message-${suffix}-start`, `message-${suffix}-end`],
-    sourceStartMessageId: `message-${suffix}-start`,
-    sourceEndMessageId: `message-${suffix}-end`,
+    messageIds: [sourceStartMessageId, sourceEndMessageId],
+    sourceStartMessageId,
+    sourceEndMessageId,
+    sensitivityEvidence: {
+      sourceMessages: [
+        { id: sourceStartMessageId, role: 'user', content: `Review episode ${suffix}.` },
+        { id: sourceEndMessageId, role: 'assistant', content: 'Review completed.' },
+      ],
+      facts: [],
+    },
     startedAt: 20,
     endedAt: 30,
     now: 40,
@@ -154,7 +164,7 @@ describe('episode cross-thread access decision', () => {
     ['deleted', { deleted_at: 80 }, {}, {}, {}],
     ['expired', {}, { expires_at: 90 }, {}, {}],
     ['policy_not_yet_bound', {}, { bound_at: 110, expires_at: 200 }, {}, {}],
-    ['not_yet_complete', { ended_at: 110 }, {}, {}, {}],
+    ['invalid_policy', { ended_at: 110 }, {}, {}, {}],
     ['malformed_source', { message_ids_json: '{bad-json' }, {}, {}, {}],
     ['malformed_source', { tool_names_json: '{bad-json' }, {}, {}, {}],
     ['withdrawn', {}, {}, {}, { withdrawn: true }],
@@ -250,7 +260,6 @@ describe('episode access policy persistence', () => {
       personaId: DEFAULT_MEMORY_PERSONA_ID,
       taskId: null,
       shareability: 'session_threads' as const,
-      sensitivity: 'normal' as const,
       boundAt: 40,
     };
 
@@ -278,6 +287,17 @@ describe('episode access policy persistence', () => {
       sourceEndMessageId: 'message-atomic-end',
       startedAt: 30,
       endedAt: 40,
+      sensitivityEvidence: {
+        sourceMessages: [
+          { id: 'message-atomic-start', role: 'user' as const, content: 'Review atomicity.' },
+          {
+            id: 'message-atomic-end',
+            role: 'assistant' as const,
+            content: 'Atomicity reviewed.',
+          },
+        ],
+        facts: [],
+      },
       now: 50,
       accessPolicy: {
         memoryConversationId: 'session-root',
@@ -285,7 +305,6 @@ describe('episode access policy persistence', () => {
         personaId: DEFAULT_MEMORY_PERSONA_ID,
         taskId: null,
         shareability: 'session_threads' as const,
-        sensitivity: 'normal' as const,
       },
     };
 
@@ -375,7 +394,6 @@ describe('episode access policy persistence', () => {
           personaId: DEFAULT_MEMORY_PERSONA_ID,
           taskId: 'task-1',
           shareability: 'session_threads',
-          sensitivity: 'normal',
           boundAt: 40,
         },
         40,
@@ -400,7 +418,6 @@ describe('episode access policy persistence', () => {
           personaId: DEFAULT_MEMORY_PERSONA_ID,
           taskId: null,
           shareability: 'session_threads',
-          sensitivity: 'normal',
           boundAt: 40,
         },
         40,
@@ -416,7 +433,6 @@ describe('episode access policy persistence', () => {
       personaId: DEFAULT_MEMORY_PERSONA_ID,
       taskId: null,
       shareability: 'session_threads' as const,
-      sensitivity: 'normal' as const,
     };
     expect(() =>
       bindEpisodeAccessPolicy(getMemoryDb(), { ...timedInput, boundAt: 39 }, 50),
@@ -454,7 +470,6 @@ describe('episode access policy persistence', () => {
           personaId: DEFAULT_MEMORY_PERSONA_ID,
           taskId: null,
           shareability: 'session_threads',
-          sensitivity: 'normal',
           boundAt: 40,
         },
         40,
@@ -485,7 +500,6 @@ describe('episode access policy persistence', () => {
             personaId: DEFAULT_MEMORY_PERSONA_ID,
             taskId: null,
             shareability: 'session_threads',
-            sensitivity: 'normal',
             boundAt: 40,
           },
           40,
@@ -514,7 +528,6 @@ describe('episode access policy persistence', () => {
           personaId: DEFAULT_MEMORY_PERSONA_ID,
           taskId: null,
           shareability: 'session_threads',
-          sensitivity: 'normal',
           boundAt: 40,
         },
         40,

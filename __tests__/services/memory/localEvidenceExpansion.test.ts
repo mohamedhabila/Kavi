@@ -5,6 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 import {
   addFactEvidence,
+  recordEpisode,
   recordThreadLocalEpisode,
 } from '../../../src/services/memory/episodes/mutations';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
@@ -39,16 +40,25 @@ function expandCurrentThreadEvidence(
     personaId: 'default',
     taskId: null,
   });
-  const selectedSources = input.selectedSources.map((source) =>
-    source && typeof source === 'object'
+  const selectedSources = input.selectedSources.map((source) => {
+    if (!source || typeof source !== 'object') return source;
+    const typed = source as LocalEvidenceSource;
+    return typed.kind === 'episode'
       ? {
-          ...(source as LocalEvidenceSource),
+          ...typed,
+          ...SCOPE,
+          lane: 'current_thread' as const,
+          authorizedOrigin: { ...currentScope, policyVersion: 1 as const },
+          accessDecision: { authorized: true as const, reason: 'eligible' as const },
+          relevanceScore: 1,
+        }
+      : {
+          ...typed,
           ...SCOPE,
           lane: 'current_thread' as const,
           authorizedOrigin: null,
-        }
-      : source,
-  );
+        };
+  });
   return expandLocalEvidence({
     ...input,
     currentScope,
@@ -84,16 +94,34 @@ function makeFact(
 }
 
 function makeEpisode(summary: string, threadId = SCOPE.sourceThreadId) {
-  const episode = recordThreadLocalEpisode({
+  const sourceKey = summary.replace(/[^A-Za-z0-9]+/gu, '-').replace(/^-|-$/gu, '');
+  const messageIds = [`${threadId}-${sourceKey}-user`, `${threadId}-${sourceKey}-assistant`];
+  const episode = recordEpisode({
     conversationId: SCOPE.memoryConversationId,
     threadId,
     summary,
+    messageIds,
+    sourceStartMessageId: messageIds[0],
+    sourceEndMessageId: messageIds[1],
     startedAt: 10,
     endedAt: 20,
-    sourceEndMessageId: `${threadId}-${summary}`,
+    sensitivityEvidence: {
+      sourceMessages: [
+        { id: messageIds[0]!, role: 'user', content: 'Please continue this work.' },
+        { id: messageIds[1]!, role: 'assistant', content: 'The work continued.' },
+      ],
+      facts: [],
+    },
+    accessPolicy: {
+      memoryConversationId: SCOPE.memoryConversationId,
+      sourceThreadId: threadId,
+      personaId: 'default',
+      taskId: null,
+      shareability: 'thread_only',
+    },
     now: 20,
   });
-  if (!episode) throw new Error('recordThreadLocalEpisode returned null');
+  if (!episode) throw new Error('recordEpisode returned null');
   return episode;
 }
 
@@ -241,6 +269,74 @@ describe('expandLocalEvidence', () => {
     expect(result.promptPayload).not.toContain('Deleted fact');
     expect(result.promptPayload).not.toContain('Wrong-thread fact');
   });
+
+  it.each(['policy_removed', 'episode_sensitive', 'policy_private', 'source_withdrawn'] as const)(
+    'revalidates current-episode access after selection when %s',
+    (mutation) => {
+      const episode = makeEpisode(`Revalidation ${mutation}.`);
+      const fact = makeFact(`Evidence ${mutation}.`);
+      addFactEvidence({
+        factId: fact.id,
+        episodeId: episode.id,
+        messageId: `evidence-${mutation}`,
+        role: 'user',
+        quote: `Grounded ${mutation}.`,
+        now: 30,
+      });
+
+      if (mutation === 'policy_removed') {
+        getMemoryDb().runSync(
+          'DELETE FROM memory_episode_access_policies WHERE episode_id = ?',
+          episode.id,
+        );
+      } else if (mutation === 'episode_sensitive') {
+        getMemoryDb().runSync(
+          "UPDATE memory_episodes SET sensitivity = 'sensitive' WHERE id = ?",
+          episode.id,
+        );
+      } else if (mutation === 'policy_private') {
+        getMemoryDb().runSync(
+          "UPDATE memory_episode_access_policies SET sensitivity = 'private' WHERE episode_id = ?",
+          episode.id,
+        );
+      } else {
+        getMemoryDb().runSync(
+          `INSERT INTO memory_withdrawals(
+             id, target_fact_id, memory_conversation_id, source_thread_id,
+             task_id, reason, withdrawn_at
+           ) VALUES (?, ?, ?, ?, '', 'user_request', ?)`,
+          `withdrawal-${mutation}`,
+          fact.id,
+          SCOPE.memoryConversationId,
+          SCOPE.sourceThreadId,
+          40,
+        );
+        getMemoryDb().runSync(
+          `INSERT INTO memory_withdrawal_sources(
+             withdrawal_id, memory_conversation_id, source_thread_id, task_id,
+             source_kind, source_id
+           ) VALUES (?, ?, ?, '', 'message', ?)`,
+          `withdrawal-${mutation}`,
+          SCOPE.memoryConversationId,
+          SCOPE.sourceThreadId,
+          episode.sourceStartMessageId,
+        );
+      }
+
+      const result = expandCurrentThreadEvidence({
+        selectedSources: [{ kind: 'episode', episodeId: episode.id }],
+        asOf: 100,
+      });
+
+      expect(result.evidence).toEqual([]);
+      expect(result.diagnostics).toMatchObject({
+        requestedSourceCount: 1,
+        acceptedSourceCount: 0,
+        rejectedSourceCount: 1,
+        queryCount: 0,
+      });
+    },
+  );
 
   it('expands run facts in deterministic run and observed-step order without cross-thread reads', () => {
     const runId = 'run-ordered';
@@ -521,10 +617,11 @@ describe('expandLocalEvidence', () => {
       promptPayload: '[]',
       diagnostics: {
         requestedSourceCount: 3,
-        acceptedSourceCount: 3,
+        acceptedSourceCount: 2,
+        rejectedSourceCount: 1,
         sourceWithEvidenceCount: 0,
         emittedEvidenceCount: 0,
-        queryCount: 3,
+        queryCount: 2,
         promptChars: 2,
       },
     });

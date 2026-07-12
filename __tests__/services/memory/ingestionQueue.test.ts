@@ -176,7 +176,6 @@ describe('ingestionQueue', () => {
         personaId: 'default',
         taskId: null,
         shareability: 'thread_only',
-        sensitivity: 'normal',
       },
       now: 10,
     })!;
@@ -194,7 +193,6 @@ describe('ingestionQueue', () => {
         personaId: 'default',
         taskId: null,
         shareability: 'thread_only',
-        sensitivity: 'normal',
       },
       now: 10,
     })!;

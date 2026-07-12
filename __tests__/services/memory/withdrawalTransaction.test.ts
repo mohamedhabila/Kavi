@@ -164,7 +164,6 @@ function seedAuthoritativeLineage(): SeededLineage {
       personaId: 'default',
       taskId: TASK_ID,
       shareability: 'thread_only',
-      sensitivity: 'normal',
     },
     now: 1_200,
   });
@@ -182,7 +181,6 @@ function seedAuthoritativeLineage(): SeededLineage {
       personaId: 'default',
       taskId: TASK_ID,
       shareability: 'thread_only',
-      sensitivity: 'normal',
     },
     now: 1_210,
   });

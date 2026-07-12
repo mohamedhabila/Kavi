@@ -17,6 +17,7 @@ import type {
   CrossThreadEpisodeRecallDiagnostics,
   EpisodeRecallSelection,
 } from './episodes/accessPolicyTypes';
+import { loadAuthorizedCurrentThreadEpisodes } from './episodes/automaticPromptAccess';
 import {
   requireMemoryAccessScopeIdentity,
   type MemoryAccessScopeIdentity,
@@ -178,6 +179,7 @@ function fetchIndexedEpisodeCandidates(
   return rows.map(rowToEpisode);
 }
 
+/** Explicit management/UI read. Never use this result for automatic model context. */
 export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): MemoryEpisode[] {
   const totalStarted = Date.now();
   const limit = presentationLimit(options.limit);
@@ -198,6 +200,7 @@ export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): Memor
   return episodes;
 }
 
+/** Explicit management/query read. Automatic prompt recall uses the scoped policy path below. */
 export function recallEpisodesForQuery(
   query: string,
   options: RecallEpisodesOptions = {},
@@ -248,17 +251,12 @@ export function recallScopedEpisodesForQuery(
     throw new Error('scoped_episode_recall_timestamp_invalid');
   }
   const resultLimit = presentationLimit(options.limit);
-  let currentTiming: RecallEpisodesTiming | undefined;
-  const current = recallEpisodesForQuery(query, {
-    conversationId: scope.memoryConversationId,
-    threadId: scope.sourceThreadId,
-    taskId: scope.taskId,
-    limit: resultLimit,
-    maxAgeMs: options.maxAgeMs,
-    asOf: options.now,
-    onTiming: (timing) => {
-      currentTiming = timing;
-    },
+  const current = loadAuthorizedCurrentThreadEpisodes({
+    currentScope: scope,
+    resultLimit,
+    query,
+    now: options.now,
+    ...(options.maxAgeMs === undefined ? {} : { maxAgeMs: options.maxAgeMs }),
   });
   const crossThread = loadAuthorizedCrossThreadEpisodeCandidates({
     db: getMemoryDb(),
@@ -266,28 +264,31 @@ export function recallScopedEpisodesForQuery(
     now: options.now,
     query,
   });
-  const merged = mergeCurrentAndCrossThreadEpisodes(current, crossThread, resultLimit);
-  if (currentTiming) {
-    options.onTiming?.({
-      queryUnitCount: currentTiming.queryUnitCount,
-      candidateLimit:
-        currentTiming.candidateLimit +
-        (crossThread.diagnostics.emptyQuerySuppressed
-          ? 0
-          : CROSS_THREAD_EPISODE_INDEXED_CANDIDATE_LIMIT),
-      candidateCount: currentTiming.candidateCount + crossThread.diagnostics.scannedCount,
-      resultLimit,
-      resultCount: merged.selections.length,
-      fetchMs: currentTiming.fetchMs + crossThread.diagnostics.fetchMs,
-      scoreMs:
-        currentTiming.scoreMs +
-        crossThread.diagnostics.policyMs +
-        crossThread.diagnostics.scoreMs +
-        crossThread.diagnostics.selectionMs,
-      sortMs: currentTiming.sortMs + crossThread.diagnostics.sortMs,
-      totalMs: Date.now() - totalStarted,
-    });
-  }
+  const merged = mergeCurrentAndCrossThreadEpisodes(
+    current.selections,
+    crossThread,
+    resultLimit,
+  );
+  options.onTiming?.({
+    queryUnitCount: current.timing.queryUnitCount,
+    candidateLimit:
+      current.timing.candidateLimit +
+      (crossThread.diagnostics.emptyQuerySuppressed
+        ? 0
+        : CROSS_THREAD_EPISODE_INDEXED_CANDIDATE_LIMIT),
+    candidateCount: current.timing.candidateCount + crossThread.diagnostics.scannedCount,
+    resultLimit,
+    resultCount: merged.selections.length,
+    fetchMs: current.timing.fetchMs + crossThread.diagnostics.fetchMs,
+    scoreMs:
+      current.timing.policyMs +
+      current.timing.scoreMs +
+      crossThread.diagnostics.policyMs +
+      crossThread.diagnostics.scoreMs +
+      crossThread.diagnostics.selectionMs,
+    sortMs: current.timing.sortMs + crossThread.diagnostics.sortMs,
+    totalMs: Date.now() - totalStarted,
+  });
   return {
     selections: merged.selections,
     diagnostics: merged.crossThreadDiagnostics,

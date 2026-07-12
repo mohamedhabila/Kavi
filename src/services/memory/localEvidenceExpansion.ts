@@ -1,4 +1,4 @@
-import { revalidateAuthorizedCrossThreadEpisodeOrigin } from './episodes/accessPolicyStore';
+import { revalidateAutomaticPromptEpisodeOrigin } from './episodes/automaticPromptAccess';
 import type { AuthorizedEpisodeOrigin } from './episodes/accessPolicyTypes';
 import { normalizeFactKind, type MemoryFactKind } from './facts/types';
 import {
@@ -6,7 +6,6 @@ import {
   type RequiredMemoryAccessScopeIdentity,
 } from './memoryScopeIdentity';
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './database';
 import {
   listLocalEpisodeNeighborhood,
   listLocalFactNeighborhood,
@@ -49,17 +48,18 @@ function boundedIdentifier(value: unknown): string | null {
     : null;
 }
 
-function crossThreadSourceIsCurrentlyAuthorized(
-  source: Omit<SelectedSource, 'sourceIndex'>,
+function episodeSourceIsCurrentlyAuthorized(
+  source: Omit<SelectedSource, 'sourceIndex'> & { relevanceScore: number },
   currentScope: RequiredMemoryAccessScopeIdentity,
   asOf: number,
 ): boolean {
   if (source.kind !== 'episode' || !source.authorizedOrigin) return false;
   return Boolean(
-    revalidateAuthorizedCrossThreadEpisodeOrigin({
-      db: getMemoryDb(),
+    revalidateAutomaticPromptEpisodeOrigin({
       episodeId: source.id,
+      lane: source.lane,
       authorizedOrigin: source.authorizedOrigin,
+      relevanceScore: source.relevanceScore,
       currentScope,
       asOf,
     }),
@@ -97,18 +97,14 @@ function normalizedSource(
   if (source.kind === 'episode') {
     const id = boundedIdentifier(source.episodeId);
     if (!id) return null;
-    if (currentLane) {
-      return {
-        kind: 'episode',
-        id,
-        memoryConversationId,
-        sourceThreadId,
-        lane: 'current_thread',
-        authorizedOrigin: null,
-      };
-    }
+    const lane =
+      source.lane === 'current_thread'
+        ? ('current_thread' as const)
+        : source.lane === 'cross_thread'
+          ? ('cross_thread' as const)
+          : null;
     if (
-      source.lane !== 'cross_thread' ||
+      !lane ||
       !source.accessDecision ||
       typeof source.accessDecision !== 'object' ||
       (source.accessDecision as Record<string, unknown>).authorized !== true ||
@@ -131,8 +127,8 @@ function normalizedSource(
         personaId: rawOrigin.personaId as string,
         taskId: rawOrigin.taskId as string | null,
       });
-      if (scope.taskId !== null || rawOrigin.policyVersion !== 1) return null;
-      authorizedOrigin = { ...scope, taskId: null, policyVersion: 1 };
+      if (rawOrigin.policyVersion !== 1) return null;
+      authorizedOrigin = { ...scope, policyVersion: 1 };
     } catch {
       return null;
     }
@@ -141,12 +137,16 @@ function normalizedSource(
       id,
       memoryConversationId,
       sourceThreadId,
-      lane: 'cross_thread' as const,
+      lane,
       authorizedOrigin,
     };
     return memoryConversationId === authorizedOrigin.memoryConversationId &&
       sourceThreadId === authorizedOrigin.sourceThreadId &&
-      crossThreadSourceIsCurrentlyAuthorized(normalized, currentScope, asOf)
+      episodeSourceIsCurrentlyAuthorized(
+        { ...normalized, relevanceScore: source.relevanceScore },
+        currentScope,
+        asOf,
+      )
       ? normalized
       : null;
   }

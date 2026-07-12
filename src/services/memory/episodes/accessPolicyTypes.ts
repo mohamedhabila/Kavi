@@ -10,10 +10,15 @@ export type EpisodeShareability = (typeof EPISODE_SHAREABILITY)[number];
 export const EPISODE_SENSITIVITY = ['normal', 'private', 'sensitive'] as const;
 export type EpisodeSensitivity = (typeof EPISODE_SENSITIVITY)[number];
 
+export function closedEpisodeSensitivity(value: unknown): EpisodeSensitivity | null {
+  return typeof value === 'string' && EPISODE_SENSITIVITY.includes(value as EpisodeSensitivity)
+    ? (value as EpisodeSensitivity)
+    : null;
+}
+
 export interface EpisodeAccessPolicyInput extends MemoryAccessScopeIdentity {
   episodeId: string;
   shareability: EpisodeShareability;
-  sensitivity: EpisodeSensitivity;
   expiresAt?: number | null;
   boundAt?: number;
 }
@@ -67,26 +72,40 @@ export type CrossThreadEpisodeAccessDecision =
   | { authorized: true; reason: 'eligible'; policy: EpisodeAccessPolicy }
   | { authorized: false; reason: Exclude<CrossThreadEpisodeAccessReason, 'eligible'> };
 
+export type AutomaticPromptEpisodeAccessDecision =
+  | {
+      authorized: true;
+      reason: 'eligible';
+      lane: 'current_thread' | 'cross_thread';
+      policy: EpisodeAccessPolicy;
+    }
+  | { authorized: false; reason: Exclude<CrossThreadEpisodeAccessReason, 'eligible'> };
+
 export interface AuthorizedEpisodeOrigin extends RequiredMemoryAccessScopeIdentity {
-  taskId: null;
   policyVersion: 1;
 }
 
-export interface AuthorizedEpisodeSelection {
+export interface AuthorizedCurrentThreadEpisodeSelection {
   episode: MemoryEpisode;
-  lane: 'cross_thread';
+  lane: 'current_thread';
   authorizedOrigin: AuthorizedEpisodeOrigin;
   accessDecision: Readonly<{ authorized: true; reason: 'eligible' }>;
   relevanceScore: number;
 }
 
-export type EpisodeRecallSelection =
-  | {
-      episode: MemoryEpisode;
-      lane: 'current_thread';
-      authorizedOrigin: null;
-    }
-  | AuthorizedEpisodeSelection;
+export interface AuthorizedCrossThreadEpisodeSelection {
+  episode: MemoryEpisode;
+  lane: 'cross_thread';
+  authorizedOrigin: AuthorizedEpisodeOrigin & { taskId: null };
+  accessDecision: Readonly<{ authorized: true; reason: 'eligible' }>;
+  relevanceScore: number;
+}
+
+export type AuthorizedEpisodeSelection =
+  | AuthorizedCurrentThreadEpisodeSelection
+  | AuthorizedCrossThreadEpisodeSelection;
+
+export type EpisodeRecallSelection = AuthorizedEpisodeSelection;
 
 export interface CrossThreadEpisodeReasonCount {
   reason: CrossThreadEpisodeAccessReason;

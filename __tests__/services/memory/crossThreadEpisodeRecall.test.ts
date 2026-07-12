@@ -18,6 +18,7 @@ import {
   mergeCurrentAndCrossThreadEpisodes,
   selectBoundedCrossThreadEpisodes,
 } from '../../../src/services/memory/episodes/crossThreadRecall';
+import { loadAuthorizedCurrentThreadEpisodes } from '../../../src/services/memory/episodes/automaticPromptAccess';
 import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
 import { episodePromptLineCost } from '../../../src/services/memory/episodes/promptRendering';
 import type { MemoryEpisode } from '../../../src/services/memory/episodes/types';
@@ -72,17 +73,31 @@ function seedEpisode(input: {
   const threadId = input.threadId ?? `thread-${input.suffix}`;
   const conversationId = input.conversationId ?? SESSION_ID;
   const endedAt = input.endedAt ?? 1_000;
+  const messageIds = [`message-${input.suffix}-start`, `message-${input.suffix}-end`];
+  const userContent =
+    input.sensitivity === 'sensitive'
+      ? 'My passport number is P1234567.'
+      : input.sensitivity === 'private'
+        ? 'My city is Delft.'
+        : `We discussed ${input.summary}.`;
   const episode = recordThreadLocalEpisode({
     conversationId,
     threadId,
     taskId: input.taskId ?? null,
     summary: input.summary,
-    messageIds: [`message-${input.suffix}-start`, `message-${input.suffix}-end`],
+    messageIds,
     toolNames: input.toolNames ?? [],
     sourceStartMessageId: `message-${input.suffix}-start`,
     sourceEndMessageId: `message-${input.suffix}-end`,
     startedAt: endedAt - 10,
     endedAt,
+    sensitivityEvidence: {
+      sourceMessages: [
+        { id: messageIds[0]!, role: 'user', content: userContent },
+        { id: messageIds[1]!, role: 'assistant', content: 'I understood the request.' },
+      ],
+      facts: [],
+    },
     now: endedAt,
   });
   if (!episode) throw new Error('expected episode');
@@ -97,7 +112,6 @@ function seedEpisode(input: {
         personaId: input.personaId ?? DEFAULT_MEMORY_PERSONA_ID,
         taskId: input.taskId ?? null,
         shareability: input.shareability ?? 'session_threads',
-        sensitivity: input.sensitivity ?? 'normal',
         expiresAt: input.expiresAt ?? null,
         boundAt: endedAt,
       },
@@ -482,7 +496,6 @@ describe('bounded authorized cross-thread episode recall', () => {
       suffix: 'priority-current',
       threadId: CURRENT_THREAD_ID,
       summary: 'release current priority',
-      bindPolicy: false,
     });
     const cross = load('release');
     if (cross.candidates.length === 0) {
@@ -490,14 +503,22 @@ describe('bounded authorized cross-thread episode recall', () => {
     }
     const loaded = load('release');
 
-    const one = mergeCurrentAndCrossThreadEpisodes([current], loaded, 1);
+    const currentSelection = loadAuthorizedCurrentThreadEpisodes({
+      db: getMemoryDb(),
+      currentScope: currentScope(),
+      now: NOW,
+      query: 'release current',
+      resultLimit: 1,
+    }).selections;
+    expect(currentSelection[0]?.episode.id).toBe(current.id);
+    const one = mergeCurrentAndCrossThreadEpisodes(currentSelection, loaded, 1);
     expect(one.selections).toEqual([
       expect.objectContaining({
         lane: 'current_thread',
         episode: expect.objectContaining({ id: current.id }),
       }),
     ]);
-    const two = mergeCurrentAndCrossThreadEpisodes([current], loaded, 2);
+    const two = mergeCurrentAndCrossThreadEpisodes(currentSelection, loaded, 2);
     expect(two.selections[0]).toEqual(
       expect.objectContaining({
         lane: 'current_thread',

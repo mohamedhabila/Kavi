@@ -12,7 +12,7 @@ import {
 import { ensureEpisodeAccessPolicySchema } from './accessPolicySchema';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import {
-  EPISODE_SENSITIVITY,
+  closedEpisodeSensitivity,
   EPISODE_SHAREABILITY,
   type AuthorizedEpisodeOrigin,
   type EpisodeAccessPolicy,
@@ -20,6 +20,7 @@ import {
   type EpisodeAccessPolicyRow,
 } from './accessPolicyTypes';
 import type { EpisodeRow } from './types';
+import { maxEpisodeSensitivity } from './sensitivityPolicy';
 
 interface WithdrawalPresenceRow {
   withdrawn: number;
@@ -30,15 +31,15 @@ function safeTimestamp(value: number, code: string): number {
   return value;
 }
 
-function normalizePolicyInput(input: EpisodeAccessPolicyInput, now: number): EpisodeAccessPolicy {
+function normalizePolicyInput(
+  input: EpisodeAccessPolicyInput,
+  now: number,
+): Omit<EpisodeAccessPolicy, 'sensitivity'> {
   if (!isExactMemoryScopeId(input.episodeId)) {
     throw new Error('episode_access_episode_id_invalid');
   }
   if (!EPISODE_SHAREABILITY.includes(input.shareability)) {
     throw new Error('episode_access_shareability_invalid');
-  }
-  if (!EPISODE_SENSITIVITY.includes(input.sensitivity)) {
-    throw new Error('episode_access_sensitivity_invalid');
   }
   const boundAt = safeTimestamp(input.boundAt ?? now, 'episode_access_bound_at_invalid');
   if (boundAt > now) throw new Error('episode_access_bound_at_future');
@@ -51,14 +52,13 @@ function normalizePolicyInput(input: EpisodeAccessPolicyInput, now: number): Epi
     episodeId: input.episodeId,
     scope: requireMemoryAccessScopeIdentity(input),
     shareability: input.shareability,
-    sensitivity: input.sensitivity,
     expiresAt,
     policyVersion: 1,
     boundAt,
   };
 }
 
-function policyMatches(left: EpisodeAccessPolicy, right: EpisodeAccessPolicy): boolean {
+function policyIdentityMatches(left: EpisodeAccessPolicy, right: EpisodeAccessPolicy): boolean {
   // The first persisted boundAt remains authoritative across exact source replays.
   return (
     left.episodeId === right.episodeId &&
@@ -68,7 +68,6 @@ function policyMatches(left: EpisodeAccessPolicy, right: EpisodeAccessPolicy): b
     left.scope.personaId === right.scope.personaId &&
     left.scope.taskId === right.scope.taskId &&
     left.shareability === right.shareability &&
-    left.sensitivity === right.sensitivity &&
     left.expiresAt === right.expiresAt &&
     left.policyVersion === right.policyVersion
   );
@@ -91,32 +90,36 @@ export function bindEpisodeAccessPolicy(
   now = Date.now(),
 ): EpisodeAccessPolicy {
   const observedAt = safeTimestamp(now, 'episode_access_observed_at_invalid');
-  const policy = normalizePolicyInput(input, observedAt);
+  const policyIdentity = normalizePolicyInput(input, observedAt);
   ensureEpisodeAccessPolicySchema(db, observedAt);
-  if (policy.scope.memoryOwnerId !== getLocalMemoryVaultOwnerId(db)) {
+  if (policyIdentity.scope.memoryOwnerId !== getLocalMemoryVaultOwnerId(db)) {
     throw new Error('episode_access_owner_mismatch');
   }
-  if (policy.shareability === 'session_threads' && policy.scope.taskId !== null) {
+  if (policyIdentity.shareability === 'session_threads' && policyIdentity.scope.taskId !== null) {
     throw new Error('episode_access_task_shareability_invalid');
   }
   const episode = db.getFirstSync<EpisodeRow>(
     'SELECT * FROM memory_episodes WHERE id = ? LIMIT 1',
-    policy.episodeId,
+    policyIdentity.episodeId,
   );
   if (!episode) throw new Error('episode_access_episode_not_found');
   if (
-    episode.conversation_id !== policy.scope.memoryConversationId ||
-    episode.thread_id !== policy.scope.sourceThreadId ||
-    (episode.task_id ?? null) !== policy.scope.taskId
+    episode.conversation_id !== policyIdentity.scope.memoryConversationId ||
+    episode.thread_id !== policyIdentity.scope.sourceThreadId ||
+    (episode.task_id ?? null) !== policyIdentity.scope.taskId
   ) {
     throw new Error('episode_access_origin_mismatch');
   }
-  if (policy.shareability === 'session_threads' && !hasCompleteEpisodeSource(episode)) {
+  if (policyIdentity.shareability === 'session_threads' && !hasCompleteEpisodeSource(episode)) {
     throw new Error('episode_access_source_incomplete');
   }
-  if (policy.boundAt < Math.max(episode.created_at, episode.ended_at)) {
+  if (policyIdentity.boundAt < Math.max(episode.created_at, episode.ended_at)) {
     throw new Error('episode_access_bound_before_completion');
   }
+  const policy: EpisodeAccessPolicy = {
+    ...policyIdentity,
+    sensitivity: closedEpisodeSensitivity(episode.sensitivity) ?? 'sensitive',
+  };
 
   const existingRow = db.getFirstSync<EpisodeAccessPolicyRow>(
     'SELECT * FROM memory_episode_access_policies WHERE episode_id = ? LIMIT 1',
@@ -125,8 +128,17 @@ export function bindEpisodeAccessPolicy(
   if (existingRow) {
     const existing = episodeAccessPolicyFromRow(existingRow);
     if (!existing) throw new Error('episode_access_policy_corrupt');
-    if (!policyMatches(existing, policy)) throw new Error('episode_access_identity_conflict');
-    return existing;
+    if (!policyIdentityMatches(existing, policy))
+      throw new Error('episode_access_identity_conflict');
+    const sensitivity = maxEpisodeSensitivity(existing.sensitivity, policy.sensitivity);
+    if (sensitivity !== existing.sensitivity) {
+      db.runSync(
+        'UPDATE memory_episode_access_policies SET sensitivity = ? WHERE episode_id = ?',
+        sensitivity,
+        existing.episodeId,
+      );
+    }
+    return sensitivity === existing.sensitivity ? existing : { ...existing, sensitivity };
   }
   db.runSync(
     `INSERT INTO memory_episode_access_policies(

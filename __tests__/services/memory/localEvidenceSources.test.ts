@@ -19,7 +19,13 @@ const currentScope = {
 } as const;
 
 function currentEpisode(id: string) {
-  return { episode: episode(id), lane: 'current_thread' as const, authorizedOrigin: null };
+  return {
+    episode: episode(id),
+    lane: 'current_thread' as const,
+    authorizedOrigin: { ...currentScope, policyVersion: 1 as const },
+    accessDecision: { authorized: true as const, reason: 'eligible' as const },
+    relevanceScore: 1,
+  };
 }
 
 describe('local evidence source derivation', () => {
@@ -45,7 +51,9 @@ describe('local evidence source derivation', () => {
         memoryConversationId: 'conversation-1',
         sourceThreadId: 'thread-1',
         lane: 'current_thread',
-        authorizedOrigin: null,
+        authorizedOrigin: { ...currentScope, policyVersion: 1 },
+        accessDecision: { authorized: true, reason: 'eligible' },
+        relevanceScore: 1,
       },
       {
         kind: 'run',
@@ -69,7 +77,9 @@ describe('local evidence source derivation', () => {
         memoryConversationId: 'conversation-1',
         sourceThreadId: 'thread-1',
         lane: 'current_thread',
-        authorizedOrigin: null,
+        authorizedOrigin: { ...currentScope, policyVersion: 1 },
+        accessDecision: { authorized: true, reason: 'eligible' },
+        relevanceScore: 1,
       },
       {
         kind: 'run',

@@ -55,6 +55,47 @@ function indexedColumns(index: string): string[] {
 }
 
 describe('ensureFactSchema', () => {
+  it('migrates legacy episodes to a fail-closed sensitive classification', () => {
+    const db = getMemoryDb();
+    db.execSync(`
+      CREATE TABLE memory_episodes (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT,
+        thread_id TEXT,
+        task_id TEXT,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER NOT NULL,
+        summary TEXT NOT NULL,
+        entities_json TEXT NOT NULL DEFAULT '[]',
+        message_ids_json TEXT NOT NULL DEFAULT '[]',
+        tool_names_json TEXT NOT NULL DEFAULT '[]',
+        importance REAL NOT NULL DEFAULT 0.5,
+        embedding TEXT,
+        created_at INTEGER NOT NULL,
+        deleted_at INTEGER,
+        source_start_message_id TEXT,
+        source_end_message_id TEXT
+      );
+      INSERT INTO memory_episodes (
+        id, conversation_id, thread_id, started_at, ended_at, summary,
+        message_ids_json, created_at, source_start_message_id, source_end_message_id
+      ) VALUES (
+        'legacy-episode', 'legacy-root', 'legacy-thread', 1, 2, 'Legacy episode',
+        '["legacy-user","legacy-assistant"]', 2, 'legacy-user', 'legacy-assistant'
+      );
+    `);
+
+    ensureFactSchema();
+
+    expect(columnNames('memory_episodes')).toContain('sensitivity');
+    expect(
+      db.getFirstSync<{ sensitivity: string }>(
+        'SELECT sensitivity FROM memory_episodes WHERE id = ?',
+        'legacy-episode',
+      )?.sensitivity,
+    ).toBe('sensitive');
+  });
+
   it('destroys legacy provider-editable raw blocks without recreating the table', () => {
     const db = getMemoryDb();
     db.execSync(`
@@ -443,7 +484,9 @@ describe('ensureFactSchema', () => {
         'decay_policy',
       ]),
     );
-    expect(columnNames('memory_episodes')).toContain('summary');
+    expect(columnNames('memory_episodes')).toEqual(
+      expect.arrayContaining(['summary', 'sensitivity']),
+    );
     expect(columnNames('memory_fact_evidence')).toContain('fact_id');
     expect(columnNames('memory_ingestion_jobs')).toContain('provider_enrichment');
     expect(columnNames('memory_ingestion_receipts')).toEqual(
@@ -592,7 +635,6 @@ describe('ensureFactSchema', () => {
         personaId: 'default',
         taskId: null,
         shareability: 'thread_only',
-        sensitivity: 'normal',
       },
       now: 10,
     });

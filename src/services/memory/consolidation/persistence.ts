@@ -13,6 +13,7 @@ import type { ConsolidatorFact, ConsolidatorResult } from '../consolidator';
 import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
 import { resolveCodeOwnedMemoryTaskId } from '../memoryScopeIdentity';
 import { classifyMemoryFactSensitivity } from '../memorySensitivityPolicy';
+import type { MemorySensitivityInput } from '../memorySensitivityPolicy';
 
 const logger = createLogger('memory.consolidation.persistence');
 
@@ -117,16 +118,24 @@ function applyConsolidatorResultInTransaction(
   ensureFactSchema();
   const now = options.now ?? Date.now();
 
-  const messageIds = (options.messages ?? [])
+  const closedTurnMessages = selectClosedTurnMessages(
+    options.messages ?? [],
+    options.sourceUserMessageId,
+    options.sourceAssistantMessageId,
+  );
+  const messageIds = closedTurnMessages
     .map((message) => message.id)
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
-  const toolNames = (options.messages ?? [])
+  const toolNames = closedTurnMessages
     .flatMap((message) => message.toolCalls?.map((toolCall) => toolCall.name) ?? [])
     .filter((name): name is string => typeof name === 'string' && name.length > 0);
-  const timestamps = (options.messages ?? [])
+  const timestamps = closedTurnMessages
     .map((message) => message.timestamp)
     .filter((timestamp): timestamp is number => typeof timestamp === 'number');
   const episodeSummary = result.episodeSummary ?? null;
+  const factSensitivityInputs = result.newFacts.map((fact) =>
+    buildFactSensitivityInput(fact, episodeSummary),
+  );
   const episodeInput = episodeSummary
     ? {
         conversationId: options.conversationId,
@@ -141,6 +150,14 @@ function applyConsolidatorResultInTransaction(
           options.sourceAssistantMessageId ?? messageIds[messageIds.length - 1] ?? null,
         toolNames,
         importance: Math.max(0.5, ...result.newFacts.map((fact) => fact.importance ?? 0.5)),
+        sensitivityEvidence: {
+          sourceMessages: closedTurnMessages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            ...buildEpisodeSensitivityMessageText(message),
+          })),
+          facts: factSensitivityInputs,
+        },
         now,
       }
     : null;
@@ -154,7 +171,6 @@ function applyConsolidatorResultInTransaction(
             personaId: options.episodeAccess.personaId,
             taskId: resolveCodeOwnedMemoryTaskId(options.taskId),
             shareability: options.episodeAccess.shareability,
-            sensitivity: 'normal',
           },
         })
       : recordThreadLocalEpisode(episodeInput)
@@ -164,40 +180,16 @@ function applyConsolidatorResultInTransaction(
   const resolvedFacts: ApplyConsolidatorResultResult['resolvedFacts'] = [];
   const invalidatedFactIds: string[] = [];
   for (const [inputIndex, fact] of result.newFacts.entries()) {
+    const sensitivityInput = factSensitivityInputs[inputIndex]!;
     const subjectType = fact.subject === 'user' ? 'self' : 'concept';
     const sourceMessageId =
       fact.evidenceMessageIds?.[0] ??
       options.sourceUserMessageId ??
       options.sourceAssistantMessageId ??
       null;
-    const memoryWrite = fact.admittedWrite
-      ? {
-          operation: fact.admittedWrite.operation,
-          authority: fact.admittedWrite.authority,
-          evidenceMessageId: fact.admittedWrite.evidenceMessageId,
-          ...(fact.admittedWrite.operation === 'replace_current'
-            ? { expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId }
-            : {}),
-          assertionClass: fact.assertionClass ?? null,
-          evidenceQuote: fact.evidenceQuote ?? null,
-        }
-      : undefined;
-    const attributes = {
-      ...(fact.reason ? { reason: fact.reason } : {}),
-      ...(memoryWrite ? { memoryWrite } : {}),
-    };
-    const sourceSummary = fact.reason ?? episodeSummary ?? null;
-    if (
-      classifyMemoryFactSensitivity({
-        subject: fact.subject,
-        subjectType,
-        predicate: fact.predicate,
-        objectText: fact.value,
-        attributes,
-        sourceSummary,
-        memoryKind: 'semantic_fact',
-      }) === 'restricted'
-    ) {
+    const attributes = sensitivityInput.attributes ?? {};
+    const sourceSummary = sensitivityInput.sourceSummary ?? null;
+    if (classifyMemoryFactSensitivity(sensitivityInput) === 'restricted') {
       continue;
     }
     const subject = upsertEntity({ type: subjectType, name: fact.subject, now });
@@ -317,6 +309,93 @@ function applyConsolidatorResultInTransaction(
     activeFocusUpdated,
     openThreadsUpdated,
     episodeId: episode?.id ?? null,
+  };
+}
+
+function selectClosedTurnMessages(
+  messages: ReadonlyArray<Message>,
+  sourceUserMessageId: string | undefined,
+  sourceAssistantMessageId: string | undefined,
+): Message[] {
+  if (!sourceUserMessageId || !sourceAssistantMessageId) return [...messages];
+  const start = messages.findIndex(
+    (message) => message.id === sourceUserMessageId && message.role === 'user',
+  );
+  const end = messages.findIndex(
+    (message, index) =>
+      index >= start && message.id === sourceAssistantMessageId && message.role === 'assistant',
+  );
+  return start >= 0 && end >= start ? messages.slice(start, end + 1) : [];
+}
+
+function buildFactSensitivityInput(
+  fact: ConsolidatorFact,
+  episodeSummary: string | null,
+): MemorySensitivityInput {
+  const memoryWrite = fact.admittedWrite
+    ? {
+        operation: fact.admittedWrite.operation,
+        authority: fact.admittedWrite.authority,
+        evidenceMessageId: fact.admittedWrite.evidenceMessageId,
+        ...(fact.admittedWrite.operation === 'replace_current'
+          ? { expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId }
+          : {}),
+        assertionClass: fact.assertionClass ?? null,
+        evidenceQuote: fact.evidenceQuote ?? null,
+      }
+    : undefined;
+  return {
+    subject: fact.subject,
+    subjectType: fact.subject === 'user' ? 'self' : 'concept',
+    predicate: fact.predicate,
+    objectText: fact.value,
+    attributes: {
+      ...(fact.reason ? { reason: fact.reason } : {}),
+      ...(memoryWrite ? { memoryWrite } : {}),
+    },
+    sourceSummary: fact.reason ?? episodeSummary ?? null,
+    memoryKind: 'semantic_fact',
+  };
+}
+
+const EPISODE_SENSITIVITY_FIELD_LIMIT = 16_000;
+
+function boundedEpisodeSensitivityField(value: string | undefined): {
+  content: string;
+  truncated: boolean;
+} {
+  if (!value) return { content: '', truncated: false };
+  if (value.length <= EPISODE_SENSITIVITY_FIELD_LIMIT) {
+    return { content: value, truncated: false };
+  }
+  const side = Math.floor(EPISODE_SENSITIVITY_FIELD_LIMIT / 2);
+  return {
+    content: `${value.slice(0, side)}\n${value.slice(-side)}`,
+    truncated: true,
+  };
+}
+
+function buildEpisodeSensitivityMessageText(message: Message): {
+  content: string;
+  truncated: boolean;
+} {
+  const fields = [message.content, message.enrichedContent, message.reasoning];
+  for (const toolCall of message.toolCalls ?? []) {
+    fields.push(
+      toolCall.name,
+      toolCall.arguments,
+      toolCall.result,
+      toolCall.error,
+      toolCall.progressText,
+    );
+  }
+  const bounded = fields.map(boundedEpisodeSensitivityField);
+  return {
+    content: bounded
+      .map((field) => field.content)
+      .filter(Boolean)
+      .join('\n'),
+    truncated: bounded.some((field) => field.truncated),
   };
 }
 

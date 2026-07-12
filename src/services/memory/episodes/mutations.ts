@@ -5,6 +5,8 @@ import { ensureEpisodeAccessPolicySchema } from './accessPolicySchema';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { bindEpisodeAccessPolicy } from './accessPolicyStore';
 import { replaceEpisodeRetrievalTerms } from './retrievalIndex';
+import { deriveEpisodeSensitivity, maxEpisodeSensitivity } from './sensitivityPolicy';
+import { closedEpisodeSensitivity, type EpisodeSensitivity } from './accessPolicyTypes';
 import {
   clamp01,
   type AddFactEvidenceInput,
@@ -45,7 +47,6 @@ export function recordEpisode(input: RecordScopedEpisodeInput): MemoryEpisode | 
         personaId: input.accessPolicy.personaId,
         taskId: input.accessPolicy.taskId,
         shareability: input.accessPolicy.shareability,
-        sensitivity: input.accessPolicy.sensitivity,
         ...(input.accessPolicy.expiresAt === undefined
           ? {}
           : { expiresAt: input.accessPolicy.expiresAt }),
@@ -84,6 +85,20 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
         sourceEndMessageId,
       )
     : null;
+  const priorSensitivity = existing
+    ? maxEpisodeSensitivity(
+        rowToEpisode(existing).sensitivity,
+        readPersistedPolicySensitivity(db, existing.id),
+      )
+    : undefined;
+  const sensitivity = deriveEpisodeSensitivity({
+    summary: normalizedSummary,
+    messageIds,
+    sourceStartMessageId,
+    sourceEndMessageId,
+    evidence: input.sensitivityEvidence,
+    priorSensitivity,
+  });
 
   if (existing) {
     const current = rowToEpisode(existing);
@@ -100,6 +115,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     const episode = {
       ...current,
       summary: normalizedSummary,
+      sensitivity,
       entities:
         input.entities === undefined
           ? current.entities
@@ -118,13 +134,15 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
                 entities_json = ?,
                 tool_names_json = ?,
                 importance = ?,
-                embedding = ?
+                embedding = ?,
+                sensitivity = ?
           WHERE id = ?`,
         episode.summary,
         JSON.stringify(episode.entities),
         JSON.stringify(episode.toolNames),
         episode.importance,
         episode.embedding ? JSON.stringify(episode.embedding) : null,
+        episode.sensitivity,
         episode.id,
       );
       if (
@@ -146,6 +164,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     startedAt,
     endedAt,
     summary: normalizedSummary,
+    sensitivity,
     entities: Array.from(new Set(input.entities ?? [])).slice(0, 24),
     messageIds,
     toolNames: Array.from(new Set(input.toolNames ?? [])).slice(0, 64),
@@ -158,10 +177,10 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
   };
   db.runSync(
     `INSERT INTO memory_episodes
-       (id, conversation_id, thread_id, task_id, started_at, ended_at, summary,
+       (id, conversation_id, thread_id, task_id, started_at, ended_at, summary, sensitivity,
         entities_json, message_ids_json, tool_names_json, importance, embedding, created_at,
         deleted_at, source_start_message_id, source_end_message_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
     episode.id,
     episode.conversationId,
     episode.threadId,
@@ -169,6 +188,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     episode.startedAt,
     episode.endedAt,
     episode.summary,
+    episode.sensitivity,
     JSON.stringify(episode.entities),
     JSON.stringify(episode.messageIds),
     JSON.stringify(episode.toolNames),
@@ -180,6 +200,18 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
   );
   replaceEpisodeRetrievalTerms(db, episode);
   return episode;
+}
+
+function readPersistedPolicySensitivity(
+  db: ReturnType<typeof getSchemaReadyMemoryDb>,
+  episodeId: string,
+): EpisodeSensitivity {
+  const row = db.getFirstSync<{ sensitivity: string }>(
+    'SELECT sensitivity FROM memory_episode_access_policies WHERE episode_id = ? LIMIT 1',
+    episodeId,
+  );
+  if (!row) return 'normal';
+  return closedEpisodeSensitivity(row.sensitivity) ?? 'sensitive';
 }
 
 export function addFactEvidence(input: AddFactEvidenceInput): MemoryFactEvidence | null {

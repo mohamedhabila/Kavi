@@ -8,7 +8,8 @@ import { ensureEpisodeAccessPolicySchema } from './accessPolicySchema';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import {
   CROSS_THREAD_EPISODE_ACCESS_REASONS,
-  type AuthorizedEpisodeSelection,
+  type AuthorizedCrossThreadEpisodeSelection,
+  type AuthorizedCurrentThreadEpisodeSelection,
   type CrossThreadEpisodeAccessReason,
   type CrossThreadEpisodeRecallDiagnostics,
   type EpisodeAccessPolicyRow,
@@ -16,7 +17,7 @@ import {
 } from './accessPolicyTypes';
 import { episodePromptLineCost } from './promptRendering';
 import { episodeQueryUnits, scoreEpisodesForQuery, sortScoredEpisodes } from './queryScoring';
-import { rowToEpisode, type EpisodeRow, type MemoryEpisode } from './types';
+import { rowToEpisode, type EpisodeRow } from './types';
 
 export const CROSS_THREAD_EPISODE_INDEXED_CANDIDATE_LIMIT = 80;
 export const CROSS_THREAD_EPISODE_CANDIDATE_LIMIT = 12;
@@ -41,7 +42,7 @@ interface CrossThreadEpisodeCandidateRow extends EpisodeRow {
 }
 
 export interface CrossThreadEpisodeCandidateResult {
-  candidates: AuthorizedEpisodeSelection[];
+  candidates: AuthorizedCrossThreadEpisodeSelection[];
   diagnostics: CrossThreadEpisodeRecallDiagnostics;
 }
 
@@ -145,6 +146,7 @@ function fetchCandidateRows(
         AND policy.source_thread_id != ?
         AND policy.shareability = 'session_threads'
         AND policy.sensitivity = 'normal'
+        AND episode.sensitivity = 'normal'
         AND policy.task_id IS NULL
         AND policy.bound_at <= ?
         AND (policy.expires_at IS NULL OR policy.expires_at > ?)
@@ -238,7 +240,7 @@ export function loadAuthorizedCrossThreadEpisodeCandidates(input: {
 
   const rows = fetchCandidateRows(input.db, scope, input.now, queryUnits);
   const fetchMs = Date.now() - fetchStarted;
-  const authorized: AuthorizedEpisodeSelection[] = [];
+  const authorized: AuthorizedCrossThreadEpisodeSelection[] = [];
   let eligibleCount = 0;
   const policyStarted = Date.now();
   for (const row of rows) {
@@ -281,7 +283,7 @@ export function loadAuthorizedCrossThreadEpisodeCandidates(input: {
   const ranked = sortScoredEpisodes(scored);
   const sortMs = Date.now() - sortStarted;
   const selectionStarted = Date.now();
-  const candidates: AuthorizedEpisodeSelection[] = [];
+  const candidates: AuthorizedCrossThreadEpisodeSelection[] = [];
   const acceptedThreads = new Set<string>();
   const perThread = new Map<string, number>();
   let threadFanoutDroppedCount = 0;
@@ -345,7 +347,7 @@ export function selectBoundedCrossThreadEpisodes(
     CROSS_THREAD_EPISODE_SELECTION_LIMIT,
     'cross_thread_episode_selection_limit_invalid',
   );
-  const selected: AuthorizedEpisodeSelection[] = [];
+  const selected: AuthorizedCrossThreadEpisodeSelection[] = [];
   let promptChars = 0;
   let selectionLimitDroppedCount = result.diagnostics.selectionLimitDroppedCount;
   let promptBudgetDroppedCount = result.diagnostics.promptBudgetDroppedCount;
@@ -374,17 +376,17 @@ export function selectBoundedCrossThreadEpisodes(
 }
 
 export function mergeCurrentAndCrossThreadEpisodes(
-  currentThreadEpisodes: ReadonlyArray<MemoryEpisode>,
+  currentThreadEpisodes: ReadonlyArray<AuthorizedCurrentThreadEpisodeSelection>,
   crossThread: CrossThreadEpisodeCandidateResult,
   resultLimit: number,
 ): MergedEpisodeRecallResult {
   const limit = boundedLimit(resultLimit, 20, 'episode_recall_result_limit_invalid');
   const seen = new Set<string>();
   const selections: EpisodeRecallSelection[] = [];
-  for (const episode of currentThreadEpisodes) {
-    if (selections.length >= limit || seen.has(episode.id)) continue;
-    seen.add(episode.id);
-    selections.push({ episode, lane: 'current_thread', authorizedOrigin: null });
+  for (const selection of currentThreadEpisodes) {
+    if (selections.length >= limit || seen.has(selection.episode.id)) continue;
+    seen.add(selection.episode.id);
+    selections.push(selection);
   }
   const remaining = Math.max(0, limit - selections.length);
   const uniqueCrossCandidates = crossThread.candidates.filter(

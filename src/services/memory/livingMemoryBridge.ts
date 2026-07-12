@@ -58,6 +58,7 @@ import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 import { markFactsRecalled } from './facts/mutations';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
+import { revalidateAutomaticPromptEpisodeSelection } from './episodes/automaticPromptAccess';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -408,8 +409,15 @@ export async function buildLivingMemorySections(
       if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
       recalledFacts = retrieval.facts;
       resolutionFacts = retrieval.resolutionFacts;
-      recalledEpisodes = retrieval.episodes;
-      recalledEpisodeSelections = retrieval.episodeSelections;
+      recalledEpisodeSelections = retrieval.episodeSelections.flatMap((selection) => {
+        const authorized = revalidateAutomaticPromptEpisodeSelection({
+          currentScope: applicabilityScope,
+          selection,
+          asOf: now,
+        });
+        return authorized ? [authorized] : [];
+      });
+      recalledEpisodes = recalledEpisodeSelections.map((selection) => selection.episode);
       retrievalTimings = retrieval.timings;
     } catch (error) {
       if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;

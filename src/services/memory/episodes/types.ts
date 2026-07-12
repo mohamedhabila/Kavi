@@ -1,4 +1,6 @@
 import { safeParseArray } from '../schema';
+import type { MemorySensitivityInput } from '../memorySensitivityPolicy';
+import { closedEpisodeSensitivity } from './accessPolicyTypes';
 import type { EpisodeSensitivity, EpisodeShareability } from './accessPolicyTypes';
 
 export interface MemoryEpisode {
@@ -9,6 +11,7 @@ export interface MemoryEpisode {
   startedAt: number;
   endedAt: number;
   summary: string;
+  sensitivity: EpisodeSensitivity;
   entities: string[];
   messageIds: string[];
   toolNames: string[];
@@ -38,6 +41,7 @@ export interface EpisodeRow {
   started_at: number;
   ended_at: number;
   summary: string;
+  sensitivity: string;
   entities_json: string;
   message_ids_json: string;
   tool_names_json: string;
@@ -83,6 +87,7 @@ export function rowToEpisode(row: EpisodeRow): MemoryEpisode {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     summary: row.summary,
+    sensitivity: closedEpisodeSensitivity(row.sensitivity) ?? 'sensitive',
     entities: safeParseArray<string>(row.entities_json),
     messageIds: safeParseArray<string>(row.message_ids_json),
     toolNames: safeParseArray<string>(row.tool_names_json),
@@ -121,7 +126,22 @@ export interface RecordEpisodeInput {
   embedding?: number[] | null;
   sourceStartMessageId?: string | null;
   sourceEndMessageId?: string | null;
+  /** Raw, code-owned evidence used to derive sensitivity. Missing evidence fails closed. */
+  sensitivityEvidence?: EpisodeSensitivityEvidence;
   now?: number;
+}
+
+export interface EpisodeSensitivitySourceMessage {
+  id: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  /** True when any source field exceeded the bounded classifier input. */
+  truncated?: boolean;
+}
+
+export interface EpisodeSensitivityEvidence {
+  sourceMessages: ReadonlyArray<EpisodeSensitivitySourceMessage>;
+  facts: ReadonlyArray<MemorySensitivityInput>;
 }
 
 export interface RecordScopedEpisodeInput extends RecordEpisodeInput {
@@ -134,7 +154,6 @@ export interface RecordEpisodeAccessPolicyInput {
   personaId: string;
   taskId: string | null;
   shareability: EpisodeShareability;
-  sensitivity: EpisodeSensitivity;
   expiresAt?: number | null;
 }
 

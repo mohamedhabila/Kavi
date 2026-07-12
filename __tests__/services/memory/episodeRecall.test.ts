@@ -12,9 +12,6 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
-import { ensureEpisodeAccessPolicySchema } from '../../../src/services/memory/episodes/accessPolicySchema';
-import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
-import { bindEpisodeAccessPolicy } from '../../../src/services/memory/episodes/accessPolicyStore';
 import {
   EPISODE_PRESENTATION_MAX,
   EPISODE_QUERY_CANDIDATE_MAX,
@@ -22,10 +19,8 @@ import {
   EPISODE_RECALL_LOCAL_P95_BUDGET_MS,
   recallEpisodesForQuery,
   recallRecentEpisodes,
-  recallScopedEpisodesForQuery,
   type RecallEpisodesTiming,
 } from '../../../src/services/memory/episodeRecall';
-import { DEFAULT_MEMORY_PERSONA_ID } from '../../../src/services/memory/memoryScopeIdentity';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -35,7 +30,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  ensureEpisodeAccessPolicySchema(getMemoryDb(), 1);
 });
 
 function makeEpisode(overrides: Partial<Parameters<typeof recordThreadLocalEpisode>[0]> = {}) {
@@ -49,24 +43,6 @@ function makeEpisode(overrides: Partial<Parameters<typeof recordThreadLocalEpiso
   });
   if (!episode) throw new Error('recordThreadLocalEpisode returned null');
   return episode;
-}
-
-function makeCompleteEpisode(
-  suffix: string,
-  overrides: Partial<Parameters<typeof recordThreadLocalEpisode>[0]> = {},
-) {
-  return makeEpisode({
-    conversationId: 'root-conversation',
-    threadId: `thread-${suffix}`,
-    summary: `release continuity ${suffix}`,
-    messageIds: [`message-${suffix}-start`, `message-${suffix}-end`],
-    sourceStartMessageId: `message-${suffix}-start`,
-    sourceEndMessageId: `message-${suffix}-end`,
-    startedAt: 90,
-    endedAt: 100,
-    now: 100,
-    ...overrides,
-  });
 }
 
 describe('recallRecentEpisodes', () => {
@@ -489,122 +465,5 @@ describe('recallEpisodesForQuery', () => {
     const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
 
     expect(p95).toBeLessThanOrEqual(EPISODE_RECALL_LOCAL_P95_BUDGET_MS);
-  });
-});
-
-describe('recallScopedEpisodesForQuery', () => {
-  it('keeps root and source thread distinct while current-first filling with authorized cross-thread continuity', () => {
-    const db = getMemoryDb();
-    const ownerId = getLocalMemoryVaultOwnerId(db);
-    const current = makeCompleteEpisode('current', {
-      threadId: 'thread-current',
-      summary: 'release current checkpoint',
-    });
-    makeCompleteEpisode('wrong-root', {
-      conversationId: 'other-root',
-      threadId: 'thread-current',
-      summary: 'release forbidden root',
-    });
-    makeCompleteEpisode('task-local', {
-      threadId: 'thread-current',
-      taskId: 'task-private',
-      summary: 'release forbidden task',
-    });
-    const cross = makeCompleteEpisode('cross', {
-      threadId: 'thread-cross',
-      summary: 'release cross continuity',
-    });
-    bindEpisodeAccessPolicy(
-      db,
-      {
-        episodeId: cross.id,
-        memoryOwnerId: ownerId,
-        memoryConversationId: 'root-conversation',
-        sourceThreadId: 'thread-cross',
-        personaId: DEFAULT_MEMORY_PERSONA_ID,
-        taskId: null,
-        shareability: 'session_threads',
-        sensitivity: 'normal',
-        boundAt: 100,
-      },
-      100,
-    );
-
-    let timing: RecallEpisodesTiming | undefined;
-    const result = recallScopedEpisodesForQuery('release continuity checkpoint', {
-      currentScope: {
-        memoryOwnerId: ownerId,
-        memoryConversationId: 'root-conversation',
-        sourceThreadId: 'thread-current',
-        personaId: DEFAULT_MEMORY_PERSONA_ID,
-        taskId: null,
-      },
-      limit: 2,
-      now: 200,
-      onTiming: (value) => {
-        timing = value;
-      },
-    });
-
-    expect(result.selections).toHaveLength(2);
-    expect(result.selections[0]).toMatchObject({
-      lane: 'current_thread',
-      episode: { id: current.id },
-      authorizedOrigin: null,
-    });
-    expect(result.selections[1]).toMatchObject({
-      lane: 'cross_thread',
-      episode: { id: cross.id },
-      authorizedOrigin: {
-        memoryOwnerId: ownerId,
-        memoryConversationId: 'root-conversation',
-        sourceThreadId: 'thread-cross',
-        personaId: DEFAULT_MEMORY_PERSONA_ID,
-        taskId: null,
-      },
-    });
-    expect(result.selections.map((selection) => selection.episode.summary)).not.toEqual(
-      expect.arrayContaining(['release forbidden root', 'release forbidden task']),
-    );
-    expect(timing).toMatchObject({
-      candidateCount: 2,
-      resultCount: 2,
-      resultLimit: 2,
-    });
-    expect(timing!.totalMs).toBeGreaterThanOrEqual(timing!.fetchMs);
-    expect(timing!.totalMs).toBeGreaterThanOrEqual(timing!.scoreMs);
-    expect(timing!.totalMs).toBeGreaterThanOrEqual(timing!.sortMs);
-    expect(result.diagnostics).toMatchObject({
-      scannedCount: 1,
-      eligibleCount: 1,
-      selectedCount: 1,
-    });
-  });
-
-  it('reports current-only candidates without inventing cross-thread work', () => {
-    makeCompleteEpisode('only-current', {
-      threadId: 'thread-current',
-      summary: 'release current only',
-    });
-    let timing: RecallEpisodesTiming | undefined;
-
-    const result = recallScopedEpisodesForQuery('release current', {
-      currentScope: {
-        memoryOwnerId: getLocalMemoryVaultOwnerId(getMemoryDb()),
-        memoryConversationId: 'root-conversation',
-        sourceThreadId: 'thread-current',
-        personaId: DEFAULT_MEMORY_PERSONA_ID,
-        taskId: null,
-      },
-      limit: 2,
-      now: 200,
-      onTiming: (value) => {
-        timing = value;
-      },
-    });
-
-    expect(result.selections).toEqual([expect.objectContaining({ lane: 'current_thread' })]);
-    expect(result.diagnostics).toMatchObject({ scannedCount: 0, eligibleCount: 0 });
-    expect(timing).toMatchObject({ candidateCount: 1, resultCount: 1 });
   });
 });

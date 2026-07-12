@@ -172,6 +172,8 @@ export function ensureFactSchema(): void {
       started_at INTEGER NOT NULL,
       ended_at INTEGER NOT NULL,
       summary TEXT NOT NULL,
+      sensitivity TEXT NOT NULL DEFAULT 'sensitive'
+        CHECK(sensitivity IN ('normal', 'private', 'sensitive')),
       entities_json TEXT NOT NULL DEFAULT '[]',
       message_ids_json TEXT NOT NULL DEFAULT '[]',
       tool_names_json TEXT NOT NULL DEFAULT '[]',
@@ -456,6 +458,12 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(db, 'memory_facts', 'expires_at', 'expires_at INTEGER');
   ensureColumn(db, 'memory_episodes', 'source_start_message_id', 'source_start_message_id TEXT');
   ensureColumn(db, 'memory_episodes', 'source_end_message_id', 'source_end_message_id TEXT');
+  ensureColumn(
+    db,
+    'memory_episodes',
+    'sensitivity',
+    "sensitivity TEXT NOT NULL DEFAULT 'sensitive' CHECK(sensitivity IN ('normal', 'private', 'sensitive'))",
+  );
   ensureColumn(db, 'memory_facts', 'source_actor_id', 'source_actor_id TEXT');
   ensureColumn(db, 'memory_facts', 'memory_owner_id', 'memory_owner_id TEXT');
   ensureColumn(db, 'memory_facts', 'persona_id', 'persona_id TEXT');

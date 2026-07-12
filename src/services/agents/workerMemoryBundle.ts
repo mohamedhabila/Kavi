@@ -8,7 +8,7 @@ import type {
 } from '../../types/subAgent';
 import { createLogger } from '../../utils/logger';
 import { getEntityById } from '../memory/entities';
-import { getEpisodeAccessPolicy } from '../memory/episodes/accessPolicyStore';
+import { revalidateAutomaticPromptEpisodeSelection } from '../memory/episodes/automaticPromptAccess';
 import { loadActiveMemoryFactConflictSignals } from '../memory/facts/observations';
 import type { MemoryFact, MemoryFactKind } from '../memory/facts/types';
 import { applyMemoryApplicabilityPolicy } from '../memory/memoryApplicabilityPolicy';
@@ -21,7 +21,6 @@ import { resolveLocalMemoryAccessScope } from '../memory/memoryScopeStore';
 import { isExactMemoryProvenanceId } from '../memory/memoryProvenanceIdentity';
 import { orchestrateMemoryRetrieval } from '../memory/retrievalOrchestrator';
 import { tokenizeLexicalUnits } from '../memory/ranking/lexical';
-import { getMemoryDb } from '../memory/database';
 
 const logger = createLogger('agents.workerMemoryBundle');
 
@@ -310,27 +309,16 @@ function episodeBundleRecord(
   scope: RequiredMemoryAccessScopeIdentity,
   now: number,
 ): SubAgentMemoryBundleEpisode | null {
-  const episode = selection.episode;
-  const policy = getEpisodeAccessPolicy(getMemoryDb(), episode.id);
-  if (
-    !policy ||
-    policy.sensitivity !== 'normal' ||
-    policy.scope.memoryOwnerId !== scope.memoryOwnerId ||
-    policy.scope.memoryConversationId !== scope.memoryConversationId ||
-    policy.scope.personaId !== scope.personaId ||
-    policy.scope.sourceThreadId !== episode.threadId ||
-    policy.scope.taskId !== episode.taskId ||
-    episode.conversationId !== policy.scope.memoryConversationId ||
-    episode.deletedAt !== null ||
-    policy.boundAt > now ||
-    (policy.expiresAt !== null && policy.expiresAt <= now) ||
-    !episode.sourceEndMessageId
-  ) {
-    return null;
-  }
+  const authorized = revalidateAutomaticPromptEpisodeSelection({
+    selection,
+    currentScope: scope,
+    asOf: now,
+  });
+  if (!authorized) return null;
+  const episode = authorized.episode;
   return sanitizeEpisode({
     episodeId: episode.id,
-    lane: selection.lane,
+    lane: authorized.lane,
     summary: episode.summary,
     sourceEndMessageId: episode.sourceEndMessageId,
     endedAt: episode.endedAt,
