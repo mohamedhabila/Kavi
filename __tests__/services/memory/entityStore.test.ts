@@ -52,6 +52,24 @@ describe('upsertEntity', () => {
     expect(second.attributes).toMatchObject({ city: 'Seattle', tier: 'gold' });
   });
 
+  it('never regresses last-seen time when an older event replays', () => {
+    const first = upsertEntity({ name: 'Chronology', type: 'concept', now: 200 });
+    const replayed = upsertEntity({
+      name: 'Chronology',
+      type: 'concept',
+      attributes: { replayed: true },
+      now: 100,
+    });
+
+    expect(replayed).toMatchObject({
+      id: first.id,
+      firstSeenAt: 200,
+      lastSeenAt: 200,
+      attributes: { replayed: true },
+    });
+    expect(getEntityById(first.id)?.lastSeenAt).toBe(200);
+  });
+
   it('finds an existing entity via alias match', () => {
     const created = upsertEntity({ name: 'Kavi', type: 'project', aliases: ['kavi mobile'] });
     const looked = upsertEntity({ name: 'Kavi Mobile', type: 'project' });

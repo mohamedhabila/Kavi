@@ -157,13 +157,14 @@ function mergeAndPersist(
     existing.canonical_name,
   );
   const mergedAttrs = { ...prevAttrs, ...(input.attributes ?? {}) };
+  const lastSeenAt = Math.max(existing.last_seen_at, now);
   db.runSync(
     `UPDATE memory_entities
        SET aliases = ?, attributes = ?, last_seen_at = ?
        WHERE id = ?`,
     JSON.stringify(mergedAliases),
     JSON.stringify(mergedAttrs),
-    now,
+    lastSeenAt,
     existing.id,
   );
   return {
@@ -173,7 +174,7 @@ function mergeAndPersist(
     aliases: mergedAliases,
     attributes: mergedAttrs,
     firstSeenAt: existing.first_seen_at,
-    lastSeenAt: now,
+    lastSeenAt,
     deletedAt: null,
   };
 }
