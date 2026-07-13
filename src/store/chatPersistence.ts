@@ -11,10 +11,23 @@ import {
   MAX_PERSISTED_TAGS,
 } from './chatPersistenceLimits';
 import { sanitizeAgentRun } from './chatPersistenceAgentRuns';
+import { selectMessagesForPersistenceWithOpenMemoryPublicationTurns } from './chatMessageMemoryPublicationGuards';
 import { sanitizeMessage } from './chatPersistenceMessages';
-import { keepAnchoredTail, truncateText } from './chatPersistencePrimitives';
+import { truncateText } from './chatPersistencePrimitives';
 import { sanitizeUsage } from './chatPersistenceUsage';
 import { normalizeSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
+import { isEligibleMessageMemoryPublicationSource } from '../utils/messageMemoryPublication';
+
+function projectValidPublicationSources(conversation: Conversation): Conversation['messages'] {
+  return (conversation.messages ?? []).map((message) => {
+    if (!message.memoryPublication || isEligibleMessageMemoryPublicationSource(message)) {
+      return message;
+    }
+
+    const { memoryPublication: _invalidPublication, ...messageWithoutInvalidPublication } = message;
+    return messageWithoutInvalidPublication;
+  });
+}
 
 function sanitizeLogEntry(entry: ConversationLogEntry): ConversationLogEntry {
   return {
@@ -28,7 +41,10 @@ function sanitizeLogEntry(entry: ConversationLogEntry): ConversationLogEntry {
 }
 
 export function sanitizeConversationForPersistence(conversation: Conversation): Conversation {
-  const messages = keepAnchoredTail(conversation.messages ?? [], MAX_PERSISTED_MESSAGES) ?? [];
+  const messages = selectMessagesForPersistenceWithOpenMemoryPublicationTurns(
+    projectValidPublicationSources(conversation),
+    MAX_PERSISTED_MESSAGES,
+  );
   const replayStart = Math.max(0, messages.length - MAX_PERSISTED_EXACT_REPLAY_MESSAGES);
   const reasoningStart = Math.max(0, messages.length - MAX_PERSISTED_REASONING_MESSAGES);
   const {
