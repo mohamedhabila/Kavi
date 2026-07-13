@@ -19,18 +19,20 @@ function tool(
 describe('conversation-mode tool authority', () => {
   const ordinaryTools = [
     tool('memory_recall', 'memory'),
-    tool('memory_remember', 'memory'),
+    tool('memory_manage', 'memory'),
+    tool('memory_forget', 'memory'),
     tool('web_search', 'web'),
     tool('calendar_create_event', 'calendar'),
   ];
   const orchestrationTools = [
     tool('update_goals', 'goals'),
+    tool('memory_remember', 'memory'),
     tool('sessions_spawn', 'sessions'),
     tool('sessions_history', 'sessions'),
     tool('custom_worker_control', 'sessions'),
   ];
 
-  it('keeps ordinary assistant tools but removes graph and worker authority from chitchat', () => {
+  it('keeps ordinary assistant and memory-read tools but removes provider-owned orchestration and passive memory writes from chitchat', () => {
     const filtered = filterToolsForConversationMode(
       [...ordinaryTools, ...orchestrationTools],
       'chitchat',
