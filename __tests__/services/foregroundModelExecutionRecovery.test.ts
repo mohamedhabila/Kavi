@@ -99,6 +99,11 @@ function harness(
     mutateProjection,
     isCurrentProcessRun: () => false,
     flushChatState,
+    settleMemoryPublication: async ({ conversationId, sourceEndMessageId }) => ({
+      conversationId,
+      sourceEndMessageId,
+      status: 'unclassified',
+    }),
     complete,
     releaseProjection,
     clock: () => 20,
