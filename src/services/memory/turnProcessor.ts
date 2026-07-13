@@ -70,6 +70,8 @@ export interface ProcessTurnInput {
   commitPersistenceReceipt?: (receipt: TurnPersistenceReceipt) => void;
   /** Queue structural checkpoint committed atomically before optional provider work. */
   commitStructuralCheckpoint?: () => boolean;
+  /** Persist a readable structural checkpoint without finalizing the source cursor or receipt. */
+  deferStructuralFinalization?: boolean;
 }
 
 function resolveMemoryConversationId(
@@ -457,7 +459,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
 
   const persistenceContext = {
     result: structuralResult,
-    finalize: !input.extractor,
+    finalize: !input.extractor && !input.deferStructuralFinalization,
     now,
     conversationId: memoryConversationId,
     threadId: input.threadId,

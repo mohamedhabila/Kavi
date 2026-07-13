@@ -21,13 +21,23 @@ import {
   rowToIngestionJob,
 } from './ingestionQueueIdentity';
 import type { IngestionJobRow, IngestionSourceIdentity } from './ingestionQueueIdentity';
-import { NO_ACTIVE_PRIOR_DEPENDENCY_SQL } from './ingestionQueueDependencies';
+import {
+  NO_ACTIVE_PRIOR_DEPENDENCY_SQL,
+  NO_BLOCKING_PRIOR_DEPENDENCY_SQL,
+} from './ingestionQueueDependencies';
+import { failIngestionJobForInvalidIdentity } from './ingestionQueueIdentityFailure';
+import { INGESTION_PROCESSING_LEASE_MS } from './ingestionQueueStructuralCheckpoint';
 
 export { getNextPendingIngestionAttemptAt } from './ingestionQueueDependencies';
+export { failIngestionJobForInvalidIdentity } from './ingestionQueueIdentityFailure';
+export {
+  claimIngestionJobForStructuralCheckpoint,
+  deferIngestionEnrichmentAfterStructuralCheckpoint,
+  INGESTION_PROCESSING_LEASE_MS,
+} from './ingestionQueueStructuralCheckpoint';
 
 export const INGESTION_RETRY_BASE_DELAY_MS = 15_000;
 export const INGESTION_RETRY_MAX_DELAY_MS = 5 * 60_000;
-export const INGESTION_PROCESSING_LEASE_MS = 5 * 60_000;
 
 export type IngestionJobStatus =
   | 'pending'
@@ -335,38 +345,6 @@ export function discardIngestionJob(jobId: string): boolean {
   });
 }
 
-export function failIngestionJobForInvalidIdentity(
-  jobId: string,
-  outcomeCode: 'persona_scope_missing' | 'source_identity_invalid',
-  now: number,
-): boolean {
-  ensureFactSchema();
-  const failedAt = requireIngestionTimestamp(now, 'memory_ingestion_clock_invalid');
-  return runMemoryTransaction(() => {
-    const db = getMemoryDb();
-    db.runSync('DELETE FROM memory_ingestion_receipts WHERE job_id = ?', jobId);
-    const result = db.runSync(
-      `UPDATE memory_ingestion_jobs
-          SET status = 'failed',
-              provider_outcome = NULL,
-              outcome_code = ?,
-              next_attempt_at = NULL,
-              lease_expires_at = NULL,
-              claim_token = NULL,
-              structural_completed_at = NULL,
-              completed_at = ?,
-              updated_at = ?
-        WHERE id = ?
-          AND status IN ('pending', 'processing', 'retrying')`,
-      outcomeCode,
-      failedAt,
-      failedAt,
-      jobId,
-    );
-    return (result.changes ?? 0) === 1;
-  });
-}
-
 export function countCompletedIngestionJobsForThread(threadId: string): number {
   ensureFactSchema();
   if (!isExactMemoryScopeId(threadId)) return 0;
@@ -389,7 +367,7 @@ export function listPendingIngestionJobs(
     `SELECT candidate.* FROM memory_ingestion_jobs AS candidate
        WHERE candidate.status IN ('pending', 'retrying')
          AND candidate.next_attempt_at <= ?
-         AND ${NO_ACTIVE_PRIOR_DEPENDENCY_SQL}
+         AND ${NO_BLOCKING_PRIOR_DEPENDENCY_SQL}
        ORDER BY CASE WHEN candidate.structural_completed_at IS NULL THEN 0 ELSE 1 END ASC,
                 candidate.next_attempt_at ASC,
                 candidate.created_at ASC

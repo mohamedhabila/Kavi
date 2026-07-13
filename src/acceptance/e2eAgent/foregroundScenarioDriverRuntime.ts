@@ -319,9 +319,12 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
   while (Date.now() <= deadline) {
     const job = getIngestionJob(jobId);
     if (!job) throw new Error(`Memory ingestion job ${jobId} disappeared before completion.`);
-    if (!['pending', 'processing'].includes(job.status)) return job;
+    if (job.structuralCompletedAt !== null) return job;
+    if (['degraded', 'completed_structural', 'completed_enriched', 'failed'].includes(job.status)) {
+      return job;
+    }
 
-    if (job.status === 'pending' && !requestedDrain) {
+    if ((job.status === 'pending' || job.status === 'retrying') && !requestedDrain) {
       requestedDrain = true;
       await drainIngestionQueueWithWakeup({
         loadMessagesForThread: (threadId) =>
@@ -330,14 +333,6 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
         loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
         maxJobs: 1,
       });
-      const afterDrain = getIngestionJob(jobId);
-      if (
-        afterDrain?.status === 'pending' &&
-        afterDrain.nextAttemptAt !== null &&
-        afterDrain.nextAttemptAt > Date.now()
-      ) {
-        return afterDrain;
-      }
       continue;
     }
 

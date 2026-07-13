@@ -81,7 +81,6 @@ describe('foreground scenario memory settlement', () => {
     };
     mockedGetIngestionJob
       .mockImplementationOnce(() => pending)
-      .mockImplementationOnce(() => pending)
       .mockImplementationOnce(() => processing)
       .mockReturnValue(completed);
     mockedDrainIngestionQueueWithWakeup.mockResolvedValueOnce({
@@ -117,9 +116,7 @@ describe('foreground scenario memory settlement', () => {
       );
       await jest.advanceTimersByTimeAsync(10);
 
-      await expect(settlement).resolves.toEqual([
-        expect.objectContaining({ job: completed }),
-      ]);
+      await expect(settlement).resolves.toEqual([expect.objectContaining({ job: completed })]);
       expect(mockedDrainIngestionQueueWithWakeup).toHaveBeenCalledTimes(1);
       expect(mockedDrainIngestionQueueWithWakeup).toHaveBeenCalledWith(
         expect.objectContaining({ maxJobs: 1 }),
@@ -160,6 +157,74 @@ describe('foreground scenario memory settlement', () => {
 
       expect(mockedGetIngestionJob.mock.calls.length).toBeGreaterThanOrEqual(2);
       expect(mockedGetIngestionJob.mock.calls.length).toBeLessThanOrEqual(10);
+      expect(mockedDrainIngestionQueueWithWakeup).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it.each(['pending', 'processing', 'retrying'] as const)(
+    'accepts a durable structural checkpoint while enrichment is %s',
+    async (status) => {
+      const checkpointed = {
+        ...makeJob(status),
+        structuralCompletedAt: 2,
+      };
+      mockedGetIngestionJob.mockReturnValue(checkpointed);
+
+      await expect(
+        settleForegroundScenarioMemory(
+          [
+            {
+              promise: Promise.resolve({
+                processed: true,
+                enqueued: true,
+                jobId: checkpointed.id,
+                episodeId: null,
+                factIds: [],
+                activeFocusUpdated: false,
+                openThreadsUpdated: false,
+                enriched: false,
+              }),
+            },
+          ],
+          1_000,
+        ),
+      ).resolves.toEqual([expect.objectContaining({ job: checkpointed })]);
+      expect(mockedDrainIngestionQueueWithWakeup).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not accept uncheckpointed retry work as settled memory', async () => {
+    jest.useFakeTimers();
+    mockedGetIngestionJob.mockReturnValue({
+      ...makeJob('retrying'),
+      nextAttemptAt: 2_000,
+    });
+    try {
+      const settlement = settleForegroundScenarioMemory(
+        [
+          {
+            promise: Promise.resolve({
+              processed: true,
+              enqueued: true,
+              jobId: 'job-processing',
+              episodeId: null,
+              factIds: [],
+              activeFocusUpdated: false,
+              openThreadsUpdated: false,
+              enriched: false,
+            }),
+          },
+        ],
+        1_000,
+      );
+      const rejection = expect(settlement).rejects.toThrow(
+        'Timed out waiting for memory ingestion job job-processing.',
+      );
+      await jest.advanceTimersByTimeAsync(1_000);
+      await rejection;
+
       expect(mockedDrainIngestionQueueWithWakeup).toHaveBeenCalledTimes(1);
     } finally {
       jest.useRealTimers();

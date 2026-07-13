@@ -20,7 +20,9 @@ import { hasSealedIngestionJobIdentity } from './ingestionQueueIdentity';
 import { resolveJobSourceWindow } from './ingestionSourceWindow';
 import {
   claimIngestionJob,
+  claimIngestionJobForStructuralCheckpoint,
   completeIngestionJob,
+  deferIngestionEnrichmentAfterStructuralCheckpoint,
   discardIngestionJob,
   discardPendingIngestionJobs,
   failIngestionJobForInvalidIdentity,
@@ -264,7 +266,12 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     return { processed: false, skipped: 'slot_unavailable' };
   }
 
-  const claimToken = claimIngestionJob(job.id, startedAt);
+  let structuralCheckpointOnly = false;
+  let claimToken = claimIngestionJob(job.id, startedAt);
+  if (!claimToken) {
+    claimToken = claimIngestionJobForStructuralCheckpoint(job.id, startedAt);
+    structuralCheckpointOnly = claimToken !== null;
+  }
   if (!claimToken) {
     releaseIngestionSlot(job.id);
     return { processed: false, skipped: 'claim_lost' };
@@ -282,7 +289,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       personaSummary: input.personaSummary,
       activeChatProvider: resolveSealedActiveChatProvider(job, input.activeChatProvider),
       requireExplicitChatProvider: Boolean(job.chatProviderId),
-      ...(job.providerEnrichment ? {} : { extractor: null }),
+      ...(job.providerEnrichment && !structuralCheckpointOnly ? {} : { extractor: null }),
       taskId: job.taskId ?? undefined,
       graphGoalEvidence: input.graphGoalEvidence,
       sourceRunId: job.sourceRunId ?? undefined,
@@ -292,6 +299,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       },
       now: job.sourceAt,
       skipWorkingMemorySync: true,
+      deferStructuralFinalization: structuralCheckpointOnly,
       providerSignal: activeAttempt.controller.signal,
       canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
       commitStructuralCheckpoint: () =>
@@ -330,6 +338,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     } else {
       if (
         turnResult.processed &&
+        (receiptJob?.structuralCompletedAt ?? null) === null &&
         !markIngestionJobStructuralComplete(job.id, transitionAt, claimToken)
       ) {
         return {
@@ -338,28 +347,9 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
           skipped: 'claim_lost',
         };
       }
-      const decision = classifyIngestionOutcome(turnResult, job.providerEnrichment);
-      if (decision.kind === 'complete') {
-        const completed = completeIngestionJob(
-          job.id,
-          decision.status,
-          decision.providerOutcome,
-          transitionAt,
-          claimToken,
-        );
-        if (!completed) {
-          return {
-            processed: false,
-            status: getIngestionJob(job.id)?.status,
-            skipped: 'claim_lost',
-          };
-        }
-        status = decision.status;
-      } else {
-        const transition = retryOrCompleteIngestionJob({
+      if (structuralCheckpointOnly && turnResult.processed) {
+        const transition = deferIngestionEnrichmentAfterStructuralCheckpoint({
           jobId: job.id,
-          providerOutcome: decision.providerOutcome,
-          outcomeCode: decision.outcomeCode,
           now: transitionAt,
           claimToken,
         });
@@ -367,6 +357,37 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
           return { processed: false, status: transition.status, skipped: 'claim_lost' };
         }
         status = transition.status;
+      } else {
+        const decision = classifyIngestionOutcome(turnResult, job.providerEnrichment);
+        if (decision.kind === 'complete') {
+          const completed = completeIngestionJob(
+            job.id,
+            decision.status,
+            decision.providerOutcome,
+            transitionAt,
+            claimToken,
+          );
+          if (!completed) {
+            return {
+              processed: false,
+              status: getIngestionJob(job.id)?.status,
+              skipped: 'claim_lost',
+            };
+          }
+          status = decision.status;
+        } else {
+          const transition = retryOrCompleteIngestionJob({
+            jobId: job.id,
+            providerOutcome: decision.providerOutcome,
+            outcomeCode: decision.outcomeCode,
+            now: transitionAt,
+            claimToken,
+          });
+          if (!transition.applied) {
+            return { processed: false, status: transition.status, skipped: 'claim_lost' };
+          }
+          status = transition.status;
+        }
       }
     }
 

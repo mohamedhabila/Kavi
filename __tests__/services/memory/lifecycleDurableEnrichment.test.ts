@@ -24,11 +24,14 @@ jest.mock('../../../src/services/llm/LlmService', () => ({
 }));
 
 import { getConsolidationState } from '../../../src/services/memory/consolidatorScheduler';
+import { upsertEntity } from '../../../src/services/memory/entities';
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
   __resetIngestionQueueForTests,
   drainIngestionQueue,
+  enqueueIngestionJob,
   getIngestionJob,
 } from '../../../src/services/memory/ingestionQueue';
 import {
@@ -42,6 +45,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
+import { persistMemoryRemember } from '../../../src/services/memory/memoryRememberPersistence';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
@@ -274,5 +278,233 @@ describe('durable memory enrichment retries', () => {
     expect(providerFacts).toHaveLength(1);
     expect(evidenceCount).toBe(firstEvidenceCount + 1);
     expect(getConsolidationState('conv-provider-retry')?.lastConsolidatedMessageId).toBe('a-retry');
+  });
+
+  it('does not let prior enrichment resurrect a value superseded by a checkpointed successor', async () => {
+    useSettingsStore.setState({
+      consolidationProvider: 'provider-causal',
+      providers: [
+        {
+          id: 'provider-causal',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'gpt-4o-mini',
+          enabled: true,
+        },
+      ],
+    } as any);
+    const threadId = 'conv-provider-causal';
+    const user = upsertEntity({ name: 'user', type: 'self', now: 50 });
+    recordFactWithApplicability(
+      {
+        subjectId: user.id,
+        predicate: 'preferred_channel',
+        objectText: 'Email',
+        scope: 'conversation',
+        originConversationId: threadId,
+        originThreadId: threadId,
+        sourceMessageId: 'u-causal-seed',
+        now: 50,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    );
+    const history: Message[] = [
+      {
+        id: 'u-causal-prior',
+        role: 'user',
+        content: 'My preferred channel is Signal.',
+        timestamp: 1,
+      },
+      {
+        id: 'a-causal-prior',
+        role: 'assistant',
+        content: 'I will remember it.',
+        timestamp: 2,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      },
+      {
+        id: 'u-causal-successor',
+        role: 'user',
+        content: 'My preferred channel is WhatsApp.',
+        timestamp: 3,
+      },
+      {
+        id: 'a-causal-successor',
+        role: 'assistant',
+        content: 'I will remember that too.',
+        timestamp: 4,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      },
+    ];
+    const prior = enqueueIngestionJob({
+      personaId: 'default',
+      threadId,
+      threadTitle: null,
+      memoryConversationId: threadId,
+      taskId: null,
+      sourceStartMessageId: 'u-causal-prior',
+      sourceEndMessageId: 'a-causal-prior',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 100,
+    })!;
+    mockSendMessage.mockRejectedValueOnce(new Error('temporary timeout'));
+
+    await drainIngestionQueue({ loadMessagesForThread: () => history, now: 100 });
+    const priorRetry = getIngestionJob(prior.id)!;
+    expect(priorRetry).toEqual(
+      expect.objectContaining({ status: 'retrying', structuralCompletedAt: 100 }),
+    );
+    const successor = enqueueIngestionJob({
+      personaId: 'default',
+      threadId,
+      threadTitle: null,
+      memoryConversationId: threadId,
+      taskId: null,
+      priorUserMessageId: 'u-causal-prior',
+      sourceStartMessageId: 'u-causal-successor',
+      sourceEndMessageId: 'a-causal-successor',
+      sourceRunId: null,
+      sourceAt: 101,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 101,
+    })!;
+    mockSendMessage
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                new_facts: [
+                  {
+                    subject: 'user',
+                    predicate: 'preferred_channel',
+                    value: 'Signal',
+                    scope: 'conversation',
+                    operation: 'replace_current',
+                    assertion_class: 'current_direct',
+                    evidence_message_ids: ['u-causal-prior'],
+                    evidence_quote: 'My preferred channel is Signal',
+                  },
+                ],
+                episode_summary: null,
+                active_focus: null,
+                open_threads: [],
+                notable: [],
+              }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                new_facts: [
+                  {
+                    subject: 'user',
+                    predicate: 'preferred_channel',
+                    value: 'WhatsApp',
+                    scope: 'conversation',
+                    operation: 'replace_current',
+                    assertion_class: 'current_direct',
+                    evidence_message_ids: ['u-causal-successor'],
+                    evidence_quote: 'My preferred channel is WhatsApp',
+                  },
+                ],
+                episode_summary: null,
+                active_focus: null,
+                open_threads: [],
+                notable: [],
+              }),
+            },
+          },
+        ],
+      });
+
+    await drainIngestionQueue({ loadMessagesForThread: () => history, maxJobs: 1, now: 101 });
+
+    expect(getIngestionJob(successor.id)).toEqual(
+      expect.objectContaining({
+        status: 'retrying',
+        attemptCount: 0,
+        providerOutcome: 'structural_only',
+        structuralCompletedAt: 101,
+      }),
+    );
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    expect(getConsolidationState(threadId)).toBeNull();
+    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(101);
+    const successorCorrection = persistMemoryRemember(
+      {
+        subject: 'user',
+        subjectType: 'self',
+        predicate: 'preferred_channel',
+        value: 'WhatsApp',
+        pinned: false,
+        scope: 'conversation',
+        originConversationId: threadId,
+        originThreadId: threadId,
+      },
+      {
+        requestEvidence: {
+          memoryConversationId: threadId,
+          sourceThreadId: threadId,
+          taskId: null,
+          userMessageId: 'u-causal-successor',
+          userMessageText: 'My preferred channel is WhatsApp.',
+          priorUserMessageId: 'u-causal-prior',
+        },
+      },
+    );
+    dateNow.mockRestore();
+    expect(successorCorrection).toMatchObject({
+      status: 'persisted',
+      grounded: true,
+      result: { fact: { objectText: 'WhatsApp', validAt: 101 } },
+    });
+
+    await drainIngestionQueue({
+      loadMessagesForThread: () => history,
+      maxJobs: 1,
+      now: priorRetry.nextAttemptAt!,
+    });
+    expect(getIngestionJob(prior.id)?.status).toBe('completed_enriched');
+    expect(getIngestionJob(successor.id)?.status).toBe('retrying');
+    expect(mockSendMessage).toHaveBeenCalledTimes(2);
+    expect(getConsolidationState(threadId)?.lastConsolidatedMessageId).toBe('a-causal-prior');
+    expect(listFacts({ predicate: 'preferred_channel', originConversationId: threadId })).toEqual([
+      expect.objectContaining({ objectText: 'WhatsApp', validAt: 101, invalidAt: null }),
+    ]);
+    expect(
+      listFacts({
+        predicate: 'preferred_channel',
+        originConversationId: threadId,
+        includeInvalidated: true,
+      }).some((fact) => fact.objectText === 'Signal'),
+    ).toBe(false);
+
+    await drainIngestionQueue({
+      loadMessagesForThread: () => history,
+      maxJobs: 1,
+      now: priorRetry.nextAttemptAt!,
+    });
+    expect(getIngestionJob(successor.id)).toEqual(
+      expect.objectContaining({ status: 'completed_enriched', attemptCount: 1 }),
+    );
+    expect(mockSendMessage).toHaveBeenCalledTimes(3);
+    expect(getConsolidationState(threadId)?.lastConsolidatedMessageId).toBe('a-causal-successor');
+    expect(listFacts({ predicate: 'preferred_channel', originConversationId: threadId })).toEqual([
+      expect.objectContaining({ objectText: 'WhatsApp', invalidAt: null }),
+    ]);
   });
 });
