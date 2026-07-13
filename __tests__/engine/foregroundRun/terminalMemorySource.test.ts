@@ -1,4 +1,7 @@
-import { resolveForegroundTerminalMemorySource } from '../../../src/engine/graph/foregroundRun/terminalMemorySource';
+import {
+  fingerprintForegroundTerminalMemorySource,
+  resolveForegroundTerminalMemorySource,
+} from '../../../src/engine/graph/foregroundRun/terminalMemorySource';
 import type { AgentRun } from '../../../src/types/agentRun';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
@@ -298,5 +301,47 @@ describe('resolveForegroundTerminalMemorySource', () => {
         status: 'failed',
       }),
     ).toBeUndefined();
+  });
+
+  it('fingerprints a closed final independently of later sub-agent observations', () => {
+    const source = finalAssistant('assistant-current', 11);
+    const baseMessages: Message[] = [
+      { id: 'user-current', role: 'user', content: 'Current', timestamp: 10 },
+      source,
+    ];
+    const observedMessages: Message[] = [
+      ...baseMessages,
+      {
+        id: 'worker-completed',
+        role: 'assistant',
+        content: 'Worker completed.',
+        timestamp: 12,
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'completed',
+          snapshot: {
+            sessionId: 'worker-1',
+            parentConversationId: 'conversation',
+            status: 'completed',
+            startedAt: 10,
+            updatedAt: 12,
+            depth: 1,
+            sandboxPolicy: 'inherit',
+          },
+        },
+      },
+    ];
+
+    expect(
+      fingerprintForegroundTerminalMemorySource({
+        conversation: conversation({ messages: observedMessages }),
+        source,
+      }),
+    ).toBe(
+      fingerprintForegroundTerminalMemorySource({
+        conversation: conversation({ messages: baseMessages }),
+        source,
+      }),
+    );
   });
 });

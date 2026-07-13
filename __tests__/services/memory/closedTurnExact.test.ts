@@ -128,6 +128,38 @@ describe('resolveClosedTurnEndingAt', () => {
     ).toBe('resolved');
   });
 
+  it('allows later sub-agent observations without treating them as owning projections', () => {
+    const messages: Message[] = [
+      { id: 'user', role: 'user', content: 'Do it.', timestamp: 1 },
+      finalAssistant('claimed-final', 2),
+      {
+        id: 'worker-observation',
+        role: 'assistant',
+        content: 'Verifier completed.',
+        timestamp: 3,
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'completed',
+          snapshot: {
+            sessionId: 'worker-1',
+            parentConversationId: 'conversation-1',
+            status: 'completed',
+            startedAt: 2,
+            updatedAt: 3,
+            depth: 1,
+            sandboxPolicy: 'inherit',
+          },
+        },
+      },
+    ];
+
+    expect(resolveClosedTurnEndingAt(messages, 'claimed-final')).toMatchObject({
+      status: 'resolved',
+      sourceStartMessageId: 'user',
+      sourceEndMessageId: 'claimed-final',
+    });
+  });
+
   it('rejects ambiguous source-user and prior-user identities', () => {
     const final = finalAssistant('final', 5);
     expectInvalid(

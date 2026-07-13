@@ -38,8 +38,10 @@ export function resolveClosedTurnEndingAt(
     return { status: 'invalid', reason: 'source_end_not_closed' };
   }
   for (let index = sourceEnd.index + 1; index < messages.length; index += 1) {
-    const role = messages[index]?.role;
+    const message = messages[index];
+    const role = message?.role;
     if (role === 'user') break;
+    if (role === 'assistant' && message.subAgentEvent) continue;
     if (role === 'assistant' || role === 'tool') {
       return { status: 'invalid', reason: 'source_end_not_terminal' };
     }
