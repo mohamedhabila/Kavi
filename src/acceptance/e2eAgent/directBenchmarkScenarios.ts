@@ -114,9 +114,20 @@ export const DIRECT_TAU_USER_COORDINATION_STATE: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
+    {
+      kind: 'turn_clarification',
+      turnIndex: 0,
+      requiredMissingFields: ['recipient', 'message_body'],
+    },
+    { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
+    { kind: 'turn_completion', turnIndex: 0, field: 'execution', expected: true },
+    { kind: 'turn_completion', turnIndex: 0, field: 'final_response', expected: true },
+    { kind: 'turn_completion', turnIndex: 1, field: 'execution', expected: true },
+    { kind: 'turn_completion', turnIndex: 1, field: 'final_response', expected: true },
     { kind: 'native_fixture_state', path: 'contacts.resultCount', expectedValue: '1' },
     { kind: 'native_fixture_state', path: 'sms.opened', expectedValue: 'true' },
     { kind: 'native_fixture_state', path: 'sms.recipientCount', expectedValue: '1' },
+    { kind: 'native_fixture_state', path: 'sms.messageLength', expectedValue: '18' },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

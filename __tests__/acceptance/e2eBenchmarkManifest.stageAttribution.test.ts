@@ -1,4 +1,5 @@
 import { buildE2EBenchmarkManifest } from '../../src/acceptance/e2eAgent/e2eBenchmarkManifest';
+import { DIRECT_TAU_USER_COORDINATION_STATE } from '../../src/acceptance/e2eAgent/directBenchmarkScenarios';
 import { E2E_AGENT_SCENARIOS } from '../../src/acceptance/e2eAgent/scenarios';
 import type { E2ERubric, E2EScenario } from '../../src/acceptance/e2eAgent/types';
 
@@ -139,5 +140,63 @@ describe('E2E benchmark manifest stage attribution', () => {
       .map((evaluator) => evaluator.fingerprint);
     expect(completionFingerprints).toHaveLength(3);
     expect(new Set(completionFingerprints).size).toBe(3);
+  });
+
+  it('attributes user-coordination guards to canonical trajectory and final-state evidence', () => {
+    const manifest = buildE2EBenchmarkManifest(DIRECT_TAU_USER_COORDINATION_STATE);
+
+    expect(
+      manifest.trajectoryEvaluators.map(({ rubricKind, evaluatorKind, evidenceKind }) => ({
+        rubricKind,
+        evaluatorKind,
+        evidenceKind,
+      })),
+    ).toEqual([
+      {
+        rubricKind: 'min_user_turns',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'graph_state',
+      },
+      {
+        rubricKind: 'turn_clarification',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'assistant_response',
+      },
+      {
+        rubricKind: 'turn_native_invocation_count',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'native_fixture_state',
+      },
+      ...Array.from({ length: 4 }, () => ({
+        rubricKind: 'turn_completion' as const,
+        evaluatorKind: 'trajectory' as const,
+        evidenceKind: 'execution_state' as const,
+      })),
+    ]);
+    expect(
+      manifest.finalStateEvaluators.map(({ rubricKind, evaluatorKind, evidenceKind }) => ({
+        rubricKind,
+        evaluatorKind,
+        evidenceKind,
+      })),
+    ).toEqual([
+      ...Array.from({ length: 4 }, () => ({
+        rubricKind: 'native_fixture_state' as const,
+        evaluatorKind: 'final_state' as const,
+        evidenceKind: 'native_fixture_state' as const,
+      })),
+      {
+        rubricKind: 'graph_terminal_success',
+        evaluatorKind: 'final_state',
+        evidenceKind: 'graph_state',
+      },
+    ]);
+    expect(manifest.resourceBudgetEvaluators).toEqual([
+      expect.objectContaining({
+        rubricKind: 'token_budget',
+        evaluatorKind: 'resource_budget',
+        evidenceKind: 'token_accounting',
+      }),
+    ]);
   });
 });
