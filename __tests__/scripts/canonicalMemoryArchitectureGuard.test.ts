@@ -147,6 +147,60 @@ describe('canonical memory architecture guard', () => {
     );
   });
 
+  it('rejects bare sealed-applicability fact writes from product modules', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/newProductWriter.ts',
+      [
+        'recordFactWithApplicability(input, applicability);',
+        'replaceCurrentFactWithApplicability(input, applicability);',
+      ].join('\n'),
+    );
+
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('recordFactWithApplicability'),
+        expect.stringContaining('replaceCurrentFactWithApplicability'),
+        expect.stringContaining(
+          'uses bare sealed-applicability fact mutation outside approved low-level modules',
+        ),
+      ]),
+    );
+  });
+
+  it('keeps the bare mutation allowlist exact to its low-level owners and acceptance fixtures', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/facts/mutations.ts',
+      'export function recordFactWithApplicability() {}\n',
+    );
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/facts/exactReplacement.ts',
+      [
+        'recordFactWithApplicability(input, applicability);',
+        'export function replaceCurrentFactWithApplicability() {}',
+      ].join('\n'),
+    );
+    writeProjectFile(
+      projectRoot,
+      'src/acceptance/fixtures/seedMemory.ts',
+      'recordFactWithApplicability(input, applicability);\n',
+    );
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual([]);
+
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/facts/newProductWriter.ts',
+      'recordFactWithApplicability(input, applicability);\n',
+    );
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('src/services/memory/facts/newProductWriter.ts'),
+      ]),
+    );
+  });
+
   it('is wired into the standard verification gate', () => {
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'),
