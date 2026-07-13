@@ -5,6 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
+import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
   invalidateManagedMemoryFact,
@@ -27,6 +28,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { MemoryPersistenceSourceWithdrawnError } from '../../../src/services/memory/withdrawalFence';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const grounded = { factClass: 'subjective_user', sourceAuthority: 'grounded_user' } as const;
@@ -415,6 +417,43 @@ describe('contributed exact replacement replay', () => {
       ),
     ).toEqual({ invalid_at: 300, deleted_at: null });
     expect(rowCounts()).toEqual(countsBeforeReplay);
+  });
+
+  it('prevents replay projection repair when an exact source was retired', () => {
+    const seeded = seedChangedReplacement();
+    getMemoryDb().runSync('UPDATE memory_facts SET pinned = 0 WHERE id = ?', seeded.successor.id);
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'retired-replacement-source',
+      memoryConversationId: 'conversation-1',
+      sourceThreadId: 'thread-1',
+      taskId: null,
+      sourceKind: 'message',
+      sourceId: 'user-message-2',
+    });
+    const countsBeforeReplay = rowCounts();
+    const listener = jest.fn();
+    const unsubscribe = subscribeToMemoryChanges(listener);
+
+    try {
+      expect(() =>
+        replaceCurrentFactWithContribution(
+          seeded.replacementInput,
+          grounded,
+          seeded.replacementContext,
+        ),
+      ).toThrow(MemoryPersistenceSourceWithdrawnError);
+    } finally {
+      unsubscribe();
+    }
+
+    expect(
+      getMemoryDb().getFirstSync<{ pinned: number }>(
+        'SELECT pinned FROM memory_facts WHERE id = ?',
+        seeded.successor.id,
+      ),
+    ).toEqual({ pinned: 0 });
+    expect(rowCounts()).toEqual(countsBeforeReplay);
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it('rejects changed payload at the same producer identity without mutating history', () => {

@@ -20,7 +20,6 @@ import {
   evaluateGroundedReplacement,
   type GroundedReplacementRejection,
 } from './groundedFactReplacement';
-import { assertMemoryPersistenceSourcesAreWritable } from './withdrawalFence';
 import {
   deriveExactSelfCorrectionEvidence,
   deriveExactNamedSubjectClaimEvidence,
@@ -381,14 +380,6 @@ export function persistMemoryRemember(
 
   try {
     return runMemoryTransaction((): MemoryRememberPersistenceResult => {
-      assertMemoryPersistenceSourcesAreWritable(
-        {
-          memoryConversationId: evidence.memoryConversationId,
-          sourceThreadId: evidence.sourceThreadId,
-          taskId: evidence.taskId,
-        },
-        sourceAliases,
-      );
       const subject = upsertEntity({
         name: writeInput.subject,
         type: writeInput.subjectType,

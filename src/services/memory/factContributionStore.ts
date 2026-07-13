@@ -9,10 +9,12 @@ import {
   type MemoryFactContributionPayloadV1,
   type MemoryFactContributionProducerIdentity,
   type MemoryFactContributionSourceAlias,
+  type MemoryFactContributionSourceScope,
 } from './factContributionCodec';
 import { hasExactFactContentIdentity } from './facts/contentIdentity';
 import type { FactRow, MemoryFact } from './facts/types';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import { assertMemoryPersistenceSourcesAreWritable } from './withdrawalFence';
 
 export interface MemoryFactContributionWriteContext {
   memoryConversationId: string;
@@ -158,6 +160,38 @@ function sourceRowsMatch(
   return expected.every((alias) => actualKeys.has(`${alias.sourceKind}\u0000${alias.sourceId}`));
 }
 
+function normalizeWriteContext(context: MemoryFactContributionWriteContext): {
+  id: string;
+  scope: MemoryFactContributionSourceScope;
+  producer: MemoryFactContributionProducerIdentity;
+  aliases: ReadonlyArray<MemoryFactContributionSourceAlias>;
+} {
+  const db = getSchemaReadyMemoryDb();
+  const scope = normalizeMemoryFactContributionSourceScope({
+    memoryOwnerId: getLocalMemoryVaultOwnerId(db),
+    memoryConversationId: context.memoryConversationId,
+    sourceThreadId: context.sourceThreadId,
+    taskId: context.taskId,
+  });
+  const producer = requireMemoryFactContributionProducerIdentity(context.producer);
+  const aliases = normalizeMemoryFactContributionSourceAliases(context.sourceAliases);
+  return { id: buildMemoryFactContributionId({ scope, producer }), scope, producer, aliases };
+}
+
+function assertNormalizedSourceAliasesAreWritable(
+  scope: ReturnType<typeof normalizeMemoryFactContributionSourceScope>,
+  aliases: ReadonlyArray<MemoryFactContributionSourceAlias>,
+): void {
+  assertMemoryPersistenceSourcesAreWritable(
+    {
+      memoryConversationId: scope.memoryConversationId,
+      sourceThreadId: scope.sourceThreadId,
+      taskId: scope.taskId === '' ? null : scope.taskId,
+    },
+    aliases,
+  );
+}
+
 interface MemoryFactContributionReplayContext {
   memoryConversationId: string;
   sourceThreadId: string;
@@ -189,7 +223,12 @@ export function loadFactContributionReplayFromAliasCandidates(input: {
     'SELECT * FROM memory_fact_contributions WHERE id = ? LIMIT 1',
     id,
   );
-  if (!row) return null;
+  if (!row) {
+    if (expectedAliasSets.length === 1) {
+      assertNormalizedSourceAliasesAreWritable(scope, expectedAliasSets[0]!);
+    }
+    return null;
+  }
   const sourceRows = db.getAllSync<ContributionSourceRow>(
     `SELECT source_kind, source_id
        FROM memory_fact_contribution_sources
@@ -209,6 +248,7 @@ export function loadFactContributionReplayFromAliasCandidates(input: {
   ) {
     fail('memory_fact_contribution_replay_mismatch');
   }
+  assertNormalizedSourceAliasesAreWritable(scope, matchedAliases);
   return {
     id,
     factId: row.fact_id,
@@ -240,14 +280,8 @@ export function persistFactContributionInTransaction(input: {
 }): MemoryFactContributionWriteReceipt {
   const db = getSchemaReadyMemoryDb();
   const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
-  const scope = normalizeMemoryFactContributionSourceScope({
-    memoryOwnerId,
-    memoryConversationId: input.context.memoryConversationId,
-    sourceThreadId: input.context.sourceThreadId,
-    taskId: input.context.taskId,
-  });
-  const producer = requireMemoryFactContributionProducerIdentity(input.context.producer);
-  const aliases = normalizeMemoryFactContributionSourceAliases(input.context.sourceAliases);
+  const { aliases, id, producer, scope } = normalizeWriteContext(input.context);
+  assertNormalizedSourceAliasesAreWritable(scope, aliases);
   const encoded = encodeMemoryFactContributionPayload(input.payload);
   const factRow = db.getFirstSync<FactRow>(
     'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
@@ -257,7 +291,6 @@ export function persistFactContributionInTransaction(input: {
   assertSourceScopeMatchesPayload(input.payload, scope);
   assertPayloadSourcesHaveAliases(input.payload, aliases);
 
-  const id = buildMemoryFactContributionId({ scope, producer });
   const expected = {
     fact_id: input.fact.id,
     memory_owner_id: scope.memoryOwnerId,
