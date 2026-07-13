@@ -102,9 +102,11 @@ describe('buildAgentTurnPromptBundle', () => {
     ).cacheableText;
 
     expect(withoutToolsCacheable.length).toBeLessThan(withToolsCacheable.length);
+    expect(withoutToolsCacheable).toContain('Passive memory runs only after final delivery');
     expect(withoutToolsCacheable).toContain(
-      'Natural chitchat memory is recorded after the turn',
+      'Without verified current-turn durable-memory write evidence',
     );
+    expect(withoutToolsCacheable).toContain('never promise to remember or save it');
     expect(withoutToolsCacheable).not.toContain('With tools, batch independent calls');
     expect(
       splitCacheableSystemPromptSections(withoutTools.enrichedSystemPromptSections).dynamicText,

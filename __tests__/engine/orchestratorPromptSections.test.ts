@@ -1,6 +1,7 @@
 import {
   buildRuntimeContextNote,
   buildSystemPromptSections,
+  DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT,
   getUserMessagePromptContent,
   joinSystemPromptSections,
   stripRuntimeContextFromUserContent,
@@ -33,7 +34,11 @@ describe('orchestratorPromptSections', () => {
     expect(prompt).toContain(
       'mentioning a meeting, deadline, person, or schedule alone does not request inspection',
     );
-    expect(prompt).toContain('Natural chitchat memory is recorded after the turn');
+    expect(prompt).toContain(DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT);
+    expect(prompt).toContain('Without verified current-turn durable-memory write evidence');
+    expect(prompt).toContain('never say it was remembered, saved, stored, or updated');
+    expect(prompt).toContain('never promise to remember or save it');
+    expect(prompt).not.toContain('Natural chitchat memory is recorded after the turn');
     expect(prompt).toContain(
       'Reading, search, recall, or verification is not completion when the request also requires action',
     );
@@ -79,7 +84,7 @@ describe('orchestratorPromptSections', () => {
     expect(prompt).toContain(
       'Use external-state tools only when the requested answer or action requires live data',
     );
-    expect(prompt).toContain('Natural chitchat memory is recorded after the turn');
+    expect(prompt).toContain(DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT);
     expect(prompt).not.toContain('With tools, batch independent calls');
     expect(prompt).not.toContain('For web research, web_search discovers');
     expect(prompt).toContain('Execution mode for this turn: no registered executable tools');
@@ -115,7 +120,7 @@ describe('orchestratorPromptSections', () => {
 
     expect(textOnlyCacheable.length).toBeLessThan(toolCapableCacheable.length);
     expect(providerNoToolsCacheable).toBe(textOnlyCacheable);
-    expect(textOnlyCacheable).toContain('Natural chitchat memory is recorded after the turn');
+    expect(textOnlyCacheable).toContain(DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT);
     expect(textOnlyCacheable).not.toContain('With tools, batch independent calls');
     expect(splitCacheableSystemPromptSections(textOnly).dynamicText).toContain(
       'Execution mode for this turn: no registered executable tools',

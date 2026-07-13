@@ -66,9 +66,11 @@ describe('Orchestrator', () => {
       expect(requestMessages[0].content).not.toContain('## Tool Call Style');
       expect(requestMessages[0].content).not.toContain('## Agent Mode');
       expect(requestMessages[0].content).not.toContain('Available orchestration tools');
+      expect(requestMessages[0].content).toContain('Passive memory runs only after final delivery');
       expect(requestMessages[0].content).toContain(
-        'Natural chitchat memory is recorded after the turn',
+        'Without verified current-turn durable-memory write evidence',
       );
+      expect(requestMessages[0].content).toContain('never promise to remember or save it');
       expect(requestMessages[0].content).toContain(
         "Safety: no independent goals beyond the user's request.",
       );

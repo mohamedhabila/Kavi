@@ -5,6 +5,9 @@ export type SystemPromptSection = {
   cacheable?: boolean;
 };
 
+export const DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT =
+  'Passive memory runs only after final delivery. Acknowledge the information itself. Without verified current-turn durable-memory write evidence, never say it was remembered, saved, stored, or updated, and never promise to remember or save it.';
+
 export function formatUtcOffset(offsetMinutesWestOfUtc: number): string {
   const totalMinutes = -offsetMinutesWestOfUtc;
   const sign = totalMinutes >= 0 ? '+' : '-';
@@ -16,14 +19,12 @@ export function formatUtcOffset(offsetMinutesWestOfUtc: number): string {
   return `UTC${sign}${hours}:${minutes}`;
 }
 
-export function buildRuntimePromptSection(options: {
-  toolExecutionAvailable: boolean;
-}): string {
+export function buildRuntimePromptSection(options: { toolExecutionAvailable: boolean }): string {
   const universalGuidance = [
     'Runtime: mobile (React Native / Expo), channel mobile-app.',
     'Use the runtime_context block for request time and timezone.',
     'Use external-state tools only when the requested answer or action requires live data; mentioning a meeting, deadline, person, or schedule alone does not request inspection.',
-    'Natural chitchat memory is recorded after the turn; acknowledge it without memory-management or unrelated tools.',
+    DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT,
     'Final answers report completed work or a real blocker, not an unfinished plan.',
   ];
   if (!options.toolExecutionAvailable) {
@@ -175,11 +176,9 @@ export function buildSystemPromptSections(
   const toolExecutionAvailable = toolingEnabled && !textOnlyTurn;
 
   appendSystemPromptSection(sections, prompt, { cacheable: true });
-  appendSystemPromptSection(
-    sections,
-    buildRuntimePromptSection({ toolExecutionAvailable }),
-    { cacheable: true },
-  );
+  appendSystemPromptSection(sections, buildRuntimePromptSection({ toolExecutionAvailable }), {
+    cacheable: true,
+  });
   appendSystemPromptSection(sections, safetySection, { cacheable: true });
   appendSystemPromptSection(sections, runtimeContextSection);
   appendSystemPromptSection(
