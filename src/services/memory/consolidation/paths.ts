@@ -19,9 +19,10 @@ import { LlmService } from '../../llm/LlmService';
 import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import { resolveConversationModel, resolveProviderApiKey } from '../../llm/support/providerSupport';
 import { UnsupportedConsolidatorResponseError, type ConsolidatorExtractor } from '../consolidator';
+import { MEMORY_CONSOLIDATION_OUTPUT_SCHEMA } from './outputSchema';
 
 const MEMORY_EXTRACTOR_TIMEOUT_MS = 30_000;
-const MEMORY_EXTRACTOR_MAX_TOKENS = 32_000;
+const MEMORY_EXTRACTOR_MAX_TOKENS = 4_096;
 
 export type ConsolidationProviderTier = 'configured' | 'on_device' | 'chat' | 'deterministic';
 
@@ -82,6 +83,9 @@ function buildProviderExtractor(
       const response = await llm.sendMessage([{ role: 'user', content: prompt }] as never, {
         model,
         maxTokens: MEMORY_EXTRACTOR_MAX_TOKENS,
+        temperature: 0,
+        reasoning_effort: 'none',
+        structuredOutput: MEMORY_CONSOLIDATION_OUTPUT_SCHEMA,
         signal: controller.signal,
       });
       return extractConsolidationAssistantText(response);

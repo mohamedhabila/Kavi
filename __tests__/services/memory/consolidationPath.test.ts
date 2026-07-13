@@ -59,6 +59,47 @@ describe('resolveConsolidationPath', () => {
     expect(path.extractor).toEqual(expect.any(Function));
   });
 
+  it('requests a bounded deterministic structured extraction', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content:
+              '{"new_facts":[],"episode_summary":null,"active_focus":null,"open_threads":[],"notable":[]}',
+          },
+        },
+      ],
+    });
+    const path = await resolveConsolidationPath(makeProvider());
+
+    await expect(path.extractor?.('consolidate this turn')).resolves.toContain('new_facts');
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'consolidate this turn' }],
+      expect.objectContaining({
+        model: 'gemini-test',
+        maxTokens: 4_096,
+        temperature: 0,
+        reasoning_effort: 'none',
+        structuredOutput: expect.objectContaining({
+          name: 'memory_consolidation',
+          mimeType: 'application/json',
+          strict: false,
+          schema: expect.objectContaining({
+            additionalProperties: false,
+            required: [
+              'new_facts',
+              'episode_summary',
+              'active_focus',
+              'open_threads',
+              'notable',
+            ],
+          }),
+        }),
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
   it('keeps the job-scoped model instead of substituting the current global model', async () => {
     const provider = makeProvider({ model: 'persisted-conversation-model' });
     useSettingsStore.setState({
