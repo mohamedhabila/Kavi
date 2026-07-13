@@ -48,6 +48,17 @@ export interface ModelProjectionOwner {
   controlEpoch: number;
 }
 
+/**
+ * Exact, content-free source identity that must finish semantic ingestion
+ * before a fresh top-level conversation can rely on prior memory.
+ */
+export interface SemanticMemoryHandoff {
+  version: 1;
+  memoryConversationId: string;
+  sourceThreadId: string;
+  sourceEndMessageId: string;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -68,6 +79,7 @@ export interface Conversation {
   activeAgentRunId?: string;
   workspaceTargetId?: string;
   modelProjectionOwner?: ModelProjectionOwner;
+  semanticMemoryHandoff?: SemanticMemoryHandoff;
 
   parentConversationId?: string;
   isSideThread?: boolean;

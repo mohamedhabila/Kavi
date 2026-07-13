@@ -14,6 +14,7 @@ import { sanitizeAgentRun } from './chatPersistenceAgentRuns';
 import { sanitizeMessage } from './chatPersistenceMessages';
 import { keepAnchoredTail, truncateText } from './chatPersistencePrimitives';
 import { sanitizeUsage } from './chatPersistenceUsage';
+import { normalizeSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
 
 function sanitizeLogEntry(entry: ConversationLogEntry): ConversationLogEntry {
   return {
@@ -30,9 +31,14 @@ export function sanitizeConversationForPersistence(conversation: Conversation): 
   const messages = keepAnchoredTail(conversation.messages ?? [], MAX_PERSISTED_MESSAGES) ?? [];
   const replayStart = Math.max(0, messages.length - MAX_PERSISTED_EXACT_REPLAY_MESSAGES);
   const reasoningStart = Math.max(0, messages.length - MAX_PERSISTED_REASONING_MESSAGES);
+  const {
+    semanticMemoryHandoff: rawSemanticMemoryHandoff,
+    ...conversationWithoutSemanticMemoryHandoff
+  } = conversation;
+  const semanticMemoryHandoff = normalizeSemanticMemoryHandoff(rawSemanticMemoryHandoff);
 
   return {
-    ...conversation,
+    ...conversationWithoutSemanticMemoryHandoff,
     title: truncateText(conversation.title, MAX_PERSISTED_LOG_TITLE_CHARS) || conversation.title,
     systemPrompt:
       truncateText(conversation.systemPrompt, MAX_PERSISTED_SYSTEM_PROMPT_CHARS) ||
@@ -51,6 +57,7 @@ export function sanitizeConversationForPersistence(conversation: Conversation): 
       .slice(-MAX_PERSISTED_AGENT_RUNS)
       .map((run) => sanitizeAgentRun(run)),
     ...(conversation.usage ? { usage: sanitizeUsage(conversation.usage) } : {}),
+    ...(semanticMemoryHandoff ? { semanticMemoryHandoff } : {}),
   };
 }
 

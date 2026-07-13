@@ -53,11 +53,13 @@ jest.mock('../../../src/services/memory/facts/exactReplacementQueries', () => ({
 }));
 
 import {
-  findLastClosedTurn,
-  normalizeTerminalClosedTurnMessages,
   processIngestionTurn,
   syncWorkingMemoryFromTurn,
 } from '../../../src/services/memory/turnProcessor';
+import {
+  findLastClosedTurn,
+  normalizeTerminalClosedTurnMessages,
+} from '../../../src/services/memory/closedTurn';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 

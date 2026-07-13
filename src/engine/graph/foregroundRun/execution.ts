@@ -34,6 +34,7 @@ import {
   type PendingVerifiedProcedureObservation,
 } from '../../../services/memory/verifiedProcedure/executionSession';
 import { resolveGraphTaskId } from '../../goals/graphTaskScope';
+import { enforceSemanticMemoryHandoffGate } from './semanticMemoryHandoffGate';
 
 function buildModelReadyMessages(messages: Message[]): Message[] {
   return deduplicateToolResults(ensureToolResultPairing(messages));
@@ -221,6 +222,19 @@ async function executeReservedForegroundConversationRun(
     clearForegroundRequestIfCurrent();
     return;
   }
+
+  const semanticMemoryGate = await enforceSemanticMemoryHandoffGate({
+    signal: abortController.signal,
+    conversation: runConversation,
+    conversationId,
+    durability: context.durability,
+    owner: projectionOwner,
+    closeReservationFailure,
+    clearForegroundRequestIfCurrent,
+    isCurrentRunInvocation,
+    setChatError: context.helpers.setChatError,
+  });
+  if (semanticMemoryGate === 'stopped') return;
 
   const { finalizationProviderContext, model, provider, providerWithApiKey } = preflight;
   const executionContext = resolveForegroundConversationExecutionContext({

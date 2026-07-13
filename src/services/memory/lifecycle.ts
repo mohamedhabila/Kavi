@@ -162,6 +162,16 @@ export async function runMemoryBackgroundFlush(): Promise<void> {
   });
 }
 
+/** Install the app-state runtime and request a non-blocking foreground drain. */
+export function scheduleMemoryIngestionDrainFromAppState(): void {
+  const settings = useSettingsStore.getState();
+  if (settings.disableLongTermMemory) return;
+  scheduleIngestionDrain({
+    loadMessagesForThread,
+    loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
+  });
+}
+
 // ── Main entry: record completed turn ─────────────────────────────────────
 
 export interface RecordCompletedTurnForMemoryInput {

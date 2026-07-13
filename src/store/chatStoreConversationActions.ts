@@ -4,6 +4,7 @@ import { getDefaultConversationTitle } from '../utils/conversation';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { resolveConversationWorkspaceTargetId } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
+import { captureSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 type ChatStoreGet = StoreApi<ChatState>['getState'];
@@ -19,6 +20,37 @@ function buildEmptyConversationUsage() {
     totalCost: 0,
     totalCalls: 0,
   };
+}
+
+function captureActiveMemoryHandoff(get: ChatStoreGet) {
+  const state = get();
+  const active = state.activeConversationId
+    ? state.conversations.find((conversation) => conversation.id === state.activeConversationId)
+    : undefined;
+  return captureSemanticMemoryHandoff(active);
+}
+
+function attachActivationMemoryHandoff(
+  state: Pick<ChatState, 'activeConversationId' | 'conversations'>,
+  targetId: string,
+) {
+  if (!state.activeConversationId || state.activeConversationId === targetId) {
+    return state.conversations;
+  }
+  const target = state.conversations.find((conversation) => conversation.id === targetId);
+  if (!target || target.semanticMemoryHandoff || target.modelProjectionOwner) {
+    return state.conversations;
+  }
+  const source = state.conversations.find(
+    (conversation) => conversation.id === state.activeConversationId,
+  );
+  const handoff = captureSemanticMemoryHandoff(source);
+  if (!handoff) return state.conversations;
+  return state.conversations.map((conversation) =>
+    conversation.id === targetId
+      ? { ...conversation, semanticMemoryHandoff: handoff }
+      : conversation,
+  );
 }
 
 export function createConversationStoreActions(
@@ -42,6 +74,8 @@ export function createConversationStoreActions(
       const now = Date.now();
       const id = generateId();
       const workspaceTargetId = resolveConversationWorkspaceTargetId();
+      const semanticMemoryHandoff =
+        options?.activate === false ? undefined : captureActiveMemoryHandoff(get);
       const newConversation = {
         id,
         title: getDefaultConversationTitle(),
@@ -57,6 +91,7 @@ export function createConversationStoreActions(
         logs: [],
         agentRuns: [],
         ...(workspaceTargetId ? { workspaceTargetId } : {}),
+        ...(semanticMemoryHandoff ? { semanticMemoryHandoff } : {}),
       };
       set((state) => ({
         conversations: [newConversation, ...state.conversations],
@@ -82,7 +117,10 @@ export function createConversationStoreActions(
           : undefined;
       if (existing) {
         if (options?.activate !== false) {
-          set({ activeConversationId: existing.id });
+          set((state) => ({
+            conversations: attachActivationMemoryHandoff(state, existing.id),
+            activeConversationId: existing.id,
+          }));
           requestChatStorePersistenceCheckpoint();
         }
         return existing.id;
@@ -90,6 +128,8 @@ export function createConversationStoreActions(
       const now = Date.now();
       const id = generateId();
       const workspaceTargetId = resolveConversationWorkspaceTargetId();
+      const semanticMemoryHandoff =
+        options?.activate === false ? undefined : captureActiveMemoryHandoff(get);
       const newConversation = {
         id,
         title: getDefaultConversationTitle(),
@@ -106,6 +146,7 @@ export function createConversationStoreActions(
         logs: [],
         agentRuns: [],
         ...(workspaceTargetId ? { workspaceTargetId } : {}),
+        ...(semanticMemoryHandoff ? { semanticMemoryHandoff } : {}),
       };
       set((state) => ({
         conversations: [newConversation, ...state.conversations],
@@ -116,7 +157,7 @@ export function createConversationStoreActions(
     },
 
     createSideThread: (parentConversationId, options) => {
-      const { conversations } = get();
+      const { conversations, activeConversationId } = get();
       const parent = conversations.find((c) => c.id === parentConversationId);
       if (!parent) return null;
       if (parent.isSideThread) return null;
@@ -124,6 +165,16 @@ export function createConversationStoreActions(
       const now = Date.now();
       const id = generateId();
       const workspaceTargetId = resolveConversationWorkspaceTargetId(parent.workspaceTargetId);
+      const active = activeConversationId
+        ? conversations.find((conversation) => conversation.id === activeConversationId)
+        : undefined;
+      const source =
+        active?.id === parent.id ||
+        (active?.isSideThread && active.parentConversationId === parent.id)
+          ? active
+          : parent;
+      const semanticMemoryHandoff =
+        options?.activate === false ? undefined : captureSemanticMemoryHandoff(source);
       const sideThread = {
         id,
         title: options?.title ?? `↳ ${parent.title}`,
@@ -141,6 +192,7 @@ export function createConversationStoreActions(
         logs: [],
         agentRuns: [],
         ...(workspaceTargetId ? { workspaceTargetId } : {}),
+        ...(semanticMemoryHandoff ? { semanticMemoryHandoff } : {}),
       };
       set((state) => ({
         conversations: [sideThread, ...state.conversations],
@@ -166,15 +218,17 @@ export function createConversationStoreActions(
     },
 
     setActiveConversation: (id) => {
-      set({ activeConversationId: id });
+      set((state) => ({
+        conversations: id ? attachActivationMemoryHandoff(state, id) : state.conversations,
+        activeConversationId: id,
+      }));
       requestChatStorePersistenceCheckpoint();
     },
 
     deleteConversation: (id) => {
       set((state) => ({
         conversations: state.conversations.filter((c) => c.id !== id),
-        activeConversationId:
-          state.activeConversationId === id ? null : state.activeConversationId,
+        activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
       }));
       requestChatStorePersistenceCheckpoint();
     },

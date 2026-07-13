@@ -13,7 +13,7 @@ import {
   waitForNextTurnMemoryConsistency,
   type NextTurnMemoryConsistencyResult,
 } from './nextTurnConsistency';
-import { findLastClosedTurn } from './turnProcessor';
+import { findLastClosedTurn } from './closedTurn';
 import {
   resolveMemoryContextStrategy,
   resolveMemoryRetrievalStrategy,
