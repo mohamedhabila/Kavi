@@ -63,6 +63,19 @@ export interface SubAgentMessageEvent {
   snapshot: SubAgentSnapshot;
 }
 
+export type MessageMemoryPublicationDisposition =
+  | null
+  | 'enqueued'
+  | 'opt_out'
+  | 'ephemeral_thread'
+  | 'withdrawn';
+
+/** Content-free durable state for publishing this exact assistant message to memory. */
+export interface MessageMemoryPublication {
+  readonly version: 1;
+  readonly disposition: MessageMemoryPublicationDisposition;
+}
+
 export interface Message {
   id: string;
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -76,6 +89,7 @@ export interface Message {
   reasoning?: string;
   providerReplay?: MessageProviderReplay;
   assistantMetadata?: AssistantMessageMetadata;
+  memoryPublication?: MessageMemoryPublication;
   effectId?: 'confetti' | 'balloons' | 'spotlight';
   subAgentEvent?: SubAgentMessageEvent;
 }
