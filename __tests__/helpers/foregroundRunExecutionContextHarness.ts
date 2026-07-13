@@ -1,5 +1,7 @@
 import type { Conversation, ModelProjectionOwner } from '../../src/types/conversation';
+import type { MessageMemoryPublicationDisposition } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import type { TransitionMessageMemoryPublicationResult } from '../../src/store/chatStoreTypes';
 import type { ForegroundRunPreflightResult } from '../../src/engine/graph/foregroundRun/preflight';
 import {
   appendAgentRunCheckpointInConversation,
@@ -14,6 +16,10 @@ import {
   updateAgentRunPlanInConversation,
 } from '../../src/store/agentRuns/graph';
 import { useChatStore } from '../../src/store/useChatStore';
+import {
+  normalizeMessageMemoryPublication,
+  resolveMessageMemoryPublicationTransition,
+} from '../../src/utils/messageMemoryPublication';
 
 export function createConversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
@@ -76,6 +82,12 @@ export function createExecutionContext(params: {
   recordConversationTurnMemory: jest.Mock;
   ensureCanonicalConversation: jest.Mock;
 }) {
+  if (!params.recordConversationTurnMemory.getMockImplementation()) {
+    params.recordConversationTurnMemory.mockResolvedValue({
+      disposition: 'enqueued',
+      jobId: 'job-foreground-test',
+    });
+  }
   let idSequence = 0;
   let runSequence = 0;
   let currentConversation = params.conversation;
@@ -157,6 +169,43 @@ export function createExecutionContext(params: {
           message.id === messageId ? { ...message, assistantMetadata } : message,
         ),
       });
+    },
+  );
+  const transitionMessageMemoryPublication = jest.fn(
+    (
+      conversationId: string,
+      messageId: string,
+      disposition: MessageMemoryPublicationDisposition,
+    ): TransitionMessageMemoryPublicationResult => {
+      if (conversationId !== currentConversation.id) {
+        return { status: 'rejected', reason: 'source_unavailable' };
+      }
+      const messageIndexes = currentConversation.messages.flatMap((message, index) =>
+        message.id === messageId ? [index] : [],
+      );
+      if (messageIndexes.length !== 1) {
+        return {
+          status: 'rejected',
+          reason: messageIndexes.length === 0 ? 'source_unavailable' : 'source_identity_invalid',
+        };
+      }
+      const messageIndex = messageIndexes[0]!;
+      const message = currentConversation.messages[messageIndex]!;
+      const transition = resolveMessageMemoryPublicationTransition(
+        normalizeMessageMemoryPublication(message.memoryPublication),
+        { version: 1, disposition },
+      );
+      if (!transition.applied) return { status: 'rejected', reason: 'transition_conflict' };
+      if (transition.changed) {
+        const messages = [...currentConversation.messages];
+        messages[messageIndex] = { ...message, memoryPublication: transition.publication };
+        commitConversation({ ...currentConversation, messages });
+      }
+      return {
+        status: 'applied',
+        changed: transition.changed,
+        publication: transition.publication,
+      };
     },
   );
   const ensureAgentRunFinalResponse = jest.fn(
@@ -329,6 +378,7 @@ export function createExecutionContext(params: {
       completeAgentRun,
       setAgentRunPhase,
       startAgentRun,
+      transitionMessageMemoryPublication,
       updateAgentRunAsyncWork,
       updateAgentRunControlGraph,
       updateAgentRunPlan,

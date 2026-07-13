@@ -9,6 +9,7 @@ import {
   createReadyPreflightResult,
 } from '../helpers/foregroundRunExecutionContextHarness';
 import type { PendingVerifiedProcedureObservation } from '../../src/services/memory/verifiedProcedure/executionSession';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 const mockCommitPendingVerifiedProcedureObservation = jest.fn();
 
@@ -44,6 +45,7 @@ function deliverFinalAssistantMessage(callbacks: Parameters<typeof runOrchestrat
 describe('foreground terminal memory publication', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    useSettingsStore.setState({ disableLongTermMemory: false });
   });
 
   it.each([
@@ -109,10 +111,10 @@ describe('foreground terminal memory publication', () => {
   it('blocks journal completion and projection release until terminal memory is published', async () => {
     const conversation = createConversation({ mode: 'chitchat' });
     const provider = createProvider('target-provider', 'target-model');
-    let resolvePublication = () => {};
+    let resolvePublication!: (value: { disposition: 'enqueued'; jobId: string }) => void;
     const recordConversationTurnMemory = jest.fn(
       () =>
-        new Promise<void>((resolve) => {
+        new Promise<{ disposition: 'enqueued'; jobId: string }>((resolve) => {
           resolvePublication = resolve;
         }),
     );
@@ -139,13 +141,140 @@ describe('foreground terminal memory publication', () => {
 
     expect(context.durability.completeModelExecution).not.toHaveBeenCalled();
     expect(context.durability.releaseModelProjection).not.toHaveBeenCalled();
+    expect(context.durability.flushChatState).toHaveBeenCalledTimes(2);
+    expect(
+      context.getCurrentConversation().messages.find((message) => message.role === 'assistant')
+        ?.memoryPublication,
+    ).toEqual({ version: 1, disposition: null });
 
-    resolvePublication();
+    resolvePublication({ disposition: 'enqueued', jobId: 'job-deferred' });
     await execution;
 
+    expect(context.durability.flushChatState).toHaveBeenCalledTimes(4);
+    expect(
+      context.getCurrentConversation().messages.find((message) => message.role === 'assistant')
+        ?.memoryPublication,
+    ).toEqual({ version: 1, disposition: 'enqueued' });
+    expect(context.durability.flushChatState.mock.invocationCallOrder[1]).toBeLessThan(
+      recordConversationTurnMemory.mock.invocationCallOrder[0],
+    );
+    expect(recordConversationTurnMemory.mock.invocationCallOrder[0]).toBeLessThan(
+      context.durability.flushChatState.mock.invocationCallOrder[2],
+    );
+    expect(context.durability.flushChatState.mock.invocationCallOrder[2]).toBeLessThan(
+      context.durability.completeModelExecution.mock.invocationCallOrder[0],
+    );
     expect(context.durability.completeModelExecution).toHaveBeenCalledTimes(1);
     expect(context.durability.releaseModelProjection).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['opt_out', true, false],
+    ['ephemeral_thread', false, true],
+  ] as const)(
+    'persists an initial %s receipt without invoking durable memory publication',
+    async (disposition, disabled, isSideThread) => {
+      useSettingsStore.setState({ disableLongTermMemory: disabled });
+      const conversation = createConversation({ mode: 'chitchat', isSideThread });
+      const provider = createProvider('target-provider', 'target-model');
+      const recordConversationTurnMemory = jest.fn();
+      const context = createExecutionContext({
+        conversation,
+        providers: [provider],
+        ensureCanonicalConversation: jest.fn(),
+        recordConversationTurnMemory,
+      });
+      mockedResolveForegroundRunPreflight.mockResolvedValue(
+        createReadyPreflightResult({ conversation, provider }),
+      );
+      mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+        deliverFinalAssistantMessage(callbacks);
+        callbacks.onDone();
+        return { terminalDisposition: 'final_candidate' };
+      });
+
+      await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+      expect(recordConversationTurnMemory).not.toHaveBeenCalled();
+      expect(
+        context.getCurrentConversation().messages.find((message) => message.role === 'assistant')
+          ?.memoryPublication,
+      ).toEqual({ version: 1, disposition });
+      expect(context.durability.flushChatState).toHaveBeenCalledTimes(3);
+      expect(context.durability.completeModelExecution).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('reuses an already terminal receipt without publishing the turn again', async () => {
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const recordConversationTurnMemory = jest.fn();
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory,
+    });
+    mockedResolveForegroundRunPreflight.mockResolvedValue(
+      createReadyPreflightResult({ conversation, provider }),
+    );
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      deliverFinalAssistantMessage(callbacks);
+      const final = context
+        .getCurrentConversation()
+        .messages.find((message) => message.role === 'assistant');
+      expect(final).toBeDefined();
+      expect(
+        context.store.transitionMessageMemoryPublication(conversation.id, final!.id, 'opt_out'),
+      ).toMatchObject({ status: 'applied' });
+      callbacks.onDone();
+      return { terminalDisposition: 'final_candidate' };
+    });
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(recordConversationTurnMemory).not.toHaveBeenCalled();
+    expect(context.durability.flushChatState).toHaveBeenCalledTimes(3);
+    expect(context.durability.completeModelExecution).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([2, 3])(
+    'withholds journal completion when source changes during receipt flush %i',
+    async (mutationFlushNumber) => {
+      const conversation = createConversation({ mode: 'chitchat' });
+      const provider = createProvider('target-provider', 'target-model');
+      const recordConversationTurnMemory = jest.fn();
+      const context = createExecutionContext({
+        conversation,
+        providers: [provider],
+        ensureCanonicalConversation: jest.fn(),
+        recordConversationTurnMemory,
+      });
+      context.durability.flushChatState.mockImplementation(async () => {
+        if (context.durability.flushChatState.mock.calls.length !== mutationFlushNumber) return;
+        const final = context
+          .getCurrentConversation()
+          .messages.find((message) => message.role === 'assistant');
+        if (final) context.store.updateMessage(conversation.id, final.id, 'Changed during flush');
+      });
+      mockedResolveForegroundRunPreflight.mockResolvedValue(
+        createReadyPreflightResult({ conversation, provider }),
+      );
+      mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+        deliverFinalAssistantMessage(callbacks);
+        callbacks.onDone();
+        return { terminalDisposition: 'final_candidate' };
+      });
+
+      await expect(
+        executeForegroundConversationRun({ context, conversationId: conversation.id }),
+      ).rejects.toThrow('foreground_terminal_memory_source_changed');
+
+      expect(recordConversationTurnMemory).toHaveBeenCalledTimes(mutationFlushNumber - 2);
+      expect(context.durability.completeModelExecution).not.toHaveBeenCalled();
+      expect(context.durability.releaseModelProjection).not.toHaveBeenCalled();
+    },
+  );
 
   it('publishes an exact untracked agentic turn without creating a synthetic run', async () => {
     const conversation = createConversation({
@@ -432,6 +561,11 @@ describe('foreground terminal memory publication', () => {
     expect(context.durability.relinquishModelExecutionProcessOwnership).toHaveBeenCalledWith(
       context.durability.createModelExecution.mock.calls[0][0].runId,
     );
+    expect(
+      context.getCurrentConversation().messages.find((message) => message.role === 'assistant')
+        ?.memoryPublication,
+    ).toEqual({ version: 1, disposition: null });
+    expect(context.durability.flushChatState).toHaveBeenCalledTimes(2);
     expect(context.durability.completeModelExecution).not.toHaveBeenCalled();
     expect(context.durability.releaseModelProjection).not.toHaveBeenCalled();
   });

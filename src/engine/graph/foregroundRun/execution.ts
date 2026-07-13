@@ -385,13 +385,6 @@ async function executeReservedForegroundConversationRun(
         throw new Error('model_projection_ownership_changed');
       }
       let projectedConversation = context.helpers.getConversation(conversationId);
-      if (projectionOwner) {
-        await context.durability.flushChatState();
-        if (!context.durability.ownsModelProjection(conversationId, projectionOwner)) {
-          throw new Error('model_projection_ownership_changed');
-        }
-        projectedConversation = context.helpers.getConversation(conversationId);
-      }
       const publication = await publishForegroundTerminalMemory({
         allowIncompleteHandoff: options?.allowIncompleteHandoff === true,
         assertProjectionOwnership: () => {
@@ -406,12 +399,15 @@ async function executeReservedForegroundConversationRun(
         conversationId,
         currentAssistantMessageId: projectionMessageId,
         finalizationProviderContext,
+        flushChatState: context.durability.flushChatState,
         getConversation: () => context.helpers.getConversation(conversationId),
+        getConversations: context.helpers.getConversations,
         memoryConversationId: workspaceTarget.workspaceConversationId,
         orchestratorTerminalDisposition,
         recordConversationTurnMemory: context.helpers.recordConversationTurnMemory,
         runId: bootstrapResult.trackedAgentRunId,
         status,
+        transitionMessageMemoryPublication: context.store.transitionMessageMemoryPublication,
       });
       projectedConversation = publication.conversation;
       journalStatus = publication.journalStatus;

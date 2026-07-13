@@ -395,6 +395,8 @@ export const ChatScreen: React.FC = () => {
       completeAgentRun,
       setAgentRunPhase,
       startAgentRun,
+      transitionMessageMemoryPublication:
+        useChatStore.getState().transitionMessageMemoryPublication,
       updateAgentRunAsyncWork,
       updateAgentRunControlGraph,
       updateAgentRunPlan,

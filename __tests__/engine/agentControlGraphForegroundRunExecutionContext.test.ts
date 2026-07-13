@@ -151,18 +151,21 @@ describe('foreground run target-conversation execution context', () => {
     expect(context.durability.createModelExecution.mock.invocationCallOrder[0]).toBeLessThan(
       context.durability.activateModelExecution.mock.invocationCallOrder[0],
     );
-    expect(context.durability.flushChatState).toHaveBeenCalledTimes(3);
+    expect(context.durability.flushChatState).toHaveBeenCalledTimes(4);
     expect(context.durability.flushChatState.mock.invocationCallOrder[1]).toBeLessThan(
       recordConversationTurnMemory.mock.invocationCallOrder[0],
     );
     expect(recordConversationTurnMemory.mock.invocationCallOrder[0]).toBeLessThan(
+      context.durability.flushChatState.mock.invocationCallOrder[2],
+    );
+    expect(context.durability.flushChatState.mock.invocationCallOrder[2]).toBeLessThan(
       context.durability.completeModelExecution.mock.invocationCallOrder[0],
     );
     expect(context.durability.completeModelExecution.mock.invocationCallOrder[0]).toBeLessThan(
       context.durability.releaseModelProjection.mock.invocationCallOrder[0],
     );
     expect(context.durability.releaseModelProjection.mock.invocationCallOrder[0]).toBeLessThan(
-      context.durability.flushChatState.mock.invocationCallOrder[2],
+      context.durability.flushChatState.mock.invocationCallOrder[3],
     );
   });
 

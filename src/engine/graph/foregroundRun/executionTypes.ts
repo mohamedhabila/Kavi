@@ -63,6 +63,7 @@ export type ForegroundConversationRunStoreActions = Pick<
   | 'completeAgentRun'
   | 'setAgentRunPhase'
   | 'startAgentRun'
+  | 'transitionMessageMemoryPublication'
   | 'updateAgentRunAsyncWork'
   | 'updateAgentRunControlGraph'
   | 'updateAgentRunPlan'

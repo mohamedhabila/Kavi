@@ -590,6 +590,7 @@ export function createForegroundScenarioRuntime(
       completeAgentRun: store.completeAgentRun,
       setAgentRunPhase: store.setAgentRunPhase,
       startAgentRun: store.startAgentRun,
+      transitionMessageMemoryPublication: store.transitionMessageMemoryPublication,
       updateAgentRunAsyncWork: store.updateAgentRunAsyncWork,
       updateAgentRunControlGraph: store.updateAgentRunControlGraph,
       updateAgentRunPlan: store.updateAgentRunPlan,
