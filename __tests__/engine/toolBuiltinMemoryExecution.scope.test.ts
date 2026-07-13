@@ -1,5 +1,6 @@
 const mockExecuteMemoryRecall = jest.fn();
 const mockExecuteMemorySearch = jest.fn();
+const mockExecuteMemoryRemember = jest.fn();
 const mockExecuteMemoryPin = jest.fn();
 const mockExecuteMemoryUnpin = jest.fn();
 const mockExecuteMemoryInvalidate = jest.fn();
@@ -33,7 +34,7 @@ jest.mock('../../src/services/memory/memoryScopeStore', () => ({
 jest.mock('../../src/engine/tools/builtin-memory', () => ({
   executeMemoryRecall: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
   executeMemorySearch: (...args: unknown[]) => mockExecuteMemorySearch(...args),
-  executeMemoryRemember: jest.fn(),
+  executeMemoryRemember: (...args: unknown[]) => mockExecuteMemoryRemember(...args),
   executeMemoryPin: (...args: unknown[]) => mockExecuteMemoryPin(...args),
   executeMemoryUnpin: (...args: unknown[]) => mockExecuteMemoryUnpin(...args),
   executeMemoryForget: (...args: unknown[]) => mockExecuteMemoryForget(...args),
@@ -54,9 +55,65 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockExecuteMemoryRecall.mockReturnValue('{"ok":true}');
   mockExecuteMemorySearch.mockResolvedValue('{"ok":true}');
+  mockExecuteMemoryRemember.mockResolvedValue('{"ok":true}');
 });
 
 describe('builtin memory execution scope', () => {
+  it('routes persisted execution authority only through the code-owned remember context', async () => {
+    const executionClaim = Object.freeze({
+      executionRunId: 'execution-remember',
+      toolCallId: 'tool-call-remember',
+      claimedAt: 2_000_000_000_000,
+    });
+    const providerArgs = {
+      subject: 'user',
+      predicate: 'timezone',
+      value: 'UTC+1',
+      scope: 'global',
+      sourceRunId: 'provider-forged-run',
+    };
+
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      authorizedEffectExecutionClaim: executionClaim,
+      context: {
+        ...BASE_PARAMS.context,
+        currentUserMessage: {
+          id: 'user-message-remember',
+          text: 'My timezone is UTC+1.',
+        },
+        agentRunId: 'agent-run-remember',
+      },
+      name: 'memory_remember',
+      args: providerArgs,
+    });
+
+    expect(mockExecuteMemoryRemember).toHaveBeenCalledWith(
+      {
+        ...providerArgs,
+        sourceRunId: 'agent-run-remember',
+      },
+      {
+        executionClaim,
+        requestEvidence: {
+          memoryConversationId: 'delegated-memory-scope',
+          sourceThreadId: 'child-thread',
+          taskId: 'active-task',
+          userMessageId: 'user-message-remember',
+          userMessageText: 'My timezone is UTC+1.',
+        },
+      },
+    );
+    expect(mockExecuteMemoryRemember.mock.calls[0]?.[0]).not.toHaveProperty('executionClaim');
+    expect(providerArgs).toEqual({
+      subject: 'user',
+      predicate: 'timezone',
+      value: 'UTC+1',
+      scope: 'global',
+      sourceRunId: 'provider-forged-run',
+    });
+  });
+
   it.each([
     ['memory_recall', mockExecuteMemoryRecall, { subject: 'project' }],
     ['memory_search', mockExecuteMemorySearch, { query: 'project state' }],

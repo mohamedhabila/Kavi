@@ -41,7 +41,7 @@ function verifiedWriteResult(): string {
 }
 
 function writeInput(
-  execute: () => Promise<string>,
+  execute: AuthorizedToolEffectDispatchInput['execute'],
   overrides: Partial<AuthorizedToolEffectDispatchInput> = {},
 ): AuthorizedToolEffectDispatchInput {
   return {
@@ -109,7 +109,7 @@ const SKILL_EVIDENCE: RuntimeExternalToolEvidence = {
 
 function dynamicInput(
   evidence: RuntimeExternalToolEvidence,
-  execute: () => Promise<string>,
+  execute: AuthorizedToolEffectDispatchInput['execute'],
   overrides: Partial<AuthorizedToolEffectDispatchInput> = {},
 ): AuthorizedToolEffectDispatchInput {
   const suffix = evidence.provenance.source;
@@ -156,6 +156,23 @@ afterEach(() => {
 });
 
 describe('authorized durable tool effect dispatch', () => {
+  it('hands the executor only the exact persisted claim after authorization', async () => {
+    const execute = jest.fn(async () => verifiedWriteResult());
+    const input = writeInput(execute);
+
+    await expect(dispatchAuthorizedToolEffect(input, { now: () => 100 })).resolves.toMatchObject({
+      kind: 'executed',
+    });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![0]).toEqual({
+      executionRunId: 'execution-run-1',
+      toolCallId: 'tool-call-write-1',
+      claimedAt: 100,
+    });
+    expect(Object.isFrozen(execute.mock.calls[0]![0])).toBe(true);
+  });
+
   it.each([
     ['MCP', MCP_EVIDENCE],
     ['skill', SKILL_EVIDENCE],

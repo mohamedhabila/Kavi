@@ -26,6 +26,8 @@ import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useChatStore } from '../../src/store/useChatStore';
 import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { createGoal } from '../../src/engine/goals/types';
+import type { ToolExecutionContext } from '../../src/engine/tools/toolExecutionContext';
+import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -36,6 +38,34 @@ const MEMORY_TOOLS = [
   'memory_pin',
   'memory_unpin',
 ];
+
+async function executeGroundedRemember(input: {
+  args: Record<string, unknown>;
+  threadId: string;
+  userMessageId: string;
+  userMessageText: string;
+  context?: ToolExecutionContext;
+}): Promise<string> {
+  const memoryConversationId = input.context?.memoryConversationId ?? input.threadId;
+  const execution = memoryRememberExecution({
+    memoryConversationId,
+    sourceThreadId: input.threadId,
+    taskId:
+      input.context?.controlGraphGoals?.find((goal) => goal.status === 'active')?.id ?? null,
+    userMessageId: input.userMessageId,
+    userMessageText: input.userMessageText,
+  });
+  return executeTool(
+    'memory_remember',
+    JSON.stringify(input.args),
+    input.threadId,
+    {
+      ...input.context,
+      currentUserMessage: { id: input.userMessageId, text: input.userMessageText },
+    },
+    execution.executionClaim,
+  );
+}
 
 beforeEach(() => {
   closeMemoryDb();
@@ -66,23 +96,18 @@ describe('structured memory tool executor — opt-out gate', () => {
 
   it('still honors explicit memory_forget withdrawal while memory is disabled', async () => {
     const remembered = JSON.parse(
-      await executeTool(
-        'memory_remember',
-        JSON.stringify({
+      await executeGroundedRemember({
+        args: {
           subject: 'user',
           subjectType: 'self',
           predicate: 'usual architecture review duration',
           value: '30 minutes',
           scope: 'global',
-        }),
-        'conv-1',
-        {
-          currentUserMessage: {
-            id: 'user-review-duration-withdrawal',
-            text: 'I usually keep architecture reviews to 30 minutes.',
-          },
         },
-      ),
+        threadId: 'conv-1',
+        userMessageId: 'user-review-duration-withdrawal',
+        userMessageText: 'I usually keep architecture reviews to 30 minutes.',
+      }),
     );
     useSettingsStore.setState({ disableLongTermMemory: true });
 
@@ -100,23 +125,18 @@ describe('structured memory tool executor — opt-out gate', () => {
 
   it('rejects memory_manage withdrawal aliases and keeps correction gated under opt-out', async () => {
     const remembered = JSON.parse(
-      await executeTool(
-        'memory_remember',
-        JSON.stringify({
+      await executeGroundedRemember({
+        args: {
           subject: 'user',
           subjectType: 'self',
           predicate: 'usual architecture review duration',
           value: '45 minutes',
           scope: 'global',
-        }),
-        'conv-1',
-        {
-          currentUserMessage: {
-            id: 'user-review-duration-manage',
-            text: 'I usually keep architecture reviews to 45 minutes.',
-          },
         },
-      ),
+        threadId: 'conv-1',
+        userMessageId: 'user-review-duration-manage',
+        userMessageText: 'I usually keep architecture reviews to 45 minutes.',
+      }),
     );
     useSettingsStore.setState({ disableLongTermMemory: true });
 
@@ -171,16 +191,17 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('adds runtime conversation provenance to memory_remember writes', async () => {
-    const raw = await executeTool(
-      'memory_remember',
-      JSON.stringify({
+    const raw = await executeGroundedRemember({
+      args: {
         subject: 'user',
         predicate: 'timezone',
         value: 'UTC+1',
         scope: 'conversation',
-      }),
-      'conv-runtime-memory',
-    );
+      },
+      threadId: 'conv-runtime-memory',
+      userMessageId: 'user-runtime-timezone',
+      userMessageText: 'My timezone is UTC+1.',
+    });
     const parsed = JSON.parse(raw);
 
     expect(parsed.ok).toBe(true);
@@ -190,20 +211,21 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('writes memory_remember facts to the explicit memory namespace with source-thread provenance', async () => {
-    const raw = await executeTool(
-      'memory_remember',
-      JSON.stringify({
+    const raw = await executeGroundedRemember({
+      args: {
         subject: 'project',
         predicate: 'release_artifact',
-        value: 'build-42',
+        value: 'artifact-build',
         scope: 'conversation',
-      }),
-      'child-runtime-memory',
-      {
+      },
+      threadId: 'child-runtime-memory',
+      userMessageId: 'user-release-artifact',
+      userMessageText: 'project release_artifact is artifact-build.',
+      context: {
         memoryConversationId: 'parent-runtime-memory',
         workspaceConversationId: 'parent-runtime-files',
       },
-    );
+    });
     const parsed = JSON.parse(raw);
 
     expect(parsed.ok).toBe(true);
@@ -213,9 +235,8 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('ignores provider-supplied null provenance for memory_remember writes', async () => {
-    const raw = await executeTool(
-      'memory_remember',
-      JSON.stringify({
+    const raw = await executeGroundedRemember({
+      args: {
         subject: 'project',
         predicate: 'build_marker',
         value: 'artifact-null',
@@ -225,14 +246,16 @@ describe('structured memory tool executor — opt-out gate', () => {
         originTaskId: 'model-task',
         sourceMessageId: 'model-message',
         sourceRunId: 'model-run',
-      }),
-      'child-runtime-memory',
-      {
+      },
+      threadId: 'child-runtime-memory',
+      userMessageId: 'user-build-marker-null',
+      userMessageText: 'project build_marker is artifact-null.',
+      context: {
         memoryConversationId: 'parent-runtime-memory',
         workspaceConversationId: 'parent-runtime-files',
         agentRunId: 'runtime-run',
       },
-    );
+    });
     const parsed = JSON.parse(raw);
 
     expect(parsed.ok).toBe(true);
@@ -240,16 +263,15 @@ describe('structured memory tool executor — opt-out gate', () => {
     expect(parsed.fact.originConversationId).toBe('parent-runtime-memory');
     expect(parsed.fact.originThreadId).toBe('child-runtime-memory');
     expect(parsed.fact.originTaskId).toBeNull();
-    expect(parsed.fact.sourceMessageId).toBeNull();
+    expect(parsed.fact.sourceMessageId).toBe('user-build-marker-null');
     expect(listFacts({ originConversationId: 'parent-runtime-memory' })[0]?.sourceRunId).toBe(
       'runtime-run',
     );
   });
 
   it('ignores provider-supplied provenance overrides for memory_remember writes', async () => {
-    const raw = await executeTool(
-      'memory_remember',
-      JSON.stringify({
+    const raw = await executeGroundedRemember({
+      args: {
         subject: 'project',
         predicate: 'build_marker',
         value: 'artifact-hostile',
@@ -259,13 +281,15 @@ describe('structured memory tool executor — opt-out gate', () => {
         originTaskId: 'wrong-run',
         sourceMessageId: 'wrong-message',
         sourceRunId: 'wrong-run',
-      }),
-      'child-runtime-memory',
-      {
+      },
+      threadId: 'child-runtime-memory',
+      userMessageId: 'user-build-marker-hostile',
+      userMessageText: 'project build_marker is artifact-hostile.',
+      context: {
         memoryConversationId: 'parent-runtime-memory',
         workspaceConversationId: 'parent-runtime-files',
       },
-    );
+    });
     const parsed = JSON.parse(raw);
 
     expect(parsed.ok).toBe(true);
@@ -273,34 +297,55 @@ describe('structured memory tool executor — opt-out gate', () => {
     expect(parsed.fact.originConversationId).toBe('parent-runtime-memory');
     expect(parsed.fact.originThreadId).toBe('child-runtime-memory');
     expect(parsed.fact.originTaskId).toBeNull();
-    expect(parsed.fact.sourceMessageId).toBeNull();
+    expect(parsed.fact.sourceMessageId).toBe('user-build-marker-hostile');
     expect(listFacts({ originConversationId: 'parent-runtime-memory' })[0]?.sourceRunId).toBeNull();
   });
 
+  it('rejects a present non-exact code-owned agent run instead of trimming it', async () => {
+    const raw = await executeGroundedRemember({
+      args: {
+        subject: 'project',
+        predicate: 'build_marker',
+        value: 'artifact-invalid-run',
+        scope: 'global',
+        sourceRunId: 'provider-forged-run',
+      },
+      threadId: 'child-runtime-memory',
+      userMessageId: 'user-invalid-runtime-run',
+      userMessageText: 'project build_marker is artifact-invalid-run.',
+      context: { agentRunId: ' runtime-run ' },
+    });
+
+    expect(JSON.parse(raw)).toMatchObject({ ok: false, code: 'internal' });
+    expect(listFacts()).toEqual([]);
+  });
+
   it('records active graph task provenance separately from source run provenance', async () => {
-    const raw = await executeTool(
-      'memory_remember',
-      JSON.stringify({
+    const context: ToolExecutionContext = {
+      memoryConversationId: 'parent-runtime-memory',
+      workspaceConversationId: 'parent-runtime-files',
+      agentRunId: 'runtime-run',
+      controlGraphGoals: [
+        createGoal({
+          id: 'task-active',
+          title: 'Ship the release',
+          status: 'active',
+          now: 1_000,
+        }),
+      ],
+    };
+    const raw = await executeGroundedRemember({
+      args: {
         subject: 'project',
         predicate: 'release_artifact',
         value: 'artifact-task',
         scope: 'session',
-      }),
-      'child-runtime-memory',
-      {
-        memoryConversationId: 'parent-runtime-memory',
-        workspaceConversationId: 'parent-runtime-files',
-        agentRunId: 'runtime-run',
-        controlGraphGoals: [
-          createGoal({
-            id: 'task-active',
-            title: 'Ship the release',
-            status: 'active',
-            now: 1_000,
-          }),
-        ],
       },
-    );
+      threadId: 'child-runtime-memory',
+      userMessageId: 'user-release-artifact-task',
+      userMessageText: 'project release_artifact is artifact-task.',
+      context,
+    });
     const parsed = JSON.parse(raw);
     const storedFact = listFacts({ originConversationId: 'parent-runtime-memory' })[0];
 
@@ -315,30 +360,32 @@ describe('structured memory tool executor — opt-out gate', () => {
       conversations: [{ id: 'persona-thread', personaId: 'assistant-persona' }],
     } as never);
     const global = JSON.parse(
-      await executeTool(
-        'memory_remember',
-        JSON.stringify({
+      await executeGroundedRemember({
+        args: {
           subject: 'user',
-          predicate: 'stable_timezone',
+          predicate: 'timezone',
           value: 'UTC+1',
           scope: 'global',
-        }),
-        'persona-thread',
-        { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
-      ),
+        },
+        threadId: 'persona-thread',
+        userMessageId: 'user-global-timezone',
+        userMessageText: 'My timezone is UTC+1.',
+        context: { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
+      }),
     );
     const persona = JSON.parse(
-      await executeTool(
-        'memory_remember',
-        JSON.stringify({
+      await executeGroundedRemember({
+        args: {
           subject: 'user',
-          predicate: 'assistant_tone',
+          predicate: 'role',
           value: 'warm',
           scope: 'persona',
-        }),
-        'persona-thread',
-        { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
-      ),
+        },
+        threadId: 'persona-thread',
+        userMessageId: 'user-persona-role',
+        userMessageText: 'My role is warm.',
+        context: { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
+      }),
     );
 
     expect(global).toMatchObject({
@@ -365,17 +412,18 @@ describe('structured memory tool executor — opt-out gate', () => {
 
   it('rejects session memory without an active task instead of changing scope', async () => {
     const parsed = JSON.parse(
-      await executeTool(
-        'memory_remember',
-        JSON.stringify({
+      await executeGroundedRemember({
+        args: {
           subject: 'project',
           predicate: 'draft_state',
           value: 'open',
           scope: 'session',
-        }),
-        'thread-1',
-        { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
-      ),
+        },
+        threadId: 'thread-1',
+        userMessageId: 'user-session-without-task',
+        userMessageText: 'project draft_state is open.',
+        context: { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
+      }),
     );
 
     expect(parsed).toMatchObject({ ok: false, code: 'invalid_args' });

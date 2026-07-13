@@ -180,6 +180,21 @@ describe('production tool lifecycle durable effect wiring', () => {
       code: 'grounding_required',
     });
     expect(JSON.parse(result)).not.toHaveProperty('code', 'tool_effect_reconciliation_required');
+    expect(mockedExecuteToolInner).toHaveBeenCalledWith(
+      'memory_remember',
+      expect.any(String),
+      'conversation-1',
+      expect.not.objectContaining({
+        executionRunId: expect.anything(),
+        toolCallId: expect.anything(),
+        authorizedEffectExecutionClaim: expect.anything(),
+      }),
+      {
+        executionRunId: 'execution-run-memory-rejected',
+        toolCallId: 'tool-call-memory-rejected',
+        claimedAt: expect.any(Number),
+      },
+    );
     expect(captureEffectReceipt).toHaveBeenCalledWith(
       expect.objectContaining({
         effectKind: 'memory.write',
@@ -441,6 +456,14 @@ describe('production tool lifecycle durable effect wiring', () => {
       contractIdentity: { kind: 'runtime_external', source: 'skill' },
     });
     expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(
+      {},
+      expect.not.objectContaining({
+        executionRunId: expect.anything(),
+        toolCallId: expect.anything(),
+        authorizedEffectExecutionClaim: expect.anything(),
+      }),
+    );
     expect(mockedExecuteToolInner).not.toHaveBeenCalled();
   });
 

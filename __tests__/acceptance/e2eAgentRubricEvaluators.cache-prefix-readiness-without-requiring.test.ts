@@ -1,16 +1,10 @@
 import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluators';
-import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
   return makeExpoSqliteMock();
 });
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { resetE2EWorkspaceSandbox } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
-import { executeMemoryRemember } from '../../src/engine/tools/builtin-memory';
-import {
-  buildScopedMemoryEvidenceDelta,
-  captureScopedMemoryEvidence,
-} from '../../src/services/memory/evidenceSnapshot';
 import {
   resetE2ENativeMobileFixtures,
   getE2ENativeMobileFixtureStateSnapshot,
@@ -18,66 +12,10 @@ import {
   tryExecuteE2ENativeMobileTool,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 import { withIngestionSourceSnapshot } from '../helpers/ingestionSourceSnapshotFixture';
-function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioResult {
-  return {
-    contentClass: 'synthetic_public',
-    fixtureId: 'fixture-a',
-    conversationId: 'conv-a',
-    toolCalls: [],
-    toolResults: [],
-    graphSnapshots: [],
-    memoryFinalState: {
-      capturedAt: 1,
-      scope: { memoryConversationId: 'conv-a', sourceThreadId: 'conv-a' },
-      facts: [],
-      episodes: [],
-      workingBlocks: [],
-      ingestionJobs: [],
-    },
-    usage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      totalTokens: 0,
-      eventCount: 0,
-    },
-    errors: [],
-    completed: true,
-    durationMs: 1,
-    userTurnCount: 1,
-    turnTraces: [],
-    ...overrides,
-  };
-}
-
-function buildResultWithMemoryEvidence(
-  conversationId: string,
-  overrides: Partial<E2EScenarioResult> = {},
-): E2EScenarioResult {
-  const scope = { memoryConversationId: conversationId, sourceThreadId: conversationId };
-  const before = {
-    capturedAt: 0,
-    scope,
-    facts: [],
-    episodes: [],
-    workingBlocks: [],
-    ingestionJobs: [],
-  };
-  const after = captureScopedMemoryEvidence(scope);
-  return buildResult({
-    conversationId,
-    memoryFinalState: after,
-    ...overrides,
-    turnTraces: [
-      {
-        memoryEvidence: {
-          delta: buildScopedMemoryEvidenceDelta(before, after),
-        },
-      } as E2EScenarioResult['turnTraces'][number],
-    ],
-  });
-}
+import {
+  buildE2ERubricResult as buildResult,
+  buildE2ERubricResultWithMemoryEvidence as buildResultWithMemoryEvidence,
+} from '../helpers/e2eRubricResult';
 
 describe('evaluateE2ERubric', () => {
   beforeEach(() => {
@@ -544,138 +482,5 @@ describe('evaluateE2ERubric', () => {
       },
     );
     expect(outcome.passed).toBe(true);
-  });
-  it('checks memory_fact from sqlite store', () => {
-    const conversationId = 'conv-memory-fact';
-    const rememberResult = executeMemoryRemember({
-      subject: 'e2e-entity-i1',
-      predicate: 'artifact_token',
-      value: 'E2E-MEM-42',
-      scope: 'conversation',
-      originConversationId: conversationId,
-      originThreadId: conversationId,
-    });
-    expect(JSON.parse(rememberResult).ok).toBe(true);
-
-    const result = buildResultWithMemoryEvidence(conversationId);
-    resetE2EMemorySandbox();
-    const outcome = evaluateE2ERubric(result, {
-      kind: 'memory_fact',
-      subject: 'e2e-entity-i1',
-      predicate: 'artifact_token',
-      value: 'E2E-MEM-42',
-      scope: 'conversation',
-    });
-    expect(outcome.passed).toBe(true);
-    expect(
-      evaluateE2ERubric(result, {
-        kind: 'memory_fact',
-        subject: 'wrong-subject',
-        predicate: 'artifact_token',
-        value: 'E2E-MEM-42',
-        scope: 'conversation',
-      }),
-    ).toMatchObject({ passed: false });
-    expect(
-      evaluateE2ERubric(result, {
-        kind: 'memory_fact',
-        subject: 'e2e-entity-i1',
-        predicate: 'artifact_token',
-        value: 'E2E-MEM-42',
-        scope: 'global',
-      }),
-    ).toMatchObject({ passed: false });
-  });
-  it('checks memory_fact_absent from currently valid sqlite facts', () => {
-    const conversationId = 'conv-memory-fact-update';
-    const oldResult = JSON.parse(
-      executeMemoryRemember({
-        subject: 'e2e-entity-update',
-        predicate: 'artifact_token',
-        value: 'E2E-OLD',
-        scope: 'conversation',
-        originConversationId: conversationId,
-        originThreadId: conversationId,
-      }),
-    );
-    expect(oldResult.ok).toBe(true);
-    const newResult = JSON.parse(
-      executeMemoryRemember(
-        {
-          subject: 'e2e-entity-update',
-          predicate: 'artifact_token',
-          value: 'E2E-NEW',
-          scope: 'conversation',
-          originConversationId: conversationId,
-          originThreadId: conversationId,
-        },
-        {
-          requestEvidence: {
-            memoryConversationId: conversationId,
-            sourceThreadId: conversationId,
-            taskId: null,
-            userMessageId: 'msg-memory-fact-update',
-            userMessageText: 'Correction: e2e-entity-update artifact token is E2E-NEW.',
-          },
-        },
-      ),
-    );
-    expect(newResult.ok).toBe(true);
-
-    const result = buildResultWithMemoryEvidence(conversationId);
-    const absent = evaluateE2ERubric(result, {
-      kind: 'memory_fact_absent',
-      subject: 'e2e-entity-update',
-      predicate: 'artifact_token',
-      value: 'E2E-OLD',
-      scope: 'conversation',
-    });
-    const present = evaluateE2ERubric(result, {
-      kind: 'memory_fact_absent',
-      subject: 'e2e-entity-update',
-      predicate: 'artifact_token',
-      value: 'E2E-NEW',
-      scope: 'conversation',
-    });
-
-    expect(absent.passed).toBe(true);
-    expect(present.passed).toBe(false);
-  });
-
-  it('does not treat an expired fact as current memory evidence', () => {
-    const conversationId = 'conv-memory-expired';
-    executeMemoryRemember({
-      subject: 'e2e-expired-subject',
-      predicate: 'temporary_code',
-      value: 'EXPIRED-CODE',
-      originConversationId: conversationId,
-      originThreadId: conversationId,
-    });
-    const { getMemoryDb } = require('../../src/services/memory/database');
-    getMemoryDb().runSync(
-      `UPDATE memory_facts SET expires_at = ? WHERE origin_conversation_id = ?`,
-      1,
-      conversationId,
-    );
-
-    const result = buildResultWithMemoryEvidence(conversationId);
-    expect(
-      evaluateE2ERubric(result, {
-        kind: 'memory_fact',
-        subject: 'e2e-expired-subject',
-        predicate: 'temporary_code',
-        value: 'EXPIRED-CODE',
-        scope: 'global',
-      }),
-    ).toMatchObject({ passed: false });
-    expect(
-      evaluateE2ERubric(result, {
-        kind: 'memory_fact_absent',
-        subject: 'e2e-expired-subject',
-        predicate: 'temporary_code',
-        value: 'EXPIRED-CODE',
-        scope: 'global',
-      }),
-    ).toMatchObject({ passed: true });
   });
 });

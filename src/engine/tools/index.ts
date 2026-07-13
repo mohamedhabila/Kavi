@@ -223,10 +223,10 @@ export async function executeTool(
         controlGranted: () => context.executionSignal?.aborted !== true,
       },
       runtimeExternalEvidence,
-      execute: () =>
+      execute: (claim) =>
         runtimeExternalBinding
           ? runtimeExternalBinding.execute(argsString, conversationId, executorContext)
-          : executeToolInner(normalizedName, argsString, conversationId, executorContext),
+          : executeToolInner(normalizedName, argsString, conversationId, executorContext, claim),
     });
     finalizeEffectReceiptCapture(context);
     if (dispatched.kind === 'executed') {

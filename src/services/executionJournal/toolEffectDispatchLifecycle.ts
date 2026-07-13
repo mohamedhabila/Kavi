@@ -40,6 +40,7 @@ import {
   serializeExecutionRunEffectDispatch,
 } from './executionRunEffectBarrier';
 import { invalidateVerifiedProcedureObservationsForExecutionRun } from '../memory/verifiedProcedure/invalidation';
+import type { AuthorizedToolEffectExecutionClaim } from './authorizedToolEffectExecutionClaim';
 
 const SHA256_PREFIX = 'sha256:';
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
@@ -67,7 +68,7 @@ export interface AuthorizedToolEffectDispatchInput {
   approvalState: 'granted' | 'not_required';
   authority: ToolEffectDispatchAuthority;
   runtimeExternalEvidence?: RuntimeExternalToolEvidence;
-  execute(): Promise<string>;
+  execute(claim: AuthorizedToolEffectExecutionClaim): Promise<string>;
 }
 
 export interface AuthorizedToolEffectDispatchOptions extends ToolEffectDispatchStoreOptions {
@@ -372,7 +373,13 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
       async (claim) => {
         let transportState: 'returned' | 'threw' = 'returned';
         try {
-          rawResult = await input.execute();
+          rawResult = await input.execute(
+            Object.freeze({
+              executionRunId: claim.identity.executionRunId,
+              toolCallId: claim.identity.toolCallId,
+              claimedAt: claim.claimedAt,
+            }),
+          );
         } catch (error) {
           executorThrew = true;
           transportState = 'threw';

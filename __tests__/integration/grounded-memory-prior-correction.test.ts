@@ -9,6 +9,7 @@ import { listFacts } from '../../src/services/memory/facts/queries';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -33,11 +34,17 @@ async function remember(
   args: Record<string, unknown>,
   currentUserMessage: { id: string; text: string },
 ): Promise<Record<string, any>> {
+  const execution = memoryRememberExecution({
+    memoryConversationId: MEMORY_CONVERSATION_ID,
+    sourceThreadId: THREAD_ID,
+    userMessageId: currentUserMessage.id,
+    userMessageText: currentUserMessage.text,
+  });
   return JSON.parse(
     await executeTool('memory_remember', JSON.stringify(args), THREAD_ID, {
       memoryConversationId: MEMORY_CONVERSATION_ID,
       currentUserMessage,
-    }),
+    }, execution.executionClaim),
   ) as Record<string, any>;
 }
 

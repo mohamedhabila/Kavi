@@ -54,6 +54,7 @@ import type { Message } from '../../../src/types/message';
 import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { drainRecordedTurn, messages } from '../../helpers/memoryLifecycle';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import { memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -236,7 +237,7 @@ describe('recordCompletedTurnForMemory', () => {
       {
         id: 'u-shared-1',
         role: 'user',
-        content: 'Persist the current release artifact path.',
+        content: 'My preferred label is "/workspace/release-checklist.md".',
         timestamp: 1,
       },
       {
@@ -251,7 +252,7 @@ describe('recordCompletedTurnForMemory', () => {
             name: 'memory_remember',
             arguments: JSON.stringify({
               subject: 'user',
-              predicate: 'checklist_path',
+              predicate: 'preferred label',
               value: '/workspace/release-checklist.md',
               scope: 'conversation',
               confidence: 0.95,
@@ -262,17 +263,24 @@ describe('recordCompletedTurnForMemory', () => {
       },
     ];
 
-    const toolWrite = executeMemoryRemember({
-      subject: 'user',
-      subjectType: 'self',
-      predicate: 'checklist_path',
-      value: '/workspace/release-checklist.md',
-      scope: 'conversation',
-      confidence: 0.95,
-      originConversationId: 'parent-conv-shared',
-      originThreadId: 'child-conv-shared',
-      sourceMessageId: 'a-shared-1',
-    });
+    const toolWrite = executeMemoryRemember(
+      {
+        subject: 'user',
+        subjectType: 'self',
+        predicate: 'preferred label',
+        value: '/workspace/release-checklist.md',
+        scope: 'conversation',
+        confidence: 0.95,
+        originConversationId: 'parent-conv-shared',
+        originThreadId: 'child-conv-shared',
+      },
+      memoryRememberExecution({
+        memoryConversationId: 'parent-conv-shared',
+        sourceThreadId: 'child-conv-shared',
+        userMessageId: 'u-shared-1',
+        userMessageText: 'My preferred label is "/workspace/release-checklist.md".',
+      }),
+    );
     expect(toolWrite.ok).toBe(true);
 
     const result = await recordCompletedTurnForMemory({
@@ -290,14 +298,14 @@ describe('recordCompletedTurnForMemory', () => {
     await drainRecordedTurn();
 
     const parentFacts = listFacts({ originConversationId: 'parent-conv-shared', limit: 20 });
-    const checklistFact = parentFacts.find((fact) => fact.predicate === 'checklist_path');
+    const checklistFact = parentFacts.find((fact) => fact.predicate === 'preferred label');
     expect(checklistFact?.objectText).toBe('/workspace/release-checklist.md');
     expect(checklistFact?.originConversationId).toBe('parent-conv-shared');
     expect(checklistFact?.originThreadId).toBe('child-conv-shared');
-    expect(parentFacts.filter((fact) => fact.predicate === 'checklist_path')).toHaveLength(1);
+    expect(parentFacts.filter((fact) => fact.predicate === 'preferred label')).toHaveLength(1);
     expect(
       listFacts({ originConversationId: 'child-conv-shared', limit: 20 }).some(
-        (fact) => fact.predicate === 'checklist_path',
+        (fact) => fact.predicate === 'preferred label',
       ),
     ).toBe(false);
     expect(listEpisodes({ conversationId: 'parent-conv-shared' })[0]).toMatchObject({
@@ -322,8 +330,8 @@ describe('recordCompletedTurnForMemory', () => {
       recallLimit: 4,
     });
     const memoryText = memory.sections.map((section) => section.text).join('\n\n');
-    expect(memory.recalledFactCount).toBe(0);
-    expect(memoryText).not.toContain('/workspace/release-checklist.md');
+    expect(memory.recalledFactCount).toBe(1);
+    expect(memoryText).toContain('/workspace/release-checklist.md');
   });
 
   it('enriches with provider when configured', async () => {

@@ -1,6 +1,7 @@
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import {
   buildMemoryFactContributionId,
+  decodeMemoryFactContributionPayload,
   encodeMemoryFactContributionPayload,
   normalizeMemoryFactContributionSourceAliases,
   normalizeMemoryFactContributionSourceScope,
@@ -24,6 +25,11 @@ export interface MemoryFactContributionWriteContext {
 export interface MemoryFactContributionWriteReceipt {
   id: string;
   status: 'created' | 'replayed';
+}
+
+export interface MemoryFactContributionReplay {
+  factId: string;
+  payload: MemoryFactContributionPayloadV1;
 }
 
 interface ContributionRow {
@@ -152,6 +158,46 @@ function sourceRowsMatch(
   if (actual.length !== expected.length) return false;
   const actualKeys = new Set(actual.map((row) => `${row.source_kind}\u0000${row.source_id}`));
   return expected.every((alias) => actualKeys.has(`${alias.sourceKind}\u0000${alias.sourceId}`));
+}
+
+/** Read an exact prior producer event without weakening its alias identity. */
+export function loadFactContributionReplay(
+  context: MemoryFactContributionWriteContext,
+): MemoryFactContributionReplay | null {
+  const db = getSchemaReadyMemoryDb();
+  const scope = normalizeMemoryFactContributionSourceScope({
+    memoryOwnerId: getLocalMemoryVaultOwnerId(db),
+    memoryConversationId: context.memoryConversationId,
+    sourceThreadId: context.sourceThreadId,
+    taskId: context.taskId,
+  });
+  const producer = requireMemoryFactContributionProducerIdentity(context.producer);
+  const expectedAliases = normalizeMemoryFactContributionSourceAliases(context.sourceAliases);
+  const id = buildMemoryFactContributionId({ scope, producer });
+  const row = db.getFirstSync<ContributionRow>(
+    'SELECT * FROM memory_fact_contributions WHERE id = ? LIMIT 1',
+    id,
+  );
+  if (!row) return null;
+  const sourceRows = db.getAllSync<ContributionSourceRow>(
+    `SELECT source_kind, source_id
+       FROM memory_fact_contribution_sources
+      WHERE contribution_id = ?
+      ORDER BY source_kind ASC, source_id ASC`,
+    id,
+  );
+  if (!sourceRowsMatch(sourceRows, expectedAliases)) {
+    fail('memory_fact_contribution_replay_mismatch');
+  }
+  return {
+    factId: row.fact_id,
+    payload: decodeMemoryFactContributionPayload({
+      payloadVersion: row.payload_version,
+      payloadJson: row.payload_json,
+      payloadSha256: row.payload_sha256,
+      payloadByteLength: row.payload_byte_length,
+    }),
+  };
 }
 
 /** Persist one immutable contribution while the owning fact transaction is active. */

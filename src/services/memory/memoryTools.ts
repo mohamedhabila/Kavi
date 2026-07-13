@@ -66,6 +66,11 @@ import {
   discardExplicitMemoryRecallGrant,
   type ExplicitMemoryRecallGrant,
 } from './explicitMemoryRecallGrant';
+import type { AuthorizedToolEffectExecutionClaim } from '../executionJournal/authorizedToolEffectExecutionClaim';
+import {
+  isExactMemoryRememberExecutionClaim,
+  isExactMemoryRememberRequestEvidence,
+} from './memoryRememberExecutionAuthority';
 export {
   executeMemoryForget,
   executeMemoryInvalidate,
@@ -461,13 +466,22 @@ export interface MemoryRememberExecutionContext {
   /** Code-owned persona identity; never accepted from provider tool arguments. */
   personaId?: string;
   /** Exact code-owned request evidence; never accepted from provider tool arguments. */
-  requestEvidence?: MemoryRememberRequestEvidence;
+  requestEvidence: MemoryRememberRequestEvidence;
+  /** Persisted effect authority; never accepted from provider tool arguments. */
+  executionClaim: AuthorizedToolEffectExecutionClaim;
 }
 
 export function executeMemoryRemember(
   args: MemoryRememberArgs,
-  context: MemoryRememberExecutionContext = {},
+  context: MemoryRememberExecutionContext,
 ): MemoryRememberResult | MemoryToolError {
+  if (
+    !context ||
+    !isExactMemoryRememberExecutionClaim(context.executionClaim) ||
+    !isExactMemoryRememberRequestEvidence(context.requestEvidence)
+  ) {
+    return err('internal', 'memory_remember execution authority invariant failed.');
+  }
   if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
   ensureFactSchema();
   const rawSubject = trimNonEmpty(args.subject, 80);

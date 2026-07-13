@@ -13,6 +13,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import { memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -34,21 +35,12 @@ function groundedRequest(
   userMessageText: string,
   priorUserMessageId?: string,
 ) {
-  return {
-    requestEvidence: {
-      memoryConversationId: 'conversation-request',
-      sourceThreadId: 'thread-request',
-      taskId: null,
-      userMessageId,
-      userMessageText,
-      ...(priorUserMessageId ? { priorUserMessageId } : {}),
-    },
-  };
+  return memoryRememberExecution({ userMessageId, userMessageText, priorUserMessageId });
 }
 
 function rememberOk(
   args: Parameters<typeof executeMemoryRemember>[0],
-  context?: Parameters<typeof executeMemoryRemember>[1],
+  context: Parameters<typeof executeMemoryRemember>[1],
 ) {
   const result = executeMemoryRemember(args, context);
   if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result)}`);
@@ -178,6 +170,8 @@ it('binds an anaphoric correction to the immediately prior user fact, not the pr
       objectText: 'blue',
       scope: 'global',
       sourceMessageId: 'user-eye-color-prior',
+      validAt: 1_779_999_999_998,
+      now: 1_779_999_999_998,
     },
     { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
   ).fact;
@@ -188,6 +182,8 @@ it('binds an anaphoric correction to the immediately prior user fact, not the pr
       objectText: 'blue',
       scope: 'global',
       sourceMessageId: 'user-car-color-older',
+      validAt: 1_779_999_999_999,
+      now: 1_779_999_999_999,
     },
     { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
   ).fact;

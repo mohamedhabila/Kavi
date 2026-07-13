@@ -9,6 +9,9 @@ import {
   type E2EOracleEvidenceDeclaration,
 } from './e2ePairedConditions';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
+import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
+import { requireExactMemoryProvenanceId } from '../../services/memory/memoryProvenanceIdentity';
+import { generateId } from '../../utils/id';
 
 type OracleUserEvidence = Readonly<{
   messageId: string;
@@ -21,6 +24,7 @@ type OracleMemoryToolExecutor = (params: {
   conversationId: string;
   workspaceConversationId: string;
   userEvidence: OracleUserEvidence;
+  executionClaim: AuthorizedToolEffectExecutionClaim;
 }) => Promise<string | null>;
 
 type OraclePersistedFactReader = (factId: string) => MemoryFact | null | undefined;
@@ -49,6 +53,7 @@ const executeProductMemoryTool: OracleMemoryToolExecutor = async (params) =>
         text: params.userEvidence.text,
       },
     },
+    authorizedEffectExecutionClaim: params.executionClaim,
   });
 
 function buildOracleUserEvidence(
@@ -75,6 +80,32 @@ function buildOracleUserEvidence(
       ? `My ${predicateLabel} is ${fact.value}.`
       : `${fact.subject} ${predicateHead} is ${fact.value}.`,
   };
+}
+
+function buildOracleExecutionClaim(
+  userEvidence: OracleUserEvidence,
+  index: number,
+  seedRunId: string,
+  baseClaimedAt: number,
+): AuthorizedToolEffectExecutionClaim {
+  const claimedAt = baseClaimedAt + index;
+  const executionDigest = stableHash(
+    stableStringify({ domain: 'e2e-oracle-seed-run-v1', seedRunId }),
+  ).slice('sha256:'.length);
+  const toolCallDigest = stableHash(
+    stableStringify({
+      domain: 'e2e-oracle-seed-tool-call-v1',
+      index,
+      messageId: userEvidence.messageId,
+      seedRunId,
+      text: userEvidence.text,
+    }),
+  ).slice('sha256:'.length);
+  return Object.freeze({
+    executionRunId: `e2e-oracle-execution-${executionDigest}`,
+    toolCallId: `e2e-oracle-tool-call-${toolCallDigest}`,
+    claimedAt,
+  });
 }
 
 function validateSeedResult(
@@ -143,6 +174,10 @@ export async function seedE2EOracleEvidence(input: {
   workspaceConversationId: string;
   executeTool?: OracleMemoryToolExecutor;
   readPersistedFact?: OraclePersistedFactReader;
+  /** Code-owned seed clock. Tests may inject one deterministic base timestamp. */
+  claimedAt?: number;
+  /** One code-owned seed invocation identity. Tests may inject it for exact replay. */
+  seedRunId?: string;
 }): Promise<{ seededFactCount: number; seededFactIds: string[] }> {
   const canonicalDeclaration = validateE2EOracleEvidenceDeclaration(input.declaration);
   if (stableStringify(input.declaration) !== stableStringify(canonicalDeclaration)) {
@@ -154,13 +189,32 @@ export async function seedE2EOracleEvidence(input: {
   };
   const executeTool = input.executeTool ?? executeProductMemoryTool;
   const readPersistedFact = input.readPersistedFact ?? getFactById;
+  const seedRunId = requireExactMemoryProvenanceId(
+    input.seedRunId ?? `e2e-oracle-seed-run-${generateId()}`,
+    'e2e_oracle_seed_run_id_invalid',
+  );
+  const baseClaimedAt = input.claimedAt ?? Date.now();
+  if (
+    !Number.isSafeInteger(baseClaimedAt) ||
+    baseClaimedAt < 0 ||
+    baseClaimedAt + input.declaration.facts.length - 1 > Number.MAX_SAFE_INTEGER
+  ) {
+    throw new Error('Oracle seeding requires a valid code-owned seed timestamp.');
+  }
   const seededFactIds: string[] = [];
   for (const [index, fact] of input.declaration.facts.entries()) {
     const userEvidence = buildOracleUserEvidence(fact, index);
+    const executionClaim = buildOracleExecutionClaim(
+      userEvidence,
+      index,
+      seedRunId,
+      baseClaimedAt,
+    );
     const rawResult = await executeTool({
       name: 'memory_remember',
       args: buildIsolatedOracleFact(fact),
       userEvidence,
+      executionClaim,
       ...identity,
     });
     const factId = validateSeedResult(rawResult, identity, userEvidence, index);

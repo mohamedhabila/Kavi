@@ -25,6 +25,7 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 const MEMORY_EXECUTION_SCOPE = {
   memoryConversationId: 'memory-tools-conversation',
@@ -34,15 +35,12 @@ const MEMORY_EXECUTION_SCOPE = {
 } as const;
 
 function groundedRequest(userMessageId: string, userMessageText: string) {
-  return {
-    requestEvidence: {
-      memoryConversationId: MEMORY_EXECUTION_SCOPE.memoryConversationId,
-      sourceThreadId: MEMORY_EXECUTION_SCOPE.sourceThreadId,
-      taskId: null,
-      userMessageId,
-      userMessageText,
-    },
-  };
+  return memoryRememberExecution({
+    memoryConversationId: MEMORY_EXECUTION_SCOPE.memoryConversationId,
+    sourceThreadId: MEMORY_EXECUTION_SCOPE.sourceThreadId,
+    userMessageId,
+    userMessageText,
+  });
 }
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -213,12 +211,10 @@ describe('living-memory tool wiring', () => {
       ),
     );
     JSON.parse(
-      executeMemoryRemember({
-        subject: 'project',
-        predicate: 'name',
-        value: 'Kavi',
-        scope: 'global',
-      }),
+      executeMemoryRemember(
+        { subject: 'project', predicate: 'name', value: 'Kavi', scope: 'global' },
+        groundedRequest('user-project-name', 'project name is Kavi.'),
+      ),
     );
 
     const recalled = JSON.parse(
@@ -226,18 +222,24 @@ describe('living-memory tool wiring', () => {
     );
 
     expect(recalled.ok).toBe(true);
-    expect(recalled.facts).toHaveLength(1);
-    expect(recalled.facts[0].policy.action).toBe('use');
+    expect(recalled.facts).toHaveLength(2);
+    expect(recalled.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ predicate: 'usual architecture review duration' }),
+        expect.objectContaining({ predicate: 'name' }),
+      ]),
+    );
+    expect(
+      recalled.facts.every((fact: { policy: { action: string } }) => fact.policy.action === 'use'),
+    ).toBe(true);
   });
 
   it('memory_pin / memory_unpin flip the pinned flag', () => {
     const r = JSON.parse(
-      executeMemoryRemember({
-        subject: 'user',
-        predicate: 'tz',
-        value: 'UTC+1',
-        scope: 'global',
-      }),
+      executeMemoryRemember(
+        { subject: 'user', predicate: 'timezone', value: 'UTC+1', scope: 'global' },
+        groundedRequest('user-timezone', 'My timezone is UTC+1.'),
+      ),
     );
     const factId = r.fact.id;
 
@@ -252,12 +254,10 @@ describe('living-memory tool wiring', () => {
 
   it('memory_forget withdraws without returning the private value', () => {
     const r = JSON.parse(
-      executeMemoryRemember({
-        subject: 'user',
-        predicate: 'name',
-        value: 'Alice',
-        scope: 'global',
-      }),
+      executeMemoryRemember(
+        { subject: 'user', predicate: 'name', value: 'Alice', scope: 'global' },
+        groundedRequest('user-name-forget', 'My name is Alice.'),
+      ),
     );
     const factId = r.fact.id;
 
@@ -269,12 +269,10 @@ describe('living-memory tool wiring', () => {
 
   it('memory invalidation preserves correction history through its own executor', () => {
     const r = JSON.parse(
-      executeMemoryRemember({
-        subject: 'user',
-        predicate: 'name',
-        value: 'Alice',
-        scope: 'global',
-      }),
+      executeMemoryRemember(
+        { subject: 'user', predicate: 'name', value: 'Alice', scope: 'global' },
+        groundedRequest('user-name-invalidate', 'My name is Alice.'),
+      ),
     );
     const invalidated = JSON.parse(
       executeMemoryInvalidate({ factId: r.fact.id }, MEMORY_EXECUTION_SCOPE),
@@ -286,7 +284,10 @@ describe('living-memory tool wiring', () => {
 
   it('returns structured errors as JSON instead of throwing', () => {
     const result = JSON.parse(
-      executeMemoryRemember({ subject: '', predicate: '', value: '', scope: 'global' } as any),
+      executeMemoryRemember(
+        { subject: '', predicate: '', value: '', scope: 'global' } as any,
+        groundedRequest('user-invalid-memory', 'Invalid memory request.'),
+      ),
     );
     expect(result.ok).toBe(false);
     expect(typeof result.error).toBe('string');

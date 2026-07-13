@@ -283,7 +283,7 @@ export function executeMemoryRecall(
 
 export function executeMemoryRemember(
   args: MemoryRememberArgs,
-  context?: MemoryRememberExecutionContext,
+  context: MemoryRememberExecutionContext,
 ): string {
   return wrapMemoryToolResult(rememberFact(args, context));
 }

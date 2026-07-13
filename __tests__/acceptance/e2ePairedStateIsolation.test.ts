@@ -25,6 +25,7 @@ import { editPromptEligibleWorkingBlock } from '../../src/services/memory/workin
 import { executeMemoryRemember } from '../../src/services/memory/memoryTools';
 import { getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
+import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 describe('paired E2E state isolation', () => {
   it('keeps the reset verification list synchronized with mutable memory tables', () => {
@@ -63,14 +64,22 @@ describe('paired E2E state isolation', () => {
     resetAndVerifyE2EScenarioSandboxes();
     writeWorkspaceRelativeFile('state-isolation', 'private.txt', 'PRIVATE-WORKSPACE');
     expect(
-      executeMemoryRemember({
-        subject: 'user',
-        predicate: 'private_fact',
-        value: 'PRIVATE-MEMORY',
-        scope: 'conversation',
-        originConversationId: 'state-isolation',
-        originThreadId: 'state-isolation',
-      }),
+      executeMemoryRemember(
+        {
+          subject: 'user',
+          predicate: 'preferred label',
+          value: 'PRIVATE-MEMORY',
+          scope: 'conversation',
+          originConversationId: 'state-isolation',
+          originThreadId: 'state-isolation',
+        },
+        memoryRememberExecution({
+          memoryConversationId: 'state-isolation',
+          sourceThreadId: 'state-isolation',
+          userMessageId: 'state-isolation-user',
+          userMessageText: 'My preferred label is "PRIVATE-MEMORY".',
+        }),
+      ),
     ).toMatchObject({ ok: true });
     const nativeState = getE2ENativeMobileFixtureStateSnapshot();
     recordE2ENativeMobileInvocation({
@@ -104,14 +113,22 @@ describe('paired E2E state isolation', () => {
       isLoading: false,
     });
     expect(
-      executeMemoryRemember({
-        subject: 'user',
-        predicate: 'oracle_leak',
-        value: 'MUST-NOT-CROSS-CONDITIONS',
-        scope: 'conversation',
-        originConversationId: 'paired-isolation',
-        originThreadId: 'paired-isolation',
-      }),
+      executeMemoryRemember(
+        {
+          subject: 'user',
+          predicate: 'preferred label',
+          value: 'MUST-NOT-CROSS-CONDITIONS',
+          scope: 'conversation',
+          originConversationId: 'paired-isolation',
+          originThreadId: 'paired-isolation',
+        },
+        memoryRememberExecution({
+          memoryConversationId: 'paired-isolation',
+          sourceThreadId: 'paired-isolation',
+          userMessageId: 'paired-isolation-user',
+          userMessageText: 'My preferred label is "MUST-NOT-CROSS-CONDITIONS".',
+        }),
+      ),
     ).toMatchObject({ ok: true });
     getMemoryDb().runSync(
       `INSERT INTO memory_verified_procedure_observations(

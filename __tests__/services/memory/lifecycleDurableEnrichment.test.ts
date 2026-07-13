@@ -51,6 +51,7 @@ import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
 import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import { memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -473,16 +474,14 @@ describe('durable memory enrichment retries', () => {
         originConversationId: threadId,
         originThreadId: threadId,
       },
-      {
-        requestEvidence: {
-          memoryConversationId: threadId,
-          sourceThreadId: threadId,
-          taskId: null,
-          userMessageId: 'u-causal-successor',
-          userMessageText: 'My preferred channel is WhatsApp.',
-          priorUserMessageId: 'u-causal-prior',
-        },
-      },
+      memoryRememberExecution({
+        memoryConversationId: threadId,
+        sourceThreadId: threadId,
+        userMessageId: 'u-causal-successor',
+        userMessageText: 'My preferred channel is WhatsApp.',
+        priorUserMessageId: 'u-causal-prior',
+        claimedAt: 101,
+      }),
     );
     dateNow.mockRestore();
     expect(successorCorrection).toMatchObject({

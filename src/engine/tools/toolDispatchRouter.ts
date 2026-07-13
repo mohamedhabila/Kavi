@@ -31,6 +31,7 @@ import { executePythonTool } from './toolPythonExecution';
 import { executeUpdateGoals } from './toolGoalExecution';
 import { createConversationFileContext } from './toolWorkspaceFiles';
 import { executeListFiles, executeReadFile, executeWriteFile } from './toolWorkspaceCoreExecution';
+import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
 
 // ── Native tool names for routing ────────────────────────────────────────
 
@@ -169,6 +170,7 @@ export async function executeToolInner(
   argsString: string,
   conversationId: string,
   context?: ToolExecutionContext,
+  authorizedEffectExecutionClaim?: AuthorizedToolEffectExecutionClaim,
 ): Promise<string> {
   name = resolveRegisteredToolName(name);
 
@@ -241,6 +243,7 @@ export async function executeToolInner(
       workspaceConversationId,
       conversationFileContext,
       context,
+      ...(authorizedEffectExecutionClaim ? { authorizedEffectExecutionClaim } : {}),
     });
   }
 

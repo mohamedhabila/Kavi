@@ -1,5 +1,6 @@
 import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { useChatStore } from '../../src/store/useChatStore';
+import { memoryRememberExecution } from './memoryRememberExecution';
 
 export async function remember(input: {
   subject: string;
@@ -55,6 +56,13 @@ export async function remember(input: {
         memoryConversationId,
         currentUserMessage: { id: input.messageId, text: input.messageText },
       },
+      memoryRememberExecution({
+        memoryConversationId,
+        sourceThreadId: threadId,
+        userMessageId: input.messageId,
+        userMessageText: input.messageText,
+        priorUserMessageId: input.priorUserMessage?.id,
+      }).executionClaim,
     ),
   ) as Record<string, any>;
 }

@@ -5,6 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 import { seedE2EOracleEvidence } from '../../src/acceptance/e2eAgent/e2eOracleEvidenceSeeder';
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
+import { getMemoryDb } from '../../src/services/memory/database';
 import { getFactById, listFacts } from '../../src/services/memory/facts/queries';
 import { findEntityByName } from '../../src/services/memory/entities';
 import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
@@ -51,31 +52,57 @@ describe('oracle evidence production retrieval integration', () => {
   });
 
   it('seeds grounded evidence, admits it to the real prompt stack, then removes it on cleanup', async () => {
+    const seedStartedAt = Date.now();
+    const declaration = {
+      interface: 'memory_remember',
+      allowSeeding: true,
+      facts: [
+        {
+          subject: 'oracle-integration-user',
+          predicate: 'oracle_preference',
+          value: ORACLE_VALUE,
+          scope: 'global',
+        },
+      ],
+    } as const;
     const seeded = await seedE2EOracleEvidence({
-      declaration: {
-        interface: 'memory_remember',
-        allowSeeding: true,
-        facts: [
-          {
-            subject: 'oracle-integration-user',
-            predicate: 'oracle_preference',
-            value: ORACLE_VALUE,
-            scope: 'global',
-          },
-        ],
-      },
+      declaration,
       conversationId: CONVERSATION_ID,
       workspaceConversationId: WORKSPACE_ID,
+      claimedAt: seedStartedAt,
+      seedRunId: 'e2e-oracle-integration-seed-a',
+    });
+    const reseeded = await seedE2EOracleEvidence({
+      declaration,
+      conversationId: CONVERSATION_ID,
+      workspaceConversationId: WORKSPACE_ID,
+      claimedAt: seedStartedAt + 10,
+      seedRunId: 'e2e-oracle-integration-seed-b',
+    });
+    const exactReplay = await seedE2EOracleEvidence({
+      declaration,
+      conversationId: CONVERSATION_ID,
+      workspaceConversationId: WORKSPACE_ID,
+      claimedAt: seedStartedAt,
+      seedRunId: 'e2e-oracle-integration-seed-a',
     });
 
     expect(seeded.seededFactCount).toBe(1);
     expect(seeded.seededFactIds).toHaveLength(1);
+    expect(reseeded).toEqual({ seededFactCount: 1, seededFactIds: seeded.seededFactIds });
+    expect(exactReplay).toEqual({ seededFactCount: 1, seededFactIds: seeded.seededFactIds });
+    expect(
+      getMemoryDb().getFirstSync('SELECT COUNT(*) AS count FROM memory_fact_contributions'),
+    ).toEqual({ count: 2 });
     const persisted = getFactById(seeded.seededFactIds[0]);
     expect(persisted).toMatchObject({
       scope: 'conversation',
       originConversationId: WORKSPACE_ID,
       originThreadId: CONVERSATION_ID,
       sourceMessageId: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
+      validAt: seedStartedAt,
+      createdAt: seedStartedAt,
+      retrievability: 1,
     });
 
     const visible = await retrieveOracleValue();

@@ -98,6 +98,8 @@ describe('paired oracle evidence seeding', () => {
         workspaceConversationId: 'isolated-workspace',
         executeTool,
         readPersistedFact: () => persistedFact({ sourceMessageId }),
+        claimedAt: 1_700_000_000_000,
+        seedRunId: 'e2e-oracle-seed-run-unit',
       }),
     ).resolves.toEqual({ seededFactCount: 1, seededFactIds: ['oracle-fact-id'] });
 
@@ -118,6 +120,11 @@ describe('paired oracle evidence seeding', () => {
       userEvidence: {
         messageId: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
         text: 'My preference is tea.',
+      },
+      executionClaim: {
+        executionRunId: expect.stringMatching(/^e2e-oracle-execution-[a-f0-9]{64}$/u),
+        toolCallId: expect.stringMatching(/^e2e-oracle-tool-call-[a-f0-9]{64}$/u),
+        claimedAt: 1_700_000_000_000,
       },
     });
     const serializedArgs = JSON.stringify(executeTool.mock.calls[0][0].args);

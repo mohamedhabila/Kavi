@@ -21,6 +21,8 @@ import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScope
 import { createExplicitMemoryRecallGrant } from '../../services/memory/explicitMemoryRecallGrant';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
 import type { ToolExecutionContext } from './toolExecutionContext';
+import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
+import { isExactMemoryProvenanceId } from '../../services/memory/memoryProvenanceIdentity';
 
 export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
   'memory_search',
@@ -115,12 +117,18 @@ function withExecutionMemoryContext(
   conversationId: string,
   memoryConversationId: string,
   context?: ToolExecutionContext,
-): { args: MemoryRememberArgs; context: MemoryRememberExecutionContext } {
+  executionClaim?: AuthorizedToolEffectExecutionClaim,
+): { args: MemoryRememberArgs; context: MemoryRememberExecutionContext } | null {
   const source =
     args && typeof args === 'object' && !Array.isArray(args)
       ? (args as Partial<MemoryRememberArgs>)
       : {};
-  const sourceRunId = context?.agentRunId?.trim() ? context.agentRunId.trim() : null;
+  const sourceRunId =
+    context?.agentRunId === undefined
+      ? null
+      : isExactMemoryProvenanceId(context.agentRunId)
+        ? context.agentRunId
+        : undefined;
   const executionMemoryContext = resolveExecutionMemoryContext(
     conversationId,
     memoryConversationId,
@@ -128,6 +136,7 @@ function withExecutionMemoryContext(
   );
   const taskId = executionMemoryContext.taskId;
   const currentUserMessage = context?.currentUserMessage;
+  if (!currentUserMessage || !executionClaim || sourceRunId === undefined) return null;
   const conversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === conversationId);
@@ -139,18 +148,15 @@ function withExecutionMemoryContext(
       ? (priorUserIdentity.priorUserMessageId ?? undefined)
       : undefined;
   const rememberContext: MemoryRememberExecutionContext = {
-    ...(currentUserMessage
-      ? {
-          requestEvidence: {
-            memoryConversationId,
-            sourceThreadId: conversationId,
-            taskId,
-            userMessageId: currentUserMessage.id,
-            userMessageText: currentUserMessage.text,
-            ...(priorUserMessageId ? { priorUserMessageId } : {}),
-          },
-        }
-      : {}),
+    executionClaim,
+    requestEvidence: {
+      memoryConversationId,
+      sourceThreadId: conversationId,
+      taskId,
+      userMessageId: currentUserMessage.id,
+      userMessageText: currentUserMessage.text,
+      ...(priorUserMessageId ? { priorUserMessageId } : {}),
+    },
   };
   const scope = source.scope as MemoryRememberArgs['scope'];
   const common = {
@@ -202,7 +208,7 @@ function withExecutionMemoryContext(
 export async function executeBuiltinMemoryTool(
   params: BuiltinToolExecutionParams,
 ): Promise<string | null> {
-  const { name, args, conversationId, context } = params;
+  const { name, args, conversationId, context, authorizedEffectExecutionClaim } = params;
   const memoryConversationId = context?.memoryConversationId ?? conversationId;
 
   if (!BUILTIN_MEMORY_TOOL_NAMES.has(name)) {
@@ -246,7 +252,21 @@ export async function executeBuiltinMemoryTool(
     );
   }
   if (name === 'memory_remember') {
-    const request = withExecutionMemoryContext(args, conversationId, memoryConversationId, context);
+    const request = withExecutionMemoryContext(
+      args,
+      conversationId,
+      memoryConversationId,
+      context,
+      authorizedEffectExecutionClaim,
+    );
+    if (!request) {
+      return JSON.stringify({
+        status: 'rejected',
+        ok: false,
+        code: 'internal',
+        error: 'memory_remember execution authority invariant failed.',
+      });
+    }
     return executeMemoryRemember(request.args, request.context);
   }
   const executionMemoryContext = resolveExecutionMemoryContext(
