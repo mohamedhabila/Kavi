@@ -6,6 +6,10 @@ import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
 import { runMemoryTransaction } from './access/transaction';
 import type { TurnPersistenceReceipt, TurnProviderOutcome } from './turnProcessor';
 import type { EpisodeShareability } from './episodes/accessPolicyTypes';
+import {
+  CONSOLIDATION_FACT_PRODUCER_IDS,
+  type ConsolidationFactProducerId,
+} from './consolidation/factContributionIdentity';
 
 interface TurnPersistenceContext {
   now: number;
@@ -62,7 +66,10 @@ function assertPersistenceFence(canPersist: (() => boolean) | undefined): void {
   if (!owned) throw new Error('Memory persistence claim lost');
 }
 
-function persistenceOptions(context: TurnPersistenceContext) {
+function persistenceOptions(
+  context: TurnPersistenceContext,
+  factContributionProducerId: ConsolidationFactProducerId,
+) {
   return {
     now: context.now,
     conversationId: context.conversationId,
@@ -72,6 +79,7 @@ function persistenceOptions(context: TurnPersistenceContext) {
     threadTitle: context.threadTitle,
     sourceUserMessageId: context.sourceUserMessageId,
     sourceAssistantMessageId: context.sourceAssistantMessageId,
+    factContributionProducerId,
     messages: context.messages,
     skipWorkingMemoryWrites: true,
     episodeAccess: context.episodeAccess,
@@ -92,7 +100,10 @@ function advanceCursor(context: TurnPersistenceContext): void {
 export function persistStructuralTurn(input: PersistStructuralTurnInput): TurnPersistenceReceipt {
   return runMemoryTransaction(() => {
     assertPersistenceFence(input.canPersist);
-    const persisted = applyConsolidatorResult(input.result, persistenceOptions(input));
+    const persisted = applyConsolidatorResult(
+      input.result,
+      persistenceOptions(input, CONSOLIDATION_FACT_PRODUCER_IDS.structuralTurn),
+    );
     const agentRunMemory = recordAgentRunEvidenceMemory({
       messages: input.messages,
       evidence: input.graphGoalEvidence ?? [],
@@ -147,7 +158,10 @@ export function finalizeProviderTurn(input: FinalizeProviderTurnInput): TurnPers
   return runMemoryTransaction(() => {
     assertPersistenceFence(input.canPersist);
     const providerPersistence = input.providerResult
-      ? applyConsolidatorResult(input.providerResult, persistenceOptions(input))
+      ? applyConsolidatorResult(
+          input.providerResult,
+          persistenceOptions(input, CONSOLIDATION_FACT_PRODUCER_IDS.providerTurn),
+        )
       : null;
     if (
       input.providerOutcome.status === 'valid' ||

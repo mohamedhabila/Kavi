@@ -22,6 +22,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -59,6 +60,7 @@ it('checks queue ownership inside the same transaction as memory persistence', (
         conversationId: 'conv-fenced-persistence',
         threadId: 'conv-fenced-persistence',
         sourceAssistantMessageId: 'assistant-fenced-persistence',
+        factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
         canPersist: () => false,
         now: 10,
       },
@@ -100,6 +102,7 @@ it('commits a final enriched-attempt receipt atomically with memory writes', () 
       conversationId: job.memoryConversationId,
       threadId: job.threadId,
       sourceAssistantMessageId: job.sourceEndMessageId,
+      factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
       canPersist: () => true,
       commitReceipt: () =>
         completeIngestionJob(job.id, 'completed_enriched', 'valid', 101, claimToken),
@@ -122,4 +125,25 @@ it('commits a final enriched-attempt receipt atomically with memory writes', () 
     failed: 0,
   });
   expect(getIngestionJob(job.id)?.status).toBe('completed_enriched');
+});
+
+it('keeps durable persistence successful when working focus overflows', () => {
+  expect(() =>
+    applyThreadLocalConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [],
+        activeFocus: 'x'.repeat(5_000),
+        openThreads: [],
+        notable: [],
+      },
+      {
+        conversationId: 'conv-overflow-focus',
+        threadId: 'conv-overflow-focus',
+        sourceAssistantMessageId: 'assistant-overflow-focus',
+        factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
+        now: 1,
+      },
+    ),
+  ).not.toThrow();
 });

@@ -10,6 +10,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/database';
+import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -54,6 +55,8 @@ it('persists grounded and passive global facts without attaching conversation id
       conversationId: 'conversation-1',
       threadId: 'thread-1',
       sourceUserMessageId: 'user-1',
+      sourceAssistantMessageId: 'assistant-1',
+      factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.structuralTurn,
       now: 100,
     },
   );

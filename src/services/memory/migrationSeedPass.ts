@@ -17,8 +17,8 @@
 //   • Fail-safe — extractor failures mark the conversation `error` but do
 //     not throw out of the caller. Re-running clears the error if the
 //     extractor next call succeeds.
-//   • Idempotent — `consolidateTurn` already dedupes facts by content_hash;
-//     re-seeding produces zero new facts.
+//   • Idempotent — each seeded fact position has a stable source-bound
+//     contribution identity and completed conversations are not re-extracted.
 // ---------------------------------------------------------------------------
 
 import { runMemoryStatement } from './access/crud';
@@ -41,6 +41,7 @@ import {
   type MigrationStateRow,
 } from './migrationStateStore';
 import { resolveCodeOwnedMemoryPersonaId } from './memoryScopeIdentity';
+import { CONSOLIDATION_FACT_PRODUCER_IDS } from './consolidation/factContributionIdentity';
 
 const logger = createLogger('memory.migrationSeedPass');
 
@@ -408,8 +409,6 @@ async function seedClaimedConversation(
           userMessage: turn.userMessage.content?.toString() ?? '',
           assistantMessage: turn.assistantMessage.content?.toString() ?? '',
           threadTitle: conv.title,
-          conversationId: conv.id,
-          threadId: conv.id,
           sourceUserMessageId: turn.userMessage.id,
           sourceAssistantMessageId: turn.assistantMessage.id,
           messages: [turn.userMessage, turn.assistantMessage],
@@ -417,8 +416,6 @@ async function seedClaimedConversation(
         },
         {
           extractor: input.extractor,
-          persist: false,
-          now: () => turnNow,
         },
       );
       if (!isMemoryPolicyEpochCurrent(policyEpoch)) {
@@ -470,6 +467,7 @@ async function seedClaimedConversation(
           threadTitle: conv.title,
           sourceUserMessageId: turn.userMessage.id,
           sourceAssistantMessageId: turn.assistantMessage.id,
+          factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.migrationSeedProvider,
           messages: [turn.userMessage, turn.assistantMessage],
           episodeAccess: {
             personaId: resolveCodeOwnedMemoryPersonaId(conv.personaId),

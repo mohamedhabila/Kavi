@@ -35,7 +35,7 @@ describe('consolidateTurn', () => {
   const buildExtractor = (payload: unknown): ConsolidatorExtractor =>
     jest.fn().mockResolvedValue(JSON.stringify(payload));
 
-  it('runs end-to-end and persists by default', async () => {
+  it('extracts a valid result without writing memory state', async () => {
     const extractor = buildExtractor({
       episode_summary: null,
       new_facts: [{ subject: 'user', predicate: 'has_name', value: 'Mo' }],
@@ -47,40 +47,9 @@ describe('consolidateTurn', () => {
       {
         userMessage: 'My name is Mo.',
         assistantMessage: 'Nice to meet you, Mo.',
-        conversationId: 'conv-persist',
-        threadId: 'thread-persist',
-        episodeAccess: { personaId: 'default', shareability: 'thread_only' },
         now: 42,
       },
       { extractor },
-    );
-    expect(result.status).toBe('valid');
-    if (result.status !== 'valid') throw new Error('expected valid outcome');
-    expect(result.result.newFacts).toHaveLength(1);
-    expect(
-      getWorkingBlock('active_focus', {
-        conversationId: 'conv-persist',
-        threadId: 'thread-persist',
-      })?.content,
-    ).toBe('Saying hello.');
-  });
-
-  it('skips persistence when persist=false', async () => {
-    const extractor = buildExtractor({
-      episode_summary: null,
-      new_facts: [{ subject: 'user', predicate: 'has_name', value: 'Mo' }],
-      active_focus: 'noop',
-      open_threads: [],
-      notable: [],
-    });
-    const result = await consolidateTurn(
-      {
-        userMessage: 'hi',
-        assistantMessage: 'hi back',
-        conversationId: 'conv-no-persist',
-        threadId: 'thread-no-persist',
-      },
-      { extractor, persist: false },
     );
     expect(result.status).toBe('valid');
     if (result.status !== 'valid') throw new Error('expected valid outcome');
@@ -102,8 +71,6 @@ describe('consolidateTurn', () => {
         {
           userMessage: 'hi',
           assistantMessage: 'hi back',
-          conversationId: 'conv-provider-error',
-          threadId: 'thread-provider-error',
         },
         { extractor },
       ),
@@ -118,8 +85,6 @@ describe('consolidateTurn', () => {
         {
           userMessage: 'hi',
           assistantMessage: 'hi back',
-          conversationId: 'conv-shape-error',
-          threadId: 'thread-shape-error',
         },
         { extractor },
       ),

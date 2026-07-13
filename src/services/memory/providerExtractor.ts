@@ -16,7 +16,6 @@ import { consolidateTurn } from './consolidator';
 
 export interface ProviderEnrichmentOptions {
   extractor: ConsolidatorExtractor;
-  now?: () => number;
   signal?: AbortSignal;
 }
 
@@ -26,8 +25,6 @@ export async function extractProviderEnrichment(
 ): Promise<ConsolidatorOutcome> {
   return consolidateTurn(input, {
     extractor: options.extractor,
-    persist: false,
-    now: options.now,
     signal: options.signal,
   });
 }

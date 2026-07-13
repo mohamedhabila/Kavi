@@ -20,12 +20,10 @@ describe('extractProviderEnrichment', () => {
     jest.clearAllMocks();
   });
 
-  it('forwards input and options to consolidateTurn with persist=false', async () => {
+  it('forwards input and extraction options to consolidateTurn', async () => {
     const turnInput = {
       userMessage: 'Hello',
       assistantMessage: 'Hi',
-      conversationId: 'conv-1',
-      threadId: 'conv-1',
     };
     const extractor = jest.fn().mockResolvedValue('{"newFacts":[]}');
     const signal = new AbortController().signal;
@@ -40,14 +38,12 @@ describe('extractProviderEnrichment', () => {
       },
     });
 
-    await extractProviderEnrichment(turnInput, { extractor, now: () => 42, signal });
+    await extractProviderEnrichment(turnInput, { extractor, signal });
 
     expect(mockConsolidateTurn).toHaveBeenCalledWith(
       turnInput,
       expect.objectContaining({
         extractor,
-        persist: false,
-        now: expect.any(Function),
         signal,
       }),
     );
@@ -70,8 +66,6 @@ describe('extractProviderEnrichment', () => {
       {
         userMessage: 'I like tea',
         assistantMessage: 'Great',
-        conversationId: 'c1',
-        threadId: 'c1',
       },
       { extractor: jest.fn() },
     );
@@ -88,7 +82,7 @@ describe('extractProviderEnrichment', () => {
 
     await expect(
       extractProviderEnrichment(
-        { userMessage: 'x', assistantMessage: 'y', conversationId: 'c1', threadId: 'c1' },
+        { userMessage: 'x', assistantMessage: 'y' },
         { extractor: jest.fn() },
       ),
     ).resolves.toEqual(expected);

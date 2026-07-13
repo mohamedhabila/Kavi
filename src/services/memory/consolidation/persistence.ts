@@ -4,8 +4,8 @@ import { runMemoryTransaction } from '../access/transaction';
 import { upsertEntity } from '../entities';
 import { addFactEvidence, recordEpisode, recordThreadLocalEpisode } from '../episodes/mutations';
 import type { EpisodeShareability } from '../episodes/accessPolicyTypes';
-import { replaceCurrentFactWithApplicability } from '../facts/exactReplacement';
-import { recordFactWithApplicability } from '../facts/mutations';
+import { replaceCurrentFactWithContribution } from '../facts/exactReplacement';
+import { recordFactWithContribution } from '../facts/mutations';
 import { composeActiveFocusContent } from '../focus';
 import { ensureFactSchema } from '../schema';
 import { editWorkingBlock } from '../workingBlocks';
@@ -14,18 +14,26 @@ import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
 import { resolveCodeOwnedMemoryTaskId } from '../memoryScopeIdentity';
 import { classifyMemoryFactSensitivity } from '../memorySensitivityPolicy';
 import type { MemorySensitivityInput } from '../memorySensitivityPolicy';
+import type { MemoryFactContributionSourceAlias } from '../factContributionCodec';
+import type { MemoryFactContributionWriteContext } from '../factContributionStore';
+import {
+  buildConsolidationFactProducerEventId,
+  type ConsolidationFactProducerId,
+} from './factContributionIdentity';
 
 const logger = createLogger('memory.consolidation.persistence');
 
 interface ApplyConsolidatorResultBaseOptions {
   conversationId: string;
   threadId: string;
-  now?: number;
+  /** Sealed source time; replaying the same producer event must reuse it exactly. */
+  now: number;
   taskId?: string;
   sourceRunId?: string;
   threadTitle?: string;
   sourceUserMessageId?: string;
-  sourceAssistantMessageId?: string;
+  sourceAssistantMessageId: string;
+  factContributionProducerId: ConsolidationFactProducerId;
   messages?: Message[];
   skipWorkingMemoryWrites?: boolean;
   /** Evaluated inside the SQLite write transaction to fence stale queue owners. */
@@ -116,7 +124,7 @@ function applyConsolidatorResultInTransaction(
     Partial<Pick<ApplyConsolidatorResultOptions, 'episodeAccess'>>,
 ): ApplyConsolidatorResultResult {
   ensureFactSchema();
-  const now = options.now ?? Date.now();
+  const now = options.now;
 
   const closedTurnMessages = selectClosedTurnMessages(
     options.messages ?? [],
@@ -225,16 +233,22 @@ function applyConsolidatorResultInTransaction(
             factClass: subjectType === 'self' ? ('subjective_user' as const) : ('unknown' as const),
             sourceAuthority: 'assistant_inferred' as const,
           });
+    const contributionContext = buildFactContributionContext(fact, factInput, inputIndex, options);
     const recorded =
       fact.admittedWrite?.operation === 'replace_current'
-        ? replaceCurrentFactWithApplicability(
+        ? replaceCurrentFactWithContribution(
             {
               ...factInput,
               expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId,
             },
             sealedApplicability,
+            contributionContext,
           )
-        : recordFactWithApplicability({ ...factInput, supersedePrior: false }, sealedApplicability);
+        : recordFactWithContribution(
+            { ...factInput, supersedePrior: false },
+            sealedApplicability,
+            contributionContext,
+          );
     if (recorded.status === 'conflict') {
       logger.devWarn(`Grounded replacement rejected at persistence: ${recorded.conflict}`);
       continue;
@@ -309,6 +323,48 @@ function applyConsolidatorResultInTransaction(
     activeFocusUpdated,
     openThreadsUpdated,
     episodeId: episode?.id ?? null,
+  };
+}
+
+function buildFactContributionContext(
+  fact: ConsolidatorFact,
+  factInput: {
+    sourceMessageId: string | null;
+    sourceTurnId: string | null;
+    sourceRunId: string | null;
+  },
+  inputIndex: number,
+  options: ApplyConsolidatorResultBaseOptions,
+): MemoryFactContributionWriteContext {
+  const sourceAliases: MemoryFactContributionSourceAlias[] = [];
+  const addAlias = (
+    sourceKind: MemoryFactContributionSourceAlias['sourceKind'],
+    sourceId: string | null | undefined,
+  ) => {
+    if (sourceId) sourceAliases.push({ sourceKind, sourceId });
+  };
+  addAlias('message', factInput.sourceMessageId);
+  addAlias('turn', factInput.sourceTurnId);
+  addAlias('run', factInput.sourceRunId);
+  addAlias('message', options.sourceUserMessageId);
+  for (const evidenceMessageId of fact.evidenceMessageIds ?? []) {
+    addAlias('message', evidenceMessageId);
+  }
+  addAlias('message', fact.admittedWrite?.evidenceMessageId);
+
+  return {
+    memoryConversationId: options.conversationId,
+    sourceThreadId: options.threadId,
+    taskId: options.taskId,
+    producer: {
+      producerId: options.factContributionProducerId,
+      producerEventId: buildConsolidationFactProducerEventId({
+        producerId: options.factContributionProducerId,
+        sourceAssistantMessageId: options.sourceAssistantMessageId,
+        inputIndex,
+      }),
+    },
+    sourceAliases,
   };
 }
 

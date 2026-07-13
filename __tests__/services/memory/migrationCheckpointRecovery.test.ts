@@ -13,9 +13,13 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Conversation } from '../../../src/types/conversation';
+import {
+  CONSOLIDATION_FACT_PRODUCER_IDS,
+  buildConsolidationFactProducerEventId,
+} from '../../../src/services/memory/consolidation/factContributionIdentity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -113,6 +117,33 @@ it('does not re-extract a committed turn after recovery interrupts the next turn
   );
   expect(predicates).toEqual(expect.arrayContaining(['turn_one_checkpoint', 'recovered_turn_two']));
   expect(predicates).not.toContain('stale_turn_two');
+  const contributions = getMemoryDb().getAllSync<{
+    producer_id: string;
+    producer_event_id: string;
+  }>(
+    `SELECT producer_id, producer_event_id
+       FROM memory_fact_contributions
+      WHERE memory_conversation_id = ?
+      ORDER BY producer_event_id ASC`,
+    conversation.id,
+  );
+  expect(contributions).toHaveLength(2);
+  expect(contributions.map((row) => row.producer_event_id).sort()).toEqual(
+    ['a-per-turn-checkpoint-0', 'a-per-turn-checkpoint-1']
+      .map((sourceAssistantMessageId) =>
+        buildConsolidationFactProducerEventId({
+          producerId: CONSOLIDATION_FACT_PRODUCER_IDS.migrationSeedProvider,
+          sourceAssistantMessageId,
+          inputIndex: 0,
+        }),
+      )
+      .sort(),
+  );
+  expect(
+    contributions.every(
+      (row) => row.producer_id === CONSOLIDATION_FACT_PRODUCER_IDS.migrationSeedProvider,
+    ),
+  ).toBe(true);
   expect(getMigrationState(conversation.id)).toMatchObject({
     lastSeededMessageId: 'a-per-turn-checkpoint-1',
     seededTurns: 2,

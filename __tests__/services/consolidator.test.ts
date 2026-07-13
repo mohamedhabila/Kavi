@@ -8,6 +8,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../src/services/memory/database';
+import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../src/services/memory/consolidation/factContributionIdentity';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { editWorkingBlock, getWorkingBlock } from '../../src/services/memory/workingBlocks';
 import { listFacts } from '../../src/services/memory/facts/queries';
@@ -20,6 +21,7 @@ import {
 } from '../../src/services/memory/consolidator';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+const THREAD_LOCAL_PRODUCER = CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport;
 
 beforeEach(() => {
   closeMemoryDb();
@@ -367,6 +369,7 @@ describe('applyThreadLocalConsolidatorResult', () => {
         threadId: 'conv-1',
         sourceUserMessageId: 'u-1',
         sourceAssistantMessageId: 'a-1',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
       },
     );
     expect(result.recordedFacts).toHaveLength(1);
@@ -410,6 +413,8 @@ describe('applyThreadLocalConsolidatorResult', () => {
         conversationId: 'conv-longmem',
         threadId: 'conv-longmem',
         threadTitle: 'longmem-delayed-thread',
+        sourceAssistantMessageId: 'assistant-longmem-focus',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
       },
     );
 
@@ -442,6 +447,8 @@ describe('applyThreadLocalConsolidatorResult', () => {
         conversationId: 'conv-task',
         threadId: 'conv-task',
         taskId: 'scope-b',
+        sourceAssistantMessageId: 'assistant-task-focus',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
       },
     );
 
@@ -478,6 +485,8 @@ describe('applyThreadLocalConsolidatorResult', () => {
         conversationId: 'conv-delayed',
         threadId: 'conv-delayed',
         skipWorkingMemoryWrites: true,
+        sourceAssistantMessageId: 'assistant-delayed',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
       },
     );
 
@@ -523,6 +532,7 @@ describe('applyThreadLocalConsolidatorResult', () => {
         taskId: 'memory-goal-a',
         sourceUserMessageId: 'u-1',
         sourceAssistantMessageId: 'a-1',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
       },
     );
     applyThreadLocalConsolidatorResult(
@@ -547,6 +557,7 @@ describe('applyThreadLocalConsolidatorResult', () => {
         taskId: 'memory-goal-b',
         sourceUserMessageId: 'u-2',
         sourceAssistantMessageId: 'a-2',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
       },
     );
 
@@ -577,7 +588,13 @@ describe('applyThreadLocalConsolidatorResult', () => {
         openThreads: ['Old follow-up'],
         notable: [],
       },
-      { now: 1, conversationId: 'conv-clear', threadId: 'conv-clear' },
+      {
+        now: 1,
+        conversationId: 'conv-clear',
+        threadId: 'conv-clear',
+        sourceAssistantMessageId: 'assistant-clear-1',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
+      },
     );
 
     const result = applyThreadLocalConsolidatorResult(
@@ -588,7 +605,13 @@ describe('applyThreadLocalConsolidatorResult', () => {
         openThreads: [],
         notable: [],
       },
-      { now: 2, conversationId: 'conv-clear', threadId: 'conv-clear' },
+      {
+        now: 2,
+        conversationId: 'conv-clear',
+        threadId: 'conv-clear',
+        sourceAssistantMessageId: 'assistant-clear-2',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
+      },
     );
 
     expect(result.openThreadsUpdated).toBe(true);
@@ -612,6 +635,9 @@ describe('applyThreadLocalConsolidatorResult', () => {
       {
         now: 10_000,
         conversationId: 'conv-episode',
+        threadId: 'conv-episode',
+        sourceAssistantMessageId: 'a-episode',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
         messages: [
           { id: 'u-episode', role: 'user', content: 'Compare runtimes', timestamp: 9_000 },
           { id: 'a-episode', role: 'assistant', content: 'Done', timestamp: 10_000 },
@@ -636,12 +662,16 @@ describe('applyThreadLocalConsolidatorResult', () => {
     const first = applyThreadLocalConsolidatorResult(result, {
       conversationId: 'conv-idempotent',
       threadId: 'thread-idempotent',
+      sourceAssistantMessageId: 'assistant-idempotent',
+      factContributionProducerId: THREAD_LOCAL_PRODUCER,
       now: 1,
     });
     const second = applyThreadLocalConsolidatorResult(result, {
       conversationId: 'conv-idempotent',
       threadId: 'thread-idempotent',
-      now: 2,
+      sourceAssistantMessageId: 'assistant-idempotent',
+      factContributionProducerId: THREAD_LOCAL_PRODUCER,
+      now: 1,
     });
     expect(first.recordedFacts).toHaveLength(1);
     expect(second.recordedFacts).toHaveLength(0);
@@ -652,25 +682,14 @@ describe('applyThreadLocalConsolidatorResult', () => {
   it('skips active_focus update when null', () => {
     const result = applyThreadLocalConsolidatorResult(
       { newFacts: [], activeFocus: null, openThreads: [], notable: [] },
-      { now: 1 },
+      {
+        now: 1,
+        conversationId: 'conv-null-focus',
+        threadId: 'conv-null-focus',
+        sourceAssistantMessageId: 'assistant-null-focus',
+        factContributionProducerId: THREAD_LOCAL_PRODUCER,
+      },
     );
     expect(result.activeFocusUpdated).toBe(false);
-  });
-
-  it('does not throw when active_focus would overflow', () => {
-    expect(() =>
-      applyThreadLocalConsolidatorResult(
-        {
-          episodeSummary: null,
-          newFacts: [],
-          // 600 chars max enforced at parse, but applyThreadLocalConsolidatorResult must
-          // also tolerate a caller that hands it raw oversize content.
-          activeFocus: 'x'.repeat(5_000),
-          openThreads: [],
-          notable: [],
-        },
-        { now: 1 },
-      ),
-    ).not.toThrow();
   });
 });

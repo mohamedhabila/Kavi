@@ -13,6 +13,7 @@ import {
 } from '../../../src/services/memory/schema';
 import type { ConsolidatorResult } from '../../../src/services/memory/consolidator';
 import type { Message } from '../../../src/types/message';
+import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -40,6 +41,7 @@ function persist(result: ConsolidatorResult, now: number) {
     threadId: 'episode-thread',
     sourceUserMessageId: 'episode-user',
     sourceAssistantMessageId: 'episode-assistant',
+    factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.structuralTurn,
     messages: MESSAGES,
     episodeAccess: { personaId: 'default', shareability: 'session_threads' },
     now,
@@ -110,6 +112,7 @@ describe('consolidation episode sensitivity persistence', () => {
       threadId: 'tool-thread',
       sourceUserMessageId: 'episode-user',
       sourceAssistantMessageId: 'episode-assistant',
+      factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.structuralTurn,
       messages,
       episodeAccess: { personaId: 'default', shareability: 'session_threads' },
       now: 30,
@@ -126,6 +129,7 @@ describe('consolidation episode sensitivity persistence', () => {
       threadId: 'oversize-thread',
       sourceUserMessageId: 'episode-user',
       sourceAssistantMessageId: 'episode-assistant',
+      factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.structuralTurn,
       messages: [{ ...MESSAGES[0], content: 'x'.repeat(16_001) }, MESSAGES[1]],
       episodeAccess: { personaId: 'default', shareability: 'session_threads' },
       now: 30,

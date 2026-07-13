@@ -20,11 +20,12 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import type { Message } from '../../../src/types/message';
 import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -89,6 +90,16 @@ function closedFileTurn(suffix: string): Message[] {
   ];
 }
 
+function factContributions(memoryConversationId: string) {
+  return getMemoryDb().getAllSync<{ fact_id: string; producer_id: string }>(
+    `SELECT fact_id, producer_id
+       FROM memory_fact_contributions
+      WHERE memory_conversation_id = ?
+      ORDER BY fact_id ASC`,
+    memoryConversationId,
+  );
+}
+
 describe('memory ingestion receipt integration', () => {
   it('commits the production turn write set with its queue transition', async () => {
     const messages = closedFileTurn('integrated');
@@ -139,6 +150,12 @@ describe('memory ingestion receipt integration', () => {
     expect(
       listFacts({ originConversationId: job.memoryConversationId }).map((fact) => fact.id),
     ).toEqual(expect.arrayContaining(receipt!.deterministicFactIds));
+    expect(factContributions(job.memoryConversationId)).toEqual(
+      receipt!.deterministicFactIds.map((factId) => ({
+        fact_id: factId,
+        producer_id: CONSOLIDATION_FACT_PRODUCER_IDS.structuralTurn,
+      })),
+    );
     expect(getIngestionJob(job.id)).toEqual(
       expect.objectContaining({ status: 'completed_structural', attemptCount: 1 }),
     );
@@ -191,7 +208,106 @@ describe('memory ingestion receipt integration', () => {
 
     expect(listEpisodes({ conversationId: job.memoryConversationId })).toEqual([]);
     expect(listFacts({ originConversationId: job.memoryConversationId })).toEqual([]);
+    expect(factContributions(job.memoryConversationId)).toEqual([]);
     expect(listIngestionPersistenceReceipts(job.id)).toEqual([]);
     expect(getIngestionJob(job.id)?.status).toBe('processing');
+  });
+
+  it('commits provider contributions with the final enriched receipt', async () => {
+    const messages: Message[] = [
+      {
+        id: 'user-provider-receipt',
+        role: 'user',
+        content: 'My preferred channel is Signal.',
+        timestamp: 299,
+      },
+      {
+        id: 'assistant-provider-receipt',
+        role: 'assistant',
+        content: 'I will remember that.',
+        timestamp: 300,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      },
+    ];
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'conversation-provider-receipt',
+      threadTitle: null,
+      memoryConversationId: 'conversation-provider-receipt',
+      taskId: null,
+      sourceStartMessageId: 'user-provider-receipt',
+      sourceEndMessageId: 'assistant-provider-receipt',
+      sourceRunId: null,
+      sourceAt: 300,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 300,
+    })!;
+    const claimToken = claimIngestionJob(job.id, 300)!;
+
+    const result = await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
+      threadId: job.threadId,
+      memoryConversationId: job.memoryConversationId,
+      messages,
+      sourceEndMessageId: job.sourceEndMessageId,
+      now: 300,
+      skipWorkingMemorySync: true,
+      canPersist: () => true,
+      extractor: async () =>
+        JSON.stringify({
+          new_facts: [
+            {
+              subject: 'user',
+              predicate: 'preferred_channel',
+              value: 'Signal',
+              scope: 'conversation',
+              operation: 'replace_current',
+              assertion_class: 'current_direct',
+              evidence_message_ids: ['user-provider-receipt'],
+              evidence_quote: 'My preferred channel is Signal.',
+            },
+          ],
+          episode_summary: null,
+          active_focus: null,
+          open_threads: [],
+          notable: [],
+        }),
+      commitPersistenceReceipt: ({ providerOutcome, ...writeSet }) => {
+        expect(providerOutcome).toEqual({ status: 'valid' });
+        commitIngestionPersistenceReceipt({
+          ...writeSet,
+          jobId: job.id,
+          claimToken,
+          providerOutcome: 'valid',
+          providerOutcomeCode: null,
+          persistedAt: 300,
+        });
+      },
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        processed: true,
+        enriched: true,
+        providerFactIds: [expect.any(String)],
+      }),
+    );
+    const [receipt] = listIngestionPersistenceReceipts(job.id);
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        providerOutcome: 'valid',
+        providerFactIds: result.providerFactIds,
+      }),
+    );
+    expect(factContributions(job.memoryConversationId)).toEqual([
+      {
+        fact_id: result.providerFactIds[0],
+        producer_id: CONSOLIDATION_FACT_PRODUCER_IDS.providerTurn,
+      },
+    ]);
+    expect(getIngestionJob(job.id)?.status).toBe('completed_enriched');
   });
 });

@@ -10,6 +10,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -45,7 +46,10 @@ describe('memory consolidator source-run provenance', () => {
         conversationId: 'conv-source-run',
         threadId: 'thread-source-run',
         sourceRunId: 'run-source-run',
+        sourceAssistantMessageId: 'assistant-source-run',
+        factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
         skipWorkingMemoryWrites: true,
+        now: 1,
       },
     );
 
@@ -86,11 +90,13 @@ describe('memory consolidator source-run provenance', () => {
           threadId: 'thread-atomic',
           sourceUserMessageId: 'user-atomic',
           sourceAssistantMessageId: 'assistant-atomic',
+          factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
           messages: [
             { id: 'user-atomic', role: 'user', content: 'Prepare it.', timestamp: 1 },
             { id: 'assistant-atomic', role: 'assistant', content: 'Done.', timestamp: 2 },
           ],
           skipWorkingMemoryWrites: true,
+          now: 2,
         },
       ),
     ).toThrow('test evidence failure');
@@ -100,6 +106,7 @@ describe('memory consolidator source-run provenance', () => {
       'memory_episodes',
       'memory_facts',
       'memory_fact_evidence',
+      'memory_fact_contributions',
     ]) {
       expect(
         getMemoryDb().getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)

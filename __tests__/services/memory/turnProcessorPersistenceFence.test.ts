@@ -9,7 +9,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
@@ -60,6 +60,14 @@ afterEach(() => {
 function expectNoFencedWrites(threadId: string): void {
   expect(listEpisodes({ threadId })).toEqual([]);
   expect(listFacts({ originConversationId: threadId })).toEqual([]);
+  expect(
+    getMemoryDb().getFirstSync<{ count: number }>(
+      `SELECT COUNT(*) AS count
+         FROM memory_fact_contributions
+        WHERE memory_conversation_id = ?`,
+      threadId,
+    )?.count,
+  ).toBe(0);
 }
 
 it('keeps the pre-provider structural checkpoint but rejects enrichment after opt-out', async () => {

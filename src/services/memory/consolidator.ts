@@ -12,8 +12,7 @@
 // Design rules:
 //   • Provider output proposes facts. It never receives direct invalidation
 //     authority. A replacement is applied only after deterministic admission.
-//   • Idempotent: re-running on the same turn must be a no-op (we dedupe by
-//     content_hash inside facts.recordFact).
+//   • Extraction-only: source-bound callers own persistence and replay identity.
 //   • Provider-agnostic: the extractor is just an `(prompt) => Promise<json>`
 //     callback so we can swap mocked / on-device / cloud LLMs without edits.
 //   • Parse and provider failures are explicit outcomes. Callers decide whether
@@ -23,7 +22,6 @@
 import type { Message } from '../../types/message';
 import type { MemoryFactScope } from './facts/types';
 import type { SealedFactApplicabilityProvenance } from './facts/applicabilityProvenance';
-import { applyConsolidatorResult } from './consolidation/persistence';
 export {
   applyConsolidatorResult,
   applyThreadLocalConsolidatorResult,
@@ -55,17 +53,7 @@ export interface ConsolidatorPromptInput {
   messages?: ConsolidatorSourceMessage[];
 }
 
-export interface ConsolidatorTurnInput extends ConsolidatorPromptInput {
-  /** Required provenance for every persisted or provider-enriched turn. */
-  conversationId: string;
-  threadId: string;
-  taskId?: string;
-  sourceRunId?: string;
-  episodeAccess?: {
-    personaId: string;
-    shareability: import('./episodes/accessPolicyTypes').EpisodeShareability;
-  };
-}
+export type ConsolidatorTurnInput = ConsolidatorPromptInput;
 
 export type ConsolidatorFactOperation = 'insert' | 'replace_current';
 
@@ -164,13 +152,6 @@ export type ConsolidatorExtractor = (prompt: string, signal?: AbortSignal) => Pr
 export interface ConsolidatorOptions {
   extractor: ConsolidatorExtractor;
   signal?: AbortSignal;
-  /** Override clock for tests. */
-  now?: () => number;
-  /**
-   * When true, persist results to the memory store (facts + active_focus block).
-   * Default true; tests can disable to inspect the parsed output.
-   */
-  persist?: boolean;
 }
 
 const PROMPT_HEADER = `You are the memory consolidator for an assistant chat app.
@@ -533,15 +514,14 @@ function isEmptyConsolidatorResult(result: ConsolidatorResult): boolean {
 }
 
 /**
- * One-shot consolidation: build the prompt, call the extractor, parse, and
- * (optionally) persist. Provider and parse failures become explicit outcomes
- * so async callers can retry without recording malformed output as success.
+ * One-shot extraction: build the prompt, call the extractor, and parse.
+ * Persistence belongs to the caller's source-bound transaction so provider and
+ * parse failures can be retried without recording malformed output as success.
  */
 export async function consolidateTurn(
   input: ConsolidatorTurnInput,
   options: ConsolidatorOptions,
 ): Promise<ConsolidatorOutcome> {
-  const persist = options.persist !== false;
   const prompt = buildConsolidatorPrompt(input);
   let raw: string;
   try {
@@ -555,21 +535,5 @@ export async function consolidateTurn(
           : 'provider_request_failed',
     };
   }
-  const outcome = parseConsolidatorOutput(raw);
-  if (persist && (outcome.status === 'valid' || outcome.status === 'empty_valid')) {
-    if (!input.episodeAccess) throw new Error('episode_access_policy_required');
-    applyConsolidatorResult(outcome.result, {
-      now: input.now ?? options.now?.(),
-      conversationId: input.conversationId,
-      threadId: input.threadId,
-      taskId: input.taskId,
-      sourceRunId: input.sourceRunId,
-      threadTitle: input.threadTitle,
-      sourceUserMessageId: input.sourceUserMessageId,
-      sourceAssistantMessageId: input.sourceAssistantMessageId,
-      messages: input.messages,
-      episodeAccess: input.episodeAccess,
-    });
-  }
-  return outcome;
+  return parseConsolidatorOutput(raw);
 }

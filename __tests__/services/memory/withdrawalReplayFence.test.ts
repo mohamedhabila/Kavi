@@ -22,6 +22,7 @@ import { applyThreadLocalConsolidatorResult } from '../../../src/services/memory
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import { seedConversation } from '../../../src/services/memory/migrationSeedPass';
+import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
@@ -197,6 +198,7 @@ describe('withdrawal ingestion replay fence', () => {
         taskId: SCOPE.taskId,
         sourceUserMessageId: 'message-old',
         sourceAssistantMessageId: 'turn-old',
+        factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
         sourceRunId: 'run-old',
         now: 400,
       }),
@@ -219,6 +221,7 @@ describe('withdrawal ingestion replay fence', () => {
           taskId: SCOPE.taskId,
           sourceUserMessageId: 'message-new',
           sourceAssistantMessageId: 'turn-new',
+          factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
           sourceRunId: 'run-new',
           now: 500,
         },

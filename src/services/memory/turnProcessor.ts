@@ -201,10 +201,6 @@ function buildTurnInput(
   return {
     userMessage: user?.content ?? '',
     assistantMessage: assistant?.content ?? '',
-    conversationId: resolveMemoryConversationId(input),
-    threadId: input.threadId,
-    taskId: input.taskId,
-    sourceRunId: input.sourceRunId,
     threadTitle: input.threadTitle,
     sourceUserMessageId: user?.id,
     sourceAssistantMessageId: assistant?.id,
@@ -373,7 +369,6 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
 
   const outcome = await extractProviderEnrichment(turnInput, {
     extractor: input.extractor,
-    now: () => now,
     signal: input.providerSignal,
   });
   if (input.providerSignal?.aborted) {
