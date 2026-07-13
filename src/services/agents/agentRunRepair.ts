@@ -26,6 +26,7 @@ import {
 } from './lifecycle/agentRunStateMachine';
 import { readPendingGoalUserConstraintDelivery } from '../../engine/goals/userConstraintFinalDelivery';
 import { buildAgentControlGraphAfterPersistedFinalDelivery } from '../../engine/graph/persistedFinalDelivery';
+import { canWriteLongTermMemory } from '../memory/policy';
 
 const FINAL_RESPONSE_CHECKPOINT_TITLE = 'Final response delivered';
 const MAX_LOG_DETAIL_CHARS = 320;
@@ -245,12 +246,7 @@ function reconcilePersistedCompletedRunGraph(params: {
     (candidate) => candidate.id === params.conversationId,
   );
   const run = conversation?.agentRuns?.find((candidate) => candidate.id === params.runId);
-  if (
-    !conversation ||
-    !run ||
-    run.status !== 'completed' ||
-    !run.controlGraph
-  ) {
+  if (!conversation || !run || run.status !== 'completed' || !run.controlGraph) {
     return false;
   }
   const reconciledGraph = buildAgentControlGraphAfterPersistedFinalDelivery({
@@ -260,11 +256,7 @@ function reconcilePersistedCompletedRunGraph(params: {
   });
   if (!reconciledGraph || reconciledGraph === run.controlGraph) return false;
 
-  store.updateAgentRunControlGraph(
-    params.conversationId,
-    reconciledGraph,
-    params.runId,
-  );
+  store.updateAgentRunControlGraph(params.conversationId, reconciledGraph, params.runId);
   const updatedRun = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === params.conversationId)
@@ -274,6 +266,24 @@ function reconcilePersistedCompletedRunGraph(params: {
     updatedRun.controlGraph?.status === 'finalized' &&
     readPendingGoalUserConstraintDelivery(updatedRun.controlGraph.goals).state === 'absent'
   );
+}
+
+function initializeRepairedFinalMemoryPublication(params: {
+  conversation: Conversation;
+  finalMessageId: string;
+}): void {
+  const disposition = !canWriteLongTermMemory()
+    ? 'opt_out'
+    : params.conversation.isSideThread
+      ? 'ephemeral_thread'
+      : null;
+  const transition = useChatStore
+    .getState()
+    .transitionMessageMemoryPublication(params.conversation.id, params.finalMessageId, disposition);
+  if (transition.status !== 'applied' || transition.publication.disposition !== disposition) {
+    const reason = transition.status === 'rejected' ? transition.reason : 'disposition_mismatch';
+    throw new Error(`agent_run_repair_memory_publication_${reason}`);
+  }
 }
 
 export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
@@ -367,6 +377,7 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
             : 'fallback_from_evidence',
       });
 
+      const finalMessageId = targetMessageId ?? generateId();
       if (targetMessageId) {
         latestStore.updateMessage(conversation.id, targetMessageId, output);
         latestStore.updateMessageAssistantMetadata(
@@ -385,7 +396,7 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
         }
       } else {
         latestStore.addMessage(conversation.id, {
-          id: generateId(),
+          id: finalMessageId,
           role: 'assistant',
           content: output,
           providerReplay:
@@ -394,13 +405,18 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
         });
       }
 
+      initializeRepairedFinalMemoryPublication({
+        conversation: latestConversation,
+        finalMessageId,
+      });
+
+      // The recovered final and its publication intent form one durability
+      // boundary. Startup recovery settles the open receipt after hydration.
+      await flushChatStorePersistenceNow();
+
       const requiresConstraintDeliveryAcknowledgement =
         latestRun.status === 'completed' &&
         readPendingGoalUserConstraintDelivery(latestRun.controlGraph?.goals).state === 'canonical';
-      if (requiresConstraintDeliveryAcknowledgement) {
-        // Persist the answer before clearing its durable delivery obligation.
-        await flushChatStorePersistenceNow();
-      }
       const persistedConversation = useChatStore
         .getState()
         .conversations.find((candidate) => candidate.id === conversation.id);

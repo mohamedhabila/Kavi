@@ -177,6 +177,25 @@ function seed(params: { delivered?: boolean; status?: 'completed' | 'failed' } =
       })),
     updateMessageProviderReplay: jest.fn(),
     addMessage: jest.fn(),
+    transitionMessageMemoryPublication: (
+      conversationId: string,
+      messageId: string,
+      disposition: any,
+    ) => {
+      updateConversation(conversationId, (conversation) => ({
+        ...conversation,
+        messages: conversation.messages.map((message: any) =>
+          message.id === messageId
+            ? { ...message, memoryPublication: { version: 1, disposition } }
+            : message,
+        ),
+      }));
+      return {
+        status: 'applied',
+        changed: true,
+        publication: { version: 1, disposition },
+      };
+    },
     appendAgentRunCheckpoint: jest.fn(),
     updateAgentRunSummary: jest.fn(),
     addConversationLog: jest.fn(),

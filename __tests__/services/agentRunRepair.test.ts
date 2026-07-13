@@ -8,6 +8,7 @@ const mockAddMessage = jest.fn();
 const mockAppendAgentRunCheckpoint = jest.fn();
 const mockUpdateAgentRunSummary = jest.fn();
 const mockAddConversationLog = jest.fn();
+const mockTransitionMessageMemoryPublication = jest.fn();
 
 let mockChatStoreState: any;
 
@@ -110,6 +111,23 @@ beforeEach(() => {
         messages: [...conversation.messages, { ...message, timestamp: 5 }],
       }));
     }),
+    transitionMessageMemoryPublication: mockTransitionMessageMemoryPublication.mockImplementation(
+      (conversationId: string, messageId: string, disposition: any) => {
+        updateConversation(conversationId, (conversation) => ({
+          ...conversation,
+          messages: conversation.messages.map((message: any) =>
+            message.id === messageId
+              ? { ...message, memoryPublication: { version: 1, disposition } }
+              : message,
+          ),
+        }));
+        return {
+          status: 'applied',
+          changed: true,
+          publication: { version: 1, disposition },
+        };
+      },
+    ),
     appendAgentRunCheckpoint: mockAppendAgentRunCheckpoint,
     updateAgentRunSummary: mockUpdateAgentRunSummary,
     addConversationLog: mockAddConversationLog,
