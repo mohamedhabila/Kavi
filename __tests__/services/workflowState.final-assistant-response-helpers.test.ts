@@ -1,6 +1,11 @@
 import type { Message } from '../../src/types/message';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
-import { getLatestFinalAssistantResponsePreview, hasDeliveredFinalAssistantResponse, summarizeBackgroundWorkerRunOutcome } from '../../src/services/agents/lifecycle/agentRunStateMachine';
+import {
+  getLatestAssistantProjectionFinalResponse,
+  getLatestFinalAssistantResponsePreview,
+  hasDeliveredFinalAssistantResponse,
+  summarizeBackgroundWorkerRunOutcome,
+} from '../../src/services/agents/lifecycle/agentRunStateMachine';
 function makeSnapshot(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot {
   return {
     sessionId: 'sub-1',
@@ -71,6 +76,7 @@ describe('final assistant response helpers', () => {
     expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBe(
       'The task is complete and verified.',
     );
+    expect(getLatestAssistantProjectionFinalResponse(messages, 'msg-user')).toBe(messages.at(-1));
   });
 
   it('rejects an older final when a newer owning projection remains incomplete after compaction', () => {
@@ -261,6 +267,7 @@ describe('final assistant response helpers', () => {
     expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBe(
       'The owning response is complete.',
     );
+    expect(getLatestAssistantProjectionFinalResponse(messages, 'msg-user')?.id).toBe('msg-final');
   });
 
   it('ignores incomplete final assistant text when deciding whether a run delivered an answer', () => {

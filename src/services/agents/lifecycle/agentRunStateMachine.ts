@@ -92,7 +92,7 @@ export function hasDeliveredFinalAssistantResponse(
   messages: Message[],
   scope: string | AgentRunMessageScope,
 ): boolean {
-  return getLatestAssistantProjectionFinalResponsePreview(messages, scope) !== undefined;
+  return getLatestAssistantProjectionFinalResponse(messages, scope) !== undefined;
 }
 
 export function getLatestFinalAssistantResponsePreview(
@@ -111,6 +111,18 @@ export function getLatestAssistantProjectionFinalResponsePreview(
   messages: Message[],
   scope: string | AgentRunMessageScope,
 ): string | undefined {
+  return getLatestAssistantProjectionFinalResponse(messages, scope)?.content.trim();
+}
+
+/**
+ * Return the exact delivered final projection for a run. Callers that persist
+ * lineage must use the message identity instead of inferring it from preview
+ * text, which may be duplicated or replaced later in the same run slice.
+ */
+export function getLatestAssistantProjectionFinalResponse(
+  messages: Message[],
+  scope: string | AgentRunMessageScope,
+): Message | undefined {
   const assistantMessages = getAgentRunMessageSlice(messages, scope).filter(
     (message) => message.role === 'assistant',
   );
@@ -119,7 +131,7 @@ export function getLatestAssistantProjectionFinalResponsePreview(
     hasCompleteFinalAssistantMetadata(projection) &&
     !isAssistantFinalResponsePlaceholder(projection) &&
     hasVisibleFinalAssistantText(projection)
-    ? projection.content.trim()
+    ? projection
     : undefined;
 }
 
