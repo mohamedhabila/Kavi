@@ -26,6 +26,7 @@ import type { Message } from '../../../src/types/message';
 import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
+import { AGENT_RUN_FACT_CONTRIBUTION_PRODUCER_ID } from '../../../src/services/memory/agentRunFactContributionIdentity';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -138,6 +139,7 @@ describe('memory ingestion receipt integration', () => {
         attemptNumber: 1,
         episodeId: expect.any(String),
         deterministicFactIds: [expect.any(String)],
+        agentRunMemoryFactIds: [expect.any(String)],
         providerFactIds: [],
         invalidatedFactIds: [],
         activeFocusUpdated: false,
@@ -150,12 +152,16 @@ describe('memory ingestion receipt integration', () => {
     expect(
       listFacts({ originConversationId: job.memoryConversationId }).map((fact) => fact.id),
     ).toEqual(expect.arrayContaining(receipt!.deterministicFactIds));
-    expect(factContributions(job.memoryConversationId)).toEqual(
-      receipt!.deterministicFactIds.map((factId) => ({
+    expect(factContributions(job.memoryConversationId)).toEqual([
+      ...receipt!.deterministicFactIds.map((factId) => ({
         fact_id: factId,
         producer_id: CONSOLIDATION_FACT_PRODUCER_IDS.structuralTurn,
       })),
-    );
+      ...receipt!.agentRunMemoryFactIds.map((factId) => ({
+        fact_id: factId,
+        producer_id: AGENT_RUN_FACT_CONTRIBUTION_PRODUCER_ID,
+      })),
+    ]);
     expect(getIngestionJob(job.id)).toEqual(
       expect.objectContaining({ status: 'completed_structural', attemptCount: 1 }),
     );

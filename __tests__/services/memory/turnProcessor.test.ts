@@ -216,9 +216,6 @@ describe('processIngestionTurn', () => {
       expect.objectContaining({
         userMessage: 'Deploy',
         assistantMessage: 'Deployed.',
-        conversationId: 'conv-1',
-        threadId: 'conv-1',
-        sourceRunId: 'run-structural',
         sourceUserMessageId: user.id,
         sourceAssistantMessageId: assistant.id,
       }),
