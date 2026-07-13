@@ -361,7 +361,7 @@ it('closes exact fact and receipt lineage without deleting a different task scop
   expect(ids('memory_ingestion_receipts', 'job_id')).toEqual([]);
   expect(
     getMemoryDb().getAllSync<{ source_thread_id: string; task_id: string }>(
-      `SELECT source_thread_id, task_id FROM memory_withdrawal_sources
+      `SELECT source_thread_id, task_id FROM memory_retired_sources
         WHERE source_kind = 'run' AND source_id IN ('run-b', 'run-c')`,
     ),
   ).toEqual([{ source_thread_id: 'thread-c', task_id: 'task-c' }]);

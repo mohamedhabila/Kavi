@@ -257,7 +257,7 @@ describe('memory withdrawal guards', () => {
     expect(next.fact.objectText).toBe(privateValue);
     expect(
       getMemoryDb().getFirstSync<{ count: number }>(
-        `SELECT COUNT(*) AS count FROM memory_withdrawal_sources
+        `SELECT COUNT(*) AS count FROM memory_retired_sources
           WHERE source_kind = 'message' AND source_id = 'message-new'`,
       )?.count,
     ).toBe(0);

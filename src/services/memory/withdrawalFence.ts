@@ -2,6 +2,7 @@ import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './database';
 import { requireExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { requireExactMemoryScopeId } from './memoryScopeIdentity';
+import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 
 export type MemoryWithdrawalSourceKind = 'message' | 'turn' | 'run';
 
@@ -62,16 +63,19 @@ export function isMemorySourceWithdrawn(input: MemoryWithdrawalSourceIdentity): 
     'memory_withdrawal_source_id_invalid',
   );
   ensureFactSchema();
+  const db = getMemoryDb();
   return Boolean(
-    getMemoryDb().getFirstSync<{ present: number }>(
+    db.getFirstSync<{ present: number }>(
       `SELECT 1 AS present
-         FROM memory_withdrawal_sources
-        WHERE memory_conversation_id = ?
+         FROM memory_retired_sources
+        WHERE memory_owner_id = ?
+          AND memory_conversation_id = ?
           AND source_thread_id = ?
           AND task_id = ?
           AND source_kind = ?
           AND source_id = ?
         LIMIT 1`,
+      getLocalMemoryVaultOwnerId(db),
       scope.memoryConversationId,
       scope.sourceThreadId,
       scope.taskId,

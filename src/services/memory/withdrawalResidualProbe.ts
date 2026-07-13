@@ -1,4 +1,5 @@
 import type { MemoryDatabase } from './access/schemaGuard';
+import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { getEmbeddingCacheEntryCount } from './embeddings';
 import { captureScopedMemoryEvidence } from './evidenceSnapshot';
 
@@ -229,10 +230,12 @@ function queueReplayFenceResiduals(
   let missing = 0;
   for (const source of sources) {
     const present = db.getFirstSync<{ present: number }>(
-      `SELECT 1 AS present FROM memory_withdrawal_sources
-        WHERE memory_conversation_id = ? AND source_thread_id = ? AND task_id = ?
+      `SELECT 1 AS present FROM memory_retired_sources
+        WHERE memory_owner_id = ? AND memory_conversation_id = ?
+          AND source_thread_id = ? AND task_id = ?
           AND source_kind = ? AND source_id = ?
         LIMIT 1`,
+      getLocalMemoryVaultOwnerId(db),
       source.memoryConversationId,
       source.sourceThreadId,
       source.taskId,

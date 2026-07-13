@@ -20,6 +20,7 @@ import {
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
+import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -381,18 +382,14 @@ describe('durable memory fact observations', () => {
 
   it('rejects an observation whose source was withdrawn in the exact scope', () => {
     const factId = createSubjectiveFact();
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawal_sources(
-        withdrawal_id, memory_conversation_id, source_thread_id, task_id,
-        source_kind, source_id
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
-      'withdrawal-1',
-      'conversation-1',
-      'thread-1',
-      'task-1',
-      'message',
-      'message-2',
-    );
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'withdrawal-1',
+      memoryConversationId: 'conversation-1',
+      sourceThreadId: 'thread-1',
+      taskId: 'task-1',
+      sourceKind: 'message',
+      sourceId: 'message-2',
+    });
 
     expect(() => recordMemoryFactObservation(conflictingObservation(factId), 200)).toThrow(
       'Memory persistence source withdrawn',

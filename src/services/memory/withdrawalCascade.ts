@@ -307,6 +307,10 @@ export function executeMemoryWithdrawalCascade(
   now: number,
 ): MemoryWithdrawalTransactionResult {
   const withdrawalId = newId('withdrawal');
+  const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+  if (lineage.target.memory_owner_id !== memoryOwnerId) {
+    throw new Error('withdrawal_lineage_invalid');
+  }
   db.runSync(
     `INSERT INTO memory_withdrawals(
        id, target_fact_id, memory_conversation_id, source_thread_id, task_id, reason, withdrawn_at
@@ -318,6 +322,12 @@ export function executeMemoryWithdrawalCascade(
     lineage.targetScope.taskId,
     now,
   );
+  db.runSync(
+    `INSERT INTO memory_source_retirement_groups(id, reason, retired_at)
+     VALUES (?, 'fact_withdrawal', ?)`,
+    withdrawalId,
+    now,
+  );
   for (const removedFactId of lineage.factIds) {
     db.runSync(
       'INSERT INTO memory_withdrawal_facts(withdrawal_id, fact_id) VALUES (?, ?)',
@@ -327,11 +337,12 @@ export function executeMemoryWithdrawalCascade(
   }
   for (const source of lineage.scopedSources) {
     db.runSync(
-      `INSERT INTO memory_withdrawal_sources(
-         withdrawal_id, memory_conversation_id, source_thread_id, task_id,
-         source_kind, source_id
-       ) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO memory_retired_sources(
+         retirement_group_id, memory_owner_id, memory_conversation_id,
+         source_thread_id, task_id, source_kind, source_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       withdrawalId,
+      memoryOwnerId,
       source.memoryConversationId,
       source.sourceThreadId,
       source.taskId,
@@ -366,10 +377,6 @@ export function executeMemoryWithdrawalCascade(
   const episodeIds = new Set(lineage.episodeIds);
   const observations = collectFactObservations(db, lineage);
   const observationIds = observations.map((row) => row.id);
-  const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
-  if (lineage.target.memory_owner_id !== memoryOwnerId) {
-    throw new Error('withdrawal_lineage_invalid');
-  }
   const verifiedProcedureObservations = collectVerifiedProcedureObservations(
     db,
     lineage,

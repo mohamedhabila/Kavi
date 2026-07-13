@@ -496,7 +496,7 @@ describe('atomic memory withdrawal', () => {
       task_id: string;
       source_kind: string;
       source_id: string;
-    }>('SELECT * FROM memory_withdrawal_sources');
+    }>('SELECT * FROM memory_retired_sources');
     expect(sourceRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

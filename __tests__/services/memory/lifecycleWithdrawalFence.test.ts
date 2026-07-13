@@ -3,7 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 import {
   __resetIngestionQueueForTests,
   countPendingIngestionJobs,
@@ -20,6 +20,7 @@ import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { messages } from '../../helpers/memoryLifecycle';
+import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -40,16 +41,13 @@ afterEach(() => {
 
 describe('memory lifecycle withdrawal fence', () => {
   it('fences a withdrawn exact turn before any working-memory mutation', async () => {
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawal_sources(
-         withdrawal_id, memory_conversation_id, source_thread_id, task_id,
-         source_kind, source_id
-       ) VALUES (?, ?, ?, '', 'turn', ?)`,
-      'withdrawal-lifecycle',
-      'conv-withdrawn',
-      'conv-withdrawn',
-      'a-1',
-    );
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'withdrawal-lifecycle',
+      memoryConversationId: 'conv-withdrawn',
+      sourceThreadId: 'conv-withdrawn',
+      sourceKind: 'turn',
+      sourceId: 'a-1',
+    });
 
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-withdrawn',

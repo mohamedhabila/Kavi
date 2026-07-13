@@ -22,6 +22,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -311,16 +312,14 @@ describe('expandLocalEvidence', () => {
           SCOPE.sourceThreadId,
           40,
         );
-        getMemoryDb().runSync(
-          `INSERT INTO memory_withdrawal_sources(
-             withdrawal_id, memory_conversation_id, source_thread_id, task_id,
-             source_kind, source_id
-           ) VALUES (?, ?, ?, '', 'message', ?)`,
-          `withdrawal-${mutation}`,
-          SCOPE.memoryConversationId,
-          SCOPE.sourceThreadId,
-          episode.sourceStartMessageId,
-        );
+        insertRetiredMemorySourceForTest({
+          retirementGroupId: `withdrawal-${mutation}`,
+          memoryConversationId: SCOPE.memoryConversationId,
+          sourceThreadId: SCOPE.sourceThreadId,
+          sourceKind: 'message',
+          sourceId: episode.sourceStartMessageId,
+          retiredAt: 40,
+        });
       }
 
       const result = expandCurrentThreadEvidence({

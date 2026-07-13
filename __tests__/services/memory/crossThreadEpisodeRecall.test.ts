@@ -28,6 +28,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -344,15 +345,14 @@ describe('bounded authorized cross-thread episode recall', () => {
       episode.threadId,
       2_000,
     );
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawal_sources(
-         withdrawal_id, memory_conversation_id, source_thread_id, task_id,
-         source_kind, source_id
-       ) VALUES ('withdrawal-cross-recall', ?, ?, '', 'message', ?)`,
-      SESSION_ID,
-      episode.threadId,
-      episode.sourceStartMessageId,
-    );
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'withdrawal-cross-recall',
+      memoryConversationId: SESSION_ID,
+      sourceThreadId: episode.threadId,
+      sourceKind: 'message',
+      sourceId: episode.sourceStartMessageId,
+      retiredAt: 2_000,
+    });
 
     const result = load('release withdrawn');
 
@@ -380,15 +380,14 @@ describe('bounded authorized cross-thread episode recall', () => {
       episode.threadId,
       2_000,
     );
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawal_sources(
-         withdrawal_id, memory_conversation_id, source_thread_id, task_id,
-         source_kind, source_id
-       ) VALUES ('withdrawal-interior', ?, ?, '', 'message', ?)`,
-      SESSION_ID,
-      episode.threadId,
-      interiorMessageId,
-    );
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'withdrawal-interior',
+      memoryConversationId: SESSION_ID,
+      sourceThreadId: episode.threadId,
+      sourceKind: 'message',
+      sourceId: interiorMessageId,
+      retiredAt: 2_000,
+    });
 
     const result = load('release withdrawn interior');
 
@@ -455,15 +454,14 @@ describe('bounded authorized cross-thread episode recall', () => {
       withdrawn.threadId,
       2_000,
     );
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawal_sources(
-         withdrawal_id, memory_conversation_id, source_thread_id, task_id,
-         source_kind, source_id
-       ) VALUES ('withdrawal-revalidate', ?, ?, '', 'turn', ?)`,
-      SESSION_ID,
-      withdrawn.threadId,
-      withdrawn.sourceEndMessageId,
-    );
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'withdrawal-revalidate',
+      memoryConversationId: SESSION_ID,
+      sourceThreadId: withdrawn.threadId,
+      sourceKind: 'turn',
+      sourceId: withdrawn.sourceEndMessageId,
+      retiredAt: 2_000,
+    });
 
     expect(revalidate(policySelection)).toBeNull();
     expect(revalidate(deletedSelection)).toBeNull();

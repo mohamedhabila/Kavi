@@ -201,8 +201,9 @@ export function revalidateAuthorizedCrossThreadEpisodeOrigin(input: {
   if (!episode || !policyRow) return null;
   const withdrawal = input.db.getFirstSync<WithdrawalPresenceRow>(
     `SELECT CASE WHEN EXISTS (
-       SELECT 1 FROM memory_withdrawal_sources AS withdrawn
-        WHERE withdrawn.memory_conversation_id = ?
+       SELECT 1 FROM memory_retired_sources AS withdrawn
+        WHERE withdrawn.memory_owner_id = ?
+          AND withdrawn.memory_conversation_id = ?
           AND withdrawn.source_thread_id = ?
           AND withdrawn.task_id = COALESCE(?, '')
           AND (
@@ -221,6 +222,7 @@ export function revalidateAuthorizedCrossThreadEpisodeOrigin(input: {
             OR (withdrawn.source_kind = 'turn' AND withdrawn.source_id = ?)
           )
      ) THEN 1 ELSE 0 END AS withdrawn`,
+    currentScope.memoryOwnerId,
     episode.conversation_id,
     episode.thread_id,
     episode.task_id,

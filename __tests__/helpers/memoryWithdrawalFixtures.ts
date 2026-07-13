@@ -2,9 +2,41 @@ import { rowToFact, type FactRow } from '../../src/services/memory/facts/types';
 import { replaceFactRetrievalTerms } from '../../src/services/memory/facts/retrievalIndex';
 import { enqueueIngestionJob as enqueueStrictIngestionJob } from '../../src/services/memory/ingestionQueueStore';
 import { getMemoryDb } from '../../src/services/memory/database';
+import { getLocalMemoryVaultOwnerId } from '../../src/services/memory/memoryVaultIdentity';
 import { createTestIngestionJobEnqueuer } from './ingestionSourceSnapshotFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
+
+export function insertRetiredMemorySourceForTest(input: {
+  retirementGroupId: string;
+  memoryConversationId: string;
+  sourceThreadId: string;
+  taskId?: string | null;
+  sourceKind: 'message' | 'turn' | 'run';
+  sourceId: string;
+  retiredAt?: number;
+}): void {
+  const db = getMemoryDb();
+  db.runSync(
+    `INSERT OR IGNORE INTO memory_source_retirement_groups(id, reason, retired_at)
+     VALUES (?, 'fact_withdrawal', ?)`,
+    input.retirementGroupId,
+    input.retiredAt ?? 0,
+  );
+  db.runSync(
+    `INSERT OR IGNORE INTO memory_retired_sources(
+       retirement_group_id, memory_owner_id, memory_conversation_id,
+       source_thread_id, task_id, source_kind, source_id
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    input.retirementGroupId,
+    getLocalMemoryVaultOwnerId(db),
+    input.memoryConversationId,
+    input.sourceThreadId,
+    input.taskId ?? '',
+    input.sourceKind,
+    input.sourceId,
+  );
+}
 
 export function cloneMemoryFactForWithdrawal(
   sourceFactId: string,

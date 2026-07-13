@@ -4,7 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { makeTestAgentRun, makeTestConversation } from '../../helpers/factories';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 import {
   __resetIngestionQueueForTests,
   cancelScheduledIngestionDrain,
@@ -20,6 +20,7 @@ import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { AgentRunControlGraphState } from '../../../src/types/agentRun';
 import type { Message } from '../../../src/types/message';
+import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -246,16 +247,13 @@ describe('publishConversationTurnMemory', () => {
   });
 
   it('settles a withdrawn exact source without mutating working memory or queue state', async () => {
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawal_sources(
-         withdrawal_id, memory_conversation_id, source_thread_id, task_id,
-         source_kind, source_id
-       ) VALUES (?, ?, ?, '', 'turn', ?)`,
-      'withdrawal-publication',
-      'conversation-publication',
-      'conversation-publication',
-      'assistant-new',
-    );
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'withdrawal-publication',
+      memoryConversationId: 'conversation-publication',
+      sourceThreadId: 'conversation-publication',
+      sourceKind: 'turn',
+      sourceId: 'assistant-new',
+    });
 
     await expect(
       publishConversationTurnMemory('conversation-publication', undefined, {
