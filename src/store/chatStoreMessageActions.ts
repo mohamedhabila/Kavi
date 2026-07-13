@@ -19,6 +19,12 @@ import {
 } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
 import { appendToolEffectReceipt } from '../utils/toolEffectReceipt';
+import {
+  isEligibleMessageMemoryPublicationSource,
+  normalizeMessageMemoryPublication,
+  resolveMessageMemoryPublicationTransition,
+} from '../utils/messageMemoryPublication';
+import type { TransitionMessageMemoryPublicationResult } from './chatStoreTypes';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 
@@ -39,6 +45,7 @@ export function createMessageStoreActions(
   | 'updateMessageReasoning'
   | 'updateMessageProviderReplay'
   | 'updateMessageAssistantMetadata'
+  | 'transitionMessageMemoryPublication'
   | 'updateMessageEffect'
   | 'editMessage'
   | 'setLoading'
@@ -47,12 +54,14 @@ export function createMessageStoreActions(
 > {
   return {
     addMessage: (conversationId, message) => {
+      const { memoryPublication: _untrustedMemoryPublication, ...trustedMessage } = message as
+        typeof message & Pick<Message, 'memoryPublication'>;
       set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id !== conversationId) return c;
           const timestamp = message.timestamp ?? Date.now();
           const newMessage: Message = {
-            ...message,
+            ...trustedMessage,
             id: message.id || generateId(),
             timestamp,
             ...(message.toolCalls
@@ -162,6 +171,71 @@ export function createMessageStoreActions(
         );
         return conversations ? { conversations } : state;
       }),
+
+    transitionMessageMemoryPublication: (conversationId, messageId, disposition) => {
+      let result: TransitionMessageMemoryPublicationResult = {
+        status: 'rejected',
+        reason: 'source_unavailable',
+      };
+      let shouldCheckpoint = false;
+      set((state) => {
+        const conversationIndexes = state.conversations.flatMap((conversation, index) =>
+          conversation.id === conversationId ? [index] : [],
+        );
+        if (conversationIndexes.length === 0) return state;
+        if (conversationIndexes.length !== 1) {
+          result = { status: 'rejected', reason: 'source_identity_invalid' };
+          return state;
+        }
+        const conversationIndex = conversationIndexes[0];
+        const conversation = state.conversations[conversationIndex];
+        const messageIndexes = conversation.messages.flatMap((message, index) =>
+          message.id === messageId ? [index] : [],
+        );
+        if (messageIndexes.length === 0) return state;
+        if (messageIndexes.length !== 1) {
+          result = { status: 'rejected', reason: 'source_identity_invalid' };
+          return state;
+        }
+        const messageIndex = messageIndexes[0];
+        const message = conversation.messages[messageIndex];
+        if (!isEligibleMessageMemoryPublicationSource(message)) {
+          result = { status: 'rejected', reason: 'source_ineligible' };
+          return state;
+        }
+
+        const current = normalizeMessageMemoryPublication(message.memoryPublication);
+        if (message.memoryPublication !== undefined && current === undefined) {
+          result = { status: 'rejected', reason: 'transition_conflict' };
+          return state;
+        }
+        const transition = resolveMessageMemoryPublicationTransition(current, {
+          version: 1,
+          disposition,
+        });
+        if (!transition.applied) {
+          result = { status: 'rejected', reason: 'transition_conflict' };
+          return state;
+        }
+        result = {
+          status: 'applied',
+          changed: transition.changed,
+          publication: transition.publication,
+        };
+        if (!transition.changed) return state;
+
+        shouldCheckpoint = true;
+        const messages = [...conversation.messages];
+        messages[messageIndex] = { ...message, memoryPublication: transition.publication };
+        const conversations = [...state.conversations];
+        conversations[conversationIndex] = { ...conversation, messages };
+        return { conversations };
+      });
+      if (shouldCheckpoint) {
+        requestChatStorePersistenceCheckpoint();
+      }
+      return result;
+    },
 
     updateMessageEffect: (conversationId, messageId, effectId) =>
       set((state) => {

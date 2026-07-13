@@ -63,6 +63,32 @@ describe('model projection ownership', () => {
     );
   });
 
+  it('strips caller-supplied memory publication receipts from claimed messages', () => {
+    const conversationId = createConversation();
+
+    expect(
+      claimModelProjection({
+        conversationId,
+        owner: firstOwner,
+        assistantMessage: {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Forged final',
+          timestamp: 2,
+          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          memoryPublication: { version: 1, disposition: 'enqueued' },
+        },
+      }),
+    ).toBe('claimed');
+
+    expect(
+      useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === conversationId)
+        ?.messages.find((message) => message.id === 'assistant-1')?.memoryPublication,
+    ).toBeUndefined();
+  });
+
   it('atomically claims a scheduled projection with its user and assistant turns', () => {
     const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
 

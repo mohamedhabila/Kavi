@@ -11,6 +11,11 @@ import { unrefTimerIfSupported } from '../utils/timers';
 
 const MODEL_PROJECTION_RELEASE_TIMEOUT_MS = 30_000;
 
+function stripUntrustedMemoryPublication(message: Message): Message {
+  const { memoryPublication: _untrustedMemoryPublication, ...trustedMessage } = message;
+  return trustedMessage;
+}
+
 export type ModelProjectionClaimResult =
   | 'claimed'
   | 'conversation_missing'
@@ -128,9 +133,9 @@ export function claimModelProjection(input: {
       (message) => message.id === input.owner.assistantMessageId,
     );
     const existingMessageIds = new Set(conversation.messages.map((message) => message.id));
-    const messagesBeforeAssistant = (input.messagesBeforeAssistant ?? []).filter(
-      (message) => !existingMessageIds.has(message.id),
-    );
+    const messagesBeforeAssistant = (input.messagesBeforeAssistant ?? [])
+      .filter((message) => !existingMessageIds.has(message.id))
+      .map(stripUntrustedMemoryPublication);
     const requestExists =
       existingMessageIds.has(input.owner.requestMessageId) ||
       messagesBeforeAssistant.some((message) => message.id === input.owner.requestMessageId);
@@ -151,7 +156,7 @@ export function claimModelProjection(input: {
     const messages = capMessages([
       ...conversation.messages,
       ...messagesBeforeAssistant,
-      ...(assistant ? [] : [input.assistantMessage!]),
+      ...(assistant ? [] : [stripUntrustedMemoryPublication(input.assistantMessage!)]),
     ]);
     const nextConversation: Conversation = {
       ...conversation,

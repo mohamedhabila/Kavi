@@ -1,4 +1,5 @@
 import type {
+  Message,
   MessageMemoryPublication,
   MessageMemoryPublicationDisposition,
 } from '../types/message';
@@ -86,6 +87,17 @@ export function isTerminalMessageMemoryPublication(
   return publication !== undefined && TERMINAL_DISPOSITIONS.has(publication.disposition);
 }
 
+/** Structural source gate shared by the code-owned store action and persistence sanitizer. */
+export function isEligibleMessageMemoryPublicationSource(message: Message): boolean {
+  return (
+    message.role === 'assistant' &&
+    !message.subAgentEvent &&
+    message.assistantMetadata?.kind === 'final' &&
+    message.assistantMetadata.completionStatus === 'complete' &&
+    message.assistantMetadata.finishReason !== 'yielded'
+  );
+}
+
 /**
  * Resolves the only legal compare-and-set transitions for a message publication receipt.
  * Identical replay is successful but unchanged so retries remain idempotent.
@@ -99,9 +111,12 @@ export function resolveMessageMemoryPublicationTransition(
   }
 
   const canApply =
-    current === undefined ||
+    (current === undefined &&
+      (requested.disposition === null ||
+        requested.disposition === 'opt_out' ||
+        requested.disposition === 'ephemeral_thread')) ||
     (isOpenMessageMemoryPublication(current) && isTerminalMessageMemoryPublication(requested)) ||
-    (current.disposition === 'enqueued' && requested.disposition === 'withdrawn');
+    (current?.disposition === 'enqueued' && requested.disposition === 'withdrawn');
 
   if (canApply) {
     return { applied: true, changed: true, publication: requested };

@@ -60,7 +60,7 @@ describe('useChatStore', () => {
         7,
       );
 
-      expect(persistOptions.version).toBe(8);
+      expect(persistOptions.version).toBe(9);
       expect(migrated.conversations[0].messages).toEqual([
         expect.objectContaining({ id: 'compact_summary', content: summary }),
         expect.objectContaining({

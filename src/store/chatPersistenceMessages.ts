@@ -27,6 +27,10 @@ import {
 import { compactPersistedToolContent } from './persistedToolContent';
 import { sanitizeToolEffectReceipts } from '../utils/toolEffectReceipt';
 import { isMemoryRetrievalEventId } from '../utils/assistantMessageMetadata';
+import {
+  isEligibleMessageMemoryPublicationSource,
+  normalizeMessageMemoryPublication,
+} from '../utils/messageMemoryPublication';
 
 function sanitizeAssistantMetadata(
   metadata: Message['assistantMetadata'],
@@ -34,10 +38,29 @@ function sanitizeAssistantMetadata(
   if (!metadata) {
     return undefined;
   }
-  const { memoryRetrievalEventId, ...completionMetadata } = metadata;
+  if (
+    !isPlainRecord(metadata) ||
+    (metadata.kind !== 'intermediate' && metadata.kind !== 'final') ||
+    (metadata.completionStatus !== 'complete' && metadata.completionStatus !== 'incomplete')
+  ) {
+    return undefined;
+  }
+  const finishReason =
+    typeof metadata.finishReason === 'string'
+      ? truncateText(metadata.finishReason, MAX_PERSISTED_LOG_TITLE_CHARS)
+      : undefined;
+  const terminalReason =
+    typeof metadata.terminalReason === 'string'
+      ? truncateText(metadata.terminalReason, MAX_PERSISTED_LOG_DETAIL_CHARS)
+      : undefined;
   return {
-    ...completionMetadata,
-    ...(isMemoryRetrievalEventId(memoryRetrievalEventId) ? { memoryRetrievalEventId } : {}),
+    kind: metadata.kind,
+    completionStatus: metadata.completionStatus,
+    ...(finishReason ? { finishReason } : {}),
+    ...(terminalReason ? { terminalReason } : {}),
+    ...(isMemoryRetrievalEventId(metadata.memoryRetrievalEventId)
+      ? { memoryRetrievalEventId: metadata.memoryRetrievalEventId }
+      : {}),
   };
 }
 
@@ -192,6 +215,12 @@ export function sanitizeMessage(
     ? sanitizeProviderReplay(message.providerReplay)
     : undefined;
   const assistantMetadata = sanitizeAssistantMetadata(message.assistantMetadata);
+  const memoryPublication = isEligibleMessageMemoryPublicationSource({
+    ...message,
+    assistantMetadata,
+  })
+    ? normalizeMessageMemoryPublication(message.memoryPublication)
+    : undefined;
 
   return {
     id: message.id,
@@ -223,6 +252,7 @@ export function sanitizeMessage(
       : {}),
     ...(providerReplay ? { providerReplay } : {}),
     ...(assistantMetadata ? { assistantMetadata } : {}),
+    ...(memoryPublication ? { memoryPublication } : {}),
     ...(message.effectId ? { effectId: message.effectId } : {}),
     ...(message.subAgentEvent
       ? {

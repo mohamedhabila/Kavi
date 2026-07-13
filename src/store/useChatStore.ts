@@ -15,7 +15,7 @@ import { partializeChatPersistState } from './chatPersistence';
 import { createAgentRunStoreActions } from './agentRuns/storeActions';
 import { createConversationStoreActions } from './chatStoreConversationActions';
 import { createMessageStoreActions } from './chatStoreMessageActions';
-import { CHAT_STORE_VERSION, migrateRetiredChatMemory } from './chatStoreMigrations';
+import { CHAT_STORE_VERSION, migrateChatStoreState } from './chatStoreMigrations';
 import { normalizePersistedChatState } from './chatStoreNormalization';
 import { createUsageStoreActions } from './chatStoreUsageActions';
 import type { ChatState } from './chatStoreTypes';
@@ -40,7 +40,7 @@ export const useChatStore = create<ChatState>()(
       version: CHAT_STORE_VERSION,
       migrate: (persistedState: unknown, persistedVersion: number) => {
         const normalized = normalizePersistedChatState(
-          migrateRetiredChatMemory(persistedState, persistedVersion),
+          migrateChatStoreState(persistedState, persistedVersion),
         );
         return partializeChatPersistState(normalized);
       },

@@ -4,6 +4,7 @@ import type {
 } from '../../src/types/message';
 import {
   areMessageMemoryPublicationsEqual,
+  isEligibleMessageMemoryPublicationSource,
   isMessageMemoryPublication,
   isOpenMessageMemoryPublication,
   isTerminalMessageMemoryPublication,
@@ -28,6 +29,41 @@ function publication(disposition: MessageMemoryPublicationDisposition): MessageM
 }
 
 describe('message memory publication', () => {
+  it('admits only explicit complete non-yielded assistant finals as receipt sources', () => {
+    const final = {
+      id: 'assistant-final',
+      role: 'assistant' as const,
+      content: 'Done',
+      timestamp: 1,
+      assistantMetadata: { kind: 'final' as const, completionStatus: 'complete' as const },
+    };
+
+    expect(isEligibleMessageMemoryPublicationSource(final)).toBe(true);
+    expect(isEligibleMessageMemoryPublicationSource({ ...final, role: 'user' })).toBe(false);
+    expect(
+      isEligibleMessageMemoryPublicationSource({
+        ...final,
+        assistantMetadata: { ...final.assistantMetadata, completionStatus: 'incomplete' },
+      }),
+    ).toBe(false);
+    expect(
+      isEligibleMessageMemoryPublicationSource({
+        ...final,
+        assistantMetadata: { ...final.assistantMetadata, finishReason: 'yielded' },
+      }),
+    ).toBe(false);
+    expect(
+      isEligibleMessageMemoryPublicationSource({
+        ...final,
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'started',
+          snapshot: {} as never,
+        },
+      }),
+    ).toBe(false);
+  });
+
   it.each(dispositions)('normalizes %s and strips fields outside the contract', (disposition) => {
     const value = {
       version: 1,
@@ -81,13 +117,32 @@ describe('message memory publication', () => {
     }
   });
 
-  it.each(dispositions)('allows absent state to become %s', (disposition) => {
-    expect(resolveMessageMemoryPublicationTransition(undefined, publication(disposition))).toEqual({
-      applied: true,
-      changed: true,
-      publication: publication(disposition),
-    });
-  });
+  it.each([null, 'opt_out', 'ephemeral_thread'] as const)(
+    'allows absent state to become %s',
+    (disposition) => {
+      expect(
+        resolveMessageMemoryPublicationTransition(undefined, publication(disposition)),
+      ).toEqual({
+        applied: true,
+        changed: true,
+        publication: publication(disposition),
+      });
+    },
+  );
+
+  it.each(['enqueued', 'withdrawn'] as const)(
+    'rejects absent state becoming %s without an open durability obligation',
+    (disposition) => {
+      expect(
+        resolveMessageMemoryPublicationTransition(undefined, publication(disposition)),
+      ).toEqual({
+        applied: false,
+        changed: false,
+        current: undefined,
+        requested: publication(disposition),
+      });
+    },
+  );
 
   it.each(terminalDispositions)('allows open state to become terminal %s', (disposition) => {
     expect(
