@@ -18,6 +18,9 @@ export interface IngestionJobRow {
   prior_user_message_id: string | null;
   source_start_message_id: string | null;
   source_end_message_id: string;
+  source_snapshot_version: number | null;
+  source_snapshot_sha256: string | null;
+  source_snapshot_byte_length: number | null;
   source_at: number;
   reason: string;
   status: string;
@@ -115,6 +118,9 @@ export function rowToIngestionJob(row: IngestionJobRow): IngestionJob {
     priorUserMessageId: row.prior_user_message_id,
     sourceStartMessageId: row.source_start_message_id,
     sourceEndMessageId: row.source_end_message_id,
+    sourceSnapshotVersion: row.source_snapshot_version,
+    sourceSnapshotSha256: row.source_snapshot_sha256,
+    sourceSnapshotByteLength: row.source_snapshot_byte_length,
     sourceAt: row.source_at,
     reason: row.reason as IngestionJobReason,
     status: row.status as IngestionJob['status'],

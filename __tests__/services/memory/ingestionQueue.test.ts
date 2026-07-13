@@ -49,6 +49,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import type { Message } from '../../../src/types/message';
+import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
@@ -62,19 +63,21 @@ type TestEnqueueInput = Pick<
   Partial<EnqueueIngestionJobInput>;
 
 function enqueueIngestionJob(input: TestEnqueueInput) {
-  return enqueueStrictIngestionJob({
-    threadTitle: null,
-    memoryConversationId: input.threadId,
-    taskId: null,
-    sourceStartMessageId: null,
-    sourceRunId: null,
-    sourceAt: input.sourceAt ?? input.now ?? 1,
-    chatProviderId: null,
-    chatModel: null,
-    reason: 'turn_completed',
-    providerEnrichment: true,
-    ...input,
-  });
+  return enqueueStrictIngestionJob(
+    withIngestionSourceSnapshot({
+      threadTitle: null,
+      memoryConversationId: input.threadId,
+      taskId: null,
+      sourceStartMessageId: null,
+      sourceRunId: null,
+      sourceAt: input.sourceAt ?? input.now ?? 1,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      ...input,
+    }),
+  );
 }
 
 function processResult(
@@ -202,13 +205,15 @@ describe('ingestionQueue', () => {
       `INSERT INTO memory_ingestion_jobs(
          id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
          source_run_id, chat_provider_id, chat_model, source_start_message_id,
-         source_end_message_id, source_at, reason, status, attempt_count,
+         source_end_message_id, source_snapshot_version, source_snapshot_sha256,
+         source_snapshot_byte_length, source_at, reason, status, attempt_count,
          provider_enrichment, provider_outcome, outcome_code, next_attempt_at,
          lease_expires_at, claim_token, structural_completed_at, created_at, updated_at,
          completed_at
        )
        SELECT ?, thread_id, thread_title, ?, persona_id, task_id, source_run_id,
               chat_provider_id, chat_model, source_start_message_id, source_end_message_id,
+              source_snapshot_version, source_snapshot_sha256, source_snapshot_byte_length,
               source_at, reason, status, attempt_count, provider_enrichment,
               provider_outcome, outcome_code, next_attempt_at, lease_expires_at,
               claim_token, structural_completed_at, created_at, updated_at, completed_at
@@ -216,6 +221,14 @@ describe('ingestionQueue', () => {
         WHERE id = ?`,
       'conflicting-source-job-b',
       'conflicting-root-b',
+      job.id,
+    );
+    db.runSync(
+      `INSERT INTO memory_ingestion_source_snapshots(job_id, payload_json, created_at)
+       SELECT ?, payload_json, created_at
+         FROM memory_ingestion_source_snapshots
+        WHERE job_id = ?`,
+      'conflicting-source-job-b',
       job.id,
     );
 

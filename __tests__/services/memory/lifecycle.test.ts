@@ -35,7 +35,7 @@ import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import { getEpisodeAccessPolicy } from '../../../src/services/memory/episodes/accessPolicyStore';
 import {
   countPendingIngestionJobs,
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   __resetIngestionQueueForTests,
 } from '../../../src/services/memory/ingestionQueue';
@@ -52,6 +52,9 @@ import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
 import { drainRecordedTurn, messages } from '../../helpers/memoryLifecycle';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -150,7 +153,12 @@ describe('recordCompletedTurnForMemory', () => {
           finishReason: 'tool_calls',
         },
         toolCalls: [
-          { name: 'write_file', arguments: JSON.stringify({ path: 'app.tsx' }), id: 'tc-1' },
+          {
+            name: 'write_file',
+            arguments: JSON.stringify({ path: 'app.tsx' }),
+            id: 'tc-1',
+            status: 'completed',
+          },
         ],
       },
       { id: 'tool-1', role: 'tool', content: 'ok', timestamp: 3, toolCallId: 'tc-1' },
@@ -243,6 +251,7 @@ describe('recordCompletedTurnForMemory', () => {
               scope: 'conversation',
               confidence: 0.95,
             }),
+            status: 'completed',
           },
         ],
       },
@@ -473,13 +482,7 @@ describe('recordCompletedTurnForMemory', () => {
         strict: false,
         schema: expect.objectContaining({
           additionalProperties: false,
-          required: [
-            'new_facts',
-            'episode_summary',
-            'active_focus',
-            'open_threads',
-            'notable',
-          ],
+          required: ['new_facts', 'episode_summary', 'active_focus', 'open_threads', 'notable'],
         }),
       },
     });

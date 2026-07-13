@@ -16,7 +16,7 @@ import {
 } from '../../../src/services/memory/episodes/mutations';
 import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { upsertMemoryTask } from '../../../src/services/memory/tasks';
-import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
+import { enqueueIngestionJob as enqueueStrictIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import * as memoryChangeNotifications from '../../../src/services/memory/changeNotifications';
 import {
@@ -24,6 +24,9 @@ import {
   insertMemoryIngestionReceiptForWithdrawal,
   requireMemoryIngestionJob,
 } from '../../helpers/memoryWithdrawalFixtures';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -281,10 +284,7 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     sourceEndMessageId: 'turn-a',
     sourceRunId: 'run-a',
   });
-  const notificationSpy = jest.spyOn(
-    memoryChangeNotifications,
-    'notifyStructuredMemoryChanged',
-  );
+  const notificationSpy = jest.spyOn(memoryChangeNotifications, 'notifyStructuredMemoryChanged');
   notificationSpy.mockClear();
 
   const result = withdrawMemoryFact(target.id, 3_000);
@@ -296,6 +296,7 @@ it('closes exact fact and receipt lineage without deleting a different task scop
       facts: 1,
       episodes: 2,
       workingBlocks: 6,
+      ingestionSourceSnapshots: 5,
       ingestionJobs: 5,
     }),
   );
@@ -346,6 +347,16 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     sameSourceSiblingJob.id,
   ]) {
     expect(remainingJobIds).not.toContain(removedId);
+  }
+  const remainingSnapshotJobIds = ids('memory_ingestion_source_snapshots', 'job_id');
+  for (const removedId of [
+    jobA.id,
+    chainedEpisodeJob.id,
+    evidenceSourceJob.id,
+    receiptJob.id,
+    sameSourceSiblingJob.id,
+  ]) {
+    expect(remainingSnapshotJobIds).not.toContain(removedId);
   }
   expect(ids('memory_ingestion_receipts', 'job_id')).toEqual([]);
   expect(

@@ -11,6 +11,7 @@ import type { IngestionJobStatus } from './ingestionQueueStore';
 import { MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
 import { newId } from './schema';
 import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
+import { ensureActiveIngestionSourceSnapshot } from './ingestionSourceSnapshotStore';
 
 export const INGESTION_PROCESSING_LEASE_MS = 5 * 60_000;
 
@@ -28,6 +29,7 @@ export function claimIngestionJobForStructuralCheckpoint(
     failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
     return null;
   }
+  if (!ensureActiveIngestionSourceSnapshot(row, now)) return null;
   const claimToken = newId('ingestion_claim');
   const claimProcessEpoch = getRuntimeProcessEpoch();
   const result = getMemoryDb().runSync(

@@ -13,7 +13,7 @@ import { __resetIngestionQueueForTests } from '../../../src/services/memory/inge
 import { recoverStaleIngestionJobs } from '../../../src/services/memory/ingestionQueueRecovery';
 import {
   claimIngestionJob,
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   INGESTION_PROCESSING_LEASE_MS,
   markIngestionJobStructuralComplete,
@@ -35,6 +35,9 @@ import {
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import type { Message } from '../../../src/types/message';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

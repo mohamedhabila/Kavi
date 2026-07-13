@@ -16,6 +16,7 @@ export const CLEARED_STRUCTURED_MEMORY_TABLES = [
   'memory_migration_state',
   'memory_ingestion_receipts',
   'memory_ingestion_jobs',
+  'memory_ingestion_source_snapshots',
   'memory_tasks',
   'memory_reflections',
   'memory_retrieval_events',

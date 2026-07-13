@@ -13,7 +13,7 @@ import { recordFact } from '../../../src/services/memory/facts/mutations';
 import {
   claimIngestionJob,
   completeIngestionJob,
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   ownsIngestionClaim,
 } from '../../../src/services/memory/ingestionQueueStore';
@@ -24,6 +24,9 @@ import { listFacts } from '../../../src/services/memory/facts/queries';
 import { seedConversation } from '../../../src/services/memory/migrationSeedPass';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

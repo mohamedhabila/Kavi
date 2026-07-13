@@ -17,6 +17,7 @@ export const MEMORY_WITHDRAWAL_RESIDUAL_SURFACES = [
   'reflections',
   'workingBlocks',
   'entities',
+  'ingestionSourceSnapshots',
   'ingestionJobs',
   'ingestionReceipts',
   'retrievalEvents',
@@ -327,6 +328,12 @@ export function probeMemoryWithdrawalResiduals(
       0,
     ),
     entities: countIds(db, 'memory_entities', 'id', plan.entityIds),
+    ingestionSourceSnapshots: countIds(
+      db,
+      'memory_ingestion_source_snapshots',
+      'job_id',
+      plan.ingestionJobIds,
+    ),
     ingestionJobs: countIds(db, 'memory_ingestion_jobs', 'id', plan.ingestionJobIds),
     ingestionReceipts: countIds(
       db,

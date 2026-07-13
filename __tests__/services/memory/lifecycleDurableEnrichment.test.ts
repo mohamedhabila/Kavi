@@ -31,7 +31,7 @@ import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
   __resetIngestionQueueForTests,
   drainIngestionQueue,
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
 } from '../../../src/services/memory/ingestionQueue';
 import {
@@ -49,6 +49,9 @@ import { persistMemoryRemember } from '../../../src/services/memory/memoryRememb
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -180,6 +183,7 @@ describe('durable memory enrichment retries', () => {
             id: 'tool-retry',
             name: 'write_file',
             arguments: JSON.stringify({ path: '/workspace/release.aab' }),
+            status: 'completed',
           },
         ],
       },

@@ -19,7 +19,7 @@ jest.mock('../../../src/services/memory/turnProcessor', () => ({
 import {
   __resetIngestionQueueForTests,
   drainIngestionQueue,
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   getNextPendingIngestionAttemptAt,
   INGESTION_RETRY_BASE_DELAY_MS,
@@ -37,6 +37,9 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = jest.mocked(processIngestionTurn);

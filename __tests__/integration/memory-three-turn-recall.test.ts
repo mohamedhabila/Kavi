@@ -17,14 +17,14 @@ const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => 
 function closedAssistant(
   id: string,
   content: string,
-  createdAt: number,
+  timestamp: number,
   toolCalls?: Message['toolCalls'],
 ): Message {
   return {
     id,
     role: 'assistant',
     content,
-    createdAt,
+    timestamp,
     ...(toolCalls ? { toolCalls } : {}),
     assistantMetadata: {
       kind: 'final',
@@ -50,17 +50,18 @@ describe('memory three-turn recall fixture', () => {
   it('turn 3 retrieval can use structural facts written from turn 1', async () => {
     const threadId = 'conv-three-turn';
     const turn1: Message[] = [
-      { id: 'u-1', role: 'user', content: 'Persist project metadata', createdAt: 1 },
+      { id: 'u-1', role: 'user', content: 'Persist project metadata', timestamp: 1 },
       {
         id: 'a-tool-1',
         role: 'assistant',
         content: '',
-        createdAt: 2,
+        timestamp: 2,
         toolCalls: [
           {
             id: 'tc-1',
             name: 'write_file',
             arguments: JSON.stringify({ path: 'projects/atlas/metadata.json' }),
+            status: 'completed',
           },
         ],
         assistantMetadata: {
@@ -69,12 +70,12 @@ describe('memory three-turn recall fixture', () => {
           finishReason: 'tool_calls',
         },
       },
-      { id: 'tool-1', role: 'tool', content: 'ok', createdAt: 3, toolCallId: 'tc-1' },
+      { id: 'tool-1', role: 'tool', content: 'ok', timestamp: 3, toolCallId: 'tc-1' },
       closedAssistant('a-1', 'Saved project metadata.', 4),
     ];
     const turn2: Message[] = [
       ...turn1,
-      { id: 'u-2', role: 'user', content: 'Continue setup', createdAt: 5 },
+      { id: 'u-2', role: 'user', content: 'Continue setup', timestamp: 5 },
       closedAssistant('a-2', 'Setup continues.', 6),
     ];
 

@@ -10,8 +10,11 @@ import {
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { upsertMemoryTask } from '../../../src/services/memory/tasks';
-import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueue';
+import { enqueueIngestionJob as enqueueStrictIngestionJob } from '../../../src/services/memory/ingestionQueue';
 import { loadMemoryOverviewSnapshot } from '../../../src/services/memory/memoryOverview';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

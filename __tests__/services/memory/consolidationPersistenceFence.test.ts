@@ -7,7 +7,7 @@ import { applyThreadLocalConsolidatorResult } from '../../../src/services/memory
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   INGESTION_PROCESSING_LEASE_MS,
   recoverStaleIngestionJobs,
@@ -21,6 +21,9 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

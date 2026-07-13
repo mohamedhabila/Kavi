@@ -37,6 +37,7 @@ describe('paired E2E state isolation', () => {
       'memory_fact_terms',
       'memory_facts',
       'memory_ingestion_jobs',
+      'memory_ingestion_source_snapshots',
       'memory_ingestion_receipts',
       'memory_migration_state',
       'memory_reflections',

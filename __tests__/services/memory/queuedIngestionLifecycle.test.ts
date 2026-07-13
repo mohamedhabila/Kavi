@@ -8,7 +8,7 @@ import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import {
   __resetIngestionQueueForTests,
   drainIngestionQueue,
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
 } from '../../../src/services/memory/ingestionQueue';
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
 import {
@@ -17,6 +17,9 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import type { Message } from '../../../src/types/message';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

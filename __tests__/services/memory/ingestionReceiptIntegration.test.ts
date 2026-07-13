@@ -11,7 +11,7 @@ import {
   listIngestionPersistenceReceipts,
 } from '../../../src/services/memory/ingestionReceiptStore';
 import {
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   processIngestionJob,
 } from '../../../src/services/memory/ingestionQueue';
@@ -23,6 +23,9 @@ import {
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import type { Message } from '../../../src/types/message';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

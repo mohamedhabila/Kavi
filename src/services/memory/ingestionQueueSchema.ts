@@ -3,12 +3,14 @@ import {
   quarantineConflictingSourceDuplicates,
 } from './ingestionQueueConflictQuarantine';
 import { getMemoryDb } from './database';
+import { failActiveJobsWithInvalidSourceSnapshots } from './ingestionSourceSnapshotStore';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
 
 const INGESTION_JOBS_TABLE = 'memory_ingestion_jobs';
 const DURABLE_INGESTION_JOBS_TABLE = 'memory_ingestion_jobs_durable';
 const INGESTION_RECEIPTS_TABLE = 'memory_ingestion_receipts';
+const INGESTION_SOURCE_SNAPSHOTS_TABLE = 'memory_ingestion_source_snapshots';
 
 function createDurableIngestionJobsTable(
   db: MemoryDb,
@@ -33,6 +35,9 @@ function createDurableIngestionJobsTable(
       prior_user_message_id TEXT,
       source_start_message_id TEXT,
       source_end_message_id TEXT NOT NULL,
+      source_snapshot_version INTEGER,
+      source_snapshot_sha256 TEXT,
+      source_snapshot_byte_length INTEGER,
       source_at INTEGER NOT NULL,
       reason TEXT NOT NULL DEFAULT 'turn_completed'
         CHECK(reason IN ('turn_completed', 'migration', 'manual')),
@@ -74,6 +79,8 @@ function createDurableIngestionJobsTable(
           'persona_scope_missing',
           'source_identity_invalid',
           'source_identity_conflict',
+          'source_snapshot_missing',
+          'source_snapshot_invalid',
           'source_window_unavailable',
           'stale_processing_lease'
         )),
@@ -92,6 +99,26 @@ function createDurableIngestionJobsTable(
       CHECK(status != 'failed' OR structural_completed_at IS NULL),
       CHECK((chat_provider_id IS NULL) = (chat_model IS NULL)),
       CHECK(source_at >= 0),
+      CHECK(
+        (source_snapshot_version IS NULL
+          AND source_snapshot_sha256 IS NULL
+          AND source_snapshot_byte_length IS NULL)
+        OR (source_snapshot_version IS NOT NULL
+          AND source_snapshot_version = 1
+          AND source_snapshot_sha256 IS NOT NULL
+          AND LENGTH(source_snapshot_sha256) = 64
+          AND source_snapshot_sha256 = LOWER(source_snapshot_sha256)
+          AND source_snapshot_sha256 NOT GLOB '*[^0-9a-f]*'
+          AND source_snapshot_byte_length IS NOT NULL
+          AND typeof(source_snapshot_byte_length) = 'integer'
+          AND source_snapshot_byte_length BETWEEN 1 AND 524288)
+      ),
+      CHECK(
+        status NOT IN ('pending', 'processing', 'retrying')
+        OR (source_snapshot_version = 1
+          AND source_snapshot_sha256 IS NOT NULL
+          AND source_snapshot_byte_length IS NOT NULL)
+      ),
       CHECK(claim_token IS NULL OR LENGTH(TRIM(claim_token)) > 0),
       CHECK(claim_process_epoch IS NULL OR LENGTH(TRIM(claim_process_epoch)) > 0),
       CHECK(
@@ -105,6 +132,84 @@ function createDurableIngestionJobsTable(
           AND claim_process_epoch IS NULL)
       )
     );
+  `);
+}
+
+function ensureIngestionSourceSnapshotsTable(db: MemoryDb): void {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS ${INGESTION_SOURCE_SNAPSHOTS_TABLE} (
+      job_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL CHECK(LENGTH(payload_json) > 0),
+      created_at INTEGER NOT NULL CHECK(created_at >= 0)
+    );
+  `);
+}
+
+function ensureIngestionSourceSnapshotGuards(db: MemoryDb): void {
+  db.execSync(`
+    DROP TRIGGER IF EXISTS trg_memory_ingestion_source_snapshot_parent_required;
+    CREATE TRIGGER trg_memory_ingestion_source_snapshot_parent_required
+      BEFORE INSERT ON ${INGESTION_SOURCE_SNAPSHOTS_TABLE}
+      WHEN NOT EXISTS (
+        SELECT 1 FROM ${INGESTION_JOBS_TABLE}
+         WHERE id = NEW.job_id
+           AND status IN ('pending', 'processing', 'retrying')
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_ingestion_source_snapshot_parent_invalid');
+      END;
+
+    DROP TRIGGER IF EXISTS trg_memory_ingestion_source_snapshot_immutable;
+    CREATE TRIGGER trg_memory_ingestion_source_snapshot_immutable
+      BEFORE UPDATE ON ${INGESTION_SOURCE_SNAPSHOTS_TABLE}
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_ingestion_source_snapshot_immutable');
+      END;
+
+    DROP TRIGGER IF EXISTS trg_memory_ingestion_source_snapshot_active_delete;
+    CREATE TRIGGER trg_memory_ingestion_source_snapshot_active_delete
+      BEFORE DELETE ON ${INGESTION_SOURCE_SNAPSHOTS_TABLE}
+      WHEN EXISTS (
+        SELECT 1 FROM ${INGESTION_JOBS_TABLE}
+         WHERE id = OLD.job_id
+           AND status IN ('pending', 'processing', 'retrying')
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_ingestion_source_snapshot_immutable');
+      END;
+
+    DROP TRIGGER IF EXISTS trg_memory_ingestion_job_snapshot_metadata_immutable;
+    CREATE TRIGGER trg_memory_ingestion_job_snapshot_metadata_immutable
+      BEFORE UPDATE OF source_snapshot_version, source_snapshot_sha256,
+                       source_snapshot_byte_length ON ${INGESTION_JOBS_TABLE}
+      WHEN OLD.source_snapshot_version IS NOT NEW.source_snapshot_version
+        OR OLD.source_snapshot_sha256 IS NOT NEW.source_snapshot_sha256
+        OR OLD.source_snapshot_byte_length IS NOT NEW.source_snapshot_byte_length
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_ingestion_source_snapshot_immutable');
+      END;
+
+    DROP TRIGGER IF EXISTS trg_memory_ingestion_job_terminal_snapshot_cleanup;
+    CREATE TRIGGER trg_memory_ingestion_job_terminal_snapshot_cleanup
+      AFTER UPDATE OF status ON ${INGESTION_JOBS_TABLE}
+      WHEN NEW.status IN ('degraded', 'completed_structural', 'completed_enriched', 'failed')
+      BEGIN
+        DELETE FROM ${INGESTION_SOURCE_SNAPSHOTS_TABLE} WHERE job_id = NEW.id;
+      END;
+
+    DROP TRIGGER IF EXISTS trg_memory_ingestion_job_delete_snapshot_cleanup;
+    CREATE TRIGGER trg_memory_ingestion_job_delete_snapshot_cleanup
+      AFTER DELETE ON ${INGESTION_JOBS_TABLE}
+      BEGIN
+        DELETE FROM ${INGESTION_SOURCE_SNAPSHOTS_TABLE} WHERE job_id = OLD.id;
+      END;
+
+    DELETE FROM ${INGESTION_SOURCE_SNAPSHOTS_TABLE}
+      WHERE job_id NOT IN (SELECT id FROM ${INGESTION_JOBS_TABLE})
+         OR job_id IN (
+           SELECT id FROM ${INGESTION_JOBS_TABLE}
+            WHERE status IN ('degraded', 'completed_structural', 'completed_enriched', 'failed')
+         );
   `);
 }
 
@@ -203,6 +308,9 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     'chat_provider_id',
     'chat_model',
     'prior_user_message_id',
+    'source_snapshot_version',
+    'source_snapshot_sha256',
+    'source_snapshot_byte_length',
   ];
   const memoryConversationColumn = columns.find(
     (column) => column.name === 'memory_conversation_id',
@@ -227,7 +335,10 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     tableSql.includes('AND claim_process_epoch IS NOT NULL)') &&
     tableSql.includes('AND claim_process_epoch IS NULL)') &&
     tableSql.includes('source_identity_invalid') &&
-    tableSql.includes('source_identity_conflict');
+    tableSql.includes('source_identity_conflict') &&
+    tableSql.includes('source_snapshot_missing') &&
+    tableSql.includes('source_snapshot_invalid') &&
+    tableSql.includes('source_snapshot_version = 1');
 
   if (isDurableSchema) return;
 
@@ -247,6 +358,9 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
   ensureColumn(db, 'chat_provider_id', 'chat_provider_id TEXT');
   ensureColumn(db, 'chat_model', 'chat_model TEXT');
   ensureColumn(db, 'prior_user_message_id', 'prior_user_message_id TEXT');
+  ensureColumn(db, 'source_snapshot_version', 'source_snapshot_version INTEGER');
+  ensureColumn(db, 'source_snapshot_sha256', 'source_snapshot_sha256 TEXT');
+  ensureColumn(db, 'source_snapshot_byte_length', 'source_snapshot_byte_length INTEGER');
 
   const invalidMigratedPersonaSql = `
     persona_id IS NULL
@@ -268,11 +382,49 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     OR ((chat_provider_id IS NULL) != (chat_model IS NULL))
   `;
   const migratedPriorIdentityUnavailableSql = names.has('prior_user_message_id') ? '0' : '1';
-  const invalidMigratedActiveIdentitySql = `
+  const migratedSnapshotMetadataMissingSql = names.has('source_snapshot_version')
+    ? `(
+        source_snapshot_version IS NULL
+        AND source_snapshot_sha256 IS NULL
+        AND source_snapshot_byte_length IS NULL
+      )`
+    : '1';
+  const migratedSnapshotMetadataValidSql = names.has('source_snapshot_version')
+    ? `(
+        source_snapshot_version = 1
+        AND LENGTH(source_snapshot_sha256) = 64
+        AND source_snapshot_sha256 = LOWER(source_snapshot_sha256)
+        AND source_snapshot_sha256 NOT GLOB '*[^0-9a-f]*'
+        AND typeof(source_snapshot_byte_length) = 'integer'
+        AND source_snapshot_byte_length BETWEEN 1 AND 524288
+      )`
+    : '0';
+  const migratedSnapshotMetadataInvalidSql = names.has('source_snapshot_version')
+    ? `(
+        NOT (${migratedSnapshotMetadataMissingSql})
+        AND COALESCE((${migratedSnapshotMetadataValidSql}), 0) = 0
+      )`
+    : '0';
+  const invalidMigratedActiveBaseIdentitySql = `
     status IN ('pending', 'processing', 'retrying')
     AND (
       ${migratedPriorIdentityUnavailableSql}
       OR (${invalidMigratedNormalizedIdentitySql})
+    )
+  `;
+  const invalidMigratedActiveIdentitySql = `
+    status IN ('pending', 'processing', 'retrying')
+    AND (
+      (${invalidMigratedActiveBaseIdentitySql})
+      OR (${migratedSnapshotMetadataMissingSql})
+      OR (${migratedSnapshotMetadataInvalidSql})
+    )
+  `;
+  const invalidMigratedActiveSnapshotSql = `
+    status IN ('pending', 'processing', 'retrying')
+    AND (
+      (${migratedSnapshotMetadataMissingSql})
+      OR (${migratedSnapshotMetadataInvalidSql})
     )
   `;
 
@@ -284,7 +436,9 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
       INSERT INTO ${DURABLE_INGESTION_JOBS_TABLE} (
         id, thread_id, thread_title, memory_conversation_id, persona_id, task_id, source_run_id,
         chat_provider_id, chat_model, prior_user_message_id,
-        source_start_message_id, source_end_message_id, source_at, reason, status,
+        source_start_message_id, source_end_message_id,
+        source_snapshot_version, source_snapshot_sha256, source_snapshot_byte_length,
+        source_at, reason, status,
         attempt_count, provider_enrichment, provider_outcome, outcome_code,
         next_attempt_at, lease_expires_at, claim_token, claim_process_epoch,
         structural_completed_at,
@@ -317,6 +471,17 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
         prior_user_message_id,
         source_start_message_id,
         source_end_message_id,
+        CASE WHEN ${migratedSnapshotMetadataValidSql} THEN 1 ELSE NULL END,
+        CASE
+          WHEN ${migratedSnapshotMetadataValidSql}
+            THEN source_snapshot_sha256
+          ELSE NULL
+        END,
+        CASE
+          WHEN ${migratedSnapshotMetadataValidSql}
+            THEN source_snapshot_byte_length
+          ELSE NULL
+        END,
         CASE
           WHEN typeof(source_at) = 'integer'
             AND source_at BETWEEN 0 AND 9007199254740991
@@ -331,7 +496,10 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
           ELSE 'manual'
         END,
         CASE
-          WHEN ${invalidMigratedActiveIdentitySql} THEN 'failed'
+          WHEN ${invalidMigratedActiveBaseIdentitySql} THEN 'failed'
+          WHEN ${invalidMigratedActiveSnapshotSql} AND structural_completed_at IS NOT NULL
+            THEN 'degraded'
+          WHEN ${invalidMigratedActiveSnapshotSql} THEN 'failed'
           WHEN status = 'completed' THEN 'completed_structural'
           WHEN status = 'processing' AND attempt_count < 5 THEN 'retrying'
           WHEN status = 'processing' AND structural_completed_at IS NOT NULL THEN 'degraded'
@@ -349,7 +517,10 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
         MAX(0, attempt_count),
         CASE WHEN provider_enrichment IN (0, 1) THEN provider_enrichment ELSE 0 END,
         CASE
-          WHEN ${invalidMigratedActiveIdentitySql} THEN NULL
+          WHEN ${invalidMigratedActiveBaseIdentitySql} THEN NULL
+          WHEN ${invalidMigratedActiveSnapshotSql} AND structural_completed_at IS NOT NULL
+            THEN 'structural_only'
+          WHEN ${invalidMigratedActiveSnapshotSql} THEN NULL
           WHEN status = 'completed' THEN 'structural_only'
           WHEN provider_outcome IN (
             'structural_only',
@@ -365,7 +536,13 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
           WHEN status IN ('pending', 'processing', 'retrying')
             AND (${invalidMigratedPersonaSql})
             THEN 'persona_scope_missing'
-          WHEN ${invalidMigratedActiveIdentitySql} THEN 'source_identity_invalid'
+          WHEN ${invalidMigratedActiveBaseIdentitySql} THEN 'source_identity_invalid'
+          WHEN status IN ('pending', 'processing', 'retrying')
+            AND (${migratedSnapshotMetadataMissingSql})
+            THEN 'source_snapshot_missing'
+          WHEN status IN ('pending', 'processing', 'retrying')
+            AND (${migratedSnapshotMetadataInvalidSql})
+            THEN 'source_snapshot_invalid'
           WHEN status = 'processing' THEN 'stale_processing_lease'
           WHEN outcome_code IN (
             'empty_response',
@@ -383,6 +560,8 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
             'persona_scope_missing',
             'source_identity_invalid',
             'source_identity_conflict',
+            'source_snapshot_missing',
+            'source_snapshot_invalid',
             'source_window_unavailable',
             'stale_processing_lease'
           ) THEN outcome_code
@@ -398,7 +577,10 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
         NULL,
         NULL,
         CASE
-          WHEN ${invalidMigratedActiveIdentitySql} THEN NULL
+          WHEN ${invalidMigratedActiveBaseIdentitySql} THEN NULL
+          WHEN ${invalidMigratedActiveSnapshotSql} AND structural_completed_at IS NOT NULL
+            THEN structural_completed_at
+          WHEN ${invalidMigratedActiveSnapshotSql} THEN NULL
           WHEN status IN (
             'completed',
             'degraded',
@@ -500,9 +682,12 @@ function ensureSourceIdentity(db: MemoryDb): void {
 
 export function ensureIngestionQueueSchema(db: MemoryDb): void {
   createDurableIngestionJobsTable(db, INGESTION_JOBS_TABLE, true);
+  ensureIngestionSourceSnapshotsTable(db);
   migrateLegacyIngestionQueue(db);
   ensureIngestionReceiptsTable(db);
-  failUnsealedActiveJobs(db);
   ensureIndexes(db);
+  ensureIngestionSourceSnapshotGuards(db);
+  failUnsealedActiveJobs(db);
+  failActiveJobsWithInvalidSourceSnapshots(db, Date.now());
   ensureSourceIdentity(db);
 }

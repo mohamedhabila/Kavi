@@ -21,7 +21,6 @@ import {
   editWorkingBlock,
 } from '../../../src/services/memory/workingBlocks';
 import { upsertMemoryTask } from '../../../src/services/memory/tasks';
-import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { EMPTY_MEMORY_WITHDRAWAL_COUNTS } from '../../../src/services/memory/withdrawalTypes';
 import { probeMemoryWithdrawalResiduals } from '../../../src/services/memory/withdrawalResidualProbe';
@@ -85,8 +84,8 @@ function insertReflection(
 }
 
 function requireJob(
-  overrides: Partial<Parameters<typeof enqueueIngestionJob>[0]>,
-): NonNullable<ReturnType<typeof enqueueIngestionJob>> {
+  overrides: Partial<Parameters<typeof requireMemoryIngestionJob>[0]>,
+): NonNullable<ReturnType<typeof requireMemoryIngestionJob>> {
   return requireMemoryIngestionJob({
     personaId: 'default',
     threadId: THREAD_ID,
@@ -377,6 +376,7 @@ describe('atomic memory withdrawal', () => {
         episodes: 1,
         reflections: 2,
         orphanEntities: 1,
+        ingestionSourceSnapshots: 2,
         ingestionJobs: 2,
         ingestionReceipts: 2,
         retrievalEvents: 2,
@@ -427,6 +427,10 @@ describe('atomic memory withdrawal', () => {
     );
     for (const removedJobId of [seeded.targetJobId, seeded.linkedMalformedReceiptJobId]) {
       expect(remainingJobIds).not.toContain(removedJobId);
+    }
+    const remainingSnapshotJobIds = ids('memory_ingestion_source_snapshots', 'job_id');
+    for (const removedJobId of [seeded.targetJobId, seeded.linkedMalformedReceiptJobId]) {
+      expect(remainingSnapshotJobIds).not.toContain(removedJobId);
     }
     expect(ids('memory_ingestion_receipts', 'job_id')).toEqual([
       seeded.unrelatedMalformedReceiptJobId,

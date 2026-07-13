@@ -8,6 +8,8 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
+import { ingestionSourceSnapshotFixture } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -169,20 +171,33 @@ describe('ingestion queue schema migration', () => {
   it('requires processing claims to own a token, lease, and process epoch together', () => {
     ensureFactSchema();
     const db = getMemoryDb();
-    db.runSync(
-      `INSERT INTO memory_ingestion_jobs (
-         id, thread_id, memory_conversation_id, persona_id, source_end_message_id,
-         source_at, created_at, updated_at
-       ) VALUES ('claim-shape', 'claim-thread', 'claim-memory', 'default',
-                 'claim-assistant', 1, 1, 1)`,
-    );
+    const job = enqueueIngestionJob({
+      threadId: 'claim-thread',
+      threadTitle: null,
+      memoryConversationId: 'claim-memory',
+      personaId: 'default',
+      taskId: null,
+      sourceRunId: null,
+      chatProviderId: null,
+      chatModel: null,
+      priorUserMessageId: null,
+      sourceStartMessageId: null,
+      sourceEndMessageId: 'claim-assistant',
+      sourceSnapshot: ingestionSourceSnapshotFixture({ sourceEndMessageId: 'claim-assistant' }),
+      sourceAt: 1,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 1,
+    });
+    expect(job).not.toBeNull();
 
     expect(() =>
       db.runSync(
         `UPDATE memory_ingestion_jobs
             SET status = 'processing', next_attempt_at = NULL,
                 claim_token = 'claim-token', lease_expires_at = 100
-          WHERE id = 'claim-shape'`,
+          WHERE id = ?`,
+        job!.id,
       ),
     ).toThrow();
     expect(() =>
@@ -191,7 +206,8 @@ describe('ingestion queue schema migration', () => {
             SET status = 'processing', next_attempt_at = NULL,
                 claim_token = 'claim-token', lease_expires_at = 100,
                 claim_process_epoch = '   '
-          WHERE id = 'claim-shape'`,
+          WHERE id = ?`,
+        job!.id,
       ),
     ).toThrow();
 
@@ -200,23 +216,60 @@ describe('ingestion queue schema migration', () => {
           SET status = 'processing', next_attempt_at = NULL,
               claim_token = 'claim-token', lease_expires_at = 100,
               claim_process_epoch = 'process-epoch'
-        WHERE id = 'claim-shape'`,
+        WHERE id = ?`,
+      job!.id,
     );
     expect(() =>
       db.runSync(
         `UPDATE memory_ingestion_jobs
             SET status = 'retrying', next_attempt_at = 100,
                 claim_token = NULL, lease_expires_at = NULL
-          WHERE id = 'claim-shape'`,
+          WHERE id = ?`,
+        job!.id,
       ),
     ).toThrow();
     db.runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'retrying', next_attempt_at = 100,
               claim_token = NULL, lease_expires_at = NULL, claim_process_epoch = NULL
-        WHERE id = 'claim-shape'`,
+        WHERE id = ?`,
+      job!.id,
     );
   });
+
+  it.each([
+    [1, null, 12],
+    [null, 'a'.repeat(64), 12],
+    [1, 'a'.repeat(64), null],
+  ])(
+    'rejects partial snapshot metadata on terminal jobs',
+    (snapshotVersion, snapshotSha256, snapshotByteLength) => {
+      ensureFactSchema();
+
+      expect(() =>
+        getMemoryDb().runSync(
+          `INSERT INTO memory_ingestion_jobs (
+             id, thread_id, memory_conversation_id, persona_id, source_end_message_id,
+             source_snapshot_version, source_snapshot_sha256, source_snapshot_byte_length,
+             source_at, reason, status, attempt_count, provider_enrichment,
+             created_at, updated_at, completed_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'turn_completed', 'failed', 0, 1, ?, ?, ?)`,
+          `partial-${snapshotVersion}-${snapshotSha256 ?? 'null'}-${snapshotByteLength}`,
+          'partial-thread',
+          'partial-memory',
+          'default',
+          'partial-assistant',
+          snapshotVersion,
+          snapshotSha256,
+          snapshotByteLength,
+          1,
+          1,
+          1,
+          1,
+        ),
+      ).toThrow();
+    },
+  );
 
   it('rebuilds an intermediate queue schema without adopting unsealed active identity', () => {
     ensureFactSchema();
@@ -387,5 +440,215 @@ describe('ingestion queue schema migration', () => {
         chat_model: null,
       },
     ]);
+  });
+
+  it('fails missing and partial migrated snapshots closed without retaining raw payloads', () => {
+    const validMetadata = ingestionSourceSnapshotFixture({
+      sourceStartMessageId: 'user-valid-metadata',
+      sourceEndMessageId: 'assistant-valid-metadata',
+      priorUserMessageId: null,
+    });
+    const corruptPayloadMetadata = ingestionSourceSnapshotFixture({
+      sourceStartMessageId: 'user-corrupt-payload',
+      sourceEndMessageId: 'assistant-corrupt-payload',
+      priorUserMessageId: null,
+    });
+    const db = getMemoryDb();
+    db.execSync(`
+      CREATE TABLE memory_ingestion_jobs (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        thread_title TEXT,
+        memory_conversation_id TEXT NOT NULL,
+        persona_id TEXT,
+        task_id TEXT,
+        source_run_id TEXT,
+        chat_provider_id TEXT,
+        chat_model TEXT,
+        prior_user_message_id TEXT,
+        source_start_message_id TEXT,
+        source_end_message_id TEXT NOT NULL,
+        source_snapshot_version INTEGER,
+        source_snapshot_sha256 TEXT,
+        source_snapshot_byte_length INTEGER,
+        source_at INTEGER,
+        reason TEXT,
+        status TEXT,
+        attempt_count INTEGER,
+        provider_enrichment INTEGER,
+        provider_outcome TEXT,
+        outcome_code TEXT,
+        next_attempt_at INTEGER,
+        lease_expires_at INTEGER,
+        claim_token TEXT,
+        claim_process_epoch TEXT,
+        structural_completed_at INTEGER,
+        error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        completed_at INTEGER
+      );
+      CREATE TABLE memory_ingestion_source_snapshots (
+        job_id TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    `);
+    const insert = (input: {
+      id: string;
+      status: 'pending' | 'processing' | 'retrying';
+      sourceStartMessageId: string;
+      sourceEndMessageId: string;
+      snapshotVersion: number | null;
+      snapshotSha256: string | null;
+      snapshotByteLength: number | null;
+      structuralCompletedAt: number | null;
+    }) => {
+      db.runSync(
+        `INSERT INTO memory_ingestion_jobs(
+           id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
+           source_run_id, chat_provider_id, chat_model, prior_user_message_id,
+           source_start_message_id, source_end_message_id, source_snapshot_version,
+           source_snapshot_sha256, source_snapshot_byte_length, source_at, reason,
+           status, attempt_count, provider_enrichment, provider_outcome, outcome_code,
+           next_attempt_at, lease_expires_at, claim_token, claim_process_epoch,
+           structural_completed_at, error, created_at, updated_at, completed_at
+         ) VALUES (?, ?, NULL, ?, 'default', NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?,
+                   10, 'turn_completed', ?, 1, 1, NULL, NULL, 10, NULL, NULL, NULL, ?,
+                   'PRIVATE-LEGACY-SNAPSHOT-RAW', 10, 11, NULL)`,
+        input.id,
+        `thread-${input.id}`,
+        `memory-${input.id}`,
+        input.sourceStartMessageId,
+        input.sourceEndMessageId,
+        input.snapshotVersion,
+        input.snapshotSha256,
+        input.snapshotByteLength,
+        input.status,
+        input.structuralCompletedAt,
+      );
+    };
+    insert({
+      id: 'corrupt-payload',
+      status: 'pending',
+      sourceStartMessageId: 'user-corrupt-payload',
+      sourceEndMessageId: 'assistant-corrupt-payload',
+      snapshotVersion: corruptPayloadMetadata.snapshotVersion,
+      snapshotSha256: corruptPayloadMetadata.payloadSha256,
+      snapshotByteLength: corruptPayloadMetadata.payloadByteLength,
+      structuralCompletedAt: null,
+    });
+    db.runSync(
+      `INSERT INTO memory_ingestion_source_snapshots(job_id, payload_json, created_at)
+       VALUES ('corrupt-payload', '{"corrupt":true}', 10)`,
+    );
+    insert({
+      id: 'retrying-missing',
+      status: 'retrying',
+      sourceStartMessageId: 'user-retrying-missing',
+      sourceEndMessageId: 'assistant-retrying-missing',
+      snapshotVersion: null,
+      snapshotSha256: null,
+      snapshotByteLength: null,
+      structuralCompletedAt: 8,
+    });
+    insert({
+      id: 'processing-missing',
+      status: 'processing',
+      sourceStartMessageId: 'user-processing-missing',
+      sourceEndMessageId: 'assistant-processing-missing',
+      snapshotVersion: null,
+      snapshotSha256: null,
+      snapshotByteLength: null,
+      structuralCompletedAt: 9,
+    });
+    insert({
+      id: 'partial-metadata',
+      status: 'pending',
+      sourceStartMessageId: 'user-partial-metadata',
+      sourceEndMessageId: 'assistant-partial-metadata',
+      snapshotVersion: 1,
+      snapshotSha256: null,
+      snapshotByteLength: 20,
+      structuralCompletedAt: null,
+    });
+    insert({
+      id: 'valid-metadata-missing-payload',
+      status: 'pending',
+      sourceStartMessageId: 'user-valid-metadata',
+      sourceEndMessageId: 'assistant-valid-metadata',
+      snapshotVersion: validMetadata.snapshotVersion,
+      snapshotSha256: validMetadata.payloadSha256,
+      snapshotByteLength: validMetadata.payloadByteLength,
+      structuralCompletedAt: null,
+    });
+
+    ensureFactSchema();
+
+    expect(
+      getMemoryDb().getAllSync<{
+        id: string;
+        status: string;
+        provider_outcome: string | null;
+        outcome_code: string | null;
+        structural_completed_at: number | null;
+        source_snapshot_version: number | null;
+      }>(
+        `SELECT id, status, provider_outcome, outcome_code, structural_completed_at,
+                source_snapshot_version
+           FROM memory_ingestion_jobs
+          ORDER BY id`,
+      ),
+    ).toEqual([
+      {
+        id: 'corrupt-payload',
+        status: 'failed',
+        provider_outcome: null,
+        outcome_code: 'source_snapshot_invalid',
+        structural_completed_at: null,
+        source_snapshot_version: 1,
+      },
+      {
+        id: 'partial-metadata',
+        status: 'failed',
+        provider_outcome: null,
+        outcome_code: 'source_snapshot_invalid',
+        structural_completed_at: null,
+        source_snapshot_version: null,
+      },
+      {
+        id: 'processing-missing',
+        status: 'degraded',
+        provider_outcome: 'structural_only',
+        outcome_code: 'source_snapshot_missing',
+        structural_completed_at: 9,
+        source_snapshot_version: null,
+      },
+      {
+        id: 'retrying-missing',
+        status: 'degraded',
+        provider_outcome: 'structural_only',
+        outcome_code: 'source_snapshot_missing',
+        structural_completed_at: 8,
+        source_snapshot_version: null,
+      },
+      {
+        id: 'valid-metadata-missing-payload',
+        status: 'failed',
+        provider_outcome: null,
+        outcome_code: 'source_snapshot_missing',
+        structural_completed_at: null,
+        source_snapshot_version: 1,
+      },
+    ]);
+    expect(columnNames('memory_ingestion_jobs')).not.toContain('error');
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_ingestion_source_snapshots',
+      )?.count,
+    ).toBe(0);
+    expect(
+      JSON.stringify(getMemoryDb().getAllSync('SELECT * FROM memory_ingestion_jobs')),
+    ).not.toContain('PRIVATE-LEGACY-SNAPSHOT-RAW');
   });
 });

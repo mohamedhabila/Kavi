@@ -19,7 +19,7 @@ jest.mock('../../../src/services/memory/turnProcessor', () => ({
 import { resolveConsolidationPath } from '../../../src/services/memory/consolidation/paths';
 import {
   __resetIngestionQueueForTests,
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   INGESTION_PROCESSING_LEASE_MS,
   INGESTION_RETRY_BASE_DELAY_MS,
@@ -44,6 +44,9 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedResolveConsolidationPath = resolveConsolidationPath as jest.MockedFunction<

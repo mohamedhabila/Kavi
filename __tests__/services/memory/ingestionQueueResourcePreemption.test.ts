@@ -15,7 +15,7 @@ import { resolveConsolidationPath } from '../../../src/services/memory/consolida
 import {
   __resetIngestionQueueForTests,
   cancelScheduledIngestionDrain,
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   scheduleIngestionDrain,
 } from '../../../src/services/memory/ingestionQueue';
@@ -34,6 +34,9 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedResolveConsolidationPath = jest.mocked(resolveConsolidationPath);

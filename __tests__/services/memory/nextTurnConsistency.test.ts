@@ -4,7 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import {
-  enqueueIngestionJob,
+  enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJobForSourceTurn,
 } from '../../../src/services/memory/ingestionQueueStore';
 import * as ingestionQueueStore from '../../../src/services/memory/ingestionQueueStore';
@@ -21,6 +21,9 @@ import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/databas
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
+import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

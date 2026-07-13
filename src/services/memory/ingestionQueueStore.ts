@@ -28,6 +28,13 @@ import {
 import { failIngestionJobForInvalidIdentity } from './ingestionQueueIdentityFailure';
 import { INGESTION_PROCESSING_LEASE_MS } from './ingestionQueueStructuralCheckpoint';
 import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
+import type { EncodedIngestionSourceSnapshot } from './ingestionSourceSnapshot';
+import {
+  ensureActiveIngestionSourceSnapshot,
+  insertIngestionSourceSnapshot,
+  requireMatchingIngestionSourceSnapshot,
+  validateIngestionSourceSnapshotForIdentity,
+} from './ingestionSourceSnapshotStore';
 
 export { getNextPendingIngestionAttemptAt } from './ingestionQueueDependencies';
 export { failIngestionJobForInvalidIdentity } from './ingestionQueueIdentityFailure';
@@ -80,6 +87,8 @@ export type IngestionOutcomeCode =
   | 'persona_scope_missing'
   | 'source_identity_invalid'
   | 'source_identity_conflict'
+  | 'source_snapshot_missing'
+  | 'source_snapshot_invalid'
   | 'source_window_unavailable'
   | 'stale_processing_lease';
 
@@ -96,6 +105,9 @@ export interface IngestionJob {
   priorUserMessageId: string | null;
   sourceStartMessageId: string | null;
   sourceEndMessageId: string;
+  sourceSnapshotVersion: number | null;
+  sourceSnapshotSha256: string | null;
+  sourceSnapshotByteLength: number | null;
   sourceAt: number;
   reason: IngestionJobReason;
   status: IngestionJobStatus;
@@ -119,6 +131,7 @@ export interface EnqueueIngestionJobInput {
   memoryConversationId: string;
   personaId: string;
   sourceEndMessageId: string;
+  sourceSnapshot: EncodedIngestionSourceSnapshot;
   sourceAt: number;
   sourceStartMessageId: string | null;
   priorUserMessageId?: string | null;
@@ -213,6 +226,11 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     reason: input.reason,
     providerEnrichment: input.providerEnrichment,
   };
+  validateIngestionSourceSnapshotForIdentity(input.sourceSnapshot, {
+    priorUserMessageId,
+    sourceStartMessageId,
+    sourceEndMessageId,
+  });
   if (
     isMemoryIngestionSourceWithdrawn({
       memoryConversationId,
@@ -226,83 +244,138 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     return null;
   }
 
-  const duplicate = db.getFirstSync<IngestionJobRow>(
-    `SELECT * FROM memory_ingestion_jobs
-       WHERE thread_id = ?
-         AND source_end_message_id = ?
-       LIMIT 1`,
-    threadId,
-    sourceEndMessageId,
-  );
-  if (duplicate) return requireMatchingIngestionSourceIdentity(duplicate, sourceIdentity);
+  let deferredFailureCode: string | null = null;
+  const matchDuplicate = (row: IngestionJobRow): IngestionJob | null => {
+    const persisted = rowToIngestionJob(row);
+    if (!hasSealedIngestionJobIdentity(persisted)) {
+      failIngestionJobForInvalidIdentity(
+        persisted.id,
+        ingestionIdentityFailureCode(persisted),
+        now,
+      );
+      deferredFailureCode = 'memory_ingestion_source_identity_invalid';
+      return null;
+    }
+    const existing = requireMatchingIngestionSourceIdentity(row, sourceIdentity);
+    try {
+      requireMatchingIngestionSourceSnapshot(db, row, input.sourceSnapshot, now);
+      return existing;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message === 'memory_ingestion_source_snapshot_missing' ||
+          error.message === 'memory_ingestion_source_snapshot_invalid')
+      ) {
+        deferredFailureCode = error.message;
+        return null;
+      }
+      throw error;
+    }
+  };
 
-  const id = newId('ingest');
-  const inserted = db.runSync(
-    `INSERT OR IGNORE INTO memory_ingestion_jobs
-       (id, thread_id, thread_title, memory_conversation_id, persona_id, task_id, source_run_id,
-        chat_provider_id, chat_model, prior_user_message_id, source_start_message_id,
-        source_end_message_id,
-        source_at, reason, status, attempt_count, provider_enrichment, provider_outcome, outcome_code,
-        next_attempt_at, lease_expires_at, structural_completed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, ?, NULL, NULL, ?, ?)`,
-    id,
-    threadId,
-    threadTitle,
-    memoryConversationId,
-    personaId,
-    taskId,
-    sourceRunId,
-    chatProviderId,
-    chatModel,
-    priorUserMessageId,
-    sourceStartMessageId,
-    sourceEndMessageId,
-    sourceAt,
-    input.reason,
-    input.providerEnrichment ? 1 : 0,
-    now,
-    now,
-    now,
-  );
-  if ((inserted.changes ?? 0) === 0) {
-    const existing = db.getFirstSync<IngestionJobRow>(
+  const result = runMemoryTransaction(() => {
+    if (
+      isMemoryIngestionSourceWithdrawn({
+        memoryConversationId,
+        sourceThreadId: threadId,
+        taskId,
+        sourceStartMessageId,
+        sourceEndMessageId,
+        sourceRunId,
+      })
+    ) {
+      return null;
+    }
+    const duplicate = db.getFirstSync<IngestionJobRow>(
       `SELECT * FROM memory_ingestion_jobs
-        WHERE thread_id = ? AND source_end_message_id = ?
+        WHERE thread_id = ?
+          AND source_end_message_id = ?
         LIMIT 1`,
       threadId,
       sourceEndMessageId,
     );
-    return existing ? requireMatchingIngestionSourceIdentity(existing, sourceIdentity) : null;
-  }
-  return rowToIngestionJob({
-    id,
-    thread_id: threadId,
-    thread_title: threadTitle,
-    memory_conversation_id: memoryConversationId,
-    persona_id: personaId,
-    task_id: taskId,
-    source_run_id: sourceRunId,
-    chat_provider_id: chatProviderId,
-    chat_model: chatModel,
-    prior_user_message_id: priorUserMessageId,
-    source_start_message_id: sourceStartMessageId,
-    source_end_message_id: sourceEndMessageId,
-    source_at: sourceAt,
-    reason: input.reason,
-    status: 'pending',
-    attempt_count: 0,
-    provider_enrichment: input.providerEnrichment ? 1 : 0,
-    provider_outcome: null,
-    outcome_code: null,
-    next_attempt_at: now,
-    lease_expires_at: null,
-    claim_token: null,
-    claim_process_epoch: null,
-    structural_completed_at: null,
-    created_at: now,
-    updated_at: now,
-    completed_at: null,
+    if (duplicate) return matchDuplicate(duplicate);
+
+    const id = newId('ingest');
+    const inserted = db.runSync(
+      `INSERT OR IGNORE INTO memory_ingestion_jobs
+         (id, thread_id, thread_title, memory_conversation_id, persona_id, task_id, source_run_id,
+          chat_provider_id, chat_model, prior_user_message_id, source_start_message_id,
+          source_end_message_id, source_snapshot_version, source_snapshot_sha256,
+          source_snapshot_byte_length, source_at, reason, status, attempt_count,
+          provider_enrichment, provider_outcome, outcome_code, next_attempt_at,
+          lease_expires_at, structural_completed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL,
+               ?, NULL, NULL, ?, ?)`,
+      id,
+      threadId,
+      threadTitle,
+      memoryConversationId,
+      personaId,
+      taskId,
+      sourceRunId,
+      chatProviderId,
+      chatModel,
+      priorUserMessageId,
+      sourceStartMessageId,
+      sourceEndMessageId,
+      input.sourceSnapshot.snapshotVersion,
+      input.sourceSnapshot.payloadSha256,
+      input.sourceSnapshot.payloadByteLength,
+      sourceAt,
+      input.reason,
+      input.providerEnrichment ? 1 : 0,
+      now,
+      now,
+      now,
+    );
+    if ((inserted.changes ?? 0) === 0) {
+      const winner = db.getFirstSync<IngestionJobRow>(
+        `SELECT * FROM memory_ingestion_jobs
+          WHERE thread_id = ? AND source_end_message_id = ?
+          LIMIT 1`,
+        threadId,
+        sourceEndMessageId,
+      );
+      if (!winner) throw new Error('memory_ingestion_enqueue_conflict');
+      return matchDuplicate(winner);
+    }
+    insertIngestionSourceSnapshot(db, id, input.sourceSnapshot, now);
+    return rowToIngestionJob({
+      id,
+      thread_id: threadId,
+      thread_title: threadTitle,
+      memory_conversation_id: memoryConversationId,
+      persona_id: personaId,
+      task_id: taskId,
+      source_run_id: sourceRunId,
+      chat_provider_id: chatProviderId,
+      chat_model: chatModel,
+      prior_user_message_id: priorUserMessageId,
+      source_start_message_id: sourceStartMessageId,
+      source_end_message_id: sourceEndMessageId,
+      source_snapshot_version: input.sourceSnapshot.snapshotVersion,
+      source_snapshot_sha256: input.sourceSnapshot.payloadSha256,
+      source_snapshot_byte_length: input.sourceSnapshot.payloadByteLength,
+      source_at: sourceAt,
+      reason: input.reason,
+      status: 'pending',
+      attempt_count: 0,
+      provider_enrichment: input.providerEnrichment ? 1 : 0,
+      provider_outcome: null,
+      outcome_code: null,
+      next_attempt_at: now,
+      lease_expires_at: null,
+      claim_token: null,
+      claim_process_epoch: null,
+      structural_completed_at: null,
+      created_at: now,
+      updated_at: now,
+      completed_at: null,
+    });
   });
+  if (deferredFailureCode) throw new Error(deferredFailureCode);
+  return result;
 }
 
 export function countPendingIngestionJobs(): number {
@@ -388,11 +461,11 @@ export function listPendingIngestionJobs(
   const jobs: IngestionJob[] = [];
   for (const row of rows) {
     const job = rowToIngestionJob(row);
-    if (hasSealedIngestionJobIdentity(job)) {
-      jobs.push(job);
+    if (!hasSealedIngestionJobIdentity(job)) {
+      failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
       continue;
     }
-    failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
+    if (ensureActiveIngestionSourceSnapshot(row, now)) jobs.push(job);
   }
   return jobs;
 }
@@ -414,7 +487,15 @@ export function getIngestionJobForProcessing(jobId: string): IngestionJob | null
     `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
     jobId,
   );
-  return row ? rowToIngestionJob(row) : null;
+  if (!row) return null;
+  const job = rowToIngestionJob(row);
+  if (!hasSealedIngestionJobIdentity(job)) return job;
+  if (ensureActiveIngestionSourceSnapshot(row, Date.now())) return job;
+  const terminal = getMemoryDb().getFirstSync<IngestionJobRow>(
+    `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
+    jobId,
+  );
+  return terminal ? rowToIngestionJob(terminal) : null;
 }
 
 export function getIngestionJobForSourceTurn(input: {
@@ -440,7 +521,19 @@ export function getIngestionJobForSourceTurn(input: {
     input.sourceThreadId,
     input.sourceEndMessageId,
   );
-  return row ? rowToIngestionJob(row) : null;
+  if (!row) return null;
+  const job = rowToIngestionJob(row);
+  if (
+    !hasSealedIngestionJobIdentity(job) ||
+    ensureActiveIngestionSourceSnapshot(row, Date.now())
+  ) {
+    return job;
+  }
+  const terminal = getMemoryDb().getFirstSync<IngestionJobRow>(
+    'SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1',
+    row.id,
+  );
+  return terminal ? rowToIngestionJob(terminal) : null;
 }
 
 export function claimIngestionJob(jobId: string, now: number): string | null {
@@ -454,6 +547,7 @@ export function claimIngestionJob(jobId: string, now: number): string | null {
     failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
     return null;
   }
+  if (!ensureActiveIngestionSourceSnapshot(row, now)) return null;
   const claimToken = newId('ingestion_claim');
   const claimProcessEpoch = getRuntimeProcessEpoch();
   const result = getMemoryDb().runSync(

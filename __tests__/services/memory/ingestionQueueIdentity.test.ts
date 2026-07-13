@@ -45,6 +45,7 @@ import {
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import type { Message } from '../../../src/types/message';
 import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
+import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
@@ -58,19 +59,21 @@ type TestEnqueueInput = Pick<
   Partial<EnqueueIngestionJobInput>;
 
 function enqueueIngestionJob(input: TestEnqueueInput) {
-  return enqueueStrictIngestionJob({
-    threadTitle: null,
-    memoryConversationId: input.threadId,
-    taskId: null,
-    sourceStartMessageId: null,
-    sourceRunId: null,
-    sourceAt: input.sourceAt ?? input.now ?? 1,
-    chatProviderId: null,
-    chatModel: null,
-    reason: 'turn_completed',
-    providerEnrichment: true,
-    ...input,
-  });
+  return enqueueStrictIngestionJob(
+    withIngestionSourceSnapshot({
+      threadTitle: null,
+      memoryConversationId: input.threadId,
+      taskId: null,
+      sourceStartMessageId: null,
+      sourceRunId: null,
+      sourceAt: input.sourceAt ?? input.now ?? 1,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      ...input,
+    }),
+  );
 }
 
 function closedTurn(suffix: string): Message[] {
@@ -111,7 +114,7 @@ afterEach(() => {
 
 describe('ingestion queue identity', () => {
   it('requires exact sealed identity and never normalizes an invalid enqueue', () => {
-    const valid = {
+    const valid = withIngestionSourceSnapshot({
       threadTitle: null,
       memoryConversationId: 'conv-valid',
       personaId: 'default',
@@ -126,7 +129,7 @@ describe('ingestion queue identity', () => {
       reason: 'turn_completed' as const,
       providerEnrichment: true,
       now: 1,
-    };
+    });
     expect(() =>
       enqueueStrictIngestionJob({
         ...valid,

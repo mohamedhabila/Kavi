@@ -45,6 +45,7 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
+import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedResolveConsolidationPath = resolveConsolidationPath as jest.MockedFunction<
@@ -61,19 +62,21 @@ type TestEnqueueInput = Pick<
   Partial<EnqueueIngestionJobInput>;
 
 function enqueueIngestionJob(input: TestEnqueueInput) {
-  return enqueueStrictIngestionJob({
-    threadTitle: null,
-    memoryConversationId: input.threadId,
-    taskId: null,
-    sourceStartMessageId: null,
-    sourceRunId: null,
-    sourceAt: input.sourceAt ?? input.now ?? 1,
-    chatProviderId: null,
-    chatModel: null,
-    reason: 'turn_completed',
-    providerEnrichment: true,
-    ...input,
-  });
+  return enqueueStrictIngestionJob(
+    withIngestionSourceSnapshot({
+      threadTitle: null,
+      memoryConversationId: input.threadId,
+      taskId: null,
+      sourceStartMessageId: null,
+      sourceRunId: null,
+      sourceAt: input.sourceAt ?? input.now ?? 1,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      ...input,
+    }),
+  );
 }
 
 function closedTurn(suffix: string): Message[] {
@@ -166,22 +169,24 @@ describe('ingestion queue runtime context', () => {
   it('rejects invalid source clocks instead of silently replacing them', () => {
     for (const sourceAt of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
       expect(() =>
-        enqueueStrictIngestionJob({
-          threadTitle: null,
-          memoryConversationId: 'invalid-source-clock',
-          personaId: 'default',
-          threadId: 'invalid-source-clock',
-          taskId: null,
-          sourceStartMessageId: null,
-          sourceEndMessageId: 'assistant-invalid-source-clock',
-          sourceRunId: null,
-          sourceAt,
-          chatProviderId: null,
-          chatModel: null,
-          reason: 'turn_completed',
-          providerEnrichment: true,
-          now: 20,
-        }),
+        enqueueStrictIngestionJob(
+          withIngestionSourceSnapshot({
+            threadTitle: null,
+            memoryConversationId: 'invalid-source-clock',
+            personaId: 'default',
+            threadId: 'invalid-source-clock',
+            taskId: null,
+            sourceStartMessageId: null,
+            sourceEndMessageId: 'assistant-invalid-source-clock',
+            sourceRunId: null,
+            sourceAt,
+            chatProviderId: null,
+            chatModel: null,
+            reason: 'turn_completed',
+            providerEnrichment: true,
+            now: 20,
+          }),
+        ),
       ).toThrow('memory_ingestion_source_timestamp_invalid');
     }
   });

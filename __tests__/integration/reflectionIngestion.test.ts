@@ -58,6 +58,7 @@ describe('reflection ingestion integration', () => {
             id: 'tc-1',
             name: 'write_file',
             arguments: JSON.stringify({ path: 'projects/atlas/metadata.json' }),
+            status: 'completed',
           },
         ],
         assistantMetadata: {

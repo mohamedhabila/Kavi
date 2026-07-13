@@ -17,6 +17,9 @@ interface PersistedIngestionIdentityRow {
   prior_user_message_id: string | null;
   source_start_message_id: string | null;
   source_end_message_id: string;
+  source_snapshot_version: number | null;
+  source_snapshot_sha256: string | null;
+  source_snapshot_byte_length: number | null;
   source_at: number;
   reason: string;
   status: string;
@@ -68,7 +71,8 @@ export function failUnsealedActiveJobs(db: MemoryDb): void {
     `SELECT id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
             source_run_id, chat_provider_id, chat_model, prior_user_message_id,
             source_start_message_id,
-            source_end_message_id, source_at, reason, status, provider_enrichment, updated_at
+            source_end_message_id, source_snapshot_version, source_snapshot_sha256,
+            source_snapshot_byte_length, source_at, reason, status, provider_enrichment, updated_at
        FROM memory_ingestion_jobs
       WHERE status IN ('pending', 'processing', 'retrying')`,
   );
@@ -104,6 +108,9 @@ function ingestionIdentityKey(row: PersistedIngestionIdentityRow): string {
     row.prior_user_message_id,
     row.source_start_message_id,
     row.source_end_message_id,
+    row.source_snapshot_version,
+    row.source_snapshot_sha256,
+    row.source_snapshot_byte_length,
     row.source_at,
     row.reason,
     row.provider_enrichment,
@@ -350,7 +357,8 @@ export function quarantineConflictingSourceDuplicates(db: MemoryDb): void {
     `SELECT id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
             source_run_id, chat_provider_id, chat_model, prior_user_message_id,
             source_start_message_id,
-            source_end_message_id, source_at, reason, status, provider_enrichment, updated_at
+            source_end_message_id, source_snapshot_version, source_snapshot_sha256,
+            source_snapshot_byte_length, source_at, reason, status, provider_enrichment, updated_at
        FROM memory_ingestion_jobs
       ORDER BY thread_id, source_end_message_id, id`,
   );

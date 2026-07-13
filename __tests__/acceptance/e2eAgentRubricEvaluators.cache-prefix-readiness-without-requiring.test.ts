@@ -17,6 +17,7 @@ import {
   getE2ENativeMobileInvocationSnapshots,
   tryExecuteE2ENativeMobileTool,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
+import { withIngestionSourceSnapshot } from '../helpers/ingestionSourceSnapshotFixture';
 function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioResult {
   return {
     contentClass: 'synthetic_public',
@@ -227,22 +228,24 @@ describe('evaluateE2ERubric', () => {
   it('checks ingestion_job_completed for the scenario conversation', () => {
     const conversationId = 'conv-ingest';
     const { enqueueIngestionJob } = require('../../src/services/memory/ingestionQueue');
-    const job = enqueueIngestionJob({
-      personaId: 'default',
-      threadId: conversationId,
-      threadTitle: null,
-      memoryConversationId: conversationId,
-      taskId: null,
-      sourceStartMessageId: null,
-      sourceEndMessageId: 'a-1',
-      sourceRunId: null,
-      sourceAt: 100,
-      chatProviderId: null,
-      chatModel: null,
-      reason: 'turn_completed',
-      providerEnrichment: true,
-      now: 100,
-    });
+    const job = enqueueIngestionJob(
+      withIngestionSourceSnapshot({
+        personaId: 'default',
+        threadId: conversationId,
+        threadTitle: null,
+        memoryConversationId: conversationId,
+        taskId: null,
+        sourceStartMessageId: null,
+        sourceEndMessageId: 'a-1',
+        sourceRunId: null,
+        sourceAt: 100,
+        chatProviderId: null,
+        chatModel: null,
+        reason: 'turn_completed',
+        providerEnrichment: true,
+        now: 100,
+      }),
+    );
     const db = require('../../src/services/memory/database').getMemoryDb();
     db.runSync(
       `UPDATE memory_ingestion_jobs
@@ -267,22 +270,24 @@ describe('evaluateE2ERubric', () => {
   it('separates durable structural checkpoints from optional enrichment completion', () => {
     const conversationId = 'conv-checkpointed';
     const { enqueueIngestionJob } = require('../../src/services/memory/ingestionQueue');
-    const job = enqueueIngestionJob({
-      personaId: 'default',
-      threadId: conversationId,
-      threadTitle: null,
-      memoryConversationId: conversationId,
-      taskId: null,
-      sourceStartMessageId: 'u-1',
-      sourceEndMessageId: 'a-1',
-      sourceRunId: null,
-      sourceAt: 100,
-      chatProviderId: null,
-      chatModel: null,
-      reason: 'turn_completed',
-      providerEnrichment: true,
-      now: 100,
-    });
+    const job = enqueueIngestionJob(
+      withIngestionSourceSnapshot({
+        personaId: 'default',
+        threadId: conversationId,
+        threadTitle: null,
+        memoryConversationId: conversationId,
+        taskId: null,
+        sourceStartMessageId: 'u-1',
+        sourceEndMessageId: 'a-1',
+        sourceRunId: null,
+        sourceAt: 100,
+        chatProviderId: null,
+        chatModel: null,
+        reason: 'turn_completed',
+        providerEnrichment: true,
+        now: 100,
+      }),
+    );
     const db = require('../../src/services/memory/database').getMemoryDb();
     db.runSync(
       `UPDATE memory_ingestion_jobs

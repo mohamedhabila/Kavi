@@ -35,6 +35,7 @@ import {
   resolveCodeOwnedMemoryConversationId,
   resolveCodeOwnedMemoryPersonaId,
 } from './memoryScopeIdentity';
+import { encodeIngestionSourceSnapshot } from './ingestionSourceSnapshot';
 
 const logger = createLogger('memory.lifecycle');
 
@@ -322,6 +323,16 @@ export async function recordCompletedTurnForMemory(
     (message) => message.id === syncResult.sourceEndMessageId,
   );
   const sourceAt = sourceEndMessage?.timestamp ?? input.now ?? Date.now();
+  const sourceRun = sourceRunId
+    ? conversation?.agentRuns?.find((run) => run.id === sourceRunId)
+    : undefined;
+  const sourceSnapshot = encodeIngestionSourceSnapshot({
+    messages: input.messages,
+    sourceStartMessageId: syncResult.sourceStartMessageId,
+    sourceEndMessageId: syncResult.sourceEndMessageId,
+    priorUserMessageId: syncResult.priorUserMessageId,
+    graphGoalEvidence: sourceRun?.controlGraph?.goals?.flatMap((goal) => goal.evidence) ?? [],
+  });
 
   const job = enqueueIngestionJob({
     threadId: input.threadId,
@@ -329,6 +340,7 @@ export async function recordCompletedTurnForMemory(
     memoryConversationId,
     personaId,
     sourceEndMessageId: syncResult.sourceEndMessageId,
+    sourceSnapshot,
     sourceAt,
     priorUserMessageId: syncResult.priorUserMessageId,
     sourceStartMessageId: syncResult.sourceStartMessageId,

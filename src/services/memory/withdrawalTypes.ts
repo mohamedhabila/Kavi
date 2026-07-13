@@ -13,6 +13,7 @@ export type MemoryWithdrawalCounts = Readonly<{
   reflections: number;
   workingBlocks: number;
   orphanEntities: number;
+  ingestionSourceSnapshots: number;
   ingestionJobs: number;
   ingestionReceipts: number;
   retrievalEvents: number;
@@ -44,6 +45,7 @@ export const EMPTY_MEMORY_WITHDRAWAL_COUNTS: MemoryWithdrawalCounts = {
   reflections: 0,
   workingBlocks: 0,
   orphanEntities: 0,
+  ingestionSourceSnapshots: 0,
   ingestionJobs: 0,
   ingestionReceipts: 0,
   retrievalEvents: 0,

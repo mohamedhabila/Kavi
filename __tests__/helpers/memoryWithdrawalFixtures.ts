@@ -1,7 +1,10 @@
 import { rowToFact, type FactRow } from '../../src/services/memory/facts/types';
 import { replaceFactRetrievalTerms } from '../../src/services/memory/facts/retrievalIndex';
-import { enqueueIngestionJob } from '../../src/services/memory/ingestionQueueStore';
+import { enqueueIngestionJob as enqueueStrictIngestionJob } from '../../src/services/memory/ingestionQueueStore';
 import { getMemoryDb } from '../../src/services/memory/database';
+import { createTestIngestionJobEnqueuer } from './ingestionSourceSnapshotFixture';
+
+const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 export function cloneMemoryFactForWithdrawal(
   sourceFactId: string,

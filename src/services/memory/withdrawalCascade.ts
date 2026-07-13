@@ -74,6 +74,25 @@ function deleteIds(
   return deleted;
 }
 
+function countIds(
+  db: MemoryDatabase,
+  table: string,
+  column: string,
+  ids: ReadonlyArray<string | number>,
+): number {
+  let count = 0;
+  for (let offset = 0; offset < ids.length; offset += DELETE_BATCH_SIZE) {
+    const batch = ids.slice(offset, offset + DELETE_BATCH_SIZE);
+    count +=
+      db.getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM ${table}
+          WHERE ${column} IN (${batch.map(() => '?').join(', ')})`,
+        ...batch,
+      )?.count ?? 0;
+  }
+  return count;
+}
+
 function rawJsonArrayContainsId(raw: string, expected: ReadonlySet<string>): boolean {
   for (const id of expected) if (raw.includes(JSON.stringify(id))) return true;
   return false;
@@ -370,6 +389,12 @@ export function executeMemoryWithdrawalCascade(
         .filter((observationFactId) => !factIds.has(observationFactId)),
     ),
   ).sort();
+  const ingestionSourceSnapshotCount = countIds(
+    db,
+    'memory_ingestion_source_snapshots',
+    'job_id',
+    lineage.jobIds,
+  );
 
   const countsBase: MemoryWithdrawalCounts = {
     ...EMPTY_MEMORY_WITHDRAWAL_COUNTS,
@@ -412,12 +437,14 @@ export function executeMemoryWithdrawalCascade(
       'job_id',
       lineage.receiptDeletionJobIds,
     ),
+    ingestionSourceSnapshots: ingestionSourceSnapshotCount,
     ingestionJobs: deleteIds(db, 'memory_ingestion_jobs', 'id', lineage.jobIds),
     retrievalEvents: scrubRetrievalEvents(db, factIds, episodeIds),
     facts: deleteIds(db, 'memory_facts', 'id', lineage.factIds),
     orphanEntities: 0,
     embeddingCacheEntries: 0,
   };
+  deleteIds(db, 'memory_ingestion_source_snapshots', 'job_id', lineage.jobIds);
   recomputeFactObservationState(db, survivingObservationFactIds, now);
   const deletedEntityIds: string[] = [];
   let orphanEntities = 0;
