@@ -25,6 +25,10 @@ import {
   resolveMessageMemoryPublicationTransition,
 } from '../utils/messageMemoryPublication';
 import type { TransitionMessageMemoryPublicationResult } from './chatStoreTypes';
+import {
+  assertMemoryPublicationLockedSourcesUnchanged,
+  preserveCodeOwnedMessageMemoryPublications,
+} from './chatMessageMemoryPublicationMutationFence';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 
@@ -32,6 +36,27 @@ function stripUntrustedToolEffectReceipts(toolCall: ToolCall): ToolCall {
   const sanitized = { ...toolCall };
   delete sanitized.effectReceipts;
   return sanitized;
+}
+
+function updateConversationMessageWithMemoryPublicationFence(
+  conversations: ChatState['conversations'],
+  conversationId: string,
+  messageId: string,
+  updater: (message: Message) => Message,
+): ChatState['conversations'] | undefined {
+  return updateConversationById(conversations, conversationId, (conversation) => {
+    const messageIndex = conversation.messages.findIndex((message) => message.id === messageId);
+    if (messageIndex < 0) return conversation;
+
+    const message = conversation.messages[messageIndex];
+    const nextMessage = updater(message);
+    if (nextMessage === message) return conversation;
+
+    const nextMessages = [...conversation.messages];
+    nextMessages[messageIndex] = nextMessage;
+    assertMemoryPublicationLockedSourcesUnchanged(conversation.messages, nextMessages);
+    return { ...conversation, messages: nextMessages };
+  });
 }
 
 export function createMessageStoreActions(
@@ -54,8 +79,8 @@ export function createMessageStoreActions(
 > {
   return {
     addMessage: (conversationId, message) => {
-      const { memoryPublication: _untrustedMemoryPublication, ...trustedMessage } = message as
-        typeof message & Pick<Message, 'memoryPublication'>;
+      const { memoryPublication: _untrustedMemoryPublication, ...trustedMessage } =
+        message as typeof message & Pick<Message, 'memoryPublication'>;
       set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id !== conversationId) return c;
@@ -82,16 +107,20 @@ export function createMessageStoreActions(
     },
 
     applyConversationCompaction: (conversationId, messages) => {
-      const nextMessages = capMessages(normalizeLegacyAssistantMessages(messages));
+      const normalizedMessages = normalizeLegacyAssistantMessages(messages);
 
       set((state) => {
         const conversations = updateConversationById(
           state.conversations,
           conversationId,
           (conversation) => {
+            const nextMessages = capMessages(
+              preserveCodeOwnedMessageMemoryPublications(conversation.messages, normalizedMessages),
+            );
             if (nextMessages.length === 0) {
               return conversation;
             }
+            assertMemoryPublicationLockedSourcesUnchanged(conversation.messages, nextMessages);
 
             return {
               ...conversation,
@@ -109,7 +138,7 @@ export function createMessageStoreActions(
 
     updateMessage: (conversationId, messageId, content) =>
       set((state) => {
-        const conversations = updateConversationMessageById(
+        const conversations = updateConversationMessageWithMemoryPublicationFence(
           state.conversations,
           conversationId,
           messageId,
@@ -120,7 +149,7 @@ export function createMessageStoreActions(
 
     updateMessageEnrichedContent: (conversationId, messageId, enrichedContent) =>
       set((state) => {
-        const conversations = updateConversationMessageById(
+        const conversations = updateConversationMessageWithMemoryPublicationFence(
           state.conversations,
           conversationId,
           messageId,
@@ -155,7 +184,7 @@ export function createMessageStoreActions(
 
     updateMessageAssistantMetadata: (conversationId, messageId, assistantMetadata) =>
       set((state) => {
-        const conversations = updateConversationMessageById(
+        const conversations = updateConversationMessageWithMemoryPublicationFence(
           state.conversations,
           conversationId,
           messageId,
@@ -266,6 +295,7 @@ export function createMessageStoreActions(
                 }
               : m,
           );
+          assertMemoryPublicationLockedSourcesUnchanged(c.messages, newMessages);
           const nextLogs = (c.logs ?? []).filter((entry) => entry.timestamp < rewindTimestamp);
           const nextAgentRuns = (c.agentRuns ?? []).filter(
             (run) => run.createdAt < rewindTimestamp,
@@ -295,7 +325,7 @@ export function createMessageStoreActions(
 
     addToolCall: (conversationId, messageId, toolCall) =>
       set((state) => {
-        const conversations = updateConversationMessageById(
+        const conversations = updateConversationMessageWithMemoryPublicationFence(
           state.conversations,
           conversationId,
           messageId,
@@ -354,7 +384,7 @@ export function createMessageStoreActions(
 
     updateToolCallStatus: (conversationId, messageId, toolCallId, status, payload) =>
       set((state) => {
-        const conversations = updateConversationMessageById(
+        const conversations = updateConversationMessageWithMemoryPublicationFence(
           state.conversations,
           conversationId,
           messageId,

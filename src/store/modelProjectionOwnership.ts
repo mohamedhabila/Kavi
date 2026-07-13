@@ -8,6 +8,10 @@ import { capMessages } from './chatStoreHelpers';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { useChatStore } from './useChatStore';
 import { unrefTimerIfSupported } from '../utils/timers';
+import {
+  assertMemoryPublicationLockedSourcesUnchanged,
+  preserveCodeOwnedMessageMemoryPublications,
+} from './chatMessageMemoryPublicationMutationFence';
 
 const MODEL_PROJECTION_RELEASE_TIMEOUT_MS = 30_000;
 
@@ -229,10 +233,19 @@ export function mutateOwnedModelProjection<T>(input: {
       result = mutation;
       return state;
     }
+    const messages = preserveCodeOwnedMessageMemoryPublications(
+      conversation.messages,
+      mutation.conversation.messages,
+    );
+    assertMemoryPublicationLockedSourcesUnchanged(conversation.messages, messages);
+    const nextConversation =
+      messages === mutation.conversation.messages
+        ? mutation.conversation
+        : { ...mutation.conversation, messages };
     const conversations = [...state.conversations];
-    conversations[conversationIndex] = mutation.conversation;
+    conversations[conversationIndex] = nextConversation;
     result = { kind: 'applied', value: mutation.value };
-    changed = mutation.conversation !== conversation;
+    changed = nextConversation !== conversation;
     return changed ? { conversations } : state;
   });
   if (changed) requestChatStorePersistenceCheckpoint();
