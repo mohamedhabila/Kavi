@@ -1,0 +1,481 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
+import { runMemoryTransaction } from '../../../src/services/memory/access/transaction';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { upsertEntity } from '../../../src/services/memory/entities';
+import { decodeMemoryFactContributionPayload } from '../../../src/services/memory/factContributionCodec';
+import {
+  persistFactContributionInTransaction,
+  persistFactContributionSupersessionsInTransaction,
+  type MemoryFactContributionWriteContext,
+} from '../../../src/services/memory/factContributionStore';
+import { replaceCurrentFactWithContribution } from '../../../src/services/memory/facts/exactReplacement';
+import { normalizeRecordFactMutation } from '../../../src/services/memory/facts/mutationNormalization';
+import {
+  recordFactWithApplicability,
+  recordFactWithContribution,
+} from '../../../src/services/memory/facts/mutations';
+import type { RecordFactInput } from '../../../src/services/memory/facts/types';
+import {
+  clearStructuredMemory,
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+const grounded = { factClass: 'subjective_user', sourceAuthority: 'grounded_user' } as const;
+
+beforeEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
+});
+
+afterEach(() => {
+  clearStructuredMemory();
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+});
+
+function subjectId(): string {
+  return upsertEntity({ type: 'self', name: 'user', now: 1 }).id;
+}
+
+function globalFact(
+  subject: string,
+  objectText: string,
+  overrides: Partial<RecordFactInput> = {},
+): RecordFactInput {
+  return {
+    subjectId: subject,
+    predicate: 'favorite_color',
+    objectText,
+    scope: 'global',
+    sourceMessageId: 'user-message-1',
+    sourceTurnId: 'assistant-turn-1',
+    now: 100,
+    ...overrides,
+  };
+}
+
+function context(
+  producerEventId: string,
+  aliases: MemoryFactContributionWriteContext['sourceAliases'] = [
+    { sourceKind: 'message', sourceId: 'user-message-1' },
+    { sourceKind: 'turn', sourceId: 'assistant-turn-1' },
+  ],
+  scope: Partial<
+    Pick<MemoryFactContributionWriteContext, 'memoryConversationId' | 'sourceThreadId' | 'taskId'>
+  > = {},
+): MemoryFactContributionWriteContext {
+  return {
+    memoryConversationId: scope.memoryConversationId ?? 'conversation-1',
+    sourceThreadId: scope.sourceThreadId ?? 'thread-1',
+    taskId: scope.taskId ?? null,
+    producer: { producerId: 'test_writer', producerEventId },
+    sourceAliases: aliases,
+  };
+}
+
+function contributionCount(): number {
+  return (
+    getMemoryDb().getFirstSync<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM memory_fact_contributions',
+    )?.count ?? 0
+  );
+}
+
+function factRows(): Array<{
+  id: string;
+  object_text: string;
+  attributes: string;
+  confidence: number;
+  fact_class: string;
+  source_authority: string;
+  invalid_at: number | null;
+  memory_owner_id: string;
+}> {
+  return getMemoryDb().getAllSync(
+    `SELECT id, object_text, attributes, confidence, fact_class, source_authority,
+            invalid_at, memory_owner_id
+       FROM memory_facts
+      ORDER BY created_at ASC, id ASC`,
+  );
+}
+
+function contributionPayloads() {
+  return getMemoryDb()
+    .getAllSync<{
+      payload_version: number;
+      payload_json: string;
+      payload_sha256: string;
+      payload_byte_length: number;
+    }>(
+      `SELECT payload_version, payload_json, payload_sha256, payload_byte_length
+         FROM memory_fact_contributions
+        ORDER BY contributed_at ASC, id ASC`,
+    )
+    .map((row) =>
+      decodeMemoryFactContributionPayload({
+        payloadVersion: row.payload_version,
+        payloadJson: row.payload_json,
+        payloadSha256: row.payload_sha256,
+        payloadByteLength: row.payload_byte_length,
+      }),
+    );
+}
+
+describe('atomic contributed fact mutations', () => {
+  it('creates one contribution and replays the exact causal event idempotently', () => {
+    const subject = subjectId();
+    const input = globalFact(subject, 'blue', { attributes: { explicit: true } });
+    const source = context('event-1');
+
+    expect(recordFactWithContribution(input, grounded, source).status).toBe('created');
+    expect(recordFactWithContribution(input, grounded, source).status).toBe('duplicate');
+    expect(() =>
+      recordFactWithContribution(
+        input,
+        grounded,
+        context('event-1', [
+          { sourceKind: 'message', sourceId: 'user-message-1' },
+          { sourceKind: 'turn', sourceId: 'assistant-turn-1' },
+          { sourceKind: 'run', sourceId: 'extra-run' },
+        ]),
+      ),
+    ).toThrow('memory_fact_contribution_replay_mismatch');
+    expect(contributionCount()).toBe(1);
+    expect(
+      getMemoryDb().getAllSync<{ source_kind: string; source_id: string }>(
+        `SELECT source_kind, source_id FROM memory_fact_contribution_sources
+          ORDER BY source_kind ASC, source_id ASC`,
+      ),
+    ).toEqual([
+      { source_kind: 'message', source_id: 'user-message-1' },
+      { source_kind: 'turn', source_id: 'assistant-turn-1' },
+    ]);
+  });
+
+  it('keeps distinct source contributions and their incoming metadata unmerged', () => {
+    const subject = subjectId();
+    recordFactWithContribution(
+      globalFact(subject, 'blue', {
+        attributes: { first: true },
+        confidence: 0.9,
+      }),
+      grounded,
+      context('event-1'),
+    );
+    const second = recordFactWithContribution(
+      globalFact(subject, 'blue', {
+        attributes: { second: true },
+        confidence: 0.4,
+        sourceMessageId: 'user-message-2',
+        sourceTurnId: 'assistant-turn-2',
+        now: 200,
+      }),
+      grounded,
+      context('event-2', [
+        { sourceKind: 'message', sourceId: 'user-message-2' },
+        { sourceKind: 'turn', sourceId: 'assistant-turn-2' },
+      ]),
+    );
+
+    expect(second.fact.confidence).toBe(0.9);
+    expect(second.fact.attributes).toEqual({ first: true, second: true });
+    expect(contributionCount()).toBe(2);
+    const payloads = contributionPayloads();
+    expect(payloads[1]!.input.confidence).toBe(0.4);
+    expect(payloads[1]!.input.attributes).toEqual({ second: true });
+  });
+
+  it('rejects changed metadata for one event and rolls back aggregate provenance changes', () => {
+    const subject = subjectId();
+    const input = globalFact(subject, 'blue');
+    const source = context('event-1');
+    recordFactWithContribution(
+      input,
+      { factClass: 'unknown', sourceAuthority: 'assistant_inferred' },
+      source,
+    );
+
+    expect(() => recordFactWithContribution(input, grounded, source)).toThrow(
+      'memory_fact_contribution_replay_mismatch',
+    );
+    expect(factRows()).toEqual([
+      expect.objectContaining({
+        fact_class: 'unknown',
+        source_authority: 'assistant_inferred',
+      }),
+    ]);
+    expect(contributionCount()).toBe(1);
+  });
+
+  it('rejects a changed fact for one event and rolls back the newly created row', () => {
+    const subject = subjectId();
+    const source = context('event-1');
+    recordFactWithContribution(globalFact(subject, 'blue'), grounded, source);
+
+    expect(() =>
+      recordFactWithContribution(globalFact(subject, 'green'), grounded, source),
+    ).toThrow('memory_fact_contribution_replay_mismatch');
+    expect(factRows().map((row) => row.object_text)).toEqual(['blue']);
+    expect(contributionCount()).toBe(1);
+  });
+
+  it('atomically records an exact replacement edge and effective inherited metadata', () => {
+    const subject = subjectId();
+    const previous = recordFactWithContribution(
+      globalFact(subject, 'blue', {
+        pinned: true,
+        reviewState: 'verified',
+        memoryKind: 'decision',
+      }),
+      grounded,
+      context('event-old'),
+    ).fact;
+    const replacement = replaceCurrentFactWithContribution(
+      {
+        ...globalFact(subject, 'green', {
+          sourceMessageId: 'user-message-2',
+          sourceTurnId: 'assistant-turn-2',
+          now: 200,
+        }),
+        expectedCurrentFactId: previous.id,
+      },
+      grounded,
+      context('event-new', [
+        { sourceKind: 'message', sourceId: 'user-message-2' },
+        { sourceKind: 'turn', sourceId: 'assistant-turn-2' },
+      ]),
+    );
+
+    expect(replacement.status).toBe('created');
+    if (replacement.status === 'conflict') throw new Error('unexpected conflict');
+    expect(replacement.fact.pinned).toBe(true);
+    expect(replacement.fact.reviewState).toBe('verified');
+    expect(replacement.fact.memoryKind).toBe('decision');
+    expect(replacement.superseded.map((fact) => fact.id)).toEqual([previous.id]);
+    expect(
+      getMemoryDb().getAllSync<{
+        predecessor_fact_id: string;
+        successor_fact_id: string;
+        superseded_at: number;
+      }>(
+        'SELECT predecessor_fact_id, successor_fact_id, superseded_at FROM memory_fact_contribution_supersessions',
+      ),
+    ).toEqual([
+      {
+        predecessor_fact_id: previous.id,
+        successor_fact_id: replacement.fact.id,
+        superseded_at: 200,
+      },
+    ]);
+    const replacementPayload = contributionPayloads()[1]!;
+    expect(replacementPayload.input.pinned).toBe(true);
+    expect(replacementPayload.input.reviewState).toBe('verified');
+    expect(replacementPayload.input.memoryKind).toBe('decision');
+  });
+
+  it('inherits exact current metadata for a contributed same-value replacement', () => {
+    const subject = subjectId();
+    const current = recordFactWithContribution(
+      globalFact(subject, 'blue', {
+        pinned: true,
+        reviewState: 'verified',
+        memoryKind: 'goal',
+      }),
+      grounded,
+      context('event-old'),
+    ).fact;
+
+    const duplicate = replaceCurrentFactWithContribution(
+      {
+        ...globalFact(subject, 'blue', {
+          sourceMessageId: 'user-message-2',
+          sourceTurnId: 'assistant-turn-2',
+          now: 200,
+        }),
+        expectedCurrentFactId: current.id,
+      },
+      grounded,
+      context('event-same-value', [
+        { sourceKind: 'message', sourceId: 'user-message-2' },
+        { sourceKind: 'turn', sourceId: 'assistant-turn-2' },
+      ]),
+    );
+
+    expect(duplicate.status).toBe('duplicate');
+    if (duplicate.status === 'conflict') throw new Error('unexpected conflict');
+    expect(duplicate.fact.id).toBe(current.id);
+    expect(duplicate.fact.pinned).toBe(true);
+    expect(duplicate.fact.reviewState).toBe('verified');
+    expect(duplicate.fact.memoryKind).toBe('goal');
+    expect(factRows()).toHaveLength(1);
+    expect(contributionCount()).toBe(2);
+    const payload = contributionPayloads()[1]!;
+    expect(payload.input.pinned).toBe(true);
+    expect(payload.input.reviewState).toBe('verified');
+    expect(payload.input.memoryKind).toBe('goal');
+  });
+
+  it('does not create a contribution when exact replacement conflicts', () => {
+    const subject = subjectId();
+    const result = replaceCurrentFactWithContribution(
+      {
+        ...globalFact(subject, 'green'),
+        expectedCurrentFactId: 'fact-missing',
+      },
+      grounded,
+      context('event-conflict'),
+    );
+
+    expect(result).toMatchObject({ status: 'conflict', conflict: 'target_changed' });
+    expect(contributionCount()).toBe(0);
+    expect(factRows()).toEqual([]);
+  });
+
+  it('rolls back fact creation for invalid aliases and exact source scope', () => {
+    const subject = subjectId();
+    expect(() =>
+      recordFactWithContribution(globalFact(subject, 'blue'), grounded, context('event-1', [])),
+    ).toThrow('memory_fact_contribution_sources_invalid');
+
+    expect(() =>
+      recordFactWithContribution(
+        {
+          subjectId: subject,
+          predicate: 'session_state',
+          objectText: 'active',
+          scope: 'session',
+          originConversationId: 'conversation-1',
+          originThreadId: 'thread-1',
+          originTaskId: 'task-1',
+          now: 100,
+        },
+        grounded,
+        context('event-2', [{ sourceKind: 'turn', sourceId: 'assistant-turn-1' }], {
+          taskId: 'task-2',
+        }),
+      ),
+    ).toThrow('memory_fact_contribution_scope_mismatch');
+    expect(factRows()).toEqual([]);
+    expect(contributionCount()).toBe(0);
+  });
+
+  it('rolls back when payload sources are missing or have the wrong alias kind', () => {
+    const subject = subjectId();
+    const input = globalFact(subject, 'blue', { sourceRunId: 'run-1' });
+
+    expect(() =>
+      recordFactWithContribution(
+        input,
+        grounded,
+        context('event-wrong-kind', [
+          { sourceKind: 'turn', sourceId: 'user-message-1' },
+          { sourceKind: 'turn', sourceId: 'assistant-turn-1' },
+          { sourceKind: 'run', sourceId: 'run-1' },
+        ]),
+      ),
+    ).toThrow('memory_fact_contribution_source_alias_missing');
+    expect(() =>
+      recordFactWithContribution(
+        input,
+        grounded,
+        context('event-missing-run', [
+          { sourceKind: 'message', sourceId: 'user-message-1' },
+          { sourceKind: 'turn', sourceId: 'assistant-turn-1' },
+        ]),
+      ),
+    ).toThrow('memory_fact_contribution_source_alias_missing');
+    expect(factRows()).toEqual([]);
+    expect(contributionCount()).toBe(0);
+  });
+
+  it('rolls back when normalized fact metadata cannot form a valid ledger payload', () => {
+    const subject = subjectId();
+    expect(() =>
+      recordFactWithContribution(
+        globalFact(subject, 'blue', {
+          attributes: { invalid: undefined } as unknown as Record<string, unknown>,
+        }),
+        grounded,
+        context('event-invalid-payload'),
+      ),
+    ).toThrow('memory_fact_contribution_payload_invalid');
+    expect(factRows()).toEqual([]);
+    expect(contributionCount()).toBe(0);
+  });
+
+  it('rejects foreign-owner and content mismatches without leaving transaction changes', () => {
+    const subject = subjectId();
+    const input = globalFact(subject, 'blue');
+    const fact = recordFactWithApplicability(input, grounded).fact;
+    const payload = normalizeRecordFactMutation(input, grounded);
+    const owner = fact.memoryOwnerId!;
+
+    expect(() =>
+      runMemoryTransaction(() => {
+        getMemoryDb().runSync(
+          "UPDATE memory_facts SET memory_owner_id = 'foreign-owner' WHERE id = ?",
+          fact.id,
+        );
+        persistFactContributionInTransaction({ fact, payload, context: context('event-owner') });
+      }),
+    ).toThrow('memory_fact_contribution_fact_mismatch');
+    expect(factRows()[0]!.memory_owner_id).toBe(owner);
+
+    expect(() =>
+      persistFactContributionInTransaction({
+        fact,
+        payload: normalizeRecordFactMutation(globalFact(subject, 'green'), grounded),
+        context: context('event-content'),
+      }),
+    ).toThrow('memory_fact_contribution_fact_mismatch');
+    expect(contributionCount()).toBe(0);
+  });
+
+  it('rolls back surrounding mutations when a supersession edge is structurally invalid', () => {
+    const subject = subjectId();
+    const predecessor = recordFactWithApplicability(globalFact(subject, 'blue'), grounded).fact;
+    const successor = recordFactWithContribution(
+      globalFact(subject, 'green', { predicate: 'different_predicate', now: 200 }),
+      grounded,
+      context('event-successor'),
+    ).fact;
+    const contributionId = getMemoryDb().getFirstSync<{ id: string }>(
+      'SELECT id FROM memory_fact_contributions WHERE fact_id = ? LIMIT 1',
+      successor.id,
+    )!.id;
+    const beforeConfidence = successor.confidence;
+
+    expect(() =>
+      runMemoryTransaction(() => {
+        getMemoryDb().runSync(
+          'UPDATE memory_facts SET confidence = 0.1 WHERE id = ?',
+          successor.id,
+        );
+        persistFactContributionSupersessionsInTransaction({
+          contributionId,
+          successorFactId: successor.id,
+          superseded: [{ id: predecessor.id, invalidAt: 300 }],
+        });
+      }),
+    ).toThrow('memory_fact_contribution_supersession_parent_invalid');
+    expect(
+      getMemoryDb().getFirstSync<{ confidence: number }>(
+        'SELECT confidence FROM memory_facts WHERE id = ?',
+        successor.id,
+      )?.confidence,
+    ).toBe(beforeConfidence);
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_contribution_supersessions',
+      )?.count,
+    ).toBe(0);
+  });
+});

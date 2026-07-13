@@ -5,13 +5,21 @@ import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import { safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import {
+  persistFactContributionSupersessionsInTransaction,
+  type MemoryFactContributionWriteContext,
+} from '../factContributionStore';
+import {
   closedMemoryFactClass,
   closedMemoryFactSensitivity,
   closedMemorySourceAuthority,
   requireMemoryFactReviewState,
   type SealedFactApplicabilityProvenance,
 } from './applicabilityProvenance';
-import { recordFactWithApplicability, setFactSensitivityFloorInTransaction } from './mutations';
+import {
+  recordFactWithApplicability,
+  recordFactWithContributionInTransaction,
+  setFactSensitivityFloorInTransaction,
+} from './mutations';
 import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
 import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { requireFactScopeIdentity } from './scopeIdentity';
@@ -162,9 +170,19 @@ export function replaceCurrentFactWithApplicability(
   return replaceCurrentFactInternal(input, applicability);
 }
 
+/** Product replacement that cannot commit without its immutable source contribution. */
+export function replaceCurrentFactWithContribution(
+  input: ReplaceCurrentFactInput,
+  applicability: SealedFactApplicabilityProvenance,
+  context: MemoryFactContributionWriteContext,
+): ReplaceCurrentFactResult {
+  return replaceCurrentFactInternal(input, applicability, context);
+}
+
 function replaceCurrentFactInternal(
   input: ReplaceCurrentFactInput,
   sealedApplicability?: SealedFactApplicabilityProvenance,
+  contributionContext?: MemoryFactContributionWriteContext,
 ): ReplaceCurrentFactResult {
   const expectedCurrentFactId = input.expectedCurrentFactId.trim();
   if (!expectedCurrentFactId) {
@@ -227,16 +245,25 @@ function replaceCurrentFactInternal(
 
       if (current.object_text.normalize('NFKC').trim() === objectText.normalize('NFKC')) {
         if (sealedApplicability) {
-          return recordFactWithApplicability(
-            {
-              ...input,
-              predicate,
-              objectText,
-              supersedePrior: false,
-              now,
-            },
-            sealedApplicability,
-          );
+          const duplicateInput = {
+            ...input,
+            predicate,
+            objectText,
+            pinned: input.pinned ?? current.pinned !== 0,
+            reviewState: requireMemoryFactReviewState(
+              input.reviewState ?? current.review_state,
+            ),
+            memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
+            supersedePrior: false,
+            now,
+          };
+          return contributionContext
+            ? recordFactWithContributionInTransaction(
+                duplicateInput,
+                sealedApplicability,
+                contributionContext,
+              ).result
+            : recordFactWithApplicability(duplicateInput, sealedApplicability);
         }
         if (hasPersistedSourceEvidence(current.id, input.sourceMessageId)) {
           return {
@@ -268,19 +295,26 @@ function replaceCurrentFactInternal(
           sourceAuthority: inheritedSourceAuthority!,
           ...(current.persona_id ? { personaId: current.persona_id } : {}),
         } as const);
-      const created = recordFactWithApplicability(
-        {
-          ...input,
-          predicate,
-          objectText,
-          pinned: input.pinned ?? current.pinned !== 0,
-          reviewState: inheritedReviewState,
-          memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
-          supersedePrior: false,
-          now,
-        },
-        replacementApplicability,
-      );
+      const replacementInput = {
+        ...input,
+        predicate,
+        objectText,
+        pinned: input.pinned ?? current.pinned !== 0,
+        reviewState: inheritedReviewState,
+        memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
+        supersedePrior: false,
+        now,
+      };
+      const contributed = contributionContext
+        ? recordFactWithContributionInTransaction(
+            replacementInput,
+            replacementApplicability,
+            contributionContext,
+          )
+        : null;
+      const created = contributed
+        ? contributed.result
+        : recordFactWithApplicability(replacementInput, replacementApplicability);
       if (created.status !== 'created') {
         throw new ExactReplacementConflict('replacement_collision');
       }
@@ -300,6 +334,13 @@ function replaceCurrentFactInternal(
         throw new ExactReplacementConflict('target_changed');
       }
       const superseded = rowToFact({ ...current, invalid_at: now, updated_at: now });
+      if (contributed) {
+        persistFactContributionSupersessionsInTransaction({
+          contributionId: contributed.contributionId,
+          successorFactId: protectedCreated.id,
+          superseded: [superseded],
+        });
+      }
       return { fact: protectedCreated, status: 'created' as const, superseded: [superseded] };
     });
   } catch (error) {

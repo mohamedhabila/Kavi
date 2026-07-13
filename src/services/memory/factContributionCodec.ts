@@ -4,6 +4,7 @@ import {
   closedMemoryFactReviewState,
   closedMemorySourceAuthority,
   type MemoryFactClass,
+  type MemoryFactReviewState,
   type MemorySourceAuthority,
 } from './facts/applicabilityProvenance';
 import { requireFactScopeIdentity } from './facts/scopeIdentity';
@@ -136,7 +137,7 @@ export interface NormalizedRecordFactContributionInput {
   retrievability: number;
   stability: number;
   decayRate: number;
-  reviewState: string;
+  reviewState: MemoryFactReviewState;
   memoryKind: MemoryFactKind;
   supersedePrior: boolean;
   now: number;
@@ -449,13 +450,9 @@ export function normalizeMemoryFactContributionSourceAliases(
 }
 
 export function buildMemoryFactContributionId(input: {
-  factId: string;
   scope: MemoryFactContributionSourceScope;
   producer: MemoryFactContributionProducerIdentity;
 }): string {
-  if (!isExactMemoryProvenanceId(input.factId)) {
-    return fail('memory_fact_contribution_fact_id_invalid');
-  }
   const scope = normalizeMemoryFactContributionSourceScope(input.scope);
   const producer = requireMemoryFactContributionProducerIdentity(input.producer);
   const identity = canonicalStringify([
@@ -466,7 +463,6 @@ export function buildMemoryFactContributionId(input: {
     scope.taskId,
     producer.producerId,
     producer.producerEventId,
-    input.factId,
   ]);
   return `mfc_${sha256HexUtf8(identity)}`;
 }

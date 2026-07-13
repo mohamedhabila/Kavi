@@ -106,7 +106,6 @@ function insertContribution(input: {
     taskId: null,
   });
   const id = buildMemoryFactContributionId({
-    factId: input.factId,
     scope,
     producer: input.producer,
   });
@@ -158,7 +157,6 @@ describe('fact contribution schema', () => {
     expect(replay.id).toBe(first.id);
     expect(replay.inserted.changes).toBe(0);
     const uppercaseShaId = buildMemoryFactContributionId({
-      factId: fact.id,
       scope: first.scope,
       producer: {
         producerId: 'turn_structural',

@@ -3,6 +3,11 @@ import { runMemoryStatement } from '../access/crud';
 import { newId, safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
+import {
+  persistFactContributionInTransaction,
+  persistFactContributionSupersessionsInTransaction,
+  type MemoryFactContributionWriteContext,
+} from '../factContributionStore';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import {
@@ -17,8 +22,8 @@ import {
   mergeDuplicateReviewState,
   mergeDuplicateSensitivity,
 } from './duplicateMetadata';
-import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
-import { requireFactScopeIdentity } from './scopeIdentity';
+import { requireFactMutationTimestamp } from './mutationValidation';
+import { normalizeRecordFactMutation } from './mutationNormalization';
 import { hasPersistedSourceEvidence } from './sourceEvidence';
 import {
   buildFactLocalSimilarityText,
@@ -32,15 +37,10 @@ import {
   closedMemoryFactReviewState,
   closedMemoryFactSensitivity,
   closedMemorySourceAuthority,
-  requireMemoryFactReviewState,
-  resolveFactApplicabilityProvenance,
   type MemoryFactSensitivity,
   type SealedFactApplicabilityProvenance,
 } from './applicabilityProvenance';
 import {
-  clamp01,
-  normalizeDecayPolicy,
-  normalizeFactKind,
   rowToFact,
   type FactRow,
   type MemoryFact,
@@ -160,42 +160,70 @@ export function recordFactWithApplicability(
   return runMemoryTransaction(() => recordFactInTransaction(input, applicability));
 }
 
+/** Product fact write that cannot commit without its immutable source contribution. */
+export function recordFactWithContribution(
+  input: RecordFactInput,
+  applicability: SealedFactApplicabilityProvenance,
+  context: MemoryFactContributionWriteContext,
+): RecordFactResult {
+  return runMemoryTransaction(
+    () => recordFactWithContributionInTransaction(input, applicability, context).result,
+  );
+}
+
+export function recordFactWithContributionInTransaction(
+  input: RecordFactInput,
+  applicability: SealedFactApplicabilityProvenance,
+  context: MemoryFactContributionWriteContext,
+): { result: RecordFactResult; contributionId: string } {
+  const payload = normalizeRecordFactMutation(input, applicability);
+  const result = recordNormalizedFactInTransaction(payload, true);
+  const contribution = persistFactContributionInTransaction({
+    fact: result.fact,
+    payload,
+    context,
+  });
+  persistFactContributionSupersessionsInTransaction({
+    contributionId: contribution.id,
+    successorFactId: result.fact.id,
+    superseded: result.superseded,
+  });
+  return { result, contributionId: contribution.id };
+}
+
 function recordFactInTransaction(
   input: RecordFactInput,
   sealedApplicability?: SealedFactApplicabilityProvenance,
 ): RecordFactResult {
-  const db = getSchemaReadyMemoryDb();
-  const now = requireFactMutationTimestamp(
-    input.now ?? Date.now(),
-    'memory_fact_mutation_clock_invalid',
+  return recordNormalizedFactInTransaction(
+    normalizeRecordFactMutation(input, sealedApplicability),
+    sealedApplicability !== undefined,
   );
-  if (!input.subjectId) throw new Error('recordFact: subjectId required');
-  const predicate = input.predicate.trim();
-  const objectText = input.objectText.trim();
-  if (!predicate) throw new Error('recordFact: predicate required');
-  if (!objectText) throw new Error('recordFact: objectText required');
+}
 
-  const scope = requireFactMutationScope(input.scope);
-  requireFactScopeIdentity(input, scope);
-  const validAt = requireFactMutationTimestamp(
-    input.validAt ?? now,
-    'memory_fact_valid_at_invalid',
-  );
-  const expiresAt =
-    input.expiresAt === null || input.expiresAt === undefined
-      ? null
-      : requireFactMutationTimestamp(input.expiresAt, 'memory_fact_expires_at_invalid');
-  if (expiresAt !== null && expiresAt <= validAt) {
-    throw new Error('memory_fact_validity_order_invalid');
-  }
-  const confidence = clamp01(input.confidence ?? 1.0);
-  const importance = clamp01(input.importance ?? 0.5);
-  const retrievability = clamp01(input.retrievability ?? 1);
-  const stability = clamp01(input.stability ?? 0.5);
-  const decayRate = Math.max(0, input.decayRate ?? 0.03);
-  const decayPolicy = normalizeDecayPolicy(input.decayPolicy);
-  const memoryKind = normalizeFactKind(input.memoryKind);
-  const reviewState = requireMemoryFactReviewState(input.reviewState ?? 'auto');
+function recordNormalizedFactInTransaction(
+  payload: ReturnType<typeof normalizeRecordFactMutation>,
+  incomingIsSealed: boolean,
+): RecordFactResult {
+  const db = getSchemaReadyMemoryDb();
+  const input = payload.input;
+  const provenance = payload.applicability;
+  const {
+    confidence,
+    decayPolicy,
+    decayRate,
+    expiresAt,
+    importance,
+    memoryKind,
+    now,
+    objectText,
+    predicate,
+    retrievability,
+    reviewState,
+    scope,
+    stability,
+    validAt,
+  } = input;
   const subject = db.getFirstSync<{ canonical_name: string; type: string }>(
     'SELECT canonical_name, type FROM memory_entities WHERE id = ? LIMIT 1',
     input.subjectId,
@@ -208,11 +236,6 @@ function recordFactInTransaction(
     attributes: input.attributes,
     sourceSummary: input.sourceSummary,
     memoryKind,
-  });
-  const provenance = resolveFactApplicabilityProvenance({
-    scope,
-    memoryKind,
-    ...(sealedApplicability ? { sealed: sealedApplicability } : {}),
   });
   const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
   const normalizedInput = {
@@ -288,7 +311,7 @@ function recordFactInTransaction(
       existingFactClass,
       existingSourceAuthority,
       incoming: provenance,
-      incomingIsSealed: sealedApplicability !== undefined,
+      incomingIsSealed,
     });
     const metadataChanged =
       nextReviewState !== existingReviewState ||

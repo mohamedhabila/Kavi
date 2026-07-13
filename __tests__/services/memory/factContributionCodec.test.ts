@@ -142,17 +142,12 @@ describe('fact contribution codec', () => {
       producerEventId: 'assistant-2:fact:0',
     });
     const first = buildMemoryFactContributionId({
-      factId: 'fact-1',
       scope,
       producer: firstProducer,
     });
 
-    expect(
-      buildMemoryFactContributionId({ factId: 'fact-1', scope, producer: firstProducer }),
-    ).toBe(first);
-    expect(
-      buildMemoryFactContributionId({ factId: 'fact-1', scope, producer: secondProducer }),
-    ).not.toBe(first);
+    expect(buildMemoryFactContributionId({ scope, producer: firstProducer })).toBe(first);
+    expect(buildMemoryFactContributionId({ scope, producer: secondProducer })).not.toBe(first);
     expect(() =>
       requireMemoryFactContributionProducerIdentity({
         producerId: 'turn structural',

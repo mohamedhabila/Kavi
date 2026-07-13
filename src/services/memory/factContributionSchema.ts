@@ -43,8 +43,7 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
           source_thread_id,
           task_id,
           producer_id,
-          producer_event_id,
-          fact_id
+          producer_event_id
         )
       );
       CREATE INDEX IF NOT EXISTS idx_memory_fact_contributions_fact
