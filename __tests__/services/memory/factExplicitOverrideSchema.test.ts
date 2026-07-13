@@ -31,6 +31,8 @@ interface OverrideValues {
   updatedAt?: number;
 }
 
+type SqlValue = string | number | null;
+
 let nextFact = 0;
 
 beforeEach(() => {
@@ -108,6 +110,26 @@ function overrideCount(): number {
     getMemoryDb().getFirstSync<{ count: number }>(
       'SELECT COUNT(*) AS count FROM memory_fact_explicit_overrides',
     )?.count ?? 0
+  );
+}
+
+function replaceFactRow(factId: string, overrides: Record<string, SqlValue> = {}): void {
+  const db = getMemoryDb();
+  const columns = db
+    .getAllSync<{ name: string }>('PRAGMA table_info(memory_facts)')
+    .map(({ name }) => name);
+  const row = db.getFirstSync<Record<string, SqlValue>>(
+    'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
+    factId,
+  );
+  if (!row) throw new Error('test fact missing');
+  const values = columns.map((column) =>
+    Object.prototype.hasOwnProperty.call(overrides, column) ? overrides[column]! : row[column]!,
+  );
+  db.runSync(
+    `INSERT OR REPLACE INTO memory_facts(${columns.join(', ')})
+     VALUES (${columns.map(() => '?').join(', ')})`,
+    ...values,
   );
 }
 
@@ -240,6 +262,15 @@ describe('fact explicit override schema', () => {
         fact.id,
       ),
     ).toThrow('memory_fact_explicit_override_delete_immutable');
+    expect(() => replaceFactRow(fact.id)).toThrow(
+      'memory_fact_explicit_override_parent_insert_immutable',
+    );
+    expect(() => replaceFactRow(fact.id, { memory_owner_id: 'another-memory-owner' })).toThrow(
+      'memory_fact_explicit_override_parent_insert_immutable',
+    );
+    expect(() => replaceFactRow(fact.id, { deleted_at: 300 })).toThrow(
+      'memory_fact_explicit_override_parent_insert_immutable',
+    );
     expect(() =>
       getMemoryDb().runSync(
         `UPDATE memory_fact_explicit_overrides
@@ -449,6 +480,7 @@ describe('fact explicit override schema', () => {
       'trg_memory_fact_explicit_override_insert_immutable',
       'trg_memory_fact_explicit_override_parent_identity_immutable',
       'trg_memory_fact_explicit_override_parent_insert',
+      'trg_memory_fact_explicit_override_parent_insert_immutable',
       'trg_memory_fact_explicit_override_update_guard',
       'trg_memory_fact_retire_explicit_override',
     ]);

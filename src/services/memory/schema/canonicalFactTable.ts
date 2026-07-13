@@ -119,6 +119,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'trg_memory_fact_delete_contributions',
     'trg_memory_fact_delete_explicit_override',
     'trg_memory_fact_explicit_override_parent_identity_immutable',
+    'trg_memory_fact_explicit_override_parent_insert_immutable',
     'trg_memory_fact_retire_explicit_override',
   ]);
   const schemaObjects = db.getAllSync<{ type: string; name: string; sql: string }>(

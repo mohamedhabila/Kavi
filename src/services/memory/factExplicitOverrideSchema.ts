@@ -21,6 +21,7 @@ export function dropFactExplicitOverrideFactReferenceTriggers(db: MemoryDb): voi
     DROP TRIGGER IF EXISTS trg_memory_fact_explicit_override_update_guard;
     DROP TRIGGER IF EXISTS trg_memory_fact_explicit_override_delete_immutable;
     DROP TRIGGER IF EXISTS trg_memory_fact_explicit_override_parent_identity_immutable;
+    DROP TRIGGER IF EXISTS trg_memory_fact_explicit_override_parent_insert_immutable;
     DROP TRIGGER IF EXISTS trg_memory_fact_delete_explicit_override;
     DROP TRIGGER IF EXISTS trg_memory_fact_retire_explicit_override;
   `);
@@ -100,6 +101,7 @@ export function ensureFactExplicitOverrideSchema(db: MemoryDb): void {
       DROP TRIGGER IF EXISTS trg_memory_fact_explicit_override_update_guard;
       DROP TRIGGER IF EXISTS trg_memory_fact_explicit_override_delete_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_explicit_override_parent_identity_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_explicit_override_parent_insert_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_delete_explicit_override;
       DROP TRIGGER IF EXISTS trg_memory_fact_retire_explicit_override;
 
@@ -226,6 +228,15 @@ export function ensureFactExplicitOverrideSchema(db: MemoryDb): void {
         )
       BEGIN
         SELECT RAISE(ABORT, 'memory_fact_explicit_override_parent_identity_immutable');
+      END;
+
+      CREATE TRIGGER trg_memory_fact_explicit_override_parent_insert_immutable
+      BEFORE INSERT ON memory_facts
+      WHEN EXISTS (
+        SELECT 1 FROM memory_fact_explicit_overrides WHERE fact_id = NEW.id
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_explicit_override_parent_insert_immutable');
       END;
 
       CREATE TRIGGER trg_memory_fact_delete_explicit_override
