@@ -62,14 +62,20 @@ describe('agent run registry cleanup', () => {
     );
 
     let review: Promise<void> | undefined;
+    let duplicateReview: Promise<void> | undefined;
     act(() => {
       review = result.current({
+        conversationId: 'missing-conversation',
+        runId: 'run-1',
+      });
+      duplicateReview = result.current({
         conversationId: 'missing-conversation',
         runId: 'run-1',
       });
     });
 
     expect(pending.size).toBe(1);
+    expect(review).toBe(duplicateReview);
     await act(async () => {
       await review;
     });

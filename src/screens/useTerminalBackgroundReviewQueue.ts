@@ -17,6 +17,7 @@ import { getReviewableSubAgentsForRun } from '../services/agents/subAgentRunTrac
 import type { QueueTerminalBackgroundReview } from './subAgentRunBridgeTypes';
 import { handleTerminalBackgroundReview } from './terminalBackgroundReviewHandler';
 import type { RecordConversationTurnMemory } from '../services/memory/turnPublication';
+import { flushChatStorePersistenceNow } from '../store/chatStorePersistence';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -77,11 +78,13 @@ export function useTerminalBackgroundReviewQueue(params: {
         }),
       );
       pendingAgentRunTerminalReviewsRef.current.set(runIdentityKey, reviewPromise);
-      return reviewPromise.finally(() => {
+      const releaseReview = () => {
         if (pendingAgentRunTerminalReviewsRef.current.get(runIdentityKey) === reviewPromise) {
           pendingAgentRunTerminalReviewsRef.current.delete(runIdentityKey);
         }
-      });
+      };
+      void reviewPromise.then(releaseReview, releaseReview);
+      return reviewPromise;
     },
     [
       appendConversationLog,
@@ -157,6 +160,7 @@ async function runTerminalBackgroundReview(params: {
       context: reviewCommand.context,
       conversationId: candidate.conversationId,
       ensureAgentRunFinalResponse: params.ensureAgentRunFinalResponseRef.current,
+      flushChatState: flushChatStorePersistenceNow,
       recordConversationTurnMemory: params.recordConversationTurnMemory,
       resumeAgentRun,
       reviewTimestamp,
@@ -167,6 +171,8 @@ async function runTerminalBackgroundReview(params: {
       updateAgentRunControlGraph: params.updateAgentRunControlGraph,
       updateAgentRunSummary: params.updateAgentRunSummary,
       updateMessageAssistantMetadata: params.updateMessageAssistantMetadata,
+      transitionMessageMemoryPublication:
+        useChatStore.getState().transitionMessageMemoryPublication,
     });
   } catch (error) {
     if (!isAbortErrorLike(error, operation.signal)) {
