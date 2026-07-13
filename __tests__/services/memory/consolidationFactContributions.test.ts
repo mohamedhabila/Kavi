@@ -3,6 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
+import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 import { applyThreadLocalConsolidatorResult } from '../../../src/services/memory/consolidator';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import {
@@ -14,6 +15,10 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import {
+  isMemorySourceWithdrawn,
+  MemoryPersistenceSourceWithdrawnError,
+} from '../../../src/services/memory/withdrawalFence';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -51,6 +56,13 @@ function sourceAliases(contributionId: string) {
       WHERE contribution_id = ?
       ORDER BY source_kind ASC, source_id ASC`,
     contributionId,
+  );
+}
+
+function tableCount(table: string): number {
+  return (
+    getMemoryDb().getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
+      ?.count ?? 0
   );
 }
 
@@ -220,5 +232,65 @@ describe('consolidation fact contributions', () => {
       },
     ]);
     expect(contributionRows()).toHaveLength(2);
+  });
+
+  it('rejects the fallback assistant-message alias and rolls back the consolidation', () => {
+    const scope = {
+      memoryConversationId: 'fallback-retirement-conversation',
+      sourceThreadId: 'fallback-retirement-thread',
+      taskId: null,
+    };
+    const sourceAssistantMessageId = 'fallback-retirement-assistant';
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'fallback-message-retirement',
+      ...scope,
+      sourceKind: 'message',
+      sourceId: sourceAssistantMessageId,
+    });
+    expect(
+      isMemorySourceWithdrawn({
+        ...scope,
+        sourceKind: 'turn',
+        sourceId: sourceAssistantMessageId,
+      }),
+    ).toBe(false);
+
+    expect(() =>
+      applyThreadLocalConsolidatorResult(
+        {
+          episodeSummary: 'The user selected English for future conversations.',
+          newFacts: [
+            {
+              subject: 'user',
+              predicate: 'preferred_language',
+              value: 'English',
+            },
+          ],
+          activeFocus: 'Use English in future conversations.',
+          openThreads: ['Confirm regional spelling preference.'],
+          notable: [],
+        },
+        {
+          conversationId: scope.memoryConversationId,
+          threadId: scope.sourceThreadId,
+          sourceAssistantMessageId,
+          factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
+          now: 200,
+        },
+      ),
+    ).toThrow(MemoryPersistenceSourceWithdrawnError);
+
+    for (const table of [
+      'memory_entities',
+      'memory_episodes',
+      'memory_facts',
+      'memory_fact_terms',
+      'memory_fact_evidence',
+      'memory_fact_contributions',
+      'memory_fact_contribution_sources',
+      'memory_working_blocks',
+    ]) {
+      expect(tableCount(table)).toBe(0);
+    }
   });
 });

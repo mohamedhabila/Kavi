@@ -3,6 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
+import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 import {
   recordAgentRunEvidenceMemory,
   type AgentRunEvidenceMemoryInput,
@@ -16,6 +17,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { MemoryPersistenceSourceWithdrawnError } from '../../../src/services/memory/withdrawalFence';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -53,15 +55,13 @@ function contributionInput(
   evidence?: readonly string[],
 ): AgentRunEvidenceMemoryInput {
   return {
-    evidence:
-      evidence ??
-      [
-        agentEvidence({
-          sourceRunId: `run-${suffix}`,
-          stateIndex: 1,
-          observation: `Observed ${suffix}`,
-        }),
-      ],
+    evidence: evidence ?? [
+      agentEvidence({
+        sourceRunId: `run-${suffix}`,
+        stateIndex: 1,
+        observation: `Observed ${suffix}`,
+      }),
+    ],
     conversationId: `conversation-${suffix}`,
     threadId: `thread-${suffix}`,
     taskId: `task-${suffix}`,
@@ -192,7 +192,11 @@ describe('agent-run fact contributions', () => {
     ]);
     const first = recordAgentRunEvidenceMemory(input);
     expect(first.factIds).toHaveLength(3);
-    expect(contributions().map((row) => row.producer_event_id).sort()).toEqual(
+    expect(
+      contributions()
+        .map((row) => row.producer_event_id)
+        .sort(),
+    ).toEqual(
       [
         buildAgentRunFactProducerEventId({
           sourceRunId,
@@ -271,7 +275,11 @@ describe('agent-run fact contributions', () => {
   });
 
   it.each([
-    ['missing turn', { sourceTurnId: undefined as never }, 'memory_agent_run_source_turn_id_invalid'],
+    [
+      'missing turn',
+      { sourceTurnId: undefined as never },
+      'memory_agent_run_source_turn_id_invalid',
+    ],
     ['unstable timestamp', { now: 1.5 }, 'memory_agent_run_timestamp_invalid'],
     [
       'non-exact conversation scope',
@@ -333,5 +341,44 @@ describe('agent-run fact contributions', () => {
     expect(tableCount('memory_facts')).toBe(0);
     expect(tableCount('memory_fact_contributions')).toBe(0);
     expect(tableCount('memory_fact_contribution_sources')).toBe(0);
+  });
+
+  it('rejects a retired parsed run alias and rolls back earlier bundle writes', () => {
+    const input = {
+      ...contributionInput('parsed-run-retirement', [
+        agentEvidence({
+          sourceRunId: 'run-first-writable-bundle',
+          stateIndex: 1,
+          observation: 'The first bundle writes before the retired bundle is visited',
+        }),
+        agentEvidence({
+          sourceRunId: 'run-second-retired-bundle',
+          stateIndex: 2,
+          toolResult: 'The second bundle must be fenced',
+        }),
+      ]),
+      sourceRunId: 'run-envelope-fallback',
+    };
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'parsed-run-retirement',
+      memoryConversationId: input.conversationId,
+      sourceThreadId: input.threadId,
+      taskId: input.taskId,
+      sourceKind: 'run',
+      sourceId: 'run-second-retired-bundle',
+    });
+
+    expect(() => recordAgentRunEvidenceMemory(input)).toThrow(
+      MemoryPersistenceSourceWithdrawnError,
+    );
+    for (const table of [
+      'memory_entities',
+      'memory_facts',
+      'memory_fact_terms',
+      'memory_fact_contributions',
+      'memory_fact_contribution_sources',
+    ]) {
+      expect(tableCount(table)).toBe(0);
+    }
   });
 });

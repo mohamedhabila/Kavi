@@ -7,6 +7,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
+import { insertRetiredMemorySourceForTest } from '../helpers/memoryWithdrawalFixtures';
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { listFacts } from '../../src/services/memory/facts/queries';
@@ -22,6 +23,10 @@ import {
   buildGraphEvidenceFactProducerEventId,
   GRAPH_EVIDENCE_FACT_PRODUCER_ID,
 } from '../../src/services/memory/evidenceBridgeContributionIdentity';
+import {
+  isMemorySourceWithdrawn,
+  MemoryPersistenceSourceWithdrawnError,
+} from '../../src/services/memory/withdrawalFence';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -61,6 +66,13 @@ function bridgeOptions(overrides: Partial<EvidenceBridgeOptions> = {}): Evidence
     now: 10,
     ...overrides,
   };
+}
+
+function tableCount(table: string): number {
+  return (
+    getMemoryDb().getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
+      ?.count ?? 0
+  );
 }
 
 describe('bridgeEvidenceToFacts', () => {
@@ -268,6 +280,46 @@ describe('bridgeEvidenceToFacts', () => {
         getMemoryDb().getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
           ?.count,
       ).toBe(0);
+    }
+  });
+
+  it('fences the message alias independently and rolls the whole bridge back', () => {
+    const options = bridgeOptions({ subjectName: 'retired-message-bridge' });
+    const scope = {
+      memoryConversationId: options.memoryConversationId,
+      sourceThreadId: options.sourceThreadId,
+      taskId: options.taskId,
+    };
+    insertRetiredMemorySourceForTest({
+      retirementGroupId: 'graph-message-retirement',
+      ...scope,
+      sourceKind: 'message',
+      sourceId: options.sourceTurnId,
+    });
+    expect(
+      isMemorySourceWithdrawn({
+        ...scope,
+        sourceKind: 'turn',
+        sourceId: options.sourceTurnId,
+      }),
+    ).toBe(false);
+
+    expect(() =>
+      bridgeEvidenceToFacts(
+        [makeEntry(), makeEntry({ id: 'e2', title: 'Second verified fact' })],
+        options,
+      ),
+    ).toThrow(MemoryPersistenceSourceWithdrawnError);
+    expect(findEntityByName('retired-message-bridge')).toBeNull();
+    for (const table of [
+      'memory_entities',
+      'memory_facts',
+      'memory_fact_terms',
+      'memory_fact_contributions',
+      'memory_fact_contribution_sources',
+      'memory_fact_evidence',
+    ]) {
+      expect(tableCount(table)).toBe(0);
     }
   });
 
