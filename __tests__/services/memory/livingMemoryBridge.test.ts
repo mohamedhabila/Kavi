@@ -14,10 +14,8 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import {
-  recordFactWithApplicability,
-  setFactPinned,
-} from '../../../src/services/memory/facts/mutations';
+import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
 import { editPromptEligibleWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
@@ -190,7 +188,7 @@ describe('buildLivingMemorySections', () => {
       objectText: 'Berlin',
       scope: 'global',
     });
-    setFactPinned(fact.fact.id, true);
+    setManagedMemoryFactPinned({ factId: fact.fact.id, pinned: true });
 
     const databaseSpy = jest.spyOn(memoryDatabase, 'getMemoryDb');
     const out = await buildLivingMemorySections({

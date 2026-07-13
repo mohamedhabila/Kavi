@@ -9,10 +9,8 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import {
-  recordFactWithApplicability,
-  setFactPinned,
-} from '../../../src/services/memory/facts/mutations';
+import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import type {
   MemoryFactKind,
   MemoryFactScope,
@@ -164,7 +162,7 @@ describe('recallFactsForQuery — pinned facts', () => {
       predicate: 'preferred_pronouns',
       objectText: 'they/them',
     });
-    setFactPinned(pinnedResult.fact.id, true);
+    setManagedMemoryFactPinned({ factId: pinnedResult.fact.id, pinned: true });
 
     const facts = await recallFactsForQuery('what is the weather today');
 
@@ -178,7 +176,7 @@ describe('recallFactsForQuery — pinned facts', () => {
       predicate: 'name',
       objectText: 'Alice',
     });
-    setFactPinned(pinned.fact.id, true);
+    setManagedMemoryFactPinned({ factId: pinned.fact.id, pinned: true });
     recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin' });
 
     const facts = await recallFactsForQuery('   ');
@@ -194,7 +192,7 @@ describe('recallFactsForQuery — pinned facts', () => {
       predicate: 'name',
       objectText: 'Alice',
     });
-    setFactPinned(pinned.fact.id, true);
+    setManagedMemoryFactPinned({ factId: pinned.fact.id, pinned: true });
 
     const facts = await recallFactsForQuery('', { alwaysIncludePinned: false });
 
@@ -242,7 +240,7 @@ describe('recallScoredFactsForQuery', () => {
       predicate: 'lives_in',
       objectText: 'Berlin',
     });
-    setFactPinned(fact.fact.id, true);
+    setManagedMemoryFactPinned({ factId: fact.fact.id, pinned: true });
 
     const scored = await recallScoredFactsForQuery('user lives Berlin');
 
@@ -327,7 +325,7 @@ describe('recallScoredFactsForQuery', () => {
       objectText: 'gamma release must always include verified compliance notes',
       importance: 0.9,
     });
-    setFactPinned(pinned.fact.id, true);
+    setManagedMemoryFactPinned({ factId: pinned.fact.id, pinned: true });
     const selected = recordFact({
       subjectId: project.id,
       predicate: 'risk',
@@ -423,7 +421,7 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       importance: 1,
       now: 20_000,
     });
-    setFactPinned(other.fact.id, true);
+    setManagedMemoryFactPinned({ factId: other.fact.id, pinned: true });
 
     const facts = await recallFactsForQuery('beta backend decision', {
       conversationId: 'conv-active',
@@ -457,7 +455,7 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       originTaskId: 'task-other',
       importance: 1,
     });
-    setFactPinned(other.fact.id, true);
+    setManagedMemoryFactPinned({ factId: other.fact.id, pinned: true });
 
     const facts = await recallFactsForQuery('release validation next step', {
       conversationId: 'conv-release',

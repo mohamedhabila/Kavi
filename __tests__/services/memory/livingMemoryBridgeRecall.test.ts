@@ -9,10 +9,8 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import {
-  recordFactWithApplicability,
-  setFactPinned,
-} from '../../../src/services/memory/facts/mutations';
+import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import {
@@ -129,7 +127,7 @@ describe('living memory recall', () => {
       scope: 'global',
       now: 500,
     });
-    setFactPinned(fact.fact.id, true, 600);
+    setManagedMemoryFactPinned({ factId: fact.fact.id, pinned: true, now: 600 });
     recordFact({
       subjectId: me.id,
       predicate: 'works_on',
@@ -283,7 +281,7 @@ describe('living memory recall', () => {
       supersedePrior: false,
       now: 2_000,
     });
-    setFactPinned(sibling.fact.id, true);
+    setManagedMemoryFactPinned({ factId: sibling.fact.id, pinned: true });
 
     const out = await buildLivingMemorySections({
       messages: [userMessage('Which release routing channel should I use?', 3_000)],

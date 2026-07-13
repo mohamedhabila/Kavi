@@ -4,10 +4,8 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
-import {
-  invalidateFact,
-  setFactLocalSimilarity,
-} from '../../../src/services/memory/facts/mutations';
+import { invalidateManagedMemoryFact } from '../../../src/services/memory/factExplicitOverrides';
+import { setFactLocalSimilarity } from '../../../src/services/memory/facts/mutations';
 import { createCurrentLocalSimilarityVector } from '../../../src/services/memory/localSimilarity';
 import type { RecallFactsTiming } from '../../../src/services/memory/factRecall';
 import {
@@ -232,7 +230,7 @@ describe('hybrid fact recall integration', () => {
     for (const fact of [allowed, expired, invalidated, deleted, otherConversation]) {
       setFactLocalSimilarity(fact.fact.id, allowed.fact.localSimilarity!, 1_100);
     }
-    invalidateFact(invalidated.fact.id, 1_200);
+    invalidateManagedMemoryFact({ factId: invalidated.fact.id, now: 1_200 });
     getMemoryDb().runSync(
       'UPDATE memory_facts SET deleted_at = ? WHERE id = ?',
       1_200,

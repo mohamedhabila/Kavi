@@ -16,11 +16,7 @@ import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
 import {
   closedMemoryFactClass,
   closedMemorySourceAuthority,
-  requireMemoryFactReviewState,
-  requireMemoryFactSensitivity,
   type MemoryFactClass,
-  type MemoryFactReviewState,
-  type MemoryFactSensitivity,
   type MemorySourceAuthority,
 } from './applicabilityProvenance';
 import type { FactRow } from './types';
@@ -480,71 +476,4 @@ export function loadActiveMemoryFactConflictSignals(input: {
     sourceId: observation.sourceId,
     observedAt: observation.observedAt,
   }));
-}
-
-function updateFactApplicabilityColumn(input: {
-  factId: string;
-  currentScope: MemoryAccessScopeIdentity;
-  column: 'review_state' | 'sensitivity';
-  value: MemoryFactReviewState | MemoryFactSensitivity;
-  now: number;
-}): boolean {
-  const scope = requireMemoryAccessScopeIdentity(input.currentScope);
-  const now = requireTimestamp(input.now, 'memory_fact_applicability_clock_invalid');
-  const db = getSchemaReadyMemoryDb();
-  if (scope.memoryOwnerId !== getLocalMemoryVaultOwnerId(db)) {
-    throw new Error('memory_fact_applicability_owner_mismatch');
-  }
-  if (!isExactMemoryScopeId(input.factId)) {
-    throw new Error('memory_fact_applicability_fact_invalid');
-  }
-  const fact = db.getFirstSync<FactRow>(
-    'SELECT * FROM memory_facts WHERE id = ? AND deleted_at IS NULL LIMIT 1',
-    input.factId,
-  );
-  if (!fact || !factIsActiveAt(fact, now) || !factMatchesScope(fact, scope)) {
-    throw new Error('memory_fact_applicability_scope_mismatch');
-  }
-  const result = db.runSync(
-    `UPDATE memory_facts SET ${input.column} = ?, updated_at = ?
-      WHERE id = ? AND memory_owner_id = ? AND deleted_at IS NULL`,
-    input.value,
-    now,
-    input.factId,
-    scope.memoryOwnerId,
-  );
-  if ((result.changes ?? 0) > 0) {
-    runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
-  }
-  return (result.changes ?? 0) > 0;
-}
-
-export function setMemoryFactReviewState(input: {
-  factId: string;
-  currentScope: MemoryAccessScopeIdentity;
-  reviewState: MemoryFactReviewState;
-  now?: number;
-}): boolean {
-  return updateFactApplicabilityColumn({
-    factId: input.factId,
-    currentScope: input.currentScope,
-    column: 'review_state',
-    value: requireMemoryFactReviewState(input.reviewState),
-    now: input.now ?? Date.now(),
-  });
-}
-
-export function setMemoryFactSensitivity(input: {
-  factId: string;
-  currentScope: MemoryAccessScopeIdentity;
-  sensitivity: MemoryFactSensitivity;
-  now?: number;
-}): boolean {
-  return updateFactApplicabilityColumn({
-    factId: input.factId,
-    currentScope: input.currentScope,
-    column: 'sensitivity',
-    value: requireMemoryFactSensitivity(input.sensitivity),
-    now: input.now ?? Date.now(),
-  });
 }

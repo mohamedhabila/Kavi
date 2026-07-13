@@ -102,6 +102,10 @@ const bannedPatterns = [
     allowedMatch: ({ filePath }) => bareFactMutationAllowedFiles.has(filePath),
   },
   {
+    label: 'retired projection-only fact mutation API',
+    pattern: String.raw`\b(?:invalidateFact|setFactPinned|setMemoryFactReviewState|setMemoryFactSensitivity|updateFactApplicabilityColumn)\b`,
+  },
+  {
     label: 'retired memory-store import',
     pattern: String.raw`(?:services/)?memory/(?:store|ranking/chunkIndex)`,
   },

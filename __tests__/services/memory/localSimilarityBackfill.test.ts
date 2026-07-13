@@ -3,7 +3,8 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { invalidateFact, recordFact } from '../../../src/services/memory/facts/mutations';
+import { invalidateManagedMemoryFact } from '../../../src/services/memory/factExplicitOverrides';
+import { recordFact } from '../../../src/services/memory/facts/mutations';
 import {
   backfillCurrentFactLocalSimilarity,
   getLocalSimilarityDiagnostics,
@@ -103,7 +104,7 @@ describe('local-similarity backfill', () => {
     for (const fact of [activeOne, activeTwo, invalid, expired, deleted, foreign]) {
       removeLocalSimilarity(fact.id);
     }
-    invalidateFact(invalid.id, 100);
+    invalidateManagedMemoryFact({ factId: invalid.id, now: 100 });
     getMemoryDb().runSync('UPDATE memory_facts SET deleted_at = ? WHERE id = ?', 100, deleted.id);
     getMemoryDb().runSync(
       'UPDATE memory_facts SET memory_owner_id = ? WHERE id = ?',

@@ -4,10 +4,10 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
+import { setScopedMemoryFactReviewState } from '../../../src/services/memory/factExplicitOverrides';
 import {
   loadActiveMemoryFactConflictSignals,
   recordMemoryFactObservation,
-  setMemoryFactReviewState,
 } from '../../../src/services/memory/facts/observations';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import type { MemoryFactScope } from '../../../src/services/memory/facts/types';
@@ -334,13 +334,13 @@ describe('durable memory fact observations', () => {
         }),
       ).toEqual([]);
       expect(() =>
-        setMemoryFactReviewState({
+        setScopedMemoryFactReviewState({
           factId,
           currentScope: currentScope(),
           reviewState: 'verified',
           now: 200,
         }),
-      ).toThrow('memory_fact_applicability_scope_mismatch');
+      ).toThrow('memory_fact_explicit_override_scope_mismatch');
     },
   );
 
@@ -370,13 +370,13 @@ describe('durable memory fact observations', () => {
         }),
       ).toEqual([]);
       expect(() =>
-        setMemoryFactReviewState({
+        setScopedMemoryFactReviewState({
           factId,
           currentScope: currentScope(),
           reviewState: 'verified',
           now: 200,
         }),
-      ).toThrow('memory_fact_applicability_scope_mismatch');
+      ).toThrow('memory_fact_explicit_override_inactive');
     },
   );
 

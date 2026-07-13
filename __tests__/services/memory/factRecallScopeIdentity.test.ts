@@ -4,11 +4,8 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
-import {
-  invalidateFact,
-  recordFactWithApplicability,
-  setFactPinned,
-} from '../../../src/services/memory/facts/mutations';
+import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import {
   listFactsForRecallCandidates,
   listFactsForRecallEligibleScan,
@@ -57,6 +54,15 @@ function recordFact(input: RecordFactInput) {
     sourceAuthority: 'tool_observed',
     ...(input.scope === 'persona' ? { personaId: ACTIVE_PERSONA } : {}),
   });
+}
+
+function invalidateProjectedFactForTest(factId: string, invalidatedAt: number): void {
+  getMemoryDb().runSync(
+    'UPDATE memory_facts SET invalid_at = ?, updated_at = ? WHERE id = ?',
+    invalidatedAt,
+    invalidatedAt,
+    factId,
+  );
 }
 
 beforeEach(() => {
@@ -288,7 +294,7 @@ describe('fact recall SQL scope identity', () => {
       scope: 'global',
     });
     const unsafeExpiry = add({ predicate: 'blocked_unsafe_expiry', scope: 'global' });
-    invalidateFact(invalidated.fact.id, 500);
+    invalidateProjectedFactForTest(invalidated.fact.id, 500);
     getMemoryDb().runSync(
       'UPDATE memory_facts SET deleted_at = ? WHERE id = ?',
       500,
@@ -320,16 +326,15 @@ describe('fact recall SQL scope identity', () => {
       ...blocked,
       expired,
       invalidated,
-      deleted,
-      invalidRawScope,
-      wrongOwner,
       unknownClass,
       unknownAuthority,
       rejected,
       sensitive,
-      unsafeExpiry,
     ]) {
-      setFactPinned(entry.fact.id, true);
+      setManagedMemoryFactPinned({ factId: entry.fact.id, pinned: true });
+    }
+    for (const entry of [deleted, invalidRawScope, wrongOwner, unsafeExpiry]) {
+      getMemoryDb().runSync('UPDATE memory_facts SET pinned = 1 WHERE id = ?', entry.fact.id);
     }
 
     const scan = listFactsForRecallEligibleScan({
@@ -533,7 +538,7 @@ describe('fact recall SQL scope identity', () => {
       scope: 'global',
       now: 100,
     });
-    invalidateFact(historical.fact.id, 500);
+    invalidateProjectedFactForTest(historical.fact.id, 500);
 
     const taskless = listFactsForRecallEligibleScan({
       recallScopeIdentity: activeIdentity(null),

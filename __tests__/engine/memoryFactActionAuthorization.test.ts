@@ -226,7 +226,7 @@ describe('raw memory tool executor fact action authorization', () => {
       threadId: 'thread-b',
     });
 
-    const invalidateFact = seedFact({
+    const factToInvalidate = seedFact({
       scope: 'session',
       rootId: 'root-a',
       threadId: 'thread-a',
@@ -234,7 +234,7 @@ describe('raw memory tool executor fact action authorization', () => {
     });
     const deniedInvalidate = await manage({
       action: 'invalidate',
-      factId: invalidateFact.id,
+      factId: factToInvalidate.id,
       rootId: 'root-a',
       threadId: 'thread-a',
       taskId: 'task-b',
@@ -243,8 +243,8 @@ describe('raw memory tool executor fact action authorization', () => {
     expect(deniedUnpin).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(unpinFact.id)?.pinned).toBe(true);
     expect(deniedInvalidate).toMatchObject({ ok: false, code: 'permission_denied' });
-    expect(getFactById(invalidateFact.id)?.invalidAt).toBeNull();
-    expect(explicitOverrideCount(invalidateFact.id)).toBe(0);
+    expect(getFactById(factToInvalidate.id)?.invalidAt).toBeNull();
+    expect(explicitOverrideCount(factToInvalidate.id)).toBe(0);
   });
 
   it('denies a fact whose durable vault owner does not match the current local owner', async () => {

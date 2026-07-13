@@ -13,6 +13,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { countFacts } from '../../../src/services/memory/facts/queries';
 import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
@@ -52,7 +53,6 @@ describe('countFacts', () => {
   });
 
   it('counts only pinned facts when pinnedOnly is true', () => {
-    const { setFactPinned } = require('../../../src/services/memory/facts/mutations');
     const a = recordFact({
       subjectId: 'user',
       predicate: 'name',
@@ -65,7 +65,7 @@ describe('countFacts', () => {
       objectText: '20',
       scope: 'global',
     });
-    setFactPinned(a.fact.id, true);
+    setManagedMemoryFactPinned({ factId: a.fact.id, pinned: true });
     expect(countFacts({ pinnedOnly: true })).toBe(1);
     expect(countFacts()).toBe(2);
     expect(b.fact.pinned).toBe(false);
@@ -86,7 +86,6 @@ describe('countFacts', () => {
   });
 
   it('combines pinnedOnly and scope filters', () => {
-    const { setFactPinned } = require('../../../src/services/memory/facts/mutations');
     const a = recordFact({
       subjectId: 'user',
       predicate: 'name',
@@ -94,7 +93,7 @@ describe('countFacts', () => {
       scope: 'global',
     });
     recordFact({ subjectId: 'user', predicate: 'age', objectText: '20', scope: 'global' });
-    setFactPinned(a.fact.id, true);
+    setManagedMemoryFactPinned({ factId: a.fact.id, pinned: true });
     expect(countFacts({ pinnedOnly: true, scope: 'global' })).toBe(1);
   });
 });

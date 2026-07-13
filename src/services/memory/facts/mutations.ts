@@ -597,38 +597,6 @@ export function markFactsRecalled(ids: string[], now = Date.now()): number {
   return result.changes ?? 0;
 }
 
-export function invalidateFact(id: string, now = Date.now()): boolean {
-  requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
-  const result = runMemoryStatement(
-    `UPDATE memory_facts
-       SET invalid_at = ?, updated_at = ?
-       WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL`,
-    now,
-    now,
-    id,
-  );
-  const changed = (result.changes ?? 0) > 0;
-  if (changed) {
-    runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
-  }
-  return changed;
-}
-
-export function setFactPinned(id: string, pinned: boolean, now = Date.now()): boolean {
-  requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
-  const result = runMemoryStatement(
-    `UPDATE memory_facts
-       SET pinned = ?, updated_at = ?
-       WHERE id = ? AND deleted_at IS NULL`,
-    pinned ? 1 : 0,
-    now,
-    id,
-  );
-  const changed = (result.changes ?? 0) > 0;
-  if (changed) runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
-  return changed;
-}
-
 /**
  * Persist one current, validated local-similarity vector for a fact.
  */

@@ -5,10 +5,8 @@ jest.mock('expo-sqlite', () => {
 
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
-import {
-  recordFactWithApplicability,
-  setFactPinned,
-} from '../../../src/services/memory/facts/mutations';
+import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import * as expansionModule from '../../../src/services/memory/localEvidenceExpansion';
 import * as llmFactSelector from '../../../src/services/memory/llmFactSelector';
@@ -58,7 +56,7 @@ function seedSelectedFact(input: {
     },
     { factClass: 'workflow', sourceAuthority: 'tool_observed' },
   );
-  setFactPinned(result.fact.id, true);
+  setManagedMemoryFactPinned({ factId: result.fact.id, pinned: true });
   if (input.quote) {
     addFactEvidence({
       factId: result.fact.id,

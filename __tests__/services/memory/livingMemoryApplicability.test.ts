@@ -5,10 +5,8 @@ jest.mock('expo-sqlite', () => {
 
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
-import {
-  recordFactWithApplicability,
-  setFactPinned,
-} from '../../../src/services/memory/facts/mutations';
+import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import type { SealedFactApplicabilityProvenance } from '../../../src/services/memory/facts/applicabilityProvenance';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
@@ -75,7 +73,7 @@ function seedFact(input: {
       sourceAuthority: 'grounded_user',
     },
   );
-  setFactPinned(recorded.fact.id, true, 1_100);
+  setManagedMemoryFactPinned({ factId: recorded.fact.id, pinned: true, now: 1_100 });
   if (input.evidence) {
     addFactEvidence({
       factId: recorded.fact.id,

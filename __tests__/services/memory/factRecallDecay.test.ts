@@ -9,10 +9,8 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import {
-  recordFactWithApplicability,
-  setFactPinned,
-} from '../../../src/services/memory/facts/mutations';
+import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import { recallScoredFactsForQuery as recallScoredFactsForQueryImpl } from '../../../src/services/memory/factRecall';
 import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
@@ -80,7 +78,7 @@ describe('recallFactsForQuery — temporal decay math', () => {
       objectText: 'Berlin',
       now: 1_000_000,
     });
-    setFactPinned(fact.fact.id, true);
+    setManagedMemoryFactPinned({ factId: fact.fact.id, pinned: true });
 
     const scored = await recallScoredFactsForQuery('Berlin', {
       now: 1_000_000 + 365 * 24 * 60 * 60 * 1000,

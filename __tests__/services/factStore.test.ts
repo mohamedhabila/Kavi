@@ -11,13 +11,15 @@ import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { upsertEntity } from '../../src/services/memory/entities';
 import {
-  invalidateFact,
   markFactsRecalled,
   recordFact,
   recordFactWithApplicability,
   setFactLocalSimilarity,
-  setFactPinned,
 } from '../../src/services/memory/facts/mutations';
+import {
+  invalidateManagedMemoryFact,
+  setManagedMemoryFactPinned,
+} from '../../src/services/memory/factExplicitOverrides';
 import { replaceCurrentFact } from '../../src/services/memory/facts/exactReplacement';
 import { hasExactFactContentIdentity } from '../../src/services/memory/facts/contentIdentity';
 import { withdrawMemoryFact } from '../../src/services/memory/withdrawal';
@@ -428,10 +430,12 @@ describe('recordFact', () => {
       scope: 'global',
       now: 100,
     }).fact;
-    expect(() => invalidateFact(fact.id, -1)).toThrow('memory_fact_mutation_clock_invalid');
-    expect(() => setFactPinned(fact.id, true, Number.NaN)).toThrow(
-      'memory_fact_mutation_clock_invalid',
+    expect(() => invalidateManagedMemoryFact({ factId: fact.id, now: -1 })).toThrow(
+      'memory_fact_explicit_override_clock_invalid',
     );
+    expect(() =>
+      setManagedMemoryFactPinned({ factId: fact.id, pinned: true, now: Number.NaN }),
+    ).toThrow('memory_fact_explicit_override_clock_invalid');
     expect(() =>
       setFactLocalSimilarity(
         fact.id,
@@ -454,17 +458,6 @@ describe('recordFact', () => {
     ).toThrow('memory_fact_mutation_clock_invalid');
   });
 
-  it('invalidateFact stamps invalid_at and idempotents on second call', () => {
-    const f = recordFact({
-      subjectId: userId,
-      predicate: 'p',
-      objectText: 'o',
-      scope: 'global',
-    });
-    expect(invalidateFact(f.fact.id)).toBe(true);
-    expect(invalidateFact(f.fact.id)).toBe(false);
-  });
-
   it('withdrawMemoryFact removes the row from current and historical reads', () => {
     const f = recordFact({
       subjectId: userId,
@@ -478,7 +471,7 @@ describe('recordFact', () => {
     expect(listFacts({ subjectId: userId, includeDeleted: true })).toHaveLength(0);
   });
 
-  it('setFactPinned bubbles pinned facts to the top of listFacts', () => {
+  it('canonical pin intent bubbles pinned facts to the top of listFacts', () => {
     const a = recordFact({
       subjectId: userId,
       predicate: 'a',
@@ -491,7 +484,7 @@ describe('recordFact', () => {
       objectText: '2',
       scope: 'global',
     });
-    setFactPinned(b.fact.id, true);
+    setManagedMemoryFactPinned({ factId: b.fact.id, pinned: true });
     const list = listFacts({ subjectId: userId });
     expect(list[0].id).toBe(b.fact.id);
     expect(list[1].id).toBe(a.fact.id);

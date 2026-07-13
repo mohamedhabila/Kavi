@@ -8,10 +8,10 @@ import {
   replaceCurrentFactWithApplicability,
 } from '../../../src/services/memory/facts/exactReplacement';
 import {
-  invalidateFact,
   recordFact,
   recordFactWithApplicability,
 } from '../../../src/services/memory/facts/mutations';
+import { invalidateManagedMemoryFact } from '../../../src/services/memory/factExplicitOverrides';
 import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
 import {
   listCurrentFactsForPriorUserSelfCorrection,
@@ -103,7 +103,7 @@ describe('replaceCurrentFact', () => {
       scope: 'global',
       now: 100,
     });
-    invalidateFact(old.fact.id, 150);
+    invalidateManagedMemoryFact({ factId: old.fact.id, now: 150 });
 
     expect(replacement(old.fact.id, 'Utrecht', 200)).toEqual({
       fact: null,

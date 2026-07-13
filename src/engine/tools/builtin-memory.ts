@@ -4,7 +4,7 @@ import {
   executeMemoryPin as pinFact,
   executeMemoryUnpin as unpinFact,
   executeMemoryForget as forgetFact,
-  executeMemoryInvalidate as invalidateFact,
+  executeMemoryInvalidate as invalidateMemoryFact,
   type MemoryRecallArgs,
   type MemoryRecallExecutionContext,
   type MemoryRememberArgs,
@@ -313,5 +313,5 @@ export function executeMemoryInvalidate(
   args: MemoryInvalidateArgs,
   context: MemoryFactActionExecutionContext,
 ): string {
-  return wrapMemoryToolResult(invalidateFact(args, context));
+  return wrapMemoryToolResult(invalidateMemoryFact(args, context));
 }

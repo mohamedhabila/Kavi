@@ -209,6 +209,35 @@ describe('canonical memory architecture guard', () => {
     );
   });
 
+  it('rejects projection-only fact mutation APIs from every production module', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/unsafeFactActions.ts',
+      [
+        'invalidateFact(factId);',
+        'setFactPinned(factId, true);',
+        'setMemoryFactReviewState(input);',
+        'setMemoryFactSensitivity(input);',
+        'updateFactApplicabilityColumn(input);',
+      ].join('\n'),
+    );
+
+    const violations = collectCanonicalMemoryArchitectureViolations(projectRoot);
+    expect(violations).toHaveLength(5);
+    expect(violations).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('invalidateFact'),
+        expect.stringContaining('setFactPinned'),
+        expect.stringContaining('setMemoryFactReviewState'),
+        expect.stringContaining('setMemoryFactSensitivity'),
+        expect.stringContaining('updateFactApplicabilityColumn'),
+      ]),
+    );
+    for (const violation of violations) {
+      expect(violation).toContain('uses retired projection-only fact mutation API');
+    }
+  });
+
   it('is wired into the standard verification gate', () => {
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'),
