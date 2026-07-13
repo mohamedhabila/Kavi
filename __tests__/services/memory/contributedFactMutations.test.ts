@@ -279,6 +279,10 @@ describe('atomic contributed fact mutations', () => {
     expect(replacementPayload.input.pinned).toBe(true);
     expect(replacementPayload.input.reviewState).toBe('verified');
     expect(replacementPayload.input.memoryKind).toBe('decision');
+    expect(replacementPayload.input.supersedePrior).toBe(false);
+
+    resetFactSchemaCacheForTests();
+    expect(() => ensureFactSchema()).not.toThrow();
   });
 
   it('inherits exact current metadata for a contributed same-value replacement', () => {

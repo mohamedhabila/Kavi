@@ -21,8 +21,15 @@ import { CLEARED_STRUCTURED_MEMORY_TABLES } from './structuredMemoryTableRegistr
 import { ensureWithdrawalSchema } from './withdrawalSchema';
 import { ensureEpisodeAccessPolicySchema } from './episodes/accessPolicySchema';
 import { ensureEpisodeRetrievalIndexSchema } from './episodes/retrievalIndex';
-import { ensureFactContributionSchema } from './factContributionSchema';
+import {
+  clearFactContributionLedgerForStructuredReset,
+  ensureFactContributionSchema,
+} from './factContributionSchema';
 import { ensureFactContributionAdmissionSchema } from './factContributionAdmissionSchema';
+import {
+  admitLegacyFactContributions,
+  isFactContributionAdmissionIntegrityFailure,
+} from './factContributionAdmission';
 import { ensureCanonicalFactTable } from './schema/canonicalFactTable';
 import { ensureFactContentIdentityV3 } from './schema/factContentIdentityV3';
 import { ensureFactSensitivityPolicyColumn } from './schema/factSensitivityPolicyColumn';
@@ -306,6 +313,7 @@ export function ensureFactSchema(): void {
   ensureFactContentIdentityV3(db);
   ensureFactContributionSchema(db);
   ensureFactContributionAdmissionSchema(db);
+  admitLegacyFactContributions(db);
   ensureFactTermStats(db);
   db.execSync(`
     DROP INDEX IF EXISTS idx_fact_terms_unit_kind;
@@ -541,6 +549,7 @@ export function resetFactSchemaCacheForTests(): void {
 
 export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>): void {
   runMemoryDatabaseSavepoint(db, (database) => {
+    clearFactContributionLedgerForStructuredReset(database);
     for (const table of CLEARED_STRUCTURED_MEMORY_TABLES) {
       const exists = database.getFirstSync<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -552,7 +561,15 @@ export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>
 }
 
 export function clearStructuredMemory(): void {
-  ensureFactSchema();
+  try {
+    ensureFactSchema();
+  } catch (error) {
+    if (!isFactContributionAdmissionIntegrityFailure(error)) throw error;
+    clearStructuredMemoryDatabase(getMemoryDb());
+    schemaReady = false;
+    ensureFactSchema();
+    return;
+  }
   clearStructuredMemoryDatabase(getMemoryDb());
 }
 

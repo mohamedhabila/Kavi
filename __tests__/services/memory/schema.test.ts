@@ -14,7 +14,6 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
-import { getFactById } from '../../../src/services/memory/facts/queries';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
   recordEpisode,
@@ -22,6 +21,7 @@ import {
   addFactEvidence,
 } from '../../../src/services/memory/episodes/mutations';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
+import { recordContributedSchemaFact } from '../../helpers/contributedSchemaFact';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -54,6 +54,14 @@ function indexedColumns(index: string): string[] {
     .map((row) => row.name);
 }
 
+function reopenLegacyFactContributionAdmissionBoundary(): void {
+  getMemoryDb().execSync(`
+    DROP TRIGGER IF EXISTS trg_memory_fact_contribution_admission_immutable;
+    DROP TRIGGER IF EXISTS trg_memory_fact_contribution_admission_insert_immutable;
+    DROP TRIGGER IF EXISTS trg_memory_fact_contribution_admission_delete_immutable;
+    DELETE FROM memory_fact_contribution_admission;
+  `);
+}
 describe('ensureFactSchema', () => {
   it('migrates legacy episodes to a fail-closed sensitive classification', () => {
     const db = getMemoryDb();
@@ -153,7 +161,7 @@ describe('ensureFactSchema', () => {
     expect(columns).not.toContain('candidate_local_semantic_count');
   });
 
-  it('migrates legacy unique hashes without losing fact history rows', () => {
+  it('canonicalizes legacy unique hashes before purging source-less content', () => {
     ensureFactSchema();
     const freshIndexes = indexNames('memory_facts').sort();
 
@@ -220,15 +228,17 @@ describe('ensureFactSchema', () => {
       getMemoryDb().getFirstSync<{ id: string; predicate: string; content_hash: string }>(
         "SELECT id, predicate, content_hash FROM memory_facts WHERE id = 'legacy-fact'",
       ),
-    ).toEqual({
-      id: 'legacy-fact',
-      predicate: 'LIVES_IN',
-      content_hash: expect.stringMatching(/^v3_[0-9a-f]{32}$/),
-    });
+    ).toBeNull();
+    expect(
+      getMemoryDb().getFirstSync<{ fact_id: string; reason: string }>(
+        "SELECT fact_id, reason FROM memory_fact_legacy_quarantine WHERE fact_id = 'legacy-fact'",
+      ),
+    ).toEqual({ fact_id: 'legacy-fact', reason: 'source_missing' });
   });
 
-  it('migrates only structurally safe legacy provenance and remains idempotent', () => {
+  it('purges structurally inferred provenance that lacks exact causal sources', () => {
     ensureFactSchema();
+    reopenLegacyFactContributionAdmissionBoundary();
     getMemoryDb().execSync(`
       INSERT INTO memory_entities(
         id, canonical_name, type, aliases, attributes, first_seen_at, last_seen_at
@@ -256,85 +266,51 @@ describe('ensureFactSchema', () => {
     resetFactSchemaCacheForTests();
     ensureFactSchema();
 
-    const readProvenance = () =>
-      getMemoryDb().getAllSync<{
-        id: string;
-        memory_owner_id: string | null;
-        fact_class: string;
-        source_authority: string;
-      }>(
-        `SELECT id, memory_owner_id, fact_class, source_authority
-           FROM memory_facts
-          WHERE id LIKE 'legacy-%'
-          ORDER BY id`,
+    const readQuarantine = () =>
+      getMemoryDb().getAllSync<{ fact_id: string; reason: string }>(
+        `SELECT fact_id, reason FROM memory_fact_legacy_quarantine ORDER BY fact_id`,
       );
-    const migrated = readProvenance();
-    expect(migrated).toEqual([
-      {
-        id: 'legacy-malformed-scope',
-        memory_owner_id: null,
-        fact_class: 'unknown',
-        source_authority: 'unknown',
-      },
-      {
-        id: 'legacy-preference',
-        memory_owner_id: expect.any(String),
-        fact_class: 'subjective_user',
-        source_authority: 'assistant_inferred',
-      },
-      {
-        id: 'legacy-procedure',
-        memory_owner_id: expect.any(String),
-        fact_class: 'workflow',
-        source_authority: 'assistant_inferred',
-      },
-      {
-        id: 'legacy-unbound-persona',
-        memory_owner_id: null,
-        fact_class: 'unknown',
-        source_authority: 'unknown',
-      },
-      {
-        id: 'legacy-unverifiable',
-        memory_owner_id: expect.any(String),
-        fact_class: 'unknown',
-        source_authority: 'unknown',
-      },
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM memory_facts WHERE id LIKE 'legacy-%'",
+      )?.count,
+    ).toBe(0);
+    const quarantined = readQuarantine();
+    expect(quarantined.map(({ fact_id }) => fact_id)).toEqual([
+      'legacy-malformed-scope',
+      'legacy-preference',
+      'legacy-procedure',
+      'legacy-unbound-persona',
+      'legacy-unverifiable',
     ]);
-    expect(getFactById('legacy-preference')).toMatchObject({
-      factClass: 'subjective_user',
-      sourceAuthority: 'assistant_inferred',
-      scope: 'global',
-    });
-    expect(getFactById('legacy-unbound-persona')).toMatchObject({
-      memoryOwnerId: null,
-      factClass: 'unknown',
-      sourceAuthority: 'unknown',
-      scope: 'persona',
-    });
-    expect(() => getFactById('legacy-malformed-scope')).toThrow('memory_fact_scope_invalid');
 
     resetFactSchemaCacheForTests();
     ensureFactSchema();
-    expect(readProvenance()).toEqual(migrated);
+    expect(readQuarantine()).toEqual(quarantined);
   });
 
   it('atomically canonicalizes task-only and equal dual task identities', () => {
     ensureFactSchema();
+    reopenLegacyFactContributionAdmissionBoundary();
     const db = getMemoryDb();
     const indexesBefore = indexNames('memory_facts').sort();
-    db.execSync(`
-      ALTER TABLE memory_facts ADD COLUMN task_id TEXT;
-      INSERT INTO memory_facts(
+    db.execSync('ALTER TABLE memory_facts ADD COLUMN task_id TEXT;');
+    const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+    db.runSync(
+      `INSERT INTO memory_facts(
         id, subject_id, predicate, object_text, content_hash, valid_at, created_at,
         updated_at, scope, origin_conversation_id, origin_thread_id, origin_task_id,
-        task_id
+        task_id, memory_owner_id, source_message_id
       ) VALUES
         ('legacy-task-only', 'subject-1', 'state', 'one', 'legacy-task-only-hash',
-         1, 1, 1, 'session', 'conversation-1', 'thread-1', NULL, 'task-1'),
+         1, 1, 1, 'session', 'conversation-1', 'thread-1', NULL, 'task-1', ?,
+         'legacy-task-only-message'),
         ('legacy-task-equal', 'subject-2', 'state', 'two', 'legacy-task-equal-hash',
-         1, 1, 1, 'session', 'conversation-1', 'thread-1', 'task-2', 'task-2');
-    `);
+         1, 1, 1, 'session', 'conversation-1', 'thread-1', 'task-2', 'task-2', ?,
+         'legacy-task-equal-message')`,
+      memoryOwnerId,
+      memoryOwnerId,
+    );
     const execSpy = jest.spyOn(db, 'execSync');
 
     resetFactSchemaCacheForTests();
@@ -514,13 +490,7 @@ describe('ensureFactSchema', () => {
   it('is idempotent and preserves existing rows across migration calls', () => {
     ensureFactSchema();
     const entity = upsertEntity({ name: 'user', type: 'self', now: 1 });
-    const recorded = recordFact({
-      subjectId: entity.id,
-      predicate: 'prefers_tone',
-      objectText: 'brief',
-      scope: 'global',
-      now: 2,
-    });
+    const recorded = recordContributedSchemaFact(entity.id);
     const episode = recordThreadLocalEpisode({
       conversationId: 'conv-schema',
       summary: 'User prefers brief answers.',

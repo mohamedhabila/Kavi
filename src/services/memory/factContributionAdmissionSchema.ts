@@ -14,6 +14,8 @@ export const MEMORY_FACT_LEGACY_QUARANTINE_REASONS = [
   'source_retired',
   'limits_exceeded',
 ] as const;
+export type MemoryFactLegacyQuarantineReason =
+  (typeof MEMORY_FACT_LEGACY_QUARANTINE_REASONS)[number];
 
 /**
  * Permanent one-way migration state for the immutable fact-contribution ledger.
@@ -46,6 +48,15 @@ export function ensureFactContributionAdmissionSchema(db: MemoryDb): void {
 
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_admission_immutable
       BEFORE UPDATE ON memory_fact_contribution_admission
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_admission_immutable');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_admission_insert_immutable
+      BEFORE INSERT ON memory_fact_contribution_admission
+      WHEN EXISTS (
+        SELECT 1 FROM memory_fact_contribution_admission WHERE singleton = 1
+      )
       BEGIN
         SELECT RAISE(ABORT, 'memory_fact_contribution_admission_immutable');
       END;

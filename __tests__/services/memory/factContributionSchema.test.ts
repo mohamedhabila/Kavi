@@ -113,7 +113,7 @@ function insertContribution(input: {
     contributionPayload(input.subjectId, input.objectText),
   );
   const inserted = db.runSync(
-    `INSERT OR IGNORE INTO memory_fact_contributions(
+    `INSERT INTO memory_fact_contributions(
        id, fact_id, memory_owner_id, memory_conversation_id, source_thread_id, task_id,
        producer_id, producer_event_id, payload_version, payload_json, payload_sha256,
        payload_byte_length, contributed_at
@@ -146,16 +146,15 @@ describe('fact contribution schema', () => {
       objectText: fact.objectText,
       producer,
     });
-    const replay = insertContribution({
-      factId: fact.id,
-      subjectId: fact.subjectId,
-      objectText: fact.objectText,
-      producer,
-    });
-
     expect(first.inserted.changes).toBe(1);
-    expect(replay.id).toBe(first.id);
-    expect(replay.inserted.changes).toBe(0);
+    expect(() =>
+      insertContribution({
+        factId: fact.id,
+        subjectId: fact.subjectId,
+        objectText: fact.objectText,
+        producer,
+      }),
+    ).toThrow('memory_fact_contribution_immutable');
     const uppercaseShaId = buildMemoryFactContributionId({
       scope: first.scope,
       producer: {
@@ -224,6 +223,20 @@ describe('fact contribution schema', () => {
     expect(() =>
       first.db.runSync(
         `UPDATE memory_fact_contributions SET producer_id = 'changed' WHERE id = ?`,
+        first.id,
+      ),
+    ).toThrow('memory_fact_contribution_immutable');
+    expect(() =>
+      first.db.runSync(
+        `INSERT OR REPLACE INTO memory_fact_contributions(
+           id, fact_id, memory_owner_id, memory_conversation_id, source_thread_id, task_id,
+           producer_id, producer_event_id, payload_version, payload_json, payload_sha256,
+           payload_byte_length, contributed_at
+         ) SELECT id, fact_id, memory_owner_id, memory_conversation_id, source_thread_id, task_id,
+                  producer_id, producer_event_id, payload_version, payload_json, payload_sha256,
+                  payload_byte_length, contributed_at
+             FROM memory_fact_contributions
+            WHERE id = ?`,
         first.id,
       ),
     ).toThrow('memory_fact_contribution_immutable');
@@ -298,6 +311,11 @@ describe('fact contribution schema', () => {
       differentMemoryKind.id,
     );
     contribution.db.runSync(
+      'UPDATE memory_facts SET invalid_at = 100, updated_at = 100 WHERE id IN (?, ?)',
+      differentMemoryKind.id,
+      predecessor.id,
+    );
+    contribution.db.runSync(
       `INSERT INTO memory_fact_contribution_supersessions(
          contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
        ) VALUES (?, ?, ?, 100)`,
@@ -324,6 +342,28 @@ describe('fact contribution schema', () => {
       predecessor.id,
       successor.id,
     );
+
+    expect(() =>
+      contribution.db.runSync(
+        'DELETE FROM memory_fact_contributions WHERE id = ?',
+        contribution.id,
+      ),
+    ).toThrow('memory_fact_contribution_immutable');
+    expect(() =>
+      contribution.db.runSync(
+        `DELETE FROM memory_fact_contribution_sources
+          WHERE contribution_id = ? AND source_id = 'user-message'`,
+        contribution.id,
+      ),
+    ).toThrow('memory_fact_contribution_source_immutable');
+    expect(() =>
+      contribution.db.runSync(
+        `DELETE FROM memory_fact_contribution_supersessions
+          WHERE contribution_id = ? AND predecessor_fact_id = ?`,
+        contribution.id,
+        predecessor.id,
+      ),
+    ).toThrow('memory_fact_contribution_supersession_immutable');
 
     contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id);
 
@@ -379,5 +419,97 @@ describe('fact contribution schema', () => {
       ).toBe(0);
     }
     expect(getLocalMemoryVaultOwnerId(contribution.db)).toBe(ownerId);
+
+    const freshFact = createFact('green');
+    const freshContribution = insertContribution({
+      factId: freshFact.id,
+      subjectId: freshFact.subjectId,
+      objectText: freshFact.objectText,
+      producer: { producerId: 'turn_provider', producerEventId: 'assistant-message:1' },
+    });
+    expect(() =>
+      freshContribution.db.runSync(
+        'DELETE FROM memory_fact_contributions WHERE id = ?',
+        freshContribution.id,
+      ),
+    ).toThrow('memory_fact_contribution_immutable');
+  });
+
+  it('removes an owned edge when its predecessor fact is deleted', () => {
+    ensureFactSchema();
+    const predecessor = createFact('blue');
+    const successor = createFact('green');
+    const contribution = insertContribution({
+      factId: successor.id,
+      subjectId: successor.subjectId,
+      objectText: successor.objectText,
+      producer: { producerId: 'memory_tool', producerEventId: 'predecessor-delete' },
+    });
+    contribution.db.runSync(
+      'UPDATE memory_facts SET invalid_at = 100, updated_at = 100 WHERE id = ?',
+      predecessor.id,
+    );
+    contribution.db.runSync(
+      `INSERT INTO memory_fact_contribution_supersessions(
+         contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
+       ) VALUES (?, ?, ?, 100)`,
+      contribution.id,
+      predecessor.id,
+      successor.id,
+    );
+
+    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id);
+
+    expect(
+      contribution.db.getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_contribution_supersessions',
+      )?.count,
+    ).toBe(0);
+    expect(
+      contribution.db.getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_contributions',
+      )?.count,
+    ).toBe(1);
+  });
+
+  it('deletes a supersession pair without depending on SQLite row order', () => {
+    ensureFactSchema();
+    const predecessor = createFact('blue');
+    const successor = createFact('green');
+    const contribution = insertContribution({
+      factId: successor.id,
+      subjectId: successor.subjectId,
+      objectText: successor.objectText,
+      producer: { producerId: 'memory_tool', producerEventId: 'pair-delete' },
+    });
+    contribution.db.runSync(
+      'UPDATE memory_facts SET invalid_at = 100, updated_at = 100 WHERE id = ?',
+      predecessor.id,
+    );
+    contribution.db.runSync(
+      `INSERT INTO memory_fact_contribution_supersessions(
+         contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
+       ) VALUES (?, ?, ?, 100)`,
+      contribution.id,
+      predecessor.id,
+      successor.id,
+    );
+
+    contribution.db.runSync(
+      'DELETE FROM memory_facts WHERE id IN (?, ?)',
+      predecessor.id,
+      successor.id,
+    );
+
+    expect(
+      contribution.db.getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_contribution_supersessions',
+      )?.count,
+    ).toBe(0);
+    expect(
+      contribution.db.getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_contributions',
+      )?.count,
+    ).toBe(0);
   });
 });

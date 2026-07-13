@@ -35,11 +35,6 @@ describe('fact contribution admission schema', () => {
     ).toEqual(['fact_id', 'reason', 'quarantined_at']);
 
     db.runSync(
-      `INSERT INTO memory_fact_contribution_admission(
-         singleton, version, completed_at, admitted_count, quarantined_count
-       ) VALUES (1, 1, 100, 4, 2)`,
-    );
-    db.runSync(
       `INSERT INTO memory_fact_legacy_quarantine(fact_id, reason, quarantined_at)
        VALUES ('legacy-fact', 'source_scope_unproven', 100)`,
     );
@@ -52,9 +47,9 @@ describe('fact contribution admission schema', () => {
     ).toEqual({
       singleton: 1,
       version: 1,
-      completed_at: 100,
-      admitted_count: 4,
-      quarantined_count: 2,
+      completed_at: expect.any(Number),
+      admitted_count: 0,
+      quarantined_count: 0,
     });
     expect(
       db.getFirstSync('SELECT fact_id, reason, quarantined_at FROM memory_fact_legacy_quarantine'),
@@ -82,11 +77,6 @@ describe('fact contribution admission schema', () => {
     ensureFactSchema();
     const db = getMemoryDb();
     db.runSync(
-      `INSERT INTO memory_fact_contribution_admission(
-         singleton, version, completed_at, admitted_count, quarantined_count
-       ) VALUES (1, 1, 200, 1, 1)`,
-    );
-    db.runSync(
       `INSERT INTO memory_fact_legacy_quarantine(fact_id, reason, quarantined_at)
        VALUES ('legacy-fact', 'source_missing', 200)`,
     );
@@ -113,5 +103,26 @@ describe('fact contribution admission schema', () => {
     expect(() =>
       db.runSync('DELETE FROM memory_fact_contribution_admission WHERE singleton = 1'),
     ).toThrow('memory_fact_contribution_admission_immutable');
+    const markerBeforeConflictWrites = db.getFirstSync(
+      'SELECT * FROM memory_fact_contribution_admission WHERE singleton = 1',
+    );
+    expect(() =>
+      db.runSync(
+        `INSERT OR REPLACE INTO memory_fact_contribution_admission(
+           singleton, version, completed_at, admitted_count, quarantined_count
+         ) VALUES (1, 1, 999, 9, 9)`,
+      ),
+    ).toThrow('memory_fact_contribution_admission_immutable');
+    expect(() =>
+      db.runSync(
+        `INSERT INTO memory_fact_contribution_admission(
+           singleton, version, completed_at, admitted_count, quarantined_count
+         ) VALUES (1, 1, 999, 9, 9)
+         ON CONFLICT(singleton) DO UPDATE SET completed_at = excluded.completed_at`,
+      ),
+    ).toThrow('memory_fact_contribution_admission_immutable');
+    expect(
+      db.getFirstSync('SELECT * FROM memory_fact_contribution_admission WHERE singleton = 1'),
+    ).toEqual(markerBeforeConflictWrites);
   });
 });

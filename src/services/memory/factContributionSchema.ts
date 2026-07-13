@@ -8,6 +8,8 @@ export function dropFactContributionFactReferenceTriggers(db: MemoryDb): void {
   db.execSync(`
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_parent_insert;
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_parent_insert;
+    DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_immutable;
+    DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_immutable;
     DROP TRIGGER IF EXISTS trg_memory_fact_delete_contributions;
   `);
 }
@@ -95,6 +97,19 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
       CREATE INDEX IF NOT EXISTS idx_memory_fact_contribution_supersessions_successor
         ON memory_fact_contribution_supersessions(successor_fact_id, superseded_at);
 
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_parent_insert;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_insert_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_parent_insert;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_delete_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_parent_insert;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_dependents;
+      DROP TRIGGER IF EXISTS trg_memory_fact_delete_contributions;
+
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_parent_insert
       BEFORE INSERT ON memory_fact_contributions
       WHEN NOT EXISTS (
@@ -107,8 +122,34 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         SELECT RAISE(ABORT, 'memory_fact_contribution_parent_invalid');
       END;
 
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_insert_immutable
+      BEFORE INSERT ON memory_fact_contributions
+      WHEN EXISTS (
+        SELECT 1
+          FROM memory_fact_contributions
+         WHERE id = NEW.id
+            OR (
+              memory_owner_id = NEW.memory_owner_id
+              AND memory_conversation_id = NEW.memory_conversation_id
+              AND source_thread_id = NEW.source_thread_id
+              AND task_id = NEW.task_id
+              AND producer_id = NEW.producer_id
+              AND producer_event_id = NEW.producer_event_id
+            )
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_immutable');
+      END;
+
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_immutable
       BEFORE UPDATE ON memory_fact_contributions
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_immutable');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_delete_immutable
+      BEFORE DELETE ON memory_fact_contributions
+      WHEN EXISTS (SELECT 1 FROM memory_facts WHERE id = OLD.fact_id)
       BEGIN
         SELECT RAISE(ABORT, 'memory_fact_contribution_immutable');
       END;
@@ -134,6 +175,15 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         SELECT RAISE(ABORT, 'memory_fact_contribution_source_immutable');
       END;
 
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_source_delete_immutable
+      BEFORE DELETE ON memory_fact_contribution_sources
+      WHEN EXISTS (
+        SELECT 1 FROM memory_fact_contributions WHERE id = OLD.contribution_id
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_source_immutable');
+      END;
+
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_supersession_parent_insert
       BEFORE INSERT ON memory_fact_contribution_supersessions
       WHEN NOT EXISTS (
@@ -148,6 +198,7 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
            AND predecessor.subject_id = successor.subject_id
            AND predecessor.predicate = successor.predicate COLLATE NOCASE
            AND predecessor.scope = successor.scope
+           AND predecessor.invalid_at = NEW.superseded_at
            AND (
              (
                successor.scope = 'global'
@@ -198,6 +249,17 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         SELECT RAISE(ABORT, 'memory_fact_contribution_supersession_immutable');
       END;
 
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_supersession_delete_immutable
+      BEFORE DELETE ON memory_fact_contribution_supersessions
+      WHEN EXISTS (
+        SELECT 1 FROM memory_fact_contributions WHERE id = OLD.contribution_id
+      )
+      AND EXISTS (SELECT 1 FROM memory_facts WHERE id = OLD.predecessor_fact_id)
+      AND EXISTS (SELECT 1 FROM memory_facts WHERE id = OLD.successor_fact_id)
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_supersession_immutable');
+      END;
+
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_delete_dependents
       AFTER DELETE ON memory_fact_contributions
       BEGIN
@@ -215,5 +277,14 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
          WHERE predecessor_fact_id = OLD.id OR successor_fact_id = OLD.id;
       END;
     `);
+  });
+}
+
+/** Privileged full-reset boundary; ordinary contribution deletion remains impossible. */
+export function clearFactContributionLedgerForStructuredReset(db: MemoryDb): void {
+  runMemoryDatabaseSavepoint(db, (database) => {
+    database.execSync('DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_immutable;');
+    database.runSync('DELETE FROM memory_fact_contributions');
+    ensureFactContributionSchema(database);
   });
 }
