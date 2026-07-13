@@ -19,10 +19,17 @@
 import type { AgentRunEvidenceEntry, AgentRunEvidenceRecorder } from '../../types/agentRun';
 import { runMemoryTransaction } from './access/transaction';
 import { addFactEvidence } from './episodes/mutations';
-import { recordFactWithApplicability } from './facts/mutations';
+import { recordFactWithContribution } from './facts/mutations';
 import type { MemoryFactScope, RecordFactResult } from './facts/types';
+import { requireFactMutationTimestamp } from './facts/mutationValidation';
 import { upsertEntity, type EntityType } from './entities';
 import { ensureFactSchema } from './schema';
+import type { MemoryFactContributionSourceAlias } from './factContributionCodec';
+import {
+  buildGraphEvidenceFactProducerEventId,
+  GRAPH_EVIDENCE_FACT_PRODUCER_ID,
+} from './evidenceBridgeContributionIdentity';
+import { requireExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 
 export interface EvidenceBridgeOptions {
   /**
@@ -36,18 +43,20 @@ export interface EvidenceBridgeOptions {
   /** Run id for traceability — written to RecordFact.sourceRunId. */
   sourceRunId?: string;
   /** Stable closed-turn id used to make repeated ingestion idempotent. */
-  sourceTurnId?: string;
+  sourceTurnId: string;
+  /** Exact source scope of the closed product turn, independent from fact scope. */
+  memoryConversationId: string;
+  sourceThreadId: string;
+  taskId: string | null;
   originConversationId?: string;
   originThreadId?: string;
   originTaskId?: string;
   scope: MemoryFactScope;
-  /** Optional now override (testing). */
-  now?: number;
+  /** Code-owned closed-turn clock; replay must reuse this exact value. */
+  now: number;
 }
 
-export interface GraphGoalEvidenceBridgeOptions extends EvidenceBridgeOptions {
-  sourceTurnId: string;
-}
+export type GraphGoalEvidenceBridgeOptions = EvidenceBridgeOptions;
 
 const MAX_GRAPH_EVIDENCE_BRIDGE_ENTRIES = 64;
 const MAX_BRIDGED_OBJECT_TEXT_CHARS = 3200;
@@ -92,8 +101,9 @@ function buildObjectText(entry: AgentRunEvidenceEntry): string {
 
 /**
  * Bridge a list of evidence entries to bi-temporal facts.
- * Entries that fail validation are reported in `skipped` — never thrown.
- * Re-running with the same entries is a no-op (recordFact dedupes on hash).
+ * Policy-ineligible entries are reported in `skipped`. Source-integrity or
+ * persistence failures throw so the owning turn transaction can roll back.
+ * Exact source replays reuse both the fact and its immutable contribution.
  */
 export function bridgeEvidenceToFacts(
   entries: ReadonlyArray<AgentRunEvidenceEntry>,
@@ -103,7 +113,18 @@ export function bridgeEvidenceToFacts(
 
   const subjectName = options.subjectName?.trim() || options.defaultSubject?.name?.trim() || '';
   const subjectType: EntityType = options.subjectType ?? options.defaultSubject?.type ?? 'project';
-  const sourceTurnId = options.sourceTurnId?.trim() || null;
+  const sourceTurnId = requireExactMemoryProvenanceId(
+    options.sourceTurnId,
+    'memory_graph_evidence_source_turn_id_invalid',
+  );
+  const sourceRunId =
+    options.sourceRunId === undefined
+      ? null
+      : requireExactMemoryProvenanceId(
+          options.sourceRunId,
+          'memory_graph_evidence_source_run_id_invalid',
+        );
+  const now = requireFactMutationTimestamp(options.now, 'memory_graph_evidence_clock_invalid');
 
   const bridged: RecordFactResult[] = [];
   const skipped: Array<{ id: string; reason: string }> = [];
@@ -115,9 +136,13 @@ export function bridgeEvidenceToFacts(
     };
   }
 
-  let subjectId: string | null = null;
-
-  for (const entry of entries) {
+  const bridgeable: Array<{
+    entry: AgentRunEvidenceEntry;
+    inputIndex: number;
+    confidence: number;
+    objectText: string;
+  }> = [];
+  for (const [inputIndex, entry] of entries.entries()) {
     if (!DEFAULT_BRIDGED_KINDS.has(entry.kind)) {
       skipped.push({ id: entry.id, reason: `kind=${entry.kind} not bridged` });
       continue;
@@ -132,60 +157,70 @@ export function bridgeEvidenceToFacts(
       skipped.push({ id: entry.id, reason: 'no title or content' });
       continue;
     }
-
-    if (subjectId === null) {
-      subjectId = upsertEntity({
-        name: subjectName,
-        type: subjectType,
-        now: options.now,
-      }).id;
-    }
-    const factSubjectId = subjectId;
-
-    try {
-      const result = runMemoryTransaction(() => {
-        const recorded = recordFactWithApplicability(
-          {
-            subjectId: factSubjectId,
-            predicate: buildPredicate(entry),
-            objectText,
-            confidence,
-            scope: options.scope,
-            ...(options.sourceRunId ? { sourceRunId: options.sourceRunId } : {}),
-            ...(sourceTurnId ? { sourceMessageId: sourceTurnId, sourceTurnId } : {}),
-            ...(options.originConversationId
-              ? { originConversationId: options.originConversationId }
-              : {}),
-            ...(options.originThreadId ? { originThreadId: options.originThreadId } : {}),
-            ...(options.originTaskId ? { originTaskId: options.originTaskId } : {}),
-            now: options.now,
-          },
-          {
-            factClass: 'workflow',
-            sourceAuthority: 'assistant_inferred',
-          },
-        );
-        if (sourceTurnId) {
-          addFactEvidence({
-            factId: recorded.fact.id,
-            messageId: sourceTurnId,
-            role: 'assistant',
-            quote: objectText,
-            now: options.now,
-          });
-        }
-        return recorded;
-      });
-      bridged.push(result);
-    } catch (e) {
-      skipped.push({
-        id: entry.id,
-        reason: e instanceof Error ? e.message : 'recordFact failed',
-      });
-    }
+    requireExactMemoryProvenanceId(entry.id, 'memory_graph_evidence_entry_id_invalid');
+    bridgeable.push({ entry, inputIndex, confidence, objectText });
   }
+  if (bridgeable.length === 0) return { bridged, skipped };
 
-  return { bridged, skipped };
+  return runMemoryTransaction(() => {
+    const subjectId = upsertEntity({
+      name: subjectName,
+      type: subjectType,
+      now,
+    }).id;
+    const sourceAliases: MemoryFactContributionSourceAlias[] = [
+      { sourceKind: 'message', sourceId: sourceTurnId },
+      { sourceKind: 'turn', sourceId: sourceTurnId },
+      ...(sourceRunId ? [{ sourceKind: 'run' as const, sourceId: sourceRunId }] : []),
+    ];
+    for (const { entry, inputIndex, confidence, objectText } of bridgeable) {
+      const recorded = recordFactWithContribution(
+        {
+          subjectId,
+          predicate: buildPredicate(entry),
+          objectText,
+          confidence,
+          scope: options.scope,
+          ...(sourceRunId ? { sourceRunId } : {}),
+          sourceMessageId: sourceTurnId,
+          sourceTurnId,
+          ...(options.originConversationId
+            ? { originConversationId: options.originConversationId }
+            : {}),
+          ...(options.originThreadId ? { originThreadId: options.originThreadId } : {}),
+          ...(options.originTaskId ? { originTaskId: options.originTaskId } : {}),
+          now,
+        },
+        {
+          factClass: 'workflow',
+          sourceAuthority: 'assistant_inferred',
+        },
+        {
+          memoryConversationId: options.memoryConversationId,
+          sourceThreadId: options.sourceThreadId,
+          taskId: options.taskId,
+          producer: {
+            producerId: GRAPH_EVIDENCE_FACT_PRODUCER_ID,
+            producerEventId: buildGraphEvidenceFactProducerEventId({
+              sourceTurnId,
+              evidenceEntryId: entry.id,
+              inputIndex,
+            }),
+          },
+          sourceAliases,
+        },
+      );
+      addFactEvidence({
+        factId: recorded.fact.id,
+        messageId: sourceTurnId,
+        role: 'assistant',
+        quote: objectText,
+        now,
+      });
+      bridged.push(recorded);
+    }
+    return { bridged, skipped };
+  });
 }
 
 function resolveGraphEvidenceRecorder(prefix: string): AgentRunEvidenceRecorder {
@@ -225,11 +260,13 @@ export function bridgeGraphGoalEvidence(
   evidenceStrings: ReadonlyArray<string>,
   options: GraphGoalEvidenceBridgeOptions,
 ): BridgeEvidenceResult {
-  const sourceTurnId = options.sourceTurnId.trim();
-  if (!sourceTurnId) throw new Error('bridgeGraphGoalEvidence: sourceTurnId required');
+  requireExactMemoryProvenanceId(
+    options.sourceTurnId,
+    'memory_graph_evidence_source_turn_id_invalid',
+  );
   const entries = mapGraphGoalEvidenceToEntries(evidenceStrings, options.now);
   if (entries.length === 0) {
     return { bridged: [], skipped: [] };
   }
-  return bridgeEvidenceToFacts(entries, { ...options, sourceTurnId });
+  return bridgeEvidenceToFacts(entries, options);
 }
