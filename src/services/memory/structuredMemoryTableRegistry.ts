@@ -8,6 +8,7 @@ export const CLEARED_STRUCTURED_MEMORY_TABLES = [
   'memory_fact_contribution_supersessions',
   'memory_fact_contribution_sources',
   'memory_fact_contributions',
+  'memory_fact_legacy_quarantine',
   'memory_fact_terms',
   'memory_fact_term_stats',
   'memory_episode_terms',
@@ -34,4 +35,5 @@ export const CLEARED_STRUCTURED_MEMORY_TABLES = [
 export const PRESERVED_STRUCTURED_MEMORY_TABLES = [
   'memory_vault_identity',
   'memory_episode_retrieval_index_meta',
+  'memory_fact_contribution_admission',
 ] as const;

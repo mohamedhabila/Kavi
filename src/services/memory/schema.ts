@@ -22,6 +22,7 @@ import { ensureWithdrawalSchema } from './withdrawalSchema';
 import { ensureEpisodeAccessPolicySchema } from './episodes/accessPolicySchema';
 import { ensureEpisodeRetrievalIndexSchema } from './episodes/retrievalIndex';
 import { ensureFactContributionSchema } from './factContributionSchema';
+import { ensureFactContributionAdmissionSchema } from './factContributionAdmissionSchema';
 import { ensureCanonicalFactTable } from './schema/canonicalFactTable';
 import { ensureFactContentIdentityV3 } from './schema/factContentIdentityV3';
 import { ensureFactSensitivityPolicyColumn } from './schema/factSensitivityPolicyColumn';
@@ -304,6 +305,7 @@ export function ensureFactSchema(): void {
   ensureCanonicalFactTable(db);
   ensureFactContentIdentityV3(db);
   ensureFactContributionSchema(db);
+  ensureFactContributionAdmissionSchema(db);
   ensureFactTermStats(db);
   db.execSync(`
     DROP INDEX IF EXISTS idx_fact_terms_unit_kind;
