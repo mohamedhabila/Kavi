@@ -142,6 +142,35 @@ describe('exact ingestion job preemption', () => {
     finishActiveIngestionAttempt(attempt);
   });
 
+  it('can resume waiting for the exact live owner after a timed-out revocation', async () => {
+    jest.useFakeTimers();
+    const target = enqueueJob('timeout-retry');
+    expect(claimIngestionJob(target.id, 100)).not.toBeNull();
+    const attempt = beginTestAttempt(target.id);
+
+    const first = preemptIngestionJobAndWait({ jobId: target.id, timeoutMs: 25 });
+    await jest.advanceTimersByTimeAsync(25);
+    await expect(first).resolves.toEqual({
+      status: 'ownership_release_timed_out',
+      previousStatus: 'processing',
+    });
+    expect(getIngestionJob(target.id)).toBeNull();
+
+    let retrySettled = false;
+    const retry = preemptIngestionJobAndWait({ jobId: target.id, timeoutMs: 100 });
+    void retry.then(() => {
+      retrySettled = true;
+    });
+    await Promise.resolve();
+    expect(retrySettled).toBe(false);
+
+    finishActiveIngestionAttempt(attempt);
+    await expect(retry).resolves.toEqual({
+      status: 'preempted',
+      previousStatus: 'missing',
+    });
+  });
+
   it('does not abort an unrelated active claimed job while discarding the target', async () => {
     const active = enqueueJob('active-sibling');
     const target = enqueueJob('unrelated-target');
