@@ -8,8 +8,10 @@ import {
   persistFactContributionSupersessionsInTransaction,
   type MemoryFactContributionWriteContext,
 } from '../factContributionStore';
+import { loadVerifiedFactContributionReplay } from '../factContributionReplay';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
+import { overlayFactExplicitProjectionInTransaction } from '../factExplicitOverrideState';
 import {
   classifyMemoryFactSensitivity,
   MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
@@ -171,13 +173,20 @@ export function recordFactWithContribution(
   );
 }
 
+/** Keep immutable causal input separate from optional aggregate-only materialization hints. */
 export function recordFactWithContributionInTransaction(
   input: RecordFactInput,
   applicability: SealedFactApplicabilityProvenance,
   context: MemoryFactContributionWriteContext,
+  materializationInput: RecordFactInput = input,
 ): { result: RecordFactResult; contributionId: string } {
   const payload = normalizeRecordFactMutation(input, applicability);
-  const result = recordNormalizedFactInTransaction(payload, true);
+  const replay = loadVerifiedFactContributionReplay({ context, payload });
+  const materializationPayload =
+    materializationInput === input
+      ? payload
+      : normalizeRecordFactMutation(materializationInput, applicability);
+  const result = recordNormalizedFactInTransaction(materializationPayload, true, replay?.factId);
   const contribution = persistFactContributionInTransaction({
     fact: result.fact,
     payload,
@@ -204,6 +213,7 @@ function recordFactInTransaction(
 function recordNormalizedFactInTransaction(
   payload: ReturnType<typeof normalizeRecordFactMutation>,
   incomingIsSealed: boolean,
+  expectedReplayFactId?: string,
 ): RecordFactResult {
   const db = getSchemaReadyMemoryDb();
   const input = payload.input;
@@ -277,17 +287,22 @@ function recordNormalizedFactInTransaction(
         },
       ),
     );
+  if (expectedReplayFactId !== undefined && existing?.id !== expectedReplayFactId) {
+    throw new Error('memory_fact_contribution_replay_target_changed');
+  }
   if (existing) {
     const sourceTurnId = input.sourceTurnId?.trim();
     const sourceMessageId = input.sourceMessageId?.trim();
-    const isSourceReplay = Boolean(
-      (sourceTurnId && existing.source_turn_id === sourceTurnId) ||
-      (sourceMessageId && hasPersistedSourceEvidence(existing.id, sourceMessageId)) ||
-      (!sourceTurnId &&
-        sourceMessageId &&
-        !existing.source_turn_id &&
-        existing.source_message_id === sourceMessageId),
-    );
+    const isSourceReplay =
+      expectedReplayFactId !== undefined ||
+      Boolean(
+        (sourceTurnId && existing.source_turn_id === sourceTurnId) ||
+        (sourceMessageId && hasPersistedSourceEvidence(existing.id, sourceMessageId)) ||
+        (!sourceTurnId &&
+          sourceMessageId &&
+          !existing.source_turn_id &&
+          existing.source_message_id === sourceMessageId),
+      );
     const existingReviewState = closedMemoryFactReviewState(existing.review_state) ?? 'rejected';
     const existingSensitivity = closedMemoryFactSensitivity(existing.sensitivity) ?? 'restricted';
     const existingFactClass = closedMemoryFactClass(existing.fact_class) ?? 'unknown';
@@ -313,21 +328,57 @@ function recordNormalizedFactInTransaction(
       incoming: provenance,
       incomingIsSealed,
     });
+    const effectiveProjection = overlayFactExplicitProjectionInTransaction({
+      factId: existing.id,
+      derivedPinned: existing.pinned !== 0,
+      derivedReviewState: nextReviewState,
+      derivedSensitivity: nextSensitivity,
+    });
     const metadataChanged =
-      nextReviewState !== existingReviewState ||
-      nextSensitivity !== existingSensitivity ||
-      nextProvenance.factClass !== existingFactClass ||
-      nextProvenance.sourceAuthority !== existingSourceAuthority;
-    if (isSourceReplay && !metadataChanged) {
-      return {
-        fact: rowToFact(existing),
-        status: 'duplicate',
-        superseded: [],
-      };
+      existing.pinned !== (effectiveProjection.pinned ? 1 : 0) ||
+      effectiveProjection.reviewState !== existing.review_state ||
+      effectiveProjection.sensitivity !== existing.sensitivity ||
+      nextProvenance.factClass !== existing.fact_class ||
+      nextProvenance.sourceAuthority !== existing.source_authority;
+    if (isSourceReplay) {
+      if (!metadataChanged) {
+        return {
+          fact: rowToFact(existing),
+          status: 'duplicate',
+          superseded: [],
+        };
+      }
+      const repaired = db.runSync(
+        `UPDATE memory_facts
+            SET pinned = ?, review_state = ?, sensitivity = ?,
+                fact_class = ?, source_authority = ?
+          WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL`,
+        effectiveProjection.pinned ? 1 : 0,
+        effectiveProjection.reviewState,
+        effectiveProjection.sensitivity,
+        nextProvenance.factClass,
+        nextProvenance.sourceAuthority,
+        existing.id,
+      );
+      if ((repaired.changes ?? 0) !== 1) {
+        throw new Error('memory_fact_duplicate_projection_update_failed');
+      }
+      const fact = rowToFact({
+        ...existing,
+        pinned: effectiveProjection.pinned ? 1 : 0,
+        review_state: effectiveProjection.reviewState,
+        sensitivity: effectiveProjection.sensitivity,
+        fact_class: nextProvenance.factClass,
+        source_authority: nextProvenance.sourceAuthority,
+      });
+      runAfterMemoryTransactionCommit(() =>
+        notifyStructuredMemoryChanged(existing.origin_conversation_id),
+      );
+      return { fact, status: 'duplicate', superseded: [] };
     }
-    const reinforcementIncrement = isSourceReplay ? 0 : 1;
-    const lastReinforcedAt = isSourceReplay ? existing.last_reinforced_at : now;
-    const lastAccessedAt = isSourceReplay ? existing.last_accessed_at : now;
+    const reinforcementIncrement = 1;
+    const lastReinforcedAt = now;
+    const lastAccessedAt = now;
     const localSimilarity = createCurrentLocalSimilarityVector(
       buildFactLocalSimilarityText({
         predicate: existing.predicate,
@@ -345,6 +396,7 @@ function recordNormalizedFactInTransaction(
              retrievability = MAX(retrievability, ?),
              stability = MAX(stability, ?),
              decay_rate = MIN(decay_rate, ?),
+             pinned = ?,
              review_state = ?,
              sensitivity = ?,
              fact_class = ?,
@@ -365,8 +417,9 @@ function recordNormalizedFactInTransaction(
       retrievability,
       stability,
       decayRate,
-      nextReviewState,
-      nextSensitivity,
+      effectiveProjection.pinned ? 1 : 0,
+      effectiveProjection.reviewState,
+      effectiveProjection.sensitivity,
       nextProvenance.factClass,
       nextProvenance.sourceAuthority,
       memoryKind,
@@ -388,8 +441,9 @@ function recordNormalizedFactInTransaction(
       retrievability: Math.max(existing.retrievability ?? 1, retrievability),
       stability: Math.max(existing.stability ?? 0.5, stability),
       decay_rate: Math.min(existing.decay_rate ?? 0.03, decayRate),
-      review_state: nextReviewState,
-      sensitivity: nextSensitivity,
+      pinned: effectiveProjection.pinned ? 1 : 0,
+      review_state: effectiveProjection.reviewState,
+      sensitivity: effectiveProjection.sensitivity,
       fact_class: nextProvenance.factClass,
       source_authority: nextProvenance.sourceAuthority,
       memory_kind: memoryKind,

@@ -1,9 +1,7 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
-import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
+import { runMemoryTransaction } from '../access/transaction';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
-import { safeParseObject } from '../schema';
-import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import {
   persistFactContributionSupersessionsInTransaction,
   type MemoryFactContributionWriteContext,
@@ -21,20 +19,11 @@ import {
   setFactSensitivityFloorInTransaction,
 } from './mutations';
 import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
-import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { requireFactScopeIdentity } from './scopeIdentity';
-import { hasPersistedSourceEvidence } from './sourceEvidence';
 import {
-  buildFactLocalSimilarityText,
-  createCurrentLocalSimilarityVector,
-  serializeCurrentLocalSimilarityVector,
-} from '../localSimilarity';
-import {
-  clamp01,
   normalizeFactKind,
   rowToFact,
   type FactRow,
-  type MemoryFact,
   type ReplaceCurrentFactConflict,
   type ReplaceCurrentFactInput,
   type ReplaceCurrentFactResult,
@@ -84,73 +73,6 @@ function replacementScopeMatches(
     row.origin_task_id === input.originTaskId &&
     isExactMemoryScopeId(row.origin_task_id)
   );
-}
-
-function reinforceExactDuplicate(
-  row: FactRow,
-  input: ReplaceCurrentFactInput,
-  now: number,
-): MemoryFact {
-  const db = getSchemaReadyMemoryDb();
-  const confidence = clamp01(input.confidence ?? row.confidence);
-  const importance = clamp01(input.importance ?? row.importance ?? 0.5);
-  const retrievability = clamp01(input.retrievability ?? row.retrievability ?? 1);
-  const stability = clamp01(input.stability ?? row.stability ?? 0.5);
-  const decayRate = Math.max(0, input.decayRate ?? row.decay_rate ?? 0.03);
-  const attributes = { ...safeParseObject(row.attributes), ...(input.attributes ?? {}) };
-  const localSimilarity = createCurrentLocalSimilarityVector(
-    buildFactLocalSimilarityText({
-      predicate: row.predicate,
-      objectText: row.object_text,
-      sourceSummary: row.source_summary,
-    }),
-  );
-  const serializedLocalSimilarity = serializeCurrentLocalSimilarityVector(localSimilarity);
-  db.runSync(
-    `UPDATE memory_facts
-       SET attributes = ?, updated_at = ?, confidence = MAX(confidence, ?),
-           importance = MAX(importance, ?), retrievability = MAX(retrievability, ?),
-           stability = MAX(stability, ?), decay_rate = MIN(decay_rate, ?),
-           repeated_mention_count = repeated_mention_count + 1,
-           last_reinforced_at = ?, last_accessed_at = ?,
-           local_similarity_model = ?, local_similarity_dimensions = ?,
-           local_similarity_vector = ?, local_similarity_updated_at = ?
-     WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL`,
-    JSON.stringify(attributes),
-    now,
-    confidence,
-    importance,
-    retrievability,
-    stability,
-    decayRate,
-    now,
-    now,
-    localSimilarity.model,
-    localSimilarity.dimensions,
-    serializedLocalSimilarity,
-    now,
-    row.id,
-  );
-  const fact = rowToFact({
-    ...row,
-    attributes: JSON.stringify(attributes),
-    updated_at: now,
-    confidence: Math.max(row.confidence, confidence),
-    importance: Math.max(row.importance ?? 0.5, importance),
-    retrievability: Math.max(row.retrievability ?? 1, retrievability),
-    stability: Math.max(row.stability ?? 0.5, stability),
-    decay_rate: Math.min(row.decay_rate ?? 0.03, decayRate),
-    repeated_mention_count: (row.repeated_mention_count ?? 0) + 1,
-    last_reinforced_at: now,
-    last_accessed_at: now,
-    local_similarity_model: localSimilarity.model,
-    local_similarity_dimensions: localSimilarity.dimensions,
-    local_similarity_vector: serializedLocalSimilarity,
-    local_similarity_updated_at: now,
-  });
-  replaceFactRetrievalTerms(fact);
-  runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(row.origin_conversation_id));
-  return fact;
 }
 
 /**
@@ -243,40 +165,57 @@ function replaceCurrentFactInternal(
         throw new ExactReplacementConflict('stale_source_order');
       }
 
-      if (current.object_text.normalize('NFKC').trim() === objectText.normalize('NFKC')) {
-        if (sealedApplicability) {
-          const duplicateInput = {
-            ...input,
-            predicate,
-            objectText,
-            pinned: input.pinned ?? current.pinned !== 0,
-            reviewState: requireMemoryFactReviewState(
-              input.reviewState ?? current.review_state,
-            ),
-            memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
-            supersedePrior: false,
-            now,
-          };
-          return contributionContext
-            ? recordFactWithContributionInTransaction(
-                duplicateInput,
-                sealedApplicability,
-                contributionContext,
-              ).result
-            : recordFactWithApplicability(duplicateInput, sealedApplicability);
-        }
-        if (hasPersistedSourceEvidence(current.id, input.sourceMessageId)) {
-          return {
-            fact: rowToFact(current),
-            status: 'duplicate' as const,
-            superseded: [],
-          };
-        }
-        return {
-          fact: reinforceExactDuplicate(current, input, now),
-          status: 'duplicate' as const,
-          superseded: [],
+      const currentMemoryKind = normalizeFactKind(current.memory_kind);
+      const replacementMemoryKind = input.memoryKind ?? currentMemoryKind;
+      const replacementObjectEntityId =
+        input.objectEntityId === undefined ? current.object_entity_id : input.objectEntityId;
+      const hasExactCurrentContentIdentity =
+        current.object_text.normalize('NFKC').trim() === objectText.normalize('NFKC') &&
+        replacementMemoryKind === currentMemoryKind &&
+        (replacementObjectEntityId ?? null) === current.object_entity_id;
+
+      if (hasExactCurrentContentIdentity) {
+        const duplicateInput = {
+          ...input,
+          predicate,
+          objectText,
+          objectEntityId: replacementObjectEntityId,
+          memoryKind: replacementMemoryKind,
+          supersedePrior: false,
+          now,
         };
+        const duplicateMaterializationInput = {
+          ...duplicateInput,
+          confidence: input.confidence ?? current.confidence,
+          importance: input.importance ?? current.importance ?? 0.5,
+          retrievability: input.retrievability ?? current.retrievability ?? 1,
+          stability: input.stability ?? current.stability ?? 0.5,
+          decayRate: input.decayRate ?? current.decay_rate ?? 0.03,
+        };
+        const currentFactClass = closedMemoryFactClass(current.fact_class);
+        const currentSourceAuthority = closedMemorySourceAuthority(current.source_authority);
+        if (!sealedApplicability && (!currentFactClass || !currentSourceAuthority)) {
+          throw new Error('memory_fact_provenance_invalid');
+        }
+        const duplicateApplicability =
+          sealedApplicability ??
+          ({
+            factClass: currentFactClass!,
+            sourceAuthority: currentSourceAuthority!,
+            ...(current.persona_id ? { personaId: current.persona_id } : {}),
+          } as const);
+        const duplicate = contributionContext
+          ? recordFactWithContributionInTransaction(
+              duplicateInput,
+              duplicateApplicability,
+              contributionContext,
+              duplicateMaterializationInput,
+            ).result
+          : recordFactWithApplicability(duplicateMaterializationInput, duplicateApplicability);
+        if (duplicate.status !== 'duplicate' || duplicate.fact.id !== current.id) {
+          throw new ExactReplacementConflict('replacement_collision');
+        }
+        return duplicate;
       }
 
       const inheritedReviewState = requireMemoryFactReviewState(
@@ -299,9 +238,10 @@ function replaceCurrentFactInternal(
         ...input,
         predicate,
         objectText,
+        objectEntityId: replacementObjectEntityId,
         pinned: input.pinned ?? current.pinned !== 0,
         reviewState: inheritedReviewState,
-        memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
+        memoryKind: replacementMemoryKind,
         supersedePrior: false,
         now,
       };

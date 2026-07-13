@@ -8,6 +8,12 @@ import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/databas
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { decodeMemoryFactContributionPayload } from '../../../src/services/memory/factContributionCodec';
 import {
+  raiseScopedMemoryFactSensitivityFloor,
+  setManagedMemoryFactPinned,
+  setScopedMemoryFactReviewState,
+} from '../../../src/services/memory/factExplicitOverrides';
+import { loadFactExplicitOverrideInTransaction } from '../../../src/services/memory/factExplicitOverrideState';
+import {
   persistFactContributionInTransaction,
   persistFactContributionSupersessionsInTransaction,
   type MemoryFactContributionWriteContext,
@@ -19,6 +25,7 @@ import {
   recordFactWithContribution,
 } from '../../../src/services/memory/facts/mutations';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
+import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 import {
   clearStructuredMemory,
   ensureFactSchema,
@@ -86,6 +93,20 @@ function contributionCount(): number {
     getMemoryDb().getFirstSync<{ count: number }>(
       'SELECT COUNT(*) AS count FROM memory_fact_contributions',
     )?.count ?? 0
+  );
+}
+
+function factProjection(factId: string) {
+  return getMemoryDb().getFirstSync<{
+    pinned: number;
+    review_state: string;
+    sensitivity: string;
+    repeated_mention_count: number;
+  }>(
+    `SELECT pinned, review_state, sensitivity, repeated_mention_count
+       FROM memory_facts
+      WHERE id = ? LIMIT 1`,
+    factId,
   );
 }
 
@@ -160,7 +181,7 @@ describe('atomic contributed fact mutations', () => {
     ]);
   });
 
-  it('keeps distinct source contributions and their incoming metadata unmerged', () => {
+  it('keeps distinct source contributions unmerged and replays the later event once', () => {
     const subject = subjectId();
     recordFactWithContribution(
       globalFact(subject, 'blue', {
@@ -170,13 +191,121 @@ describe('atomic contributed fact mutations', () => {
       grounded,
       context('event-1'),
     );
-    const second = recordFactWithContribution(
+    const secondInput = globalFact(subject, 'blue', {
+      attributes: { second: true },
+      confidence: 0.4,
+      sourceMessageId: 'user-message-2',
+      sourceTurnId: 'assistant-turn-2',
+      now: 200,
+    });
+    const secondSource = context('event-2', [
+      { sourceKind: 'message', sourceId: 'user-message-2' },
+      { sourceKind: 'turn', sourceId: 'assistant-turn-2' },
+    ]);
+    const second = recordFactWithContribution(secondInput, grounded, secondSource);
+
+    expect(second.fact.confidence).toBe(0.9);
+    expect(second.fact.attributes).toEqual({ first: true, second: true });
+    expect(contributionCount()).toBe(2);
+    const payloads = contributionPayloads();
+    expect(payloads[1]!.input.confidence).toBe(0.4);
+    expect(payloads[1]!.input.attributes).toEqual({ second: true });
+    expect(recordFactWithContribution(secondInput, grounded, secondSource)).toMatchObject({
+      fact: { id: second.fact.id, repeatedMentionCount: 1 },
+    });
+    expect(contributionCount()).toBe(2);
+    expect(contributionPayloads()).toEqual(payloads);
+  });
+
+  it('repairs duplicate projections from canonical intent without rewriting causal payloads', () => {
+    const subject = subjectId();
+    const originalInput = globalFact(subject, 'blue', { pinned: true });
+    const originalSource = context('event-1');
+    const original = recordFactWithContribution(originalInput, grounded, originalSource).fact;
+    const currentScope = resolveLocalMemoryAccessScope({
+      memoryConversationId: 'conversation-1',
+      sourceThreadId: 'thread-1',
+      personaId: 'default',
+      taskId: null,
+    });
+
+    setManagedMemoryFactPinned({ factId: original.id, pinned: false, now: 200 });
+    setScopedMemoryFactReviewState({
+      factId: original.id,
+      currentScope,
+      reviewState: 'verified',
+      now: 210,
+    });
+    raiseScopedMemoryFactSensitivityFloor({
+      factId: original.id,
+      currentScope,
+      sensitivityFloor: 'sensitive',
+      now: 220,
+    });
+    const canonicalIntent = loadFactExplicitOverrideInTransaction(original.id);
+    expect(canonicalIntent).toMatchObject({
+      pinnedOverride: false,
+      pinnedAt: 200,
+      reviewStateOverride: 'verified',
+      reviewStateAt: 210,
+      sensitivityFloor: 'sensitive',
+      sensitivityFloorAt: 220,
+      updatedAt: 220,
+    });
+
+    getMemoryDb().runSync(
+      `UPDATE memory_facts
+          SET pinned = 1, review_state = 'rejected', sensitivity = 'normal'
+        WHERE id = ?`,
+      original.id,
+    );
+
+    expect(() =>
+      recordFactWithContribution(
+        originalInput,
+        grounded,
+        context('event-1', [
+          { sourceKind: 'message', sourceId: 'user-message-1' },
+          { sourceKind: 'turn', sourceId: 'assistant-turn-1' },
+          { sourceKind: 'run', sourceId: 'unexpected-run' },
+        ]),
+      ),
+    ).toThrow('memory_fact_contribution_replay_mismatch');
+    expect(factProjection(original.id)).toEqual({
+      pinned: 1,
+      review_state: 'rejected',
+      sensitivity: 'normal',
+      repeated_mention_count: 0,
+    });
+    expect(loadFactExplicitOverrideInTransaction(original.id)).toEqual(canonicalIntent);
+
+    const replay = recordFactWithContribution(originalInput, grounded, originalSource);
+    expect(replay).toMatchObject({
+      status: 'duplicate',
+      fact: {
+        id: original.id,
+        pinned: false,
+        reviewState: 'verified',
+        sensitivity: 'sensitive',
+        repeatedMentionCount: 0,
+      },
+    });
+    expect(factProjection(original.id)).toEqual({
+      pinned: 0,
+      review_state: 'verified',
+      sensitivity: 'sensitive',
+      repeated_mention_count: 0,
+    });
+    expect(contributionCount()).toBe(1);
+    expect(loadFactExplicitOverrideInTransaction(original.id)).toEqual(canonicalIntent);
+
+    const duplicate = recordFactWithContribution(
       globalFact(subject, 'blue', {
-        attributes: { second: true },
-        confidence: 0.4,
+        pinned: true,
+        reviewState: 'rejected',
         sourceMessageId: 'user-message-2',
         sourceTurnId: 'assistant-turn-2',
-        now: 200,
+        now: 300,
       }),
       grounded,
       context('event-2', [
@@ -185,12 +314,28 @@ describe('atomic contributed fact mutations', () => {
       ]),
     );
 
-    expect(second.fact.confidence).toBe(0.9);
-    expect(second.fact.attributes).toEqual({ first: true, second: true });
+    expect(duplicate).toMatchObject({
+      status: 'duplicate',
+      fact: {
+        id: original.id,
+        pinned: false,
+        reviewState: 'verified',
+        sensitivity: 'sensitive',
+        repeatedMentionCount: 1,
+      },
+    });
+    expect(factProjection(original.id)).toEqual({
+      pinned: 0,
+      review_state: 'verified',
+      sensitivity: 'sensitive',
+      repeated_mention_count: 1,
+    });
     expect(contributionCount()).toBe(2);
-    const payloads = contributionPayloads();
-    expect(payloads[1]!.input.confidence).toBe(0.4);
-    expect(payloads[1]!.input.attributes).toEqual({ second: true });
+    expect(contributionPayloads()[1]!.input).toMatchObject({
+      pinned: true,
+      reviewState: 'rejected',
+    });
+    expect(loadFactExplicitOverrideInTransaction(original.id)).toEqual(canonicalIntent);
   });
 
   it('rejects changed metadata for one event and rolls back aggregate provenance changes', () => {
@@ -289,6 +434,9 @@ describe('atomic contributed fact mutations', () => {
     const subject = subjectId();
     const current = recordFactWithContribution(
       globalFact(subject, 'blue', {
+        attributes: { initial: true },
+        confidence: 0.4,
+        importance: 0.2,
         pinned: true,
         reviewState: 'verified',
         memoryKind: 'goal',
@@ -297,20 +445,22 @@ describe('atomic contributed fact mutations', () => {
       context('event-old'),
     ).fact;
 
+    const replacementInput = {
+      ...globalFact(subject, 'blue', {
+        sourceMessageId: 'user-message-2',
+        sourceTurnId: 'assistant-turn-2',
+        now: 200,
+      }),
+      expectedCurrentFactId: current.id,
+    };
+    const replacementSource = context('event-same-value', [
+      { sourceKind: 'message', sourceId: 'user-message-2' },
+      { sourceKind: 'turn', sourceId: 'assistant-turn-2' },
+    ]);
     const duplicate = replaceCurrentFactWithContribution(
-      {
-        ...globalFact(subject, 'blue', {
-          sourceMessageId: 'user-message-2',
-          sourceTurnId: 'assistant-turn-2',
-          now: 200,
-        }),
-        expectedCurrentFactId: current.id,
-      },
+      replacementInput,
       grounded,
-      context('event-same-value', [
-        { sourceKind: 'message', sourceId: 'user-message-2' },
-        { sourceKind: 'turn', sourceId: 'assistant-turn-2' },
-      ]),
+      replacementSource,
     );
 
     expect(duplicate.status).toBe('duplicate');
@@ -322,9 +472,41 @@ describe('atomic contributed fact mutations', () => {
     expect(factRows()).toHaveLength(1);
     expect(contributionCount()).toBe(2);
     const payload = contributionPayloads()[1]!;
-    expect(payload.input.pinned).toBe(true);
-    expect(payload.input.reviewState).toBe('verified');
+    expect(payload.input.pinned).toBe(false);
+    expect(payload.input.reviewState).toBe('auto');
     expect(payload.input.memoryKind).toBe('goal');
+
+    const later = recordFactWithContribution(
+      globalFact(subject, 'blue', {
+        attributes: { later: true },
+        confidence: 0.9,
+        importance: 0.8,
+        memoryKind: 'goal',
+        sourceMessageId: 'user-message-3',
+        sourceTurnId: 'assistant-turn-3',
+        now: 300,
+      }),
+      grounded,
+      context('event-later', [
+        { sourceKind: 'message', sourceId: 'user-message-3' },
+        { sourceKind: 'turn', sourceId: 'assistant-turn-3' },
+      ]),
+    );
+    expect(later.fact).toMatchObject({
+      id: current.id,
+      confidence: 0.9,
+      importance: 0.8,
+      repeatedMentionCount: 2,
+    });
+    const stablePayloads = contributionPayloads();
+    expect(
+      replaceCurrentFactWithContribution(replacementInput, grounded, replacementSource),
+    ).toMatchObject({
+      status: 'duplicate',
+      fact: { id: current.id, repeatedMentionCount: 2 },
+    });
+    expect(contributionCount()).toBe(3);
+    expect(contributionPayloads()).toEqual(stablePayloads);
   });
 
   it('does not create a contribution when exact replacement conflicts', () => {

@@ -12,7 +12,6 @@ import {
   recordFactWithApplicability,
 } from '../../../src/services/memory/facts/mutations';
 import { invalidateManagedMemoryFact } from '../../../src/services/memory/factExplicitOverrides';
-import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
 import {
   listCurrentFactsForPriorUserSelfCorrection,
   listCurrentFactsForReplacement,
@@ -56,15 +55,20 @@ function replacement(
   });
 }
 
+function currentFact(objectText: string, now: number, sourceMessageId?: string) {
+  return recordFact({
+    subjectId: 'entity-user',
+    predicate: 'lives_in',
+    objectText,
+    scope: 'global',
+    sourceMessageId,
+    now,
+  });
+}
+
 describe('replaceCurrentFact', () => {
   it('replaces only the exact current target and preserves history', () => {
-    const old = recordFact({
-      subjectId: 'entity-user',
-      predicate: 'lives_in',
-      objectText: 'Amsterdam',
-      scope: 'global',
-      now: 100,
-    });
+    const old = currentFact('Amsterdam', 100);
     const scoped = recordFact({
       subjectId: 'entity-user',
       predicate: 'lives_in',
@@ -115,13 +119,7 @@ describe('replaceCurrentFact', () => {
   });
 
   it('rejects a replacement whose source validity precedes the current fact', () => {
-    const current = recordFact({
-      subjectId: 'entity-user',
-      predicate: 'lives_in',
-      objectText: 'Utrecht',
-      scope: 'global',
-      now: 200,
-    });
+    const current = currentFact('Utrecht', 200);
 
     expect(replacement(current.fact.id, 'Amsterdam', 100)).toEqual({
       fact: null,
@@ -488,121 +486,6 @@ describe('replaceCurrentFact', () => {
         now: 200,
       }),
     ).toMatchObject({ status: 'conflict', conflict: 'target_scope_mismatch' });
-  });
-
-  it('deduplicates an identical replacement without adding a history row', () => {
-    const old = recordFact({
-      subjectId: 'entity-user',
-      predicate: 'lives_in',
-      objectText: 'Utrecht',
-      scope: 'global',
-      now: 100,
-    });
-
-    const result = replacement(old.fact.id, 'Utrecht', 200);
-    expect(result).toMatchObject({ status: 'duplicate', fact: { id: old.fact.id } });
-    expect(listFacts({ subjectId: 'entity-user', includeInvalidated: true })).toHaveLength(1);
-  });
-
-  it('counts one grounded same-value mention once across replay but reinforces a later source', () => {
-    const old = recordFact({
-      subjectId: 'entity-user',
-      predicate: 'lives_in',
-      objectText: 'Utrecht',
-      scope: 'global',
-      now: 100,
-    });
-    const unrelated = recordFact({
-      subjectId: 'entity-release',
-      predicate: 'target',
-      objectText: 'production',
-      scope: 'global',
-      now: 110,
-    });
-    addFactEvidence({
-      factId: unrelated.fact.id,
-      messageId: 'user-correction-1',
-      quote: 'Ship to production.',
-      now: 120,
-    });
-
-    const first = replacement(old.fact.id, 'Utrecht', 200, 'user-correction-1');
-    expect(first).toMatchObject({
-      status: 'duplicate',
-      fact: { repeatedMentionCount: 1, updatedAt: 200 },
-    });
-    addFactEvidence({
-      factId: old.fact.id,
-      messageId: 'user-correction-1',
-      quote: 'I still live in Utrecht.',
-      now: 200,
-    });
-
-    const replay = replacement(old.fact.id, 'Utrecht', 250, 'user-correction-1');
-    expect(replay).toMatchObject({
-      status: 'duplicate',
-      fact: { repeatedMentionCount: 1, updatedAt: 200 },
-    });
-
-    const laterMention = replacement(old.fact.id, 'Utrecht', 300, 'user-correction-2');
-    expect(laterMention).toMatchObject({
-      status: 'duplicate',
-      fact: { repeatedMentionCount: 2, updatedAt: 300 },
-    });
-    addFactEvidence({
-      factId: old.fact.id,
-      messageId: 'user-correction-2',
-      quote: 'I still live in Utrecht.',
-      now: 300,
-    });
-    expect(replacement(old.fact.id, 'Utrecht', 350, 'user-correction-2')).toMatchObject({
-      status: 'duplicate',
-      fact: { repeatedMentionCount: 2, updatedAt: 300 },
-    });
-    expect(listFacts({ subjectId: 'entity-user', includeInvalidated: true })).toHaveLength(1);
-  });
-
-  it('applies a sealed grounded upgrade even when same-value source evidence already exists', () => {
-    const inferred = recordFactWithApplicability(
-      {
-        subjectId: 'entity-user',
-        predicate: 'timezone',
-        objectText: 'Europe/Amsterdam',
-        scope: 'global',
-        sourceMessageId: 'user-timezone-1',
-        now: 100,
-      },
-      { factClass: 'workflow', sourceAuthority: 'assistant_inferred' },
-    );
-    addFactEvidence({
-      factId: inferred.fact.id,
-      messageId: 'user-timezone-1',
-      quote: 'My timezone is Europe/Amsterdam.',
-      now: 110,
-    });
-
-    const grounded = replaceCurrentFactWithApplicability(
-      {
-        expectedCurrentFactId: inferred.fact.id,
-        subjectId: 'entity-user',
-        predicate: 'timezone',
-        objectText: 'Europe/Amsterdam',
-        scope: 'global',
-        sourceMessageId: 'user-timezone-1',
-        now: 200,
-      },
-      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
-    );
-
-    expect(grounded).toMatchObject({
-      status: 'duplicate',
-      fact: {
-        id: inferred.fact.id,
-        factClass: 'subjective_user',
-        sourceAuthority: 'grounded_user',
-        repeatedMentionCount: 0,
-      },
-    });
   });
 
   it('supports repeated A to B to A validity intervals', () => {
