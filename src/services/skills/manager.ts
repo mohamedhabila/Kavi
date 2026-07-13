@@ -8,7 +8,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Skill, SkillEntry, SkillMetadata, SkillToolExecutionContext } from './types';
 import type { ToolDefinition } from '../../types/tool';
-import { getRuntimeExternalToolProcessEpoch } from '../runtimeExternalToolProcessEpoch';
+import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 import {
   isCodeOwnedServiceSkillId,
   isIssuedCodeOwnedServiceSkill,
@@ -318,7 +318,7 @@ export function captureSkillRuntimeToolBinding(
       source: 'skill',
       namespace: skill.id,
       registrationGeneration,
-      runtimeProcessEpoch: getRuntimeExternalToolProcessEpoch(),
+      runtimeProcessEpoch: getRuntimeProcessEpoch(),
       name: skill.name,
       version: skill.version,
       ...(skill.author ? { author: skill.author } : {}),

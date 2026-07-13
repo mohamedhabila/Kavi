@@ -15,7 +15,7 @@ import {
 } from './oauth';
 import type { McpServerConfig } from '../../types/remote';
 import type { ToolDefinition } from '../../types/tool';
-import { getRuntimeExternalToolProcessEpoch } from '../runtimeExternalToolProcessEpoch';
+import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 
 export type McpServerState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -413,7 +413,7 @@ class McpConnectionManager {
         namespace: serverId,
         connectionGeneration,
         toolRegistryGeneration,
-        runtimeProcessEpoch: getRuntimeExternalToolProcessEpoch(),
+        runtimeProcessEpoch: getRuntimeProcessEpoch(),
         targetIdentity,
         ...(sseTargetIdentity ? { sseTargetIdentity } : {}),
         transport: config.transport ?? 'auto',
