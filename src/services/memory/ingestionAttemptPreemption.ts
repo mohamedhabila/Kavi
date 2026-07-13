@@ -2,8 +2,11 @@ type ActiveIngestionAttempt = {
   jobId: string;
   controller: AbortController;
   completion: Promise<void>;
+  foregroundPreemptible: boolean;
   resolveCompletion: () => void;
 };
+
+export type ActiveIngestionPreemptionReason = 'foreground_inference' | 'memory_pressure';
 
 let activeAttempt: ActiveIngestionAttempt | null = null;
 
@@ -16,6 +19,7 @@ export function beginActiveIngestionAttempt(jobId: string): ActiveIngestionAttem
     jobId,
     controller: new AbortController(),
     completion,
+    foregroundPreemptible: true,
     resolveCompletion,
   };
   activeAttempt = attempt;
@@ -29,8 +33,20 @@ export function finishActiveIngestionAttempt(attempt: ActiveIngestionAttempt): v
   attempt.resolveCompletion();
 }
 
-export function preemptActiveIngestionAttempt(): void {
-  activeAttempt?.controller.abort();
+export function protectActiveRemoteIngestionAttemptFromForeground(
+  attempt: ActiveIngestionAttempt,
+): boolean {
+  if (activeAttempt !== attempt || attempt.controller.signal.aborted) return false;
+  attempt.foregroundPreemptible = false;
+  return true;
+}
+
+export function preemptActiveIngestionAttempt(reason: ActiveIngestionPreemptionReason): boolean {
+  const attempt = activeAttempt;
+  if (!attempt) return false;
+  if (reason === 'foreground_inference' && !attempt.foregroundPreemptible) return false;
+  attempt.controller.abort();
+  return true;
 }
 
 export async function preemptActiveIngestionAttemptAndWait(): Promise<void> {

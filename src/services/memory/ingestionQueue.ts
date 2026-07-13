@@ -46,6 +46,7 @@ import {
   finishActiveIngestionAttempt,
   preemptActiveIngestionAttempt,
   preemptActiveIngestionAttemptAndWait,
+  protectActiveRemoteIngestionAttemptFromForeground,
 } from './ingestionAttemptPreemption';
 import {
   deferIngestionJobForMissingSource,
@@ -277,6 +278,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     return { processed: false, skipped: 'claim_lost' };
   }
   const activeAttempt = beginActiveIngestionAttempt(job.id);
+  let remoteProviderEnrichment = false;
 
   try {
     const turnResult = await runConsolidation({
@@ -301,9 +303,21 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       skipWorkingMemorySync: true,
       deferStructuralFinalization: structuralCheckpointOnly,
       providerSignal: activeAttempt.controller.signal,
+      onExecutionResourceResolved: (resource) => {
+        remoteProviderEnrichment = resource === 'remote';
+      },
       canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
-      commitStructuralCheckpoint: () =>
-        markIngestionJobStructuralComplete(job.id, input.now ?? Date.now(), claimToken),
+      commitStructuralCheckpoint: () => {
+        const checkpointed = markIngestionJobStructuralComplete(
+          job.id,
+          input.now ?? Date.now(),
+          claimToken,
+        );
+        if (checkpointed && remoteProviderEnrichment) {
+          protectActiveRemoteIngestionAttemptFromForeground(activeAttempt);
+        }
+        return checkpointed;
+      },
       commitPersistenceReceipt: ({ providerOutcome, ...writeSet }) => {
         const receiptAt = input.now ?? Date.now();
         commitIngestionPersistenceReceipt({
@@ -658,7 +672,7 @@ export async function cancelScheduledIngestionDrain(): Promise<void> {
   await preemptActiveIngestionAttemptAndWait();
 }
 
-registerIngestionPreemptionHandler(() => preemptActiveIngestionAttempt());
+registerIngestionPreemptionHandler((reason) => preemptActiveIngestionAttempt(reason));
 
 registerMemoryOptOutHandler(() => {
   void cancelScheduledIngestionDrain();
