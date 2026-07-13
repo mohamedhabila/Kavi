@@ -3,32 +3,11 @@ import type { getMemoryDb } from './database';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
 
-function ensureSupersessionProjectionIntentColumns(db: MemoryDb): void {
-  const columns = new Set(
-    db
-      .getAllSync<{ name: string }>('PRAGMA table_info(memory_fact_contribution_supersessions)')
-      .map((column) => column.name),
-  );
-  if (!columns.has('pinned_input_explicit')) {
-    db.execSync(
-      `ALTER TABLE memory_fact_contribution_supersessions
-         ADD COLUMN pinned_input_explicit INTEGER NOT NULL DEFAULT 0
-         CHECK(pinned_input_explicit IN (0, 1))`,
-    );
-  }
-  if (!columns.has('review_state_input_explicit')) {
-    db.execSync(
-      `ALTER TABLE memory_fact_contribution_supersessions
-         ADD COLUMN review_state_input_explicit INTEGER NOT NULL DEFAULT 0
-         CHECK(review_state_input_explicit IN (0, 1))`,
-    );
-  }
-}
-
 /** Remove only triggers that reference memory_facts before its canonical table rebuild. */
 export function dropFactContributionFactReferenceTriggers(db: MemoryDb): void {
   db.execSync(`
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_parent_insert;
+    DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_snapshot_parent_insert;
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_parent_insert;
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_immutable;
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_immutable;
@@ -106,16 +85,58 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
       CREATE INDEX IF NOT EXISTS idx_memory_fact_contribution_sources_contribution
         ON memory_fact_contribution_sources(contribution_id, source_kind, source_id);
 
+      CREATE TABLE IF NOT EXISTS memory_fact_contribution_supersession_snapshots (
+        contribution_id TEXT PRIMARY KEY,
+        successor_fact_id TEXT NOT NULL UNIQUE
+          CHECK(LENGTH(successor_fact_id) BETWEEN 1 AND 512),
+        superseded_at INTEGER NOT NULL CHECK(
+          TYPEOF(superseded_at) = 'integer'
+          AND superseded_at BETWEEN 0 AND 9007199254740991
+        ),
+        snapshot_version INTEGER NOT NULL CHECK(
+          TYPEOF(snapshot_version) = 'integer'
+          AND snapshot_version = 1
+        ),
+        pinned_input_explicit INTEGER NOT NULL CHECK(
+          TYPEOF(pinned_input_explicit) = 'integer'
+          AND pinned_input_explicit IN (0, 1)
+        ),
+        review_state_input_explicit INTEGER NOT NULL CHECK(
+          TYPEOF(review_state_input_explicit) = 'integer'
+          AND review_state_input_explicit IN (0, 1)
+        ),
+        successor_pinned_baseline INTEGER NOT NULL CHECK(
+          TYPEOF(successor_pinned_baseline) = 'integer'
+          AND successor_pinned_baseline IN (0, 1)
+        ),
+        successor_review_state_baseline TEXT NOT NULL CHECK(
+          TYPEOF(successor_review_state_baseline) = 'text'
+          AND successor_review_state_baseline IN (
+            'auto', 'verified', 'pending_review', 'stale', 'conflicted', 'rejected'
+          )
+        ),
+        successor_sensitivity_floor TEXT NOT NULL CHECK(
+          TYPEOF(successor_sensitivity_floor) = 'text'
+          AND successor_sensitivity_floor IN (
+            'normal', 'personal', 'sensitive', 'restricted'
+          )
+        ),
+        successor_sensitivity_policy_version INTEGER NOT NULL CHECK(
+          TYPEOF(successor_sensitivity_policy_version) = 'integer'
+          AND successor_sensitivity_policy_version BETWEEN 1 AND 2147483647
+        )
+      ) WITHOUT ROWID;
+
       CREATE TABLE IF NOT EXISTS memory_fact_contribution_supersessions (
         contribution_id TEXT NOT NULL,
         predecessor_fact_id TEXT NOT NULL CHECK(LENGTH(predecessor_fact_id) BETWEEN 1 AND 512),
         successor_fact_id TEXT NOT NULL CHECK(LENGTH(successor_fact_id) BETWEEN 1 AND 512),
-        superseded_at INTEGER NOT NULL CHECK(superseded_at >= 0),
-        pinned_input_explicit INTEGER NOT NULL DEFAULT 0
-          CHECK(pinned_input_explicit IN (0, 1)),
-        review_state_input_explicit INTEGER NOT NULL DEFAULT 0
-          CHECK(review_state_input_explicit IN (0, 1)),
+        superseded_at INTEGER NOT NULL CHECK(
+          TYPEOF(superseded_at) = 'integer'
+          AND superseded_at BETWEEN 0 AND 9007199254740991
+        ),
         CHECK(predecessor_fact_id != successor_fact_id),
+        UNIQUE(predecessor_fact_id),
         PRIMARY KEY(contribution_id, predecessor_fact_id, successor_fact_id)
       );
       CREATE INDEX IF NOT EXISTS idx_memory_fact_contribution_supersessions_predecessor
@@ -130,9 +151,13 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_parent_insert;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_delete_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_snapshot_parent_insert;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_snapshot_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_snapshot_delete_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_parent_insert;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_snapshot;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_dependents;
       DROP TRIGGER IF EXISTS trg_memory_fact_delete_contributions;
 
@@ -210,15 +235,62 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         SELECT RAISE(ABORT, 'memory_fact_contribution_source_immutable');
       END;
 
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_supersession_snapshot_parent_insert
+      BEFORE INSERT ON memory_fact_contribution_supersession_snapshots
+      WHEN NOT EXISTS (
+        SELECT 1
+          FROM memory_fact_contributions AS contribution
+          JOIN memory_facts AS successor ON successor.id = NEW.successor_fact_id
+         WHERE contribution.id = NEW.contribution_id
+           AND contribution.fact_id = NEW.successor_fact_id
+           AND contribution.memory_owner_id = successor.memory_owner_id
+           AND contribution.contributed_at = NEW.superseded_at
+           AND successor.created_at = NEW.superseded_at
+           AND successor.invalid_at IS NULL
+           AND successor.deleted_at IS NULL
+           AND successor.pinned = NEW.successor_pinned_baseline
+           AND successor.review_state = NEW.successor_review_state_baseline
+           AND successor.sensitivity = NEW.successor_sensitivity_floor
+           AND successor.sensitivity_policy_version =
+                 NEW.successor_sensitivity_policy_version
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_supersession_snapshot_parent_invalid');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_supersession_snapshot_immutable
+      BEFORE UPDATE ON memory_fact_contribution_supersession_snapshots
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_supersession_snapshot_immutable');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_supersession_snapshot_delete_immutable
+      BEFORE DELETE ON memory_fact_contribution_supersession_snapshots
+      WHEN EXISTS (
+        SELECT 1 FROM memory_fact_contributions WHERE id = OLD.contribution_id
+      )
+      AND EXISTS (
+        SELECT 1
+          FROM memory_fact_contribution_supersessions
+         WHERE contribution_id = OLD.contribution_id
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_supersession_snapshot_immutable');
+      END;
+
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_supersession_parent_insert
       BEFORE INSERT ON memory_fact_contribution_supersessions
       WHEN NOT EXISTS (
         SELECT 1
           FROM memory_fact_contributions AS contribution
+          JOIN memory_fact_contribution_supersession_snapshots AS snapshot
+            ON snapshot.contribution_id = contribution.id
           JOIN memory_facts AS predecessor ON predecessor.id = NEW.predecessor_fact_id
           JOIN memory_facts AS successor ON successor.id = NEW.successor_fact_id
          WHERE contribution.id = NEW.contribution_id
            AND contribution.fact_id = NEW.successor_fact_id
+           AND snapshot.successor_fact_id = NEW.successor_fact_id
+           AND snapshot.superseded_at = NEW.superseded_at
            AND predecessor.memory_owner_id = contribution.memory_owner_id
            AND successor.memory_owner_id = contribution.memory_owner_id
            AND predecessor.subject_id = successor.subject_id
@@ -286,12 +358,28 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         SELECT RAISE(ABORT, 'memory_fact_contribution_supersession_immutable');
       END;
 
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_supersession_delete_snapshot
+      AFTER DELETE ON memory_fact_contribution_supersessions
+      WHEN NOT EXISTS (
+        SELECT 1
+          FROM memory_fact_contribution_supersessions
+         WHERE contribution_id = OLD.contribution_id
+      )
+      BEGIN
+        DELETE FROM memory_fact_contribution_supersession_snapshots
+         WHERE contribution_id = OLD.contribution_id
+           AND successor_fact_id = OLD.successor_fact_id
+           AND superseded_at = OLD.superseded_at;
+      END;
+
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_delete_dependents
       AFTER DELETE ON memory_fact_contributions
       BEGIN
         DELETE FROM memory_fact_contribution_sources
          WHERE contribution_id = OLD.id;
         DELETE FROM memory_fact_contribution_supersessions
+         WHERE contribution_id = OLD.id;
+        DELETE FROM memory_fact_contribution_supersession_snapshots
          WHERE contribution_id = OLD.id;
       END;
 
@@ -303,7 +391,6 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
          WHERE predecessor_fact_id = OLD.id OR successor_fact_id = OLD.id;
       END;
     `);
-    ensureSupersessionProjectionIntentColumns(database);
   });
 }
 

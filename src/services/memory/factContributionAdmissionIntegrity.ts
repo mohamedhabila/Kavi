@@ -12,9 +12,16 @@ import {
 import {
   closedMemoryFactClass,
   closedMemoryFactReviewState,
+  closedMemoryFactSensitivity,
   closedMemorySourceAuthority,
+  type MemoryFactReviewState,
+  type MemoryFactSensitivity,
 } from './facts/applicabilityProvenance';
 import { hasExactFactContentIdentity } from './facts/contentIdentity';
+import {
+  maxMemoryFactSensitivity,
+  MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
+} from './memorySensitivityPolicy';
 import {
   isMemoryFactScope,
   normalizeFactKind,
@@ -66,8 +73,31 @@ interface ContributionSupersessionRow {
   predecessor_fact_id: string;
   successor_fact_id: string;
   superseded_at: number;
-  pinned_input_explicit: number;
-  review_state_input_explicit: number;
+}
+
+interface ContributionSupersessionSnapshotRow {
+  contribution_id: unknown;
+  successor_fact_id: unknown;
+  superseded_at: unknown;
+  snapshot_version: unknown;
+  pinned_input_explicit: unknown;
+  review_state_input_explicit: unknown;
+  successor_pinned_baseline: unknown;
+  successor_review_state_baseline: unknown;
+  successor_sensitivity_floor: unknown;
+  successor_sensitivity_policy_version: unknown;
+}
+
+interface ContributionSupersessionSnapshot {
+  contributionId: string;
+  successorFactId: string;
+  supersededAt: number;
+  pinnedInputExplicit: boolean;
+  reviewStateInputExplicit: boolean;
+  successorPinnedBaseline: boolean;
+  successorReviewStateBaseline: MemoryFactReviewState;
+  successorSensitivityFloor: MemoryFactSensitivity;
+  successorSensitivityPolicyVersion: number;
 }
 
 const MEMORY_FACT_KINDS = new Set<MemoryFactKind>([
@@ -136,6 +166,53 @@ function strictDecayPolicy(value: unknown): MemoryDecayPolicy {
 function strictBooleanInteger(value: unknown): boolean {
   if (value !== 0 && value !== 1) return fail();
   return value === 1;
+}
+
+function strictSafeInteger(
+  value: unknown,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+): number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+    return fail();
+  }
+  return value as number;
+}
+
+function decodeSupersessionSnapshot(
+  row: ContributionSupersessionSnapshotRow,
+): ContributionSupersessionSnapshot {
+  if (
+    typeof row.contribution_id !== 'string' ||
+    row.contribution_id.length !== 68 ||
+    !row.contribution_id.startsWith('mfc_') ||
+    typeof row.successor_fact_id !== 'string' ||
+    row.successor_fact_id.length < 1 ||
+    row.successor_fact_id.length > 512 ||
+    row.snapshot_version !== 1
+  ) {
+    return fail();
+  }
+  const successorReviewStateBaseline = closedMemoryFactReviewState(
+    row.successor_review_state_baseline,
+  );
+  const successorSensitivityFloor = closedMemoryFactSensitivity(row.successor_sensitivity_floor);
+  if (!successorReviewStateBaseline || !successorSensitivityFloor) return fail();
+  return {
+    contributionId: row.contribution_id,
+    successorFactId: row.successor_fact_id,
+    supersededAt: strictSafeInteger(row.superseded_at, 0),
+    pinnedInputExplicit: strictBooleanInteger(row.pinned_input_explicit),
+    reviewStateInputExplicit: strictBooleanInteger(row.review_state_input_explicit),
+    successorPinnedBaseline: strictBooleanInteger(row.successor_pinned_baseline),
+    successorReviewStateBaseline,
+    successorSensitivityFloor,
+    successorSensitivityPolicyVersion: strictSafeInteger(
+      row.successor_sensitivity_policy_version,
+      1,
+      2_147_483_647,
+    ),
+  };
 }
 
 /** Reconstruct the exact persisted fact mutation without normalizing malformed legacy data. */
@@ -370,18 +447,54 @@ function sqliteNoCase(value: string): string {
   return value.replace(/[A-Z]/g, (character) => character.toLowerCase());
 }
 
+function assertSupersessionSnapshotIntegrity(
+  snapshot: ContributionSupersessionSnapshot,
+  facts: ReadonlyMap<string, FactRow>,
+  contributions: ReadonlyMap<string, ContributionRow>,
+  payloads: ReadonlyMap<string, MemoryFactContributionPayloadV1>,
+): void {
+  const contribution = contributions.get(snapshot.contributionId) ?? fail();
+  const payload = payloads.get(snapshot.contributionId) ?? fail();
+  const successor = facts.get(snapshot.successorFactId) ?? fail();
+  const successorSensitivity =
+    successor.sensitivity_policy_version === MEMORY_FACT_SENSITIVITY_POLICY_VERSION
+      ? (closedMemoryFactSensitivity(successor.sensitivity) ?? 'restricted')
+      : 'restricted';
+  if (
+    contribution.fact_id !== snapshot.successorFactId ||
+    contribution.memory_owner_id !== successor.memory_owner_id ||
+    contribution.contributed_at !== snapshot.supersededAt ||
+    payload.input.now !== snapshot.supersededAt ||
+    successor.created_at !== snapshot.supersededAt ||
+    snapshot.successorSensitivityPolicyVersion > MEMORY_FACT_SENSITIVITY_POLICY_VERSION ||
+    maxMemoryFactSensitivity(successorSensitivity, snapshot.successorSensitivityFloor) !==
+      successorSensitivity ||
+    (!snapshot.pinnedInputExplicit && payload.input.pinned !== false) ||
+    (!snapshot.reviewStateInputExplicit && payload.input.reviewState !== 'auto') ||
+    (snapshot.pinnedInputExplicit && snapshot.successorPinnedBaseline !== payload.input.pinned) ||
+    (snapshot.reviewStateInputExplicit &&
+      snapshot.successorReviewStateBaseline !== payload.input.reviewState)
+  ) {
+    fail();
+  }
+}
+
 function assertSupersessionIntegrity(
   row: ContributionSupersessionRow,
   facts: ReadonlyMap<string, FactRow>,
   contributions: ReadonlyMap<string, ContributionRow>,
   payloads: ReadonlyMap<string, MemoryFactContributionPayloadV1>,
+  snapshots: ReadonlyMap<string, ContributionSupersessionSnapshot>,
 ): void {
   const contribution = contributions.get(row.contribution_id) ?? fail();
   const payload = payloads.get(row.contribution_id) ?? fail();
+  const snapshot = snapshots.get(row.contribution_id) ?? fail();
   const predecessor = facts.get(row.predecessor_fact_id) ?? fail();
   const successor = facts.get(row.successor_fact_id) ?? fail();
   if (
     contribution.fact_id !== successor.id ||
+    snapshot.successorFactId !== row.successor_fact_id ||
+    snapshot.supersededAt !== row.superseded_at ||
     predecessor.id === successor.id ||
     predecessor.memory_owner_id !== contribution.memory_owner_id ||
     successor.memory_owner_id !== contribution.memory_owner_id ||
@@ -392,9 +505,7 @@ function assertSupersessionIntegrity(
     predecessor.invalid_at !== row.superseded_at ||
     row.superseded_at !== payload.input.now ||
     !Number.isSafeInteger(row.superseded_at) ||
-    row.superseded_at < 0 ||
-    (row.pinned_input_explicit !== 0 && row.pinned_input_explicit !== 1) ||
-    (row.review_state_input_explicit !== 0 && row.review_state_input_explicit !== 1)
+    row.superseded_at < 0
   ) {
     fail();
   }
@@ -447,13 +558,41 @@ export function assertFactContributionAdmissionIntegrity(db: MemoryDb): void {
     contributionCounts.set(fact.id, (contributionCounts.get(fact.id) ?? 0) + 1);
   }
   if (Array.from(sourceRowsByContribution.keys()).some((id) => !contributions.has(id))) fail();
+  const snapshots = new Map<string, ContributionSupersessionSnapshot>();
+  const snapshotSuccessorFactIds = new Set<string>();
+  for (const rawSnapshot of db.getAllSync<ContributionSupersessionSnapshotRow>(
+    `SELECT contribution_id, successor_fact_id, superseded_at, snapshot_version,
+            pinned_input_explicit, review_state_input_explicit, successor_pinned_baseline,
+            successor_review_state_baseline, successor_sensitivity_floor,
+            successor_sensitivity_policy_version
+       FROM memory_fact_contribution_supersession_snapshots`,
+  )) {
+    const snapshot = decodeSupersessionSnapshot(rawSnapshot);
+    if (
+      snapshots.has(snapshot.contributionId) ||
+      snapshotSuccessorFactIds.has(snapshot.successorFactId)
+    ) {
+      fail();
+    }
+    assertSupersessionSnapshotIntegrity(snapshot, facts, contributions, payloads);
+    snapshots.set(snapshot.contributionId, snapshot);
+    snapshotSuccessorFactIds.add(snapshot.successorFactId);
+  }
+  const snapshotEdgeCounts = new Map<string, number>();
+  const supersededPredecessorFactIds = new Set<string>();
   for (const supersession of db.getAllSync<ContributionSupersessionRow>(
-    `SELECT contribution_id, predecessor_fact_id, successor_fact_id, superseded_at,
-            pinned_input_explicit, review_state_input_explicit
+    `SELECT contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
        FROM memory_fact_contribution_supersessions`,
   )) {
-    assertSupersessionIntegrity(supersession, facts, contributions, payloads);
+    if (supersededPredecessorFactIds.has(supersession.predecessor_fact_id)) fail();
+    supersededPredecessorFactIds.add(supersession.predecessor_fact_id);
+    assertSupersessionIntegrity(supersession, facts, contributions, payloads, snapshots);
+    snapshotEdgeCounts.set(
+      supersession.contribution_id,
+      (snapshotEdgeCounts.get(supersession.contribution_id) ?? 0) + 1,
+    );
   }
+  if (Array.from(snapshots.keys()).some((id) => !snapshotEdgeCounts.has(id))) fail();
   for (const fact of facts.values()) {
     if (fact.deleted_at === null) {
       if (fact.memory_owner_id !== memoryOwnerId || !contributionCounts.has(fact.id)) fail();

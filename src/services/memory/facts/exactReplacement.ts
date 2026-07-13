@@ -2,10 +2,8 @@ import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryTransaction } from '../access/transaction';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
-import {
-  persistFactContributionSupersessionsInTransaction,
-  type MemoryFactContributionWriteContext,
-} from '../factContributionStore';
+import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../memorySensitivityPolicy';
+import type { MemoryFactContributionWriteContext } from '../factContributionStore';
 import {
   closedMemoryFactClass,
   closedMemoryFactSensitivity,
@@ -13,11 +11,11 @@ import {
   requireMemoryFactReviewState,
   type SealedFactApplicabilityProvenance,
 } from './applicabilityProvenance';
+import { recordFactWithApplicability, recordFactWithContributionInTransaction } from './mutations';
 import {
-  recordFactWithApplicability,
-  recordFactWithContributionInTransaction,
+  FactContributionMaterializationConflict,
   setFactSensitivityFloorInTransaction,
-} from './mutations';
+} from './factContributionMaterialization';
 import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
 import { requireFactScopeIdentity } from './scopeIdentity';
 import {
@@ -209,7 +207,10 @@ function replaceCurrentFactInternal(
               duplicateInput,
               duplicateApplicability,
               contributionContext,
-              duplicateMaterializationInput,
+              {
+                materializationInput: duplicateMaterializationInput,
+                expectedStatus: 'duplicate',
+              },
             ).result
           : recordFactWithApplicability(duplicateMaterializationInput, duplicateApplicability);
         if (duplicate.status !== 'duplicate' || duplicate.fact.id !== current.id) {
@@ -221,7 +222,10 @@ function replaceCurrentFactInternal(
       const inheritedReviewState = requireMemoryFactReviewState(
         input.reviewState ?? current.review_state,
       );
-      const inheritedSensitivity = closedMemoryFactSensitivity(current.sensitivity) ?? 'restricted';
+      const inheritedSensitivity =
+        current.sensitivity_policy_version === MEMORY_FACT_SENSITIVITY_POLICY_VERSION
+          ? (closedMemoryFactSensitivity(current.sensitivity) ?? 'restricted')
+          : 'restricted';
       const inheritedFactClass = closedMemoryFactClass(current.fact_class);
       const inheritedSourceAuthority = closedMemorySourceAuthority(current.source_authority);
       if (!sealedApplicability && (!inheritedFactClass || !inheritedSourceAuthority)) {
@@ -245,23 +249,11 @@ function replaceCurrentFactInternal(
         supersedePrior: false,
         now,
       };
-      const contributed = contributionContext
-        ? recordFactWithContributionInTransaction(
-            replacementInput,
-            replacementApplicability,
-            contributionContext,
-          )
-        : null;
-      const created = contributed
-        ? contributed.result
-        : recordFactWithApplicability(replacementInput, replacementApplicability);
-      if (created.status !== 'created') {
-        throw new ExactReplacementConflict('replacement_collision');
-      }
-      const protectedCreated = setFactSensitivityFloorInTransaction(
-        created.fact.id,
-        inheritedSensitivity,
-      );
+      const causalReplacementInput = {
+        ...replacementInput,
+        pinned: input.pinned,
+        reviewState: input.reviewState,
+      };
       const invalidated = db.runSync(
         `UPDATE memory_facts
            SET invalid_at = ?, updated_at = ?
@@ -274,20 +266,36 @@ function replaceCurrentFactInternal(
         throw new ExactReplacementConflict('target_changed');
       }
       const superseded = rowToFact({ ...current, invalid_at: now, updated_at: now });
-      if (contributed) {
-        persistFactContributionSupersessionsInTransaction({
-          contributionId: contributed.contributionId,
-          successorFactId: protectedCreated.id,
-          superseded: [superseded],
-          projectionIntent: {
-            pinnedInputExplicit: input.pinned !== undefined,
-            reviewStateInputExplicit: input.reviewState !== undefined,
-          },
-        });
+      const created = contributionContext
+        ? recordFactWithContributionInTransaction(
+            causalReplacementInput,
+            replacementApplicability,
+            contributionContext,
+            {
+              materializationInput: replacementInput,
+              superseded: [superseded],
+              sensitivityFloor: inheritedSensitivity,
+              expectedStatus: 'created',
+            },
+          ).result
+        : recordFactWithApplicability(replacementInput, replacementApplicability);
+      if (created.status !== 'created') {
+        throw new ExactReplacementConflict('replacement_collision');
       }
+      const protectedCreated = contributionContext
+        ? created.fact
+        : setFactSensitivityFloorInTransaction(created.fact.id, inheritedSensitivity);
       return { fact: protectedCreated, status: 'created' as const, superseded: [superseded] };
     });
   } catch (error) {
+    if (error instanceof FactContributionMaterializationConflict) {
+      return {
+        fact: null,
+        status: 'conflict',
+        superseded: [],
+        conflict: 'replacement_collision',
+      };
+    }
     if (error instanceof ExactReplacementConflict) {
       return { fact: null, status: 'conflict', superseded: [], conflict: error.code };
     }

@@ -74,7 +74,7 @@ describe('contributed supersession projection intent', () => {
     expect(
       getMemoryDb().getFirstSync(
         `SELECT pinned_input_explicit, review_state_input_explicit
-           FROM memory_fact_contribution_supersessions
+           FROM memory_fact_contribution_supersession_snapshots
           WHERE successor_fact_id = ?`,
         replacement.fact.id,
       ),

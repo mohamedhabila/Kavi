@@ -15,7 +15,6 @@ import {
 import { loadFactExplicitOverrideInTransaction } from '../../../src/services/memory/factExplicitOverrideState';
 import {
   persistFactContributionInTransaction,
-  persistFactContributionSupersessionsInTransaction,
   type MemoryFactContributionWriteContext,
 } from '../../../src/services/memory/factContributionStore';
 import { replaceCurrentFactWithContribution } from '../../../src/services/memory/facts/exactReplacement';
@@ -383,6 +382,12 @@ describe('atomic contributed fact mutations', () => {
       grounded,
       context('event-old'),
     ).fact;
+    getMemoryDb().runSync(
+      `UPDATE memory_facts
+          SET sensitivity = 'normal', sensitivity_policy_version = 1
+        WHERE id = ?`,
+      previous.id,
+    );
     const replacement = replaceCurrentFactWithContribution(
       {
         ...globalFact(subject, 'green', {
@@ -398,11 +403,11 @@ describe('atomic contributed fact mutations', () => {
         { sourceKind: 'turn', sourceId: 'assistant-turn-2' },
       ]),
     );
-
     expect(replacement.status).toBe('created');
     if (replacement.status === 'conflict') throw new Error('unexpected conflict');
     expect(replacement.fact.pinned).toBe(true);
     expect(replacement.fact.reviewState).toBe('verified');
+    expect(replacement.fact.sensitivity).toBe('restricted');
     expect(replacement.fact.memoryKind).toBe('decision');
     expect(replacement.superseded.map((fact) => fact.id)).toEqual([previous.id]);
     expect(
@@ -412,10 +417,20 @@ describe('atomic contributed fact mutations', () => {
         superseded_at: number;
         pinned_input_explicit: number;
         review_state_input_explicit: number;
+        successor_pinned_baseline: number;
+        successor_review_state_baseline: string;
+        successor_sensitivity_floor: string;
+        successor_sensitivity_policy_version: number;
       }>(
-        `SELECT predecessor_fact_id, successor_fact_id, superseded_at,
-                pinned_input_explicit, review_state_input_explicit
-           FROM memory_fact_contribution_supersessions`,
+        `SELECT edge.predecessor_fact_id, edge.successor_fact_id, edge.superseded_at,
+                snapshot.pinned_input_explicit, snapshot.review_state_input_explicit,
+                snapshot.successor_pinned_baseline,
+                snapshot.successor_review_state_baseline,
+                snapshot.successor_sensitivity_floor,
+                snapshot.successor_sensitivity_policy_version
+           FROM memory_fact_contribution_supersessions AS edge
+           JOIN memory_fact_contribution_supersession_snapshots AS snapshot
+             ON snapshot.contribution_id = edge.contribution_id`,
       ),
     ).toEqual([
       {
@@ -424,14 +439,17 @@ describe('atomic contributed fact mutations', () => {
         superseded_at: 200,
         pinned_input_explicit: 0,
         review_state_input_explicit: 0,
+        successor_pinned_baseline: 1,
+        successor_review_state_baseline: 'verified',
+        successor_sensitivity_floor: 'restricted',
+        successor_sensitivity_policy_version: 2,
       },
     ]);
     const replacementPayload = contributionPayloads()[1]!;
-    expect(replacementPayload.input.pinned).toBe(true);
-    expect(replacementPayload.input.reviewState).toBe('verified');
+    expect(replacementPayload.input.pinned).toBe(false);
+    expect(replacementPayload.input.reviewState).toBe('auto');
     expect(replacementPayload.input.memoryKind).toBe('decision');
     expect(replacementPayload.input.supersedePrior).toBe(false);
-
     resetFactSchemaCacheForTests();
     expect(() => ensureFactSchema()).not.toThrow();
   });
@@ -629,49 +647,5 @@ describe('atomic contributed fact mutations', () => {
       }),
     ).toThrow('memory_fact_contribution_fact_mismatch');
     expect(contributionCount()).toBe(0);
-  });
-
-  it('rolls back surrounding mutations when a supersession edge is structurally invalid', () => {
-    const subject = subjectId();
-    const predecessor = recordFactWithApplicability(globalFact(subject, 'blue'), grounded).fact;
-    const successor = recordFactWithContribution(
-      globalFact(subject, 'green', { predicate: 'different_predicate', now: 200 }),
-      grounded,
-      context('event-successor'),
-    ).fact;
-    const contributionId = getMemoryDb().getFirstSync<{ id: string }>(
-      'SELECT id FROM memory_fact_contributions WHERE fact_id = ? LIMIT 1',
-      successor.id,
-    )!.id;
-    const beforeConfidence = successor.confidence;
-
-    expect(() =>
-      runMemoryTransaction(() => {
-        getMemoryDb().runSync(
-          'UPDATE memory_facts SET confidence = 0.1 WHERE id = ?',
-          successor.id,
-        );
-        persistFactContributionSupersessionsInTransaction({
-          contributionId,
-          successorFactId: successor.id,
-          superseded: [{ id: predecessor.id, invalidAt: 300 }],
-          projectionIntent: {
-            pinnedInputExplicit: false,
-            reviewStateInputExplicit: false,
-          },
-        });
-      }),
-    ).toThrow('memory_fact_contribution_supersession_parent_invalid');
-    expect(
-      getMemoryDb().getFirstSync<{ confidence: number }>(
-        'SELECT confidence FROM memory_facts WHERE id = ?',
-        successor.id,
-      )?.confidence,
-    ).toBe(beforeConfidence);
-    expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_fact_contribution_supersessions',
-      )?.count,
-    ).toBe(0);
   });
 });

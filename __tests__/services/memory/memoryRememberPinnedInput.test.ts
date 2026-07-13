@@ -43,7 +43,7 @@ function replacementPinnedIntent(successorFactId: string): number | null {
   return (
     getMemoryDb().getFirstSync<{ pinned_input_explicit: number }>(
       `SELECT pinned_input_explicit
-         FROM memory_fact_contribution_supersessions
+         FROM memory_fact_contribution_supersession_snapshots
         WHERE successor_fact_id = ?`,
       successorFactId,
     )?.pinned_input_explicit ?? null

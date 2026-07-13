@@ -5,9 +5,10 @@ import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
 import {
   persistFactContributionInTransaction,
-  persistFactContributionSupersessionsInTransaction,
+  type MemoryFactContributionWriteReceipt,
   type MemoryFactContributionWriteContext,
 } from '../factContributionStore';
+import { persistFactContributionSupersessionsInTransaction } from '../factContributionSupersessionStore';
 import { loadVerifiedFactContributionReplay } from '../factContributionReplay';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
@@ -15,7 +16,6 @@ import { overlayFactExplicitProjectionInTransaction } from '../factExplicitOverr
 import {
   classifyMemoryFactSensitivity,
   MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
-  maxMemoryFactSensitivity,
 } from '../memorySensitivityPolicy';
 import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { buildFactContentHash, hasExactFactContentIdentity } from './contentIdentity';
@@ -39,9 +39,13 @@ import {
   closedMemoryFactReviewState,
   closedMemoryFactSensitivity,
   closedMemorySourceAuthority,
-  type MemoryFactSensitivity,
   type SealedFactApplicabilityProvenance,
 } from './applicabilityProvenance';
+import {
+  FactContributionMaterializationConflict,
+  setFactSensitivityFloorInTransaction,
+  type RecordFactWithContributionOptions,
+} from './factContributionMaterialization';
 import {
   rowToFact,
   type FactRow,
@@ -173,20 +177,37 @@ export function recordFactWithContribution(
   );
 }
 
-/** Keep immutable causal input separate from optional aggregate-only materialization hints. */
+/** Persist one causal event after applying its complete transaction-owned materialization plan. */
 export function recordFactWithContributionInTransaction(
   input: RecordFactInput,
   applicability: SealedFactApplicabilityProvenance,
   context: MemoryFactContributionWriteContext,
-  materializationInput: RecordFactInput = input,
-): { result: RecordFactResult; contributionId: string } {
+  options: RecordFactWithContributionOptions = {},
+): {
+  result: RecordFactResult;
+  contributionId: string;
+  contributionStatus: MemoryFactContributionWriteReceipt['status'];
+} {
   const payload = normalizeRecordFactMutation(input, applicability);
   const replay = loadVerifiedFactContributionReplay({ context, payload });
+  const materializationInput = options.materializationInput ?? input;
   const materializationPayload =
     materializationInput === input
       ? payload
       : normalizeRecordFactMutation(materializationInput, applicability);
-  const result = recordNormalizedFactInTransaction(materializationPayload, true, replay?.factId);
+  const recorded = recordNormalizedFactInTransaction(materializationPayload, true, replay?.factId);
+  if (options.expectedStatus !== undefined && recorded.status !== options.expectedStatus) {
+    throw new FactContributionMaterializationConflict();
+  }
+  const fact =
+    options.sensitivityFloor === undefined
+      ? recorded.fact
+      : setFactSensitivityFloorInTransaction(recorded.fact.id, options.sensitivityFloor);
+  const result: RecordFactResult = {
+    ...recorded,
+    fact,
+    superseded: options.superseded ? [...options.superseded] : recorded.superseded,
+  };
   const contribution = persistFactContributionInTransaction({
     fact: result.fact,
     payload,
@@ -194,14 +215,17 @@ export function recordFactWithContributionInTransaction(
   });
   persistFactContributionSupersessionsInTransaction({
     contributionId: contribution.id,
-    successorFactId: result.fact.id,
+    contributionStatus: contribution.status,
+    successor: result.fact,
     superseded: result.superseded,
-    projectionIntent: {
-      pinnedInputExplicit: input.pinned !== undefined,
-      reviewStateInputExplicit: input.reviewState !== undefined,
-    },
+    pinnedInputExplicit: input.pinned !== undefined,
+    reviewStateInputExplicit: input.reviewState !== undefined,
   });
-  return { result, contributionId: contribution.id };
+  return {
+    result,
+    contributionId: contribution.id,
+    contributionStatus: contribution.status,
+  };
 }
 
 function recordFactInTransaction(
@@ -616,22 +640,6 @@ function recordNormalizedFactInTransaction(
   replaceFactRetrievalTerms(fact);
   runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(fact.originConversationId));
   return { fact, status: 'created', superseded };
-}
-
-/** Apply a code-owned monotonic floor while an exact replacement transaction is active. */
-export function setFactSensitivityFloorInTransaction(
-  factId: string,
-  minimum: MemoryFactSensitivity,
-): MemoryFact {
-  const db = getSchemaReadyMemoryDb();
-  const row = db.getFirstSync<FactRow>('SELECT * FROM memory_facts WHERE id = ? LIMIT 1', factId);
-  if (!row) throw new Error('memory_fact_sensitivity_target_missing');
-  const existing = closedMemoryFactSensitivity(row.sensitivity) ?? 'restricted';
-  const sensitivity = maxMemoryFactSensitivity(existing, minimum);
-  if (sensitivity !== existing) {
-    db.runSync('UPDATE memory_facts SET sensitivity = ? WHERE id = ?', sensitivity, factId);
-  }
-  return rowToFact({ ...row, sensitivity });
 }
 
 export function markFactsRecalled(ids: string[], now = Date.now()): number {

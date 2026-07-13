@@ -259,9 +259,9 @@ describe('fact contribution admission integrity', () => {
     );
     const db = getMemoryDb();
     db.execSync(`
-      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_immutable;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_snapshot_immutable;
       PRAGMA ignore_check_constraints = ON;
-      UPDATE memory_fact_contribution_supersessions SET pinned_input_explicit = 2;
+      UPDATE memory_fact_contribution_supersession_snapshots SET pinned_input_explicit = 2;
       PRAGMA ignore_check_constraints = OFF;
     `);
 

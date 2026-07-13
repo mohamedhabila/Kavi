@@ -12,8 +12,8 @@ import {
   type MemoryFactContributionPayloadV1,
   type MemoryFactContributionProducerIdentity,
 } from '../../../src/services/memory/factContributionCodec';
-import { persistFactContributionSupersessionsInTransaction } from '../../../src/services/memory/factContributionStore';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
+import type { FactRow, MemoryFact } from '../../../src/services/memory/facts/types';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import {
   clearStructuredMemory,
@@ -136,38 +136,31 @@ function insertContribution(input: {
   return { db, encoded, id, inserted, scope };
 }
 
+function insertSupersessionSnapshot(contributionId: string, successor: MemoryFact): void {
+  const db = getMemoryDb();
+  const row = db.getFirstSync<FactRow>(
+    'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
+    successor.id,
+  );
+  if (!row) throw new Error('test_successor_missing');
+  db.runSync(
+    `INSERT INTO memory_fact_contribution_supersession_snapshots(
+       contribution_id, successor_fact_id, superseded_at, snapshot_version,
+       pinned_input_explicit, review_state_input_explicit, successor_pinned_baseline,
+       successor_review_state_baseline, successor_sensitivity_floor,
+       successor_sensitivity_policy_version
+     ) VALUES (?, ?, ?, 1, 0, 0, ?, ?, ?, ?)`,
+    contributionId,
+    successor.id,
+    successor.createdAt,
+    row.pinned,
+    row.review_state,
+    row.sensitivity,
+    row.sensitivity_policy_version,
+  );
+}
+
 describe('fact contribution schema', () => {
-  it('adds projection-intent columns to an existing supersession ledger', () => {
-    const db = getMemoryDb();
-    db.execSync(`
-      CREATE TABLE memory_fact_contribution_supersessions (
-        contribution_id TEXT NOT NULL,
-        predecessor_fact_id TEXT NOT NULL,
-        successor_fact_id TEXT NOT NULL,
-        superseded_at INTEGER NOT NULL,
-        PRIMARY KEY(contribution_id, predecessor_fact_id, successor_fact_id)
-      );
-    `);
-
-    ensureFactSchema();
-    resetFactSchemaCacheForTests();
-    ensureFactSchema();
-
-    expect(
-      db
-        .getAllSync<{
-          name: string;
-          notnull: number;
-          dflt_value: string | null;
-        }>('PRAGMA table_info(memory_fact_contribution_supersessions)')
-        .filter((column) => column.name.endsWith('_input_explicit'))
-        .map(({ name, notnull, dflt_value }) => ({ name, notnull, dflt_value })),
-    ).toEqual([
-      { name: 'pinned_input_explicit', notnull: 1, dflt_value: '0' },
-      { name: 'review_state_input_explicit', notnull: 1, dflt_value: '0' },
-    ]);
-  });
-
   it('persists one immutable idempotent contribution with multiple exact source aliases', () => {
     ensureFactSchema();
     const fact = createFact('blue');
@@ -298,57 +291,6 @@ describe('fact contribution schema', () => {
     ).toThrow('memory_fact_contribution_source_parent_invalid');
   });
 
-  it('persists explicit supersession projection intent and verifies exact replay', () => {
-    ensureFactSchema();
-    const predecessor = createFact('blue');
-    const successor = createFact('green');
-    const contribution = insertContribution({
-      factId: successor.id,
-      subjectId: successor.subjectId,
-      objectText: successor.objectText,
-      producer: { producerId: 'memory_tool', producerEventId: 'projection-intent' },
-    });
-    contribution.db.runSync(
-      'UPDATE memory_facts SET invalid_at = 200, updated_at = 200 WHERE id = ?',
-      predecessor.id,
-    );
-    const edge = {
-      contributionId: contribution.id,
-      successorFactId: successor.id,
-      superseded: [{ id: predecessor.id, invalidAt: 200 }],
-      projectionIntent: { pinnedInputExplicit: true, reviewStateInputExplicit: true },
-    } as const;
-
-    persistFactContributionSupersessionsInTransaction(edge);
-    expect(() => persistFactContributionSupersessionsInTransaction(edge)).not.toThrow();
-    expect(
-      contribution.db.getFirstSync(
-        `SELECT pinned_input_explicit, review_state_input_explicit
-           FROM memory_fact_contribution_supersessions
-          WHERE contribution_id = ?`,
-        contribution.id,
-      ),
-    ).toEqual({ pinned_input_explicit: 1, review_state_input_explicit: 1 });
-    expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        ...edge,
-        projectionIntent: { pinnedInputExplicit: false, reviewStateInputExplicit: true },
-      }),
-    ).toThrow('memory_fact_contribution_supersession_replay_mismatch');
-    expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        ...edge,
-        projectionIntent: { pinnedInputExplicit: true } as never,
-      }),
-    ).toThrow('memory_fact_contribution_supersession_projection_intent_invalid');
-    expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        ...edge,
-        projectionIntent: undefined as never,
-      }),
-    ).toThrow('memory_fact_contribution_supersession_projection_intent_invalid');
-  });
-
   it('owns supersession edges and deletes all ledger dependents with their fact', () => {
     ensureFactSchema();
     const predecessor = createFact('blue');
@@ -359,6 +301,7 @@ describe('fact contribution schema', () => {
       objectText: successor.objectText,
       producer: { producerId: 'memory_tool', producerEventId: 'tool-call-1' },
     });
+    insertSupersessionSnapshot(contribution.id, successor);
     const crossOwner = createFact('red');
     const crossPredicate = createFact('yellow');
     const crossScope = createFact('purple');
@@ -398,24 +341,6 @@ describe('fact contribution schema', () => {
       differentMemoryKind.id,
       predecessor.id,
     );
-    for (const [pinnedInputExplicit, reviewStateInputExplicit] of [
-      [2, 0],
-      [0, -1],
-    ]) {
-      expect(() =>
-        contribution.db.runSync(
-          `INSERT INTO memory_fact_contribution_supersessions(
-             contribution_id, predecessor_fact_id, successor_fact_id, superseded_at,
-             pinned_input_explicit, review_state_input_explicit
-           ) VALUES (?, ?, ?, 100, ?, ?)`,
-          contribution.id,
-          predecessor.id,
-          successor.id,
-          pinnedInputExplicit,
-          reviewStateInputExplicit,
-        ),
-      ).toThrow();
-    }
     contribution.db.runSync(
       `INSERT INTO memory_fact_contribution_supersessions(
          contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
@@ -443,25 +368,6 @@ describe('fact contribution schema', () => {
       predecessor.id,
       successor.id,
     );
-    expect(
-      contribution.db.getFirstSync(
-        `SELECT pinned_input_explicit, review_state_input_explicit
-           FROM memory_fact_contribution_supersessions
-          WHERE contribution_id = ? AND predecessor_fact_id = ?`,
-        contribution.id,
-        predecessor.id,
-      ),
-    ).toEqual({ pinned_input_explicit: 0, review_state_input_explicit: 0 });
-    expect(() =>
-      contribution.db.runSync(
-        `UPDATE memory_fact_contribution_supersessions
-            SET pinned_input_explicit = 1
-          WHERE contribution_id = ? AND predecessor_fact_id = ?`,
-        contribution.id,
-        predecessor.id,
-      ),
-    ).toThrow('memory_fact_contribution_supersession_immutable');
-
     expect(() =>
       contribution.db.runSync(
         'DELETE FROM memory_fact_contributions WHERE id = ?',
@@ -501,6 +407,11 @@ describe('fact contribution schema', () => {
         'SELECT COUNT(*) AS count FROM memory_fact_contribution_supersessions',
       )?.count,
     ).toBe(0);
+    expect(
+      contribution.db.getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_contribution_supersession_snapshots',
+      )?.count,
+    ).toBe(0);
   });
 
   it('clears the full contribution ledger while preserving the vault identity', () => {
@@ -529,6 +440,7 @@ describe('fact contribution schema', () => {
 
     for (const table of [
       'memory_fact_contribution_supersessions',
+      'memory_fact_contribution_supersession_snapshots',
       'memory_fact_contribution_sources',
       'memory_fact_contributions',
     ]) {
@@ -564,6 +476,7 @@ describe('fact contribution schema', () => {
       objectText: successor.objectText,
       producer: { producerId: 'memory_tool', producerEventId: 'predecessor-delete' },
     });
+    insertSupersessionSnapshot(contribution.id, successor);
     contribution.db.runSync(
       'UPDATE memory_facts SET invalid_at = 100, updated_at = 100 WHERE id = ?',
       predecessor.id,
@@ -601,6 +514,7 @@ describe('fact contribution schema', () => {
       objectText: successor.objectText,
       producer: { producerId: 'memory_tool', producerEventId: 'pair-delete' },
     });
+    insertSupersessionSnapshot(contribution.id, successor);
     contribution.db.runSync(
       'UPDATE memory_facts SET invalid_at = 100, updated_at = 100 WHERE id = ?',
       predecessor.id,

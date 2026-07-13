@@ -7,6 +7,7 @@ export const CLEARED_STRUCTURED_MEMORY_TABLES = [
   'memory_fact_evidence',
   'memory_fact_contributions',
   'memory_fact_contribution_supersessions',
+  'memory_fact_contribution_supersession_snapshots',
   'memory_fact_contribution_sources',
   'memory_fact_legacy_quarantine',
   'memory_fact_terms',
