@@ -1,5 +1,6 @@
 import type { MemoryDatabase } from '../access/schemaGuard';
 import { dropFactContributionFactReferenceTriggers } from '../factContributionSchema';
+import { dropFactExplicitOverrideFactReferenceTriggers } from '../factExplicitOverrideSchema';
 
 /**
  * Early versions made content_hash globally unique. That prevents a valid
@@ -114,7 +115,12 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'idx_facts_grounded_source',
     'idx_facts_local_similarity_current',
   ]);
-  const canonicalFactTriggers = new Set(['trg_memory_fact_delete_contributions']);
+  const canonicalFactTriggers = new Set([
+    'trg_memory_fact_delete_contributions',
+    'trg_memory_fact_delete_explicit_override',
+    'trg_memory_fact_explicit_override_parent_identity_immutable',
+    'trg_memory_fact_retire_explicit_override',
+  ]);
   const schemaObjects = db.getAllSync<{ type: string; name: string; sql: string }>(
     `SELECT type, name, sql
        FROM sqlite_master
@@ -142,6 +148,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
   db.execSync('BEGIN IMMEDIATE TRANSACTION');
   try {
     dropFactContributionFactReferenceTriggers(db);
+    dropFactExplicitOverrideFactReferenceTriggers(db);
     db.execSync(`
       DROP TABLE IF EXISTS memory_facts_without_hash_constraint;
       CREATE TABLE memory_facts_without_hash_constraint (

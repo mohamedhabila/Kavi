@@ -30,6 +30,7 @@ import {
   admitLegacyFactContributions,
   isFactContributionAdmissionIntegrityFailure,
 } from './factContributionAdmission';
+import { ensureFactExplicitOverrideSchema } from './factExplicitOverrideSchema';
 import { ensureCanonicalFactTable } from './schema/canonicalFactTable';
 import { ensureFactContentIdentityV3 } from './schema/factContentIdentityV3';
 import { ensureFactSensitivityPolicyColumn } from './schema/factSensitivityPolicyColumn';
@@ -314,6 +315,7 @@ export function ensureFactSchema(): void {
   ensureFactContributionSchema(db);
   ensureFactContributionAdmissionSchema(db);
   admitLegacyFactContributions(db);
+  ensureFactExplicitOverrideSchema(db);
   ensureFactTermStats(db);
   db.execSync(`
     DROP INDEX IF EXISTS idx_fact_terms_unit_kind;
