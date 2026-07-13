@@ -3,6 +3,7 @@ import {
   quarantineConflictingSourceDuplicates,
 } from './ingestionQueueConflictQuarantine';
 import { getMemoryDb } from './database';
+import { ensureIngestionJobSourceSchema } from './ingestionJobSourceSchema';
 import { failActiveJobsWithInvalidSourceSnapshots } from './ingestionSourceSnapshotStore';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
@@ -688,5 +689,6 @@ export function ensureIngestionQueueSchema(db: MemoryDb): void {
   ensureIngestionSourceSnapshotGuards(db);
   failUnsealedActiveJobs(db);
   failActiveJobsWithInvalidSourceSnapshots(db, Date.now());
+  ensureIngestionJobSourceSchema(db);
   ensureSourceIdentity(db);
 }

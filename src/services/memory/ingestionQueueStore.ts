@@ -4,10 +4,11 @@
 import { INGESTION_BATCH_LIMIT } from './onDeviceGuards';
 import { runMemoryTransaction } from './access/transaction';
 import { ensureFactSchema, newId } from './schema';
-import { isMemoryIngestionSourceWithdrawn } from './withdrawalFence';
+import { hasAnyRetiredExactMemorySource } from './exactMemorySourceIdentity';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { getMemoryDb } from './database';
+import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import {
   hasSealedIngestionJobIdentity,
   ingestionIdentityFailureCode,
@@ -32,6 +33,11 @@ import {
   requireMatchingIngestionSourceSnapshot,
   validateIngestionSourceSnapshotForIdentity,
 } from './ingestionSourceSnapshotStore';
+import {
+  buildIngestionJobSourcesFromSnapshot,
+  insertIngestionJobSources,
+  requireMatchingIngestionJobSources,
+} from './ingestionJobSources';
 
 export { getNextPendingIngestionAttemptAt } from './ingestionQueueDependencies';
 export { failIngestionJobForInvalidIdentity } from './ingestionQueueIdentityFailure';
@@ -224,21 +230,23 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     reason: input.reason,
     providerEnrichment: input.providerEnrichment,
   };
-  validateIngestionSourceSnapshotForIdentity(input.sourceSnapshot, {
+  const sourceSnapshot = validateIngestionSourceSnapshotForIdentity(input.sourceSnapshot, {
     priorUserMessageId,
     sourceStartMessageId,
     sourceEndMessageId,
   });
-  if (
-    isMemoryIngestionSourceWithdrawn({
+  const exactSources = buildIngestionJobSourcesFromSnapshot(
+    {
+      memoryOwnerId: getLocalMemoryVaultOwnerId(db),
       memoryConversationId,
       sourceThreadId: threadId,
       taskId,
-      sourceStartMessageId,
       sourceEndMessageId,
       sourceRunId,
-    })
-  ) {
+    },
+    sourceSnapshot,
+  );
+  if (hasAnyRetiredExactMemorySource(db, exactSources)) {
     return null;
   }
 
@@ -257,6 +265,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     const existing = requireMatchingIngestionSourceIdentity(row, sourceIdentity);
     try {
       requireMatchingIngestionSourceSnapshot(db, row, input.sourceSnapshot, now);
+      requireMatchingIngestionJobSources(db, row.id, exactSources);
       return existing;
     } catch (error) {
       if (
@@ -272,16 +281,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   };
 
   const result = runMemoryTransaction(() => {
-    if (
-      isMemoryIngestionSourceWithdrawn({
-        memoryConversationId,
-        sourceThreadId: threadId,
-        taskId,
-        sourceStartMessageId,
-        sourceEndMessageId,
-        sourceRunId,
-      })
-    ) {
+    if (hasAnyRetiredExactMemorySource(db, exactSources)) {
       return null;
     }
     const duplicate = db.getFirstSync<IngestionJobRow>(
@@ -339,6 +339,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
       return matchDuplicate(winner);
     }
     insertIngestionSourceSnapshot(db, id, input.sourceSnapshot, now);
+    insertIngestionJobSources(db, id, exactSources);
     return rowToIngestionJob({
       id,
       thread_id: threadId,

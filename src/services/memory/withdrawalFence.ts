@@ -1,10 +1,15 @@
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './database';
+import {
+  hasAnyRetiredExactMemorySource,
+  requireExactMemorySourceKind,
+  type ExactMemorySourceKind,
+} from './exactMemorySourceIdentity';
 import { requireExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { requireExactMemoryScopeId } from './memoryScopeIdentity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 
-export type MemoryWithdrawalSourceKind = 'message' | 'turn' | 'run';
+export type MemoryWithdrawalSourceKind = ExactMemorySourceKind;
 
 export interface MemoryWithdrawalSourceIdentity {
   memoryConversationId: string;
@@ -24,13 +29,6 @@ export interface MemoryIngestionSourceIdentity extends MemoryPersistenceSourceSc
   sourceStartMessageId?: string | null;
   sourceEndMessageId: string;
   sourceRunId?: string | null;
-}
-
-function requireSourceKind(value: unknown): MemoryWithdrawalSourceKind {
-  if (value !== 'message' && value !== 'turn' && value !== 'run') {
-    throw new Error('memory_withdrawal_source_kind_invalid');
-  }
-  return value;
 }
 
 function requireSourceScope(input: MemoryPersistenceSourceScope): {
@@ -57,32 +55,26 @@ function requireSourceScope(input: MemoryPersistenceSourceScope): {
 /** Exact scope + source-kind replay fence. It never matches memory value text. */
 export function isMemorySourceWithdrawn(input: MemoryWithdrawalSourceIdentity): boolean {
   const scope = requireSourceScope(input);
-  const sourceKind = requireSourceKind(input.sourceKind);
+  const sourceKind = requireExactMemorySourceKind(
+    input.sourceKind,
+    'memory_withdrawal_source_kind_invalid',
+  );
   const sourceId = requireExactMemoryProvenanceId(
     input.sourceId,
     'memory_withdrawal_source_id_invalid',
   );
   ensureFactSchema();
   const db = getMemoryDb();
-  return Boolean(
-    db.getFirstSync<{ present: number }>(
-      `SELECT 1 AS present
-         FROM memory_retired_sources
-        WHERE memory_owner_id = ?
-          AND memory_conversation_id = ?
-          AND source_thread_id = ?
-          AND task_id = ?
-          AND source_kind = ?
-          AND source_id = ?
-        LIMIT 1`,
-      getLocalMemoryVaultOwnerId(db),
-      scope.memoryConversationId,
-      scope.sourceThreadId,
-      scope.taskId,
+  return hasAnyRetiredExactMemorySource(db, [
+    {
+      memoryOwnerId: getLocalMemoryVaultOwnerId(db),
+      memoryConversationId: scope.memoryConversationId,
+      sourceThreadId: scope.sourceThreadId,
+      taskId: scope.taskId === '' ? null : scope.taskId,
       sourceKind,
       sourceId,
-    ),
-  );
+    },
+  ]);
 }
 
 export function assertMemoryPersistenceSourcesAreWritable(

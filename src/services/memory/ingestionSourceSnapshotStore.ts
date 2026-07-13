@@ -121,7 +121,7 @@ export function validateIngestionSourceSnapshotForIdentity(
     sourceStartMessageId: string | null;
     sourceEndMessageId: string;
   },
-): void {
+): IngestionSourceSnapshotV1 {
   const decoded = decodeIngestionSourceSnapshot(encoded);
   if (
     decoded.priorUserMessageId !== identity.priorUserMessageId ||
@@ -130,6 +130,7 @@ export function validateIngestionSourceSnapshotForIdentity(
   ) {
     throw new Error('memory_ingestion_source_snapshot_identity_conflict');
   }
+  return decoded;
 }
 
 export function insertIngestionSourceSnapshot(
