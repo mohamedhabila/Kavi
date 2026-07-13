@@ -267,6 +267,53 @@ describe('worker outcome reconciliation', () => {
     expect(listFacts()).toEqual([]);
   });
 
+  it('uses the exact terminal assistant clock for replay-stable persistence', async () => {
+    const recordEvidence = jest.fn(() => ({
+      factIds: ['fact-source-clock'],
+      consumedEvidence: [],
+    }));
+
+    const state = await reconcileSubAgentOutcomeMemory({
+      agent: makeAgent(),
+      config: makeConfig(),
+      messages: makeObservedMessages(),
+      now: NOW,
+      recordEvidence,
+    });
+
+    expect(state.code).toBe('recorded_verified');
+    expect(recordEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-1',
+        sourceTurnId: 'worker-turn-1',
+        now: 8_000,
+      }),
+    );
+  });
+
+  it('blocks source context without an exact terminal assistant turn', async () => {
+    const recordEvidence = jest.fn();
+    const state = await reconcileSubAgentOutcomeMemory({
+      agent: makeAgent(),
+      config: makeConfig(),
+      messages: [
+        {
+          id: 'worker-user-only',
+          role: 'user',
+          content: 'No assistant turn was committed.',
+          timestamp: 8_000,
+        },
+      ],
+      now: NOW,
+      recordEvidence,
+    });
+
+    expect(state).toEqual(
+      expect.objectContaining({ status: 'blocked', code: 'source_context_missing' }),
+    );
+    expect(recordEvidence).not.toHaveBeenCalled();
+  });
+
   it('honors memory opt-out without invoking the persistence boundary', async () => {
     useSettingsStore.setState({ disableLongTermMemory: true } as never);
     const recordEvidence = jest.fn();

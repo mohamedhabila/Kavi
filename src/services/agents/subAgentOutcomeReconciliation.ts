@@ -148,12 +148,20 @@ function hasObservedSuccessfulToolResult(messages: ReadonlyArray<Message>): bool
   );
 }
 
-function sourceTurnId(messages: ReadonlyArray<Message>): string | undefined {
+function sourceTurnIdentity(
+  messages: ReadonlyArray<Message>,
+): { id: string; timestamp: number } | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const id = messages[index]?.id;
-    if (isExactMemoryProvenanceId(id)) return id;
+    const message = messages[index];
+    if (
+      message?.role === 'assistant' &&
+      isExactMemoryProvenanceId(message.id) &&
+      validTimestamp(message.timestamp)
+    ) {
+      return { id: message.id, timestamp: message.timestamp };
+    }
   }
-  return undefined;
+  return null;
 }
 
 function artifactPaths(agent: SubAgentSnapshot): string[] {
@@ -262,7 +270,10 @@ export async function reconcileSubAgentOutcomeMemory(input: {
   }
 
   const observedToolResult = hasObservedSuccessfulToolResult(input.messages);
-  const turnId = sourceTurnId(input.messages);
+  const sourceTurn = sourceTurnIdentity(input.messages);
+  if (!sourceTurn) {
+    return terminalState('blocked', 'source_context_missing', attemptCount, now);
+  }
   const verified =
     input.agent.status === 'completed' &&
     input.agent.completionState === 'verified_success' &&
@@ -277,12 +288,12 @@ export async function reconcileSubAgentOutcomeMemory(input: {
       }),
       conversationId: scope.memoryConversationId,
       threadId: scope.sourceThreadId,
-      ...(scope.taskId ? { taskId: scope.taskId } : {}),
+      taskId: scope.taskId,
       sourceRunId: input.agent.sessionId,
       sourceActorId: input.agent.sessionId,
       ...(input.agent.agentRunId ? { parentRunId: input.agent.agentRunId } : {}),
-      ...(turnId ? { sourceTurnId: turnId } : {}),
-      now,
+      sourceTurnId: sourceTurn.id,
+      now: sourceTurn.timestamp,
     });
     if (result.factIds.length === 0) return retryState(attemptCount, now);
     return terminalState(
