@@ -269,6 +269,7 @@ export type ReplaceCurrentFactConflict =
   | 'target_missing'
   | 'target_changed'
   | 'target_scope_mismatch'
+  | 'stale_source_order'
   | 'replacement_collision';
 
 export type ReplaceCurrentFactResult =

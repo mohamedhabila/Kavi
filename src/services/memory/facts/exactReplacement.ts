@@ -221,6 +221,9 @@ function replaceCurrentFactInternal(
       ) {
         throw new ExactReplacementConflict('target_scope_mismatch');
       }
+      if (current.valid_at > validAt) {
+        throw new ExactReplacementConflict('stale_source_order');
+      }
 
       if (current.object_text.normalize('NFKC').trim() === objectText.normalize('NFKC')) {
         if (sealedApplicability) {

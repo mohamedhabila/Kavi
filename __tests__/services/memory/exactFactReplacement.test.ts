@@ -114,6 +114,26 @@ describe('replaceCurrentFact', () => {
     expect(listFacts({ subjectId: 'entity-user', predicate: 'lives_in' })).toEqual([]);
   });
 
+  it('rejects a replacement whose source validity precedes the current fact', () => {
+    const current = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'lives_in',
+      objectText: 'Utrecht',
+      scope: 'global',
+      now: 200,
+    });
+
+    expect(replacement(current.fact.id, 'Amsterdam', 100)).toEqual({
+      fact: null,
+      status: 'conflict',
+      superseded: [],
+      conflict: 'stale_source_order',
+    });
+    expect(listFacts({ subjectId: 'entity-user', predicate: 'lives_in' })).toEqual([
+      expect.objectContaining({ id: current.fact.id, objectText: 'Utrecht', invalidAt: null }),
+    ]);
+  });
+
   it('rejects scope mismatch without invalidating the target', () => {
     const old = recordFact({
       subjectId: 'entity-user',
