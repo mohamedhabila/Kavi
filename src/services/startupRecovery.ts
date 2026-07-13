@@ -4,6 +4,7 @@ import {
 } from '../store/persistHydration';
 import { flushChatStorePersistenceNow } from '../store/chatStorePersistence';
 import { useChatStore } from '../store/useChatStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { recoverInterruptedForegroundModelExecutions } from './executionJournal/foregroundModelExecutionRecovery';
@@ -19,18 +20,28 @@ import { listActiveToolEffectRestartInputs } from '../store/agentRuns/toolCalls'
 import type { Conversation } from '../types/conversation';
 import { useSchedulerStore } from './scheduler/store';
 import { releaseStaleScheduledProjectionOwners } from './scheduler/scheduledProjectionRecovery';
+import { settleOpenMessageMemoryPublications } from './memory/messageMemoryPublicationSettlement';
+
+const REQUIRED_HYDRATION_TIMEOUT_MS = 5_000;
 
 async function waitForChatHydration(): Promise<void> {
   await waitForRequiredStoreHydration(
     useChatStore as typeof useChatStore & PersistHydratableStore,
-    { name: 'chat state', timeoutMs: 5_000 },
+    { name: 'chat state', timeoutMs: REQUIRED_HYDRATION_TIMEOUT_MS },
+  );
+}
+
+async function waitForSettingsHydration(): Promise<void> {
+  await waitForRequiredStoreHydration(
+    useSettingsStore as typeof useSettingsStore & PersistHydratableStore,
+    { name: 'settings state', timeoutMs: REQUIRED_HYDRATION_TIMEOUT_MS },
   );
 }
 
 async function waitForSchedulerHydration(): Promise<void> {
   await waitForRequiredStoreHydration(
     useSchedulerStore as typeof useSchedulerStore & PersistHydratableStore,
-    { name: 'scheduler state', timeoutMs: 5_000 },
+    { name: 'scheduler state', timeoutMs: REQUIRED_HYDRATION_TIMEOUT_MS },
   );
 }
 
@@ -88,7 +99,11 @@ async function recoverPersistedAgentStateForSource(
   source: DurableRecoveryLifecycleSource,
   initializeSubAgents: boolean,
 ): Promise<void> {
-  await Promise.all([waitForChatHydration(), waitForSchedulerHydration()]);
+  await Promise.all([
+    waitForSettingsHydration(),
+    waitForChatHydration(),
+    waitForSchedulerHydration(),
+  ]);
   await releaseStaleScheduledProjectionOwners();
 
   if (initializeSubAgents) {
@@ -130,6 +145,7 @@ async function recoverPersistedAgentStateForSource(
   await repairTerminalAgentRunsMissingFinalResponses({
     activeSubAgents,
   });
+  await settleOpenMessageMemoryPublications();
   await flushChatStorePersistenceNow();
   maintainExternalExecutionRetention();
 }
