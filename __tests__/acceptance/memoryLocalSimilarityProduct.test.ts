@@ -23,6 +23,14 @@ import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import type { Message } from '../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+const REQUIRE_WALL_CLOCK_LATENCY = process.env.KAVI_LOCAL_SIMILARITY_WALL_CLOCK_GATE === '1';
+const SHARED_HOST_RETRIEVAL_CPU_P95_BUDGET_MS = 200;
+const SHARED_HOST_VECTOR_CPU_P95_BUDGET_MS = LOCAL_SIMILARITY_VECTOR_P95_BUDGET_MS;
+
+interface LatencySample {
+  cpuMs: number;
+  wallMs: number;
+}
 
 beforeEach(() => {
   closeMemoryDb();
@@ -38,6 +46,38 @@ afterEach(() => {
 function p95(values: ReadonlyArray<number>): number {
   const sorted = [...values].sort((left, right) => left - right);
   return sorted[Math.ceil(sorted.length * 0.95) - 1]!;
+}
+
+function finishLatencySample(startedAt: number, startedCpu: NodeJS.CpuUsage): LatencySample {
+  const cpu = process.cpuUsage(startedCpu);
+  return {
+    cpuMs: (cpu.user + cpu.system) / 1_000,
+    wallMs: performance.now() - startedAt,
+  };
+}
+
+function assertLatencyBudget(
+  label: string,
+  samples: ReadonlyArray<LatencySample>,
+  cpuBudgetMs: number,
+  wallBudgetMs: number,
+): void {
+  const measuredCpuP95 = p95(samples.map((sample) => sample.cpuMs));
+  const measuredWallP95 = p95(samples.map((sample) => sample.wallMs));
+  const failures = [
+    measuredCpuP95 > cpuBudgetMs
+      ? `process cpu p95 ${measuredCpuP95.toFixed(3)} ms exceeded ${cpuBudgetMs} ms`
+      : null,
+    REQUIRE_WALL_CLOCK_LATENCY && measuredWallP95 > wallBudgetMs
+      ? `wall p95 ${measuredWallP95.toFixed(3)} ms exceeded ${wallBudgetMs} ms`
+      : null,
+  ].filter(Boolean);
+  if (failures.length > 0) {
+    throw new Error(
+      `${label} latency gate failed: ${failures.join(', ')} ` +
+        `(measured wall p95 ${measuredWallP95.toFixed(3)} ms)`,
+    );
+  }
 }
 
 function deterministicDenseText(): string {
@@ -145,9 +185,10 @@ describe('production local-similarity retrieval', () => {
         now: 2_100 + index,
       });
     }
-    const durations: number[] = [];
+    const durations: LatencySample[] = [];
     for (let index = 0; index < 20; index += 1) {
       const startedAt = performance.now();
+      const startedCpu = process.cpuUsage();
       await buildUnifiedMemoryAccessContext({
         messages,
         memoryConversationId,
@@ -157,9 +198,14 @@ describe('production local-similarity retrieval', () => {
         mode: 'chat',
         now: 2_200 + index,
       });
-      durations.push(performance.now() - startedAt);
+      durations.push(finishLatencySample(startedAt, startedCpu));
     }
-    expect(p95(durations)).toBeLessThanOrEqual(LOCAL_SIMILARITY_PRODUCT_RETRIEVAL_P95_BUDGET_MS);
+    assertLatencyBudget(
+      'local-similarity retrieval',
+      durations,
+      SHARED_HOST_RETRIEVAL_CPU_P95_BUDGET_MS,
+      LOCAL_SIMILARITY_PRODUCT_RETRIEVAL_P95_BUDGET_MS,
+    );
 
     const storage = getMemoryDb().getFirstSync<{
       vector_count: number;
@@ -179,19 +225,25 @@ describe('production local-similarity retrieval', () => {
     );
   });
 
-  it('keeps bounded vector creation within its p95 and storage budgets', () => {
+  it('keeps bounded vector creation deterministic and within storage budgets', () => {
     const input = deterministicDenseText();
     for (let index = 0; index < 5; index += 1) createCurrentLocalSimilarityVector(input);
-    const durations: number[] = [];
+    const durations: LatencySample[] = [];
     for (let index = 0; index < 60; index += 1) {
       const startedAt = performance.now();
+      const startedCpu = process.cpuUsage();
       createCurrentLocalSimilarityVector(input);
-      durations.push(performance.now() - startedAt);
+      durations.push(finishLatencySample(startedAt, startedCpu));
     }
     const vector = createCurrentLocalSimilarityVector(input);
     const serialized = serializeCurrentLocalSimilarityVector(vector);
 
-    expect(p95(durations)).toBeLessThanOrEqual(LOCAL_SIMILARITY_VECTOR_P95_BUDGET_MS);
+    assertLatencyBudget(
+      'local-similarity vector creation',
+      durations,
+      SHARED_HOST_VECTOR_CPU_P95_BUDGET_MS,
+      LOCAL_SIMILARITY_VECTOR_P95_BUDGET_MS,
+    );
     expect(serialized.length).toBeLessThanOrEqual(LOCAL_SIMILARITY_MAXIMUM_SERIALIZED_CHARS);
     expect(createCurrentLocalSimilarityVector(`${input}ignored tail`)).toEqual(vector);
   });

@@ -62,6 +62,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "jest",
+    "test:performance:local-similarity": "cross-env KAVI_LOCAL_SIMILARITY_WALL_CLOCK_GATE=1 jest --runInBand --no-cache __tests__/acceptance/memoryLocalSimilarityProduct.test.ts",
     "test:coverage": "jest --runInBand --coverage --no-cache",
     "test:watch": "jest --watch",
     "test:live:anthropic": "cross-env RUN_LIVE_ANTHROPIC=1 jest --runInBand __tests__/services/LlmService.anthropic.live.test.ts",
