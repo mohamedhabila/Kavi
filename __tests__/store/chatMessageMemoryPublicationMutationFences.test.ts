@@ -69,6 +69,23 @@ function addLockedTurn(
   return conversationId;
 }
 
+function addNewerTail(conversationId: string): void {
+  const store = useChatStore.getState();
+  store.addMessage(conversationId, {
+    id: 'user-2',
+    role: 'user',
+    content: 'Keep this newer request.',
+    timestamp: 5,
+  });
+  store.addMessage(conversationId, {
+    id: 'final-2',
+    role: 'assistant',
+    content: 'Keep this newer response.',
+    timestamp: 6,
+    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+  });
+}
+
 describe('chat memory publication mutation fences', () => {
   it.each([null, 'enqueued'] as const)(
     'blocks ingestion-relevant mutations while disposition is %s',
@@ -204,6 +221,40 @@ describe('chat memory publication mutation fences', () => {
         conversationId,
         conversation(conversationId).messages.filter((message) => message.id !== 'tool-1'),
       ),
+    ).toThrow(SOURCE_LOCKED_ERROR);
+  });
+
+  it('compacts away an old enqueued turn but rejects a retained partial source', () => {
+    const compactedConversationId = addLockedTurn('enqueued');
+    addNewerTail(compactedConversationId);
+    const newerTail = conversation(compactedConversationId).messages.filter(
+      (message) => message.id === 'user-2' || message.id === 'final-2',
+    );
+
+    expect(() =>
+      useChatStore.getState().applyConversationCompaction(compactedConversationId, [
+        {
+          id: 'summary',
+          role: 'system',
+          content: 'The older durable turn was summarized.',
+          timestamp: 7,
+        },
+        ...newerTail,
+      ]),
+    ).not.toThrow();
+    expect(conversation(compactedConversationId).messages.map((message) => message.id)).toEqual([
+      'summary',
+      'user-2',
+      'final-2',
+    ]);
+
+    const partialConversationId = addLockedTurn('enqueued');
+    addNewerTail(partialConversationId);
+    const partialSource = conversation(partialConversationId).messages.filter((message) =>
+      ['user-1', 'final-1', 'user-2', 'final-2'].includes(message.id),
+    );
+    expect(() =>
+      useChatStore.getState().applyConversationCompaction(partialConversationId, partialSource),
     ).toThrow(SOURCE_LOCKED_ERROR);
   });
 

@@ -1,10 +1,78 @@
 import type { Message } from '../types/message';
+import { normalizeMessageMemoryPublication } from '../utils/messageMemoryPublication';
 import {
   areMemoryIngestionSnapshotRelevantFieldsEqual,
   getMemoryPublicationMutationLockedMessageIds,
 } from './chatMessageMemoryPublicationGuards';
 
 const SOURCE_LOCKED_ERROR = 'chat_message_memory_publication_source_locked';
+
+interface PublicationSourceWindow {
+  finalId: string;
+  disposition: null | 'enqueued';
+  messages: readonly Message[];
+}
+
+function getPublicationSourceWindows(
+  messages: readonly Message[],
+): readonly PublicationSourceWindow[] {
+  if (getMemoryPublicationMutationLockedMessageIds(messages).size === 0) return [];
+
+  const windows: PublicationSourceWindow[] = [];
+  for (let finalIndex = 0; finalIndex < messages.length; finalIndex += 1) {
+    const final = messages[finalIndex]!;
+    const publication = normalizeMessageMemoryPublication(final.memoryPublication);
+    if (
+      !publication ||
+      (publication.disposition !== null && publication.disposition !== 'enqueued')
+    ) {
+      continue;
+    }
+
+    let startIndex = 0;
+    for (let index = finalIndex - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === 'user') {
+        startIndex = index;
+        break;
+      }
+    }
+    windows.push({
+      finalId: final.id,
+      disposition: publication.disposition,
+      messages: messages.slice(startIndex, finalIndex + 1),
+    });
+  }
+  return windows;
+}
+
+function arePublicationSourceWindowsExact(
+  current: PublicationSourceWindow,
+  proposed: PublicationSourceWindow | undefined,
+): boolean {
+  if (
+    !proposed ||
+    current.disposition !== proposed.disposition ||
+    current.messages.length !== proposed.messages.length
+  ) {
+    return false;
+  }
+  return current.messages.every((message, index) => {
+    const proposedMessage = proposed.messages[index];
+    return (
+      proposedMessage?.id === message.id &&
+      areMemoryIngestionSnapshotRelevantFieldsEqual(message, proposedMessage)
+    );
+  });
+}
+
+function failIfSourceWindowChanged(
+  current: PublicationSourceWindow,
+  proposed: PublicationSourceWindow | undefined,
+): void {
+  if (!arePublicationSourceWindowsExact(current, proposed)) {
+    throw new Error(SOURCE_LOCKED_ERROR);
+  }
+}
 
 /**
  * Caller-provided projections cannot create or replace publication receipts.
@@ -44,19 +112,36 @@ export function assertMemoryPublicationLockedSourcesUnchanged(
   currentMessages: readonly Message[],
   proposedMessages: readonly Message[],
 ): void {
-  const lockedIds = getMemoryPublicationMutationLockedMessageIds(currentMessages);
-  if (lockedIds.size === 0) return;
+  const currentWindows = getPublicationSourceWindows(currentMessages);
+  if (currentWindows.length === 0) return;
+  const proposedByFinalId = new Map(
+    getPublicationSourceWindows(proposedMessages).map((window) => [window.finalId, window]),
+  );
 
-  const proposedById = new Map<string, Message | undefined>();
-  for (const message of proposedMessages) {
-    proposedById.set(message.id, proposedById.has(message.id) ? undefined : message);
+  for (const current of currentWindows) {
+    failIfSourceWindowChanged(current, proposedByFinalId.get(current.finalId));
   }
+}
 
-  for (const current of currentMessages) {
-    if (!lockedIds.has(current.id)) continue;
-    const proposed = proposedById.get(current.id);
-    if (!proposed || !areMemoryIngestionSnapshotRelevantFieldsEqual(current, proposed)) {
-      throw new Error(SOURCE_LOCKED_ERROR);
+/**
+ * Compaction may remove a source after its immutable snapshot is enqueued. Open
+ * sources, and any enqueued source whose final remains, must stay exact.
+ */
+export function assertConversationCompactionMemoryPublicationSourcesSafe(
+  currentMessages: readonly Message[],
+  proposedMessages: readonly Message[],
+): void {
+  const currentWindows = getPublicationSourceWindows(currentMessages);
+  if (currentWindows.length === 0) return;
+  const proposedByFinalId = new Map(
+    getPublicationSourceWindows(proposedMessages).map((window) => [window.finalId, window]),
+  );
+  const proposedIds = new Set(proposedMessages.map((message) => message.id));
+
+  for (const current of currentWindows) {
+    if (current.disposition === 'enqueued' && !proposedIds.has(current.finalId)) {
+      continue;
     }
+    failIfSourceWindowChanged(current, proposedByFinalId.get(current.finalId));
   }
 }

@@ -26,6 +26,7 @@ import {
 } from '../utils/messageMemoryPublication';
 import type { TransitionMessageMemoryPublicationResult } from './chatStoreTypes';
 import {
+  assertConversationCompactionMemoryPublicationSourcesSafe,
   assertMemoryPublicationLockedSourcesUnchanged,
   preserveCodeOwnedMessageMemoryPublications,
 } from './chatMessageMemoryPublicationMutationFence';
@@ -120,7 +121,10 @@ export function createMessageStoreActions(
             if (nextMessages.length === 0) {
               return conversation;
             }
-            assertMemoryPublicationLockedSourcesUnchanged(conversation.messages, nextMessages);
+            assertConversationCompactionMemoryPublicationSourcesSafe(
+              conversation.messages,
+              nextMessages,
+            );
 
             return {
               ...conversation,
