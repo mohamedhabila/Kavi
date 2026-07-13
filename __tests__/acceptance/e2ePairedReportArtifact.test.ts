@@ -167,12 +167,10 @@ describe('paired public report artifact', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
     expect(
-      validateE2EPairedEvaluationRunManifestBinding(
-        report,
-        `${reportJson}\n`,
-        manifest,
-      ),
-    ).toEqual(expect.arrayContaining([expect.stringContaining('must match the paired report bytes')]));
+      validateE2EPairedEvaluationRunManifestBinding(report, `${reportJson}\n`, manifest),
+    ).toEqual(
+      expect.arrayContaining([expect.stringContaining('must match the paired report bytes')]),
+    );
 
     const hashDrift = JSON.parse(JSON.stringify(manifest));
     hashDrift.artifacts[0].sha256 = 'd'.repeat(64);
@@ -186,6 +184,66 @@ describe('paired public report artifact', () => {
       expect.arrayContaining([expect.stringContaining('must match the paired report source')]),
     );
   });
+
+  it.each([
+    {
+      executionCompleted: true,
+      primary: 'final_response_incomplete_or_unfaithful',
+      runId: 'run-candidate-failed',
+    },
+    {
+      executionCompleted: false,
+      primary: 'premature_completion',
+      runId: 'run-candidate-incomplete',
+    },
+  ] as const)(
+    'writes a valid $primary manifest for a failed candidate',
+    ({ executionCompleted, primary, runId }) => {
+      const runtime = validRuntime();
+      const candidate = runtime.conditions[1];
+      if (candidate.status !== 'completed') throw new Error('candidate fixture must complete');
+      const candidateFailure: E2EPairedRuntimeResult = {
+        ...runtime,
+        conditions: [
+          runtime.conditions[0],
+          {
+            ...candidate,
+            result: { ...candidate.result, completed: executionCompleted },
+            assessment: {
+              executionCompleted,
+              rubricPassed: 0,
+              rubricTotal: 1,
+              passed: false,
+            },
+          },
+        ],
+      };
+
+      const report = writeE2EPairedPublicReportArtifact({
+        runtime: candidateFailure,
+        retentionRoot: directory,
+        runId,
+      });
+      const manifest = JSON.parse(
+        readFileSync(join(directory, runId, E2E_PAIRED_EVALUATION_RUN_FILE), 'utf8'),
+      );
+
+      expect(report.conditions[1]).toMatchObject({
+        status: 'completed',
+        metrics: { passed: false },
+      });
+      expect(manifest).toMatchObject({
+        evaluation: { status: 'failed', statusReason: 'candidate_scenario_failed' },
+        failures: [
+          {
+            primary,
+            secondary: [],
+            detailCode: 'candidate_scenario_failed',
+          },
+        ],
+      });
+    },
+  );
 
   it('persists zero-event overflow evidence and fails closed without a paired delta', () => {
     const reportPath = join(directory, 'run-overflow', 'paired-report.json');

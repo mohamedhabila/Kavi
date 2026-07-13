@@ -4,10 +4,11 @@ import { resolve } from 'path';
 
 import type { E2EPairedPublicReport } from './e2ePairedPublicReport';
 
-const { EVALUATION_SCHEMA_URL, loadEvaluationContract } = require('../../../scripts/lib/evaluationContract') as {
-  EVALUATION_SCHEMA_URL: string;
-  loadEvaluationContract: (projectRoot: string) => unknown;
-};
+const { EVALUATION_SCHEMA_URL, loadEvaluationContract } =
+  require('../../../scripts/lib/evaluationContract') as {
+    EVALUATION_SCHEMA_URL: string;
+    loadEvaluationContract: (projectRoot: string) => unknown;
+  };
 const { validateEvaluationRunManifest } = require('../../../scripts/lib/evaluationRunManifest') as {
   validateEvaluationRunManifest: (manifest: unknown, contract: unknown) => string[];
 };
@@ -55,7 +56,10 @@ function manifestOutcome(report: E2EPairedPublicReport): {
   statusReason: string | null;
   counts: { requested: number; executed: number; passed: number; failed: number; skipped: number };
   failures: ReadonlyArray<{
-    primary: 'task_completion' | 'infrastructure_or_evaluator';
+    primary:
+      | 'premature_completion'
+      | 'final_response_incomplete_or_unfaithful'
+      | 'infrastructure_or_evaluator';
     secondary: [];
     detailCode: string;
   }>;
@@ -85,13 +89,14 @@ function manifestOutcome(report: E2EPairedPublicReport): {
     };
   }
   if (!candidate.metrics.passed) {
+    const primary = candidate.metrics.executionCompleted
+      ? 'final_response_incomplete_or_unfaithful'
+      : 'premature_completion';
     return {
       status: 'failed',
       statusReason: 'candidate_scenario_failed',
       counts: { requested: 1, executed: 1, passed: 0, failed: 1, skipped: 0 },
-      failures: [
-        { primary: 'task_completion', secondary: [], detailCode: 'candidate_scenario_failed' },
-      ],
+      failures: [{ primary, secondary: [], detailCode: 'candidate_scenario_failed' }],
     };
   }
   return {
@@ -218,10 +223,7 @@ export function validateE2EPairedEvaluationRunManifestBinding(
   reportJson: string,
   manifest: EvaluationRunManifest,
 ): string[] {
-  const failures = validateEvaluationRunManifest(
-    manifest,
-    loadEvaluationContract(PROJECT_ROOT),
-  );
+  const failures = validateEvaluationRunManifest(manifest, loadEvaluationContract(PROJECT_ROOT));
   if (
     manifest.source.app.commitSha !== report.source.app.commitSha ||
     manifest.source.app.dirty !== report.source.app.dirty
