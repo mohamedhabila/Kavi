@@ -14,6 +14,7 @@ import {
   type E2EPairedConditionExecutionInput,
 } from '../../src/acceptance/e2eAgent/e2ePairedRuntime';
 import { withE2EPairedStoreIsolation } from '../../src/acceptance/e2eAgent/e2ePairedStateIsolation';
+import { ForegroundScenarioIsolationError } from '../../src/acceptance/e2eAgent/foregroundScenarioDriver';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { E2EScenario } from '../../src/acceptance/e2eAgent/types';
@@ -299,6 +300,49 @@ describe('paired E2E runtime coordinator', () => {
     );
     expect(result.conditions[1]).toMatchObject({ condition: 'memory_off', status: 'completed' });
   });
+
+  it.each([
+    { seed: 8, failingCondition: 'production_auto', skippedCondition: 'memory_off' },
+    { seed: 7, failingCondition: 'memory_off', skippedCondition: 'production_auto' },
+  ] as const)(
+    'does not execute $skippedCondition after $failingCondition compromises foreground isolation',
+    async ({ seed, failingCondition, skippedCondition }) => {
+      const executeCondition = jest.fn(async () => {
+        throw new ForegroundScenarioIsolationError();
+      });
+
+      const result = await runE2EPairedConditions({
+        plan: buildPlan('production_auto', 'memory_off', seed),
+        scenario: SCENARIO,
+        provider: PROVIDER,
+        dependencies: {
+          captureAppSource: () => CLEAN_APP_SOURCE,
+          executeCondition,
+          resetConditionState: async () => undefined,
+          cleanupConditionState: async () => undefined,
+          withStoreIsolation: passthroughIsolation,
+        },
+      });
+
+      expect(executeCondition).toHaveBeenCalledTimes(1);
+      expect(result.conditions).toHaveLength(2);
+      expect(
+        result.conditions.find(({ condition }) => condition === failingCondition),
+      ).toMatchObject({
+        condition: failingCondition,
+        status: 'failed',
+        category: 'condition_execution',
+      });
+      expect(
+        result.conditions.find(({ condition }) => condition === skippedCondition),
+      ).toMatchObject({
+        condition: skippedCondition,
+        status: 'failed',
+        category: 'state_reset',
+      });
+      expect(result.validForDeltaClaims).toBe(false);
+    },
+  );
 
   it('records setup, final cleanup, and store restoration failures as invalid evidence', async () => {
     const setupFailure = await runE2EPairedConditions({

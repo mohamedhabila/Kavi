@@ -25,6 +25,7 @@ import {
 } from './scenarioRunner';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EScenario, E2EScenarioResult } from './types';
+import { ForegroundScenarioIsolationError } from './foregroundScenarioDriver';
 
 export const E2E_PAIRED_RUNTIME_SCHEMA_VERSION = 'e2e-paired-runtime-v4' as const;
 
@@ -388,6 +389,7 @@ export async function runE2EPairedConditions(input: {
         E2EPairedConditionExecution
       >();
       let cleanup: E2EPairedCleanupResult = { status: 'completed' };
+      let isolationFailure: ForegroundScenarioIsolationError | null = null;
       try {
         for (const condition of executionOrder) {
           const conditionPlan = conditionPlans.get(condition);
@@ -436,6 +438,10 @@ export async function runE2EPairedConditions(input: {
               condition,
               failedCondition(conditionPlan, executionIdentityHash, 'condition_execution', error),
             );
+            if (error instanceof ForegroundScenarioIsolationError) {
+              isolationFailure = error;
+              break;
+            }
             continue;
           }
           try {
@@ -474,6 +480,23 @@ export async function runE2EPairedConditions(input: {
             conditionResults.set(
               condition,
               failedCondition(conditionPlan, executionIdentityHash, 'evidence_validation', error),
+            );
+          }
+        }
+        if (isolationFailure) {
+          for (const condition of executionOrder) {
+            if (conditionResults.has(condition)) continue;
+            const conditionPlan = conditionPlans.get(condition);
+            const executionIdentityHash = executionIdentities.get(condition);
+            if (!conditionPlan || !executionIdentityHash) continue;
+            conditionResults.set(
+              condition,
+              failedCondition(
+                conditionPlan,
+                executionIdentityHash,
+                'state_reset',
+                new Error('Condition skipped because prior foreground isolation failed.'),
+              ),
             );
           }
         }

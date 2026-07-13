@@ -71,6 +71,13 @@ const FOREGROUND_PRODUCT_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((tool) => too
 
 let scenarioRunTail: Promise<void> = Promise.resolve();
 
+export class ForegroundScenarioIsolationError extends Error {
+  constructor() {
+    super('Timed-out foreground execution did not settle before cleanup.');
+    this.name = 'ForegroundScenarioIsolationError';
+  }
+}
+
 function requireTrimmed(value: string, label: string): string {
   const trimmed = value.trim();
   if (!trimmed) throw new Error(`${label} must not be empty.`);
@@ -293,19 +300,27 @@ async function runScenarioIsolated(
         ? SCENARIO_WALL_CLOCK_TIMEOUT_ERROR
         : `Foreground scenario turn timed out after ${timeoutMs}ms.`;
       let timeout: ReturnType<typeof setTimeout> | undefined;
+      let executionSettled = false;
+      const execution = executeForegroundConversationRun({
+        conversationId: currentConversationId,
+        context: runtime.context,
+        options: {
+          maxTokens: turn.maxTokens ?? input.maxTokens,
+          ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
+          memoryRetrievalStrategy: input.memoryRetrievalStrategy,
+          memoryContextStrategy: input.memoryContextStrategy,
+          enableCompaction: input.enableCompaction,
+        },
+      })
+        .catch((error) => {
+          if (!timedOut) throw error;
+        })
+        .finally(() => {
+          executionSettled = true;
+        });
       try {
         await Promise.race([
-          executeForegroundConversationRun({
-            conversationId: currentConversationId,
-            context: runtime.context,
-            options: {
-              maxTokens: turn.maxTokens ?? input.maxTokens,
-              ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
-              memoryRetrievalStrategy: input.memoryRetrievalStrategy,
-              memoryContextStrategy: input.memoryContextStrategy,
-              enableCompaction: input.enableCompaction,
-            },
-          }),
+          execution,
           new Promise<void>((_resolve, reject) => {
             timeout = setTimeout(() => {
               timedOut = true;
@@ -322,6 +337,22 @@ async function runScenarioIsolated(
         if (!timedOut) throw error;
       } finally {
         if (timeout !== undefined) clearTimeout(timeout);
+      }
+      if (timedOut) {
+        try {
+          await awaitBeforeScenarioDeadline(execution, scenarioDeadline, () => {
+            scenarioDeadlineExceeded = true;
+          });
+        } catch {
+          if (remainingScenarioTimeMs(scenarioDeadline) <= 0) {
+            scenarioDeadlineExceeded = true;
+          }
+          // The timeout already owns the turn outcome. The important isolation
+          // boundary is that the aborted foreground execution has settled.
+        }
+        if (!executionSettled) {
+          throw new ForegroundScenarioIsolationError();
+        }
       }
 
       requestChatStorePersistenceCheckpoint(0);

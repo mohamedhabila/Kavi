@@ -565,17 +565,21 @@ describe('runForegroundScenario', () => {
   });
 
   it('aborts timed-out turns and restores both global stores', async () => {
+    let abortedExecutionSettled = false;
+    mockedCancelScheduledIngestionDrain.mockImplementationOnce(async () => {
+      expect(abortedExecutionSettled).toBe(true);
+    });
     mockedRunOrchestrator.mockImplementationOnce(async (options) => {
-      await new Promise<never>((_resolve, reject) => {
+      await new Promise<void>((resolve) => {
         const signal = options.signal?.signal;
-        const rejectAbort = () => {
-          const error = new Error('Timed out');
-          error.name = 'AbortError';
-          reject(error);
-        };
-        if (signal?.aborted) rejectAbort();
-        else signal?.addEventListener('abort', rejectAbort, { once: true });
+        const settleAbort = () => setTimeout(resolve, 10);
+        if (signal?.aborted) settleAbort();
+        else signal?.addEventListener('abort', settleAbort, { once: true });
       });
+      abortedExecutionSettled = true;
+      const error = new Error('Timed out');
+      error.name = 'AbortError';
+      throw error;
     });
 
     const result = await runForegroundScenario({
@@ -595,6 +599,7 @@ describe('runForegroundScenario', () => {
       error: 'Foreground scenario turn timed out after 5ms.',
       memory: [],
     });
+    expect(abortedExecutionSettled).toBe(true);
     expect(useChatStore.getState().conversations).toEqual([makeOriginalConversation()]);
     expect(useSettingsStore.getState().activeProviderId).toBe('original-provider');
     expect(mockedCancelScheduledIngestionDrain).toHaveBeenCalledTimes(1);

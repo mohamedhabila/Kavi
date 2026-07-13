@@ -236,13 +236,11 @@ describe('foreground scenario selected mode and outer deadline', () => {
       timeoutMs: 1_000,
       turns: [{ content: 'Complete, then persist.', route: 'production_auto' }],
     });
+    const rejection = expect(run).rejects.toThrow(
+      'Timed-out foreground execution did not settle before cleanup.',
+    );
     await jest.advanceTimersByTimeAsync(25);
-    const result = await run;
-
-    expect(result.turns[0]).toMatchObject({
-      timedOut: true,
-      error: 'Foreground scenario wall-clock deadline exceeded.',
-    });
+    await rejection;
     jest.useRealTimers();
   });
 });
