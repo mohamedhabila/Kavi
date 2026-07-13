@@ -15,6 +15,7 @@ import type {
   RecordFactResult,
   ReplaceCurrentFactConflict,
 } from './facts/types';
+import { rowToFact } from './facts/types';
 import {
   evaluateGroundedReplacement,
   type GroundedReplacementRejection,
@@ -30,7 +31,11 @@ import { isCanonicalSelfMemorySubject } from './memorySubjectIdentity';
 import { classifyMemoryFactSensitivity } from './memorySensitivityPolicy';
 import type { AuthorizedToolEffectExecutionClaim } from '../executionJournal/authorizedToolEffectExecutionClaim';
 import type { MemoryFactContributionSourceAlias } from './factContributionCodec';
-import { loadFactContributionReplay } from './factContributionStore';
+import { loadFactContributionReplayFromAliasCandidates } from './factContributionStore';
+import {
+  ExactReplacementReplayTargetChanged,
+  loadExactReplacementReplayInTransaction,
+} from './facts/exactReplacementReplay';
 import {
   buildMemoryRememberProducerEventId,
   MEMORY_REMEMBER_FACT_PRODUCER_ID,
@@ -149,7 +154,11 @@ function replayStableMemoryWriteAttributes(
   const incoming = memoryWriteAttributes(fact);
   if (!priorAttributes) return incoming;
   const priorMemoryWrite = priorAttributes.memoryWrite;
-  if (!priorMemoryWrite || typeof priorMemoryWrite !== 'object' || Array.isArray(priorMemoryWrite)) {
+  if (
+    !priorMemoryWrite ||
+    typeof priorMemoryWrite !== 'object' ||
+    Array.isArray(priorMemoryWrite)
+  ) {
     throw new Error('memory_remember_replay_metadata_invalid');
   }
   const prior = priorMemoryWrite as Record<string, unknown>;
@@ -206,34 +215,70 @@ export function persistMemoryRemember(
     taskId: evidence.taskId,
     personaId: context.personaId,
   };
-  const proposedResolution = resolveCurrentFactsForReplacement(
-    { subject: input.subject, predicate: input.predicate, scope: input.scope },
-    resolutionContext,
-  );
+  const baseSourceAliases: MemoryFactContributionSourceAlias[] = [
+    { sourceKind: 'message', sourceId: evidence.userMessageId },
+  ];
+  if (input.sourceRunId !== null && input.sourceRunId !== undefined) {
+    baseSourceAliases.push({ sourceKind: 'run', sourceId: input.sourceRunId });
+  }
+  const replayContext = {
+    memoryConversationId: evidence.memoryConversationId,
+    sourceThreadId: evidence.sourceThreadId,
+    taskId: evidence.taskId,
+    producer: {
+      producerId: MEMORY_REMEMBER_FACT_PRODUCER_ID,
+      producerEventId: buildMemoryRememberProducerEventId(context.executionClaim),
+    },
+  };
+  const replay = loadFactContributionReplayFromAliasCandidates({
+    context: replayContext,
+    sourceAliasCandidates: evidence.priorUserMessageId
+      ? [
+          baseSourceAliases,
+          [...baseSourceAliases, { sourceKind: 'message', sourceId: evidence.priorUserMessageId }],
+        ]
+      : [baseSourceAliases],
+  });
+  let replacementReplay = null;
+  try {
+    replacementReplay = replay ? loadExactReplacementReplayInTransaction(replay) : null;
+  } catch (error) {
+    if (error instanceof ExactReplacementReplayTargetChanged) {
+      return { status: 'conflict', conflict: 'target_changed' };
+    }
+    throw error;
+  }
+  const effectivePredicate = replacementReplay ? replay!.payload.input.predicate : input.predicate;
+  const proposedResolution = replacementReplay
+    ? { currentFacts: [rowToFact(replacementReplay.predecessor)], hasAnyCurrentFact: true }
+    : resolveCurrentFactsForReplacement(
+        { subject: input.subject, predicate: effectivePredicate, scope: input.scope },
+        resolutionContext,
+      );
   const directClaim = isCanonicalSelfMemorySubject(input.subject)
     ? deriveExactSelfClaimEvidence({
         userMessageText: evidence.userMessageText,
-        predicate: input.predicate,
+        predicate: effectivePredicate,
         value: input.value,
       })
     : deriveExactNamedSubjectClaimEvidence({
         userMessageText: evidence.userMessageText,
         subject: input.subject,
-        predicate: input.predicate,
+        predicate: effectivePredicate,
         value: input.value,
       });
   const proposedPredicateCorrection =
-    isCanonicalSelfMemorySubject(input.subject) &&
-    proposedResolution.currentFacts.length === 1
+    isCanonicalSelfMemorySubject(input.subject) && proposedResolution.currentFacts.length === 1
       ? deriveExactSelfCorrectionEvidence({
           userMessageText: evidence.userMessageText,
-          predicate: input.predicate,
+          predicate: effectivePredicate,
           value: input.value,
           currentValue: proposedResolution.currentFacts[0]!.objectText,
         })
       : null;
   const exactPredicateCorrection =
-    proposedPredicateCorrection?.correctionTarget === 'direct_property'
+    proposedPredicateCorrection &&
+    (proposedPredicateCorrection.correctionTarget === 'direct_property' || replacementReplay)
       ? proposedPredicateCorrection
       : null;
   const priorMessageFacts =
@@ -280,7 +325,7 @@ export function persistMemoryRemember(
     (!exactPredicateCorrection &&
       !priorMessageCorrection &&
       (proposedCorrectionIntent || exactPredicateCorrectionIntent));
-  const predicate = priorMessageCorrection?.fact.predicate ?? input.predicate;
+  const predicate = priorMessageCorrection?.fact.predicate ?? effectivePredicate;
   const resolution = priorMessageCorrection
     ? { currentFacts: [priorMessageCorrection.fact], hasAnyCurrentFact: true }
     : proposedResolution;
@@ -298,19 +343,18 @@ export function persistMemoryRemember(
     evidenceMessageIds: [evidence.userMessageId],
     evidenceQuote: exactClaim?.evidenceQuote ?? input.value,
   };
-  const decision =
-    exactClaim
-      ? evaluateGroundedReplacement(proposal, {
-          currentUserMessageId: evidence.userMessageId,
-          currentUserMessage: evidence.userMessageText,
-          memoryConversationId: resolutionContext.memoryConversationId,
-          threadId: resolutionContext.sourceThreadId,
-          taskId: resolutionContext.taskId,
-          personaId: resolutionContext.personaId,
-          currentFacts: resolution.currentFacts,
-          hasAnyCurrentFact: resolution.hasAnyCurrentFact,
-        })
-      : ({ accepted: false, reason: 'subject_not_grounded' } as const);
+  const decision = exactClaim
+    ? evaluateGroundedReplacement(proposal, {
+        currentUserMessageId: evidence.userMessageId,
+        currentUserMessage: evidence.userMessageText,
+        memoryConversationId: resolutionContext.memoryConversationId,
+        threadId: resolutionContext.sourceThreadId,
+        taskId: resolutionContext.taskId,
+        personaId: resolutionContext.personaId,
+        currentFacts: resolution.currentFacts,
+        hasAnyCurrentFact: resolution.hasAnyCurrentFact,
+      })
+    : ({ accepted: false, reason: 'subject_not_grounded' } as const);
 
   if (!decision.accepted) {
     return { status: 'grounding_required', reason: decision.reason };
@@ -319,14 +363,11 @@ export function persistMemoryRemember(
   if (!evidenceOwnsWriteScope(input, evidence)) {
     return { status: 'grounding_required', reason: 'scope_mismatch' };
   }
-  const sourceAliases: MemoryFactContributionSourceAlias[] = [
-    { sourceKind: 'message', sourceId: evidence.userMessageId },
-  ];
-  if (priorMessageCorrection && evidence.priorUserMessageId) {
+  const sourceAliases: MemoryFactContributionSourceAlias[] = replay
+    ? [...replay.sourceAliases]
+    : [...baseSourceAliases];
+  if (!replay && priorMessageCorrection && evidence.priorUserMessageId) {
     sourceAliases.push({ sourceKind: 'message', sourceId: evidence.priorUserMessageId });
-  }
-  if (writeInput.sourceRunId !== null && writeInput.sourceRunId !== undefined) {
-    sourceAliases.push({ sourceKind: 'run', sourceId: writeInput.sourceRunId });
   }
   const applicability = {
     factClass: 'subjective_user' as const,
@@ -334,16 +375,9 @@ export function persistMemoryRemember(
     ...(writeInput.scope === 'persona' ? { personaId: context.personaId } : {}),
   };
   const contributionContext = {
-    memoryConversationId: evidence.memoryConversationId,
-    sourceThreadId: evidence.sourceThreadId,
-    taskId: evidence.taskId,
-    producer: {
-      producerId: MEMORY_REMEMBER_FACT_PRODUCER_ID,
-      producerEventId: buildMemoryRememberProducerEventId(context.executionClaim),
-    },
+    ...replayContext,
     sourceAliases,
   };
-  const replay = loadFactContributionReplay(contributionContext);
 
   try {
     return runMemoryTransaction((): MemoryRememberPersistenceResult => {

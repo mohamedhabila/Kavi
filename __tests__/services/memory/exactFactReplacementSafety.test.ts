@@ -4,6 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { replaceCurrentFact } from '../../../src/services/memory/facts/exactReplacement';
+import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { getFactById, listFacts } from '../../../src/services/memory/facts/queries';
 import {
@@ -40,8 +41,9 @@ function replacement(expectedCurrentFactId: string, value: string, now: number) 
 
 describe('replaceCurrentFact safety invariants', () => {
   it('never downgrades a prior sensitivity floor during replacement', () => {
+    const subjectId = upsertEntity({ type: 'self', name: 'user', now: 1 }).id;
     const old = recordFact({
-      subjectId: 'entity-user',
+      subjectId,
       predicate: 'display_label',
       objectText: 'old label',
       scope: 'global',
@@ -54,7 +56,7 @@ describe('replaceCurrentFact safety invariants', () => {
 
     const result = replaceCurrentFact({
       expectedCurrentFactId: old.fact.id,
-      subjectId: 'entity-user',
+      subjectId,
       predicate: 'display_label',
       objectText: 'new label',
       scope: 'global',

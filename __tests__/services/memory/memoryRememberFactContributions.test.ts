@@ -6,7 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
-import { findEntityByName } from '../../../src/services/memory/entities';
+import { findEntityByName, upsertEntity } from '../../../src/services/memory/entities';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
   buildMemoryRememberProducerEventId,
@@ -244,7 +244,7 @@ describe('memory_remember fact contributions', () => {
     expect(tableCount('memory_facts')).toBe(1);
   });
 
-  it('adds the prior user alias only when an accepted correction depends on it', () => {
+  it('replays a changed-value correction without duplicating its durable history', () => {
     const firstContext = memoryRememberExecution({
       userMessageId: 'user-duration-old',
       userMessageText: 'I usually keep sprint reviews to 20 minutes.',
@@ -270,16 +270,14 @@ describe('memory_remember fact contributions', () => {
       toolCallId: 'tool-duration-new',
       claimedAt: 601,
     });
-    const corrected = executeMemoryRemember(
-      {
-        subject: 'user',
-        subjectType: 'self',
-        predicate: 'provider-invented-duration-label',
-        value: '30 minutes',
-        scope: 'global',
-      },
-      correctionContext,
-    );
+    const correctionInput = {
+      subject: 'user',
+      subjectType: 'self' as const,
+      predicate: 'provider-invented-duration-label',
+      value: '30 minutes',
+      scope: 'global' as const,
+    };
+    const corrected = executeMemoryRemember(correctionInput, correctionContext);
 
     expect(first).toMatchObject({ ok: true });
     expect(corrected).toMatchObject({ ok: true, fact: { value: '30 minutes' } });
@@ -293,6 +291,75 @@ describe('memory_remember fact contributions', () => {
       { source_kind: 'message', source_id: 'user-duration-old' },
     ]);
     expect(tableCount('memory_fact_contribution_supersessions')).toBe(1);
+    const countsBeforeReplay = {
+      facts: tableCount('memory_facts'),
+      evidence: tableCount('memory_fact_evidence'),
+      contributions: tableCount('memory_fact_contributions'),
+      aliases: tableCount('memory_fact_contribution_sources'),
+      snapshots: tableCount('memory_fact_contribution_supersession_snapshots'),
+      edges: tableCount('memory_fact_contribution_supersessions'),
+    };
+    upsertEntity({ name: 'user', type: 'self', now: 700 });
+    expect(findEntityByName('user')?.lastSeenAt).toBe(700);
+
+    const replayed = executeMemoryRemember(correctionInput, correctionContext);
+
+    expect(replayed).toMatchObject({
+      ok: true,
+      status: 'duplicate',
+      fact: { value: '30 minutes' },
+    });
+    expect(findEntityByName('user')?.lastSeenAt).toBe(700);
+    expect({
+      facts: tableCount('memory_facts'),
+      evidence: tableCount('memory_fact_evidence'),
+      contributions: tableCount('memory_fact_contributions'),
+      aliases: tableCount('memory_fact_contribution_sources'),
+      snapshots: tableCount('memory_fact_contribution_supersession_snapshots'),
+      edges: tableCount('memory_fact_contribution_supersessions'),
+    }).toEqual(countsBeforeReplay);
+
+    const changedEvidenceText = executeMemoryRemember(
+      correctionInput,
+      memoryRememberExecution({
+        userMessageId: 'user-duration-new',
+        userMessageText: 'Please save 30 minutes.',
+        priorUserMessageId: 'user-duration-old',
+        executionRunId: 'execution-duration-new',
+        toolCallId: 'tool-duration-new',
+        claimedAt: 601,
+      }),
+    );
+    expect(changedEvidenceText).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect({
+      facts: tableCount('memory_facts'),
+      evidence: tableCount('memory_fact_evidence'),
+      contributions: tableCount('memory_fact_contributions'),
+      aliases: tableCount('memory_fact_contribution_sources'),
+      snapshots: tableCount('memory_fact_contribution_supersession_snapshots'),
+      edges: tableCount('memory_fact_contribution_supersessions'),
+    }).toEqual(countsBeforeReplay);
+
+    const mismatchedPriorAlias = executeMemoryRemember(
+      correctionInput,
+      memoryRememberExecution({
+        userMessageId: 'user-duration-new',
+        userMessageText: 'Actually, make that 30 minutes from now on, not 20.',
+        priorUserMessageId: 'different-prior-message',
+        executionRunId: 'execution-duration-new',
+        toolCallId: 'tool-duration-new',
+        claimedAt: 601,
+      }),
+    );
+    expect(mismatchedPriorAlias).toMatchObject({ ok: false, code: 'internal' });
+    expect({
+      facts: tableCount('memory_facts'),
+      evidence: tableCount('memory_fact_evidence'),
+      contributions: tableCount('memory_fact_contributions'),
+      aliases: tableCount('memory_fact_contribution_sources'),
+      snapshots: tableCount('memory_fact_contribution_supersession_snapshots'),
+      edges: tableCount('memory_fact_contribution_supersessions'),
+    }).toEqual(countsBeforeReplay);
   });
 
   it.each([
@@ -374,8 +441,10 @@ describe('memory_remember fact contributions', () => {
       sourceId: 'user-retired',
     });
     expect(
-      remember({ userMessageId: 'user-retired', userMessageText: 'My preferred display name is Mo.' })
-        .result,
+      remember({
+        userMessageId: 'user-retired',
+        userMessageText: 'My preferred display name is Mo.',
+      }).result,
     ).toMatchObject({ ok: false, code: 'internal' });
 
     expect(tableCount('memory_entities')).toBe(0);

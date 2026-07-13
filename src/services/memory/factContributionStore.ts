@@ -28,8 +28,10 @@ export interface MemoryFactContributionWriteReceipt {
 }
 
 export interface MemoryFactContributionReplay {
+  id: string;
   factId: string;
   payload: MemoryFactContributionPayloadV1;
+  sourceAliases: ReadonlyArray<MemoryFactContributionSourceAlias>;
 }
 
 interface ContributionRow {
@@ -156,19 +158,32 @@ function sourceRowsMatch(
   return expected.every((alias) => actualKeys.has(`${alias.sourceKind}\u0000${alias.sourceId}`));
 }
 
-/** Read an exact prior producer event without weakening its alias identity. */
-export function loadFactContributionReplay(
-  context: MemoryFactContributionWriteContext,
-): MemoryFactContributionReplay | null {
+interface MemoryFactContributionReplayContext {
+  memoryConversationId: string;
+  sourceThreadId: string;
+  taskId?: string | null;
+  producer: MemoryFactContributionProducerIdentity;
+}
+
+/** Read a prior producer event only when one complete caller-authorized alias set matches. */
+export function loadFactContributionReplayFromAliasCandidates(input: {
+  context: MemoryFactContributionReplayContext;
+  sourceAliasCandidates: ReadonlyArray<ReadonlyArray<MemoryFactContributionSourceAlias>>;
+}): MemoryFactContributionReplay | null {
   const db = getSchemaReadyMemoryDb();
   const scope = normalizeMemoryFactContributionSourceScope({
     memoryOwnerId: getLocalMemoryVaultOwnerId(db),
-    memoryConversationId: context.memoryConversationId,
-    sourceThreadId: context.sourceThreadId,
-    taskId: context.taskId,
+    memoryConversationId: input.context.memoryConversationId,
+    sourceThreadId: input.context.sourceThreadId,
+    taskId: input.context.taskId,
   });
-  const producer = requireMemoryFactContributionProducerIdentity(context.producer);
-  const expectedAliases = normalizeMemoryFactContributionSourceAliases(context.sourceAliases);
+  const producer = requireMemoryFactContributionProducerIdentity(input.context.producer);
+  if (input.sourceAliasCandidates.length < 1 || input.sourceAliasCandidates.length > 4) {
+    fail('memory_fact_contribution_source_alias_invalid');
+  }
+  const expectedAliasSets = input.sourceAliasCandidates.map((aliases) =>
+    normalizeMemoryFactContributionSourceAliases(aliases),
+  );
   const id = buildMemoryFactContributionId({ scope, producer });
   const row = db.getFirstSync<ContributionRow>(
     'SELECT * FROM memory_fact_contributions WHERE id = ? LIMIT 1',
@@ -182,10 +197,20 @@ export function loadFactContributionReplay(
       ORDER BY source_kind ASC, source_id ASC`,
     id,
   );
-  if (!sourceRowsMatch(sourceRows, expectedAliases)) {
+  const matchedAliases = expectedAliasSets.find((aliases) => sourceRowsMatch(sourceRows, aliases));
+  if (
+    !matchedAliases ||
+    row.memory_owner_id !== scope.memoryOwnerId ||
+    row.memory_conversation_id !== scope.memoryConversationId ||
+    row.source_thread_id !== scope.sourceThreadId ||
+    row.task_id !== scope.taskId ||
+    row.producer_id !== producer.producerId ||
+    row.producer_event_id !== producer.producerEventId
+  ) {
     fail('memory_fact_contribution_replay_mismatch');
   }
   return {
+    id,
     factId: row.fact_id,
     payload: decodeMemoryFactContributionPayload({
       payloadVersion: row.payload_version,
@@ -193,7 +218,18 @@ export function loadFactContributionReplay(
       payloadSha256: row.payload_sha256,
       payloadByteLength: row.payload_byte_length,
     }),
+    sourceAliases: matchedAliases,
   };
+}
+
+/** Read an exact prior producer event without weakening its alias identity. */
+export function loadFactContributionReplay(
+  context: MemoryFactContributionWriteContext,
+): MemoryFactContributionReplay | null {
+  return loadFactContributionReplayFromAliasCandidates({
+    context,
+    sourceAliasCandidates: [context.sourceAliases],
+  });
 }
 
 /** Persist one immutable contribution while the owning fact transaction is active. */

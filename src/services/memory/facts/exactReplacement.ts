@@ -3,7 +3,11 @@ import { runMemoryTransaction } from '../access/transaction';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../memorySensitivityPolicy';
-import type { MemoryFactContributionWriteContext } from '../factContributionStore';
+import {
+  loadFactContributionReplay,
+  type MemoryFactContributionWriteContext,
+} from '../factContributionStore';
+import { assertMemoryFactContributionReplayPayload } from '../factContributionReplay';
 import {
   closedMemoryFactClass,
   closedMemoryFactSensitivity,
@@ -18,6 +22,13 @@ import {
 } from './factContributionMaterialization';
 import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
 import { requireFactScopeIdentity } from './scopeIdentity';
+import { normalizeRecordFactMutation } from './mutationNormalization';
+import {
+  canonicalizeExactReplacementPredecessorInTransaction,
+  ExactReplacementReplayTargetChanged,
+  finalizeExactReplacementReplayInTransaction,
+  loadExactReplacementReplayInTransaction,
+} from './exactReplacementReplay';
 import {
   normalizeFactKind,
   rowToFact,
@@ -71,6 +82,30 @@ function replacementScopeMatches(
     row.origin_task_id === input.originTaskId &&
     isExactMemoryScopeId(row.origin_task_id)
   );
+}
+
+function requireReplacementTarget(
+  row: FactRow,
+  input: ReplaceCurrentFactInput,
+  predicate: string,
+  validAt: number,
+  personaId: string | null,
+): void {
+  if (row.memory_owner_id !== getLocalMemoryVaultOwnerId(getSchemaReadyMemoryDb())) {
+    throw new ExactReplacementConflict('target_scope_mismatch');
+  }
+  if (
+    row.subject_id !== input.subjectId ||
+    row.predicate.trim().toLowerCase() !== predicate.toLowerCase()
+  ) {
+    throw new ExactReplacementConflict('target_changed');
+  }
+  if (!replacementScopeMatches(row, input, personaId)) {
+    throw new ExactReplacementConflict('target_scope_mismatch');
+  }
+  if (row.valid_at > validAt) {
+    throw new ExactReplacementConflict('stale_source_order');
+  }
 }
 
 /**
@@ -134,34 +169,74 @@ function replaceCurrentFactInternal(
   try {
     return runMemoryTransaction(() => {
       const db = getSchemaReadyMemoryDb();
-      const current = db.getFirstSync<FactRow>(
+      const contributionReplay = contributionContext
+        ? loadFactContributionReplay(contributionContext)
+        : null;
+      const replacementReplay = contributionReplay
+        ? loadExactReplacementReplayInTransaction(contributionReplay)
+        : null;
+      if (replacementReplay) {
+        if (!sealedApplicability || !contributionContext || !contributionReplay) {
+          throw new Error('memory_fact_provenance_invalid');
+        }
+        if (
+          expectedCurrentFactId !== replacementReplay.predecessor.id &&
+          expectedCurrentFactId !== replacementReplay.successor.id
+        ) {
+          throw new ExactReplacementConflict('target_changed');
+        }
+        requireReplacementTarget(
+          replacementReplay.predecessor,
+          input,
+          predicate,
+          validAt,
+          sealedApplicability.personaId ?? replacementReplay.predecessor.persona_id ?? null,
+        );
+        const replayMemoryKind =
+          input.memoryKind ?? normalizeFactKind(replacementReplay.predecessor.memory_kind);
+        const replayObjectEntityId =
+          input.objectEntityId === undefined
+            ? replacementReplay.predecessor.object_entity_id
+            : input.objectEntityId;
+        const replayInput = {
+          ...input,
+          predicate,
+          objectText,
+          objectEntityId: replayObjectEntityId,
+          memoryKind: replayMemoryKind,
+          supersedePrior: false,
+          now,
+        };
+        const replayPayload = normalizeRecordFactMutation(replayInput, sealedApplicability);
+        assertMemoryFactContributionReplayPayload(contributionReplay, replayPayload);
+        if (
+          replacementReplay.pinnedInputExplicit !== (input.pinned !== undefined) ||
+          replacementReplay.reviewStateInputExplicit !== (input.reviewState !== undefined)
+        ) {
+          throw new Error('memory_fact_contribution_replay_mismatch');
+        }
+        return finalizeExactReplacementReplayInTransaction({
+          replay: contributionReplay,
+          state: replacementReplay,
+          payload: replayPayload,
+          context: contributionContext,
+        });
+      }
+
+      let current = db.getFirstSync<FactRow>(
         `SELECT * FROM memory_facts
           WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL
           LIMIT 1`,
         expectedCurrentFactId,
       );
       if (!current) throw new ExactReplacementConflict('target_changed');
-      if (current.memory_owner_id !== getLocalMemoryVaultOwnerId(db)) {
-        throw new ExactReplacementConflict('target_scope_mismatch');
-      }
-      if (
-        current.subject_id !== input.subjectId ||
-        current.predicate.trim().toLowerCase() !== predicate.toLowerCase()
-      ) {
-        throw new ExactReplacementConflict('target_changed');
-      }
-      if (
-        !replacementScopeMatches(
-          current,
-          input,
-          sealedApplicability?.personaId ?? current.persona_id ?? null,
-        )
-      ) {
-        throw new ExactReplacementConflict('target_scope_mismatch');
-      }
-      if (current.valid_at > validAt) {
-        throw new ExactReplacementConflict('stale_source_order');
-      }
+      requireReplacementTarget(
+        current,
+        input,
+        predicate,
+        validAt,
+        sealedApplicability?.personaId ?? current.persona_id ?? null,
+      );
 
       const currentMemoryKind = normalizeFactKind(current.memory_kind);
       const replacementMemoryKind = input.memoryKind ?? currentMemoryKind;
@@ -218,6 +293,8 @@ function replaceCurrentFactInternal(
         }
         return duplicate;
       }
+
+      current = canonicalizeExactReplacementPredecessorInTransaction(current);
 
       const inheritedReviewState = requireMemoryFactReviewState(
         input.reviewState ?? current.review_state,
@@ -295,6 +372,9 @@ function replaceCurrentFactInternal(
         superseded: [],
         conflict: 'replacement_collision',
       };
+    }
+    if (error instanceof ExactReplacementReplayTargetChanged) {
+      return { fact: null, status: 'conflict', superseded: [], conflict: 'target_changed' };
     }
     if (error instanceof ExactReplacementConflict) {
       return { fact: null, status: 'conflict', superseded: [], conflict: error.code };
