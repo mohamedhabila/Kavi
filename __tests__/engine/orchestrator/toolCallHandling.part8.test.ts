@@ -10,6 +10,7 @@ import {
   makeProvider,
   makeCallbacks,
   createStreamGenerator,
+  useSuperAgentPersona,
   type OrchestratorOptions,
 } from '../../helpers/orchestratorHarness';
 
@@ -103,7 +104,8 @@ describe('Orchestrator', () => {
       ).toBe(false);
     });
 
-    it('keeps explicitly grounded catalog and browser tools available after catalog browse', async () => {
+    it('keeps agentic catalog and browser tools available after catalog browse', async () => {
+      useSuperAgentPersona();
       (executeTool as jest.Mock).mockResolvedValueOnce(
         JSON.stringify({
           category: 'browser',
@@ -137,6 +139,7 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv1',
+        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         toolFilter: (toolName) =>
           ['tool_catalog', 'browser_navigate', 'browser_snapshot', 'browser_click'].includes(

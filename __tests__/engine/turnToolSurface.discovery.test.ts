@@ -138,6 +138,50 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(names.has('sms_compose')).toBe(false);
   });
 
+  it('keeps catalog discovery read-only over non-memory resources in chitchat', () => {
+    const selected = resolveTurnToolSurface({
+      allTools: tools,
+      conversationMode: 'chitchat',
+      goals: [],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>([
+        'read_file',
+        'write_file',
+        'browser_navigate',
+        'browser_snapshot',
+        'memory_remember',
+      ]),
+      includeToolCatalog: true,
+    });
+
+    const names = new Set(selected.map((tool) => tool.name));
+    expect(names.has('read_file')).toBe(true);
+    expect(names.has('browser_snapshot')).toBe(true);
+    expect(names.has('memory_remember')).toBe(true);
+    expect(names.has('write_file')).toBe(false);
+    expect(names.has('browser_navigate')).toBe(false);
+  });
+
+  it('honors deliberate chitchat pins without broadening catalog mutation authority', () => {
+    const selected = resolveTurnToolSurface({
+      allTools: tools,
+      conversationMode: 'chitchat',
+      goals: [],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      explicitToolSurfaceToolNames: ['write_file'],
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(['browser_navigate']),
+      includeToolCatalog: true,
+    });
+
+    const names = new Set(selected.map((tool) => tool.name));
+    expect(names.has('write_file')).toBe(true);
+    expect(names.has('browser_navigate')).toBe(false);
+  });
+
   it('loads the discovered category tools on the turn after tool_catalog', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,

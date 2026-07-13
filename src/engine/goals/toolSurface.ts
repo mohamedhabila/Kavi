@@ -530,7 +530,15 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
   }
 
   for (const toolName of params.activatedCatalogToolNames) {
+    const tool = toolByName.get(toolName);
+    // Catalog discovery proves availability, not authority to mutate non-memory state in chat.
+    // A code-owned explicit pin remains the deliberate escape hatch above.
+    const catalogActivationMayMutateNonMemoryState =
+      params.conversationMode === 'chitchat' &&
+      isSideEffectfulTool(tool) &&
+      !isMemoryResourceTool(tool);
     if (
+      !catalogActivationMayMutateNonMemoryState &&
       shouldAcceptContinuationTool({
         toolName,
         toolByName,
