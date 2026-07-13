@@ -46,7 +46,7 @@ export interface MemoryRememberPersistenceInput {
   predicate: string;
   value: string;
   confidence?: number;
-  pinned: boolean;
+  pinned?: boolean;
   scope: MemoryFactScope;
   originConversationId?: string | null;
   originThreadId?: string | null;
@@ -105,7 +105,7 @@ function buildRecordInput(
     predicate: input.predicate,
     objectText: input.value,
     confidence: input.confidence,
-    pinned: input.pinned,
+    ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
     scope: input.scope,
     ...(input.originConversationId !== undefined
       ? { originConversationId: input.originConversationId }

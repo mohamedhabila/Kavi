@@ -484,6 +484,9 @@ export function executeMemoryRemember(
   }
   if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
   ensureFactSchema();
+  if (args.pinned !== undefined && typeof args.pinned !== 'boolean') {
+    return err('invalid_args', 'pinned must be a boolean');
+  }
   const rawSubject = trimNonEmpty(args.subject, 80);
   const predicate = trimNonEmpty(args.predicate, 80);
   const value = trimNonEmpty(args.value, 200);
@@ -525,7 +528,7 @@ export function executeMemoryRemember(
         predicate,
         value,
         confidence: typeof args.confidence === 'number' ? args.confidence : undefined,
-        pinned: args.pinned === true,
+        ...(args.pinned !== undefined ? { pinned: args.pinned } : {}),
         scope,
         ...(args.originConversationId !== undefined
           ? { originConversationId: args.originConversationId }
