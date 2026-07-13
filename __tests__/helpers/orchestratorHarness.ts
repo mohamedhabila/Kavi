@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import {
-  runOrchestrator,
+  runOrchestrator as runProductOrchestrator,
   OrchestratorCallbacks,
   OrchestratorOptions,
   MAX_TOOL_ITERATIONS,
@@ -129,10 +129,42 @@ const mockSendMessage = jest.fn();
 const makeProvider = (overrides: Partial<LlmProviderConfig> = {}): LlmProviderConfig =>
   finalizeProviderConfig(makeOrchestratorProviderConfig(overrides));
 
-const allowTools =
-  (toolNames: ReadonlyArray<string>) =>
-  (toolName: string): boolean =>
-    toolNames.includes(toolName);
+const deliberateFixtureToolNames = Symbol('deliberateFixtureToolNames');
+
+type DeliberatelyPinnedToolFilter = ((toolName: string) => boolean) & {
+  readonly [deliberateFixtureToolNames]: ReadonlyArray<string>;
+};
+
+const allowTools = (toolNames: ReadonlyArray<string>): DeliberatelyPinnedToolFilter => {
+  const pinnedToolNames = [...new Set(toolNames)];
+  const filter = ((toolName: string): boolean =>
+    pinnedToolNames.includes(toolName)) as DeliberatelyPinnedToolFilter;
+  Object.defineProperty(filter, deliberateFixtureToolNames, {
+    value: pinnedToolNames,
+    enumerable: false,
+  });
+  return filter;
+};
+
+/**
+ * Mechanics tests use allowTools() to deliberately pin the same tools they
+ * authorize. Authorization-only behavior is covered by dedicated product-level
+ * tool-filter tests, which invoke the real orchestrator directly.
+ */
+function runOrchestrator(
+  options: OrchestratorOptions,
+  callbacks: OrchestratorCallbacks,
+): ReturnType<typeof runProductOrchestrator> {
+  const fixtureToolNames = (options.toolFilter as DeliberatelyPinnedToolFilter | undefined)?.[
+    deliberateFixtureToolNames
+  ];
+  return runProductOrchestrator(
+    fixtureToolNames !== undefined && options.explicitToolSurfaceToolNames === undefined
+      ? { ...options, explicitToolSurfaceToolNames: fixtureToolNames }
+      : options,
+    callbacks,
+  );
+}
 
 function useSuperAgentPersona(): void {
   (getPersona as jest.Mock).mockImplementation((personaId: string) =>

@@ -249,6 +249,7 @@ describe('runOrchestrator — tool execution', () => {
     const callbacks = makeCallbacks();
     await runOrchestrator(
       makeOptions([makeMsg('user', 'Read test.txt')], {
+        explicitToolSurfaceToolNames: ['read_file'],
         toolFilter: allowTools(['read_file']),
       }),
       callbacks,
@@ -311,6 +312,7 @@ describe('runOrchestrator — tool execution', () => {
 
     const runPromise = runOrchestrator(
       makeOptions([makeMsg('user', 'Read test.txt')], {
+        explicitToolSurfaceToolNames: ['read_file'],
         toolFilter: allowTools(['read_file']),
       }),
       callbacks,

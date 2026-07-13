@@ -65,6 +65,11 @@ describe('Orchestrator', () => {
         model: 'gpt-5.4',
         conversationId: 'conv-expo-workflow',
         systemPrompt: 'You are helpful',
+        explicitToolSurfaceToolNames: [
+          'expo_eas_build',
+          'expo_eas_workflow_status',
+          'expo_eas_workflow_wait',
+        ],
         toolFilter: (toolName) =>
           ['expo_eas_build', 'expo_eas_workflow_status', 'expo_eas_workflow_wait'].includes(
             toolName,
@@ -157,7 +162,9 @@ describe('Orchestrator', () => {
       );
 
       expect(firstTurnTools.has('tool_catalog')).toBe(true);
-      expect(firstTurnTools.has('browser_navigate')).toBe(true);
+      expect(firstTurnTools.has('browser_navigate')).toBe(false);
+      expect(firstTurnTools.has('browser_snapshot')).toBe(false);
+      expect(firstTurnTools.has('browser_click')).toBe(false);
       expect(secondTurnTools.has('browser_navigate')).toBe(true);
       expect(secondTurnTools.has('browser_snapshot')).toBe(true);
       expect(secondTurnTools.has('browser_click')).toBe(true);
