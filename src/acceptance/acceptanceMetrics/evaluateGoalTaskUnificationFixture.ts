@@ -5,12 +5,15 @@
 import { applyGoalMutation } from '../../engine/goals/graphState';
 import type { AgentGoal } from '../../engine/goals/types';
 import { orchestrateMemoryRetrieval } from '../../services/memory/retrievalOrchestrator';
-import { recordFactWithApplicability } from '../../services/memory/facts/mutations';
 import { syncGoalTasksFromMutation } from '../../services/memory/tasks';
 import { getActiveTaskTitle } from '../../services/memory/taskStack';
 import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
 import type { AcceptanceFixtureOutcome } from './types';
 import type { GoalTaskUnificationFixture } from './goalTaskUnificationFixtures';
+import {
+  ACCEPTANCE_FACT_PRODUCER_IDS,
+  recordAcceptanceFixtureFact,
+} from '../acceptanceFactContributions';
 
 function recallIncludesToken(facts: ReadonlyArray<{ objectText: string }>, token: string): boolean {
   return facts.some((fact) => fact.objectText.includes(token));
@@ -62,7 +65,7 @@ export async function evaluateGoalTaskUnificationFixture(
     now,
   });
 
-  recordFactWithApplicability(
+  recordAcceptanceFixtureFact(
     {
       subjectId: 'entity-scope-a',
       predicate: 'scope_token',
@@ -74,6 +77,16 @@ export async function evaluateGoalTaskUnificationFixture(
       now,
     },
     { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    {
+      producerId: ACCEPTANCE_FACT_PRODUCER_IDS.goalTaskUnification,
+      fixtureId: fixture.id,
+      eventKey: 'goal-a-token',
+      memoryConversationId: fixture.threadId,
+      sourceThreadId: fixture.threadId,
+      taskId: fixture.goalAId,
+      sourceKind: 'turn',
+      sourceId: `${fixture.id}-${fixture.goalAId}-seed`,
+    },
   );
 
   const addGoalB = applyGoalMutation(
@@ -136,7 +149,7 @@ export async function evaluateGoalTaskUnificationFixture(
     now: now + 20,
   });
 
-  recordFactWithApplicability(
+  recordAcceptanceFixtureFact(
     {
       subjectId: 'entity-scope-b',
       predicate: 'scope_token',
@@ -148,6 +161,16 @@ export async function evaluateGoalTaskUnificationFixture(
       now: now + 20,
     },
     { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    {
+      producerId: ACCEPTANCE_FACT_PRODUCER_IDS.goalTaskUnification,
+      fixtureId: fixture.id,
+      eventKey: 'goal-b-token',
+      memoryConversationId: fixture.threadId,
+      sourceThreadId: fixture.threadId,
+      taskId: fixture.goalBId,
+      sourceKind: 'turn',
+      sourceId: `${fixture.id}-${fixture.goalBId}-seed`,
+    },
   );
 
   if (getActiveTaskTitle(fixture.threadId) !== fixture.goalBTitle) {

@@ -147,47 +147,55 @@ describe('canonical memory architecture guard', () => {
     );
   });
 
-  it('rejects bare sealed-applicability fact writes from product modules', () => {
+  it('rejects every bare fact mutation from product modules', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/newProductWriter.ts',
       [
+        'recordFact(input);',
         'recordFactWithApplicability(input, applicability);',
+        'replaceCurrentFact(input);',
         'replaceCurrentFactWithApplicability(input, applicability);',
       ].join('\n'),
     );
 
     expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
       expect.arrayContaining([
+        expect.stringContaining('recordFact(input)'),
         expect.stringContaining('recordFactWithApplicability'),
+        expect.stringContaining('replaceCurrentFact(input)'),
         expect.stringContaining('replaceCurrentFactWithApplicability'),
-        expect.stringContaining(
-          'uses bare sealed-applicability fact mutation outside approved low-level modules',
-        ),
+        expect.stringContaining('uses bare fact mutation outside approved low-level modules'),
       ]),
     );
   });
 
-  it('keeps the bare mutation allowlist exact to its low-level owners and acceptance fixtures', () => {
+  it('keeps the bare mutation allowlist exact to its two low-level owners', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/facts/mutations.ts',
-      'export function recordFactWithApplicability() {}\n',
+      ['export function recordFact() {}', 'export function recordFactWithApplicability() {}'].join(
+        '\n',
+      ),
     );
     writeProjectFile(
       projectRoot,
       'src/services/memory/facts/exactReplacement.ts',
       [
         'recordFactWithApplicability(input, applicability);',
+        'export function replaceCurrentFact() {}',
         'export function replaceCurrentFactWithApplicability() {}',
       ].join('\n'),
     );
-    writeProjectFile(
-      projectRoot,
-      'src/acceptance/fixtures/seedMemory.ts',
-      'recordFactWithApplicability(input, applicability);\n',
-    );
     expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual([]);
+
+    writeProjectFile(projectRoot, 'src/acceptance/fixtures/seedMemory.ts', 'recordFact(input);\n');
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('src/acceptance/fixtures/seedMemory.ts'),
+        expect.stringContaining('uses bare fact mutation outside approved low-level modules'),
+      ]),
+    );
 
     writeProjectFile(
       projectRoot,

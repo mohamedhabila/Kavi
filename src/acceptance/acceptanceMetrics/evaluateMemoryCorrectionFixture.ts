@@ -1,10 +1,13 @@
 import { upsertEntity } from '../../services/memory/entities';
-import { recordFact } from '../../services/memory/facts/mutations';
 import { listFacts } from '../../services/memory/facts/queries';
 import { processIngestionTurn } from '../../services/memory/turnProcessor';
 import type { Message } from '../../types/message';
 import type { AcceptanceFixtureOutcome } from './types';
 import type { MemoryCorrectionFixture } from './memoryCorrectionFixtures';
+import {
+  ACCEPTANCE_FACT_PRODUCER_IDS,
+  recordAcceptanceFixtureFact,
+} from '../acceptanceFactContributions';
 
 export async function evaluateMemoryCorrectionFixture(
   fixture: MemoryCorrectionFixture,
@@ -13,14 +16,26 @@ export async function evaluateMemoryCorrectionFixture(
   const threadId = `synthetic-${fixture.id}`;
   const userMessageId = `user-${fixture.id}`;
   const user = upsertEntity({ name: 'user', type: 'self', now: now - 20 });
-  const previous = recordFact({
-    subjectId: user.id,
-    predicate: fixture.predicate,
-    objectText: fixture.previousValue,
-    scope: 'global',
-    sourceMessageId: `seed-${fixture.id}`,
-    now: now - 10,
-  }).fact;
+  const previous = recordAcceptanceFixtureFact(
+    {
+      subjectId: user.id,
+      predicate: fixture.predicate,
+      objectText: fixture.previousValue,
+      scope: 'global',
+      now: now - 10,
+    },
+    { factClass: 'unknown', sourceAuthority: 'unknown' },
+    {
+      producerId: ACCEPTANCE_FACT_PRODUCER_IDS.memoryCorrection,
+      fixtureId: fixture.id,
+      eventKey: 'previous-value',
+      memoryConversationId: threadId,
+      sourceThreadId: threadId,
+      taskId: null,
+      sourceKind: 'message',
+      sourceId: `seed-${fixture.id}`,
+    },
+  ).fact;
   const messages: Message[] = [
     { id: userMessageId, role: 'user', content: fixture.userMessage, timestamp: now },
     {

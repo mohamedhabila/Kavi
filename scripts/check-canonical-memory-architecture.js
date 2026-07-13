@@ -8,12 +8,10 @@ const label = 'check-canonical-memory-architecture';
 const defaultProjectRoot = path.resolve(__dirname, '..');
 const retiredArtifactCleanupPath = 'src/services/memory/retiredMemoryArtifacts.ts';
 const memoryServiceRoot = 'src/services/memory/';
-const acceptanceFixtureRoot = 'src/acceptance/';
 
-// These modules own the low-level sealed-applicability primitives themselves.
-// Product writers must use contribution-backed mutations; acceptance fixtures
-// remain exempt so benchmark setup can seed exact facts without product events.
-const bareApplicabilityFactMutationAllowedFiles = new Set([
+// These modules own the low-level fact primitives themselves. Every product and
+// acceptance writer must use a contribution-backed mutation boundary.
+const bareFactMutationAllowedFiles = new Set([
   'src/services/memory/facts/mutations.ts',
   'src/services/memory/facts/exactReplacement.ts',
 ]);
@@ -99,11 +97,9 @@ const bannedPatterns = [
     pattern: String.raw`\b(?:hybridSearch|indexMemory|getIndexSize|chunkIndex)\b`,
   },
   {
-    label: 'bare sealed-applicability fact mutation outside approved low-level modules',
-    pattern: String.raw`\b(?:recordFactWithApplicability|replaceCurrentFactWithApplicability)\b`,
-    allowedMatch: ({ filePath }) =>
-      bareApplicabilityFactMutationAllowedFiles.has(filePath) ||
-      filePath.startsWith(acceptanceFixtureRoot),
+    label: 'bare fact mutation outside approved low-level modules',
+    pattern: String.raw`\b(?:recordFact|recordFactWithApplicability|replaceCurrentFact|replaceCurrentFactWithApplicability)\s*(?:\(|,|\})`,
+    allowedMatch: ({ filePath }) => bareFactMutationAllowedFiles.has(filePath),
   },
   {
     label: 'retired memory-store import',

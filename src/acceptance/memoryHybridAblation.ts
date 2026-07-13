@@ -1,6 +1,5 @@
 import type { Message } from '../types/message';
 import { upsertEntity } from '../services/memory/entities';
-import { recordFactWithApplicability } from '../services/memory/facts/mutations';
 import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
 import {
   buildMemoryRetrievalScopeHash,
@@ -8,6 +7,10 @@ import {
 } from '../services/memory/retrievalLog';
 import { getMemoryDb } from '../services/memory/database';
 import { stableHash, stableStringify } from './e2eAgent/e2eTraceRedaction';
+import {
+  ACCEPTANCE_FACT_PRODUCER_IDS,
+  recordAcceptanceFixtureFact,
+} from './acceptanceFactContributions';
 import { runInIsolatedStructuredMemoryEvaluation } from './structuredMemoryEvaluation';
 import {
   MEMORY_HYBRID_ABLATION_CASES,
@@ -106,20 +109,31 @@ function seedFixture(
   const addFact = (seed: MemoryHybridAblationCase['facts'][number]) => {
     const subjectId = entityIds.get(seed.entityKey);
     if (!subjectId) throw new Error(`Unknown hybrid ablation entity key: ${seed.entityKey}`);
-    const recorded = recordFactWithApplicability(
+    const originConversationId =
+      seed.origin === 'active' ? namespace : `${namespace}-other-conversation`;
+    const recorded = recordAcceptanceFixtureFact(
       {
         subjectId,
         predicate: seed.predicate,
         objectText: seed.objectText,
         scope: 'conversation',
-        originConversationId:
-          seed.origin === 'active' ? namespace : `${namespace}-other-conversation`,
+        originConversationId,
         supersedePrior: false,
         now: seed.now,
         ...(seed.validAt !== undefined ? { validAt: seed.validAt } : {}),
         ...(seed.expiresAt !== undefined ? { expiresAt: seed.expiresAt } : {}),
       },
       { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+      {
+        producerId: ACCEPTANCE_FACT_PRODUCER_IDS.memoryHybridAblation,
+        fixtureId: fixture.id,
+        eventKey: `${strategy}:${seed.key}`,
+        memoryConversationId: originConversationId,
+        sourceThreadId: originConversationId,
+        taskId: null,
+        sourceKind: 'turn',
+        sourceId: `${namespace}-seed-${seed.key}`,
+      },
     );
     factKeysById.set(recorded.fact.id, seed.key);
     if (seed.deleted) {
