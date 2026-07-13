@@ -464,7 +464,24 @@ describe('recordCompletedTurnForMemory', () => {
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
     expect(mockSendMessage.mock.calls[0][1]).toMatchObject({
       model: 'gemini-3.5-flash',
-      maxTokens: 32000,
+      maxTokens: 4096,
+      temperature: 0,
+      reasoning_effort: 'none',
+      structuredOutput: {
+        name: 'memory_consolidation',
+        mimeType: 'application/json',
+        strict: false,
+        schema: expect.objectContaining({
+          additionalProperties: false,
+          required: [
+            'new_facts',
+            'episode_summary',
+            'active_focus',
+            'open_threads',
+            'notable',
+          ],
+        }),
+      },
     });
   });
 
