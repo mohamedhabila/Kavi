@@ -196,7 +196,7 @@ export interface RecordCompletedTurnForMemoryResult {
   activeFocusUpdated: boolean;
   openThreadsUpdated: boolean;
   enriched: boolean;
-  skipped?: 'opt_out' | 'no_closed_turn' | 'source_identity_invalid';
+  skipped?: 'opt_out' | 'ephemeral_thread' | 'no_closed_turn' | 'source_identity_invalid';
 }
 
 function composeConversationFocusFromThreadTitle(
@@ -269,6 +269,19 @@ export async function recordCompletedTurnForMemory(
     threadId,
   );
   const conversation = findConversation(threadId);
+  if (conversation?.isSideThread) {
+    return {
+      processed: false,
+      enqueued: false,
+      skipped: 'ephemeral_thread',
+      jobId: null,
+      episodeId: null,
+      factIds: [],
+      activeFocusUpdated: false,
+      openThreadsUpdated: false,
+      enriched: false,
+    };
+  }
   const personaId = resolveCodeOwnedMemoryPersonaId(conversation?.personaId);
   const sourceRunId = input.sourceRunId ?? conversation?.activeAgentRunId ?? undefined;
   const chatProvider = input.activeChatProvider ?? resolveActiveMemoryChatProvider(conversation);

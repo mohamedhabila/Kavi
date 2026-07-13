@@ -45,15 +45,18 @@ export function semanticMemoryHandoffsEqual(
 export function captureSemanticMemoryHandoff(
   conversation: Conversation | undefined,
 ): SemanticMemoryHandoff | undefined {
-  if (!canWriteLongTermMemory() || !conversation || !isExactDurableScopeId(conversation.id)) {
+  if (
+    !canWriteLongTermMemory() ||
+    !conversation ||
+    conversation.isSideThread ||
+    !isExactDurableScopeId(conversation.id)
+  ) {
     return undefined;
   }
   const pendingHandoff = normalizeSemanticMemoryHandoff(conversation.semanticMemoryHandoff);
   if (pendingHandoff) return pendingHandoff;
 
-  const memoryConversationId = conversation.isSideThread
-    ? conversation.parentConversationId
-    : conversation.id;
+  const memoryConversationId = conversation.id;
   if (!isExactDurableScopeId(memoryConversationId)) return undefined;
 
   const ownedAssistantMessageId = conversation.modelProjectionOwner?.assistantMessageId;

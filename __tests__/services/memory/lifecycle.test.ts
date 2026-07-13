@@ -73,6 +73,31 @@ beforeEach(() => {
 });
 
 describe('recordCompletedTurnForMemory', () => {
+  it('does not persist turns from an ephemeral side thread', async () => {
+    const parentId = useChatStore.getState().createConversation('openai', 'system');
+    const sideThreadId = useChatStore.getState().createSideThread(parentId)!;
+    for (const message of messages) {
+      useChatStore.getState().addMessage(sideThreadId, message);
+    }
+
+    const result = await recordCompletedTurnForMemory({
+      threadId: sideThreadId,
+      memoryConversationId: parentId,
+      messages: useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === sideThreadId)!.messages,
+      now: 10,
+    });
+
+    expect(result).toMatchObject({
+      processed: false,
+      enqueued: false,
+      skipped: 'ephemeral_thread',
+      jobId: null,
+    });
+    expect(countPendingIngestionJobs()).toBe(0);
+  });
+
   it('always processes turns and creates an episode even without a provider', async () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-live',

@@ -446,7 +446,7 @@ describe('semantic memory handoff capture and activation', () => {
     });
   });
 
-  it('attaches the exact workspace and producing thread across the real side-thread flow', () => {
+  it('gates entry into a side thread on its parent without persisting side-thread turns', () => {
     const parentId = useChatStore.getState().createConversation('openai', 'system');
     useChatStore.getState().addMessage(parentId, {
       id: 'parent-user',
@@ -496,15 +496,10 @@ describe('semantic memory handoff capture and activation', () => {
     expect(
       useChatStore.getState().conversations.find((entry) => entry.id === secondSideId)
         ?.semanticMemoryHandoff,
-    ).toEqual({
-      version: 1,
-      memoryConversationId: parentId,
-      sourceThreadId: firstSideId,
-      sourceEndMessageId: 'side-assistant',
-    });
+    ).toBeUndefined();
   });
 
-  it('does not capture yielded state but preserves a closed side-thread boundary', () => {
+  it('does not capture yielded state or a closed side-thread boundary', () => {
     const parentId = useChatStore.getState().createConversation('openai', 'system');
     useChatStore.getState().addMessage(parentId, {
       id: 'parent-user',
@@ -549,11 +544,6 @@ describe('semantic memory handoff capture and activation', () => {
     expect(
       useChatStore.getState().conversations.find((conversation) => conversation.id === afterSide)
         ?.semanticMemoryHandoff,
-    ).toEqual({
-      version: 1,
-      memoryConversationId: parentId,
-      sourceThreadId: sideId,
-      sourceEndMessageId: 'side-assistant',
-    });
+    ).toBeUndefined();
   });
 });
