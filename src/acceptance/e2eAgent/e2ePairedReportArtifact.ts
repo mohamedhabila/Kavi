@@ -6,6 +6,7 @@ import {
   uniqueManagedPath,
   withFileLockSync,
 } from '../../../scripts/e2eReport/fileTransaction';
+import { requireE2ePairedRunId } from '../../../scripts/lib/e2ePairedRunId';
 import { buildE2EPairedPublicReport, type E2EPairedPublicReport } from './e2ePairedPublicReport';
 import type { E2EPairedRuntimeResult } from './e2ePairedRuntime';
 import {
@@ -14,7 +15,6 @@ import {
 } from './e2ePairedEvaluationRunManifest';
 
 const PAIRED_REPORT_FILE = 'paired-report.json';
-const SAFE_RUN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 
 export class E2EPairedClaimFailure extends Error {
   constructor(
@@ -27,18 +27,6 @@ export class E2EPairedClaimFailure extends Error {
     );
     this.name = 'E2EPairedClaimFailure';
   }
-}
-
-function requireRunId(value: string): string {
-  if (
-    !SAFE_RUN_ID_PATTERN.test(value) ||
-    value === '.' ||
-    value === '..' ||
-    value !== value.trim()
-  ) {
-    throw new Error('Paired report runId must be a bounded path-free identifier.');
-  }
-  return value;
 }
 
 function resolveCanonicalRetentionRoot(retentionRoot: string): string {
@@ -79,7 +67,7 @@ export function writeE2EPairedPublicReportArtifact(input: {
   generatedAt?: Date;
   host?: { os: string; arch: string; nodeVersion: string };
 }): E2EPairedPublicReport {
-  const runId = requireRunId(input.runId);
+  const runId = requireE2ePairedRunId(input.runId);
   const retentionRoot = resolveCanonicalRetentionRoot(input.retentionRoot);
   const runDir = assertManagedRunPath(retentionRoot, runId);
   const reportRelativePath = `${runId}/${PAIRED_REPORT_FILE}`;
