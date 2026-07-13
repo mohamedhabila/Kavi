@@ -13,6 +13,7 @@ import { E2E_DIRECT_BENCHMARK_SCENARIOS } from '../../src/acceptance/e2eAgent/di
 import {
   DELEGATION_E2E_SCENARIOS,
   E2E_AGENT_SCENARIOS,
+  E2E_PAIRED_ONLY_SCENARIOS,
 } from '../../src/acceptance/e2eAgent/scenarios';
 import type { E2EScenario } from '../../src/acceptance/e2eAgent/types';
 import {
@@ -149,6 +150,7 @@ describe('E2E thin runner fixtures', () => {
       ...E2E_AGENT_SCENARIOS,
       ...E2E_BENCHMARK_SCENARIOS,
       ...E2E_DIRECT_BENCHMARK_SCENARIOS,
+      ...E2E_PAIRED_ONLY_SCENARIOS,
     ]) {
       expectNoInternalGraphSeeds(scenario);
       expect(scenario as unknown as Record<string, unknown>).not.toHaveProperty('allowedTools');
@@ -523,6 +525,32 @@ describe('E2E structural mobile assistant scenarios', () => {
         true,
       );
     }
+  });
+
+  it('keeps passive causal-memory learning turns free of native side effects', () => {
+    const scenario = E2E_PAIRED_ONLY_SCENARIOS.find(
+      (entry) => entry.id === 'paired-causal-global-preference',
+    );
+    expect(scenario).toBeDefined();
+    expectNoInternalGraphSeeds(scenario!);
+
+    const neutralRubrics = scenario!.pairedEvaluation!.neutralRubricIndexes.map(
+      (index) => scenario!.rubrics[index],
+    );
+    expect(neutralRubrics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'turn_native_invocation_count',
+          turnIndex: 0,
+          expectedCount: 0,
+        }),
+        expect.objectContaining({
+          kind: 'turn_native_invocation_count',
+          turnIndex: 1,
+          expectedCount: 0,
+        }),
+      ]),
+    );
   });
 
   it('scoped goal-switch scenario satisfies task-scoped focus rubrics', async () => {

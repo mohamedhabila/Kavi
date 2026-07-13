@@ -126,6 +126,27 @@ describe('paired causal-memory scenario and contract', () => {
     expect(prompt).not.toContain('default_meeting_duration_minutes');
     expect(prompt).not.toContain('subject `');
     expect(validateE2EPairedCausalMemoryContract(scenario)).toEqual(scenario.pairedEvaluation);
+    expect(scenario.pairedEvaluation).toMatchObject({
+      neutralRubricIndexes: Array.from({ length: 25 }, (_value, index) => index),
+      causalRubricIndexes: Array.from({ length: 11 }, (_value, index) => index + 25),
+    });
+    const neutralRubrics = scenario.pairedEvaluation!.neutralRubricIndexes.map(
+      (index) => scenario.rubrics[index],
+    );
+    expect(neutralRubrics).toEqual(
+      expect.arrayContaining([
+        {
+          kind: 'turn_native_invocation_count',
+          turnIndex: 0,
+          expectedCount: 0,
+        },
+        {
+          kind: 'turn_native_invocation_count',
+          turnIndex: 1,
+          expectedCount: 0,
+        },
+      ]),
+    );
     expect(scenario.initialMessages).toBeUndefined();
   });
 

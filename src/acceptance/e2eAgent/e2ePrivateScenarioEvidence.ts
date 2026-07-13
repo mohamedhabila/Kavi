@@ -12,7 +12,7 @@ import {
 import type { E2EScenario, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 
 export const E2E_PRIVATE_EVIDENCE_DIR_ENV = 'E2E_PRIVATE_EVIDENCE_DIR';
-export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v6';
+export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v7';
 
 export type E2EPrivateEvidenceProvenance = Readonly<{
   app: E2EAppSourceRevision;
@@ -66,6 +66,7 @@ export type E2EPrivateScenarioEvidence = {
       agentRun: E2EScenarioTurnTrace['agentRun'];
       memory: E2EScenarioTurnTrace['memory'];
       memoryEvidence: E2EScenarioTurnTrace['memoryEvidence'];
+      retrieval: E2EScenarioTurnTrace['retrieval'];
       native: E2EScenarioTurnTrace['native'];
       toolCalls: E2EScenarioTurnTrace['toolCalls'];
       toolResults: E2EScenarioTurnTrace['toolResults'];
@@ -129,6 +130,9 @@ function projectTurn(
   if (turn.lifecycleBefore === undefined) {
     throw new Error('Private evidence turn lifecycleBefore is missing.');
   }
+  if (!turn.retrieval) {
+    throw new Error('Private evidence turn retrieval is missing.');
+  }
   return {
     turnIndex: turn.turnIndex,
     lifecycleBefore: turn.lifecycleBefore,
@@ -140,6 +144,7 @@ function projectTurn(
     agentRun: turn.agentRun,
     memory: turn.memory,
     memoryEvidence: turn.memoryEvidence,
+    retrieval: turn.retrieval,
     native: turn.native,
     toolCalls: turn.toolCalls,
     toolResults: turn.toolResults,

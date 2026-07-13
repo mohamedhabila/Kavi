@@ -22,6 +22,7 @@ import {
   resetE2ENativeMobileFixtures,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 import type { E2EScenario, E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
+import { buildPairedRetrievalEvent } from '../helpers/e2ePairedRunHarness';
 import { buildFixtureResult } from '../helpers/e2eRunReportHarness';
 
 const SCENARIO: E2EScenario = {
@@ -52,6 +53,7 @@ function buildPrivateResult(): E2EScenarioResult {
   resetE2ENativeMobileFixtures();
   const nativeState = getE2ENativeMobileFixtureStateSnapshot();
   const usage = buildFixtureResult().usage;
+  const retrievalEvent = buildPairedRetrievalEvent();
   return buildFixtureResult({
     contentClass: 'private',
     fixtureId: SCENARIO.id,
@@ -130,6 +132,11 @@ function buildPrivateResult(): E2EScenarioResult {
           },
         },
         native: { stateBefore: nativeState, stateAfter: nativeState, invocations: [] },
+        retrieval: {
+          sourceThreadIdHash: retrievalEvent.scope.sourceThreadIdHash,
+          instrumentationStatus: 'recorded',
+          events: [retrievalEvent],
+        },
         toolCalls: [
           { id: 'private-tool-call', name: 'write_file', arguments: 'PRIVATE-ARGS-SENTINEL' },
         ],
@@ -161,15 +168,17 @@ describe('private E2E scenario evidence', () => {
   });
 
   it('builds a closed raw evidence DTO without serializing Message/provider replay objects', () => {
+    const result = buildPrivateResult();
     const evidence = buildE2EPrivateScenarioEvidence({
       scenario: SCENARIO,
-      result: buildPrivateResult(),
+      result,
       provenance: PRIVATE_PROVENANCE,
       evidenceId: 'evidence-1',
       now: new Date('2026-07-10T00:00:00.000Z'),
     });
     const serialized = JSON.stringify(evidence);
 
+    expect(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION).toBe('e2e-private-scenario-evidence-v7');
     expect(evidence.schemaVersion).toBe(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION);
     expect(evidence.provenance).toEqual(PRIVATE_PROVENANCE);
     expect(evidence.scenario.requestedTurns).toEqual([
@@ -181,6 +190,7 @@ describe('private E2E scenario evidence', () => {
       },
     ]);
     expect(evidence.result.turns[0]?.lifecycleBefore).toBeNull();
+    expect(evidence.result.turns[0]?.retrieval).toEqual(result.turnTraces[0]?.retrieval);
     expect(evidence.result.estimatedCost).toEqual({ status: 'available', usd: 0.125 });
     for (const sentinel of [
       'PRIVATE-REQUEST-SENTINEL',
@@ -190,11 +200,28 @@ describe('private E2E scenario evidence', () => {
       'PRIVATE-ARGS-SENTINEL',
       'PRIVATE-RESULT-SENTINEL',
       'PRIVATE-RUBRIC-SENTINEL',
+      'retrieval-private-event',
     ]) {
       expect(serialized).toContain(sentinel);
     }
     expect(serialized).not.toContain('providerReplay');
     expect(serialized).not.toContain('initialMessages');
+  });
+
+  it('rejects a turn that cannot prove the retrieval state used by memory rubrics', () => {
+    const result = buildPrivateResult();
+    const turnWithoutRetrieval = {
+      ...result.turnTraces[0]!,
+      retrieval: undefined,
+    } as unknown as E2EScenarioResult['turnTraces'][number];
+
+    expect(() =>
+      buildE2EPrivateScenarioEvidence({
+        scenario: SCENARIO,
+        result: { ...result, turnTraces: [turnWithoutRetrieval] },
+        provenance: PRIVATE_PROVENANCE,
+      }),
+    ).toThrow('Private evidence turn retrieval is missing.');
   });
 
   it('preserves a verified relaunch boundary in requested and observed private evidence', () => {

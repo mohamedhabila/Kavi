@@ -319,11 +319,12 @@ directory.
 
 For exact local diagnosis, set
 `E2E_PRIVATE_EVIDENCE_DIR=.private/evals/<run-name>`. The runner then writes an
-atomic, owner-only `e2e-private-scenario-evidence-v5` file per attempt with raw
-turn, selected-mode, result, estimated-cost, memory, native, graph, and lifecycle
-evidence. The setting is intentionally opt-in; the directory is gitignored,
-cannot escape the private root through `..` or symlinks, is never referenced by
-the public report, and must not be included in uploaded CI artifacts.
+atomic, owner-only `e2e-private-scenario-evidence-v7` file per attempt with raw
+turn, selected-mode, result, estimated-cost, memory, per-turn retrieval, native,
+graph, and lifecycle evidence. The setting is intentionally opt-in; the
+directory is gitignored, cannot escape the private root through `..` or symlinks,
+is never referenced by the public report, and must not be included in uploaded
+CI artifacts.
 
 Parallel scenario workers exchange entries through the private
 `e2e-partial-report-v2` envelope. The writer accepts only

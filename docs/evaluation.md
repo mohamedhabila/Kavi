@@ -657,10 +657,11 @@ permission to publish private input.
 
 Raw scenario evidence is local and opt-in. Set `E2E_PRIVATE_EVIDENCE_DIR` to a
 directory that resolves inside `.private/evals/` to write one unique
-`e2e-private-scenario-evidence-v5` file per attempt. The private file retains
+`e2e-private-scenario-evidence-v7` file per attempt. The private file retains
 requested turns and user-selected modes, final responses, exact memory and
-receipt evidence, tool and native results, graph state, and verified relaunch
-boundaries for diagnosis.
+receipt evidence, per-turn retrieval events used by memory-selection rubrics,
+tool and native results, graph state, and verified relaunch boundaries for
+diagnosis.
 Directories are owner-only, files are written atomically with mode `0600`,
 symlink escapes are rejected, and no private path is included in a public
 report. Never upload this directory as a public CI artifact.
