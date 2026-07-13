@@ -43,6 +43,7 @@ describe('agent-run evidence applicability', () => {
       conversationId: 'conv-observation-only',
       threadId: 'conv-observation-only',
       taskId: null,
+      sourceTurnId: 'assistant-observation-only',
       now: 10,
     });
 
@@ -135,6 +136,7 @@ describe('agent-run evidence applicability', () => {
       conversationId: 'conv-summary-only',
       threadId: 'conv-summary-only',
       taskId: null,
+      sourceTurnId: 'assistant-summary-only',
       now: 10,
     });
 

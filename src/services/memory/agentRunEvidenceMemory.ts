@@ -17,9 +17,15 @@ import {
   stringField,
   type JsonRecord,
 } from './agentRunEvidenceRecordCompaction';
+import { runMemoryTransaction } from './access/transaction';
+import {
+  AGENT_RUN_FACT_CONTRIBUTION_PRODUCER_ID,
+  buildAgentRunFactProducerEventId,
+} from './agentRunFactContributionIdentity';
 import { upsertEntity } from './entities';
-import { recordFactWithApplicability } from './facts/mutations';
-import type { MemoryFactKind } from './facts/types';
+import { recordFactWithContribution } from './facts/mutations';
+import { requireExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { requireExactMemoryScopeId } from './memoryScopeIdentity';
 import { ensureFactSchema } from './schema';
 
 export interface AgentRunEvidenceMemoryInput {
@@ -27,12 +33,12 @@ export interface AgentRunEvidenceMemoryInput {
   evidence?: ReadonlyArray<string>;
   conversationId: string;
   threadId: string;
-  taskId?: string;
+  taskId: string | null;
   sourceRunId?: string;
   sourceActorId?: string;
   parentRunId?: string;
-  sourceTurnId?: string;
-  now?: number;
+  sourceTurnId: string;
+  now: number;
 }
 
 export interface AgentRunEvidenceMemoryResult {
@@ -122,6 +128,12 @@ function directlyObservedEvidenceSlice(step: AgentRunStep): JsonRecord {
   );
 }
 
+function definedRecord(value: JsonRecord): JsonRecord {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  );
+}
+
 function stepHasStructurallyDirectEvidence(step: AgentRunStep): boolean {
   if (step.observation || step.toolResult) return true;
   if ((step.observedControlSequence?.length ?? 0) > 0) return true;
@@ -174,13 +186,15 @@ function getBundle(
   bundles: Map<string, AgentRunBundle>,
   sourceRunId: string,
 ): AgentRunBundle | null {
-  const trimmed = sourceRunId.trim();
-  if (!trimmed) return null;
-  const existing = bundles.get(trimmed);
+  const exactSourceRunId = requireExactMemoryProvenanceId(
+    sourceRunId,
+    'memory_agent_run_source_run_id_invalid',
+  );
+  const existing = bundles.get(exactSourceRunId);
   if (existing) return existing;
   if (bundles.size >= MAX_RUNS_PER_TURN) return null;
   const created: AgentRunBundle = {
-    sourceRunId: trimmed,
+    sourceRunId: exactSourceRunId,
     tools: new Set(),
     sources: new Set(),
     artifacts: new Set(),
@@ -189,17 +203,22 @@ function getBundle(
     summaries: new Set(),
     steps: [],
   };
-  bundles.set(trimmed, created);
+  bundles.set(exactSourceRunId, created);
   return created;
+}
+
+function exactStringField(record: JsonRecord, field: string): string | undefined {
+  const value = record[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function resolveSourceRunId(record: JsonRecord, fallback?: string): string | undefined {
   return (
-    stringField(record, 'sourceRunId') ??
-    stringField(record, 'source_run_id') ??
-    stringField(record, 'trajectory_id') ??
-    stringField(record, 'run_id') ??
-    stringField(record, 'runId') ??
+    exactStringField(record, 'sourceRunId') ??
+    exactStringField(record, 'source_run_id') ??
+    exactStringField(record, 'trajectory_id') ??
+    exactStringField(record, 'run_id') ??
+    exactStringField(record, 'runId') ??
     fallback
   );
 }
@@ -366,23 +385,55 @@ function ingestEvidence(
   return consumed;
 }
 
+function requireExactAgentRunSourceScope(input: AgentRunEvidenceMemoryInput): void {
+  requireExactMemoryScopeId(
+    input.conversationId,
+    'memory_agent_run_conversation_scope_invalid',
+  );
+  requireExactMemoryScopeId(input.threadId, 'memory_agent_run_thread_scope_invalid');
+  if (input.taskId !== null) {
+    requireExactMemoryScopeId(input.taskId, 'memory_agent_run_task_scope_invalid');
+  }
+  if (input.sourceRunId !== undefined) {
+    requireExactMemoryProvenanceId(
+      input.sourceRunId,
+      'memory_agent_run_source_run_id_invalid',
+    );
+  }
+}
+
+function requireAgentRunPersistenceIdentity(input: AgentRunEvidenceMemoryInput): void {
+  requireExactMemoryProvenanceId(
+    input.sourceTurnId,
+    'memory_agent_run_source_turn_id_invalid',
+  );
+  if (!Number.isSafeInteger(input.now) || input.now < 0) {
+    throw new Error('memory_agent_run_timestamp_invalid');
+  }
+}
+
 function recordBundleFact(
   bundle: AgentRunBundle,
   input: AgentRunEvidenceMemoryInput,
   subjectId: string,
-  kind: MemoryFactKind,
+  kind: 'agent_run' | 'evidence_span',
+  recordIndex: number,
   predicate: string,
   objectText: string,
   attributes: JsonRecord,
+  confidence: number,
   importance: number,
   retrievability: number,
+  stability: number,
+  sourceAuthority: 'assistant_inferred' | 'tool_observed',
 ): string | null {
   const trimmed = objectText.trim();
   if (!trimmed) return null;
-  const authorityMultiplier = bundleHasObservedSourceEvidence(bundle)
-    ? 1
-    : agentRunAuthorityMultiplier(bundle);
-  const recorded = recordFactWithApplicability(
+  const authorityMultiplier =
+    kind !== 'agent_run' || bundleHasObservedSourceEvidence(bundle)
+      ? 1
+      : agentRunAuthorityMultiplier(bundle);
+  const recorded = recordFactWithContribution(
     {
       subjectId,
       predicate,
@@ -395,16 +446,33 @@ function recordBundleFact(
       originThreadId: input.threadId,
       originTaskId: input.taskId,
       scope: input.taskId ? 'session' : 'conversation',
-      confidence: 0.82 * authorityMultiplier,
+      confidence: confidence * authorityMultiplier,
       importance,
       retrievability: retrievability * authorityMultiplier,
-      stability: 0.72,
+      stability,
       attributes,
       now: input.now,
     },
     {
       factClass: 'workflow',
-      sourceAuthority: 'assistant_inferred',
+      sourceAuthority,
+    },
+    {
+      memoryConversationId: input.conversationId,
+      sourceThreadId: input.threadId,
+      taskId: input.taskId,
+      producer: {
+        producerId: AGENT_RUN_FACT_CONTRIBUTION_PRODUCER_ID,
+        producerEventId: buildAgentRunFactProducerEventId({
+          sourceRunId: bundle.sourceRunId,
+          recordKind: kind,
+          recordIndex,
+        }),
+      },
+      sourceAliases: [
+        { sourceKind: 'turn', sourceId: input.sourceTurnId },
+        { sourceKind: 'run', sourceId: bundle.sourceRunId },
+      ],
     },
   );
   return recorded.fact.id;
@@ -425,7 +493,7 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
   const decisions = Array.from(bundle.decisions).slice(0, 12);
   const risks = Array.from(bundle.risks).slice(0, 12);
   const summaries = Array.from(bundle.summaries).slice(0, 12);
-  const baseAttributes: JsonRecord = {
+  const baseAttributes: JsonRecord = definedRecord({
     sourceRunId: bundle.sourceRunId,
     sourceActorId: input.sourceActorId,
     parentRunId: input.parentRunId,
@@ -434,7 +502,7 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     outcome: bundle.outcome,
     stepCount: bundle.steps.length,
     tools,
-  };
+  });
 
   const agentRunRecord = compactAgentRunRecord({
     base: {
@@ -460,9 +528,10 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     input,
     subject.id,
     'agent_run',
+    0,
     'agent_run',
     agentRunRecord,
-    {
+    definedRecord({
       ...baseAttributes,
       evidenceType: 'agent_run',
       artifacts,
@@ -470,9 +539,12 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
       risks,
       summaries,
       sources,
-    },
+    }),
+    0.82,
     0.8,
     0.88,
+    0.72,
+    'assistant_inferred',
   );
   if (agentRunId) factIds.push(agentRunId);
 
@@ -481,40 +553,30 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     .slice(0, MAX_EVIDENCE_SPAN_FACTS_PER_RUN);
 
   evidenceSpanSteps.forEach((step, index) => {
-    const recorded = recordFactWithApplicability(
-      {
-        subjectId: subject.id,
-        predicate: 'evidence_span',
-        objectText: evidenceSpanRecordForStep(bundle, step, index),
-        memoryKind: 'evidence_span',
-        sourceRunId: bundle.sourceRunId,
-        sourceActorId: input.sourceActorId,
-        sourceTurnId: input.sourceTurnId,
-        originConversationId: input.conversationId,
-        originThreadId: input.threadId,
-        originTaskId: input.taskId,
-        scope: input.taskId ? 'session' : 'conversation',
-        confidence: 0.9,
-        importance: 0.86,
-        retrievability: 0.94,
-        stability: 0.66,
-        attributes: {
-          ...baseAttributes,
-          evidenceType: 'evidence_span',
-          sequence: index,
-          stateIndex: step.stateIndex,
-          status: step.status,
-          toolName: step.toolName,
-          url: step.url,
-        },
-        now: input.now,
-      },
-      {
-        factClass: 'workflow',
-        sourceAuthority: 'tool_observed',
-      },
+    const evidenceSpanId = recordBundleFact(
+      bundle,
+      input,
+      subject.id,
+      'evidence_span',
+      index,
+      'evidence_span',
+      evidenceSpanRecordForStep(bundle, step, index),
+      definedRecord({
+        ...baseAttributes,
+        evidenceType: 'evidence_span',
+        sequence: index,
+        stateIndex: step.stateIndex,
+        status: step.status,
+        toolName: step.toolName,
+        url: step.url,
+      }),
+      0.9,
+      0.86,
+      0.94,
+      0.66,
+      'tool_observed',
     );
-    factIds.push(recorded.fact.id);
+    if (evidenceSpanId) factIds.push(evidenceSpanId);
   });
 
   return factIds;
@@ -524,12 +586,17 @@ export function recordAgentRunEvidenceMemory(
   input: AgentRunEvidenceMemoryInput,
 ): AgentRunEvidenceMemoryResult {
   ensureFactSchema();
+  requireExactAgentRunSourceScope(input);
   const bundles = new Map<string, AgentRunBundle>();
   const consumedEvidence = ingestEvidence(bundles, input.evidence ?? [], input.sourceRunId);
   // Code-routed run evidence owns run-level metadata. Transcript tool records
   // still contribute observed steps, but a step status must not replace the
   // terminal status supplied by the execution boundary.
   ingestMessages(bundles, input.messages ?? [], input.sourceRunId);
-  const factIds = Array.from(bundles.values()).flatMap((bundle) => persistBundle(bundle, input));
+  if (bundles.size === 0) return { factIds: [], consumedEvidence };
+  requireAgentRunPersistenceIdentity(input);
+  const factIds = runMemoryTransaction(() =>
+    Array.from(bundles.values()).flatMap((bundle) => persistBundle(bundle, input)),
+  );
   return { factIds, consumedEvidence };
 }

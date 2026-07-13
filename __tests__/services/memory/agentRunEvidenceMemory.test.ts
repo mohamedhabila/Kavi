@@ -31,6 +31,7 @@ describe('recordAgentRunEvidenceMemory', () => {
       conversationId: 'conv-agent-memory',
       threadId: 'conv-agent-memory',
       taskId: 'task-analysis',
+      sourceTurnId: 'assistant-non-json',
       now: 10,
     });
 
@@ -64,6 +65,7 @@ describe('recordAgentRunEvidenceMemory', () => {
       conversationId: 'conv-agent-memory',
       threadId: 'conv-agent-memory',
       taskId: 'task-analysis',
+      sourceTurnId: 'assistant-authority',
       now: 10,
     });
 
@@ -99,6 +101,7 @@ describe('recordAgentRunEvidenceMemory', () => {
       conversationId: 'conv-agent-memory',
       threadId: 'conv-agent-memory',
       taskId: 'task-analysis',
+      sourceTurnId: 'assistant-failed-observed',
       now: 10,
     });
 
@@ -649,6 +652,7 @@ describe('recordAgentRunEvidenceMemory', () => {
       threadId: 'conv-agent-memory',
       taskId: 'task-analysis',
       sourceRunId: 'fallback-run',
+      sourceTurnId: 'assistant-empty',
       now: 10,
     });
 
