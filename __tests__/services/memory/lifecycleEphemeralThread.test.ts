@@ -52,6 +52,7 @@ it('does not persist turns from an ephemeral side thread', async () => {
     threadId: sideThreadId,
     memoryConversationId: parentId,
     messages,
+    sourceEndMessageId: 'side-assistant',
     now: 10,
   });
 

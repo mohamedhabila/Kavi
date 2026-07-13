@@ -56,10 +56,6 @@ import {
   processIngestionTurn,
   syncWorkingMemoryFromTurn,
 } from '../../../src/services/memory/turnProcessor';
-import {
-  findLastClosedTurn,
-  normalizeTerminalClosedTurnMessages,
-} from '../../../src/services/memory/closedTurn';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
@@ -72,77 +68,6 @@ function makeMsg(overrides: Partial<Message> = {}): Message {
     ...overrides,
   } as Message;
 }
-
-describe('findLastClosedTurn', () => {
-  it('closes tool-only terminal assistants with final metadata', () => {
-    const user = makeMsg({ role: 'user', content: 'List calendars' });
-    const assistant = makeMsg({
-      role: 'assistant',
-      content: '',
-      toolCalls: [{ id: 'tc-1', name: 'calendar_list', arguments: '{}' }],
-      assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
-    });
-    const closed = findLastClosedTurn([user, assistant]);
-    expect(closed.user?.id).toBe(user.id);
-    expect(closed.assistant?.id).toBe(assistant.id);
-  });
-
-  it('promotes tool-only assistants in the latest user slice before closure', () => {
-    const user = makeMsg({ role: 'user', content: 'Run tools only' });
-    const assistant = makeMsg({
-      role: 'assistant',
-      content: '',
-      toolCalls: [{ id: 'tc-1', name: 'calendar_list', arguments: '{}' }],
-      assistantMetadata: {
-        finishReason: 'stop',
-        kind: 'intermediate',
-        completionStatus: 'complete',
-      },
-    });
-    const closed = findLastClosedTurn([user, assistant]);
-    expect(closed.assistant?.assistantMetadata).toMatchObject({
-      kind: 'final',
-      completionStatus: 'complete',
-    });
-  });
-
-  it('closes empty final assistants with terminal metadata', () => {
-    const user = makeMsg({ role: 'user', content: 'weekend-planning-thread' });
-    const assistant = makeMsg({
-      role: 'assistant',
-      content: '',
-      assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
-    });
-    const closed = findLastClosedTurn([user, assistant]);
-    expect(closed.user?.id).toBe(user.id);
-    expect(closed.assistant?.id).toBe(assistant.id);
-  });
-
-  it('skips intermediate tool batches that are not terminal', () => {
-    const user = makeMsg({ role: 'user', content: 'Hello' });
-    const messages: Message[] = [
-      user,
-      makeMsg({
-        role: 'assistant',
-        content: '',
-        toolCalls: [{ id: 'tc-1', name: 'tool_catalog', arguments: '{}' }],
-        assistantMetadata: {
-          finishReason: 'stop',
-          kind: 'intermediate',
-          completionStatus: 'complete',
-        },
-      }),
-      makeMsg({ role: 'tool', content: 'ok', toolCallId: 'tc-1' }),
-      makeMsg({
-        role: 'assistant',
-        content: 'Done.',
-        assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
-      }),
-    ];
-    const closed = findLastClosedTurn(messages);
-    expect(closed.assistant?.content).toBe('Done.');
-  });
-});
 
 describe('syncWorkingMemoryFromTurn', () => {
   beforeEach(() => {
@@ -163,40 +88,20 @@ describe('syncWorkingMemoryFromTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'plan-weekend-trip-42' }),
         makeMsg({
+          id: 'assistant-tool-only-sync',
           role: 'assistant',
           content: '',
           toolCalls: [{ id: 'tc-1', name: 'calendar_list', arguments: '{}' }],
           assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
         }),
       ],
+      sourceEndMessageId: 'assistant-tool-only-sync',
       threadTitle: 'weekend-planning-thread',
     });
 
     expect(result.processed).toBe(true);
     expect(result.skipped).toBeUndefined();
     expect(mockExtractStructuralMemory).toHaveBeenCalled();
-  });
-});
-
-describe('normalizeTerminalClosedTurnMessages', () => {
-  it('does not mutate messages when the latest assistant already has text', () => {
-    const messages = [
-      makeMsg({ role: 'user', content: 'Hi' }),
-      makeMsg({ role: 'assistant', content: 'Hello' }),
-    ];
-    expect(normalizeTerminalClosedTurnMessages(messages)).toBe(messages);
-  });
-
-  it('promotes empty no-tool assistants in the latest user turn slice', () => {
-    const user = makeMsg({ role: 'user', content: 'plan-weekend-trip-42' });
-    const assistant = makeMsg({ role: 'assistant', content: '' });
-    const normalized = normalizeTerminalClosedTurnMessages([user, assistant]);
-    expect(normalized).not.toBe([user, assistant]);
-    expect(normalized[1]?.assistantMetadata).toMatchObject({
-      kind: 'final',
-      completionStatus: 'complete',
-    });
-    expect(findLastClosedTurn(normalized).assistant?.id).toBe(assistant.id);
   });
 });
 
@@ -231,15 +136,20 @@ describe('processIngestionTurn', () => {
   });
 
   it('returns processed=false when there are no messages', async () => {
-    const result = await processIngestionTurn({ threadId: 'conv-1', messages: [] });
+    const result = await processIngestionTurn({
+      threadId: 'conv-1',
+      messages: [],
+      sourceEndMessageId: 'missing-final',
+    });
     expect(result.processed).toBe(false);
-    expect(result.skipped).toBe('no_closed_turn');
+    expect(result.skipped).toBe('source_identity_invalid');
   });
 
   it('returns processed=false when the only assistant message is a placeholder', async () => {
     const messages: Message[] = [
       makeMsg({ role: 'user', content: 'Hello' }),
       makeMsg({
+        id: 'assistant-placeholder',
         role: 'assistant',
         content: '',
         assistantMetadata: {
@@ -249,12 +159,16 @@ describe('processIngestionTurn', () => {
         },
       }),
     ];
-    const result = await processIngestionTurn({ threadId: 'conv-1', messages });
+    const result = await processIngestionTurn({
+      threadId: 'conv-1',
+      messages,
+      sourceEndMessageId: 'assistant-placeholder',
+    });
     expect(result.processed).toBe(false);
     expect(result.skipped).toBe('no_closed_turn');
   });
 
-  it('skips intermediate placeholders and finds the last closed turn', async () => {
+  it('rejects an exact closed turn followed by a later assistant', async () => {
     const closedAssistant = makeMsg({
       role: 'assistant',
       content: 'All done.',
@@ -273,12 +187,14 @@ describe('processIngestionTurn', () => {
         },
       }),
     ];
-    await processIngestionTurn({
+    const result = await processIngestionTurn({
       episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages,
+      sourceEndMessageId: closedAssistant.id,
     });
-    expect(mockExtractStructuralMemory).toHaveBeenCalled();
+    expect(result).toMatchObject({ processed: false, skipped: 'source_identity_invalid' });
+    expect(mockExtractStructuralMemory).not.toHaveBeenCalled();
   });
 
   it('calls structural extraction with the turn input', async () => {
@@ -292,6 +208,7 @@ describe('processIngestionTurn', () => {
       episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [user, assistant],
+      sourceEndMessageId: assistant.id,
       sourceRunId: 'run-structural',
     });
 
@@ -330,11 +247,13 @@ describe('processIngestionTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'Deploy' }),
         makeMsg({
+          id: 'assistant-persisted',
           role: 'assistant',
           content: 'Done',
           assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
         }),
       ],
+      sourceEndMessageId: 'assistant-persisted',
       sourceRunId: 'run-persisted',
     });
 
@@ -377,6 +296,7 @@ describe('processIngestionTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
         makeMsg({
+          id: 'assistant-provider-failure',
           role: 'assistant',
           content: 'Hi',
           assistantMetadata: {
@@ -386,6 +306,7 @@ describe('processIngestionTurn', () => {
           },
         }),
       ],
+      sourceEndMessageId: 'assistant-provider-failure',
       extractor: jest.fn(),
     });
 
@@ -419,6 +340,7 @@ describe('processIngestionTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
         makeMsg({
+          id: 'assistant-preempted',
           role: 'assistant',
           content: 'Hi',
           assistantMetadata: {
@@ -428,6 +350,7 @@ describe('processIngestionTurn', () => {
           },
         }),
       ],
+      sourceEndMessageId: 'assistant-preempted',
       extractor: jest.fn(),
       providerSignal: controller.signal,
     });
@@ -469,11 +392,13 @@ describe('processIngestionTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
         makeMsg({
+          id: 'assistant-evidence-absent',
           role: 'assistant',
           content: 'Hi',
           assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
         }),
       ],
+      sourceEndMessageId: 'assistant-evidence-absent',
       extractor: jest.fn(),
     });
 
@@ -511,11 +436,13 @@ describe('processIngestionTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'Remember a structured preference.' }),
         makeMsg({
+          id: 'assistant-structural-precedence',
           role: 'assistant',
           content: 'Done',
           assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
         }),
       ],
+      sourceEndMessageId: 'assistant-structural-precedence',
       extractor: jest.fn(),
     });
 
@@ -573,11 +500,13 @@ describe('processIngestionTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'Use the current preference to complete the task.' }),
         makeMsg({
+          id: 'assistant-no-provider-invention',
           role: 'assistant',
           content: 'Done',
           assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
         }),
       ],
+      sourceEndMessageId: 'assistant-no-provider-invention',
       extractor: jest.fn(),
     });
 
@@ -601,6 +530,7 @@ describe('processIngestionTurn', () => {
       episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [makeMsg({ role: 'user', content: 'Hey' }), assistant],
+      sourceEndMessageId: assistant.id,
     });
 
     expect(mockUpsertState).toHaveBeenCalledWith(
@@ -624,6 +554,7 @@ describe('processIngestionTurn', () => {
         messages: [
           makeMsg({ role: 'user', content: 'Hey' }),
           makeMsg({
+            id: 'assistant-cursor-failure',
             role: 'assistant',
             content: 'Hi',
             assistantMetadata: {
@@ -633,6 +564,7 @@ describe('processIngestionTurn', () => {
             },
           }),
         ],
+        sourceEndMessageId: 'assistant-cursor-failure',
       }),
     ).rejects.toThrow('Cursor write failed');
   });
@@ -644,11 +576,13 @@ describe('processIngestionTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
         makeMsg({
+          id: 'assistant-extraction-context',
           role: 'assistant',
           content: 'Hi',
           assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
         }),
       ],
+      sourceEndMessageId: 'assistant-extraction-context',
       threadTitle: 'API Work',
       personaSummary: 'You are a coding assistant',
     });
@@ -669,11 +603,13 @@ describe('processIngestionTurn', () => {
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
         makeMsg({
+          id: 'assistant-custom-now',
           role: 'assistant',
           content: 'Hi',
           assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
         }),
       ],
+      sourceEndMessageId: 'assistant-custom-now',
       now,
     });
 

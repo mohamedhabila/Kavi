@@ -169,6 +169,7 @@ describe('memory ingestion receipt integration', () => {
         threadId: job.threadId,
         memoryConversationId: job.memoryConversationId,
         messages: closedFileTurn('race'),
+        sourceEndMessageId: job.sourceEndMessageId,
         now: 200,
         skipWorkingMemorySync: true,
         canPersist: () => true,

@@ -133,6 +133,7 @@ describe('durable memory enrichment retries', () => {
       threadId: 'conv-provider-fail',
       threadTitle: 'Release hardening',
       messages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 
@@ -219,6 +220,7 @@ describe('durable memory enrichment retries', () => {
     const recorded = await recordCompletedTurnForMemory({
       threadId: 'conv-provider-retry',
       messages: retryMessages,
+      sourceEndMessageId: 'a-retry',
       now: 100,
     });
 

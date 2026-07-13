@@ -31,7 +31,6 @@ import {
 } from './memoryScopeIdentity';
 import { mergeProviderIntoStructural } from './providerFactReconciliation';
 import {
-  resolveClosedTurnSourceIdentity,
   resolveSealedPriorUserMessageIdentity,
   type MemoryMessageIdentity,
 } from './priorUserMessageIdentity';
@@ -39,7 +38,11 @@ import {
   skippedSyncWorkingMemoryResult,
   type SyncWorkingMemoryResult,
 } from './syncWorkingMemoryResult';
-import { findLastClosedTurn } from './closedTurn';
+import {
+  resolveClosedTurnEndingAt,
+  type ExactClosedTurnFailureReason,
+  type ExactClosedTurnResolution,
+} from './closedTurn';
 
 export type { SyncWorkingMemoryResult } from './syncWorkingMemoryResult';
 
@@ -48,6 +51,7 @@ const logger = createLogger('memory.turnProcessor');
 export interface ProcessTurnInput {
   threadId: string;
   memoryConversationId?: string;
+  sourceEndMessageId: string;
   messages: ConsolidatorSourceMessage[];
   threadTitle?: string;
   personaSummary?: string;
@@ -74,6 +78,18 @@ export interface ProcessTurnInput {
   commitStructuralCheckpoint?: () => boolean;
   /** Persist a readable structural checkpoint without finalizing the source cursor or receipt. */
   deferStructuralFinalization?: boolean;
+}
+
+function exactClosedTurnSkipReason(
+  reason: ExactClosedTurnFailureReason,
+): 'no_closed_turn' | 'source_identity_invalid' {
+  return reason === 'source_end_not_closed' ? 'no_closed_turn' : 'source_identity_invalid';
+}
+
+function resolveExactClosedTurn(
+  input: Pick<ProcessTurnInput, 'messages' | 'sourceEndMessageId'>,
+): ExactClosedTurnResolution {
+  return resolveClosedTurnEndingAt(input.messages, input.sourceEndMessageId);
 }
 
 function resolveMemoryConversationId(
@@ -262,14 +278,11 @@ export function syncWorkingMemoryFromTurn(input: ProcessTurnInput): SyncWorkingM
     return skippedSyncWorkingMemoryResult('opt_out');
   }
   const now = input.now ?? Date.now();
-  const { user, assistant } = findLastClosedTurn(input.messages);
-  if (!assistant) {
-    return skippedSyncWorkingMemoryResult('no_closed_turn');
+  const closedTurn = resolveExactClosedTurn(input);
+  if (closedTurn.status === 'invalid') {
+    return skippedSyncWorkingMemoryResult(exactClosedTurnSkipReason(closedTurn.reason));
   }
-  const sourceIdentity = resolveClosedTurnSourceIdentity(input.messages, user?.id, assistant.id);
-  if (sourceIdentity.status === 'invalid') {
-    return skippedSyncWorkingMemoryResult('source_identity_invalid');
-  }
+  const { user, assistant } = closedTurn;
 
   const structural = extractStructuralMemory(buildTurnInput(user, assistant, input));
   const working = applyWorkingMemoryFromStructural(structural, input, now);
@@ -278,9 +291,9 @@ export function syncWorkingMemoryFromTurn(input: ProcessTurnInput): SyncWorkingM
     processed: true,
     activeFocusUpdated: working.activeFocusUpdated,
     openThreadsUpdated: working.openThreadsUpdated,
-    sourceEndMessageId: sourceIdentity.sourceEndMessageId,
-    sourceStartMessageId: sourceIdentity.sourceStartMessageId,
-    priorUserMessageId: sourceIdentity.priorUserMessageId,
+    sourceEndMessageId: closedTurn.sourceEndMessageId,
+    sourceStartMessageId: closedTurn.sourceStartMessageId,
+    priorUserMessageId: closedTurn.priorUserMessageId,
   };
 }
 
@@ -293,10 +306,11 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     return skippedProcessTurnResult('opt_out');
   }
   const now = input.now ?? Date.now();
-  const { user, assistant } = findLastClosedTurn(input.messages);
-  if (!assistant) {
-    return skippedProcessTurnResult('no_closed_turn');
+  const closedTurn = resolveExactClosedTurn(input);
+  if (closedTurn.status === 'invalid') {
+    return skippedProcessTurnResult(exactClosedTurnSkipReason(closedTurn.reason));
   }
+  const { user, assistant } = closedTurn;
   if (!input.episodeAccess) {
     throw new Error('episode_access_policy_required');
   }

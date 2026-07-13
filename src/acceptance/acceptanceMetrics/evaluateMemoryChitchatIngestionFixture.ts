@@ -13,9 +13,14 @@ export async function evaluateMemoryChitchatIngestionFixture(
   fixture: MemoryChitchatIngestionFixture,
   now = 100,
 ): Promise<AcceptanceFixtureOutcome> {
+  const sourceEndMessageId = fixture.messages[fixture.messages.length - 1]?.id;
+  if (!sourceEndMessageId) {
+    throw new Error(`Memory chitchat fixture ${fixture.id} is missing a final assistant message`);
+  }
   const recordResult = await recordCompletedTurnForMemory({
     threadId: fixture.threadId,
     messages: fixture.messages,
+    sourceEndMessageId,
     threadTitle: fixture.threadTitle,
     now,
   });

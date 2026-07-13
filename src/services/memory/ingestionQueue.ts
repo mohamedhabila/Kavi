@@ -285,6 +285,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     const turnResult = await runConsolidation({
       threadId: job.threadId,
       memoryConversationId: job.memoryConversationId,
+      sourceEndMessageId: job.sourceEndMessageId,
       messages: sourceSnapshot.turnMessages,
       sealedPriorUserMessageId: job.priorUserMessageId ?? undefined,
       priorIdentityMessages: sourceSnapshot.priorUserMessage

@@ -283,7 +283,11 @@ function buildToolMessagesForTrajectory(
   return messages;
 }
 
-function buildTrajectoryMessages(trajectory: JsonObject, id: string, terminalAt: number): Message[] {
+function buildTrajectoryMessages(
+  trajectory: JsonObject,
+  id: string,
+  terminalAt: number,
+): Message[] {
   const metadata = trajectoryMetadata(trajectory, id);
   const stateCount = Array.isArray(trajectory.states) ? trajectory.states.length : 0;
   const toolBaseTimestamp = terminalAt - stateCount * 2 - 1;
@@ -357,6 +361,7 @@ async function insertTrajectory(
   const ingestionResult = await processIngestionTurn({
     threadId: resolved.conversationId,
     messages,
+    sourceEndMessageId: `assistant-final-${id}`,
     threadTitle: String(trajectory.goal ?? id),
     graphGoalEvidence,
     sourceRunId: id,

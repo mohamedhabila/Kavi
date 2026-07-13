@@ -6,10 +6,13 @@ import {
   type TerminalFinalResponseRecoveryCandidate,
 } from '../terminalFinalResponseRecovery';
 import type { EnsureAgentRunFinalResponse, ResolvedFinalizationProviderContext } from './contracts';
+import { buildAgentRunMessageScope } from '../../../services/agents/lifecycle/agentRunStateMachine';
 import { getReviewableSubAgentsForRun } from '../../../services/agents/subAgentRunTracking';
 import { resolveConversationWorkspaceTarget } from '../../../services/conversationWorkspace/ownership';
+import { useChatStore } from '../../../store/useChatStore';
 import type { Conversation } from '../../../types/conversation';
-import type { RecordConversationTurnMemory } from '../../../screens/chatTurnMemory';
+import type { RecordConversationTurnMemory } from '../../../services/memory/turnPublication';
+import { findLatestPreferredAgentRunAssistantMessageId } from './assistantMessages';
 
 type ResolveConversationFinalizationContext = (
   conversation: Conversation,
@@ -39,13 +42,27 @@ export async function recoverTerminalFinalResponse(params: {
     providerContext: params.providerContext,
     timestamp: params.candidate.timestamp,
   });
-  if (preview) {
+  const settledConversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === params.candidate.conversationId);
+  const settledRun = settledConversation?.agentRuns?.find(
+    (candidate) => candidate.id === params.candidate.runId,
+  );
+  const sourceEndMessageId =
+    settledConversation && settledRun
+      ? findLatestPreferredAgentRunAssistantMessageId(
+          settledConversation.messages,
+          buildAgentRunMessageScope(settledRun),
+        )
+      : undefined;
+  if (preview && sourceEndMessageId) {
     params.recordConversationTurnMemory(
       params.candidate.conversationId,
       params.providerContext
         ? { ...params.providerContext.provider, model: params.providerContext.model }
         : undefined,
       {
+        sourceEndMessageId,
         memoryConversationId: workspaceTarget.workspaceConversationId,
         sourceRunId: params.candidate.runId,
       },

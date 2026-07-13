@@ -8,7 +8,8 @@
 // runMemoryBackgroundFlush — drains the ingestion queue on background.
 //
 // All entry points honor the privacy opt-out (`disableLongTermMemory`).
-// None of these calls ever throw out of the lifecycle hook.
+// Turn publication rejects persistence failures so durable callers can hold
+// their completion boundary closed until the exact source has been recorded.
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../store/useChatStore';
@@ -159,6 +160,7 @@ export function scheduleMemoryIngestionDrainFromAppState(): void {
 export interface RecordCompletedTurnForMemoryInput {
   threadId: string;
   memoryConversationId?: string | null;
+  sourceEndMessageId: string;
   messages: Message[];
   threadTitle?: string;
   personaSummary?: string;
@@ -265,12 +267,13 @@ export async function recordCompletedTurnForMemory(
     };
   }
   const personaId = resolveCodeOwnedMemoryPersonaId(conversation?.personaId);
-  const sourceRunId = input.sourceRunId ?? conversation?.activeAgentRunId ?? undefined;
+  const sourceRunId = input.sourceRunId;
   const chatProvider = input.activeChatProvider ?? resolveActiveMemoryChatProvider(conversation);
 
   const syncResult = syncWorkingMemoryFromTurn({
     threadId: input.threadId,
     memoryConversationId,
+    sourceEndMessageId: input.sourceEndMessageId,
     messages: input.messages,
     threadTitle: input.threadTitle,
     personaSummary: input.personaSummary,

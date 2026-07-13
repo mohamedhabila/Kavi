@@ -1,6 +1,8 @@
 import { recoverTerminalFinalResponse } from '../../src/engine/graph/foregroundRun/useForegroundRunRecoveryEffects';
+import { useChatStore } from '../../src/store/useChatStore';
 import type { Conversation } from '../../src/types/conversation';
 import { makeTestProviderConfig } from '../fixtures/providers';
+import { makeTestAgentRun } from '../helpers/factories';
 
 const conversation: Conversation = {
   id: 'conversation-1',
@@ -18,9 +20,44 @@ const candidate = {
 };
 
 describe('terminal final-response recovery', () => {
+  beforeEach(() => {
+    useChatStore.setState({ conversations: [conversation] } as never);
+  });
+
   it('records the recovered terminal turn exactly after final delivery succeeds', async () => {
     const provider = makeTestProviderConfig({ id: 'provider-1', model: 'configured-model' });
-    const ensureAgentRunFinalResponse = jest.fn().mockResolvedValue('Recovered answer');
+    const ensureAgentRunFinalResponse = jest.fn().mockImplementation(async () => {
+      useChatStore.setState({
+        conversations: [
+          {
+            ...conversation,
+            messages: [
+              {
+                id: 'user-1',
+                role: 'user',
+                content: 'Recover the answer.',
+                timestamp: 1,
+              },
+              {
+                id: 'final-1',
+                role: 'assistant',
+                content: 'Recovered answer',
+                timestamp: 20,
+                assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+              },
+            ],
+            agentRuns: [
+              makeTestAgentRun({
+                id: candidate.runId,
+                userMessageId: 'user-1',
+                status: candidate.status,
+              }),
+            ],
+          },
+        ],
+      });
+      return 'Recovered answer';
+    });
     const recordConversationTurnMemory = jest.fn();
 
     await expect(
@@ -49,7 +86,11 @@ describe('terminal final-response recovery', () => {
     expect(recordConversationTurnMemory).toHaveBeenCalledWith(
       conversation.id,
       expect.objectContaining({ id: provider.id, model: 'sealed-model' }),
-      { memoryConversationId: conversation.id, sourceRunId: candidate.runId },
+      {
+        sourceEndMessageId: 'final-1',
+        memoryConversationId: conversation.id,
+        sourceRunId: candidate.runId,
+      },
     );
   });
 

@@ -137,6 +137,7 @@ describe('terminal background review memory closeout', () => {
 
     expect(recordConversationTurnMemory).toHaveBeenCalledTimes(1);
     expect(recordConversationTurnMemory).toHaveBeenCalledWith(conversation.id, undefined, {
+      sourceEndMessageId: 'final-1',
       memoryConversationId: conversation.id,
       sourceRunId: run.id,
     });

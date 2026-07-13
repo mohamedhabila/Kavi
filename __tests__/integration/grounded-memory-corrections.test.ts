@@ -108,6 +108,7 @@ async function ingest(input: {
     threadId: 'thread-1',
     memoryConversationId: 'conversation-1',
     messages: turnMessages,
+    sourceEndMessageId: 'assistant-current',
     extractor: async () =>
       JSON.stringify({
         new_facts: [
@@ -288,6 +289,7 @@ describe('grounded passive memory corrections', () => {
       threadId: 'thread-1',
       memoryConversationId: 'conversation-1',
       messages: turnMessages,
+      sourceEndMessageId: 'assistant-current',
       extractor: async () =>
         JSON.stringify({
           new_facts: ['Utrecht', 'Paris'].map((value) => ({

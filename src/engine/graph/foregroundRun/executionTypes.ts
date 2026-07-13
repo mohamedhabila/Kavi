@@ -28,6 +28,7 @@ import type {
   ModelProjectionReleaseResult,
   OwnedModelProjectionMutationResult,
 } from '../../../store/modelProjectionOwnership';
+import type { RecordConversationTurnMemory } from '../../../services/memory/turnPublication';
 
 export type EnsureCanonicalConversationOptions = {
   providerId?: string;
@@ -130,11 +131,7 @@ export interface ForegroundConversationRunHelpers {
   getConversation: (conversationId: string) => Conversation | undefined;
   getConversations: () => Conversation[];
   getResumeAgentRun: () => ResumeAgentRun | null;
-  recordConversationTurnMemory: (
-    conversationId: string,
-    activeChatProvider?: LlmProviderConfig,
-    options?: { memoryConversationId?: string | null; sourceRunId?: string },
-  ) => void;
+  recordConversationTurnMemory: RecordConversationTurnMemory;
   requestPersistenceCheckpoint: (delayMs?: number) => void;
   setChatError: (message: string | null) => void;
 }

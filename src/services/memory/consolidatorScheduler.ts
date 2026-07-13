@@ -203,7 +203,8 @@ export async function maybeRunConsolidation(
 
   const lastAssistant = lastAssistantMessage(input.messages);
   const lastUser = lastUserMessage(input.messages);
-  if (!lastAssistant || !lastUser) {
+  const sourceEndMessageId = evaluation.anchorMessageId;
+  if (!lastAssistant || !lastUser || !sourceEndMessageId) {
     return {
       ran: false,
       skipped: 'no_user_message',
@@ -215,7 +216,7 @@ export async function maybeRunConsolidation(
   const messageWindow = unconsolidatedWindow(
     input.messages,
     state?.lastConsolidatedMessageId ?? null,
-    evaluation.anchorMessageId ?? lastAssistant.id,
+    sourceEndMessageId,
   );
 
   let extractor = input.extractor;
@@ -233,6 +234,7 @@ export async function maybeRunConsolidation(
       threadId: input.threadId,
       memoryConversationId,
       messages: messageWindow,
+      sourceEndMessageId,
       threadTitle: input.threadTitle,
       personaSummary: input.personaSummary,
       episodeAccess: {

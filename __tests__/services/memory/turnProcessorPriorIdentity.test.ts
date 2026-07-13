@@ -65,6 +65,7 @@ it.each([
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId,
     messages: currentTurn,
+    sourceEndMessageId: 'assistant-current',
     sealedPriorUserMessageId: sealed,
     priorIdentityMessages: history,
   });
@@ -79,6 +80,7 @@ it('accepts an exact unique sealed prior without widening the persisted turn', a
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId,
     messages: currentTurn,
+    sourceEndMessageId: 'assistant-current',
     sealedPriorUserMessageId: 'user-prior',
     priorIdentityMessages: [...priorTurn, ...currentTurn],
   });

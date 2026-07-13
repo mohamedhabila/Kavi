@@ -100,6 +100,7 @@ describe('turnProcessor memory namespace contract', () => {
       threadId: 'child-conv-1',
       memoryConversationId: 'parent-conv-1',
       messages: [makeMsg({ role: 'user', content: 'Remember this.' }), assistant],
+      sourceEndMessageId: assistant.id,
     });
 
     expect(mockExtractStructuralMemory).toHaveBeenCalledWith(
@@ -139,6 +140,7 @@ describe('turnProcessor memory namespace contract', () => {
         episodeAccess: { personaId: 'default', shareability: 'thread_only' },
         threadId: 'conv-required-graph',
         messages: [makeMsg({ role: 'user', content: 'Remember this.' }), assistant],
+        sourceEndMessageId: assistant.id,
         graphGoalEvidence: ['tool:required-evidence'],
         commitPersistenceReceipt,
       }),

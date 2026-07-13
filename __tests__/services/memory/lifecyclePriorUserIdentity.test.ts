@@ -68,6 +68,7 @@ it('seals the immediately prior user identity when the turn is enqueued', async 
   const result = await recordCompletedTurnForMemory({
     threadId: 'conv-sealed-prior',
     messages: history,
+    sourceEndMessageId: 'a-current',
     now: 10,
   });
 

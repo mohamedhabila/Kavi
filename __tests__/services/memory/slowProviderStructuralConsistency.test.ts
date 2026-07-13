@@ -156,6 +156,7 @@ function processClaimedTurn(input: {
     threadId: input.job.threadId,
     memoryConversationId: input.job.memoryConversationId,
     messages: input.messages,
+    sourceEndMessageId: input.job.sourceEndMessageId,
     extractor: input.extractor,
     graphGoalEvidence: GRAPH_EVIDENCE,
     sourceRunId: 'run-structural-consistency',

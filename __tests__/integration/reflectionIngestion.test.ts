@@ -71,7 +71,12 @@ describe('reflection ingestion integration', () => {
       closedAssistant('a-1', 'Saved atlas metadata.', now + 3),
     ];
 
-    const recorded = await recordCompletedTurnForMemory({ threadId, messages: turn1, now });
+    const recorded = await recordCompletedTurnForMemory({
+      threadId,
+      messages: turn1,
+      sourceEndMessageId: 'a-1',
+      now,
+    });
     expect(recorded.jobId).not.toBeNull();
     await waitForIngestionJobTerminal(recorded.jobId!);
 

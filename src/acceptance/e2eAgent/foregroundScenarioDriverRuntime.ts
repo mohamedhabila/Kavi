@@ -29,10 +29,8 @@ import {
   type IngestionJob,
 } from '../../services/memory/ingestionQueue';
 import { listIngestionPersistenceReceipts } from '../../services/memory/ingestionReceiptStore';
-import {
-  loadIngestionJobRuntimeContext,
-  recordCompletedTurnForMemory,
-} from '../../services/memory/lifecycle';
+import { loadIngestionJobRuntimeContext } from '../../services/memory/lifecycle';
+import { publishConversationTurnMemory } from '../../services/memory/turnPublication';
 import { createAgentRunFinalResponse } from '../../screens/agentRunFinalResponse';
 import { truncateLogDetail } from '../../screens/chatFormatting';
 import {
@@ -425,21 +423,12 @@ export function createForegroundScenarioRuntime(
   let context: ExecuteForegroundConversationRunParams['context'];
 
   const recordConversationTurnMemory: ExecuteForegroundConversationRunParams['context']['helpers']['recordConversationTurnMemory'] =
-    (conversationId, activeChatProvider, options = {}) => {
-      const conversation = useChatStore
-        .getState()
-        .conversations.find((candidate) => candidate.id === conversationId);
-      if (!conversation) return;
+    (conversationId, activeChatProvider, options) => {
+      const promise = publishConversationTurnMemory(conversationId, activeChatProvider, options);
       memoryRecords.push({
-        promise: recordCompletedTurnForMemory({
-          threadId: conversationId,
-          memoryConversationId: options.memoryConversationId,
-          messages: conversation.messages,
-          threadTitle: conversation.title,
-          activeChatProvider,
-          sourceRunId: options.sourceRunId,
-        }),
+        promise,
       });
+      return promise;
     };
 
   const ensureAgentRunFinalResponse = createAgentRunFinalResponse({

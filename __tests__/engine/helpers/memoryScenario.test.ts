@@ -26,7 +26,7 @@ describe('memoryScenario helper', () => {
     await recordCompletedTurnForMemory({
       threadId: conversationId,
       messages,
-      completedMessageId: 'a1',
+      sourceEndMessageId: 'a1',
     });
 
     const focus = await readMemoryScenarioWorkingBlock(conversationId, 'active_focus');

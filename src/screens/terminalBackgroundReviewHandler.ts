@@ -12,11 +12,8 @@ import {
   ResumeAgentRun,
 } from '../engine/graph/foregroundRun/contracts';
 import { completeTerminalBackgroundReviewRun } from './terminalBackgroundCompletion';
-import type { RecordConversationTurnMemory } from './chatTurnMemory';
-import {
-  hasIncompleteBlockingGoals,
-  hasResumableBlockingGoals,
-} from '../engine/goals/types';
+import type { RecordConversationTurnMemory } from '../services/memory/turnPublication';
+import { hasIncompleteBlockingGoals, hasResumableBlockingGoals } from '../engine/goals/types';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -64,17 +61,13 @@ export async function handleTerminalBackgroundReview(params: {
   }
 
   const status =
-    candidateStatus === 'completed' && !hasIncompleteBlockingGoals(goals)
-      ? 'completed'
-      : 'failed';
+    candidateStatus === 'completed' && !hasIncompleteBlockingGoals(goals) ? 'completed' : 'failed';
   const checkpointTitle =
     status === 'completed' ? 'Background workers finished' : 'Background worker review failed';
   const runMessageScope = buildAgentRunMessageScope(targetRun);
   let latestSummary = candidateSummary;
 
-  if (
-    !getLatestAssistantProjectionFinalResponsePreview(conversation.messages, runMessageScope)
-  ) {
+  if (!getLatestAssistantProjectionFinalResponsePreview(conversation.messages, runMessageScope)) {
     const preferredAssistantMessageId = findLatestPreferredAgentRunAssistantMessageId(
       conversation.messages,
       runMessageScope,
@@ -105,7 +98,11 @@ export async function handleTerminalBackgroundReview(params: {
     settledConversation.messages,
     settledRunMessageScope,
   );
-  if (!settledFinalResponse) return;
+  const settledFinalResponseMessageId = findLatestPreferredAgentRunAssistantMessageId(
+    settledConversation.messages,
+    settledRunMessageScope,
+  );
+  if (!settledFinalResponse || !settledFinalResponseMessageId) return;
   latestSummary = settledFinalResponse;
 
   const completed = completeTerminalBackgroundReviewRun({
@@ -132,6 +129,7 @@ export async function handleTerminalBackgroundReview(params: {
     conversations: useChatStore.getState().conversations,
   });
   params.recordConversationTurnMemory(params.conversationId, undefined, {
+    sourceEndMessageId: settledFinalResponseMessageId,
     memoryConversationId: workspaceTarget.workspaceConversationId,
     sourceRunId: params.runId,
   });

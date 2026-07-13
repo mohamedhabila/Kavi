@@ -79,10 +79,20 @@ describe('memory three-turn recall fixture', () => {
       closedAssistant('a-2', 'Setup continues.', 6),
     ];
 
-    await recordCompletedTurnForMemory({ threadId, messages: turn1, now: 10 });
+    await recordCompletedTurnForMemory({
+      threadId,
+      messages: turn1,
+      sourceEndMessageId: 'a-1',
+      now: 10,
+    });
     await drainIngestionQueue({ now: 10 });
 
-    await recordCompletedTurnForMemory({ threadId, messages: turn2, now: 20 });
+    await recordCompletedTurnForMemory({
+      threadId,
+      messages: turn2,
+      sourceEndMessageId: 'a-2',
+      now: 20,
+    });
     await drainIngestionQueue({ now: 20 });
 
     const retrieval = await orchestrateMemoryRetrieval({

@@ -77,6 +77,7 @@ describe('memory always-on turn integration', () => {
     const chitchat = await recordCompletedTurnForMemory({
       threadId: 'conv-chit',
       messages: makeClosedTurn('hello', 'hi there'),
+      sourceEndMessageId: 'assistant-1',
     });
     expect(chitchat.processed).toBe(true);
     expect(chitchat.enqueued).toBe(true);
@@ -88,6 +89,7 @@ describe('memory always-on turn integration', () => {
     const agentic = await recordCompletedTurnForMemory({
       threadId: 'conv-agent',
       messages: makeClosedTurn('search docs', 'Here are results [web_search]'),
+      sourceEndMessageId: 'assistant-1',
     });
     expect(agentic.processed).toBe(true);
     expect(agentic.enqueued).toBe(true);
@@ -103,6 +105,7 @@ describe('memory always-on turn integration', () => {
       threadId: 'conv-sync',
       threadTitle: 'Trip planning',
       messages,
+      sourceEndMessageId: 'assistant-1',
     });
 
     expect(recorded.processed).toBe(true);
@@ -170,6 +173,7 @@ describe('memory always-on turn integration', () => {
     const recorded = await recordCompletedTurnForMemory({
       threadId: 'conv-natural-remember',
       messages,
+      sourceEndMessageId: 'assistant-1',
       now: 10,
     });
     expect(recorded.jobId).not.toBeNull();

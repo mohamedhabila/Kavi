@@ -82,6 +82,7 @@ describe('recordCompletedTurnForMemory', () => {
       threadId: 'conv-live',
       threadTitle: 'Release hardening',
       messages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 
@@ -122,6 +123,7 @@ describe('recordCompletedTurnForMemory', () => {
       threadId: 'conv-duplicate-source',
       threadTitle: 'Must not be persisted',
       messages: duplicateMessages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 
@@ -175,6 +177,7 @@ describe('recordCompletedTurnForMemory', () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-tools',
       messages: toolMessages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 
@@ -199,6 +202,7 @@ describe('recordCompletedTurnForMemory', () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-sealed-persona',
       messages,
+      sourceEndMessageId: 'a-1',
       taskId: 'task-private',
       now: 10,
     });
@@ -276,6 +280,7 @@ describe('recordCompletedTurnForMemory', () => {
       memoryConversationId: 'parent-conv-shared',
       threadTitle: 'Shared release workspace',
       messages: childMessages,
+      sourceEndMessageId: 'a-shared-1',
       providerEnrichment: false,
       now: 10,
     });
@@ -365,6 +370,7 @@ describe('recordCompletedTurnForMemory', () => {
       threadId: 'conv-provider',
       threadTitle: 'Release hardening',
       messages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 
@@ -419,6 +425,7 @@ describe('recordCompletedTurnForMemory', () => {
       threadId: 'conv-provider-fallback',
       threadTitle: 'Release hardening',
       messages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 
@@ -465,6 +472,7 @@ describe('recordCompletedTurnForMemory', () => {
       threadId: 'conv-gemini-provider-fallback',
       threadTitle: 'Release hardening',
       messages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 
@@ -575,6 +583,7 @@ describe('recordCompletedTurnForMemory', () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-structural-only',
       messages,
+      sourceEndMessageId: 'a-1',
       threadTitle: 'Structural acceptance flow',
       providerEnrichment: false,
     });
@@ -584,42 +593,6 @@ describe('recordCompletedTurnForMemory', () => {
     expect(getIngestionJob(result.jobId!)?.status).toBe('completed_structural');
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(getConsolidationState('conv-structural-only')?.lastConsolidatedMessageId).toBe('a-1');
-  });
-
-  it('anchors focus to the completed final assistant turn when placeholders trail it', async () => {
-    const messagesWithTrailingPlaceholder: Message[] = [
-      { id: 'u-1', role: 'user', content: 'Please remember the launch checklist.', timestamp: 1 },
-      {
-        id: 'a-final',
-        role: 'assistant',
-        content: 'The launch checklist is captured. Next: validate signing.',
-        timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
-      },
-      {
-        id: 'a-placeholder',
-        role: 'assistant',
-        content: 'Waiting for background worker results.',
-        timestamp: 3,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'yielded' },
-      },
-    ];
-
-    const result = await recordCompletedTurnForMemory({
-      threadId: 'conv-placeholder',
-      threadTitle: 'Launch prep',
-      messages: messagesWithTrailingPlaceholder,
-      now: 10,
-    });
-
-    expect(result.processed).toBe(true);
-    const focus = getWorkingBlock('active_focus', {
-      conversationId: 'conv-placeholder',
-      threadId: 'conv-placeholder',
-    })?.content;
-    expect(focus).toContain('Launch prep');
-    await drainRecordedTurn();
-    expect(getConsolidationState('conv-placeholder')?.lastConsolidatedMessageId).toBe('a-final');
   });
 
   it('anchors conversation focus to thread metadata even when no closed turn is available', async () => {
@@ -633,7 +606,15 @@ describe('recordCompletedTurnForMemory', () => {
           content: 'Verify stored state later.',
           timestamp: 1,
         },
+        {
+          id: 'a-incomplete',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+        },
       ],
+      sourceEndMessageId: 'a-incomplete',
       now: 10,
     });
 
@@ -654,6 +635,7 @@ describe('recordCompletedTurnForMemory', () => {
       threadTitle: 'thread-focus-anchor',
       taskId: 'goal-1',
       messages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 
@@ -680,6 +662,7 @@ describe('recordCompletedTurnForMemory', () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-disabled',
       messages,
+      sourceEndMessageId: 'a-1',
       now: 10,
     });
 

@@ -16,7 +16,7 @@ import type {
 import { getReviewableSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 import type { QueueTerminalBackgroundReview } from './subAgentRunBridgeTypes';
 import { handleTerminalBackgroundReview } from './terminalBackgroundReviewHandler';
-import type { RecordConversationTurnMemory } from './chatTurnMemory';
+import type { RecordConversationTurnMemory } from '../services/memory/turnPublication';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 

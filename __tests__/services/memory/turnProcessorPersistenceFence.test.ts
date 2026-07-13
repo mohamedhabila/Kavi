@@ -67,6 +67,7 @@ it('keeps the pre-provider structural checkpoint but rejects enrichment after op
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: 'conv-opt-out-fence',
     messages,
+    sourceEndMessageId: 'assistant-fenced',
     extractor: async () => {
       useSettingsStore.setState({ disableLongTermMemory: true } as never);
       return validPayload();
@@ -83,6 +84,7 @@ it('does not persist when the durable queue claim is no longer owned', async () 
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: 'conv-claim-fence',
     messages,
+    sourceEndMessageId: 'assistant-fenced',
     extractor: async () => validPayload(),
     canPersist: () => false,
   });
@@ -99,6 +101,7 @@ it('rolls back every structural lane when the atomic checkpoint is rejected', as
       episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-checkpoint-fence',
       messages,
+      sourceEndMessageId: 'assistant-fenced',
       extractor,
       canPersist: () => true,
       commitStructuralCheckpoint: () => false,

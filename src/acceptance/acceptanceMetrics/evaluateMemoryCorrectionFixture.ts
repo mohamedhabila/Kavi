@@ -40,6 +40,7 @@ export async function evaluateMemoryCorrectionFixture(
     threadId,
     memoryConversationId: threadId,
     messages,
+    sourceEndMessageId: `assistant-${fixture.id}`,
     extractor: async () =>
       JSON.stringify({
         new_facts: [

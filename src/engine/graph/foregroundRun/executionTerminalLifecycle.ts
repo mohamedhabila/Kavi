@@ -231,7 +231,11 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
               ...finalizationProviderContext.provider,
               model: finalizationProviderContext.model,
             },
-            { memoryConversationId, sourceRunId: runId },
+            {
+              sourceEndMessageId: getCurrentAssistantMessageId(),
+              memoryConversationId,
+              sourceRunId: runId,
+            },
           ),
         reviewCompletion: () =>
           reviewForegroundRunCompletion({
