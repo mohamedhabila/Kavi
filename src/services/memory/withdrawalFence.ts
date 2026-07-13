@@ -31,6 +31,15 @@ export interface MemoryIngestionSourceIdentity extends MemoryPersistenceSourceSc
   sourceRunId?: string | null;
 }
 
+export class MemoryPersistenceSourceWithdrawnError extends Error {
+  readonly code = 'memory_persistence_source_withdrawn' as const;
+
+  constructor() {
+    super('Memory persistence source withdrawn');
+    this.name = 'MemoryPersistenceSourceWithdrawnError';
+  }
+}
+
 function requireSourceScope(input: MemoryPersistenceSourceScope): {
   memoryConversationId: string;
   sourceThreadId: string;
@@ -84,11 +93,39 @@ export function assertMemoryPersistenceSourcesAreWritable(
     sourceId: string | null | undefined;
   }>,
 ): void {
-  for (const source of sources) {
-    if (source.sourceId === null || source.sourceId === undefined) continue;
-    if (isMemorySourceWithdrawn({ ...scope, ...source, sourceId: source.sourceId })) {
-      throw new Error('Memory persistence source withdrawn');
-    }
+  const normalizedScope = requireSourceScope(scope);
+  const exactSources = sources.flatMap((source) => {
+    if (source.sourceId === null || source.sourceId === undefined) return [];
+    return [
+      {
+        sourceKind: requireExactMemorySourceKind(
+          source.sourceKind,
+          'memory_withdrawal_source_kind_invalid',
+        ),
+        sourceId: requireExactMemoryProvenanceId(
+          source.sourceId,
+          'memory_withdrawal_source_id_invalid',
+        ),
+      },
+    ];
+  });
+  if (exactSources.length === 0) return;
+  ensureFactSchema();
+  const db = getMemoryDb();
+  const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+  if (
+    hasAnyRetiredExactMemorySource(
+      db,
+      exactSources.map((source) => ({
+        memoryOwnerId,
+        memoryConversationId: normalizedScope.memoryConversationId,
+        sourceThreadId: normalizedScope.sourceThreadId,
+        taskId: normalizedScope.taskId === '' ? null : normalizedScope.taskId,
+        ...source,
+      })),
+    )
+  ) {
+    throw new MemoryPersistenceSourceWithdrawnError();
   }
 }
 
