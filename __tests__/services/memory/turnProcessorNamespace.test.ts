@@ -105,8 +105,7 @@ describe('turnProcessor memory namespace contract', () => {
 
     expect(mockExtractStructuralMemory).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: 'parent-conv-1',
-        threadId: 'child-conv-1',
+        sourceAssistantMessageId: assistant.id,
       }),
     );
     expect(mockApplyConsolidatorResult).toHaveBeenCalledWith(
