@@ -101,7 +101,7 @@ describe('graph evidence ingestion bridge', () => {
     };
 
     await processIngestionTurn({ ...input, now: 100 });
-    await processIngestionTurn({ ...input, now: 200 });
+    await processIngestionTurn({ ...input, now: 100 });
 
     const afterReplay = listFacts({ originConversationId: THREAD_ID }).find((fact) =>
       fact.objectText.includes(evidence),
@@ -126,7 +126,7 @@ describe('graph evidence ingestion bridge', () => {
       messages: buildClosedTurnMessages('user-replay-2', 'assistant-replay-2'),
       sourceEndMessageId: 'assistant-replay-2',
       sourceRunId: 'run-graph-later',
-      now: 400,
+      now: 300,
     });
 
     const afterLaterTurn = listFacts({ originConversationId: THREAD_ID }).filter((fact) =>
