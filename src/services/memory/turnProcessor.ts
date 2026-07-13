@@ -14,6 +14,7 @@ import type {
   ConsolidatorExtractor,
   ConsolidatorOutcome,
   ConsolidatorResult,
+  ConsolidatorSourceMessage,
   ConsolidatorTurnInput,
 } from './consolidator';
 import { extractStructuralMemory } from './deterministicExtractor';
@@ -32,6 +33,7 @@ import { mergeProviderIntoStructural } from './providerFactReconciliation';
 import {
   resolveClosedTurnSourceIdentity,
   resolveSealedPriorUserMessageIdentity,
+  type MemoryMessageIdentity,
 } from './priorUserMessageIdentity';
 import {
   skippedSyncWorkingMemoryResult,
@@ -46,7 +48,7 @@ const logger = createLogger('memory.turnProcessor');
 export interface ProcessTurnInput {
   threadId: string;
   memoryConversationId?: string;
-  messages: Message[];
+  messages: ConsolidatorSourceMessage[];
   threadTitle?: string;
   personaSummary?: string;
   taskId?: string;
@@ -58,7 +60,7 @@ export interface ProcessTurnInput {
   /** Queue-sealed user message immediately preceding this turn-local window. */
   sealedPriorUserMessageId?: string;
   /** Code-owned provenance context used only to verify the sealed prior identity. */
-  priorIdentityMessages?: Message[];
+  priorIdentityMessages?: MemoryMessageIdentity[];
   skipWorkingMemorySync?: boolean;
   episodeAccess?: {
     personaId: string;

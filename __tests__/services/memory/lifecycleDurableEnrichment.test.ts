@@ -49,6 +49,7 @@ import { persistMemoryRemember } from '../../../src/services/memory/memoryRememb
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
+import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
@@ -258,7 +259,6 @@ describe('durable memory enrichment retries', () => {
     });
 
     const secondDrain = await drainIngestionQueue({
-      loadMessagesForThread: () => retryMessages,
       now: retryingJob!.nextAttemptAt!,
     });
     const episodes = listEpisodes({ threadId: 'conv-provider-retry' });
@@ -356,10 +356,16 @@ describe('durable memory enrichment retries', () => {
       reason: 'turn_completed',
       providerEnrichment: true,
       now: 100,
+      sourceSnapshot: encodeIngestionSourceSnapshot({
+        messages: history,
+        priorUserMessageId: null,
+        sourceStartMessageId: 'u-causal-prior',
+        sourceEndMessageId: 'a-causal-prior',
+      }),
     })!;
     mockSendMessage.mockRejectedValueOnce(new Error('temporary timeout'));
 
-    await drainIngestionQueue({ loadMessagesForThread: () => history, now: 100 });
+    await drainIngestionQueue({ now: 100 });
     const priorRetry = getIngestionJob(prior.id)!;
     expect(priorRetry).toEqual(
       expect.objectContaining({ status: 'retrying', structuralCompletedAt: 100 }),
@@ -380,6 +386,12 @@ describe('durable memory enrichment retries', () => {
       reason: 'turn_completed',
       providerEnrichment: true,
       now: 101,
+      sourceSnapshot: encodeIngestionSourceSnapshot({
+        messages: history,
+        priorUserMessageId: 'u-causal-prior',
+        sourceStartMessageId: 'u-causal-successor',
+        sourceEndMessageId: 'a-causal-successor',
+      }),
     })!;
     mockSendMessage
       .mockResolvedValueOnce({
@@ -435,7 +447,7 @@ describe('durable memory enrichment retries', () => {
         ],
       });
 
-    await drainIngestionQueue({ loadMessagesForThread: () => history, maxJobs: 1, now: 101 });
+    await drainIngestionQueue({ maxJobs: 1, now: 101 });
 
     expect(getIngestionJob(successor.id)).toEqual(
       expect.objectContaining({
@@ -478,7 +490,6 @@ describe('durable memory enrichment retries', () => {
     });
 
     await drainIngestionQueue({
-      loadMessagesForThread: () => history,
       maxJobs: 1,
       now: priorRetry.nextAttemptAt!,
     });
@@ -498,7 +509,6 @@ describe('durable memory enrichment retries', () => {
     ).toBe(false);
 
     await drainIngestionQueue({
-      loadMessagesForThread: () => history,
       maxJobs: 1,
       now: priorRetry.nextAttemptAt!,
     });

@@ -48,7 +48,6 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
-import type { Message } from '../../../src/types/message';
 import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -96,28 +95,6 @@ function processResult(
     bridgedEvidenceFactIds: [],
     agentRunMemoryFactIds: [],
   };
-}
-
-function closedTurn(suffix: string): Message[] {
-  return [
-    {
-      id: `user-${suffix}`,
-      role: 'user',
-      content: 'Remember this',
-      createdAt: 1,
-    },
-    {
-      id: `assistant-${suffix}`,
-      role: 'assistant',
-      content: 'Done',
-      createdAt: 2,
-      assistantMetadata: {
-        kind: 'final',
-        completionStatus: 'complete',
-        finishReason: 'stop',
-      },
-    },
-  ];
 }
 
 function columnNamesForQueue(): string[] {
@@ -310,7 +287,6 @@ describe('ingestionQueue', () => {
       now: 100,
     });
     await drainIngestionQueue({
-      loadMessagesForThread: () => closedTurn('completed-dedupe'),
       now: 100,
     });
 
@@ -338,37 +314,11 @@ describe('ingestionQueue', () => {
       sourceEndMessageId: 'assistant-1',
       sourceStartMessageId: 'user-1',
     });
-    const messages: Message[] = [
-      {
-        id: 'user-1',
-        role: 'user',
-        content: 'Record this memory.',
-        createdAt: 1,
-      },
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: 'Done',
-        createdAt: 2,
-        assistantMetadata: {
-          kind: 'final',
-          completionStatus: 'complete',
-          finishReason: 'stop',
-        },
-      },
-    ];
-    const loadMessagesForThread = jest.fn((threadId: string) =>
-      threadId === 'child-conv-1' ? messages : [],
-    );
-
-    const result = await drainIngestionQueue({
-      loadMessagesForThread,
-    });
+    const result = await drainIngestionQueue({});
 
     expect(result.completed).toBe(1);
     expect(job?.threadId).toBe('child-conv-1');
     expect(job?.memoryConversationId).toBe('parent-conv-1');
-    expect(loadMessagesForThread).toHaveBeenCalledWith('child-conv-1');
     expect(mockedProcessIngestionTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         threadId: 'child-conv-1',
@@ -392,29 +342,7 @@ describe('ingestionQueue', () => {
     });
     expect(job).not.toBeNull();
 
-    const messages: Message[] = [
-      {
-        id: 'user-1',
-        role: 'user',
-        content: 'Remember this',
-        createdAt: 1,
-      },
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: 'Done',
-        createdAt: 2,
-        assistantMetadata: {
-          kind: 'final',
-          completionStatus: 'complete',
-          finishReason: 'stop',
-        },
-      },
-    ];
-
-    const result = await drainIngestionQueue({
-      loadMessagesForThread: () => messages,
-    });
+    const result = await drainIngestionQueue({});
 
     expect(result.attempted).toBe(1);
     expect(result.completed).toBe(1);
@@ -433,54 +361,32 @@ describe('ingestionQueue', () => {
     );
   });
 
-  it('defers a job when its recorded source window is not loaded', async () => {
+  it('drains a job from its recorded snapshot without loaded chat history', async () => {
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'conv-missing-window',
       sourceStartMessageId: 'user-missing',
       sourceEndMessageId: 'assistant-missing',
     });
-    const latestTurn: Message[] = [
-      {
-        id: 'user-latest',
-        role: 'user',
-        content: 'This later turn must not replace the queued source window.',
-        createdAt: 3,
-      },
-      {
-        id: 'assistant-latest',
-        role: 'assistant',
-        content: 'Later response',
-        createdAt: 4,
-        assistantMetadata: {
-          kind: 'final',
-          completionStatus: 'complete',
-          finishReason: 'stop',
-        },
-      },
-    ];
-
-    const result = await drainIngestionQueue({
-      loadMessagesForThread: () => latestTurn,
-    });
+    const result = await drainIngestionQueue({});
 
     expect(result).toEqual(
       expect.objectContaining({
         attempted: 1,
-        completed: 0,
-        retrying: 1,
+        completed: 1,
+        completedStructural: 1,
+        retrying: 0,
         deferred: 0,
-        sourceDeferred: 1,
         failed: 0,
       }),
     );
-    expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(1);
     expect(getIngestionJob(job!.id)).toEqual(
       expect.objectContaining({
-        status: 'retrying',
+        status: 'completed_structural',
         attemptCount: 1,
-        providerOutcome: null,
-        outcomeCode: 'source_window_unavailable',
+        providerOutcome: 'structural_only',
+        outcomeCode: null,
       }),
     );
   });
@@ -492,29 +398,7 @@ describe('ingestionQueue', () => {
       threadId: 'conv-fail',
       sourceEndMessageId: 'assistant-fail',
     });
-    const messages: Message[] = [
-      {
-        id: 'user-fail',
-        role: 'user',
-        content: 'Remember this',
-        createdAt: 1,
-      },
-      {
-        id: 'assistant-fail',
-        role: 'assistant',
-        content: 'Done',
-        createdAt: 2,
-        assistantMetadata: {
-          kind: 'final',
-          completionStatus: 'complete',
-          finishReason: 'stop',
-        },
-      },
-    ];
-
-    const result = await drainIngestionQueue({
-      loadMessagesForThread: () => messages,
-    });
+    const result = await drainIngestionQueue({});
 
     expect(result.attempted).toBe(1);
     expect(result.completed).toBe(0);
@@ -544,7 +428,6 @@ describe('ingestionQueue', () => {
       });
 
       const result = await drainIngestionQueue({
-        loadMessagesForThread: () => closedTurn(providerStatus),
         now: 100,
       });
 
@@ -581,7 +464,6 @@ describe('ingestionQueue', () => {
     });
 
     const result = await drainIngestionQueue({
-      loadMessagesForThread: () => closedTurn('malformed'),
       now: 100,
     });
 
@@ -618,7 +500,6 @@ describe('ingestionQueue', () => {
         processResult({ status: 'schema_invalid', code: 'invalid_field_type' }),
       );
       const result = await drainIngestionQueue({
-        loadMessagesForThread: () => closedTurn('degraded'),
         now,
       });
       const current = getIngestionJob(job!.id)!;
@@ -658,7 +539,6 @@ describe('ingestionQueue', () => {
         new Error(`sensitive provider exception ${attempt}`),
       );
       const result = await drainIngestionQueue({
-        loadMessagesForThread: () => closedTurn('processing-failed'),
         now,
       });
       const current = getIngestionJob(job!.id)!;

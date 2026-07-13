@@ -80,10 +80,10 @@ describe('memory three-turn recall fixture', () => {
     ];
 
     await recordCompletedTurnForMemory({ threadId, messages: turn1, now: 10 });
-    await drainIngestionQueue({ loadMessagesForThread: () => turn1, now: 10 });
+    await drainIngestionQueue({ now: 10 });
 
     await recordCompletedTurnForMemory({ threadId, messages: turn2, now: 20 });
-    await drainIngestionQueue({ loadMessagesForThread: () => turn2, now: 20 });
+    await drainIngestionQueue({ now: 20 });
 
     const retrieval = await orchestrateMemoryRetrieval({
       userMessage: 'Which atlas metadata file did we write?',

@@ -51,6 +51,7 @@ import { buildLivingMemorySections } from '../../../src/services/memory/livingMe
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
+import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { drainRecordedTurn, messages } from '../../helpers/memoryLifecycle';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 
@@ -90,7 +91,7 @@ describe('recordCompletedTurnForMemory', () => {
     expect(result.activeFocusUpdated).toBe(true);
     expect(result.enriched).toBe(false);
 
-    await drainRecordedTurn('conv-live', messages);
+    await drainRecordedTurn();
 
     // Episode was created
     const episodes = listEpisodes({ threadId: 'conv-live' });
@@ -179,7 +180,7 @@ describe('recordCompletedTurnForMemory', () => {
 
     expect(result.processed).toBe(true);
     expect(result.enqueued).toBe(true);
-    await drainRecordedTurn('conv-tools', toolMessages);
+    await drainRecordedTurn();
     expect(listEpisodes({ threadId: 'conv-tools' }).length).toBeGreaterThanOrEqual(1);
     expect(listFacts({ limit: 20 }).length).toBeGreaterThanOrEqual(1);
   });
@@ -210,7 +211,7 @@ describe('recordCompletedTurnForMemory', () => {
           : conversation,
       ),
     }));
-    await drainRecordedTurn('conv-sealed-persona', messages);
+    await drainRecordedTurn();
 
     const episode = listEpisodes({ threadId: 'conv-sealed-persona' })[0];
     expect(episode).toBeDefined();
@@ -281,7 +282,7 @@ describe('recordCompletedTurnForMemory', () => {
 
     expect(result.processed).toBe(true);
     expect(result.enqueued).toBe(true);
-    await drainRecordedTurn('child-conv-shared', childMessages);
+    await drainRecordedTurn();
 
     const parentFacts = listFacts({ originConversationId: 'parent-conv-shared', limit: 20 });
     const checklistFact = parentFacts.find((fact) => fact.predicate === 'checklist_path');
@@ -369,7 +370,7 @@ describe('recordCompletedTurnForMemory', () => {
 
     expect(result.processed).toBe(true);
     expect(result.enqueued).toBe(true);
-    await drainRecordedTurn('conv-provider', messages);
+    await drainRecordedTurn();
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
 
     const userEntity = findEntityByName('user');
@@ -423,7 +424,7 @@ describe('recordCompletedTurnForMemory', () => {
 
     expect(result.processed).toBe(true);
     expect(result.enqueued).toBe(true);
-    await drainRecordedTurn('conv-provider-fallback', messages);
+    await drainRecordedTurn();
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -469,7 +470,7 @@ describe('recordCompletedTurnForMemory', () => {
 
     expect(result.processed).toBe(true);
     expect(result.enqueued).toBe(true);
-    await drainRecordedTurn('conv-gemini-provider-fallback', messages);
+    await drainRecordedTurn();
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
     expect(mockSendMessage.mock.calls[0][1]).toMatchObject({
       model: 'gemini-3.5-flash',
@@ -536,10 +537,16 @@ describe('recordCompletedTurnForMemory', () => {
       sourceEndMessageId: 'a-1',
       sourceRunId: null,
       sourceAt: 2,
-      chatProviderId: null,
-      chatModel: null,
+      chatProviderId: 'provider-active-bg',
+      chatModel: 'gpt-4o-mini',
       reason: 'turn_completed',
       providerEnrichment: true,
+      sourceSnapshot: encodeIngestionSourceSnapshot({
+        messages,
+        priorUserMessageId: null,
+        sourceStartMessageId: 'u-1',
+        sourceEndMessageId: 'a-1',
+      }),
     });
 
     await runMemoryBackgroundFlush();
@@ -571,7 +578,7 @@ describe('recordCompletedTurnForMemory', () => {
       threadTitle: 'Structural acceptance flow',
       providerEnrichment: false,
     });
-    await drainRecordedTurn('conv-structural-only', messages);
+    await drainRecordedTurn();
 
     expect(result.enqueued).toBe(true);
     expect(getIngestionJob(result.jobId!)?.status).toBe('completed_structural');
@@ -611,7 +618,7 @@ describe('recordCompletedTurnForMemory', () => {
       threadId: 'conv-placeholder',
     })?.content;
     expect(focus).toContain('Launch prep');
-    await drainRecordedTurn('conv-placeholder', messagesWithTrailingPlaceholder);
+    await drainRecordedTurn();
     expect(getConsolidationState('conv-placeholder')?.lastConsolidatedMessageId).toBe('a-final');
   });
 

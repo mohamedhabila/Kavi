@@ -453,6 +453,11 @@ describe('ingestion queue schema migration', () => {
       sourceEndMessageId: 'assistant-corrupt-payload',
       priorUserMessageId: null,
     });
+    const legacyWindowSnapshot = ingestionSourceSnapshotFixture({
+      sourceStartMessageId: 'user-legacy-window',
+      sourceEndMessageId: 'assistant-legacy-window',
+      priorUserMessageId: null,
+    });
     const db = getMemoryDb();
     db.execSync(`
       CREATE TABLE memory_ingestion_jobs (
@@ -503,6 +508,7 @@ describe('ingestion queue schema migration', () => {
       snapshotSha256: string | null;
       snapshotByteLength: number | null;
       structuralCompletedAt: number | null;
+      outcomeCode?: string | null;
     }) => {
       db.runSync(
         `INSERT INTO memory_ingestion_jobs(
@@ -514,7 +520,7 @@ describe('ingestion queue schema migration', () => {
            next_attempt_at, lease_expires_at, claim_token, claim_process_epoch,
            structural_completed_at, error, created_at, updated_at, completed_at
          ) VALUES (?, ?, NULL, ?, 'default', NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?,
-                   10, 'turn_completed', ?, 1, 1, NULL, NULL, 10, NULL, NULL, NULL, ?,
+                   10, 'turn_completed', ?, 1, 1, NULL, ?, 10, NULL, NULL, NULL, ?,
                    'PRIVATE-LEGACY-SNAPSHOT-RAW', 10, 11, NULL)`,
         input.id,
         `thread-${input.id}`,
@@ -525,9 +531,26 @@ describe('ingestion queue schema migration', () => {
         input.snapshotSha256,
         input.snapshotByteLength,
         input.status,
+        input.outcomeCode ?? null,
         input.structuralCompletedAt,
       );
     };
+    insert({
+      id: 'legacy-window-retry',
+      status: 'retrying',
+      sourceStartMessageId: 'user-legacy-window',
+      sourceEndMessageId: 'assistant-legacy-window',
+      snapshotVersion: legacyWindowSnapshot.snapshotVersion,
+      snapshotSha256: legacyWindowSnapshot.payloadSha256,
+      snapshotByteLength: legacyWindowSnapshot.payloadByteLength,
+      structuralCompletedAt: null,
+      outcomeCode: 'source_window_unavailable',
+    });
+    db.runSync(
+      `INSERT INTO memory_ingestion_source_snapshots(job_id, payload_json, created_at)
+       VALUES ('legacy-window-retry', ?, 10)`,
+      legacyWindowSnapshot.payloadJson,
+    );
     insert({
       id: 'corrupt-payload',
       status: 'pending',
@@ -609,6 +632,14 @@ describe('ingestion queue schema migration', () => {
         source_snapshot_version: 1,
       },
       {
+        id: 'legacy-window-retry',
+        status: 'retrying',
+        provider_outcome: null,
+        outcome_code: null,
+        structural_completed_at: null,
+        source_snapshot_version: 1,
+      },
+      {
         id: 'partial-metadata',
         status: 'failed',
         provider_outcome: null,
@@ -646,7 +677,13 @@ describe('ingestion queue schema migration', () => {
       getMemoryDb().getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM memory_ingestion_source_snapshots',
       )?.count,
-    ).toBe(0);
+    ).toBe(1);
+    expect(
+      getMemoryDb().getFirstSync<{ sql: string }>(
+        `SELECT sql FROM sqlite_master
+          WHERE type = 'table' AND name = 'memory_ingestion_jobs'`,
+      )?.sql,
+    ).not.toContain('source_window_unavailable');
     expect(
       JSON.stringify(getMemoryDb().getAllSync('SELECT * FROM memory_ingestion_jobs')),
     ).not.toContain('PRIVATE-LEGACY-SNAPSHOT-RAW');

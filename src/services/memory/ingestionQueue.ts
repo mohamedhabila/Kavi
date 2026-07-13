@@ -6,7 +6,6 @@
 // episode/fact enrichment without blocking chat responses.
 // ---------------------------------------------------------------------------
 
-import type { Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
 import { unrefTimerIfSupported } from '../../utils/timers';
@@ -17,10 +16,8 @@ import {
   type IngestionReceiptProviderOutcomeCode,
 } from './ingestionReceiptStore';
 import { hasSealedIngestionJobIdentity } from './ingestionQueueIdentity';
-import { resolveJobSourceWindow } from './ingestionSourceWindow';
 import {
-  claimIngestionJob,
-  claimIngestionJobForStructuralCheckpoint,
+  claimIngestionJobWithSourceSnapshot,
   completeIngestionJob,
   deferIngestionEnrichmentAfterStructuralCheckpoint,
   discardIngestionJob,
@@ -48,10 +45,7 @@ import {
   preemptActiveIngestionAttemptAndWait,
   protectActiveRemoteIngestionAttemptFromForeground,
 } from './ingestionAttemptPreemption';
-import {
-  deferIngestionJobForMissingSource,
-  recoverStaleIngestionJobs,
-} from './ingestionQueueRecovery';
+import { recoverStaleIngestionJobs } from './ingestionQueueRecovery';
 import {
   acquireIngestionSlot,
   INGESTION_BATCH_LIMIT,
@@ -123,10 +117,8 @@ function preserveThreadTitleFocus(input: {
 
 export interface ProcessIngestionJobInput {
   jobId: string;
-  messages: Message[];
   personaSummary?: string;
   activeChatProvider?: LlmProviderConfig;
-  graphGoalEvidence?: string[];
   now?: number;
 }
 
@@ -217,7 +209,6 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
   status?: IngestionJobStatus;
   skipped?:
     | 'missing_or_terminal'
-    | 'source_window_unavailable'
     | 'memory_pressure'
     | 'slot_unavailable'
     | 'not_due'
@@ -234,49 +225,59 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     return { processed: false, skipped: 'opt_out' };
   }
   recoverStaleIngestionJobs(startedAt);
-  const job = getIngestionJobForProcessing(input.jobId);
-  if (!job) {
+  const candidateJob = getIngestionJobForProcessing(input.jobId);
+  if (!candidateJob) {
     return { processed: false, skipped: 'missing_or_terminal' };
   }
-  if (['degraded', 'completed_structural', 'completed_enriched', 'failed'].includes(job.status)) {
-    return { processed: false, status: job.status, skipped: 'missing_or_terminal' };
+  if (
+    ['degraded', 'completed_structural', 'completed_enriched', 'failed'].includes(
+      candidateJob.status,
+    )
+  ) {
+    return { processed: false, status: candidateJob.status, skipped: 'missing_or_terminal' };
   }
-  if (!hasSealedIngestionJobIdentity(job)) {
-    const identityFailure = job.personaId
+  if (!hasSealedIngestionJobIdentity(candidateJob)) {
+    const identityFailure = candidateJob.personaId
       ? ('source_identity_invalid' as const)
       : ('persona_scope_missing' as const);
-    failIngestionJobForInvalidIdentity(job.id, identityFailure, startedAt);
-    const persistedStatus = getIngestionJobForProcessing(job.id)?.status;
+    failIngestionJobForInvalidIdentity(candidateJob.id, identityFailure, startedAt);
+    const persistedStatus = getIngestionJobForProcessing(candidateJob.id)?.status;
     return {
       processed: false,
       ...(persistedStatus ? { status: persistedStatus } : {}),
       skipped: persistedStatus === 'failed' ? identityFailure : 'missing_or_terminal',
     };
   }
-  if (job.status === 'processing' || (job.nextAttemptAt ?? Number.POSITIVE_INFINITY) > startedAt) {
-    return { processed: false, status: job.status, skipped: 'not_due' };
-  }
-  const sourceWindow = resolveJobSourceWindow(job, input.messages);
-  if (!sourceWindow) {
-    return { processed: false, skipped: 'source_window_unavailable' };
+  if (
+    candidateJob.status === 'processing' ||
+    (candidateJob.nextAttemptAt ?? Number.POSITIVE_INFINITY) > startedAt
+  ) {
+    return { processed: false, status: candidateJob.status, skipped: 'not_due' };
   }
   if (shouldAbortIngestionDueToMemoryPressure()) {
     return { processed: false, skipped: 'memory_pressure' };
   }
-  if (!acquireIngestionSlot(job.id)) {
+  if (!acquireIngestionSlot(candidateJob.id)) {
     return { processed: false, skipped: 'slot_unavailable' };
   }
 
-  let structuralCheckpointOnly = false;
-  let claimToken = claimIngestionJob(job.id, startedAt);
-  if (!claimToken) {
-    claimToken = claimIngestionJobForStructuralCheckpoint(job.id, startedAt);
-    structuralCheckpointOnly = claimToken !== null;
+  const claimed = claimIngestionJobWithSourceSnapshot(candidateJob.id, startedAt);
+  if (!claimed) {
+    releaseIngestionSlot(candidateJob.id);
+    const persistedStatus = getIngestionJob(candidateJob.id)?.status;
+    const terminal =
+      persistedStatus === 'degraded' ||
+      persistedStatus === 'completed_structural' ||
+      persistedStatus === 'completed_enriched' ||
+      persistedStatus === 'failed';
+    return {
+      processed: false,
+      ...(persistedStatus ? { status: persistedStatus } : {}),
+      skipped: terminal ? 'missing_or_terminal' : 'claim_lost',
+    };
   }
-  if (!claimToken) {
-    releaseIngestionSlot(job.id);
-    return { processed: false, skipped: 'claim_lost' };
-  }
+  const { job, claimToken, sourceSnapshot } = claimed;
+  const structuralCheckpointOnly = claimed.mode === 'structural_checkpoint';
   const activeAttempt = beginActiveIngestionAttempt(job.id);
   let remoteProviderEnrichment = false;
 
@@ -284,16 +285,18 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     const turnResult = await runConsolidation({
       threadId: job.threadId,
       memoryConversationId: job.memoryConversationId,
-      messages: sourceWindow.turnMessages,
+      messages: sourceSnapshot.turnMessages,
       sealedPriorUserMessageId: job.priorUserMessageId ?? undefined,
-      priorIdentityMessages: sourceWindow.priorIdentityMessages,
+      priorIdentityMessages: sourceSnapshot.priorUserMessage
+        ? [sourceSnapshot.priorUserMessage, ...sourceSnapshot.turnMessages]
+        : sourceSnapshot.turnMessages,
       threadTitle: job.threadTitle ?? undefined,
       personaSummary: input.personaSummary,
       activeChatProvider: resolveSealedActiveChatProvider(job, input.activeChatProvider),
       requireExplicitChatProvider: Boolean(job.chatProviderId),
       ...(job.providerEnrichment && !structuralCheckpointOnly ? {} : { extractor: null }),
       taskId: job.taskId ?? undefined,
-      graphGoalEvidence: input.graphGoalEvidence,
+      graphGoalEvidence: sourceSnapshot.graphGoalEvidence,
       sourceRunId: job.sourceRunId ?? undefined,
       episodeAccess: {
         personaId: job.personaId,
@@ -460,11 +463,9 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
 export interface IngestionJobRuntimeContext {
   personaSummary?: string;
   activeChatProvider?: LlmProviderConfig;
-  graphGoalEvidence?: string[];
 }
 
 export interface DrainIngestionQueueInput {
-  loadMessagesForThread: (threadId: string) => Message[];
   loadRuntimeContextForJob?: (job: IngestionJob) => IngestionJobRuntimeContext;
   maxJobs?: number;
   now?: number;
@@ -478,21 +479,8 @@ export interface DrainIngestionQueueResult {
   retrying: number;
   degraded: number;
   deferred: number;
-  sourceDeferred: number;
   resourceDeferred: number;
   failed: number;
-}
-
-function recordSourceDeferral(result: DrainIngestionQueueResult, jobId: string, now: number): void {
-  result.sourceDeferred += 1;
-  const transition = deferIngestionJobForMissingSource(jobId, now);
-  if (transition.applied && transition.status === 'retrying') {
-    result.retrying += 1;
-  } else if (transition.applied && transition.status === 'failed') {
-    result.failed += 1;
-  } else {
-    result.deferred += 1;
-  }
 }
 
 export async function drainIngestionQueue(
@@ -506,7 +494,6 @@ export async function drainIngestionQueue(
     retrying: 0,
     degraded: 0,
     deferred: 0,
-    sourceDeferred: 0,
     resourceDeferred: 0,
     failed: 0,
   };
@@ -516,18 +503,11 @@ export async function drainIngestionQueue(
   const jobs = listPendingIngestionJobs(input.maxJobs ?? INGESTION_BATCH_LIMIT, now);
   for (const job of jobs) {
     result.attempted += 1;
-    const messages = input.loadMessagesForThread(job.threadId);
-    if (messages.length === 0) {
-      recordSourceDeferral(result, job.id, now);
-      continue;
-    }
     const runtimeContext = input.loadRuntimeContextForJob?.(job) ?? {};
     const processed = await processIngestionJob({
       jobId: job.id,
-      messages,
       personaSummary: runtimeContext.personaSummary,
       activeChatProvider: runtimeContext.activeChatProvider,
-      graphGoalEvidence: runtimeContext.graphGoalEvidence,
       ...(input.now === undefined ? {} : { now }),
     });
     if (processed.status === 'completed_structural') {
@@ -543,12 +523,7 @@ export async function drainIngestionQueue(
     } else if (processed.status === 'failed') {
       result.failed += 1;
     } else {
-      if (processed.skipped === 'source_window_unavailable') {
-        recordSourceDeferral(result, job.id, now);
-      } else if (
-        processed.skipped === 'memory_pressure' ||
-        processed.skipped === 'slot_unavailable'
-      ) {
+      if (processed.skipped === 'memory_pressure' || processed.skipped === 'slot_unavailable') {
         result.deferred += 1;
         result.resourceDeferred += 1;
       } else {

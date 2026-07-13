@@ -23,7 +23,6 @@ export async function runMemoryRecallScenario(
     now,
   });
   await drainIngestionQueue({
-    loadMessagesForThread: () => turn1Messages,
     now,
   });
 
@@ -33,7 +32,6 @@ export async function runMemoryRecallScenario(
     now: now + 10,
   });
   await drainIngestionQueue({
-    loadMessagesForThread: () => turn2Messages,
     now: now + 10,
   });
 

@@ -36,7 +36,6 @@ import { closeMemoryDb } from '../../../src/services/memory/database';
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
-import type { Message } from '../../../src/types/message';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
@@ -44,19 +43,6 @@ const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestio
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = jest.mocked(processIngestionTurn);
 const mockedResolveConsolidationPath = jest.mocked(resolveConsolidationPath);
-
-function closedTurn(suffix: string): Message[] {
-  return [
-    { id: `user-${suffix}`, role: 'user', content: 'Remember this.', timestamp: 1 },
-    {
-      id: `assistant-${suffix}`,
-      role: 'assistant',
-      content: 'Done.',
-      timestamp: 2,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
-    },
-  ];
-}
 
 function processResult(
   providerOutcome: Awaited<ReturnType<typeof processIngestionTurn>>['providerOutcome'],
@@ -122,7 +108,6 @@ describe('ingestion queue structural priority', () => {
       now: 100,
     })!;
     await drainIngestionQueue({
-      loadMessagesForThread: () => closedTurn('enrichment-retry'),
       now: 100,
     });
     const dueAt = 100 + INGESTION_RETRY_BASE_DELAY_MS;
@@ -148,8 +133,6 @@ describe('ingestion queue structural priority', () => {
     ]);
     mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'not_requested' }));
     await drainIngestionQueue({
-      loadMessagesForThread: (threadId) =>
-        closedTurn(threadId === newTurn.threadId ? 'new-turn' : 'enrichment-retry'),
       maxJobs: 1,
       now: dueAt,
     });
@@ -162,7 +145,6 @@ describe('ingestion queue structural priority', () => {
 
   it('checkpoints an adjacent turn without letting its enrichment overtake a retrying prior turn', async () => {
     const threadId = 'conv-causal-retry';
-    const history = [...closedTurn('prior'), ...closedTurn('current')];
     mockedProcessIngestionTurn.mockResolvedValueOnce(
       processResult({ status: 'provider_error', code: 'provider_request_failed' }),
     );
@@ -182,7 +164,7 @@ describe('ingestion queue structural priority', () => {
       providerEnrichment: true,
       now: 100,
     })!;
-    await drainIngestionQueue({ loadMessagesForThread: () => history, now: 100 });
+    await drainIngestionQueue({ now: 100 });
     const dueAt = 100 + INGESTION_RETRY_BASE_DELAY_MS;
     const correction = enqueueIngestionJob({
       personaId: 'persona-after-switch',
@@ -208,7 +190,7 @@ describe('ingestion queue structural priority', () => {
     expect(getNextPendingIngestionAttemptAt()).toBe(101);
 
     mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'not_requested' }));
-    await drainIngestionQueue({ loadMessagesForThread: () => history, maxJobs: 1, now: 101 });
+    await drainIngestionQueue({ maxJobs: 1, now: 101 });
 
     expect(getIngestionJob(correction.id)).toEqual(
       expect.objectContaining({
@@ -226,7 +208,7 @@ describe('ingestion queue structural priority', () => {
     expect(listPendingIngestionJobs(3, dueAt)).toEqual([expect.objectContaining({ id: prior.id })]);
 
     mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'valid' }));
-    await drainIngestionQueue({ loadMessagesForThread: () => history, maxJobs: 1, now: dueAt });
+    await drainIngestionQueue({ maxJobs: 1, now: dueAt });
 
     expect(getIngestionJob(prior.id)?.status).toBe('completed_enriched');
     expect(listPendingIngestionJobs(3, dueAt)).toEqual([
@@ -234,7 +216,7 @@ describe('ingestion queue structural priority', () => {
     ]);
 
     mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'valid' }));
-    await drainIngestionQueue({ loadMessagesForThread: () => history, maxJobs: 1, now: dueAt });
+    await drainIngestionQueue({ maxJobs: 1, now: dueAt });
 
     expect(getIngestionJob(correction.id)).toEqual(
       expect.objectContaining({ status: 'completed_enriched', attemptCount: 1 }),
@@ -253,7 +235,6 @@ describe('ingestion queue structural priority', () => {
     jest.useFakeTimers({ now: 100 });
     try {
       const threadId = 'conv-causal-checkpoint-wake';
-      const history = [...closedTurn('causal-prior'), ...closedTurn('causal-successor')];
       mockedProcessIngestionTurn
         .mockResolvedValueOnce(
           processResult({ status: 'provider_error', code: 'provider_request_failed' }),
@@ -277,7 +258,7 @@ describe('ingestion queue structural priority', () => {
         providerEnrichment: true,
         now: 100,
       })!;
-      await drainIngestionQueue({ loadMessagesForThread: () => history, maxJobs: 1, now: 100 });
+      await drainIngestionQueue({ maxJobs: 1, now: 100 });
       const dueAt = 100 + INGESTION_RETRY_BASE_DELAY_MS;
       const successor = enqueueIngestionJob({
         personaId: 'default',
@@ -298,7 +279,7 @@ describe('ingestion queue structural priority', () => {
       })!;
       jest.setSystemTime(101);
 
-      scheduleIngestionDrain({ loadMessagesForThread: () => history });
+      scheduleIngestionDrain({});
       await flushScheduledIngestion();
 
       expect(getIngestionJob(successor.id)).toEqual(

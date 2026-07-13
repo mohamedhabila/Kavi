@@ -19,7 +19,6 @@ jest.mock('../../src/services/memory/ingestionQueue', () => ({
     retrying: 0,
     degraded: 0,
     deferred: 0,
-    sourceDeferred: 0,
     resourceDeferred: 0,
     failed: 0,
   })),
@@ -91,7 +90,6 @@ describe('foreground scenario memory settlement', () => {
       retrying: 0,
       degraded: 0,
       deferred: 1,
-      sourceDeferred: 0,
       resourceDeferred: 1,
       failed: 0,
     });

@@ -23,6 +23,7 @@ import {
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import type { Message } from '../../../src/types/message';
+import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
@@ -46,18 +47,19 @@ function closedFileTurn(suffix: string): Message[] {
       id: `user-${suffix}`,
       role: 'user',
       content: 'Create the release manifest.',
-      createdAt: 90,
+      timestamp: 90,
     },
     {
       id: `assistant-tool-${suffix}`,
       role: 'assistant',
       content: '',
-      createdAt: 91,
+      timestamp: 91,
       toolCalls: [
         {
           id: `tool-call-${suffix}`,
           name: 'write_file',
           arguments: JSON.stringify({ path: 'dist/release-manifest.json' }),
+          status: 'completed',
         },
       ],
       assistantMetadata: {
@@ -70,14 +72,14 @@ function closedFileTurn(suffix: string): Message[] {
       id: `tool-result-${suffix}`,
       role: 'tool',
       content: 'ok',
-      createdAt: 92,
+      timestamp: 92,
       toolCallId: `tool-call-${suffix}`,
     },
     {
       id: `assistant-${suffix}`,
       role: 'assistant',
       content: 'The manifest is ready.',
-      createdAt: 93,
+      timestamp: 93,
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
@@ -89,6 +91,7 @@ function closedFileTurn(suffix: string): Message[] {
 
 describe('memory ingestion receipt integration', () => {
   it('commits the production turn write set with its queue transition', async () => {
+    const messages = closedFileTurn('integrated');
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'conversation-integrated-receipt',
@@ -104,11 +107,16 @@ describe('memory ingestion receipt integration', () => {
       reason: 'turn_completed',
       providerEnrichment: false,
       now: 100,
+      sourceSnapshot: encodeIngestionSourceSnapshot({
+        messages,
+        priorUserMessageId: null,
+        sourceStartMessageId: 'user-integrated',
+        sourceEndMessageId: 'assistant-integrated',
+      }),
     })!;
 
     const result = await processIngestionJob({
       jobId: job.id,
-      messages: closedFileTurn('integrated'),
       now: 100,
     });
 

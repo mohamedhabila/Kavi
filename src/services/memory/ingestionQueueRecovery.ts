@@ -1,74 +1,12 @@
-import { MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './database';
 import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
-import {
-  computeNextIngestionAttemptAt,
-  recoverIngestionJobClaim,
-  type IngestionJobStatus,
-  type IngestionTransitionResult,
-} from './ingestionQueueStore';
+import { recoverIngestionJobClaim } from './ingestionQueueStore';
 
 export interface StaleIngestionRecoveryResult {
   retrying: number;
   degraded: number;
   failed: number;
-}
-
-export function deferIngestionJobForMissingSource(
-  jobId: string,
-  now: number,
-): IngestionTransitionResult {
-  const current = getMemoryDb().getFirstSync<{
-    status: IngestionJobStatus;
-    attempt_count: number;
-    next_attempt_at: number | null;
-  }>(
-    `SELECT status, attempt_count, next_attempt_at
-       FROM memory_ingestion_jobs
-      WHERE id = ?
-      LIMIT 1`,
-    jobId,
-  );
-  if (
-    !current ||
-    !['pending', 'retrying'].includes(current.status) ||
-    (current.next_attempt_at ?? Number.POSITIVE_INFINITY) > now
-  ) {
-    return { status: current?.status ?? 'failed', applied: false };
-  }
-
-  const attemptCount = current.attempt_count + 1;
-  const terminal = attemptCount >= MAX_INGESTION_ATTEMPTS;
-  const status: IngestionJobStatus = terminal ? 'failed' : 'retrying';
-  const nextAttemptAt = terminal ? null : computeNextIngestionAttemptAt(now, attemptCount);
-  const updated = getMemoryDb().runSync(
-    `UPDATE memory_ingestion_jobs
-        SET status = ?,
-            attempt_count = ?,
-            provider_outcome = NULL,
-            outcome_code = 'source_window_unavailable',
-            next_attempt_at = ?,
-            lease_expires_at = NULL,
-            claim_token = NULL,
-            claim_process_epoch = NULL,
-            completed_at = ?,
-            updated_at = ?
-      WHERE id = ?
-        AND status = ?
-        AND attempt_count = ?
-        AND next_attempt_at <= ?`,
-    status,
-    attemptCount,
-    nextAttemptAt,
-    terminal ? now : null,
-    now,
-    jobId,
-    current.status,
-    current.attempt_count,
-    now,
-  );
-  return { status, applied: updated.changes === 1 };
 }
 
 export function recoverStaleIngestionJobs(now = Date.now()): StaleIngestionRecoveryResult {

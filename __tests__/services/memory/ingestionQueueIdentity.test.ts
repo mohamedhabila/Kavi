@@ -43,7 +43,6 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
-import type { Message } from '../../../src/types/message';
 import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
 
@@ -74,28 +73,6 @@ function enqueueIngestionJob(input: TestEnqueueInput) {
       ...input,
     }),
   );
-}
-
-function closedTurn(suffix: string): Message[] {
-  return [
-    {
-      id: `user-${suffix}`,
-      role: 'user',
-      content: 'Remember this',
-      createdAt: 1,
-    },
-    {
-      id: `assistant-${suffix}`,
-      role: 'assistant',
-      content: 'Done',
-      createdAt: 2,
-      assistantMetadata: {
-        kind: 'final',
-        completionStatus: 'complete',
-        finishReason: 'stop',
-      },
-    },
-  ];
 }
 
 beforeEach(() => {
@@ -236,7 +213,6 @@ describe('ingestion queue identity', () => {
     await expect(
       processIngestionJob({
         jobId: completed.id,
-        messages: closedTurn('legacy-completed'),
         now: 2,
       }),
     ).resolves.toMatchObject({
@@ -263,7 +239,6 @@ describe('ingestion queue identity', () => {
     await expect(
       processIngestionJob({
         jobId: job!.id,
-        messages: closedTurn('corrupt-persona'),
         now: 2,
       }),
     ).resolves.toMatchObject({
@@ -310,7 +285,6 @@ describe('ingestion queue identity', () => {
       await expect(
         processIngestionJob({
           jobId: persistedId,
-          messages: closedTurn(suffix),
           now: 2,
         }),
       ).resolves.toEqual({
@@ -328,7 +302,7 @@ describe('ingestion queue identity', () => {
     },
   );
 
-  it('quarantines corrupt due jobs before loading their source messages', async () => {
+  it('quarantines corrupt due jobs before processing their source snapshots', async () => {
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'corrupt-before-load',
@@ -341,12 +315,9 @@ describe('ingestion queue identity', () => {
       ' corrupt-root ',
       job.id,
     );
-    const loadMessagesForThread = jest.fn(() => closedTurn('corrupt-before-load'));
-
-    await expect(drainIngestionQueue({ loadMessagesForThread, now: 2 })).resolves.toMatchObject({
+    await expect(drainIngestionQueue({ now: 2 })).resolves.toMatchObject({
       attempted: 0,
     });
-    expect(loadMessagesForThread).not.toHaveBeenCalled();
     expect(getIngestionJob(job.id)).toMatchObject({
       status: 'failed',
       outcomeCode: 'source_identity_invalid',

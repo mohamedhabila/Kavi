@@ -33,6 +33,11 @@ export type {
   ApplyConsolidatorResultResult,
 } from './consolidation/persistence';
 
+/** Bounded durable source messages may retain only attachment presence. */
+export interface ConsolidatorSourceMessage extends Message {
+  hasAttachments?: true;
+}
+
 export interface ConsolidatorPromptInput {
   /** Most recent user message that led to this assistant turn. */
   userMessage: string;
@@ -47,7 +52,7 @@ export interface ConsolidatorPromptInput {
   sourceUserMessageId?: string;
   sourceAssistantMessageId?: string;
   /** All user/assistant/tool messages since the previous consolidation cursor. */
-  messages?: Message[];
+  messages?: ConsolidatorSourceMessage[];
 }
 
 export interface ConsolidatorTurnInput extends ConsolidatorPromptInput {
@@ -246,7 +251,7 @@ export function buildConsolidatorPrompt(input: ConsolidatorPromptInput): string 
   return lines.join('\n\n');
 }
 
-function selectPromptMessageWindow(input: ConsolidatorPromptInput): Message[] {
+function selectPromptMessageWindow(input: ConsolidatorPromptInput): ConsolidatorSourceMessage[] {
   const messages = input.messages ?? [];
   if (!messages.length) return messages;
   if (!input.sourceUserMessageId && !input.sourceAssistantMessageId) return messages;
@@ -265,7 +270,7 @@ function selectPromptMessageWindow(input: ConsolidatorPromptInput): Message[] {
   return messages.slice(startIndex, endIndex + 1);
 }
 
-function formatMessageWindow(messages: Message[]): string {
+function formatMessageWindow(messages: ConsolidatorSourceMessage[]): string {
   return messages
     .slice(-24)
     .map((message) => {

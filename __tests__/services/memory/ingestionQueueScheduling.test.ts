@@ -44,6 +44,7 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
+import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
@@ -150,9 +151,7 @@ describe('ingestion queue scheduling and job context', () => {
       now: 100,
     })!;
 
-    scheduleIngestionDrain({
-      loadMessagesForThread: () => closedTurn('provider-preempted'),
-    });
+    scheduleIngestionDrain({});
     jest.runAllTicks();
     await attemptStarted;
     const inferenceLease = acquireMainInferenceLease('foreground:conv-user:request-1');
@@ -188,9 +187,7 @@ describe('ingestion queue scheduling and job context', () => {
     })!;
     const lease = acquireMainInferenceLease('foreground:conv-foreground-priority:request-1');
 
-    scheduleIngestionDrain({
-      loadMessagesForThread: () => closedTurn('foreground-priority'),
-    });
+    scheduleIngestionDrain({});
     await flushScheduledIngestion();
 
     expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
@@ -227,7 +224,7 @@ describe('ingestion queue scheduling and job context', () => {
       now: 100,
     })!;
 
-    scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('auto-retry') });
+    scheduleIngestionDrain({});
     await flushScheduledIngestion();
 
     expect(getIngestionJob(job.id)).toEqual(
@@ -269,16 +266,14 @@ describe('ingestion queue scheduling and job context', () => {
       });
     }
 
-    scheduleIngestionDrain({
-      loadMessagesForThread: (threadId) => closedTurn(threadId.replace('conv-', '')),
-    });
+    scheduleIngestionDrain({});
     await flushScheduledIngestion();
 
     expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(5);
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('keeps the newest source loader when an older drain completes later', async () => {
+  it('keeps newly scheduled work when an older drain completes later', async () => {
     let releaseFirstAttempt: (() => void) | undefined;
     let markFirstAttemptStarted: (() => void) | undefined;
     const firstAttemptHeld = new Promise<void>((resolve) => {
@@ -309,10 +304,7 @@ describe('ingestion queue scheduling and job context', () => {
       now: 100,
     })!;
 
-    scheduleIngestionDrain({
-      loadMessagesForThread: (threadId) =>
-        threadId === firstJob.threadId ? closedTurn('runtime-a') : [],
-    });
+    scheduleIngestionDrain({});
     jest.runAllTicks();
     await firstAttemptStarted;
 
@@ -333,10 +325,7 @@ describe('ingestion queue scheduling and job context', () => {
       providerEnrichment: true,
       now: 101,
     })!;
-    scheduleIngestionDrain({
-      loadMessagesForThread: (threadId) =>
-        threadId === secondJob.threadId ? closedTurn('runtime-b') : [],
-    });
+    scheduleIngestionDrain({});
 
     releaseFirstAttempt?.();
     await flushScheduledIngestion();
@@ -350,65 +339,6 @@ describe('ingestion queue scheduling and job context', () => {
       }),
     );
     expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(2);
-  });
-
-  it('backs off unavailable sources so healthy work behind the batch can run', async () => {
-    const missingJobs = [];
-    for (let index = 0; index < 3; index += 1) {
-      missingJobs.push(
-        enqueueIngestionJob({
-          personaId: 'default',
-          threadId: `conv-missing-${index}`,
-          threadTitle: null,
-          memoryConversationId: `conv-missing-${index}`,
-          taskId: null,
-          sourceStartMessageId: null,
-          sourceEndMessageId: `assistant-missing-${index}`,
-          sourceRunId: null,
-          sourceAt: 100,
-          chatProviderId: null,
-          chatModel: null,
-          reason: 'turn_completed',
-          providerEnrichment: true,
-          now: 100,
-        })!,
-      );
-    }
-    const healthy = enqueueIngestionJob({
-      personaId: 'default',
-      threadId: 'conv-healthy-after-missing',
-      threadTitle: null,
-      memoryConversationId: 'conv-healthy-after-missing',
-      taskId: null,
-      sourceStartMessageId: 'user-healthy-after-missing',
-      sourceEndMessageId: 'assistant-healthy-after-missing',
-      sourceRunId: null,
-      sourceAt: 100,
-      chatProviderId: null,
-      chatModel: null,
-      reason: 'turn_completed',
-      providerEnrichment: true,
-      now: 100,
-    })!;
-
-    scheduleIngestionDrain({
-      loadMessagesForThread: (threadId) =>
-        threadId === healthy.threadId ? closedTurn('healthy-after-missing') : [],
-    });
-    await flushScheduledIngestion();
-
-    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(1);
-    expect(getIngestionJob(healthy.id)?.status).toBe('completed_structural');
-    for (const missingJob of missingJobs) {
-      expect(getIngestionJob(missingJob.id)).toEqual(
-        expect.objectContaining({
-          status: 'retrying',
-          attemptCount: 1,
-          outcomeCode: 'source_window_unavailable',
-        }),
-      );
-    }
-    expect(jest.getTimerCount()).toBe(1);
   });
 
   it('resolves title, provider, run, and evidence independently for coalesced jobs', async () => {
@@ -441,6 +371,13 @@ describe('ingestion queue scheduling and job context', () => {
       reason: 'turn_completed',
       providerEnrichment: true,
       now: 100,
+      sourceSnapshot: encodeIngestionSourceSnapshot({
+        messages: closedTurn('context-a'),
+        priorUserMessageId: null,
+        sourceStartMessageId: 'user-context-a',
+        sourceEndMessageId: 'assistant-context-a',
+        graphGoalEvidence: ['tool:a'],
+      }),
     });
     enqueueIngestionJob({
       personaId: 'default',
@@ -457,20 +394,24 @@ describe('ingestion queue scheduling and job context', () => {
       reason: 'turn_completed',
       providerEnrichment: true,
       now: 100,
+      sourceSnapshot: encodeIngestionSourceSnapshot({
+        messages: closedTurn('context-b'),
+        priorUserMessageId: null,
+        sourceStartMessageId: 'user-context-b',
+        sourceEndMessageId: 'assistant-context-b',
+        graphGoalEvidence: ['tool:b'],
+      }),
     });
     const loadRuntimeContextForJob = jest.fn((job) =>
       job.threadId.endsWith('-a')
         ? {
             activeChatProvider: providerA,
-            graphGoalEvidence: ['tool:a'],
           }
         : {
             activeChatProvider: providerB,
-            graphGoalEvidence: ['tool:b'],
           },
     );
     const runtime = {
-      loadMessagesForThread: (threadId: string) => closedTurn(threadId.replace('conv-', '')),
       loadRuntimeContextForJob,
     };
 
@@ -519,7 +460,7 @@ describe('ingestion queue scheduling and job context', () => {
       providerEnrichment: true,
       now: 100,
     })!;
-    scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('opt-out-race') });
+    scheduleIngestionDrain({});
 
     useSettingsStore.getState().setDisableLongTermMemory(true);
     await flushScheduledIngestion();
@@ -562,7 +503,7 @@ describe('ingestion queue scheduling and job context', () => {
       now: 100,
     })!;
 
-    scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('in-flight-opt-out') });
+    scheduleIngestionDrain({});
     jest.runAllTicks();
     await attemptStarted;
     expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(1);
@@ -600,7 +541,6 @@ describe('ingestion queue scheduling and job context', () => {
 
     await processIngestionJob({
       jobId: job.id,
-      messages: closedTurn('completion-clock'),
     });
 
     expect(getIngestionJob(job.id)?.nextAttemptAt).toBe(30_100 + INGESTION_RETRY_BASE_DELAY_MS);
@@ -632,7 +572,6 @@ describe('ingestion queue scheduling and job context', () => {
 
     const result = await processIngestionJob({
       jobId: job.id,
-      messages: closedTurn('expired-live-attempt'),
     });
 
     expect(result).toEqual(
@@ -666,9 +605,7 @@ describe('ingestion queue scheduling and job context', () => {
     })!;
     expect(claimIngestionJob(job.id, 100)).not.toBeNull();
 
-    await drainIngestionQueueWithWakeup({
-      loadMessagesForThread: () => closedTurn('cold-start-lease'),
-    });
+    await drainIngestionQueueWithWakeup({});
     expect(jest.getTimerCount()).toBe(1);
 
     await jest.advanceTimersByTimeAsync(INGESTION_PROCESSING_LEASE_MS - 1);

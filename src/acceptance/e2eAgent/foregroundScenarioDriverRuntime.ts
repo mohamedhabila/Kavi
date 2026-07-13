@@ -327,9 +327,6 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
     if ((job.status === 'pending' || job.status === 'retrying') && !requestedDrain) {
       requestedDrain = true;
       await drainIngestionQueueWithWakeup({
-        loadMessagesForThread: (threadId) =>
-          useChatStore.getState().conversations.find((candidate) => candidate.id === threadId)
-            ?.messages ?? [],
         loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
         maxJobs: 1,
       });

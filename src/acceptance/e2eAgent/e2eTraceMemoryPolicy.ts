@@ -43,7 +43,6 @@ export const E2E_PUBLIC_INGESTION_OUTCOME_CODES = completeEnum<IngestionOutcomeC
   'unsupported_response_shape',
   'processing_incomplete',
   'processing_error',
-  'source_window_unavailable',
   'stale_processing_lease',
   'persona_scope_missing',
   'source_identity_invalid',

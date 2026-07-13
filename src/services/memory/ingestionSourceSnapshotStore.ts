@@ -4,6 +4,7 @@ import type { IngestionJobRow } from './ingestionQueueIdentity';
 import {
   decodeIngestionSourceSnapshot,
   type EncodedIngestionSourceSnapshot,
+  type IngestionSourceSnapshotV1,
 } from './ingestionSourceSnapshot';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
@@ -13,19 +14,20 @@ interface PersistedSnapshotRow {
   payload_json: string;
 }
 
+type SnapshotResolution =
+  | { status: 'resolved'; snapshot: IngestionSourceSnapshotV1 }
+  | { status: 'invalid'; code: SnapshotFailureCode };
+
 function isActiveStatus(status: string): boolean {
   return status === 'pending' || status === 'processing' || status === 'retrying';
 }
 
-function snapshotFailureCode(
-  db: MemoryDb,
-  row: IngestionJobRow,
-): SnapshotFailureCode | null {
+function resolvePersistedSnapshot(db: MemoryDb, row: IngestionJobRow): SnapshotResolution {
   const metadataMissing =
     row.source_snapshot_version === null &&
     row.source_snapshot_sha256 === null &&
     row.source_snapshot_byte_length === null;
-  if (metadataMissing) return 'source_snapshot_missing';
+  if (metadataMissing) return { status: 'invalid', code: 'source_snapshot_missing' };
   if (
     row.source_snapshot_version !== 1 ||
     typeof row.source_snapshot_sha256 !== 'string' ||
@@ -33,7 +35,7 @@ function snapshotFailureCode(
     !Number.isSafeInteger(row.source_snapshot_byte_length) ||
     (row.source_snapshot_byte_length ?? 0) <= 0
   ) {
-    return 'source_snapshot_invalid';
+    return { status: 'invalid', code: 'source_snapshot_invalid' };
   }
 
   const persisted = db.getFirstSync<PersistedSnapshotRow>(
@@ -43,23 +45,31 @@ function snapshotFailureCode(
       LIMIT 1`,
     row.id,
   );
-  if (!persisted) return 'source_snapshot_missing';
+  if (!persisted) return { status: 'invalid', code: 'source_snapshot_missing' };
 
   try {
-    const decoded = decodeIngestionSourceSnapshot({
+    const snapshot = decodeIngestionSourceSnapshot({
       snapshotVersion: row.source_snapshot_version,
       payloadJson: persisted.payload_json,
       payloadSha256: row.source_snapshot_sha256,
       payloadByteLength: row.source_snapshot_byte_length,
     });
-    return decoded.sourceStartMessageId === row.source_start_message_id &&
-      decoded.sourceEndMessageId === row.source_end_message_id &&
-      decoded.priorUserMessageId === row.prior_user_message_id
-      ? null
-      : 'source_snapshot_invalid';
+    if (
+      snapshot.sourceStartMessageId !== row.source_start_message_id ||
+      snapshot.sourceEndMessageId !== row.source_end_message_id ||
+      snapshot.priorUserMessageId !== row.prior_user_message_id
+    ) {
+      return { status: 'invalid', code: 'source_snapshot_invalid' };
+    }
+    return { status: 'resolved', snapshot };
   } catch {
-    return 'source_snapshot_invalid';
+    return { status: 'invalid', code: 'source_snapshot_invalid' };
   }
+}
+
+function snapshotFailureCode(db: MemoryDb, row: IngestionJobRow): SnapshotFailureCode | null {
+  const resolution = resolvePersistedSnapshot(db, row);
+  return resolution.status === 'invalid' ? resolution.code : null;
 }
 
 function failActiveSnapshot(
@@ -159,18 +169,27 @@ export function requireMatchingIngestionSourceSnapshot(
   }
 }
 
-export function ensureActiveIngestionSourceSnapshot(
+export function ensureActiveIngestionSourceSnapshot(row: IngestionJobRow, now: number): boolean {
+  if (!isActiveStatus(row.status)) return true;
+  return runMemoryTransaction(() => {
+    return loadActiveIngestionSourceSnapshotForRow(row, now) !== null;
+  });
+}
+
+/**
+ * Resolve one already-selected active row inside its caller's transaction.
+ * Missing, corrupt, or identity-mismatched payloads terminalize the job.
+ */
+export function loadActiveIngestionSourceSnapshotForRow(
   row: IngestionJobRow,
   now: number,
-): boolean {
-  if (!isActiveStatus(row.status)) return true;
+): IngestionSourceSnapshotV1 | null {
   const db = getMemoryDb();
-  const failure = snapshotFailureCode(db, row);
-  if (!failure) return true;
-  return runMemoryTransaction(() => {
-    failActiveSnapshot(db, row.id, failure, now);
-    return false;
-  });
+  if (!isActiveStatus(row.status)) return null;
+  const resolution = resolvePersistedSnapshot(db, row);
+  if (resolution.status === 'resolved') return resolution.snapshot;
+  failActiveSnapshot(db, row.id, resolution.code, now);
+  return null;
 }
 
 export function failActiveJobsWithInvalidSourceSnapshots(db: MemoryDb, now: number): void {

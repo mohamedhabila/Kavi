@@ -54,7 +54,6 @@ import {
   ownsIngestionClaim,
   retryOrCompleteIngestionJob,
 } from '../../../src/services/memory/ingestionQueueStore';
-import type { Message } from '../../../src/types/message';
 import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 
@@ -81,28 +80,6 @@ function processResult(
     bridgedEvidenceFactIds: [],
     agentRunMemoryFactIds: [],
   };
-}
-
-function closedTurn(suffix: string): Message[] {
-  return [
-    {
-      id: `user-${suffix}`,
-      role: 'user',
-      content: 'Remember this',
-      createdAt: 1,
-    },
-    {
-      id: `assistant-${suffix}`,
-      role: 'assistant',
-      content: 'Done',
-      createdAt: 2,
-      assistantMetadata: {
-        kind: 'final',
-        completionStatus: 'complete',
-        finishReason: 'stop',
-      },
-    },
-  ];
 }
 
 beforeEach(() => {
@@ -517,7 +494,6 @@ describe('ingestion queue recovery and diagnostics', () => {
 
     await expect(
       drainIngestionQueue({
-        loadMessagesForThread: () => closedTurn('foreign-drain'),
         now: 100,
       }),
     ).resolves.toEqual(
@@ -552,7 +528,6 @@ describe('ingestion queue recovery and diagnostics', () => {
       now: 100,
     });
     await drainIngestionQueue({
-      loadMessagesForThread: () => closedTurn('diagnostics-structural'),
       now: 100,
     });
 
@@ -576,8 +551,6 @@ describe('ingestion queue recovery and diagnostics', () => {
       now: 200,
     });
     await drainIngestionQueue({
-      loadMessagesForThread: (threadId) =>
-        threadId === 'conv-diagnostics-retrying' ? closedTurn('diagnostics-retrying') : [],
       now: 200,
     });
 

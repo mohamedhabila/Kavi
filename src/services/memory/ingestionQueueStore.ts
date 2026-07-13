@@ -1,7 +1,7 @@
 // Durable ingestion persistence, claims, retries, recovery, and diagnostics.
 // Processing orchestration remains in ingestionQueue.ts.
 
-import { INGESTION_BATCH_LIMIT, MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
+import { INGESTION_BATCH_LIMIT } from './onDeviceGuards';
 import { runMemoryTransaction } from './access/transaction';
 import { ensureFactSchema, newId } from './schema';
 import { isMemoryIngestionSourceWithdrawn } from './withdrawalFence';
@@ -21,12 +21,9 @@ import {
   rowToIngestionJob,
 } from './ingestionQueueIdentity';
 import type { IngestionJobRow, IngestionSourceIdentity } from './ingestionQueueIdentity';
-import {
-  NO_ACTIVE_PRIOR_DEPENDENCY_SQL,
-  NO_BLOCKING_PRIOR_DEPENDENCY_SQL,
-} from './ingestionQueueDependencies';
+import { NO_BLOCKING_PRIOR_DEPENDENCY_SQL } from './ingestionQueueDependencies';
 import { failIngestionJobForInvalidIdentity } from './ingestionQueueIdentityFailure';
-import { INGESTION_PROCESSING_LEASE_MS } from './ingestionQueueStructuralCheckpoint';
+import { claimIngestionJobForFullProcessing } from './ingestionQueueStructuralCheckpoint';
 import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 import type { EncodedIngestionSourceSnapshot } from './ingestionSourceSnapshot';
 import {
@@ -50,8 +47,10 @@ export {
 } from './ingestionQueueRetryPolicy';
 export {
   claimIngestionJobForStructuralCheckpoint,
+  claimIngestionJobWithSourceSnapshot,
   deferIngestionEnrichmentAfterStructuralCheckpoint,
   INGESTION_PROCESSING_LEASE_MS,
+  type ClaimedIngestionSourceSnapshot,
 } from './ingestionQueueStructuralCheckpoint';
 
 export type IngestionJobStatus =
@@ -89,7 +88,6 @@ export type IngestionOutcomeCode =
   | 'source_identity_conflict'
   | 'source_snapshot_missing'
   | 'source_snapshot_invalid'
-  | 'source_window_unavailable'
   | 'stale_processing_lease';
 
 export interface IngestionJob {
@@ -465,7 +463,7 @@ export function listPendingIngestionJobs(
       failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
       continue;
     }
-    if (ensureActiveIngestionSourceSnapshot(row, now)) jobs.push(job);
+    jobs.push(job);
   }
   return jobs;
 }
@@ -487,15 +485,7 @@ export function getIngestionJobForProcessing(jobId: string): IngestionJob | null
     `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
     jobId,
   );
-  if (!row) return null;
-  const job = rowToIngestionJob(row);
-  if (!hasSealedIngestionJobIdentity(job)) return job;
-  if (ensureActiveIngestionSourceSnapshot(row, Date.now())) return job;
-  const terminal = getMemoryDb().getFirstSync<IngestionJobRow>(
-    `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
-    jobId,
-  );
-  return terminal ? rowToIngestionJob(terminal) : null;
+  return row ? rowToIngestionJob(row) : null;
 }
 
 export function getIngestionJobForSourceTurn(input: {
@@ -523,10 +513,7 @@ export function getIngestionJobForSourceTurn(input: {
   );
   if (!row) return null;
   const job = rowToIngestionJob(row);
-  if (
-    !hasSealedIngestionJobIdentity(job) ||
-    ensureActiveIngestionSourceSnapshot(row, Date.now())
-  ) {
+  if (!hasSealedIngestionJobIdentity(job) || ensureActiveIngestionSourceSnapshot(row, Date.now())) {
     return job;
   }
   const terminal = getMemoryDb().getFirstSync<IngestionJobRow>(
@@ -537,45 +524,7 @@ export function getIngestionJobForSourceTurn(input: {
 }
 
 export function claimIngestionJob(jobId: string, now: number): string | null {
-  const row = getMemoryDb().getFirstSync<IngestionJobRow>(
-    `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
-    jobId,
-  );
-  if (!row) return null;
-  const job = rowToIngestionJob(row);
-  if (!hasSealedIngestionJobIdentity(job)) {
-    failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
-    return null;
-  }
-  if (!ensureActiveIngestionSourceSnapshot(row, now)) return null;
-  const claimToken = newId('ingestion_claim');
-  const claimProcessEpoch = getRuntimeProcessEpoch();
-  const result = getMemoryDb().runSync(
-    `UPDATE memory_ingestion_jobs AS candidate
-       SET status = 'processing',
-           attempt_count = attempt_count + 1,
-           provider_outcome = NULL,
-           outcome_code = NULL,
-           next_attempt_at = NULL,
-           lease_expires_at = ?,
-           claim_token = ?,
-           claim_process_epoch = ?,
-           completed_at = NULL,
-           updated_at = ?
-     WHERE candidate.id = ?
-       AND candidate.status IN ('pending', 'retrying')
-       AND candidate.next_attempt_at <= ?
-       AND candidate.attempt_count < ?
-       AND ${NO_ACTIVE_PRIOR_DEPENDENCY_SQL}`,
-    now + INGESTION_PROCESSING_LEASE_MS,
-    claimToken,
-    claimProcessEpoch,
-    now,
-    jobId,
-    now,
-    MAX_INGESTION_ATTEMPTS,
-  );
-  return result.changes === 1 ? claimToken : null;
+  return claimIngestionJobForFullProcessing(jobId, now)?.claimToken ?? null;
 }
 
 export function ownsIngestionClaim(jobId: string, claimToken: string, now: number): boolean {

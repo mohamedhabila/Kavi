@@ -17,6 +17,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import type { Message } from '../../../src/types/message';
+import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
@@ -72,6 +73,12 @@ it('consolidates each queued turn from its recorded source window', async () => 
     reason: 'turn_completed',
     providerEnrichment: true,
     now: 10,
+    sourceSnapshot: encodeIngestionSourceSnapshot({
+      messages: transcript,
+      priorUserMessageId: null,
+      sourceStartMessageId: 'u-window-1',
+      sourceEndMessageId: 'a-window-1',
+    }),
   });
   enqueueIngestionJob({
     personaId: 'default',
@@ -89,10 +96,16 @@ it('consolidates each queued turn from its recorded source window', async () => 
     reason: 'turn_completed',
     providerEnrichment: true,
     now: 20,
+    sourceSnapshot: encodeIngestionSourceSnapshot({
+      messages: transcript,
+      priorUserMessageId: 'u-window-1',
+      sourceStartMessageId: 'u-window-2',
+      sourceEndMessageId: 'a-window-2',
+    }),
   });
 
-  const firstResult = await drainIngestionQueue({ loadMessagesForThread: () => transcript });
-  const secondResult = await drainIngestionQueue({ loadMessagesForThread: () => transcript });
+  const firstResult = await drainIngestionQueue({});
+  const secondResult = await drainIngestionQueue({});
 
   expect([firstResult, secondResult]).toEqual([
     {
@@ -103,7 +116,6 @@ it('consolidates each queued turn from its recorded source window', async () => 
       retrying: 0,
       degraded: 0,
       deferred: 0,
-      sourceDeferred: 0,
       resourceDeferred: 0,
       failed: 0,
     },
@@ -115,7 +127,6 @@ it('consolidates each queued turn from its recorded source window', async () => 
       retrying: 0,
       degraded: 0,
       deferred: 0,
-      sourceDeferred: 0,
       resourceDeferred: 0,
       failed: 0,
     },

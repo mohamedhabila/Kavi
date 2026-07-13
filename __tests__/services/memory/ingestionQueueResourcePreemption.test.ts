@@ -32,7 +32,6 @@ import {
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
-import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 
@@ -59,19 +58,6 @@ const ON_DEVICE_PROVIDER: LlmProviderConfig = {
   baseUrl: '',
   model: 'local-model',
 };
-
-function closedTurn(suffix: string): Message[] {
-  return [
-    { id: `user-${suffix}`, role: 'user', content: 'Remember this.', timestamp: 1 },
-    {
-      id: `assistant-${suffix}`,
-      role: 'assistant',
-      content: 'Done.',
-      timestamp: 2,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
-    },
-  ];
-}
 
 function processResult(
   providerOutcome: Awaited<ReturnType<typeof processIngestionTurn>>['providerOutcome'],
@@ -166,7 +152,7 @@ describe('ingestion queue resource-aware preemption', () => {
     });
     const job = enqueueJob('remote-survives');
 
-    scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('remote-survives') });
+    scheduleIngestionDrain({});
     jest.runAllTicks();
     await attemptStarted;
     const inferenceLease = acquireMainInferenceLease('foreground:remote-survives');
@@ -205,7 +191,7 @@ describe('ingestion queue resource-aware preemption', () => {
     });
     const job = enqueueJob('on-device-preempted');
 
-    scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('on-device-preempted') });
+    scheduleIngestionDrain({});
     jest.runAllTicks();
     await attemptStarted;
     const inferenceLease = acquireMainInferenceLease('foreground:on-device-preempted');
@@ -241,7 +227,7 @@ describe('ingestion queue resource-aware preemption', () => {
     });
     const job = enqueueJob('remote-memory-pressure');
 
-    scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('remote-memory-pressure') });
+    scheduleIngestionDrain({});
     jest.runAllTicks();
     await attemptStarted;
     setMemoryPressureAbort(true);
@@ -278,7 +264,7 @@ describe('ingestion queue resource-aware preemption', () => {
     });
     const job = enqueueJob('remote-shutdown');
 
-    scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('remote-shutdown') });
+    scheduleIngestionDrain({});
     jest.runAllTicks();
     await attemptStarted;
     await cancelScheduledIngestionDrain();

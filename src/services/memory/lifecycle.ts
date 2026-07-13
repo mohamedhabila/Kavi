@@ -54,13 +54,6 @@ const EMPTY_SEED_RESULT: RunSeedPassResult = {
 let lastSeedAt = 0;
 const SEED_TICK_COOLDOWN_MS = 30_000;
 
-function loadMessagesForThread(threadId: string): Message[] {
-  const conversation = useChatStore
-    .getState()
-    .conversations.find((entry: Conversation) => entry.id === threadId);
-  return conversation?.messages ?? [];
-}
-
 function findConversation(threadId: string): Conversation | undefined {
   return useChatStore.getState().conversations.find((entry: Conversation) => entry.id === threadId);
 }
@@ -84,11 +77,6 @@ function resolveActiveMemoryChatProvider(
 }
 
 export function loadIngestionJobRuntimeContext(job: IngestionJob): IngestionJobRuntimeContext {
-  const conversation = findConversation(job.threadId);
-  const sourceRun = job.sourceRunId
-    ? conversation?.agentRuns?.find((run) => run.id === job.sourceRunId)
-    : undefined;
-  const goals = sourceRun?.controlGraph?.goals ?? [];
   const provider = job.chatProviderId
     ? useSettingsStore
         .getState()
@@ -98,11 +86,6 @@ export function loadIngestionJobRuntimeContext(job: IngestionJob): IngestionJobR
   return {
     ...(provider
       ? { activeChatProvider: job.chatModel ? { ...provider, model: job.chatModel } : provider }
-      : {}),
-    ...(sourceRun
-      ? {
-          graphGoalEvidence: Array.from(new Set(goals.flatMap((goal) => goal.evidence))),
-        }
       : {}),
   };
 }
@@ -158,7 +141,6 @@ export async function runMemoryBackgroundFlush(): Promise<void> {
   if (settings.disableLongTermMemory) return;
 
   await drainIngestionQueueWithWakeup({
-    loadMessagesForThread,
     loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
   });
 }
@@ -168,7 +150,6 @@ export function scheduleMemoryIngestionDrainFromAppState(): void {
   const settings = useSettingsStore.getState();
   if (settings.disableLongTermMemory) return;
   scheduleIngestionDrain({
-    loadMessagesForThread,
     loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
   });
 }
@@ -354,8 +335,6 @@ export async function recordCompletedTurnForMemory(
   });
 
   scheduleIngestionDrain({
-    loadMessagesForThread: (candidateThreadId) =>
-      candidateThreadId === threadId ? input.messages : loadMessagesForThread(candidateThreadId),
     loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
   });
 

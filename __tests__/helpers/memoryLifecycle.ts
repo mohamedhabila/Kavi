@@ -3,7 +3,6 @@ import {
   drainIngestionQueue,
 } from '../../src/services/memory/ingestionQueue';
 import { loadIngestionJobRuntimeContext } from '../../src/services/memory/lifecycle';
-import type { Message } from '../../src/types/message';
 
 export const messages: Message[] = [
   {
@@ -22,12 +21,10 @@ export const messages: Message[] = [
   },
 ];
 
-export async function drainRecordedTurn(
-  threadId: string,
-  recordedMessages: Message[],
-): Promise<Awaited<ReturnType<typeof drainIngestionQueue>>> {
+export async function drainRecordedTurn(): Promise<
+  Awaited<ReturnType<typeof drainIngestionQueue>>
+> {
   const result = await drainIngestionQueue({
-    loadMessagesForThread: (id) => (id === threadId ? recordedMessages : []),
     loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
   });
   for (let round = 0; round < 50 && countPendingIngestionJobs() > 0; round += 1) {

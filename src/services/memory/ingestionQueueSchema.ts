@@ -81,7 +81,6 @@ function createDurableIngestionJobsTable(
           'source_identity_conflict',
           'source_snapshot_missing',
           'source_snapshot_invalid',
-          'source_window_unavailable',
           'stale_processing_lease'
         )),
       next_attempt_at INTEGER,
@@ -338,7 +337,8 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     tableSql.includes('source_identity_conflict') &&
     tableSql.includes('source_snapshot_missing') &&
     tableSql.includes('source_snapshot_invalid') &&
-    tableSql.includes('source_snapshot_version = 1');
+    tableSql.includes('source_snapshot_version = 1') &&
+    !tableSql.includes('source_window_unavailable');
 
   if (isDurableSchema) return;
 
@@ -562,7 +562,6 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
             'source_identity_conflict',
             'source_snapshot_missing',
             'source_snapshot_invalid',
-            'source_window_unavailable',
             'stale_processing_lease'
           ) THEN outcome_code
           ELSE NULL

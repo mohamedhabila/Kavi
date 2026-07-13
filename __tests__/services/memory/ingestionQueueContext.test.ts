@@ -45,6 +45,7 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
+import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -209,7 +210,6 @@ describe('ingestion queue runtime context', () => {
     });
 
     await drainIngestionQueue({
-      loadMessagesForThread: () => closedTurn('provider'),
       loadRuntimeContextForJob: () => ({ activeChatProvider: provider }),
     });
 
@@ -232,7 +232,6 @@ describe('ingestion queue runtime context', () => {
     });
 
     await drainIngestionQueue({
-      loadMessagesForThread: () => closedTurn('provider-mismatch'),
       loadRuntimeContextForJob: () => ({
         activeChatProvider: {
           id: 'different-provider',
@@ -268,7 +267,6 @@ describe('ingestion queue runtime context', () => {
     });
 
     await drainIngestionQueue({
-      loadMessagesForThread: () => closedTurn('structural'),
       loadRuntimeContextForJob: () => ({ activeChatProvider: provider }),
     });
 
@@ -282,6 +280,7 @@ describe('ingestion queue runtime context', () => {
   });
 
   it('verifies prior provenance without widening the turn-local persistence window', async () => {
+    const history = [...closedTurn('prior'), ...closedTurn('current')];
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'conv-prior-user',
@@ -289,22 +288,34 @@ describe('ingestion queue runtime context', () => {
       sourceStartMessageId: 'user-current',
       sourceEndMessageId: 'assistant-current',
       providerEnrichment: false,
+      sourceSnapshot: encodeIngestionSourceSnapshot({
+        messages: history,
+        priorUserMessageId: 'user-prior',
+        sourceStartMessageId: 'user-current',
+        sourceEndMessageId: 'assistant-current',
+      }),
     });
-    const history = [...closedTurn('prior'), ...closedTurn('current')];
 
-    await drainIngestionQueue({ loadMessagesForThread: () => history });
+    await drainIngestionQueue({});
 
     expect(job).not.toBeNull();
     expect(mockedProcessIngestionTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         sealedPriorUserMessageId: 'user-prior',
-        priorIdentityMessages: history,
+        priorIdentityMessages: [{ id: 'user-prior', role: 'user' }, ...closedTurn('current')],
         messages: closedTurn('current'),
       }),
     );
   });
 
   it('does not rebind a queued turn to mutable intervening history', async () => {
+    const capturedHistory = [...closedTurn('prior'), ...closedTurn('current')];
+    const sourceSnapshot = encodeIngestionSourceSnapshot({
+      messages: capturedHistory,
+      priorUserMessageId: 'user-prior',
+      sourceStartMessageId: 'user-current',
+      sourceEndMessageId: 'assistant-current',
+    });
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'conv-sealed-prior-user',
@@ -312,78 +323,17 @@ describe('ingestion queue runtime context', () => {
       sourceStartMessageId: 'user-current',
       sourceEndMessageId: 'assistant-current',
       providerEnrichment: false,
+      sourceSnapshot,
     });
-    const mutatedHistory = [
-      ...closedTurn('prior'),
-      ...closedTurn('intervening'),
-      ...closedTurn('current'),
-    ];
+    capturedHistory.splice(2, 0, ...closedTurn('intervening'));
 
-    const result = await drainIngestionQueue({ loadMessagesForThread: () => mutatedHistory });
+    const result = await drainIngestionQueue({});
 
     expect(job).not.toBeNull();
-    expect(result.sourceDeferred).toBe(1);
-    expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    {
-      label: 'source start',
-      history: [
-        ...closedTurn('current'),
-        { id: 'user-current', role: 'user' as const, content: 'Duplicate', timestamp: 3 },
-      ],
-    },
-    {
-      label: 'source end',
-      history: [
-        ...closedTurn('current'),
-        {
-          id: 'assistant-current',
-          role: 'assistant' as const,
-          content: 'Duplicate',
-          timestamp: 3,
-        },
-      ],
-    },
-  ])('rejects a duplicate $label identity before processing', async ({ history }) => {
-    const job = enqueueIngestionJob({
-      personaId: 'default',
-      threadId: 'conv-duplicate-source',
-      sourceStartMessageId: 'user-current',
-      sourceEndMessageId: 'assistant-current',
-      providerEnrichment: false,
-    });
-
-    const result = await drainIngestionQueue({ loadMessagesForThread: () => history });
-
-    expect(job).not.toBeNull();
-    expect(result.sourceDeferred).toBe(1);
-    expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
-  });
-
-  it('rejects duplicate prior-user identities even when the sealed id still matches', async () => {
-    const job = enqueueIngestionJob({
-      personaId: 'default',
-      threadId: 'conv-duplicate-prior',
-      priorUserMessageId: 'user-prior',
-      sourceStartMessageId: 'user-current',
-      sourceEndMessageId: 'assistant-current',
-      providerEnrichment: false,
-    });
-    const duplicatePrior: Message = {
-      id: 'user-prior',
-      role: 'user',
-      content: 'Duplicate prior identity',
-      timestamp: 3,
-    };
-    const history = [...closedTurn('prior'), duplicatePrior, ...closedTurn('current')];
-
-    const result = await drainIngestionQueue({ loadMessagesForThread: () => history });
-
-    expect(job).not.toBeNull();
-    expect(result.sourceDeferred).toBe(1);
-    expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
+    expect(result.completedStructural).toBe(1);
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ messages: closedTurn('current') }),
+    );
   });
 
   it('uses the sealed thread title through scheduled drains', async () => {
@@ -394,9 +344,7 @@ describe('ingestion queue runtime context', () => {
       sourceEndMessageId: 'assistant-scheduled-title',
     });
 
-    scheduleIngestionDrain({
-      loadMessagesForThread: () => closedTurn('scheduled-title'),
-    });
+    scheduleIngestionDrain({});
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(job).not.toBeNull();

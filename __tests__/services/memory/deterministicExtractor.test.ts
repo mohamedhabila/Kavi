@@ -10,6 +10,10 @@ import {
   sliceClosedTurnMessages,
 } from '../../../src/services/memory/deterministicExtractor';
 import type { Message } from '../../../src/types/message';
+import {
+  decodeIngestionSourceSnapshot,
+  encodeIngestionSourceSnapshot,
+} from '../../../src/services/memory/ingestionSourceSnapshot';
 
 function msg(overrides: Partial<Message> = {}): Message {
   return {
@@ -68,6 +72,47 @@ describe('extractStructuralMemory — episode summary', () => {
       ],
     });
     expect(result.episodeSummary).toContain('[attachments]');
+  });
+
+  it('preserves attachment presence from a content-minimal ingestion snapshot', () => {
+    const messages: Message[] = [
+      {
+        id: 'user-snapshot-attachment',
+        role: 'user',
+        content: 'Review this attachment.',
+        timestamp: 1,
+        attachments: [
+          {
+            id: 'attachment-1',
+            type: 'file',
+            uri: 'file:///private/source.pdf',
+            name: 'source.pdf',
+            mimeType: 'application/pdf',
+            size: 10,
+          },
+        ],
+      },
+      {
+        id: 'assistant-snapshot-attachment',
+        role: 'assistant',
+        content: 'Reviewed.',
+        timestamp: 2,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      },
+    ];
+    const snapshot = decodeIngestionSourceSnapshot(
+      encodeIngestionSourceSnapshot({
+        messages,
+        priorUserMessageId: null,
+        sourceStartMessageId: 'user-snapshot-attachment',
+        sourceEndMessageId: 'assistant-snapshot-attachment',
+      }),
+    );
+
+    expect(snapshot.turnMessages[0]).toMatchObject({ hasAttachments: true });
+    expect(
+      extractStructuralMemory({ ...baseInput, messages: snapshot.turnMessages }).episodeSummary,
+    ).toContain('[attachments]');
   });
 
   it('falls back to "Turn completed" when no signals exist', () => {

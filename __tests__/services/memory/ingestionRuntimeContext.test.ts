@@ -98,7 +98,7 @@ afterEach(() => {
 });
 
 describe('ingestion runtime context', () => {
-  it('resolves the persisted provider model and exact source run, not the latest run', () => {
+  it('resolves only the sealed provider and model from live runtime settings', () => {
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'thread-context',
@@ -121,7 +121,6 @@ describe('ingestion runtime context', () => {
         id: 'provider-context',
         model: 'persisted-job-model',
       }),
-      graphGoalEvidence: ['tool:old-evidence'],
     });
   });
 

@@ -14,7 +14,6 @@ import {
   discardPendingIngestionJobs,
   enqueueIngestionJob,
   getIngestionJob,
-  getIngestionJobForProcessing,
   getIngestionJobForSourceTurn,
   listPendingIngestionJobs,
   markIngestionJobStructuralComplete,
@@ -207,7 +206,8 @@ describe('ingestion source snapshot store', () => {
       job.id,
     );
 
-    expect(getIngestionJobForProcessing(job.id)).toMatchObject({
+    expect(claimIngestionJob(job.id, 5)).toBeNull();
+    expect(getIngestionJob(job.id)).toMatchObject({
       status: 'failed',
       outcomeCode: 'source_snapshot_invalid',
     });
@@ -219,18 +219,20 @@ describe('ingestion source snapshot store', () => {
     getMemoryDb().execSync('DROP TRIGGER trg_memory_ingestion_source_snapshot_active_delete');
     getMemoryDb().runSync('DELETE FROM memory_ingestion_source_snapshots WHERE job_id = ?', job.id);
 
-    expect(getIngestionJobForProcessing(job.id)).toMatchObject({
+    expect(claimIngestionJob(job.id, 20)).toBeNull();
+    expect(getIngestionJob(job.id)).toMatchObject({
       status: 'failed',
       outcomeCode: 'source_snapshot_missing',
     });
   });
 
-  it('terminalizes a missing payload discovered while listing pending work', () => {
+  it('keeps pending enumeration metadata-only and terminalizes a missing payload at claim', () => {
     const job = enqueueIngestionJob(enqueueInput('list-missing'))!;
     getMemoryDb().execSync('DROP TRIGGER trg_memory_ingestion_source_snapshot_active_delete');
     getMemoryDb().runSync('DELETE FROM memory_ingestion_source_snapshots WHERE job_id = ?', job.id);
 
-    expect(listPendingIngestionJobs(10, 20)).toEqual([]);
+    expect(listPendingIngestionJobs(10, 20)).toEqual([expect.objectContaining({ id: job.id })]);
+    expect(claimIngestionJob(job.id, 20)).toBeNull();
     expect(getIngestionJob(job.id)).toMatchObject({
       status: 'failed',
       outcomeCode: 'source_snapshot_missing',

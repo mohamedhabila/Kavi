@@ -1,8 +1,10 @@
 import type { Message } from '../../types/message';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 
-export type UniqueMessageIdentityResolution =
-  | { status: 'resolved'; index: number; message: Message }
+export type MemoryMessageIdentity = Pick<Message, 'id' | 'role'>;
+
+export type UniqueMessageIdentityResolution<T extends MemoryMessageIdentity = Message> =
+  | { status: 'resolved'; index: number; message: T }
   | { status: 'invalid'; reason: 'id_invalid' | 'missing' | 'ambiguous' };
 
 export type PriorUserMessageIdentityResolution =
@@ -33,10 +35,10 @@ export type ClosedTurnSourceIdentityResolution =
     }
   | { status: 'invalid' };
 
-export function resolveUniqueMessageIdentity(
-  messages: readonly Message[],
+export function resolveUniqueMessageIdentity<T extends MemoryMessageIdentity>(
+  messages: readonly T[],
   messageId: string | undefined,
-): UniqueMessageIdentityResolution {
+): UniqueMessageIdentityResolution<T> {
   if (!isExactMemoryProvenanceId(messageId)) {
     return { status: 'invalid', reason: 'id_invalid' };
   }
@@ -58,7 +60,7 @@ export function resolveUniqueMessageIdentity(
  * fails closed instead of guessing from the end of the conversation.
  */
 export function resolvePriorUserMessageIdentity(
-  messages: readonly Message[],
+  messages: readonly MemoryMessageIdentity[],
   currentUserMessageId: string | undefined,
 ): PriorUserMessageIdentityResolution {
   if (currentUserMessageId === undefined) {
@@ -95,7 +97,7 @@ export function resolvePriorUserMessageIdentity(
 }
 
 export function resolveSealedPriorUserMessageIdentity(
-  messages: readonly Message[],
+  messages: readonly MemoryMessageIdentity[],
   currentUserMessageId: string | undefined,
   sealedPriorUserMessageId: string | undefined,
 ): SealedPriorUserMessageIdentityResolution {

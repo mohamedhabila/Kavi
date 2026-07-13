@@ -29,7 +29,6 @@ export async function evaluateMemoryChitchatIngestionFixture(
   }
 
   await drainIngestionQueue({
-    loadMessagesForThread: () => fixture.messages,
     now,
   });
   if (recordResult.jobId) {

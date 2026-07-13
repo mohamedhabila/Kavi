@@ -11,7 +11,11 @@
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
-import type { ConsolidatorFact, ConsolidatorTurnInput } from './consolidator';
+import type {
+  ConsolidatorFact,
+  ConsolidatorSourceMessage,
+  ConsolidatorTurnInput,
+} from './consolidator';
 
 const MAX_STRUCTURAL_FACTS = 5;
 
@@ -33,10 +37,10 @@ const MAX_FOCUS_CHARS = 600;
  * traces do not leak into focus, episodes, or facts for the current turn.
  */
 export function sliceClosedTurnMessages(
-  messages: Message[],
+  messages: ConsolidatorSourceMessage[],
   sourceUserMessageId?: string,
   sourceAssistantMessageId?: string,
-): Message[] {
+): ConsolidatorSourceMessage[] {
   if (!messages.length) return messages;
   if (!sourceUserMessageId && !sourceAssistantMessageId) return messages;
 
@@ -81,7 +85,10 @@ export function extractStructuralMemory(input: ConsolidatorTurnInput): Structura
 
 // ── Episode summary (language-agnostic) ────────────────────────────────────
 
-function buildStructuralEpisodeSummary(messages: Message[], userText: string): string {
+function buildStructuralEpisodeSummary(
+  messages: ConsolidatorSourceMessage[],
+  userText: string,
+): string {
   const parts: string[] = [];
 
   // User intent from first user message in window
@@ -104,7 +111,9 @@ function buildStructuralEpisodeSummary(messages: Message[], userText: string): s
   if (hasCode) parts.push('[code]');
 
   // Attachment presence
-  const hasAttachments = messages.some((m) => (m.attachments ?? []).length > 0);
+  const hasAttachments = messages.some(
+    (message) => message.hasAttachments === true || (message.attachments ?? []).length > 0,
+  );
   if (hasAttachments) parts.push('[attachments]');
 
   return parts.join(' | ').slice(0, 600) || 'Turn completed';
