@@ -10,6 +10,7 @@ import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { runAfterMemoryTransactionCommit } from './access/transaction';
+import { canWriteLongTermMemory } from './policy';
 
 export type WorkingBlockLabel =
   | 'active_focus'
@@ -145,6 +146,7 @@ export function editWorkingBlock(
   scope: WorkingBlockScope = {},
   options: { now?: number; promptEligibility?: WorkingBlockPromptEligibility } = {},
 ): WorkingMemoryBlock {
+  if (!canWriteLongTermMemory()) throw new Error('memory_disabled');
   const db = getSchemaReadyMemoryDb();
   const now = options.now ?? Date.now();
   const def = definitionFor(label);
@@ -239,6 +241,10 @@ export function clearWorkingBlock(
     scopeKey,
   );
   const changed = (result.changes ?? 0) > 0;
-  if (changed) notifyStructuredMemoryChanged(scope.conversationId ?? scope.threadId ?? null);
+  if (changed) {
+    runAfterMemoryTransactionCommit(() =>
+      notifyStructuredMemoryChanged(scope.conversationId ?? scope.threadId ?? null),
+    );
+  }
   return changed;
 }

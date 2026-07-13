@@ -11,8 +11,10 @@ import { getActiveGoal, getGoalById } from '../../engine/goals/types';
 import { getMany, getOne, runMemoryStatement } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
+import { canWriteLongTermMemory } from './policy';
 import { upsertGoalTaskEntry } from './taskStack';
 import { editPromptEligibleWorkingBlock } from './workingBlocks';
+import { runAfterMemoryTransactionCommit } from './access/transaction';
 
 export type MemoryTaskState = 'active' | 'paused' | 'completed';
 
@@ -102,6 +104,7 @@ export interface UpsertMemoryTaskInput {
 }
 
 export function upsertMemoryTask(input: UpsertMemoryTaskInput): MemoryTask {
+  if (!canWriteLongTermMemory()) throw new Error('memory_disabled');
   const db = getSchemaReadyMemoryDb();
   const now = input.now ?? Date.now();
   const id = input.id.trim();
@@ -143,7 +146,7 @@ export function upsertMemoryTask(input: UpsertMemoryTaskInput): MemoryTask {
       now,
       id,
     );
-    notifyStructuredMemoryChanged(threadId);
+    runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(threadId));
     return rowToTask({
       ...existing,
       title,
@@ -176,7 +179,7 @@ export function upsertMemoryTask(input: UpsertMemoryTaskInput): MemoryTask {
     now,
     now,
   );
-  notifyStructuredMemoryChanged(threadId);
+  runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(threadId));
   return {
     id,
     threadId,
@@ -293,6 +296,7 @@ export function syncGoalTasksFromMutation(params: {
   goals: ReadonlyArray<AgentGoal>;
   now?: number;
 }): void {
+  if (!canWriteLongTermMemory()) return;
   const threadId = params.threadId.trim();
   if (!threadId) return;
   const now = params.now ?? Date.now();
@@ -320,6 +324,7 @@ export function syncActiveGoalFocusFromGraphTransition(params: {
   goals: ReadonlyArray<AgentGoal>;
   now?: number;
 }): void {
+  if (!canWriteLongTermMemory()) return;
   const activeGoal = getActiveGoal(params.goals);
   if (!activeGoal) {
     return;
@@ -339,7 +344,8 @@ export function syncActiveTaskFromGoal(params: {
   goalTitle: string;
   threadTitle?: string;
   now?: number;
-}): MemoryTask {
+}): MemoryTask | null {
+  if (!canWriteLongTermMemory()) return null;
   const pausedTasks = listMemoryTasks(params.threadId, { includeCompleted: false });
   const now = params.now ?? Date.now();
 

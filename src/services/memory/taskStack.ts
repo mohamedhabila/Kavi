@@ -16,6 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import { generateId } from '../../utils/id';
+import { canWriteLongTermMemory } from './policy';
 import { editWorkingBlock, getWorkingBlock } from './workingBlocks';
 
 export interface TaskStackEntry {
@@ -57,6 +58,10 @@ function writeBlock(threadId: string, entries: TaskStackEntry[]): void {
   });
 }
 
+function assertTaskStackWritable(): void {
+  if (!canWriteLongTermMemory()) throw new Error('memory_disabled');
+}
+
 /** Read the current task stack for a conversation. */
 export function readTaskStack(threadId: string): TaskStackEntry[] {
   return readBlock(threadId);
@@ -64,6 +69,7 @@ export function readTaskStack(threadId: string): TaskStackEntry[] {
 
 /** Push a new task onto the stack and mark it active (pausing the previous active task). */
 export function pushTask(threadId: string, title: string): TaskStackEntry {
+  assertTaskStackWritable();
   const now = Date.now();
   const entries = readBlock(threadId).map((e) =>
     e.state === 'active' ? { ...e, state: 'paused' as const, lastActiveAt: now } : e,
@@ -82,6 +88,7 @@ export function pushTask(threadId: string, title: string): TaskStackEntry {
 
 /** Pop the top task from the stack. Returns the removed entry or null if empty. */
 export function popTask(threadId: string): TaskStackEntry | null {
+  assertTaskStackWritable();
   const entries = readBlock(threadId);
   if (entries.length === 0) return null;
   const removed = entries.pop()!;
@@ -99,6 +106,7 @@ export function popTask(threadId: string): TaskStackEntry | null {
 
 /** Mark a specific task as active, pausing all others. */
 export function activateTask(threadId: string, taskId: string): void {
+  assertTaskStackWritable();
   const entries = readBlock(threadId);
   const hasTarget = entries.some((e) => e.id === taskId);
   if (!hasTarget) return;
@@ -113,6 +121,7 @@ export function activateTask(threadId: string, taskId: string): void {
 
 /** Mark a specific task as completed. */
 export function completeTask(threadId: string, taskId: string): void {
+  assertTaskStackWritable();
   const entries = readBlock(threadId).map((e) =>
     e.id === taskId ? { ...e, state: 'completed' as const, lastActiveAt: Date.now() } : e,
   );
@@ -121,6 +130,7 @@ export function completeTask(threadId: string, taskId: string): void {
 
 /** Mark a specific task as paused without changing other entries. */
 export function pauseTask(threadId: string, taskId: string, now: number = Date.now()): void {
+  assertTaskStackWritable();
   const trimmedId = taskId.trim();
   if (!threadId.trim() || !trimmedId) return;
   const entries = readBlock(threadId).map((entry) =>
@@ -142,6 +152,7 @@ export function upsertGoalTaskEntry(
   state: TaskStackEntry['state'],
   now: number = Date.now(),
 ): TaskStackEntry {
+  assertTaskStackWritable();
   const trimmedThreadId = threadId.trim();
   const trimmedId = taskId.trim();
   const trimmedTitle = title.trim();
