@@ -373,6 +373,7 @@ describe('grounded passive memory corrections', () => {
       userContent: 'I moved to Utrecht.',
       predicate: 'lives_in',
       value: 'Utrecht',
+      operation: 'insert',
     });
 
     const user = upsertEntity({ name: 'user', type: 'self', now: 400 });

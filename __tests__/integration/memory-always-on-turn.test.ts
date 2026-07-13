@@ -3,12 +3,28 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
+jest.mock('../../src/services/llm/support/providerSupport', () => {
+  const actual = jest.requireActual('../../src/services/llm/support/providerSupport');
+  return {
+    ...actual,
+    resolveProviderApiKey: jest.fn(async () => 'test-key'),
+  };
+});
+
+const mockSendMessage = jest.fn();
+
+jest.mock('../../src/services/llm/LlmService', () => ({
+  LlmService: jest.fn().mockImplementation(() => ({ sendMessage: mockSendMessage })),
+}));
+
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { __resetIngestionQueueForTests } from '../../src/services/memory/ingestionQueue';
 import { getWorkingBlock } from '../../src/services/memory/workingBlocks';
 import { listEpisodes } from '../../src/services/memory/episodes/queries';
+import { listFacts } from '../../src/services/memory/facts/queries';
+import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { Message } from '../../src/types/message';
 import { waitForIngestionJobTerminal } from '../helpers/ingestionQueueHarness';
@@ -43,7 +59,12 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   __resetIngestionQueueForTests();
-  useSettingsStore.setState({ disableLongTermMemory: false } as never);
+  mockSendMessage.mockReset();
+  useSettingsStore.setState({
+    disableLongTermMemory: false,
+    consolidationProvider: '',
+    providers: [],
+  } as never);
 });
 
 afterEach(() => {
@@ -96,5 +117,94 @@ describe('memory always-on turn integration', () => {
     expect(recorded.jobId).not.toBeNull();
     await waitForIngestionJobTerminal(recorded.jobId!);
     expect(listEpisodes({ threadId: 'conv-sync' }).length).toBeGreaterThan(0);
+  });
+
+  it('grounds and recalls a natural chitchat memory request without a memory-write tool', async () => {
+    const userContent =
+      'Please remember that I usually keep weekly planning meetings to 25 minutes.';
+    const messages = makeClosedTurn(userContent, 'I will keep that in mind.');
+    expect(messages.every((message) => !message.toolCalls?.length)).toBe(true);
+    useSettingsStore.setState({
+      consolidationProvider: 'provider-memory',
+      providers: [
+        {
+          id: 'provider-memory',
+          name: 'Memory provider',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'memory-model',
+          enabled: true,
+        },
+      ],
+    } as never);
+    mockSendMessage.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              new_facts: [
+                {
+                  subject: 'user',
+                  predicate: 'usual_weekly_planning_meeting_duration',
+                  value: '25 minutes',
+                  scope: 'global',
+                  importance: 0.8,
+                  confidence: 0.95,
+                  evidence_message_ids: ['user-1'],
+                  operation: 'insert',
+                  assertion_class: 'current_direct',
+                  evidence_quote: userContent,
+                  reason: 'Explicit durable user preference.',
+                },
+              ],
+              episode_summary: null,
+              active_focus: null,
+              open_threads: [],
+              notable: [],
+            }),
+          },
+        },
+      ],
+    });
+
+    const recorded = await recordCompletedTurnForMemory({
+      threadId: 'conv-natural-remember',
+      messages,
+      now: 10,
+    });
+    expect(recorded.jobId).not.toBeNull();
+    await expect(waitForIngestionJobTerminal(recorded.jobId!)).resolves.toEqual(
+      expect.objectContaining({ status: 'completed_enriched' }),
+    );
+
+    const matchingFacts = listFacts({ limit: 20 }).filter(
+      (fact) => fact.predicate === 'usual_weekly_planning_meeting_duration',
+    );
+    expect(matchingFacts).toHaveLength(1);
+    expect(matchingFacts[0]).toMatchObject({
+      objectText: '25 minutes',
+      sourceMessageId: 'user-1',
+      factClass: 'subjective_user',
+      sourceAuthority: 'grounded_user',
+    });
+
+    const recall = await buildLivingMemorySections({
+      conversationId: 'conv-natural-recall',
+      sourceThreadId: 'conv-natural-recall',
+      personaId: 'default',
+      taskId: null,
+      messages: [
+        {
+          id: 'user-recall',
+          role: 'user',
+          content: 'What is my usual weekly planning meeting duration?',
+          timestamp: 20,
+        },
+      ],
+      now: matchingFacts[0]!.createdAt + 1,
+      recallLimit: 4,
+    });
+    expect(recall.recalledFactCount).toBeGreaterThan(0);
+    expect(recall.sections.map((section) => section.text).join('\n')).toContain('25 minutes');
   });
 });

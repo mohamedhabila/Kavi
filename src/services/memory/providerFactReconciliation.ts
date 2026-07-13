@@ -29,6 +29,25 @@ interface ResolvedProviderFact {
   resolution: CurrentReplacementResolution;
 }
 
+function admitInitialGroundedSelfInsert(
+  fact: ProviderFact,
+  resolution: CurrentReplacementResolution,
+  context: ProviderMergeContext,
+): ProviderFact | null {
+  if (!isCanonicalSelfMemorySubject(fact.subject) || resolution.hasAnyCurrentFact) {
+    return fact;
+  }
+  const decision = evaluateGroundedReplacement(
+    { ...fact, operation: 'replace_current' },
+    {
+      ...context,
+      currentFacts: resolution.currentFacts,
+      hasAnyCurrentFact: resolution.hasAnyCurrentFact,
+    },
+  );
+  return decision.accepted && decision.operation === 'insert' ? decision.fact : null;
+}
+
 function withEvidenceQuote(fact: ProviderFact, evidenceQuote: string): ProviderFact {
   return {
     ...fact,
@@ -78,7 +97,12 @@ function resolveProviderFact(
       : directFact;
 
   if (fact.operation !== 'replace_current' || !isCanonicalSelfMemorySubject(fact.subject)) {
-    return groundedDirectFact ? { fact: groundedDirectFact, resolution } : null;
+    if (!groundedDirectFact) return null;
+    const admittedFact =
+      fact.operation === 'replace_current'
+        ? groundedDirectFact
+        : admitInitialGroundedSelfInsert(groundedDirectFact, resolution, context);
+    return admittedFact ? { fact: admittedFact, resolution } : null;
   }
 
   if (resolution.currentFacts.length === 1) {
