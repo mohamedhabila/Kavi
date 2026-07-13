@@ -127,8 +127,8 @@ describe('paired causal-memory scenario and contract', () => {
     expect(prompt).not.toContain('subject `');
     expect(validateE2EPairedCausalMemoryContract(scenario)).toEqual(scenario.pairedEvaluation);
     expect(scenario.pairedEvaluation).toMatchObject({
-      neutralRubricIndexes: Array.from({ length: 25 }, (_value, index) => index),
-      causalRubricIndexes: Array.from({ length: 11 }, (_value, index) => index + 25),
+      neutralRubricIndexes: Array.from({ length: 27 }, (_value, index) => index),
+      causalRubricIndexes: Array.from({ length: 11 }, (_value, index) => index + 27),
     });
     const neutralRubrics = scenario.pairedEvaluation!.neutralRubricIndexes.map(
       (index) => scenario.rubrics[index],
@@ -143,6 +143,18 @@ describe('paired causal-memory scenario and contract', () => {
         {
           kind: 'turn_native_invocation_count',
           turnIndex: 1,
+          expectedCount: 0,
+        },
+        {
+          kind: 'turn_tool_call_count',
+          turnIndex: 0,
+          scope: 'all',
+          expectedCount: 0,
+        },
+        {
+          kind: 'turn_tool_call_count',
+          turnIndex: 1,
+          scope: 'all',
           expectedCount: 0,
         },
       ]),

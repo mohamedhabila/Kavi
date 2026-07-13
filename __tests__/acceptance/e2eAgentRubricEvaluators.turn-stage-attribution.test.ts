@@ -250,6 +250,85 @@ describe('turn stage-attribution rubrics', () => {
     });
   });
 
+  it('counts model-requested tools on the exact turn and classifies producer effects fail-closed', () => {
+    const passiveTurn = buildTurn({
+      turnIndex: 0,
+      toolCalls: [
+        { id: 'read-1', name: 'read_file', arguments: '{"path":"notes.txt"}' },
+      ],
+    });
+    const result = {
+      ...buildResult(),
+      turnTraces: [passiveTurn, buildTurn({ turnIndex: 1 })],
+    };
+
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'turn_tool_call_count',
+        turnIndex: 0,
+        scope: 'all',
+        expectedCount: 0,
+      }),
+    ).toMatchObject({
+      fixtureId: 'stage-attribution:turn-0:all:turn_tool_call_count',
+      passed: false,
+      detail: 'turn 0 all tool call count 1 (expected 0)',
+    });
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'turn_tool_call_count',
+        turnIndex: 0,
+        scope: 'side_effectful',
+        expectedCount: 0,
+      }),
+    ).toMatchObject({ passed: true });
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'turn_tool_call_count',
+        turnIndex: 1,
+        scope: 'all',
+        expectedCount: 0,
+      }),
+    ).toMatchObject({ passed: true });
+
+    for (const name of ['write_file', 'mcp__unclassified__mutate']) {
+      const toolCallId = `effect-${name}`;
+      const effectful = buildResult(
+        buildTurn({
+          toolCalls: [{ id: toolCallId, name, arguments: '{}' }],
+          toolResults: [
+            { toolCallId, name, content: '{"status":"completed"}', isError: false },
+          ],
+        }),
+      );
+      expect(
+        evaluateE2ERubric(effectful, {
+          kind: 'turn_tool_call_count',
+          turnIndex: 1,
+          scope: 'side_effectful',
+          expectedCount: 0,
+        }),
+      ).toMatchObject({
+        passed: false,
+        detail: 'turn 1 side_effectful tool call count 1 (expected 0)',
+      });
+    }
+  });
+
+  it('rejects invalid turn tool-call expectations', () => {
+    expect(
+      evaluateE2ERubric(buildResult(), {
+        kind: 'turn_tool_call_count',
+        turnIndex: 1,
+        scope: 'all',
+        expectedCount: -1,
+      }),
+    ).toMatchObject({
+      passed: false,
+      detail: 'turn 1 tool call expectation is invalid',
+    });
+  });
+
   it('grades the actual route directive and resolved mode for the requested turn', () => {
     expect(
       evaluateE2ERubric(buildResult(), {

@@ -60,6 +60,12 @@ describe('E2E benchmark manifest stage attribution', () => {
         toolName: 'calendar_update_event',
         expectedCount: 0,
       },
+      {
+        kind: 'turn_tool_call_count',
+        turnIndex: 1,
+        scope: 'all',
+        expectedCount: 0,
+      },
       { kind: 'ingestion_job_checkpointed', minCount: 1 },
     ];
     const scenario: E2EScenario = {
@@ -128,6 +134,11 @@ describe('E2E benchmark manifest stage attribution', () => {
         rubricKind: 'turn_native_invocation_count',
         evaluatorKind: 'trajectory',
         evidenceKind: 'native_fixture_state',
+      },
+      {
+        rubricKind: 'turn_tool_call_count',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'execution_state',
       },
       {
         rubricKind: 'ingestion_job_checkpointed',

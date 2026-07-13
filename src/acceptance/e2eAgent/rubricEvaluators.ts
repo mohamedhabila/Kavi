@@ -425,6 +425,7 @@ export function evaluateE2ERubric(
     case 'turn_final_response_token':
     case 'turn_clarification':
     case 'turn_native_invocation_count':
+    case 'turn_tool_call_count':
     case 'turn_memory_answer':
     case 'turn_memory_selection':
       return evaluateE2ETurnStageRubric(result, rubric);

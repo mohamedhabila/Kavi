@@ -259,7 +259,11 @@ continuity/retrieval evidence, not standalone causal-memory evidence: the raw
 persisted chat remains available across these relaunches. Causal memory is
 evaluated separately by `paired-causal-global-preference`, whose product-created
 new conversation begins with zero raw messages while retaining owner-global
-memory.
+memory. Its two passive learning turns must contain zero model-requested tool
+calls of any kind as well as zero native invocations; exact per-turn calls remain
+available in opt-in private evidence. This prevents a non-native effect from
+inflating neutral parity while leaving product behavior and benchmark prompts
+unchanged.
 Its 240K token ceiling is provisional until clean first-attempt live trials are
 available. Recalibrate to `ceil(max observed × 1.25)` after at least three
 retries-disabled runs. The nine-turn 810-second scenario deadline is a hard
@@ -445,7 +449,8 @@ maps to at least 1 scenario (`e2eBenchmarkRegistry.ts`).
 **Structural rubrics:** graph status, terminal success, completion holds,
 workspace paths and absence, file hashes, memory predicates, native fixture
 state, goal status/criteria, user-turn count, token budgets, cache reads, graph
-audit observations, ingestion jobs, memory episodes, and working-block tokens.
+audit observations, ingestion jobs, memory episodes, working-block tokens, and
+turn-attributed tool-call counts for passive no-action guards.
 E2E scenarios do not declare `allowedTools` and do not score `tool_called`,
 `tool_sequence`, `tool_call_max`, `first_turn_tool_called`,
 `graph_session_tools`, or tool-result `json_field` rubrics. Redacted traces

@@ -126,15 +126,15 @@ treatment, such as `lexical_baseline` versus `production_auto`. Oracle evidence
 is intentionally excluded from this maintainer command because it is a
 diagnostic, not a product treatment. Reports are immutable under
 `.private/evals/runs/e2e-paired` by default; choose a new run ID for every
-attempt. A valid paired delta is local product evidence, not an official
-benchmark result or a capability pass bar.
+attempt. A valid paired delta is local product evidence, not an official benchmark result or a capability pass bar.
 
-For the causal gate, reuse the base environment with
-`E2E_PAIRED_SCENARIO_ID=paired-causal-global-preference E2E_PAIRED_RUN_ID=release-candidate-01-causal-global-preference E2E_PAIRED_REFERENCE_CONDITION=memory_off E2E_PAIRED_CANDIDATE_CONDITION=production_auto npm run eval:e2e:paired`.
+For the causal gate, reuse the base environment with `E2E_PAIRED_SCENARIO_ID=paired-causal-global-preference E2E_PAIRED_RUN_ID=release-candidate-01-causal-global-preference E2E_PAIRED_REFERENCE_CONDITION=memory_off E2E_PAIRED_CANDIDATE_CONDITION=production_auto npm run eval:e2e:paired`.
 `production_auto` is the production-memory treatment; the frozen pair uses real
 `createConversation`, zero raw messages, and no seeding/deletion. Both sides must
-pass neutral guards, only the product may pass every causal rubric, and the
-result remains local `kavi-core` evidence rather than an official benchmark.
+pass neutral guards, including zero model-requested tool calls and independently
+zero native invocations on both passive learning turns. Calls are attributed to
+the exact immutable-trajectory turn, so a successful non-native effect cannot pass
+as neutral. Only the product may pass every causal rubric; the result remains local `kavi-core` evidence, not an official benchmark.
 
 ## Evaluation lanes
 

@@ -527,7 +527,7 @@ describe('E2E structural mobile assistant scenarios', () => {
     }
   });
 
-  it('keeps passive causal-memory learning turns free of native side effects', () => {
+  it('keeps passive causal-memory learning turns free of tool calls and native side effects', () => {
     const scenario = E2E_PAIRED_ONLY_SCENARIOS.find(
       (entry) => entry.id === 'paired-causal-global-preference',
     );
@@ -547,6 +547,18 @@ describe('E2E structural mobile assistant scenarios', () => {
         expect.objectContaining({
           kind: 'turn_native_invocation_count',
           turnIndex: 1,
+          expectedCount: 0,
+        }),
+        expect.objectContaining({
+          kind: 'turn_tool_call_count',
+          turnIndex: 0,
+          scope: 'all',
+          expectedCount: 0,
+        }),
+        expect.objectContaining({
+          kind: 'turn_tool_call_count',
+          turnIndex: 1,
+          scope: 'all',
           expectedCount: 0,
         }),
       ]),

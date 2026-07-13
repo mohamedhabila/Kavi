@@ -1,5 +1,9 @@
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import { ALL_NATIVE_TOOL_DEFINITIONS } from '../../engine/tools/native/definitions';
+import {
+  descriptorForToolName,
+  descriptorHasProducerEffect,
+} from '../../engine/tools/toolLifecycleSemantics';
 import { evaluateE2EMemoryProbeRubric } from './e2eMemoryProbeRubricEvaluators';
 import type {
   E2EClarificationMissingField,
@@ -19,6 +23,7 @@ type E2ETurnStageRubric = Extract<
       | 'turn_final_response_token'
       | 'turn_clarification'
       | 'turn_native_invocation_count'
+      | 'turn_tool_call_count'
       | 'turn_memory_answer'
       | 'turn_memory_selection';
   }
@@ -72,6 +77,9 @@ function fixtureIdForRubric(result: E2EScenarioResult, rubric: E2ETurnStageRubri
   }
   if (rubric.kind === 'turn_native_invocation_count') {
     return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.toolName ?? 'all'}:${rubric.kind}`;
+  }
+  if (rubric.kind === 'turn_tool_call_count') {
+    return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.scope}:${rubric.kind}`;
   }
   return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.kind}`;
 }
@@ -273,6 +281,34 @@ export function evaluateE2ETurnStageRubric(
           fixtureId,
           passed: false,
           detail: `turn ${rubric.turnIndex} native invocation count ${actualCount} (expected ${rubric.expectedCount})`,
+        };
+      }
+      return { fixtureId, passed: true };
+    }
+
+    case 'turn_tool_call_count': {
+      if (
+        !Number.isSafeInteger(rubric.expectedCount) ||
+        rubric.expectedCount < 0 ||
+        (rubric.scope !== 'all' && rubric.scope !== 'side_effectful')
+      ) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `turn ${rubric.turnIndex} tool call expectation is invalid`,
+        };
+      }
+      const actualCount =
+        rubric.scope === 'all'
+          ? turn.toolCalls.length
+          : turn.toolCalls.filter((call) =>
+              descriptorHasProducerEffect(descriptorForToolName(call.name)),
+            ).length;
+      if (actualCount !== rubric.expectedCount) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `turn ${rubric.turnIndex} ${rubric.scope} tool call count ${actualCount} (expected ${rubric.expectedCount})`,
         };
       }
       return { fixtureId, passed: true };

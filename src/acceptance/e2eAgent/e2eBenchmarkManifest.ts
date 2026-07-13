@@ -198,6 +198,7 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_final_response_token',
   'turn_clarification',
   'turn_native_invocation_count',
+  'turn_tool_call_count',
   'turn_memory_answer',
   'turn_memory_selection',
 ]);
@@ -277,6 +278,8 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
       return 'assistant_response';
     case 'turn_native_invocation_count':
       return 'native_fixture_state';
+    case 'turn_tool_call_count':
+      return 'execution_state';
     case 'turn_memory_selection':
       return 'memory_retrieval';
     case 'goals_bootstrapped':

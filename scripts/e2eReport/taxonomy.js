@@ -95,6 +95,8 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
       return ['missing_clarification'];
     case 'turn_native_invocation_count':
       return ['native_side_effect_failure'];
+    case 'turn_tool_call_count':
+      return ['wrong_tool'];
     case 'turn_memory_selection':
       return ['memory_retrieval_miss'];
     case 'memory_fact':

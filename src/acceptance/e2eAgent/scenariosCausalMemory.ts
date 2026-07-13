@@ -32,6 +32,8 @@ const NEUTRAL_RUBRICS: ReadonlyArray<E2ERubric> = [
   ...completedTurnRubrics(3, 'chitchat'),
   { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
   { kind: 'turn_native_invocation_count', turnIndex: 1, expectedCount: 0 },
+  { kind: 'turn_tool_call_count', turnIndex: 0, scope: 'all', expectedCount: 0 },
+  { kind: 'turn_tool_call_count', turnIndex: 1, scope: 'all', expectedCount: 0 },
   { kind: 'turn_lifecycle_boundary', turnIndex: 2, boundary: 'new_conversation' },
   { kind: 'memory_fact_absent', ...STALE_PREFERENCE },
   { kind: 'native_fixture_state', path: 'calendar.updatedEventCount', expectedValue: '0' },

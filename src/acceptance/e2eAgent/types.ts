@@ -268,6 +268,12 @@ export type E2ERubric =
       expectedCount: number;
     }
   | {
+      kind: 'turn_tool_call_count';
+      turnIndex: number;
+      scope: 'all' | 'side_effectful';
+      expectedCount: number;
+    }
+  | {
       kind: 'turn_memory_answer';
       turnIndex: number;
       answer: E2EMemoryProbeAnswerExpectation;
