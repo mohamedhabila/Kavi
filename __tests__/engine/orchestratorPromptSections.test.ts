@@ -19,14 +19,7 @@ describe('orchestratorPromptSections', () => {
 
   it('builds full system prompts with cacheable policy before dynamic context', () => {
     const runtimeContext = buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z'));
-    const sections = buildSystemPromptSections(
-      'Base prompt.',
-      runtimeContext,
-      '',
-      '',
-      true,
-      false,
-    );
+    const sections = buildSystemPromptSections('Base prompt.', runtimeContext, '', '', true, false);
     const prompt = joinSystemPromptSections(sections);
 
     expect(sections[0]).toMatchObject({ text: 'Base prompt.', cacheable: true });
@@ -37,20 +30,23 @@ describe('orchestratorPromptSections', () => {
       'Prefer the highest-leverage tool that directly fits the next work unit. If a worker can finish from its prompt',
     );
     expect(prompt).toContain(
-      'Verification, search, listing, reading, or memory recall is not completion when the same turn also asks you to write',
+      'Verify external state only when the requested answer or action depends on freshness',
     );
     expect(prompt).toContain(
-      'Fetch known URLs directly',
+      'A mention of a meeting, deadline, person, or schedule is not by itself a request to inspect external state.',
     );
+    expect(prompt).toContain(
+      'Natural chitchat memory statements are recorded automatically after the completed turn',
+    );
+    expect(prompt).toContain(
+      'Verification, search, listing, reading, or memory recall is not completion when the same turn also asks you to write',
+    );
+    expect(prompt).toContain('Fetch known URLs directly');
     expect(prompt).toContain('batch independent fetches');
     expect(prompt).not.toContain('site:host');
     expect(prompt).not.toContain('one broad query and one reference-oriented query');
-    expect(prompt).toContain(
-      'compare sources separately',
-    );
-    expect(prompt).toContain(
-      're-search only when fetched pages are insufficient',
-    );
+    expect(prompt).toContain('compare sources separately');
+    expect(prompt).toContain('re-search only when fetched pages are insufficient');
     expect(prompt).toContain("Safety: no independent goals beyond the user's request.");
     expect(prompt).not.toContain('## Tool Call Style');
   });
@@ -102,14 +98,7 @@ describe('orchestratorPromptSections', () => {
       true,
       false,
     );
-    const textOnly = buildSystemPromptSections(
-      'Base prompt.',
-      runtimeContext,
-      '',
-      '',
-      true,
-      true,
-    );
+    const textOnly = buildSystemPromptSections('Base prompt.', runtimeContext, '', '', true, true);
     const providerNoTools = buildSystemPromptSections(
       'Base prompt.',
       runtimeContext,

@@ -58,9 +58,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
           requiredResourceKinds: ['memory'],
         },
       ],
-      workingMessages: [
-        userMessage('Subject `longmem-entity` has access_code `LONGMEM-E2E-42`.'),
-      ],
+      workingMessages: [userMessage('Subject `longmem-entity` has access_code `LONGMEM-E2E-42`.')],
     });
 
     const names = new Set(selected.map((tool) => tool.name));
@@ -101,6 +99,43 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(names.has('contacts_search')).toBe(true);
     expect(names.has('sms_compose')).toBe(false);
     expect(names.has('contacts_get')).toBe(false);
+  });
+
+  it('keeps an unscoped chitchat turn closed over external state', () => {
+    const selected = resolveTurnToolSurface({
+      allTools: [...tools, ...resourceFlowTools],
+      conversationMode: 'chitchat',
+      goals: [],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(),
+      includeToolCatalog: true,
+    });
+
+    expect(selected.map((tool) => tool.name)).toEqual([
+      'memory_recall',
+      'tool_catalog',
+      'tool_describe',
+    ]);
+  });
+
+  it('admits an exact catalog-activated device read into chitchat', () => {
+    const selected = resolveTurnToolSurface({
+      allTools: resourceFlowTools,
+      conversationMode: 'chitchat',
+      goals: [],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(['contacts_search']),
+      includeToolCatalog: true,
+    });
+
+    const names = new Set(selected.map((tool) => tool.name));
+    expect(names.has('contacts_search')).toBe(true);
+    expect(names.has('contacts_get')).toBe(false);
+    expect(names.has('sms_compose')).toBe(false);
   });
 
   it('loads the discovered category tools on the turn after tool_catalog', async () => {

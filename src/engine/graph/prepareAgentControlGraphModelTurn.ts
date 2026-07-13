@@ -32,6 +32,7 @@ export async function prepareAgentControlGraphModelTurn(
 
   const toolSurface = await resolveModelTurnGroundedToolSurface({
     allTools: params.allTools,
+    conversationMode: params.isSuperAgent ? 'agentic' : 'chitchat',
     completedWorkflowToolNames: params.completedWorkflowToolNames,
     goals: params.goals,
     explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,

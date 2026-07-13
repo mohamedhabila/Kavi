@@ -1,6 +1,7 @@
 import type { AgentGoal } from '../../../types/agentRun';
 import type { Message } from '../../../types/message';
 import type { ToolDefinition } from '../../../types/tool';
+import type { ConversationMode } from '../../../types/conversation';
 import type { TrackedAsyncOperation } from '../../pendingAsyncOperations';
 import { resolveGoalCapabilityToolNames } from '../../goals/toolSurface';
 import { normalizeToolName } from '../../tools/toolNameNormalization';
@@ -11,6 +12,7 @@ import { resolveDefaultGroundedRequestScopedTools } from '../turnToolSurface';
 
 export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
+  conversationMode: ConversationMode;
   completedWorkflowToolNames: ReadonlySet<string>;
   goals?: ReadonlyArray<AgentGoal>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
@@ -50,6 +52,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
 
   const groundedRequestScopedTools = await resolveDefaultGroundedRequestScopedTools({
     allTools: params.allTools,
+    conversationMode: params.conversationMode,
     observedToolNames: params.completedWorkflowToolNames,
     goals,
     pendingAsyncMonitorToolNames,

@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ToolDefinition } from '../../types/tool';
+import type { ConversationMode } from '../../types/conversation';
 import {
   normalizeToolWorkflowContract,
   workflowProductionSatisfiesConsumption,
@@ -44,6 +45,7 @@ const STABLE_TOOL_SURFACE_ORDER_VALUES = [
 export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
   DEFAULT_CORE_TOOL_ORDER,
 );
+const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['memory_recall']);
 const STABLE_TOOL_SURFACE_ORDER = new Map(
   [...STABLE_TOOL_SURFACE_ORDER_VALUES, 'tool_catalog', 'tool_describe'].map((name, index) => [
     name,
@@ -421,6 +423,7 @@ function resolveGoalCapabilityToolNamesForGoals(
 
 export interface ResolveTurnToolSurfaceParams {
   allTools: ReadonlyArray<ToolDefinition>;
+  conversationMode?: ConversationMode;
   goals: ReadonlyArray<AgentGoal>;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
@@ -441,15 +444,21 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
       .filter(([toolName]) => Boolean(toolName)),
   );
 
-  for (const toolName of DEFAULT_CORE_TOOL_NAMES) {
+  const defaultCoreToolNames =
+    params.conversationMode === 'chitchat'
+      ? CHITCHAT_DEFAULT_CORE_TOOL_NAMES
+      : DEFAULT_CORE_TOOL_NAMES;
+  for (const toolName of defaultCoreToolNames) {
     selectedNames.add(toolName);
     stablePrefixToolNames.add(toolName);
   }
 
-  for (const [toolName, tool] of toolByName) {
-    if (isDefaultMobileDiscoveryTool(tool)) {
-      selectedNames.add(toolName);
-      stablePrefixToolNames.add(toolName);
+  if (params.conversationMode !== 'chitchat') {
+    for (const [toolName, tool] of toolByName) {
+      if (isDefaultMobileDiscoveryTool(tool)) {
+        selectedNames.add(toolName);
+        stablePrefixToolNames.add(toolName);
+      }
     }
   }
 
@@ -562,7 +571,9 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
   });
 
   return orderTurnToolSurface(
-    params.allTools.filter((tool) => selectedNames.has(normalizeToolName(tool.name))),
+    Array.from(toolByName.values()).filter((tool) =>
+      selectedNames.has(normalizeToolName(tool.name)),
+    ),
   ).map((tool) => {
     const normalizedName = normalizeToolName(tool.name);
     return withPromptCachePlacement(

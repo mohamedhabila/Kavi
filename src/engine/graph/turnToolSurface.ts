@@ -1,6 +1,7 @@
 import type { AgentGoal } from '../../types/agentRun';
 import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
+import type { ConversationMode } from '../../types/conversation';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import {
   normalizeToolWorkflowContract,
@@ -127,6 +128,7 @@ function resolveWorkflowContinuationToolNames(
 
 export async function resolveDefaultGroundedRequestScopedTools(params: {
   allTools: ReadonlyArray<ToolDefinition>;
+  conversationMode?: ConversationMode;
   observedToolNames: Iterable<string>;
   goals?: ReadonlyArray<AgentGoal>;
   pendingAsyncMonitorToolNames?: ReadonlySet<string>;
@@ -188,6 +190,7 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
 
   return resolveTurnToolSurface({
     allTools: params.allTools,
+    conversationMode: params.conversationMode,
     goals,
     pendingAsyncMonitorToolNames,
     explicitToolSurfaceToolNames,

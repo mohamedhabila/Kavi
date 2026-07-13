@@ -321,6 +321,7 @@ describe('Orchestrator — toolFilter', () => {
       conversationId: 'conv-filter-pass',
       systemPrompt: 'Test',
       messages: [makeMsg('user', 'Do something safe')],
+      explicitToolSurfaceToolNames: ['read_file'],
       toolFilter: (name) => name === 'read_file',
     };
 
@@ -372,7 +373,7 @@ describe('Orchestrator — toolFilter', () => {
     expect(callbacks.calls.onToolMessage[0]?.result).toContain('not registered');
   });
 
-  it('uses the graph-owned default tool surface when toolFilter is undefined', async () => {
+  it('uses a deliberately pinned tool surface when toolFilter is undefined', async () => {
     mockStreamMessage
       .mockReturnValueOnce(
         makeStream([
@@ -398,6 +399,7 @@ describe('Orchestrator — toolFilter', () => {
       conversationId: 'conv-no-filter',
       systemPrompt: 'Test',
       messages: [makeMsg('user', 'Anything')],
+      explicitToolSurfaceToolNames: ['read_file'],
       // toolFilter omitted
     };
 
@@ -469,6 +471,15 @@ describe('Orchestrator — toolFilter', () => {
       );
       expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
         'memory_remember',
+      );
+      expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
+        'memory_manage',
+      );
+      expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
+        'calendar_list',
+      );
+      expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
+        'read_file',
       );
       expect(mockExecuteTool).not.toHaveBeenCalled();
       expect(callbacks.calls.onToolMessage[0]?.result).toContain('not allowed');
