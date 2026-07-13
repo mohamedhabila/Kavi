@@ -62,10 +62,7 @@ function resolveWorkflowContinuationToolNames(
   seedToolNames: Iterable<string>,
 ): Set<string> {
   const toolByName = new Map<string, ToolDefinition>();
-  const contractByName = new Map<
-    string,
-    ReturnType<typeof normalizeToolWorkflowContract>
-  >();
+  const contractByName = new Map<string, ReturnType<typeof normalizeToolWorkflowContract>>();
   for (const tool of allTools) {
     const normalizedName = normalizeToolName(tool.name);
     if (normalizedName) {
@@ -134,7 +131,7 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   goals?: ReadonlyArray<AgentGoal>;
   pendingAsyncMonitorToolNames?: ReadonlySet<string>;
   workingMessages: ReadonlyArray<Message>;
-  useExplicitFilteredToolSurface?: boolean;
+  explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   sessionActivatedToolNames?: ReadonlyArray<string>;
 }): Promise<ToolDefinition[]> {
   const messagesSinceLatestUserMessage = getMessagesSinceLatestUserMessage(params.workingMessages);
@@ -160,10 +157,10 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   const observedToolNames = Array.from(params.observedToolNames)
     .map((toolName) => normalizeToolName(toolName))
     .filter(Boolean);
-  const workflowContinuationToolNames = resolveWorkflowContinuationToolNames(
-    params.allTools,
-    [...recentContinuationToolNames, ...observedToolNames],
-  );
+  const workflowContinuationToolNames = resolveWorkflowContinuationToolNames(params.allTools, [
+    ...recentContinuationToolNames,
+    ...observedToolNames,
+  ]);
   const sameTurnWorkflowContinuationToolNames = resolveWorkflowContinuationToolNames(
     params.allTools,
     recentContinuationToolNames,
@@ -173,16 +170,13 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
     ...workflowContinuationToolNames,
   ]);
   const hasObservedToolNames = observedToolNames.length > 0;
-  const explicitToolSurfaceToolNames = params.useExplicitFilteredToolSurface
-    ? params.allTools.map((tool) => tool.name)
-    : [];
-  const hasGoalScopedCallableTools = resolveGoalCapabilityToolNames(
-    goals,
-    params.allTools,
-  ).some((toolName) => {
-    const normalizedName = normalizeToolName(toolName);
-    return normalizedName && !DISCOVERY_ACTIVATION_TOOL_NAMES.has(normalizedName);
-  });
+  const explicitToolSurfaceToolNames = params.explicitToolSurfaceToolNames ?? [];
+  const hasGoalScopedCallableTools = resolveGoalCapabilityToolNames(goals, params.allTools).some(
+    (toolName) => {
+      const normalizedName = normalizeToolName(toolName);
+      return normalizedName && !DISCOVERY_ACTIVATION_TOOL_NAMES.has(normalizedName);
+    },
+  );
   const hasSurfaceContinuationSignals =
     pendingAsyncMonitorToolNames.size > 0 ||
     explicitToolSurfaceToolNames.length > 0 ||

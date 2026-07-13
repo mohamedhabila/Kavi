@@ -79,6 +79,7 @@ export function resolveSubAgentToolAccess(params: {
   hasExplicitToolsConfig: boolean;
   explicitToolSelectionRejectedMessage: string | undefined;
   disableToolingForExplicitEmptyToolSurface: boolean;
+  explicitToolSurfaceToolNames: ReadonlyArray<string> | undefined;
   toolFilter: ((name: string) => boolean) | undefined;
 } {
   const runtimeToolAvailability = getRuntimeToolAvailabilityContext();
@@ -143,6 +144,7 @@ export function resolveSubAgentToolAccess(params: {
     hasExplicitToolsConfig,
     explicitToolSelectionRejectedMessage,
     disableToolingForExplicitEmptyToolSurface,
+    explicitToolSurfaceToolNames: hasExplicitToolsConfig ? (allowedToolNames ?? []) : undefined,
     toolFilter,
   };
 }

@@ -45,6 +45,7 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
   messages: Message[];
   allProviders?: LlmProviderConfig[];
   disableTooling: boolean;
+  explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   toolFilter?: (toolName: string) => boolean;
   linkUnderstandingEnabled?: boolean;
   mediaUnderstandingEnabled?: boolean;
@@ -143,6 +144,7 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
       mediaUnderstandingEnabled: params.mediaUnderstandingEnabled,
       allProviders: params.allProviders,
       disableTooling: params.disableTooling,
+      explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
       toolFilter: params.toolFilter,
     },
     callbacks,

@@ -63,7 +63,7 @@ export async function executeAgentControlGraphIteration(
     disableTooling: params.disableTooling,
     completedWorkflowToolNames: params.graph.completedWorkflowToolNames,
     goals: currentGoals,
-    useExplicitFilteredToolSurface: params.toolRuntime.useExplicitFilteredToolSurface,
+    explicitToolSurfaceToolNames: params.toolRuntime.explicitToolSurfaceToolNames,
     isSuperAgent: params.isSuperAgent,
     iteration: params.iteration,
     maxTokens: params.maxTokens,

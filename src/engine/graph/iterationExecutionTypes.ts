@@ -133,7 +133,7 @@ export type ToolRuntimeBindings = {
   runtimeToolAvailability: RuntimeToolAvailabilityContext;
   toolCallHistory: ToolCallRecord[];
   stagnationSignatures: IterationProgressSignature[];
-  useExplicitFilteredToolSurface?: boolean;
+  explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   toolFilter?: (toolName: string) => boolean;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;

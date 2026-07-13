@@ -13,7 +13,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
   completedWorkflowToolNames: ReadonlySet<string>;
   goals?: ReadonlyArray<AgentGoal>;
-  useExplicitFilteredToolSurface?: boolean;
+  explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   sessionActivatedToolNames?: ReadonlyArray<string>;
   workingMessages: ReadonlyArray<Message>;
@@ -54,7 +54,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     goals,
     pendingAsyncMonitorToolNames,
     workingMessages: params.workingMessages,
-    useExplicitFilteredToolSurface: params.useExplicitFilteredToolSurface,
+    explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
     sessionActivatedToolNames: params.sessionActivatedToolNames,
   });
   const groundedToolNames = new Set(

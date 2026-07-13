@@ -82,6 +82,8 @@ export interface OrchestratorOptions {
   linkUnderstandingEnabled?: boolean;
   mediaUnderstandingEnabled?: boolean;
   maxLinks?: number;
+  /** Deliberate request-scoped pins. Authorization filters never imply grounding. */
+  explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   toolFilter?: (toolName: string) => boolean;
   internalUserMessageCount?: number;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];

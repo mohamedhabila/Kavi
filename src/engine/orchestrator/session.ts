@@ -249,7 +249,7 @@ export async function runOrchestratorGraphSession(params: {
         runtimeToolAvailability,
         toolCallHistory,
         stagnationSignatures,
-        useExplicitFilteredToolSurface: Boolean(options.toolFilter),
+        explicitToolSurfaceToolNames: options.explicitToolSurfaceToolNames,
         toolFilter: options.toolFilter,
         workspaceConversationId: options.workspaceConversationId,
         workspaceReadFallbackConversationId: options.workspaceReadFallbackConversationId,

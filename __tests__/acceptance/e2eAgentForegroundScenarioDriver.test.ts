@@ -459,6 +459,7 @@ describe('runForegroundScenario', () => {
     const toolFilter = mockedRunOrchestrator.mock.calls[0][0].toolFilter;
     expect(toolFilter?.('memory_recall')).toBe(true);
     expect(toolFilter?.('memory_search')).toBe(false);
+    expect(mockedRunOrchestrator.mock.calls[0][0].explicitToolSurfaceToolNames).toBeUndefined();
     expect(result.turns[0].retrieval).toEqual({
       sourceThreadIdHash: null,
       instrumentationStatus: 'opt_out',

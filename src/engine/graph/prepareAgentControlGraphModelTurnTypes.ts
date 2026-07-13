@@ -49,7 +49,7 @@ export interface PrepareAgentControlGraphModelTurnParams {
   disableTooling?: boolean;
   completedWorkflowToolNames: ReadonlySet<string>;
   goals?: ReadonlyArray<AgentGoal>;
-  useExplicitFilteredToolSurface?: boolean;
+  explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   isSuperAgent: boolean;
   iteration: number;
   maxTokens: number;

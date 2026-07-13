@@ -152,7 +152,7 @@ beforeEach(() => {
 // ── Tests ────────────────────────────────────────────────────────────────
 
 describe('Orchestrator — toolFilter', () => {
-  it('only advertises tools that pass the current toolFilter policy', async () => {
+  it('treats toolFilter as subtractive authorization without grounding every allowed tool', async () => {
     mockStreamMessage.mockReturnValueOnce(
       makeStream([
         { type: 'token', content: 'Done' },
@@ -167,6 +167,31 @@ describe('Orchestrator — toolFilter', () => {
       conversationId: 'conv-filter-tools',
       systemPrompt: 'Test',
       messages: [makeMsg('user', 'Search the documentation and fetch the page')],
+      toolFilter: (name) => name === 'web_search' || name === 'web_fetch',
+    };
+
+    await runOrchestrator(options, callbacks);
+
+    const [, streamOptions] = mockStreamMessage.mock.calls[0];
+    expect(streamOptions.tools.map((tool: any) => tool.name)).toEqual([]);
+  });
+
+  it('advertises deliberately pinned tools within the authorization boundary', async () => {
+    mockStreamMessage.mockReturnValueOnce(
+      makeStream([
+        { type: 'token', content: 'Done' },
+        { type: 'done', content: 'Done' },
+      ]),
+    );
+
+    const callbacks = makeCallbacks();
+    const options: OrchestratorOptions = {
+      provider,
+      model: 'gpt-test',
+      conversationId: 'conv-explicit-tool-surface',
+      systemPrompt: 'Test',
+      messages: [makeMsg('user', 'Search the documentation and fetch the page')],
+      explicitToolSurfaceToolNames: ['web_search', 'web_fetch', 'write_file'],
       toolFilter: (name) => name === 'web_search' || name === 'web_fetch',
     };
 

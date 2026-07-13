@@ -75,6 +75,7 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
   const {
     explicitToolSelectionRejectedMessage,
     disableToolingForExplicitEmptyToolSurface,
+    explicitToolSurfaceToolNames,
     toolFilter,
   } = resolveSubAgentToolAccess({
     tools: params.config.tools,
@@ -237,6 +238,7 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       messages,
       allProviders: params.allProviders,
       disableTooling: disableToolingForExplicitEmptyToolSurface,
+      explicitToolSurfaceToolNames,
       toolFilter: workerToolFilter,
       linkUnderstandingEnabled: params.config.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: params.config.mediaUnderstandingEnabled,

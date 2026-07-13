@@ -30,6 +30,7 @@ describe('Sub-Agent Service', () => {
 
       expect(capturedOptions).toBeDefined();
       expect(typeof capturedOptions.toolFilter).toBe('function');
+      expect(capturedOptions.explicitToolSurfaceToolNames).toBeUndefined();
     });
 
     it('preserves full sandbox access while blocking parent-memory tools', async () => {
@@ -132,6 +133,7 @@ describe('Sub-Agent Service', () => {
 
       expect(capturedOptions).toEqual(
         expect.objectContaining({
+          explicitToolSurfaceToolNames: ['read_file'],
           toolFilter: expect.any(Function),
         }),
       );
