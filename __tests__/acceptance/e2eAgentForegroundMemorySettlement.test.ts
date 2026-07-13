@@ -75,24 +75,18 @@ describe('foreground scenario memory settlement', () => {
       structuralCompletedAt: 2,
       completedAt: 2,
     };
-    const lifecycle = {
-      processed: true,
-      enqueued: true,
+    const publication = {
+      disposition: 'enqueued' as const,
       jobId: completed.id,
-      episodeId: null,
-      factIds: [],
-      activeFocusUpdated: false,
-      openThreadsUpdated: false,
-      enriched: false,
     };
     mockedGetIngestionJob.mockReturnValue(completed);
 
     await expect(
       settleForegroundScenarioMemory(
-        [{ promise: Promise.resolve(lifecycle) }, { promise: Promise.resolve(lifecycle) }],
+        [{ promise: Promise.resolve(publication) }, { promise: Promise.resolve(publication) }],
         1_000,
       ),
-    ).resolves.toEqual([expect.objectContaining({ lifecycle, job: completed })]);
+    ).resolves.toEqual([expect.objectContaining({ publication, job: completed })]);
     expect(mockedGetIngestionJob).toHaveBeenCalledTimes(1);
   });
 
@@ -127,14 +121,8 @@ describe('foreground scenario memory settlement', () => {
         [
           {
             promise: Promise.resolve({
-              processed: true,
-              enqueued: true,
+              disposition: 'enqueued',
               jobId: pending.id,
-              episodeId: null,
-              factIds: [],
-              activeFocusUpdated: false,
-              openThreadsUpdated: false,
-              enriched: false,
             }),
           },
         ],
@@ -162,14 +150,8 @@ describe('foreground scenario memory settlement', () => {
         [
           {
             promise: Promise.resolve({
-              processed: true,
-              enqueued: true,
+              disposition: 'enqueued',
               jobId: 'job-processing',
-              episodeId: null,
-              factIds: [],
-              activeFocusUpdated: false,
-              openThreadsUpdated: false,
-              enriched: false,
             }),
           },
         ],
@@ -203,14 +185,8 @@ describe('foreground scenario memory settlement', () => {
           [
             {
               promise: Promise.resolve({
-                processed: true,
-                enqueued: true,
+                disposition: 'enqueued',
                 jobId: checkpointed.id,
-                episodeId: null,
-                factIds: [],
-                activeFocusUpdated: false,
-                openThreadsUpdated: false,
-                enriched: false,
               }),
             },
           ],
@@ -232,14 +208,8 @@ describe('foreground scenario memory settlement', () => {
         [
           {
             promise: Promise.resolve({
-              processed: true,
-              enqueued: true,
+              disposition: 'enqueued',
               jobId: 'job-processing',
-              episodeId: null,
-              factIds: [],
-              activeFocusUpdated: false,
-              openThreadsUpdated: false,
-              enriched: false,
             }),
           },
         ],

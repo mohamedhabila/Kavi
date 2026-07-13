@@ -37,6 +37,12 @@ import {
   resolveCodeOwnedMemoryPersonaId,
 } from './memoryScopeIdentity';
 import { encodeIngestionSourceSnapshot } from './ingestionSourceSnapshot';
+import {
+  resolveClosedTurnEndingAt,
+  type ExactClosedTurnFailureReason,
+} from './closedTurn';
+import { runMemoryTransaction } from './access/transaction';
+import { getMemoryPolicyEpoch, isMemoryPolicyEpochCurrent } from './policy';
 
 const logger = createLogger('memory.lifecycle');
 
@@ -180,7 +186,12 @@ export interface RecordCompletedTurnForMemoryResult {
   activeFocusUpdated: boolean;
   openThreadsUpdated: boolean;
   enriched: boolean;
-  skipped?: 'opt_out' | 'ephemeral_thread' | 'no_closed_turn' | 'source_identity_invalid';
+  skipped?:
+    | 'opt_out'
+    | 'ephemeral_thread'
+    | 'withdrawn'
+    | 'no_closed_turn'
+    | 'source_identity_invalid';
 }
 
 function composeConversationFocusFromThreadTitle(
@@ -225,6 +236,12 @@ function syncConversationFocusFromThreadTitle(input: {
   }
 }
 
+function closedTurnSkipReason(
+  reason: ExactClosedTurnFailureReason,
+): 'no_closed_turn' | 'source_identity_invalid' {
+  return reason === 'source_end_not_closed' ? 'no_closed_turn' : 'source_identity_invalid';
+}
+
 /**
  * Record a completed turn for memory. Sync Layer-1 update is immediate;
  * durable consolidation is enqueued and drained asynchronously.
@@ -233,7 +250,8 @@ export async function recordCompletedTurnForMemory(
   input: RecordCompletedTurnForMemoryInput,
 ): Promise<RecordCompletedTurnForMemoryResult> {
   const settings = useSettingsStore.getState();
-  if (settings.disableLongTermMemory) {
+  const policyEpoch = getMemoryPolicyEpoch();
+  if (settings.disableLongTermMemory || !isMemoryPolicyEpochCurrent(policyEpoch)) {
     return {
       processed: false,
       enqueued: false,
@@ -269,73 +287,110 @@ export async function recordCompletedTurnForMemory(
   const personaId = resolveCodeOwnedMemoryPersonaId(conversation?.personaId);
   const sourceRunId = input.sourceRunId;
   const chatProvider = input.activeChatProvider ?? resolveActiveMemoryChatProvider(conversation);
-
-  const syncResult = syncWorkingMemoryFromTurn({
-    threadId: input.threadId,
-    memoryConversationId,
-    sourceEndMessageId: input.sourceEndMessageId,
-    messages: input.messages,
-    threadTitle: input.threadTitle,
-    personaSummary: input.personaSummary,
-    taskId: input.taskId,
-    now: input.now,
-  });
-  const conversationFocusUpdated =
-    syncResult.skipped === 'source_identity_invalid'
-      ? false
-      : syncConversationFocusFromThreadTitle({
-          memoryConversationId,
-          threadTitle: input.threadTitle,
-          now: input.now,
-        });
-
-  if (!syncResult.processed || !syncResult.sourceEndMessageId) {
+  const closedTurn = resolveClosedTurnEndingAt(input.messages, input.sourceEndMessageId);
+  if (closedTurn.status === 'invalid') {
     return {
       processed: false,
       enqueued: false,
-      skipped: syncResult.skipped,
+      skipped: closedTurnSkipReason(closedTurn.reason),
       jobId: null,
       episodeId: null,
       factIds: [],
-      activeFocusUpdated: conversationFocusUpdated,
+      activeFocusUpdated: false,
       openThreadsUpdated: false,
       enriched: false,
     };
   }
-
-  const sourceEndMessage = input.messages.find(
-    (message) => message.id === syncResult.sourceEndMessageId,
-  );
-  const sourceAt = sourceEndMessage?.timestamp ?? input.now ?? Date.now();
+  const sourceAt = closedTurn.assistant.timestamp ?? input.now ?? Date.now();
   const sourceRun = sourceRunId
     ? conversation?.agentRuns?.find((run) => run.id === sourceRunId)
     : undefined;
   const sourceSnapshot = encodeIngestionSourceSnapshot({
     messages: input.messages,
-    sourceStartMessageId: syncResult.sourceStartMessageId,
-    sourceEndMessageId: syncResult.sourceEndMessageId,
-    priorUserMessageId: syncResult.priorUserMessageId,
+    sourceStartMessageId: closedTurn.sourceStartMessageId,
+    sourceEndMessageId: closedTurn.sourceEndMessageId,
+    priorUserMessageId: closedTurn.priorUserMessageId,
     graphGoalEvidence: sourceRun?.controlGraph?.goals?.flatMap((goal) => goal.evidence) ?? [],
   });
 
-  const job = enqueueIngestionJob({
-    threadId: input.threadId,
-    threadTitle: input.threadTitle ?? conversation?.title ?? null,
-    memoryConversationId,
-    personaId,
-    sourceEndMessageId: syncResult.sourceEndMessageId,
-    sourceSnapshot,
-    sourceAt,
-    priorUserMessageId: syncResult.priorUserMessageId,
-    sourceStartMessageId: syncResult.sourceStartMessageId,
-    taskId: input.taskId ?? null,
-    sourceRunId: sourceRunId ?? null,
-    chatProviderId: chatProvider?.id ?? null,
-    chatModel: chatProvider?.model ?? null,
-    reason: 'turn_completed',
-    providerEnrichment: input.providerEnrichment ?? true,
-    now: input.now,
-  });
+  const policyChangedError = 'memory_turn_publication_policy_changed';
+  let publication:
+    | { disposition: 'opt_out' | 'withdrawn' }
+    | {
+        disposition: 'enqueued';
+        job: NonNullable<ReturnType<typeof enqueueIngestionJob>>;
+        syncResult: ReturnType<typeof syncWorkingMemoryFromTurn>;
+        conversationFocusUpdated: boolean;
+      };
+  try {
+    publication = runMemoryTransaction(() => {
+      if (!isMemoryPolicyEpochCurrent(policyEpoch)) {
+        return { disposition: 'opt_out' as const };
+      }
+      const job = enqueueIngestionJob({
+        threadId: input.threadId,
+        threadTitle: input.threadTitle ?? conversation?.title ?? null,
+        memoryConversationId,
+        personaId,
+        sourceEndMessageId: closedTurn.sourceEndMessageId,
+        sourceSnapshot,
+        sourceAt,
+        priorUserMessageId: closedTurn.priorUserMessageId,
+        sourceStartMessageId: closedTurn.sourceStartMessageId,
+        taskId: input.taskId ?? null,
+        sourceRunId: sourceRunId ?? null,
+        chatProviderId: chatProvider?.id ?? null,
+        chatModel: chatProvider?.model ?? null,
+        reason: 'turn_completed',
+        providerEnrichment: input.providerEnrichment ?? true,
+        now: input.now,
+      });
+      if (!job) return { disposition: 'withdrawn' as const };
+
+      const syncResult = syncWorkingMemoryFromTurn({
+        threadId: input.threadId,
+        memoryConversationId,
+        sourceEndMessageId: closedTurn.sourceEndMessageId,
+        messages: input.messages,
+        threadTitle: input.threadTitle,
+        personaSummary: input.personaSummary,
+        taskId: input.taskId,
+        now: input.now,
+      });
+      if (
+        !syncResult.processed ||
+        syncResult.sourceStartMessageId !== closedTurn.sourceStartMessageId ||
+        syncResult.sourceEndMessageId !== closedTurn.sourceEndMessageId ||
+        syncResult.priorUserMessageId !== closedTurn.priorUserMessageId
+      ) {
+        throw new Error('memory_turn_working_projection_source_mismatch');
+      }
+      const conversationFocusUpdated = syncConversationFocusFromThreadTitle({
+        memoryConversationId,
+        threadTitle: input.threadTitle,
+        now: input.now,
+      });
+      if (!isMemoryPolicyEpochCurrent(policyEpoch)) throw new Error(policyChangedError);
+      return { disposition: 'enqueued' as const, job, syncResult, conversationFocusUpdated };
+    });
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== policyChangedError) throw error;
+    publication = { disposition: 'opt_out' };
+  }
+
+  if (publication.disposition !== 'enqueued') {
+    return {
+      processed: false,
+      enqueued: false,
+      skipped: publication.disposition,
+      jobId: null,
+      episodeId: null,
+      factIds: [],
+      activeFocusUpdated: false,
+      openThreadsUpdated: false,
+      enriched: false,
+    };
+  }
 
   scheduleIngestionDrain({
     loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
@@ -343,12 +398,13 @@ export async function recordCompletedTurnForMemory(
 
   return {
     processed: true,
-    enqueued: job !== null,
-    jobId: job?.id ?? null,
+    enqueued: true,
+    jobId: publication.job.id,
     episodeId: null,
     factIds: [],
-    activeFocusUpdated: syncResult.activeFocusUpdated || conversationFocusUpdated,
-    openThreadsUpdated: syncResult.openThreadsUpdated,
+    activeFocusUpdated:
+      publication.syncResult.activeFocusUpdated || publication.conversationFocusUpdated,
+    openThreadsUpdated: publication.syncResult.openThreadsUpdated,
     enriched: false,
   };
 }

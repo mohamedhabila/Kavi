@@ -361,7 +361,7 @@ export async function settleForegroundScenarioMemory(
       uniqueResults.map(async (result) => {
         const job = result.jobId ? await awaitMemoryJob(result.jobId, deadline) : null;
         return {
-          lifecycle: result,
+          publication: result,
           job,
           receipts: result.jobId ? listIngestionPersistenceReceipts(result.jobId) : [],
         };

@@ -171,7 +171,7 @@ function buildPrivateEvidenceResult(): E2EScenarioResult {
         },
         memory: [
           {
-            lifecycle: { jobId: 'PRIVATE-JOB-ID', factIds: ['PRIVATE-FACT-ID'] },
+            publication: { disposition: 'enqueued', jobId: 'PRIVATE-JOB-ID' },
             job: {
               id: 'PRIVATE-JOB-ID',
               status: 'completed_enriched',
@@ -443,7 +443,7 @@ describe('public immutable E2E evidence projection', () => {
     receipt.jobId = 'mismatched-job';
 
     expect(() => buildE2EScenarioTraceSummary({ result })).toThrow(
-      'Memory receipt jobId does not match its closeout lifecycle jobId.',
+      'Memory receipt jobId does not match its turn publication jobId.',
     );
   });
 

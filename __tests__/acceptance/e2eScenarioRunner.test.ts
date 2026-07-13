@@ -259,7 +259,7 @@ describe('runE2EScenario product foreground integration', () => {
       },
       memory: [
         {
-          lifecycle: { processed: true, enqueued: true },
+          publication: { disposition: 'enqueued', jobId: 'job-1' },
           job: { status: 'completed_enriched' },
         },
       ],

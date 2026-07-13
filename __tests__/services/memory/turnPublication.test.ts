@@ -4,7 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { makeTestAgentRun, makeTestConversation } from '../../helpers/factories';
-import { closeMemoryDb } from '../../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import {
   __resetIngestionQueueForTests,
   cancelScheduledIngestionDrain,
@@ -106,7 +106,7 @@ describe('publishConversationTurnMemory', () => {
       sourceRunId: 'run-exact',
     });
 
-    expect(result).toMatchObject({ processed: true, enqueued: true });
+    expect(result).toEqual({ disposition: 'enqueued', jobId: expect.any(String) });
     expect(
       getIngestionJobForSourceTurn({
         memoryConversationId: 'conversation-publication',
@@ -216,8 +216,8 @@ describe('publishConversationTurnMemory', () => {
       sourceEndMessageId: 'assistant-new',
     });
 
-    expect(first).toMatchObject({ enqueued: true, jobId: expect.any(String) });
-    expect(duplicate).toMatchObject({ enqueued: true, jobId: first.jobId });
+    expect(first).toEqual({ disposition: 'enqueued', jobId: expect.any(String) });
+    expect(duplicate).toEqual({ disposition: 'enqueued', jobId: first.jobId });
     expect(
       getIngestionJobForSourceTurn({
         memoryConversationId: 'conversation-publication',
@@ -233,7 +233,7 @@ describe('publishConversationTurnMemory', () => {
       publishConversationTurnMemory('conversation-publication', undefined, {
         sourceEndMessageId: 'assistant-new',
       }),
-    ).resolves.toMatchObject({ enqueued: false, skipped: 'opt_out' });
+    ).resolves.toEqual({ disposition: 'opt_out', jobId: null });
 
     useSettingsStore.setState({ disableLongTermMemory: false } as any);
     setConversation({ isSideThread: true });
@@ -241,7 +241,27 @@ describe('publishConversationTurnMemory', () => {
       publishConversationTurnMemory('conversation-publication', undefined, {
         sourceEndMessageId: 'assistant-new',
       }),
-    ).resolves.toMatchObject({ enqueued: false, skipped: 'ephemeral_thread' });
+    ).resolves.toEqual({ disposition: 'ephemeral_thread', jobId: null });
+    expect(countPendingIngestionJobs()).toBe(0);
+  });
+
+  it('settles a withdrawn exact source without mutating working memory or queue state', async () => {
+    getMemoryDb().runSync(
+      `INSERT INTO memory_withdrawal_sources(
+         withdrawal_id, memory_conversation_id, source_thread_id, task_id,
+         source_kind, source_id
+       ) VALUES (?, ?, ?, '', 'turn', ?)`,
+      'withdrawal-publication',
+      'conversation-publication',
+      'conversation-publication',
+      'assistant-new',
+    );
+
+    await expect(
+      publishConversationTurnMemory('conversation-publication', undefined, {
+        sourceEndMessageId: 'assistant-new',
+      }),
+    ).resolves.toEqual({ disposition: 'withdrawn', jobId: null });
     expect(countPendingIngestionJobs()).toBe(0);
   });
 });

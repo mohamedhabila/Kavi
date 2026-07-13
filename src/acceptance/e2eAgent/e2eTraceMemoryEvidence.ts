@@ -200,8 +200,8 @@ function collectAttributedReceipts(
   const receipts: ForegroundScenarioMemorySnapshot['receipts'][number][] = [];
   for (const record of records) {
     for (const receipt of record.receipts) {
-      if (record.lifecycle.jobId === null || receipt.jobId !== record.lifecycle.jobId) {
-        throw new Error('Memory receipt jobId does not match its closeout lifecycle jobId.');
+      if (record.publication.jobId === null || receipt.jobId !== record.publication.jobId) {
+        throw new Error('Memory receipt jobId does not match its turn publication jobId.');
       }
       receipts.push(receipt);
     }

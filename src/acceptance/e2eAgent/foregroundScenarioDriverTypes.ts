@@ -1,6 +1,6 @@
 import type { IngestionJob } from '../../services/memory/ingestionQueue';
 import type { IngestionPersistenceReceipt } from '../../services/memory/ingestionReceiptStore';
-import type { RecordCompletedTurnForMemoryResult } from '../../services/memory/lifecycle';
+import type { MemoryTurnPublicationResult } from '../../services/memory/turnPublication';
 import type { AgentRun, AgentRunControlGraphStatus, AgentRunStatus } from '../../types/agentRun';
 import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { AssistantCompletionStatus, Message } from '../../types/message';
@@ -84,7 +84,7 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
       : T;
 
 export type ForegroundScenarioMemorySnapshot = Readonly<{
-  lifecycle: DeepReadonly<RecordCompletedTurnForMemoryResult>;
+  publication: DeepReadonly<MemoryTurnPublicationResult>;
   job: DeepReadonly<IngestionJob> | null;
   receipts: ReadonlyArray<DeepReadonly<IngestionPersistenceReceipt>>;
 }>;
@@ -165,7 +165,7 @@ export type ForegroundScenarioDriverResult = Readonly<{
 }>;
 
 export type ForegroundScenarioMemoryRecord = {
-  promise: Promise<RecordCompletedTurnForMemoryResult>;
+  promise: Promise<MemoryTurnPublicationResult>;
 };
 
 export function cloneAndFreeze<T>(value: T): DeepReadonly<T> {

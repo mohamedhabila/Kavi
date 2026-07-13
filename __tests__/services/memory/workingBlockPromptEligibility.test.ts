@@ -14,6 +14,8 @@ import {
   editWorkingBlock,
   getWorkingBlock,
 } from '../../../src/services/memory/workingBlocks';
+import { runMemoryTransaction } from '../../../src/services/memory/access/transaction';
+import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -89,5 +91,28 @@ describe('working-block prompt eligibility', () => {
         threadId: 'exact-thread',
       }),
     ).toThrow('working_block_conversation_id_invalid');
+  });
+
+  it('notifies only after the enclosing memory transaction commits', () => {
+    ensureFactSchema();
+    const listener = jest.fn();
+    const unsubscribe = subscribeToMemoryChanges(listener);
+    const scope = { conversationId: 'transaction-conversation', threadId: 'transaction-thread' };
+
+    expect(() =>
+      runMemoryTransaction(() => {
+        editPromptEligibleWorkingBlock('active_focus', 'rolled back', scope);
+        throw new Error('rollback');
+      }),
+    ).toThrow('rollback');
+    expect(getWorkingBlock('active_focus', scope)).toBeNull();
+    expect(listener).not.toHaveBeenCalled();
+
+    runMemoryTransaction(() => {
+      editPromptEligibleWorkingBlock('active_focus', 'committed', scope);
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(getWorkingBlock('active_focus', scope)?.content).toBe('committed');
+    unsubscribe();
   });
 });

@@ -41,15 +41,9 @@ function buildTurn(overrides: Partial<TurnTrace> = {}): TurnTrace {
     agentRun: null,
     memory: [
       {
-        lifecycle: {
-          processed: true,
-          enqueued: true,
+        publication: {
+          disposition: 'enqueued',
           jobId: 'job-1',
-          episodeId: 'episode-1',
-          factIds: [],
-          activeFocusUpdated: true,
-          openThreadsUpdated: false,
-          enriched: true,
         },
         job: null,
         receipts: [

@@ -147,8 +147,8 @@ export function evaluateE2ETurnStageRubric(
 
     case 'turn_memory_receipt': {
       const receipts = turn.memory.flatMap((snapshot) =>
-        snapshot.lifecycle.jobId
-          ? snapshot.receipts.filter((receipt) => receipt.jobId === snapshot.lifecycle.jobId)
+        snapshot.publication.jobId
+          ? snapshot.receipts.filter((receipt) => receipt.jobId === snapshot.publication.jobId)
           : [],
       );
       if (receipts.length === 0) {

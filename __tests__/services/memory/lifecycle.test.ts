@@ -595,7 +595,7 @@ describe('recordCompletedTurnForMemory', () => {
     expect(getConsolidationState('conv-structural-only')?.lastConsolidatedMessageId).toBe('a-1');
   });
 
-  it('anchors conversation focus to thread metadata even when no closed turn is available', async () => {
+  it('does not project conversation focus without an exact closed turn', async () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-title-only',
       threadTitle: 'longmem-delayed-thread',
@@ -620,13 +620,13 @@ describe('recordCompletedTurnForMemory', () => {
 
     expect(result.processed).toBe(false);
     expect(result.skipped).toBe('no_closed_turn');
-    expect(result.activeFocusUpdated).toBe(true);
+    expect(result.activeFocusUpdated).toBe(false);
     expect(
       getWorkingBlock('active_focus', {
         conversationId: 'conv-title-only',
         threadId: 'conv-title-only',
-      })?.content,
-    ).toBe('longmem-delayed-thread');
+      }),
+    ).toBeNull();
   });
 
   it('keeps conversation focus separate from graph task-scoped turn memory', async () => {

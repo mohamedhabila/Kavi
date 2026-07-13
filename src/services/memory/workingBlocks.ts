@@ -9,6 +9,7 @@ import { getMany, getOne, runMemoryStatement } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
+import { runAfterMemoryTransactionCommit } from './access/transaction';
 
 export type WorkingBlockLabel =
   | 'active_focus'
@@ -209,7 +210,7 @@ export function editWorkingBlock(
     promptEligibility,
     updatedAt: now,
   };
-  notifyStructuredMemoryChanged(conversationId);
+  runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(conversationId));
   return block;
 }
 

@@ -272,7 +272,7 @@ describe('runForegroundScenario', () => {
       user: { text: 'Hello there.', timestamp: 10 },
       memory: [
         {
-          lifecycle: { processed: true, enqueued: true },
+          publication: { disposition: 'enqueued', jobId: 'job-1' },
           job: { status: 'completed_enriched' },
           receipts: [{ jobId: 'job-1', attemptNumber: 1, providerOutcome: 'valid' }],
         },
@@ -387,7 +387,7 @@ describe('runForegroundScenario', () => {
       run: null,
       memory: [
         {
-          lifecycle: { processed: true, enqueued: true },
+          publication: { disposition: 'enqueued', jobId: 'job-2' },
           job: { status: 'completed_enriched' },
         },
       ],
@@ -662,14 +662,8 @@ describe('runForegroundScenario', () => {
         [
           {
             promise: Promise.resolve({
-              processed: true,
-              enqueued: true,
+              disposition: 'enqueued',
               jobId: pendingJob.id,
-              episodeId: null,
-              factIds: [],
-              activeFocusUpdated: true,
-              openThreadsUpdated: false,
-              enriched: false,
             }),
           },
         ],
@@ -677,15 +671,9 @@ describe('runForegroundScenario', () => {
       ),
     ).resolves.toEqual([
       {
-        lifecycle: {
-          processed: true,
-          enqueued: true,
+        publication: {
+          disposition: 'enqueued',
           jobId: pendingJob.id,
-          episodeId: null,
-          factIds: [],
-          activeFocusUpdated: true,
-          openThreadsUpdated: false,
-          enriched: false,
         },
         job: pendingJob,
         receipts: [priorAttemptReceipt],
