@@ -35,9 +35,7 @@ function seedRunningRun(automaticRecoveryAttemptCount = 0): void {
                 forceFinalText: false,
                 requireWorkflowTool: false,
                 incompleteFinalTextRecoveryCount: 0,
-                ...(automaticRecoveryAttemptCount > 0
-                  ? { automaticRecoveryAttemptCount }
-                  : {}),
+                ...(automaticRecoveryAttemptCount > 0 ? { automaticRecoveryAttemptCount } : {}),
               },
             }),
           },
@@ -177,7 +175,7 @@ describe('foreground interrupted response final delivery', () => {
         conversationId: 'conversation-1',
         runId: 'run-1',
         disableTools: true,
-        reuseAssistantDraft: false,
+        assistantDraftMode: 'new',
       }),
     );
   });

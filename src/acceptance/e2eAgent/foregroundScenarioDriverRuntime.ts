@@ -348,10 +348,17 @@ export async function settleForegroundScenarioMemory(
     Promise.all(records.map((record) => record.promise)),
     deadline,
   );
-  const jobIds = results.flatMap((result) => (result.jobId ? [result.jobId] : []));
+  const seenJobIds = new Set<string>();
+  const uniqueResults = results.filter((result) => {
+    if (!result.jobId) return true;
+    if (seenJobIds.has(result.jobId)) return false;
+    seenJobIds.add(result.jobId);
+    return true;
+  });
+  const jobIds = uniqueResults.flatMap((result) => (result.jobId ? [result.jobId] : []));
   const snapshots = await awaitMemorySettlementBeforeDeadline(
     Promise.all(
-      results.map(async (result) => {
+      uniqueResults.map(async (result) => {
         const job = result.jobId ? await awaitMemoryJob(result.jobId, deadline) : null;
         return {
           lifecycle: result,
@@ -476,7 +483,7 @@ export function createForegroundScenarioRuntime(
       context,
       options: {
         reuseAgentRunId: params.runId,
-        reuseAssistantDraft: params.reuseAssistantDraft,
+        assistantDraftMode: params.assistantDraftMode,
         additionalSystemPrompt: params.additionalSystemPrompt,
         additionalUserPrompt: params.additionalUserPrompt,
         disableTools: params.disableTools,

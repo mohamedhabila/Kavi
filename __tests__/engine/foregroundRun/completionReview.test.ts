@@ -132,6 +132,7 @@ describe('foregroundRun completion review', () => {
       turnSummary: finalAnswer,
       updateAgentRunControlGraph: jest.fn(),
       updateAgentRunSummary: jest.fn(),
+      updateMessageAssistantMetadata: jest.fn(),
       setAgentRunPhase: jest.fn(),
     });
 
@@ -209,6 +210,7 @@ describe('foregroundRun completion review', () => {
         turnSummary: 'Blocked',
         updateAgentRunControlGraph: jest.fn(),
         updateAgentRunSummary: jest.fn(),
+        updateMessageAssistantMetadata: jest.fn(),
         setAgentRunPhase: jest.fn(),
       }),
     ).resolves.toEqual(

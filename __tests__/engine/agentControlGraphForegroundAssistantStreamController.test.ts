@@ -1,13 +1,16 @@
 import { createForegroundAssistantStreamController } from '../../src/engine/graph/foregroundRun/assistantStreamController';
 
-function createHarness(overrides: {
-  resumedAssistantDraft?: {
-    assistantMetadata?: { finishReason?: string };
-    content?: string;
-    id: string;
-    reasoning?: string;
-  };
-} = {}) {
+function createHarness(
+  overrides: {
+    replaceResumedAssistantDraft?: boolean;
+    resumedAssistantDraft?: {
+      assistantMetadata?: { finishReason?: string };
+      content?: string;
+      id: string;
+      reasoning?: string;
+    };
+  } = {},
+) {
   const drafts: Record<string, { content?: string; reasoning?: string }> = {};
   const clearStreamingDraft = jest.fn((messageId: string) => {
     delete drafts[messageId];
@@ -39,6 +42,7 @@ function createHarness(overrides: {
     currentAssistantMessageId: 'assistant-1',
     getStreamingDraft: (messageId) => drafts[messageId],
     publishIntervalMs: 48,
+    replaceResumedAssistantDraft: overrides.replaceResumedAssistantDraft,
     resumedAssistantDraft: overrides.resumedAssistantDraft,
   });
 
@@ -99,6 +103,26 @@ describe('foreground assistant stream controller', () => {
     expect(harness.updateMessage).toHaveBeenCalledWith('assistant-1', 'Baseline answer');
     expect(harness.updateMessageReasoning).not.toHaveBeenCalled();
     expect(harness.controller.getVisibleAssistantContent()).toBe('Baseline answer');
+  });
+
+  it('replaces a recovery placeholder instead of continuing its text', () => {
+    const harness = createHarness({
+      replaceResumedAssistantDraft: true,
+      resumedAssistantDraft: {
+        id: 'assistant-1',
+        content: 'The run completed, but no final response was generated.',
+        reasoning: 'Fallback reasoning',
+        assistantMetadata: { finishReason: 'terminal_review_pending' },
+      },
+    });
+
+    expect(harness.controller.resolveAssistantTurnContent('Completed response.')).toBe(
+      'Completed response.',
+    );
+    harness.controller.commitResolvedContent('Completed response.', true);
+
+    expect(harness.updateMessage).toHaveBeenCalledWith('assistant-1', 'Completed response.');
+    expect(harness.controller.getVisibleAssistantContent()).toBe('');
   });
 
   it('starts a fresh assistant turn when the next turn is queued', () => {

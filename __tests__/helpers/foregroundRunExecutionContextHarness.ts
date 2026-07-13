@@ -92,9 +92,7 @@ export function createExecutionContext(params: {
   const noOp = jest.fn();
   const appendAgentRunCheckpoint = jest.fn((conversationId, entry, runId) => {
     if (conversationId !== currentConversation.id) return;
-    commitConversation(
-      appendAgentRunCheckpointInConversation(currentConversation, entry, runId),
-    );
+    commitConversation(appendAgentRunCheckpointInConversation(currentConversation, entry, runId));
   });
   const completeAgentRun = jest.fn((conversationId, completion, runId) => {
     if (conversationId !== currentConversation.id) return;
@@ -121,9 +119,7 @@ export function createExecutionContext(params: {
   });
   const updateAgentRunAsyncWork = jest.fn((conversationId, patch, runId) => {
     if (conversationId !== currentConversation.id) return;
-    commitConversation(
-      updateAgentRunAsyncWorkInConversation(currentConversation, patch, runId),
-    );
+    commitConversation(updateAgentRunAsyncWorkInConversation(currentConversation, patch, runId));
   });
   const updateAgentRunControlGraph = jest.fn((conversationId, controlGraph, runId) => {
     if (conversationId !== currentConversation.id) return;
@@ -139,6 +135,51 @@ export function createExecutionContext(params: {
     if (conversationId !== currentConversation.id) return;
     commitConversation(updateAgentRunSummaryInConversation(currentConversation, patch, runId));
   });
+  const updateMessage = jest.fn((conversationId: string, messageId: string, content: string) => {
+    if (conversationId !== currentConversation.id) return;
+    commitConversation({
+      ...currentConversation,
+      messages: currentConversation.messages.map((message) =>
+        message.id === messageId ? { ...message, content } : message,
+      ),
+    });
+  });
+  const updateMessageAssistantMetadata = jest.fn(
+    (
+      conversationId: string,
+      messageId: string,
+      assistantMetadata: Conversation['messages'][number]['assistantMetadata'],
+    ) => {
+      if (conversationId !== currentConversation.id) return;
+      commitConversation({
+        ...currentConversation,
+        messages: currentConversation.messages.map((message) =>
+          message.id === messageId ? { ...message, assistantMetadata } : message,
+        ),
+      });
+    },
+  );
+  const ensureAgentRunFinalResponse = jest.fn(
+    async ({ conversationId, preferredAssistantMessageId }) => {
+      if (conversationId !== currentConversation.id) return undefined;
+      const target = preferredAssistantMessageId
+        ? currentConversation.messages.find(
+            (message) => message.id === preferredAssistantMessageId && message.role === 'assistant',
+          )
+        : [...currentConversation.messages]
+            .reverse()
+            .find((message) => message.role === 'assistant' && !message.subAgentEvent);
+      if (!target) return undefined;
+      const content = target.content.trim() || 'Recovered test final response.';
+      updateMessage(conversationId, target.id, content);
+      updateMessageAssistantMetadata(conversationId, target.id, {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'recovered_for_execution_test',
+      });
+      return content;
+    },
+  );
   const flushChatState = jest.fn().mockResolvedValue(undefined);
   const createModelExecution = jest.fn(async (input) => ({
     runId: input.runId,
@@ -237,7 +278,7 @@ export function createExecutionContext(params: {
       clearPendingRunState: noOp,
       clearTrackedRunCancellation: noOp,
       createId: () => `generated-${++idSequence}`,
-      ensureAgentRunFinalResponse: jest.fn(),
+      ensureAgentRunFinalResponse,
       ensureCanonicalConversation: params.ensureCanonicalConversation,
       getConversation: (conversationId: string) =>
         conversationId === currentConversation.id ? currentConversation : undefined,
@@ -292,8 +333,8 @@ export function createExecutionContext(params: {
       updateAgentRunControlGraph,
       updateAgentRunPlan,
       updateAgentRunSummary,
-      updateMessage: noOp,
-      updateMessageAssistantMetadata: noOp,
+      updateMessage,
+      updateMessageAssistantMetadata,
       updateMessageEffect: noOp,
       updateMessageEnrichedContent: noOp,
       updateMessageProviderReplay: noOp,

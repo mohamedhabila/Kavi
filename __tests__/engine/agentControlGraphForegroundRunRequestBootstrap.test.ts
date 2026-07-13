@@ -142,7 +142,7 @@ describe('foreground run request bootstrap', () => {
 
     const claim = prepareForegroundRunRequestClaim({
       createForegroundRequestId: () => 'request-2',
-      options: { reuseAgentRunId: 'run-1', reuseAssistantDraft: true },
+      options: { reuseAgentRunId: 'run-1', assistantDraftMode: 'continue' },
       registerForegroundRequest: jest.fn(),
       shouldAutoAbortPreviousForegroundRequest,
     });
@@ -151,7 +151,7 @@ describe('foreground run request bootstrap', () => {
       conversation,
       createAssistantMessageId: () => 'assistant-new',
       defaultConversationMode: 'agentic',
-      options: { reuseAgentRunId: 'run-1', reuseAssistantDraft: true },
+      options: { reuseAgentRunId: 'run-1', assistantDraftMode: 'continue' },
     });
     expect(prepared.kind).toBe('ready');
     if (prepared.kind !== 'ready') throw new Error('Expected a ready bootstrap');

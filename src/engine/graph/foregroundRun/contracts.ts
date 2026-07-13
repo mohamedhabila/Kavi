@@ -14,10 +14,12 @@ export type ResolvedFinalizationProviderContext = {
   internalUserMessageCount?: number;
 };
 
+export type AssistantDraftMode = 'continue' | 'new' | 'replace';
+
 export type RunChatOptions = {
   maxTokens?: number;
   reuseAgentRunId?: string;
-  reuseAssistantDraft?: boolean;
+  assistantDraftMode?: AssistantDraftMode;
   additionalSystemPrompt?: string;
   additionalUserPrompt?: string;
   disableTools?: boolean;
@@ -51,6 +53,6 @@ export type ResumeAgentRun = (params: {
   additionalSystemPrompt: string;
   additionalUserPrompt?: string;
   disableTools?: boolean;
-  reuseAssistantDraft?: boolean;
+  assistantDraftMode: AssistantDraftMode;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
 }) => Promise<void>;

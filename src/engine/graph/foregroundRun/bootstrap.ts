@@ -6,6 +6,7 @@ import { shouldTrackForegroundAgentRun } from '../runTracking';
 import { findLatestIncompleteAgentRunAssistantMessage } from './assistantMessages';
 import { buildAgentRunMessageScope } from '../../../services/agents/lifecycle/agentRunStateMachine';
 import type { WorkflowTaskAnchor } from '../../../types/workflowTaskAnchor';
+import type { AssistantDraftMode } from './contracts';
 
 function normalizeId(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -19,9 +20,9 @@ function findLatestUserMessage(conversation: Conversation | undefined): Message 
 function resolveResumedAssistantDraft(params: {
   conversation: Conversation | undefined;
   existingRun: AgentRun | undefined;
-  reuseAssistantDraft?: boolean;
+  assistantDraftMode?: AssistantDraftMode;
 }): Message | undefined {
-  if (!params.conversation || !params.existingRun || params.reuseAssistantDraft === false) {
+  if (!params.conversation || !params.existingRun || params.assistantDraftMode === 'new') {
     return undefined;
   }
 
@@ -40,6 +41,7 @@ export type ForegroundRunBootstrapSelection = {
   assistantMessageId: string;
   existingRun?: AgentRun;
   latestUserMessage?: Message;
+  replaceResumedAssistantDraft: boolean;
   resumedAssistantDraft?: Message;
   shouldAbortPreviousForegroundRequest: boolean;
   shouldInsertPlaceholderAssistant: boolean;
@@ -62,7 +64,7 @@ export function buildForegroundRunBootstrapSelection(params: {
   createAssistantMessageId: () => string;
   defaultConversationMode?: ConversationMode;
   reuseAgentRunId?: string;
-  reuseAssistantDraft?: boolean;
+  assistantDraftMode?: AssistantDraftMode;
 }): ForegroundRunBootstrapSelection {
   const normalizedReuseAgentRunId = normalizeId(params.reuseAgentRunId);
   const latestUserMessage = findLatestUserMessage(params.conversation);
@@ -81,13 +83,15 @@ export function buildForegroundRunBootstrapSelection(params: {
   const resumedAssistantDraft = resolveResumedAssistantDraft({
     conversation: params.conversation,
     existingRun,
-    reuseAssistantDraft: params.reuseAssistantDraft,
+    assistantDraftMode: params.assistantDraftMode,
   });
 
   return {
     assistantMessageId: resumedAssistantDraft?.id ?? params.createAssistantMessageId(),
     existingRun,
     latestUserMessage,
+    replaceResumedAssistantDraft:
+      params.assistantDraftMode === 'replace' && resumedAssistantDraft !== undefined,
     resumedAssistantDraft,
     shouldAbortPreviousForegroundRequest: !normalizedReuseAgentRunId,
     shouldInsertPlaceholderAssistant: !resumedAssistantDraft,

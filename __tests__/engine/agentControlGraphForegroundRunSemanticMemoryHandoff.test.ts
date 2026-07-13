@@ -96,7 +96,7 @@ describe('foreground semantic memory handoff barrier', () => {
     mockedWaitForSemanticMemoryHandoff.mockResolvedValue(consistencyResult({}));
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onDone();
-      return { terminalDisposition: 'final_candidate' };
+      return { terminalDisposition: 'command' };
     });
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
@@ -137,7 +137,7 @@ describe('foreground semantic memory handoff barrier', () => {
     mockedWaitForSemanticMemoryHandoff.mockResolvedValue(consistencyResult({}));
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onDone();
-      return { terminalDisposition: 'final_candidate' };
+      return { terminalDisposition: 'command' };
     });
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
@@ -225,7 +225,7 @@ describe('foreground semantic memory handoff barrier', () => {
     );
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onDone();
-      return { terminalDisposition: 'final_candidate' };
+      return { terminalDisposition: 'command' };
     });
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });

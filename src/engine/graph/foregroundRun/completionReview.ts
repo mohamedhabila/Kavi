@@ -56,6 +56,7 @@ export async function reviewForegroundRunCompletion(params: {
   turnSummary: string;
   updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
   updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
+  updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
   setAgentRunPhase: ChatStore['setAgentRunPhase'];
 }): Promise<ForegroundRunCompletionReviewResult> {
   const defaultCompletion = {
@@ -128,6 +129,7 @@ export async function reviewForegroundRunCompletion(params: {
     setAgentRunPhase: params.setAgentRunPhase,
     updateAgentRunControlGraph: params.updateAgentRunControlGraph,
     updateAgentRunSummary: params.updateAgentRunSummary,
+    updateMessageAssistantMetadata: params.updateMessageAssistantMetadata,
     context: reviewContext,
   });
   if (finalDeliveryResult.handled) {
@@ -149,8 +151,7 @@ function buildForegroundRunDirectCompletion(
   }
 
   if (hasBlockedBlockingGoals(reviewContext.reviewRun.controlGraph?.goals ?? [])) {
-    const detail =
-      'The workflow delivered a blocker report, but a required goal remains blocked.';
+    const detail = 'The workflow delivered a blocker report, but a required goal remains blocked.';
     return {
       handled: false,
       completionStatus: 'failed',

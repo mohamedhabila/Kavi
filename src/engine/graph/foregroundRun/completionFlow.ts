@@ -25,7 +25,6 @@ export async function handleForegroundRunCompletionFlow(params: {
   finalizeCompletion: (
     completion: Extract<ForegroundRunCompletionReviewResult, { handled: false }>,
   ) => boolean;
-  recordConversationTurnMemory: () => void;
   reviewCompletion: () => Promise<ForegroundRunCompletionReviewResult>;
   forceTerminalReview?: boolean;
   trackedRunState: ForegroundRunTrackingState;
@@ -53,9 +52,6 @@ export async function handleForegroundRunCompletionFlow(params: {
 
   const completionReview = await params.reviewCompletion();
   if (completionReview.handled) {
-    if (completionReview.terminalized) {
-      params.recordConversationTurnMemory();
-    }
     return;
   }
 
@@ -68,5 +64,4 @@ export async function handleForegroundRunCompletionFlow(params: {
     title: completionReview.completionLogTitle,
     detail: completionReview.completionLogDetail,
   });
-  params.recordConversationTurnMemory();
 }

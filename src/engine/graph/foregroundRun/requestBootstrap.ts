@@ -68,7 +68,7 @@ export function prepareForegroundRunRequestBootstrap(params: {
     createAssistantMessageId: params.createAssistantMessageId,
     defaultConversationMode: params.defaultConversationMode,
     reuseAgentRunId: requestedReuseRunId,
-    reuseAssistantDraft: params.options?.reuseAssistantDraft,
+    assistantDraftMode: params.options?.assistantDraftMode,
   });
   if (requestedReuseRunId && bootstrap.existingRun?.id !== requestedReuseRunId) {
     return { kind: 'reuse_unavailable', runId: requestedReuseRunId };

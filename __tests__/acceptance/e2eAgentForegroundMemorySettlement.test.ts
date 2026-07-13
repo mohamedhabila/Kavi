@@ -68,6 +68,34 @@ describe('foreground scenario memory settlement', () => {
     jest.clearAllMocks();
   });
 
+  it('counts idempotent publications of the same durable job once', async () => {
+    const completed = {
+      ...makeJob('completed_enriched'),
+      providerOutcome: 'valid' as const,
+      structuralCompletedAt: 2,
+      completedAt: 2,
+    };
+    const lifecycle = {
+      processed: true,
+      enqueued: true,
+      jobId: completed.id,
+      episodeId: null,
+      factIds: [],
+      activeFocusUpdated: false,
+      openThreadsUpdated: false,
+      enriched: false,
+    };
+    mockedGetIngestionJob.mockReturnValue(completed);
+
+    await expect(
+      settleForegroundScenarioMemory(
+        [{ promise: Promise.resolve(lifecycle) }, { promise: Promise.resolve(lifecycle) }],
+        1_000,
+      ),
+    ).resolves.toEqual([expect.objectContaining({ lifecycle, job: completed })]);
+    expect(mockedGetIngestionJob).toHaveBeenCalledTimes(1);
+  });
+
   it('waits for an in-flight drain after the foreground drain loses the ingestion slot', async () => {
     jest.useFakeTimers();
     const pending = makeJob('pending');

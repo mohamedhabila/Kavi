@@ -1,7 +1,14 @@
 import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import { filterModelVisibleAttachments } from '../../utils/messageAttachments';
+import { getCommand } from '../../services/commands/builtins';
+import { parseCommand } from '../../services/commands/parser';
 import { buildGraphEntryRequestFrame } from './requestEntrySignals';
+
+function isRegisteredSlashCommand(content: string | undefined): boolean {
+  const command = parseCommand(content);
+  return command ? getCommand(command.name) !== undefined : false;
+}
 
 export function shouldTrackForegroundAgentRun(params: {
   conversationMode?: ConversationMode;
@@ -17,6 +24,10 @@ export function shouldTrackForegroundAgentRun(params: {
 
   if (params.reuseAgentRunId?.trim()) {
     return true;
+  }
+
+  if (isRegisteredSlashCommand(params.latestUserMessage?.content)) {
+    return false;
   }
 
   const frame = buildGraphEntryRequestFrame({

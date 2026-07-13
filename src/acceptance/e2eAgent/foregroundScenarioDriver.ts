@@ -412,9 +412,14 @@ async function runScenarioIsolated(
       const nativeInvocations =
         getE2ENativeMobileInvocationSnapshots().slice(nativeInvocationStart);
       const chatError = runtime.getChatError();
+      const expectedMemoryCloseouts =
+        finalAssistant?.completionStatus === 'complete' && !timedOut ? 1 : 0;
       const memoryInvariantError =
-        !timedOut && !chatError && !memorySettlementError && memory.length !== 1
-          ? `Foreground turn recorded ${memory.length} memory closeouts; expected exactly one.`
+        !timedOut &&
+        !chatError &&
+        !memorySettlementError &&
+        memory.length !== expectedMemoryCloseouts
+          ? `Foreground turn recorded ${memory.length} memory closeouts; expected ${expectedMemoryCloseouts}.`
           : null;
       const turnError = scenarioDeadlineExceeded
         ? SCENARIO_WALL_CLOCK_TIMEOUT_ERROR

@@ -63,6 +63,7 @@ import {
   holdMockOrchestratorUntilAbort,
   mockImportConversationWorkspaceAttachment,
   mockIsAvailableAsync,
+  mockPublishConversationTurnMemory,
   mockRunOrchestrator,
   mockShareAsync,
   mockShareConversationWorkspaceFile,
@@ -133,6 +134,7 @@ export function resetChatScreenTestEnvironment() {
     mockImportConversationWorkspaceAttachment,
     mockShareAsync,
     mockIsAvailableAsync,
+    mockPublishConversationTurnMemory,
     mockFileWrite,
   };
 

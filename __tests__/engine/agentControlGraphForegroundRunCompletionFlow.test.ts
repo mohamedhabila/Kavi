@@ -21,7 +21,6 @@ describe('foregroundRun completion flow', () => {
     const appendConversationLog = jest.fn();
     const enterAsyncMonitoringPhase = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(true);
-    const recordConversationTurnMemory = jest.fn();
     const reviewCompletion = jest.fn().mockResolvedValue({
       handled: false as const,
       completionStatus: 'completed' as const,
@@ -43,7 +42,6 @@ describe('foregroundRun completion flow', () => {
       currentAssistantMessageId: 'assistant-1',
       enterAsyncMonitoringPhase,
       finalizeCompletion,
-      recordConversationTurnMemory,
       reviewCompletion,
       trackedRunState: createTrackingState({
         backgroundWorkers: {
@@ -63,14 +61,12 @@ describe('foregroundRun completion flow', () => {
       }),
     );
     expect(enterAsyncMonitoringPhase).not.toHaveBeenCalled();
-    expect(recordConversationTurnMemory).toHaveBeenCalledTimes(1);
   });
 
   it('finalizes an ordinary completed assistant answer without background-specific handling', async () => {
     const appendConversationLog = jest.fn();
     const enterAsyncMonitoringPhase = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(true);
-    const recordConversationTurnMemory = jest.fn();
     const reviewCompletion = jest.fn().mockResolvedValue({
       handled: false as const,
       completionStatus: 'completed' as const,
@@ -97,7 +93,6 @@ describe('foregroundRun completion flow', () => {
       currentAssistantMessageId: 'assistant-1',
       enterAsyncMonitoringPhase,
       finalizeCompletion,
-      recordConversationTurnMemory,
       reviewCompletion,
       trackedRunState: createTrackingState({
         backgroundWorkers: {
@@ -117,14 +112,12 @@ describe('foregroundRun completion flow', () => {
         checkpointTitle: 'Turn completed',
       }),
     );
-    expect(recordConversationTurnMemory).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the run open for async monitoring without triggering review', async () => {
     const appendConversationLog = jest.fn();
     const enterAsyncMonitoringPhase = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(true);
-    const recordConversationTurnMemory = jest.fn();
     const reviewCompletion = jest.fn();
 
     await handleForegroundRunCompletionFlow({
@@ -133,7 +126,6 @@ describe('foregroundRun completion flow', () => {
       currentAssistantMessageId: 'assistant-1',
       enterAsyncMonitoringPhase,
       finalizeCompletion,
-      recordConversationTurnMemory,
       reviewCompletion,
       trackedRunState: createTrackingState({
         pendingAsyncOperations: [
@@ -164,12 +156,10 @@ describe('foregroundRun completion flow', () => {
     );
     expect(finalizeCompletion).not.toHaveBeenCalled();
     expect(reviewCompletion).not.toHaveBeenCalled();
-    expect(recordConversationTurnMemory).not.toHaveBeenCalled();
   });
 
   it('forces terminal review for a failed graph even while async work remains', async () => {
     const enterAsyncMonitoringPhase = jest.fn();
-    const recordConversationTurnMemory = jest.fn();
     const reviewCompletion = jest.fn().mockResolvedValue({
       handled: true as const,
       terminalized: true,
@@ -182,7 +172,6 @@ describe('foregroundRun completion flow', () => {
       enterAsyncMonitoringPhase,
       forceTerminalReview: true,
       finalizeCompletion: jest.fn(),
-      recordConversationTurnMemory,
       reviewCompletion,
       trackedRunState: createTrackingState({
         pendingAsyncOperations: [
@@ -203,56 +192,37 @@ describe('foregroundRun completion flow', () => {
 
     expect(reviewCompletion).toHaveBeenCalledTimes(1);
     expect(enterAsyncMonitoringPhase).not.toHaveBeenCalled();
-    expect(recordConversationTurnMemory).toHaveBeenCalledTimes(1);
   });
 
-  it('records memory when review terminalizes a failed run', async () => {
-    const recordConversationTurnMemory = jest.fn();
+  it.each([true, false])(
+    'returns without duplicate finalization when completion review handled the run (terminalized=%s)',
+    async (terminalized) => {
+      const appendConversationLog = jest.fn();
+      const finalizeCompletion = jest.fn();
 
-    await handleForegroundRunCompletionFlow({
-      appendConversationLog: jest.fn(),
-      currentAssistantMessage: undefined,
-      currentAssistantMessageId: 'assistant-1',
-      enterAsyncMonitoringPhase: jest.fn(),
-      finalizeCompletion: jest.fn(),
-      recordConversationTurnMemory,
-      reviewCompletion: jest.fn().mockResolvedValue({
-        handled: true as const,
-        terminalized: true,
-      }),
-      trackedRunState: createTrackingState(),
-      turnSummary: 'Turn failed',
-    });
+      await handleForegroundRunCompletionFlow({
+        appendConversationLog,
+        currentAssistantMessage: undefined,
+        currentAssistantMessageId: 'assistant-1',
+        enterAsyncMonitoringPhase: jest.fn(),
+        finalizeCompletion,
+        reviewCompletion: jest.fn().mockResolvedValue({
+          handled: true as const,
+          terminalized,
+        }),
+        trackedRunState: createTrackingState(),
+        turnSummary: terminalized ? 'Turn failed' : 'Run continuing',
+      });
 
-    expect(recordConversationTurnMemory).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not record memory while review continues the same run', async () => {
-    const recordConversationTurnMemory = jest.fn();
-
-    await handleForegroundRunCompletionFlow({
-      appendConversationLog: jest.fn(),
-      currentAssistantMessage: undefined,
-      currentAssistantMessageId: 'assistant-1',
-      enterAsyncMonitoringPhase: jest.fn(),
-      finalizeCompletion: jest.fn(),
-      recordConversationTurnMemory,
-      reviewCompletion: jest.fn().mockResolvedValue({
-        handled: true as const,
-        terminalized: false,
-      }),
-      trackedRunState: createTrackingState(),
-      turnSummary: 'Run continuing',
-    });
-
-    expect(recordConversationTurnMemory).not.toHaveBeenCalled();
-  });
+      expect(finalizeCompletion).not.toHaveBeenCalled();
+      expect(appendConversationLog).not.toHaveBeenCalled();
+    },
+  );
 
   it('finalizes the run after review when no open work remains', async () => {
     const appendConversationLog = jest.fn();
     const enterAsyncMonitoringPhase = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(true);
-    const recordConversationTurnMemory = jest.fn();
     const reviewCompletion = jest.fn().mockResolvedValue({
       handled: false as const,
       completionStatus: 'completed' as const,
@@ -270,7 +240,6 @@ describe('foregroundRun completion flow', () => {
       currentAssistantMessageId: 'assistant-1',
       enterAsyncMonitoringPhase,
       finalizeCompletion,
-      recordConversationTurnMemory,
       reviewCompletion,
       trackedRunState: createTrackingState(),
       turnSummary: 'Turn summary',
@@ -289,13 +258,11 @@ describe('foregroundRun completion flow', () => {
       title: 'Turn completed',
       detail: 'Turn completed',
     });
-    expect(recordConversationTurnMemory).toHaveBeenCalledTimes(1);
     expect(enterAsyncMonitoringPhase).not.toHaveBeenCalled();
   });
 
-  it('does not log success or record memory when the completion boundary rejects terminalization', async () => {
+  it('does not log success when the completion boundary rejects terminalization', async () => {
     const appendConversationLog = jest.fn();
-    const recordConversationTurnMemory = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(false);
 
     await handleForegroundRunCompletionFlow({
@@ -304,7 +271,6 @@ describe('foregroundRun completion flow', () => {
       currentAssistantMessageId: 'assistant-1',
       enterAsyncMonitoringPhase: jest.fn(),
       finalizeCompletion,
-      recordConversationTurnMemory,
       reviewCompletion: jest.fn().mockResolvedValue({
         handled: false as const,
         completionStatus: 'completed' as const,
@@ -321,6 +287,5 @@ describe('foregroundRun completion flow', () => {
 
     expect(finalizeCompletion).toHaveBeenCalledTimes(1);
     expect(appendConversationLog).not.toHaveBeenCalled();
-    expect(recordConversationTurnMemory).not.toHaveBeenCalled();
   });
 });

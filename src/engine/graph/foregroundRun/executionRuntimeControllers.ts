@@ -103,6 +103,7 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
     currentAssistantMessageId: bootstrapResult.assistantMessageId,
     getStreamingDraft: (messageId) => shared.refs.streamingDraftsRef.current[messageId],
     publishIntervalMs: shared.state.streamUiDraftPublishIntervalMs,
+    replaceResumedAssistantDraft: bootstrapResult.bootstrap.replaceResumedAssistantDraft,
     resumedAssistantDraft: bootstrapResult.bootstrap.resumedAssistantDraft,
   });
 

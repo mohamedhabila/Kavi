@@ -1,6 +1,20 @@
 import { mockChatScreenState } from './state';
 import type { OrchestratorRunResult } from '../../src/engine/orchestrator';
 
+export const mockPublishConversationTurnMemory = jest.fn().mockResolvedValue({
+  processed: true,
+  enqueued: true,
+  jobId: 'chat-screen-memory-job',
+  episodeId: null,
+  factIds: [],
+  activeFocusUpdated: false,
+  openThreadsUpdated: false,
+  enriched: false,
+});
+jest.mock('../../src/services/memory/turnPublication', () => ({
+  publishConversationTurnMemory: (...args: unknown[]) => mockPublishConversationTurnMemory(...args),
+}));
+
 jest.mock('../../src/services/startupRecovery', () => ({
   recoverPersistedAgentState: jest.fn().mockResolvedValue(undefined),
   triggerForegroundJournalRecovery: jest.fn().mockResolvedValue(undefined),

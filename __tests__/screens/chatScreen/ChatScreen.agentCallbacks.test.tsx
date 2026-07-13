@@ -138,6 +138,10 @@ describe('ChatScreen agent callbacks', () => {
       ];
 
       await act(async () => {
+        await callbacks.onToolMessage(
+          'tc1',
+          JSON.stringify({ status: 'error', error: 'Tool failed' }),
+        );
         callbacks.onAssistantMessage(
           'final content',
           [],
@@ -155,7 +159,6 @@ describe('ChatScreen agent callbacks', () => {
         callbacks.onAgentControlGraphStateChange(
           createAgentRunControlGraphState({ status: 'awaiting_review' }),
         );
-        callbacks.onToolMessage('tc1', JSON.stringify({ status: 'error', error: 'Tool failed' }));
         callbacks.onUsage({
           inputTokens: 40,
           outputTokens: 20,

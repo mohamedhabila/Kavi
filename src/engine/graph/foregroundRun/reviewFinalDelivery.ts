@@ -5,6 +5,12 @@ import { Conversation, ConversationLogEntry } from '../../../types/conversation'
 import { RecoverAgentRunFinalPreview, ResumeAgentRun } from './contracts';
 import { buildForegroundRunReviewContext, type ForegroundRunReviewContext } from './reviewContext';
 import { consumeAgentRunAutomaticRecoveryAttempt } from './automaticRecoveryBudget';
+import { buildForegroundAssistantIncompleteMetadata } from './terminalLifecycle';
+import {
+  findAgentRunReplaceableAssistantMessageId,
+  hasVisibleAssistantOutput,
+} from './assistantMessages';
+import { buildAgentRunMessageScope } from '../../../services/agents/lifecycle/agentRunStateMachine';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -27,6 +33,37 @@ type FinalizeTrackedRun = (
   terminalReason?: AgentRunTerminalReason,
 ) => boolean;
 
+function prepareLatestAssistantForFinalDeliveryRecovery(params: {
+  conversationId: string;
+  getLatestConversation: () => Conversation | undefined;
+  runId: string;
+  updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
+}): boolean {
+  const conversation = params.getLatestConversation();
+  const run = conversation?.agentRuns?.find((candidate) => candidate.id === params.runId);
+  if (!conversation || !run) {
+    return false;
+  }
+
+  const targetMessageId = findAgentRunReplaceableAssistantMessageId(
+    conversation.messages,
+    buildAgentRunMessageScope(run),
+  );
+  const targetMessage = targetMessageId
+    ? conversation.messages.find((message) => message.id === targetMessageId)
+    : undefined;
+  if (!targetMessage || !hasVisibleAssistantOutput(targetMessage)) {
+    return false;
+  }
+
+  params.updateMessageAssistantMetadata(
+    params.conversationId,
+    targetMessage.id,
+    buildForegroundAssistantIncompleteMetadata('terminal_review_pending'),
+  );
+  return true;
+}
+
 export async function handleForegroundRunReviewFinalDelivery(params: {
   appendConversationLog: AppendConversationLog;
   assertNotAborted: () => void;
@@ -41,6 +78,7 @@ export async function handleForegroundRunReviewFinalDelivery(params: {
   setAgentRunPhase: ChatStore['setAgentRunPhase'];
   updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
   updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
+  updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
   context: ForegroundRunReviewContext;
 }): Promise<
   { handled: true; terminalized: boolean } | ({ handled: false } & ForegroundRunReviewContext)
@@ -183,6 +221,13 @@ export async function handleForegroundRunReviewFinalDelivery(params: {
       params.runId,
     );
 
+    const replaceAssistantDraft = prepareLatestAssistantForFinalDeliveryRecovery({
+      conversationId: params.conversationId,
+      getLatestConversation: params.getLatestConversation,
+      runId: params.runId,
+      updateMessageAssistantMetadata: params.updateMessageAssistantMetadata,
+    });
+
     await params.flushChatState();
     params.assertNotAborted();
     await params.resumeAgentRun?.({
@@ -191,7 +236,7 @@ export async function handleForegroundRunReviewFinalDelivery(params: {
       additionalSystemPrompt: finalReviewGate.systemPrompt,
       additionalUserPrompt: finalReviewGate.userPrompt,
       disableTools: true,
-      reuseAssistantDraft: false,
+      assistantDraftMode: replaceAssistantDraft ? 'replace' : 'new',
     });
     params.assertNotAborted();
     return { handled: true, terminalized: false };

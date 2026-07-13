@@ -24,20 +24,27 @@ export function createForegroundAssistantStreamController(params: {
   currentAssistantMessageId: string;
   getStreamingDraft: (messageId: string) => StreamingDraftSnapshot | undefined;
   publishIntervalMs: number;
+  replaceResumedAssistantDraft?: boolean;
   resumedAssistantDraft?: ResumedAssistantDraft;
 }) {
   let currentAssistantMessageId = params.currentAssistantMessageId;
-  let accumulatedContent = params.resumedAssistantDraft?.content ?? '';
-  let accumulatedReasoning = params.resumedAssistantDraft?.reasoning ?? '';
-  let lastCommittedContent = params.resumedAssistantDraft?.content ?? '';
-  let lastCommittedReasoning = params.resumedAssistantDraft?.reasoning ?? '';
-  let lastPublishedContent = params.resumedAssistantDraft?.content
-    ? stripInternalAssistantTranscriptArtifacts(params.resumedAssistantDraft.content)
+  const resumedDraftContent = params.replaceResumedAssistantDraft
+    ? ''
+    : (params.resumedAssistantDraft?.content ?? '');
+  const resumedDraftReasoning = params.replaceResumedAssistantDraft
+    ? ''
+    : (params.resumedAssistantDraft?.reasoning ?? '');
+  let accumulatedContent = resumedDraftContent;
+  let accumulatedReasoning = resumedDraftReasoning;
+  let lastCommittedContent = resumedDraftContent;
+  let lastCommittedReasoning = resumedDraftReasoning;
+  let lastPublishedContent = resumedDraftContent
+    ? stripInternalAssistantTranscriptArtifacts(resumedDraftContent)
     : '';
-  let lastPublishedReasoning = params.resumedAssistantDraft?.reasoning ?? '';
-  let cachedVisibleContentSource = params.resumedAssistantDraft?.content ?? '';
-  let cachedVisibleContent = params.resumedAssistantDraft?.content
-    ? stripInternalAssistantTranscriptArtifacts(params.resumedAssistantDraft.content)
+  let lastPublishedReasoning = resumedDraftReasoning;
+  let cachedVisibleContentSource = resumedDraftContent;
+  let cachedVisibleContent = resumedDraftContent
+    ? stripInternalAssistantTranscriptArtifacts(resumedDraftContent)
     : '';
   let startNextAssistantTurn = false;
   let checkpointTimer: ReturnType<typeof setTimeout> | null = null;
@@ -215,6 +222,9 @@ export function createForegroundAssistantStreamController(params: {
 
       const preserveExistingDraft =
         params.resumedAssistantDraft.assistantMetadata?.finishReason === 'terminal_review_pending';
+      if (params.replaceResumedAssistantDraft) {
+        return stripInternalAssistantTranscriptArtifacts(content);
+      }
       const currentVisibleContent = getVisibleAssistantContent();
       const baselineContent =
         currentVisibleContent ||
@@ -234,12 +244,14 @@ export function createForegroundAssistantStreamController(params: {
 
       const baselineContent =
         params.resumedAssistantDraft &&
-        currentAssistantMessageId === params.resumedAssistantDraft.id
+        currentAssistantMessageId === params.resumedAssistantDraft.id &&
+        !params.replaceResumedAssistantDraft
           ? (params.resumedAssistantDraft.content ?? '')
           : '';
       const baselineReasoning =
         params.resumedAssistantDraft &&
-        currentAssistantMessageId === params.resumedAssistantDraft.id
+        currentAssistantMessageId === params.resumedAssistantDraft.id &&
+        !params.replaceResumedAssistantDraft
           ? (params.resumedAssistantDraft.reasoning ?? '')
           : '';
       const baselineVisibleContent = baselineContent

@@ -2,6 +2,7 @@ import { runOrchestrator } from '../../src/engine/orchestrator';
 import { executeForegroundConversationRun } from '../../src/engine/graph/foregroundRun/execution';
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
 import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
+import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
 import { __resetOnDeviceGuardsForTests } from '../../src/services/memory/onDeviceGuards';
 import type { AgentRun } from '../../src/types/agentRun';
 import {
@@ -110,6 +111,14 @@ describe('foreground run supersession', () => {
       return defaultCreateModelExecution(input);
     });
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      callbacks.onAssistantMessage?.('The newest turn completed.', [], undefined, {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'stop',
+      });
+      callbacks.onAgentControlGraphStateChange?.(
+        createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
+      );
       callbacks.onDone();
       return { terminalDisposition: 'final_candidate' };
     });

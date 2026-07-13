@@ -59,6 +59,7 @@ describe('foreground final-delivery automatic recovery budget', () => {
         setAgentRunPhase: jest.fn(),
         updateAgentRunControlGraph,
         updateAgentRunSummary: jest.fn(),
+        updateMessageAssistantMetadata: jest.fn(),
       }),
     ).resolves.toEqual({ handled: true, terminalized: false });
 
@@ -158,6 +159,7 @@ describe('foreground final-delivery automatic recovery budget', () => {
         setAgentRunPhase: jest.fn(),
         updateAgentRunControlGraph: jest.fn(),
         updateAgentRunSummary: jest.fn(),
+        updateMessageAssistantMetadata: jest.fn(),
       }),
     ).resolves.toEqual({ handled: true, terminalized: true });
 
@@ -186,6 +188,107 @@ describe('foreground final-delivery automatic recovery budget', () => {
     expect(appendConversationLog).toHaveBeenCalledWith(
       conversation.id,
       expect.objectContaining({ level: 'error', title: 'Final delivery recovery stopped' }),
+    );
+  });
+
+  it('reuses the exact generated placeholder as an incomplete recovery draft', async () => {
+    const run = {
+      id: 'run-1',
+      userMessageId: 'user-1',
+      goal: 'Finish the task',
+      status: 'running',
+      createdAt: 1,
+      updatedAt: 2,
+      currentPhase: 'deliver',
+      phases: [],
+      checkpoints: [],
+      summary: {
+        assistantTurns: 1,
+        startedTools: 0,
+        completedTools: 0,
+        failedTools: 0,
+        spawnedSubAgents: 0,
+      },
+      controlGraph: createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
+    } as AgentRun;
+    const initialConversation = {
+      id: 'conversation-1',
+      title: 'Recovery',
+      messages: [
+        { id: 'user-1', role: 'user', content: 'Finish the task', timestamp: 1 },
+        {
+          id: 'assistant-placeholder',
+          role: 'assistant',
+          content: 'The action is still pending.',
+          timestamp: 2,
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'yielded',
+          },
+        },
+      ],
+      createdAt: 1,
+      updatedAt: 2,
+      agentRuns: [run],
+    } as Conversation;
+    const recoveredConversation = {
+      ...initialConversation,
+      messages: initialConversation.messages.map((message) =>
+        message.id === 'assistant-placeholder'
+          ? {
+              ...message,
+              content: 'The run completed, but no final response was generated.',
+              assistantMetadata: {
+                kind: 'final' as const,
+                completionStatus: 'complete' as const,
+                finishReason: 'fallback_from_evidence',
+              },
+            }
+          : message,
+      ),
+    } as Conversation;
+    const resumeAgentRun = jest.fn().mockResolvedValue(undefined);
+    const updateMessageAssistantMetadata = jest.fn();
+    let didRecover = false;
+
+    await expect(
+      handleForegroundRunReviewFinalDelivery({
+        appendConversationLog: jest.fn(),
+        assertNotAborted: jest.fn(),
+        conversationId: initialConversation.id,
+        context: buildForegroundRunReviewContext({
+          reviewConversation: initialConversation,
+          reviewRun: run,
+        }),
+        finalizeTrackedRun: jest.fn(),
+        flushChatState: jest.fn().mockResolvedValue(undefined),
+        getLatestConversation: () => (didRecover ? recoveredConversation : initialConversation),
+        recoverAgentRunFinalPreview: jest.fn(async () => {
+          didRecover = true;
+          return { recovered: false, delivered: false };
+        }),
+        resumeAgentRun,
+        runId: run.id,
+        signal: new AbortController().signal,
+        setAgentRunPhase: jest.fn(),
+        updateAgentRunControlGraph: jest.fn(),
+        updateAgentRunSummary: jest.fn(),
+        updateMessageAssistantMetadata,
+      }),
+    ).resolves.toEqual({ handled: true, terminalized: false });
+
+    expect(updateMessageAssistantMetadata).toHaveBeenCalledWith(
+      initialConversation.id,
+      'assistant-placeholder',
+      expect.objectContaining({
+        kind: 'final',
+        completionStatus: 'incomplete',
+        finishReason: 'terminal_review_pending',
+      }),
+    );
+    expect(resumeAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ assistantDraftMode: 'replace' }),
     );
   });
 });

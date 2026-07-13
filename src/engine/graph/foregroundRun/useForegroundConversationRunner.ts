@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import type { AgentRunAsyncOperation } from '../../../types/agentRun';
-import type { ResumeAgentRun, RunChatOptions } from './contracts';
+import type { AssistantDraftMode, ResumeAgentRun, RunChatOptions } from './contracts';
 import { executeForegroundConversationRun } from './execution';
 import type {
   ForegroundConversationRunHelpers,
@@ -148,12 +148,12 @@ export function useForegroundConversationRunner(
       additionalSystemPrompt: string;
       additionalUserPrompt?: string;
       disableTools?: boolean;
-      reuseAssistantDraft?: boolean;
+      assistantDraftMode: AssistantDraftMode;
       initialPendingAsyncOperations?: AgentRunAsyncOperation[];
     }) => {
       await runChat(resumeParams.conversationId, {
         reuseAgentRunId: resumeParams.runId,
-        reuseAssistantDraft: resumeParams.reuseAssistantDraft,
+        assistantDraftMode: resumeParams.assistantDraftMode,
         additionalSystemPrompt: resumeParams.additionalSystemPrompt,
         additionalUserPrompt: resumeParams.additionalUserPrompt,
         disableTools: resumeParams.disableTools,

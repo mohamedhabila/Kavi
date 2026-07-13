@@ -59,6 +59,26 @@ describe('agent control graph run tracking', () => {
     }
   });
 
+  it('does not create workflow runs for registered slash commands', () => {
+    expect(
+      shouldTrackForegroundAgentRun({
+        conversationMode: 'agentic',
+        latestUserMessage: userMessage('/new'),
+        messageCount: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps unknown slash-prefixed requests on the normal workflow path', () => {
+    expect(
+      shouldTrackForegroundAgentRun({
+        conversationMode: 'agentic',
+        latestUserMessage: userMessage('/future-command'),
+        messageCount: 1,
+      }),
+    ).toBe(true);
+  });
+
   it('does not track chitchat turns even when the text is actionable', () => {
     expect(
       shouldTrackForegroundAgentRun({

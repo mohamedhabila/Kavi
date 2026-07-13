@@ -84,11 +84,7 @@ export async function handleForegroundInterruptedResponseRecovery(params: {
     const visibleFailure = params.visibleContent.trim()
       ? `${params.visibleContent.trim()}\n\n${detail}`
       : detail;
-    params.updateMessage(
-      params.conversationId,
-      params.currentAssistantMessageId,
-      visibleFailure,
-    );
+    params.updateMessage(params.conversationId, params.currentAssistantMessageId, visibleFailure);
     params.updateMessageAssistantMetadata(
       params.conversationId,
       params.currentAssistantMessageId,
@@ -163,6 +159,7 @@ export async function handleForegroundInterruptedResponseRecovery(params: {
       runId,
       additionalSystemPrompt: outcome.resumePrompt,
       additionalUserPrompt: outcome.resumeUserPrompt,
+      assistantDraftMode: 'continue',
     });
 
     params.assertNotAborted();
@@ -223,7 +220,7 @@ export async function handleForegroundInterruptedResponseRecovery(params: {
       additionalSystemPrompt: buildAgentControlGraphFinalReviewRecoverySystemPrompt(),
       additionalUserPrompt: buildAgentControlGraphFinalReviewRecoveryUserPrompt(),
       disableTools: true,
-      reuseAssistantDraft: false,
+      assistantDraftMode: 'new',
     });
     params.assertNotAborted();
   };
@@ -237,10 +234,7 @@ export async function handleForegroundInterruptedResponseRecovery(params: {
     markDeliveryPending: boolean;
   }) => {
     if (paramsForHold.markDeliveryPending) {
-      params.markCurrentAssistantDraftIncomplete(
-        params.visibleContent,
-        'terminal_review_pending',
-      );
+      params.markCurrentAssistantDraftIncomplete(params.visibleContent, 'terminal_review_pending');
     }
     if (runId) {
       params.setAgentRunPhase(

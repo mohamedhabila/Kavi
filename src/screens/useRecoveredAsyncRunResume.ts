@@ -130,6 +130,7 @@ export function useRecoveredAsyncRunResume({
             additionalSystemPrompt: buildPendingAsyncOperationResumePrompt(
               effectivePendingOperations,
             ),
+            assistantDraftMode: 'continue',
             initialPendingAsyncOperations: effectivePendingOperations,
           });
         } catch (error) {

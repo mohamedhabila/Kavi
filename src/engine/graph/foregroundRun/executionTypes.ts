@@ -215,7 +215,6 @@ export interface ForegroundConversationRunRuntimeParams {
   guardRunCallback: () => boolean;
   isCurrentRunInvocation: () => boolean;
   model: string;
-  memoryConversationId: string;
   options?: RunChatOptions;
   provider: LlmProviderConfig;
   wrapResumeAgentRun: (

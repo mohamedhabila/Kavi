@@ -56,6 +56,7 @@ export async function handleTerminalBackgroundReview(params: {
       additionalSystemPrompt:
         'Background workers finished, but goals are still open. Continue executing the active goal set.',
       additionalUserPrompt: candidateSummary,
+      assistantDraftMode: 'continue',
     });
     return;
   }

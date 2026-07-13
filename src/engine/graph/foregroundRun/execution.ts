@@ -1,5 +1,6 @@
 import type { Message } from '../../../types/message';
 import { runOrchestrator } from '../../orchestrator';
+import type { OrchestratorTerminalDisposition } from '../../orchestrator/types';
 import { resolveConversationWorkspaceTarget } from '../../../services/conversationWorkspace/ownership';
 import { isAbortErrorLike } from '../../../services/agents/agentRunCancellation';
 import { supersedeForegroundConversationRun } from '../foregroundConversationCancellation';
@@ -35,6 +36,7 @@ import {
 } from '../../../services/memory/verifiedProcedure/executionSession';
 import { resolveGraphTaskId } from '../../goals/graphTaskScope';
 import { enforceSemanticMemoryHandoffGate } from './semanticMemoryHandoffGate';
+import { publishForegroundTerminalMemory } from './terminalMemoryPublication';
 
 function buildModelReadyMessages(messages: Message[]): Message[] {
   return deduplicateToolResults(ensureToolResultPairing(messages));
@@ -286,6 +288,7 @@ async function executeReservedForegroundConversationRun(
   const { assistantMessageId } = bootstrapResult;
   let executionLease: ForegroundModelExecutionLease | null = null;
   let pendingVerifiedProcedureObservation: PendingVerifiedProcedureObservation | undefined;
+  let orchestratorTerminalDisposition: OrchestratorTerminalDisposition | undefined;
   let journalTerminal = false;
   let closingSupersededGeneration = false;
   const guardRunCallback = () =>
@@ -323,7 +326,6 @@ async function executeReservedForegroundConversationRun(
     guardRunCallback,
     isCurrentRunInvocation,
     model,
-    memoryConversationId: workspaceTarget.workspaceConversationId,
     options,
     provider,
     wrapResumeAgentRun: (resume, terminalStatus) =>
@@ -367,11 +369,14 @@ async function executeReservedForegroundConversationRun(
   const requestMessageId = resumePreparation.workflowScopeUserMessageId;
   const closeModelGenerationUnchecked = async (
     status: 'succeeded' | 'failed' | 'cancelled',
+    options?: { allowIncompleteHandoff?: boolean },
   ): Promise<void> => {
     if (!executionLease) {
       throw new Error('foreground_model_journal_generation_missing');
     }
-    const projectionMessageId = runtime.getCurrentAssistantMessageId();
+    let projectionMessageId = runtime.getCurrentAssistantMessageId();
+    let terminalMemorySourceId: string | undefined;
+    let journalStatus = status;
     if (!journalTerminal) {
       if (
         projectionOwner &&
@@ -379,12 +384,44 @@ async function executeReservedForegroundConversationRun(
       ) {
         throw new Error('model_projection_ownership_changed');
       }
-      const projectedConversation = context.helpers.getConversation(conversationId);
+      let projectedConversation = context.helpers.getConversation(conversationId);
+      if (projectionOwner) {
+        await context.durability.flushChatState();
+        if (!context.durability.ownsModelProjection(conversationId, projectionOwner)) {
+          throw new Error('model_projection_ownership_changed');
+        }
+        projectedConversation = context.helpers.getConversation(conversationId);
+      }
+      const publication = await publishForegroundTerminalMemory({
+        allowIncompleteHandoff: options?.allowIncompleteHandoff === true,
+        assertProjectionOwnership: () => {
+          if (
+            projectionOwner &&
+            !context.durability.ownsModelProjection(conversationId, projectionOwner)
+          ) {
+            throw new Error('model_projection_ownership_changed');
+          }
+        },
+        conversation: projectedConversation,
+        conversationId,
+        currentAssistantMessageId: projectionMessageId,
+        finalizationProviderContext,
+        getConversation: () => context.helpers.getConversation(conversationId),
+        memoryConversationId: workspaceTarget.workspaceConversationId,
+        orchestratorTerminalDisposition,
+        recordConversationTurnMemory: context.helpers.recordConversationTurnMemory,
+        runId: bootstrapResult.trackedAgentRunId,
+        status,
+      });
+      projectedConversation = publication.conversation;
+      journalStatus = publication.journalStatus;
+      projectionMessageId = publication.projectionMessageId;
+      terminalMemorySourceId = publication.terminalMemorySourceId;
       const projectionState = {
         conversationId,
         requestMessageId,
         projectionMessageId,
-        terminalStatus: status,
+        terminalStatus: journalStatus,
         projectionOwner,
         assistantMessage: projectedConversation?.messages.find(
           (message) => message.id === projectionMessageId,
@@ -395,21 +432,19 @@ async function executeReservedForegroundConversationRun(
             )
           : undefined,
       };
-      if (projectionOwner) {
-        await context.durability.flushChatState();
-        if (!context.durability.ownsModelProjection(conversationId, projectionOwner)) {
-          throw new Error('model_projection_ownership_changed');
-        }
-      }
       await context.durability.completeModelExecution({
         lease: executionLease,
-        status,
+        status: journalStatus,
         projectionMessageId,
         projectionState,
       });
       journalTerminal = true;
     }
-    if (status === 'succeeded' && pendingVerifiedProcedureObservation) {
+    if (
+      journalStatus === 'succeeded' &&
+      terminalMemorySourceId &&
+      pendingVerifiedProcedureObservation
+    ) {
       const pending = pendingVerifiedProcedureObservation;
       pendingVerifiedProcedureObservation = undefined;
       const finalAgentRun = bootstrapResult.trackedAgentRunId
@@ -421,7 +456,7 @@ async function executeReservedForegroundConversationRun(
         memoryLineage: {
           sourceMessageId: requestMessageId,
           sourceRunId: bootstrapResult.trackedAgentRunId ?? null,
-          sourceTurnId: projectionMessageId,
+          sourceTurnId: terminalMemorySourceId,
           taskId:
             resolveGraphTaskId({
               goals: finalAgentRun?.controlGraph?.goals,
@@ -449,9 +484,10 @@ async function executeReservedForegroundConversationRun(
   };
   const closeModelGeneration = async (
     status: 'succeeded' | 'failed' | 'cancelled',
+    options?: { allowIncompleteHandoff?: boolean },
   ): Promise<void> => {
     try {
-      await closeModelGenerationUnchecked(status);
+      await closeModelGenerationUnchecked(status, options);
     } catch (error) {
       if (executionLease) {
         context.durability.relinquishModelExecutionProcessOwnership(executionLease.runId);
@@ -460,7 +496,7 @@ async function executeReservedForegroundConversationRun(
     }
   };
   closeModelGenerationForHandoff = async (status) => {
-    await closeModelGeneration(status);
+    await closeModelGeneration(status, { allowIncompleteHandoff: true });
     completedHandoffStatus = status;
   };
 
@@ -588,6 +624,7 @@ async function executeReservedForegroundConversationRun(
         },
         runtime.callbacks,
       );
+      orchestratorTerminalDisposition = orchestratorResult.terminalDisposition;
       pendingVerifiedProcedureObservation = orchestratorResult.pendingVerifiedProcedureObservation;
       terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
     } catch (error: unknown) {

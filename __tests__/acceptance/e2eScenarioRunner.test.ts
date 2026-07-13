@@ -111,7 +111,7 @@ function buildFinalizedGraphSnapshot(
   };
 }
 
-function makeCompletedJob(id: string): IngestionJob {
+function makeCompletedJob(id: string, sourceEndMessageId = `assistant-${id}`): IngestionJob {
   return {
     id,
     threadId: 'scenario-conversation',
@@ -122,7 +122,7 @@ function makeCompletedJob(id: string): IngestionJob {
     chatProviderId: MOCK_E2E_PROVIDER.id,
     chatModel: MOCK_E2E_PROVIDER.model,
     sourceStartMessageId: null,
-    sourceEndMessageId: `assistant-${id}`,
+    sourceEndMessageId,
     sourceAt: 1,
     reason: 'turn_completed',
     status: 'completed_enriched',
@@ -156,10 +156,26 @@ describe('runE2EScenario product foreground integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     const jobs = new Map<string, IngestionJob>();
+    const jobsBySource = new Map<string, IngestionJob>();
     let memorySequence = 0;
-    mockedRecordCompletedTurnForMemory.mockImplementation(async () => {
+    mockedRecordCompletedTurnForMemory.mockImplementation(async (input) => {
+      const duplicate = jobsBySource.get(input.sourceEndMessageId);
+      if (duplicate) {
+        return {
+          processed: true,
+          enqueued: true,
+          jobId: duplicate.id,
+          episodeId: null,
+          factIds: [],
+          activeFocusUpdated: true,
+          openThreadsUpdated: false,
+          enriched: true,
+        };
+      }
       const jobId = `job-${++memorySequence}`;
-      jobs.set(jobId, makeCompletedJob(jobId));
+      const job = makeCompletedJob(jobId, input.sourceEndMessageId);
+      jobs.set(jobId, job);
+      jobsBySource.set(input.sourceEndMessageId, job);
       return {
         processed: true,
         enqueued: true,
@@ -457,10 +473,11 @@ describe('runE2EScenario product foreground integration', () => {
 
     const result = await runE2EScenario(scenario());
 
+    expect(result.errors).toEqual([]);
     expect(mockedRunOrchestrator).toHaveBeenCalledTimes(2);
     expect(result.completed).toBe(true);
-    expect(result.errors).toEqual([]);
     expect(result.turnTraces[0]?.memory).toHaveLength(1);
+    expect(result.turnTraces[0]?.finalAssistantCandidateCount).toBe(1);
     expect(result.turnTraces[0]).toMatchObject({
       finalAssistant: {
         text: 'Completed response.',

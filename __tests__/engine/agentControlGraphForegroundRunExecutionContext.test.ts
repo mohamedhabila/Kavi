@@ -3,6 +3,7 @@ import { executeForegroundConversationRun } from '../../src/engine/graph/foregro
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
 import { resolveForegroundInterruptedResponseOutcome } from '../../src/engine/graph/foregroundRun/foregroundInterruptedResponse';
 import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
+import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
 import {
   createConversation,
   createExecutionContext,
@@ -13,9 +14,6 @@ import {
   __resetOnDeviceGuardsForTests,
   isMainInferenceActive,
 } from '../../src/services/memory/onDeviceGuards';
-import type { PendingVerifiedProcedureObservation } from '../../src/services/memory/verifiedProcedure/executionSession';
-
-const mockCommitPendingVerifiedProcedureObservation = jest.fn();
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(),
@@ -29,11 +27,6 @@ jest.mock('../../src/engine/graph/foregroundRun/foregroundInterruptedResponse', 
   resolveForegroundInterruptedResponseOutcome: jest.fn(),
 }));
 
-jest.mock('../../src/services/memory/verifiedProcedure/executionSession', () => ({
-  commitPendingVerifiedProcedureObservation: (...args: unknown[]) =>
-    mockCommitPendingVerifiedProcedureObservation(...args),
-}));
-
 const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runOrchestrator>;
 const mockedResolveForegroundRunPreflight = resolveForegroundRunPreflight as jest.MockedFunction<
   typeof resolveForegroundRunPreflight
@@ -42,6 +35,20 @@ const mockedResolveForegroundInterruptedResponseOutcome =
   resolveForegroundInterruptedResponseOutcome as jest.MockedFunction<
     typeof resolveForegroundInterruptedResponseOutcome
   >;
+
+function deliverFinalAssistantMessage(
+  callbacks: Parameters<typeof runOrchestrator>[1],
+  content = 'The requested turn is complete.',
+): void {
+  callbacks.onAssistantMessage?.(content, [], undefined, {
+    kind: 'final',
+    completionStatus: 'complete',
+    finishReason: 'stop',
+  });
+  callbacks.onAgentControlGraphStateChange?.(
+    createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
+  );
+}
 
 describe('foreground run target-conversation execution context', () => {
   beforeEach(() => {
@@ -77,6 +84,7 @@ describe('foreground run target-conversation execution context', () => {
     );
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onCommandResult?.({ action: 'new_conversation' });
+      deliverFinalAssistantMessage(callbacks, 'A new conversation is ready.');
       callbacks.onDone();
       return { terminalDisposition: 'command' };
     });
@@ -107,6 +115,8 @@ describe('foreground run target-conversation execution context', () => {
       }),
       expect.objectContaining({
         memoryConversationId: conversation.id,
+        sourceEndMessageId:
+          context.durability.completeModelExecution.mock.calls[0][0].projectionMessageId,
       }),
     );
     expect(context.durability.createModelExecution).toHaveBeenCalledWith(
@@ -141,61 +151,20 @@ describe('foreground run target-conversation execution context', () => {
     expect(context.durability.createModelExecution.mock.invocationCallOrder[0]).toBeLessThan(
       context.durability.activateModelExecution.mock.invocationCallOrder[0],
     );
+    expect(context.durability.flushChatState).toHaveBeenCalledTimes(3);
+    expect(context.durability.flushChatState.mock.invocationCallOrder[1]).toBeLessThan(
+      recordConversationTurnMemory.mock.invocationCallOrder[0],
+    );
+    expect(recordConversationTurnMemory.mock.invocationCallOrder[0]).toBeLessThan(
+      context.durability.completeModelExecution.mock.invocationCallOrder[0],
+    );
     expect(context.durability.completeModelExecution.mock.invocationCallOrder[0]).toBeLessThan(
       context.durability.releaseModelProjection.mock.invocationCallOrder[0],
     );
+    expect(context.durability.releaseModelProjection.mock.invocationCallOrder[0]).toBeLessThan(
+      context.durability.flushChatState.mock.invocationCallOrder[2],
+    );
   });
-
-  it.each([
-    ['agentic', 'run-1'],
-    ['chitchat', null],
-  ] as const)(
-    'commits %s procedure evidence with exact turn-memory lineage between durable completion and owner release',
-    async (mode, sourceRunId) => {
-      const conversation = createConversation({ mode });
-      const provider = createProvider('target-provider', 'target-model');
-      const context = createExecutionContext({
-        conversation,
-        providers: [provider],
-        ensureCanonicalConversation: jest.fn(),
-        recordConversationTurnMemory: jest.fn(),
-      });
-      mockedResolveForegroundRunPreflight.mockResolvedValue(
-        createReadyPreflightResult({ conversation, provider }),
-      );
-      const pending = Object.freeze({}) as PendingVerifiedProcedureObservation;
-      mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
-        callbacks.onDone();
-        return {
-          terminalDisposition: 'final_candidate',
-          pendingVerifiedProcedureObservation: pending,
-        };
-      });
-      mockCommitPendingVerifiedProcedureObservation.mockResolvedValue({ status: 'recorded' });
-
-      await executeForegroundConversationRun({ context, conversationId: conversation.id });
-
-      expect(mockCommitPendingVerifiedProcedureObservation).toHaveBeenCalledWith({
-        memoryLineage: {
-          sourceMessageId:
-            context.durability.createModelExecution.mock.calls[0][0].requestMessageId,
-          sourceRunId,
-          sourceTurnId:
-            context.durability.completeModelExecution.mock.calls[0][0].projectionMessageId,
-          taskId: null,
-        },
-        pending,
-        surface: 'foreground',
-        terminalObservedAt: expect.any(Number),
-      });
-      expect(context.durability.completeModelExecution.mock.invocationCallOrder[0]).toBeLessThan(
-        mockCommitPendingVerifiedProcedureObservation.mock.invocationCallOrder[0],
-      );
-      expect(
-        mockCommitPendingVerifiedProcedureObservation.mock.invocationCallOrder[0],
-      ).toBeLessThan(context.durability.releaseModelProjection.mock.invocationCallOrder[0]);
-    },
-  );
 
   it('waits for slow startup recovery readiness before creating exactly one generation', async () => {
     const conversation = createConversation({ mode: 'chitchat' });
@@ -218,7 +187,7 @@ describe('foreground run target-conversation execution context', () => {
     );
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onDone();
-      return { terminalDisposition: 'final_candidate' };
+      return { terminalDisposition: 'command' };
     });
 
     const execution = executeForegroundConversationRun({
@@ -277,6 +246,7 @@ describe('foreground run target-conversation execution context', () => {
     );
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       expect(isMainInferenceActive()).toBe(true);
+      deliverFinalAssistantMessage(callbacks);
       callbacks.onDone();
       expect(isMainInferenceActive()).toBe(true);
       return { terminalDisposition: 'final_candidate' };
@@ -327,7 +297,7 @@ describe('foreground run target-conversation execution context', () => {
     );
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onDone();
-      return { terminalDisposition: 'final_candidate' };
+      return { terminalDisposition: 'command' };
     });
     context.durability.completeModelExecution.mockRejectedValueOnce(
       new Error('journal unavailable'),
@@ -504,7 +474,7 @@ describe('foreground run target-conversation execution context', () => {
         return;
       }
       callbacks.onDone();
-      return { terminalDisposition: 'final_candidate' };
+      return { terminalDisposition: 'command' };
     });
 
     const first = executeForegroundConversationRun({
@@ -587,7 +557,7 @@ describe('foreground run target-conversation execution context', () => {
         new Promise<Awaited<ReturnType<typeof runOrchestrator>>>((resolve) => {
           callbacksByConversation.set(options.conversationId, callbacks);
           releaseByConversation.set(options.conversationId, () =>
-            resolve({ terminalDisposition: 'final_candidate' }),
+            resolve({ terminalDisposition: 'command' }),
           );
         }),
     );

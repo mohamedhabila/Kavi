@@ -14,7 +14,10 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { SubAgentDetailModal } from '../components/agents/SubAgentDetailModal';
 import { ApprovalBanner } from '../components/approval/ApprovalBanner';
 import { ProactiveTaskSuggestionBanner } from '../components/chat/ProactiveTaskSuggestionBanner';
-import { type EnsureAgentRunFinalResponse } from '../engine/graph/foregroundRun/contracts';
+import {
+  type AssistantDraftMode,
+  type EnsureAgentRunFinalResponse,
+} from '../engine/graph/foregroundRun/contracts';
 import { useConversationGraphController } from '../engine/graph/conversation/useConversationGraphController';
 import { useForegroundConversationActions } from '../engine/graph/foregroundRun/useForegroundConversationActions';
 import { useForegroundRunRecoveryEffects } from '../engine/graph/foregroundRun/useForegroundRunRecoveryEffects';
@@ -154,7 +157,7 @@ export const ChatScreen: React.FC = () => {
         additionalSystemPrompt: string;
         additionalUserPrompt?: string;
         disableTools?: boolean;
-        reuseAssistantDraft?: boolean;
+        assistantDraftMode: AssistantDraftMode;
         initialPendingAsyncOperations?: AgentRunAsyncOperation[];
       }) => Promise<void>)
     | null

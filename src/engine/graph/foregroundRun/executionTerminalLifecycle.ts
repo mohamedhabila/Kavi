@@ -42,7 +42,6 @@ type RuntimeTerminalLifecycleParams = Pick<
   flushPendingSurfacedSubAgentOutputs: () => void;
   getCurrentAssistantMessageId: () => string;
   mutableState: ForegroundRunMutableState;
-  memoryConversationId: string;
   runId?: string;
   runStartedAt: number;
   trackedRunStore: ReturnType<typeof createForegroundTrackedRunStore>;
@@ -61,7 +60,6 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
     getCurrentAssistantMessageId,
     getCurrentConversation,
     mutableState,
-    memoryConversationId,
     runId,
     runStartedAt,
     wrapResumeAgentRun,
@@ -136,6 +134,9 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
     getCurrentAssistantMessageId,
     getVisibleAssistantContent: () => assistantStream.getVisibleAssistantContent(),
     markCurrentAssistantPendingReview: ({ currentAssistantMessageId, visibleContent }) => {
+      if (!runId) {
+        return;
+      }
       applyForegroundAssistantDraftIncomplete({
         finishReason: 'terminal_review_pending',
         messageId: currentAssistantMessageId,
@@ -224,19 +225,6 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
             completionReview.completionTerminalReason,
           );
         },
-        recordConversationTurnMemory: () =>
-          shared.helpers.recordConversationTurnMemory(
-            conversationId,
-            {
-              ...finalizationProviderContext.provider,
-              model: finalizationProviderContext.model,
-            },
-            {
-              sourceEndMessageId: getCurrentAssistantMessageId(),
-              memoryConversationId,
-              sourceRunId: runId,
-            },
-          ),
         reviewCompletion: () =>
           reviewForegroundRunCompletion({
             appendConversationLog: shared.helpers.appendConversationLog,
@@ -251,6 +239,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
             turnSummary,
             updateAgentRunControlGraph: shared.store.updateAgentRunControlGraph,
             updateAgentRunSummary: shared.store.updateAgentRunSummary,
+            updateMessageAssistantMetadata: shared.store.updateMessageAssistantMetadata,
             setAgentRunPhase: shared.store.setAgentRunPhase,
           }),
         trackedRunState,
