@@ -98,6 +98,11 @@ function buildLongThread(turnPairs: number, baseTs: number): Message[] {
       role: 'assistant',
       content: asstContent,
       timestamp: asstTs,
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'stop',
+      },
     } as Message);
   }
   return messages;

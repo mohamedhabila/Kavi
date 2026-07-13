@@ -52,7 +52,17 @@ function userMsg(id: string, ts: number, content = `u-${id}`): Message {
 }
 
 function asstMsg(id: string, ts: number, content = `a-${id}`): Message {
-  return { id, role: 'assistant', content, timestamp: ts } as Message;
+  return {
+    id,
+    role: 'assistant',
+    content,
+    timestamp: ts,
+    assistantMetadata: {
+      kind: 'final',
+      completionStatus: 'complete',
+      finishReason: 'stop',
+    },
+  } as Message;
 }
 
 function buildTranscript(turns: number, anchorTs = 1_000): Message[] {
