@@ -32,9 +32,10 @@ function assertCompletePublicationFinal(messages: readonly Message[], finalIndex
   }
 
   for (let index = finalIndex + 1; index < messages.length; index += 1) {
-    const role = messages[index]?.role;
+    const message = messages[index];
+    const role = message?.role;
     if (role === 'user') return;
-    if (role === 'assistant' || role === 'tool') {
+    if ((role === 'assistant' && !message?.subAgentEvent) || role === 'tool') {
       fail('chat_message_memory_publication_turn_not_terminal');
     }
   }

@@ -26,9 +26,7 @@ function final(
       completionStatus: 'complete',
       finishReason: 'stop',
     },
-    ...(disposition !== undefined
-      ? { memoryPublication: { version: 1, disposition } }
-      : {}),
+    ...(disposition !== undefined ? { memoryPublication: { version: 1, disposition } } : {}),
   });
 }
 
@@ -63,7 +61,11 @@ describe('chat message memory publication guards', () => {
   });
 
   test('protects the complete prefix when a source has no preceding user', () => {
-    const messages = [message('system-1', 'system'), message('assistant-1', 'assistant'), final('final-1', null)];
+    const messages = [
+      message('system-1', 'system'),
+      message('assistant-1', 'assistant'),
+      final('final-1', null),
+    ];
 
     expect([...getOpenMemoryPublicationTurnMessageIds(messages)]).toEqual([
       'system-1',
@@ -74,13 +76,13 @@ describe('chat message memory publication guards', () => {
 
   test('fails closed for invalid, duplicate, or structurally incomplete sources', () => {
     expect(() =>
-      getOpenMemoryPublicationTurnMessageIds([
-        message('same-id', 'user'),
-        final('same-id', null),
-      ]),
+      getOpenMemoryPublicationTurnMessageIds([message('same-id', 'user'), final('same-id', null)]),
     ).toThrow('chat_message_memory_publication_identity_invalid');
     expect(() =>
-      getOpenMemoryPublicationTurnMessageIds([message('invalid id', 'user'), final('final-1', null)]),
+      getOpenMemoryPublicationTurnMessageIds([
+        message('invalid id', 'user'),
+        final('final-1', null),
+      ]),
     ).toThrow('chat_message_memory_publication_identity_invalid');
     expect(() =>
       getOpenMemoryPublicationTurnMessageIds([
@@ -91,11 +93,61 @@ describe('chat message memory publication guards', () => {
     ).toThrow('chat_message_memory_publication_turn_not_terminal');
   });
 
-  test('does not impose publication identity rules on receipt-free historical messages', () => {
-    const historical = [
-      message('legacy duplicate', 'user'),
-      final('legacy duplicate', undefined),
+  test('treats later sub-agent events as observations rather than assistant projections', () => {
+    const messages = [
+      message('user-1', 'user'),
+      final('final-1', null),
+      message('worker-event-1', 'assistant', {
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'completed',
+          snapshot: {
+            sessionId: 'worker-1',
+            parentConversationId: 'conversation-1',
+            depth: 1,
+            startedAt: 1,
+            updatedAt: 2,
+            status: 'completed',
+            sandboxPolicy: 'inherit',
+          },
+        },
+      }),
     ];
+
+    expect([...getOpenMemoryPublicationTurnMessageIds(messages)]).toEqual(['user-1', 'final-1']);
+    expect([...getMemoryPublicationMutationLockedMessageIds(messages)]).toEqual([
+      'user-1',
+      'final-1',
+    ]);
+  });
+
+  test('still rejects a later owning assistant projection after sub-agent observations', () => {
+    expect(() =>
+      getOpenMemoryPublicationTurnMessageIds([
+        message('user-1', 'user'),
+        final('final-1', null),
+        message('worker-event-1', 'assistant', {
+          subAgentEvent: {
+            type: 'sub-agent',
+            event: 'completed',
+            snapshot: {
+              sessionId: 'worker-1',
+              parentConversationId: 'conversation-1',
+              depth: 1,
+              startedAt: 1,
+              updatedAt: 2,
+              status: 'completed',
+              sandboxPolicy: 'inherit',
+            },
+          },
+        }),
+        message('assistant-later', 'assistant'),
+      ]),
+    ).toThrow('chat_message_memory_publication_turn_not_terminal');
+  });
+
+  test('does not impose publication identity rules on receipt-free historical messages', () => {
+    const historical = [message('legacy duplicate', 'user'), final('legacy duplicate', undefined)];
 
     expect([...getOpenMemoryPublicationTurnMessageIds(historical)]).toEqual([]);
     expect([...getMemoryPublicationMutationLockedMessageIds(historical)]).toEqual([]);
@@ -172,9 +224,9 @@ describe('chat message memory publication guards', () => {
         toolCalls: [{ ...right.toolCalls![0]!, result: 'changed' }],
       }),
     ).toBe(false);
-    expect(
-      areMemoryIngestionSnapshotRelevantFieldsEqual(left, { ...right, attachments: [] }),
-    ).toBe(false);
+    expect(areMemoryIngestionSnapshotRelevantFieldsEqual(left, { ...right, attachments: [] })).toBe(
+      false,
+    );
     expect(
       areMemoryIngestionSnapshotRelevantFieldsEqual(left, {
         ...right,
