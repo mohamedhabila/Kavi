@@ -233,6 +233,29 @@ describe('fact explicit override schema', () => {
     expect(overrideCount()).toBe(0);
   });
 
+  it('stores semantic invalidation time before a later logical ordering clock', () => {
+    ensureFactSchema();
+    const fact = seedFact();
+
+    insertOverride(fact.id, requireOwner(fact), {
+      explicitInvalidatedAt: 150,
+      createdAt: 200,
+      updatedAt: 250,
+    });
+
+    expect(
+      getMemoryDb().getFirstSync<{
+        explicit_invalidated_at: number;
+        created_at: number;
+        updated_at: number;
+      }>(
+        `SELECT explicit_invalidated_at, created_at, updated_at
+           FROM memory_fact_explicit_overrides WHERE fact_id = ?`,
+        fact.id,
+      ),
+    ).toEqual({ explicit_invalidated_at: 150, created_at: 200, updated_at: 250 });
+  });
+
   it('enforces the live parent owner and immutable target identity', () => {
     ensureFactSchema();
     const fact = seedFact();

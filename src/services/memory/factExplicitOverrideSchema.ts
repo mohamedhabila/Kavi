@@ -84,7 +84,7 @@ export function ensureFactExplicitOverrideSchema(db: MemoryDb): void {
         ),
         CHECK(
           explicit_invalidated_at IS NULL
-          OR explicit_invalidated_at BETWEEN created_at AND updated_at
+          OR explicit_invalidated_at <= updated_at
         ),
         CHECK(
           pinned_override IS NOT NULL

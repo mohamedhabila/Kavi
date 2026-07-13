@@ -24,6 +24,15 @@ import { useSettingsStore } from '../../src/store/useSettingsStore';
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 let subjectIndex = 0;
 
+function explicitOverrideCount(factId: string): number {
+  return (
+    getMemoryDb().getFirstSync<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM memory_fact_explicit_overrides WHERE fact_id = ?',
+      factId,
+    )?.count ?? 0
+  );
+}
+
 function seedFact(input: {
   scope: 'global' | 'persona' | 'conversation' | 'project' | 'session';
   personaId?: string;
@@ -200,6 +209,7 @@ describe('raw memory tool executor fact action authorization', () => {
 
     expect(result).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(seeded.id)?.pinned).toBe(false);
+    expect(explicitOverrideCount(seeded.id)).toBe(0);
   });
 
   it('applies the same exact-scope authorization to unpin and invalidate', async () => {
@@ -234,6 +244,7 @@ describe('raw memory tool executor fact action authorization', () => {
     expect(getFactById(unpinFact.id)?.pinned).toBe(true);
     expect(deniedInvalidate).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(invalidateFact.id)?.invalidAt).toBeNull();
+    expect(explicitOverrideCount(invalidateFact.id)).toBe(0);
   });
 
   it('denies a fact whose durable vault owner does not match the current local owner', async () => {
@@ -247,6 +258,7 @@ describe('raw memory tool executor fact action authorization', () => {
 
     expect(result).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(fact.id)?.pinned).toBe(false);
+    expect(explicitOverrideCount(fact.id)).toBe(0);
   });
 
   it.each([

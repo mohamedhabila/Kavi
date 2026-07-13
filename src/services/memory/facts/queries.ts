@@ -594,3 +594,21 @@ export function getFactById(id: string): MemoryFact | null {
   const row = getOne<FactRow>(`SELECT * FROM memory_facts WHERE id = ? LIMIT 1`, id);
   return row ? rowToFact(row) : null;
 }
+
+/** Direct-id recall read. Explicit user invalidation is an unconditional applicability fence. */
+export function getFactByIdForRecallCandidate(id: string): MemoryFact | null {
+  const row = getOne<FactRow>(
+    `SELECT fact.*
+       FROM memory_facts AS fact
+      WHERE fact.id = ?
+        AND NOT EXISTS (
+          SELECT 1
+            FROM memory_fact_explicit_overrides AS explicit_override
+           WHERE explicit_override.fact_id = fact.id
+             AND explicit_override.explicit_invalidated_at IS NOT NULL
+        )
+      LIMIT 1`,
+    id,
+  );
+  return row ? rowToFact(row) : null;
+}

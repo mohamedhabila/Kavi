@@ -7,16 +7,18 @@ import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNot
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
-  FactExplicitOverrideMutationError,
   invalidateManagedMemoryFact,
   invalidateScopedMemoryFact,
-  loadFactExplicitOverrideInTransaction,
-  overlayFactExplicitApplicabilityInTransaction,
   raiseScopedMemoryFactSensitivityFloor,
   setManagedMemoryFactPinned,
   setScopedMemoryFactPinned,
   setScopedMemoryFactReviewState,
 } from '../../../src/services/memory/factExplicitOverrides';
+import {
+  FactExplicitOverrideMutationError,
+  loadFactExplicitOverrideInTransaction,
+  overlayFactExplicitProjectionInTransaction,
+} from '../../../src/services/memory/factExplicitOverrideState';
 import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
 import type { MemoryFact, MemoryFactScope } from '../../../src/services/memory/facts/types';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
@@ -680,12 +682,13 @@ describe('canonical fact explicit overrides', () => {
     });
 
     expect(
-      overlayFactExplicitApplicabilityInTransaction({
+      overlayFactExplicitProjectionInTransaction({
         factId: fact.id,
+        derivedPinned: false,
         derivedReviewState: 'rejected',
         derivedSensitivity: 'normal',
       }),
-    ).toEqual({ reviewState: 'verified', sensitivity: 'sensitive' });
+    ).toEqual({ pinned: false, reviewState: 'verified', sensitivity: 'sensitive' });
     expect(loadFactExplicitOverrideInTransaction(fact.id)).toMatchObject({
       reviewStateAt: 200,
       sensitivityFloorAt: 210,

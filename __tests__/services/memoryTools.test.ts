@@ -7,13 +7,14 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb } from '../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { findEntityByName } from '../../src/services/memory/entities';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import {
   queryMemoryFactsForManagement,
+  executeMemoryRecall,
   executeMemoryRemember,
   executeMemoryPin,
   executeMemoryUnpin,
@@ -42,6 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
   useSettingsStore.setState({ disableLongTermMemory: false });
@@ -62,6 +64,18 @@ function rememberOk(
   const result = executeMemoryRemember(args, context);
   if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result)}`);
   return result;
+}
+
+function explicitOverride(factId: string) {
+  return getMemoryDb().getFirstSync<{
+    pinned_override: number | null;
+    pinned_at: number | null;
+    explicit_invalidated_at: number | null;
+  }>(
+    `SELECT pinned_override, pinned_at, explicit_invalidated_at
+       FROM memory_fact_explicit_overrides WHERE fact_id = ? LIMIT 1`,
+    factId,
+  );
 }
 
 describe('executeMemoryRemember', () => {
@@ -202,9 +216,7 @@ describe('executeMemoryRemember', () => {
     expect(next).toMatchObject({ ok: false, code: 'grounding_required' });
     expect(
       queryMemoryFactsForManagement({ subject: 'user', predicate: 'Preferred_Display_Name' }),
-    ).toMatchObject(
-      { ok: true, facts: [expect.objectContaining({ value: 'Berlin' })] },
-    );
+    ).toMatchObject({ ok: true, facts: [expect.objectContaining({ value: 'Berlin' })] });
   });
 
   it('rejects laundering a current fact into a different durable scope', () => {
@@ -393,13 +405,65 @@ describe('executeMemoryPin / executeMemoryUnpin', () => {
       { subject: 'user', predicate: 'Preferred_Display_Name', value: 'Berlin', scope: 'global' },
       groundedRequest('user-pin-lives', 'My preferred display name is Berlin.'),
     );
+    const actionNow = Date.now() + 1_000;
+    jest.spyOn(Date, 'now').mockReturnValue(actionNow);
     const pinned = executeMemoryPin({ factId: created.fact.id }, MEMORY_ACTION_SCOPE);
     expect(pinned.ok).toBe(true);
     if (pinned.ok) expect(pinned.fact.pinned).toBe(true);
+    expect(explicitOverride(created.fact.id)).toMatchObject({
+      pinned_override: 1,
+      pinned_at: actionNow,
+    });
 
     const unpinned = executeMemoryUnpin({ factId: created.fact.id }, MEMORY_ACTION_SCOPE);
     expect(unpinned.ok).toBe(true);
     if (unpinned.ok) expect(unpinned.fact.pinned).toBe(false);
+    expect(explicitOverride(created.fact.id)).toMatchObject({
+      pinned_override: 0,
+      pinned_at: actionNow + 1,
+    });
+  });
+
+  it('validates arguments before disabled-memory policy and performs no disabled writes', () => {
+    const created = rememberOk(
+      { subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' },
+      groundedRequest('user-disabled-actions-role', 'My role is Engineer.'),
+    );
+    useSettingsStore.setState({ disableLongTermMemory: true });
+
+    expect(executeMemoryPin({ factId: ' ' }, MEMORY_ACTION_SCOPE)).toMatchObject({
+      ok: false,
+      code: 'invalid_args',
+    });
+    for (const result of [
+      executeMemoryPin({ factId: created.fact.id }, MEMORY_ACTION_SCOPE),
+      executeMemoryUnpin({ factId: created.fact.id }, MEMORY_ACTION_SCOPE),
+      executeMemoryInvalidate({ factId: created.fact.id }, MEMORY_ACTION_SCOPE),
+    ]) {
+      expect(result).toMatchObject({ ok: false, code: 'memory_disabled' });
+    }
+    expect(explicitOverride(created.fact.id)).toBeNull();
+    expect(
+      getMemoryDb().getFirstSync<{ pinned: number; invalid_at: number | null }>(
+        'SELECT pinned, invalid_at FROM memory_facts WHERE id = ?',
+        created.fact.id,
+      ),
+    ).toEqual({ pinned: 0, invalid_at: null });
+  });
+
+  it('rejects a malformed execution scope before creating explicit intent', () => {
+    const created = rememberOk(
+      { subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' },
+      groundedRequest('user-invalid-action-scope-role', 'My role is Engineer.'),
+    );
+
+    expect(
+      executeMemoryPin(
+        { factId: created.fact.id },
+        { ...MEMORY_ACTION_SCOPE, sourceThreadId: ' thread-request ' },
+      ),
+    ).toMatchObject({ ok: false, code: 'invalid_args' });
+    expect(explicitOverride(created.fact.id)).toBeNull();
   });
 
   it('returns not_found for unknown id', () => {
@@ -430,6 +494,23 @@ describe('executeMemoryPin / executeMemoryUnpin', () => {
       ok: true,
       fact: { id: created.fact.id, pinned: true },
     });
+  });
+
+  it('rejects a foreign-owner fact from whole-vault pin management', () => {
+    const created = rememberOk(
+      { subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' },
+      groundedRequest('user-foreign-owner-role', 'My role is Engineer.'),
+    );
+    getMemoryDb().runSync(
+      "UPDATE memory_facts SET memory_owner_id = 'foreign-owner' WHERE id = ?",
+      created.fact.id,
+    );
+
+    expect(setMemoryFactPinnedForManagement({ factId: created.fact.id }, true)).toMatchObject({
+      ok: false,
+      code: 'permission_denied',
+    });
+    expect(explicitOverride(created.fact.id)).toBeNull();
   });
 });
 
@@ -468,6 +549,8 @@ describe('executeMemoryForget', () => {
       { subject: 'user', predicate: 'Preferred_Display_Name', value: 'Berlin', scope: 'global' },
       groundedRequest('user-invalidate-lives', 'My preferred display name is Berlin.'),
     );
+    const firstInvalidatedAt = Date.now() + 1_000;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(firstInvalidatedAt);
     const result = executeMemoryInvalidate({ factId: created.fact.id }, MEMORY_ACTION_SCOPE);
     expect(result).toEqual(
       expect.objectContaining({
@@ -477,6 +560,17 @@ describe('executeMemoryForget', () => {
         status: 'invalidated',
       }),
     );
+    now.mockReturnValue(firstInvalidatedAt + 1_000);
+    expect(executeMemoryInvalidate({ factId: created.fact.id }, MEMORY_ACTION_SCOPE)).toMatchObject(
+      {
+        ok: true,
+        invalidatedAt: firstInvalidatedAt,
+        status: 'invalidated',
+      },
+    );
+    expect(explicitOverride(created.fact.id)).toMatchObject({
+      explicit_invalidated_at: firstInvalidatedAt,
+    });
     const recall = queryMemoryFactsForManagement({ all: true, includeHistory: true });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
@@ -484,6 +578,74 @@ describe('executeMemoryForget', () => {
         expect.objectContaining({ value: 'Berlin', invalidAt: expect.any(Number) }),
       ]);
     }
+  });
+
+  it('does not relabel a system-invalidated fact as explicit user intent', () => {
+    const created = rememberOk(
+      { subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' },
+      groundedRequest('user-system-invalid-role', 'My role is Engineer.'),
+    );
+    const invalidatedAt = Date.now();
+    getMemoryDb().runSync(
+      'UPDATE memory_facts SET invalid_at = ?, updated_at = ? WHERE id = ?',
+      invalidatedAt,
+      invalidatedAt,
+      created.fact.id,
+    );
+
+    expect(executeMemoryInvalidate({ factId: created.fact.id }, MEMORY_ACTION_SCOPE)).toMatchObject(
+      {
+        ok: false,
+        code: 'not_found',
+      },
+    );
+    expect(explicitOverride(created.fact.id)).toBeNull();
+  });
+
+  it('keeps invalidation immediate while advancing logical order past a regressed clock', () => {
+    const created = rememberOk(
+      { subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' },
+      groundedRequest('user-clock-skew-role', 'My role is Engineer.'),
+    );
+    const durableNow = Date.now() + 10_000;
+    const semanticNow = durableNow - 5_000;
+    getMemoryDb().runSync(
+      'UPDATE memory_facts SET updated_at = ? WHERE id = ?',
+      durableNow,
+      created.fact.id,
+    );
+    const now = jest.spyOn(Date, 'now').mockReturnValue(semanticNow);
+
+    expect(executeMemoryInvalidate({ factId: created.fact.id }, MEMORY_ACTION_SCOPE)).toMatchObject(
+      {
+        ok: true,
+        status: 'invalidated',
+        invalidatedAt: semanticNow,
+      },
+    );
+    expect(explicitOverride(created.fact.id)).toMatchObject({
+      explicit_invalidated_at: semanticNow,
+    });
+    expect(
+      getMemoryDb().getFirstSync<{ invalid_at: number; updated_at: number }>(
+        'SELECT invalid_at, updated_at FROM memory_facts WHERE id = ?',
+        created.fact.id,
+      ),
+    ).toEqual({ invalid_at: semanticNow, updated_at: durableNow });
+
+    now.mockReturnValue(semanticNow - 1_000);
+    expect(executeMemoryInvalidate({ factId: created.fact.id }, MEMORY_ACTION_SCOPE)).toMatchObject(
+      {
+        ok: true,
+        status: 'invalidated',
+        invalidatedAt: semanticNow,
+      },
+    );
+    const recall = executeMemoryRecall(
+      { all: true },
+      { ...MEMORY_ACTION_SCOPE, now: semanticNow - 1_000 },
+    );
+    expect(recall).toMatchObject({ ok: true, facts: [] });
   });
 
   it('keeps whole-vault UI withdrawal on an explicit non-agent path', () => {

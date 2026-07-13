@@ -2,7 +2,6 @@ import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/
 import { getSchemaReadyMemoryDb, type MemoryDatabase } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 import {
-  closedMemoryFactReviewState,
   closedMemoryFactSensitivity,
   requireMemoryFactReviewState,
   requireMemoryFactSensitivity,
@@ -10,6 +9,12 @@ import {
   type MemoryFactSensitivity,
 } from './facts/applicabilityProvenance';
 import { rowToFact, type FactRow, type MemoryFact } from './facts/types';
+import {
+  FactExplicitOverrideMutationError,
+  loadFactExplicitOverrideInTransaction,
+  type FactExplicitOverride,
+  type FactExplicitOverrideMutationErrorCode,
+} from './factExplicitOverrideState';
 import { canManageMemoryFactFromScope } from './memoryFactActionAuthorization';
 import {
   maxMemoryFactSensitivity,
@@ -21,57 +26,6 @@ import {
   type RequiredMemoryAccessScopeIdentity,
 } from './memoryScopeIdentity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
-
-export type FactExplicitOverrideMutationErrorCode =
-  | 'clock_invalid'
-  | 'clock_regression'
-  | 'fact_invalid'
-  | 'pinned_invalid'
-  | 'not_found'
-  | 'owner_mismatch'
-  | 'scope_mismatch'
-  | 'inactive'
-  | 'already_invalidated'
-  | 'projection_update_failed'
-  | 'override_corrupt';
-
-export class FactExplicitOverrideMutationError extends Error {
-  readonly code: FactExplicitOverrideMutationErrorCode;
-
-  constructor(code: FactExplicitOverrideMutationErrorCode) {
-    super(`memory_fact_explicit_override_${code}`);
-    this.name = 'FactExplicitOverrideMutationError';
-    this.code = code;
-  }
-}
-
-export interface FactExplicitOverride {
-  factId: string;
-  memoryOwnerId: string;
-  pinnedOverride: boolean | null;
-  pinnedAt: number | null;
-  reviewStateOverride: MemoryFactReviewState | null;
-  reviewStateAt: number | null;
-  sensitivityFloor: MemoryFactSensitivity | null;
-  sensitivityFloorAt: number | null;
-  explicitInvalidatedAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface FactExplicitOverrideRow {
-  fact_id: string;
-  memory_owner_id: string;
-  pinned_override: number | null;
-  pinned_at: number | null;
-  review_state_override: string | null;
-  review_state_at: number | null;
-  sensitivity_floor: string | null;
-  sensitivity_floor_at: number | null;
-  explicit_invalidated_at: number | null;
-  created_at: number;
-  updated_at: number;
-}
 
 interface AuthorizedFact {
   db: MemoryDatabase;
@@ -99,6 +53,10 @@ function requireClock(value: number): number {
   return value;
 }
 
+function optionalClock(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : requireClock(value);
+}
+
 function requireFactId(value: string): string {
   if (
     typeof value !== 'string' ||
@@ -114,87 +72,6 @@ function requireFactId(value: string): string {
 function requirePinned(value: unknown): boolean {
   if (typeof value !== 'boolean') fail('pinned_invalid');
   return value;
-}
-
-function nullableClock(value: unknown): number | null {
-  if (value === null) return null;
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : fail('override_corrupt');
-}
-
-function decodeOverride(row: FactExplicitOverrideRow): FactExplicitOverride {
-  const pinnedAt = nullableClock(row.pinned_at);
-  const reviewStateAt = nullableClock(row.review_state_at);
-  const sensitivityFloorAt = nullableClock(row.sensitivity_floor_at);
-  const explicitInvalidatedAt = nullableClock(row.explicit_invalidated_at);
-  const createdAt = nullableClock(row.created_at) ?? fail('override_corrupt');
-  const updatedAt = nullableClock(row.updated_at) ?? fail('override_corrupt');
-  const pinnedOverride =
-    row.pinned_override === null
-      ? null
-      : row.pinned_override === 0
-        ? false
-        : row.pinned_override === 1
-          ? true
-          : fail('override_corrupt');
-  const reviewStateOverride =
-    row.review_state_override === null
-      ? null
-      : (closedMemoryFactReviewState(row.review_state_override) ?? fail('override_corrupt'));
-  const sensitivityFloor =
-    row.sensitivity_floor === null
-      ? null
-      : (closedMemoryFactSensitivity(row.sensitivity_floor) ?? fail('override_corrupt'));
-  if (
-    !row.fact_id ||
-    !row.memory_owner_id ||
-    (pinnedOverride === null) !== (pinnedAt === null) ||
-    (reviewStateOverride === null) !== (reviewStateAt === null) ||
-    (sensitivityFloor === null) !== (sensitivityFloorAt === null) ||
-    createdAt > updatedAt ||
-    [pinnedAt, reviewStateAt, sensitivityFloorAt, explicitInvalidatedAt].some(
-      (clock) => clock !== null && (clock < createdAt || clock > updatedAt),
-    )
-  ) {
-    fail('override_corrupt');
-  }
-  return {
-    factId: row.fact_id,
-    memoryOwnerId: row.memory_owner_id,
-    pinnedOverride,
-    pinnedAt,
-    reviewStateOverride,
-    reviewStateAt,
-    sensitivityFloor,
-    sensitivityFloorAt,
-    explicitInvalidatedAt,
-    createdAt,
-    updatedAt,
-  };
-}
-
-/** Read canonical explicit intent. Callers that merge projections must already own a transaction. */
-export function loadFactExplicitOverrideInTransaction(factId: string): FactExplicitOverride | null {
-  const row = getSchemaReadyMemoryDb().getFirstSync<FactExplicitOverrideRow>(
-    'SELECT * FROM memory_fact_explicit_overrides WHERE fact_id = ? LIMIT 1',
-    requireFactId(factId),
-  );
-  return row ? decodeOverride(row) : null;
-}
-
-export function overlayFactExplicitApplicabilityInTransaction(input: {
-  factId: string;
-  derivedReviewState: MemoryFactReviewState;
-  derivedSensitivity: MemoryFactSensitivity;
-}): { reviewState: MemoryFactReviewState; sensitivity: MemoryFactSensitivity } {
-  const override = loadFactExplicitOverrideInTransaction(input.factId);
-  return {
-    reviewState: override?.reviewStateOverride ?? input.derivedReviewState,
-    sensitivity: override?.sensitivityFloor
-      ? maxMemoryFactSensitivity(input.derivedSensitivity, override.sensitivityFloor)
-      : input.derivedSensitivity,
-  };
 }
 
 function loadFact(db: MemoryDatabase, factId: string): FactRow {
@@ -259,6 +136,50 @@ function requireActiveAt(row: FactRow, now: number): void {
   ) {
     fail('inactive');
   }
+}
+
+interface MutationClock {
+  semanticAt: number;
+  orderingAt: number;
+}
+
+function mutationClock(
+  target: AuthorizedFact,
+  previous: FactExplicitOverride | null,
+  requestedNow: number | undefined,
+): MutationClock {
+  const semanticAt = requireClock(requestedNow ?? Date.now());
+  return {
+    semanticAt,
+    orderingAt:
+      requestedNow !== undefined
+        ? semanticAt
+        : requireClock(
+            Math.max(
+              semanticAt,
+              target.row.created_at,
+              target.row.updated_at,
+              previous?.createdAt ?? 0,
+              previous?.updatedAt ?? 0,
+            ),
+          ),
+  };
+}
+
+function changedFieldClock(
+  observedNow: number,
+  requestedNow: number | undefined,
+  previousFieldClock: number | null | undefined,
+): number {
+  if (
+    requestedNow !== undefined ||
+    previousFieldClock === null ||
+    previousFieldClock === undefined ||
+    observedNow > previousFieldClock
+  ) {
+    return observedNow;
+  }
+  return requireClock(previousFieldClock + 1);
 }
 
 function emptyOverride(target: AuthorizedFact, now: number): FactExplicitOverride {
@@ -404,10 +325,9 @@ function setSensitivityProjection(target: AuthorizedFact, floor: MemoryFactSensi
 function setPinned(
   target: AuthorizedFact,
   pinned: boolean,
-  now: number,
+  requestedNow: number | undefined,
 ): FactExplicitOverrideMutationResult {
   requireTemporalShape(target.row);
-  if (now < target.row.created_at) fail('clock_regression');
   const previous = loadFactExplicitOverrideInTransaction(target.fact.id);
   if (previous?.pinnedOverride === pinned) {
     const repaired = setPinnedProjection(target, pinned);
@@ -418,6 +338,9 @@ function setPinned(
       override: previous,
     };
   }
+  const clock = mutationClock(target, previous, requestedNow);
+  const now = changedFieldClock(clock.orderingAt, requestedNow, previous?.pinnedAt);
+  if (now < target.row.created_at) fail('clock_regression');
   if (previous?.pinnedAt !== null && previous?.pinnedAt !== undefined && now <= previous.pinnedAt) {
     fail('clock_regression');
   }
@@ -436,10 +359,15 @@ function setPinned(
 function setReviewState(
   target: AuthorizedFact,
   reviewState: MemoryFactReviewState,
-  now: number,
+  requestedNow: number | undefined,
 ): FactExplicitOverrideMutationResult {
-  requireActiveAt(target.row, now);
+  requireTemporalShape(target.row);
   const previous = loadFactExplicitOverrideInTransaction(target.fact.id);
+  if (previous?.explicitInvalidatedAt !== null && previous?.explicitInvalidatedAt !== undefined) {
+    fail('inactive');
+  }
+  const clock = mutationClock(target, previous, requestedNow);
+  requireActiveAt(target.row, clock.semanticAt);
   if (previous?.reviewStateOverride === reviewState) {
     const repaired = setReviewStateProjection(target, reviewState);
     if (repaired) notifyAfterCommit(target);
@@ -449,6 +377,7 @@ function setReviewState(
       override: previous,
     };
   }
+  const now = changedFieldClock(clock.orderingAt, requestedNow, previous?.reviewStateAt);
   if (
     previous?.reviewStateAt !== null &&
     previous?.reviewStateAt !== undefined &&
@@ -475,10 +404,15 @@ function sensitivityRank(value: MemoryFactSensitivity): number {
 function raiseSensitivityFloor(
   target: AuthorizedFact,
   requestedFloor: MemoryFactSensitivity,
-  now: number,
+  requestedNow: number | undefined,
 ): FactExplicitOverrideMutationResult {
-  requireActiveAt(target.row, now);
+  requireTemporalShape(target.row);
   const previous = loadFactExplicitOverrideInTransaction(target.fact.id);
+  if (previous?.explicitInvalidatedAt !== null && previous?.explicitInvalidatedAt !== undefined) {
+    fail('inactive');
+  }
+  const clock = mutationClock(target, previous, requestedNow);
+  requireActiveAt(target.row, clock.semanticAt);
   if (
     previous?.sensitivityFloor &&
     sensitivityRank(previous.sensitivityFloor) >= sensitivityRank(requestedFloor)
@@ -491,6 +425,7 @@ function raiseSensitivityFloor(
       override: previous,
     };
   }
+  const now = changedFieldClock(clock.orderingAt, requestedNow, previous?.sensitivityFloorAt);
   if (
     previous?.sensitivityFloorAt !== null &&
     previous?.sensitivityFloorAt !== undefined &&
@@ -510,7 +445,10 @@ function raiseSensitivityFloor(
   return { status: 'updated', fact, override: next };
 }
 
-function invalidate(target: AuthorizedFact, now: number): FactExplicitInvalidationResult {
+function invalidate(
+  target: AuthorizedFact,
+  requestedNow: number | undefined,
+): FactExplicitInvalidationResult {
   requireTemporalShape(target.row);
   const previous = loadFactExplicitOverrideInTransaction(target.fact.id);
   if (previous?.explicitInvalidatedAt !== null && previous?.explicitInvalidatedAt !== undefined) {
@@ -539,26 +477,27 @@ function invalidate(target: AuthorizedFact, now: number): FactExplicitInvalidati
     };
   }
   if (target.row.invalid_at !== null) fail('already_invalidated');
-  if (!Number.isSafeInteger(target.row.updated_at) || now < target.row.updated_at) {
+  const clock = mutationClock(target, previous, requestedNow);
+  if (!Number.isSafeInteger(target.row.updated_at) || clock.orderingAt < target.row.updated_at) {
     fail('clock_regression');
   }
-  const { next } = updatedOverride(target, now, (current) => ({
+  const { next } = updatedOverride(target, clock.orderingAt, (current) => ({
     ...current,
-    explicitInvalidatedAt: now,
-    updatedAt: Math.max(current.updatedAt, now),
+    explicitInvalidatedAt: clock.semanticAt,
+    updatedAt: Math.max(current.updatedAt, clock.orderingAt),
   }));
   const result = target.db.runSync(
     `UPDATE memory_facts SET invalid_at = ?, updated_at = ?
       WHERE id = ? AND memory_owner_id = ? AND invalid_at IS NULL AND deleted_at IS NULL`,
-    now,
-    now,
+    clock.semanticAt,
+    clock.orderingAt,
     target.fact.id,
     target.memoryOwnerId,
   );
   if ((result.changes ?? 0) !== 1) fail('projection_update_failed');
   const fact = rereadFact(target);
   notifyAfterCommit(target);
-  return { status: 'updated', fact, override: next, invalidatedAt: now };
+  return { status: 'updated', fact, override: next, invalidatedAt: clock.semanticAt };
 }
 
 export function setScopedMemoryFactPinned(input: {
@@ -569,9 +508,9 @@ export function setScopedMemoryFactPinned(input: {
 }): FactExplicitOverrideMutationResult {
   const factId = requireFactId(input.factId);
   const pinned = requirePinned(input.pinned);
-  const now = requireClock(input.now ?? Date.now());
+  const requestedNow = optionalClock(input.now);
   return runMemoryTransaction(() =>
-    setPinned(authorizeScopedFact(factId, input.currentScope), pinned, now),
+    setPinned(authorizeScopedFact(factId, input.currentScope), pinned, requestedNow),
   );
 }
 
@@ -582,8 +521,8 @@ export function setManagedMemoryFactPinned(input: {
 }): FactExplicitOverrideMutationResult {
   const factId = requireFactId(input.factId);
   const pinned = requirePinned(input.pinned);
-  const now = requireClock(input.now ?? Date.now());
-  return runMemoryTransaction(() => setPinned(authorizeManagedFact(factId), pinned, now));
+  const requestedNow = optionalClock(input.now);
+  return runMemoryTransaction(() => setPinned(authorizeManagedFact(factId), pinned, requestedNow));
 }
 
 export function setScopedMemoryFactReviewState(input: {
@@ -594,9 +533,9 @@ export function setScopedMemoryFactReviewState(input: {
 }): FactExplicitOverrideMutationResult {
   const factId = requireFactId(input.factId);
   const reviewState = requireMemoryFactReviewState(input.reviewState);
-  const now = requireClock(input.now ?? Date.now());
+  const requestedNow = optionalClock(input.now);
   return runMemoryTransaction(() =>
-    setReviewState(authorizeScopedFact(factId, input.currentScope), reviewState, now),
+    setReviewState(authorizeScopedFact(factId, input.currentScope), reviewState, requestedNow),
   );
 }
 
@@ -608,9 +547,13 @@ export function raiseScopedMemoryFactSensitivityFloor(input: {
 }): FactExplicitOverrideMutationResult {
   const factId = requireFactId(input.factId);
   const sensitivityFloor = requireMemoryFactSensitivity(input.sensitivityFloor);
-  const now = requireClock(input.now ?? Date.now());
+  const requestedNow = optionalClock(input.now);
   return runMemoryTransaction(() =>
-    raiseSensitivityFloor(authorizeScopedFact(factId, input.currentScope), sensitivityFloor, now),
+    raiseSensitivityFloor(
+      authorizeScopedFact(factId, input.currentScope),
+      sensitivityFloor,
+      requestedNow,
+    ),
   );
 }
 
@@ -620,9 +563,9 @@ export function invalidateScopedMemoryFact(input: {
   now?: number;
 }): FactExplicitInvalidationResult {
   const factId = requireFactId(input.factId);
-  const now = requireClock(input.now ?? Date.now());
+  const requestedNow = optionalClock(input.now);
   return runMemoryTransaction(() =>
-    invalidate(authorizeScopedFact(factId, input.currentScope), now),
+    invalidate(authorizeScopedFact(factId, input.currentScope), requestedNow),
   );
 }
 
@@ -631,6 +574,6 @@ export function invalidateManagedMemoryFact(input: {
   now?: number;
 }): FactExplicitInvalidationResult {
   const factId = requireFactId(input.factId);
-  const now = requireClock(input.now ?? Date.now());
-  return runMemoryTransaction(() => invalidate(authorizeManagedFact(factId), now));
+  const requestedNow = optionalClock(input.now);
+  return runMemoryTransaction(() => invalidate(authorizeManagedFact(factId), requestedNow));
 }

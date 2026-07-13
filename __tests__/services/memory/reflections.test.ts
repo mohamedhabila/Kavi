@@ -9,6 +9,8 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
+import { invalidateManagedMemoryFact } from '../../../src/services/memory/factExplicitOverrides';
+import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
   __resetOnDeviceGuardsForTests,
@@ -17,6 +19,7 @@ import {
 import {
   buildReflectionContent,
   dayPeriodBounds,
+  getApplicableLatestReflectionContent,
   getLatestReflection,
   refreshThreadReflection,
   upsertReflection,
@@ -132,6 +135,50 @@ describe('memory reflections', () => {
     expect(saved?.id).toBeTruthy();
     const latest = getLatestReflection({ threadId: 'conv-reflection', kind: 'daily_focus' });
     expect(latest?.content).toContain('episode:ep-1');
+  });
+
+  it('never rehydrates explicitly invalidated facts after a clock rollback', () => {
+    const now = 1_700_000_000_000;
+    const invalidatedAt = now + 1_000;
+    const threadId = 'conv-invalidated-reflection';
+    const entity = upsertEntity({ name: 'private project', type: 'artifact', now });
+    const fact = recordFactWithApplicability(
+      {
+        subjectId: entity.id,
+        predicate: 'private_status',
+        objectText: 'must-not-return',
+        scope: 'conversation',
+        originConversationId: threadId,
+        originThreadId: threadId,
+        validAt: now,
+        now,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    ).fact;
+    upsertReflection({
+      scope: 'thread',
+      threadId,
+      periodStart: dayPeriodBounds(now).start,
+      periodEnd: dayPeriodBounds(now).end,
+      kind: 'daily_focus',
+      content: `fact:${fact.id} private_status:must-not-return`,
+      sourceEpisodeIds: [],
+      sourceFactIds: [fact.id],
+      now,
+    });
+    invalidateManagedMemoryFact({ factId: fact.id, now: invalidatedAt });
+
+    expect(
+      getApplicableLatestReflectionContent({
+        currentScope: resolveLocalMemoryAccessScope({
+          memoryConversationId: threadId,
+          sourceThreadId: threadId,
+          personaId: 'default',
+          taskId: null,
+        }),
+        asOf: now,
+      }),
+    ).toBeNull();
   });
 
   it('rejects normalized aliases and malformed reflection lineage ids', () => {

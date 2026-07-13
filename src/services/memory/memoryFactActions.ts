@@ -1,4 +1,9 @@
-import { invalidateFact, setFactPinned } from './facts/mutations';
+import {
+  invalidateScopedMemoryFact,
+  setManagedMemoryFactPinned,
+  setScopedMemoryFactPinned,
+} from './factExplicitOverrides';
+import { FactExplicitOverrideMutationError } from './factExplicitOverrideState';
 import { getFactById } from './facts/queries';
 import type { MemoryFact } from './facts/types';
 import { canManageMemoryFactFromScope } from './memoryFactActionAuthorization';
@@ -8,7 +13,10 @@ import type {
   MemoryInvalidateResult,
   MemoryPinResult,
 } from './memoryToolResultTypes';
-import { isExactMemoryScopeId } from './memoryScopeIdentity';
+import {
+  isExactMemoryScopeId,
+  type RequiredMemoryAccessScopeIdentity,
+} from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 import { canWriteLongTermMemory } from './policy';
 import { ensureFactSchema } from './schema';
@@ -60,10 +68,9 @@ function validateFactActionArgs(
   return id ?? error('invalid_args', 'factId is required and must be at most 64 characters.');
 }
 
-function resolveAuthorizedFactForAction(
-  factId: string,
+function resolveFactActionScope(
   execution: MemoryFactActionExecutionContext,
-): MemoryFact | MemoryFactActionError {
+): RequiredMemoryAccessScopeIdentity | MemoryFactActionError {
   if (
     !execution ||
     !isExactMemoryScopeId(execution.memoryConversationId) ||
@@ -73,14 +80,46 @@ function resolveAuthorizedFactForAction(
   ) {
     return error('invalid_args', 'memory fact action execution scope is invalid.');
   }
-  const fact = getFactById(factId);
-  if (!fact || fact.deletedAt !== null) return error('not_found', `fact ${factId} not found`);
-  const currentScope = resolveLocalMemoryAccessScope({
+  return resolveLocalMemoryAccessScope({
     memoryConversationId: execution.memoryConversationId,
     sourceThreadId: execution.sourceThreadId,
     personaId: execution.personaId,
     taskId: execution.taskId,
   });
+}
+
+function explicitOverrideActionError(
+  cause: unknown,
+  factId: string,
+  actionLabel: string,
+): MemoryFactActionError {
+  if (!(cause instanceof FactExplicitOverrideMutationError)) {
+    return error('internal', `${actionLabel} failed.`);
+  }
+  if (cause.code === 'owner_mismatch' || cause.code === 'scope_mismatch') {
+    return error('permission_denied', 'Fact is outside the current memory scope.');
+  }
+  if (
+    cause.code === 'not_found' ||
+    cause.code === 'inactive' ||
+    cause.code === 'already_invalidated'
+  ) {
+    return error('not_found', `fact ${factId} not found`);
+  }
+  if (cause.code === 'fact_invalid' || cause.code === 'pinned_invalid') {
+    return error('invalid_args', `${actionLabel} input is invalid.`);
+  }
+  return error('internal', `${actionLabel} failed.`);
+}
+
+function resolveAuthorizedFactForAction(
+  factId: string,
+  execution: MemoryFactActionExecutionContext,
+): MemoryFact | MemoryFactActionError {
+  const currentScope = resolveFactActionScope(execution);
+  if ('ok' in currentScope) return currentScope;
+  const fact = getFactById(factId);
+  if (!fact || fact.deletedAt !== null) return error('not_found', `fact ${factId} not found`);
   return canManageMemoryFactFromScope(fact, currentScope)
     ? fact
     : error('permission_denied', 'Fact is outside the current memory scope.');
@@ -91,24 +130,28 @@ function setPin(
   pinned: boolean,
   execution: MemoryFactActionExecutionContext,
 ): MemoryPinResult | MemoryFactActionError {
+  const actionLabel = pinned ? 'memory_pin' : 'memory_unpin';
+  const id = validateFactActionArgs(args, actionLabel);
+  if (typeof id !== 'string') return id;
   if (!canWriteLongTermMemory()) {
     return error('memory_disabled', 'Long-term memory is disabled.');
   }
-  if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
-    return error('invalid_args', `${pinned ? 'memory_pin' : 'memory_unpin'} accepts only factId.`);
-  }
   ensureFactSchema();
-  const id = exactFactId(args.factId);
-  if (!id) return error('invalid_args', 'factId is required and must be at most 64 characters.');
   try {
-    const authorized = resolveAuthorizedFactForAction(id, execution);
-    if ('ok' in authorized) return authorized;
-    if (!setFactPinned(id, pinned)) return error('not_found', `fact ${id} not found or deleted`);
-    const fact = getFactById(id);
-    if (!fact) return error('not_found', `fact ${id} not found after update`);
-    return { ok: true, status: pinned ? 'pinned' : 'unpinned', fact: serializeMemoryFact(fact) };
+    const currentScope = resolveFactActionScope(execution);
+    if ('ok' in currentScope) return currentScope;
+    const result = setScopedMemoryFactPinned({
+      factId: id,
+      currentScope,
+      pinned,
+    });
+    return {
+      ok: true,
+      status: pinned ? 'pinned' : 'unpinned',
+      fact: serializeMemoryFact(result.fact),
+    };
   } catch (cause) {
-    return error('internal', cause instanceof Error ? cause.message : 'pin update failed');
+    return explicitOverrideActionError(cause, id, actionLabel);
   }
 }
 
@@ -184,12 +227,14 @@ export function setMemoryFactPinnedForManagement(
   const id = exactFactId(args.factId);
   if (!id) return error('invalid_args', 'factId is required and must be at most 64 characters.');
   try {
-    if (!setFactPinned(id, pinned)) return error('not_found', `fact ${id} not found or deleted`);
-    const fact = getFactById(id);
-    if (!fact) return error('not_found', `fact ${id} not found after update`);
-    return { ok: true, status: pinned ? 'pinned' : 'unpinned', fact: serializeMemoryFact(fact) };
+    const result = setManagedMemoryFactPinned({ factId: id, pinned });
+    return {
+      ok: true,
+      status: pinned ? 'pinned' : 'unpinned',
+      fact: serializeMemoryFact(result.fact),
+    };
   } catch (cause) {
-    return error('internal', cause instanceof Error ? cause.message : 'pin update failed');
+    return explicitOverrideActionError(cause, id, 'Memory management pin');
   }
 }
 
@@ -197,24 +242,24 @@ export function executeMemoryInvalidate(
   args: MemoryInvalidateArgs,
   execution: MemoryFactActionExecutionContext,
 ): MemoryInvalidateResult | MemoryFactActionError {
-  if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
-    return error('invalid_args', 'memory_manage action=invalidate accepts only factId.');
-  }
+  const id = validateFactActionArgs(args, 'memory_manage action=invalidate');
+  if (typeof id !== 'string') return id;
   if (!canWriteLongTermMemory()) {
     return error('memory_disabled', 'Long-term memory is disabled.');
   }
   ensureFactSchema();
-  const id = exactFactId(args.factId);
-  if (!id) return error('invalid_args', 'factId is required and must be at most 64 characters.');
   try {
-    const authorized = resolveAuthorizedFactForAction(id, execution);
-    if ('ok' in authorized) return authorized;
-    const invalidatedAt = Date.now();
-    if (!invalidateFact(id, invalidatedAt)) {
-      return error('not_found', `fact ${id} not found or already invalidated`);
-    }
-    return { ok: true, action: 'invalidation', factId: id, invalidatedAt, status: 'invalidated' };
-  } catch {
-    return error('internal', 'Memory invalidation failed.');
+    const currentScope = resolveFactActionScope(execution);
+    if ('ok' in currentScope) return currentScope;
+    const result = invalidateScopedMemoryFact({ factId: id, currentScope });
+    return {
+      ok: true,
+      action: 'invalidation',
+      factId: id,
+      invalidatedAt: result.invalidatedAt,
+      status: 'invalidated',
+    };
+  } catch (cause) {
+    return explicitOverrideActionError(cause, id, 'Memory invalidation');
   }
 }

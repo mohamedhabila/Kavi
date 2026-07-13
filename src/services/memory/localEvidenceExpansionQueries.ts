@@ -42,6 +42,12 @@ function currentFactSql(alias: string): string {
       AND ${alias}.deleted_at IS NULL
       AND ${alias}.valid_at <= ?
       AND (${alias}.invalid_at IS NULL OR ${alias}.invalid_at > ?)
+      AND NOT EXISTS (
+        SELECT 1
+          FROM memory_fact_explicit_overrides AS explicit_override
+         WHERE explicit_override.fact_id = ${alias}.id
+           AND explicit_override.explicit_invalidated_at IS NOT NULL
+      )
       AND (${alias}.expires_at IS NULL OR ${alias}.expires_at > ?)`;
 }
 

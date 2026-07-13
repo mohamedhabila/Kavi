@@ -295,6 +295,12 @@ export function recordMemoryFactObservation(
           AND valid_at <= ?
           AND created_at <= ?
           AND (invalid_at IS NULL OR invalid_at > ?)
+          AND NOT EXISTS (
+            SELECT 1
+              FROM memory_fact_explicit_overrides AS explicit_override
+             WHERE explicit_override.fact_id = memory_facts.id
+               AND explicit_override.explicit_invalidated_at IS NOT NULL
+          )
           AND (expires_at IS NULL OR expires_at > ?)
         LIMIT 1`,
       input.factId,
@@ -420,6 +426,12 @@ export function loadActiveMemoryFactConflictSignals(input: {
           AND created_at <= ?
           AND valid_at <= ?
           AND (invalid_at IS NULL OR invalid_at > ?)
+          AND NOT EXISTS (
+            SELECT 1
+              FROM memory_fact_explicit_overrides AS explicit_override
+             WHERE explicit_override.fact_id = memory_facts.id
+               AND explicit_override.explicit_invalidated_at IS NOT NULL
+          )
           AND (expires_at IS NULL OR expires_at > ?)`,
       ...ids,
       scope.memoryOwnerId,

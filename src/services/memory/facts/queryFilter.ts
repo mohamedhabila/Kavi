@@ -22,6 +22,15 @@ function column(name: string, alias?: string): string {
   return alias ? `${alias}.${name}` : name;
 }
 
+function excludesExplicitInvalidation(alias?: string): string {
+  return `NOT EXISTS (
+    SELECT 1
+      FROM memory_fact_explicit_overrides AS explicit_override
+     WHERE explicit_override.fact_id = ${column('id', alias)}
+       AND explicit_override.explicit_invalidated_at IS NOT NULL
+  )`;
+}
+
 function buildRecallScopeFilter(
   identity: RecallFactScopeIdentity,
   asOf: number,
@@ -100,6 +109,7 @@ function buildRecallScopeFilter(
       `TYPEOF(${createdColumn}) = 'integer' AND ${createdColumn} >= 0 AND ${createdColumn} <= ?`,
       `TYPEOF(${validColumn}) = 'integer' AND ${validColumn} >= 0 AND ${validColumn} <= ?`,
       `(${invalidColumn} IS NULL OR (TYPEOF(${invalidColumn}) = 'integer' AND ${invalidColumn} > ? AND ${invalidColumn} <= ${Number.MAX_SAFE_INTEGER}))`,
+      excludesExplicitInvalidation(alias),
       `(${expiresColumn} IS NULL OR (TYPEOF(${expiresColumn}) = 'integer' AND ${expiresColumn} > ? AND ${expiresColumn} <= ${Number.MAX_SAFE_INTEGER}))`,
       `${deletedColumn} IS NULL`,
     ],
@@ -154,6 +164,7 @@ export function buildFactFilter(
     params.push(asOf);
   }
   if (!options.includeInvalidated) {
+    if (!recallScopeIdentity) clauses.push(excludesExplicitInvalidation(alias));
     if (options.asOf !== undefined) {
       clauses.push(`${column('valid_at', alias)} <= ?`);
       params.push(options.asOf);

@@ -8,7 +8,7 @@
 import { createLogger } from '../../utils/logger';
 import type { MemoryEpisode } from './episodes/types';
 import type { MemoryFact } from './facts/types';
-import { getFactById, listFactsForRecallPeriod } from './facts/queries';
+import { getFactByIdForRecallCandidate, listFactsForRecallPeriod } from './facts/queries';
 import { isMainInferenceActive, shouldAbortIngestionDueToMemoryPressure } from './onDeviceGuards';
 import { getOne } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
@@ -343,7 +343,7 @@ export function getApplicableLatestReflectionContent(input: {
       'memory_reflection_fact_sources_invalid',
     );
     const facts = sourceFactIds.flatMap((factId) => {
-      const fact = getFactById(factId);
+      const fact = getFactByIdForRecallCandidate(factId);
       return fact ? [fact] : [];
     });
     return buildReflectionContent({
