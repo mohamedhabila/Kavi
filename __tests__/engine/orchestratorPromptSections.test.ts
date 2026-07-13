@@ -25,28 +25,24 @@ describe('orchestratorPromptSections', () => {
     expect(sections[0]).toMatchObject({ text: 'Base prompt.', cacheable: true });
     expect(prompt).toContain('Runtime: mobile (React Native / Expo), channel mobile-app.');
     expect(prompt).toContain('Runtime context:');
-    expect(prompt).toContain('When provider tools are supplied for the turn');
+    expect(prompt).toContain('With tools, batch independent calls and sequence only dependencies');
+    expect(prompt).toContain('Use the highest-leverage tool. Launch a self-contained worker');
     expect(prompt).toContain(
-      'Prefer the highest-leverage tool that directly fits the next work unit. If a worker can finish from its prompt',
+      'Use external-state tools only when the requested answer or action requires live data',
     );
     expect(prompt).toContain(
-      'Verify external state only when the requested answer or action depends on freshness',
+      'mentioning a meeting, deadline, person, or schedule alone does not request inspection',
     );
+    expect(prompt).toContain('Natural chitchat memory is recorded after the turn');
     expect(prompt).toContain(
-      'A mention of a meeting, deadline, person, or schedule is not by itself a request to inspect external state.',
-    );
-    expect(prompt).toContain(
-      'Natural chitchat memory statements are recorded automatically after the completed turn',
-    );
-    expect(prompt).toContain(
-      'Verification, search, listing, reading, or memory recall is not completion when the same turn also asks you to write',
+      'Reading, search, recall, or verification is not completion when the request also requires action',
     );
     expect(prompt).toContain('Fetch known URLs directly');
     expect(prompt).toContain('batch independent fetches');
     expect(prompt).not.toContain('site:host');
     expect(prompt).not.toContain('one broad query and one reference-oriented query');
-    expect(prompt).toContain('compare sources separately');
-    expect(prompt).toContain('re-search only when fetched pages are insufficient');
+    expect(prompt).toContain('compare sources');
+    expect(prompt).toContain('re-search only if needed');
     expect(prompt).toContain("Safety: no independent goals beyond the user's request.");
     expect(prompt).not.toContain('## Tool Call Style');
   });
@@ -68,7 +64,7 @@ describe('orchestratorPromptSections', () => {
     expect(prompt).not.toContain('## Agent Mode');
   });
 
-  it('keeps text-only turns on the same cacheable runtime baseline with dynamic mode limits', () => {
+  it('keeps universal policy while omitting unusable tool guidance from text-only turns', () => {
     const sections = buildSystemPromptSections(
       'Base prompt.',
       buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z')),
@@ -80,15 +76,19 @@ describe('orchestratorPromptSections', () => {
     const prompt = joinSystemPromptSections(sections);
 
     expect(prompt).toContain('Runtime: mobile (React Native / Expo), channel mobile-app.');
-    expect(prompt).toContain('When provider tools are supplied for the turn');
-    expect(prompt).toContain('For web research, use web_search');
+    expect(prompt).toContain(
+      'Use external-state tools only when the requested answer or action requires live data',
+    );
+    expect(prompt).toContain('Natural chitchat memory is recorded after the turn');
+    expect(prompt).not.toContain('With tools, batch independent calls');
+    expect(prompt).not.toContain('For web research, web_search discovers');
     expect(prompt).toContain('Execution mode for this turn: no registered executable tools');
     expect(prompt).toContain('Available skills:');
     expect(prompt).toContain('Weather');
     expect(prompt).toContain("Safety: no independent goals beyond the user's request.");
   });
 
-  it('keeps the cacheable baseline stable across per-turn execution modes', () => {
+  it('uses a smaller cacheable baseline when the turn cannot execute tools', () => {
     const runtimeContext = buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z'));
     const toolCapable = buildSystemPromptSections(
       'Base prompt.',
@@ -108,12 +108,15 @@ describe('orchestratorPromptSections', () => {
       false,
     );
 
-    expect(splitCacheableSystemPromptSections(textOnly).cacheableText).toBe(
-      splitCacheableSystemPromptSections(toolCapable).cacheableText,
-    );
-    expect(splitCacheableSystemPromptSections(providerNoTools).cacheableText).toBe(
-      splitCacheableSystemPromptSections(toolCapable).cacheableText,
-    );
+    const toolCapableCacheable = splitCacheableSystemPromptSections(toolCapable).cacheableText;
+    const textOnlyCacheable = splitCacheableSystemPromptSections(textOnly).cacheableText;
+    const providerNoToolsCacheable =
+      splitCacheableSystemPromptSections(providerNoTools).cacheableText;
+
+    expect(textOnlyCacheable.length).toBeLessThan(toolCapableCacheable.length);
+    expect(providerNoToolsCacheable).toBe(textOnlyCacheable);
+    expect(textOnlyCacheable).toContain('Natural chitchat memory is recorded after the turn');
+    expect(textOnlyCacheable).not.toContain('With tools, batch independent calls');
     expect(splitCacheableSystemPromptSections(textOnly).dynamicText).toContain(
       'Execution mode for this turn: no registered executable tools',
     );

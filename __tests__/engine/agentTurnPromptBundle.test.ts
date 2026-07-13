@@ -78,7 +78,7 @@ describe('buildAgentTurnPromptBundle', () => {
     expect(bundle.enrichedSystemPrompt).not.toContain('Runtime context:');
   });
 
-  it('keeps the cacheable baseline stable when the turn has no selected tools', () => {
+  it('omits tool-only cacheable guidance when the turn has no selected tools', () => {
     const withTools = buildAgentTurnPromptBundle({
       ...baseParams,
       selectedTools: [
@@ -94,11 +94,18 @@ describe('buildAgentTurnPromptBundle', () => {
       selectedTools: [],
     });
 
-    expect(
-      splitCacheableSystemPromptSections(withoutTools.enrichedSystemPromptSections).cacheableText,
-    ).toBe(
-      splitCacheableSystemPromptSections(withTools.enrichedSystemPromptSections).cacheableText,
+    const withToolsCacheable = splitCacheableSystemPromptSections(
+      withTools.enrichedSystemPromptSections,
+    ).cacheableText;
+    const withoutToolsCacheable = splitCacheableSystemPromptSections(
+      withoutTools.enrichedSystemPromptSections,
+    ).cacheableText;
+
+    expect(withoutToolsCacheable.length).toBeLessThan(withToolsCacheable.length);
+    expect(withoutToolsCacheable).toContain(
+      'Natural chitchat memory is recorded after the turn',
     );
+    expect(withoutToolsCacheable).not.toContain('With tools, batch independent calls');
     expect(
       splitCacheableSystemPromptSections(withoutTools.enrichedSystemPromptSections).dynamicText,
     ).toContain('Execution mode for this turn: no registered executable tools');

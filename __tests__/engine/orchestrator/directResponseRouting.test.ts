@@ -66,6 +66,12 @@ describe('Orchestrator', () => {
       expect(requestMessages[0].content).not.toContain('## Tool Call Style');
       expect(requestMessages[0].content).not.toContain('## Agent Mode');
       expect(requestMessages[0].content).not.toContain('Available orchestration tools');
+      expect(requestMessages[0].content).toContain(
+        'Natural chitchat memory is recorded after the turn',
+      );
+      expect(requestMessages[0].content).toContain(
+        "Safety: no independent goals beyond the user's request.",
+      );
       expect(requestMessages[0].content.length).toBeLessThan(2800);
       expect(callbacks.calls.onAssistantMessage.at(-1)).toEqual(
         expect.objectContaining({

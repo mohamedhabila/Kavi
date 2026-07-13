@@ -16,20 +16,28 @@ export function formatUtcOffset(offsetMinutesWestOfUtc: number): string {
   return `UTC${sign}${hours}:${minutes}`;
 }
 
-export function buildRuntimePromptSection(): string {
-  return [
+export function buildRuntimePromptSection(options: {
+  toolExecutionAvailable: boolean;
+}): string {
+  const universalGuidance = [
     'Runtime: mobile (React Native / Expo), channel mobile-app.',
     'Use the runtime_context block for request time and timezone.',
-    'When provider tools are supplied for the turn, batch independent calls and sequence only when later calls depend on earlier results.',
-    'Prefer the highest-leverage tool that directly fits the next work unit. If a worker can finish from its prompt, launch it directly and omit worker tools unless narrowing scope.',
-    'Verify external state only when the requested answer or action depends on freshness, deadlines, schedules, or other live data.',
-    'A mention of a meeting, deadline, person, or schedule is not by itself a request to inspect external state.',
-    'Natural chitchat memory statements are recorded automatically after the completed turn; acknowledge them without memory-management or unrelated tools.',
-    'When a request needs app state or a side effect and the concrete app tool is not on the current surface, use discovery tools to expose the relevant capability before answering.',
-    'If the user asks for a durable file, artifact, external update, or other tool-persisted outcome, create or update it before final delivery once the required content is available.',
-    'Verification, search, listing, reading, or memory recall is not completion when the same turn also asks you to write, create, send, update, open, or otherwise act; continue to the action tool when possible.',
+    'Use external-state tools only when the requested answer or action requires live data; mentioning a meeting, deadline, person, or schedule alone does not request inspection.',
+    'Natural chitchat memory is recorded after the turn; acknowledge it without memory-management or unrelated tools.',
     'Final answers report completed work or a real blocker, not an unfinished plan.',
-    'For web research, use web_search for discovery and web_fetch for reading. Fetch known URLs directly, batch independent fetches, compare sources separately, and re-search only when fetched pages are insufficient.',
+  ];
+  if (!options.toolExecutionAvailable) {
+    return universalGuidance.join('\n');
+  }
+
+  return [
+    ...universalGuidance,
+    'With tools, batch independent calls and sequence only dependencies.',
+    'Use the highest-leverage tool. Launch a self-contained worker directly; omit worker tools unless needed to narrow scope.',
+    'If requested app state or a side effect needs a tool absent from the surface, use discovery to expose it.',
+    'When a durable artifact or external update is requested, create or update it before final delivery once content is available.',
+    'Reading, search, recall, or verification is not completion when the request also requires action; continue to the action tool.',
+    'For web research, web_search discovers and web_fetch reads. Fetch known URLs directly, batch independent fetches, compare sources, and re-search only if needed.',
   ].join('\n');
 }
 
@@ -164,9 +172,14 @@ export function buildSystemPromptSections(
   const skillsSection = normalizedSkillsPrompt.trim();
 
   const runtimeContextSection = formatRuntimeContextSection(runtimeContext);
+  const toolExecutionAvailable = toolingEnabled && !textOnlyTurn;
 
   appendSystemPromptSection(sections, prompt, { cacheable: true });
-  appendSystemPromptSection(sections, buildRuntimePromptSection(), { cacheable: true });
+  appendSystemPromptSection(
+    sections,
+    buildRuntimePromptSection({ toolExecutionAvailable }),
+    { cacheable: true },
+  );
   appendSystemPromptSection(sections, safetySection, { cacheable: true });
   appendSystemPromptSection(sections, runtimeContextSection);
   appendSystemPromptSection(
@@ -174,6 +187,8 @@ export function buildSystemPromptSections(
     buildExecutionModePromptSection({ toolingEnabled, textOnlyTurn }),
   );
   appendSystemPromptSection(sections, workflowRuntimePrompt);
-  appendSystemPromptSection(sections, toolingEnabled ? skillsSection : '', { cacheable: true });
+  appendSystemPromptSection(sections, toolingEnabled ? skillsSection : '', {
+    cacheable: true,
+  });
   return orderSystemPromptSectionsForCaching(sections);
 }
