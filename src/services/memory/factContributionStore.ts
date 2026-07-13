@@ -32,6 +32,11 @@ export interface MemoryFactContributionReplay {
   payload: MemoryFactContributionPayloadV1;
 }
 
+export interface MemoryFactContributionSupersessionProjectionIntent {
+  pinnedInputExplicit: boolean;
+  reviewStateInputExplicit: boolean;
+}
+
 interface ContributionRow {
   id: string;
   fact_id: string;
@@ -55,10 +60,29 @@ interface ContributionSourceRow {
 
 interface SupersessionRow {
   superseded_at: number;
+  pinned_input_explicit: number;
+  review_state_input_explicit: number;
 }
 
 function fail(code: string): never {
   throw new Error(code);
+}
+
+function projectionIntentFlags(value: MemoryFactContributionSupersessionProjectionIntent): {
+  pinnedInputExplicit: 0 | 1;
+  reviewStateInputExplicit: 0 | 1;
+} {
+  if (
+    !value ||
+    typeof value.pinnedInputExplicit !== 'boolean' ||
+    typeof value.reviewStateInputExplicit !== 'boolean'
+  ) {
+    fail('memory_fact_contribution_supersession_projection_intent_invalid');
+  }
+  return {
+    pinnedInputExplicit: value.pinnedInputExplicit ? 1 : 0,
+    reviewStateInputExplicit: value.reviewStateInputExplicit ? 1 : 0,
+  };
 }
 
 function assertFactMatchesPayload(
@@ -301,7 +325,11 @@ export function persistFactContributionSupersessionsInTransaction(input: {
   contributionId: string;
   successorFactId: string;
   superseded: ReadonlyArray<Pick<MemoryFact, 'id' | 'invalidAt'>>;
+  projectionIntent: MemoryFactContributionSupersessionProjectionIntent;
 }): void {
+  const { pinnedInputExplicit, reviewStateInputExplicit } = projectionIntentFlags(
+    input.projectionIntent,
+  );
   if (input.superseded.length === 0) return;
   const db = getSchemaReadyMemoryDb();
   const contribution = db.getFirstSync<{ fact_id: string }>(
@@ -326,7 +354,7 @@ export function persistFactContributionSupersessionsInTransaction(input: {
     a.localeCompare(b),
   )) {
     const existing = db.getFirstSync<SupersessionRow>(
-      `SELECT superseded_at
+      `SELECT superseded_at, pinned_input_explicit, review_state_input_explicit
          FROM memory_fact_contribution_supersessions
         WHERE contribution_id = ? AND predecessor_fact_id = ? AND successor_fact_id = ?
         LIMIT 1`,
@@ -335,19 +363,26 @@ export function persistFactContributionSupersessionsInTransaction(input: {
       input.successorFactId,
     );
     if (existing) {
-      if (existing.superseded_at !== supersededAt) {
+      if (
+        existing.superseded_at !== supersededAt ||
+        existing.pinned_input_explicit !== pinnedInputExplicit ||
+        existing.review_state_input_explicit !== reviewStateInputExplicit
+      ) {
         fail('memory_fact_contribution_supersession_replay_mismatch');
       }
       continue;
     }
     db.runSync(
       `INSERT INTO memory_fact_contribution_supersessions(
-         contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
-       ) VALUES (?, ?, ?, ?)`,
+         contribution_id, predecessor_fact_id, successor_fact_id, superseded_at,
+         pinned_input_explicit, review_state_input_explicit
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
       input.contributionId,
       predecessorFactId,
       input.successorFactId,
       supersededAt,
+      pinnedInputExplicit,
+      reviewStateInputExplicit,
     );
   }
 }

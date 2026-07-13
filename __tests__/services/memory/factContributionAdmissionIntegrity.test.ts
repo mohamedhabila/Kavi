@@ -223,6 +223,53 @@ describe('fact contribution admission integrity', () => {
     expect(tableCount('memory_fact_contribution_supersessions')).toBe(0);
   });
 
+  it('fails closed when supersession projection intent is externally corrupted', () => {
+    const subject = upsertEntity({ name: 'user', type: 'self', now: 100 });
+    const contributionContext = (eventId: string, messageId: string) => ({
+      memoryConversationId: 'conversation-1',
+      sourceThreadId: 'thread-1',
+      taskId: null,
+      producer: { producerId: 'integrity_test', producerEventId: eventId },
+      sourceAliases: [{ sourceKind: 'message' as const, sourceId: messageId }],
+    });
+    recordFactWithContribution(
+      {
+        subjectId: subject.id,
+        predicate: 'favorite_color',
+        objectText: 'blue',
+        scope: 'global',
+        sourceMessageId: 'message-1',
+        now: 100,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+      contributionContext('event-1', 'message-1'),
+    );
+    recordFactWithContribution(
+      {
+        subjectId: subject.id,
+        predicate: 'favorite_color',
+        objectText: 'green',
+        scope: 'global',
+        sourceMessageId: 'message-2',
+        supersedePrior: true,
+        now: 200,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+      contributionContext('event-2', 'message-2'),
+    );
+    const db = getMemoryDb();
+    db.execSync(`
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_immutable;
+      PRAGMA ignore_check_constraints = ON;
+      UPDATE memory_fact_contribution_supersessions SET pinned_input_explicit = 2;
+      PRAGMA ignore_check_constraints = OFF;
+    `);
+
+    expect(() => admitLegacyFactContributions(db, 500)).toThrow(
+      'memory_fact_contribution_admission_integrity_failed',
+    );
+  });
+
   it('allows an explicit full-memory clear to recover an unbacked post-boundary fact', () => {
     exactConversationLegacyFact('clear_unbacked');
     resetFactSchemaCacheForTests();

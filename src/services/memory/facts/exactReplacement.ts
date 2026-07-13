@@ -279,6 +279,10 @@ function replaceCurrentFactInternal(
           contributionId: contributed.contributionId,
           successorFactId: protectedCreated.id,
           superseded: [superseded],
+          projectionIntent: {
+            pinnedInputExplicit: input.pinned !== undefined,
+            reviewStateInputExplicit: input.reviewState !== undefined,
+          },
         });
       }
       return { fact: protectedCreated, status: 'created' as const, superseded: [superseded] };

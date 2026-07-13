@@ -196,6 +196,10 @@ export function recordFactWithContributionInTransaction(
     contributionId: contribution.id,
     successorFactId: result.fact.id,
     superseded: result.superseded,
+    projectionIntent: {
+      pinnedInputExplicit: input.pinned !== undefined,
+      reviewStateInputExplicit: input.reviewState !== undefined,
+    },
   });
   return { result, contributionId: contribution.id };
 }

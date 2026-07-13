@@ -66,6 +66,8 @@ interface ContributionSupersessionRow {
   predecessor_fact_id: string;
   successor_fact_id: string;
   superseded_at: number;
+  pinned_input_explicit: number;
+  review_state_input_explicit: number;
 }
 
 const MEMORY_FACT_KINDS = new Set<MemoryFactKind>([
@@ -390,7 +392,9 @@ function assertSupersessionIntegrity(
     predecessor.invalid_at !== row.superseded_at ||
     row.superseded_at !== payload.input.now ||
     !Number.isSafeInteger(row.superseded_at) ||
-    row.superseded_at < 0
+    row.superseded_at < 0 ||
+    (row.pinned_input_explicit !== 0 && row.pinned_input_explicit !== 1) ||
+    (row.review_state_input_explicit !== 0 && row.review_state_input_explicit !== 1)
   ) {
     fail();
   }
@@ -444,7 +448,8 @@ export function assertFactContributionAdmissionIntegrity(db: MemoryDb): void {
   }
   if (Array.from(sourceRowsByContribution.keys()).some((id) => !contributions.has(id))) fail();
   for (const supersession of db.getAllSync<ContributionSupersessionRow>(
-    `SELECT contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
+    `SELECT contribution_id, predecessor_fact_id, successor_fact_id, superseded_at,
+            pinned_input_explicit, review_state_input_explicit
        FROM memory_fact_contribution_supersessions`,
   )) {
     assertSupersessionIntegrity(supersession, facts, contributions, payloads);

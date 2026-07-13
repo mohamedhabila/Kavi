@@ -410,14 +410,20 @@ describe('atomic contributed fact mutations', () => {
         predecessor_fact_id: string;
         successor_fact_id: string;
         superseded_at: number;
+        pinned_input_explicit: number;
+        review_state_input_explicit: number;
       }>(
-        'SELECT predecessor_fact_id, successor_fact_id, superseded_at FROM memory_fact_contribution_supersessions',
+        `SELECT predecessor_fact_id, successor_fact_id, superseded_at,
+                pinned_input_explicit, review_state_input_explicit
+           FROM memory_fact_contribution_supersessions`,
       ),
     ).toEqual([
       {
         predecessor_fact_id: previous.id,
         successor_fact_id: replacement.fact.id,
         superseded_at: 200,
+        pinned_input_explicit: 0,
+        review_state_input_explicit: 0,
       },
     ]);
     const replacementPayload = contributionPayloads()[1]!;
@@ -649,6 +655,10 @@ describe('atomic contributed fact mutations', () => {
           contributionId,
           successorFactId: successor.id,
           superseded: [{ id: predecessor.id, invalidAt: 300 }],
+          projectionIntent: {
+            pinnedInputExplicit: false,
+            reviewStateInputExplicit: false,
+          },
         });
       }),
     ).toThrow('memory_fact_contribution_supersession_parent_invalid');

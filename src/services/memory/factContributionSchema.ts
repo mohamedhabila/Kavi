@@ -3,6 +3,28 @@ import type { getMemoryDb } from './database';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
 
+function ensureSupersessionProjectionIntentColumns(db: MemoryDb): void {
+  const columns = new Set(
+    db
+      .getAllSync<{ name: string }>('PRAGMA table_info(memory_fact_contribution_supersessions)')
+      .map((column) => column.name),
+  );
+  if (!columns.has('pinned_input_explicit')) {
+    db.execSync(
+      `ALTER TABLE memory_fact_contribution_supersessions
+         ADD COLUMN pinned_input_explicit INTEGER NOT NULL DEFAULT 0
+         CHECK(pinned_input_explicit IN (0, 1))`,
+    );
+  }
+  if (!columns.has('review_state_input_explicit')) {
+    db.execSync(
+      `ALTER TABLE memory_fact_contribution_supersessions
+         ADD COLUMN review_state_input_explicit INTEGER NOT NULL DEFAULT 0
+         CHECK(review_state_input_explicit IN (0, 1))`,
+    );
+  }
+}
+
 /** Remove only triggers that reference memory_facts before its canonical table rebuild. */
 export function dropFactContributionFactReferenceTriggers(db: MemoryDb): void {
   db.execSync(`
@@ -89,6 +111,10 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         predecessor_fact_id TEXT NOT NULL CHECK(LENGTH(predecessor_fact_id) BETWEEN 1 AND 512),
         successor_fact_id TEXT NOT NULL CHECK(LENGTH(successor_fact_id) BETWEEN 1 AND 512),
         superseded_at INTEGER NOT NULL CHECK(superseded_at >= 0),
+        pinned_input_explicit INTEGER NOT NULL DEFAULT 0
+          CHECK(pinned_input_explicit IN (0, 1)),
+        review_state_input_explicit INTEGER NOT NULL DEFAULT 0
+          CHECK(review_state_input_explicit IN (0, 1)),
         CHECK(predecessor_fact_id != successor_fact_id),
         PRIMARY KEY(contribution_id, predecessor_fact_id, successor_fact_id)
       );
@@ -277,6 +303,7 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
          WHERE predecessor_fact_id = OLD.id OR successor_fact_id = OLD.id;
       END;
     `);
+    ensureSupersessionProjectionIntentColumns(database);
   });
 }
 
