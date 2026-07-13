@@ -335,7 +335,6 @@ export const ChatScreen: React.FC = () => {
     conversations,
     ensureAgentRunFinalResponse,
     queueTerminalBackgroundReview,
-    recordConversationTurnMemory,
     resolveConversationFinalizationContext,
     subAgentActivityVersion,
   });
