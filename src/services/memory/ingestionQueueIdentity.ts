@@ -28,6 +28,7 @@ export interface IngestionJobRow {
   next_attempt_at: number | null;
   lease_expires_at: number | null;
   claim_token: string | null;
+  claim_process_epoch: string | null;
   structural_completed_at: number | null;
   created_at: number;
   updated_at: number;
@@ -124,6 +125,7 @@ export function rowToIngestionJob(row: IngestionJobRow): IngestionJob {
     nextAttemptAt: row.next_attempt_at,
     leaseExpiresAt: row.lease_expires_at,
     claimToken: row.claim_token,
+    claimProcessEpoch: row.claim_process_epoch,
     structuralCompletedAt: row.structural_completed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

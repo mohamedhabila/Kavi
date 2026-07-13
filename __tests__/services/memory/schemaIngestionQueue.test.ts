@@ -78,6 +78,7 @@ describe('ingestion queue schema migration', () => {
         'thread_title',
         'persona_id',
         'claim_token',
+        'claim_process_epoch',
         'source_at',
         'provider_outcome',
         'outcome_code',
@@ -163,6 +164,58 @@ describe('ingestion queue schema migration', () => {
          ) VALUES ('invalid-null-memory', 'thread-null', NULL, 'assistant-null', 1, 1)`,
       ),
     ).toThrow();
+  });
+
+  it('requires processing claims to own a token, lease, and process epoch together', () => {
+    ensureFactSchema();
+    const db = getMemoryDb();
+    db.runSync(
+      `INSERT INTO memory_ingestion_jobs (
+         id, thread_id, memory_conversation_id, persona_id, source_end_message_id,
+         source_at, created_at, updated_at
+       ) VALUES ('claim-shape', 'claim-thread', 'claim-memory', 'default',
+                 'claim-assistant', 1, 1, 1)`,
+    );
+
+    expect(() =>
+      db.runSync(
+        `UPDATE memory_ingestion_jobs
+            SET status = 'processing', next_attempt_at = NULL,
+                claim_token = 'claim-token', lease_expires_at = 100
+          WHERE id = 'claim-shape'`,
+      ),
+    ).toThrow();
+    expect(() =>
+      db.runSync(
+        `UPDATE memory_ingestion_jobs
+            SET status = 'processing', next_attempt_at = NULL,
+                claim_token = 'claim-token', lease_expires_at = 100,
+                claim_process_epoch = '   '
+          WHERE id = 'claim-shape'`,
+      ),
+    ).toThrow();
+
+    db.runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'processing', next_attempt_at = NULL,
+              claim_token = 'claim-token', lease_expires_at = 100,
+              claim_process_epoch = 'process-epoch'
+        WHERE id = 'claim-shape'`,
+    );
+    expect(() =>
+      db.runSync(
+        `UPDATE memory_ingestion_jobs
+            SET status = 'retrying', next_attempt_at = 100,
+                claim_token = NULL, lease_expires_at = NULL
+          WHERE id = 'claim-shape'`,
+      ),
+    ).toThrow();
+    db.runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'retrying', next_attempt_at = 100,
+              claim_token = NULL, lease_expires_at = NULL, claim_process_epoch = NULL
+        WHERE id = 'claim-shape'`,
+    );
   });
 
   it('rebuilds an intermediate queue schema without adopting unsealed active identity', () => {

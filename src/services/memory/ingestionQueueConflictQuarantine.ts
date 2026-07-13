@@ -82,6 +82,7 @@ export function failUnsealedActiveJobs(db: MemoryDb): void {
       `UPDATE memory_ingestion_jobs
           SET status = 'failed', provider_outcome = NULL, outcome_code = ?,
               next_attempt_at = NULL, lease_expires_at = NULL, claim_token = NULL,
+              claim_process_epoch = NULL,
               structural_completed_at = NULL, completed_at = updated_at
         WHERE id = ? AND status IN ('pending', 'processing', 'retrying')`,
       outcomeCode,
@@ -369,7 +370,8 @@ export function quarantineConflictingSourceDuplicates(db: MemoryDb): void {
         `UPDATE memory_ingestion_jobs
             SET status = 'failed', provider_outcome = NULL,
                 outcome_code = 'source_identity_conflict', next_attempt_at = NULL,
-                lease_expires_at = NULL, claim_token = NULL, structural_completed_at = NULL,
+                lease_expires_at = NULL, claim_token = NULL, claim_process_epoch = NULL,
+                structural_completed_at = NULL,
                 completed_at = updated_at
           WHERE id = ?`,
         row.id,

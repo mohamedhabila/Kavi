@@ -1,5 +1,6 @@
 import { getMemoryDb } from './database';
 import { ensureFactSchema } from './schema';
+import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 
 function activePriorDependencyExistsSql(extraPredicate?: string): string {
   return `EXISTS (
@@ -40,10 +41,11 @@ export function getNextPendingIngestionAttemptAt(): number | null {
           WHERE candidate.status IN ('pending', 'retrying')
             AND ${NO_BLOCKING_PRIOR_DEPENDENCY_SQL}
          UNION ALL
-         SELECT lease_expires_at AS wake_at
+         SELECT CASE WHEN claim_process_epoch != ? THEN 0 ELSE lease_expires_at END AS wake_at
            FROM memory_ingestion_jobs
           WHERE status = 'processing'
        )`,
+    getRuntimeProcessEpoch(),
   );
   return row?.next_attempt_at ?? null;
 }

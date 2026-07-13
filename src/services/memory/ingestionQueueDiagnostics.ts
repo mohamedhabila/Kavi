@@ -1,6 +1,7 @@
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './database';
 import type { IngestionJobStatus, IngestionProviderOutcome } from './ingestionQueueStore';
+import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 
 const ALL_INGESTION_STATUSES: ReadonlyArray<IngestionJobStatus> = [
   'pending',
@@ -65,9 +66,10 @@ export function getIngestionQueueDiagnostics(now = Date.now()): IngestionQueueDi
   const staleProcessingCount =
     db.getFirstSync<{ count: number }>(
       `SELECT COUNT(*) AS count
-         FROM memory_ingestion_jobs
+        FROM memory_ingestion_jobs
         WHERE status = 'processing'
-          AND lease_expires_at <= ?`,
+          AND (claim_process_epoch != ? OR lease_expires_at <= ?)`,
+      getRuntimeProcessEpoch(),
       now,
     )?.count ?? 0;
 

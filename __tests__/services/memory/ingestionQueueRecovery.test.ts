@@ -48,12 +48,14 @@ import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/databas
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import {
   claimIngestionJob,
+  claimIngestionJobForStructuralCheckpoint,
   completeIngestionJob,
   markIngestionJobStructuralComplete,
   ownsIngestionClaim,
   retryOrCompleteIngestionJob,
 } from '../../../src/services/memory/ingestionQueueStore';
 import type { Message } from '../../../src/types/message';
+import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
@@ -115,7 +117,7 @@ afterEach(() => {
 });
 
 describe('ingestion queue recovery and diagnostics', () => {
-  it('reconciles an exact committed episode before terminal stale recovery', () => {
+  it('reconciles an exact committed episode before recovering a foreign-process claim', () => {
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'thread-crash-window',
@@ -135,9 +137,10 @@ describe('ingestion queue recovery and diagnostics', () => {
     getMemoryDb().runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 5,
-              next_attempt_at = NULL, lease_expires_at = 100,
-              claim_token = 'claim-episode-crash'
+              next_attempt_at = NULL, lease_expires_at = 1_000,
+              claim_token = 'claim-episode-crash', claim_process_epoch = ?
         WHERE id = ?`,
+      `${getRuntimeProcessEpoch()}-foreign`,
       job.id,
     );
     const episode = recordThreadLocalEpisode({
@@ -181,8 +184,9 @@ describe('ingestion queue recovery and diagnostics', () => {
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 5,
               next_attempt_at = NULL, lease_expires_at = 100,
-              claim_token = 'claim-fact-crash'
+              claim_token = 'claim-fact-crash', claim_process_epoch = ?
         WHERE id = ?`,
+      getRuntimeProcessEpoch(),
       job.id,
     );
     const subject = upsertEntity({ type: 'self', name: 'user', now: 50 });
@@ -260,16 +264,18 @@ describe('ingestion queue recovery and diagnostics', () => {
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 1,
               next_attempt_at = NULL, lease_expires_at = 100,
-              claim_token = 'claim-retryable'
+              claim_token = 'claim-retryable', claim_process_epoch = ?
         WHERE id = ?`,
+      getRuntimeProcessEpoch(),
       retryable!.id,
     );
     getMemoryDb().runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 5,
               next_attempt_at = NULL, lease_expires_at = 100,
-              claim_token = 'claim-exhausted'
+              claim_token = 'claim-exhausted', claim_process_epoch = ?
         WHERE id = ?`,
+      getRuntimeProcessEpoch(),
       exhausted!.id,
     );
     getMemoryDb().runSync(
@@ -277,8 +283,10 @@ describe('ingestion queue recovery and diagnostics', () => {
           SET status = 'processing', attempt_count = 5,
               next_attempt_at = NULL, lease_expires_at = 100,
               claim_token = 'claim-structural',
+              claim_process_epoch = ?,
               structural_completed_at = 50
         WHERE id = ?`,
+      getRuntimeProcessEpoch(),
       structurallyCompleted!.id,
     );
 
@@ -331,6 +339,12 @@ describe('ingestion queue recovery and diagnostics', () => {
       now: 10,
     })!;
     const firstClaim = claimIngestionJob(job.id, 10)!;
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({
+        claimProcessEpoch: getRuntimeProcessEpoch(),
+        leaseExpiresAt: 10 + INGESTION_PROCESSING_LEASE_MS,
+      }),
+    );
     expect(ownsIngestionClaim(job.id, firstClaim, 11)).toBe(true);
     expect(ownsIngestionClaim(job.id, firstClaim, 10 + INGESTION_PROCESSING_LEASE_MS)).toBe(false);
 
@@ -365,6 +379,156 @@ describe('ingestion queue recovery and diagnostics', () => {
         secondClaim,
       ),
     ).toBe(true);
+  });
+
+  it('stamps structural-checkpoint claims with the current process epoch', () => {
+    const prior = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'thread-structural-claim',
+      threadTitle: null,
+      memoryConversationId: 'thread-structural-claim',
+      taskId: null,
+      sourceStartMessageId: 'user-structural-prior',
+      sourceEndMessageId: 'assistant-structural-prior',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 10,
+    })!;
+    const successor = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'thread-structural-claim',
+      threadTitle: null,
+      memoryConversationId: 'thread-structural-claim',
+      taskId: null,
+      priorUserMessageId: 'user-structural-prior',
+      sourceStartMessageId: 'user-structural-successor',
+      sourceEndMessageId: 'assistant-structural-successor',
+      sourceRunId: null,
+      sourceAt: 11,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 11,
+    })!;
+    getMemoryDb().runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'retrying', structural_completed_at = 10, next_attempt_at = 1_000
+        WHERE id = ?`,
+      prior.id,
+    );
+
+    expect(claimIngestionJob(successor.id, 11)).toBeNull();
+    const claim = claimIngestionJobForStructuralCheckpoint(successor.id, 11);
+
+    expect(claim).not.toBeNull();
+    expect(getIngestionJob(successor.id)).toEqual(
+      expect.objectContaining({
+        status: 'processing',
+        claimToken: claim,
+        claimProcessEpoch: getRuntimeProcessEpoch(),
+        leaseExpiresAt: 11 + INGESTION_PROCESSING_LEASE_MS,
+      }),
+    );
+  });
+
+  it('rejects normal owner transitions for a foreign-process claim', () => {
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'thread-foreign-owner',
+      threadTitle: null,
+      memoryConversationId: 'thread-foreign-owner',
+      taskId: null,
+      sourceStartMessageId: 'user-foreign-owner',
+      sourceEndMessageId: 'assistant-foreign-owner',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 10,
+    })!;
+    getMemoryDb().runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'processing', attempt_count = 1, next_attempt_at = NULL,
+              lease_expires_at = 1_000, claim_token = 'foreign-owner-claim',
+              claim_process_epoch = ?
+        WHERE id = ?`,
+      `${getRuntimeProcessEpoch()}-foreign`,
+      job.id,
+    );
+
+    expect(ownsIngestionClaim(job.id, 'foreign-owner-claim', 100)).toBe(false);
+    expect(markIngestionJobStructuralComplete(job.id, 100, 'foreign-owner-claim')).toBe(false);
+    expect(
+      completeIngestionJob(job.id, 'completed_enriched', 'valid', 100, 'foreign-owner-claim'),
+    ).toBe(false);
+    expect(
+      retryOrCompleteIngestionJob({
+        jobId: job.id,
+        providerOutcome: null,
+        outcomeCode: 'processing_error',
+        now: 100,
+        claimToken: 'foreign-owner-claim',
+      }),
+    ).toEqual({ status: 'processing', applied: false });
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({
+        status: 'processing',
+        claimProcessEpoch: `${getRuntimeProcessEpoch()}-foreign`,
+      }),
+    );
+  });
+
+  it('recovers and processes a foreign-process claim in the same drain', async () => {
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'thread-foreign-drain',
+      threadTitle: null,
+      memoryConversationId: 'thread-foreign-drain',
+      taskId: null,
+      sourceStartMessageId: 'user-foreign-drain',
+      sourceEndMessageId: 'assistant-foreign-drain',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: false,
+      now: 10,
+    })!;
+    getMemoryDb().runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'processing', attempt_count = 1, next_attempt_at = NULL,
+              lease_expires_at = 1_000, claim_token = 'foreign-drain-claim',
+              claim_process_epoch = ?
+        WHERE id = ?`,
+      `${getRuntimeProcessEpoch()}-foreign`,
+      job.id,
+    );
+
+    await expect(
+      drainIngestionQueue({
+        loadMessagesForThread: () => closedTurn('foreign-drain'),
+        now: 100,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({ attempted: 1, completed: 1, completedStructural: 1 }),
+    );
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({
+        status: 'completed_structural',
+        attemptCount: 2,
+        claimToken: null,
+        claimProcessEpoch: null,
+        leaseExpiresAt: null,
+      }),
+    );
   });
 
   it('reports bounded state and provider-outcome aggregates', async () => {

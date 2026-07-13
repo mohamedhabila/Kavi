@@ -27,17 +27,25 @@ import {
 } from './ingestionQueueDependencies';
 import { failIngestionJobForInvalidIdentity } from './ingestionQueueIdentityFailure';
 import { INGESTION_PROCESSING_LEASE_MS } from './ingestionQueueStructuralCheckpoint';
+import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 
 export { getNextPendingIngestionAttemptAt } from './ingestionQueueDependencies';
 export { failIngestionJobForInvalidIdentity } from './ingestionQueueIdentityFailure';
+export {
+  recoverIngestionJobClaim,
+  retryOrCompleteIngestionJob,
+  type IngestionTransitionResult,
+} from './ingestionQueueClaimTransition';
+export {
+  computeNextIngestionAttemptAt,
+  INGESTION_RETRY_BASE_DELAY_MS,
+  INGESTION_RETRY_MAX_DELAY_MS,
+} from './ingestionQueueRetryPolicy';
 export {
   claimIngestionJobForStructuralCheckpoint,
   deferIngestionEnrichmentAfterStructuralCheckpoint,
   INGESTION_PROCESSING_LEASE_MS,
 } from './ingestionQueueStructuralCheckpoint';
-
-export const INGESTION_RETRY_BASE_DELAY_MS = 15_000;
-export const INGESTION_RETRY_MAX_DELAY_MS = 5 * 60_000;
 
 export type IngestionJobStatus =
   | 'pending'
@@ -98,6 +106,7 @@ export interface IngestionJob {
   nextAttemptAt: number | null;
   leaseExpiresAt: number | null;
   claimToken: string | null;
+  claimProcessEpoch: string | null;
   structuralCompletedAt: number | null;
   createdAt: number;
   updatedAt: number;
@@ -288,6 +297,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     next_attempt_at: now,
     lease_expires_at: null,
     claim_token: null,
+    claim_process_epoch: null,
     structural_completed_at: null,
     created_at: now,
     updated_at: now,
@@ -433,15 +443,6 @@ export function getIngestionJobForSourceTurn(input: {
   return row ? rowToIngestionJob(row) : null;
 }
 
-export function computeNextIngestionAttemptAt(now: number, attemptCount: number): number {
-  const exponent = Math.max(0, Math.min(MAX_INGESTION_ATTEMPTS - 1, attemptCount - 1));
-  const delay = Math.min(
-    INGESTION_RETRY_MAX_DELAY_MS,
-    INGESTION_RETRY_BASE_DELAY_MS * 2 ** exponent,
-  );
-  return now + delay;
-}
-
 export function claimIngestionJob(jobId: string, now: number): string | null {
   const row = getMemoryDb().getFirstSync<IngestionJobRow>(
     `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
@@ -454,6 +455,7 @@ export function claimIngestionJob(jobId: string, now: number): string | null {
     return null;
   }
   const claimToken = newId('ingestion_claim');
+  const claimProcessEpoch = getRuntimeProcessEpoch();
   const result = getMemoryDb().runSync(
     `UPDATE memory_ingestion_jobs AS candidate
        SET status = 'processing',
@@ -463,6 +465,7 @@ export function claimIngestionJob(jobId: string, now: number): string | null {
            next_attempt_at = NULL,
            lease_expires_at = ?,
            claim_token = ?,
+           claim_process_epoch = ?,
            completed_at = NULL,
            updated_at = ?
      WHERE candidate.id = ?
@@ -472,6 +475,7 @@ export function claimIngestionJob(jobId: string, now: number): string | null {
        AND ${NO_ACTIVE_PRIOR_DEPENDENCY_SQL}`,
     now + INGESTION_PROCESSING_LEASE_MS,
     claimToken,
+    claimProcessEpoch,
     now,
     jobId,
     now,
@@ -488,10 +492,12 @@ export function ownsIngestionClaim(jobId: string, claimToken: string, now: numbe
         WHERE id = ?
           AND status = 'processing'
           AND claim_token = ?
+          AND claim_process_epoch = ?
           AND lease_expires_at > ?
         LIMIT 1`,
       jobId,
       claimToken,
+      getRuntimeProcessEpoch(),
       now,
     ),
   );
@@ -512,12 +518,14 @@ export function completeIngestionJob(
            next_attempt_at = NULL,
            lease_expires_at = NULL,
            claim_token = NULL,
+           claim_process_epoch = NULL,
            structural_completed_at = COALESCE(structural_completed_at, ?),
            completed_at = ?,
            updated_at = ?
      WHERE id = ?
        AND status = 'processing'
        AND claim_token = ?
+       AND claim_process_epoch = ?
        AND lease_expires_at > ?`,
     status,
     providerOutcome,
@@ -526,6 +534,7 @@ export function completeIngestionJob(
     now,
     jobId,
     claimToken,
+    getRuntimeProcessEpoch(),
     now,
   );
   return result.changes === 1;
@@ -543,124 +552,14 @@ export function markIngestionJobStructuralComplete(
       WHERE id = ?
         AND status = 'processing'
         AND claim_token = ?
+        AND claim_process_epoch = ?
         AND lease_expires_at > ?`,
     now,
     now,
     jobId,
     claimToken,
+    getRuntimeProcessEpoch(),
     now,
   );
   return result.changes === 1;
-}
-
-function reconcileStructuralCompletion(jobId: string, claimToken: string): void {
-  getMemoryDb().runSync(
-    `UPDATE memory_ingestion_jobs
-        SET structural_completed_at = COALESCE(
-          structural_completed_at,
-          (
-            SELECT episode.created_at
-              FROM memory_episodes AS episode
-             WHERE episode.deleted_at IS NULL
-               AND episode.conversation_id = memory_ingestion_jobs.memory_conversation_id
-               AND episode.thread_id = memory_ingestion_jobs.thread_id
-               AND episode.source_end_message_id = memory_ingestion_jobs.source_end_message_id
-             LIMIT 1
-          ),
-          (
-            SELECT fact.created_at
-              FROM memory_facts AS fact
-             WHERE fact.invalid_at IS NULL
-               AND fact.deleted_at IS NULL
-               AND fact.origin_conversation_id = memory_ingestion_jobs.memory_conversation_id
-               AND fact.origin_thread_id = memory_ingestion_jobs.thread_id
-               AND (
-                 fact.source_turn_id = memory_ingestion_jobs.source_end_message_id
-                 OR fact.source_message_id = memory_ingestion_jobs.source_end_message_id
-               )
-             LIMIT 1
-          ),
-          (
-            SELECT evidence.created_at
-              FROM memory_fact_evidence AS evidence
-              JOIN memory_facts AS fact ON fact.id = evidence.fact_id
-             WHERE fact.invalid_at IS NULL
-               AND fact.deleted_at IS NULL
-               AND fact.origin_conversation_id = memory_ingestion_jobs.memory_conversation_id
-               AND fact.origin_thread_id = memory_ingestion_jobs.thread_id
-               AND evidence.message_id = memory_ingestion_jobs.source_end_message_id
-             LIMIT 1
-          )
-        )
-      WHERE id = ? AND status = 'processing' AND claim_token = ?`,
-    jobId,
-    claimToken,
-  );
-}
-
-export interface IngestionTransitionResult {
-  status: IngestionJobStatus;
-  applied: boolean;
-}
-
-export function retryOrCompleteIngestionJob(input: {
-  jobId: string;
-  providerOutcome: IngestionProviderOutcome | null;
-  outcomeCode: IngestionOutcomeCode;
-  now: number;
-  claimToken: string;
-}): IngestionTransitionResult {
-  reconcileStructuralCompletion(input.jobId, input.claimToken);
-  const current = getMemoryDb().getFirstSync<{
-    attempt_count: number;
-    status: string;
-    structural_completed_at: number | null;
-    claim_token: string | null;
-  }>(
-    `SELECT attempt_count, status, structural_completed_at, claim_token
-       FROM memory_ingestion_jobs
-      WHERE id = ?
-      LIMIT 1`,
-    input.jobId,
-  );
-  if (!current || current.status !== 'processing' || current.claim_token !== input.claimToken) {
-    return {
-      status: (current?.status as IngestionJobStatus | undefined) ?? 'failed',
-      applied: false,
-    };
-  }
-
-  const terminal = current.attempt_count >= MAX_INGESTION_ATTEMPTS;
-  const status: IngestionJobStatus = terminal
-    ? current.structural_completed_at !== null
-      ? 'degraded'
-      : 'failed'
-    : 'retrying';
-  const nextAttemptAt = terminal
-    ? null
-    : computeNextIngestionAttemptAt(input.now, current.attempt_count);
-
-  const updated = getMemoryDb().runSync(
-    `UPDATE memory_ingestion_jobs
-       SET status = ?,
-           provider_outcome = ?,
-           outcome_code = ?,
-           next_attempt_at = ?,
-           lease_expires_at = NULL,
-           claim_token = NULL,
-           completed_at = ?,
-           updated_at = ?
-     WHERE id = ?
-       AND status = 'processing'
-       AND claim_token = ?`,
-    status,
-    input.providerOutcome,
-    input.outcomeCode,
-    nextAttemptAt,
-    terminal ? input.now : null,
-    input.now,
-    input.jobId,
-    input.claimToken,
-  );
-  return { status, applied: updated.changes === 1 };
 }

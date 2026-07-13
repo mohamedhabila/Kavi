@@ -6,6 +6,7 @@ import {
 } from './ingestionQueueStore';
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './database';
+import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 
 export type IngestionReceiptProviderOutcomeCode =
   | 'empty_response'
@@ -222,10 +223,12 @@ export function commitIngestionPersistenceReceipt(
         WHERE id = ?
           AND status = 'processing'
           AND claim_token = ?
+          AND claim_process_epoch = ?
           AND lease_expires_at > ?
         LIMIT 1`,
       jobId,
       claimToken,
+      getRuntimeProcessEpoch(),
       persistedAt,
     );
     if (!claim) throw new IngestionReceiptCommitError('claim_lost');

@@ -10,6 +10,7 @@ import { CAN_CLAIM_STRUCTURAL_CHECKPOINT_SQL } from './ingestionQueueDependencie
 import type { IngestionJobStatus } from './ingestionQueueStore';
 import { MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
 import { newId } from './schema';
+import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 
 export const INGESTION_PROCESSING_LEASE_MS = 5 * 60_000;
 
@@ -28,6 +29,7 @@ export function claimIngestionJobForStructuralCheckpoint(
     return null;
   }
   const claimToken = newId('ingestion_claim');
+  const claimProcessEpoch = getRuntimeProcessEpoch();
   const result = getMemoryDb().runSync(
     `UPDATE memory_ingestion_jobs AS candidate
        SET status = 'processing',
@@ -37,6 +39,7 @@ export function claimIngestionJobForStructuralCheckpoint(
            next_attempt_at = NULL,
            lease_expires_at = ?,
            claim_token = ?,
+           claim_process_epoch = ?,
            completed_at = NULL,
            updated_at = ?
      WHERE candidate.id = ?
@@ -46,6 +49,7 @@ export function claimIngestionJobForStructuralCheckpoint(
        AND ${CAN_CLAIM_STRUCTURAL_CHECKPOINT_SQL}`,
     now + INGESTION_PROCESSING_LEASE_MS,
     claimToken,
+    claimProcessEpoch,
     now,
     jobId,
     now,
@@ -68,8 +72,10 @@ export function deferIngestionEnrichmentAfterStructuralCheckpoint(input: {
     status: string;
     structural_completed_at: number | null;
     claim_token: string | null;
+    claim_process_epoch: string | null;
+    lease_expires_at: number | null;
   }>(
-    `SELECT status, structural_completed_at, claim_token
+    `SELECT status, structural_completed_at, claim_token, claim_process_epoch, lease_expires_at
        FROM memory_ingestion_jobs
       WHERE id = ?
       LIMIT 1`,
@@ -79,6 +85,8 @@ export function deferIngestionEnrichmentAfterStructuralCheckpoint(input: {
     !current ||
     current.status !== 'processing' ||
     current.claim_token !== input.claimToken ||
+    current.claim_process_epoch !== getRuntimeProcessEpoch() ||
+    (current.lease_expires_at ?? Number.NEGATIVE_INFINITY) <= input.now ||
     current.structural_completed_at === null
   ) {
     return {
@@ -96,16 +104,21 @@ export function deferIngestionEnrichmentAfterStructuralCheckpoint(input: {
            next_attempt_at = ?,
            lease_expires_at = NULL,
            claim_token = NULL,
+           claim_process_epoch = NULL,
            completed_at = NULL,
            updated_at = ?
      WHERE id = ?
        AND status = 'processing'
        AND claim_token = ?
+       AND claim_process_epoch = ?
+       AND lease_expires_at > ?
        AND structural_completed_at IS NOT NULL`,
     input.now,
     input.now,
     input.jobId,
     input.claimToken,
+    getRuntimeProcessEpoch(),
+    input.now,
   );
   return { status: 'retrying', applied: updated.changes === 1 };
 }

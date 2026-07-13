@@ -1,9 +1,10 @@
 import { MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './database';
+import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 import {
   computeNextIngestionAttemptAt,
-  retryOrCompleteIngestionJob,
+  recoverIngestionJobClaim,
   type IngestionJobStatus,
   type IngestionTransitionResult,
 } from './ingestionQueueStore';
@@ -50,6 +51,7 @@ export function deferIngestionJobForMissingSource(
             next_attempt_at = ?,
             lease_expires_at = NULL,
             claim_token = NULL,
+            claim_process_epoch = NULL,
             completed_at = ?,
             updated_at = ?
       WHERE id = ?
@@ -71,22 +73,32 @@ export function deferIngestionJobForMissingSource(
 
 export function recoverStaleIngestionJobs(now = Date.now()): StaleIngestionRecoveryResult {
   ensureFactSchema();
-  const stale = getMemoryDb().getAllSync<{ id: string; claim_token: string }>(
-    `SELECT id, claim_token
+  const currentProcessEpoch = getRuntimeProcessEpoch();
+  const stale = getMemoryDb().getAllSync<{
+    id: string;
+    claim_token: string;
+    claim_process_epoch: string;
+    lease_expires_at: number;
+  }>(
+    `SELECT id, claim_token, claim_process_epoch, lease_expires_at
        FROM memory_ingestion_jobs
       WHERE status = 'processing'
-        AND lease_expires_at <= ?
-      ORDER BY lease_expires_at ASC, created_at ASC`,
+        AND (claim_process_epoch != ? OR lease_expires_at <= ?)
+      ORDER BY CASE WHEN claim_process_epoch != ? THEN 0 ELSE 1 END ASC,
+               lease_expires_at ASC,
+               created_at ASC`,
+    currentProcessEpoch,
     now,
+    currentProcessEpoch,
   );
   const result: StaleIngestionRecoveryResult = { retrying: 0, degraded: 0, failed: 0 };
   for (const row of stale) {
-    const transition = retryOrCompleteIngestionJob({
+    const transition = recoverIngestionJobClaim({
       jobId: row.id,
-      providerOutcome: null,
-      outcomeCode: 'stale_processing_lease',
-      now,
       claimToken: row.claim_token,
+      claimProcessEpoch: row.claim_process_epoch,
+      leaseExpiresAt: row.lease_expires_at,
+      now,
     });
     if (!transition.applied) continue;
     if (transition.status === 'retrying') result.retrying += 1;

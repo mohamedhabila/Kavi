@@ -20,6 +20,7 @@ import {
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
+import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -85,6 +86,7 @@ function setJobState(
             next_attempt_at = ?,
             lease_expires_at = ?,
             claim_token = ?,
+            claim_process_epoch = ?,
             structural_completed_at = ?,
             completed_at = ?,
             provider_outcome = ?,
@@ -94,6 +96,7 @@ function setJobState(
     options.nextAttemptAt ?? null,
     options.leaseExpiresAt ?? null,
     isProcessing ? `claim-${jobId}` : null,
+    isProcessing ? getRuntimeProcessEpoch() : null,
     options.structuralCompletedAt !== undefined
       ? options.structuralCompletedAt
       : hasStructuralState

@@ -20,6 +20,7 @@ import {
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
+import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -87,6 +88,7 @@ function setStatus(
             next_attempt_at = ?,
             lease_expires_at = ?,
             claim_token = ?,
+            claim_process_epoch = ?,
             completed_at = ?,
             updated_at = 100
       WHERE id = ?`,
@@ -101,6 +103,7 @@ function setStatus(
     status === 'retrying' ? 100 : null,
     status === 'processing' ? 1_000 : null,
     status === 'processing' ? `claim-${jobId}` : null,
+    status === 'processing' ? getRuntimeProcessEpoch() : null,
     terminal ? 100 : null,
     jobId,
   );

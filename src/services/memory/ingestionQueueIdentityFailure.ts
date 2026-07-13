@@ -23,6 +23,7 @@ export function failIngestionJobForInvalidIdentity(
               next_attempt_at = NULL,
               lease_expires_at = NULL,
               claim_token = NULL,
+              claim_process_epoch = NULL,
               structural_completed_at = NULL,
               completed_at = ?,
               updated_at = ?

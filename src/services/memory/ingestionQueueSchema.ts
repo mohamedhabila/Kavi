@@ -80,6 +80,7 @@ function createDurableIngestionJobsTable(
       next_attempt_at INTEGER,
       lease_expires_at INTEGER,
       claim_token TEXT,
+      claim_process_epoch TEXT,
       structural_completed_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
@@ -92,9 +93,16 @@ function createDurableIngestionJobsTable(
       CHECK((chat_provider_id IS NULL) = (chat_model IS NULL)),
       CHECK(source_at >= 0),
       CHECK(claim_token IS NULL OR LENGTH(TRIM(claim_token)) > 0),
+      CHECK(claim_process_epoch IS NULL OR LENGTH(TRIM(claim_process_epoch)) > 0),
       CHECK(
-        (status = 'processing' AND claim_token IS NOT NULL AND lease_expires_at IS NOT NULL)
-        OR (status != 'processing' AND claim_token IS NULL AND lease_expires_at IS NULL)
+        (status = 'processing'
+          AND claim_token IS NOT NULL
+          AND lease_expires_at IS NOT NULL
+          AND claim_process_epoch IS NOT NULL)
+        OR (status != 'processing'
+          AND claim_token IS NULL
+          AND lease_expires_at IS NULL
+          AND claim_process_epoch IS NULL)
       )
     );
   `);
@@ -186,6 +194,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     'next_attempt_at',
     'lease_expires_at',
     'claim_token',
+    'claim_process_epoch',
     'structural_completed_at',
     'thread_title',
     'persona_id',
@@ -212,6 +221,11 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     tableSql.includes("CHECK(reason IN ('turn_completed', 'migration', 'manual'))") &&
     tableSql.includes('provider_enrichment IN (0, 1)') &&
     tableSql.includes('(chat_provider_id IS NULL) = (chat_model IS NULL)') &&
+    tableSql.includes(
+      'CHECK(claim_process_epoch IS NULL OR LENGTH(TRIM(claim_process_epoch)) > 0)',
+    ) &&
+    tableSql.includes('AND claim_process_epoch IS NOT NULL)') &&
+    tableSql.includes('AND claim_process_epoch IS NULL)') &&
     tableSql.includes('source_identity_invalid') &&
     tableSql.includes('source_identity_conflict');
 
@@ -225,6 +239,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
   ensureColumn(db, 'next_attempt_at', 'next_attempt_at INTEGER');
   ensureColumn(db, 'lease_expires_at', 'lease_expires_at INTEGER');
   ensureColumn(db, 'claim_token', 'claim_token TEXT');
+  ensureColumn(db, 'claim_process_epoch', 'claim_process_epoch TEXT');
   ensureColumn(db, 'structural_completed_at', 'structural_completed_at INTEGER');
   ensureColumn(db, 'thread_title', 'thread_title TEXT');
   ensureColumn(db, 'source_at', 'source_at INTEGER');
@@ -271,7 +286,8 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
         chat_provider_id, chat_model, prior_user_message_id,
         source_start_message_id, source_end_message_id, source_at, reason, status,
         attempt_count, provider_enrichment, provider_outcome, outcome_code,
-        next_attempt_at, lease_expires_at, claim_token, structural_completed_at,
+        next_attempt_at, lease_expires_at, claim_token, claim_process_epoch,
+        structural_completed_at,
         created_at, updated_at, completed_at
       )
       SELECT
@@ -378,6 +394,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
           WHEN status = 'processing' AND attempt_count < 5 THEN updated_at
           ELSE NULL
         END,
+        NULL,
         NULL,
         NULL,
         CASE

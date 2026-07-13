@@ -44,6 +44,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import type { Message } from '../../../src/types/message';
+import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
@@ -201,8 +202,9 @@ describe('ingestion queue identity', () => {
     getMemoryDb().runSync(
       `UPDATE memory_ingestion_jobs
           SET persona_id = NULL, status = 'processing', next_attempt_at = NULL,
-              claim_token = 'legacy-claim', lease_expires_at = 100
+              claim_token = 'legacy-claim', claim_process_epoch = ?, lease_expires_at = 100
         WHERE id = ?`,
+      getRuntimeProcessEpoch(),
       processing.id,
     );
     getMemoryDb().runSync(
