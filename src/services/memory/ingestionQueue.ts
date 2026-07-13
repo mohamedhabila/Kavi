@@ -74,6 +74,14 @@ export {
 } from './ingestionQueueStore';
 export { recoverStaleIngestionJobs } from './ingestionQueueRecovery';
 export {
+  EXACT_INGESTION_PREEMPTION_WAIT_MS,
+  preemptIngestionJobAndWait,
+} from './ingestionJobPreemption';
+export type {
+  ExactIngestionJobPreemptionResult,
+  PreemptIngestionJobAndWaitInput,
+} from './ingestionJobPreemption';
+export {
   getIngestionPersistenceReceipt,
   listIngestionPersistenceReceipts,
 } from './ingestionReceiptStore';
