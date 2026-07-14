@@ -14,13 +14,12 @@ jest.mock('../../src/services/remote/approvalStore', () => {
 import { createGoal } from '../../src/engine/goals/types';
 import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { upsertEntity } from '../../src/services/memory/entities';
-import { recordFactWithContribution } from '../../src/services/memory/facts/mutations';
 import { getFactById } from '../../src/services/memory/facts/queries';
-import { codeOwnedMemorySensitivityDeclaration } from '../../src/services/memory/memorySensitivityPolicy';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { recordContributionBackedFact } from '../helpers/memoryRetirementTestFixtures';
 import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -48,7 +47,7 @@ function seedFact(input: {
     type: 'concept',
   });
   const sourceId = `memory-action-source-${subjectIndex}`;
-  return recordFactWithContribution(
+  return recordContributionBackedFact(
     {
       subjectId: subject.id,
       predicate: 'status',
@@ -61,24 +60,17 @@ function seedFact(input: {
       ...(input.taskId ? { originTaskId: input.taskId } : {}),
     },
     {
-      factClass: 'objective',
-      sourceAuthority: 'tool_observed',
-      ...(input.personaId ? { personaId: input.personaId } : {}),
-    },
-    {
       memoryConversationId: input.rootId ?? `${sourceId}-root`,
       sourceThreadId: input.threadId ?? `${sourceId}-thread`,
       taskId: input.taskId ?? null,
-      producer: {
-        producerId: 'memory_fact_action_authorization_test',
-        producerEventId: `${sourceId}-event`,
+      producerId: 'memory_fact_action_authorization_test',
+      producerEventId: `${sourceId}-event`,
+      applicability: {
+        factClass: 'objective',
+        sourceAuthority: 'tool_observed',
+        ...(input.personaId ? { personaId: input.personaId } : {}),
       },
-      sourceAliases: [
-        { sourceKind: 'message', sourceId: `${sourceId}-message` },
-        { sourceKind: 'turn', sourceId: `${sourceId}-turn` },
-      ],
     },
-    codeOwnedMemorySensitivityDeclaration(),
   ).fact;
 }
 
