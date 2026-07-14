@@ -23,7 +23,7 @@ export function selectChatScreenChatSlice(state: ChatState) {
     updateMessageProviderReplay: state.updateMessageProviderReplay,
     updateMessageAssistantMetadata: state.updateMessageAssistantMetadata,
     updateMessageEffect: state.updateMessageEffect,
-    editMessage: state.editMessage,
+    rewindUserMessageForResend: state.rewindUserMessageForResend,
     setLoading: state.setLoading,
     addToolCall: state.addToolCall,
     updateToolCallStatus: state.updateToolCallStatus,

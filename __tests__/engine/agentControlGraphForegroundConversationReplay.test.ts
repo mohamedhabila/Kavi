@@ -34,12 +34,16 @@ function createConversation(messages: Conversation['messages']): Conversation {
 describe('foreground conversation replay', () => {
   it('rewinds and reapplies edited resend through graph-owned actions', () => {
     const cancelConversationRunForRewind = jest.fn();
-    const editMessage = jest.fn();
+    const rewindUserMessageForResend = jest.fn(() => ({
+      status: 'applied' as const,
+      replacedMessageId: 'user-1',
+      replacementMessageId: 'user-edit-1',
+    }));
 
     const applied = applyForegroundEditedResend({
       actions: {
         cancelConversationRunForRewind,
-        editMessage,
+        rewindUserMessageForResend,
       },
       conversationId: 'conv-1',
       editingMessageId: 'user-1',
@@ -51,12 +55,16 @@ describe('foreground conversation replay', () => {
       'conv-1',
       FOREGROUND_EDIT_RESEND_REWIND_REASON,
     );
-    expect(editMessage).toHaveBeenCalledWith('conv-1', 'user-1', 'Edited hello');
+    expect(rewindUserMessageForResend).toHaveBeenCalledWith('conv-1', 'user-1', 'Edited hello');
   });
 
   it('rewinds to the preceding user turn when retrying an assistant response', () => {
     const cancelConversationRunForRewind = jest.fn();
-    const editMessage = jest.fn();
+    const rewindUserMessageForResend = jest.fn(() => ({
+      status: 'applied' as const,
+      replacedMessageId: 'user-2',
+      replacementMessageId: 'user-retry-1',
+    }));
     const conversation = createConversation([
       { id: 'user-1', role: 'user', content: 'First request', timestamp: 1 },
       { id: 'assistant-1', role: 'assistant', content: 'First reply', timestamp: 2 },
@@ -67,7 +75,7 @@ describe('foreground conversation replay', () => {
     const applied = applyForegroundRetryResend({
       actions: {
         cancelConversationRunForRewind,
-        editMessage,
+        rewindUserMessageForResend,
       },
       assistantMessageId: 'assistant-2',
       conversation,
@@ -79,12 +87,12 @@ describe('foreground conversation replay', () => {
       'conv-1',
       FOREGROUND_RETRY_REWIND_REASON,
     );
-    expect(editMessage).toHaveBeenCalledWith('conv-1', 'user-2', 'Second request');
+    expect(rewindUserMessageForResend).toHaveBeenCalledWith('conv-1', 'user-2', 'Second request');
   });
 
   it('returns false when a retry target cannot be resolved', () => {
     const cancelConversationRunForRewind = jest.fn();
-    const editMessage = jest.fn();
+    const rewindUserMessageForResend = jest.fn();
     const conversation = createConversation([
       { id: 'assistant-1', role: 'assistant', content: 'Reply only', timestamp: 1 },
     ]);
@@ -92,7 +100,7 @@ describe('foreground conversation replay', () => {
     const applied = applyForegroundRetryResend({
       actions: {
         cancelConversationRunForRewind,
-        editMessage,
+        rewindUserMessageForResend,
       },
       assistantMessageId: 'assistant-1',
       conversation,
@@ -101,6 +109,28 @@ describe('foreground conversation replay', () => {
 
     expect(applied).toBe(false);
     expect(cancelConversationRunForRewind).not.toHaveBeenCalled();
-    expect(editMessage).not.toHaveBeenCalled();
+    expect(rewindUserMessageForResend).not.toHaveBeenCalled();
+  });
+
+  it('does not resend when the exact user replacement is rejected', () => {
+    const cancelConversationRunForRewind = jest.fn();
+    const rewindUserMessageForResend = jest.fn(() => ({
+      status: 'rejected' as const,
+      reason: 'message_unavailable' as const,
+    }));
+    const conversation = createConversation([
+      { id: 'user-1', role: 'user', content: 'Request', timestamp: 1 },
+      { id: 'assistant-1', role: 'assistant', content: 'Reply', timestamp: 2 },
+    ]);
+
+    expect(
+      applyForegroundRetryResend({
+        actions: { cancelConversationRunForRewind, rewindUserMessageForResend },
+        assistantMessageId: 'assistant-1',
+        conversation,
+        conversationId: 'conv-1',
+      }),
+    ).toBe(false);
+    expect(rewindUserMessageForResend).toHaveBeenCalledWith('conv-1', 'user-1', 'Request');
   });
 });

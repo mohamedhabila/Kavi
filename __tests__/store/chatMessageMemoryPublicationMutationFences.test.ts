@@ -300,7 +300,7 @@ describe('chat memory publication mutation fences', () => {
     const conversationId = addLockedTurn('enqueued');
     const store = useChatStore.getState();
 
-    expect(() => store.editMessage(conversationId, 'user-1', 'edited')).toThrow(
+    expect(() => store.rewindUserMessageForResend(conversationId, 'user-1', 'edited')).toThrow(
       SOURCE_LOCKED_ERROR,
     );
     expect(conversation(conversationId).messages).toHaveLength(4);
@@ -317,14 +317,18 @@ describe('chat memory publication mutation fences', () => {
       content: 'A later response',
       timestamp: 6,
     });
-    expect(() => store.editMessage(conversationId, 'user-2', 'Edited later request')).not.toThrow();
-    expect(conversation(conversationId).messages.map((message) => message.id)).toEqual([
-      'user-1',
-      'assistant-tool',
-      'tool-1',
-      'final-1',
-      'user-2',
-    ]);
+    expect(() =>
+      store.rewindUserMessageForResend(conversationId, 'user-2', 'Edited later request'),
+    ).not.toThrow();
+    expect(
+      conversation(conversationId)
+        .messages.slice(0, 4)
+        .map((message) => message.id),
+    ).toEqual(['user-1', 'assistant-tool', 'tool-1', 'final-1']);
+    expect(conversation(conversationId).messages[4]).toEqual(
+      expect.objectContaining({ role: 'user', content: 'Edited later request' }),
+    );
+    expect(conversation(conversationId).messages[4]?.id).not.toBe('user-2');
   });
 
   it('fences direct owned-projection rewrites and preserves receipts on safe mutations', () => {

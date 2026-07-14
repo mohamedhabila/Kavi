@@ -37,7 +37,7 @@ type UseForegroundConversationActionsParams = {
   clearForegroundRequestForConversation: (conversationId: string) => void;
   completeAgentRun: ChatStoreState['completeAgentRun'];
   defaultConversationMode: Conversation['mode'];
-  editMessage: ChatStoreState['editMessage'];
+  rewindUserMessageForResend: ChatStoreState['rewindUserMessageForResend'];
   editingMessageId: string | null;
   ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
   ensureCanonicalConversation: ForegroundConversationRunHelpers['ensureCanonicalConversation'];
@@ -72,7 +72,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     clearForegroundRequestForConversation,
     completeAgentRun,
     defaultConversationMode,
-    editMessage,
+    rewindUserMessageForResend,
     editingMessageId,
     ensureAgentRunFinalResponse,
     ensureCanonicalConversation,
@@ -312,7 +312,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
           applyForegroundEditedResend({
             actions: {
               cancelConversationRunForRewind,
-              editMessage,
+              rewindUserMessageForResend,
             },
             conversationId,
             editingMessageId: editingMessageId ?? undefined,
@@ -334,7 +334,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     },
     [
       cancelConversationRunForRewind,
-      editMessage,
+      rewindUserMessageForResend,
       editingMessageId,
       getLiveActiveConversationId,
       handleResend,
@@ -365,7 +365,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
           applyForegroundRetryResend({
             actions: {
               cancelConversationRunForRewind,
-              editMessage,
+              rewindUserMessageForResend,
             },
             assistantMessageId: messageId,
             conversation: getConversation(conversationId) ?? activeConversation,
@@ -385,7 +385,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     },
     [
       cancelConversationRunForRewind,
-      editMessage,
+      rewindUserMessageForResend,
       getConversation,
       getLiveActiveConversationId,
       handleResend,

@@ -43,7 +43,10 @@ function createParams(
     clearForegroundRequestForConversation: jest.fn(),
     completeAgentRun: jest.fn(),
     defaultConversationMode: 'agentic',
-    editMessage: jest.fn(),
+    rewindUserMessageForResend: jest.fn(() => ({
+      status: 'rejected',
+      reason: 'message_unavailable',
+    })),
     editingMessageId: null,
     ensureAgentRunFinalResponse: jest.fn(),
     ensureCanonicalConversation: jest.fn(),
@@ -214,17 +217,67 @@ describe('useForegroundConversationActions', () => {
     expect(hasModelProjectionIntent(conversationId)).toBe(false);
   });
 
+  it('starts an assistant retry from a freshly identified user turn', async () => {
+    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    useChatStore.getState().addMessage(conversationId, {
+      id: 'original-user',
+      role: 'user',
+      content: 'Retry this request',
+      timestamp: 1,
+    });
+    useChatStore.getState().addMessage(conversationId, {
+      id: 'original-assistant',
+      role: 'assistant',
+      content: 'Original response',
+      timestamp: 2,
+    });
+    let retriedUserMessageId: string | undefined;
+    const runChat = jest.fn(async () => {
+      retriedUserMessageId = useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === conversationId)
+        ?.messages.find((message) => message.role === 'user')?.id;
+    });
+    const { result } = renderHook(() =>
+      useForegroundConversationActions(
+        createParams(conversationId, {
+          rewindUserMessageForResend: useChatStore.getState().rewindUserMessageForResend,
+          runChat,
+        }),
+      ),
+    );
+
+    await act(async () => {
+      await result.current.handleRetry('original-assistant');
+    });
+
+    expect(runChat).toHaveBeenCalledWith(conversationId);
+    expect(retriedUserMessageId).toBeDefined();
+    expect(retriedUserMessageId).not.toBe('original-user');
+    expect(
+      useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === conversationId)?.messages,
+    ).toEqual([
+      expect.objectContaining({
+        id: retriedUserMessageId,
+        role: 'user',
+        content: 'Retry this request',
+      }),
+    ]);
+  });
+
   it('leaves send, edit, and retry state untouched when projection availability fails', async () => {
     const conversationId = useChatStore.getState().createConversation('openai', 'system');
     const addMessage = jest.fn();
-    const editMessage = jest.fn();
+    const rewindUserMessageForResend = jest.fn();
     const runChat = jest.fn();
     const setChatError = jest.fn();
     const { result } = renderHook(() =>
       useForegroundConversationActions(
         createParams(conversationId, {
           addMessage,
-          editMessage,
+          rewindUserMessageForResend,
           editingMessageId: 'user-1',
           runChat,
           setChatError,
@@ -240,7 +293,7 @@ describe('useForegroundConversationActions', () => {
     });
 
     expect(addMessage).not.toHaveBeenCalled();
-    expect(editMessage).not.toHaveBeenCalled();
+    expect(rewindUserMessageForResend).not.toHaveBeenCalled();
     expect(runChat).not.toHaveBeenCalled();
     expect(setChatError).toHaveBeenCalledWith('projection wait failed');
   });

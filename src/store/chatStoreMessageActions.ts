@@ -17,14 +17,17 @@ import {
   updateConversationById,
   updateConversationMessageById,
 } from './chatStoreHelpers';
-import type { ChatState } from './chatStoreTypes';
+import type {
+  ChatState,
+  RewindUserMessageForResendResult,
+  TransitionMessageMemoryPublicationResult,
+} from './chatStoreTypes';
 import { appendToolEffectReceipt } from '../utils/toolEffectReceipt';
 import {
   isEligibleMessageMemoryPublicationSource,
   normalizeMessageMemoryPublication,
   resolveMessageMemoryPublicationTransition,
 } from '../utils/messageMemoryPublication';
-import type { TransitionMessageMemoryPublicationResult } from './chatStoreTypes';
 import {
   assertConversationCompactionMemoryPublicationSourcesSafe,
   assertMemoryPublicationLockedSourcesUnchanged,
@@ -73,7 +76,7 @@ export function createMessageStoreActions(
   | 'updateMessageAssistantMetadata'
   | 'transitionMessageMemoryPublication'
   | 'updateMessageEffect'
-  | 'editMessage'
+  | 'rewindUserMessageForResend'
   | 'setLoading'
   | 'addToolCall'
   | 'updateToolCallStatus'
@@ -281,47 +284,101 @@ export function createMessageStoreActions(
         return conversations ? { conversations } : state;
       }),
 
-    editMessage: (conversationId, messageId, newContent) => {
-      set((state) => ({
-        conversations: state.conversations.map((c) => {
-          if (c.id !== conversationId) return c;
-          const index = c.messages.findIndex((m) => m.id === messageId);
-          if (index === -1) return c;
-          const rewindTimestamp = c.messages[index]?.timestamp ?? Date.now();
-          const editTimestamp = Date.now();
-          const newMessages = c.messages.slice(0, index + 1).map((m) =>
-            m.id === messageId
-              ? {
-                  ...m,
-                  content: newContent,
-                  enrichedContent: undefined,
-                  timestamp: editTimestamp,
-                }
-              : m,
-          );
-          assertMemoryPublicationLockedSourcesUnchanged(c.messages, newMessages);
-          const nextLogs = (c.logs ?? []).filter((entry) => entry.timestamp < rewindTimestamp);
-          const nextAgentRuns = (c.agentRuns ?? []).filter(
-            (run) => run.createdAt < rewindTimestamp,
-          );
-          const nextActiveAgentRunId =
-            c.activeAgentRunId &&
-            nextAgentRuns.some((run) => run.id === c.activeAgentRunId && run.status === 'running')
-              ? c.activeAgentRunId
-              : undefined;
+    rewindUserMessageForResend: (conversationId, messageId, newContent) => {
+      let result: RewindUserMessageForResendResult = {
+        status: 'rejected',
+        reason: 'conversation_unavailable',
+      };
+      let shouldCheckpoint = false;
 
-          return {
-            ...c,
-            messages: newMessages,
-            logs: nextLogs,
-            agentRuns: nextAgentRuns,
-            activeAgentRunId: nextActiveAgentRunId,
-            usage: c.usage,
-            updatedAt: editTimestamp,
-          };
-        }),
-      }));
-      requestChatStorePersistenceCheckpoint();
+      set((state) => {
+        const conversationIndexes = state.conversations.flatMap((conversation, index) =>
+          conversation.id === conversationId ? [index] : [],
+        );
+        if (conversationIndexes.length === 0) return state;
+        if (conversationIndexes.length !== 1) {
+          result = { status: 'rejected', reason: 'conversation_identity_invalid' };
+          return state;
+        }
+
+        const conversationIndex = conversationIndexes[0];
+        const conversation = state.conversations[conversationIndex];
+        const messageIndexes = conversation.messages.flatMap((message, index) =>
+          message.id === messageId ? [index] : [],
+        );
+        if (messageIndexes.length === 0) {
+          result = { status: 'rejected', reason: 'message_unavailable' };
+          return state;
+        }
+        if (messageIndexes.length !== 1) {
+          result = { status: 'rejected', reason: 'message_identity_invalid' };
+          return state;
+        }
+
+        const messageIndex = messageIndexes[0];
+        const message = conversation.messages[messageIndex];
+        if (message.role !== 'user') {
+          result = { status: 'rejected', reason: 'message_ineligible' };
+          return state;
+        }
+
+        const existingMessageIds = new Set(conversation.messages.map((candidate) => candidate.id));
+        let replacementMessageId = generateId();
+        while (existingMessageIds.has(replacementMessageId)) {
+          replacementMessageId = generateId();
+        }
+
+        const rewindTimestamp = message.timestamp;
+        const replacementTimestamp = Date.now();
+        const {
+          enrichedContent: _discardedEnrichedContent,
+          memoryPublication: _discardedMemoryPublication,
+          ...preservedMessage
+        } = message;
+        const replacementMessage: Message = {
+          ...preservedMessage,
+          id: replacementMessageId,
+          content: newContent,
+          timestamp: replacementTimestamp,
+        };
+        const nextMessages = [...conversation.messages.slice(0, messageIndex), replacementMessage];
+        assertMemoryPublicationLockedSourcesUnchanged(conversation.messages, nextMessages);
+
+        const nextLogs = (conversation.logs ?? []).filter(
+          (entry) => entry.timestamp < rewindTimestamp,
+        );
+        const nextAgentRuns = (conversation.agentRuns ?? []).filter(
+          (run) => run.createdAt < rewindTimestamp,
+        );
+        const nextActiveAgentRunId =
+          conversation.activeAgentRunId &&
+          nextAgentRuns.some(
+            (run) => run.id === conversation.activeAgentRunId && run.status === 'running',
+          )
+            ? conversation.activeAgentRunId
+            : undefined;
+
+        const conversations = [...state.conversations];
+        conversations[conversationIndex] = {
+          ...conversation,
+          messages: nextMessages,
+          logs: nextLogs,
+          agentRuns: nextAgentRuns,
+          activeAgentRunId: nextActiveAgentRunId,
+          usage: conversation.usage,
+          updatedAt: replacementTimestamp,
+        };
+        result = {
+          status: 'applied',
+          replacedMessageId: messageId,
+          replacementMessageId,
+        };
+        shouldCheckpoint = true;
+        return { conversations };
+      });
+
+      if (shouldCheckpoint) requestChatStorePersistenceCheckpoint();
+      return result;
     },
 
     setLoading: (loading) =>

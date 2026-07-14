@@ -46,6 +46,22 @@ export type TransitionMessageMemoryPublicationResult =
         | 'transition_conflict';
     }>;
 
+export type RewindUserMessageForResendResult =
+  | Readonly<{
+      status: 'applied';
+      replacedMessageId: string;
+      replacementMessageId: string;
+    }>
+  | Readonly<{
+      status: 'rejected';
+      reason:
+        | 'conversation_unavailable'
+        | 'conversation_identity_invalid'
+        | 'message_unavailable'
+        | 'message_identity_invalid'
+        | 'message_ineligible';
+    }>;
+
 export interface ChatState {
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -117,7 +133,11 @@ export interface ChatState {
     messageId: string,
     effectId?: Message['effectId'],
   ) => void;
-  editMessage: (conversationId: string, messageId: string, newContent: string) => void;
+  rewindUserMessageForResend: (
+    conversationId: string,
+    messageId: string,
+    newContent: string,
+  ) => RewindUserMessageForResendResult;
   setLoading: (loading: boolean) => void;
   addToolCall: (conversationId: string, messageId: string, toolCall: ToolCall) => void;
   updateToolCallStatus: (

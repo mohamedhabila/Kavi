@@ -1,4 +1,5 @@
 import type { Conversation } from '../../types/conversation';
+import type { RewindUserMessageForResendResult } from '../../store/chatStoreTypes';
 
 export const FOREGROUND_EDIT_RESEND_REWIND_REASON =
   'Cancelled because the active run was rewound for an edited resend.';
@@ -7,7 +8,11 @@ export const FOREGROUND_RETRY_REWIND_REASON =
 
 type RewindConversationActions = {
   cancelConversationRunForRewind: (conversationId: string, reason: string) => void;
-  editMessage: (conversationId: string, messageId: string, content: string) => void;
+  rewindUserMessageForResend: (
+    conversationId: string,
+    messageId: string,
+    content: string,
+  ) => RewindUserMessageForResendResult;
 };
 
 function findRetryUserMessageId(
@@ -44,8 +49,13 @@ export function applyForegroundEditedResend(params: {
     params.conversationId,
     FOREGROUND_EDIT_RESEND_REWIND_REASON,
   );
-  params.actions.editMessage(params.conversationId, params.editingMessageId, params.text);
-  return true;
+  return (
+    params.actions.rewindUserMessageForResend(
+      params.conversationId,
+      params.editingMessageId,
+      params.text,
+    ).status === 'applied'
+  );
 }
 
 export function applyForegroundRetryResend(params: {
@@ -74,6 +84,11 @@ export function applyForegroundRetryResend(params: {
     params.conversationId,
     FOREGROUND_RETRY_REWIND_REASON,
   );
-  params.actions.editMessage(params.conversationId, retryUserMessage.id, retryUserMessage.content);
-  return true;
+  return (
+    params.actions.rewindUserMessageForResend(
+      params.conversationId,
+      retryUserMessage.id,
+      retryUserMessage.content,
+    ).status === 'applied'
+  );
 }
