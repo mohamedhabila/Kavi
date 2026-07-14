@@ -75,9 +75,6 @@ export function resolveRequestDecision(input: RequestDecisionPolicyInput): Reque
   if (input.frame.input.kind === 'empty') {
     return withDecision(input.frame, requiredInformation, 'clarify', 'missing_input');
   }
-  if (input.frame.decision.reason === 'punctuation_only') {
-    return withDecision(input.frame, requiredInformation, 'clarify', 'punctuation_only');
-  }
   if (input.policyDisposition === 'prohibited') {
     return withDecision(input.frame, requiredInformation, 'decline', 'prohibited');
   }

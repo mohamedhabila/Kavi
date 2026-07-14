@@ -154,16 +154,16 @@ describe('graph entry request decision signals', () => {
     });
   });
 
-  it('keeps structural clarification ahead of async authority', () => {
-    const clarificationFrame = buildGraphEntryRequestFrame({
+  it('routes nonempty symbols through the same structured async authority', () => {
+    const symbolFrame = buildGraphEntryRequestFrame({
       text: '...',
       attachmentCount: 0,
       mode: 'agentic',
       continuation: 'resume_waiting_async',
     });
 
-    expect(decide({ requestFrame: clarificationFrame, available: [] })).toMatchObject({
-      decision: { action: 'clarify', reason: 'punctuation_only' },
+    expect(decide({ requestFrame: symbolFrame, available: [] })).toMatchObject({
+      decision: { action: 'decline', reason: 'prohibited' },
     });
   });
 

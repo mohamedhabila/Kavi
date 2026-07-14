@@ -6,13 +6,8 @@ import {
   type RequestMode,
 } from '../../services/agents/requestFrame';
 
-const PUNCTUATION_ONLY_PATTERN = /^[\s.\-_,!?/\\|+=*~:;()[\]{}<>…"'`“”‘’]+$/u;
 export function normalizeRequestText(value: string | undefined): string {
-  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
-}
-
-export function requestTextIsPunctuationOnly(value: string): boolean {
-  return PUNCTUATION_ONLY_PATTERN.test(value);
+  return typeof value === 'string' ? value.replace(/\s+/gu, ' ').trim() : '';
 }
 
 function requestInputKind(textPresent: boolean, attachmentCount: number): RequestInputKind {
@@ -36,9 +31,7 @@ export function buildGraphEntryRequestFrame(params: {
   const decision =
     kind === 'empty'
       ? ({ action: 'clarify', reason: 'missing_input' } as const)
-      : params.attachmentCount === 0 && requestTextIsPunctuationOnly(normalized)
-        ? ({ action: 'clarify', reason: 'punctuation_only' } as const)
-        : ({ action: 'act', reason: 'actionable_input' } as const);
+      : ({ action: 'act', reason: 'actionable_input' } as const);
   return {
     version: REQUEST_FRAME_VERSION,
     mode: params.mode,

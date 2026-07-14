@@ -1,7 +1,6 @@
 import {
   buildGraphEntryRequestFrame,
   normalizeRequestText,
-  requestTextIsPunctuationOnly,
 } from '../../src/engine/graph/requestEntrySignals';
 
 describe('graph entry request frame', () => {
@@ -17,8 +16,8 @@ describe('graph entry request frame', () => {
       text: ' ... ',
       attachmentCount: 0,
       kind: 'text',
-      action: 'clarify',
-      reason: 'punctuation_only',
+      action: 'act',
+      reason: 'actionable_input',
     },
     {
       text: '',
@@ -52,7 +51,7 @@ describe('graph entry request frame', () => {
           continuation: 'new',
         }),
       ).toMatchObject({
-        version: 1,
+        version: 2,
         mode: 'agentic',
         input: { kind, attachmentCount },
         continuation: 'new',
@@ -87,9 +86,25 @@ describe('graph entry request frame', () => {
     },
   );
 
-  it('normalizes whitespace without changing literal-token requests', () => {
+  it.each(['...', '؟،', '…。', '🫶🏽', '∑→∞', '\u0301', '\u200d'])(
+    'routes nonempty symbol or mixed-script input without guessing semantics: %s',
+    (text) => {
+      expect(
+        buildGraphEntryRequestFrame({
+          text,
+          attachmentCount: 0,
+          mode: 'chitchat',
+          continuation: 'new',
+        }),
+      ).toMatchObject({
+        input: { kind: 'text' },
+        decision: { action: 'act', reason: 'actionable_input' },
+      });
+    },
+  );
+
+  it('normalizes Unicode whitespace without changing literal-token requests', () => {
     expect(normalizeRequestText('  CHECKNO42\n')).toBe('CHECKNO42');
-    expect(requestTextIsPunctuationOnly('CHECKNO42')).toBe(false);
-    expect(requestTextIsPunctuationOnly('...')).toBe(true);
+    expect(normalizeRequestText('\u2003\u3000\n')).toBe('');
   });
 });

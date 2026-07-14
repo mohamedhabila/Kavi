@@ -516,7 +516,6 @@ const DECISION_REASONS = new Set<RequestUnderstandingRouting['decisionReason']>(
   'actionable_input',
   'requirements_resolved',
   'missing_input',
-  'punctuation_only',
   'required_information_missing',
   'information_lookup_required',
   'waiting_for_async',

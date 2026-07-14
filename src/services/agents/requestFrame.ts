@@ -1,4 +1,4 @@
-export const REQUEST_FRAME_VERSION = 1 as const;
+export const REQUEST_FRAME_VERSION = 2 as const;
 
 export type RequestMode = 'chitchat' | 'agentic';
 export type RequestInputKind = 'empty' | 'text' | 'attachments' | 'text_and_attachments';
@@ -8,7 +8,6 @@ export type RequestDecisionReason =
   | 'actionable_input'
   | 'requirements_resolved'
   | 'missing_input'
-  | 'punctuation_only'
   | 'required_information_missing'
   | 'information_lookup_required'
   | 'waiting_for_async'
