@@ -23,11 +23,12 @@ describe('LlmService', () => {
           name: 'OpenRouter',
           baseUrl: 'https://openrouter.ai/api/v1',
           apiKey: 'sk-openrouter',
-          model: 'openai/gpt-5.4',
+          model: 'qwen/qwen3.5-9b',
         }),
       );
 
       const result = await service.sendMessage([{ role: 'user', content: 'Return JSON.' }], {
+        reasoning_effort: 'none',
         structuredOutput: {
           name: 'pilot_report',
           mimeType: 'application/json',
@@ -49,7 +50,9 @@ describe('LlmService', () => {
       );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.reasoning_effort).toBe('none');
+      expect(body.reasoning).toEqual({ effort: 'none' });
+      expect(body.reasoning_effort).toBeUndefined();
+      expect(body.provider).toEqual({ require_parameters: true });
       expect(body.response_format).toEqual({
         type: 'json_schema',
         json_schema: {
@@ -67,6 +70,37 @@ describe('LlmService', () => {
       });
       expect(body.text).toBeUndefined();
       expect(result?.output_parsed).toEqual({ approved: true });
+    });
+
+    it('does not infer OpenRouter reasoning controls without an explicit request', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ choices: [{ message: { content: '{"ok":true}' } }] }),
+      });
+      const service = new LlmService(
+        makeConfig({
+          id: 'openrouter',
+          name: 'OpenRouter',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          apiKey: 'sk-openrouter',
+          model: 'qwen/qwen3.5-9b',
+        }),
+      );
+
+      await service.sendMessage([{ role: 'user', content: 'Return JSON.' }], {
+        structuredOutput: {
+          schema: {
+            type: 'object',
+            properties: { ok: { type: 'boolean' } },
+            required: ['ok'],
+          },
+        },
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning_effort).toBeUndefined();
+      expect(body.provider).toEqual({ require_parameters: true });
     });
 
     it('adds OpenRouter sticky session and Claude cache control without OpenAI cache fields', async () => {

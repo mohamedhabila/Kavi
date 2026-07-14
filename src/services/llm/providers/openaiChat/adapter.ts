@@ -9,6 +9,7 @@ import type {
   StructuredOutputOptions,
   ToolChoiceMode,
 } from '../../support/contracts';
+import { applyCompatibleReasoningControl } from './reasoning';
 
 export async function sendOpenAICompatibleChat(args: {
   baseUrl: string;
@@ -35,16 +36,10 @@ export async function sendOpenAICompatibleChat(args: {
   reorderToolsForPromptCaching: (
     tools: NonNullable<MessageRequestOptions['tools']>,
   ) => NonNullable<MessageRequestOptions['tools']>;
-  normalizeStructuredOutputOptions: (
-    value: unknown,
-  ) => StructuredOutputOptions | undefined;
+  normalizeStructuredOutputOptions: (value: unknown) => StructuredOutputOptions | undefined;
   strictifyOpenAiSchema: (schema: Record<string, any>) => Record<string, any>;
   isStrictCompatibleSchema: (schema: Record<string, any>) => boolean;
-  performFetch: (
-    url: string,
-    init: RequestInit,
-    preferStreaming?: boolean,
-  ) => Promise<Response>;
+  performFetch: (url: string, init: RequestInit, preferStreaming?: boolean) => Promise<Response>;
 }): Promise<any> {
   const appendDynamicTextToLatestUserMessage = (
     messages: ChatCompletionMessage[],
@@ -130,23 +125,26 @@ export async function sendOpenAICompatibleChat(args: {
   }
 
   body.max_tokens = args.options.maxTokens ?? resolveModelOutputTokenBudget(args.model);
-  if (
-    args.options.temperature !== undefined &&
-    args.supportsTemperature(args.model)
-  ) {
+  if (args.options.temperature !== undefined && args.supportsTemperature(args.model)) {
     body.temperature = args.options.temperature;
   }
-  const structuredOutput = args.normalizeStructuredOutputOptions(
-    args.options.structuredOutput,
-  );
-  const reasoningEffort =
-    args.options.reasoning_effort ?? (structuredOutput ? 'none' : undefined);
+  const structuredOutput = args.normalizeStructuredOutputOptions(args.options.structuredOutput);
+  const isOpenRouterProvider = args.isOpenRouterProvider();
   if (
-    reasoningEffort &&
-    args.isOpenAIReasoningModel(args.model)
+    isOpenRouterProvider &&
+    (structuredOutput !== undefined || args.options.reasoning_effort !== undefined)
   ) {
-    body.reasoning_effort = reasoningEffort;
+    body.provider = { require_parameters: true };
   }
+  const reasoningEffort =
+    args.options.reasoning_effort ??
+    (structuredOutput && !isOpenRouterProvider ? 'none' : undefined);
+  applyCompatibleReasoningControl({
+    body,
+    effort: reasoningEffort,
+    isOpenAIReasoningModel: args.isOpenAIReasoningModel(args.model),
+    isOpenRouterProvider,
+  });
   if (structuredOutput) {
     body.response_format = args.buildCompatibleStructuredOutputFormat(structuredOutput);
   }
@@ -163,9 +161,7 @@ export async function sendOpenAICompatibleChat(args: {
         function: {
           name: tool.name,
           description: tool.description,
-          parameters: useStrict
-            ? args.strictifyOpenAiSchema(normalizedSchema)
-            : normalizedSchema,
+          parameters: useStrict ? args.strictifyOpenAiSchema(normalizedSchema) : normalizedSchema,
           ...(useStrict ? { strict: true } : {}),
         },
       };
@@ -228,9 +224,7 @@ export async function sendOpenAICompatibleChat(args: {
   const json = await response.json();
   const content = json?.choices?.[0]?.message?.content;
   const outputParsed =
-    structuredOutput && typeof content === 'string'
-      ? tryParseJson(content)
-      : undefined;
+    structuredOutput && typeof content === 'string' ? tryParseJson(content) : undefined;
   return outputParsed !== undefined
     ? {
         ...json,
