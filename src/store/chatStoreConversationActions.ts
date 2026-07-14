@@ -5,6 +5,8 @@ import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { resolveConversationWorkspaceTargetId } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
 import { captureSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
+import { retireConversationSourcesBeforeDeletion } from '../services/memory/conversationDeletionRetirement';
+import { resolveConversationWorkspaceTarget } from '../services/conversationWorkspace/ownership';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 type ChatStoreGet = StoreApi<ChatState>['getState'];
@@ -28,6 +30,30 @@ function captureActiveMemoryHandoff(get: ChatStoreGet) {
     ? state.conversations.find((conversation) => conversation.id === state.activeConversationId)
     : undefined;
   return captureSemanticMemoryHandoff(active);
+}
+
+function retireConversationDeletionTargets(
+  get: ChatStoreGet,
+  targets: ReadonlyArray<
+    Readonly<{
+      conversationId: string;
+      memoryConversationId: string;
+      sourceThreadId: string;
+      messages: ChatState['conversations'][number]['messages'];
+    }>
+  >,
+): void {
+  const result = retireConversationSourcesBeforeDeletion({ targets });
+  for (const withdrawal of result.publicationWithdrawals) {
+    const transition = get().transitionMessageMemoryPublication(
+      withdrawal.conversationId,
+      withdrawal.sourceEndMessageId,
+      'withdrawn',
+    );
+    if (transition.status !== 'applied') {
+      throw new Error(`conversation_delete_memory_publication_commit_${transition.reason}`);
+    }
+  }
 }
 
 function attachActivationMemoryHandoff(
@@ -206,6 +232,17 @@ export function createConversationStoreActions(
       const { conversations } = get();
       const target = conversations.find((c) => c.id === id);
       if (!target || !target.isSideThread) return false;
+      retireConversationDeletionTargets(get, [
+        {
+          conversationId: target.id,
+          memoryConversationId: resolveConversationWorkspaceTarget({
+            conversationId: target.id,
+            conversations,
+          }).workspaceConversationId,
+          sourceThreadId: target.id,
+          messages: target.messages,
+        },
+      ]);
       set((state) => ({
         conversations: state.conversations.filter((c) => c.id !== id),
         activeConversationId:
@@ -226,6 +263,23 @@ export function createConversationStoreActions(
     },
 
     deleteConversation: (id) => {
+      const matches = get().conversations.filter((conversation) => conversation.id === id);
+      if (matches.length > 1) {
+        throw new Error('conversation_delete_identity_invalid');
+      }
+      if (matches.length === 0) return;
+      const target = matches[0]!;
+      retireConversationDeletionTargets(get, [
+        {
+          conversationId: id,
+          memoryConversationId: resolveConversationWorkspaceTarget({
+            conversationId: id,
+            conversations: get().conversations,
+          }).workspaceConversationId,
+          sourceThreadId: id,
+          messages: target.messages,
+        },
+      ]);
       set((state) => ({
         conversations: state.conversations.filter((c) => c.id !== id),
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
@@ -234,6 +288,18 @@ export function createConversationStoreActions(
     },
 
     clearAllConversations: () => {
+      retireConversationDeletionTargets(
+        get,
+        get().conversations.map((conversation) => ({
+          conversationId: conversation.id,
+          memoryConversationId: resolveConversationWorkspaceTarget({
+            conversationId: conversation.id,
+            conversations: get().conversations,
+          }).workspaceConversationId,
+          sourceThreadId: conversation.id,
+          messages: conversation.messages,
+        })),
+      );
       set({ conversations: [], activeConversationId: null });
       requestChatStorePersistenceCheckpoint();
     },

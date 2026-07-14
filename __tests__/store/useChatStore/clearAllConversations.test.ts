@@ -2,6 +2,11 @@
 // Tests - useChatStore: clearAllConversations
 // ---------------------------------------------------------------------------
 
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import { useChatStore } from '../../helpers/chatStoreHarness';
 
 describe('useChatStore', () => {

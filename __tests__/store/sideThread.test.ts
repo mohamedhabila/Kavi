@@ -9,6 +9,11 @@
 // (it must not affect existing main-thread behavior).
 // ---------------------------------------------------------------------------
 
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import { useChatStore } from '../../src/store/useChatStore';
 
 beforeEach(() => {
@@ -55,9 +60,7 @@ describe('side-thread sandbox', () => {
   });
 
   it('createSideThread allows overriding provider/model/persona/system prompt', () => {
-    const parentId = useChatStore
-      .getState()
-      .createConversation('openai', 'parent system', 'gpt-x');
+    const parentId = useChatStore.getState().createConversation('openai', 'parent system', 'gpt-x');
 
     const sideId = useChatStore.getState().createSideThread(parentId, {
       providerId: 'anthropic',
