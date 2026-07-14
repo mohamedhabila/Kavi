@@ -49,12 +49,16 @@ import type {
   VerifiedFactContributionAggregate,
   VerifiedFactContributionLoadResult,
 } from './factContributionAggregateTypes';
+import { requireFactContributionExplicitProjection } from './factContributionExplicitProjection';
 import {
   closedMemoryFactReviewState,
   closedMemoryFactSensitivity,
 } from './facts/applicabilityProvenance';
 import { hasExactFactContentIdentity } from './facts/contentIdentity';
-import type { FactContributionClassifierContext } from './facts/factContributionProjection';
+import type {
+  FactContributionClassifierContext,
+  FactContributionExplicitProjection,
+} from './facts/factContributionProjection';
 import { isMemoryFactScope, normalizeFactKind } from './facts/types';
 import {
   maxMemoryFactSensitivity,
@@ -250,6 +254,7 @@ function requireEdgeRow(row: RawSupersessionEdgeRow): FactContributionAdmissionS
 function requireFactEvidence(row: RawFactEvidenceRow): {
   evidence: FactContributionFactEvidence;
   classifierContext: FactContributionClassifierContext;
+  explicitProjection: Readonly<FactContributionExplicitProjection> | null;
 } {
   const scope = isMemoryFactScope(row.scope) ? row.scope : fail();
   const memoryKind = normalizeFactKind(row.memory_kind);
@@ -267,29 +272,31 @@ function requireFactEvidence(row: RawFactEvidenceRow): {
   const subjectName = row.subject_name === null ? null : requireString(row.subject_name);
   const subjectType = row.subject_type === null ? null : requireString(row.subject_type);
   if ((subjectName === null) !== (subjectType === null)) return fail();
+  const evidence = Object.freeze({
+    id: requireFactId(row.id),
+    memoryOwnerId: requireScopeId(row.memory_owner_id),
+    memoryKind,
+    scope,
+    originConversationId: requireNullableScopeId(row.origin_conversation_id),
+    originThreadId: requireNullableScopeId(row.origin_thread_id),
+    originTaskId: requireNullableScopeId(row.origin_task_id),
+    personaId: requireNullableScopeId(row.persona_id),
+    subjectId: requireFactId(row.subject_id),
+    predicate: requireString(row.predicate),
+    objectText: requireString(row.object_text),
+    objectEntityId: requireNullableFactId(row.object_entity_id),
+    createdAt: requireTimestamp(row.created_at),
+    invalidAt: requireNullableTimestamp(row.invalid_at),
+    deletedAt: requireNullableTimestamp(row.deleted_at),
+    pinned,
+    reviewState,
+    sensitivity,
+    sensitivityPolicyVersion,
+  });
   return {
-    evidence: Object.freeze({
-      id: requireFactId(row.id),
-      memoryOwnerId: requireScopeId(row.memory_owner_id),
-      memoryKind,
-      scope,
-      originConversationId: requireNullableScopeId(row.origin_conversation_id),
-      originThreadId: requireNullableScopeId(row.origin_thread_id),
-      originTaskId: requireNullableScopeId(row.origin_task_id),
-      personaId: requireNullableScopeId(row.persona_id),
-      subjectId: requireFactId(row.subject_id),
-      predicate: requireString(row.predicate),
-      objectText: requireString(row.object_text),
-      objectEntityId: requireNullableFactId(row.object_entity_id),
-      createdAt: requireTimestamp(row.created_at),
-      invalidAt: requireNullableTimestamp(row.invalid_at),
-      deletedAt: requireNullableTimestamp(row.deleted_at),
-      pinned,
-      reviewState,
-      sensitivity,
-      sensitivityPolicyVersion,
-    }),
+    evidence,
     classifierContext: Object.freeze({ subject: subjectName, subjectType }),
+    explicitProjection: requireFactContributionExplicitProjection(row, evidence),
   };
 }
 
@@ -531,7 +538,11 @@ export function loadVerifiedFactContributionAggregatesInTransaction(
 
   const facts = new Map<
     string,
-    { evidence: FactContributionFactEvidence; classifierContext: FactContributionClassifierContext }
+    {
+      evidence: FactContributionFactEvidence;
+      classifierContext: FactContributionClassifierContext;
+      explicitProjection: Readonly<FactContributionExplicitProjection> | null;
+    }
   >();
   for (const rawFact of raw.facts) {
     const fact = requireFactEvidence(rawFact);
@@ -616,6 +627,7 @@ export function loadVerifiedFactContributionAggregatesInTransaction(
       supersessionPlan: plan,
       factEvidence: fact.evidence,
       classifierContext: fact.classifierContext,
+      explicitProjection: fact.explicitProjection,
     });
   });
   aggregates.sort(

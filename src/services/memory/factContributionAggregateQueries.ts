@@ -76,6 +76,17 @@ export interface RawFactEvidenceRow {
   sensitivity_policy_version: unknown;
   subject_name: unknown;
   subject_type: unknown;
+  override_fact_id: unknown;
+  override_memory_owner_id: unknown;
+  override_pinned_override: unknown;
+  override_pinned_at: unknown;
+  override_review_state_override: unknown;
+  override_review_state_at: unknown;
+  override_sensitivity_floor: unknown;
+  override_sensitivity_floor_at: unknown;
+  override_explicit_invalidated_at: unknown;
+  override_created_at: unknown;
+  override_updated_at: unknown;
 }
 
 export interface RawPredecessorEvidenceRow {
@@ -238,9 +249,22 @@ export function loadRawContributionAggregateRows(
                   fact.object_entity_id, fact.created_at, fact.invalid_at, fact.deleted_at,
                   fact.pinned, fact.review_state, fact.sensitivity,
                   fact.sensitivity_policy_version, subject.canonical_name AS subject_name,
-                  subject.type AS subject_type
+                  subject.type AS subject_type,
+                  explicit_override.fact_id AS override_fact_id,
+                  explicit_override.memory_owner_id AS override_memory_owner_id,
+                  explicit_override.pinned_override AS override_pinned_override,
+                  explicit_override.pinned_at AS override_pinned_at,
+                  explicit_override.review_state_override AS override_review_state_override,
+                  explicit_override.review_state_at AS override_review_state_at,
+                  explicit_override.sensitivity_floor AS override_sensitivity_floor,
+                  explicit_override.sensitivity_floor_at AS override_sensitivity_floor_at,
+                  explicit_override.explicit_invalidated_at AS override_explicit_invalidated_at,
+                  explicit_override.created_at AS override_created_at,
+                  explicit_override.updated_at AS override_updated_at
              FROM memory_facts AS fact
              LEFT JOIN memory_entities AS subject ON subject.id = fact.subject_id
+             LEFT JOIN memory_fact_explicit_overrides AS explicit_override
+               ON explicit_override.fact_id = fact.id
             WHERE fact.id IN (
               SELECT DISTINCT contribution.fact_id
                 FROM memory_fact_contributions AS contribution

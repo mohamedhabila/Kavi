@@ -1,11 +1,10 @@
 import type { PersistedExactMemorySourceIdentity } from './exactMemorySourceIdentity';
 import {
+  overlayFactContributionExplicitProjectionForRetirement,
   projectFactFromSurvivingContributions,
   type FactContributionProjection,
 } from './facts/factContributionProjection';
-import {
-  MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS,
-} from './sourceRetirementChildCommitments';
+import { MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS } from './sourceRetirementChildCommitments';
 import {
   MEMORY_SOURCE_RETIREMENT_PLAN_VERSION,
   type MemorySourceRetirementFactReactivation,
@@ -46,10 +45,7 @@ function freezeOrdinalIds(values: Iterable<string>): ReadonlyArray<string> {
 }
 
 function closeRetirementGraph(graph: SourceRetirementPlanningGraph): RetirementClosure {
-  const closedSourcesByKey = new Map<
-    string,
-    Readonly<PersistedExactMemorySourceIdentity>
-  >();
+  const closedSourcesByKey = new Map<string, Readonly<PersistedExactMemorySourceIdentity>>();
   const pendingSourceKeys: string[] = [];
   const newlyRetiredContributionIds = new Set<string>();
   const tombstonedFactIds = new Set<string>();
@@ -59,15 +55,10 @@ function closeRetirementGraph(graph: SourceRetirementPlanningGraph): RetirementC
     remainingContributionsByFact.set(fact.factId, fact.aggregates.length);
   }
 
-  const addClosedSource = (
-    source: Readonly<PersistedExactMemorySourceIdentity>,
-  ): void => {
+  const addClosedSource = (source: Readonly<PersistedExactMemorySourceIdentity>): void => {
     const key = sourceRetirementIdentityKey(source);
     if (closedSourcesByKey.has(key)) return;
-    if (
-      closedSourcesByKey.size >=
-      MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS.retiredSources
-    ) {
+    if (closedSourcesByKey.size >= MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS.retiredSources) {
       fail('memory_source_retirement_plan_resource_limit');
     }
     closedSourcesByKey.set(key, source);
@@ -117,8 +108,7 @@ function closeRetirementGraph(graph: SourceRetirementPlanningGraph): RetirementC
     }
     while (tombstoneCursor < pendingTombstonedFactIds.length) {
       const factId = pendingTombstonedFactIds[tombstoneCursor++]!;
-      for (const contributionId of
-        graph.aggregateIdsByPredecessorFact.get(factId) ?? []) {
+      for (const contributionId of graph.aggregateIdsByPredecessorFact.get(factId) ?? []) {
         retireContribution(contributionId);
       }
     }
@@ -140,7 +130,9 @@ function projectSurvivingFact(
     })),
     classifierContext: fact.classifierContext,
   });
-  return deepFreeze(projection);
+  return deepFreeze(
+    overlayFactContributionExplicitProjectionForRetirement(projection, fact.explicitProjection),
+  );
 }
 
 function collectSupersessionTargets(
@@ -176,6 +168,8 @@ function isExactReactivation(input: {
   return (
     invalidatedAt !== null &&
     input.fact.evidence.deletedAt === null &&
+    (input.fact.explicitProjection === null ||
+      input.fact.explicitProjection.explicitInvalidatedAt === null) &&
     !input.survivingTargets.has(input.fact.factId) &&
     Boolean(input.retiredTargetTimes.get(input.fact.factId)?.has(invalidatedAt))
   );
@@ -247,6 +241,7 @@ function planFactActions(
           factId: fact.factId,
           survivingContributionIds,
           projection: projectSurvivingFact(fact, surviving),
+          explicitInvalidatedAt: fact.explicitProjection?.explicitInvalidatedAt ?? null,
         }),
       );
     }
@@ -278,9 +273,7 @@ export function planExactSourceRetirement(
       graph.requestedSources.map((source) => Object.freeze({ ...source })),
     ),
     closedSources: Object.freeze(closedSources),
-    newlyRetiredContributionIds: freezeOrdinalIds(
-      closure.newlyRetiredContributionIds,
-    ),
+    newlyRetiredContributionIds: freezeOrdinalIds(closure.newlyRetiredContributionIds),
     ...actions,
   });
 }

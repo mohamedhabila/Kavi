@@ -186,8 +186,7 @@ function snapshotProjection(
     snapshot.superseded_at !== input.contributedAt ||
     snapshot.snapshot_version !== 1 ||
     (snapshot.pinned_input_explicit !== 0 && snapshot.pinned_input_explicit !== 1) ||
-    (snapshot.review_state_input_explicit !== 0 &&
-      snapshot.review_state_input_explicit !== 1) ||
+    (snapshot.review_state_input_explicit !== 0 && snapshot.review_state_input_explicit !== 1) ||
     (snapshot.successor_pinned_baseline !== 0 && snapshot.successor_pinned_baseline !== 1) ||
     !reviewState ||
     !sensitivityFloor ||
@@ -378,11 +377,10 @@ export function mergeFactContributionProjection(
   };
 }
 
-function overlayExplicitProjection(
-  projection: FactContributionProjection,
+function requireExplicitProjection(
   explicit: FactContributionExplicitProjection | null,
-): FactContributionProjection {
-  if (!explicit) return projection;
+): FactContributionExplicitProjection | null {
+  if (!explicit) return null;
   if (
     (explicit.pinnedOverride !== null && typeof explicit.pinnedOverride !== 'boolean') ||
     (explicit.reviewStateOverride !== null &&
@@ -390,14 +388,18 @@ function overlayExplicitProjection(
     (explicit.sensitivityFloor !== null &&
       !closedMemoryFactSensitivity(explicit.sensitivityFloor)) ||
     (explicit.explicitInvalidatedAt !== null &&
-      (!Number.isSafeInteger(explicit.explicitInvalidatedAt) ||
-        explicit.explicitInvalidatedAt < 0))
+      (!Number.isSafeInteger(explicit.explicitInvalidatedAt) || explicit.explicitInvalidatedAt < 0))
   ) {
     fail('memory_fact_contribution_projection_explicit_invalid');
   }
-  if (explicit.explicitInvalidatedAt !== null) {
-    fail('memory_fact_contribution_projection_explicitly_invalidated');
-  }
+  return explicit;
+}
+
+function applyExplicitProjection(
+  projection: FactContributionProjection,
+  explicit: FactContributionExplicitProjection | null,
+): FactContributionProjection {
+  if (!explicit) return projection;
   return {
     ...projection,
     pinned: explicit.pinnedOverride ?? projection.pinned,
@@ -406,6 +408,29 @@ function overlayExplicitProjection(
       ? maxMemoryFactSensitivity(projection.sensitivity, explicit.sensitivityFloor)
       : projection.sensitivity,
   };
+}
+
+function overlayExplicitProjection(
+  projection: FactContributionProjection,
+  explicitInput: FactContributionExplicitProjection | null,
+): FactContributionProjection {
+  const explicit = requireExplicitProjection(explicitInput);
+  if (!explicit) return projection;
+  if (explicit.explicitInvalidatedAt !== null) {
+    fail('memory_fact_contribution_projection_explicitly_invalidated');
+  }
+  return applyExplicitProjection(projection, explicit);
+}
+
+/**
+ * Preserve durable intent while rebuilding non-lifecycle columns during source retirement.
+ * `explicitInvalidatedAt` remains owned by the executor and is intentionally not cleared here.
+ */
+export function overlayFactContributionExplicitProjectionForRetirement(
+  projection: FactContributionProjection,
+  explicitInput: FactContributionExplicitProjection | null,
+): FactContributionProjection {
+  return applyExplicitProjection(projection, requireExplicitProjection(explicitInput));
 }
 
 /** Reduce surviving contributions without mutating caller order or payload-owned objects. */
@@ -428,11 +453,7 @@ export function projectFactFromSurvivingContributions(input: {
     }
     seen.add(contributionId);
   }
-  let projection = baselineFactContributionProjection(
-    factId,
-    ordered[0]!,
-    input.classifierContext,
-  );
+  let projection = baselineFactContributionProjection(factId, ordered[0]!, input.classifierContext);
   for (let index = 1; index < ordered.length; index += 1) {
     projection = mergeFactContributionProjection(
       projection,

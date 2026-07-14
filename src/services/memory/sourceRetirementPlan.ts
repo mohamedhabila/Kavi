@@ -47,6 +47,8 @@ export interface MemorySourceRetirementFactRematerialization {
   factId: string;
   survivingContributionIds: ReadonlyArray<string>;
   projection: Readonly<FactContributionProjection>;
+  /** Explicit invalidation is lifecycle-owned and must survive projection replacement unchanged. */
+  explicitInvalidatedAt: number | null;
 }
 
 /** Immutable, deterministic instructions for a later transactional executor. */
@@ -58,7 +60,5 @@ export interface MemorySourceRetirementPlan {
   survivors: ReadonlyArray<Readonly<MemorySourceRetirementFactSurvivor>>;
   tombstones: ReadonlyArray<Readonly<MemorySourceRetirementFactTombstone>>;
   reactivations: ReadonlyArray<Readonly<MemorySourceRetirementFactReactivation>>;
-  rematerializations: ReadonlyArray<
-    Readonly<MemorySourceRetirementFactRematerialization>
-  >;
+  rematerializations: ReadonlyArray<Readonly<MemorySourceRetirementFactRematerialization>>;
 }

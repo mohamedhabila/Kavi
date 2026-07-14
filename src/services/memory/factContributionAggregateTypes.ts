@@ -7,7 +7,10 @@ import type {
 } from './factContributionCodec';
 import type { FactContributionSupersessionPlan } from './factContributionSupersessionStore';
 import type { MemoryFactReviewState, MemoryFactSensitivity } from './facts/applicabilityProvenance';
-import type { FactContributionClassifierContext } from './facts/factContributionProjection';
+import type {
+  FactContributionClassifierContext,
+  FactContributionExplicitProjection,
+} from './facts/factContributionProjection';
 import type { MemoryFactKind, MemoryFactScope } from './facts/types';
 
 export interface NormalizedContributionParent {
@@ -71,6 +74,7 @@ export interface VerifiedFactContributionAggregate {
   supersessionPlan: FactContributionSupersessionPlan;
   factEvidence: Readonly<FactContributionFactEvidence>;
   classifierContext: Readonly<FactContributionClassifierContext>;
+  explicitProjection: Readonly<FactContributionExplicitProjection> | null;
 }
 
 export interface VerifiedFactContributionLoadResult {

@@ -1,5 +1,6 @@
 import {
   mergeFactContributionProjection,
+  overlayFactContributionExplicitProjectionForRetirement,
   projectFactFromSurvivingContributions,
   type FactContributionExplicitProjection,
   type VerifiedFactContributionProjectionInput,
@@ -270,6 +271,24 @@ describe('fact contribution projection', () => {
     ).toThrow('memory_fact_contribution_projection_explicitly_invalidated');
   });
 
+  it('overlays explicit intent for retirement without clearing lifecycle invalidation', () => {
+    const derived = project([contribution('1', 100)]);
+
+    expect(
+      overlayFactContributionExplicitProjectionForRetirement(derived, {
+        pinnedOverride: true,
+        reviewStateOverride: 'rejected',
+        sensitivityFloor: 'restricted',
+        explicitInvalidatedAt: 150,
+      }),
+    ).toMatchObject({
+      pinned: true,
+      reviewState: 'rejected',
+      sensitivity: 'restricted',
+    });
+    expect(derived).toMatchObject({ pinned: false, reviewState: 'auto' });
+  });
+
   it('removing the base shifts base-owned fields to the earliest survivor', () => {
     const base = contribution('1', 100, {
       attributes: { baseOnly: true, layer: 'base' },
@@ -368,9 +387,9 @@ describe('fact contribution projection', () => {
     });
     const baseline = project([base]);
 
-    expect(
-      mergeFactContributionProjection(baseline, FACT_ID, later, CLASSIFIER_CONTEXT),
-    ).toEqual(project([later, base]));
+    expect(mergeFactContributionProjection(baseline, FACT_ID, later, CLASSIFIER_CONTEXT)).toEqual(
+      project([later, base]),
+    );
   });
 
   it('rejects pairwise use when the incoming contribution is not canonically later', () => {
@@ -380,12 +399,7 @@ describe('fact contribution projection', () => {
     const baseline = project([sameTimeLater]);
 
     expect(() =>
-      mergeFactContributionProjection(
-        baseline,
-        FACT_ID,
-        sameTimeEarlier,
-        CLASSIFIER_CONTEXT,
-      ),
+      mergeFactContributionProjection(baseline, FACT_ID, sameTimeEarlier, CLASSIFIER_CONTEXT),
     ).toThrow('memory_fact_contribution_projection_order_invalid');
     expect(() =>
       mergeFactContributionProjection(baseline, FACT_ID, delayedOlder, CLASSIFIER_CONTEXT),
@@ -395,14 +409,14 @@ describe('fact contribution projection', () => {
   it('does not mutate or retain mutable aliases into mixed-script payloads', () => {
     const first = contribution('1', 100, {
       attributes: {
-        '色': { value: '青' },
-        'تفضيل': ['هادئ', '🌍'],
+        色: { value: '青' },
+        تفضيل: ['هادئ', '🌍'],
         shared: 'начало',
       },
       sourceSummary: 'ملخص 日本語 resumo',
     });
     const second = contribution('2', 200, {
-      attributes: { shared: 'النهاية', 'ключ': 'значение' },
+      attributes: { shared: 'النهاية', ключ: 'значение' },
     });
     const inputs = [second, first];
     const before = JSON.stringify(inputs);
@@ -415,10 +429,10 @@ describe('fact contribution projection', () => {
       first.contributionId,
     ]);
     expect(projection.attributes).toEqual({
-      '色': { value: '青' },
-      'تفضيل': ['هادئ', '🌍'],
+      色: { value: '青' },
+      تفضيل: ['هادئ', '🌍'],
       shared: 'النهاية',
-      'ключ': 'значение',
+      ключ: 'значение',
     });
     (projection.attributes['色'] as { value: string }).value = 'changed';
     expect((first.payload.input.attributes['色'] as { value: string }).value).toBe('青');
@@ -429,9 +443,7 @@ describe('fact contribution projection', () => {
     const malformed = { ...valid, contributionId: 'mfc_not-hex' };
     const timestampMismatch = { ...valid, contributedAt: 101 };
 
-    expect(() => project([malformed])).toThrow(
-      'memory_fact_contribution_projection_id_invalid',
-    );
+    expect(() => project([malformed])).toThrow('memory_fact_contribution_projection_id_invalid');
     expect(() => project([valid, { ...valid }])).toThrow(
       'memory_fact_contribution_projection_duplicate',
     );
@@ -463,11 +475,13 @@ describe('fact contribution projection', () => {
       },
     };
 
-    expect(() => projectFactFromSurvivingContributions({
-      factId: ' invalid',
-      contributions: [valid],
-      classifierContext: CLASSIFIER_CONTEXT,
-    })).toThrow('memory_fact_contribution_projection_fact_id_invalid');
+    expect(() =>
+      projectFactFromSurvivingContributions({
+        factId: ' invalid',
+        contributions: [valid],
+        classifierContext: CLASSIFIER_CONTEXT,
+      }),
+    ).toThrow('memory_fact_contribution_projection_fact_id_invalid');
     expect(() => project([valid, unrelated])).toThrow(
       'memory_fact_contribution_projection_identity_mismatch',
     );

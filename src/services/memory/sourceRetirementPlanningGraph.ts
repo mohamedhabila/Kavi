@@ -1,6 +1,4 @@
-import {
-  MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES,
-} from './factContributionChildCommitments';
+import { MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES } from './factContributionChildCommitments';
 import {
   encodeMemoryFactContributionPayload,
   MEMORY_FACT_CONTRIBUTION_LIMITS,
@@ -9,8 +7,13 @@ import type {
   FactContributionFactEvidence,
   VerifiedFactContributionAggregate,
 } from './factContributionAggregateTypes';
+import {
+  closedMemoryFactReviewState,
+  closedMemoryFactSensitivity,
+} from './facts/applicabilityProvenance';
 import type {
   FactContributionClassifierContext,
+  FactContributionExplicitProjection,
 } from './facts/factContributionProjection';
 import {
   requireExactMemorySourceKind,
@@ -18,9 +21,8 @@ import {
 } from './exactMemorySourceIdentity';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
-import {
-  MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS,
-} from './sourceRetirementChildCommitments';
+import { maxMemoryFactSensitivity } from './memorySensitivityPolicy';
+import { MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS } from './sourceRetirementChildCommitments';
 import {
   MEMORY_SOURCE_RETIREMENT_PLAN_LIMITS,
   type MemorySourceRetirementPlanInput,
@@ -36,6 +38,12 @@ const SOURCE_KEYS = [
   'sourceKind',
   'sourceId',
 ] as const;
+const EXPLICIT_PROJECTION_KEYS = [
+  'explicitInvalidatedAt',
+  'pinnedOverride',
+  'reviewStateOverride',
+  'sensitivityFloor',
+] as const;
 
 export interface SourceRetirementAggregateNode {
   aggregate: Readonly<VerifiedFactContributionAggregate>;
@@ -48,6 +56,7 @@ export interface SourceRetirementFactNode {
   aggregates: SourceRetirementAggregateNode[];
   evidence: Readonly<FactContributionFactEvidence>;
   classifierContext: Readonly<FactContributionClassifierContext>;
+  explicitProjection: Readonly<FactContributionExplicitProjection> | null;
 }
 
 export interface SourceRetirementPlanningGraph {
@@ -121,10 +130,7 @@ function requireFactId(value: unknown): string {
   return value;
 }
 
-function requirePersistedSource(
-  value: unknown,
-  code: string,
-): PersistedExactMemorySourceIdentity {
+function requirePersistedSource(value: unknown, code: string): PersistedExactMemorySourceIdentity {
   if (!isPlainRecord(value) || !hasExactKeys(value, SOURCE_KEYS)) fail(code);
   if (
     !isExactMemoryScopeId(value.memoryOwnerId) ||
@@ -163,10 +169,7 @@ function normalizeRequestedSources(
       'memory_source_retirement_plan_request_invalid',
     );
     const key = sourceRetirementIdentityKey(source);
-    if (
-      seen.has(key) ||
-      (memoryOwnerId !== null && source.memoryOwnerId !== memoryOwnerId)
-    ) {
+    if (seen.has(key) || (memoryOwnerId !== null && source.memoryOwnerId !== memoryOwnerId)) {
       fail('memory_source_retirement_plan_request_invalid');
     }
     memoryOwnerId = source.memoryOwnerId;
@@ -203,9 +206,20 @@ function exactFactEvidenceMatches(
   );
 }
 
-function assertFactEvidence(
-  aggregate: Readonly<VerifiedFactContributionAggregate>,
-): void {
+function exactExplicitProjectionMatches(
+  left: Readonly<FactContributionExplicitProjection> | null,
+  right: Readonly<FactContributionExplicitProjection> | null,
+): boolean {
+  if (left === null || right === null) return left === right;
+  return (
+    left.pinnedOverride === right.pinnedOverride &&
+    left.reviewStateOverride === right.reviewStateOverride &&
+    left.sensitivityFloor === right.sensitivityFloor &&
+    left.explicitInvalidatedAt === right.explicitInvalidatedAt
+  );
+}
+
+function assertFactEvidence(aggregate: Readonly<VerifiedFactContributionAggregate>): void {
   const fact = aggregate.factEvidence;
   if (
     !fact ||
@@ -222,6 +236,27 @@ function assertFactEvidence(
     !context ||
     (context.subject !== null && typeof context.subject !== 'string') ||
     (context.subjectType !== null && typeof context.subjectType !== 'string')
+  ) {
+    fail('memory_source_retirement_plan_aggregate_invalid');
+  }
+  const explicit = aggregate.explicitProjection;
+  if (explicit === null) return;
+  if (
+    !isPlainRecord(explicit) ||
+    !hasExactKeys(explicit, EXPLICIT_PROJECTION_KEYS) ||
+    (explicit.pinnedOverride !== null && typeof explicit.pinnedOverride !== 'boolean') ||
+    (explicit.reviewStateOverride !== null &&
+      !closedMemoryFactReviewState(explicit.reviewStateOverride)) ||
+    (explicit.sensitivityFloor !== null &&
+      !closedMemoryFactSensitivity(explicit.sensitivityFloor)) ||
+    (explicit.explicitInvalidatedAt !== null &&
+      (!Number.isSafeInteger(explicit.explicitInvalidatedAt) ||
+        explicit.explicitInvalidatedAt < 0)) ||
+    (explicit.pinnedOverride !== null && explicit.pinnedOverride !== fact.pinned) ||
+    (explicit.reviewStateOverride !== null && explicit.reviewStateOverride !== fact.reviewState) ||
+    (explicit.sensitivityFloor !== null &&
+      maxMemoryFactSensitivity(fact.sensitivity, explicit.sensitivityFloor) !== fact.sensitivity) ||
+    (explicit.explicitInvalidatedAt !== null && explicit.explicitInvalidatedAt !== fact.invalidAt)
   ) {
     fail('memory_source_retirement_plan_aggregate_invalid');
   }
@@ -391,7 +426,8 @@ export function buildSourceRetirementPlanningGraph(
       if (
         !exactFactEvidenceMatches(factNode.evidence, aggregate.factEvidence) ||
         factNode.classifierContext.subject !== aggregate.classifierContext.subject ||
-        factNode.classifierContext.subjectType !== aggregate.classifierContext.subjectType
+        factNode.classifierContext.subjectType !== aggregate.classifierContext.subjectType ||
+        !exactExplicitProjectionMatches(factNode.explicitProjection, aggregate.explicitProjection)
       ) {
         fail('memory_source_retirement_plan_aggregate_invalid');
       }
@@ -402,6 +438,7 @@ export function buildSourceRetirementPlanningGraph(
         aggregates: [node],
         evidence: aggregate.factEvidence,
         classifierContext: aggregate.classifierContext,
+        explicitProjection: aggregate.explicitProjection,
       });
       if (factsById.size > MEMORY_SOURCE_RETIREMENT_PLAN_LIMITS.facts) {
         fail('memory_source_retirement_plan_resource_limit');
@@ -423,10 +460,7 @@ export function buildSourceRetirementPlanningGraph(
   }
   for (const fact of factsById.values()) {
     fact.aggregates.sort((left, right) =>
-      compareSourceRetirementOrdinal(
-        left.aggregate.contributionId,
-        right.aggregate.contributionId,
-      ),
+      compareSourceRetirementOrdinal(left.aggregate.contributionId, right.aggregate.contributionId),
     );
     Object.freeze(fact.aggregates);
     Object.freeze(fact);

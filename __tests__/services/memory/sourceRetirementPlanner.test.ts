@@ -1,5 +1,6 @@
 import type { VerifiedFactContributionAggregate } from '../../../src/services/memory/factContributionAggregateTypes';
 import type { PersistedExactMemorySourceIdentity } from '../../../src/services/memory/exactMemorySourceIdentity';
+import type { FactContributionExplicitProjection } from '../../../src/services/memory/facts/factContributionProjection';
 import { planExactSourceRetirement } from '../../../src/services/memory/sourceRetirementPlanner';
 import { MEMORY_SOURCE_RETIREMENT_PLAN_LIMITS } from '../../../src/services/memory/sourceRetirementPlan';
 
@@ -17,6 +18,10 @@ interface AggregateOptions {
   aliases?: ReadonlyArray<{ sourceKind: 'message' | 'turn' | 'run'; sourceId: string }>;
   predecessorFactIds?: ReadonlyArray<string>;
   attributes?: Record<string, unknown>;
+  pinned?: boolean;
+  reviewState?: 'auto' | 'verified' | 'pending_review' | 'stale' | 'conflicted' | 'rejected';
+  sensitivity?: 'normal' | 'personal' | 'sensitive' | 'restricted';
+  explicitProjection?: FactContributionExplicitProjection | null;
 }
 
 function contributionId(index: number): string {
@@ -152,12 +157,13 @@ function aggregate(
       createdAt: factCreatedAt,
       invalidAt: options.invalidAt ?? null,
       deletedAt: options.deletedAt ?? null,
-      pinned: false,
-      reviewState: 'auto',
-      sensitivity: 'normal',
+      pinned: options.pinned ?? false,
+      reviewState: options.reviewState ?? 'auto',
+      sensitivity: options.sensitivity ?? 'normal',
       sensitivityPolicyVersion: 1,
     },
     classifierContext: { subject: null, subjectType: null },
+    explicitProjection: options.explicitProjection ?? null,
   };
 }
 
@@ -189,14 +195,8 @@ describe('exact source retirement fixed-point planner', () => {
       activeAggregates: [second, first],
     });
 
-    expect(plan.newlyRetiredContributionIds).toEqual([
-      first.contributionId,
-      second.contributionId,
-    ]);
-    expect(plan.tombstones.map(({ factId }) => factId)).toEqual([
-      'fact_alias_a',
-      'fact_alias_b',
-    ]);
+    expect(plan.newlyRetiredContributionIds).toEqual([first.contributionId, second.contributionId]);
+    expect(plan.tombstones.map(({ factId }) => factId)).toEqual(['fact_alias_a', 'fact_alias_b']);
     expect(sourceIds(plan)).toEqual([
       ':message:message_seed',
       ':run:run_closed_transitively',
@@ -229,9 +229,7 @@ describe('exact source retirement fixed-point planner', () => {
     });
 
     const plan = planExactSourceRetirement({
-      requestedSources: [
-        exactSource({ sourceKind: 'message', sourceId: 'message_chain_seed' }),
-      ],
+      requestedSources: [exactSource({ sourceKind: 'message', sourceId: 'message_chain_seed' })],
       activeAggregates: [dependent, predecessor, successor],
     });
 
@@ -337,9 +335,7 @@ describe('exact source retirement fixed-point planner', () => {
     expect(Object.isFrozen(plan.reactivations[0]!.projection)).toBe(true);
     expect(Object.isFrozen(plan.reactivations[0]!.projection.attributes.nested)).toBe(true);
     expect(
-      plan.rematerializations.some(
-        ({ factId }) => factId === plan.reactivations[0]!.factId,
-      ),
+      plan.rematerializations.some(({ factId }) => factId === plan.reactivations[0]!.factId),
     ).toBe(false);
   });
 
@@ -424,9 +420,7 @@ describe('exact source retirement fixed-point planner', () => {
     expect(partial.rematerializations).toEqual([]);
 
     const complete = planExactSourceRetirement({
-      requestedSources: [
-        exactSource({ sourceKind: 'message', sourceId: 'message_deleted_keep' }),
-      ],
+      requestedSources: [exactSource({ sourceKind: 'message', sourceId: 'message_deleted_keep' })],
       activeAggregates: [kept],
     });
     expect(complete.survivors).toEqual([]);
