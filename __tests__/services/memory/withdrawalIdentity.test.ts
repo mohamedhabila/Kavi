@@ -18,7 +18,13 @@ import {
   normalizeWithdrawalOpaqueId,
 } from '../../../src/services/memory/withdrawalLineage';
 import type { FactRow } from '../../../src/services/memory/facts/types';
-import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
+import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
+import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
+import type { PersistedExactMemorySourceIdentity } from '../../../src/services/memory/exactMemorySourceIdentity';
+import {
+  loadVerifiedRetirementGroup,
+  retirementLedgerCounts,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -28,17 +34,41 @@ const EXACT_SCOPE = {
   taskId: 'task-1',
 } as const;
 
+function exactSource(
+  sourceKind: PersistedExactMemorySourceIdentity['sourceKind'],
+  sourceId: string,
+  taskId: string | null = EXACT_SCOPE.taskId,
+): PersistedExactMemorySourceIdentity {
+  return {
+    memoryOwnerId: getLocalMemoryVaultOwnerId(getMemoryDb()),
+    memoryConversationId: EXACT_SCOPE.memoryConversationId,
+    sourceThreadId: EXACT_SCOPE.sourceThreadId,
+    taskId: taskId ?? '',
+    sourceKind,
+    sourceId,
+  };
+}
+
+function retireSource(
+  retirementGroupId: string,
+  sourceKind: PersistedExactMemorySourceIdentity['sourceKind'],
+  sourceId: string,
+  taskId: string | null = EXACT_SCOPE.taskId,
+) {
+  return retireExactMemorySources({
+    reason: 'message_delete',
+    requestedSources: [exactSource(sourceKind, sourceId, taskId)],
+    retiredAt: 100,
+    retirementGroupId,
+  });
+}
+
 beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  insertRetiredMemorySourceForTest({
-    retirementGroupId: 'withdrawal-1',
-    ...EXACT_SCOPE,
-    sourceKind: 'message',
-    sourceId: 'message-1',
-  });
+  retireSource('withdrawal-1', 'message', 'message-1');
 });
 
 afterEach(() => {
@@ -48,34 +78,28 @@ afterEach(() => {
 
 describe('memory withdrawal identity', () => {
   it('stores one tombstone per exact source while preserving sibling identities', () => {
-    insertRetiredMemorySourceForTest({
-      retirementGroupId: 'withdrawal-duplicate',
-      ...EXACT_SCOPE,
-      sourceKind: 'message',
-      sourceId: 'message-1',
+    expect(retireSource('withdrawal-duplicate', 'message', 'message-1')).toMatchObject({
+      status: 'already_retired',
+      requestedSourceCount: 1,
     });
-    insertRetiredMemorySourceForTest({
+    expect(retireSource('withdrawal-sibling', 'turn', 'message-1')).toMatchObject({
+      status: 'retired',
       retirementGroupId: 'withdrawal-sibling',
-      ...EXACT_SCOPE,
-      sourceKind: 'turn',
-      sourceId: 'message-1',
     });
 
-    expect(
-      getMemoryDb().getAllSync<{ retirement_group_id: string; source_kind: string }>(
-        `SELECT retirement_group_id, source_kind FROM memory_retired_sources
-          WHERE memory_conversation_id = ? AND source_thread_id = ?
-            AND task_id = ? AND source_id = ?
-          ORDER BY source_kind`,
-        EXACT_SCOPE.memoryConversationId,
-        EXACT_SCOPE.sourceThreadId,
-        EXACT_SCOPE.taskId,
-        'message-1',
-      ),
-    ).toEqual([
-      { retirement_group_id: 'withdrawal-1', source_kind: 'message' },
-      { retirement_group_id: 'withdrawal-sibling', source_kind: 'turn' },
+    expect(loadVerifiedRetirementGroup('withdrawal-1')?.closedSources).toEqual([
+      exactSource('message', 'message-1'),
     ]);
+    expect(loadVerifiedRetirementGroup('withdrawal-sibling')?.closedSources).toEqual([
+      exactSource('turn', 'message-1'),
+    ]);
+    expect(retirementLedgerCounts()).toEqual({
+      groups: 2,
+      requests: 2,
+      sources: 2,
+      contributions: 0,
+      facts: 0,
+    });
     expect(
       isMemorySourceWithdrawn({
         ...EXACT_SCOPE,
@@ -86,20 +110,19 @@ describe('memory withdrawal identity', () => {
   });
 
   it('does not apply a foreign-owner tombstone to the local memory vault', () => {
-    getMemoryDb().runSync(
-      `INSERT INTO memory_source_retirement_groups(id, reason, retired_at)
-       VALUES ('foreign-owner-retirement', 'fact_withdrawal', 1)`,
-    );
-    getMemoryDb().runSync(
-      `INSERT INTO memory_retired_sources(
-         retirement_group_id, memory_owner_id, memory_conversation_id,
-         source_thread_id, task_id, source_kind, source_id
-       ) VALUES ('foreign-owner-retirement', 'foreign-owner', ?, ?, ?, 'message', ?)`,
-      EXACT_SCOPE.memoryConversationId,
-      EXACT_SCOPE.sourceThreadId,
-      EXACT_SCOPE.taskId,
-      'foreign-only-message',
-    );
+    expect(() =>
+      retireExactMemorySources({
+        reason: 'message_delete',
+        requestedSources: [
+          {
+            ...exactSource('message', 'foreign-only-message'),
+            memoryOwnerId: 'foreign-owner',
+          },
+        ],
+        retiredAt: 101,
+        retirementGroupId: 'foreign-owner-retirement',
+      }),
+    ).toThrow('memory_source_retirement_requested_sources_invalid');
 
     expect(
       isMemorySourceWithdrawn({
@@ -116,14 +139,7 @@ describe('memory withdrawal identity', () => {
   });
 
   it('keeps null-task and exact-task source identities independent', () => {
-    insertRetiredMemorySourceForTest({
-      retirementGroupId: 'null-task-retirement',
-      memoryConversationId: EXACT_SCOPE.memoryConversationId,
-      sourceThreadId: EXACT_SCOPE.sourceThreadId,
-      taskId: null,
-      sourceKind: 'message',
-      sourceId: 'task-sensitive-message',
-    });
+    retireSource('null-task-retirement', 'message', 'task-sensitive-message', null);
 
     expect(
       isMemorySourceWithdrawn({

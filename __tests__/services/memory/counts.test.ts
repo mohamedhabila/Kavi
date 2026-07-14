@@ -20,6 +20,7 @@ import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/
 import { countEpisodes } from '../../../src/services/memory/episodes/queries';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
+import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -42,12 +43,21 @@ describe('countFacts', () => {
   });
 
   it('excludes withdrawn facts', () => {
-    const result = recordFact({
-      subjectId: 'user',
-      predicate: 'name',
-      objectText: 'A',
-      scope: 'global',
-    });
+    const result = recordContributionBackedFact(
+      {
+        subjectId: 'user',
+        predicate: 'name',
+        objectText: 'A',
+        scope: 'global',
+        sourceMessageId: 'count-withdraw-message',
+        sourceTurnId: 'count-withdraw-turn',
+      },
+      {
+        memoryConversationId: 'count-withdraw-conversation',
+        sourceThreadId: 'count-withdraw-thread',
+        producerEventId: 'count-withdraw-event',
+      },
+    );
     expect(withdrawMemoryFact(result.fact.id).status).toBe('withdrawn');
     expect(countFacts()).toBe(0);
   });

@@ -22,7 +22,6 @@ import { buildToolEffectReceipt } from '../../../src/engine/toolExecution/toolEf
 import { CALENDAR_CREATE_TOOL } from '../../../src/engine/tools/native/calendar/definitions';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { getMemoryDb } from '../../../src/services/memory/database';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { invalidateVerifiedProcedureObservationsForExecutionRun } from '../../../src/services/memory/verifiedProcedure/invalidation';
 import {
@@ -41,6 +40,7 @@ import {
   hashVerifiedProcedureProvenanceSync,
   type VerifiedProcedureMemoryLineage,
 } from '../../../src/services/memory/verifiedProcedure/provenanceHash';
+import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const OBSERVED_AT = Date.now() - 1_000;
@@ -326,20 +326,28 @@ describe('verified procedure execution session', () => {
       terminalObservedAt: OBSERVED_AT + 202,
     });
 
-    const fact = recordFact({
-      subjectId: 'profile-owner',
-      predicate: 'calendar_workflow_note',
-      objectText: 'Use the verified calendar workflow.',
-      scope: 'session',
-      originConversationId: memoryConversationId,
-      originThreadId: sourceThreadId,
-      originTaskId: targetLineage.taskId,
-      taskId: targetLineage.taskId,
-      sourceMessageId: targetLineage.sourceMessageId,
-      sourceRunId: targetLineage.sourceRunId,
-      sourceTurnId: targetLineage.sourceTurnId,
-      now: OBSERVED_AT + 300,
-    }).fact;
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: 'profile-owner',
+        predicate: 'calendar_workflow_note',
+        objectText: 'Use the verified calendar workflow.',
+        scope: 'session',
+        originConversationId: memoryConversationId,
+        originThreadId: sourceThreadId,
+        originTaskId: targetLineage.taskId,
+        taskId: targetLineage.taskId,
+        sourceMessageId: targetLineage.sourceMessageId,
+        sourceRunId: targetLineage.sourceRunId,
+        sourceTurnId: targetLineage.sourceTurnId,
+        now: OBSERVED_AT + 300,
+      },
+      {
+        memoryConversationId,
+        sourceThreadId,
+        taskId: targetLineage.taskId,
+        producerEventId: 'verified-procedure-foreground-target',
+      },
+    ).fact;
     const revisionBeforeWithdrawal = getMemoryDb().getFirstSync<{
       observation_revision: number;
     }>('SELECT observation_revision FROM memory_verified_procedure_state')?.observation_revision;
@@ -390,17 +398,24 @@ describe('verified procedure execution session', () => {
       lineage: siblingLineage,
       terminalObservedAt: OBSERVED_AT + 211,
     });
-    const fact = recordFact({
-      subjectId: 'profile-owner',
-      predicate: 'chitchat_calendar_workflow_note',
-      objectText: 'Use the chitchat calendar workflow.',
-      scope: 'conversation',
-      originConversationId: memoryConversationId,
-      originThreadId: sourceThreadId,
-      sourceMessageId: targetLineage.sourceMessageId,
-      sourceTurnId: targetLineage.sourceTurnId,
-      now: OBSERVED_AT + 310,
-    }).fact;
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: 'profile-owner',
+        predicate: 'chitchat_calendar_workflow_note',
+        objectText: 'Use the chitchat calendar workflow.',
+        scope: 'conversation',
+        originConversationId: memoryConversationId,
+        originThreadId: sourceThreadId,
+        sourceMessageId: targetLineage.sourceMessageId,
+        sourceTurnId: targetLineage.sourceTurnId,
+        now: OBSERVED_AT + 310,
+      },
+      {
+        memoryConversationId,
+        sourceThreadId,
+        producerEventId: 'verified-procedure-chitchat-target',
+      },
+    ).fact;
 
     expect(withdrawMemoryFact(fact.id, OBSERVED_AT + 410)).toMatchObject({
       status: 'withdrawn',
@@ -426,18 +441,25 @@ describe('verified procedure execution session', () => {
     await observeList(session, executionRunId);
     await observeCreate(session, executionRunId);
     const pending = await seal(session);
-    const fact = recordFact({
-      subjectId: 'profile-owner',
-      predicate: 'pending_calendar_workflow_note',
-      objectText: 'Pending workflow source.',
-      scope: 'conversation',
-      originConversationId: memoryConversationId,
-      originThreadId: sourceThreadId,
-      sourceMessageId: lineage.sourceMessageId,
-      sourceRunId: lineage.sourceRunId,
-      sourceTurnId: lineage.sourceTurnId,
-      now: OBSERVED_AT + 320,
-    }).fact;
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: 'profile-owner',
+        predicate: 'pending_calendar_workflow_note',
+        objectText: 'Pending workflow source.',
+        scope: 'conversation',
+        originConversationId: memoryConversationId,
+        originThreadId: sourceThreadId,
+        sourceMessageId: lineage.sourceMessageId,
+        sourceRunId: lineage.sourceRunId,
+        sourceTurnId: lineage.sourceTurnId,
+        now: OBSERVED_AT + 320,
+      },
+      {
+        memoryConversationId,
+        sourceThreadId,
+        producerEventId: 'verified-procedure-pending-target',
+      },
+    ).fact;
     expect(withdrawMemoryFact(fact.id, OBSERVED_AT + 420)).toMatchObject({
       status: 'withdrawn',
     });

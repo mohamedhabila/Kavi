@@ -291,13 +291,13 @@ export function probeMemoryWithdrawalResiduals(
   plan: MemoryWithdrawalResidualPlan,
 ): MemoryWithdrawalResidualProbe {
   const counts: MemoryWithdrawalResidualCounts = {
-    facts: countIds(db, 'memory_facts', 'id', plan.factIds),
+    facts: countIds(db, 'memory_facts', 'id', plan.factIds, 'AND deleted_at IS NULL'),
     graphRelations: countIds(
       db,
       'memory_facts',
       'id',
       plan.factIds,
-      'AND object_entity_id IS NOT NULL',
+      'AND deleted_at IS NULL AND object_entity_id IS NOT NULL',
     ),
     retrievalTerms: countIds(db, 'memory_fact_terms', 'fact_id', plan.factIds),
     retrievalTermStats: retrievalTermStatResiduals(db, plan),

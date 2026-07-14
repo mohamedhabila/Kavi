@@ -26,11 +26,14 @@ import { EMPTY_MEMORY_WITHDRAWAL_COUNTS } from '../../../src/services/memory/wit
 import { probeMemoryWithdrawalResiduals } from '../../../src/services/memory/withdrawalResidualProbe';
 import * as memoryChangeNotifications from '../../../src/services/memory/changeNotifications';
 import {
-  cloneMemoryFactForWithdrawal,
   insertMemoryIngestionReceiptForWithdrawal,
   insertMemoryRetrievalEventForWithdrawal,
   requireMemoryIngestionJob,
 } from '../../helpers/memoryWithdrawalFixtures';
+import {
+  loadVerifiedFactRetirement,
+  recordContributionBackedFact,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -44,7 +47,7 @@ const RUN_ID = 'run-target';
 
 interface SeededLineage {
   targetFactId: string;
-  historyFactId: string;
+  replayFactId: string;
   collisionFactId: string;
   orphanEntityId: string;
   sharedEntityId: string;
@@ -108,25 +111,60 @@ function requireJob(
 function seedAuthoritativeLineage(): SeededLineage {
   const sharedEntity = upsertEntity({ name: 'user', type: 'self', now: 1_000 });
   const orphanEntity = upsertEntity({ name: 'private-object', type: 'concept', now: 1_000 });
-  const target = recordFact({
-    subjectId: sharedEntity.id,
-    predicate: 'private_preference',
-    objectText: PRIVATE_VALUE,
-    objectEntityId: orphanEntity.id,
-    scope: 'session',
-    originConversationId: CONVERSATION_ID,
-    originThreadId: THREAD_ID,
-    originTaskId: TASK_ID,
-    taskId: TASK_ID,
-    sourceMessageId: MESSAGE_ID,
-    sourceTurnId: TURN_ID,
-    sourceRunId: RUN_ID,
-    sourceSummary: PRIVATE_VALUE,
-    supersedePrior: false,
-    now: 1_000,
-  }).fact;
-  const historyFactId = 'fact-history-same-identity';
-  cloneMemoryFactForWithdrawal(target.id, historyFactId);
+  const target = recordContributionBackedFact(
+    {
+      subjectId: sharedEntity.id,
+      predicate: 'private_preference',
+      objectText: PRIVATE_VALUE,
+      objectEntityId: orphanEntity.id,
+      scope: 'session',
+      originConversationId: CONVERSATION_ID,
+      originThreadId: THREAD_ID,
+      originTaskId: TASK_ID,
+      taskId: TASK_ID,
+      sourceMessageId: MESSAGE_ID,
+      sourceTurnId: TURN_ID,
+      sourceRunId: RUN_ID,
+      sourceSummary: PRIVATE_VALUE,
+      supersedePrior: false,
+      now: 1_000,
+    },
+    {
+      memoryConversationId: CONVERSATION_ID,
+      sourceThreadId: THREAD_ID,
+      taskId: TASK_ID,
+      producerEventId: 'withdrawal-transaction-target',
+    },
+  ).fact;
+  const sharedSupport = recordContributionBackedFact(
+    {
+      subjectId: sharedEntity.id,
+      predicate: 'private_preference',
+      objectText: PRIVATE_VALUE,
+      objectEntityId: orphanEntity.id,
+      scope: 'session',
+      originConversationId: CONVERSATION_ID,
+      originThreadId: THREAD_ID,
+      originTaskId: TASK_ID,
+      taskId: TASK_ID,
+      sourceMessageId: 'message-history',
+      sourceTurnId: 'turn-history',
+      sourceRunId: 'run-history',
+      sourceSummary: PRIVATE_VALUE,
+      supersedePrior: false,
+      now: 1_001,
+    },
+    {
+      memoryConversationId: CONVERSATION_ID,
+      sourceThreadId: THREAD_ID,
+      taskId: TASK_ID,
+      producerEventId: 'withdrawal-transaction-history',
+    },
+  ).fact;
+  if (sharedSupport.id !== target.id) {
+    throw new Error('expected contribution-backed canonical fact replay');
+  }
+  const replayFactId = sharedSupport.id;
 
   const collision = recordFact({
     subjectId: sharedEntity.id,
@@ -315,7 +353,7 @@ function seedAuthoritativeLineage(): SeededLineage {
   });
   return {
     targetFactId: target.id,
-    historyFactId,
+    replayFactId,
     collisionFactId: collision.id,
     orphanEntityId: orphanEntity.id,
     sharedEntityId: sharedEntity.id,
@@ -358,7 +396,7 @@ afterEach(() => {
 });
 
 describe('atomic memory withdrawal', () => {
-  it('purges only authoritative lineage and leaves a content-free scoped tombstone', () => {
+  it('purges only authoritative artifacts and seals a content-free retirement receipt', () => {
     const seeded = seedAuthoritativeLineage();
     const notificationSpy = jest.spyOn(memoryChangeNotifications, 'notifyStructuredMemoryChanged');
     notificationSpy.mockClear();
@@ -369,8 +407,8 @@ describe('atomic memory withdrawal', () => {
     if (result.status !== 'withdrawn') throw new Error('expected withdrawal');
     expect(result.receipt.counts).toEqual(
       expect.objectContaining({
-        facts: 2,
-        graphRelations: 2,
+        facts: 1,
+        graphRelations: 1,
         factEvidence: 2,
         episodeAccessPolicies: 1,
         episodes: 1,
@@ -385,7 +423,16 @@ describe('atomic memory withdrawal', () => {
     expect(JSON.stringify(result)).not.toContain(PRIVATE_VALUE);
     expect(notificationSpy).toHaveBeenLastCalledWith(CONVERSATION_ID);
 
-    expect(ids('memory_facts')).toEqual([seeded.collisionFactId]);
+    expect(ids('memory_facts')).toEqual(
+      expect.arrayContaining([seeded.targetFactId, seeded.collisionFactId]),
+    );
+    expect(ids('memory_facts')).toHaveLength(2);
+    expect(
+      getMemoryDb().getFirstSync<{ deleted_at: number }>(
+        'SELECT deleted_at FROM memory_facts WHERE id = ?',
+        seeded.targetFactId,
+      ),
+    ).toEqual({ deleted_at: 5_000 });
     expect(ids('memory_entities')).toContain(seeded.sharedEntityId);
     expect(ids('memory_entities')).not.toContain(seeded.orphanEntityId);
     expect(ids('memory_fact_evidence')).toEqual([]);
@@ -458,9 +505,8 @@ describe('atomic memory withdrawal', () => {
     expect(ids('memory_retrieval_events')).not.toContain('retrieval-linked-malformed');
 
     const removedTerms = getMemoryDb().getFirstSync<{ count: number }>(
-      `SELECT COUNT(*) AS count FROM memory_fact_terms WHERE fact_id IN (?, ?)`,
+      'SELECT COUNT(*) AS count FROM memory_fact_terms WHERE fact_id = ?',
       seeded.targetFactId,
-      seeded.historyFactId,
     );
     expect(removedTerms?.count).toBe(0);
     const expectedStats = getMemoryDb().getAllSync<{
@@ -490,35 +536,36 @@ describe('atomic memory withdrawal', () => {
       expect(actual?.total_weight).toBeCloseTo(expected.total_weight, 12);
     }
 
-    const sourceRows = getMemoryDb().getAllSync<{
-      memory_conversation_id: string;
-      source_thread_id: string;
-      task_id: string;
-      source_kind: string;
-      source_id: string;
-    }>('SELECT * FROM memory_retired_sources');
-    expect(sourceRows).toEqual(
+    const verifiedRetirement = loadVerifiedFactRetirement(seeded.targetFactId);
+    expect(verifiedRetirement).toMatchObject({
+      reason: 'fact_withdrawal',
+      retiredFactIds: [seeded.targetFactId],
+    });
+    expect(verifiedRetirement?.closedSources).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          memory_conversation_id: CONVERSATION_ID,
-          source_thread_id: THREAD_ID,
-          task_id: TASK_ID,
-          source_kind: 'message',
-          source_id: MESSAGE_ID,
+          memoryConversationId: CONVERSATION_ID,
+          sourceThreadId: THREAD_ID,
+          taskId: TASK_ID,
+          sourceKind: 'message',
+          sourceId: MESSAGE_ID,
         }),
-        expect.objectContaining({ source_kind: 'turn', source_id: TURN_ID }),
-        expect.objectContaining({ source_kind: 'run', source_id: RUN_ID }),
+        expect.objectContaining({ sourceKind: 'turn', sourceId: TURN_ID }),
+        expect.objectContaining({ sourceKind: 'run', sourceId: RUN_ID }),
+        expect.objectContaining({ sourceKind: 'message', sourceId: 'message-history' }),
+        expect.objectContaining({ sourceKind: 'turn', sourceId: 'turn-history' }),
+        expect.objectContaining({ sourceKind: 'run', sourceId: 'run-history' }),
       ]),
     );
     expect(
-      sourceRows.some((row) => row.source_kind === 'turn' && row.source_id === MESSAGE_ID),
+      verifiedRetirement?.closedSources.some(
+        (source) => source.sourceKind === 'turn' && source.sourceId === MESSAGE_ID,
+      ),
     ).toBe(false);
-    expect(
-      JSON.stringify(getMemoryDb().getAllSync('SELECT * FROM memory_withdrawals')),
-    ).not.toContain(PRIVATE_VALUE);
+    expect(JSON.stringify(verifiedRetirement)).not.toContain(PRIVATE_VALUE);
 
     const residualProbe = probeMemoryWithdrawalResiduals(getMemoryDb(), {
-      factIds: [seeded.targetFactId, seeded.historyFactId],
+      factIds: [seeded.targetFactId],
       retrievalTermStats: [],
       evidenceIds: seeded.evidenceIds,
       observationIds: [],
@@ -559,11 +606,11 @@ describe('atomic memory withdrawal', () => {
     );
     expect(JSON.stringify(residualProbe)).not.toContain(PRIVATE_VALUE);
 
-    const indirectReplay = withdrawMemoryFact(seeded.historyFactId, 6_000);
+    const indirectReplay = withdrawMemoryFact(seeded.replayFactId, 6_000);
     expect(indirectReplay.status).toBe('already_withdrawn');
     if (indirectReplay.status !== 'already_withdrawn') throw new Error('expected replay');
     expect(indirectReplay.receipt.withdrawalId).toBe(result.receipt.withdrawalId);
-    expect(indirectReplay.receipt.factId).toBe(seeded.historyFactId);
+    expect(indirectReplay.receipt.factId).toBe(seeded.replayFactId);
     expect(indirectReplay.receipt.counts).toEqual(EMPTY_MEMORY_WITHDRAWAL_COUNTS);
     notificationSpy.mockRestore();
   });

@@ -4,14 +4,14 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
-import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import {
-  clearStructuredMemory,
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { isMemorySourceWithdrawn } from '../../../src/services/memory/withdrawalFence';
-import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
+import {
+  ensureSourceRetirementSchema,
+  isSourceRetirementSchemaResetRequired,
+} from '../../../src/services/memory/sourceRetirementSchema';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -26,118 +26,162 @@ afterEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
 });
 
+function retirementTableNames(): string[] {
+  return getMemoryDb()
+    .getAllSync<{ name: string }>(
+      `SELECT name FROM sqlite_master
+        WHERE type = 'table' AND name LIKE 'memory_%retirement%'
+           OR type = 'table' AND name LIKE 'memory_retired_%'
+        ORDER BY name`,
+    )
+    .map((row) => row.name);
+}
+
 describe('source retirement schema', () => {
-  it('clears retirement groups and sources with structured memory', () => {
+  it('installs the exact five-table immutable ledger and is idempotent', () => {
+    const db = getMemoryDb();
+
     ensureFactSchema();
-    const ownerId = getLocalMemoryVaultOwnerId(getMemoryDb());
-    insertRetiredMemorySourceForTest({
-      retirementGroupId: 'retirement-clear',
-      memoryConversationId: 'conversation-clear',
-      sourceThreadId: 'thread-clear',
-      sourceKind: 'run',
-      sourceId: 'run-clear',
-    });
+    ensureSourceRetirementSchema(db);
 
-    clearStructuredMemory();
-
+    expect(retirementTableNames()).toEqual([
+      'memory_retired_fact_contributions',
+      'memory_retired_facts',
+      'memory_retired_sources',
+      'memory_source_retirement_groups',
+      'memory_source_retirement_requests',
+    ]);
     expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_source_retirement_groups',
-      )?.count,
-    ).toBe(0);
+      db
+        .getAllSync<{ name: string }>('PRAGMA table_info(memory_source_retirement_groups)')
+        .map((row) => row.name),
+    ).toEqual([
+      'id',
+      'memory_owner_id',
+      'reason',
+      'retired_at',
+      'requested_source_set_version',
+      'requested_source_set_count',
+      'requested_source_set_sha256',
+      'closed_source_set_version',
+      'closed_source_set_count',
+      'closed_source_set_sha256',
+      'retired_contribution_set_version',
+      'retired_contribution_set_count',
+      'retired_contribution_set_sha256',
+      'retired_fact_set_version',
+      'retired_fact_set_count',
+      'retired_fact_set_sha256',
+    ]);
     expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_retired_sources',
-      )?.count,
-    ).toBe(0);
-    expect(getLocalMemoryVaultOwnerId(getMemoryDb())).toBe(ownerId);
+      db.getAllSync<{ name: string }>(
+        `SELECT name FROM sqlite_master
+          WHERE type = 'trigger' AND name LIKE 'trg_memory_%retirement%'
+             OR type = 'trigger' AND name LIKE 'trg_memory_retired_%'`,
+      ),
+    ).toHaveLength(23);
   });
 
-  it('migrates legacy withdrawal sources once and removes the old table', () => {
+  it('rejects the legacy two-table layout without migrating or dropping it', () => {
     const db = getMemoryDb();
     db.execSync(`
-      CREATE TABLE memory_withdrawals (
+      CREATE TABLE memory_source_retirement_groups (
         id TEXT PRIMARY KEY,
-        target_fact_id TEXT NOT NULL UNIQUE,
-        memory_conversation_id TEXT NOT NULL,
-        source_thread_id TEXT NOT NULL,
-        task_id TEXT NOT NULL,
         reason TEXT NOT NULL,
-        withdrawn_at INTEGER NOT NULL
+        retired_at INTEGER NOT NULL
       );
-      CREATE TABLE memory_withdrawal_sources (
-        withdrawal_id TEXT NOT NULL,
+      CREATE TABLE memory_retired_sources (
+        retirement_group_id TEXT NOT NULL,
+        memory_owner_id TEXT NOT NULL,
         memory_conversation_id TEXT NOT NULL,
         source_thread_id TEXT NOT NULL,
         task_id TEXT NOT NULL,
         source_kind TEXT NOT NULL,
-        source_id TEXT NOT NULL,
-        PRIMARY KEY (
-          withdrawal_id, memory_conversation_id, source_thread_id,
-          task_id, source_kind, source_id
-        )
+        source_id TEXT NOT NULL
       );
     `);
-    db.runSync(
-      `INSERT INTO memory_withdrawals(
-         id, target_fact_id, memory_conversation_id, source_thread_id,
-         task_id, reason, withdrawn_at
-       ) VALUES ('legacy-withdrawal', 'legacy-fact', 'conversation-1',
-                 'thread-1', 'task-1', 'user_request', 123)`,
-    );
-    db.runSync(
-      `INSERT INTO memory_withdrawal_sources(
-         withdrawal_id, memory_conversation_id, source_thread_id,
-         task_id, source_kind, source_id
-       ) VALUES ('legacy-withdrawal', 'conversation-1', 'thread-1',
-                 'task-1', 'message', 'message-1')`,
-    );
 
-    ensureFactSchema();
+    let thrown: unknown;
+    try {
+      ensureFactSchema();
+    } catch (error) {
+      thrown = error;
+    }
 
+    expect(isSourceRetirementSchemaResetRequired(thrown)).toBe(true);
     expect(
-      db.getFirstSync<{ name: string }>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_withdrawal_sources'",
+      db.getFirstSync<{ present: number }>(
+        `SELECT 1 AS present FROM sqlite_master
+          WHERE type = 'table' AND name = 'memory_source_retirement_requests'`,
       ),
     ).toBeNull();
     expect(
-      db.getFirstSync<{
-        reason: string;
-        retired_at: number;
-      }>(
-        `SELECT reason, retired_at FROM memory_source_retirement_groups
-          WHERE id = 'legacy-withdrawal'`,
+      db.getAllSync<{ name: string }>('PRAGMA table_info(memory_source_retirement_groups)').map(
+        (row) => row.name,
       ),
-    ).toEqual({ reason: 'fact_withdrawal', retired_at: 123 });
-    expect(
-      db.getFirstSync<{
-        memory_owner_id: string;
-        retirement_group_id: string;
-      }>(
-        `SELECT memory_owner_id, retirement_group_id FROM memory_retired_sources
-          WHERE memory_conversation_id = 'conversation-1'
-            AND source_thread_id = 'thread-1' AND task_id = 'task-1'
-            AND source_kind = 'message' AND source_id = 'message-1'`,
-      ),
-    ).toEqual({
-      memory_owner_id: getLocalMemoryVaultOwnerId(db),
-      retirement_group_id: 'legacy-withdrawal',
-    });
-    expect(
-      isMemorySourceWithdrawn({
-        memoryConversationId: 'conversation-1',
-        sourceThreadId: 'thread-1',
-        taskId: 'task-1',
-        sourceKind: 'message',
-        sourceId: 'message-1',
-      }),
-    ).toBe(true);
+    ).toEqual(['id', 'reason', 'retired_at']);
+  });
 
-    resetFactSchemaCacheForTests();
-    ensureFactSchema();
+  it.each(['memory_withdrawals', 'memory_withdrawal_facts', 'memory_withdrawal_sources'])(
+    'rejects the removed legacy table %s instead of retaining a compatibility layer',
+    (tableName) => {
+      const db = getMemoryDb();
+      db.execSync(`CREATE TABLE ${tableName} (id TEXT PRIMARY KEY)`);
+
+      expect(() => ensureFactSchema()).toThrow(
+        'memory_source_retirement_schema_reset_required',
+      );
+      expect(
+        db.getFirstSync<{ name: string }>(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+          tableName,
+        )?.name,
+      ).toBe(tableName);
+    },
+  );
+
+  it('rejects a partial canonical layout without filling missing tables', () => {
+    const db = getMemoryDb();
+    db.execSync(`
+      CREATE TABLE memory_retired_facts (
+        fact_id TEXT PRIMARY KEY,
+        retirement_group_id TEXT NOT NULL
+      )
+    `);
+
+    expect(() => ensureFactSchema()).toThrow(
+      'memory_source_retirement_schema_reset_required',
+    );
+    expect(retirementTableNames()).toEqual(['memory_retired_facts']);
+  });
+
+  it('rejects a conflicting schema object instead of attempting a fresh install', () => {
+    const db = getMemoryDb();
+    db.execSync("CREATE VIEW memory_retired_facts AS SELECT 'fact-1' AS fact_id");
+
+    expect(() => ensureFactSchema()).toThrow(
+      'memory_source_retirement_schema_reset_required',
+    );
     expect(
-      db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_retired_sources')
-        ?.count,
-    ).toBe(1);
+      db.getFirstSync<{ type: string }>(
+        "SELECT type FROM sqlite_master WHERE name = 'memory_retired_facts'",
+      )?.type,
+    ).toBe('view');
+  });
+
+  it('rejects a weakened external parent-protection trigger', () => {
+    const db = getMemoryDb();
+    ensureFactSchema();
+    db.execSync(`
+      DROP TRIGGER trg_memory_retired_fact_parent_delete;
+      CREATE TRIGGER trg_memory_retired_fact_parent_delete
+      BEFORE DELETE ON memory_facts
+      BEGIN SELECT 1; END;
+    `);
+    resetFactSchemaCacheForTests();
+
+    expect(() => ensureFactSchema()).toThrow(
+      'memory_source_retirement_schema_reset_required',
+    );
   });
 });

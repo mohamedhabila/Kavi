@@ -3,7 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import {
   ensureFactSchema,
@@ -13,6 +12,8 @@ import {
   assertMemoryPersistenceSourcesAreWritable,
   MemoryPersistenceSourceWithdrawnError,
 } from '../../../src/services/memory/withdrawalFence';
+import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
+import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const scope = {
@@ -20,6 +21,26 @@ const scope = {
   sourceThreadId: 'thread-1',
   taskId: 'task-1',
 };
+
+function retireSource(
+  retirementGroupId: string,
+  sourceKind: 'message' | 'turn' | 'run',
+  sourceId: string,
+): void {
+  retireExactMemorySources({
+    reason: 'message_delete',
+    requestedSources: [
+      {
+        memoryOwnerId: getLocalMemoryVaultOwnerId(getMemoryDb()),
+        ...scope,
+        sourceKind,
+        sourceId,
+      },
+    ],
+    retiredAt: 100,
+    retirementGroupId,
+  });
+}
 
 beforeEach(() => {
   closeMemoryDb();
@@ -35,12 +56,7 @@ afterEach(() => {
 });
 
 it('checks every exact source in one batched retirement query', () => {
-  insertRetiredMemorySourceForTest({
-    retirementGroupId: 'retirement-1',
-    ...scope,
-    sourceKind: 'run',
-    sourceId: 'run-retired',
-  });
+  retireSource('retirement-1', 'run', 'run-retired');
   const db = getMemoryDb();
   const querySpy = jest.spyOn(db, 'getFirstSync');
 
@@ -65,12 +81,7 @@ it('checks every exact source in one batched retirement query', () => {
 });
 
 it('does not broaden retirement across source kind or scope', () => {
-  insertRetiredMemorySourceForTest({
-    retirementGroupId: 'retirement-2',
-    ...scope,
-    sourceKind: 'message',
-    sourceId: 'shared-id',
-  });
+  retireSource('retirement-2', 'message', 'shared-id');
 
   expect(() =>
     assertMemoryPersistenceSourcesAreWritable(scope, [
@@ -78,9 +89,8 @@ it('does not broaden retirement across source kind or scope', () => {
     ]),
   ).not.toThrow();
   expect(() =>
-    assertMemoryPersistenceSourcesAreWritable(
-      { ...scope, sourceThreadId: 'thread-2' },
-      [{ sourceKind: 'message', sourceId: 'shared-id' }],
-    ),
+    assertMemoryPersistenceSourcesAreWritable({ ...scope, sourceThreadId: 'thread-2' }, [
+      { sourceKind: 'message', sourceId: 'shared-id' },
+    ]),
   ).not.toThrow();
 });

@@ -15,10 +15,17 @@ import { ensureIngestionQueueSchema } from './ingestionQueueSchema';
 import { ensureMigrationStateSchema } from './migrationStateSchema';
 import { ensureRetrievalEventSchema } from './retrievalEventSchema';
 import { ensureRetrievalOutcomeSchema } from './retrievalOutcomeSchema';
-import { ensureSourceRetirementSchema } from './sourceRetirementSchema';
+import {
+  ensureSourceRetirementSchema,
+  isSourceRetirementSchemaResetRequired,
+} from './sourceRetirementSchema';
 import { ensureVerifiedProcedureObservationSchema } from './verifiedProcedure/observationSchema';
-import { CLEARED_STRUCTURED_MEMORY_TABLES } from './structuredMemoryTableRegistry';
-import { ensureWithdrawalSchema } from './withdrawalSchema';
+import {
+  CLEARED_STRUCTURED_MEMORY_TABLES,
+  FULL_RESET_DROPPED_RETIREMENT_PARENT_TRIGGERS,
+  FULL_RESET_DROPPED_RETIREMENT_TABLES,
+  FULL_RESET_REBUILT_CONTRIBUTION_TABLES,
+} from './structuredMemoryTableRegistry';
 import { ensureEpisodeAccessPolicySchema } from './episodes/accessPolicySchema';
 import { ensureEpisodeRetrievalIndexSchema } from './episodes/retrievalIndex';
 import {
@@ -295,8 +302,6 @@ export function ensureFactSchema(): void {
   ensureRetrievalEventSchema(db);
   ensureMigrationStateSchema(db);
   ensureMemoryVaultIdentitySchema(db);
-  ensureSourceRetirementSchema(db);
-  ensureWithdrawalSchema(db);
   ensureRetrievalOutcomeSchema(db);
   ensureVerifiedProcedureObservationSchema(db);
   ensureEpisodeAccessPolicySchema(db);
@@ -314,6 +319,7 @@ export function ensureFactSchema(): void {
   ensureCanonicalFactTable(db);
   ensureFactContentIdentityV3(db);
   ensureFactContributionSchema(db);
+  ensureSourceRetirementSchema(db);
   ensureFactContributionAdmissionSchema(db);
   admitLegacyFactContributions(db);
   ensureFactExplicitOverrideSchema(db);
@@ -552,14 +558,32 @@ export function resetFactSchemaCacheForTests(): void {
 
 export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>): void {
   runMemoryDatabaseSavepoint(db, (database) => {
+    for (const trigger of FULL_RESET_DROPPED_RETIREMENT_PARENT_TRIGGERS) {
+      database.execSync(`DROP TRIGGER IF EXISTS ${trigger}`);
+    }
+    for (const table of FULL_RESET_DROPPED_RETIREMENT_TABLES) {
+      database.execSync(`DROP TABLE IF EXISTS ${table}`);
+    }
     clearFactContributionLedgerForStructuredReset(database);
+    const factsExist = database.getFirstSync<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_facts'",
+    );
+    if (factsExist) database.runSync('DELETE FROM memory_facts');
     for (const table of CLEARED_STRUCTURED_MEMORY_TABLES) {
+      if (
+        table === 'memory_facts' ||
+        FULL_RESET_DROPPED_RETIREMENT_TABLES.some((candidate) => candidate === table) ||
+        FULL_RESET_REBUILT_CONTRIBUTION_TABLES.some((candidate) => candidate === table)
+      ) {
+        continue;
+      }
       const exists = database.getFirstSync<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
         table,
       );
       if (exists) database.runSync(`DELETE FROM ${table}`);
     }
+    ensureSourceRetirementSchema(database);
   });
 }
 
@@ -569,7 +593,8 @@ export function clearStructuredMemory(): void {
   } catch (error) {
     if (
       !isFactContributionAdmissionIntegrityFailure(error) &&
-      !isFactContributionSchemaResetRequired(error)
+      !isFactContributionSchemaResetRequired(error) &&
+      !isSourceRetirementSchemaResetRequired(error)
     ) {
       throw error;
     }

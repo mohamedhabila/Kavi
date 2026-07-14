@@ -49,7 +49,10 @@ import type {
   VerifiedFactContributionAggregate,
   VerifiedFactContributionLoadResult,
 } from './factContributionAggregateTypes';
-import { requireFactContributionExplicitProjection } from './factContributionExplicitProjection';
+import {
+  requireFactContributionExplicitProjection,
+  requireFactContributionExplicitProjectionForReplay,
+} from './factContributionExplicitProjection';
 import {
   closedMemoryFactReviewState,
   closedMemoryFactSensitivity,
@@ -251,7 +254,10 @@ function requireEdgeRow(row: RawSupersessionEdgeRow): FactContributionAdmissionS
   return { ...row } as FactContributionAdmissionSupersessionRow;
 }
 
-function requireFactEvidence(row: RawFactEvidenceRow): {
+function requireFactEvidence(
+  row: RawFactEvidenceRow,
+  allowRepairableProjectionDrift: boolean,
+): {
   evidence: FactContributionFactEvidence;
   classifierContext: FactContributionClassifierContext;
   explicitProjection: Readonly<FactContributionExplicitProjection> | null;
@@ -296,7 +302,9 @@ function requireFactEvidence(row: RawFactEvidenceRow): {
   return {
     evidence,
     classifierContext: Object.freeze({ subject: subjectName, subjectType }),
-    explicitProjection: requireFactContributionExplicitProjection(row, evidence),
+    explicitProjection: allowRepairableProjectionDrift
+      ? requireFactContributionExplicitProjectionForReplay(row, evidence)
+      : requireFactContributionExplicitProjection(row, evidence),
   };
 }
 
@@ -404,12 +412,16 @@ function assertSnapshotProjection(
   }
 }
 
+/** Verify immutable identity/scope evidence; only sealed parent retirement relaxes lifecycle drift. */
 function assertPredecessorRelation(
   parent: NormalizedContributionParent,
   successor: FactContributionFactEvidence,
   edge: FactContributionAdmissionSupersessionRow,
   predecessor: FactContributionPredecessorEvidence | undefined,
+  parentContributionRetired: boolean,
 ): void {
+  const lifecycleMatchesCommittedEdge =
+    predecessor?.invalidAt === edge.superseded_at && predecessor.deletedAt === null;
   if (
     !predecessor ||
     edge.successor_fact_id !== parent.factId ||
@@ -419,8 +431,7 @@ function assertPredecessorRelation(
     !sqliteNoCaseEquals(predecessor.predicate, successor.predicate) ||
     predecessor.scope !== successor.scope ||
     !hasMatchingFactSupersessionScope(predecessor, successor) ||
-    predecessor.invalidAt !== edge.superseded_at ||
-    predecessor.deletedAt !== null ||
+    (!parentContributionRetired && !lifecycleMatchesCommittedEdge) ||
     edge.superseded_at !== parent.contributedAt
   ) {
     fail();
@@ -445,9 +456,10 @@ function groupRows<T extends { contribution_id: string }>(
  * Load immutable contribution evidence without applying source retirement or write authorization.
  * Callers own the surrounding transaction and decide whether missing producer events are allowed.
  */
-export function loadVerifiedFactContributionAggregatesInTransaction(
+function loadVerifiedFactContributionAggregates(
   db: MemoryDatabase,
   contributionIds: ReadonlyArray<string>,
+  allowRepairableProjectionDrift: boolean,
 ): VerifiedFactContributionLoadResult {
   if (
     !Array.isArray(contributionIds) ||
@@ -463,6 +475,7 @@ export function loadVerifiedFactContributionAggregatesInTransaction(
   const rawParents = loadRawContributionParents(db, requestedIds);
   if (rawParents.length !== requestedIds.length) return fail();
   const parents: NormalizedContributionParent[] = [];
+  const retiredContributionIds = new Set<string>();
   const missingContributionIds: string[] = [];
   let localOwnerId: string | null = null;
   for (let index = 0; index < rawParents.length; index += 1) {
@@ -481,7 +494,12 @@ export function loadVerifiedFactContributionAggregatesInTransaction(
       continue;
     }
     if (row.id !== requestedId) return fail();
-    parents.push(normalizeParent(row, rowOwnerId));
+    const parent = normalizeParent(row, rowOwnerId);
+    if (row.retirement_group_id !== null) {
+      requireFactId(row.retirement_group_id);
+      retiredContributionIds.add(parent.id);
+    }
+    parents.push(parent);
   }
   const parentIds = new Set(parents.map((parent) => parent.id));
   const payloadBytes = parents.reduce((sum, parent) => sum + parent.payloadByteLength, 0);
@@ -545,7 +563,7 @@ export function loadVerifiedFactContributionAggregatesInTransaction(
     }
   >();
   for (const rawFact of raw.facts) {
-    const fact = requireFactEvidence(rawFact);
+    const fact = requireFactEvidence(rawFact, allowRepairableProjectionDrift);
     if (facts.has(fact.evidence.id)) return fail();
     facts.set(fact.evidence.id, fact);
   }
@@ -613,6 +631,7 @@ export function loadVerifiedFactContributionAggregatesInTransaction(
         fact.evidence,
         edge,
         predecessors.get(edge.predecessor_fact_id),
+        retiredContributionIds.has(parent.id),
       );
     }
     return Object.freeze({
@@ -639,4 +658,20 @@ export function loadVerifiedFactContributionAggregatesInTransaction(
     aggregates: Object.freeze(aggregates),
     missingContributionIds: Object.freeze(missingContributionIds),
   });
+}
+
+/** Strict aggregate view used by admission, planning, integrity audits, and materialization. */
+export function loadVerifiedFactContributionAggregatesInTransaction(
+  db: MemoryDatabase,
+  contributionIds: ReadonlyArray<string>,
+): VerifiedFactContributionLoadResult {
+  return loadVerifiedFactContributionAggregates(db, contributionIds, false);
+}
+
+/** Replay-only view that permits repairable explicit projection drift after source preflight. */
+export function loadVerifiedFactContributionAggregatesForReplayInTransaction(
+  db: MemoryDatabase,
+  contributionIds: ReadonlyArray<string>,
+): VerifiedFactContributionLoadResult {
+  return loadVerifiedFactContributionAggregates(db, contributionIds, true);
 }

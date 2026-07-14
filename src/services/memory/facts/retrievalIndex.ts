@@ -1,4 +1,4 @@
-import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
+import { getSchemaReadyMemoryDb, type MemoryDatabase } from '../access/schemaGuard';
 import { retrievalTextForFact } from '../ranking/factText';
 import { tokenizeLexicalUnits } from '../ranking/lexical';
 import type { MemoryFact } from './types';
@@ -22,7 +22,7 @@ function termsBySpecificity(terms: ReadonlyArray<string>): string[] {
     const rightLength = Array.from(right).length;
     const leftLength = Array.from(left).length;
     if (rightLength !== leftLength) return rightLength - leftLength;
-    return left.localeCompare(right);
+    return left < right ? -1 : left > right ? 1 : 0;
   });
 }
 
@@ -43,12 +43,19 @@ function rankedTermsForFact(fact: MemoryFact): string[] {
 }
 
 export function deleteFactRetrievalTerms(factId: string): void {
+  deleteFactRetrievalTermsInTransaction(getSchemaReadyMemoryDb(), factId);
+}
+
+export function deleteFactRetrievalTermsInTransaction(db: MemoryDatabase, factId: string): void {
   if (!factId) return;
-  getSchemaReadyMemoryDb().runSync('DELETE FROM memory_fact_terms WHERE fact_id = ?', factId);
+  db.runSync('DELETE FROM memory_fact_terms WHERE fact_id = ?', factId);
 }
 
 export function replaceFactRetrievalTerms(fact: MemoryFact): void {
-  const db = getSchemaReadyMemoryDb();
+  replaceFactRetrievalTermsInTransaction(getSchemaReadyMemoryDb(), fact);
+}
+
+export function replaceFactRetrievalTermsInTransaction(db: MemoryDatabase, fact: MemoryFact): void {
   const terms = rankedTermsForFact(fact);
   db.runSync('DELETE FROM memory_fact_terms WHERE fact_id = ?', fact.id);
   if (terms.length === 0) return;

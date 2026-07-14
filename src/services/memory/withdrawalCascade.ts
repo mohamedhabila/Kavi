@@ -1,7 +1,5 @@
 import type { MemoryDatabase } from './access/schemaGuard';
-import { deleteFactRetrievalTerms } from './facts/retrievalIndex';
 import { deleteEpisodeAccessPolicies } from './episodes/accessPolicySchema';
-import { newId } from './schema';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import type { MemoryWithdrawalLineage } from './withdrawalLineage';
 import { normalizeWithdrawalOpaqueId } from './withdrawalLineage';
@@ -10,7 +8,6 @@ import type { MemoryWithdrawalResidualPlan } from './withdrawalResidualProbe';
 import {
   EMPTY_MEMORY_WITHDRAWAL_COUNTS,
   type MemoryWithdrawalCounts,
-  type WithdrawMemoryFactResult,
 } from './withdrawalTypes';
 import { hashVerifiedProcedureProvenanceSync } from './verifiedProcedure/provenanceHash';
 import { decodeVerifiedProcedureEvidenceManifest } from './verifiedProcedure/evidenceManifest';
@@ -23,11 +20,6 @@ interface RetrievalEventLineageRow {
   id: string;
   selected_fact_ids_json: string;
   selected_episode_ids_json: string;
-}
-
-interface RetrievalTermLineageRow {
-  unit: string;
-  memory_kind: string;
 }
 
 interface FactObservationLineageRow {
@@ -50,9 +42,8 @@ interface VerifiedProcedureScopedSourceHashes {
   turnIds: Set<string>;
 }
 
-export interface MemoryWithdrawalTransactionResult {
-  result: WithdrawMemoryFactResult;
-  notificationScope: string | null;
+export interface MemoryRetirementArtifactCleanupResult {
+  counts: MemoryWithdrawalCounts;
   residualPlan: MemoryWithdrawalResidualPlan;
 }
 
@@ -156,7 +147,7 @@ function scrubRetrievalEvents(
 function isOrphanEntity(db: MemoryDatabase, entityId: string): boolean {
   return !db.getFirstSync<{ present: number }>(
     `SELECT 1 AS present FROM memory_facts
-      WHERE subject_id = ? OR object_entity_id = ? LIMIT 1`,
+      WHERE deleted_at IS NULL AND (subject_id = ? OR object_entity_id = ?) LIMIT 1`,
     entityId,
     entityId,
   );
@@ -300,79 +291,17 @@ function recomputeFactObservationState(
   }
 }
 
-export function executeMemoryWithdrawalCascade(
+export function cleanupRetiredMemoryArtifactsInTransaction(
   db: MemoryDatabase,
-  factId: string,
   lineage: MemoryWithdrawalLineage,
+  fencedSources: MemoryWithdrawalLineage['scopedSources'],
   now: number,
-): MemoryWithdrawalTransactionResult {
-  const withdrawalId = newId('withdrawal');
+): MemoryRetirementArtifactCleanupResult {
   const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
   if (lineage.target.memory_owner_id !== memoryOwnerId) {
     throw new Error('withdrawal_lineage_invalid');
   }
-  db.runSync(
-    `INSERT INTO memory_withdrawals(
-       id, target_fact_id, memory_conversation_id, source_thread_id, task_id, reason, withdrawn_at
-     ) VALUES (?, ?, ?, ?, ?, 'user_request', ?)`,
-    withdrawalId,
-    factId,
-    lineage.targetScope.memoryConversationId,
-    lineage.targetScope.sourceThreadId,
-    lineage.targetScope.taskId,
-    now,
-  );
-  db.runSync(
-    `INSERT INTO memory_source_retirement_groups(id, reason, retired_at)
-     VALUES (?, 'fact_withdrawal', ?)`,
-    withdrawalId,
-    now,
-  );
-  for (const removedFactId of lineage.factIds) {
-    db.runSync(
-      'INSERT INTO memory_withdrawal_facts(withdrawal_id, fact_id) VALUES (?, ?)',
-      withdrawalId,
-      removedFactId,
-    );
-  }
-  for (const source of lineage.scopedSources) {
-    db.runSync(
-      `INSERT OR IGNORE INTO memory_retired_sources(
-         retirement_group_id, memory_owner_id, memory_conversation_id,
-         source_thread_id, task_id, source_kind, source_id
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      withdrawalId,
-      memoryOwnerId,
-      source.memoryConversationId,
-      source.sourceThreadId,
-      source.taskId,
-      source.sourceKind,
-      source.sourceId,
-    );
-  }
-
-  const retrievalTermRows: RetrievalTermLineageRow[] = [];
-  for (let offset = 0; offset < lineage.factIds.length; offset += DELETE_BATCH_SIZE) {
-    const factIds = lineage.factIds.slice(offset, offset + DELETE_BATCH_SIZE);
-    retrievalTermRows.push(
-      ...db.getAllSync<RetrievalTermLineageRow>(
-        `SELECT unit, memory_kind FROM memory_fact_terms
-          WHERE fact_id IN (${factIds.map(() => '?').join(', ')})`,
-        ...factIds,
-      ),
-    );
-  }
-  for (const removedFactId of lineage.factIds) {
-    deleteFactRetrievalTerms(removedFactId);
-  }
-  const retrievalTermStats = Array.from(
-    new Map(
-      retrievalTermRows.map((row) => [
-        `${row.unit}\u0000${row.memory_kind}`,
-        { unit: row.unit, memoryKind: row.memory_kind },
-      ]),
-    ).values(),
-  );
+  const retrievalTermStats: Array<{ unit: string; memoryKind: string }> = [];
   const factIds = new Set(lineage.factIds);
   const episodeIds = new Set(lineage.episodeIds);
   const observations = collectFactObservations(db, lineage);
@@ -405,6 +334,7 @@ export function executeMemoryWithdrawalCascade(
 
   const countsBase: MemoryWithdrawalCounts = {
     ...EMPTY_MEMORY_WITHDRAWAL_COUNTS,
+    facts: lineage.factIds.length,
     graphRelations: lineage.facts.filter((row) => Boolean(row.object_entity_id)).length,
     factEvidence: deleteIds(
       db,
@@ -419,7 +349,7 @@ export function executeMemoryWithdrawalCascade(
       'id',
       verifiedProcedureObservationIds,
     ),
-    retrievalTerms: retrievalTermRows.length,
+    retrievalTerms: 0,
     reflections: deleteIds(
       db,
       'memory_reflections',
@@ -447,7 +377,6 @@ export function executeMemoryWithdrawalCascade(
     ingestionSourceSnapshots: ingestionSourceSnapshotCount,
     ingestionJobs: deleteIds(db, 'memory_ingestion_jobs', 'id', lineage.jobIds),
     retrievalEvents: scrubRetrievalEvents(db, factIds, episodeIds),
-    facts: deleteIds(db, 'memory_facts', 'id', lineage.factIds),
     orphanEntities: 0,
     embeddingCacheEntries: 0,
   };
@@ -478,25 +407,9 @@ export function executeMemoryWithdrawalCascade(
     ingestionJobIds: lineage.jobIds,
     ingestionReceiptJobIds: lineage.receiptDeletionJobIds,
     affectedScopes: lineage.affectedScopes,
-    sources: lineage.scopedSources,
+    sources: fencedSources,
   };
   assertMemoryWithdrawalHasNoResiduals(db, { ...residualPlan, checkEmbeddingCache: false });
 
-  return {
-    result: {
-      status: 'withdrawn',
-      receipt: {
-        status: 'withdrawn',
-        withdrawalId,
-        factId,
-        withdrawnAt: now,
-        counts,
-      },
-    },
-    notificationScope:
-      lineage.affectedScopes.length === 1
-        ? lineage.affectedScopes[0].memoryConversationId || null
-        : null,
-    residualPlan,
-  };
+  return { counts, residualPlan };
 }

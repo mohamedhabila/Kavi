@@ -59,10 +59,10 @@ function requireAbsentOverride(row: RawFactEvidenceRow): null {
   return null;
 }
 
-/** Decode and cross-check the fact-owned explicit intent joined into one aggregate snapshot. */
-export function requireFactContributionExplicitProjection(
+function requireExplicitProjection(
   row: RawFactEvidenceRow,
   fact: Readonly<FactContributionFactEvidence>,
+  allowRepairableProjectionDrift: boolean,
 ): Readonly<FactContributionExplicitProjection> | null {
   if (row.override_fact_id === null) return requireAbsentOverride(row);
   if (
@@ -113,9 +113,14 @@ export function requireFactContributionExplicitProjection(
       reviewStateOverride === null &&
       sensitivityFloor === null &&
       explicitInvalidatedAt === null) ||
-    (pinnedOverride !== null && fact.pinned !== pinnedOverride) ||
-    (reviewStateOverride !== null && fact.reviewState !== reviewStateOverride) ||
-    (sensitivityFloor !== null &&
+    (!allowRepairableProjectionDrift &&
+      pinnedOverride !== null &&
+      fact.pinned !== pinnedOverride) ||
+    (!allowRepairableProjectionDrift &&
+      reviewStateOverride !== null &&
+      fact.reviewState !== reviewStateOverride) ||
+    (!allowRepairableProjectionDrift &&
+      sensitivityFloor !== null &&
       maxMemoryFactSensitivity(fact.sensitivity, sensitivityFloor) !== fact.sensitivity) ||
     (explicitInvalidatedAt !== null && fact.invalidAt !== explicitInvalidatedAt)
   ) {
@@ -127,4 +132,23 @@ export function requireFactContributionExplicitProjection(
     sensitivityFloor,
     explicitInvalidatedAt,
   });
+}
+
+/** Decode and cross-check fact-owned explicit intent against its canonical projection. */
+export function requireFactContributionExplicitProjection(
+  row: RawFactEvidenceRow,
+  fact: Readonly<FactContributionFactEvidence>,
+): Readonly<FactContributionExplicitProjection> | null {
+  return requireExplicitProjection(row, fact, false);
+}
+
+/**
+ * Replay-only view: pin, review, and sensitivity overlays may be repaired from verified intent.
+ * Deletion and explicit invalidation remain unconditional fences.
+ */
+export function requireFactContributionExplicitProjectionForReplay(
+  row: RawFactEvidenceRow,
+  fact: Readonly<FactContributionFactEvidence>,
+): Readonly<FactContributionExplicitProjection> | null {
+  return requireExplicitProjection(row, fact, true);
 }

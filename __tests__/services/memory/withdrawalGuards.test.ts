@@ -9,7 +9,6 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
 import {
   recordThreadLocalEpisode,
   addFactEvidence,
@@ -27,25 +26,38 @@ import { forgetMemoryFactForManagement } from '../../../src/services/memory/memo
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { EMPTY_MEMORY_WITHDRAWAL_COUNTS } from '../../../src/services/memory/withdrawalTypes';
 import { probeMemoryWithdrawalResiduals } from '../../../src/services/memory/withdrawalResidualProbe';
+import {
+  loadVerifiedFactRetirement,
+  recordContributionBackedFact,
+  retirementLedgerCounts,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 function recordScopedFact(value: string, sourceMessageId = 'message-old') {
   const entity = upsertEntity({ name: 'withdrawal-user', type: 'self', now: 100 });
-  return recordFact({
-    subjectId: entity.id,
-    predicate: 'private_value',
-    objectText: value,
-    scope: 'session',
-    originConversationId: 'conversation-1',
-    originThreadId: 'thread-1',
-    originTaskId: 'task-1',
-    sourceMessageId,
-    sourceTurnId: 'turn-old',
-    sourceRunId: 'run-old',
-    supersedePrior: false,
-    now: 200,
-  }).fact;
+  return recordContributionBackedFact(
+    {
+      subjectId: entity.id,
+      predicate: 'private_value',
+      objectText: value,
+      scope: 'session',
+      originConversationId: 'conversation-1',
+      originThreadId: 'thread-1',
+      originTaskId: 'task-1',
+      sourceMessageId,
+      sourceTurnId: 'turn-old',
+      sourceRunId: 'run-old',
+      supersedePrior: false,
+      now: 200,
+    },
+    {
+      memoryConversationId: 'conversation-1',
+      sourceThreadId: 'thread-1',
+      taskId: 'task-1',
+      producerEventId: `withdrawal-guard-${sourceMessageId}`,
+    },
+  ).fact;
 }
 
 beforeEach(() => {
@@ -75,11 +87,13 @@ describe('memory withdrawal guards', () => {
           fact.id,
         )?.count,
       ).toBe(1);
-      expect(
-        getMemoryDb().getFirstSync<{ count: number }>(
-          'SELECT COUNT(*) AS count FROM memory_withdrawals',
-        )?.count,
-      ).toBe(0);
+      expect(retirementLedgerCounts()).toEqual({
+        groups: 0,
+        requests: 0,
+        sources: 0,
+        contributions: 0,
+        facts: 0,
+      });
     },
   );
 
@@ -90,7 +104,8 @@ describe('memory withdrawal guards', () => {
     const first = withdrawMemoryFact(fact.id, 1_000);
     expect(first.status).toBe('withdrawn');
     if (first.status !== 'withdrawn') throw new Error('expected withdrawal');
-    expect(first.receipt.counts.embeddingCacheEntries).toBe(1);
+    expect(first.receipt.counts.embeddingCacheEntries).toBe(0);
+    expect(clearEmbeddingCache()).toBe(0);
 
     await getEmbeddingCached('cache after first withdrawal', DEFAULT_LOCAL_EMBEDDING_CONFIG);
     const replay = withdrawMemoryFact(fact.id, 2_000);
@@ -101,11 +116,18 @@ describe('memory withdrawal guards', () => {
     expect(replay.receipt.withdrawalId).toBe(first.receipt.withdrawalId);
     expect(replay.receipt.withdrawnAt).toBe(first.receipt.withdrawnAt);
     expect(clearEmbeddingCache()).toBe(1);
-    expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_withdrawals',
-      )?.count,
-    ).toBe(1);
+    expect(retirementLedgerCounts()).toEqual({
+      groups: 1,
+      requests: 3,
+      sources: 3,
+      contributions: 1,
+      facts: 1,
+    });
+    expect(loadVerifiedFactRetirement(fact.id)).toMatchObject({
+      retirementGroupId: first.receipt.withdrawalId,
+      reason: 'fact_withdrawal',
+      retiredFactIds: [fact.id],
+    });
   });
 
   it('rolls every database surface back and returns only a generic tool error', async () => {
@@ -131,9 +153,9 @@ describe('memory withdrawal guards', () => {
     });
     await getEmbeddingCached('rollback cache entry', DEFAULT_LOCAL_EMBEDDING_CONFIG);
     getMemoryDb().execSync(`
-      CREATE TRIGGER reject_withdrawal_fact_delete
-      BEFORE DELETE ON memory_facts
-      WHEN OLD.id = '${fact.id}'
+      CREATE TRIGGER reject_withdrawal_fact_tombstone
+      BEFORE UPDATE OF deleted_at ON memory_facts
+      WHEN OLD.id = '${fact.id}' AND OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
       BEGIN
         SELECT RAISE(ABORT, 'forced private rollback detail');
       END;
@@ -165,11 +187,13 @@ describe('memory withdrawal guards', () => {
         fact.id,
       )?.count,
     ).toBe(1);
-    expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_withdrawals',
-      )?.count,
-    ).toBe(0);
+    expect(retirementLedgerCounts()).toEqual({
+      groups: 0,
+      requests: 0,
+      sources: 0,
+      contributions: 0,
+      facts: 0,
+    });
     expect(clearEmbeddingCache()).toBe(1);
   });
 
@@ -181,15 +205,23 @@ describe('memory withdrawal guards', () => {
       { now: 200 },
     );
     const entity = upsertEntity({ name: 'global-user', type: 'self', now: 100 });
-    const fact = recordFact({
-      subjectId: entity.id,
-      predicate: 'private_global',
-      objectText: 'private global value',
-      scope: 'global',
-      sourceMessageId: 'global-message',
-      supersedePrior: false,
-      now: 300,
-    }).fact;
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: entity.id,
+        predicate: 'private_global',
+        objectText: 'private global value',
+        scope: 'global',
+        sourceMessageId: 'global-message',
+        sourceTurnId: 'global-turn',
+        supersedePrior: false,
+        now: 300,
+      },
+      {
+        memoryConversationId: 'global-conversation',
+        sourceThreadId: 'global-thread',
+        producerEventId: 'withdrawal-guard-global',
+      },
+    ).fact;
     const episode = recordThreadLocalEpisode({
       summary: 'private global episode',
       messageIds: ['global-message'],
@@ -221,8 +253,11 @@ describe('memory withdrawal guards', () => {
       })?.content,
     ).toBe('independent working focus');
     expect(
-      getMemoryDb().getFirstSync('SELECT id FROM memory_facts WHERE id = ?', fact.id),
-    ).toBeNull();
+      getMemoryDb().getFirstSync<{ id: string; deleted_at: number }>(
+        'SELECT id, deleted_at FROM memory_facts WHERE id = ?',
+        fact.id,
+      ),
+    ).toEqual({ id: fact.id, deleted_at: 400 });
     expect(
       getMemoryDb().getFirstSync('SELECT id FROM memory_episodes WHERE id = ?', episode.id),
     ).toBeNull();
@@ -237,20 +272,28 @@ describe('memory withdrawal guards', () => {
     expect(withdrawMemoryFact(oldFact.id, 1_000).status).toBe('withdrawn');
 
     const newEntity = upsertEntity({ name: 'withdrawal-user', type: 'self', now: 1_100 });
-    const next = recordFact({
-      subjectId: newEntity.id,
-      predicate: 'private_value',
-      objectText: privateValue,
-      scope: 'session',
-      originConversationId: 'conversation-1',
-      originThreadId: 'thread-1',
-      originTaskId: 'task-1',
-      sourceMessageId: 'message-new',
-      sourceTurnId: 'turn-new',
-      sourceRunId: 'run-new',
-      supersedePrior: false,
-      now: 1_200,
-    });
+    const next = recordContributionBackedFact(
+      {
+        subjectId: newEntity.id,
+        predicate: 'private_value',
+        objectText: privateValue,
+        scope: 'session',
+        originConversationId: 'conversation-1',
+        originThreadId: 'thread-1',
+        originTaskId: 'task-1',
+        sourceMessageId: 'message-new',
+        sourceTurnId: 'turn-new',
+        sourceRunId: 'run-new',
+        supersedePrior: false,
+        now: 1_200,
+      },
+      {
+        memoryConversationId: 'conversation-1',
+        sourceThreadId: 'thread-1',
+        taskId: 'task-1',
+        producerEventId: 'withdrawal-guard-new-assertion',
+      },
+    );
 
     expect(next.status).toBe('created');
     expect(next.fact.id).not.toBe(oldFact.id);
@@ -263,19 +306,29 @@ describe('memory withdrawal guards', () => {
     ).toBe(0);
   });
 
-  it('audits exported evidence for a source-less fact from its affected scope', () => {
-    const entity = upsertEntity({ name: 'source-less-user', type: 'self', now: 100 });
-    const fact = recordFact({
-      subjectId: entity.id,
-      predicate: 'source_less_value',
-      objectText: 'source-less private value',
-      scope: 'session',
-      originConversationId: 'conversation-source-less',
-      originThreadId: 'thread-source-less',
-      originTaskId: 'task-source-less',
-      supersedePrior: false,
-      now: 200,
-    }).fact;
+  it('audits exported evidence from the affected scope independently of source filters', () => {
+    const entity = upsertEntity({ name: 'scoped-export-user', type: 'self', now: 100 });
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: entity.id,
+        predicate: 'scoped_export_value',
+        objectText: 'scoped private value',
+        scope: 'session',
+        originConversationId: 'conversation-scoped-export',
+        originThreadId: 'thread-scoped-export',
+        originTaskId: 'task-scoped-export',
+        sourceMessageId: 'message-scoped-export',
+        sourceTurnId: 'turn-scoped-export',
+        supersedePrior: false,
+        now: 200,
+      },
+      {
+        memoryConversationId: 'conversation-scoped-export',
+        sourceThreadId: 'thread-scoped-export',
+        taskId: 'task-scoped-export',
+        producerEventId: 'withdrawal-guard-scoped-export',
+      },
+    ).fact;
     const probe = probeMemoryWithdrawalResiduals(getMemoryDb(), {
       factIds: [fact.id],
       retrievalTermStats: [],
@@ -290,9 +343,9 @@ describe('memory withdrawal guards', () => {
       ingestionReceiptJobIds: [],
       affectedScopes: [
         {
-          memoryConversationId: 'conversation-source-less',
-          sourceThreadId: 'thread-source-less',
-          taskId: 'task-source-less',
+          memoryConversationId: 'conversation-scoped-export',
+          sourceThreadId: 'thread-scoped-export',
+          taskId: 'task-scoped-export',
         },
       ],
       sources: [],
@@ -364,17 +417,21 @@ describe('memory withdrawal guards', () => {
       term.memory_kind,
     );
 
-    expect(() => withdrawMemoryFact(fact.id, 2_100)).toThrow('withdrawal_residual_detected');
+    expect(() => withdrawMemoryFact(fact.id, 2_100)).toThrow(
+      'memory_source_retirement_retrieval_stat_invalid',
+    );
     expect(
       getMemoryDb().getFirstSync<{ present: number }>(
         'SELECT 1 AS present FROM memory_facts WHERE id = ?',
         fact.id,
       ),
     ).toEqual({ present: 1 });
-    expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_withdrawals',
-      )?.count,
-    ).toBe(0);
+    expect(retirementLedgerCounts()).toEqual({
+      groups: 0,
+      requests: 0,
+      sources: 0,
+      contributions: 0,
+      facts: 0,
+    });
   });
 });

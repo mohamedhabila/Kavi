@@ -15,7 +15,7 @@ import {
   type MemoryFactContributionSourceAlias,
   type MemoryFactContributionSourceScope,
 } from './factContributionCodec';
-import { loadVerifiedFactContributionAggregatesInTransaction } from './factContributionAggregateStore';
+import { loadVerifiedFactContributionAggregatesForReplayInTransaction } from './factContributionAggregateStore';
 import {
   assertFactContributionSupersessionReplayInTransaction,
   persistFactContributionSupersessionPlanInTransaction,
@@ -135,6 +135,19 @@ function sourceAliasesMatch(
   return expected.every((alias) => actualKeys.has(`${alias.sourceKind}\u0000${alias.sourceId}`));
 }
 
+function aliasesGuaranteedByEveryCandidate(
+  candidates: ReadonlyArray<ReadonlyArray<MemoryFactContributionSourceAlias>>,
+): ReadonlyArray<MemoryFactContributionSourceAlias> {
+  const remainingCandidateKeys = candidates
+    .slice(1)
+    .map(
+      (aliases) => new Set(aliases.map((alias) => `${alias.sourceKind}\u0000${alias.sourceId}`)),
+    );
+  return candidates[0]!.filter((alias) =>
+    remainingCandidateKeys.every((keys) => keys.has(`${alias.sourceKind}\u0000${alias.sourceId}`)),
+  );
+}
+
 function sourceCommitment(input: {
   contributionId: string;
   scope: MemoryFactContributionSourceScope;
@@ -185,7 +198,7 @@ function assertNormalizedSourceAliasesAreWritable(
 
 function loadReplayAggregate(db: ReturnType<typeof getSchemaReadyMemoryDb>, id: string) {
   try {
-    const loaded = loadVerifiedFactContributionAggregatesInTransaction(db, [id]);
+    const loaded = loadVerifiedFactContributionAggregatesForReplayInTransaction(db, [id]);
     if (loaded.missingContributionIds.length === 1 && loaded.aggregates.length === 0) return null;
     if (loaded.missingContributionIds.length !== 0 || loaded.aggregates.length !== 1) {
       fail('memory_fact_contribution_replay_mismatch');
@@ -222,14 +235,13 @@ function loadFactContributionReplayFromAliasCandidatesInTransaction(input: {
   const expectedAliasSets = input.sourceAliasCandidates.map((aliases) =>
     normalizeMemoryFactContributionSourceAliases(aliases),
   );
+  const guaranteedAliases = aliasesGuaranteedByEveryCandidate(expectedAliasSets);
+  if (guaranteedAliases.length > 0) {
+    assertNormalizedSourceAliasesAreWritable(scope, guaranteedAliases);
+  }
   const id = buildMemoryFactContributionId({ scope, producer });
   const aggregate = loadReplayAggregate(db, id);
-  if (!aggregate) {
-    if (expectedAliasSets.length === 1) {
-      assertNormalizedSourceAliasesAreWritable(scope, expectedAliasSets[0]!);
-    }
-    return null;
-  }
+  if (!aggregate) return null;
   if (
     aggregate.memoryOwnerId !== scope.memoryOwnerId ||
     aggregate.sourceScope.memoryConversationId !== scope.memoryConversationId ||

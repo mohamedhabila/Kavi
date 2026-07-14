@@ -81,6 +81,11 @@ export interface MemoryWithdrawalLineage {
   affectedScopes: MemoryWithdrawalScope[];
 }
 
+export interface ExactMemoryRetirementLineageSeed {
+  factIds: ReadonlyArray<string>;
+  scopedSources: ReadonlyArray<ScopedMemoryWithdrawalSource>;
+}
+
 export function normalizeWithdrawalOpaqueId(value: string | null | undefined): string | null {
   return isExactMemoryProvenanceId(value) ? value : null;
 }
@@ -463,20 +468,77 @@ function ingestionJobMatchesSources(
 export function collectMemoryWithdrawalLineage(
   db: MemoryDatabase,
   target: FactRow,
+  retirementSeed?: Readonly<ExactMemoryRetirementLineageSeed>,
 ): MemoryWithdrawalLineage {
   const targetScope = factWithdrawalScope(target);
-  const facts = db
-    .getAllSync<FactRow>(
-      'SELECT * FROM memory_facts WHERE id = ? OR content_hash = ?',
-      target.id,
-      target.content_hash,
-    )
-    .filter((row) => row.id === target.id || sameDurableIdentity(row, target));
+  let facts: FactRow[];
+  if (retirementSeed) {
+    if (
+      retirementSeed.factIds.length === 0 ||
+      retirementSeed.factIds.length > MAX_LINEAGE_IDS ||
+      !retirementSeed.factIds.includes(target.id) ||
+      retirementSeed.factIds.some((id) => !normalizeWithdrawalOpaqueId(id)) ||
+      new Set(retirementSeed.factIds).size !== retirementSeed.factIds.length
+    ) {
+      throw new Error('withdrawal_lineage_invalid');
+    }
+    facts = [];
+    for (let offset = 0; offset < retirementSeed.factIds.length; offset += SELECT_BATCH_SIZE) {
+      const batch = retirementSeed.factIds.slice(offset, offset + SELECT_BATCH_SIZE);
+      facts.push(
+        ...db.getAllSync<FactRow>(
+          `SELECT * FROM memory_facts
+            WHERE id IN (${batch.map(() => '?').join(', ')})
+            ORDER BY id ASC`,
+          ...batch,
+        ),
+      );
+    }
+    if (
+      facts.length !== retirementSeed.factIds.length ||
+      new Set(facts.map((row) => row.id)).size !== retirementSeed.factIds.length
+    ) {
+      throw new Error('withdrawal_lineage_invalid');
+    }
+  } else {
+    facts = db
+      .getAllSync<FactRow>(
+        'SELECT * FROM memory_facts WHERE id = ? OR content_hash = ?',
+        target.id,
+        target.content_hash,
+      )
+      .filter((row) => row.id === target.id || sameDurableIdentity(row, target));
+  }
   const factIds = new Set(facts.map((row) => row.id));
   const sourceIndexes = new Map<string, ScopedSourceIndex>();
   const affectedScopes = new Map<string, MemoryWithdrawalScope>();
   const scopedSources = new Map<string, ScopedMemoryWithdrawalSource>();
   const factScopes = new Map<string, MemoryWithdrawalScope>();
+  if ((retirementSeed?.scopedSources.length ?? 0) > MAX_LINEAGE_IDS) {
+    throw new Error('withdrawal_lineage_limit');
+  }
+  for (const source of retirementSeed?.scopedSources ?? []) {
+    if (
+      !isExactMemoryScopeId(source.memoryConversationId) ||
+      !isExactMemoryScopeId(source.sourceThreadId) ||
+      (source.taskId !== '' && !isExactMemoryScopeId(source.taskId)) ||
+      !normalizeWithdrawalOpaqueId(source.sourceId) ||
+      (source.sourceKind !== 'message' &&
+        source.sourceKind !== 'turn' &&
+        source.sourceKind !== 'run')
+    ) {
+      throw new Error('withdrawal_lineage_invalid');
+    }
+    const scope = {
+      memoryConversationId: source.memoryConversationId,
+      sourceThreadId: source.sourceThreadId,
+      taskId: source.taskId,
+    };
+    const sourceIndex = getScopedSourceIndex(sourceIndexes, scope);
+    affectedScopes.set(scopeKey(scope), scope);
+    addSource(sourceIndex.sources, source.sourceKind, source.sourceId);
+    addScopedSource(scopedSources, scope, source.sourceKind, source.sourceId);
+  }
   for (const fact of facts) {
     const factScope = factWithdrawalScope(fact);
     const sourceIndex = getScopedSourceIndex(sourceIndexes, factScope);

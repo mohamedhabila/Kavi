@@ -176,11 +176,14 @@ function selectFactEvidence(whereClause: string, params: string[]): MemoryFactEv
 
 function listScopedFactEvidence(scope: MemoryEvidenceScope): MemoryFactEvidenceRecord[] {
   return selectFactEvidence(
-    'fact.origin_conversation_id = ? AND COALESCE(fact.origin_thread_id, fact.origin_conversation_id) = ?',
+    `fact.origin_conversation_id = ?
+      AND COALESCE(fact.origin_thread_id, fact.origin_conversation_id) = ?
+      AND fact.deleted_at IS NULL`,
     [scope.memoryConversationId, scope.sourceThreadId],
   );
 }
 
+/** Isolated evaluation evidence is forensic and intentionally retains canonical tombstones. */
 function listCompleteFactEvidence(): MemoryFactEvidenceRecord[] {
   return selectFactEvidence('1 = 1', []);
 }
@@ -288,6 +291,7 @@ function listIngestionJobEvidence(scope: MemoryEvidenceScope): IngestionJobEvide
   ).map((row) => ({ ...row, providerEnrichment: row.providerEnrichment !== 0 }));
 }
 
+/** Production-scoped evidence exports active memory only and never expose canonical tombstones. */
 export function captureScopedMemoryEvidence(
   scopeInput: MemoryEvidenceScope,
   now = Date.now(),

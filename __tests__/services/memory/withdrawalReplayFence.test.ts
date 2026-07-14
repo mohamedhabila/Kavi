@@ -9,7 +9,6 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
 import {
   claimIngestionJob,
   completeIngestionJob,
@@ -26,6 +25,7 @@ import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/co
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -72,20 +72,28 @@ afterEach(() => {
 describe('withdrawal ingestion replay fence', () => {
   it('revokes a processing claim and rejects exact stale-source replay', () => {
     const entity = upsertEntity({ name: 'user', type: 'self', now: 100 });
-    const fact = recordFact({
-      subjectId: entity.id,
-      predicate: 'private_value',
-      objectText: 'withdraw me',
-      scope: 'session',
-      originConversationId: SCOPE.memoryConversationId,
-      originThreadId: SCOPE.threadId,
-      originTaskId: SCOPE.taskId,
-      sourceMessageId: 'message-old',
-      sourceTurnId: 'turn-old',
-      sourceRunId: 'run-old',
-      supersedePrior: false,
-      now: 200,
-    }).fact;
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: entity.id,
+        predicate: 'private_value',
+        objectText: 'withdraw me',
+        scope: 'session',
+        originConversationId: SCOPE.memoryConversationId,
+        originThreadId: SCOPE.threadId,
+        originTaskId: SCOPE.taskId,
+        sourceMessageId: 'message-old',
+        sourceTurnId: 'turn-old',
+        sourceRunId: 'run-old',
+        supersedePrior: false,
+        now: 200,
+      },
+      {
+        memoryConversationId: SCOPE.memoryConversationId,
+        sourceThreadId: SCOPE.threadId,
+        taskId: SCOPE.taskId,
+        producerEventId: 'withdrawal-replay-processing',
+      },
+    ).fact;
     const processingJob = enqueue();
     if (!processingJob) throw new Error('expected job');
     const claimToken = claimIngestionJob(processingJob.id, 600);
@@ -110,20 +118,28 @@ describe('withdrawal ingestion replay fence', () => {
 
   it('does not cross source kinds, source threads, tasks, or new assertions', () => {
     const entity = upsertEntity({ name: 'user', type: 'self', now: 100 });
-    const fact = recordFact({
-      subjectId: entity.id,
-      predicate: 'private_value',
-      objectText: 'withdraw me',
-      scope: 'session',
-      originConversationId: SCOPE.memoryConversationId,
-      originThreadId: SCOPE.threadId,
-      originTaskId: SCOPE.taskId,
-      sourceMessageId: 'shared-source-id',
-      sourceTurnId: 'turn-old',
-      sourceRunId: 'run-old',
-      supersedePrior: false,
-      now: 200,
-    }).fact;
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: entity.id,
+        predicate: 'private_value',
+        objectText: 'withdraw me',
+        scope: 'session',
+        originConversationId: SCOPE.memoryConversationId,
+        originThreadId: SCOPE.threadId,
+        originTaskId: SCOPE.taskId,
+        sourceMessageId: 'shared-source-id',
+        sourceTurnId: 'turn-old',
+        sourceRunId: 'run-old',
+        supersedePrior: false,
+        now: 200,
+      },
+      {
+        memoryConversationId: SCOPE.memoryConversationId,
+        sourceThreadId: SCOPE.threadId,
+        taskId: SCOPE.taskId,
+        producerEventId: 'withdrawal-replay-scope',
+      },
+    ).fact;
     expect(withdrawMemoryFact(fact.id, 300).status).toBe('withdrawn');
 
     expect(
@@ -160,20 +176,28 @@ describe('withdrawal ingestion replay fence', () => {
 
   it('rejects migration and direct-persistence replay before any memory write', () => {
     const entity = upsertEntity({ name: 'user', type: 'self', now: 100 });
-    const fact = recordFact({
-      subjectId: entity.id,
-      predicate: 'private_value',
-      objectText: 'withdraw me',
-      scope: 'session',
-      originConversationId: SCOPE.memoryConversationId,
-      originThreadId: SCOPE.threadId,
-      originTaskId: SCOPE.taskId,
-      sourceMessageId: 'message-old',
-      sourceTurnId: 'turn-old',
-      sourceRunId: 'run-old',
-      supersedePrior: false,
-      now: 200,
-    }).fact;
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: entity.id,
+        predicate: 'private_value',
+        objectText: 'withdraw me',
+        scope: 'session',
+        originConversationId: SCOPE.memoryConversationId,
+        originThreadId: SCOPE.threadId,
+        originTaskId: SCOPE.taskId,
+        sourceMessageId: 'message-old',
+        sourceTurnId: 'turn-old',
+        sourceRunId: 'run-old',
+        supersedePrior: false,
+        now: 200,
+      },
+      {
+        memoryConversationId: SCOPE.memoryConversationId,
+        sourceThreadId: SCOPE.threadId,
+        taskId: SCOPE.taskId,
+        producerEventId: 'withdrawal-replay-persistence',
+      },
+    ).fact;
     expect(withdrawMemoryFact(fact.id, 300).status).toBe('withdrawn');
     const replayResult = {
       episodeSummary: 'must not return',
@@ -237,18 +261,25 @@ describe('withdrawal ingestion replay fence', () => {
     const userMessageId = 'message-migration-old';
     const assistantMessageId = 'turn-migration-old';
     const entity = upsertEntity({ name: 'migration-user', type: 'self', now: 100 });
-    const fact = recordFact({
-      subjectId: entity.id,
-      predicate: 'private_value',
-      objectText: 'withdraw migration value',
-      scope: 'conversation',
-      originConversationId: conversationId,
-      originThreadId: conversationId,
-      sourceMessageId: userMessageId,
-      sourceTurnId: assistantMessageId,
-      supersedePrior: false,
-      now: 200,
-    }).fact;
+    const fact = recordContributionBackedFact(
+      {
+        subjectId: entity.id,
+        predicate: 'private_value',
+        objectText: 'withdraw migration value',
+        scope: 'conversation',
+        originConversationId: conversationId,
+        originThreadId: conversationId,
+        sourceMessageId: userMessageId,
+        sourceTurnId: assistantMessageId,
+        supersedePrior: false,
+        now: 200,
+      },
+      {
+        memoryConversationId: conversationId,
+        sourceThreadId: conversationId,
+        producerEventId: 'withdrawal-replay-migration',
+      },
+    ).fact;
     expect(withdrawMemoryFact(fact.id, 300).status).toBe('withdrawn');
     const messages: Message[] = [
       { id: userMessageId, role: 'user', content: 'remember this', timestamp: 100 },

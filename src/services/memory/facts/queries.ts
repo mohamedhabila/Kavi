@@ -595,12 +595,18 @@ export function getFactById(id: string): MemoryFact | null {
   return row ? rowToFact(row) : null;
 }
 
-/** Direct-id recall read. Explicit user invalidation is an unconditional applicability fence. */
+/** Direct-id recall read. Retirement and explicit user invalidation are unconditional fences. */
 export function getFactByIdForRecallCandidate(id: string): MemoryFact | null {
   const row = getOne<FactRow>(
     `SELECT fact.*
        FROM memory_facts AS fact
       WHERE fact.id = ?
+        AND fact.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM memory_retired_facts AS retired
+           WHERE retired.fact_id = fact.id
+        )
         AND NOT EXISTS (
           SELECT 1
             FROM memory_fact_explicit_overrides AS explicit_override

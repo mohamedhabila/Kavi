@@ -21,6 +21,10 @@ import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/databas
 import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
+import {
+  recordContributionBackedFact,
+  retirementLedgerCounts,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -53,7 +57,7 @@ function createSubjectiveFact(): string {
 }
 
 function createObservationSource(sourceId: string, now: number): string {
-  return recordFactWithApplicability(
+  return recordContributionBackedFact(
     {
       subjectId: `entity-${sourceId}`,
       predicate: 'evidence_source',
@@ -65,7 +69,12 @@ function createObservationSource(sourceId: string, now: number): string {
       sourceMessageId: sourceId,
       now,
     },
-    { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    {
+      memoryConversationId: 'conversation-1',
+      sourceThreadId: 'thread-1',
+      taskId: 'task-1',
+      producerEventId: `observation-source-${sourceId}`,
+    },
   ).fact.id;
 }
 
@@ -575,10 +584,12 @@ describe('durable memory fact observations', () => {
         factId,
       )?.count,
     ).toBe(1);
-    expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_withdrawals',
-      )?.count,
-    ).toBe(0);
+    expect(retirementLedgerCounts()).toEqual({
+      groups: 0,
+      requests: 0,
+      sources: 0,
+      contributions: 0,
+      facts: 0,
+    });
   });
 });

@@ -3,6 +3,7 @@ import { replaceFactRetrievalTerms } from '../../src/services/memory/facts/retri
 import { enqueueIngestionJob as enqueueStrictIngestionJob } from '../../src/services/memory/ingestionQueueStore';
 import { getMemoryDb } from '../../src/services/memory/database';
 import { getLocalMemoryVaultOwnerId } from '../../src/services/memory/memoryVaultIdentity';
+import { retireExactMemorySources } from '../../src/services/memory/sourceRetirementCoordinator';
 import { createTestIngestionJobEnqueuer } from './ingestionSourceSnapshotFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
@@ -17,25 +18,32 @@ export function insertRetiredMemorySourceForTest(input: {
   retiredAt?: number;
 }): void {
   const db = getMemoryDb();
-  db.runSync(
-    `INSERT OR IGNORE INTO memory_source_retirement_groups(id, reason, retired_at)
-     VALUES (?, 'fact_withdrawal', ?)`,
-    input.retirementGroupId,
-    input.retiredAt ?? 0,
-  );
-  db.runSync(
-    `INSERT OR IGNORE INTO memory_retired_sources(
-       retirement_group_id, memory_owner_id, memory_conversation_id,
-       source_thread_id, task_id, source_kind, source_id
-     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    input.retirementGroupId,
-    getLocalMemoryVaultOwnerId(db),
-    input.memoryConversationId,
-    input.sourceThreadId,
-    input.taskId ?? '',
-    input.sourceKind,
-    input.sourceId,
-  );
+  const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+  const activeContributionClock = db.getFirstSync<{ contributed_at: number | null }>(
+    `SELECT MAX(contribution.contributed_at) AS contributed_at
+       FROM memory_fact_contributions AS contribution
+       LEFT JOIN memory_retired_fact_contributions AS retired
+         ON retired.contribution_id = contribution.id
+      WHERE contribution.memory_owner_id = ?
+        AND retired.contribution_id IS NULL`,
+    memoryOwnerId,
+  )?.contributed_at;
+  const result = retireExactMemorySources({
+    reason: 'fact_withdrawal',
+    requestedSources: [
+      {
+        memoryOwnerId,
+        memoryConversationId: input.memoryConversationId,
+        sourceThreadId: input.sourceThreadId,
+        taskId: input.taskId ?? '',
+        sourceKind: input.sourceKind,
+        sourceId: input.sourceId,
+      },
+    ],
+    retiredAt: input.retiredAt ?? activeContributionClock ?? 0,
+    retirementGroupId: input.retirementGroupId,
+  });
+  if (result.status !== 'retired') throw new Error('test retirement fixture replayed unexpectedly');
 }
 
 export function cloneMemoryFactForWithdrawal(

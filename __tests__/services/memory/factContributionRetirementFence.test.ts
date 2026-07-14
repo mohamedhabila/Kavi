@@ -28,6 +28,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { MemoryPersistenceSourceWithdrawnError } from '../../../src/services/memory/withdrawalFence';
+import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const grounded = { factClass: 'subjective_user', sourceAuthority: 'grounded_user' } as const;
@@ -95,6 +96,7 @@ function retire(sourceKind: MemoryFactContributionSourceKind): void {
     ...scope,
     sourceKind,
     sourceId,
+    retiredAt: 200,
   });
 }
 
@@ -129,26 +131,31 @@ it('does not broaden retirement across source kind, thread, or task identity', (
     ...scope,
     sourceKind: 'turn',
     sourceId: 'message-1',
+    retiredAt: 200,
   });
-  getMemoryDb().runSync(
-    `INSERT INTO memory_retired_sources(
-       retirement_group_id, memory_owner_id, memory_conversation_id,
-       source_thread_id, task_id, source_kind, source_id
-     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    'retired-sibling-kind',
-    'foreign-owner',
-    scope.memoryConversationId,
-    scope.sourceThreadId,
-    '',
-    'message',
-    'message-1',
-  );
+  expect(() =>
+    retireExactMemorySources({
+      reason: 'message_delete',
+      requestedSources: [
+        {
+          memoryOwnerId: 'foreign-owner',
+          ...scope,
+          taskId: '',
+          sourceKind: 'message',
+          sourceId: 'message-1',
+        },
+      ],
+      retiredAt: 200,
+      retirementGroupId: 'retired-foreign-owner',
+    }),
+  ).toThrow('memory_source_retirement_requested_sources_invalid');
   insertRetiredMemorySourceForTest({
     retirementGroupId: 'retired-sibling-thread',
     ...scope,
     sourceThreadId: 'thread-2',
     sourceKind: 'message',
     sourceId: 'message-1',
+    retiredAt: 200,
   });
   insertRetiredMemorySourceForTest({
     retirementGroupId: 'retired-sibling-task',
@@ -156,6 +163,7 @@ it('does not broaden retirement across source kind, thread, or task identity', (
     taskId: 'task-1',
     sourceKind: 'message',
     sourceId: 'message-1',
+    retiredAt: 200,
   });
 
   expect(
@@ -174,6 +182,7 @@ it('fences only the durable alias set selected from replay candidates', () => {
     ...scope,
     sourceKind: 'message',
     sourceId: 'unused-prior-message',
+    retiredAt: 200,
   });
 
   const replay = loadFactContributionReplayFromAliasCandidates({
@@ -193,6 +202,7 @@ it('defers retirement when an absent replay has multiple candidate alias sets', 
     ...scope,
     sourceKind: 'message',
     sourceId: 'optional-prior-message',
+    retiredAt: 200,
   });
 
   expect(
@@ -237,9 +247,16 @@ it('prevents exact replay projection repair after retirement', () => {
     grounded,
     contributionContext(),
   );
-  const before = counts();
+  const beforeRetirement = counts();
   getMemoryDb().runSync('UPDATE memory_facts SET pinned = 0 WHERE id = ?', first.fact.id);
   retire('message');
+  const afterRetirement = counts();
+  expect(afterRetirement).toEqual({
+    facts: beforeRetirement.facts,
+    terms: 0,
+    contributions: beforeRetirement.contributions,
+    aliases: beforeRetirement.aliases,
+  });
   const listener = jest.fn();
   const unsubscribe = subscribeToMemoryChanges(listener);
 
@@ -255,7 +272,7 @@ it('prevents exact replay projection repair after retirement', () => {
     unsubscribe();
   }
 
-  expect(counts()).toEqual(before);
+  expect(counts()).toEqual(afterRetirement);
   expect(
     getMemoryDb().getFirstSync<{ pinned: number }>(
       'SELECT pinned FROM memory_facts WHERE id = ?',

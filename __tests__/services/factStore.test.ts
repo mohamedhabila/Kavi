@@ -29,6 +29,10 @@ import {
   listFacts,
 } from '../../src/services/memory/facts/queries';
 import { createCurrentLocalSimilarityVector } from '../../src/services/memory/localSimilarity';
+import {
+  loadVerifiedFactRetirement,
+  recordContributionBackedFact,
+} from '../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -457,17 +461,32 @@ describe('recordFact', () => {
     ).toThrow('memory_fact_mutation_clock_invalid');
   });
 
-  it('withdrawMemoryFact removes the row from current and historical reads', () => {
-    const f = recordFact({
-      subjectId: userId,
-      predicate: 'p',
-      objectText: 'o',
-      scope: 'global',
-    });
+  it('withdrawMemoryFact tombstones the canonical row and excludes it from current reads', () => {
+    const f = recordContributionBackedFact(
+      {
+        subjectId: userId,
+        predicate: 'p',
+        objectText: 'o',
+        scope: 'global',
+        sourceMessageId: 'fact-store-withdraw-message',
+        sourceTurnId: 'fact-store-withdraw-turn',
+      },
+      {
+        memoryConversationId: 'fact-store-withdraw-conversation',
+        sourceThreadId: 'fact-store-withdraw-thread',
+        producerEventId: 'fact-store-withdraw-event',
+      },
+    );
     expect(withdrawMemoryFact(f.fact.id).status).toBe('withdrawn');
     expect(listFacts({ subjectId: userId })).toHaveLength(0);
-    expect(getFactById(f.fact.id)).toBeNull();
-    expect(listFacts({ subjectId: userId, includeDeleted: true })).toHaveLength(0);
+    expect(getFactById(f.fact.id)).toEqual(
+      expect.objectContaining({ id: f.fact.id, deletedAt: expect.any(Number) }),
+    );
+    expect(listFacts({ subjectId: userId, includeDeleted: true })).toEqual([]);
+    expect(loadVerifiedFactRetirement(f.fact.id)).toMatchObject({
+      reason: 'fact_withdrawal',
+      retiredFactIds: [f.fact.id],
+    });
   });
 
   it('canonical pin intent bubbles pinned facts to the top of listFacts', () => {
@@ -517,13 +536,22 @@ describe('recordFact', () => {
   });
 
   it('maintains indexed retrieval terms for active facts', () => {
-    const r = recordFact({
-      subjectId: userId,
-      predicate: 'route_code',
-      objectText: 'QNEEDLE active memory',
-      scope: 'global',
-      memoryKind: 'semantic_fact',
-    });
+    const r = recordContributionBackedFact(
+      {
+        subjectId: userId,
+        predicate: 'route_code',
+        objectText: 'QNEEDLE active memory',
+        scope: 'global',
+        memoryKind: 'semantic_fact',
+        sourceMessageId: 'fact-store-index-message',
+        sourceTurnId: 'fact-store-index-turn',
+      },
+      {
+        memoryConversationId: 'fact-store-index-conversation',
+        sourceThreadId: 'fact-store-index-thread',
+        producerEventId: 'fact-store-index-event',
+      },
+    );
     const db = getMemoryDb();
     expect(
       db.getFirstSync<{ count: number }>(

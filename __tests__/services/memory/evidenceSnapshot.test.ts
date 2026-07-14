@@ -10,6 +10,8 @@ import {
 } from '../../../src/services/memory/evidenceSnapshot';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { resetE2EMemorySandbox } from '../../../src/acceptance/e2eAgent/sandboxMemory';
+import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
+import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
 
 const SCOPE = {
   memoryConversationId: 'memory-evidence-conversation',
@@ -82,6 +84,33 @@ describe('scoped memory evidence', () => {
         }),
         expect.objectContaining({ id: sibling.fact.id }),
       ]),
+    );
+  });
+
+  it('excludes canonical tombstones from scoped exports while retaining isolated forensic evidence', () => {
+    const recorded = recordContributionBackedFact(
+      {
+        subjectId: 'retired-evidence-subject',
+        predicate: 'retired_evidence',
+        objectText: 'must-not-leave-the-active-vault',
+        scope: 'conversation',
+        originConversationId: SCOPE.memoryConversationId,
+        originThreadId: SCOPE.sourceThreadId,
+        sourceMessageId: 'retired-evidence-message',
+        sourceTurnId: 'retired-evidence-turn',
+        now: 100,
+      },
+      {
+        memoryConversationId: SCOPE.memoryConversationId,
+        sourceThreadId: SCOPE.sourceThreadId,
+        producerEventId: 'retired-evidence-event',
+      },
+    );
+
+    expect(withdrawMemoryFact(recorded.fact.id, 200)).toMatchObject({ status: 'withdrawn' });
+    expect(captureScopedMemoryEvidence(SCOPE, 300).facts).toEqual([]);
+    expect(captureCompleteMemoryEvidenceForIsolatedEvaluation(SCOPE, 300).facts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: recorded.fact.id, deletedAt: 200 })]),
     );
   });
 

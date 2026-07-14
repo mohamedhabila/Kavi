@@ -336,15 +336,6 @@ describe('bounded authorized cross-thread episode recall', () => {
 
   it('revalidates withdrawal tombstones before returning an origin', () => {
     const episode = seedEpisode({ suffix: 'withdrawn', summary: 'release withdrawn source' });
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawals(
-         id, target_fact_id, memory_conversation_id, source_thread_id,
-         task_id, reason, withdrawn_at
-       ) VALUES ('withdrawal-cross-recall', 'fact-cross-recall', ?, ?, '', 'user_request', ?)`,
-      SESSION_ID,
-      episode.threadId,
-      2_000,
-    );
     insertRetiredMemorySourceForTest({
       retirementGroupId: 'withdrawal-cross-recall',
       memoryConversationId: SESSION_ID,
@@ -370,15 +361,6 @@ describe('bounded authorized cross-thread episode recall', () => {
       'UPDATE memory_episodes SET message_ids_json = ? WHERE id = ?',
       JSON.stringify([episode.sourceStartMessageId, interiorMessageId, episode.sourceEndMessageId]),
       episode.id,
-    );
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawals(
-         id, target_fact_id, memory_conversation_id, source_thread_id,
-         task_id, reason, withdrawn_at
-       ) VALUES ('withdrawal-interior', 'fact-interior', ?, ?, '', 'user_request', ?)`,
-      SESSION_ID,
-      episode.threadId,
-      2_000,
     );
     insertRetiredMemorySourceForTest({
       retirementGroupId: 'withdrawal-interior',
@@ -444,15 +426,6 @@ describe('bounded authorized cross-thread episode recall', () => {
       'UPDATE memory_episodes SET deleted_at = ? WHERE id = ?',
       2_000,
       episodeDeleted.id,
-    );
-    getMemoryDb().runSync(
-      `INSERT INTO memory_withdrawals(
-         id, target_fact_id, memory_conversation_id, source_thread_id,
-         task_id, reason, withdrawn_at
-       ) VALUES ('withdrawal-revalidate', 'fact-revalidate', ?, ?, '', 'user_request', ?)`,
-      SESSION_ID,
-      withdrawn.threadId,
-      2_000,
     );
     insertRetiredMemorySourceForTest({
       retirementGroupId: 'withdrawal-revalidate',

@@ -245,12 +245,6 @@ export function ensureFactExplicitOverrideSchema(db: MemoryDb): void {
         DELETE FROM memory_fact_explicit_overrides WHERE fact_id = OLD.id;
       END;
 
-      CREATE TRIGGER trg_memory_fact_retire_explicit_override
-      AFTER UPDATE OF deleted_at ON memory_facts
-      WHEN OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
-      BEGIN
-        DELETE FROM memory_fact_explicit_overrides WHERE fact_id = NEW.id;
-      END;
     `);
   });
 }

@@ -22,6 +22,7 @@ export interface RawContributionParentRow {
   payload_sha256: unknown;
   payload_byte_length: unknown;
   contributed_at: unknown;
+  retirement_group_id: unknown;
 }
 
 export interface RawContributionSourceRow {
@@ -132,10 +133,12 @@ export function loadRawContributionParents(
             contribution.supersession_set_count, contribution.supersession_set_sha256,
             contribution.payload_version, contribution.payload_json,
             contribution.payload_sha256, contribution.payload_byte_length,
-            contribution.contributed_at
+            contribution.contributed_at, retired.retirement_group_id
        FROM requested
        CROSS JOIN memory_vault_identity AS vault
        LEFT JOIN memory_fact_contributions AS contribution ON contribution.id = requested.id
+       LEFT JOIN memory_retired_fact_contributions AS retired
+         ON retired.contribution_id = contribution.id
       WHERE vault.singleton = 1
       ORDER BY requested.id ASC
       LIMIT ${requestedIds.length + 1}`,

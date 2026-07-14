@@ -5,6 +5,11 @@ let transactionDepth = 0;
 let afterCommitCallbacks: Array<() => void> | null = null;
 const logger = createLogger('memory-transaction');
 
+/** Fail closed when a store operation requires one caller-owned atomic boundary. */
+export function assertMemoryTransactionActive(code: string): void {
+  if (transactionDepth <= 0) throw new Error(code);
+}
+
 /**
  * Run side effects only after the outermost memory transaction commits.
  * Callers outside a transaction execute immediately.

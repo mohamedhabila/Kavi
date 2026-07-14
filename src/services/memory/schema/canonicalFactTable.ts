@@ -121,8 +121,14 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'trg_memory_fact_delete_explicit_override',
     'trg_memory_fact_explicit_override_parent_identity_immutable',
     'trg_memory_fact_explicit_override_parent_insert_immutable',
-    'trg_memory_fact_retire_explicit_override',
+    'trg_memory_retired_fact_parent_delete',
+    'trg_memory_retired_fact_parent_identity_update',
   ]);
+  const sourceRetirementFactReferenceTriggerNames = [
+    'trg_memory_retired_fact_parent',
+    'trg_memory_retired_fact_parent_delete',
+    'trg_memory_retired_fact_parent_identity_update',
+  ] as const;
   const schemaObjects = db.getAllSync<{ type: string; name: string; sql: string }>(
     `SELECT type, name, sql
        FROM sqlite_master
@@ -143,6 +149,14 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
       throw new Error('memory_fact_schema_object_unsupported');
     }
   }
+  const sourceRetirementFactReferenceTriggers = db.getAllSync<{ name: string; sql: string }>(
+    `SELECT name, sql
+       FROM sqlite_master
+      WHERE type = 'trigger'
+        AND name IN (${sourceRetirementFactReferenceTriggerNames.map(() => '?').join(', ')})
+      ORDER BY name`,
+    ...sourceRetirementFactReferenceTriggerNames,
+  );
   const originTaskProjection = hasLegacyTaskId
     ? 'COALESCE(origin_task_id, task_id)'
     : 'origin_task_id';
@@ -151,6 +165,9 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
   try {
     dropFactContributionFactReferenceTriggers(db);
     dropFactExplicitOverrideFactReferenceTriggers(db);
+    for (const trigger of sourceRetirementFactReferenceTriggers) {
+      db.execSync(`DROP TRIGGER ${trigger.name}`);
+    }
     db.execSync(`
       DROP TABLE IF EXISTS memory_facts_without_hash_constraint;
       CREATE TABLE memory_facts_without_hash_constraint (
@@ -237,6 +254,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
       DROP TABLE memory_facts;
       ALTER TABLE memory_facts_without_hash_constraint RENAME TO memory_facts;
     `);
+    for (const trigger of sourceRetirementFactReferenceTriggers) db.execSync(trigger.sql);
     db.execSync('COMMIT');
   } catch (error) {
     db.execSync('ROLLBACK');

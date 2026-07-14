@@ -25,6 +25,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -95,23 +96,32 @@ function tableCount(table: string): number {
   );
 }
 
+function retireLegacyMessageSource(sourceId: string, retiredAt: number, retirementGroupId: string) {
+  const db = getMemoryDb();
+  return retireExactMemorySources({
+    reason: 'message_delete',
+    requestedSources: [
+      {
+        memoryOwnerId: getLocalMemoryVaultOwnerId(db),
+        memoryConversationId: 'legacy-conversation',
+        sourceThreadId: 'legacy-thread',
+        taskId: '',
+        sourceKind: 'message',
+        sourceId,
+      },
+    ],
+    retiredAt,
+    retirementGroupId,
+  });
+}
+
 describe('fact contribution admission integrity', () => {
   it('quarantines a legacy fact whose exact source was already retired', () => {
     const fact = exactConversationLegacyFact('retired_source');
     const db = getMemoryDb();
-    const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
-    db.runSync(
-      `INSERT INTO memory_source_retirement_groups(id, reason, retired_at)
-       VALUES ('legacy-retirement', 'message_deleted', 150)`,
-    );
-    db.runSync(
-      `INSERT INTO memory_retired_sources(
-         retirement_group_id, memory_owner_id, memory_conversation_id,
-         source_thread_id, task_id, source_kind, source_id
-       ) VALUES ('legacy-retirement', ?, 'legacy-conversation', 'legacy-thread', '',
-                 'message', 'retired_source-message')`,
-      memoryOwnerId,
-    );
+    expect(
+      retireLegacyMessageSource('retired_source-message', 150, 'legacy-retirement'),
+    ).toMatchObject({ status: 'retired', retirementGroupId: 'legacy-retirement' });
     reopenLegacyBoundary();
 
     expect(admitLegacyFactContributions(db, 500)).toMatchObject({
@@ -625,19 +635,13 @@ describe('fact contribution admission integrity', () => {
     exactConversationLegacyFact('clear_retired_source');
     reopenLegacyBoundary();
     admitLegacyFactContributions(getMemoryDb(), 500);
-    const db = getMemoryDb();
-    db.runSync(
-      `INSERT INTO memory_source_retirement_groups(id, reason, retired_at)
-       VALUES ('post-boundary-retirement', 'message_deleted', 600)`,
-    );
-    db.runSync(
-      `INSERT INTO memory_retired_sources(
-         retirement_group_id, memory_owner_id, memory_conversation_id,
-         source_thread_id, task_id, source_kind, source_id)
-       VALUES ('post-boundary-retirement', ?, 'legacy-conversation', 'legacy-thread', '',
-               'message', 'clear_retired_source-message')`,
-      getLocalMemoryVaultOwnerId(db),
-    );
+    expect(
+      retireLegacyMessageSource('clear_retired_source-message', 600, 'post-boundary-retirement'),
+    ).toMatchObject({
+      status: 'retired',
+      retirementGroupId: 'post-boundary-retirement',
+      retiredContributionCount: 1,
+    });
     resetFactSchemaCacheForTests();
 
     expect(() => clearStructuredMemory()).not.toThrow();

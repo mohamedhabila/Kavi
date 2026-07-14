@@ -16,6 +16,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
 import type { Message } from '../../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -86,8 +87,7 @@ function sourceFixture(options: SourceFixtureOptions) {
       sourceEndMessageId,
       priorUserMessageId,
     }),
-    sourceRunId:
-      options.sourceRunId === undefined ? `run-${options.suffix}` : options.sourceRunId,
+    sourceRunId: options.sourceRunId === undefined ? `run-${options.suffix}` : options.sourceRunId,
     sourceAt: now,
     chatProviderId: null,
     chatModel: null,
@@ -124,24 +124,23 @@ function retireExactSource(input: {
 }): void {
   const db = getMemoryDb();
   const retirementGroupId = `retirement-${input.suffix}`;
-  db.runSync(
-    `INSERT INTO memory_source_retirement_groups(id, reason, retired_at)
-     VALUES (?, 'test', 1)`,
-    retirementGroupId,
-  );
-  db.runSync(
-    `INSERT INTO memory_retired_sources(
-       retirement_group_id, memory_owner_id, memory_conversation_id,
-       source_thread_id, task_id, source_kind, source_id
-     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    retirementGroupId,
-    getLocalMemoryVaultOwnerId(db),
-    input.memoryConversationId,
-    input.sourceThreadId,
-    input.taskId ?? '',
-    input.sourceKind,
-    input.sourceId,
-  );
+  expect(
+    retireExactMemorySources({
+      reason: 'message_delete',
+      requestedSources: [
+        {
+          memoryOwnerId: getLocalMemoryVaultOwnerId(db),
+          memoryConversationId: input.memoryConversationId,
+          sourceThreadId: input.sourceThreadId,
+          taskId: input.taskId ?? '',
+          sourceKind: input.sourceKind,
+          sourceId: input.sourceId,
+        },
+      ],
+      retiredAt: 1_000,
+      retirementGroupId,
+    }),
+  ).toMatchObject({ status: 'retired', retirementGroupId });
 }
 
 beforeEach(() => {
@@ -169,10 +168,7 @@ describe('canonical ingestion job source index', () => {
     ];
     expect(sourceRows(job.id)).toEqual(expected);
     expect(() =>
-      getMemoryDb().runSync(
-        'DELETE FROM memory_ingestion_job_sources WHERE job_id = ?',
-        job.id,
-      ),
+      getMemoryDb().runSync('DELETE FROM memory_ingestion_job_sources WHERE job_id = ?', job.id),
     ).toThrow('memory_ingestion_job_source_immutable');
 
     const claimToken = claimIngestionJob(job.id, 20)!;
@@ -183,10 +179,7 @@ describe('canonical ingestion job source index', () => {
     expect(sourceRows(job.id)).toEqual(expected);
     expect(enqueueIngestionJob(input)?.id).toBe(job.id);
     expect(() =>
-      getMemoryDb().runSync(
-        'DELETE FROM memory_ingestion_job_sources WHERE job_id = ?',
-        job.id,
-      ),
+      getMemoryDb().runSync('DELETE FROM memory_ingestion_job_sources WHERE job_id = ?', job.id),
     ).toThrow('memory_ingestion_job_source_immutable');
 
     expect(
@@ -269,9 +262,7 @@ describe('canonical ingestion job source index', () => {
         WHERE job_id = ? AND source_kind = 'message' AND source_id = 'middle-replay'`,
       first.id,
     );
-    expect(() => enqueueIngestionJob(input)).toThrow(
-      'memory_ingestion_job_sources_conflict',
-    );
+    expect(() => enqueueIngestionJob(input)).toThrow('memory_ingestion_job_sources_conflict');
     expect(sourceRows(first.id)).toHaveLength(5);
   });
 
@@ -297,13 +288,7 @@ describe('canonical ingestion job source index', () => {
     const terminal = enqueueIngestionJob(sourceFixture({ suffix: 'bootstrap-terminal' }))!;
     const claimToken = claimIngestionJob(terminal.id, 20)!;
     expect(
-      completeIngestionJob(
-        terminal.id,
-        'completed_structural',
-        'structural_only',
-        21,
-        claimToken,
-      ),
+      completeIngestionJob(terminal.id, 'completed_structural', 'structural_only', 21, claimToken),
     ).toBe(true);
     getMemoryDb().runSync(
       `INSERT INTO memory_ingestion_receipts(

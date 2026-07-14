@@ -24,6 +24,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const grounded = { factClass: 'subjective_user', sourceAuthority: 'grounded_user' } as const;
@@ -185,18 +186,27 @@ describe('verified fact contribution aggregate loading', () => {
     const created = createContribution(1);
     const db = getMemoryDb();
     const ownerId = getLocalMemoryVaultOwnerId(db);
-    db.runSync(
-      `INSERT INTO memory_source_retirement_groups(id, reason, retired_at)
-       VALUES ('aggregate-retirement', 'message_deleted', 500)`,
-    );
-    db.runSync(
-      `INSERT INTO memory_retired_sources(
-         retirement_group_id, memory_owner_id, memory_conversation_id,
-         source_thread_id, task_id, source_kind, source_id
-       ) VALUES ('aggregate-retirement', ?, 'aggregate-conversation',
-                 'aggregate-thread', '', 'message', 'message-1')`,
-      ownerId,
-    );
+    expect(
+      retireExactMemorySources({
+        reason: 'message_delete',
+        requestedSources: [
+          {
+            memoryOwnerId: ownerId,
+            memoryConversationId: 'aggregate-conversation',
+            sourceThreadId: 'aggregate-thread',
+            taskId: '',
+            sourceKind: 'message',
+            sourceId: 'message-1',
+          },
+        ],
+        retiredAt: 500,
+        retirementGroupId: 'aggregate-retirement',
+      }),
+    ).toMatchObject({
+      status: 'retired',
+      retirementGroupId: 'aggregate-retirement',
+      retiredContributionCount: 1,
+    });
 
     expect(
       loadVerifiedFactContributionAggregatesInTransaction(db, [created.contributionId]).aggregates,

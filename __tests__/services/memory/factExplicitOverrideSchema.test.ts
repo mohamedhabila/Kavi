@@ -414,7 +414,7 @@ describe('fact explicit override schema', () => {
     });
   });
 
-  it('cleans overrides on hard deletion and soft retirement', () => {
+  it('cleans overrides only on hard deletion and preserves soft-retired intent', () => {
     ensureFactSchema();
     const hardDeleted = seedFact();
     const retired = seedFact();
@@ -433,10 +433,21 @@ describe('fact explicit override schema', () => {
       retired.id,
     );
 
-    expect(overrideCount()).toBe(0);
+    expect(overrideCount()).toBe(1);
+    expect(
+      getMemoryDb().getFirstSync(
+        'SELECT * FROM memory_fact_explicit_overrides WHERE fact_id = ?',
+        retired.id,
+      ),
+    ).toMatchObject({
+      fact_id: retired.id,
+      memory_owner_id: requireOwner(retired),
+      review_state_override: 'rejected',
+      review_state_at: 200,
+    });
     expect(() =>
       insertOverride(retired.id, requireOwner(retired), { pinnedOverride: 1, pinnedAt: 400 }),
-    ).toThrow('memory_fact_explicit_override_parent_invalid');
+    ).toThrow('memory_fact_explicit_override_insert_immutable');
   });
 
   it('clears override intent during structured reset without removing the schema', () => {
@@ -505,11 +516,44 @@ describe('fact explicit override schema', () => {
       'trg_memory_fact_explicit_override_parent_insert',
       'trg_memory_fact_explicit_override_parent_insert_immutable',
       'trg_memory_fact_explicit_override_update_guard',
-      'trg_memory_fact_retire_explicit_override',
     ]);
 
     getMemoryDb().runSync('DELETE FROM memory_facts WHERE id = ?', fact.id);
     expect(overrideCount()).toBe(0);
+  });
+
+  it('preserves explicit intent when the canonical fact is retired', () => {
+    ensureFactSchema();
+    const fact = seedFact();
+    insertOverride(fact.id, requireOwner(fact), {
+      pinnedOverride: 1,
+      pinnedAt: 200,
+      reviewStateOverride: 'pending_review',
+      reviewStateAt: 210,
+      createdAt: 200,
+      updatedAt: 210,
+    });
+
+    getMemoryDb().runSync(
+      'UPDATE memory_facts SET invalid_at = ?, deleted_at = ? WHERE id = ?',
+      220,
+      220,
+      fact.id,
+    );
+
+    expect(
+      getMemoryDb().getFirstSync(
+        'SELECT * FROM memory_fact_explicit_overrides WHERE fact_id = ?',
+        fact.id,
+      ),
+    ).toMatchObject({
+      fact_id: fact.id,
+      memory_owner_id: requireOwner(fact),
+      pinned_override: 1,
+      pinned_at: 200,
+      review_state_override: 'pending_review',
+      review_state_at: 210,
+    });
   });
 
   it('rolls back the complete schema unit when trigger installation fails', () => {

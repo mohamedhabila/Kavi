@@ -301,17 +301,6 @@ describe('expandLocalEvidence', () => {
           episode.id,
         );
       } else {
-        getMemoryDb().runSync(
-          `INSERT INTO memory_withdrawals(
-             id, target_fact_id, memory_conversation_id, source_thread_id,
-             task_id, reason, withdrawn_at
-           ) VALUES (?, ?, ?, ?, '', 'user_request', ?)`,
-          `withdrawal-${mutation}`,
-          fact.id,
-          SCOPE.memoryConversationId,
-          SCOPE.sourceThreadId,
-          40,
-        );
         insertRetiredMemorySourceForTest({
           retirementGroupId: `withdrawal-${mutation}`,
           memoryConversationId: SCOPE.memoryConversationId,

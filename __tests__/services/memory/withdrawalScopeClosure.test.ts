@@ -9,7 +9,6 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
 import {
   addFactEvidence,
   recordThreadLocalEpisode,
@@ -20,11 +19,14 @@ import { enqueueIngestionJob as enqueueStrictIngestionJob } from '../../../src/s
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import * as memoryChangeNotifications from '../../../src/services/memory/changeNotifications';
 import {
-  cloneMemoryFactForWithdrawal,
   insertMemoryIngestionReceiptForWithdrawal,
   requireMemoryIngestionJob,
 } from '../../helpers/memoryWithdrawalFixtures';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import {
+  loadVerifiedFactRetirement,
+  recordContributionBackedFact,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -73,45 +75,93 @@ afterEach(() => {
 
 it('closes exact fact and receipt lineage without deleting a different task scope', () => {
   const subject = upsertEntity({ name: 'closure-user', type: 'self', now: 100 });
-  const target = recordFact({
-    subjectId: subject.id,
-    predicate: 'private_value',
-    objectText: 'private closure value',
-    scope: 'session',
-    originConversationId: CONVERSATION_ID,
-    originThreadId: 'thread-a',
-    originTaskId: 'task-a',
-    taskId: 'task-a',
-    sourceMessageId: 'message-a',
-    sourceTurnId: 'turn-a',
-    sourceRunId: 'run-a',
-    supersedePrior: false,
-    now: 200,
-  }).fact;
-  const duplicateFactId = 'fact-closure-thread-b';
-  cloneMemoryFactForWithdrawal(target.id, duplicateFactId, {
-    origin_thread_id: 'thread-b',
-    origin_task_id: 'task-b',
-    task_id: 'task-b',
-    source_message_id: 'message-b',
-    source_turn_id: 'turn-b',
-    source_run_id: 'run-b',
-  });
-  const retainedFact = recordFact({
-    subjectId: subject.id,
-    predicate: 'unrelated_value',
-    objectText: 'retain this fact',
-    scope: 'session',
-    originConversationId: CONVERSATION_ID,
-    originThreadId: 'thread-a',
-    originTaskId: 'task-retained',
-    taskId: 'task-retained',
-    sourceMessageId: 'message-unrelated-fact',
-    sourceTurnId: 'turn-unrelated-fact',
-    sourceRunId: 'run-unrelated-fact',
-    supersedePrior: false,
-    now: 201,
-  }).fact;
+  const target = recordContributionBackedFact(
+    {
+      subjectId: subject.id,
+      predicate: 'private_value',
+      objectText: 'private closure value',
+      scope: 'global',
+      sourceMessageId: 'message-a',
+      sourceTurnId: 'turn-a',
+      sourceRunId: 'run-a',
+      supersedePrior: false,
+      now: 200,
+    },
+    {
+      memoryConversationId: CONVERSATION_ID,
+      sourceThreadId: 'thread-a',
+      taskId: 'task-a',
+      producerEventId: 'withdrawal-scope-closure-target',
+    },
+  ).fact;
+  const receiptSupport = recordContributionBackedFact(
+    {
+      subjectId: subject.id,
+      predicate: 'private_value',
+      objectText: 'private closure value',
+      scope: 'global',
+      sourceMessageId: 'message-c',
+      sourceTurnId: 'turn-c',
+      sourceRunId: 'run-c',
+      supersedePrior: false,
+      now: 201,
+    },
+    {
+      memoryConversationId: CONVERSATION_ID,
+      sourceThreadId: 'thread-c',
+      taskId: 'task-c',
+      producerEventId: 'withdrawal-scope-closure-receipt',
+    },
+  ).fact;
+  if (receiptSupport.id !== target.id) {
+    throw new Error('expected multi-scope support for one canonical fact');
+  }
+  const duplicateFactId = recordContributionBackedFact(
+    {
+      subjectId: subject.id,
+      predicate: 'private_value',
+      objectText: 'private closure value',
+      scope: 'session',
+      originConversationId: CONVERSATION_ID,
+      originThreadId: 'thread-b',
+      originTaskId: 'task-b',
+      taskId: 'task-b',
+      sourceMessageId: 'message-b',
+      sourceTurnId: 'turn-b',
+      sourceRunId: 'run-b',
+      supersedePrior: false,
+      now: 202,
+    },
+    {
+      memoryConversationId: CONVERSATION_ID,
+      sourceThreadId: 'thread-b',
+      taskId: 'task-b',
+      producerEventId: 'withdrawal-scope-closure-sibling',
+    },
+  ).fact.id;
+  const retainedFact = recordContributionBackedFact(
+    {
+      subjectId: subject.id,
+      predicate: 'unrelated_value',
+      objectText: 'retain this fact',
+      scope: 'session',
+      originConversationId: CONVERSATION_ID,
+      originThreadId: 'thread-a',
+      originTaskId: 'task-retained',
+      taskId: 'task-retained',
+      sourceMessageId: 'message-unrelated-fact',
+      sourceTurnId: 'turn-unrelated-fact',
+      sourceRunId: 'run-unrelated-fact',
+      supersedePrior: false,
+      now: 203,
+    },
+    {
+      memoryConversationId: CONVERSATION_ID,
+      sourceThreadId: 'thread-a',
+      taskId: 'task-retained',
+      producerEventId: 'withdrawal-scope-closure-retained',
+    },
+  ).fact;
 
   const episodeA = recordThreadLocalEpisode({
     conversationId: CONVERSATION_ID,
@@ -300,9 +350,22 @@ it('closes exact fact and receipt lineage without deleting a different task scop
       ingestionJobs: 5,
     }),
   );
-  expect(notificationSpy).toHaveBeenLastCalledWith(null);
-  expect(ids('memory_facts')).toEqual(expect.arrayContaining([duplicateFactId, retainedFact.id]));
-  expect(ids('memory_facts')).toHaveLength(2);
+  expect(notificationSpy).toHaveBeenLastCalledWith(CONVERSATION_ID);
+  expect(ids('memory_facts')).toEqual(
+    expect.arrayContaining([target.id, duplicateFactId, retainedFact.id]),
+  );
+  expect(ids('memory_facts')).toHaveLength(3);
+  expect(
+    getMemoryDb().getFirstSync<{ deleted_at: number }>(
+      'SELECT deleted_at FROM memory_facts WHERE id = ?',
+      target.id,
+    ),
+  ).toEqual({ deleted_at: 3_000 });
+  const verifiedRetirement = loadVerifiedFactRetirement(target.id);
+  expect(verifiedRetirement).toMatchObject({
+    reason: 'fact_withdrawal',
+    retiredFactIds: [target.id],
+  });
   expect(ids('memory_episodes')).toEqual(
     expect.arrayContaining([episodeB.id, unrelatedEpisode.id]),
   );
@@ -360,11 +423,17 @@ it('closes exact fact and receipt lineage without deleting a different task scop
   }
   expect(ids('memory_ingestion_receipts', 'job_id')).toEqual([]);
   expect(
-    getMemoryDb().getAllSync<{ source_thread_id: string; task_id: string }>(
-      `SELECT source_thread_id, task_id FROM memory_retired_sources
-        WHERE source_kind = 'run' AND source_id IN ('run-b', 'run-c')`,
+    verifiedRetirement?.closedSources.filter(
+      (source) => source.sourceKind === 'run' && ['run-b', 'run-c'].includes(source.sourceId),
     ),
-  ).toEqual([{ source_thread_id: 'thread-c', task_id: 'task-c' }]);
+  ).toEqual([
+    expect.objectContaining({
+      sourceThreadId: 'thread-c',
+      taskId: 'task-c',
+      sourceKind: 'run',
+      sourceId: 'run-c',
+    }),
+  ]);
   expect(
     enqueueIngestionJob({
       personaId: 'default',
