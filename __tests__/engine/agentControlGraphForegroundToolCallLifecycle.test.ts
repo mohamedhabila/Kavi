@@ -183,7 +183,12 @@ describe('foreground tool call lifecycle controller', () => {
       pendingSurfacedWorkerOutputs,
     });
 
-    harness.controller.publishToolMessage('tc-surface', 'tool result');
+    harness.controller.publishToolMessage({
+      version: 1,
+      toolCallId: 'tc-surface',
+      status: 'completed',
+      content: 'tool result',
+    });
 
     expect(harness.actions.addToolMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -196,7 +201,7 @@ describe('foreground tool call lifecycle controller', () => {
             id: 'tc-surface',
             name: 'sessions_surface_output',
             status: 'completed',
-            result: sourceToolCall.result,
+            result: expect.stringContaining('surfaced to the user'),
           }),
         ],
       }),
@@ -226,7 +231,12 @@ describe('foreground tool call lifecycle controller', () => {
       completedAt: undefined,
     });
     harness.setCurrentAssistantMessageId('assistant-2');
-    harness.controller.publishToolMessage('tc-python', '1\n');
+    harness.controller.publishToolMessage({
+      version: 1,
+      toolCallId: 'tc-python',
+      status: 'completed',
+      content: '1\n',
+    });
 
     expect(harness.actions.addToolMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -265,7 +275,12 @@ describe('foreground tool call lifecycle controller', () => {
     const harness = createHarness({ liveToolCalls: [toolCall] });
 
     harness.controller.completeToolCall(toolCall);
-    harness.controller.publishToolMessage(toolCall.id, toolCall.result!);
+    harness.controller.publishToolMessage({
+      version: 1,
+      toolCallId: toolCall.id,
+      status: 'completed',
+      content: toolCall.result!,
+    });
 
     expect(harness.actions.updateToolCallStatus).toHaveBeenCalledWith(
       'assistant-1',
@@ -275,5 +290,44 @@ describe('foreground tool call lifecycle controller', () => {
     );
     const publishedMessage = harness.actions.addToolMessage.mock.calls[0]?.[0];
     expect(publishedMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
+  });
+
+  it('keeps terminal status independent from arbitrary result prose', () => {
+    const sourceToolCall: ToolCall = {
+      id: 'tc-status',
+      name: 'remote_action',
+      arguments: '{}',
+      status: 'completed',
+      result: 'stale result',
+    };
+    const harness = createHarness({ liveToolCalls: [sourceToolCall] });
+
+    harness.controller.publishToolMessage({
+      version: 1,
+      toolCallId: sourceToolCall.id,
+      status: 'completed',
+      content: 'Error: this is user-visible data, not an execution status',
+    });
+    harness.controller.publishToolMessage({
+      version: 1,
+      toolCallId: sourceToolCall.id,
+      status: 'failed',
+      content: 'تم التنفيذ بنجاح · 成功しました · operación terminada',
+    });
+
+    expect(harness.actions.addToolMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        isError: false,
+        toolCalls: [expect.objectContaining({ status: 'completed' })],
+      }),
+    );
+    expect(harness.actions.addToolMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        isError: true,
+        toolCalls: [expect.objectContaining({ status: 'failed' })],
+      }),
+    );
   });
 });

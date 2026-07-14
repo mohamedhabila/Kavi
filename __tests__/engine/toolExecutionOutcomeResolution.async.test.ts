@@ -60,7 +60,12 @@ describe('tool execution outcome resolution', () => {
     const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
 
     expect(result.status).toBe('continued');
-    expect(params.onToolMessage).toHaveBeenCalledWith('tc1', 'file body');
+    expect(params.onToolMessage).toHaveBeenCalledWith({
+      version: 1,
+      toolCallId: 'tc1',
+      status: 'completed',
+      content: 'file body',
+    });
     expect(params.applyGraphEvents).toHaveBeenCalledWith([
       expect.objectContaining({
         type: 'TOOL_RESULT_RECORDED',

@@ -138,10 +138,12 @@ describe('ChatScreen agent callbacks', () => {
       ];
 
       await act(async () => {
-        await callbacks.onToolMessage(
-          'tc1',
-          JSON.stringify({ status: 'error', error: 'Tool failed' }),
-        );
+        await callbacks.onToolMessage({
+          version: 1,
+          toolCallId: 'tc1',
+          status: 'failed',
+          content: JSON.stringify({ status: 'error', error: 'Tool failed' }),
+        });
         callbacks.onAssistantMessage(
           'final content',
           [],
@@ -169,6 +171,8 @@ describe('ChatScreen agent callbacks', () => {
         callbacks.onDone();
         await Promise.resolve();
       });
+
+      return { terminalDisposition: 'final_candidate' as const };
     });
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
@@ -277,11 +281,11 @@ describe('ChatScreen agent callbacks', () => {
     jest.useRealTimers();
   });
 
-  it('does not start a tracked agent run for low-signal agentic requests', async () => {
+  it('tracks every nonempty agentic request without content heuristics', async () => {
     mockRunOrchestrator.mockImplementationOnce(
       async (_options: any, callbacks: OrchestratorCallbacks) => {
-        callbacks.onAssistantMessage('What concrete outcome do you want me to accomplish?', []);
-        callbacks.onDone();
+        callbacks.onError(new Error('synthetic routing probe'));
+        return { terminalDisposition: 'failed' as const };
       },
     );
 
@@ -290,10 +294,22 @@ describe('ChatScreen agent callbacks', () => {
     fireEvent.press(getByTestId('icon-Send').parent || getByTestId('icon-Send'));
 
     await waitFor(() => {
-      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+      expect(mockRunOrchestrator).toHaveBeenCalled();
     });
 
-    expect(mockStartAgentRun).not.toHaveBeenCalled();
-    expect(mockCompleteAgentRun).not.toHaveBeenCalled();
+    expect(mockStartAgentRun).toHaveBeenCalledWith(
+      'conv1',
+      expect.objectContaining({
+        goal: '---',
+        userMessageId: expect.any(String),
+      }),
+    );
+    await waitFor(() => {
+      expect(mockCompleteAgentRun).toHaveBeenCalledWith(
+        'conv1',
+        expect.objectContaining({ status: 'failed' }),
+        'run-1',
+      );
+    });
   });
 });

@@ -35,6 +35,10 @@ import {
   type CanonicalToolExecutionOutcome,
 } from './toolExecutionOutcomeCanonicalization';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
+import {
+  buildToolMessageOutcome,
+  type ToolMessageOutcome,
+} from '../toolExecution/toolMessageOutcome';
 
 export interface ToolExecutionOutcome {
   index: number;
@@ -54,6 +58,7 @@ function updateToolCallHistoryResult(params: {
   toolName: string;
   argumentsText: string | undefined;
   result: string;
+  status: ToolMessageOutcome['status'];
 }): void {
   if (!params.history) {
     return;
@@ -73,6 +78,7 @@ function updateToolCallHistoryResult(params: {
     params.history[index] = {
       ...entry,
       result: params.result,
+      status: params.status,
     };
     return;
   }
@@ -190,7 +196,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   warn: (message: string, error: unknown) => void;
-  onToolMessage: (toolCallId: string, result: string) => void | Promise<void>;
+  onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
   onStateChange: (state: 'thinking') => void;
   yieldToUiFrame: () => Promise<void>;
   applyGraphEvents: (events: ReadonlyArray<AgentControlGraphEvent>) => void;
@@ -273,11 +279,17 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       toolName,
       argumentsText: executableToolCall?.arguments,
       result: canonicalOutcome.toolMessage.content,
+      status: canonicalOutcome.toolMessage.isError === true ? 'failed' : 'completed',
     });
     canonicalToolExecutionOutcomes.push(canonicalOutcome);
 
     workingMessages.push(canonicalOutcome.toolMessage);
-    await params.onToolMessage(canonicalOutcome.toolCallId, canonicalOutcome.toolMessage.content);
+    await params.onToolMessage(
+      buildToolMessageOutcome({
+        toolCallId: canonicalOutcome.toolCallId,
+        toolMessage: canonicalOutcome.toolMessage,
+      }),
+    );
 
     const graphToolCall = canonicalOutcome.toolMessage.toolCalls?.[0];
     const effectPolicy = resolveToolEffectPolicy(toolName);

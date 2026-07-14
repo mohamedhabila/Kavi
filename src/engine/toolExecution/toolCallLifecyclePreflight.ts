@@ -48,6 +48,7 @@ function completePreflightFailure(params: {
     params.effectiveToolCall.name,
     params.effectiveToolCall.arguments,
     params.content,
+    'failed',
     params.preflightBlockedKind,
   );
   return {

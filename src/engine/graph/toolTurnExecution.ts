@@ -41,6 +41,7 @@ import { materializeToolEffectCompletionGoals } from './toolEffectGoalMaterializ
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
+import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 
 type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
@@ -56,7 +57,7 @@ type ToolTurnCallbacks = {
   ) => void;
   onToolCallStart: (toolCall: ToolCall) => void;
   onToolCallComplete: (toolCall: ToolCall) => void;
-  onToolMessage: (toolCallId: string, result: string) => void | Promise<void>;
+  onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
   onStateChange: (state: OrchestratorState) => void;
 };
 

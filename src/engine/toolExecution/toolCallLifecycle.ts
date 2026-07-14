@@ -319,6 +319,7 @@ export async function executeToolCallLifecycle(
       effectiveToolCall.name,
       effectiveToolCall.arguments,
       result,
+      toolResultIsError ? 'failed' : 'completed',
     );
 
     return {
@@ -378,6 +379,7 @@ export async function executeToolCallLifecycle(
       effectiveToolCall.name,
       effectiveToolCall.arguments,
       errorResult,
+      'failed',
     );
 
     return {

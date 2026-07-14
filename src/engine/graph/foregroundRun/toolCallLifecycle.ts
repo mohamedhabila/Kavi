@@ -1,9 +1,9 @@
-import { isToolResultErrorLike } from '../../../utils/toolResultErrors';
 import { buildSurfacedSubAgentOutputToolResultSummary } from '../../../services/agents/surfacedSubAgentOutput';
 import { formatCompactElapsed } from '../../../services/agents/lifecycle/presentPhase';
 import type { ConversationLogEntry } from '../../../types/conversation';
 import type { Message, ToolCall } from '../../../types/message';
 import type { ToolEffectReceipt } from '../../../types/toolEffectReceipt';
+import type { ToolMessageOutcome } from '../../toolExecution/toolMessageOutcome';
 import {
   extractMessageEffect,
   summarizeToolArguments,
@@ -78,6 +78,7 @@ function resolveForegroundToolResultCall(params: {
   now: number;
   persistedToolCalls?: ToolCall[];
   result: string;
+  status: ToolMessageOutcome['status'];
   toolCallId: string;
 }): ToolCall | undefined {
   const sourceToolCall = [...(params.liveToolCalls ?? []), ...(params.persistedToolCalls ?? [])]
@@ -90,9 +91,9 @@ function resolveForegroundToolResultCall(params: {
 
   const resultToolCall: ToolCall = {
     ...sourceToolCall,
-    status: sourceToolCall.status === 'failed' ? 'failed' : 'completed',
-    result: sourceToolCall.result ?? params.result,
-    error: sourceToolCall.error,
+    status: params.status,
+    result: params.result,
+    error: params.status === 'failed' ? sourceToolCall.error : undefined,
     completedAt: sourceToolCall.completedAt ?? params.now,
   };
   delete resultToolCall.effectReceipts;
@@ -177,32 +178,33 @@ export function createForegroundToolCallLifecycleController(params: {
       params.actions.applyToolCompletionEffect(completionEffect);
       params.actions.appendConversationLog(completionEffect.logEntry);
     },
-    publishToolMessage(toolCallId: string, rawResult: string) {
+    publishToolMessage(outcome: ToolMessageOutcome) {
       const toolMessageEffect = buildForegroundSurfacedWorkerToolMessageEffect({
         pendingOutputs: params.pendingSurfacedWorkerOutputs,
-        toolCallId,
-        rawResult,
+        toolCallId: outcome.toolCallId,
+        rawResult: outcome.content,
       });
-      const assistantMessageId = resolveToolCallAssistantMessageId(toolCallId);
+      const assistantMessageId = resolveToolCallAssistantMessageId(outcome.toolCallId);
       const toolResultCall = resolveForegroundToolResultCall({
         liveToolCalls: params.accessors.getLiveToolCalls(assistantMessageId),
         persistedToolCalls: params.accessors.getPersistedAssistantToolCalls(assistantMessageId),
-        toolCallId,
+        toolCallId: outcome.toolCallId,
         result: toolMessageEffect.content,
+        status: outcome.status,
         now: getNow(),
       });
 
       params.actions.addToolMessage({
-        id: `${assistantMessageId}_tool_${toolCallId}`,
+        id: `${assistantMessageId}_tool_${outcome.toolCallId}`,
         role: 'tool',
         content: toolMessageEffect.content,
-        toolCallId,
+        toolCallId: outcome.toolCallId,
         ...(toolResultCall ? { toolCalls: [toolResultCall] } : {}),
-        isError: toolResultCall?.status === 'failed' || isToolResultErrorLike(rawResult),
+        isError: outcome.status === 'failed',
       });
-      params.actions.flushSurfacedWorkerOutput(toolCallId);
+      params.actions.flushSurfacedWorkerOutput(outcome.toolCallId);
       params.actions.requestPersistenceCheckpoint();
-      releaseToolCallAssistantMessageId(toolCallId);
+      releaseToolCallAssistantMessageId(outcome.toolCallId);
     },
     queueToolCall(toolCall: ToolCall) {
       const queuedToolCall: ToolCall = {

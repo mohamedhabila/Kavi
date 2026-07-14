@@ -134,8 +134,16 @@ describe('tool execution outcome resolution', () => {
 
     await resolveAgentControlGraphToolExecutionOutcomes(params);
 
-    const emittedContent = params.onToolMessage.mock.calls[0]?.[1];
+    const emittedOutcome = params.onToolMessage.mock.calls[0]?.[0];
+    const emittedContent = emittedOutcome?.content;
     expect(typeof emittedContent).toBe('string');
+    expect(emittedOutcome).toEqual(
+      expect.objectContaining({
+        version: 1,
+        toolCallId: 'tc-goals',
+        status: 'completed',
+      }),
+    );
     expect(params.workingMessages[0].content).toBe(emittedContent);
     expect(params.workingMessages[0].toolCalls?.[0]?.result).toBe(emittedContent);
     expect(params.workingMessages[0].toolCalls?.[0]?.raw).toEqual({

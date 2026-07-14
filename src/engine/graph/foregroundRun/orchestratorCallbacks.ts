@@ -9,6 +9,7 @@ import { editWorkingBlock } from '../../../services/memory/workingBlocks';
 import { generateId } from '../../../utils/id';
 import type { OrchestratorCallbacks } from '../../orchestrator';
 import type { AgentRunControlGraphState } from '../../../types/agentRun';
+import type { ToolMessageOutcome } from '../../toolExecution/toolMessageOutcome';
 import {
   applyOrchestratorCompactionEffect,
   buildOrchestratorCompactionEffect,
@@ -43,7 +44,7 @@ type ForegroundOrchestratorCallbacksControllers = {
   };
   toolCallLifecycle: {
     completeToolCall: (toolCall: ToolCall) => void;
-    publishToolMessage: (toolCallId: string, result: string) => void | Promise<void>;
+    publishToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
     queueToolCall: (toolCall: ToolCall) => void;
     startToolCall: (toolCall: ToolCall) => void;
   };
@@ -204,11 +205,11 @@ export function createForegroundRunOrchestratorCallbacks(params: {
         toolCalls,
       });
     },
-    onToolMessage: async (toolCallId, result) => {
+    onToolMessage: async (outcome) => {
       if (!params.guardRunCallback()) {
         return;
       }
-      await params.controllers.toolCallLifecycle.publishToolMessage(toolCallId, result);
+      await params.controllers.toolCallLifecycle.publishToolMessage(outcome);
     },
     onError: (error) => {
       if (!params.guardRunCallback()) {

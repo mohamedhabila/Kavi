@@ -5,6 +5,7 @@ import {
   type ToolCallRecord,
 } from '../loopDetection';
 import type { ToolExecutionLifecycleMetricsRecorder } from './toolCallLifecycleTypes';
+import type { ToolMessageOutcomeStatus } from './toolMessageOutcome';
 
 export async function yieldToUiFrame(): Promise<void> {
   await new Promise<void>((resolve) => {
@@ -18,6 +19,7 @@ export function recordLifecycleToolCall(
   toolName: string,
   argumentsText: string,
   result: string | undefined,
+  status: ToolMessageOutcomeStatus,
   preflightBlockedKind?: PreflightBlockedKind,
 ): void {
   recordToolCall(history, {
@@ -25,6 +27,7 @@ export function recordLifecycleToolCall(
     name: toolName,
     arguments: argumentsText,
     timestamp: Date.now(),
+    status,
     result,
     resultHash: hashResult(result),
     ...(preflightBlockedKind ? { preflightBlockedKind } : {}),

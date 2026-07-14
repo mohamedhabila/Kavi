@@ -7,7 +7,7 @@ import type {
 } from '../../types/message';
 import { generateId } from '../../utils/id';
 import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
+import type { ToolMessageOutcome } from '../../engine/toolExecution/toolMessageOutcome';
 
 type ChatState = Pick<
   ReturnType<typeof useChatStore.getState>,
@@ -67,27 +67,30 @@ export class ScheduledToolTurnLedger {
     return this.completedToolCallIds.has(toolCallId);
   }
 
-  appendTerminalResult(toolCallId: string, result: string, content: string): boolean {
-    const assistantMessageId = this.assistantMessageIds.get(toolCallId);
+  appendTerminalResult(outcome: ToolMessageOutcome, content: string): boolean {
+    const assistantMessageId = this.assistantMessageIds.get(outcome.toolCallId);
     if (!assistantMessageId) return false;
-    const isError = isToolResultErrorLike(result);
-    if (!this.wasCompleted(toolCallId)) {
+    const isError = outcome.status === 'failed';
+    if (!this.wasCompleted(outcome.toolCallId)) {
       this.chatState.updateToolCallStatus(
         this.conversationId,
         assistantMessageId,
-        toolCallId,
-        isError ? 'failed' : 'completed',
-        { result, ...(isError ? { error: result } : {}) },
+        outcome.toolCallId,
+        outcome.status,
+        {
+          result: outcome.content,
+          ...(isError ? { error: outcome.content } : {}),
+        },
       );
     }
     this.chatState.addMessage(this.conversationId, {
-      id: `${assistantMessageId}_tool_${toolCallId}`,
+      id: `${assistantMessageId}_tool_${outcome.toolCallId}`,
       role: 'tool',
       content,
-      toolCallId,
+      toolCallId: outcome.toolCallId,
       isError,
     });
-    this.terminalResultIds.add(toolCallId);
+    this.terminalResultIds.add(outcome.toolCallId);
     return true;
   }
 

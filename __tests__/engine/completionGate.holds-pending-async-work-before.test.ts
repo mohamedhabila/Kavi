@@ -432,6 +432,7 @@ describe('completionGate', () => {
           name: 'calendar_create_event',
           arguments: '{"startDate":"2026-06-15T09:00:00"}',
           timestamp: 1,
+          status: 'failed',
           result: JSON.stringify({
             status: 'error',
             code: 'missing_required_argument',
@@ -467,6 +468,7 @@ describe('completionGate', () => {
           name: GOAL_BOOTSTRAP_TOOL_NAME,
           arguments: '{"action":"complete","id":"missing"}',
           timestamp: 1,
+          status: 'failed',
           result: JSON.stringify({
             status: 'error',
             action: 'complete',
@@ -509,6 +511,7 @@ describe('completionGate', () => {
           name: GOAL_BOOTSTRAP_TOOL_NAME,
           arguments: '{"action":"complete","id":"missing"}',
           timestamp: 1,
+          status: 'failed',
           result: JSON.stringify({ status: 'error' }),
         },
         {
@@ -516,6 +519,7 @@ describe('completionGate', () => {
           name: GOAL_BOOTSTRAP_TOOL_NAME,
           arguments: '{"action":"add","id":"scope","name":"Scope"}',
           timestamp: 2,
+          status: 'completed',
           result: JSON.stringify({ status: 'ok' }),
         },
       ],

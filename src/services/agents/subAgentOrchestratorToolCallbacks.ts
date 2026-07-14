@@ -173,17 +173,27 @@ export function createSubAgentOrchestratorToolCallbacks<TAgent extends SubAgentS
         );
       }
     },
-    onToolMessage: (toolCallId, result) => {
+    onToolMessage: (outcome) => {
+      const trackedToolCall = params.transcriptToolCalls.get(outcome.toolCallId);
       params.appendTranscriptMessage(params.transcriptMessages, {
         id: generateId(),
         role: 'tool',
-        content: result,
-        toolCallId,
+        content: outcome.content,
+        toolCallId: outcome.toolCallId,
         timestamp: Date.now(),
-        ...(params.transcriptToolCalls.has(toolCallId)
-          ? { toolCalls: [params.transcriptToolCalls.get(toolCallId)!] }
+        ...(trackedToolCall
+          ? {
+              toolCalls: [
+                {
+                  ...trackedToolCall,
+                  status: outcome.status,
+                  result: outcome.content,
+                  ...(outcome.status === 'completed' ? { error: undefined } : {}),
+                },
+              ],
+            }
           : {}),
-        ...(typeof result === 'string' && /^Error:/i.test(result) ? { isError: true } : {}),
+        isError: outcome.status === 'failed',
       });
       params.refreshSubAgentArtifacts(params.subAgent, params.transcriptMessages);
       params.checkpointSessionContext(

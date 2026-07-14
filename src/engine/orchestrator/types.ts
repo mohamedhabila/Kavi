@@ -18,6 +18,7 @@ import type {
 } from '../../services/memory/memoryAccessPolicy';
 import type { PendingVerifiedProcedureObservation } from '../../services/memory/verifiedProcedure/executionSession';
 import type { WorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
+import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 
 export type OrchestratorTerminalDisposition =
   | 'final_candidate'
@@ -50,7 +51,7 @@ export interface OrchestratorCallbacks {
     providerReplay?: MessageProviderReplay,
     assistantCompletion?: AssistantMessageMetadata,
   ) => void;
-  onToolMessage: (toolCallId: string, result: string) => void | Promise<void>;
+  onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
   onError: (error: Error) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDone: () => void;

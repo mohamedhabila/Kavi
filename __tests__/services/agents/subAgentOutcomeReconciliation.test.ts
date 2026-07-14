@@ -243,6 +243,39 @@ describe('worker outcome reconciliation', () => {
     );
   });
 
+  it('trusts completed tool status even when opaque result data contains failure-like prose', async () => {
+    const messages = makeObservedMessages();
+    messages[0]!.toolCalls![0]!.result =
+      'Error: this phrase is part of the returned document · فشل · 失败';
+
+    const state = await reconcileSubAgentOutcomeMemory({
+      agent: makeAgent(),
+      config: makeConfig(),
+      messages,
+      now: NOW,
+    });
+
+    expect(state.code).toBe('recorded_verified');
+  });
+
+  it('never promotes failed tool status when result prose claims success', async () => {
+    const messages = makeObservedMessages();
+    messages[0]!.toolCalls![0] = {
+      ...messages[0]!.toolCalls![0]!,
+      status: 'failed',
+      result: 'Completed successfully · تم بنجاح · 完了しました',
+    };
+
+    const state = await reconcileSubAgentOutcomeMemory({
+      agent: makeAgent(),
+      config: makeConfig(),
+      messages,
+      now: NOW,
+    });
+
+    expect(state.code).toBe('recorded_candidate');
+  });
+
   it('fails closed before writing when the persisted source scope does not bind to the worker', async () => {
     const recordEvidence = jest.fn();
     const state = await reconcileSubAgentOutcomeMemory({

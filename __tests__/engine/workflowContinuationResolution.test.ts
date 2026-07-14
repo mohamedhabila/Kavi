@@ -20,12 +20,14 @@ function buildToolCall(
   name: string,
   timestamp: number,
   result: string = JSON.stringify({ status: 'ok' }),
+  status: ToolCallRecord['status'] = 'completed',
 ): ToolCallRecord {
   return {
     id: `tc-${name}-${timestamp}`,
     name,
     arguments: '{}',
     timestamp,
+    status,
     result,
   };
 }
@@ -134,7 +136,7 @@ describe('workflow continuation resolution', () => {
       selectedTools: [consumer],
       toolCallHistory: [
         buildToolCall(producer.name, 1),
-        buildToolCall(consumer.name, 2, 'Error: resource unavailable'),
+        buildToolCall(consumer.name, 2, 'opaque', 'failed'),
       ],
     });
 

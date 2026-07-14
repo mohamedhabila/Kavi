@@ -1,10 +1,16 @@
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
 import { createGoal } from '../../src/engine/goals/types';
 import { ERROR_WARNING_THRESHOLD, GOAL_BOOTSTRAP_STALL_THRESHOLD, GOAL_MUTATION_STALL_THRESHOLD, STAGNANT_PROGRESS_THRESHOLD, WARNING_THRESHOLD, buildGoalProgressFingerprint, buildToolMultisetKey, detectGenericRepeat, detectGoalBootstrapStall, detectGoalFocusThrash, detectGoalMutationErrorLoop, detectGoalMutationStall, GOAL_FOCUS_THRASH_THRESHOLD, detectRepeatedErrors, detectStagnantProgress, hashResult, recordIterationProgressSignature, type IterationProgressSignature, type ToolCallRecord } from '../../src/engine/loopDetection';
-const rec = (name: string, args: string, result?: string): ToolCallRecord => ({
+const rec = (
+  name: string,
+  args: string,
+  result?: string,
+  status: ToolCallRecord['status'] = 'completed',
+): ToolCallRecord => ({
   name,
   arguments: args,
   timestamp: Date.now(),
+  status,
   result,
   resultHash: result !== undefined ? hashResult(result) : undefined,
 });
@@ -35,8 +41,8 @@ describe('detectGenericRepeat', () => {
 describe('detectRepeatedErrors', () => {
   it('detects repeated identical errors', () => {
     const history = [
-      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: timeout'),
-      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: timeout'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'تم بنجاح · 完了', 'failed'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'تم بنجاح · 完了', 'failed'),
     ];
     expect(detectRepeatedErrors(history)).toEqual({
       detected: true,
@@ -47,8 +53,8 @@ describe('detectRepeatedErrors', () => {
 
   it('ignores successful repeated calls', () => {
     const history = [
-      rec('web_fetch', '{"urls":["https://example.com"]}', 'ok'),
-      rec('web_fetch', '{"urls":["https://example.com"]}', 'ok'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: opaque document text'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: opaque document text'),
     ];
     expect(detectRepeatedErrors(history)).toEqual({ detected: false });
   });
@@ -222,7 +228,7 @@ describe('detectGoalFocusThrash', () => {
 describe('detectGoalMutationErrorLoop', () => {
   it('detects consecutive update_goals validation failures', () => {
     const history = Array.from({ length: GOAL_MUTATION_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'Error: validation failed'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'opaque', 'failed'),
     );
     expect(detectGoalMutationErrorLoop(history)).toEqual({
       detected: true,
@@ -233,11 +239,11 @@ describe('detectGoalMutationErrorLoop', () => {
   it('detects recent update_goals validation failures even when other tools are interleaved', () => {
     const history = [
       rec('write_file', '{"path":"status.txt"}', '{"ok":true}'),
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'Error: validation failed'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'opaque', 'failed'),
       rec('write_file', '{"path":"status.txt"}', '{"ok":true}'),
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'Error: validation failed'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'opaque', 'failed'),
       rec('device_status', '{}', '{"ok":true}'),
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'Error: validation failed'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'opaque', 'failed'),
     ];
 
     expect(detectGoalMutationErrorLoop(history)).toEqual({
@@ -250,7 +256,7 @@ describe('detectGoalMutationErrorLoop', () => {
 describe('detectGoalBootstrapStall', () => {
   it('does not fire when goals already exist', () => {
     const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'Error: invalid payload'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'opaque', 'failed'),
     );
     expect(
       detectGoalBootstrapStall({
@@ -272,7 +278,7 @@ describe('detectGoalBootstrapStall', () => {
 
   it('detects repeated bootstrap errors without goal creation', () => {
     const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'Error: invalid payload'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'opaque', 'failed'),
     );
     expect(detectGoalBootstrapStall({ goals: [], history })).toEqual({
       detected: true,

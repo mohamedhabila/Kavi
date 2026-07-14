@@ -539,13 +539,14 @@ export async function executeScheduledJob(
         accumulatedContent = content;
         useChatStore.getState().updateMessage(conversationId, activeAssistantMessageId, content);
       },
-      onToolMessage: (toolCallId, result) => {
+      onToolMessage: (outcome) => {
         if (!transcriptMutationAllowed()) return;
-        const surfacedOutput = pendingSurfacedSubAgentOutputs.get(toolCallId);
+        const surfacedOutput = pendingSurfacedSubAgentOutputs.get(outcome.toolCallId);
         const appended = toolTurns.appendTerminalResult(
-          toolCallId,
-          result,
-          surfacedOutput ? buildSurfacedSubAgentOutputToolResultSummary(surfacedOutput) : result,
+          outcome,
+          surfacedOutput
+            ? buildSurfacedSubAgentOutputToolResultSummary(surfacedOutput)
+            : outcome.content,
         );
         if (!appended) return;
         toolMessageAppendedSinceAssistantTurn = true;

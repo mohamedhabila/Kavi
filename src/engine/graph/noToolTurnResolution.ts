@@ -9,7 +9,6 @@ import {
   normalizeCompletionFinishReason,
 } from '../../services/llm/support/completionRecovery';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import type { ToolDefinition } from '../../types/tool';
 import {
   getPendingTrackedAsyncOperations,
@@ -152,7 +151,7 @@ function resolvePendingWorkflowContinuationToolNames(params: {
   for (const entry of params.toolCallHistory ?? []) {
     const toolName = normalizeToolName(entry.name);
     const tool = registeredToolByName.get(toolName);
-    if (!tool || isToolResultErrorLike(entry.result)) {
+    if (!tool || entry.status === 'failed') {
       continue;
     }
 

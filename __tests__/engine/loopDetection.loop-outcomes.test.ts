@@ -1,10 +1,16 @@
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
 import { createGoal } from '../../src/engine/goals/types';
 import { CRITICAL_THRESHOLD, ERROR_WARNING_THRESHOLD, GOAL_BOOTSTRAP_STALL_THRESHOLD, GOAL_MUTATION_STALL_THRESHOLD, STAGNANT_PROGRESS_THRESHOLD, TOOL_CALL_HISTORY_SIZE, WARNING_THRESHOLD, buildGoalProgressFingerprint, buildToolMultisetKey, detectConsecutiveBlockedPreflightCalls, detectLoops, PREFLIGHT_BLOCKED_LOOP_THRESHOLD, hashResult, recordIterationProgressSignature, recordToolCall, type IterationProgressSignature, type ToolCallRecord } from '../../src/engine/loopDetection';
-const rec = (name: string, args: string, result?: string): ToolCallRecord => ({
+const rec = (
+  name: string,
+  args: string,
+  result?: string,
+  status: ToolCallRecord['status'] = 'completed',
+): ToolCallRecord => ({
   name,
   arguments: args,
   timestamp: Date.now(),
+  status,
   result,
   resultHash: result !== undefined ? hashResult(result) : undefined,
 });
@@ -16,7 +22,7 @@ describe('detectLoops', () => {
 
   it('escalates bootstrap stall to critical when goals are absent', () => {
     const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'Error: invalid payload'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'opaque', 'failed'),
     );
     expect(detectLoops(history, [], { goals: [] })).toEqual(
       expect.objectContaining({
@@ -30,7 +36,7 @@ describe('detectLoops', () => {
 
   it('does not infer bootstrap stall without explicit graph goal context', () => {
     const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'Error: invalid payload'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'opaque', 'failed'),
     ).map((entry) => ({ ...entry, preflightBlockedKind: 'tool_filter' as const }));
 
     expect(detectLoops(history)).toEqual(
@@ -43,7 +49,7 @@ describe('detectLoops', () => {
 
   it('detects consecutive preflight blocked tool_filter calls at threshold 3', () => {
     const history = Array.from({ length: PREFLIGHT_BLOCKED_LOOP_THRESHOLD }, () =>
-      rec('update_goals', '{}', 'Tool "update_goals" is not allowed in this context.'),
+      rec('update_goals', '{}', 'opaque', 'failed'),
     ).map((entry) => ({ ...entry, preflightBlockedKind: 'tool_filter' as const }));
 
     expect(detectConsecutiveBlockedPreflightCalls(history)).toEqual({
@@ -67,6 +73,7 @@ describe('detectLoops', () => {
         'calendar_create_event',
         '{}',
         '{"status":"error","code":"missing_required_argument"}',
+        'failed',
       ),
     ).map((entry) => ({ ...entry, preflightBlockedKind: 'schema_validation' as const }));
 
@@ -97,7 +104,7 @@ describe('detectLoops', () => {
 
   it('downgrades preflight filter loops when only persistent focus goals remain', () => {
     const history = Array.from({ length: PREFLIGHT_BLOCKED_LOOP_THRESHOLD }, () =>
-      rec('tool_catalog', '{}', 'Tool "tool_catalog" is not allowed in this context.'),
+      rec('tool_catalog', '{}', 'opaque', 'failed'),
     ).map((entry) => ({ ...entry, preflightBlockedKind: 'tool_filter' as const }));
 
     expect(
@@ -216,7 +223,8 @@ describe('detectLoops', () => {
       rec(
         GOAL_BOOTSTRAP_TOOL_NAME,
         `{"action":"complete","goals":[{"id":"scope-a","attempt":${index}}]}`,
-        `Error: validation failed ${index}`,
+        `opaque-${index}`,
+        'failed',
       ),
     );
 
@@ -247,7 +255,8 @@ describe('detectLoops', () => {
       rec(
         GOAL_BOOTSTRAP_TOOL_NAME,
         `{"action":"add","goals":[{"id":"stale-${index}"}]}`,
-        `Error: validation failed ${index}`,
+        `opaque-${index}`,
+        'failed',
       ),
     );
 
@@ -434,8 +443,8 @@ describe('detectLoops', () => {
 
   it('warns on repeated identical errors before generic repeat escalation', () => {
     const history = [
-      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: timeout'),
-      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: timeout'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'opaque', 'failed'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'opaque', 'failed'),
     ];
     expect(detectLoops(history)).toEqual(
       expect.objectContaining({

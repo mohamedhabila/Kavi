@@ -217,7 +217,12 @@ describe('ChatScreen sub-agent worker loop', () => {
             'This output is intended to be surfaced directly to the user by the runtime. Do not restate the same content in assistant text unless you are adding materially new information.',
         }),
       });
-      callbacks.onToolMessage('tc-surface', 'tool result');
+      callbacks.onToolMessage({
+        version: 1,
+        toolCallId: 'tc-surface',
+        status: 'completed',
+        content: 'tool result',
+      });
       callbacks.onToken('Worker-authored final answer');
       callbacks.onAssistantMessage('Worker-authored final answer', []);
       callbacks.onDone();

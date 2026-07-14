@@ -373,7 +373,12 @@ describe('runE2EScenario product foreground integration', () => {
         result: JSON.stringify([{ id: 'cal-1', title: 'Work' }]),
         completedAt: 2,
       });
-      await callbacks.onToolMessage(call.id, JSON.stringify([{ id: 'cal-1', title: 'Work' }]));
+      await callbacks.onToolMessage({
+        version: 1,
+        toolCallId: call.id,
+        status: 'completed',
+        content: JSON.stringify([{ id: 'cal-1', title: 'Work' }]),
+      });
       callbacks.onAssistantMessage(
         'Listed calendars.',
         undefined,

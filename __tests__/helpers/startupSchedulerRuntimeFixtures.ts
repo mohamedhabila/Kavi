@@ -1,4 +1,8 @@
 import type { OrchestratorRunResult } from '../../src/engine/orchestrator/types';
+import type {
+  ToolMessageOutcome,
+  ToolMessageOutcomeStatus,
+} from '../../src/engine/toolExecution/toolMessageOutcome';
 import type { SchedulerExecutionResult } from '../../src/services/scheduler/executionResult';
 import type { checkpointScheduledExecutionResult } from '../../src/services/scheduler/jobExecutorPersistence';
 import type { AssistantMessageMetadata } from '../../src/types/message';
@@ -12,6 +16,14 @@ export const completeFinalMetadata: AssistantMessageMetadata = {
   kind: 'final',
   completionStatus: 'complete',
 };
+
+export function toolMessageOutcome(
+  toolCallId: string,
+  status: ToolMessageOutcomeStatus,
+  content: string,
+): ToolMessageOutcome {
+  return { version: 1, toolCallId, status, content };
+}
 
 export const startupTestProvider: LlmProviderConfig = {
   id: 'openai',

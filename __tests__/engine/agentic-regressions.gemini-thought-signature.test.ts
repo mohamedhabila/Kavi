@@ -573,7 +573,12 @@ describe('Bug 3: Subagent context persistence', () => {
           ],
         },
       );
-      callbacks.onToolMessage('tc1', 'file content');
+      callbacks.onToolMessage({
+        version: 1,
+        toolCallId: 'tc1',
+        status: 'completed',
+        content: 'file content',
+      });
       callbacks.onDone();
       return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });

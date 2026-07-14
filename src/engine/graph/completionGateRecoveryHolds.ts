@@ -1,5 +1,4 @@
 import type { AgentGoal } from '../../types/agentRun';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
 import type { ToolCallRecord } from '../loopDetection';
 import type { CompletionGateDecision } from './completionGateTypes';
@@ -17,7 +16,7 @@ function hasUnrepairedGraphMutationError(
       continue;
     }
 
-    return isToolResultErrorLike(entry.result);
+    return entry.status === 'failed';
   }
 
   return false;
@@ -43,7 +42,7 @@ function hasLatestRetryableToolError(
     return false;
   }
   return (
-    isToolResultErrorLike(latestEntry.result) &&
+    latestEntry.status === 'failed' &&
     extractRecentToolRepairHints([latestEntry]).length > 0
   );
 }

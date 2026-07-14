@@ -1,6 +1,5 @@
 import type { AgentGoal, AgentRunControlGraphState } from '../../types/agentRun';
 import type { Message } from '../../types/message';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import {
   areGoalSuccessCriteriaSatisfied,
   isCountOnlySuccessCriterion,
@@ -257,8 +256,9 @@ function collectToolHistoryEvidence(history: ReadonlyArray<ToolCallRecord> | und
         .filter(
           (entry) =>
             entry.name !== 'update_goals' &&
+            entry.status === 'completed' &&
             typeof entry.result === 'string' &&
-            !isToolResultErrorLike(entry.result),
+            entry.result.length > 0,
         )
         .flatMap((entry) => [
           ...buildToolGoalEvidenceStrings({

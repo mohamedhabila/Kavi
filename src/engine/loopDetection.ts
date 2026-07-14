@@ -1,13 +1,14 @@
 import { GOAL_BOOTSTRAP_TOOL_NAME } from './goals/bootstrap';
 import { areGoalSuccessCriteriaSatisfied } from './goals/completionEvidence';
 import { isBlockingGoal, type AgentGoal } from './goals/types';
-import { isToolResultErrorLike } from '../utils/toolResultErrors';
+import type { ToolMessageOutcomeStatus } from './toolExecution/toolMessageOutcome';
 
 export interface ToolCallRecord {
   id?: string;
   name: string;
   arguments: string;
   timestamp: number;
+  status: ToolMessageOutcomeStatus;
   result?: string;
   argsHash?: string;
   resultHash?: string;
@@ -161,7 +162,7 @@ export function detectRepeatedErrors(
 
   const counts = new Map<string, number>();
   for (const entry of history) {
-    if (!isToolResultErrorLike(entry.result)) {
+    if (entry.status !== 'failed') {
       continue;
     }
 
@@ -376,7 +377,7 @@ export function detectGoalMutationErrorLoop(
       .slice(-threshold);
     if (
       recentGoalMutationCalls.length >= threshold &&
-      recentGoalMutationCalls.every((entry) => isToolResultErrorLike(entry.result))
+      recentGoalMutationCalls.every((entry) => entry.status === 'failed')
     ) {
       return { detected: true, count: recentGoalMutationCalls.length };
     }
@@ -384,7 +385,7 @@ export function detectGoalMutationErrorLoop(
     return { detected: false };
   }
 
-  const allErrors = window.every((entry) => isToolResultErrorLike(entry.result));
+  const allErrors = window.every((entry) => entry.status === 'failed');
   if (allErrors) {
     return { detected: true, count: threshold };
   }
@@ -415,7 +416,7 @@ export function detectGoalBootstrapStall(params: {
     return { detected: false };
   }
 
-  const allErrors = window.every((entry) => isToolResultErrorLike(entry.result));
+  const allErrors = window.every((entry) => entry.status === 'failed');
   const firstKey = buildRawToolArgsKey(window[0]!);
   const allIdentical = window.every((entry) => buildRawToolArgsKey(entry) === firstKey);
   if (allErrors || allIdentical) {

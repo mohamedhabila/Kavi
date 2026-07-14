@@ -566,14 +566,17 @@ describe('toolTurnBatchExecution', () => {
       },
     ];
     mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+      const status =
+        params.tc.name === GOAL_BOOTSTRAP_TOOL_NAME ? ('failed' as const) : ('completed' as const);
       const result =
-        params.tc.name === GOAL_BOOTSTRAP_TOOL_NAME
+        status === 'failed'
           ? '{"status":"error","error":"validation failed"}'
           : '{"ok":true}';
       params.toolCallHistory.push({
         name: params.tc.name,
         arguments: params.tc.arguments,
         timestamp: Date.now(),
+        status,
         result,
       });
       return {
@@ -588,9 +591,9 @@ describe('toolTurnBatchExecution', () => {
             id: params.tc.id,
             name: params.tc.name,
             arguments: params.tc.arguments,
-            status: result.includes('"error"') ? 'failed' : 'completed',
+            status,
           },
-          isError: result.includes('"error"'),
+          isError: status === 'failed',
         }),
       };
     });

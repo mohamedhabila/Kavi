@@ -30,6 +30,7 @@ import type { AgentControlGraphWorkflowToolResultProgress } from './workflowTool
 import type { ThinkingLevel } from '../thinking';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
+import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 
 export type IterationCallbacks = {
   onAssistantMessage: (
@@ -45,7 +46,7 @@ export type IterationCallbacks = {
   onToolCallQueued?: (toolCall: ToolCall) => void;
   onToolCallStart: (toolCall: ToolCall) => void;
   onToolCallComplete: (toolCall: ToolCall) => void;
-  onToolMessage: (toolCallId: string, result: string) => void | Promise<void>;
+  onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
 };
 
 export interface AgentControlGraphIterationRuntimeState {

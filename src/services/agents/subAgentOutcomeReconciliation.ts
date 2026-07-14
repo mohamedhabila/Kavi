@@ -5,7 +5,6 @@ import type {
   SubAgentOutcomeReconciliationState,
   SubAgentSnapshot,
 } from '../../types/subAgent';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
 import { recordAgentRunEvidenceMemory } from '../memory/agentRunEvidenceMemory';
 import { isExactMemoryProvenanceId } from '../memory/memoryProvenanceIdentity';
@@ -142,8 +141,7 @@ function hasObservedSuccessfulToolResult(messages: ReadonlyArray<Message>): bool
       (toolCall) =>
         toolCall.status === 'completed' &&
         typeof toolCall.result === 'string' &&
-        toolCall.result.trim().length > 0 &&
-        !isToolResultErrorLike(toolCall.result),
+        toolCall.result.trim().length > 0,
     ),
   );
 }

@@ -5,6 +5,7 @@ import {
   completedOrchestratorRun,
   mockStartupScheduledExecutionCheckpoint,
   startupTestProvider as mockProvider,
+  toolMessageOutcome,
 } from '../helpers/startupSchedulerRuntimeFixtures';
 
 const mockRegisterBuiltInServiceSkills = jest.fn();
@@ -596,7 +597,7 @@ describe('initializeServices', () => {
       callbacks.onAssistantMessage('Using a tool.', [
         { id: 'tc-1', name: 'read_file', arguments: '{}', status: 'pending' },
       ]);
-      callbacks.onToolMessage('tc-1', 'tool result');
+      callbacks.onToolMessage(toolMessageOutcome('tc-1', 'completed', 'tool result'));
       callbacks.onAssistantMessage('done', [], undefined, completeFinalMetadata);
       callbacks.onDone();
       return completedOrchestratorRun;
@@ -645,7 +646,7 @@ describe('initializeServices', () => {
       callbacks.onAssistantMessage('Using a tool.', [
         { id: 'tc-2', name: 'read_file', arguments: '{}', status: 'pending' },
       ]);
-      callbacks.onToolMessage('tc-2', payload);
+      callbacks.onToolMessage(toolMessageOutcome('tc-2', 'failed', payload));
       callbacks.onAssistantMessage('done', [], undefined, completeFinalMetadata);
       callbacks.onDone();
       return completedOrchestratorRun;
