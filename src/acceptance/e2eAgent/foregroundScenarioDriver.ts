@@ -413,7 +413,11 @@ async function runScenarioIsolated(
         getE2ENativeMobileInvocationSnapshots().slice(nativeInvocationStart);
       const chatError = runtime.getChatError();
       const expectedMemoryCloseouts =
-        finalAssistant?.completionStatus === 'complete' && !timedOut ? 1 : 0;
+        input.disableLongTermMemory !== true &&
+        finalAssistant?.completionStatus === 'complete' &&
+        !timedOut
+          ? 1
+          : 0;
       const memoryInvariantError =
         !timedOut &&
         !chatError &&

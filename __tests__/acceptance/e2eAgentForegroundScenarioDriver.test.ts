@@ -464,6 +464,21 @@ describe('runForegroundScenario', () => {
       instrumentationStatus: 'opt_out',
       events: [],
     });
+    expect(result.turns[0]).toMatchObject({
+      completion: {
+        assistantStatus: 'complete',
+        executionCompleted: true,
+        finalResponseCompleted: true,
+      },
+      error: null,
+      memory: [],
+    });
+    expect(
+      result.turns[0].messages.find(
+        (message) => message.id === result.turns[0].finalAssistant?.messageId,
+      )?.memoryPublication,
+    ).toEqual({ version: 1, disposition: 'opt_out' });
+    expect(mockedRecordCompletedTurnForMemory).not.toHaveBeenCalled();
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
   });
 
