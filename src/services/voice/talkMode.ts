@@ -14,6 +14,7 @@ import {
   type TTSProvider,
 } from './voice';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import { isLikelyVoiceEcho } from './voiceEchoSimilarity';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -420,35 +421,6 @@ export class TalkModeManager {
       return false;
     }
 
-    const normalize = (value: string) =>
-      value
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    const normalizedTranscript = normalize(transcript);
-    const normalizedResponse = normalize(response);
-
-    if (!normalizedTranscript || !normalizedResponse) {
-      return false;
-    }
-
-    if (normalizedTranscript === normalizedResponse) {
-      return true;
-    }
-
-    if (
-      normalizedResponse.includes(normalizedTranscript) ||
-      normalizedTranscript.includes(normalizedResponse)
-    ) {
-      return normalizedTranscript.length >= 12 || normalizedResponse.length >= 12;
-    }
-
-    const transcriptTokens = new Set(normalizedTranscript.split(' '));
-    const responseTokens = normalizedResponse.split(' ');
-    const sharedTokenCount = responseTokens.filter((token) => transcriptTokens.has(token)).length;
-    const overlapRatio = sharedTokenCount / Math.max(responseTokens.length, 1);
-
-    return overlapRatio >= 0.8 && sharedTokenCount >= 4;
+    return isLikelyVoiceEcho(transcript, response);
   }
 }
