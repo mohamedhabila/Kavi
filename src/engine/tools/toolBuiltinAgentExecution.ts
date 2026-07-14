@@ -2,6 +2,7 @@ import { executeAgentsConfigure, executeAgentsList, executeAgentsSwitch } from '
 import { executeMessageEffect, executePollCreate } from './builtin-interaction';
 import { executeSpeak } from './builtin-media';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
+import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export const BUILTIN_AGENT_TOOL_NAMES = new Set([
   'poll_create',
@@ -15,7 +16,7 @@ export const BUILTIN_AGENT_TOOL_NAMES = new Set([
 
 export async function executeBuiltinAgentTool(
   params: BuiltinToolExecutionParams,
-): Promise<string | null> {
+): Promise<ToolRuntimeOutcome | null> {
   const { name, args, conversationId } = params;
 
   switch (name) {
@@ -36,7 +37,7 @@ export async function executeBuiltinAgentTool(
       if (action === 'list') return executeAgentsList();
       if (action === 'switch') return executeAgentsSwitch(args, conversationId);
       if (action === 'configure') return executeAgentsConfigure(args);
-      return 'Error: agents requires action ∈ {list, switch, configure}';
+      return failedToolOutcome('Error: agents requires action ∈ {list, switch, configure}');
     }
     default:
       return null;

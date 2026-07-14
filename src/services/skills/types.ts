@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ToolDefinition } from '../../types/tool';
+import type { ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export interface Skill {
   id: string;
@@ -32,7 +33,7 @@ export interface SkillToolDefinition {
   };
   strict?: boolean;
   contract?: ToolDefinition['contract'];
-  handler?: (args: any, context: SkillToolExecutionContext) => Promise<string>;
+  handler?: (args: any, context: SkillToolExecutionContext) => Promise<ToolRuntimeOutcome>;
 }
 
 export type SkillInvocationPolicy = 'auto' | 'manual' | 'agent-decides';

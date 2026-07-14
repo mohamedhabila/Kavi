@@ -182,11 +182,11 @@ export async function pickContact(): Promise<NativeActionResult<Record<string, u
 
     const contact = await Contacts.presentContactPickerAsync();
     if (!contact) {
-      return makeActionResult(
-        'cancelled',
+      return makeActionFailure(
+        'contacts_pick_cancelled',
         'Contact selection was cancelled.',
         { accessPrivileges: permission?.accessPrivileges || 'unknown' },
-        'contacts_pick_cancelled',
+        'cancelled',
       );
     }
 

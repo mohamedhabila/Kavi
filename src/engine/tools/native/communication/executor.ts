@@ -1,24 +1,29 @@
 import { executeStructuredNativeAction } from '../structuredAction';
+import type { ToolRuntimeOutcome } from '../../../../types/toolRuntimeOutcome';
 
-export async function executeOpenUrl(args: { url: string }): Promise<string> {
+export async function executeOpenUrl(args: { url: string }): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('open_url', args as Record<string, unknown>);
 }
 
-export async function executeEmailCompose(args: Record<string, unknown>): Promise<string> {
+export async function executeEmailCompose(
+  args: Record<string, unknown>,
+): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('email_compose', args);
 }
 
-export async function executeSmsCompose(args: Record<string, unknown>): Promise<string> {
+export async function executeSmsCompose(
+  args: Record<string, unknown>,
+): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('sms_compose', args);
 }
 
 export async function executePhoneCall(args: {
   number: string;
   defaultCountry?: string;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('phone_call', args as Record<string, unknown>);
 }
 
-export async function executeMapsOpen(args: Record<string, unknown>): Promise<string> {
+export async function executeMapsOpen(args: Record<string, unknown>): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('maps_open', args);
 }

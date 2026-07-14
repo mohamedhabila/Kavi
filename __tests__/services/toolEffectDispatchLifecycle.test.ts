@@ -17,6 +17,11 @@ import { dispatchAuthorizedToolEffect } from '../../src/services/executionJourna
 import type { AuthorizedToolEffectDispatchInput } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
 import { readToolEffectRestartDisposition } from '../../src/services/executionJournal/toolEffectRestartDisposition';
 import type { RuntimeExternalToolEvidence } from '../../src/engine/toolExecution/toolContractIdentity';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../src/types/toolRuntimeOutcome';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -31,13 +36,15 @@ function authority(overrides: Partial<AuthorizedToolEffectDispatchInput['authori
   };
 }
 
-function verifiedWriteResult(): string {
-  return JSON.stringify({
-    status: 'written',
-    path: 'private/plan.md',
-    size: 4,
-    sha256: 'a'.repeat(64),
-  });
+function verifiedWriteResult(): ToolRuntimeOutcome {
+  return completedToolOutcome(
+    JSON.stringify({
+      status: 'written',
+      path: 'private/plan.md',
+      size: 4,
+      sha256: 'a'.repeat(64),
+    }),
+  );
 }
 
 function writeInput(
@@ -156,6 +163,27 @@ afterEach(() => {
 });
 
 describe('authorized durable tool effect dispatch', () => {
+  it('settles from the executor status when opaque content sounds successful', async () => {
+    const content = '完了しました — تم بنجاح — завершено';
+
+    const result = await dispatchAuthorizedToolEffect(
+      writeInput(async () => failedToolOutcome(content)),
+      { now: () => 100 },
+    );
+
+    expect(result).toMatchObject({
+      kind: 'executed',
+      status: 'failed',
+      result: content,
+      requiresReconciliation: true,
+      receipt: {
+        transportState: 'returned',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      },
+    });
+  });
+
   it('hands the executor only the exact persisted claim after authorization', async () => {
     const execute = jest.fn(async () => verifiedWriteResult());
     const input = writeInput(execute);
@@ -184,7 +212,7 @@ describe('authorized durable tool effect dispatch', () => {
         effectState: 'applied',
         verificationState: 'verified',
       });
-      const execute = jest.fn(async () => rawResult);
+      const execute = jest.fn(async () => completedToolOutcome(rawResult));
       const input = dynamicInput(evidence, execute);
 
       const first = await dispatchAuthorizedToolEffect(input, { now: () => 100 });
@@ -228,7 +256,7 @@ describe('authorized durable tool effect dispatch', () => {
         reason: 'ambiguous_effect',
       });
 
-      const replayExecutor = jest.fn(async () => rawResult);
+      const replayExecutor = jest.fn(async () => completedToolOutcome(rawResult));
       await expect(
         dispatchAuthorizedToolEffect(
           dynamicInput(evidence, replayExecutor, {
@@ -254,7 +282,7 @@ describe('authorized durable tool effect dispatch', () => {
       },
     ],
   ] as const)('blocks %s dynamic evidence before execution', async (_label, evidence) => {
-    const execute = jest.fn(async () => 'must not run');
+    const execute = jest.fn(async () => completedToolOutcome('must not run'));
     const result = await dispatchAuthorizedToolEffect(
       dynamicInput(MCP_EVIDENCE, execute, { runtimeExternalEvidence: evidence }),
       { now: () => 100 },
@@ -266,7 +294,7 @@ describe('authorized durable tool effect dispatch', () => {
   });
 
   it('blocks a changed runtime generation from borrowing an existing durable claim', async () => {
-    const firstExecutor = jest.fn(async () => '{"status":"completed"}');
+    const firstExecutor = jest.fn(async () => completedToolOutcome('{"status":"completed"}'));
     const firstInput = dynamicInput(MCP_EVIDENCE, firstExecutor);
     await expect(
       dispatchAuthorizedToolEffect(firstInput, { now: () => 100 }),
@@ -275,7 +303,7 @@ describe('authorized durable tool effect dispatch', () => {
       ...MCP_EVIDENCE,
       provenance: { ...MCP_EVIDENCE.provenance, connectionGeneration: 5 },
     };
-    const changedExecutor = jest.fn(async () => '{"status":"completed"}');
+    const changedExecutor = jest.fn(async () => completedToolOutcome('{"status":"completed"}'));
 
     await expect(
       dispatchAuthorizedToolEffect(
@@ -536,13 +564,15 @@ describe('authorized durable tool effect dispatch', () => {
   it('stores only bounded identities and digests, never raw arguments or results', async () => {
     await dispatchAuthorizedToolEffect(
       writeInput(async () =>
-        JSON.stringify({
-          status: 'written',
-          path: 'private/plan.md',
-          size: 4,
-          sha256: 'a'.repeat(64),
-          echoedSecret: 'must-never-be-journaled',
-        }),
+        completedToolOutcome(
+          JSON.stringify({
+            status: 'written',
+            path: 'private/plan.md',
+            size: 4,
+            sha256: 'a'.repeat(64),
+            echoedSecret: 'must-never-be-journaled',
+          }),
+        ),
       ),
       { now: () => 100 },
     );

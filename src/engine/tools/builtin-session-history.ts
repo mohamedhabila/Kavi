@@ -9,6 +9,11 @@ import { createSurfacedSubAgentOutputPayload } from '../../services/agents/surfa
 import { selectRecentSubAgentEvidenceActivity } from '../../services/agents/subAgentEvidence';
 import { stripAttachmentPayloads } from '../../utils/messageAttachments';
 import { TERMINAL_SESSION_OUTPUT_GUIDANCE } from './builtin-session-resultSupport';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 type SessionHistoryMessage = {
   role: Message['role'] | 'system';
@@ -89,48 +94,52 @@ function serializeSessionHistory(
   return serialized;
 }
 
-export async function executeSessionList(): Promise<string> {
+export async function executeSessionList(): Promise<ToolRuntimeOutcome> {
   const agents = listActiveSubAgents();
   if (agents.length === 0) {
-    return JSON.stringify({
-      sessions: [],
-      count: 0,
-      guidance:
-        'No active sessions are available. Reuse any known session ids instead of calling sessions_list again unless the active session set may have changed.',
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        sessions: [],
+        count: 0,
+        guidance:
+          'No active sessions are available. Reuse any known session ids instead of calling sessions_list again unless the active session set may have changed.',
+      }),
+    );
   }
 
-  return JSON.stringify({
-    sessions: agents.map((agent) => ({
-      sessionId: agent.sessionId,
-      ...(agent.workstreamId ? { workstreamId: agent.workstreamId } : {}),
-      name: agent.name,
-      parentConversationId: agent.parentConversationId,
-      status: agent.status,
-      depth: agent.depth,
-      startedAt: agent.startedAt,
-      launchState: agent.launchState,
-      output: agent.output?.slice(0, 500),
-      currentActivity: agent.currentActivity,
-      activeToolName: agent.activeToolName,
-      lastToolResultPreview: agent.lastToolResultPreview,
-      artifactCount: agent.artifacts?.length || 0,
-      hasDeadline: typeof agent.deadlineAt === 'number',
-      deadlineAt: agent.deadlineAt,
-      canCancel: agent.status === 'running',
-    })),
-    count: agents.length,
-    guidance:
-      'Reuse the returned session ids. Switch to sessions_wait, sessions_output, or sessions_history for a known session instead of calling sessions_list again unless the active session set may have changed.',
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      sessions: agents.map((agent) => ({
+        sessionId: agent.sessionId,
+        ...(agent.workstreamId ? { workstreamId: agent.workstreamId } : {}),
+        name: agent.name,
+        parentConversationId: agent.parentConversationId,
+        status: agent.status,
+        depth: agent.depth,
+        startedAt: agent.startedAt,
+        launchState: agent.launchState,
+        output: agent.output?.slice(0, 500),
+        currentActivity: agent.currentActivity,
+        activeToolName: agent.activeToolName,
+        lastToolResultPreview: agent.lastToolResultPreview,
+        artifactCount: agent.artifacts?.length || 0,
+        hasDeadline: typeof agent.deadlineAt === 'number',
+        deadlineAt: agent.deadlineAt,
+        canCancel: agent.status === 'running',
+      })),
+      count: agents.length,
+      guidance:
+        'Reuse the returned session ids. Switch to sessions_wait, sessions_output, or sessions_history for a known session instead of calling sessions_list again unless the active session set may have changed.',
+    }),
+  );
 }
 
 export async function executeSessionHistory(args: {
   sessionId: string;
   maxMessages?: number;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return `Error: session not found: ${args.sessionId}`;
+  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
 
   const maxSize = 80 * 1024;
   const maxPerMessage = 4000;
@@ -163,34 +172,42 @@ export async function executeSessionHistory(args: {
     messages: transcriptMessages.length > 0 ? transcriptMessages : fallbackMessages,
   };
 
-  return serializeSessionHistory(history, maxSize);
+  return completedToolOutcome(serializeSessionHistory(history, maxSize));
 }
 
-export async function executeSessionOutput(args: { sessionId: string }): Promise<string> {
+export async function executeSessionOutput(args: {
+  sessionId: string;
+}): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return `Error: session not found: ${args.sessionId}`;
+  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
 
   if (agent.status === 'running') {
-    return JSON.stringify({
-      sessionId: args.sessionId,
-      status: agent.status,
-      hasOutput: false,
-      guidance:
-        'Final output is not available yet because the worker is still running. Call sessions_wait if you need to block until it finishes, or continue with other non-overlapping work until it does.',
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        sessionId: args.sessionId,
+        status: agent.status,
+        hasOutput: false,
+        guidance:
+          'Final output is not available yet because the worker is still running. Call sessions_wait if you need to block until it finishes, or continue with other non-overlapping work until it does.',
+      }),
+    );
   }
 
   const output = agent.output || '';
   const recentActivity = selectRecentSubAgentEvidenceActivity(agent);
-  return JSON.stringify({
-    sessionId: args.sessionId,
-    status: agent.status,
-    hasOutput: output.length > 0,
-    output,
-    ...(agent.lastToolResultPreview ? { lastToolResultPreview: agent.lastToolResultPreview } : {}),
-    ...(recentActivity.length > 0 ? { recentActivity } : {}),
-    guidance: TERMINAL_SESSION_OUTPUT_GUIDANCE,
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      sessionId: args.sessionId,
+      status: agent.status,
+      hasOutput: output.length > 0,
+      output,
+      ...(agent.lastToolResultPreview
+        ? { lastToolResultPreview: agent.lastToolResultPreview }
+        : {}),
+      ...(recentActivity.length > 0 ? { recentActivity } : {}),
+      guidance: TERMINAL_SESSION_OUTPUT_GUIDANCE,
+    }),
+  );
 }
 
 export async function executeSessionSurfaceOutput(args: {
@@ -204,18 +221,20 @@ export async function executeSessionSurfaceOutput(args: {
   maxChars?: number;
   fallbackToFullOutput?: boolean;
   trim?: boolean;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return `Error: session not found: ${args.sessionId}`;
+  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
 
   if (agent.status === 'running') {
-    return JSON.stringify({
-      sessionId: args.sessionId,
-      status: agent.status,
-      hasOutput: false,
-      guidance:
-        'Worker output cannot be surfaced yet because the worker is still running. Call sessions_wait if you need to block until it finishes, or continue with other non-overlapping work until it does.',
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        sessionId: args.sessionId,
+        status: agent.status,
+        hasOutput: false,
+        guidance:
+          'Worker output cannot be surfaced yet because the worker is still running. Call sessions_wait if you need to block until it finishes, or continue with other non-overlapping work until it does.',
+      }),
+    );
   }
 
   const surfacedResult = createSurfacedSubAgentOutputPayload({
@@ -235,12 +254,14 @@ export async function executeSessionSurfaceOutput(args: {
   });
 
   if (surfacedResult.error || !surfacedResult.payload) {
-    return JSON.stringify({
-      status: 'error',
-      sessionId: args.sessionId,
-      error: surfacedResult.error || 'Unable to surface worker output.',
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        sessionId: args.sessionId,
+        error: surfacedResult.error || 'Unable to surface worker output.',
+      }),
+    );
   }
 
-  return JSON.stringify(surfacedResult.payload);
+  return completedToolOutcome(JSON.stringify(surfacedResult.payload));
 }

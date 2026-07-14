@@ -71,7 +71,7 @@ export function createProductivitySkill(): Skill {
 
           const factor = conversions[from]?.[to];
           if (!factor) {
-            return JSON.stringify({ error: `Unsupported conversion: ${from} → ${to}` });
+            throw new Error(`Unsupported conversion: ${from} → ${to}`);
           }
 
           return JSON.stringify({
@@ -86,7 +86,10 @@ export function createProductivitySkill(): Skill {
         'calculate',
         'Evaluate a mathematical expression',
         {
-          expression: { type: 'string', description: 'Math expression (for example "2^10 + sqrt(144)")' },
+          expression: {
+            type: 'string',
+            description: 'Math expression (for example "2^10 + sqrt(144)")',
+          },
         },
         ['expression'],
         async (args) => {
@@ -96,7 +99,7 @@ export function createProductivitySkill(): Skill {
               sanitized.replace(/\s/g, '').length <
               args.expression.replace(/\s/g, '').length * 0.8
             ) {
-              return JSON.stringify({ error: 'Expression contains unsupported characters' });
+              throw new Error('Expression contains unsupported characters');
             }
             const jsExpr = sanitized
               .replace(/\^/g, '**')
@@ -113,13 +116,13 @@ export function createProductivitySkill(): Skill {
             // JavaScript execution surface.
             const result = new Function(`"use strict"; return (${jsExpr})`)();
             if (typeof result !== 'number' || !isFinite(result)) {
-              return JSON.stringify({ error: 'Expression did not produce a finite number' });
+              throw new Error('Expression did not produce a finite number');
             }
             return JSON.stringify({ expression: args.expression, result });
           } catch (error: unknown) {
-            return JSON.stringify({
-              error: `Invalid expression: ${error instanceof Error ? error.message : String(error)}`,
-            });
+            throw new Error(
+              `Invalid expression: ${error instanceof Error ? error.message : String(error)}`,
+            );
           }
         },
       ),

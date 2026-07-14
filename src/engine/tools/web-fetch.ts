@@ -17,6 +17,11 @@ import {
   writeCache,
 } from './web-shared';
 import { ToolDefinition } from '../../types/tool';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 import { isAllowedUrl } from '../../services/security/ssrf';
 import {
   describeFetchError,
@@ -159,12 +164,12 @@ export async function executeWebFetch(
     maxChars?: number;
   },
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const urls = Array.isArray(args.urls)
     ? args.urls.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean)
     : [];
   if (urls.length === 0) {
-    return JSON.stringify({ error: 'At least one URL is required' });
+    return failedToolOutcome(JSON.stringify({ error: 'At least one URL is required' }));
   }
 
   const fetches = await Promise.all(
@@ -178,7 +183,10 @@ export async function executeWebFetch(
     ),
   );
 
-  return JSON.stringify({ fetches });
+  const content = JSON.stringify({ fetches });
+  return fetches.some((entry) => Boolean(entry.error))
+    ? failedToolOutcome(content)
+    : completedToolOutcome(content);
 }
 
 // ── Tool Definition ──────────────────────────────────────────────────────

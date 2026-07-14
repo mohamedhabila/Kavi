@@ -23,6 +23,11 @@ import {
   workspaceSourceDirectoryExists,
 } from '../../services/workspaces/sourceFiles';
 import { listWorkspaceSourceTree } from '../../services/workspaces/sourceSearch';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 export {
   CRON_TOOL,
@@ -40,22 +45,24 @@ export async function executeFileEdit(
   },
   conversationId: string,
   fallbackConversationId?: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const rawArgs = args as Record<string, unknown>;
   const pathArg = requireToolStringArg(rawArgs, 'path', 'file_edit', {
     allRequired: ['path', 'edits'],
   });
-  if (pathArg.error) return pathArg.error;
+  if (pathArg.error) return failedToolOutcome(pathArg.error);
 
   const editsArg = normalizeFocusedTextEditOperations(rawArgs.edits, 'file_edit', 'edits');
-  if (editsArg.error) return editsArg.error;
+  if (editsArg.error) return failedToolOutcome(editsArg.error);
 
   if (!editsArg.operations?.length) {
-    return 'Error: "edits" for file_edit must contain at least one focused update.';
+    return failedToolOutcome(
+      'Error: "edits" for file_edit must contain at least one focused update.',
+    );
   }
 
   const safePath = sanitizeWorkspaceRelativePath(pathArg.value!);
-  if (!safePath) return 'Error: "path" is required for file_edit';
+  if (!safePath) return failedToolOutcome('Error: "path" is required for file_edit');
   const source = resolveConversationWorkspaceSource(conversationId, fallbackConversationId);
 
   let content: string;
@@ -64,11 +71,11 @@ export async function executeFileEdit(
     content = result.content;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return `Error: ${message}`;
+    return failedToolOutcome(`Error: ${message}`);
   }
 
   const applyResult = applyFocusedTextEditOperations(content, editsArg.operations, 'file_edit');
-  if (applyResult.error) return applyResult.error;
+  if (applyResult.error) return failedToolOutcome(applyResult.error);
 
   const newContent = applyResult.content!;
   let sha256: string;
@@ -78,38 +85,44 @@ export async function executeFileEdit(
     result = await writeWorkspaceSourceTextFile(source, safePath, newContent);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return `Error: ${message}`;
+    return failedToolOutcome(`Error: ${message}`);
   }
 
   try {
     const readback = await readWorkspaceSourceTextFile(source, result.path);
     if (readback.path !== result.path || readback.content !== newContent) {
-      return JSON.stringify({
+      return failedToolOutcome(
+        JSON.stringify({
+          status: 'edited_unverified',
+          path: result.path,
+          size: result.size,
+          sha256,
+          editCount: editsArg.operations.length,
+          verificationError: 'workspace_readback_mismatch',
+        }),
+      );
+    }
+    return completedToolOutcome(
+      JSON.stringify({
+        status: 'edited',
+        path: readback.path,
+        size: readback.size,
+        sha256,
+        editCount: editsArg.operations.length,
+        summary: `Edited and verified ${readback.path} with ${editsArg.operations.length} focused update(s)`,
+      }),
+    );
+  } catch {
+    return failedToolOutcome(
+      JSON.stringify({
         status: 'edited_unverified',
         path: result.path,
         size: result.size,
         sha256,
         editCount: editsArg.operations.length,
-        verificationError: 'workspace_readback_mismatch',
-      });
-    }
-    return JSON.stringify({
-      status: 'edited',
-      path: readback.path,
-      size: readback.size,
-      sha256,
-      editCount: editsArg.operations.length,
-      summary: `Edited and verified ${readback.path} with ${editsArg.operations.length} focused update(s)`,
-    });
-  } catch {
-    return JSON.stringify({
-      status: 'edited_unverified',
-      path: result.path,
-      size: result.size,
-      sha256,
-      editCount: editsArg.operations.length,
-      verificationError: 'workspace_readback_failed',
-    });
+        verificationError: 'workspace_readback_failed',
+      }),
+    );
   }
 }
 
@@ -130,15 +143,15 @@ export async function executeGlobSearch(
   args: { pattern: string; path?: string },
   conversationId: string,
   fallbackConversationId?: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const patternArg = requireToolStringArg(
     args as Record<string, unknown>,
     'pattern',
     'glob_search',
   );
-  if (patternArg.error) return patternArg.error;
+  if (patternArg.error) return failedToolOutcome(patternArg.error);
   const pathArg = getOptionalToolStringArg(args as Record<string, unknown>, 'path', 'glob_search');
-  if (pathArg.error) return pathArg.error;
+  if (pathArg.error) return failedToolOutcome(pathArg.error);
 
   const safePath = sanitizeWorkspaceRelativePath(pathArg.value || '');
   const source = resolveConversationWorkspaceSource(conversationId, fallbackConversationId);
@@ -146,38 +159,40 @@ export async function executeGlobSearch(
   let allFiles: string[];
   try {
     if (!(await workspaceSourceDirectoryExists(source, safePath))) {
-      return `Error: directory not found: ${safePath || '/'}`;
+      return failedToolOutcome(`Error: directory not found: ${safePath || '/'}`);
     }
     allFiles = await listWorkspaceSourceTree(source, safePath);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return `Error: ${message}`;
+    return failedToolOutcome(`Error: ${message}`);
   }
   const regex = globToRegex(patternArg.value!);
   const matches = allFiles.filter((f) => regex.test(f));
 
-  return normalizeGlobSearchResult({
-    pattern: patternArg.value!,
-    path: safePath || '.',
-    matches,
-  });
+  return completedToolOutcome(
+    normalizeGlobSearchResult({
+      pattern: patternArg.value!,
+      path: safePath || '.',
+      matches,
+    }),
+  );
 }
 
 export async function executeTextSearch(
   args: { query: string; path?: string; isRegex?: boolean },
   conversationId: string,
   fallbackConversationId?: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const queryArg = requireToolStringArg(args as Record<string, unknown>, 'query', 'text_search');
-  if (queryArg.error) return queryArg.error;
+  if (queryArg.error) return failedToolOutcome(queryArg.error);
   const pathArg = getOptionalToolStringArg(args as Record<string, unknown>, 'path', 'text_search');
-  if (pathArg.error) return pathArg.error;
+  if (pathArg.error) return failedToolOutcome(pathArg.error);
   const isRegexArg = getOptionalToolBooleanArg(
     args as Record<string, unknown>,
     'isRegex',
     'text_search',
   );
-  if (isRegexArg.error) return isRegexArg.error;
+  if (isRegexArg.error) return failedToolOutcome(isRegexArg.error);
 
   const safePath = sanitizeWorkspaceRelativePath(pathArg.value || '');
   const source = resolveConversationWorkspaceSource(conversationId, fallbackConversationId);
@@ -185,12 +200,12 @@ export async function executeTextSearch(
   let allFiles: string[];
   try {
     if (!(await workspaceSourceDirectoryExists(source, safePath))) {
-      return `Error: directory not found: ${safePath || '/'}`;
+      return failedToolOutcome(`Error: directory not found: ${safePath || '/'}`);
     }
     allFiles = (await listWorkspaceSourceTree(source, safePath)).filter((f) => !f.endsWith('/'));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return `Error: ${message}`;
+    return failedToolOutcome(`Error: ${message}`);
   }
   const results: TextSearchMatch[] = [];
   const maxResults = 50;
@@ -202,7 +217,7 @@ export async function executeTextSearch(
       ? new RegExp(queryArg.value!, 'gi')
       : new RegExp(queryArg.value!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   } catch {
-    return 'Error: invalid regex pattern';
+    return failedToolOutcome('Error: invalid regex pattern');
   }
 
   for (const filePath of allFiles) {
@@ -229,11 +244,13 @@ export async function executeTextSearch(
       // Skip unreadable files
     }
   }
-  return normalizeTextSearchResult({
-    query: queryArg.value!,
-    path: safePath || '.',
-    isRegex: isRegexArg.value === true,
-    matches: results,
-    truncated,
-  });
+  return completedToolOutcome(
+    normalizeTextSearchResult({
+      query: queryArg.value!,
+      path: safePath || '.',
+      isRegex: isRegexArg.value === true,
+      matches: results,
+      truncated,
+    }),
+  );
 }

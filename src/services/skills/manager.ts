@@ -8,6 +8,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Skill, SkillEntry, SkillMetadata, SkillToolExecutionContext } from './types';
 import type { ToolDefinition } from '../../types/tool';
+import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 import {
   isCodeOwnedServiceSkillId,
@@ -212,7 +213,7 @@ export interface CapturedSkillRuntimeToolBinding {
     author?: string;
   }>;
   isCurrent(): boolean;
-  execute(argsString: string, context?: SkillToolExecutionContext): Promise<string>;
+  execute(argsString: string, context?: SkillToolExecutionContext): Promise<ToolRuntimeOutcome>;
 }
 
 export function registerSkill(skill: Skill): void {
@@ -279,23 +280,23 @@ async function executeCapturedSkillTool(
   handler: NonNullable<Skill['tools'][number]['handler']>,
   argsString: string,
   context: SkillToolExecutionContext = {},
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   let args: any;
   try {
     args = JSON.parse(argsString);
   } catch {
-    return 'Error: invalid tool arguments JSON';
+    return failedToolOutcome('Error: invalid tool arguments JSON');
   }
 
   if (context.executionSignal?.aborted) {
-    return 'Error: Request cancelled';
+    return failedToolOutcome('Error: Request cancelled');
   }
 
   try {
     return await handler(args, context);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return `Error executing ${skillId}/${toolName}: ${message}`;
+    return failedToolOutcome(`Error executing ${skillId}/${toolName}: ${message}`);
   }
 }
 
@@ -338,16 +339,20 @@ export async function executeSkillTool(
   fullToolName: string,
   argsString: string,
   context: SkillToolExecutionContext = {},
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const parsed = parseSkillToolName(fullToolName);
-  if (!parsed) return `Error: invalid skill tool name: ${fullToolName}`;
+  if (!parsed) return failedToolOutcome(`Error: invalid skill tool name: ${fullToolName}`);
 
   const skill = loadedSkills.get(parsed.skillId);
-  if (!skill) return `Error: skill not loaded: ${parsed.skillId}`;
+  if (!skill) return failedToolOutcome(`Error: skill not loaded: ${parsed.skillId}`);
 
   const tool = skill.tools.find((t) => t.name === parsed.toolName);
-  if (!tool) return `Error: tool "${parsed.toolName}" not found in skill "${skill.name}"`;
-  if (!tool.handler) return `Error: tool "${parsed.toolName}" has no handler`;
+  if (!tool) {
+    return failedToolOutcome(`Error: tool "${parsed.toolName}" not found in skill "${skill.name}"`);
+  }
+  if (!tool.handler) {
+    return failedToolOutcome(`Error: tool "${parsed.toolName}" has no handler`);
+  }
 
   return executeCapturedSkillTool(
     parsed.skillId,

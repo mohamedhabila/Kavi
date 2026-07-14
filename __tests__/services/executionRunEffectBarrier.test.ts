@@ -12,23 +12,26 @@ import {
   dispatchAuthorizedToolEffect,
   type AuthorizedToolEffectDispatchInput,
 } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
+import { completedToolOutcome, type ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
 };
 
-function verifiedWriteResult(path: string): string {
-  return JSON.stringify({
-    status: 'written',
-    path,
-    size: 4,
-    sha256: 'a'.repeat(64),
-  });
+function verifiedWriteResult(path: string): ToolRuntimeOutcome {
+  return completedToolOutcome(
+    JSON.stringify({
+      status: 'written',
+      path,
+      size: 4,
+      sha256: 'a'.repeat(64),
+    }),
+  );
 }
 
 function effectInput(params: {
   toolCallId: string;
-  execute: () => Promise<string>;
+  execute: () => Promise<ToolRuntimeOutcome>;
   conversationId?: string;
   executionRunId: string;
   permissionGranted?: () => boolean;

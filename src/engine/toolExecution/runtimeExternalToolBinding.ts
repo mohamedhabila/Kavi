@@ -9,6 +9,7 @@ import {
   type ToolExecutionContext,
 } from '../tools/toolExecutionContext';
 import { createConversationFileContext } from '../tools/toolWorkspaceFiles';
+import type { ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export type RuntimeExternalToolBinding = Readonly<{
   evidence: RuntimeExternalToolEvidence;
@@ -17,7 +18,7 @@ export type RuntimeExternalToolBinding = Readonly<{
     argsString: string,
     conversationId: string,
     context?: ToolExecutionContext,
-  ): Promise<string>;
+  ): Promise<ToolRuntimeOutcome>;
 }>;
 
 function canonicalize(value: unknown): unknown {

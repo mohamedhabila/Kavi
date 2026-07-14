@@ -1,4 +1,10 @@
-export async function executeHapticFeedback(args: { type?: string }): Promise<string> {
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../../../types/toolRuntimeOutcome';
+
+export async function executeHapticFeedback(args: { type?: string }): Promise<ToolRuntimeOutcome> {
   try {
     const Haptics = await import('expo-haptics');
     const type = args.type || 'medium';
@@ -25,10 +31,12 @@ export async function executeHapticFeedback(args: { type?: string }): Promise<st
         break;
     }
 
-    return JSON.stringify({ status: 'triggered', type });
+    return completedToolOutcome(JSON.stringify({ status: 'triggered', type }));
   } catch (err: unknown) {
-    return JSON.stringify({
-      error: `Haptic feedback failed: ${err instanceof Error ? err.message : String(err)}`,
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        error: `Haptic feedback failed: ${err instanceof Error ? err.message : String(err)}`,
+      }),
+    );
   }
 }

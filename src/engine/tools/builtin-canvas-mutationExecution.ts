@@ -11,6 +11,11 @@ import { resolveCanvasSurfaceTarget } from './builtin-canvas-helpers';
 import type { CanvasToolExecutionContext } from './builtin-canvas-sourceTypes';
 import { buildCanvasSourceBundle } from './builtin-canvas-sourcePathing';
 import { resolveCanvasHtmlSource } from './builtin-canvas-sourceResolution';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 export async function executeCanvasCreate(
   args: {
@@ -24,7 +29,7 @@ export async function executeCanvasCreate(
     dataModel?: Record<string, any>;
   },
   executionContext: CanvasToolExecutionContext = {},
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const normalized = normalizeCanvasCreateArgs(args as Record<string, unknown>);
   const surfaceId = `surface-${generateId()}`;
   const htmlSource = await resolveCanvasHtmlSource(
@@ -36,7 +41,7 @@ export async function executeCanvasCreate(
     normalized.entryFile,
     executionContext,
   );
-  if (htmlSource.error) return htmlSource.error;
+  if (htmlSource.error) return failedToolOutcome(htmlSource.error);
 
   const title = deriveCanvasTitle(
     args as Record<string, unknown>,
@@ -53,14 +58,16 @@ export async function executeCanvasCreate(
     components: normalized.components || [],
     dataModel: normalized.dataModel,
   });
-  return JSON.stringify({
-    status: 'created',
-    surfaceId,
-    title,
-    renderMode: htmlSource.content ? 'html' : 'components',
-    ...(htmlSource.sourceBundle ? { sourceBundle: htmlSource.sourceBundle } : {}),
-    guidance: `Canvas created. Next call canvas_eval with {"surfaceId":"${surfaceId}","script":"document.title || 'loaded'"} to open or refresh the preview.`,
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      status: 'created',
+      surfaceId,
+      title,
+      renderMode: htmlSource.content ? 'html' : 'components',
+      ...(htmlSource.sourceBundle ? { sourceBundle: htmlSource.sourceBundle } : {}),
+      guidance: `Canvas created. Next call canvas_eval with {"surfaceId":"${surfaceId}","script":"document.title || 'loaded'"} to open or refresh the preview.`,
+    }),
+  );
 }
 
 export async function executeCanvasUpdate(
@@ -76,9 +83,9 @@ export async function executeCanvasUpdate(
     dataOperations?: Array<{ op: string; path: string; value?: any }>;
   },
   executionContext: CanvasToolExecutionContext = {},
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const normalized = normalizeCanvasUpdateArgs(args as Record<string, unknown>);
-  if (normalized.error) return normalized.error;
+  if (normalized.error) return failedToolOutcome(normalized.error);
 
   const htmlSource = await resolveCanvasHtmlSource(
     normalized.surfaceId!,
@@ -89,17 +96,21 @@ export async function executeCanvasUpdate(
     normalized.entryFile,
     executionContext,
   );
-  if (htmlSource.error) return htmlSource.error;
+  if (htmlSource.error) return failedToolOutcome(htmlSource.error);
 
   const surface = getSurface(normalized.surfaceId!);
-  if (!surface) return `Error: surface not found: ${normalized.surfaceId}`;
+  if (!surface) return failedToolOutcome(`Error: surface not found: ${normalized.surfaceId}`);
 
   if (htmlSource.content && normalized.contentEdits?.length) {
-    return 'Error: canvas_update accepts either content, filePath, directoryPath, or contentEdits for HTML updates, not both. Prefer contentEdits for focused changes or directoryPath/filePath after local HTML edits.';
+    return failedToolOutcome(
+      'Error: canvas_update accepts either content, filePath, directoryPath, or contentEdits for HTML updates, not both. Prefer contentEdits for focused changes or directoryPath/filePath after local HTML edits.',
+    );
   }
 
   if (normalized.components?.length && normalized.componentOperations?.length) {
-    return 'Error: canvas_update accepts either components or componentOperations for component updates, not both. Prefer componentOperations for focused changes.';
+    return failedToolOutcome(
+      'Error: canvas_update accepts either components or componentOperations for component updates, not both. Prefer componentOperations for focused changes.',
+    );
   }
 
   if (
@@ -109,7 +120,9 @@ export async function executeCanvasUpdate(
     !normalized.componentOperations?.length &&
     !normalized.dataOperations?.length
   ) {
-    return 'Error: canvas_update requires content, filePath, directoryPath, contentEdits, components, componentOperations, or dataOperations.';
+    return failedToolOutcome(
+      'Error: canvas_update requires content, filePath, directoryPath, contentEdits, components, componentOperations, or dataOperations.',
+    );
   }
 
   try {
@@ -119,7 +132,9 @@ export async function executeCanvasUpdate(
     let nextSourceBundle = htmlSource.sourceBundle;
     if (normalized.contentEdits?.length) {
       if (surface.renderMode !== 'html' || typeof surface.rawHtml !== 'string') {
-        return 'Error: contentEdits can only be used with HTML-mode canvases that have stored rawHtml. Use componentOperations/dataOperations for structured canvases or content for a deliberate mode switch.';
+        return failedToolOutcome(
+          'Error: contentEdits can only be used with HTML-mode canvases that have stored rawHtml. Use componentOperations/dataOperations for structured canvases or content for a deliberate mode switch.',
+        );
       }
 
       const contentEditResult = applyFocusedTextEditOperations(
@@ -127,7 +142,7 @@ export async function executeCanvasUpdate(
         normalized.contentEdits,
         'canvas_update contentEdits',
       );
-      if (contentEditResult.error) return contentEditResult.error;
+      if (contentEditResult.error) return failedToolOutcome(contentEditResult.error);
       nextContent = contentEditResult.content!;
       nextSourceBundle = buildCanvasSourceBundle({ sourceType: 'content' });
       appliedUpdates.push(`contentEdits:${normalized.contentEdits.length}`);
@@ -155,9 +170,11 @@ export async function executeCanvasUpdate(
         normalized.componentOperations,
         'canvas_update componentOperations',
       );
-      if (componentPatchResult.error) return componentPatchResult.error;
+      if (componentPatchResult.error) return failedToolOutcome(componentPatchResult.error);
       if (!Array.isArray(componentPatchResult.value)) {
-        return 'Error: componentOperations must resolve to an array of canvas components.';
+        return failedToolOutcome(
+          'Error: componentOperations must resolve to an array of canvas components.',
+        );
       }
       nextComponents = componentPatchResult.value as CanvasComponent[];
       appliedUpdates.push(`componentOperations:${normalized.componentOperations.length}`);
@@ -186,27 +203,37 @@ export async function executeCanvasUpdate(
       appliedUpdates.push(`dataOperations:${normalized.dataOperations.length}`);
     }
 
-    return JSON.stringify({
-      status: 'updated',
-      surfaceId: normalized.surfaceId!,
-      appliedUpdates,
-      ...(nextSourceBundle ? { sourceBundle: nextSourceBundle } : {}),
-      ...(normalized.note ? { note: normalized.note } : {}),
-      guidance: `If the user should see the latest canvas, call canvas_eval with {"surfaceId":"${normalized.surfaceId!}","script":"document.title || 'loaded'"}.`,
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        status: 'updated',
+        surfaceId: normalized.surfaceId!,
+        appliedUpdates,
+        ...(nextSourceBundle ? { sourceBundle: nextSourceBundle } : {}),
+        ...(normalized.note ? { note: normalized.note } : {}),
+        guidance: `If the user should see the latest canvas, call canvas_eval with {"surfaceId":"${normalized.surfaceId!}","script":"document.title || 'loaded'"}.`,
+      }),
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return JSON.stringify({ status: 'error', surfaceId: normalized.surfaceId!, error: message });
+    return failedToolOutcome(
+      JSON.stringify({ status: 'error', surfaceId: normalized.surfaceId!, error: message }),
+    );
   }
 }
 
-export async function executeCanvasDelete(args: { surfaceId: string }): Promise<string> {
+export async function executeCanvasDelete(args: {
+  surfaceId: string;
+}): Promise<ToolRuntimeOutcome> {
   const resolved = resolveCanvasSurfaceTarget(args as Record<string, unknown>, 'canvas_delete');
-  if (resolved.error) return JSON.stringify({ status: 'error', error: resolved.error });
+  if (resolved.error) {
+    return failedToolOutcome(JSON.stringify({ status: 'error', error: resolved.error }));
+  }
   processCanvasMessage({ type: 'deleteSurface', surfaceId: resolved.surfaceId! });
-  return JSON.stringify({
-    status: 'deleted',
-    surfaceId: resolved.surfaceId!,
-    ...(resolved.note ? { note: resolved.note } : {}),
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      status: 'deleted',
+      surfaceId: resolved.surfaceId!,
+      ...(resolved.note ? { note: resolved.note } : {}),
+    }),
+  );
 }

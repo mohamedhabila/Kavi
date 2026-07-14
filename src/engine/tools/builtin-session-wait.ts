@@ -1,14 +1,24 @@
-import {
-  getSubAgent,
-  waitForSubAgentCompletion,
-} from '../../services/agents/subAgent';
+import { getSubAgent, waitForSubAgentCompletion } from '../../services/agents/subAgent';
 import {
   pruneStaleCommandPolls,
   resetCommandPollCount,
 } from '../../services/agents/commandPollBackoff';
-import { collectRequestedSessionIds, DEFAULT_SESSIONS_WAIT_TIMEOUT_MS, resolveBlockingWaitTimeoutMs } from './builtin-session-waitSupport';
-import { COMPLETED_SESSIONS_WAIT_GUIDANCE, serializeRunningSessionWaitEntry, serializeTerminalSessionResult } from './builtin-session-resultSupport';
+import {
+  collectRequestedSessionIds,
+  DEFAULT_SESSIONS_WAIT_TIMEOUT_MS,
+  resolveBlockingWaitTimeoutMs,
+} from './builtin-session-waitSupport';
+import {
+  COMPLETED_SESSIONS_WAIT_GUIDANCE,
+  serializeRunningSessionWaitEntry,
+  serializeTerminalSessionResult,
+} from './builtin-session-resultSupport';
 import { sessionStatusFingerprints, sessionStatusPollState } from './builtin-session-statusSupport';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 export async function executeSessionWait(
   args: {
@@ -17,39 +27,43 @@ export async function executeSessionWait(
     waitTimeoutMs?: number;
   },
   conversationId: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   pruneStaleCommandPolls(sessionStatusPollState);
 
   const selection = collectRequestedSessionIds(args, conversationId);
   if (selection.error) {
-    return JSON.stringify({ status: 'error', error: selection.error });
+    return failedToolOutcome(JSON.stringify({ status: 'error', error: selection.error }));
   }
 
   if (selection.sessionIds.length === 0) {
-    return JSON.stringify({
-      status: 'completed',
-      sessionIds: [],
-      sessionCount: 0,
-      completedCount: 0,
-      pendingCount: 0,
-      waitedForConversationSessions: selection.waitsForConversationSessions,
-      sessions: [],
-      guidance: selection.waitsForConversationSessions
-        ? 'No running sub-agent sessions remain for this conversation.'
-        : 'No target sub-agent sessions were provided.',
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        status: 'completed',
+        sessionIds: [],
+        sessionCount: 0,
+        completedCount: 0,
+        pendingCount: 0,
+        waitedForConversationSessions: selection.waitsForConversationSessions,
+        sessions: [],
+        guidance: selection.waitsForConversationSessions
+          ? 'No running sub-agent sessions remain for this conversation.'
+          : 'No target sub-agent sessions were provided.',
+      }),
+    );
   }
 
   const missingSessionIds = selection.sessionIds.filter((sessionId) => !getSubAgent(sessionId));
   if (missingSessionIds.length > 0) {
-    return JSON.stringify({
-      status: 'error',
-      error:
-        missingSessionIds.length === 1
-          ? `session not found: ${missingSessionIds[0]}`
-          : `sessions not found: ${missingSessionIds.join(', ')}`,
-      missingSessionIds,
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        error:
+          missingSessionIds.length === 1
+            ? `session not found: ${missingSessionIds[0]}`
+            : `sessions not found: ${missingSessionIds.join(', ')}`,
+        missingSessionIds,
+      }),
+    );
   }
 
   const waitWindow = resolveBlockingWaitTimeoutMs(
@@ -106,22 +120,24 @@ export async function executeSessionWait(
   const pendingCount = pendingSessions.length;
   const completedAll = pendingCount === 0;
 
-  return JSON.stringify({
-    status: completedAll ? 'completed' : 'running',
-    sessionIds: selection.sessionIds,
-    sessionCount: selection.sessionIds.length,
-    completedCount,
-    pendingCount,
-    waitedForConversationSessions: selection.waitsForConversationSessions,
-    ...(!completedAll ? { waitTimeoutMs } : {}),
-    ...(!completedAll ? { waitTimedOut: true } : {}),
-    ...(!completedAll && waitWindow.usedDefault ? { usedDefaultWaitTimeout: true } : {}),
-    sessions,
-    ...(pendingSessions.length > 0 ? { pendingSessions } : {}),
-    guidance: completedAll
-      ? `All requested sub-agent sessions reached terminal states. ${COMPLETED_SESSIONS_WAIT_GUIDANCE}`
-      : completedCount > 0
-        ? 'The wait window ended while some requested sub-agent sessions are still running. Continue from any completed outputs that are already sufficient, call sessions_wait again to keep blocking, or keep working on non-overlapping tasks until they finish.'
-        : 'The wait window ended while some requested sub-agent sessions are still running. Call sessions_wait again to keep blocking, or keep working on non-overlapping tasks until they finish.',
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      status: completedAll ? 'completed' : 'running',
+      sessionIds: selection.sessionIds,
+      sessionCount: selection.sessionIds.length,
+      completedCount,
+      pendingCount,
+      waitedForConversationSessions: selection.waitsForConversationSessions,
+      ...(!completedAll ? { waitTimeoutMs } : {}),
+      ...(!completedAll ? { waitTimedOut: true } : {}),
+      ...(!completedAll && waitWindow.usedDefault ? { usedDefaultWaitTimeout: true } : {}),
+      sessions,
+      ...(pendingSessions.length > 0 ? { pendingSessions } : {}),
+      guidance: completedAll
+        ? `All requested sub-agent sessions reached terminal states. ${COMPLETED_SESSIONS_WAIT_GUIDANCE}`
+        : completedCount > 0
+          ? 'The wait window ended while some requested sub-agent sessions are still running. Continue from any completed outputs that are already sufficient, call sessions_wait again to keep blocking, or keep working on non-overlapping tasks until they finish.'
+          : 'The wait window ended while some requested sub-agent sessions are still running. Call sessions_wait again to keep blocking, or keep working on non-overlapping tasks until they finish.',
+    }),
+  );
 }

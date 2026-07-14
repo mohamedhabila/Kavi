@@ -1,6 +1,3 @@
-// ---------------------------------------------------------------------------
-// Kavi — E2E native mobile fixtures
-// ---------------------------------------------------------------------------
 // Node live E2E lacks Expo native modules. The acceptance environment installs
 // this fixture at the generic native-tool boundary for the duration of a run.
 
@@ -17,6 +14,12 @@ import {
   E2E_FIXTURE_DEVICE_STATUS_JSON,
   E2E_NATIVE_PERMISSION_STATES,
 } from './e2eNativeDeviceFixtures';
+import {
+  completedE2ENativeOutcome,
+  failedE2ENativeOutcome,
+  type E2ENativeMobileOutcome,
+} from './e2eNativeMobileOutcome';
+import { E2E_FIXTURE_CALENDAR_LIST_JSON, type E2ECalendarEvent } from './e2eNativeCalendarFixtures';
 
 export {
   E2E_FIXTURE_DEVICE_HEALTH_JSON,
@@ -28,31 +31,10 @@ export {
 
 export { getE2ENativeMobileInvocationSnapshots } from './e2eNativeMobileEvidence';
 export type { E2ENativeMobileInvocationSnapshot } from './e2eNativeMobileEvidence';
-
-/** Deterministic calendar list for live E2E (Node lacks expo-calendar). */
-export const E2E_FIXTURE_CALENDAR_LIST_JSON = JSON.stringify([
-  {
-    id: 'e2e-cal-1',
-    title: 'E2E Calendar',
-    source: 'e2e',
-    color: '#3366ff',
-    allowsModifications: true,
-  },
-]);
-
-/** Deterministic empty events payload for live E2E. */
-export const E2E_FIXTURE_CALENDAR_EVENTS_JSON = JSON.stringify([]);
-
-type E2ECalendarEvent = {
-  id: string;
-  calendarId: string;
-  title: string;
-  startDate: string;
-  endDate: string;
-  location?: string;
-  notes?: string;
-  allDay: boolean;
-};
+export {
+  E2E_FIXTURE_CALENDAR_EVENTS_JSON,
+  E2E_FIXTURE_CALENDAR_LIST_JSON,
+} from './e2eNativeCalendarFixtures';
 
 function applyE2EPermissionFixtureState(): void {
   e2eNativeFixtureState.permissions.location = E2E_NATIVE_PERMISSION_STATES.denied.location.status;
@@ -201,8 +183,8 @@ function parseFixtureArgs(argsString: string): Record<string, unknown> {
   }
 }
 
-function buildMissingRequiredArgsError(name: string, missing: string[]): string {
-  return JSON.stringify({
+function buildMissingRequiredArgsError(name: string, missing: string[]): E2ENativeMobileOutcome {
+  return failedE2ENativeOutcome({
     status: 'error',
     code: 'missing_required_argument',
     tool: name,
@@ -215,8 +197,8 @@ function buildInvalidFixtureArgsError(
   name: string,
   message: string,
   code = 'invalid_arguments',
-): string {
-  return JSON.stringify({
+): E2ENativeMobileOutcome {
+  return failedE2ENativeOutcome({
     status: 'error',
     code,
     tool: name,
@@ -224,7 +206,10 @@ function buildInvalidFixtureArgsError(
   });
 }
 
-function validateE2ENativeRequiredArgs(name: string, args: Record<string, unknown>): string | null {
+function validateE2ENativeRequiredArgs(
+  name: string,
+  args: Record<string, unknown>,
+): E2ENativeMobileOutcome | null {
   const definition = e2eNativeToolDefinitionsByName.get(name);
   const required = definition?.input_schema?.required;
   if (!Array.isArray(required) || required.length === 0) {
@@ -257,7 +242,7 @@ export function getE2ENativeMobileFixtureStateSnapshot(): E2ENativeMobileFixture
 export async function tryExecuteE2ENativeCalendarTool(
   name: string,
   argsString: string,
-): Promise<string | null> {
+): Promise<E2ENativeMobileOutcome | null> {
   const args = parseFixtureArgs(argsString);
   const validationError = validateE2ENativeRequiredArgs(name, args);
   if (validationError) {
@@ -268,10 +253,10 @@ export async function tryExecuteE2ENativeCalendarTool(
     case 'calendar_list':
       e2eNativeFixtureState.calendar.listed = true;
       e2eNativeFixtureState.calendar.allowsModifications = true;
-      return E2E_FIXTURE_CALENDAR_LIST_JSON;
+      return completedE2ENativeOutcome(E2E_FIXTURE_CALENDAR_LIST_JSON);
     case 'calendar_events':
       e2eNativeFixtureState.calendar.listed = true;
-      return JSON.stringify(readE2ECalendarEvents(args));
+      return completedE2ENativeOutcome(readE2ECalendarEvents(args));
     default:
       return null;
   }
@@ -375,7 +360,7 @@ function readE2ECalendarEvents(args: Record<string, unknown>): Record<string, un
 async function executeE2ENativeMobileTool(
   name: string,
   argsString: string,
-): Promise<string | null> {
+): Promise<E2ENativeMobileOutcome | null> {
   const calendarResult = await tryExecuteE2ENativeCalendarTool(name, argsString);
   if (calendarResult !== null) {
     return calendarResult;
@@ -409,7 +394,7 @@ async function executeE2ENativeMobileTool(
       e2eCalendarEvents.push(event);
       e2eLastCreatedCalendarEventId = event.id;
       recordLastCreatedCalendarTiming(event);
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'created_verified',
         eventId: event.id,
         calendarId: event.calendarId,
@@ -420,7 +405,7 @@ async function executeE2ENativeMobileTool(
       const eventId = readStringArg(args, 'id', 'e2e-event-1');
       const eventIndex = e2eCalendarEvents.findIndex((event) => event.id === eventId);
       if (eventIndex < 0) {
-        return JSON.stringify({
+        return failedE2ENativeOutcome({
           status: 'not_found',
           code: 'not_found',
           eventId,
@@ -448,7 +433,7 @@ async function executeE2ENativeMobileTool(
         ...(typeof args.allDay === 'boolean' ? { allDay: args.allDay } : {}),
       };
       if (e2eCalendarEventsEqual(existing, updated)) {
-        return JSON.stringify({
+        return completedE2ENativeOutcome({
           status: 'updated_verified',
           eventId,
           event: serializeE2ECalendarEvent(existing),
@@ -460,7 +445,7 @@ async function executeE2ENativeMobileTool(
       if (e2eLastCreatedCalendarEventId === updated.id) {
         recordLastCreatedCalendarTiming(updated);
       }
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'updated_verified',
         eventId,
         event: serializeE2ECalendarEvent(updated),
@@ -473,33 +458,33 @@ async function executeE2ENativeMobileTool(
           : 'query';
       e2eNativeFixtureState.maps.opened = true;
       e2eNativeFixtureState.maps.targetKind = targetKind;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'maps_opened',
         targetKind,
       });
     }
     case 'device_status':
-      return E2E_FIXTURE_DEVICE_STATUS_JSON;
+      return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_STATUS_JSON);
     case 'device_info':
-      return E2E_FIXTURE_DEVICE_INFO_JSON;
+      return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_INFO_JSON);
     case 'device_permissions':
       applyE2EPermissionFixtureState();
-      return E2E_FIXTURE_DEVICE_PERMISSIONS_JSON;
+      return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_PERMISSIONS_JSON);
     case 'device_health':
-      return E2E_FIXTURE_DEVICE_HEALTH_JSON;
+      return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_HEALTH_JSON);
     case 'device_query': {
       const kind = typeof args.kind === 'string' ? args.kind.toLowerCase() : '';
-      if (kind === 'status') return E2E_FIXTURE_DEVICE_STATUS_JSON;
-      if (kind === 'info') return E2E_FIXTURE_DEVICE_INFO_JSON;
-      if (kind === 'health') return E2E_FIXTURE_DEVICE_HEALTH_JSON;
+      if (kind === 'status') return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_STATUS_JSON);
+      if (kind === 'info') return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_INFO_JSON);
+      if (kind === 'health') return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_HEALTH_JSON);
       if (kind === 'permissions') {
         applyE2EPermissionFixtureState();
-        return E2E_FIXTURE_DEVICE_PERMISSIONS_JSON;
+        return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_PERMISSIONS_JSON);
       }
       return null;
     }
     case 'location_current':
-      return JSON.stringify({
+      return failedE2ENativeOutcome({
         status: 'permission_denied',
         code: 'permission_denied',
         permission: E2E_NATIVE_PERMISSION_STATES.denied.location,
@@ -508,10 +493,12 @@ async function executeE2ENativeMobileTool(
     case 'contacts_search_full':
       e2eNativeFixtureState.contacts.resultCount = E2E_CONTACTS.length;
       e2eNativeFixtureState.contacts.lastQuery = typeof args.query === 'string' ? args.query : '';
-      return JSON.stringify(E2E_CONTACTS);
+      return completedE2ENativeOutcome(E2E_CONTACTS);
     case 'contacts_get':
     case 'contacts_get_full':
-      return JSON.stringify(E2E_CONTACTS.find((contact) => contact.id === args.id) ?? null);
+      return completedE2ENativeOutcome(
+        E2E_CONTACTS.find((contact) => contact.id === args.id) ?? null,
+      );
     case 'sms_compose': {
       const rawRecipients = Array.isArray(args.recipients)
         ? args.recipients.filter((recipient): recipient is string => typeof recipient === 'string')
@@ -542,7 +529,7 @@ async function executeE2ENativeMobileTool(
       e2eNativeFixtureState.sms.recipientCount = recipients.length;
       e2eNativeFixtureState.sms.messageLength =
         typeof args.message === 'string' ? args.message.length : 0;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'sms_composer_opened',
         recipientCount: e2eNativeFixtureState.sms.recipientCount,
         messageLength: e2eNativeFixtureState.sms.messageLength,
@@ -552,13 +539,13 @@ async function executeE2ENativeMobileTool(
       e2eClipboardText = typeof args.text === 'string' ? args.text : '';
       e2eNativeFixtureState.clipboard.text = e2eClipboardText;
       e2eNativeFixtureState.clipboard.writeCount += 1;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'clipboard_written',
         textLength: e2eClipboardText.length,
       });
     case 'clipboard_read':
       e2eNativeFixtureState.clipboard.readCount += 1;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'clipboard_read',
         text: e2eClipboardText,
         textLength: e2eClipboardText.length,
@@ -569,26 +556,26 @@ async function executeE2ENativeMobileTool(
         e2eClipboardText = typeof args.text === 'string' ? args.text : '';
         e2eNativeFixtureState.clipboard.text = e2eClipboardText;
         e2eNativeFixtureState.clipboard.writeCount += 1;
-        return JSON.stringify({
+        return completedE2ENativeOutcome({
           status: 'clipboard_written',
           textLength: e2eClipboardText.length,
         });
       }
       if (action === 'read') {
         e2eNativeFixtureState.clipboard.readCount += 1;
-        return JSON.stringify({
+        return completedE2ENativeOutcome({
           status: 'clipboard_read',
           text: e2eClipboardText,
           textLength: e2eClipboardText.length,
         });
       }
-      return JSON.stringify({ status: 'validation_error', code: 'validation_error' });
+      return failedE2ENativeOutcome({ status: 'validation_error', code: 'validation_error' });
     }
     case 'share_text':
       e2eNativeFixtureState.share.opened = true;
       e2eNativeFixtureState.share.kind = 'text';
       e2eNativeFixtureState.share.textLength = typeof args.text === 'string' ? args.text.length : 0;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'share_sheet_opened',
         kind: 'text',
         textLength: e2eNativeFixtureState.share.textLength,
@@ -598,14 +585,14 @@ async function executeE2ENativeMobileTool(
       e2eNativeFixtureState.share.opened = true;
       e2eNativeFixtureState.share.kind = typeof args.kind === 'string' ? args.kind : 'text';
       e2eNativeFixtureState.share.textLength = typeof args.text === 'string' ? args.text.length : 0;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'share_sheet_opened',
         kind: e2eNativeFixtureState.share.kind,
         textLength: e2eNativeFixtureState.share.textLength,
       });
     case 'notification_send':
       e2eNativeFixtureState.notification.displayed = true;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'notification_accepted',
         id: 'e2e-notification-now',
         titleLength: typeof args.title === 'string' ? args.title.length : 0,
@@ -615,14 +602,14 @@ async function executeE2ENativeMobileTool(
       e2eNativeFixtureState.notification.scheduled = true;
       e2eNativeFixtureState.notification.delaySeconds =
         typeof args.delaySeconds === 'number' ? Math.max(0, Math.floor(args.delaySeconds)) : 0;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'notification_scheduled',
         id: 'e2e-notification-scheduled',
         delaySeconds: e2eNativeFixtureState.notification.delaySeconds,
       });
     case 'notification_cancel':
       e2eNativeFixtureState.notification.cancelled = true;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'notification_cancelled',
         id: typeof args.id === 'string' ? args.id : 'e2e-notification-scheduled',
         cancelled: true,
@@ -649,12 +636,12 @@ async function executeE2ENativeMobileTool(
         },
       ].slice(0, typeof args.count === 'number' ? Math.max(0, Math.min(args.count, 20)) : 2);
       e2eNativeFixtureState.media.photoCount = photos.length;
-      return JSON.stringify(photos);
+      return completedE2ENativeOutcome(photos);
     }
     case 'screen_record':
       e2eNativeFixtureState.media.screenStatus = 'captured';
       e2eNativeFixtureState.media.screenBase64Length = 2048;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'captured',
         format: args.format === 'jpeg' ? 'jpeg' : 'png',
         base64Length: 2048,
@@ -664,7 +651,7 @@ async function executeE2ENativeMobileTool(
       e2eNativeFixtureState.media.cameraStatus = 'recorded';
       e2eNativeFixtureState.media.cameraDuration =
         typeof args.durationSeconds === 'number' ? args.durationSeconds : 10;
-      return JSON.stringify({
+      return completedE2ENativeOutcome({
         status: 'recorded',
         uri: 'file:///e2e/camera-clip.mp4',
         width: 1280,
@@ -680,7 +667,7 @@ async function executeE2ENativeMobileTool(
 export async function tryExecuteE2ENativeMobileTool(
   name: string,
   argsString: string,
-): Promise<string | null> {
+): Promise<E2ENativeMobileOutcome | null> {
   const stateBefore = getE2ENativeMobileFixtureStateSnapshot();
   const result = await executeE2ENativeMobileTool(name, argsString);
   const stateAfter = getE2ENativeMobileFixtureStateSnapshot();

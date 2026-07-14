@@ -40,6 +40,11 @@ import {
   buildLeastPrivilegeWorkerMemoryBundle,
   sanitizeSubAgentMemorySelectionScope,
 } from '../../services/agents/workerMemoryBundle';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 export async function executeSessionSend(
   args: {
@@ -50,24 +55,26 @@ export async function executeSessionSend(
   },
   provider: LlmProviderConfig,
   inheritedModel?: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return `Error: session not found: ${args.sessionId}`;
+  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
 
   if (agent.status === 'running') {
-    return JSON.stringify({
-      status: 'running',
-      sessionId: args.sessionId,
-      currentActivity: agent.currentActivity,
-      activeToolName: agent.activeToolName,
-      message:
-        'Session is still processing. The currentActivity field describes the active step. Use sessions_wait if you need to block for completion, or call sessions_cancel and respawn the worker with corrected instructions before sending follow-up work.',
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        status: 'running',
+        sessionId: args.sessionId,
+        currentActivity: agent.currentActivity,
+        activeToolName: agent.activeToolName,
+        message:
+          'Session is still processing. The currentActivity field describes the active step. Use sessions_wait if you need to block for completion, or call sessions_cancel and respawn the worker with corrected instructions before sending follow-up work.',
+      }),
+    );
   }
 
   const normalizedMessage = normalizeRequiredSessionText(args.message, 'message');
   if (!normalizedMessage.value) {
-    return JSON.stringify({ status: 'error', error: normalizedMessage.error });
+    return failedToolOutcome(JSON.stringify({ status: 'error', error: normalizedMessage.error }));
   }
 
   const message = normalizedMessage.value;
@@ -198,43 +205,50 @@ export async function executeSessionSend(
 
       if (raceResult === null) {
         observeBackgroundSubAgentResult(started);
-        return JSON.stringify({
-          status: 'running',
-          sessionId: started.sessionId,
-          previousSessionId: args.sessionId,
-          depth: started.depth,
-          name: followUpConfig.name,
-          ...(followUpConfig.workstreamId ? { workstreamId: followUpConfig.workstreamId } : {}),
-          model: followUpModel,
-          waitTimedOut: true,
-          waitTimeoutMs,
-          ...(waitWindow.usedDefault ? { usedDefaultWaitTimeout: true } : {}),
-          guidance:
-            'The worker is still running. Call sessions_wait if you need to keep blocking, or continue with other non-overlapping work until it completes.',
-        });
+        return completedToolOutcome(
+          JSON.stringify({
+            status: 'running',
+            sessionId: started.sessionId,
+            previousSessionId: args.sessionId,
+            depth: started.depth,
+            name: followUpConfig.name,
+            ...(followUpConfig.workstreamId ? { workstreamId: followUpConfig.workstreamId } : {}),
+            model: followUpModel,
+            waitTimedOut: true,
+            waitTimeoutMs,
+            ...(waitWindow.usedDefault ? { usedDefaultWaitTimeout: true } : {}),
+            guidance:
+              'The worker is still running. Call sessions_wait if you need to keep blocking, or continue with other non-overlapping work until it completes.',
+          }),
+        );
       }
 
-      return JSON.stringify({
+      const terminalContent = JSON.stringify({
         ...serializeTerminalSessionResult(raceResult),
         previousSessionId: args.sessionId,
         ...(followUpConfig.workstreamId ? { workstreamId: followUpConfig.workstreamId } : {}),
       });
+      return raceResult.status === 'completed'
+        ? completedToolOutcome(terminalContent)
+        : failedToolOutcome(terminalContent);
     }
 
     const launched = await launchSubAgent(followUpConfig, followUpProvider, followUpAllProviders);
-    return JSON.stringify({
-      status: launched.status,
-      sessionId: launched.sessionId,
-      previousSessionId: args.sessionId,
-      depth: launched.depth,
-      name: followUpConfig.name,
-      ...(followUpConfig.workstreamId ? { workstreamId: followUpConfig.workstreamId } : {}),
-      model: followUpModel,
-      guidance:
-        'The worker is running in the background. Use sessions_wait when you need the final output, or continue with other non-overlapping work until it completes.',
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        status: launched.status,
+        sessionId: launched.sessionId,
+        previousSessionId: args.sessionId,
+        depth: launched.depth,
+        name: followUpConfig.name,
+        ...(followUpConfig.workstreamId ? { workstreamId: followUpConfig.workstreamId } : {}),
+        model: followUpModel,
+        guidance:
+          'The worker is running in the background. Use sessions_wait when you need the final output, or continue with other non-overlapping work until it completes.',
+      }),
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return JSON.stringify({ status: 'error', error: message });
+    return failedToolOutcome(JSON.stringify({ status: 'error', error: message }));
   }
 }

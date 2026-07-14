@@ -30,8 +30,17 @@ import { launchBrowserLiveSession, stopBrowserLiveSession } from '../../services
 import type { BrowserActRequest } from '../../services/browser/types';
 import { startBrowserTrace, completeBrowserTrace } from '../../services/browser/traceStore';
 import { normalizeBrowserToolResult } from './resultNormalization/browserResult';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
-export async function executeBrowserTool(name: string, args: any): Promise<string> {
+function completedJsonToolOutcome(value: unknown): ToolRuntimeOutcome {
+  return completedToolOutcome(JSON.stringify(value));
+}
+
+export async function executeBrowserTool(name: string, args: any): Promise<ToolRuntimeOutcome> {
   const sessionId = args.sessionId || '';
   const actionKind = name.replace('browser_', '');
   const description = buildBrowserTraceDescription(name, args);
@@ -42,11 +51,11 @@ export async function executeBrowserTool(name: string, args: any): Promise<strin
 
   try {
     const rawResult = await executeBrowserToolInner(name, args);
-    const result = normalizeBrowserToolResult(name, rawResult);
+    const content = normalizeBrowserToolResult(name, rawResult.content);
     if (traceId && sessionId) {
       let parsedResponse: Record<string, unknown> | undefined;
       try {
-        parsedResponse = JSON.parse(result);
+        parsedResponse = JSON.parse(content);
       } catch {}
       completeBrowserTrace(traceId, sessionId, {
         status: 'success',
@@ -55,7 +64,9 @@ export async function executeBrowserTool(name: string, args: any): Promise<strin
         pageUrl: parsedResponse?.url as string | undefined,
       });
     }
-    return result;
+    return rawResult.status === 'completed'
+      ? completedToolOutcome(content)
+      : failedToolOutcome(content);
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : String(err);
     if (traceId && sessionId) {
@@ -126,7 +137,7 @@ function buildBrowserTraceDescription(name: string, args: any): string {
   }
 }
 
-async function executeBrowserToolInner(name: string, args: any): Promise<string> {
+async function executeBrowserToolInner(name: string, args: any): Promise<ToolRuntimeOutcome> {
   switch (name) {
     case 'browser_launch': {
       const settings = useSettingsStore.getState();
@@ -135,26 +146,28 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         ? providers.find((p: any) => p.id === args.providerId)
         : providers.find((p: any) => p.enabled !== false);
       if (!provider)
-        return JSON.stringify({ status: 'error', message: 'No browser provider found' });
+        return failedToolOutcome(
+          JSON.stringify({ status: 'error', message: 'No browser provider found' }),
+        );
       const sessionId = await launchBrowserLiveSession(provider);
-      return JSON.stringify({ status: 'ok', sessionId });
+      return completedJsonToolOutcome({ status: 'ok', sessionId });
     }
     case 'browser_stop':
       await stopBrowserLiveSession(args.sessionId);
-      return JSON.stringify({ status: 'ok', message: 'Session stopped' });
+      return completedJsonToolOutcome({ status: 'ok', message: 'Session stopped' });
     case 'browser_status': {
       const status = await browserSessionStatus(args.sessionId);
-      return JSON.stringify(status);
+      return completedJsonToolOutcome(status);
     }
     case 'browser_navigate': {
       const result = await browserNavigate(args.sessionId, {
         url: args.url,
         targetId: args.targetId,
       });
-      return JSON.stringify(result);
+      return completedJsonToolOutcome(result);
     }
     case 'browser_click':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserAct(args.sessionId, {
           kind: 'click',
           ref: args.ref,
@@ -163,7 +176,7 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         } as BrowserActRequest),
       );
     case 'browser_type':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserAct(args.sessionId, {
           kind: 'type',
           ref: args.ref,
@@ -173,15 +186,15 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         } as BrowserActRequest),
       );
     case 'browser_press_key':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserAct(args.sessionId, { kind: 'press', key: args.key } as BrowserActRequest),
       );
     case 'browser_hover':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserAct(args.sessionId, { kind: 'hover', ref: args.ref } as BrowserActRequest),
       );
     case 'browser_select':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserAct(args.sessionId, {
           kind: 'select',
           ref: args.ref,
@@ -189,7 +202,7 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         } as BrowserActRequest),
       );
     case 'browser_drag':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserAct(args.sessionId, {
           kind: 'drag',
           startRef: args.startRef,
@@ -197,7 +210,7 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         } as BrowserActRequest),
       );
     case 'browser_wait':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserAct(args.sessionId, {
           kind: 'wait',
           timeMs: args.timeMs,
@@ -214,56 +227,64 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         ref: args.ref,
         type: args.type,
       });
-      return JSON.stringify(result);
+      return completedJsonToolOutcome(result);
     }
     case 'browser_snapshot': {
       const result = await browserSnapshot(args.sessionId, { maxChars: args.maxChars });
-      return JSON.stringify(result);
+      return completedJsonToolOutcome(result);
     }
     case 'browser_inspect': {
       const kind = typeof args.kind === 'string' ? args.kind.toLowerCase() : '';
       if (kind === 'console') {
-        return JSON.stringify(await browserConsoleMessages(args.sessionId, { level: args.level }));
+        return completedJsonToolOutcome(
+          await browserConsoleMessages(args.sessionId, { level: args.level }),
+        );
       }
       if (kind === 'errors') {
-        return JSON.stringify(await browserPageErrors(args.sessionId, { clear: args.clear }));
+        return completedJsonToolOutcome(
+          await browserPageErrors(args.sessionId, { clear: args.clear }),
+        );
       }
       if (kind === 'network') {
-        return JSON.stringify(
+        return completedJsonToolOutcome(
           await browserNetworkRequests(args.sessionId, {
             filter: args.filter,
             clear: args.clear,
           }),
         );
       }
-      return 'Error: browser_inspect requires kind ∈ {console, errors, network}';
+      return failedToolOutcome('Error: browser_inspect requires kind ∈ {console, errors, network}');
     }
     case 'browser_console': {
       const result = await browserConsoleMessages(args.sessionId, { level: args.level });
-      return JSON.stringify(result);
+      return completedJsonToolOutcome(result);
     }
     case 'browser_errors': {
       const result = await browserPageErrors(args.sessionId, { clear: args.clear });
-      return JSON.stringify(result);
+      return completedJsonToolOutcome(result);
     }
     case 'browser_network': {
       const result = await browserNetworkRequests(args.sessionId, {
         filter: args.filter,
         clear: args.clear,
       });
-      return JSON.stringify(result);
+      return completedJsonToolOutcome(result);
     }
     case 'browser_cookies': {
       const action = args.action || 'get';
       if (action === 'set')
-        return JSON.stringify(await browserSetCookies(args.sessionId, { cookie: args.cookie }));
-      if (action === 'clear') return JSON.stringify(await browserClearCookies(args.sessionId));
-      return JSON.stringify(await browserGetCookies(args.sessionId));
+        return completedJsonToolOutcome(
+          await browserSetCookies(args.sessionId, { cookie: args.cookie }),
+        );
+      if (action === 'clear') {
+        return completedJsonToolOutcome(await browserClearCookies(args.sessionId));
+      }
+      return completedJsonToolOutcome(await browserGetCookies(args.sessionId));
     }
     case 'browser_storage': {
       const action = args.action || 'get';
       if (action === 'set')
-        return JSON.stringify(
+        return completedJsonToolOutcome(
           await browserStorageSet(args.sessionId, {
             kind: args.kind,
             key: args.key,
@@ -271,13 +292,15 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
           }),
         );
       if (action === 'clear')
-        return JSON.stringify(await browserStorageClear(args.sessionId, { kind: args.kind }));
-      return JSON.stringify(
+        return completedJsonToolOutcome(
+          await browserStorageClear(args.sessionId, { kind: args.kind }),
+        );
+      return completedJsonToolOutcome(
         await browserStorageGet(args.sessionId, { kind: args.kind, key: args.key }),
       );
     }
     case 'browser_evaluate':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserAct(args.sessionId, {
           kind: 'evaluate',
           fn: args.expression,
@@ -285,7 +308,7 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         } as BrowserActRequest),
       );
     case 'browser_upload':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserUpload(args.sessionId, {
           ref: args.ref,
           filePath: args.filePath,
@@ -294,7 +317,7 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         }),
       );
     case 'browser_download':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserDownload(args.sessionId, {
           url: args.url,
           suggestedFilename: args.suggestedFilename,
@@ -303,7 +326,7 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         }),
       );
     case 'browser_pdf':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserPdf(args.sessionId, {
           format: args.format,
           landscape: args.landscape,
@@ -318,10 +341,10 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         targetId: args.targetId,
         submit: args.submit,
       });
-      return JSON.stringify(result);
+      return completedJsonToolOutcome(result);
     }
     case 'browser_dialog':
-      return JSON.stringify(
+      return completedJsonToolOutcome(
         await browserDialog(args.sessionId, {
           action: args.action,
           promptText: args.promptText,
@@ -329,6 +352,6 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
         }),
       );
     default:
-      return `Error: unhandled browser tool "${name}"`;
+      return failedToolOutcome(`Error: unhandled browser tool "${name}"`);
   }
 }

@@ -16,6 +16,7 @@ describe('executeTool — permission check', () => {
   it('blocks denied tools', async () => {
     setToolPermissionAllowed(false);
     const result = await executeTool('read_file', '{"path":"test"}', CONV_ID);
-    expect(result).toContain('not allowed');
+    expect(result.status).toBe('failed');
+    expect(result.content).toContain('not allowed');
   });
 });

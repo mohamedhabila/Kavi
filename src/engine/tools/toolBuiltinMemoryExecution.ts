@@ -23,6 +23,7 @@ import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
 import { isExactMemoryProvenanceId } from '../../services/memory/memoryProvenanceIdentity';
+import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
   'memory_search',
@@ -37,12 +38,14 @@ export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
 const MEMORY_MANAGE_KEYS = new Set(['action', 'factId']);
 const MEMORY_MANAGE_ACTIONS = new Set(['pin', 'unpin', 'invalidate']);
 
-function buildMemoryPermissionDenied(): string {
-  return JSON.stringify({
-    ok: false,
-    code: 'permission_denied',
-    error: 'Long-term memory is disabled in settings.',
-  });
+function buildMemoryPermissionDenied(): ToolRuntimeOutcome {
+  return failedToolOutcome(
+    JSON.stringify({
+      ok: false,
+      code: 'permission_denied',
+      error: 'Long-term memory is disabled in settings.',
+    }),
+  );
 }
 
 function memoryManageAction(args: unknown): string {
@@ -56,8 +59,8 @@ function hasOnlyKeys(args: unknown, allowed: ReadonlySet<string>): args is Recor
   return Object.keys(args).every((key) => allowed.has(key));
 }
 
-function buildInvalidMemoryManageArgs(message: string): string {
-  return JSON.stringify({ ok: false, code: 'invalid_args', error: message });
+function buildInvalidMemoryManageArgs(message: string): ToolRuntimeOutcome {
+  return failedToolOutcome(JSON.stringify({ ok: false, code: 'invalid_args', error: message }));
 }
 
 function resolveExecutionMemoryContext(
@@ -207,7 +210,7 @@ function withExecutionMemoryContext(
 
 export async function executeBuiltinMemoryTool(
   params: BuiltinToolExecutionParams,
-): Promise<string | null> {
+): Promise<ToolRuntimeOutcome | null> {
   const { name, args, conversationId, context, authorizedEffectExecutionClaim } = params;
   const memoryConversationId = context?.memoryConversationId ?? conversationId;
 
@@ -260,12 +263,14 @@ export async function executeBuiltinMemoryTool(
       authorizedEffectExecutionClaim,
     );
     if (!request) {
-      return JSON.stringify({
-        status: 'rejected',
-        ok: false,
-        code: 'internal',
-        error: 'memory_remember execution authority invariant failed.',
-      });
+      return failedToolOutcome(
+        JSON.stringify({
+          status: 'rejected',
+          ok: false,
+          code: 'internal',
+          error: 'memory_remember execution authority invariant failed.',
+        }),
+      );
     }
     return executeMemoryRemember(request.args, request.context);
   }
@@ -290,5 +295,5 @@ export async function executeBuiltinMemoryTool(
     }
   }
 
-  return `Error: unknown memory_* tool "${name}"`;
+  return failedToolOutcome(`Error: unknown memory_* tool "${name}"`);
 }

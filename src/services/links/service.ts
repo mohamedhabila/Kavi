@@ -43,13 +43,16 @@ export async function runLinkUnderstanding(
 
   const outputs: LinkExtractionResult[] = await (async () => {
     try {
-      const raw = await executeWebFetch({
+      const outcome = await executeWebFetch({
         urls: links.map((link) => link.url),
         extractMode: 'markdown',
         maxChars: 8_000, // Keep per-link content concise for LLM context
       });
+      if (outcome.status === 'failed') {
+        return links.map((link) => ({ url: link.url, content: '', error: outcome.content }));
+      }
 
-      const parsed = JSON.parse(raw) as {
+      const parsed = JSON.parse(outcome.content) as {
         error?: string;
         fetches?: Array<{
           requestedUrl?: string;

@@ -1,8 +1,14 @@
 import { executeSessionCancel, executeSessionYield } from './builtin-session-control';
-import { executeSessionHistory, executeSessionList, executeSessionOutput, executeSessionSurfaceOutput } from './builtin-session-history';
+import {
+  executeSessionHistory,
+  executeSessionList,
+  executeSessionOutput,
+  executeSessionSurfaceOutput,
+} from './builtin-session-history';
 import { executeSessionStatus } from './builtin-session-status';
 import { executeSessionWait } from './builtin-session-wait';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
+import type { ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export const BUILTIN_SESSION_TOOL_NAMES = new Set([
   'sessions_list',
@@ -17,7 +23,7 @@ export const BUILTIN_SESSION_TOOL_NAMES = new Set([
 
 export async function executeBuiltinSessionTool(
   params: BuiltinToolExecutionParams,
-): Promise<string | null> {
+): Promise<ToolRuntimeOutcome | null> {
   const { name, args, conversationId } = params;
 
   switch (name) {

@@ -3,6 +3,7 @@ import { executeSessionSpawn } from './builtin-session-spawn';
 import { resolveToolProviderContext, type ToolProviderContextInput } from './toolProviderContext';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import { executeWebSearch } from './web-search';
+import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export const PROVIDER_AWARE_TOOL_NAMES = new Set(['sessions_send', 'sessions_spawn', 'web_search']);
 
@@ -12,7 +13,7 @@ export async function executeProviderAwareTool(params: {
   conversationId: string;
   workspaceConversationId: string;
   context?: ToolExecutionContext;
-}): Promise<string | null> {
+}): Promise<ToolRuntimeOutcome | null> {
   if (!PROVIDER_AWARE_TOOL_NAMES.has(params.name)) {
     return null;
   }
@@ -24,10 +25,12 @@ export async function executeProviderAwareTool(params: {
   switch (params.name) {
     case 'sessions_spawn':
       if (!providerContext.provider) {
-        return JSON.stringify({
-          status: 'error',
-          error: 'No enabled provider configured for sub-agent sessions.',
-        });
+        return failedToolOutcome(
+          JSON.stringify({
+            status: 'error',
+            error: 'No enabled provider configured for sub-agent sessions.',
+          }),
+        );
       }
       return executeSessionSpawn(
         params.args,
@@ -43,10 +46,12 @@ export async function executeProviderAwareTool(params: {
       );
     case 'sessions_send':
       if (!providerContext.provider) {
-        return JSON.stringify({
-          status: 'error',
-          error: 'No enabled provider configured for sub-agent sessions.',
-        });
+        return failedToolOutcome(
+          JSON.stringify({
+            status: 'error',
+            error: 'No enabled provider configured for sub-agent sessions.',
+          }),
+        );
       }
       return executeSessionSend(params.args, providerContext.provider, params.context?.model);
     case 'web_search':

@@ -9,6 +9,11 @@ import { useRemoteStore } from '../../services/remote/store';
 import { needsApprovalWithContext, requestToolApproval } from '../../services/remote/approvalStore';
 import { executeSshCommand, resolveSshTarget } from '../../services/ssh/connector';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -48,7 +53,10 @@ const backgroundTasks = new Map<string, BackgroundTask>();
 /**
  * Execute a command with enhanced features: approval check, background mode.
  */
-export async function enhancedExec(command: string, options: ExecOptions = {}): Promise<string> {
+export async function enhancedExec(
+  command: string,
+  options: ExecOptions = {},
+): Promise<ToolRuntimeOutcome> {
   // 1. Check approval gate
   if (
     needsApprovalWithContext('ssh_exec', { command, cwd: options.cwd, targetId: options.targetId })
@@ -60,11 +68,13 @@ export async function enhancedExec(command: string, options: ExecOptions = {}): 
     });
 
     if (decision !== 'approved') {
-      return JSON.stringify({
-        status: 'rejected',
-        reason: decision,
-        command,
-      });
+      return failedToolOutcome(
+        JSON.stringify({
+          status: 'rejected',
+          reason: decision,
+          command,
+        }),
+      );
     }
   }
 
@@ -77,7 +87,10 @@ export async function enhancedExec(command: string, options: ExecOptions = {}): 
   return executeForeground(command, options);
 }
 
-async function executeForeground(command: string, options: ExecOptions): Promise<string> {
+async function executeForeground(
+  command: string,
+  options: ExecOptions,
+): Promise<ToolRuntimeOutcome> {
   const target = await resolveSshTarget(options.targetId);
 
   const timeoutMs = options.timeoutMs ?? 30_000;
@@ -95,13 +108,15 @@ async function executeForeground(command: string, options: ExecOptions): Promise
       }),
     ]);
 
-    return JSON.stringify({
-      status: 'executed',
-      targetId: target.id,
-      command,
-      cwd: options.cwd || target.remoteRoot || null,
-      output: result,
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        status: 'executed',
+        targetId: target.id,
+        command,
+        cwd: options.cwd || target.remoteRoot || null,
+        output: result,
+      }),
+    );
   } finally {
     if (timeout) {
       clearTimeout(timeout);
@@ -109,7 +124,10 @@ async function executeForeground(command: string, options: ExecOptions): Promise
   }
 }
 
-async function startBackgroundExec(command: string, options: ExecOptions): Promise<string> {
+async function startBackgroundExec(
+  command: string,
+  options: ExecOptions,
+): Promise<ToolRuntimeOutcome> {
   const jobId = `bg-exec-${generateId()}`;
   const remoteStore = useRemoteStore.getState();
 
@@ -142,13 +160,15 @@ async function startBackgroundExec(command: string, options: ExecOptions): Promi
     }
   });
 
-  return JSON.stringify({
-    status: 'started',
-    jobId,
-    command,
-    message:
-      'Command started in background. Use ssh_background_job_status or ssh_background_job_wait to monitor it.',
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      status: 'started',
+      jobId,
+      command,
+      message:
+        'Command started in background. Use ssh_background_job_status or ssh_background_job_wait to monitor it.',
+    }),
+  );
 }
 
 async function execInBackground(

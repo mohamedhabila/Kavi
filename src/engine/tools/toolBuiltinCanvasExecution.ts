@@ -1,8 +1,19 @@
 import { executeAudioTranscribe, executeCameraSnap } from './builtin-media';
-import { executeCanvasCreate, executeCanvasDelete, executeCanvasUpdate } from './builtin-canvas-mutationExecution';
-import { executeCanvasEval, executeCanvasList, executeCanvasNavigate, executeCanvasRead, executeCanvasSnapshot } from './builtin-canvas-runtime';
+import {
+  executeCanvasCreate,
+  executeCanvasDelete,
+  executeCanvasUpdate,
+} from './builtin-canvas-mutationExecution';
+import {
+  executeCanvasEval,
+  executeCanvasList,
+  executeCanvasNavigate,
+  executeCanvasRead,
+  executeCanvasSnapshot,
+} from './builtin-canvas-runtime';
 import { executePdfRead, executeWait } from './builtin-utility';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
+import type { ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export const BUILTIN_CANVAS_TOOL_NAMES = new Set([
   'canvas_list',
@@ -21,7 +32,7 @@ export const BUILTIN_CANVAS_TOOL_NAMES = new Set([
 
 export async function executeBuiltinCanvasTool(
   params: BuiltinToolExecutionParams,
-): Promise<string | null> {
+): Promise<ToolRuntimeOutcome | null> {
   const { name, args, conversationFileContext } = params;
 
   switch (name) {

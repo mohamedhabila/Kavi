@@ -4,6 +4,7 @@ import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecutio
 import type { ToolDefinition } from '../../src/types/tool';
 import type { VerifiedProcedureExecutionSession } from '../../src/services/memory/verifiedProcedure/executionSession';
 import * as toolOutputSpill from '../../src/engine/tools/toolOutputSpill';
+import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 
 jest.mock('../../src/services/events/bus', () => ({
   emitAgentEvent: jest.fn(),
@@ -111,7 +112,7 @@ describe('executeToolCallLifecycle', () => {
       () => new Promise<void>((resolve) => (releaseFence = resolve)),
     );
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({ status: 'created_verified', eventId: 'event-1' }),
+      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
     );
 
     const pending = executeToolCallLifecycle(
@@ -140,7 +141,7 @@ describe('executeToolCallLifecycle', () => {
 
   it('fails closed when the pre-effect scheduler fence cannot persist', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({ status: 'created_verified', eventId: 'event-1' }),
+      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
     );
 
     await expect(
@@ -163,7 +164,7 @@ describe('executeToolCallLifecycle', () => {
   });
 
   it('passes the code-owned current user message only through execution context', async () => {
-    mockedExecuteTool.mockResolvedValueOnce('{}');
+    mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome('{}'));
     const currentUserMessage = { id: 'user-current', text: 'Raw current request.' };
 
     await executeToolCallLifecycle(codeLifecycle('javascript', { currentUserMessage }));
@@ -178,13 +179,15 @@ describe('executeToolCallLifecycle', () => {
 
   it('returns schema-grounded retry details for structured missing required arguments', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({
-        status: 'error',
-        code: 'missing_required_argument',
-        tool: 'calendar_create_event',
-        missingRequiredArguments: ['title'],
-        error: 'Missing required argument(s): title',
-      }),
+      failedToolOutcome(
+        JSON.stringify({
+          status: 'error',
+          code: 'missing_required_argument',
+          tool: 'calendar_create_event',
+          missingRequiredArguments: ['title'],
+          error: 'Missing required argument(s): title',
+        }),
+      ),
     );
 
     const result = await executeToolCallLifecycle(buildLifecycle());
@@ -214,7 +217,7 @@ describe('executeToolCallLifecycle', () => {
 
   it('records a code-owned calendar receipt without exposing it to the provider transcript', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({ status: 'created_verified', eventId: 'event-1' }),
+      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
     );
     const onToolCallComplete = jest.fn();
     const result = await executeToolCallLifecycle(
@@ -263,7 +266,7 @@ describe('executeToolCallLifecycle', () => {
 
   it('preserves the primary receipt when the awaited procedure observer fails unexpectedly', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({ status: 'created_verified', eventId: 'event-1' }),
+      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
     );
     const markReconciliationRequired = jest.fn();
     const verifiedProcedureSession = {
@@ -304,7 +307,7 @@ describe('executeToolCallLifecycle', () => {
 
   it('awaits raw procedure observation before lifecycle completion', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({ status: 'created_verified', eventId: 'event-1' }),
+      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
     );
     let releaseObserver!: () => void;
     let observerStarted!: () => void;
@@ -366,7 +369,7 @@ describe('executeToolCallLifecycle', () => {
       privatePayload: 'RAW-ONLY-EVIDENCE',
     });
     const spilledPayload = JSON.stringify({ status: 'spilled', path: '.kavi/spill/result.txt' });
-    mockedExecuteTool.mockResolvedValueOnce(rawResult);
+    mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome(rawResult));
     jest.spyOn(toolOutputSpill, 'maybeSpillToolOutput').mockResolvedValueOnce({
       spilled: true,
       path: '.kavi/spill/result.txt',
@@ -409,12 +412,14 @@ describe('executeToolCallLifecycle', () => {
 
   it('records a code-owned workspace artifact ref and digest end to end', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({
-        status: 'written',
-        path: 'reports/final.md',
-        size: 4,
-        sha256: 'a'.repeat(64),
-      }),
+      completedToolOutcome(
+        JSON.stringify({
+          status: 'written',
+          path: 'reports/final.md',
+          size: 4,
+          sha256: 'a'.repeat(64),
+        }),
+      ),
     );
     const onToolCallComplete = jest.fn();
     const result = await executeToolCallLifecycle(
@@ -464,11 +469,13 @@ describe('executeToolCallLifecycle', () => {
     'records %s interpreter completion without claiming side-effect completion',
     async (toolName) => {
       mockedExecuteTool.mockResolvedValueOnce(
-        JSON.stringify({
-          status: 'completed',
-          workspaceMutationState: 'none_observed',
-          output: '42',
-        }),
+        completedToolOutcome(
+          JSON.stringify({
+            status: 'completed',
+            workspaceMutationState: 'none_observed',
+            output: '42',
+          }),
+        ),
       );
 
       const result = await executeToolCallLifecycle(codeLifecycle(toolName));
@@ -489,12 +496,14 @@ describe('executeToolCallLifecycle', () => {
 
   it('keeps a returned Python timeout distinct from transport failure', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({
-        status: 'timed_out',
-        isError: true,
-        failureKind: 'timed_out',
-        error: 'Python execution timed out after 1000ms',
-      }),
+      failedToolOutcome(
+        JSON.stringify({
+          status: 'timed_out',
+          isError: true,
+          failureKind: 'timed_out',
+          error: 'Python execution timed out after 1000ms',
+        }),
+      ),
     );
 
     const result = await executeToolCallLifecycle(codeLifecycle('python'));
@@ -512,12 +521,14 @@ describe('executeToolCallLifecycle', () => {
 
   it('keeps interpreter completion when returned workspace persistence fails', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({
-        status: 'effect_failed',
-        isError: true,
-        failureKind: 'workspace_persistence_failed',
-        error: 'storage unavailable',
-      }),
+      failedToolOutcome(
+        JSON.stringify({
+          status: 'effect_failed',
+          isError: true,
+          failureKind: 'workspace_persistence_failed',
+          error: 'storage unavailable',
+        }),
+      ),
     );
 
     const result = await executeToolCallLifecycle(codeLifecycle('javascript'));

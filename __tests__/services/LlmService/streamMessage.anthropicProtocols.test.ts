@@ -269,7 +269,7 @@ describe('LlmService', () => {
       ]);
     });
 
-    it('should set is_error on Anthropic tool_result when content starts with Error:', async () => {
+    it('does not infer Anthropic tool failure from opaque multilingual content', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -306,7 +306,7 @@ describe('LlmService', () => {
         {
           role: 'tool',
           tool_call_id: 'toolu_1',
-          content: 'Error: "code" is required for javascript and must be a string',
+          content: 'خطأ: Ошибка: Error: 完了しました',
         },
       ]);
 
@@ -318,7 +318,7 @@ describe('LlmService', () => {
           m.content.some((b: any) => b.type === 'tool_result'),
       );
       const toolResult = toolResultMsg.content.find((b: any) => b.type === 'tool_result');
-      expect(toolResult.is_error).toBe(true);
+      expect(toolResult.is_error).toBeUndefined();
     });
 
     it('should set is_error on Anthropic tool_result when is_error flag is passed through', async () => {
@@ -358,7 +358,7 @@ describe('LlmService', () => {
         {
           role: 'tool',
           tool_call_id: 'toolu_1',
-          content: 'Error: Permission denied',
+          content: '完了しました — تم بنجاح — завершено',
           is_error: true,
         } as any,
       ]);

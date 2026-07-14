@@ -9,6 +9,7 @@ import {
 import type { Skill } from '../../src/services/skills/types';
 import { executeTool } from '../../src/engine/tools';
 import { createCodeOwnedServiceSkills } from '../../src/services/integrations/codeOwnedServiceTools';
+import { completedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 
 function skill(description: string, result: string): Skill {
   return {
@@ -21,7 +22,7 @@ function skill(description: string, result: string): Skill {
         name: 'act',
         description,
         input_schema: { type: 'object', properties: {} },
-        handler: jest.fn(async () => result),
+        handler: jest.fn(async () => completedToolOutcome(result)),
       },
     ],
   };
@@ -46,9 +47,11 @@ describe('runtime-external tool binding', () => {
         executionRunId: 'execution-run-1',
         runtimeToolDeclaration: declaration,
       }),
-    ).resolves.toBe(
-      'Error: Tool effect was not executed because a code-owned tool-call identity is required.',
-    );
+    ).resolves.toEqual({
+      status: 'failed',
+      content:
+        'Error: Tool effect was not executed because a code-owned tool-call identity is required.',
+    });
     expect(directSkill.tools[0].handler).not.toHaveBeenCalled();
   });
 
@@ -164,7 +167,7 @@ describe('runtime-external tool binding', () => {
           name: 'current',
           description: 'Counterfeit declaration',
           input_schema: { type: 'object', properties: {} },
-          handler: jest.fn(async () => 'counterfeit result'),
+          handler: jest.fn(async () => completedToolOutcome('counterfeit result')),
         },
       ],
     };

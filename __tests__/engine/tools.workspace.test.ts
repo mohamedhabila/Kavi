@@ -1,4 +1,5 @@
 import type { Skill } from '../../src/services/skills/types';
+import { completedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 import {
   __getStore,
   executeToolInner as executeTool,
@@ -22,7 +23,7 @@ describe('executeToolInner raw workspace routing', () => {
       JSON.stringify({ query: 'remember this detail' }),
       CONV_ID,
     );
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
 
     expect(parsed.method).toBe('living_memory');
     expect(parsed.index).toBe('memory_facts');
@@ -48,7 +49,7 @@ describe('executeToolInner raw workspace routing', () => {
             required: ['path'],
           },
           handler: async (args, context) => {
-            return await context.readConversationFile!(args.path);
+            return completedToolOutcome(await context.readConversationFile!(args.path));
           },
         },
       ],
@@ -69,7 +70,7 @@ describe('executeToolInner raw workspace routing', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('workspace contents');
+      expect(result.content).toBe('workspace contents');
     } finally {
       unregisterSkill(skillId);
     }
@@ -91,7 +92,7 @@ describe('executeToolInner raw workspace routing', () => {
       JSON.stringify({ filePath: 'canvas/page.html' }),
       CONV_ID,
     );
-    const created = JSON.parse(createResult);
+    const created = JSON.parse(createResult.content);
 
     expect(created.status).toBe('created');
     expect(created.title).toBe('Canvas File');
@@ -112,7 +113,7 @@ describe('executeToolInner raw workspace routing', () => {
       JSON.stringify({ surfaceId: created.surfaceId, filePath: 'canvas/page.html' }),
       CONV_ID,
     );
-    const updated = JSON.parse(updateResult);
+    const updated = JSON.parse(updateResult.content);
 
     expect(updated.status).toBe('updated');
     expect(getSurface(created.surfaceId)?.rawHtml).toContain('Version 2');
@@ -125,7 +126,7 @@ describe('executeToolInner raw workspace routing', () => {
         JSON.stringify({ path: 'test.txt', content: 'Hello world' }),
         CONV_ID,
       );
-      const parsed = JSON.parse(result);
+      const parsed = JSON.parse(result.content);
       expect(parsed).toEqual(
         expect.objectContaining({
           status: 'written',
@@ -134,8 +135,8 @@ describe('executeToolInner raw workspace routing', () => {
           sha256: '64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c',
         }),
       );
-      expect(result).toContain('Wrote 11 chars');
-      expect(result).toContain('test.txt');
+      expect(result.content).toContain('Wrote 11 chars');
+      expect(result.content).toContain('test.txt');
     });
 
     it('should create nested directories without failing when parents already exist', async () => {
@@ -151,7 +152,7 @@ describe('executeToolInner raw workspace routing', () => {
         CONV_ID,
       );
 
-      expect(result).toContain('file-two.txt');
+      expect(result.content).toContain('file-two.txt');
       expect(Object.keys(__getStore())).toEqual(
         expect.arrayContaining([
           'file:///mock/documents/workspace/test-conversation/nested/dir/file-one.txt',
@@ -163,8 +164,8 @@ describe('executeToolInner raw workspace routing', () => {
     it('should return a friendly error when content is missing', async () => {
       const result = await executeTool('write_file', JSON.stringify({ path: 'test.txt' }), CONV_ID);
 
-      expect(result).toContain('Error');
-      expect(result).toContain('content');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('content');
     });
 
     it('should return a friendly error when path is missing', async () => {
@@ -174,8 +175,8 @@ describe('executeToolInner raw workspace routing', () => {
         CONV_ID,
       );
 
-      expect(result).toContain('Error');
-      expect(result).toContain('path');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('path');
     });
   });
 
@@ -186,8 +187,8 @@ describe('executeToolInner raw workspace routing', () => {
         JSON.stringify({ path: 'nonexistent.txt' }),
         CONV_ID,
       );
-      expect(result).toContain('Error');
-      expect(result).toContain('not found');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('not found');
     });
 
     it('should read a previously written file', async () => {
@@ -197,7 +198,7 @@ describe('executeToolInner raw workspace routing', () => {
         CONV_ID,
       );
       const result = await executeTool('read_file', JSON.stringify({ path: 'data.txt' }), CONV_ID);
-      expect(result).toBe('test content');
+      expect(result.content).toBe('test content');
     });
   });
 
@@ -207,19 +208,19 @@ describe('executeToolInner raw workspace routing', () => {
       await executeTool('write_file', JSON.stringify({ path: 'b.txt', content: 'b' }), CONV_ID);
 
       const result = await executeTool('list_files', JSON.stringify({}), CONV_ID);
-      expect(result).toContain('a.txt');
-      expect(result).toContain('b.txt');
+      expect(result.content).toContain('a.txt');
+      expect(result.content).toContain('b.txt');
     });
 
     it('should return empty directory message', async () => {
       const result = await executeTool('list_files', JSON.stringify({}), CONV_ID);
-      expect(result).toContain('empty directory');
+      expect(result.content).toContain('empty directory');
     });
 
     it('should reject non-string path values', async () => {
       const result = await executeTool('list_files', JSON.stringify({ path: 123 }), CONV_ID);
-      expect(result).toContain('Error');
-      expect(result).toContain('path');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('path');
     });
   });
 
@@ -247,7 +248,7 @@ describe('executeToolInner raw workspace routing', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('remote workspace notes');
+      expect(result.content).toBe('remote workspace notes');
       expect(mockReadWorkspaceFile).toHaveBeenCalledWith(
         expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
         'docs/notes.md',
@@ -271,7 +272,7 @@ describe('executeToolInner raw workspace routing', () => {
         CONV_ID,
       );
 
-      expect(result).toContain('Wrote 17 chars to src/app.ts');
+      expect(result.content).toContain('Wrote 17 chars to src/app.ts');
       expect(mockWriteWorkspaceFile).toHaveBeenCalledWith(
         expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
         'src/app.ts',
@@ -293,8 +294,8 @@ describe('executeToolInner raw workspace routing', () => {
 
       const result = await executeTool('list_files', JSON.stringify({}), CONV_ID);
 
-      expect(result).toContain('src/');
-      expect(result).toContain('README.md');
+      expect(result.content).toContain('src/');
+      expect(result.content).toContain('README.md');
       expect(mockListWorkspaceDirectory).toHaveBeenCalledWith(
         expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
         '.',
@@ -327,7 +328,7 @@ describe('executeToolInner raw workspace routing', () => {
         CONV_ID,
       );
 
-      expect(JSON.parse(result)).toEqual(
+      expect(JSON.parse(result.content)).toEqual(
         expect.objectContaining({
           status: 'edited',
           path: 'src/app.ts',
@@ -376,8 +377,8 @@ describe('executeToolInner raw workspace routing', () => {
 
       const result = await executeTool('text_search', JSON.stringify({ query: 'needle' }), CONV_ID);
 
-      expect(result).toContain('src/app.ts');
-      expect(result).toContain('needle');
+      expect(result.content).toContain('src/app.ts');
+      expect(result.content).toContain('needle');
       expect(mockListWorkspaceDirectory).toHaveBeenCalledWith(
         expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
         '.',

@@ -1,4 +1,5 @@
 import type { ToolExecutionContext } from '../toolExecutionContext';
+import type { ToolRuntimeOutcome } from '../../../types/toolRuntimeOutcome';
 
 export type NativeToolExecutionRequest = {
   name: string;
@@ -8,7 +9,7 @@ export type NativeToolExecutionRequest = {
 };
 
 export interface NativeToolExecutionEnvironment {
-  tryExecute(request: NativeToolExecutionRequest): Promise<string | null>;
+  tryExecute(request: NativeToolExecutionRequest): Promise<ToolRuntimeOutcome | null>;
 }
 
 type NativeToolExecutionEnvironmentRegistration = {
@@ -45,6 +46,6 @@ export function installNativeToolExecutionEnvironment(
 
 export async function tryExecuteNativeToolInEnvironment(
   request: NativeToolExecutionRequest,
-): Promise<string | null> {
+): Promise<ToolRuntimeOutcome | null> {
   return activeRegistration?.environment.tryExecute(request) ?? null;
 }

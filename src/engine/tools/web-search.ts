@@ -1,6 +1,11 @@
 import type { ToolDefinition } from '../../types/tool';
 import type { ToolProviderContextInput } from './toolProviderContext';
 import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
+import {
   getSearchProviderApiKey,
   resolveConfiguredSearchProvider,
   resolveSearchProvider,
@@ -130,10 +135,10 @@ async function executeSingleWebSearch(params: {
 export async function executeWebSearch(
   args: ExecuteWebSearchArgs,
   context?: ToolProviderContextInput,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const normalizedSearches = normalizeWebSearchRequests(args);
   if ('error' in normalizedSearches) {
-    return JSON.stringify({ error: normalizedSearches.error });
+    return failedToolOutcome(JSON.stringify({ error: normalizedSearches.error }));
   }
 
   const resolved = await resolveSearchProvider({
@@ -146,10 +151,12 @@ export async function executeWebSearch(
       )?.apiKey,
   });
   if (!resolved) {
-    return JSON.stringify({
-      error:
-        'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi.',
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        error:
+          'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi.',
+      }),
+    );
   }
 
   try {
@@ -175,14 +182,19 @@ export async function executeWebSearch(
       }),
     );
 
-    return JSON.stringify({
+    const content = JSON.stringify({
       provider: resolved.provider,
       searches,
     });
+    return searches.some((search) => 'error' in search)
+      ? failedToolOutcome(content)
+      : completedToolOutcome(content);
   } catch (error: unknown) {
-    return JSON.stringify({
-      error: `Search failed: ${error instanceof Error ? error.message : String(error)}`,
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        error: `Search failed: ${error instanceof Error ? error.message : String(error)}`,
+      }),
+    );
   }
 }
 

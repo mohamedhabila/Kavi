@@ -2,18 +2,25 @@ import { BUILT_IN_PERSONAS, type AgentPersona } from '../../services/agents/pers
 import { getAvailablePersonas, getPersona, isBuiltInPersona } from '../../services/agents/registry';
 import { usePersonaConfigStore } from '../../services/agents/store';
 import { useChatStore } from '../../store/useChatStore';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
-export async function executeAgentsList(): Promise<string> {
+export async function executeAgentsList(): Promise<ToolRuntimeOutcome> {
   const personas = getAvailablePersonas();
-  return JSON.stringify({
-    agents: personas.map((persona) => ({
-      id: persona.id,
-      name: persona.name,
-      description: persona.description,
-      icon: persona.icon,
-      custom: !BUILT_IN_PERSONAS.some((entry) => entry.id === persona.id),
-    })),
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      agents: personas.map((persona) => ({
+        id: persona.id,
+        name: persona.name,
+        description: persona.description,
+        icon: persona.icon,
+        custom: !BUILT_IN_PERSONAS.some((entry) => entry.id === persona.id),
+      })),
+    }),
+  );
 }
 
 export async function executeAgentsSwitch(
@@ -21,19 +28,23 @@ export async function executeAgentsSwitch(
     personaId: string;
   },
   conversationId?: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const persona = getPersona(args.personaId);
   if (!persona) {
-    return `Error: persona not found: ${args.personaId}. Use agents_list to see available personas.`;
+    return failedToolOutcome(
+      `Error: persona not found: ${args.personaId}. Use agents_list to see available personas.`,
+    );
   }
   if (conversationId) {
     useChatStore.getState().updatePersonaInConversation(conversationId, args.personaId);
   }
-  return JSON.stringify({
-    status: 'switched',
-    personaId: args.personaId,
-    name: persona.name,
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      status: 'switched',
+      personaId: args.personaId,
+      name: persona.name,
+    }),
+  );
 }
 
 export async function executeAgentsConfigure(args: {
@@ -45,7 +56,7 @@ export async function executeAgentsConfigure(args: {
   systemPrompt?: string;
   temperature?: number;
   thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   const persona = getPersona(args.personaId);
   const store = usePersonaConfigStore.getState();
 
@@ -62,7 +73,9 @@ export async function executeAgentsConfigure(args: {
       icon: '🔧',
     };
     store.upsertCustomPersona(created);
-    return JSON.stringify({ status: 'created', persona: { id: created.id, name: created.name } });
+    return completedToolOutcome(
+      JSON.stringify({ status: 'created', persona: { id: created.id, name: created.name } }),
+    );
   }
 
   if (isBuiltInPersona(args.personaId)) {
@@ -92,8 +105,10 @@ export async function executeAgentsConfigure(args: {
     getPersona(args.personaId) ||
     usePersonaConfigStore.getState().customPersonas.find((entry) => entry.id === args.personaId);
 
-  return JSON.stringify({
-    status: 'configured',
-    persona: { id: args.personaId, name: updated?.name || args.name || args.personaId },
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      status: 'configured',
+      persona: { id: args.personaId, name: updated?.name || args.name || args.personaId },
+    }),
+  );
 }

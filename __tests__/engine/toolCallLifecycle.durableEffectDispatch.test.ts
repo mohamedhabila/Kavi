@@ -41,6 +41,7 @@ import {
   unregisterSkill,
 } from '../../src/services/skills/manager';
 import type { ToolDefinition } from '../../src/types/tool';
+import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -118,6 +119,30 @@ function dynamicLifecycle(definition: ToolDefinition): ToolExecutionLifecyclePar
   };
 }
 
+function effectFreeLifecycle(): ToolExecutionLifecycleParams {
+  return {
+    ...lifecycle(),
+    tc: {
+      id: 'tool-call-read-1',
+      name: 'read_file',
+      arguments: JSON.stringify({ path: 'reports/final.md' }),
+    },
+    availableToolNames: new Set(['read_file']),
+    groundedRequestScopedTools: [
+      {
+        name: 'read_file',
+        description: 'Read a workspace file.',
+        input_schema: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          required: ['path'],
+        },
+        contract: { sideEffects: [] },
+      },
+    ],
+  };
+}
+
 async function waitForCall(mock: jest.Mock): Promise<void> {
   for (let attempt = 0; attempt < 20 && mock.mock.calls.length === 0; attempt += 1) {
     await new Promise<void>((resolve) => setTimeout(resolve, 2));
@@ -146,15 +171,43 @@ afterEach(() => {
 });
 
 describe('production tool lifecycle durable effect wiring', () => {
+  it('preserves a typed failure when opaque multilingual content sounds successful', async () => {
+    mockedNeedsApproval.mockReturnValue(false);
+    const content = '完了しました — تم بنجاح — завершено';
+    mockedExecuteToolInner.mockResolvedValue(failedToolOutcome(content));
+
+    const result = await executeToolCallLifecycle(effectFreeLifecycle());
+
+    expect(result.toolMessage.content).toBe(content);
+    expect(result.toolMessage.isError).toBe(true);
+    expect(result.toolMessage.toolCalls?.[0]?.status).toBe('failed');
+    expect(result.effectReceipt).toBeUndefined();
+  });
+
+  it('preserves a typed success when opaque multilingual content sounds like failure', async () => {
+    mockedNeedsApproval.mockReturnValue(false);
+    const content = 'Error: فشل — Ошибка — エラー';
+    mockedExecuteToolInner.mockResolvedValue(completedToolOutcome(content));
+
+    const result = await executeToolCallLifecycle(effectFreeLifecycle());
+
+    expect(result.toolMessage.content).toBe(content);
+    expect(result.toolMessage.isError).toBeUndefined();
+    expect(result.toolMessage.toolCalls?.[0]?.status).toBe('completed');
+    expect(result.effectReceipt).toBeUndefined();
+  });
+
   it('records a definitive memory rejection without inventing an ambiguous side effect', async () => {
     mockedNeedsApproval.mockReturnValue(false);
     mockedExecuteToolInner.mockResolvedValue(
-      JSON.stringify({
-        status: 'rejected',
-        ok: false,
-        code: 'grounding_required',
-        error: 'Exact current-user grounding is required.',
-      }),
+      failedToolOutcome(
+        JSON.stringify({
+          status: 'rejected',
+          ok: false,
+          code: 'grounding_required',
+          error: 'Exact current-user grounding is required.',
+        }),
+      ),
     );
     const captureEffectReceipt = jest.fn();
 
@@ -174,12 +227,16 @@ describe('production tool lifecycle durable effect wiring', () => {
       },
     );
 
-    expect(JSON.parse(result)).toMatchObject({
+    expect(result.status).toBe('failed');
+    expect(JSON.parse(result.content)).toMatchObject({
       status: 'rejected',
       ok: false,
       code: 'grounding_required',
     });
-    expect(JSON.parse(result)).not.toHaveProperty('code', 'tool_effect_reconciliation_required');
+    expect(JSON.parse(result.content)).not.toHaveProperty(
+      'code',
+      'tool_effect_reconciliation_required',
+    );
     expect(mockedExecuteToolInner).toHaveBeenCalledWith(
       'memory_remember',
       expect.any(String),
@@ -212,7 +269,7 @@ describe('production tool lifecycle durable effect wiring', () => {
 
   it('fails closed for an effectful central dispatch without an execution-run identity', async () => {
     mockedNeedsApproval.mockReturnValue(false);
-    mockedExecuteToolInner.mockResolvedValue('{}');
+    mockedExecuteToolInner.mockResolvedValue(completedToolOutcome('{}'));
     const finalizeEffectReceiptCapture = jest.fn();
 
     const result = await executeTool(
@@ -225,7 +282,8 @@ describe('production tool lifecycle durable effect wiring', () => {
       },
     );
 
-    expect(result).toContain('code-owned execution-run identity is required');
+    expect(result.status).toBe('failed');
+    expect(result.content).toContain('code-owned execution-run identity is required');
     expect(mockedExecuteToolInner).not.toHaveBeenCalled();
     expect(mockedRequestApproval).not.toHaveBeenCalled();
     expect(finalizeEffectReceiptCapture).toHaveBeenCalledTimes(1);
@@ -255,7 +313,7 @@ describe('production tool lifecycle durable effect wiring', () => {
           'SELECT status FROM execution_effects LIMIT 1',
         ),
       ).toEqual({ status: 'started' });
-      return rawResult;
+      return completedToolOutcome(rawResult);
     });
     const onToolCallComplete = jest.fn();
 
@@ -420,7 +478,7 @@ describe('production tool lifecycle durable effect wiring', () => {
       effectState: 'applied',
       verificationState: 'verified',
     });
-    const handler = jest.fn(async () => rawResult);
+    const handler = jest.fn(async () => completedToolOutcome(rawResult));
     registerSkill({
       id: 'receipt-test',
       name: 'Receipt test',
@@ -469,7 +527,7 @@ describe('production tool lifecycle durable effect wiring', () => {
 
   it('blocks a stale skill declaration before either handler executes', async () => {
     mockedNeedsApproval.mockReturnValue(false);
-    const firstHandler = jest.fn(async () => 'first');
+    const firstHandler = jest.fn(async () => completedToolOutcome('first'));
     registerSkill({
       id: 'receipt-test',
       name: 'Receipt test',
@@ -488,7 +546,7 @@ describe('production tool lifecycle durable effect wiring', () => {
       (tool) => tool.name === 'skill__receipt-test__mutate',
     );
     if (!staleDeclaration) throw new Error('stale declaration missing');
-    const replacementHandler = jest.fn(async () => 'replacement');
+    const replacementHandler = jest.fn(async () => completedToolOutcome('replacement'));
     registerSkill({
       id: 'receipt-test',
       name: 'Receipt test',
@@ -521,7 +579,7 @@ describe('production tool lifecycle durable effect wiring', () => {
   it('does not prepare or dispatch when approval is denied', async () => {
     mockedNeedsApproval.mockReturnValue(true);
     mockedRequestApproval.mockResolvedValue('rejected');
-    mockedExecuteToolInner.mockResolvedValue('{}');
+    mockedExecuteToolInner.mockResolvedValue(completedToolOutcome('{}'));
 
     const result = await executeToolCallLifecycle(lifecycle());
 
@@ -540,7 +598,7 @@ describe('production tool lifecycle durable effect wiring', () => {
       useToolPermissionsStore.getState().setPermission('write_file', false);
       return false;
     });
-    mockedExecuteToolInner.mockResolvedValue('{}');
+    mockedExecuteToolInner.mockResolvedValue(completedToolOutcome('{}'));
 
     const result = await executeToolCallLifecycle(lifecycle());
 

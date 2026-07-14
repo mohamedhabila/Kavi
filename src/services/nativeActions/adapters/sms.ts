@@ -92,11 +92,11 @@ export async function composeSms(
 
     switch (smsResult.result) {
       case 'cancelled':
-        return makeActionResult(
-          'cancelled',
+        return makeActionFailure(
+          'sms_compose_cancelled',
           'SMS composition was cancelled.',
           { rawResult: smsResult.result },
-          'sms_compose_cancelled',
+          'cancelled',
         );
       case 'sent':
         return makeActionResult(

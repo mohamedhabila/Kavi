@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { seedE2EOracleEvidence } from '../../src/acceptance/e2eAgent/e2eOracleEvidenceSeeder';
 import type { E2EOracleEvidenceDeclaration } from '../../src/acceptance/e2eAgent/e2ePairedConditions';
 import type { MemoryFact } from '../../src/services/memory/facts/types';
+import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 
 function persistedFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
   return {
@@ -55,18 +56,20 @@ describe('paired oracle evidence seeding', () => {
     const executeTool = jest.fn(
       async ({ conversationId, workspaceConversationId, userEvidence }) => {
         sourceMessageId = userEvidence.messageId;
-        return JSON.stringify({
-          ok: true,
-          status: 'created',
-          fact: {
-            id: 'oracle-fact-id',
-            scope: 'conversation',
-            originConversationId: workspaceConversationId,
-            originThreadId: conversationId,
-            originTaskId: null,
-            sourceMessageId,
-          },
-        });
+        return completedToolOutcome(
+          JSON.stringify({
+            ok: true,
+            status: 'created',
+            fact: {
+              id: 'oracle-fact-id',
+              scope: 'conversation',
+              originConversationId: workspaceConversationId,
+              originThreadId: conversationId,
+              originTaskId: null,
+              sourceMessageId,
+            },
+          }),
+        );
       },
     );
     const declaration: E2EOracleEvidenceDeclaration = {
@@ -143,17 +146,19 @@ describe('paired oracle evidence seeding', () => {
     let sourceMessageId = '';
     const executeTool = jest.fn(async ({ userEvidence }) => {
       sourceMessageId = userEvidence.messageId;
-      return JSON.stringify({
-        ok: true,
-        fact: {
-          id: 'oracle-fact-id',
-          scope: 'conversation',
-          originConversationId: 'isolated-workspace',
-          originThreadId: 'isolated-thread',
-          originTaskId: null,
-          sourceMessageId,
-        },
-      });
+      return completedToolOutcome(
+        JSON.stringify({
+          ok: true,
+          fact: {
+            id: 'oracle-fact-id',
+            scope: 'conversation',
+            originConversationId: 'isolated-workspace',
+            originThreadId: 'isolated-thread',
+            originTaskId: null,
+            sourceMessageId,
+          },
+        }),
+      );
     });
 
     await seedE2EOracleEvidence({
@@ -195,7 +200,17 @@ describe('paired oracle evidence seeding', () => {
         declaration,
         conversationId: 'isolated-thread',
         workspaceConversationId: 'isolated-workspace',
-        executeTool: async () => '{malformed',
+        executeTool: async () => failedToolOutcome('完了しました — تم بنجاح'),
+        readPersistedFact: () => persistedFact(),
+      }),
+    ).rejects.toThrow('failed at the product tool boundary');
+
+    await expect(
+      seedE2EOracleEvidence({
+        declaration,
+        conversationId: 'isolated-thread',
+        workspaceConversationId: 'isolated-workspace',
+        executeTool: async () => completedToolOutcome('{malformed'),
         readPersistedFact: () => persistedFact(),
       }),
     ).rejects.toThrow('malformed JSON');
@@ -208,17 +223,19 @@ describe('paired oracle evidence seeding', () => {
         workspaceConversationId: 'isolated-workspace',
         executeTool: async ({ userEvidence }) => {
           untrustedSourceMessageId = userEvidence.messageId;
-          return JSON.stringify({
-            ok: true,
-            fact: {
-              id: 'oracle-fact-id',
-              scope: 'conversation',
-              originConversationId: 'isolated-workspace',
-              originThreadId: 'isolated-thread',
-              originTaskId: null,
-              sourceMessageId: userEvidence.messageId,
-            },
-          });
+          return completedToolOutcome(
+            JSON.stringify({
+              ok: true,
+              fact: {
+                id: 'oracle-fact-id',
+                scope: 'conversation',
+                originConversationId: 'isolated-workspace',
+                originThreadId: 'isolated-thread',
+                originTaskId: null,
+                sourceMessageId: userEvidence.messageId,
+              },
+            }),
+          );
         },
         readPersistedFact: () =>
           persistedFact({

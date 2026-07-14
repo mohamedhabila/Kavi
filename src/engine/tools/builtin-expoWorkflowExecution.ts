@@ -7,25 +7,30 @@ import { runExpoGraphqlQuery } from '../../services/expo/rawGraphql';
 import { getExpoProjectAutomationContext, withExpoAutomation } from './builtin-expoAutomation';
 import { resolveExpoProjectForToolCall } from './builtin-expoProjectResolution';
 import { normalizeExpoToolPayload } from './builtin-expoSummary';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 export async function executeExpoEasWorkflowRuns(args: {
   projectId: string;
   limit?: number;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   const resolved = await resolveExpoProjectForToolCall('expo_eas_workflow_runs', args.projectId);
   if ('response' in resolved) {
-    return resolved.response;
+    return failedToolOutcome(resolved.response);
   }
   const projectId = resolved.project.id;
   const automation = getExpoProjectAutomationContext(projectId).automation;
-
-  return JSON.stringify(
-    normalizeExpoToolPayload(
-      'expo_eas_workflow_runs',
-      withExpoAutomation(projectId, await listExpoWorkflowRuns(projectId, args)),
-      { preferredFlow: automation.preferredFlow },
-    ),
+  const result = await listExpoWorkflowRuns(projectId, args);
+  const content = JSON.stringify(
+    normalizeExpoToolPayload('expo_eas_workflow_runs', withExpoAutomation(projectId, result), {
+      preferredFlow: automation.preferredFlow,
+    }),
   );
+
+  return result.status === 'ok' ? completedToolOutcome(content) : failedToolOutcome(content);
 }
 
 export async function executeExpoEasWorkflowStatus(args: {
@@ -33,21 +38,21 @@ export async function executeExpoEasWorkflowStatus(args: {
   workflowRunId?: string;
   includeJobs?: boolean;
   includeLogs?: boolean;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   const resolved = await resolveExpoProjectForToolCall('expo_eas_workflow_status', args.projectId);
   if ('response' in resolved) {
-    return resolved.response;
+    return failedToolOutcome(resolved.response);
   }
   const projectId = resolved.project.id;
   const automation = getExpoProjectAutomationContext(projectId).automation;
-
-  return JSON.stringify(
-    normalizeExpoToolPayload(
-      'expo_eas_workflow_status',
-      withExpoAutomation(projectId, await inspectExpoWorkflowRun(projectId, args)),
-      { preferredFlow: automation.preferredFlow },
-    ),
+  const result = await inspectExpoWorkflowRun(projectId, args);
+  const content = JSON.stringify(
+    normalizeExpoToolPayload('expo_eas_workflow_status', withExpoAutomation(projectId, result), {
+      preferredFlow: automation.preferredFlow,
+    }),
   );
+
+  return result.status === 'ok' ? completedToolOutcome(content) : failedToolOutcome(content);
 }
 
 export async function executeExpoEasWorkflowWait(args: {
@@ -57,21 +62,21 @@ export async function executeExpoEasWorkflowWait(args: {
   pollIntervalMs?: number;
   includeJobs?: boolean;
   includeLogs?: boolean;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   const resolved = await resolveExpoProjectForToolCall('expo_eas_workflow_wait', args.projectId);
   if ('response' in resolved) {
-    return resolved.response;
+    return failedToolOutcome(resolved.response);
   }
   const projectId = resolved.project.id;
   const automation = getExpoProjectAutomationContext(projectId).automation;
-
-  return JSON.stringify(
-    normalizeExpoToolPayload(
-      'expo_eas_workflow_wait',
-      withExpoAutomation(projectId, await waitForExpoWorkflowRun(projectId, args)),
-      { preferredFlow: automation.preferredFlow },
-    ),
+  const result = await waitForExpoWorkflowRun(projectId, args);
+  const content = JSON.stringify(
+    normalizeExpoToolPayload('expo_eas_workflow_wait', withExpoAutomation(projectId, result), {
+      preferredFlow: automation.preferredFlow,
+    }),
   );
+
+  return result.status === 'ok' ? completedToolOutcome(content) : failedToolOutcome(content);
 }
 
 export async function executeExpoEasGraphql(args: {
@@ -79,12 +84,12 @@ export async function executeExpoEasGraphql(args: {
   variables?: Record<string, unknown>;
   projectId?: string;
   accountId?: string;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   let resolvedProjectId: string | undefined;
   if (args.projectId !== undefined) {
     const resolved = await resolveExpoProjectForToolCall('expo_eas_graphql', args.projectId);
     if ('response' in resolved) {
-      return resolved.response;
+      return failedToolOutcome(resolved.response);
     }
     resolvedProjectId = resolved.project.id;
   }
@@ -93,10 +98,11 @@ export async function executeExpoEasGraphql(args: {
     resolvedProjectId ? { ...args, projectId: resolvedProjectId } : args,
   );
   const automationProjectId = resolvedProjectId || result.projectId;
+  let content: string;
   if (automationProjectId) {
     try {
       const automation = getExpoProjectAutomationContext(automationProjectId).automation;
-      return JSON.stringify(
+      content = JSON.stringify(
         normalizeExpoToolPayload(
           'expo_eas_graphql',
           withExpoAutomation(automationProjectId, result),
@@ -106,9 +112,11 @@ export async function executeExpoEasGraphql(args: {
         ),
       );
     } catch {
-      return JSON.stringify(normalizeExpoToolPayload('expo_eas_graphql', result));
+      content = JSON.stringify(normalizeExpoToolPayload('expo_eas_graphql', result));
     }
+  } else {
+    content = JSON.stringify(normalizeExpoToolPayload('expo_eas_graphql', result));
   }
 
-  return JSON.stringify(normalizeExpoToolPayload('expo_eas_graphql', result));
+  return result.status === 'error' ? failedToolOutcome(content) : completedToolOutcome(content);
 }

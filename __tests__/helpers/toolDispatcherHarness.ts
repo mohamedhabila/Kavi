@@ -43,6 +43,8 @@ let mockChatState: {
   recordAgentRunEvidence: (...args: any[]) => any;
 };
 
+const mockCompletedToolOutcome = (content: string) => ({ status: 'completed', content }) as const;
+
 jest.mock('../../src/services/workspaces/files', () => ({
   readWorkspaceFile: (...args: any[]) => mockReadWorkspaceFile(...args),
   writeWorkspaceFile: (...args: any[]) => mockWriteWorkspaceFile(...args),
@@ -109,63 +111,77 @@ jest.mock('../../src/services/agents/subAgent', () => ({
 }));
 
 const mockBuiltinToolFns = {
-  executeCanvasList: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeCanvasRead: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeCanvasCreate: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeCanvasUpdate: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeCanvasDelete: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeCanvasNavigate: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeCanvasEval: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeCanvasSnapshot: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeWait: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executePdfRead: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeCameraSnap: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeAudioTranscribe: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeMemorySearch: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshExec: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshBackgroundJobStatus: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshBackgroundJobWait: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshListDirectory: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshReadFile: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshWriteFile: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshRenamePath: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshDeletePath: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSshMakeDirectory: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasCreateProject: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasStatus: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasProbe: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasBuild: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasUpdate: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasSubmit: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasDeployWeb: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasWorkflowRuns: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasWorkflowStatus: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasWorkflowWait: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeExpoEasGraphql: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeToolCatalog: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeToolDescribe: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executePollCreate: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeMessageEffect: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSpeak: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeAgentsList: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeAgentsSwitch: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeAgentsConfigure: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeCanvasList: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeCanvasRead: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeCanvasCreate: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeCanvasUpdate: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeCanvasDelete: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeCanvasNavigate: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeCanvasEval: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeCanvasSnapshot: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeWait: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executePdfRead: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeCameraSnap: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeAudioTranscribe: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeMemorySearch: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshExec: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshBackgroundJobStatus: jest
+    .fn()
+    .mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshBackgroundJobWait: jest
+    .fn()
+    .mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshListDirectory: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshReadFile: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshWriteFile: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshRenamePath: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshDeletePath: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSshMakeDirectory: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasCreateProject: jest
+    .fn()
+    .mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasStatus: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasProbe: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasBuild: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasUpdate: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasSubmit: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasDeployWeb: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasWorkflowRuns: jest
+    .fn()
+    .mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasWorkflowStatus: jest
+    .fn()
+    .mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasWorkflowWait: jest
+    .fn()
+    .mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeExpoEasGraphql: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeToolCatalog: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeToolDescribe: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executePollCreate: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeMessageEffect: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSpeak: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeAgentsList: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeAgentsSwitch: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeAgentsConfigure: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
 };
 
 const mockSessionLaunchFns = {
-  executeSessionSpawn: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionSend: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionSpawn: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSessionSend: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
 };
 
 const mockSessionInspectionFns = {
-  executeSessionList: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionHistory: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionOutput: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionSurfaceOutput: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionStatus: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionWait: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionCancel: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionYield: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionList: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSessionHistory: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSessionOutput: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSessionSurfaceOutput: jest
+    .fn()
+    .mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSessionStatus: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSessionWait: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSessionCancel: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
+  executeSessionYield: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"status":"ok"}')),
 };
 
 jest.mock('../../src/engine/tools/builtin-canvas-runtime', () => ({
@@ -286,15 +302,19 @@ jest.mock('../../src/engine/tools/native/executor', () => ({
   executeNativeTool: jest.fn().mockImplementation((name: string) => {
     if (name === 'notification_send') {
       return Promise.resolve(
-        JSON.stringify({ status: 'notification_accepted', id: 'notification-id' }),
+        mockCompletedToolOutcome(
+          JSON.stringify({ status: 'notification_accepted', id: 'notification-id' }),
+        ),
       );
     }
     if (name === 'notification_schedule') {
       return Promise.resolve(
-        JSON.stringify({ status: 'notification_scheduled', id: 'notification-id' }),
+        mockCompletedToolOutcome(
+          JSON.stringify({ status: 'notification_scheduled', id: 'notification-id' }),
+        ),
       );
     }
-    return Promise.resolve(JSON.stringify({ status: 'ok' }));
+    return Promise.resolve(mockCompletedToolOutcome('{"status":"ok"}'));
   }),
 }));
 
@@ -370,18 +390,18 @@ jest.mock('../../src/services/media/imageGeneration', () => ({
 // Mock web tools
 jest.mock('../../src/engine/tools/web-search', () => ({
   ...jest.requireActual('../../src/engine/tools/web-search'),
-  executeWebSearch: jest.fn().mockResolvedValue(JSON.stringify({ results: [] })),
+  executeWebSearch: jest.fn().mockResolvedValue(mockCompletedToolOutcome('{"results":[]}')),
 }));
 jest.mock('../../src/engine/tools/web-fetch', () => ({
   ...jest.requireActual('../../src/engine/tools/web-fetch'),
-  executeWebFetch: jest.fn().mockResolvedValue('fetched'),
+  executeWebFetch: jest.fn().mockResolvedValue(mockCompletedToolOutcome('fetched')),
 }));
 
 // Mock extended tools
 jest.mock('../../src/engine/tools/extended', () => ({
-  executeFileEdit: jest.fn().mockResolvedValue('edited'),
-  executeGlobSearch: jest.fn().mockResolvedValue('[]'),
-  executeTextSearch: jest.fn().mockResolvedValue('[]'),
+  executeFileEdit: jest.fn().mockResolvedValue(mockCompletedToolOutcome('edited')),
+  executeGlobSearch: jest.fn().mockResolvedValue(mockCompletedToolOutcome('[]')),
+  executeTextSearch: jest.fn().mockResolvedValue(mockCompletedToolOutcome('[]')),
 }));
 
 // Mock services

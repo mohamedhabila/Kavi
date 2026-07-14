@@ -12,6 +12,7 @@ import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
 import { requireExactMemoryProvenanceId } from '../../services/memory/memoryProvenanceIdentity';
 import { generateId } from '../../utils/id';
+import type { ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 type OracleUserEvidence = Readonly<{
   messageId: string;
@@ -25,7 +26,7 @@ type OracleMemoryToolExecutor = (params: {
   workspaceConversationId: string;
   userEvidence: OracleUserEvidence;
   executionClaim: AuthorizedToolEffectExecutionClaim;
-}) => Promise<string | null>;
+}) => Promise<ToolRuntimeOutcome | null>;
 
 type OraclePersistedFactReader = (factId: string) => MemoryFact | null | undefined;
 
@@ -109,17 +110,20 @@ function buildOracleExecutionClaim(
 }
 
 function validateSeedResult(
-  rawResult: string | null,
+  outcome: ToolRuntimeOutcome | null,
   identity: { conversationId: string; workspaceConversationId: string },
   userEvidence: OracleUserEvidence,
   index: number,
 ): string {
-  if (rawResult === null) {
+  if (outcome === null) {
     throw new Error(`Oracle memory_remember fact ${index} was not handled by the product tool.`);
+  }
+  if (outcome.status === 'failed') {
+    throw new Error(`Oracle memory_remember fact ${index} failed at the product tool boundary.`);
   }
   let parsed: Record<string, unknown>;
   try {
-    const value = JSON.parse(rawResult) as unknown;
+    const value = JSON.parse(outcome.content) as unknown;
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('not object');
     parsed = value as Record<string, unknown>;
   } catch {
@@ -204,20 +208,15 @@ export async function seedE2EOracleEvidence(input: {
   const seededFactIds: string[] = [];
   for (const [index, fact] of input.declaration.facts.entries()) {
     const userEvidence = buildOracleUserEvidence(fact, index);
-    const executionClaim = buildOracleExecutionClaim(
-      userEvidence,
-      index,
-      seedRunId,
-      baseClaimedAt,
-    );
-    const rawResult = await executeTool({
+    const executionClaim = buildOracleExecutionClaim(userEvidence, index, seedRunId, baseClaimedAt);
+    const outcome = await executeTool({
       name: 'memory_remember',
       args: buildIsolatedOracleFact(fact),
       userEvidence,
       executionClaim,
       ...identity,
     });
-    const factId = validateSeedResult(rawResult, identity, userEvidence, index);
+    const factId = validateSeedResult(outcome, identity, userEvidence, index);
     validatePersistedSeed(readPersistedFact(factId), fact, identity, userEvidence, index);
     seededFactIds.push(factId);
   }

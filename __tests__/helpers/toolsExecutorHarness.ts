@@ -1,5 +1,8 @@
 import type { Skill } from '../../src/services/skills/types';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 import { withCanonicalToolExecution } from './canonicalToolExecution';
+
+const mockCompletedToolOutcome = (content: string) => ({ status: 'completed', content }) as const;
 
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('./expoSqliteShim');
@@ -257,15 +260,17 @@ jest.mock('../../src/engine/tools/native/executor', () => ({
   executeNativeTool: jest.fn().mockImplementation((name: string) => {
     if (name === 'notification_send') {
       return Promise.resolve(
-        JSON.stringify({
-          status: 'notification_accepted',
-          id: 'notification-id',
-          title: 'Test',
-          body: 'Hello',
-        }),
+        mockCompletedToolOutcome(
+          JSON.stringify({
+            status: 'notification_accepted',
+            id: 'notification-id',
+            title: 'Test',
+            body: 'Hello',
+          }),
+        ),
       );
     }
-    return Promise.resolve(JSON.stringify({ status: 'ok' }));
+    return Promise.resolve(mockCompletedToolOutcome(JSON.stringify({ status: 'ok' })));
   }),
 }));
 
@@ -301,7 +306,7 @@ export let executeTool: (
   argsString: string,
   conversationId: string,
   context?: Record<string, unknown>,
-) => Promise<string>;
+) => Promise<ToolRuntimeOutcome>;
 export let executeToolInner: typeof import('../../src/engine/tools/toolDispatchRouter').executeToolInner;
 export let executeNativeTool: jest.Mock;
 export let generateImage: jest.Mock;

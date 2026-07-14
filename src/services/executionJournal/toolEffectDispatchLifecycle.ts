@@ -19,7 +19,6 @@ import {
   digestToolContractIdentity,
   type RuntimeExternalToolEvidence,
 } from '../../engine/toolExecution/toolContractIdentity';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import { dispatchEffectExactlyOnce } from './effectDispatchCoordinator';
 import type { EffectDispatchIdentity } from './effectDispatchPolicy';
 import {
@@ -41,6 +40,7 @@ import {
 } from './executionRunEffectBarrier';
 import { invalidateVerifiedProcedureObservationsForExecutionRun } from '../memory/verifiedProcedure/invalidation';
 import type { AuthorizedToolEffectExecutionClaim } from './authorizedToolEffectExecutionClaim';
+import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 const SHA256_PREFIX = 'sha256:';
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
@@ -48,6 +48,7 @@ const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 export type AuthorizedToolEffectDispatchResult =
   | {
       kind: 'executed';
+      status: ToolRuntimeOutcome['status'];
       result: string;
       receipt: ToolEffectReceipt;
       requiresReconciliation: boolean;
@@ -55,6 +56,7 @@ export type AuthorizedToolEffectDispatchResult =
     }
   | {
       kind: 'blocked' | 'reconciliation_required';
+      status: 'failed';
       result: string;
       executorThrew: false;
     };
@@ -68,7 +70,7 @@ export interface AuthorizedToolEffectDispatchInput {
   approvalState: 'granted' | 'not_required';
   authority: ToolEffectDispatchAuthority;
   runtimeExternalEvidence?: RuntimeExternalToolEvidence;
-  execute(claim: AuthorizedToolEffectExecutionClaim): Promise<string>;
+  execute(claim: AuthorizedToolEffectExecutionClaim): Promise<ToolRuntimeOutcome>;
 }
 
 export interface AuthorizedToolEffectDispatchOptions extends ToolEffectDispatchStoreOptions {
@@ -309,6 +311,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   if (!receiptContractIdentity) {
     return {
       kind: 'blocked',
+      status: 'failed',
       result:
         'Error: Tool effect was not executed because no trustworthy receipt identity was available.',
       executorThrew: false,
@@ -325,13 +328,14 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   } catch {
     return {
       kind: 'blocked',
+      status: 'failed',
       result:
         'Error: Tool effect was not executed because its durable identity could not be prepared.',
       executorThrew: false,
     };
   }
 
-  let rawResult: string | undefined;
+  let rawOutcome: ToolRuntimeOutcome | undefined;
   let exactReceipt: ToolEffectReceipt | undefined;
   let executorThrew = false;
   const buildReceipt = options.buildReceipt ?? buildToolEffectReceipt;
@@ -344,6 +348,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   } catch {
     return {
       kind: 'blocked',
+      status: 'failed',
       result:
         'Error: Tool effect was not executed because the durable execution clock is unavailable.',
       executorThrew: false,
@@ -373,7 +378,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
       async (claim) => {
         let transportState: 'returned' | 'threw' = 'returned';
         try {
-          rawResult = await input.execute(
+          rawOutcome = await input.execute(
             Object.freeze({
               executionRunId: claim.identity.executionRunId,
               toolCallId: claim.identity.toolCallId,
@@ -383,15 +388,15 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
         } catch (error) {
           executorThrew = true;
           transportState = 'threw';
-          rawResult = `Error: ${safeExecutorError(error)}`;
+          rawOutcome = failedToolOutcome(`Error: ${safeExecutorError(error)}`);
         }
         exactReceipt = await buildReceipt({
           toolCallId: input.toolCallId,
           toolName: input.toolName,
           argumentsText: input.argumentsText,
-          resultText: rawResult,
+          resultText: rawOutcome.content,
           transportState,
-          resultIsError: transportState === 'returned' && isToolResultErrorLike(rawResult),
+          resultIsError: rawOutcome.status === 'failed',
           executionRunId: claim.identity.executionRunId,
           dispatchRunId: claim.identity.runId,
           recordedAt: Math.max(claim.claimedAt, (options.now ?? Date.now)()),
@@ -404,6 +409,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   } catch {
     return {
       kind: 'blocked',
+      status: 'failed',
       result:
         'Error: Tool effect was not executed because the durable execution journal is unavailable.',
       executorThrew: false,
@@ -413,13 +419,14 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   const dispatchResult = await dispatchEffectExactlyOnce(prepared.identity, prepared.ports);
   if (
     dispatchResult.kind === 'settled' &&
-    rawResult !== undefined &&
+    rawOutcome !== undefined &&
     exactReceipt !== undefined &&
     dispatchResult.receipt.receiptId === exactReceipt.receiptId
   ) {
     return {
       kind: 'executed',
-      result: rawResult,
+      status: rawOutcome.status,
+      result: rawOutcome.content,
       receipt: exactReceipt,
       requiresReconciliation: dispatchResult.requiresReconciliation,
       executorThrew,
@@ -428,6 +435,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   if (dispatchResult.kind === 'blocked') {
     return {
       kind: 'blocked',
+      status: 'failed',
       result: `Error: Tool effect was not executed because durable dispatch was blocked (${dispatchResult.reason}).`,
       executorThrew: false,
     };
@@ -436,6 +444,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
     dispatchResult.kind === 'reconciliation_required' ? dispatchResult.reason : dispatchResult.kind;
   return {
     kind: 'reconciliation_required',
+    status: 'failed',
     result: `Error: Tool effect outcome is ambiguous and requires reconciliation; do not retry automatically (${reconciliationReason}).`,
     executorThrew: false,
   };
@@ -453,6 +462,7 @@ export async function dispatchAuthorizedToolEffect(
   if (!isCodeOwnedExecutionRunId(executionRunId)) {
     return {
       kind: 'blocked',
+      status: 'failed',
       result:
         'Error: Tool effect was not executed because a code-owned execution-run identity is required.',
       executorThrew: false,
@@ -471,6 +481,7 @@ export async function dispatchAuthorizedToolEffect(
       if (barrier.kind === 'reconciliation_required') {
         return {
           kind: 'reconciliation_required' as const,
+          status: 'failed' as const,
           result:
             'Error: A prior tool effect in this execution requires reconciliation; do not retry automatically ' +
             `(${barrier.blockingStatus}).`,
@@ -480,6 +491,7 @@ export async function dispatchAuthorizedToolEffect(
       if (barrier.kind !== 'clear') {
         return {
           kind: 'blocked' as const,
+          status: 'failed' as const,
           result:
             barrier.kind === 'identity_conflict'
               ? 'Error: Tool effect was not executed because the execution-run identity conflicts with durable journal state.'

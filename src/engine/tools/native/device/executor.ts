@@ -1,6 +1,11 @@
 import { collectDeviceResourceHealth } from '../../../../services/deviceResourceHealth';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../../../types/toolRuntimeOutcome';
 
-export async function executeDeviceStatus(): Promise<string> {
+export async function executeDeviceStatus(): Promise<ToolRuntimeOutcome> {
   try {
     const Battery = await import('expo-battery');
     const Network = await import('expo-network');
@@ -20,54 +25,62 @@ export async function executeDeviceStatus(): Promise<string> {
       3: 'full',
     };
 
-    return JSON.stringify({
-      battery: {
-        level: Math.round((batteryLevel as number) * 100),
-        state: batteryStateNames[batteryState as number] || 'unknown',
-      },
-      network: {
-        isConnected: (networkState as any).isConnected,
-        type: (networkState as any).type,
-        isInternetReachable: (networkState as any).isInternetReachable,
-      },
-      screen: { width: screen.width, height: screen.height },
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        battery: {
+          level: Math.round((batteryLevel as number) * 100),
+          state: batteryStateNames[batteryState as number] || 'unknown',
+        },
+        network: {
+          isConnected: (networkState as any).isConnected,
+          type: (networkState as any).type,
+          isInternetReachable: (networkState as any).isInternetReachable,
+        },
+        screen: { width: screen.width, height: screen.height },
+      }),
+    );
   } catch (err: unknown) {
-    return JSON.stringify({
-      error: `Device status failed: ${err instanceof Error ? err.message : String(err)}`,
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        error: `Device status failed: ${err instanceof Error ? err.message : String(err)}`,
+      }),
+    );
   }
 }
 
 // ── Device Info Tool ─────────────────────────────────────────────────────
 
-export async function executeDeviceInfo(): Promise<string> {
+export async function executeDeviceInfo(): Promise<ToolRuntimeOutcome> {
   try {
     const Device = await import('expo-device');
     const { Platform } = await import('react-native');
 
-    return JSON.stringify({
-      brand: Device.brand,
-      modelName: Device.modelName,
-      designName: Device.designName,
-      osName: Device.osName,
-      osVersion: Device.osVersion,
-      platformApiLevel: Device.platformApiLevel,
-      totalMemory: Device.totalMemory,
-      deviceType: Device.deviceType,
-      isDevice: Device.isDevice,
-      platform: Platform.OS,
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        brand: Device.brand,
+        modelName: Device.modelName,
+        designName: Device.designName,
+        osName: Device.osName,
+        osVersion: Device.osVersion,
+        platformApiLevel: Device.platformApiLevel,
+        totalMemory: Device.totalMemory,
+        deviceType: Device.deviceType,
+        isDevice: Device.isDevice,
+        platform: Platform.OS,
+      }),
+    );
   } catch (err: unknown) {
-    return JSON.stringify({
-      error: `Device info failed: ${err instanceof Error ? err.message : String(err)}`,
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        error: `Device info failed: ${err instanceof Error ? err.message : String(err)}`,
+      }),
+    );
   }
 }
 
 // ── Device Permissions Tool ──────────────────────────────────────────────
 
-export async function executeDevicePermissions(): Promise<string> {
+export async function executeDevicePermissions(): Promise<ToolRuntimeOutcome> {
   const permissions: Record<string, string> = {};
 
   try {
@@ -113,11 +126,11 @@ export async function executeDevicePermissions(): Promise<string> {
     permissions.microphone = 'unavailable';
   }
 
-  return JSON.stringify(permissions);
+  return completedToolOutcome(JSON.stringify(permissions));
 }
 
 // ── Device Health Tool ───────────────────────────────────────────────────
 
-export async function executeDeviceHealth(): Promise<string> {
-  return JSON.stringify(await collectDeviceResourceHealth());
+export async function executeDeviceHealth(): Promise<ToolRuntimeOutcome> {
+  return completedToolOutcome(JSON.stringify(await collectDeviceResourceHealth()));
 }

@@ -37,6 +37,11 @@ import type {
   CanvasReadResultPayload,
   ServerToClientMessage,
 } from './types';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 export {
   getFocusedCanvasSurfaceId,
@@ -47,7 +52,7 @@ export {
 let eventHandler: CanvasEventHandler = {};
 
 interface PendingRequest {
-  resolve: (value: string) => void;
+  resolve: (value: ToolRuntimeOutcome) => void;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -70,7 +75,7 @@ const SNAPSHOT_TIMEOUT_MS = 15_000;
 function resolvePendingRequest<T extends PendingRequest>(
   map: Map<string, T>,
   surfaceId: string,
-  result: string,
+  result: ToolRuntimeOutcome,
 ): void {
   const pending = map.get(surfaceId);
   if (!pending) {
@@ -86,17 +91,17 @@ function rejectPendingSurfaceRequests(surfaceId: string, reason: string): void {
   resolvePendingRequest(
     pendingEvals,
     surfaceId,
-    JSON.stringify({ status: 'error', surfaceId, error: reason }),
+    failedToolOutcome(JSON.stringify({ status: 'error', surfaceId, error: reason })),
   );
   resolvePendingRequest(
     pendingReads,
     surfaceId,
-    JSON.stringify({ status: 'error', surfaceId, error: reason }),
+    failedToolOutcome(JSON.stringify({ status: 'error', surfaceId, error: reason })),
   );
   resolvePendingRequest(
     pendingSnapshots,
     surfaceId,
-    JSON.stringify({ status: 'error', surfaceId, error: reason }),
+    failedToolOutcome(JSON.stringify({ status: 'error', surfaceId, error: reason })),
   );
 }
 
@@ -140,15 +145,19 @@ export async function hydrateCanvasSurfaces(): Promise<void> {
  * Dispatches an eval request and returns a Promise that resolves
  * when the CanvasScreen's WebView returns the result (or times out).
  */
-export function requestCanvasEval(surfaceId: string, script: string): Promise<string> {
+export function requestCanvasEval(surfaceId: string, script: string): Promise<ToolRuntimeOutcome> {
   const surface = getCanvasSurface(surfaceId);
-  if (!surface) return Promise.resolve(`Error: surface not found: ${surfaceId}`);
+  if (!surface) {
+    return Promise.resolve(failedToolOutcome(`Error: surface not found: ${surfaceId}`));
+  }
 
-  return new Promise<string>((resolve) => {
+  return new Promise<ToolRuntimeOutcome>((resolve) => {
     const timer = setTimeout(() => {
       pendingEvals.delete(surfaceId);
       resolve(
-        JSON.stringify({ status: 'timeout', surfaceId, message: 'Eval timed out after 10s' }),
+        failedToolOutcome(
+          JSON.stringify({ status: 'timeout', surfaceId, message: 'Eval timed out after 10s' }),
+        ),
       );
     }, EVAL_TIMEOUT_MS);
 
@@ -159,11 +168,13 @@ export function requestCanvasEval(surfaceId: string, script: string): Promise<st
       clearTimeout(timer);
       pendingEvals.delete(surfaceId);
       resolve(
-        JSON.stringify({
-          status: 'eval_dispatched',
-          surfaceId,
-          note: 'Canvas preview is not available yet.',
-        }),
+        completedToolOutcome(
+          JSON.stringify({
+            status: 'eval_dispatched',
+            surfaceId,
+            note: 'Canvas preview is not available yet.',
+          }),
+        ),
       );
     }
   });
@@ -172,11 +183,13 @@ export function requestCanvasEval(surfaceId: string, script: string): Promise<st
 export function requestCanvasRead(
   surfaceId: string,
   options?: CanvasReadRequestOptions,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const surface = getCanvasSurface(surfaceId);
   if (!surface) {
     return Promise.resolve(
-      JSON.stringify({ status: 'error', error: `surface not found: ${surfaceId}` }),
+      failedToolOutcome(
+        JSON.stringify({ status: 'error', error: `surface not found: ${surfaceId}` }),
+      ),
     );
   }
 
@@ -191,19 +204,23 @@ export function requestCanvasRead(
 
   if (!shouldReadLiveDom) {
     return Promise.resolve(
-      JSON.stringify(buildStoredCanvasReadResponse(surface, normalizedOptions, focusedSurfaceId)),
+      completedToolOutcome(
+        JSON.stringify(buildStoredCanvasReadResponse(surface, normalizedOptions, focusedSurfaceId)),
+      ),
     );
   }
 
-  return new Promise<string>((resolve) => {
+  return new Promise<ToolRuntimeOutcome>((resolve) => {
     const timer = setTimeout(() => {
       pendingReads.delete(surfaceId);
       resolve(
-        JSON.stringify({
-          status: 'error',
-          surfaceId,
-          error: 'Canvas read timed out after 10s',
-        }),
+        failedToolOutcome(
+          JSON.stringify({
+            status: 'error',
+            surfaceId,
+            error: 'Canvas read timed out after 10s',
+          }),
+        ),
       );
     }, READ_TIMEOUT_MS);
 
@@ -214,12 +231,14 @@ export function requestCanvasRead(
       clearTimeout(timer);
       pendingReads.delete(surfaceId);
       resolve(
-        JSON.stringify(
-          buildStoredCanvasReadResponse(
-            surface,
-            normalizedOptions,
-            focusedSurfaceId,
-            'Live DOM read is not available because the canvas preview is not active.',
+        completedToolOutcome(
+          JSON.stringify(
+            buildStoredCanvasReadResponse(
+              surface,
+              normalizedOptions,
+              focusedSurfaceId,
+              'Live DOM read is not available because the canvas preview is not active.',
+            ),
           ),
         ),
       );
@@ -235,15 +254,23 @@ export function requestCanvasSnapshot(
   surfaceId: string,
   format: 'png' | 'jpeg',
   quality?: number,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const surface = getCanvasSurface(surfaceId);
-  if (!surface) return Promise.resolve(`Error: surface not found: ${surfaceId}`);
+  if (!surface) {
+    return Promise.resolve(failedToolOutcome(`Error: surface not found: ${surfaceId}`));
+  }
 
-  return new Promise<string>((resolve) => {
+  return new Promise<ToolRuntimeOutcome>((resolve) => {
     const timer = setTimeout(() => {
       pendingSnapshots.delete(surfaceId);
       resolve(
-        JSON.stringify({ status: 'timeout', surfaceId, message: 'Snapshot timed out after 15s' }),
+        failedToolOutcome(
+          JSON.stringify({
+            status: 'timeout',
+            surfaceId,
+            message: 'Snapshot timed out after 15s',
+          }),
+        ),
       );
     }, SNAPSHOT_TIMEOUT_MS);
 
@@ -254,23 +281,29 @@ export function requestCanvasSnapshot(
       clearTimeout(timer);
       pendingSnapshots.delete(surfaceId);
       resolve(
-        JSON.stringify({
-          status: 'snapshot_requested',
-          surfaceId,
-          format,
-          note: 'Canvas preview is not available yet.',
-        }),
+        completedToolOutcome(
+          JSON.stringify({
+            status: 'snapshot_requested',
+            surfaceId,
+            format,
+            note: 'Canvas preview is not available yet.',
+          }),
+        ),
       );
     }
   });
 }
 
 /** Called by CanvasScreen when a WebView eval completes */
-export function resolveCanvasEval(surfaceId: string, result: string): void {
+export function resolveCanvasEval(
+  surfaceId: string,
+  result: { succeeded: boolean; content: string },
+): void {
+  const content = JSON.stringify({ status: 'eval_completed', surfaceId, result: result.content });
   resolvePendingRequest(
     pendingEvals,
     surfaceId,
-    JSON.stringify({ status: 'eval_completed', surfaceId, result }),
+    result.succeeded ? completedToolOutcome(content) : failedToolOutcome(content),
   );
 }
 
@@ -286,13 +319,17 @@ export function resolveCanvasRead(surfaceId: string, payload: CanvasReadResultPa
   const surface = getCanvasSurface(surfaceId);
   if (!surface) {
     pending.resolve(
-      JSON.stringify({ status: 'error', surfaceId, error: `surface not found: ${surfaceId}` }),
+      failedToolOutcome(
+        JSON.stringify({ status: 'error', surfaceId, error: `surface not found: ${surfaceId}` }),
+      ),
     );
     return;
   }
 
   if (payload.error) {
-    pending.resolve(JSON.stringify({ status: 'error', surfaceId, error: payload.error }));
+    pending.resolve(
+      failedToolOutcome(JSON.stringify({ status: 'error', surfaceId, error: payload.error })),
+    );
     return;
   }
 
@@ -301,17 +338,19 @@ export function resolveCanvasRead(surfaceId: string, payload: CanvasReadResultPa
   const contentLength =
     typeof payload.contentLength === 'number' ? payload.contentLength : content.length;
   pending.resolve(
-    JSON.stringify(
-      buildCanvasReadResponse(surface, pending.options, getFocusedCanvasSurfaceId(), {
-        modeUsed: 'dom',
-        contentType: payload.contentType || 'live_dom',
-        content,
-        contentLength,
-        truncated,
-        note: payload.note,
-        title: payload.title,
-        url: payload.url,
-      }),
+    completedToolOutcome(
+      JSON.stringify(
+        buildCanvasReadResponse(surface, pending.options, getFocusedCanvasSurfaceId(), {
+          modeUsed: 'dom',
+          contentType: payload.contentType || 'live_dom',
+          content,
+          contentLength,
+          truncated,
+          note: payload.note,
+          title: payload.title,
+          url: payload.url,
+        }),
+      ),
     ),
   );
 }
@@ -331,20 +370,24 @@ export function resolveCanvasSnapshot(
 
   if (result.error) {
     pending.resolve(
-      JSON.stringify({ status: 'error', surfaceId, format: pending.format, error: result.error }),
+      failedToolOutcome(
+        JSON.stringify({ status: 'error', surfaceId, format: pending.format, error: result.error }),
+      ),
     );
     return;
   }
 
   const dataUri = typeof result.dataUri === 'string' ? truncateDataUri(result.dataUri) : '';
   pending.resolve(
-    JSON.stringify({
-      status: 'snapshot_captured',
-      surfaceId,
-      format: pending.format,
-      dataUri,
-      truncated: dataUri !== (result.dataUri || ''),
-    }),
+    completedToolOutcome(
+      JSON.stringify({
+        status: 'snapshot_captured',
+        surfaceId,
+        format: pending.format,
+        dataUri,
+        truncated: dataUri !== (result.dataUri || ''),
+      }),
+    ),
   );
 }
 

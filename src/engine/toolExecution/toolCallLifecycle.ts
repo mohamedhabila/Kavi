@@ -1,6 +1,5 @@
 import { emitAgentEvent } from '../../services/events/bus';
 import { getWorkingContextWindow } from '../../services/context/tokenCounter';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import { executeTool } from '../tools/index';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { maybeSpillToolOutput } from '../tools/toolOutputSpill';
@@ -32,6 +31,7 @@ import {
   observeExternalToolResultDurability,
 } from '../../services/executionJournal/externalToolDurabilityLifecycle';
 import { isCodeOwnedEffectFreeInvocation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
+import { failedToolOutcome } from '../../types/toolRuntimeOutcome';
 
 function runtimeToolDeclaration(lifecycle: ToolExecutionLifecycleParams, toolName: string) {
   return lifecycle.groundedRequestScopedTools?.find(
@@ -189,7 +189,7 @@ export async function executeToolCallLifecycle(
   let effectReconciliationRequired = false;
 
   try {
-    let result = await executeTool(
+    let outcome = await executeTool(
       effectiveToolCall.name,
       effectiveToolCall.arguments,
       params.conversationId,
@@ -222,6 +222,7 @@ export async function executeToolCallLifecycle(
         currentUserMessage: params.currentUserMessage,
       },
     );
+    let result = outcome.content;
     if (authoritativeEffectReceipt) {
       attachExecutionReceipt({
         lifecycle: params,
@@ -234,7 +235,7 @@ export async function executeToolCallLifecycle(
         toolCall,
         result,
         transportState: 'returned',
-        resultIsError: isToolResultErrorLike(result),
+        resultIsError: outcome.status === 'failed',
         recordedAt: Date.now(),
       });
     }
@@ -245,7 +246,7 @@ export async function executeToolCallLifecycle(
       receipt: authoritativeEffectReceipt,
       reconciliationRequired: effectReconciliationRequired,
     });
-    if (!isToolResultErrorLike(result)) {
+    if (outcome.status === 'completed') {
       const durability = await observeExternalToolResultDurability({
         toolName: effectiveToolCall.name,
         toolCallId: effectiveToolCall.id,
@@ -256,7 +257,8 @@ export async function executeToolCallLifecycle(
         observedAt: Date.now(),
       });
       if (durability.kind === 'untracked_external' || durability.kind === 'persistence_failed') {
-        result = buildUntrackedExternalToolResult(durability);
+        outcome = failedToolOutcome(buildUntrackedExternalToolResult(durability));
+        result = outcome.content;
       } else if (
         durability.kind === 'persisted' &&
         (durability.scheduling.kind === 'blocked' || durability.scheduling.kind === 'deferred')
@@ -289,7 +291,7 @@ export async function executeToolCallLifecycle(
     );
     params.onPendingAsyncOperationsChange?.();
 
-    const toolResultIsError = isToolResultErrorLike(result);
+    const toolResultIsError = outcome.status === 'failed';
     const completedAt = Date.now();
     completeRunningToolCall(
       toolCall,

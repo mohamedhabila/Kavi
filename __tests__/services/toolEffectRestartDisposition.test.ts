@@ -13,22 +13,25 @@ import {
   buildToolEffectRestartDispositionResolver,
   readToolEffectRestartDisposition,
 } from '../../src/services/executionJournal/toolEffectRestartDisposition';
+import { completedToolOutcome, type ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
 };
 
-function verifiedWriteResult(): string {
-  return JSON.stringify({
-    status: 'written',
-    path: 'private/plan.md',
-    size: 4,
-    sha256: 'a'.repeat(64),
-  });
+function verifiedWriteResult(): ToolRuntimeOutcome {
+  return completedToolOutcome(
+    JSON.stringify({
+      status: 'written',
+      path: 'private/plan.md',
+      size: 4,
+      sha256: 'a'.repeat(64),
+    }),
+  );
 }
 
 function input(
-  execute: () => Promise<string>,
+  execute: () => Promise<ToolRuntimeOutcome>,
   overrides: Partial<AuthorizedToolEffectDispatchInput> = {},
 ): AuthorizedToolEffectDispatchInput {
   return {

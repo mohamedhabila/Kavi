@@ -32,6 +32,11 @@ import { executeUpdateGoals } from './toolGoalExecution';
 import { createConversationFileContext } from './toolWorkspaceFiles';
 import { executeListFiles, executeReadFile, executeWriteFile } from './toolWorkspaceCoreExecution';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 // ── Native tool names for routing ────────────────────────────────────────
 
@@ -119,25 +124,29 @@ export async function executeCreateTask(args: {
   name?: unknown;
   timezone?: unknown;
   mode?: unknown;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   const schedule = typeof args.schedule === 'string' ? args.schedule.trim() : '';
   const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
   const name = typeof args.name === 'string' ? args.name.trim() : '';
   const timezone = typeof args.timezone === 'string' ? args.timezone.trim() : '';
   if (args.mode !== undefined && args.mode !== 'agentic' && args.mode !== 'chitchat') {
-    return JSON.stringify({
-      status: 'error',
-      code: 'invalid_scheduled_job',
-      error: 'mode must be agentic or chitchat.',
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        code: 'invalid_scheduled_job',
+        error: 'mode must be agentic or chitchat.',
+      }),
+    );
   }
   const mode = args.mode === 'chitchat' ? 'chitchat' : 'agentic';
   if (!schedule || !prompt) {
-    return JSON.stringify({
-      status: 'error',
-      code: 'invalid_scheduled_job',
-      error: 'Both schedule and prompt are required to create a scheduled job.',
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        code: 'invalid_scheduled_job',
+        error: 'Both schedule and prompt are required to create a scheduled job.',
+      }),
+    );
   }
   try {
     const created = await createScheduledJob({
@@ -146,20 +155,24 @@ export async function executeCreateTask(args: {
       prompt,
       mode,
     });
-    return JSON.stringify({
-      status: 'task_created',
-      id: created.id,
-      schedule,
-      prompt,
-      ...(timezone ? { timezone } : {}),
-      ...(created.warning ? { warning: created.warning } : {}),
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        status: 'task_created',
+        id: created.id,
+        schedule,
+        prompt,
+        ...(timezone ? { timezone } : {}),
+        ...(created.warning ? { warning: created.warning } : {}),
+      }),
+    );
   } catch (error) {
-    return JSON.stringify({
-      status: 'error',
-      code: 'scheduled_job_create_failed',
-      error: error instanceof Error ? error.message : String(error),
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        code: 'scheduled_job_create_failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 }
 
@@ -171,7 +184,7 @@ export async function executeToolInner(
   conversationId: string,
   context?: ToolExecutionContext,
   authorizedEffectExecutionClaim?: AuthorizedToolEffectExecutionClaim,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   name = resolveRegisteredToolName(name);
 
   let args: any;
@@ -179,7 +192,9 @@ export async function executeToolInner(
     args = argsString ? JSON.parse(argsString) : {};
   } catch {
     const preview = argsString.length > 300 ? argsString.slice(0, 300) + '…' : argsString;
-    return `Error: tool "${name}" received malformed JSON arguments that could not be parsed. Raw input: ${preview}\nPlease retry the tool call with valid JSON arguments.`;
+    return failedToolOutcome(
+      `Error: tool "${name}" received malformed JSON arguments that could not be parsed. Raw input: ${preview}\nPlease retry the tool call with valid JSON arguments.`,
+    );
   }
 
   const { workspaceConversationId, workspaceReadFallbackConversationId } =
@@ -296,32 +311,34 @@ export async function executeToolInner(
           });
         case 'list': {
           const jobs = await listScheduledJobs();
-          if (jobs.length === 0) return JSON.stringify({ jobs: [] });
-          return JSON.stringify({
-            jobs: jobs.map((j: any) => ({
-              id: j.id,
-              name: j.name,
-              enabled: j.enabled,
-              schedule: j.schedule,
-              mode: j.payload.mode,
-              state: j.runningAttemptId
-                ? 'running'
-                : j.nextRetryAtMs
-                  ? 'retry_scheduled'
-                  : j.enabled
-                    ? 'scheduled'
-                    : 'disabled',
-              nextRunAtMs: j.nextRetryAtMs ?? j.nextRunAtMs,
-              lastError: j.lastError,
-              deliveryWarning: j.lastDeliveryError,
-              wakeWarning: j.lastWakeError,
-            })),
-          });
+          if (jobs.length === 0) return completedToolOutcome(JSON.stringify({ jobs: [] }));
+          return completedToolOutcome(
+            JSON.stringify({
+              jobs: jobs.map((j: any) => ({
+                id: j.id,
+                name: j.name,
+                enabled: j.enabled,
+                schedule: j.schedule,
+                mode: j.payload.mode,
+                state: j.runningAttemptId
+                  ? 'running'
+                  : j.nextRetryAtMs
+                    ? 'retry_scheduled'
+                    : j.enabled
+                      ? 'scheduled'
+                      : 'disabled',
+                nextRunAtMs: j.nextRetryAtMs ?? j.nextRunAtMs,
+                lastError: j.lastError,
+                deliveryWarning: j.lastDeliveryError,
+                wakeWarning: j.lastWakeError,
+              })),
+            }),
+          );
         }
         case 'update': {
-          if (!args.id) return 'Error: id is required for update action';
+          if (!args.id) return failedToolOutcome('Error: id is required for update action');
           const existingJob = await getScheduledJob(args.id);
-          if (!existingJob) return `Error: job not found: ${args.id}`;
+          if (!existingJob) return failedToolOutcome(`Error: job not found: ${args.id}`);
           const updates: Parameters<typeof updateScheduledJob>[1] = {};
           const requestedTimezone =
             typeof args.timezone === 'string' && args.timezone.trim()
@@ -333,7 +350,9 @@ export async function executeToolInner(
               : args.mode === 'agentic' || args.mode === 'chitchat'
                 ? args.mode
                 : null;
-          if (requestedMode === null) return 'Error: mode must be agentic or chitchat';
+          if (requestedMode === null) {
+            return failedToolOutcome('Error: mode must be agentic or chitchat');
+          }
           if (typeof args.name === 'string' && args.name.trim()) updates.name = args.name.trim();
           if (typeof args.schedule === 'string' && args.schedule.trim()) {
             const timezone =
@@ -346,7 +365,7 @@ export async function executeToolInner(
             };
           } else if (requestedTimezone) {
             if (existingJob.schedule.kind !== 'cron') {
-              return 'Error: timezone can only update a cron schedule';
+              return failedToolOutcome('Error: timezone can only update a cron schedule');
             }
             updates.schedule = { ...existingJob.schedule, tz: requestedTimezone };
           }
@@ -360,114 +379,148 @@ export async function executeToolInner(
             };
           }
           if (Object.keys(updates).length === 0) {
-            return 'Error: update requires at least one of name, schedule, prompt, timezone, or mode';
+            return failedToolOutcome(
+              'Error: update requires at least one of name, schedule, prompt, timezone, or mode',
+            );
           }
           try {
             const result = await updateScheduledJob(args.id, updates);
-            if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
-            return JSON.stringify({
-              status: 'updated',
-              id: args.id,
-              ...(result.warning ? { warning: result.warning } : {}),
-            });
+            if (result.status === 'not_found') {
+              return failedToolOutcome(`Error: job not found: ${args.id}`);
+            }
+            return completedToolOutcome(
+              JSON.stringify({
+                status: 'updated',
+                id: args.id,
+                ...(result.warning ? { warning: result.warning } : {}),
+              }),
+            );
           } catch (error) {
-            return JSON.stringify({
-              status: 'error',
-              code: 'scheduled_job_update_failed',
-              error: error instanceof Error ? error.message : String(error),
-              id: args.id,
-            });
+            return failedToolOutcome(
+              JSON.stringify({
+                status: 'error',
+                code: 'scheduled_job_update_failed',
+                error: error instanceof Error ? error.message : String(error),
+                id: args.id,
+              }),
+            );
           }
         }
         case 'delete': {
-          if (!args.id) return 'Error: id is required for delete action';
+          if (!args.id) return failedToolOutcome('Error: id is required for delete action');
           try {
             const result = await deleteScheduledJob(args.id);
-            if (result === 'not_found') return `Error: job not found: ${args.id}`;
-            if (result === 'busy') return `Error: scheduled job is currently running: ${args.id}`;
-            return JSON.stringify({ status: 'deleted', id: args.id });
+            if (result === 'not_found') {
+              return failedToolOutcome(`Error: job not found: ${args.id}`);
+            }
+            if (result === 'busy') {
+              return failedToolOutcome(`Error: scheduled job is currently running: ${args.id}`);
+            }
+            return completedToolOutcome(JSON.stringify({ status: 'deleted', id: args.id }));
           } catch (error) {
-            return JSON.stringify({
-              status: 'error',
-              code: 'scheduled_job_delete_failed',
-              error: error instanceof Error ? error.message : String(error),
-              id: args.id,
-            });
+            return failedToolOutcome(
+              JSON.stringify({
+                status: 'error',
+                code: 'scheduled_job_delete_failed',
+                error: error instanceof Error ? error.message : String(error),
+                id: args.id,
+              }),
+            );
           }
         }
         case 'enable': {
-          if (!args.id) return 'Error: id is required for enable action';
+          if (!args.id) return failedToolOutcome('Error: id is required for enable action');
           try {
             const result = await setScheduledJobEnabled(args.id, true);
-            if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
-            return JSON.stringify({
-              status: 'enabled',
-              id: args.id,
-              ...(result.warning ? { warning: result.warning } : {}),
-            });
+            if (result.status === 'not_found') {
+              return failedToolOutcome(`Error: job not found: ${args.id}`);
+            }
+            return completedToolOutcome(
+              JSON.stringify({
+                status: 'enabled',
+                id: args.id,
+                ...(result.warning ? { warning: result.warning } : {}),
+              }),
+            );
           } catch (error) {
-            return JSON.stringify({
-              status: 'error',
-              code: 'scheduled_job_enable_failed',
-              error: error instanceof Error ? error.message : String(error),
-              id: args.id,
-            });
+            return failedToolOutcome(
+              JSON.stringify({
+                status: 'error',
+                code: 'scheduled_job_enable_failed',
+                error: error instanceof Error ? error.message : String(error),
+                id: args.id,
+              }),
+            );
           }
         }
         case 'disable': {
-          if (!args.id) return 'Error: id is required for disable action';
+          if (!args.id) return failedToolOutcome('Error: id is required for disable action');
           try {
             const result = await setScheduledJobEnabled(args.id, false);
-            if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
-            return JSON.stringify({
-              status: 'disabled',
-              id: args.id,
-              ...(result.warning ? { warning: result.warning } : {}),
-            });
+            if (result.status === 'not_found') {
+              return failedToolOutcome(`Error: job not found: ${args.id}`);
+            }
+            return completedToolOutcome(
+              JSON.stringify({
+                status: 'disabled',
+                id: args.id,
+                ...(result.warning ? { warning: result.warning } : {}),
+              }),
+            );
           } catch (error) {
-            return JSON.stringify({
-              status: 'error',
-              code: 'scheduled_job_disable_failed',
-              error: error instanceof Error ? error.message : String(error),
-              id: args.id,
-            });
+            return failedToolOutcome(
+              JSON.stringify({
+                status: 'error',
+                code: 'scheduled_job_disable_failed',
+                error: error instanceof Error ? error.message : String(error),
+                id: args.id,
+              }),
+            );
           }
         }
         case 'run': {
-          if (!args.id) return 'Error: id is required for run action';
+          if (!args.id) return failedToolOutcome('Error: id is required for run action');
           const result = await runJobNow(args.id, { trigger: 'manual' });
-          if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
+          if (result.status === 'not_found') {
+            return failedToolOutcome(`Error: job not found: ${args.id}`);
+          }
           if (
             result.status === 'retrying' ||
             result.status === 'failed' ||
             result.status === 'busy' ||
             result.status === 'skipped'
           ) {
-            return JSON.stringify({
-              status: 'error',
-              code:
-                result.status === 'retrying'
-                  ? 'scheduled_job_retrying'
-                  : result.status === 'busy'
-                    ? 'scheduled_job_busy'
-                    : result.status === 'skipped'
-                      ? 'scheduled_job_not_due'
-                      : 'scheduled_job_failed',
-              error: result.error,
-              retryScheduled: result.status === 'retrying',
+            return failedToolOutcome(
+              JSON.stringify({
+                status: 'error',
+                code:
+                  result.status === 'retrying'
+                    ? 'scheduled_job_retrying'
+                    : result.status === 'busy'
+                      ? 'scheduled_job_busy'
+                      : result.status === 'skipped'
+                        ? 'scheduled_job_not_due'
+                        : 'scheduled_job_failed',
+                error: result.error,
+                retryScheduled: result.status === 'retrying',
+                id: args.id,
+                name: result.name,
+              }),
+            );
+          }
+          return completedToolOutcome(
+            JSON.stringify({
+              status: result.status,
               id: args.id,
               name: result.name,
-            });
-          }
-          return JSON.stringify({
-            status: result.status,
-            id: args.id,
-            name: result.name,
-            ...(result.status === 'succeeded' && result.warning ? { warning: result.warning } : {}),
-          });
+              ...(result.status === 'succeeded' && result.warning
+                ? { warning: result.warning }
+                : {}),
+            }),
+          );
         }
         default:
-          return `Error: unknown cron action: ${action}`;
+          return failedToolOutcome(`Error: unknown cron action: ${action}`);
       }
     }
 
@@ -480,6 +533,8 @@ export async function executeToolInner(
       return executeImageEdit(args, workspaceConversationId);
 
     default:
-      return `Error: unknown tool "${name}". Available tools include: read_file, write_file, list_files, update_goals, javascript, python, web_search, web_fetch, file_edit, glob_search, text_search, cron, canvas_list, canvas_read, canvas_create, canvas_update, canvas_eval, canvas_snapshot, image_generate, image_edit. Tool names are case-sensitive.`;
+      return failedToolOutcome(
+        `Error: unknown tool "${name}". Available tools include: read_file, write_file, list_files, update_goals, javascript, python, web_search, web_fetch, file_edit, glob_search, text_search, cron, canvas_list, canvas_read, canvas_create, canvas_update, canvas_eval, canvas_snapshot, image_generate, image_edit. Tool names are case-sensitive.`,
+      );
   }
 }

@@ -94,7 +94,8 @@ export async function executeNativeAction(
 export function serializeNativeActionResult(
   result: NativeActionResult<Record<string, unknown>>,
 ): string {
-  return JSON.stringify(result);
+  const { executionStatus: _executionStatus, ...modelVisibleResult } = result;
+  return JSON.stringify(modelVisibleResult);
 }
 
 export function serializeNativeActionSummary(

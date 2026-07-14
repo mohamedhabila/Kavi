@@ -29,6 +29,11 @@ import type {
 } from '../../services/memory/memoryApplicabilityTypes';
 import { projectAgentRunExperienceViews } from '../../services/memory/experienceRecords';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from '../../services/memory/policy';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 type MemorySearchScope = 'all' | 'conversation' | 'global';
 
@@ -142,42 +147,48 @@ const MEMORY_SEARCH_POLICY_INSTRUCTION =
 export async function executeMemorySearch(
   args: { query: string; maxResults?: number; scope?: 'all' | 'conversation' | 'global' },
   options: MemorySearchOptions,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const memoryReadEpoch = captureMemoryReadEpoch();
   const query = typeof args.query === 'string' ? args.query.trim() : '';
   const maxResults = clampMemorySearchLimit(args.maxResults);
   const requestedScope = normalizeMemorySearchScope(args.scope);
   const conversationId = options.memoryConversationId;
   const optOutResult = () =>
-    JSON.stringify({
-      results: [],
-      method: 'living_memory',
-      index: 'memory_facts',
-      totalFound: 0,
-      scope: requestedScope,
-      outcome: 'opt_out',
-    });
+    failedToolOutcome(
+      JSON.stringify({
+        results: [],
+        method: 'living_memory',
+        index: 'memory_facts',
+        totalFound: 0,
+        scope: requestedScope,
+        outcome: 'opt_out',
+      }),
+    );
   if (memoryReadEpoch === null || !isMemoryReadEpochCurrent(memoryReadEpoch)) {
     return optOutResult();
   }
   try {
     if (!query) {
-      return JSON.stringify({
-        results: [],
-        method: 'living_memory',
-        index: 'memory_facts',
-        totalFound: 0,
-        scope: requestedScope,
-      });
+      return failedToolOutcome(
+        JSON.stringify({
+          results: [],
+          method: 'living_memory',
+          index: 'memory_facts',
+          totalFound: 0,
+          scope: requestedScope,
+        }),
+      );
     }
     if (requestedScope === 'conversation' && !conversationId) {
-      return JSON.stringify({
-        results: [],
-        method: 'living_memory',
-        index: 'memory_facts',
-        totalFound: 0,
-        scope: requestedScope,
-      });
+      return failedToolOutcome(
+        JSON.stringify({
+          results: [],
+          method: 'living_memory',
+          index: 'memory_facts',
+          totalFound: 0,
+          scope: requestedScope,
+        }),
+      );
     }
     const scopeFilter = scopeFilterForSearch(requestedScope, conversationId);
     const memoryScope = resolveLocalMemoryAccessScope({
@@ -237,27 +248,31 @@ export async function executeMemorySearch(
       now,
     );
     if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
-    return JSON.stringify({
-      results: selected.map(formatSearchResult),
-      method: 'living_memory',
-      index: 'memory_facts',
-      totalFound: selected.length,
-      scope: requestedScope,
-      policyInstruction: MEMORY_SEARCH_POLICY_INSTRUCTION,
-      applicabilityPolicy: applicabilitySummary,
-      ...(applicabilitySummary.state === 'degraded' ? { degraded: true } : {}),
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        results: selected.map(formatSearchResult),
+        method: 'living_memory',
+        index: 'memory_facts',
+        totalFound: selected.length,
+        scope: requestedScope,
+        policyInstruction: MEMORY_SEARCH_POLICY_INSTRUCTION,
+        applicabilityPolicy: applicabilitySummary,
+        ...(applicabilitySummary.state === 'degraded' ? { degraded: true } : {}),
+      }),
+    );
   } catch (error) {
     if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
-    return JSON.stringify({
-      results: [],
-      method: 'living_memory',
-      index: 'memory_facts',
-      totalFound: 0,
-      scope: requestedScope,
-      degraded: true,
-      error: error instanceof Error ? error.message : 'memory search unavailable',
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        results: [],
+        method: 'living_memory',
+        index: 'memory_facts',
+        totalFound: 0,
+        scope: requestedScope,
+        degraded: true,
+        error: error instanceof Error ? error.message : 'memory search unavailable',
+      }),
+    );
   }
 }
 
@@ -270,48 +285,49 @@ export async function executeMemorySearch(
 //     of throwing, so the agent runtime can format them as tool-call errors
 // ---------------------------------------------------------------------------
 
-function wrapMemoryToolResult(result: unknown): string {
-  return JSON.stringify(result);
+function wrapMemoryToolResult(result: { ok: boolean }): ToolRuntimeOutcome {
+  const content = JSON.stringify(result);
+  return result.ok ? completedToolOutcome(content) : failedToolOutcome(content);
 }
 
 export function executeMemoryRecall(
   args: MemoryRecallArgs,
   context: MemoryRecallExecutionContext,
-): string {
+): ToolRuntimeOutcome {
   return wrapMemoryToolResult(recallFacts(args, context));
 }
 
 export function executeMemoryRemember(
   args: MemoryRememberArgs,
   context: MemoryRememberExecutionContext,
-): string {
+): ToolRuntimeOutcome {
   return wrapMemoryToolResult(rememberFact(args, context));
 }
 
 export function executeMemoryPin(
   args: MemoryPinArgs,
   context: MemoryFactActionExecutionContext,
-): string {
+): ToolRuntimeOutcome {
   return wrapMemoryToolResult(pinFact(args, context));
 }
 
 export function executeMemoryUnpin(
   args: MemoryPinArgs,
   context: MemoryFactActionExecutionContext,
-): string {
+): ToolRuntimeOutcome {
   return wrapMemoryToolResult(unpinFact(args, context));
 }
 
 export function executeMemoryForget(
   args: MemoryForgetArgs,
   context: MemoryFactActionExecutionContext,
-): string {
+): ToolRuntimeOutcome {
   return wrapMemoryToolResult(forgetFact(args, context));
 }
 
 export function executeMemoryInvalidate(
   args: MemoryInvalidateArgs,
   context: MemoryFactActionExecutionContext,
-): string {
+): ToolRuntimeOutcome {
   return wrapMemoryToolResult(invalidateMemoryFact(args, context));
 }

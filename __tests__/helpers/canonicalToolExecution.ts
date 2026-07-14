@@ -1,11 +1,12 @@
 import type { ToolExecutionContext } from '../../src/engine/tools/toolExecutionContext';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 
 export type CanonicalToolExecutor = (
   name: string,
   argsString: string,
   conversationId: string,
   context?: ToolExecutionContext,
-) => Promise<string>;
+) => Promise<ToolRuntimeOutcome>;
 
 let executionSequence = 0;
 

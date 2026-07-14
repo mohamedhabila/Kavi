@@ -2,7 +2,6 @@ import { resolveRegisteredToolName } from '../../engine/tools/toolNameNormalizat
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { ToolCall } from '../../types/message';
 import type { TokenUsage } from '../../types/usage';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import type {
   ForegroundScenarioDriverResult,
   ForegroundScenarioTurnSnapshot,
@@ -71,8 +70,7 @@ function collectToolResults(
       isError:
         message.isError === true ||
         toolCall?.status === 'failed' ||
-        Boolean(toolCall?.error?.trim()) ||
-        isToolResultErrorLike(message.content),
+        Boolean(toolCall?.error?.trim()),
     });
   }
 

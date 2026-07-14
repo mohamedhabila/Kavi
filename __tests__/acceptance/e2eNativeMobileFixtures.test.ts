@@ -29,22 +29,22 @@ describe('E2E native mobile fixtures', () => {
   });
 
   it('returns deterministic calendar_list JSON at the dispatch seam', async () => {
-    const raw = await tryExecuteE2ENativeCalendarTool('calendar_list', '{}');
-    expect(raw).toBe(E2E_FIXTURE_CALENDAR_LIST_JSON);
-    const parsed = JSON.parse(raw!) as Array<{ allowsModifications: boolean }>;
+    const outcome = await tryExecuteE2ENativeCalendarTool('calendar_list', '{}');
+    expect(outcome).toEqual({ status: 'completed', content: E2E_FIXTURE_CALENDAR_LIST_JSON });
+    const parsed = JSON.parse(outcome!.content) as Array<{ allowsModifications: boolean }>;
     expect(parsed[0]?.allowsModifications).toBe(true);
   });
 
   it('returns deterministic empty calendar_events JSON at the dispatch seam', async () => {
-    const raw = await tryExecuteE2ENativeCalendarTool(
+    const outcome = await tryExecuteE2ENativeCalendarTool(
       'calendar_events',
       JSON.stringify({
         startDate: '2026-06-10T00:00:00Z',
         endDate: '2026-06-11T00:00:00Z',
       }),
     );
-    expect(raw).toBe(E2E_FIXTURE_CALENDAR_EVENTS_JSON);
-    expect(JSON.parse(raw!)).toEqual([]);
+    expect(outcome).toEqual({ status: 'completed', content: E2E_FIXTURE_CALENDAR_EVENTS_JSON });
+    expect(JSON.parse(outcome!.content)).toEqual([]);
     expect(getE2ENativeMobileFixtureStateSnapshot().calendar.listed).toBe(true);
   });
 
@@ -72,14 +72,17 @@ describe('E2E native mobile fixtures', () => {
   });
 
   it('routes calendar_list through executeToolInner without touching native executors', async () => {
-    const raw = await executeToolInner('calendar_list', '{}', 'conv-calendar-e2e');
-    expect(raw).toBe(E2E_FIXTURE_CALENDAR_LIST_JSON);
+    const outcome = await executeToolInner('calendar_list', '{}', 'conv-calendar-e2e');
+    expect(outcome).toEqual({ status: 'completed', content: E2E_FIXTURE_CALENDAR_LIST_JSON });
   });
 
   it('returns deterministic permission-state fixtures for mobile-native benchmarks', async () => {
-    const raw = await tryExecuteE2ENativeMobileTool('device_permissions', '{}');
-    expect(raw).toBe(E2E_FIXTURE_DEVICE_PERMISSIONS_JSON);
-    const parsed = JSON.parse(raw!);
+    const outcome = await tryExecuteE2ENativeMobileTool('device_permissions', '{}');
+    expect(outcome).toEqual({
+      status: 'completed',
+      content: E2E_FIXTURE_DEVICE_PERMISSIONS_JSON,
+    });
+    const parsed = JSON.parse(outcome!.content);
     expect(parsed.version).toBe('native-tools-2026-07-10');
     expect(parsed.states.denied.location.status).toBe('denied');
     expect(parsed.states.askEveryTime.camera.scope).toBe('ephemeral');
@@ -95,14 +98,14 @@ describe('E2E native mobile fixtures', () => {
   ])(
     'routes deterministic device_query %s evidence without loading Expo modules',
     async (kind, expected) => {
-      const raw = await executeToolInner(
+      const outcome = await executeToolInner(
         'device_query',
         JSON.stringify({ kind }),
         'conv-mobile-device-e2e',
       );
 
-      expect(raw).toBe(expected);
-      expect(JSON.parse(raw)).not.toHaveProperty('error');
+      expect(outcome).toEqual({ status: 'completed', content: expected });
+      expect(JSON.parse(outcome.content)).not.toHaveProperty('error');
     },
   );
 
@@ -112,13 +115,13 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ text: 'E2E-CLIPBOARD-42' }),
       'conv-mobile-e2e',
     );
-    expect(JSON.parse(writeRaw)).toEqual({
+    expect(JSON.parse(writeRaw.content)).toEqual({
       status: 'clipboard_written',
       textLength: 16,
     });
 
     const readRaw = await executeToolInner('clipboard_read', '{}', 'conv-mobile-e2e');
-    expect(JSON.parse(readRaw)).toEqual({
+    expect(JSON.parse(readRaw.content)).toEqual({
       status: 'clipboard_read',
       text: 'E2E-CLIPBOARD-42',
       textLength: 16,
@@ -134,7 +137,8 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(invalidCreateRaw)).toEqual({
+    expect(invalidCreateRaw.status).toBe('failed');
+    expect(JSON.parse(invalidCreateRaw.content)).toEqual({
       status: 'error',
       code: 'missing_required_argument',
       tool: 'calendar_create_event',
@@ -152,7 +156,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    const created = JSON.parse(createRaw);
+    const created = JSON.parse(createRaw.content);
     expect(created).toEqual(
       expect.objectContaining({
         status: 'created_verified',
@@ -165,7 +169,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ id: created.eventId, title: 'Updated Review' }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(updateRaw)).toEqual({
+    expect(JSON.parse(updateRaw.content)).toEqual({
       status: 'updated_verified',
       eventId: 'e2e-event-1',
       event: expect.objectContaining({
@@ -179,7 +183,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ id: created.eventId, title: 'Updated Review' }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(duplicateUpdateRaw)).toEqual({
+    expect(JSON.parse(duplicateUpdateRaw.content)).toEqual({
       status: 'updated_verified',
       eventId: 'e2e-event-1',
       idempotent: true,
@@ -202,7 +206,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ query: 'E2E Station' }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(mapsRaw)).toEqual({
+    expect(JSON.parse(mapsRaw.content)).toEqual({
       status: 'maps_opened',
       targetKind: 'query',
     });
@@ -220,7 +224,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    const created = JSON.parse(createRaw);
+    const created = JSON.parse(createRaw.content);
     expect(created).toEqual(
       expect.objectContaining({
         status: 'created_verified',
@@ -241,7 +245,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(updateRaw)).toEqual(
+    expect(JSON.parse(updateRaw.content)).toEqual(
       expect.objectContaining({
         status: 'updated_verified',
         eventId: 'e2e-event-1',
@@ -261,7 +265,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(eventsRaw)).toEqual([
+    expect(JSON.parse(eventsRaw.content)).toEqual([
       expect.objectContaining({
         id: 'e2e-event-1',
         calendarId: 'e2e-cal-1',
@@ -283,7 +287,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ query: 'Avery' }),
       'conv-mobile-contact-e2e',
     );
-    expect(JSON.parse(contactsRaw)).toEqual([
+    expect(JSON.parse(contactsRaw.content)).toEqual([
       expect.objectContaining({
         id: 'e2e-contact-avery',
         phoneNumbers: [expect.objectContaining({ number: '+15550101001' })],
@@ -297,7 +301,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-contact-e2e',
     );
-    expect(JSON.parse(smsRaw)).toEqual({
+    expect(JSON.parse(smsRaw.content)).toEqual({
       status: 'sms_composer_opened',
       recipientCount: 1,
       messageLength: 11,
@@ -319,7 +323,8 @@ describe('E2E native mobile fixtures', () => {
       'conv-mobile-contact-e2e',
     );
 
-    expect(JSON.parse(raw)).toEqual({
+    expect(raw.status).toBe('failed');
+    expect(JSON.parse(raw.content)).toEqual({
       status: 'error',
       code: 'invalid_phone_number',
       tool: 'sms_compose',
@@ -339,7 +344,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ title: 'E2E', body: 'Ping', delaySeconds: 60 }),
       'conv-mobile-notification-e2e',
     );
-    const scheduled = JSON.parse(scheduleRaw);
+    const scheduled = JSON.parse(scheduleRaw.content);
     expect(scheduled.status).toBe('notification_scheduled');
 
     const cancelRaw = await executeToolInner(
@@ -347,7 +352,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ id: scheduled.id }),
       'conv-mobile-notification-e2e',
     );
-    expect(JSON.parse(cancelRaw)).toEqual({
+    expect(JSON.parse(cancelRaw.content)).toEqual({
       status: 'notification_cancelled',
       id: 'e2e-notification-scheduled',
       cancelled: true,
@@ -356,7 +361,8 @@ describe('E2E native mobile fixtures', () => {
 
   it('returns structural permission-denied evidence without marking the tool result as malformed', async () => {
     const raw = await executeToolInner('location_current', '{}', 'conv-mobile-permission-e2e');
-    expect(JSON.parse(raw)).toEqual(
+    expect(raw.status).toBe('failed');
+    expect(JSON.parse(raw.content)).toEqual(
       expect.objectContaining({
         status: 'permission_denied',
         code: 'permission_denied',

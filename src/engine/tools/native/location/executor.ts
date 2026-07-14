@@ -6,12 +6,16 @@ async function loadLocationModule() {
   }
 }
 
-export async function executeLocationCurrent(): Promise<string> {
+export async function executeLocationCurrent(): Promise<ToolRuntimeOutcome> {
   const Location = await loadLocationModule();
-  if (!Location) return JSON.stringify({ error: 'Location module not available' });
+  if (!Location) {
+    return failedToolOutcome(JSON.stringify({ error: 'Location module not available' }));
+  }
 
   const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== 'granted') return JSON.stringify({ error: 'Location permission denied' });
+  if (status !== 'granted') {
+    return failedToolOutcome(JSON.stringify({ error: 'Location permission denied' }));
+  }
 
   const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
 
@@ -35,12 +39,19 @@ export async function executeLocationCurrent(): Promise<string> {
     // Reverse geocode not critical
   }
 
-  return JSON.stringify({
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
-    altitude: location.coords.altitude,
-    accuracy: location.coords.accuracy,
-    timestamp: location.timestamp,
-    address,
-  });
+  return completedToolOutcome(
+    JSON.stringify({
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      altitude: location.coords.altitude,
+      accuracy: location.coords.accuracy,
+      timestamp: location.timestamp,
+      address,
+    }),
+  );
 }
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../../../types/toolRuntimeOutcome';

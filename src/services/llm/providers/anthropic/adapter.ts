@@ -1,4 +1,3 @@
-import { isToolResultErrorLike } from '../../../../utils/toolResultErrors';
 import { normalizeToolInputSchema } from '../../../../utils/toolSchema';
 import { resolveModelOutputTokenBudget } from '../../../context/outputTokenBudget';
 import { normalizeUsage } from '../../../usage/tracker';
@@ -99,7 +98,11 @@ function applyAnthropicMessageCacheBreakpoints(args: {
 
   const messages = args.messages.map((message) => ({ ...message }));
   let applied = 0;
-  for (let index = messages.length - 2; index >= 0 && applied < messageBreakpointLimit; index -= 1) {
+  for (
+    let index = messages.length - 2;
+    index >= 0 && applied < messageBreakpointLimit;
+    index -= 1
+  ) {
     const message = messages[index];
     if (message.role !== 'user' && message.role !== 'assistant') {
       continue;
@@ -127,6 +130,7 @@ export async function sendAnthropicMessages(args: {
     content: string | any[];
     tool_call_id?: string;
     name?: string;
+    is_error?: boolean;
   }>;
   options: MessageRequestOptions;
   sanitizeAnthropicRequestOptions: (
@@ -142,10 +146,7 @@ export async function sendAnthropicMessages(args: {
     message: ChatCompletionMessage,
     options?: { stripThinkingWithoutToolUse?: boolean },
   ) => any[];
-  mergeAnthropicContent: (
-    existing: string | any[],
-    incoming: string | any[],
-  ) => string | any[];
+  mergeAnthropicContent: (existing: string | any[], incoming: string | any[]) => string | any[];
   mergeAnthropicToolResultsById: (blocks: any[]) => any[];
   mergeAnthropicAssistantContent: (
     existing: string | any[],
@@ -156,15 +157,9 @@ export async function sendAnthropicMessages(args: {
   normalizeAnthropicConversationHistory: (
     messages: Array<{ role: string; content: string | any[] }>,
   ) => Array<{ role: string; content: string | any[] }>;
-  buildAnthropicToolRaw: (
-    id: string,
-    name: string,
-    argumentsText: string,
-  ) => Record<string, any>;
+  buildAnthropicToolRaw: (id: string, name: string, argumentsText: string) => Record<string, any>;
   extractAnthropicReasoningText: (assistantBlocks: any[]) => string | undefined;
-  buildAnthropicToolChoice: (
-    choice: ToolChoiceMode | undefined,
-  ) => Record<string, any> | undefined;
+  buildAnthropicToolChoice: (choice: ToolChoiceMode | undefined) => Record<string, any> | undefined;
   shouldIncludeAnthropicInterleavedThinkingBeta: (
     model: string,
     options: MessageRequestOptions,
@@ -175,15 +170,11 @@ export async function sendAnthropicMessages(args: {
     sections?: MessageRequestOptions['systemPromptSections'];
     enablePromptCaching?: boolean;
   }) => string | Array<Record<string, any>> | undefined;
-  reorderAnthropicToolsForCaching: (
-    tools: NonNullable<MessageRequestOptions['tools']>,
-  ) => {
+  reorderAnthropicToolsForCaching: (tools: NonNullable<MessageRequestOptions['tools']>) => {
     orderedTools: NonNullable<MessageRequestOptions['tools']>;
     lastStablePrefixIndex: number;
   };
-  simplifyAnthropicToolDescription: (
-    description: string | undefined,
-  ) => string;
+  simplifyAnthropicToolDescription: (description: string | undefined) => string;
   simplifyAnthropicSchema: (
     schema: Record<string, any>,
     options: { strict: boolean },
@@ -194,11 +185,7 @@ export async function sendAnthropicMessages(args: {
   maxAnthropicStrictTools: number;
   anthropicEphemeralCacheControl: { type: 'ephemeral' };
   anthropicInterleavedThinkingBeta: string;
-  performFetch: (
-    url: string,
-    init: RequestInit,
-    preferStreaming?: boolean,
-  ) => Promise<Response>;
+  performFetch: (url: string, init: RequestInit, preferStreaming?: boolean) => Promise<Response>;
   attachProviderResponse: (payload: any, provider: 'anthropic', raw: any) => any;
 }): Promise<any> {
   const anthropicOptions = args.sanitizeAnthropicRequestOptions(
@@ -232,21 +219,18 @@ export async function sendAnthropicMessages(args: {
 
   for (const msg of args.messages) {
     if (msg.role === 'system') {
-      systemContent =
-        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      systemContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
       continue;
     }
 
     if (msg.role === 'tool') {
       const toolContent =
         typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      const toolUseId =
-        typeof msg.tool_call_id === 'string' ? msg.tool_call_id.trim() : '';
+      const toolUseId = typeof msg.tool_call_id === 'string' ? msg.tool_call_id.trim() : '';
       if (!toolUseId) {
         continue;
       }
-      const isError =
-        (msg as any).is_error === true || isToolResultErrorLike(toolContent);
+      const isError = msg.is_error === true;
       pendingToolResults.push({
         type: 'tool_result',
         tool_use_id: toolUseId,
@@ -259,19 +243,16 @@ export async function sendAnthropicMessages(args: {
     flushPendingToolResults();
 
     if (msg.role === 'assistant') {
-      const contentBlocks = args.normalizeAnthropicAssistantBlocks(
-        msg as ChatCompletionMessage,
-        { stripThinkingWithoutToolUse: true },
-      );
+      const contentBlocks = args.normalizeAnthropicAssistantBlocks(msg as ChatCompletionMessage, {
+        stripThinkingWithoutToolUse: true,
+      });
       if (contentBlocks.length === 0) {
         continue;
       }
 
       const hasToolCalls = contentBlocks.some((block: any) => block.type === 'tool_use');
       const content: string | any[] =
-        !hasToolCalls &&
-        contentBlocks.length === 1 &&
-        contentBlocks[0].type === 'text'
+        !hasToolCalls && contentBlocks.length === 1 && contentBlocks[0].type === 'text'
           ? contentBlocks[0].text
           : contentBlocks;
 
@@ -292,10 +273,7 @@ export async function sendAnthropicMessages(args: {
 
       const lastMsg = anthropicMessages[anthropicMessages.length - 1];
       if (lastMsg?.role === 'user') {
-        lastMsg.content = args.mergeAnthropicContent(
-          lastMsg.content,
-          normalizedContent,
-        );
+        lastMsg.content = args.mergeAnthropicContent(lastMsg.content, normalizedContent);
       } else {
         anthropicMessages.push({ role: msg.role, content: normalizedContent });
       }
@@ -355,10 +333,7 @@ export async function sendAnthropicMessages(args: {
           { strict: useStrict },
         ),
       };
-      if (
-        args.options.enablePromptCaching &&
-        index === anthropicToolPlan.lastStablePrefixIndex
-      ) {
+      if (args.options.enablePromptCaching && index === anthropicToolPlan.lastStablePrefixIndex) {
         base.cache_control = args.anthropicEphemeralCacheControl;
       }
       if (useStrict) base.strict = true;
@@ -374,8 +349,9 @@ export async function sendAnthropicMessages(args: {
     body.cache_control = args.anthropicEphemeralCacheControl;
     const automaticCacheBreakpointCount = 1;
     const systemCacheBreakpointCount = Array.isArray(body.system)
-      ? body.system.filter((block: unknown) => isPlainRecord(block) && isPlainRecord(block.cache_control))
-          .length
+      ? body.system.filter(
+          (block: unknown) => isPlainRecord(block) && isPlainRecord(block.cache_control),
+        ).length
       : 0;
     const breakpointsAvailable = Math.max(
       0,
@@ -459,9 +435,8 @@ export async function sendAnthropicMessages(args: {
   const providerReplay =
     assistantBlocks.length > 0 ? { anthropicBlocks: assistantBlocks } : undefined;
   const contentText =
-    json.content?.map((content: any) =>
-      content.type === 'text' ? content.text : '',
-    ).join('') || '';
+    json.content?.map((content: any) => (content.type === 'text' ? content.text : '')).join('') ||
+    '';
   const outputParsed = tryParseJson(contentText);
 
   const normalizedResponse = {

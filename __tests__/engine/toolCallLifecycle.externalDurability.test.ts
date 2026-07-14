@@ -2,6 +2,7 @@ import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCal
 import { executeTool } from '../../src/engine/tools';
 import { observeExternalToolResultDurability } from '../../src/services/executionJournal/externalToolDurabilityLifecycle';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
+import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 
 jest.mock('../../src/services/events/bus', () => ({ emitAgentEvent: jest.fn() }));
 jest.mock('../../src/engine/tools', () => ({ executeTool: jest.fn() }));
@@ -74,7 +75,7 @@ describe('tool call external durability boundary', () => {
       mode: 'eas-workflow',
       workflowRun: { id: 'workflow-1', status: 'NEW' },
     });
-    mockedExecuteTool.mockResolvedValueOnce(rawResult);
+    mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome(rawResult));
     mockedObserveDurability.mockResolvedValueOnce({
       kind: 'persisted',
       observation: {
@@ -108,10 +109,12 @@ describe('tool call external durability boundary', () => {
 
   it('returns a no-retry failure when a launched run cannot be journaled', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({
-        mode: 'github-workflow',
-        workflowRun: { id: 12345, status: 'queued' },
-      }),
+      completedToolOutcome(
+        JSON.stringify({
+          mode: 'github-workflow',
+          workflowRun: { id: 12345, status: 'queued' },
+        }),
+      ),
     );
     mockedObserveDurability.mockResolvedValueOnce({
       kind: 'persistence_failed',
@@ -126,9 +129,9 @@ describe('tool call external durability boundary', () => {
     expect(result.toolMessage.content).toContain('github workflow 12345');
   });
 
-  it('does not classify provider-declared error results as durable launches', async () => {
+  it('does not observe executor-declared failures as durable launches', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({ status: 'error', error: 'dispatch rejected' }),
+      failedToolOutcome(JSON.stringify({ status: 'error', error: 'dispatch rejected' })),
     );
 
     const result = await executeToolCallLifecycle(lifecycle());

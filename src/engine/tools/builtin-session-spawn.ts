@@ -42,6 +42,11 @@ import {
   resolveCodeOwnedMemoryPersonaId,
 } from '../../services/memory/memoryScopeIdentity';
 import { buildLeastPrivilegeWorkerMemoryBundle } from '../../services/agents/workerMemoryBundle';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 function selectExactSubAgentSession<T extends { sessionId?: string }>(
   session: T | undefined,
@@ -83,7 +88,7 @@ export async function executeSessionSpawn(
     ToolExecutionContext,
     'controlGraphGoals' | 'agentRunId' | 'memoryConversationId'
   >,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   try {
     const exactConversationId = requireExactDurableScopeId(
       conversationId,
@@ -91,7 +96,7 @@ export async function executeSessionSpawn(
     );
     const normalizedPrompt = normalizeDelegatedWorkerPrompt(args);
     if (!normalizedPrompt.value) {
-      return JSON.stringify({ status: 'error', error: normalizedPrompt.error });
+      return failedToolOutcome(JSON.stringify({ status: 'error', error: normalizedPrompt.error }));
     }
 
     const prompt = normalizedPrompt.value;
@@ -161,7 +166,7 @@ export async function executeSessionSpawn(
       parentGoals: executionContext?.controlGraphGoals,
     });
     if (launchPlan.status !== 'ready') {
-      return JSON.stringify(launchPlan.response);
+      return failedToolOutcome(JSON.stringify(launchPlan.response));
     }
 
     const { activeRun, spawnGate } = launchPlan;
@@ -230,38 +235,45 @@ export async function executeSessionSpawn(
 
       if (raceResult === null) {
         observeBackgroundSubAgentResult(started, { announce: true });
-        return JSON.stringify({
-          status: 'running',
-          sessionId: started.sessionId,
-          depth: started.depth,
-          name: sanitizedName,
-          ...(spawnGate.workstreamId ? { workstreamId: spawnGate.workstreamId } : {}),
-          model: config.model || provider.model,
-          waitTimedOut: true,
-          waitTimeoutMs,
-          ...(waitWindow.usedDefault ? { usedDefaultWaitTimeout: true } : {}),
-          guidance:
-            'The worker is still running. Call sessions_wait if you need to keep blocking, or continue with other non-overlapping work until it completes.',
-        });
+        return completedToolOutcome(
+          JSON.stringify({
+            status: 'running',
+            sessionId: started.sessionId,
+            depth: started.depth,
+            name: sanitizedName,
+            ...(spawnGate.workstreamId ? { workstreamId: spawnGate.workstreamId } : {}),
+            model: config.model || provider.model,
+            waitTimedOut: true,
+            waitTimeoutMs,
+            ...(waitWindow.usedDefault ? { usedDefaultWaitTimeout: true } : {}),
+            guidance:
+              'The worker is still running. Call sessions_wait if you need to keep blocking, or continue with other non-overlapping work until it completes.',
+          }),
+        );
       }
 
-      return JSON.stringify({
+      const terminalContent = JSON.stringify({
         ...serializeTerminalSessionResult(raceResult),
         ...(spawnGate.workstreamId ? { workstreamId: spawnGate.workstreamId } : {}),
       });
+      return raceResult.status === 'completed'
+        ? completedToolOutcome(terminalContent)
+        : failedToolOutcome(terminalContent);
     }
 
     const launched = await launchSubAgent(config, provider, allProviders);
-    return JSON.stringify({
-      status: launched.status,
-      sessionId: launched.sessionId,
-      depth: launched.depth,
-      name: sanitizedName,
-      ...(spawnGate.workstreamId ? { workstreamId: spawnGate.workstreamId } : {}),
-      model: config.model || provider.model,
-      guidance:
-        'The worker is running in the background. Use sessions_wait when you need the final output, or continue with other non-overlapping work until it completes.',
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        status: launched.status,
+        sessionId: launched.sessionId,
+        depth: launched.depth,
+        name: sanitizedName,
+        ...(spawnGate.workstreamId ? { workstreamId: spawnGate.workstreamId } : {}),
+        model: config.model || provider.model,
+        guidance:
+          'The worker is running in the background. Use sessions_wait when you need the final output, or continue with other non-overlapping work until it completes.',
+      }),
+    );
   } catch (err: unknown) {
     let message: string;
     let errorClass = 'unknown';
@@ -276,11 +288,13 @@ export async function executeSessionSpawn(
       errorClass = err instanceof Error ? err.name || 'error' : typeof err;
       message = err instanceof Error ? err.message : String(err);
     }
-    return JSON.stringify({
-      status: 'error',
-      code: 'session_spawn_error',
-      errorClass,
-      error: message,
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        code: 'session_spawn_error',
+        errorClass,
+        error: message,
+      }),
+    );
   }
 }

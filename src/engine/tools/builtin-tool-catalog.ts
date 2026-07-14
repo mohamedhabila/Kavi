@@ -24,6 +24,11 @@ import type {
 } from './builtin-tool-catalogTypes';
 import { TOOL_DEFINITIONS } from './definitions';
 import { ALL_NATIVE_TOOL_DEFINITIONS } from './native/definitions';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 function hasCatalogSearchArgs(args: ExecuteToolCatalogArgs): boolean {
   const query = typeof args.query === 'string' ? args.query.trim() : '';
@@ -107,7 +112,7 @@ function getGithubCapabilityTools(options: {
 export async function executeToolCatalog(
   args: ExecuteToolCatalogArgs,
   options?: ExecuteToolCatalogOptions,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const availableToolNames = options?.availableToolNames;
   const visibleToolNames = options?.visibleToolNames;
   const staticVisibleTools = [...TOOL_DEFINITIONS, ...ALL_NATIVE_TOOL_DEFINITIONS].filter(
@@ -128,12 +133,14 @@ export async function executeToolCatalog(
   });
 
   if (hasCatalogSearchArgs(args)) {
-    return buildToolCatalogSearchResponse({
-      query: args.query,
-      capabilities: args.capabilities,
-      category: requestedCategory,
-      options: { availableToolNames, visibleToolNames },
-    });
+    return completedToolOutcome(
+      buildToolCatalogSearchResponse({
+        query: args.query,
+        capabilities: args.capabilities,
+        category: requestedCategory,
+        options: { availableToolNames, visibleToolNames },
+      }),
+    );
   }
 
   if (
@@ -142,35 +149,43 @@ export async function executeToolCatalog(
     requestedCategory !== 'mcp' &&
     requestedCategory !== 'skills'
   ) {
-    return buildToolCatalogInvalidCategoryResponse(args.category);
+    return failedToolOutcome(buildToolCatalogInvalidCategoryResponse(args.category));
   }
 
   if (requestedCategory === 'mcp') {
-    return buildToolCatalogMcpCategoryResponse({ mcpCatalog, availableToolNames });
+    return completedToolOutcome(
+      buildToolCatalogMcpCategoryResponse({ mcpCatalog, availableToolNames }),
+    );
   }
 
   if (requestedCategory === 'skills') {
-    return buildToolCatalogSkillsCategoryResponse({ skillCatalog, availableToolNames });
+    return completedToolOutcome(
+      buildToolCatalogSkillsCategoryResponse({ skillCatalog, availableToolNames }),
+    );
   }
 
   if (requestedCategory === 'github') {
-    return buildToolCatalogGithubCategoryResponse({ githubCapabilityTools });
+    return completedToolOutcome(buildToolCatalogGithubCategoryResponse({ githubCapabilityTools }));
   }
 
   if (requestedCategory) {
-    return buildToolCatalogStaticCategoryResponse({
-      requestedCategory,
-      staticToolMap,
-      availableToolNames,
-    });
+    return completedToolOutcome(
+      buildToolCatalogStaticCategoryResponse({
+        requestedCategory,
+        staticToolMap,
+        availableToolNames,
+      }),
+    );
   }
 
-  return buildToolCatalogOverviewResponse({
-    staticToolMap,
-    availableToolNames,
-    staticVisibleToolCount: staticVisibleTools.length,
-    mcpCatalog,
-    skillCatalog,
-    githubCapabilityTools,
-  });
+  return completedToolOutcome(
+    buildToolCatalogOverviewResponse({
+      staticToolMap,
+      availableToolNames,
+      staticVisibleToolCount: staticVisibleTools.length,
+      mcpCatalog,
+      skillCatalog,
+      githubCapabilityTools,
+    }),
+  );
 }

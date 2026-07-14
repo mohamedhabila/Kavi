@@ -3,7 +3,7 @@ import {
   setupToolDispatcherHarness,
   type ToolDispatcherHarness,
 } from '../helpers/toolDispatcherHarness';
-import { isToolResultErrorLike } from '../../src/utils/toolResultErrors';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 
 let executeTool: ToolDispatcherHarness['executeToolInner'];
 let builtinMod: ToolDispatcherHarness['builtinMod'];
@@ -18,8 +18,9 @@ let mockGetJob: ToolDispatcherHarness['mockGetJob'];
 let mockExecutePython: ToolDispatcherHarness['mockExecutePython'];
 let mockRecordAgentRunEvidence: ToolDispatcherHarness['mockRecordAgentRunEvidence'];
 
-function expectCompletedExecution(result: string, output: string): void {
-  expect(JSON.parse(result)).toEqual(
+function expectCompletedExecution(result: ToolRuntimeOutcome, output: string): void {
+  expect(result.status).toBe('completed');
+  expect(JSON.parse(result.content)).toEqual(
     expect.objectContaining({
       status: 'completed',
       workspaceMutationState: 'none_observed',
@@ -48,7 +49,7 @@ describe('executeToolInner — raw core tools routing', () => {
   it('routes memory_search with the shared conversation scope', async () => {
     const result = await executeTool('memory_search', '{"query":"state"}', CONV_ID);
 
-    expect(result).toBe(JSON.stringify({ status: 'ok' }));
+    expect(result).toEqual({ status: 'completed', content: JSON.stringify({ status: 'ok' }) });
     expect(builtinMod.executeMemorySearch).toHaveBeenCalledWith(
       { query: 'state' },
       {
@@ -83,7 +84,8 @@ describe('executeToolInner — raw core tools routing', () => {
     );
     expect(mockRecordAgentRunEvidence).not.toHaveBeenCalled();
 
-    expect(JSON.parse(result)).toEqual(
+    expect(result.status).toBe('completed');
+    expect(JSON.parse(result.content)).toEqual(
       expect.objectContaining({
         status: 'completed',
         fileCount: 1,
@@ -94,7 +96,7 @@ describe('executeToolInner — raw core tools routing', () => {
   it('handles invalid JSON args gracefully', async () => {
     const result = await executeTool('read_file', '{invalid json', CONV_ID);
     // Robust arg parsing falls back to {} — tool runs with no args
-    expect(typeof result).toBe('string');
+    expect(result.status).toBe('failed');
   });
 
   it('routes cron create', async () => {
@@ -103,18 +105,19 @@ describe('executeToolInner — raw core tools routing', () => {
       '{"action":"create","schedule":"0 * * * *","prompt":"test"}',
       CONV_ID,
     );
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
+    expect(result.status).toBe('completed');
     expect(parsed.status).toBe('task_created');
     expect(parsed.id).toBe('job-1');
   });
 
   it('validates cron create arguments and preserves name and timezone', async () => {
     const invalid = await executeTool('cron', '{"action":"create"}', CONV_ID);
-    expect(JSON.parse(invalid)).toMatchObject({
+    expect(JSON.parse(invalid.content)).toMatchObject({
       status: 'error',
       code: 'invalid_scheduled_job',
     });
-    expect(isToolResultErrorLike(invalid)).toBe(true);
+    expect(invalid.status).toBe('failed');
 
     await executeTool(
       'cron',
@@ -156,7 +159,8 @@ describe('executeToolInner — raw core tools routing', () => {
       CONV_ID,
     );
 
-    expect(JSON.parse(result)).toMatchObject({ status: 'updated', id: 'job-1' });
+    expect(result.status).toBe('completed');
+    expect(JSON.parse(result.content)).toMatchObject({ status: 'updated', id: 'job-1' });
     expect(mockUpdateScheduledJob).toHaveBeenCalledWith('job-1', {
       name: 'Updated briefing',
       schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
@@ -178,7 +182,7 @@ describe('executeToolInner — raw core tools routing', () => {
       },
     ] as any);
     const result = await executeTool('cron', '{"action":"list"}', CONV_ID);
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
     expect(parsed.jobs[0]).toMatchObject({
       id: 'job-1',
       mode: 'agentic',
@@ -191,37 +195,40 @@ describe('executeToolInner — raw core tools routing', () => {
 
   it('routes cron delete', async () => {
     const result = await executeTool('cron', '{"action":"delete","id":"job-1"}', CONV_ID);
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('deleted');
   });
 
   it('refuses to delete a running scheduled job claim', async () => {
     mockDeleteScheduledJob.mockResolvedValueOnce('busy');
     const result = await executeTool('cron', '{"action":"delete","id":"job-1"}', CONV_ID);
-    expect(result).toBe('Error: scheduled job is currently running: job-1');
+    expect(result).toEqual({
+      status: 'failed',
+      content: 'Error: scheduled job is currently running: job-1',
+    });
   });
 
   it('routes cron enable', async () => {
     const result = await executeTool('cron', '{"action":"enable","id":"job-1"}', CONV_ID);
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('enabled');
   });
 
   it('routes cron disable', async () => {
     const result = await executeTool('cron', '{"action":"disable","id":"job-1"}', CONV_ID);
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('disabled');
   });
 
   it('does not report success for an unknown cron enable target', async () => {
     mockSetScheduledJobEnabled.mockResolvedValueOnce({ status: 'not_found' });
     const result = await executeTool('cron', '{"action":"enable","id":"missing"}', CONV_ID);
-    expect(result).toBe('Error: job not found: missing');
+    expect(result).toEqual({ status: 'failed', content: 'Error: job not found: missing' });
   });
 
   it('routes cron run', async () => {
     const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('succeeded');
     expect(mockRunJobNow).toHaveBeenCalledWith('job-1', { trigger: 'manual' });
   });
@@ -234,13 +241,13 @@ describe('executeToolInner — raw core tools routing', () => {
       error: 'provider unavailable',
     });
     const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
-    expect(JSON.parse(result)).toMatchObject({
+    expect(JSON.parse(result.content)).toMatchObject({
       status: 'error',
       code: 'scheduled_job_failed',
       error: 'provider unavailable',
       id: 'job-1',
     });
-    expect(isToolResultErrorLike(result)).toBe(true);
+    expect(result.status).toBe('failed');
   });
 
   it('marks a scheduled cron retry as incomplete error-like evidence', async () => {
@@ -251,12 +258,12 @@ describe('executeToolInner — raw core tools routing', () => {
       error: 'temporary provider failure',
     });
     const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
-    expect(JSON.parse(result)).toMatchObject({
+    expect(JSON.parse(result.content)).toMatchObject({
       status: 'error',
       code: 'scheduled_job_retrying',
       retryScheduled: true,
     });
-    expect(isToolResultErrorLike(result)).toBe(true);
+    expect(result.status).toBe('failed');
   });
 
   it('marks an already-running manual cron request as incomplete evidence', async () => {
@@ -267,21 +274,22 @@ describe('executeToolInner — raw core tools routing', () => {
       error: 'The scheduled job already has an active execution.',
     });
     const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
-    expect(JSON.parse(result)).toMatchObject({
+    expect(JSON.parse(result.content)).toMatchObject({
       status: 'error',
       code: 'scheduled_job_busy',
     });
-    expect(isToolResultErrorLike(result)).toBe(true);
+    expect(result.status).toBe('failed');
   });
 
   it('handles cron unknown action', async () => {
     const result = await executeTool('cron', '{"action":"bogus"}', CONV_ID);
-    expect(result).toContain('unknown cron action');
+    expect(result.status).toBe('failed');
+    expect(result.content).toContain('unknown cron action');
   });
 
   it('routes notify', async () => {
     const result = await executeTool('notification_send', '{"title":"hi","body":"there"}', CONV_ID);
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('notification_accepted');
     expect(executeNativeTool).toHaveBeenCalledWith(
       'notification_send',
@@ -292,7 +300,8 @@ describe('executeToolInner — raw core tools routing', () => {
 
   it('returns error for unknown tool', async () => {
     const result = await executeTool('nonexistent_tool', '{}', CONV_ID);
-    expect(result).toContain('unknown tool');
+    expect(result.status).toBe('failed');
+    expect(result.content).toContain('unknown tool');
   });
 
   it('routes javascript', async () => {

@@ -28,6 +28,7 @@ import {
 import { executeToolCatalog } from './builtin-tool-catalog';
 import { executeToolDescribe } from './builtin-tool-describe';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
+import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export const BUILTIN_REMOTE_TOOL_NAMES = new Set([
   'ssh_exec',
@@ -58,7 +59,7 @@ export const BUILTIN_REMOTE_TOOL_NAMES = new Set([
 
 export async function executeBuiltinRemoteTool(
   params: BuiltinToolExecutionParams,
-): Promise<string | null> {
+): Promise<ToolRuntimeOutcome | null> {
   const { name, args, context } = params;
 
   switch (name) {
@@ -90,7 +91,9 @@ export async function executeBuiltinRemoteTool(
         case 'make_directory':
           return executeSshMakeDirectory(args);
         default:
-          return 'Error: ssh_fs requires action ∈ {list, read, write, rename, delete, mkdir}';
+          return failedToolOutcome(
+            'Error: ssh_fs requires action ∈ {list, read, write, rename, delete, mkdir}',
+          );
       }
     }
     case 'ssh_list_directory':

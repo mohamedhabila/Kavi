@@ -8,6 +8,11 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentGoalMutation } from '../goals/types';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 import { normalizeGoalCompletionPolicy, type AgentGoalStatus } from '../goals/types';
 
 const ALLOWED_UPDATE_GOALS_ROOT_FIELDS = new Set([
@@ -268,10 +273,11 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   return { mutation, errors: [] };
 }
 
-export function executeUpdateGoals(args: Record<string, unknown>): string {
+export function executeUpdateGoals(args: Record<string, unknown>): ToolRuntimeOutcome {
   const parsed = parseUpdateGoalsArgs(args);
-  return buildUpdateGoalsResult({
+  const content = buildUpdateGoalsResult({
     mutation: parsed.mutation,
     validationErrors: parsed.errors,
   });
+  return parsed.errors.length > 0 ? failedToolOutcome(content) : completedToolOutcome(content);
 }

@@ -1,4 +1,5 @@
 import type { E2ENativeMobileFixtureStateSnapshot } from './e2eNativeMobileFixtures';
+import type { E2ENativeMobileOutcome } from './e2eNativeMobileOutcome';
 
 export type E2ENativeMobileInvocationSnapshot = {
   sequence: number;
@@ -12,13 +13,13 @@ export type E2ENativeMobileInvocationSnapshot = {
 
 let invocationSnapshots: E2ENativeMobileInvocationSnapshot[] = [];
 
-function classifyResult(result: string | null): {
+function classifyResult(result: E2ENativeMobileOutcome | null): {
   resultStatus: string | null;
   errorClass: string | null;
 } {
   if (result === null) return { resultStatus: null, errorClass: null };
   try {
-    const parsed = JSON.parse(result) as unknown;
+    const parsed = JSON.parse(result.content) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return {
         resultStatus: Array.isArray(parsed) ? 'result_array' : 'result_value',
@@ -27,11 +28,10 @@ function classifyResult(result: string | null): {
     }
     const record = parsed as Record<string, unknown>;
     const resultStatus = typeof record.status === 'string' ? record.status : 'result_object';
-    const isErrorStatus = /error|denied|not_found/.test(resultStatus);
     const errorClass =
-      typeof record.code === 'string' && (typeof record.error === 'string' || isErrorStatus)
+      result.status === 'failed' && typeof record.code === 'string'
         ? record.code
-        : typeof record.error === 'string'
+        : result.status === 'failed'
           ? 'tool_error'
           : null;
     return { resultStatus, errorClass };
@@ -50,7 +50,7 @@ export function getE2ENativeMobileInvocationSnapshots(): E2ENativeMobileInvocati
 
 export function recordE2ENativeMobileInvocation(params: {
   toolName: string;
-  result: string | null;
+  result: E2ENativeMobileOutcome | null;
   stateBefore: E2ENativeMobileFixtureStateSnapshot;
   stateAfter: E2ENativeMobileFixtureStateSnapshot;
 }): void {

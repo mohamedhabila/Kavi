@@ -7,13 +7,20 @@ import {
   prepareJavaScriptWorkspaceExecution,
 } from './toolWorkspaceSnapshots';
 import { sanitizeToolWorkspacePath } from './toolWorkspaceFiles';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 function javascriptFailure(
   error: string,
   output?: string,
   failureKind: 'execution_failed' | 'workspace_persistence_failed' = 'execution_failed',
-): string {
-  return normalizeJavaScriptToolResult({ success: false, error, output, failureKind });
+): ToolRuntimeOutcome {
+  return failedToolOutcome(
+    normalizeJavaScriptToolResult({ success: false, error, output, failureKind }),
+  );
 }
 
 function diffJavaScriptWorkspaceFiles(
@@ -92,7 +99,7 @@ export async function executeJavascript(
   },
   conversationId: string,
   fallbackConversationId?: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   try {
     const rawArgs = args as Record<string, unknown>;
     const codeArg = getOptionalToolStringArg(rawArgs, 'code', 'javascript');
@@ -173,12 +180,14 @@ export async function executeJavascript(
       }
     }
 
-    return normalizeJavaScriptToolResult({
-      success: true,
-      output,
-      files: changedFiles,
-      deletedPaths,
-    });
+    return completedToolOutcome(
+      normalizeJavaScriptToolResult({
+        success: true,
+        output,
+        files: changedFiles,
+        deletedPaths,
+      }),
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return javascriptFailure(message);

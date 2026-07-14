@@ -2,13 +2,14 @@ import { executeBuiltinAgentTool, BUILTIN_AGENT_TOOL_NAMES } from './toolBuiltin
 import { executeBuiltinCanvasTool, BUILTIN_CANVAS_TOOL_NAMES } from './toolBuiltinCanvasExecution';
 import { executeBuiltinMemoryTool, BUILTIN_MEMORY_TOOL_NAMES } from './toolBuiltinMemoryExecution';
 import { executeBuiltinRemoteTool, BUILTIN_REMOTE_TOOL_NAMES } from './toolBuiltinRemoteExecution';
-import { executeBuiltinSessionTool, BUILTIN_SESSION_TOOL_NAMES } from './toolBuiltinSessionExecution';
+import {
+  executeBuiltinSessionTool,
+  BUILTIN_SESSION_TOOL_NAMES,
+} from './toolBuiltinSessionExecution';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
+import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
-const BUILTIN_PROVIDER_AWARE_TOOL_NAMES = new Set([
-  'sessions_spawn',
-  'sessions_send',
-]);
+const BUILTIN_PROVIDER_AWARE_TOOL_NAMES = new Set(['sessions_spawn', 'sessions_send']);
 
 export const BUILTIN_TOOL_NAMES = new Set([
   ...BUILTIN_PROVIDER_AWARE_TOOL_NAMES,
@@ -19,14 +20,17 @@ export const BUILTIN_TOOL_NAMES = new Set([
   ...BUILTIN_AGENT_TOOL_NAMES,
 ]);
 
-export async function executeBuiltinTool(params: BuiltinToolExecutionParams): Promise<string> {
-  const handlers = [
-    executeBuiltinCanvasTool,
-    executeBuiltinSessionTool,
-    executeBuiltinMemoryTool,
-    executeBuiltinRemoteTool,
-    executeBuiltinAgentTool,
-  ];
+export async function executeBuiltinTool(
+  params: BuiltinToolExecutionParams,
+): Promise<ToolRuntimeOutcome> {
+  const handlers: Array<(input: BuiltinToolExecutionParams) => Promise<ToolRuntimeOutcome | null>> =
+    [
+      executeBuiltinCanvasTool,
+      executeBuiltinSessionTool,
+      executeBuiltinMemoryTool,
+      executeBuiltinRemoteTool,
+      executeBuiltinAgentTool,
+    ];
 
   for (const handler of handlers) {
     const result = await handler(params);
@@ -35,5 +39,5 @@ export async function executeBuiltinTool(params: BuiltinToolExecutionParams): Pr
     }
   }
 
-  return `Error: unhandled builtin tool "${params.name}"`;
+  return failedToolOutcome(`Error: unhandled builtin tool "${params.name}"`);
 }

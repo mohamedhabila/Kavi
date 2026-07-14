@@ -18,9 +18,13 @@ import {
 import { executeToolInner } from './toolDispatchRouter';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import { buildToolEffectReceipt } from '../toolExecution/toolEffectReceipt';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import { resolveRuntimeExternalToolBinding } from '../toolExecution/runtimeExternalToolBinding';
 import { isCodeOwnedExecutionRunId } from '../../services/executionJournal/executionRunEffectBarrier';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 // ── Central dispatcher ───────────────────────────────────────────────────
 
@@ -70,14 +74,16 @@ export async function executeTool(
   argsString: string,
   conversationId: string,
   context?: ToolExecutionContext,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const normalizedName = resolveRegisteredToolName(name);
 
   // Permission check
   const permissions = useToolPermissionsStore.getState();
   if (!permissions.isAllowed(normalizedName)) {
     logToolCall(normalizedName, argsString, 'denied', 0, conversationId);
-    return `Error: tool "${normalizedName}" is not allowed by your permission settings`;
+    return failedToolOutcome(
+      `Error: tool "${normalizedName}" is not allowed by your permission settings`,
+    );
   }
 
   const isRuntimeExternalNamespace =
@@ -86,7 +92,7 @@ export async function executeTool(
     const result = `Error: unknown tool "${normalizedName}".`;
     finalizeEffectReceiptCapture(context);
     logToolCall(normalizedName, argsString, 'error', 0, conversationId, 'unknown_tool');
-    return result;
+    return failedToolOutcome(result);
   }
 
   let parsedArgs: any;
@@ -110,7 +116,7 @@ export async function executeTool(
       conversationId,
       'execution_run_identity_required',
     );
-    return result;
+    return failedToolOutcome(result);
   }
   if (context?.toolCallId && !isCodeOwnedExecutionRunId(executionRunId)) {
     const result =
@@ -124,7 +130,7 @@ export async function executeTool(
       conversationId,
       'execution_run_identity_required',
     );
-    return result;
+    return failedToolOutcome(result);
   }
   if (!effectFreeInvocation && !context?.toolCallId) {
     const result =
@@ -138,7 +144,7 @@ export async function executeTool(
       conversationId,
       'tool_call_identity_required',
     );
-    return result;
+    return failedToolOutcome(result);
   }
 
   // Approval gate — blocks destructive/sensitive tools until human approves.
@@ -154,7 +160,7 @@ export async function executeTool(
     });
     if (decision !== 'approved') {
       logToolCall(normalizedName, argsString, 'denied', 0, conversationId);
-      return `Error: tool "${normalizedName}" was ${decision} by user approval`;
+      return failedToolOutcome(`Error: tool "${normalizedName}" was ${decision} by user approval`);
     }
   }
 
@@ -186,7 +192,7 @@ export async function executeTool(
       conversationId,
       result,
     );
-    return result;
+    return failedToolOutcome(result);
   }
 
   if (runtimeExternalBinding && !context?.toolCallId) {
@@ -201,7 +207,7 @@ export async function executeTool(
       conversationId,
       'runtime_external_tool_call_identity_required',
     );
-    return result;
+    return failedToolOutcome(result);
   }
 
   if (context?.toolCallId && !effectFreeInvocation) {
@@ -240,16 +246,18 @@ export async function executeTool(
       logToolCall(
         normalizedName,
         argsString,
-        dispatched.executorThrew || dispatched.requiresReconciliation ? 'error' : 'success',
+        dispatched.status === 'failed' || dispatched.requiresReconciliation ? 'error' : 'success',
         Date.now() - startTime,
         conversationId,
         dispatched.requiresReconciliation
           ? 'tool_effect_reconciliation_required'
-          : dispatched.executorThrew
+          : dispatched.status === 'failed'
             ? dispatched.result
             : undefined,
       );
-      return visibleResult;
+      return dispatched.requiresReconciliation || dispatched.status === 'failed'
+        ? failedToolOutcome(visibleResult)
+        : completedToolOutcome(visibleResult);
     } else {
       if (dispatched.kind === 'reconciliation_required') {
         markEffectReconciliationRequired(context);
@@ -263,15 +271,22 @@ export async function executeTool(
         dispatched.result,
       );
     }
-    return dispatched.result;
+    return failedToolOutcome(dispatched.result);
   }
 
-  let result: string;
+  let outcome: ToolRuntimeOutcome;
   try {
-    result = runtimeExternalBinding
+    outcome = runtimeExternalBinding
       ? await runtimeExternalBinding.execute(argsString, conversationId, executorContext)
       : await executeToolInner(normalizedName, argsString, conversationId, executorContext);
-    logToolCall(normalizedName, argsString, 'success', Date.now() - startTime, conversationId);
+    logToolCall(
+      normalizedName,
+      argsString,
+      outcome.status === 'completed' ? 'success' : 'error',
+      Date.now() - startTime,
+      conversationId,
+      outcome.status === 'failed' ? outcome.content : undefined,
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logToolCall(
@@ -282,7 +297,7 @@ export async function executeTool(
       conversationId,
       message,
     );
-    return `Error: ${message}`;
+    return failedToolOutcome(`Error: ${message}`);
   }
   if (context?.toolCallId) {
     if (!isCodeOwnedExecutionRunId(context.executionRunId)) {
@@ -294,9 +309,9 @@ export async function executeTool(
           toolCallId: context.toolCallId,
           toolName: normalizedName,
           argumentsText: argsString,
-          resultText: result,
+          resultText: outcome.content,
           transportState: 'returned',
-          resultIsError: isToolResultErrorLike(result),
+          resultIsError: outcome.status === 'failed',
           executionRunId: context.executionRunId,
           recordedAt: Date.now(),
           runtimeExternalEvidence,
@@ -307,7 +322,7 @@ export async function executeTool(
     }
     finalizeEffectReceiptCapture(context);
   }
-  return result;
+  return outcome;
 }
 
 // ── Tool name normalization ───────────────────────────────────────────────

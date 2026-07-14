@@ -22,7 +22,7 @@ export function createKnowledgeSkill(): Skill {
               { headers: { 'User-Agent': 'KaviMobile/1.0' } },
             );
             if (!res.ok) {
-              return JSON.stringify({ error: `Wikipedia: ${res.status}` });
+              throw new Error(`Wikipedia: ${res.status}`);
             }
             const data = await res.json();
             return JSON.stringify({
@@ -32,7 +32,7 @@ export function createKnowledgeSkill(): Skill {
               url: data.content_urls?.desktop?.page,
             });
           } catch (error: unknown) {
-            return JSON.stringify({ error: error instanceof Error ? error.message : String(error) });
+            throw error instanceof Error ? error : new Error(String(error));
           }
         },
       ),
@@ -49,11 +49,11 @@ export function createKnowledgeSkill(): Skill {
               `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(args.word)}`,
             );
             if (!res.ok) {
-              return JSON.stringify({ error: `Dictionary: ${res.status}` });
+              throw new Error(`Dictionary: ${res.status}`);
             }
             const data = await res.json();
             if (!Array.isArray(data) || data.length === 0) {
-              return JSON.stringify({ error: 'Word not found' });
+              throw new Error('Word not found');
             }
             const entry = data[0];
             return JSON.stringify({
@@ -61,11 +61,13 @@ export function createKnowledgeSkill(): Skill {
               phonetic: entry.phonetic,
               meanings: entry.meanings?.slice(0, 3).map((meaning: any) => ({
                 partOfSpeech: meaning.partOfSpeech,
-                definitions: meaning.definitions?.slice(0, 2).map((definition: any) => definition.definition),
+                definitions: meaning.definitions
+                  ?.slice(0, 2)
+                  .map((definition: any) => definition.definition),
               })),
             });
           } catch (error: unknown) {
-            return JSON.stringify({ error: error instanceof Error ? error.message : String(error) });
+            throw error instanceof Error ? error : new Error(String(error));
           }
         },
       ),

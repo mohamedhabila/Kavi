@@ -13,6 +13,11 @@ import {
   startRemoteJob,
   updateRemoteJob,
 } from '../remote/store';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 export interface McpToolEntry {
   serverId: string;
@@ -93,34 +98,36 @@ export async function executeMcpTool(
   fullToolName: string,
   argsString: string,
   options?: McpToolExecutionOptions,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const parsed = parseMcpToolName(fullToolName);
   if (!parsed) {
-    return `Error: invalid MCP tool name: ${fullToolName}`;
+    return failedToolOutcome(`Error: invalid MCP tool name: ${fullToolName}`);
   }
 
   if (options?.isToolAllowed && !options.isToolAllowed(parsed.serverId, parsed.toolName)) {
-    return `Error: MCP tool "${parsed.toolName}" is not allowed for server "${parsed.serverId}"`;
+    return failedToolOutcome(
+      `Error: MCP tool "${parsed.toolName}" is not allowed for server "${parsed.serverId}"`,
+    );
   }
 
   const client = clients.get(parsed.serverId);
   if (!client) {
-    return `Error: MCP server "${parsed.serverId}" not connected`;
+    return failedToolOutcome(`Error: MCP server "${parsed.serverId}" not connected`);
   }
 
   if (!client.isConnected()) {
-    return `Error: MCP server "${parsed.serverId}" is disconnected`;
+    return failedToolOutcome(`Error: MCP server "${parsed.serverId}" is disconnected`);
   }
 
   let args: Record<string, unknown>;
   try {
     const parsedArgs = JSON.parse(argsString);
     if (!isPlainRecord(parsedArgs)) {
-      return 'Error: MCP tool arguments must be a JSON object';
+      return failedToolOutcome('Error: MCP tool arguments must be a JSON object');
     }
     args = parsedArgs;
   } catch {
-    return 'Error: invalid tool arguments JSON';
+    return failedToolOutcome('Error: invalid tool arguments JSON');
   }
 
   const jobId = startRemoteJob({
@@ -160,7 +167,7 @@ export async function executeMcpTool(
       result.isError ? 'error' : 'closed',
       result.isError ? formatted : undefined,
     );
-    return formatted;
+    return result.isError ? failedToolOutcome(formatted) : completedToolOutcome(formatted);
   } catch (err: unknown) {
     const message = `Error calling MCP tool: ${err instanceof Error ? err.message : String(err)}`;
     updateRemoteJob(jobId, {
@@ -174,6 +181,6 @@ export async function executeMcpTool(
       value: message,
     });
     closeRemoteSession(sessionId, 'error', message);
-    return message;
+    return failedToolOutcome(message);
   }
 }

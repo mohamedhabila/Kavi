@@ -20,7 +20,8 @@ beforeEach(() => {
 describe('executeToolInner — raw media and session routing', () => {
   it('routes image_generate', async () => {
     const result = await executeTool('image_generate', '{"prompt":"cat"}', CONV_ID);
-    const parsed = JSON.parse(result);
+    expect(result.status).toBe('completed');
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('generated');
     expect(parsed.fileUri).toBe('file:///mock/cache/generated.png');
     expect(generateImage).toHaveBeenCalledWith(
@@ -34,7 +35,8 @@ describe('executeToolInner — raw media and session routing', () => {
       new Error('Anthropic does not support image generation'),
     );
     const result = await executeTool('image_generate', '{"prompt":"cat"}', CONV_ID);
-    const parsed = JSON.parse(result);
+    expect(result.status).toBe('failed');
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('error');
     expect(parsed.message).toContain('Anthropic');
   });
@@ -45,7 +47,8 @@ describe('executeToolInner — raw media and session routing', () => {
       '{"prompt":"Add a teal scarf","imagePath":"assets/cat.png"}',
       CONV_ID,
     );
-    const parsed = JSON.parse(result);
+    expect(result.status).toBe('completed');
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('edited');
     expect(parsed.fileUri).toBe('file:///mock/cache/edited.png');
     expect(editImage).toHaveBeenCalledWith(
@@ -71,7 +74,8 @@ describe('executeToolInner — raw media and session routing', () => {
       '{"prompt":"Add a teal scarf","imagePath":"assets/cat.png"}',
       CONV_ID,
     );
-    const parsed = JSON.parse(result);
+    expect(result.status).toBe('failed');
+    const parsed = JSON.parse(result.content);
     expect(parsed.status).toBe('error');
     expect(parsed.message).toContain('requires at least one input image');
   });

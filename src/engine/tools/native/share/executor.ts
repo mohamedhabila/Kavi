@@ -1,6 +1,10 @@
 import { executeStructuredNativeAction } from '../structuredAction';
+import type { ToolRuntimeOutcome } from '../../../../types/toolRuntimeOutcome';
 
-export async function executeShareText(args: { text: string; title?: string }): Promise<string> {
+export async function executeShareText(args: {
+  text: string;
+  title?: string;
+}): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('share_text', args as Record<string, unknown>);
 }
 
@@ -8,7 +12,7 @@ export async function executeShareUrl(args: {
   url: string;
   message?: string;
   title?: string;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('share_url', args as Record<string, unknown>);
 }
 
@@ -17,10 +21,13 @@ export async function executeShareFile(args: {
   mimeType?: string;
   dialogTitle?: string;
   uti?: string;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('share_file', args as Record<string, unknown>);
 }
 
-export async function executeShareContact(args: { id: string; message?: string }): Promise<string> {
+export async function executeShareContact(args: {
+  id: string;
+  message?: string;
+}): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('share_contact', args as Record<string, unknown>);
 }

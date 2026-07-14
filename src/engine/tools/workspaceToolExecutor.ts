@@ -7,6 +7,11 @@ import {
 } from '../../services/workspaces/control';
 import type { WorkspaceTargetConfig } from '../../types/remote';
 import { getOptionalToolStringArg, requireToolStringArg } from './fileArgumentUtils';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 function resolveWorkspaceTarget(targetId: string): WorkspaceTargetConfig {
   const targets: WorkspaceTargetConfig[] = useSettingsStore.getState().workspaceTargets || [];
@@ -15,12 +20,12 @@ function resolveWorkspaceTarget(targetId: string): WorkspaceTargetConfig {
   return target;
 }
 
-export async function executeWorkspaceTool(name: string, args: any): Promise<string> {
+export async function executeWorkspaceTool(name: string, args: any): Promise<ToolRuntimeOutcome> {
   const rawArgs = args as Record<string, unknown>;
 
   if (name === 'workspace_status') {
     const targetIdArg = getOptionalToolStringArg(rawArgs, 'targetId', name);
-    if (targetIdArg.error) return targetIdArg.error;
+    if (targetIdArg.error) return failedToolOutcome(targetIdArg.error);
 
     const settings = useSettingsStore.getState();
     const targets = targetIdArg.value
@@ -28,46 +33,52 @@ export async function executeWorkspaceTool(name: string, args: any): Promise<str
       : settings.workspaceTargets || [];
     const statuses = targets.map((target) => getWorkspaceTargetControlStatus(target, settings));
 
-    return JSON.stringify({
-      summary: targetIdArg.value
-        ? statuses[0]?.summary || 'Workspace target not found.'
-        : statuses.length > 0
-          ? `Found ${statuses.length} configured workspace targets.`
-          : 'No configured workspace targets.',
-      targets: statuses,
-    });
+    return completedToolOutcome(
+      JSON.stringify({
+        summary: targetIdArg.value
+          ? statuses[0]?.summary || 'Workspace target not found.'
+          : statuses.length > 0
+            ? `Found ${statuses.length} configured workspace targets.`
+            : 'No configured workspace targets.',
+        targets: statuses,
+      }),
+    );
   }
 
   const targetIdArg = requireToolStringArg(rawArgs, 'targetId', name);
-  if (targetIdArg.error) return targetIdArg.error;
+  if (targetIdArg.error) return failedToolOutcome(targetIdArg.error);
 
   const target = resolveWorkspaceTarget(targetIdArg.value!);
 
   switch (name) {
     case 'workspace_launch_browser': {
       const providerIdArg = getOptionalToolStringArg(rawArgs, 'providerId', name);
-      if (providerIdArg.error) return providerIdArg.error;
+      if (providerIdArg.error) return failedToolOutcome(providerIdArg.error);
       const result = await launchWorkspaceBrowserSession(target, {
         providerId: providerIdArg.value,
         settings: useSettingsStore.getState(),
       });
-      return JSON.stringify({
-        summary: `Workspace browser session launched for ${target.name}.`,
-        targetId: target.id,
-        sessionId: result.sessionId,
-        providerId: result.providerId,
-        url: result.url,
-      });
+      return completedToolOutcome(
+        JSON.stringify({
+          summary: `Workspace browser session launched for ${target.name}.`,
+          targetId: target.id,
+          sessionId: result.sessionId,
+          providerId: result.providerId,
+          url: result.url,
+        }),
+      );
     }
     case 'workspace_delegate_task': {
       const promptArg = requireToolStringArg(rawArgs, 'prompt', name);
-      if (promptArg.error) return promptArg.error;
+      if (promptArg.error) return failedToolOutcome(promptArg.error);
       const modeArg = getOptionalToolStringArg(rawArgs, 'mode', name);
-      if (modeArg.error) return modeArg.error;
+      if (modeArg.error) return failedToolOutcome(modeArg.error);
 
       const mode = (modeArg.value || 'agent') as WorkspaceDelegationMode;
       if (!['agent', 'plan', 'ask'].includes(mode)) {
-        return 'Error: "mode" for workspace_delegate_task must be one of "agent", "plan", or "ask".';
+        return failedToolOutcome(
+          'Error: "mode" for workspace_delegate_task must be one of "agent", "plan", or "ask".',
+        );
       }
 
       const result = await delegateWorkspaceTask(target, promptArg.value!, {
@@ -77,18 +88,20 @@ export async function executeWorkspaceTool(name: string, args: any): Promise<str
       const outputPreview =
         result.output.length > 4000 ? `${result.output.slice(0, 4000)}...` : result.output;
 
-      return JSON.stringify({
-        summary: `Delegated task to ${target.name} via ${result.providerLabel}.`,
-        targetId: result.targetId,
-        sshTargetId: result.sshTargetId,
-        mode: result.mode,
-        commandPreview: result.command.slice(0, 240),
-        output: outputPreview,
-        outputChars: result.output.length,
-        truncated: outputPreview.length !== result.output.length,
-      });
+      return completedToolOutcome(
+        JSON.stringify({
+          summary: `Delegated task to ${target.name} via ${result.providerLabel}.`,
+          targetId: result.targetId,
+          sshTargetId: result.sshTargetId,
+          mode: result.mode,
+          commandPreview: result.command.slice(0, 240),
+          output: outputPreview,
+          outputChars: result.output.length,
+          truncated: outputPreview.length !== result.output.length,
+        }),
+      );
     }
     default:
-      return `Error: unhandled workspace tool "${name}"`;
+      return failedToolOutcome(`Error: unhandled workspace tool "${name}"`);
   }
 }

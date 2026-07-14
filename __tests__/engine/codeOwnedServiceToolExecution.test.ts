@@ -7,6 +7,7 @@ import { executeTool } from '../../src/engine/tools';
 import { registerBuiltInServiceSkills } from '../../src/services/integrations/registry';
 import { getSkillToolDefinitions, unregisterSkill } from '../../src/services/skills/manager';
 import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 
 const CODE_OWNED_SKILL_IDS = [
   'communication',
@@ -22,7 +23,7 @@ const mockFetch = jest.fn();
 async function executeCodeOwnedServiceTool(
   name: string,
   args: Record<string, unknown>,
-): Promise<{ result: string; receipt: ToolEffectReceipt }> {
+): Promise<{ result: ToolRuntimeOutcome; receipt: ToolEffectReceipt }> {
   const declaration = getSkillToolDefinitions().find((tool) => tool.name === name);
   if (!declaration) throw new Error(`Missing declaration: ${name}`);
   let receipt: ToolEffectReceipt | undefined;
@@ -105,7 +106,8 @@ describe('code-owned service tool execution', () => {
     });
 
     for (const execution of [weather, finance, communication]) {
-      expect(JSON.parse(execution.result)).not.toHaveProperty(
+      expect(execution.result.status).toBe('completed');
+      expect(JSON.parse(execution.result.content)).not.toHaveProperty(
         'code',
         'tool_effect_reconciliation_required',
       );

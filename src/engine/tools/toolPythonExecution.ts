@@ -8,6 +8,11 @@ import {
   preparePythonWorkspaceExecution,
 } from './toolWorkspaceSnapshots';
 import { sanitizeToolWorkspacePath } from './toolWorkspaceFiles';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 const MAX_PYTHON_TOOL_TIMEOUT_MS = 15 * 60 * 1000;
 const PYTHON_HTTP_URL_PATTERN = /^https?:\/\/\S+$/i;
@@ -16,8 +21,10 @@ function pythonFailure(
   error: string,
   failureKind: PythonExecutionFailureKind,
   output?: string,
-): string {
-  return normalizePythonToolResult({ success: false, error, failureKind, output });
+): ToolRuntimeOutcome {
+  return failedToolOutcome(
+    normalizePythonToolResult({ success: false, error, failureKind, output }),
+  );
 }
 
 function normalizePythonPackages(value: unknown): { packages?: string[]; error?: string } {
@@ -151,7 +158,7 @@ export async function executePythonTool(
   _conversationId: string,
   workspaceConversationId: string,
   context?: ToolExecutionContext,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   try {
     const rawArgs = args as Record<string, unknown>;
     const codeArg = getOptionalToolStringArg(rawArgs, 'code', 'python');
@@ -264,7 +271,8 @@ export async function executePythonTool(
       }
     }
 
-    return normalizePythonToolResult(result);
+    const content = normalizePythonToolResult(result);
+    return result.success ? completedToolOutcome(content) : failedToolOutcome(content);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return pythonFailure(message, 'runtime_failed');

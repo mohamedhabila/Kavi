@@ -5,6 +5,7 @@ export type NativeActionPlatform = 'android' | 'ios' | 'web' | 'windows' | 'maco
 export interface NativeActionResult<
   TDetails extends Record<string, unknown> | undefined = Record<string, unknown> | undefined,
 > {
+  executionStatus: 'completed' | 'failed';
   status: string;
   summary: string;
   platform: NativeActionPlatform;
@@ -146,6 +147,7 @@ export function makeActionResult<TDetails extends Record<string, unknown> | unde
   code?: string,
 ): NativeActionResult<TDetails> {
   return {
+    executionStatus: 'completed',
     status,
     summary,
     platform: getNativeActionPlatform(),
@@ -160,7 +162,10 @@ export function makeActionFailure(
   details?: Record<string, unknown>,
   status = 'failed',
 ): NativeActionResult<Record<string, unknown>> {
-  return makeActionResult(status, summary, details, code);
+  return {
+    ...makeActionResult(status, summary, details, code),
+    executionStatus: 'failed',
+  };
 }
 
 export function getErrorMessage(error: unknown): string {
@@ -177,11 +182,11 @@ export function errorToNativeActionResult(
   extraDetails?: Record<string, unknown>,
 ): NativeActionResult<Record<string, unknown>> {
   if (error instanceof NativeActionError) {
-    return makeActionResult(
-      error.status,
+    return makeActionFailure(
+      error.code,
       error.message,
       { ...(extraDetails || {}), ...(error.details || {}) },
-      error.code,
+      error.status,
     );
   }
 

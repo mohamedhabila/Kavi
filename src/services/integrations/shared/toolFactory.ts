@@ -1,6 +1,9 @@
 import type { SkillToolDefinition } from '../../skills/types';
+import type { SkillToolExecutionContext } from '../../skills/types';
+import { completedToolOutcome, failedToolOutcome } from '../../../types/toolRuntimeOutcome';
 
 export type SkillToolHandler = NonNullable<SkillToolDefinition['handler']>;
+type SuccessfulApiToolHandler = (args: any, context: SkillToolExecutionContext) => Promise<string>;
 
 type ApiToolOptions = {
   strict?: boolean;
@@ -13,7 +16,7 @@ export function createApiTool(
   description: string,
   properties: Record<string, any>,
   required: string[],
-  handler: SkillToolHandler,
+  handler: SuccessfulApiToolHandler,
   options: ApiToolOptions = {},
 ): SkillToolDefinition {
   return {
@@ -27,6 +30,13 @@ export function createApiTool(
     },
     strict: options.strict,
     contract: options.contract,
-    handler,
+    handler: async (args, context) => {
+      try {
+        return completedToolOutcome(await handler(args, context));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return failedToolOutcome(`Error: ${message}`);
+      }
+    },
   };
 }

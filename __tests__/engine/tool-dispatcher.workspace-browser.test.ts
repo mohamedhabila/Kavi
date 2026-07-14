@@ -27,7 +27,7 @@ describe('executeToolInner — raw workspace and browser routing', () => {
   it('routes workspace_status and summarizes configured targets', async () => {
     const result = await executeTool('workspace_status', '{}', CONV_ID);
 
-    expect(JSON.parse(result)).toMatchObject({
+    expect(JSON.parse(result.content)).toMatchObject({
       summary: 'Found 1 configured workspace targets.',
       targets: [expect.objectContaining({ targetId: 'ws-1', summary: 'Workspace A is ready.' })],
     });
@@ -46,7 +46,7 @@ describe('executeToolInner — raw workspace and browser routing', () => {
       CONV_ID,
     );
 
-    expect(JSON.parse(result)).toMatchObject({
+    expect(JSON.parse(result.content)).toMatchObject({
       summary: 'Workspace browser session launched for Workspace A.',
       targetId: 'ws-1',
       sessionId: 'workspace-browser-session-1',
@@ -62,8 +62,8 @@ describe('executeToolInner — raw workspace and browser routing', () => {
   it('returns a friendly error when workspace_delegate_task prompt is missing', async () => {
     const result = await executeTool('workspace_delegate_task', '{"targetId":"ws-1"}', CONV_ID);
 
-    expect(result).toContain('Error');
-    expect(result).toContain('prompt');
+    expect(result.status).toBe('failed');
+    expect(result.content).toContain('prompt');
     expect(mockDelegateWorkspaceTask).not.toHaveBeenCalled();
   });
 
@@ -80,7 +80,7 @@ describe('executeToolInner — raw workspace and browser routing', () => {
       '{"sessionId":"browser-session-1"}',
       CONV_ID,
     );
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
 
     expect(parsed.summary).toContain('Binary image omitted');
     expect(parsed.targetId).toBe('page-2');
@@ -102,7 +102,7 @@ describe('executeToolInner — raw workspace and browser routing', () => {
       '{"sessionId":"browser-session-1"}',
       CONV_ID,
     );
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
 
     expect(parsed.summary).toContain('trimmed for context');
     expect(parsed.snapshotChars).toBe(largeSnapshot.length);
@@ -132,7 +132,7 @@ describe('executeToolInner — raw workspace and browser routing', () => {
       '{"sessionId":"browser-session-1"}',
       CONV_ID,
     );
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(result.content);
 
     expect(parsed.failedCount).toBe(2);
     expect(parsed.requests[0].status).toBeGreaterThanOrEqual(400);
@@ -145,7 +145,7 @@ describe('executeToolInner — raw workspace and browser routing', () => {
       CONV_ID,
     );
 
-    expect(JSON.parse(result)).toMatchObject({
+    expect(JSON.parse(result.content)).toMatchObject({
       summary: 'Delegated task to Workspace A via Cursor CLI.',
       targetId: 'ws-1',
       sshTargetId: 'ssh-1',

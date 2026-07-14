@@ -70,6 +70,7 @@ export const CanvasSurfacePresenter: React.FC = () => {
         if (!document.body) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'evalResult', surfaceId: ${safeSurfaceId},
+            succeeded: false,
             result: ${JSON.stringify(`${errorPrefix}: `)} + 'Document not ready'
           }));
           return;
@@ -92,12 +93,14 @@ export const CanvasSurfacePresenter: React.FC = () => {
         if (__error) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'evalResult', surfaceId: ${safeSurfaceId},
+            succeeded: false,
             result: ${JSON.stringify(`${errorPrefix}: `)} + __error.message
           }));
           return;
         }
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'evalResult', surfaceId: ${safeSurfaceId},
+          succeeded: true,
           result: String(__result !== undefined ? __result : ${JSON.stringify(noReturnValue)})
         }));
       })(); true;`;
@@ -296,7 +299,10 @@ export const CanvasSurfacePresenter: React.FC = () => {
           actionType: data.action,
         });
       } else if (data.type === 'evalResult') {
-        resolveCanvasEval(data.surfaceId, data.result);
+        resolveCanvasEval(data.surfaceId, {
+          succeeded: data.succeeded === true,
+          content: typeof data.result === 'string' ? data.result : '',
+        });
       } else if (data.type === 'readResult') {
         resolveCanvasRead(data.surfaceId, {
           content: typeof data.content === 'string' ? data.content : '',

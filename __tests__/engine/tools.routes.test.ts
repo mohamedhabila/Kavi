@@ -17,15 +17,15 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ path: 'sub/dir/file.txt', content: 'nested content' }),
         CONV_ID,
       );
-      expect(result).toContain('Wrote');
-      expect(result).toContain('sub/dir/file.txt');
+      expect(result.content).toContain('Wrote');
+      expect(result.content).toContain('sub/dir/file.txt');
 
       const read = await executeTool(
         'read_file',
         JSON.stringify({ path: 'sub/dir/file.txt' }),
         CONV_ID,
       );
-      expect(read).toBe('nested content');
+      expect(read).toEqual({ status: 'completed', content: 'nested content' });
     });
   });
 
@@ -47,8 +47,8 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ path: 'subdir' }),
         'list-sub-test',
       );
-      expect(result).toContain('a.txt');
-      expect(result).toContain('b.txt');
+      expect(result.content).toContain('a.txt');
+      expect(result.content).toContain('b.txt');
     });
 
     it('returns error for non-existent subdirectory', async () => {
@@ -57,8 +57,8 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ path: 'nonexistent' }),
         CONV_ID,
       );
-      expect(result).toContain('Error');
-      expect(result).toContain('not found');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('not found');
     });
   });
 
@@ -69,7 +69,7 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ title: 'Test', body: 'Hello' }),
         CONV_ID,
       );
-      const parsed = JSON.parse(result);
+      const parsed = JSON.parse(result.content);
       expect(parsed.status).toBe('notification_accepted');
       expect(parsed.title).toBe('Test');
       expect(parsed.body).toBe('Hello');
@@ -88,7 +88,7 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ prompt: 'A cat' }),
         CONV_ID,
       );
-      const parsed = JSON.parse(result);
+      const parsed = JSON.parse(result.content);
       expect(parsed.status).toBe('generated');
       expect(parsed.providerId).toBe('openai');
       expect(parsed.fileUri).toBe('file:///mock/cache/generated.png');
@@ -126,7 +126,7 @@ describe('executeToolInner raw additional routes', () => {
         CONV_ID,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = JSON.parse(result.content);
       expect(parsed.status).toBe('edited');
       expect(parsed.providerId).toBe('openai');
       expect(parsed.fileUri).toBe('file:///mock/cache/edited.png');
@@ -210,7 +210,7 @@ describe('executeToolInner raw additional routes', () => {
         },
       );
 
-      expect(result).toBe('Skill instructions');
+      expect(result.content).toBe('Skill instructions');
     });
 
     it('falls back to the session workspace for JavaScript path execution when the shared workspace lacks worker files', async () => {
@@ -241,7 +241,7 @@ describe('executeToolInner raw additional routes', () => {
         },
       );
 
-      expect(JSON.parse(result)).toEqual(
+      expect(JSON.parse(result.content)).toEqual(
         expect.objectContaining({
           status: 'completed',
           workspaceMutationState: 'none_observed',
@@ -258,7 +258,7 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ schedule: '0 8 * * *', prompt: 'Daily reminder' }),
         CONV_ID,
       );
-      const parsed = JSON.parse(result);
+      const parsed = JSON.parse(result.content);
       expect(parsed.status).toBe('task_created');
       expect(parsed.id).toBe('job-1');
       expect(parsed.schedule).toBe('0 8 * * *');
@@ -270,7 +270,7 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ schedule: '*/5 * * * *', command: 'Check status' }),
         CONV_ID,
       );
-      const parsed = JSON.parse(result);
+      const parsed = JSON.parse(result.content);
       expect(parsed.status).toBe('task_created');
       expect(parsed.id).toBe('job-1');
     });
@@ -279,7 +279,7 @@ describe('executeToolInner raw additional routes', () => {
   describe('native tool routing', () => {
     it('routes clipboard_read to native executor', async () => {
       const result = await executeTool('clipboard_read', '{}', CONV_ID);
-      expect(typeof result).toBe('string');
+      expect(result.status).toBe('completed');
     });
   });
 
@@ -294,7 +294,8 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ path: 'test.txt', content: 'no' }),
         CONV_ID,
       );
-      expect(result).toContain('not allowed');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('not allowed');
 
       useToolPermissionsStore.getState().reset();
     });
@@ -303,28 +304,32 @@ describe('executeToolInner raw additional routes', () => {
   describe('cron CRUD actions', () => {
     it('lists jobs when empty', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'list' }), CONV_ID);
-      const parsed = JSON.parse(result);
+      const parsed = JSON.parse(result.content);
       expect(parsed.jobs).toEqual([]);
     });
 
     it('delete requires id', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'delete' }), CONV_ID);
-      expect(result).toContain('id is required');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('id is required');
     });
 
     it('enable requires id', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'enable' }), CONV_ID);
-      expect(result).toContain('id is required');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('id is required');
     });
 
     it('disable requires id', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'disable' }), CONV_ID);
-      expect(result).toContain('id is required');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('id is required');
     });
 
     it('run requires id', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'run' }), CONV_ID);
-      expect(result).toContain('id is required');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('id is required');
     });
 
     it('run returns error for non-existent job', async () => {
@@ -333,26 +338,29 @@ describe('executeToolInner raw additional routes', () => {
         JSON.stringify({ action: 'run', id: 'nope' }),
         CONV_ID,
       );
-      expect(result).toContain('not found');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('not found');
     });
 
     it('rejects unknown action', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'explode' }), CONV_ID);
-      expect(result).toContain('unknown cron action');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('unknown cron action');
     });
   });
 
   describe('unknown tool', () => {
     it('returns error for unknown tool name', async () => {
       const result = await executeTool('nonexistent_tool_xyz', '{}', CONV_ID);
-      expect(result).toContain('unknown tool');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('unknown tool');
     });
   });
 
   describe('invalid JSON args', () => {
     it('handles malformed JSON gracefully', async () => {
       const result = await executeTool('write_file', 'not-json{{{', CONV_ID);
-      expect(typeof result).toBe('string');
+      expect(result.status).toBe('failed');
     });
   });
 });

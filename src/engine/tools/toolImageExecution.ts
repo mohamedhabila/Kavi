@@ -2,6 +2,11 @@ import { File } from 'expo-file-system';
 import { editImage, generateImage } from '../../services/media/imageGeneration';
 import { resolveToolProviderContext } from './toolProviderContext';
 import { getWorkspaceDir, sanitizeToolWorkspacePath } from './toolWorkspaceFiles';
+import {
+  completedToolOutcome,
+  failedToolOutcome,
+  type ToolRuntimeOutcome,
+} from '../../types/toolRuntimeOutcome';
 
 export async function executeImageGenerate(
   args: {
@@ -14,21 +19,23 @@ export async function executeImageGenerate(
     style?: 'vivid' | 'natural';
   },
   conversationId: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const provider = (await resolveToolProviderContext()).provider;
   if (!provider) {
-    return JSON.stringify({
-      status: 'error',
-      message: 'No enabled provider configured for image generation.',
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        message: 'No enabled provider configured for image generation.',
+      }),
+    );
   }
 
   try {
     const result = await generateImage(provider, { ...args, conversationId });
-    return JSON.stringify(result);
+    return completedToolOutcome(JSON.stringify(result));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return JSON.stringify({ status: 'error', message });
+    return failedToolOutcome(JSON.stringify({ status: 'error', message }));
   }
 }
 
@@ -93,27 +100,33 @@ export async function executeImageEdit(
     outputCompression?: number;
   },
   conversationId: string,
-): Promise<string> {
+): Promise<ToolRuntimeOutcome> {
   const provider = (await resolveToolProviderContext()).provider;
   if (!provider) {
-    return JSON.stringify({
-      status: 'error',
-      message: 'No enabled provider configured for image editing.',
-    });
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        message: 'No enabled provider configured for image editing.',
+      }),
+    );
   }
 
   const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
   if (!prompt) {
-    return JSON.stringify({ status: 'error', message: 'image_edit requires a non-empty prompt.' });
+    return failedToolOutcome(
+      JSON.stringify({ status: 'error', message: 'image_edit requires a non-empty prompt.' }),
+    );
   }
 
   try {
     const imagePaths = normalizeImageEditInputPaths(args as Record<string, unknown>);
     if (imagePaths.length === 0) {
-      return JSON.stringify({
-        status: 'error',
-        message: 'image_edit requires imagePath or imagePaths.',
-      });
+      return failedToolOutcome(
+        JSON.stringify({
+          status: 'error',
+          message: 'image_edit requires imagePath or imagePaths.',
+        }),
+      );
     }
 
     const images = imagePaths.map((path) => buildWorkspaceImageEditSource(path, conversationId));
@@ -122,26 +135,23 @@ export async function executeImageEdit(
         ? buildWorkspaceImageEditSource(args.maskPath.trim(), conversationId)
         : undefined;
 
-    const result = await editImage(
-      provider,
-      {
-        prompt,
-        images,
-        ...(mask ? { mask } : {}),
-        model: args.model,
-        size: args.size,
-        quality: args.quality,
-        format: args.format,
-        background: args.background,
-        inputFidelity: args.inputFidelity,
-        moderation: args.moderation,
-        outputCompression: args.outputCompression,
-        conversationId,
-      },
-    );
-    return JSON.stringify(result);
+    const result = await editImage(provider, {
+      prompt,
+      images,
+      ...(mask ? { mask } : {}),
+      model: args.model,
+      size: args.size,
+      quality: args.quality,
+      format: args.format,
+      background: args.background,
+      inputFidelity: args.inputFidelity,
+      moderation: args.moderation,
+      outputCompression: args.outputCompression,
+      conversationId,
+    });
+    return completedToolOutcome(JSON.stringify(result));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return JSON.stringify({ status: 'error', message });
+    return failedToolOutcome(JSON.stringify({ status: 'error', message }));
   }
 }

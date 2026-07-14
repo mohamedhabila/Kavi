@@ -3,9 +3,11 @@ import {
   executePython,
   executeToolInner as executeTool,
 } from '../helpers/toolsExecutorHarness';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 
-function expectCompletedExecution(result: string, output: string): void {
-  expect(JSON.parse(result)).toEqual(
+function expectCompletedExecution(result: ToolRuntimeOutcome, output: string): void {
+  expect(result.status).toBe('completed');
+  expect(JSON.parse(result.content)).toEqual(
     expect.objectContaining({
       status: 'completed',
       workspaceMutationState: 'none_observed',
@@ -14,8 +16,9 @@ function expectCompletedExecution(result: string, output: string): void {
   );
 }
 
-function expectFailedExecution(result: string, errorFragment: string): void {
-  expect(JSON.parse(result)).toEqual(
+function expectFailedExecution(result: ToolRuntimeOutcome, errorFragment: string): void {
+  expect(result.status).toBe('failed');
+  expect(JSON.parse(result.content)).toEqual(
     expect.objectContaining({
       status: 'failed',
       isError: true,
@@ -164,7 +167,7 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expect(JSON.parse(result)).toEqual(
+      expect(JSON.parse(result.content)).toEqual(
         expect.objectContaining({
           summary: 'JavaScript execution completed and changed 1 workspace file.',
           status: 'completed',
@@ -192,7 +195,7 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expect(JSON.parse(result)).toEqual(
+      expect(JSON.parse(result.content)).toEqual(
         expect.objectContaining({
           summary: 'JavaScript execution completed and changed 0 workspace files, deleted 1 path.',
           status: 'completed',
@@ -452,7 +455,7 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expect(JSON.parse(result)).toEqual(
+      expect(JSON.parse(result.content)).toEqual(
         expect.objectContaining({
           summary: 'Python execution completed and wrote 1 workspace file.',
           status: 'completed',
@@ -479,7 +482,7 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expect(JSON.parse(result)).toEqual(
+      expect(JSON.parse(result.content)).toEqual(
         expect.objectContaining({
           summary: 'Python execution completed with trimmed output for context.',
           status: 'completed',
@@ -531,7 +534,7 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expect(JSON.parse(result)).toEqual(
+      expect(JSON.parse(result.content)).toEqual(
         expect.objectContaining({
           status: 'timed_out',
           isError: true,

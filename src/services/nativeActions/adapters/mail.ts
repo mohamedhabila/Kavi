@@ -38,11 +38,11 @@ export async function composeEmail(
 
       switch (composerResult.status) {
         case MailComposer.MailComposerStatus.CANCELLED:
-          return makeActionResult(
-            'cancelled',
+          return makeActionFailure(
+            'email_compose_cancelled',
             'Email composition was cancelled.',
             { rawStatus: composerResult.status },
-            'email_compose_cancelled',
+            'cancelled',
           );
         case MailComposer.MailComposerStatus.SAVED:
           return makeActionResult(
