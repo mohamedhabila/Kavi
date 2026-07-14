@@ -83,7 +83,7 @@ describe('resolveConsolidationPath', () => {
         structuredOutput: expect.objectContaining({
           name: 'memory_consolidation',
           mimeType: 'application/json',
-          strict: false,
+          strict: true,
           schema: expect.objectContaining({
             additionalProperties: false,
             required: [

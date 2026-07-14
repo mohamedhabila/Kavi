@@ -137,8 +137,30 @@ it('consolidates each queued turn from its recorded source window', async () => 
       summary: episode.summary,
     })),
   ).toEqual([
-    { messageIds: ['u-window-2', 'a-window-2'], summary: 'Second queued turn.' },
-    { messageIds: ['u-window-1', 'a-window-1'], summary: 'First queued turn.' },
+    {
+      messageIds: ['u-window-2', 'a-window-2'],
+      summary: JSON.stringify({
+        kind: 'structural_turn',
+        version: 1,
+        messageCount: 2,
+        toolCallCount: 0,
+        completedToolCallCount: 0,
+        hasCodeBlock: false,
+        hasAttachments: false,
+      }),
+    },
+    {
+      messageIds: ['u-window-1', 'a-window-1'],
+      summary: JSON.stringify({
+        kind: 'structural_turn',
+        version: 1,
+        messageCount: 2,
+        toolCallCount: 0,
+        completedToolCallCount: 0,
+        hasCodeBlock: false,
+        hasAttachments: false,
+      }),
+    },
   ]);
   expect(getConsolidationState(threadId)?.lastConsolidatedMessageId).toBe('a-window-2');
 });

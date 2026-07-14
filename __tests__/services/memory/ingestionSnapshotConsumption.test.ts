@@ -123,7 +123,15 @@ it('processes the immutable turn after restart even when live chat is deleted', 
   expect(listEpisodes({ threadId: 'thread-durable-source' })).toEqual([
     expect.objectContaining({
       messageIds: ['user-durable-source', 'assistant-durable-source'],
-      summary: 'Retain durable source token ORBIT-742.',
+      summary: JSON.stringify({
+        kind: 'structural_turn',
+        version: 1,
+        messageCount: 2,
+        toolCallCount: 0,
+        completedToolCallCount: 0,
+        hasCodeBlock: false,
+        hasAttachments: false,
+      }),
     }),
   ]);
   expect(
