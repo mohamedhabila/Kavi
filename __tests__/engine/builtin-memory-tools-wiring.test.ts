@@ -45,7 +45,6 @@ function groundedRequest(userMessageId: string, userMessageText: string) {
 }
 
 function groundedArgs(input: {
-  userMessageId: string;
   userMessageText: string;
   subject: string;
   predicate: string;
@@ -54,7 +53,6 @@ function groundedArgs(input: {
   importance?: number;
 }) {
   return memoryRememberArgs({
-    userMessageId: input.userMessageId,
     userMessageText: input.userMessageText,
     subjectRef:
       input.subject === 'user' ? { kind: 'self' } : { kind: 'named', label: input.subject },
@@ -139,17 +137,24 @@ describe('living-memory tool wiring', () => {
   it('declares strict provider-neutral semantic evidence for memory writes', () => {
     expect(MEMORY_REMEMBER_TOOL.description).toContain('strict provider-neutral');
     const evidence = MEMORY_REMEMBER_TOOL.input_schema.properties.semanticEvidence;
+    const fields = [
+      'version',
+      'subject_ref',
+      'subject_type',
+      'predicate',
+      'value',
+      'scope',
+      'importance',
+      'confidence',
+      'operation',
+      'assertion_class',
+      'evidence_quote',
+      'sensitivity',
+    ];
     expect(evidence.additionalProperties).toBe(false);
-    expect(evidence.required).toEqual(
-      expect.arrayContaining([
-        'source_message_id',
-        'assertion_class',
-        'evidence_quote',
-        'subject_quote',
-        'predicate_quote',
-        'value_quote',
-      ]),
-    );
+    expect(evidence.properties.version.enum).toEqual([2]);
+    expect(Object.keys(evidence.properties)).toEqual(fields);
+    expect(evidence.required).toEqual(fields);
     expect(evidence.properties.assertion_class.enum).toEqual(
       expect.arrayContaining(['current_direct', 'quoted', 'third_party', 'uncertain']),
     );
@@ -202,7 +207,6 @@ describe('living-memory tool wiring', () => {
     const remembered = parseOutcome(
       executeMemoryRemember(
         groundedArgs({
-          userMessageId: 'user-prefers',
           userMessageText: 'I prefer dark mode.',
           subject: 'user',
           predicate: 'preference',
@@ -231,7 +235,6 @@ describe('living-memory tool wiring', () => {
     parseOutcome(
       executeMemoryRemember(
         groundedArgs({
-          userMessageId: 'user-review-duration',
           userMessageText: 'I usually keep architecture reviews to 30 minutes.',
           subject: 'user',
           predicate: 'usual architecture review duration',
@@ -246,7 +249,6 @@ describe('living-memory tool wiring', () => {
     parseOutcome(
       executeMemoryRemember(
         groundedArgs({
-          userMessageId: 'user-project-name',
           userMessageText: 'project name is Kavi.',
           subject: 'project',
           predicate: 'name',
@@ -277,7 +279,6 @@ describe('living-memory tool wiring', () => {
     const r = parseOutcome(
       executeMemoryRemember(
         groundedArgs({
-          userMessageId: 'user-timezone',
           userMessageText: 'My timezone is UTC+1.',
           subject: 'user',
           predicate: 'timezone',
@@ -301,7 +302,6 @@ describe('living-memory tool wiring', () => {
     const r = parseOutcome(
       executeMemoryRemember(
         groundedArgs({
-          userMessageId: 'user-name-forget',
           userMessageText: 'My name is Alice.',
           subject: 'user',
           predicate: 'name',
@@ -322,7 +322,6 @@ describe('living-memory tool wiring', () => {
     const r = parseOutcome(
       executeMemoryRemember(
         groundedArgs({
-          userMessageId: 'user-name-invalidate',
           userMessageText: 'My name is Alice.',
           subject: 'user',
           predicate: 'name',

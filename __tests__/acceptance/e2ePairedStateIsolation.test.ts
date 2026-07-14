@@ -66,10 +66,8 @@ describe('paired E2E state isolation', () => {
     expect(
       executeMemoryRemember(
         memoryRememberArgs({
-          userMessageId: 'state-isolation-user',
           userMessageText: '主体🧑 label PRIVATE-MEMORY',
           subjectRef: { kind: 'self' },
-          subjectMention: '🧑',
           predicate: 'preferred label',
           value: 'PRIVATE-MEMORY',
           scope: 'conversation',
@@ -116,10 +114,8 @@ describe('paired E2E state isolation', () => {
     expect(
       executeMemoryRemember(
         memoryRememberArgs({
-          userMessageId: 'paired-isolation-user',
           userMessageText: '主体🧑 label MUST-NOT-CROSS-CONDITIONS',
           subjectRef: { kind: 'self' },
-          subjectMention: '🧑',
           predicate: 'preferred label',
           value: 'MUST-NOT-CROSS-CONDITIONS',
           scope: 'conversation',

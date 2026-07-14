@@ -21,7 +21,6 @@ describe('evaluateE2ERubric memory facts', () => {
     const rememberResult = parseCompletedToolOutcome(
       executeMemoryRemember(
         memoryRememberArgs({
-          userMessageId: 'user-memory-fact',
           userMessageText: 'e2e-entity-i1 artifact_token is E2E-MEM-42.',
           subjectRef: { kind: 'named', label: 'e2e-entity-i1' },
           predicate: 'artifact_token',
@@ -74,7 +73,6 @@ describe('evaluateE2ERubric memory facts', () => {
     const oldResult = parseCompletedToolOutcome(
       executeMemoryRemember(
         memoryRememberArgs({
-          userMessageId: 'msg-memory-fact-old',
           userMessageText: 'e2e-entity-update artifact_token is E2E-OLD.',
           subjectRef: { kind: 'named', label: 'e2e-entity-update' },
           predicate: 'artifact_token',
@@ -93,7 +91,6 @@ describe('evaluateE2ERubric memory facts', () => {
     const newResult = parseCompletedToolOutcome(
       executeMemoryRemember(
         memoryRememberArgs({
-          userMessageId: 'msg-memory-fact-update',
           userMessageText: 'e2e-entity-update artifact_token is E2E-NEW.',
           subjectRef: { kind: 'named', label: 'e2e-entity-update' },
           predicate: 'artifact_token',
@@ -137,7 +134,6 @@ describe('evaluateE2ERubric memory facts', () => {
     const rememberResult = parseCompletedToolOutcome(
       executeMemoryRemember(
         memoryRememberArgs({
-          userMessageId: 'msg-memory-expired',
           userMessageText: 'e2e-expired-subject temporary_code is EXPIRED-CODE.',
           subjectRef: { kind: 'named', label: 'e2e-expired-subject' },
           predicate: 'temporary_code',

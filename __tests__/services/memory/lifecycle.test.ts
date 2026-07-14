@@ -240,10 +240,8 @@ describe('recordCompletedTurnForMemory', () => {
   it('keeps the tool-owned child write in the parent namespace without post-turn duplication', async () => {
     const userMessageText = '主体🧑 label /workspace/release-checklist.md';
     const rememberArgs = memoryRememberArgs({
-      userMessageId: 'u-shared-1',
       userMessageText,
       subjectRef: { kind: 'self' },
-      subjectMention: '🧑',
       predicate: 'preferred label',
       value: '/workspace/release-checklist.md',
       scope: 'conversation',

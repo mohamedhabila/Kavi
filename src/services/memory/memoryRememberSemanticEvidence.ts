@@ -1,6 +1,32 @@
 import type { EntityType } from './entities';
+import type { MemoryFactSensitivity } from './facts/applicabilityProvenance';
 import type { MemoryRememberRequestEvidence } from './memoryRememberPersistence';
-import { decodeSemanticFactProposals, type SemanticFactProposalV1 } from './semanticFactProposal';
+import {
+  decodeSemanticFactProposals,
+  SEMANTIC_FACT_PROPOSAL_VERSION,
+  type SemanticFactAssertionClass,
+  type SemanticFactProposalOperation,
+  type SemanticFactProposalScope,
+  type SemanticFactProposalV1,
+  type SemanticFactSubjectRef,
+} from './semanticFactProposal';
+
+export const MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION = 2 as const;
+
+export interface MemoryRememberSemanticEvidenceV2Input {
+  readonly version: typeof MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION;
+  readonly subject_ref: SemanticFactSubjectRef;
+  readonly subject_type: EntityType;
+  readonly predicate: string;
+  readonly value: string;
+  readonly scope: SemanticFactProposalScope;
+  readonly importance: number;
+  readonly confidence: number;
+  readonly operation: SemanticFactProposalOperation;
+  readonly assertion_class: SemanticFactAssertionClass;
+  readonly evidence_quote: string;
+  readonly sensitivity: MemoryFactSensitivity;
+}
 
 const MEMORY_REMEMBER_SEMANTIC_EVIDENCE_FIELDS = new Set([
   'version',
@@ -11,24 +37,18 @@ const MEMORY_REMEMBER_SEMANTIC_EVIDENCE_FIELDS = new Set([
   'scope',
   'importance',
   'confidence',
-  'source_message_id',
   'operation',
   'assertion_class',
   'evidence_quote',
   'sensitivity',
-  'subject_quote',
-  'predicate_quote',
-  'value_quote',
 ]);
 const PROPOSAL_FIELDS = [
-  'version',
   'subject_ref',
   'predicate',
   'value',
   'scope',
   'importance',
   'confidence',
-  'source_message_id',
   'operation',
   'assertion_class',
   'evidence_quote',
@@ -51,9 +71,6 @@ export interface BoundMemoryRememberSemanticEvidence {
 export interface MemoryRememberSemanticEvidenceBinding {
   proposal: SemanticFactProposalV1;
   subjectType: EntityType;
-  subjectQuote: string;
-  predicateQuote: string;
-  valueQuote: string;
 }
 
 export type BindMemoryRememberSemanticEvidenceResult =
@@ -63,11 +80,9 @@ export type BindMemoryRememberSemanticEvidenceResult =
       code:
         | 'invalid_contract'
         | 'non_current_assertion'
-        | 'wrong_source_message'
         | 'evidence_quote_mismatch'
-        | 'subject_quote_mismatch'
-        | 'predicate_quote_mismatch'
-        | 'value_quote_mismatch';
+        | 'subject_not_grounded'
+        | 'value_not_grounded';
     };
 
 const bindings = new WeakMap<object, MemoryRememberSemanticEvidenceBinding>();
@@ -79,39 +94,37 @@ export function bindMemoryRememberSemanticEvidence(
   if (!isPlainRecord(raw) || !hasExactFields(raw, MEMORY_REMEMBER_SEMANTIC_EVIDENCE_FIELDS)) {
     return { valid: false, code: 'invalid_contract' };
   }
-  const proposalRaw = Object.fromEntries(PROPOSAL_FIELDS.map((field) => [field, raw[field]]));
+  if (raw.version !== MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION) {
+    return { valid: false, code: 'invalid_contract' };
+  }
+  const proposalRaw = {
+    version: SEMANTIC_FACT_PROPOSAL_VERSION,
+    ...Object.fromEntries(PROPOSAL_FIELDS.map((field) => [field, raw[field]])),
+    source_message_id: request.userMessageId,
+  };
   const decoded = decodeSemanticFactProposals([proposalRaw]);
   if (!decoded.valid || decoded.value.length !== 1) {
     return { valid: false, code: 'invalid_contract' };
   }
   const proposal = decoded.value[0]!;
   const subjectType = decodeSubjectType(raw.subject_type, proposal);
-  const subjectQuote = exactString(raw.subject_quote, 160);
-  const predicateQuote = exactString(raw.predicate_quote, 200);
-  const valueQuote = exactString(raw.value_quote, 200);
-  if (!subjectType || !subjectQuote || !predicateQuote || !valueQuote) {
+  if (!subjectType) {
     return { valid: false, code: 'invalid_contract' };
   }
   if (proposal.assertionClass !== 'current_direct') {
     return { valid: false, code: 'non_current_assertion' };
   }
-  if (proposal.sourceMessageId !== request.userMessageId) {
-    return { valid: false, code: 'wrong_source_message' };
-  }
   if (!request.userMessageText.includes(proposal.evidenceQuote)) {
     return { valid: false, code: 'evidence_quote_mismatch' };
   }
-  if (valueQuote !== proposal.value || !proposal.evidenceQuote.includes(valueQuote)) {
-    return { valid: false, code: 'value_quote_mismatch' };
+  if (!proposal.evidenceQuote.includes(proposal.value)) {
+    return { valid: false, code: 'value_not_grounded' };
   }
   if (
-    !proposal.evidenceQuote.includes(subjectQuote) ||
-    (proposal.subjectRef.kind === 'named' && subjectQuote !== proposal.subjectRef.label)
+    proposal.subjectRef.kind === 'named' &&
+    !proposal.evidenceQuote.includes(proposal.subjectRef.label)
   ) {
-    return { valid: false, code: 'subject_quote_mismatch' };
-  }
-  if (!proposal.evidenceQuote.includes(predicateQuote)) {
-    return { valid: false, code: 'predicate_quote_mismatch' };
+    return { valid: false, code: 'subject_not_grounded' };
   }
 
   const evidence = Object.freeze({
@@ -120,9 +133,6 @@ export function bindMemoryRememberSemanticEvidence(
   bindings.set(evidence, {
     proposal,
     subjectType,
-    subjectQuote,
-    predicateQuote,
-    valueQuote,
   });
   return { valid: true, evidence };
 }
@@ -146,12 +156,6 @@ function decodeSubjectType(raw: unknown, proposal: SemanticFactProposalV1): Enti
   if (proposal.subjectRef.kind === 'self') return raw === 'self' ? 'self' : null;
   return typeof raw === 'string' && NAMED_SUBJECT_TYPES.has(raw as EntityType)
     ? (raw as EntityType)
-    : null;
-}
-
-function exactString(raw: unknown, maxLength: number): string | null {
-  return typeof raw === 'string' && raw.length > 0 && raw === raw.trim() && raw.length <= maxLength
-    ? raw
     : null;
 }
 

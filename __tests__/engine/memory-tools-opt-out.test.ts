@@ -99,7 +99,6 @@ describe('structured memory tool executor — opt-out gate', () => {
     const remembered = parseCompletedToolOutcome(
       await executeGroundedRemember({
         args: memoryRememberArgs({
-          userMessageId: 'user-review-duration-withdrawal',
           userMessageText: 'I usually keep architecture reviews to 30 minutes.',
           subjectRef: { kind: 'self' },
           predicate: 'usual architecture review duration',
@@ -129,7 +128,6 @@ describe('structured memory tool executor — opt-out gate', () => {
     const remembered = parseCompletedToolOutcome(
       await executeGroundedRemember({
         args: memoryRememberArgs({
-          userMessageId: 'user-review-duration-manage',
           userMessageText: 'I usually keep architecture reviews to 45 minutes.',
           subjectRef: { kind: 'self' },
           predicate: 'usual architecture review duration',
@@ -200,7 +198,6 @@ describe('structured memory tool executor — opt-out gate', () => {
   it('adds runtime conversation provenance to memory_remember writes', async () => {
     const outcome = await executeGroundedRemember({
       args: memoryRememberArgs({
-        userMessageId: 'user-runtime-timezone',
         userMessageText: 'My timezone is UTC+1.',
         subjectRef: { kind: 'self' },
         predicate: 'timezone',
@@ -222,7 +219,6 @@ describe('structured memory tool executor — opt-out gate', () => {
   it('writes memory_remember facts to the explicit memory namespace with source-thread provenance', async () => {
     const outcome = await executeGroundedRemember({
       args: memoryRememberArgs({
-        userMessageId: 'user-release-artifact',
         userMessageText: 'project release_artifact is artifact-build.',
         subjectRef: { kind: 'named', label: 'project' },
         predicate: 'release_artifact',
@@ -249,7 +245,6 @@ describe('structured memory tool executor — opt-out gate', () => {
     const outcome = await executeGroundedRemember({
       args: {
         ...memoryRememberArgs({
-          userMessageId: 'user-build-marker-null',
           userMessageText: 'project build_marker is artifact-null.',
           subjectRef: { kind: 'named', label: 'project' },
           predicate: 'build_marker',
@@ -285,7 +280,6 @@ describe('structured memory tool executor — opt-out gate', () => {
     const outcome = await executeGroundedRemember({
       args: {
         ...memoryRememberArgs({
-          userMessageId: 'user-build-marker-hostile',
           userMessageText: 'project build_marker is artifact-hostile.',
           subjectRef: { kind: 'named', label: 'project' },
           predicate: 'build_marker',
@@ -319,7 +313,6 @@ describe('structured memory tool executor — opt-out gate', () => {
   it('rejects a present non-exact code-owned agent run instead of trimming it', async () => {
     const outcome = await executeGroundedRemember({
       args: memoryRememberArgs({
-        userMessageId: 'user-invalid-runtime-run',
         userMessageText: 'project build_marker is artifact-invalid-run.',
         subjectRef: { kind: 'named', label: 'project' },
         predicate: 'build_marker',
@@ -352,7 +345,6 @@ describe('structured memory tool executor — opt-out gate', () => {
     };
     const outcome = await executeGroundedRemember({
       args: memoryRememberArgs({
-        userMessageId: 'user-release-artifact-task',
         userMessageText: 'project release_artifact is artifact-task.',
         subjectRef: { kind: 'named', label: 'project' },
         predicate: 'release_artifact',
@@ -380,7 +372,6 @@ describe('structured memory tool executor — opt-out gate', () => {
     const global = parseCompletedToolOutcome(
       await executeGroundedRemember({
         args: memoryRememberArgs({
-          userMessageId: 'user-global-timezone',
           userMessageText: 'My timezone is UTC+1.',
           subjectRef: { kind: 'self' },
           predicate: 'timezone',
@@ -396,7 +387,6 @@ describe('structured memory tool executor — opt-out gate', () => {
     const persona = parseCompletedToolOutcome(
       await executeGroundedRemember({
         args: memoryRememberArgs({
-          userMessageId: 'user-persona-role',
           userMessageText: 'My role is warm.',
           subjectRef: { kind: 'self' },
           predicate: 'role',
@@ -436,7 +426,6 @@ describe('structured memory tool executor — opt-out gate', () => {
     const parsed = parseFailedToolOutcome(
       await executeGroundedRemember({
         args: memoryRememberArgs({
-          userMessageId: 'user-session-without-task',
           userMessageText: 'project draft_state is open.',
           subjectRef: { kind: 'named', label: 'project' },
           predicate: 'draft_state',

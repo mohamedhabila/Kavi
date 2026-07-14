@@ -70,7 +70,6 @@ function testRememberArgs(
   context: Parameters<typeof executeMemoryRemember>[1],
 ) {
   return memoryRememberArgs({
-    userMessageId: context.requestEvidence.userMessageId,
     userMessageText: context.requestEvidence.userMessageText,
     subjectRef:
       input.subject === 'user' || input.subjectType === 'self'

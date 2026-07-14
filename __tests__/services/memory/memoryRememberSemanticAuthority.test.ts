@@ -19,11 +19,10 @@ const MESSAGE_ID = 'message-opaque-authority';
 const SUBJECT = '主体_ω42';
 const PREDICATE = '属性_π42';
 const VALUE = 'значение_成功_error_failed';
-const MESSAGE = `${SUBJECT} :: ${PREDICATE} :: ${VALUE}`;
+const MESSAGE = `${SUBJECT} :: 関係_本文42 :: ${VALUE}`;
 
 function args(overrides: Partial<Parameters<typeof memoryRememberArgs>[0]> = {}) {
   return memoryRememberArgs({
-    userMessageId: MESSAGE_ID,
     userMessageText: MESSAGE,
     subjectRef: { kind: 'named', label: SUBJECT },
     subjectType: 'concept',
@@ -74,6 +73,7 @@ describe('typed memory_remember semantic authority', () => {
         predicate: PREDICATE,
         value: VALUE,
         scope: 'conversation',
+        sourceMessageId: MESSAGE_ID,
         originConversationId: 'memory-root-opaque',
         originThreadId: 'thread-opaque',
       },
@@ -92,36 +92,24 @@ describe('typed memory_remember semantic authority', () => {
 
   it.each([
     [
-      'source message',
-      (input: ReturnType<typeof args>) => {
-        (input.semanticEvidence as Record<string, unknown>).source_message_id = 'wrong-message';
-      },
-    ],
-    [
       'evidence quote',
       (input: ReturnType<typeof args>) => {
         (input.semanticEvidence as Record<string, unknown>).evidence_quote = `${MESSAGE}!`;
       },
     ],
     [
-      'value quote',
+      'value',
       (input: ReturnType<typeof args>) => {
-        const semantic = input.semanticEvidence as { value_quote: unknown };
-        semantic.value_quote = VALUE.slice(0, -1);
+        (input.semanticEvidence as Record<string, unknown>).value = '不存在_value';
       },
     ],
     [
-      'named subject quote',
+      'named subject',
       (input: ReturnType<typeof args>) => {
-        const semantic = input.semanticEvidence as { subject_quote: unknown };
-        semantic.subject_quote = VALUE;
-      },
-    ],
-    [
-      'relation quote',
-      (input: ReturnType<typeof args>) => {
-        const semantic = input.semanticEvidence as { predicate_quote: unknown };
-        semantic.predicate_quote = 'missing relation';
+        (input.semanticEvidence as Record<string, unknown>).subject_ref = {
+          kind: 'named',
+          label: '不存在_subject',
+        };
       },
     ],
   ] as const)('rejects an exact %s mismatch', (_label, mutate) => {
@@ -129,6 +117,29 @@ describe('typed memory_remember semantic authority', () => {
     mutate(input);
     const result = executeMemoryRemember(input, execution());
     expect(result).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+  });
+
+  it.each(['source_message_id', 'subject_quote', 'predicate_quote', 'value_quote'] as const)(
+    'rejects removed semantic field %s without a compatibility fallback',
+    (field) => {
+      const input = args();
+      (input.semanticEvidence as Record<string, unknown>)[field] = 'forged';
+      expect(executeMemoryRemember(input, execution())).toMatchObject({
+        ok: false,
+        code: 'invalid_args',
+      });
+      expect(listFacts({ includeInvalidated: true })).toEqual([]);
+    },
+  );
+
+  it('rejects the v1 semantic contract without a compatibility fallback', () => {
+    const input = args();
+    (input.semanticEvidence as Record<string, unknown>).version = 1;
+    expect(executeMemoryRemember(input, execution())).toMatchObject({
+      ok: false,
+      code: 'invalid_args',
+    });
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
   });
 

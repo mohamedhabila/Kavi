@@ -87,7 +87,6 @@ function remember(input: {
     context,
     result: executeMemoryRemember(
       memoryRememberArgs({
-        userMessageId,
         userMessageText,
         subjectRef: { kind: 'self' },
         predicate: 'preferred display name',
@@ -256,10 +255,8 @@ describe('memory_remember fact contributions', () => {
     });
     const first = executeMemoryRemember(
       memoryRememberArgs({
-        userMessageId: 'user-duration-old',
         userMessageText: firstMessage,
         subjectRef: { kind: 'self' },
-        subjectMention: '🧑',
         predicate: 'sprint review duration preference',
         value: '20 minutes',
         scope: 'global',
@@ -276,10 +273,8 @@ describe('memory_remember fact contributions', () => {
       claimedAt: 601,
     });
     const correctionInput = memoryRememberArgs({
-      userMessageId: 'user-duration-new',
       userMessageText: correctionMessage,
       subjectRef: { kind: 'self' },
-      subjectMention: '🧑',
       predicate: 'sprint review duration preference',
       value: '30 minutes',
       scope: 'global',
@@ -329,10 +324,8 @@ describe('memory_remember fact contributions', () => {
     const changedMessage = '主体🧑 exact 30 minutes';
     const changedEvidenceText = executeMemoryRemember(
       memoryRememberArgs({
-        userMessageId: 'user-duration-new',
         userMessageText: changedMessage,
         subjectRef: { kind: 'self' },
-        subjectMention: '🧑',
         predicate: 'sprint review duration preference',
         value: '30 minutes',
         scope: 'global',
@@ -360,7 +353,7 @@ describe('memory_remember fact contributions', () => {
   it.each([
     ['missing execution context', undefined, 'internal', false],
     [
-      'mismatched semantic source',
+      'mismatched current evidence',
       memoryRememberExecution({
         userMessageId: 'user-ungrounded',
         userMessageText: '主体🧑 value Mo',
@@ -368,12 +361,10 @@ describe('memory_remember fact contributions', () => {
       'grounding_required',
       true,
     ],
-  ] as const)('fails %s before any write', (_label, context, code, wrongSource) => {
+  ] as const)('fails %s before any write', (_label, context, code, wrongEvidence) => {
     const input = memoryRememberArgs({
-      userMessageId: wrongSource ? 'different-message' : 'user-missing-context',
-      userMessageText: '主体🧑 value Mo',
+      userMessageText: wrongEvidence ? '異なる証拠 Mo' : '主体🧑 value Mo',
       subjectRef: { kind: 'self' },
-      subjectMention: '🧑',
       predicate: 'preferred display name',
       value: 'Mo',
       scope: 'global',
@@ -397,7 +388,6 @@ describe('memory_remember fact contributions', () => {
     expect(
       executeMemoryRemember(
         memoryRememberArgs({
-          userMessageId: 'user-secret',
           userMessageText: 'My API key is sk-private-secret.',
           subjectRef: { kind: 'self' },
           predicate: 'API key',
@@ -419,7 +409,6 @@ describe('memory_remember fact contributions', () => {
       executeMemoryRemember(
         {
           ...memoryRememberArgs({
-            userMessageId: 'user-scope-mismatch',
             userMessageText: 'My preferred display name is Mo.',
             subjectRef: { kind: 'self' },
             predicate: 'preferred display name',

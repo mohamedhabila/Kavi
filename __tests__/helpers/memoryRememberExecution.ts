@@ -2,6 +2,7 @@ import type {
   MemoryRememberArgs,
   MemoryRememberExecutionContext,
 } from '../../src/services/memory/memoryTools';
+import type { MemoryRememberSemanticEvidenceV2Input } from '../../src/services/memory/memoryRememberSemanticEvidence';
 import type {
   SemanticFactAssertionClass,
   SemanticFactProposalOperation,
@@ -53,12 +54,9 @@ export function memoryRememberExecution(input: {
 }
 
 export function memoryRememberArgs(input: {
-  userMessageId: string;
   userMessageText: string;
   subjectRef: SemanticFactSubjectRef;
   subjectType?: 'self' | 'person' | 'place' | 'org' | 'project' | 'thing' | 'concept' | 'event';
-  subjectMention?: string;
-  predicateQuote?: string;
   predicate: string;
   value: string;
   scope?: SemanticFactProposalScope;
@@ -71,31 +69,25 @@ export function memoryRememberArgs(input: {
   pinned?: boolean;
 }): MemoryRememberArgs {
   const evidenceQuote = input.evidenceQuote ?? input.userMessageText;
-  const subjectMention =
-    input.subjectMention ??
-    (input.subjectRef.kind === 'named' ? input.subjectRef.label : evidenceQuote);
+  const semanticEvidence: MemoryRememberSemanticEvidenceV2Input = {
+    version: 2,
+    subject_ref:
+      input.subjectRef.kind === 'self'
+        ? { kind: 'self' }
+        : { kind: 'named', label: input.subjectRef.label },
+    subject_type: input.subjectType ?? (input.subjectRef.kind === 'self' ? 'self' : 'concept'),
+    predicate: input.predicate,
+    value: input.value,
+    scope: input.scope ?? 'global',
+    importance: input.importance ?? 0.5,
+    confidence: input.confidence ?? 0.9,
+    operation: input.operation ?? 'record',
+    assertion_class: input.assertionClass ?? 'current_direct',
+    evidence_quote: evidenceQuote,
+    sensitivity: input.sensitivity ?? 'normal',
+  };
   return {
-    semanticEvidence: {
-      version: 1,
-      subject_ref:
-        input.subjectRef.kind === 'self'
-          ? { kind: 'self' }
-          : { kind: 'named', label: input.subjectRef.label },
-      subject_type: input.subjectType ?? (input.subjectRef.kind === 'self' ? 'self' : 'concept'),
-      predicate: input.predicate,
-      value: input.value,
-      scope: input.scope ?? 'global',
-      importance: input.importance ?? 0.5,
-      confidence: input.confidence ?? 0.9,
-      source_message_id: input.userMessageId,
-      operation: input.operation ?? 'record',
-      assertion_class: input.assertionClass ?? 'current_direct',
-      evidence_quote: evidenceQuote,
-      sensitivity: input.sensitivity ?? 'normal',
-      subject_quote: subjectMention,
-      predicate_quote: input.predicateQuote ?? evidenceQuote,
-      value_quote: input.value,
-    },
+    semanticEvidence,
     ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
   };
 }

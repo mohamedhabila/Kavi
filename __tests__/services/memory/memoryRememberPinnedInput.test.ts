@@ -25,10 +25,8 @@ function rememberDisplayName(input: {
   const userMessageText = `表示名の主体🧑は${input.value}`;
   return executeMemoryRemember(
     memoryRememberArgs({
-      userMessageId: input.userMessageId,
       userMessageText,
       subjectRef: { kind: 'self' },
-      subjectMention: '🧑',
       predicate: 'preferred display name',
       value: input.value,
       scope: 'global',
@@ -113,7 +111,6 @@ describe('memory_remember pinned input', () => {
   it('rejects a provided non-boolean pin before writing memory state', () => {
     const userMessageText = 'malformed-pin-subject status ready';
     const malformed = memoryRememberArgs({
-      userMessageId: 'user-malformed-pin',
       userMessageText,
       subjectRef: { kind: 'named', label: 'malformed-pin-subject' },
       predicate: 'status',

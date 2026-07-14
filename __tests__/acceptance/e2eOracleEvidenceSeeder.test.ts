@@ -107,7 +107,7 @@ describe('paired oracle evidence seeding', () => {
       workspaceConversationId: 'isolated-workspace',
       args: {
         semanticEvidence: {
-          version: 1,
+          version: 2,
           subject_ref: { kind: 'self' },
           subject_type: 'self',
           predicate: 'preference',
@@ -115,14 +115,10 @@ describe('paired oracle evidence seeding', () => {
           scope: 'conversation',
           importance: 0.8,
           confidence: 0.9,
-          source_message_id: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
           operation: 'record',
           assertion_class: 'current_direct',
           evidence_quote: '⟦self⟧\npreference\ntea',
           sensitivity: 'normal',
-          subject_quote: '⟦self⟧',
-          predicate_quote: 'preference',
-          value_quote: 'tea',
         },
         pinned: true,
       },

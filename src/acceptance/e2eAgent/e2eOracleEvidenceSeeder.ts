@@ -3,6 +3,7 @@ import { createConversationFileContext } from '../../engine/tools/toolWorkspaceF
 import { getFactById } from '../../services/memory/facts/queries';
 import type { MemoryFact } from '../../services/memory/facts/types';
 import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
+import type { MemoryRememberSemanticEvidenceV2Input } from '../../services/memory/memoryRememberSemanticEvidence';
 import { isCanonicalSelfMemorySubject } from '../../services/memory/memorySubjectIdentity';
 import {
   validateE2EOracleEvidenceDeclaration,
@@ -36,25 +37,22 @@ function buildIsolatedOracleFact(
   userEvidence: OracleUserEvidence,
 ): MemoryRememberArgs {
   const selfSubject = isCanonicalSelfMemorySubject(fact.subject);
+  const semanticEvidence: MemoryRememberSemanticEvidenceV2Input = {
+    version: 2,
+    subject_ref: selfSubject ? { kind: 'self' } : { kind: 'named', label: fact.subject },
+    subject_type: selfSubject ? 'self' : (fact.subjectType ?? 'concept'),
+    predicate: fact.predicate,
+    value: fact.value,
+    scope: 'conversation',
+    importance: fact.importance ?? 0.5,
+    confidence: fact.confidence ?? 0.9,
+    operation: 'record',
+    assertion_class: 'current_direct',
+    evidence_quote: userEvidence.text,
+    sensitivity: 'normal',
+  };
   return {
-    semanticEvidence: {
-      version: 1,
-      subject_ref: selfSubject ? { kind: 'self' } : { kind: 'named', label: fact.subject },
-      subject_type: selfSubject ? 'self' : (fact.subjectType ?? 'concept'),
-      predicate: fact.predicate,
-      value: fact.value,
-      scope: 'conversation',
-      importance: fact.importance ?? 0.5,
-      confidence: fact.confidence ?? 0.9,
-      source_message_id: userEvidence.messageId,
-      operation: 'record',
-      assertion_class: 'current_direct',
-      evidence_quote: userEvidence.text,
-      sensitivity: 'normal',
-      subject_quote: selfSubject ? '⟦self⟧' : fact.subject,
-      predicate_quote: fact.predicate,
-      value_quote: fact.value,
-    },
+    semanticEvidence,
     ...(fact.pinned !== undefined ? { pinned: fact.pinned } : {}),
   };
 }

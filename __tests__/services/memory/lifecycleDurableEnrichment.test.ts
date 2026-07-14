@@ -487,7 +487,6 @@ describe('durable memory enrichment retries', () => {
       claimedAt: 101,
     });
     const correctionArgs = memoryRememberArgs({
-      userMessageId: 'u-causal-successor',
       userMessageText: correctionText,
       subjectRef: { kind: 'self' },
       predicate: 'preferred_channel',
