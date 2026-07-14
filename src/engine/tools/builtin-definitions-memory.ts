@@ -267,7 +267,7 @@ export const MEMORY_FORGET_TOOL: ToolDefinition = {
   },
   contract: {
     category: 'memory',
-    capabilities: ['write'],
+    capabilities: ['delete'],
     resourceKinds: ['memory'],
     sideEffects: ['destructive'],
     riskHints: ['destructive', 'requires_approval'],

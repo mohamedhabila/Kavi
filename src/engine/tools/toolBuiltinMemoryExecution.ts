@@ -23,6 +23,7 @@ import type { ToolExecutionContext } from './toolExecutionContext';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
 import { isExactMemoryProvenanceId } from '../../services/memory/memoryProvenanceIdentity';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
+import { buildMemoryDisabledToolResult } from './memoryPolicyToolAuthority';
 
 export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
   'memory_search',
@@ -37,14 +38,8 @@ export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
 const MEMORY_MANAGE_KEYS = new Set(['action', 'factId']);
 const MEMORY_MANAGE_ACTIONS = new Set(['pin', 'unpin', 'invalidate']);
 
-function buildMemoryPermissionDenied(): ToolRuntimeOutcome {
-  return failedToolOutcome(
-    JSON.stringify({
-      ok: false,
-      code: 'permission_denied',
-      error: 'Long-term memory is disabled in settings.',
-    }),
-  );
+function buildMemoryDisabledRejection(): ToolRuntimeOutcome {
+  return failedToolOutcome(buildMemoryDisabledToolResult());
 }
 
 function memoryManageAction(args: unknown): string {
@@ -192,7 +187,7 @@ export async function executeBuiltinMemoryTool(
   }
 
   if (useSettingsStore.getState().disableLongTermMemory) {
-    return buildMemoryPermissionDenied();
+    return buildMemoryDisabledRejection();
   }
 
   if (name === 'memory_search') {

@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // Tests — Engine memory tools opt-out
 // ---------------------------------------------------------------------------
-// Verifies that every `memory_*` tool short-circuits with a uniform
-// `permission_denied` payload when `useSettingsStore.disableLongTermMemory`
+// Verifies that every non-erasure memory tool short-circuits with a uniform
+// typed rejection when `useSettingsStore.disableLongTermMemory`
 // is set, and falls through to the real implementation when the flag is off.
 // ---------------------------------------------------------------------------
 
@@ -84,13 +84,14 @@ afterEach(() => {
 
 describe('structured memory tool executor — opt-out gate', () => {
   it.each(MEMORY_TOOLS)(
-    'returns permission_denied for %s when disableLongTermMemory is true',
+    'returns a typed disabled rejection for %s when disableLongTermMemory is true',
     async (toolName) => {
       useSettingsStore.setState({ disableLongTermMemory: true });
       const outcome = await executeTool(toolName, '{}', 'conv-1');
       const parsed = parseFailedToolOutcome(outcome);
       expect(parsed.ok).toBe(false);
-      expect(parsed.code).toBe('permission_denied');
+      expect(parsed.status).toBe('rejected');
+      expect(parsed.code).toBe('memory_disabled');
       expect(typeof parsed.error).toBe('string');
     },
   );
@@ -157,7 +158,9 @@ describe('structured memory tool executor — opt-out gate', () => {
     );
 
     expect(withdrawnAlias).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
-    expect(invalidated).toEqual(expect.objectContaining({ ok: false, code: 'permission_denied' }));
+    expect(invalidated).toEqual(
+      expect.objectContaining({ status: 'rejected', ok: false, code: 'memory_disabled' }),
+    );
   });
 
   it.each(['PIN', 'UNPIN', 'INVALIDATE', 'FORGET'])(
@@ -192,7 +195,7 @@ describe('structured memory tool executor — opt-out gate', () => {
     useSettingsStore.setState({ disableLongTermMemory: false });
     const outcome = await executeTool('memory_recall', JSON.stringify({ all: true }), 'conv-1');
     const parsed = parseCompletedToolOutcome(outcome);
-    expect(parsed.code).not.toBe('permission_denied');
+    expect(parsed.code).not.toBe('memory_disabled');
   });
 
   it('adds runtime conversation provenance to memory_remember writes', async () => {

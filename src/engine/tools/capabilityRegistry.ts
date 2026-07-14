@@ -16,6 +16,7 @@ export type ToolCapability =
   | 'discover'
   | 'read'
   | 'write'
+  | 'delete'
   | 'commit'
   | 'push'
   | 'deploy'
@@ -122,6 +123,7 @@ const TOOL_CAPABILITY_VALUES = new Set<ToolCapability>([
   'discover',
   'read',
   'write',
+  'delete',
   'commit',
   'push',
   'deploy',

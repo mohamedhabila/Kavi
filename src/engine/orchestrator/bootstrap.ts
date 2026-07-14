@@ -33,6 +33,7 @@ import {
 } from '../pendingAsyncOperations';
 import { buildToolDefinitions } from '../tools/definitions';
 import { filterToolsForConversationMode } from '../tools/conversationModeToolAuthority';
+import { filterToolsForMemoryPolicy } from '../tools/memoryPolicyToolAuthority';
 import {
   filterToolsByRuntimeAvailability,
   getRuntimeToolAvailabilityContext,
@@ -240,9 +241,10 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
     isSuperAgent ? 'agentic' : 'chitchat',
   );
+  const policyAuthorizedTools = filterToolsForMemoryPolicy(modeAuthorizedTools);
   const catalogVisibleTools = params.toolFilter
-    ? modeAuthorizedTools.filter((tool) => params.toolFilter?.(tool.name) !== false)
-    : modeAuthorizedTools;
+    ? policyAuthorizedTools.filter((tool) => params.toolFilter?.(tool.name) !== false)
+    : policyAuthorizedTools;
   const catalogVisibleToolNames = new Set(catalogVisibleTools.map((tool) => tool.name));
   const runtimeToolAvailability = getRuntimeToolAvailabilityContext();
   const allTools = filterToolsByRuntimeAvailability(catalogVisibleTools, runtimeToolAvailability);
