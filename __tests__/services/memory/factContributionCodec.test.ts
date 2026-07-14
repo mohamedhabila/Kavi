@@ -157,6 +157,18 @@ describe('fact contribution codec', () => {
     ).toThrow('memory_fact_contribution_thread_id_invalid');
   });
 
+  it('orders opaque mixed-script source IDs by ECMAScript ordinal order', () => {
+    expect(
+      normalizeMemoryFactContributionSourceAliases([
+        { sourceKind: 'message', sourceId: 'β' },
+        { sourceKind: 'message', sourceId: 'ä' },
+        { sourceKind: 'message', sourceId: 'a' },
+        { sourceKind: 'message', sourceId: '消息' },
+        { sourceKind: 'message', sourceId: 'Z' },
+      ]).map((alias) => alias.sourceId),
+    ).toEqual(['Z', 'a', 'ä', 'β', '消息']);
+  });
+
   it('uses the unique causal producer event for idempotent contribution identity', () => {
     const scope = normalizeMemoryFactContributionSourceScope({
       memoryOwnerId: 'vault-owner',

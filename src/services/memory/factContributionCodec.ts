@@ -87,6 +87,10 @@ const MEMORY_KINDS = [
 ] as const satisfies readonly MemoryFactKind[];
 const PRODUCER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 
+function compareOrdinal(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export type MemoryFactContributionSourceKind = (typeof SOURCE_KINDS)[number];
 
 export interface MemoryFactContributionSourceScope {
@@ -463,8 +467,8 @@ export function normalizeMemoryFactContributionSourceAliases(
   }
   return Array.from(normalized.values()).sort(
     (left, right) =>
-      left.sourceKind.localeCompare(right.sourceKind) ||
-      left.sourceId.localeCompare(right.sourceId),
+      compareOrdinal(left.sourceKind, right.sourceKind) ||
+      compareOrdinal(left.sourceId, right.sourceId),
   );
 }
 
