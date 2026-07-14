@@ -197,6 +197,53 @@ describe('memory withdrawal guards', () => {
     expect(clearEmbeddingCache()).toBe(1);
   });
 
+  it('rolls retirement and lineage cleanup back when physical payload deletion fails', async () => {
+    const fact = recordScopedFact('PRIVATE-PURGE-ROLLBACK-SENTINEL');
+    const contribution = getMemoryDb().getFirstSync<{ id: string }>(
+      'SELECT id FROM memory_fact_contributions WHERE fact_id = ? LIMIT 1',
+      fact.id,
+    );
+    if (!contribution) throw new Error('expected contribution');
+    await getEmbeddingCached('purge rollback cache entry', DEFAULT_LOCAL_EMBEDDING_CONFIG);
+    getMemoryDb().execSync(`
+      CREATE TRIGGER reject_retired_payload_delete
+      BEFORE DELETE ON memory_fact_contributions
+      WHEN OLD.id = '${contribution.id}'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced private purge rollback detail');
+      END;
+    `);
+
+    const result = forgetMemoryFactForManagement({ factId: fact.id });
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'internal',
+      error: 'Memory withdrawal failed.',
+    });
+    expect(JSON.stringify(result)).not.toContain('forced private purge rollback detail');
+    expect(
+      getMemoryDb().getFirstSync<{ object_text: string }>(
+        'SELECT object_text FROM memory_facts WHERE id = ?',
+        fact.id,
+      )?.object_text,
+    ).toBe('PRIVATE-PURGE-ROLLBACK-SENTINEL');
+    expect(
+      getMemoryDb().getFirstSync<{ id: string }>(
+        'SELECT id FROM memory_fact_contributions WHERE id = ?',
+        contribution.id,
+      )?.id,
+    ).toBe(contribution.id);
+    expect(retirementLedgerCounts()).toEqual({
+      groups: 0,
+      requests: 0,
+      sources: 0,
+      contributions: 0,
+      facts: 0,
+    });
+    expect(clearEmbeddingCache()).toBe(1);
+  });
+
   it('preserves independently scoped working state while deleting exact linked memory', () => {
     editPromptEligibleWorkingBlock(
       'active_focus',
@@ -253,11 +300,8 @@ describe('memory withdrawal guards', () => {
       })?.content,
     ).toBe('independent working focus');
     expect(
-      getMemoryDb().getFirstSync<{ id: string; deleted_at: number }>(
-        'SELECT id, deleted_at FROM memory_facts WHERE id = ?',
-        fact.id,
-      ),
-    ).toEqual({ id: fact.id, deleted_at: 400 });
+      getMemoryDb().getFirstSync('SELECT id FROM memory_facts WHERE id = ?', fact.id),
+    ).toBeNull();
     expect(
       getMemoryDb().getFirstSync('SELECT id FROM memory_episodes WHERE id = ?', episode.id),
     ).toBeNull();

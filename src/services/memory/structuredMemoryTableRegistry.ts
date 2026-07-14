@@ -29,7 +29,7 @@ export const USER_RESET_CLEARED_STRUCTURED_MEMORY_TABLES = [
   'memory_entities',
 ] as const;
 
-/** Immutable causal records retained by an ordinary user reset. */
+/** Contribution table schemas rebuilt only by privileged physical test cleanup. */
 export const FULL_RESET_REBUILT_CONTRIBUTION_TABLES = [
   'memory_fact_contributions',
   'memory_fact_contribution_supersessions',
@@ -37,7 +37,10 @@ export const FULL_RESET_REBUILT_CONTRIBUTION_TABLES = [
   'memory_fact_contribution_sources',
 ] as const;
 
-/** Immutable causal records retained by an ordinary user reset. */
+/**
+ * Table schemas retained by an ordinary reset. Causal payload parents are
+ * physically purged; only the content-free retirement tables retain rows.
+ */
 export const USER_RESET_PRESERVED_STRUCTURED_MEMORY_TABLES = [
   ...FULL_RESET_REBUILT_CONTRIBUTION_TABLES,
   'memory_facts',
@@ -62,9 +65,11 @@ export const FULL_RESET_DROPPED_RETIREMENT_TABLES = [
 
 /** External triggers survive retirement-table drops unless removed explicitly. */
 export const FULL_RESET_DROPPED_RETIREMENT_PARENT_TRIGGERS = [
-  'trg_memory_retired_fact_contribution_parent_delete',
+  'trg_memory_fact_contribution_delete_immutable',
+  'trg_memory_fact_contribution_insert_immutable',
   'trg_memory_retired_fact_contribution_parent_identity_update',
   'trg_memory_retired_fact_parent_delete',
+  'trg_memory_retired_fact_parent_insert',
   'trg_memory_retired_fact_parent_identity_update',
 ] as const;
 

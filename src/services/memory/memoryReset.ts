@@ -1,9 +1,11 @@
 import { getSchemaReadyMemoryDb, type MemoryDatabase } from './access/schemaGuard';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/transaction';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
+import { checkpointMemoryDatabaseAfterSensitiveDeletion } from './database';
 import { clearEmbeddingCache, getEmbeddingCacheEntryCount } from './embeddings';
 import type { PersistedExactMemorySourceIdentity } from './exactMemorySourceIdentity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import { purgeAllRetiredCausalPayloadsForOwnerInTransaction } from './retiredCausalPayloadPurge';
 import { retireExactMemorySources } from './sourceRetirementCoordinator';
 import { USER_RESET_CLEARED_STRUCTURED_MEMORY_TABLES } from './structuredMemoryTableRegistry';
 
@@ -123,6 +125,8 @@ export function resetCanonicalMemoryForManagement(): void {
     }
 
     assertNoActiveCausalMemory(db, memoryOwnerId);
+    purgeAllRetiredCausalPayloadsForOwnerInTransaction(db, memoryOwnerId);
+    runAfterMemoryTransactionCommit(checkpointMemoryDatabaseAfterSensitiveDeletion);
     clearDerivedMemory(db);
     clearEmbeddingCache();
     if (getEmbeddingCacheEntryCount() !== 0) {

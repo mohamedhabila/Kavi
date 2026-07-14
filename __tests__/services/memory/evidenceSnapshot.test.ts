@@ -87,7 +87,7 @@ describe('scoped memory evidence', () => {
     );
   });
 
-  it('excludes canonical tombstones from scoped exports while retaining isolated forensic evidence', () => {
+  it('excludes physically forgotten facts from scoped and isolated evaluation exports', () => {
     const recorded = recordContributionBackedFact(
       {
         subjectId: 'retired-evidence-subject',
@@ -109,9 +109,7 @@ describe('scoped memory evidence', () => {
 
     expect(withdrawMemoryFact(recorded.fact.id, 200)).toMatchObject({ status: 'withdrawn' });
     expect(captureScopedMemoryEvidence(SCOPE, 300).facts).toEqual([]);
-    expect(captureCompleteMemoryEvidenceForIsolatedEvaluation(SCOPE, 300).facts).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: recorded.fact.id, deletedAt: 200 })]),
-    );
+    expect(captureCompleteMemoryEvidenceForIsolatedEvaluation(SCOPE, 300).facts).toEqual([]);
   });
 
   it('classifies created and invalidated facts from bounded snapshots', () => {

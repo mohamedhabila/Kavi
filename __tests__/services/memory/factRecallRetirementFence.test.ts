@@ -50,7 +50,7 @@ it('never returns an immutable retired fact through the direct-id recall path', 
   );
 
   expect(withdrawMemoryFact(recorded.fact.id, 200)).toMatchObject({ status: 'withdrawn' });
-  expect(getFactById(recorded.fact.id)).toMatchObject({ deletedAt: 200 });
+  expect(getFactById(recorded.fact.id)).toBeNull();
   expect(getFactByIdForRecallCandidate(recorded.fact.id)).toBeNull();
 
   getMemoryDb().runSync(

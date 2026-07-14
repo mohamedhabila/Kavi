@@ -258,6 +258,14 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
               AND producer_event_id = NEW.producer_event_id
             )
       )
+      OR EXISTS (
+        SELECT 1
+          FROM memory_retired_fact_contributions AS retired
+          JOIN memory_source_retirement_groups AS retirement
+            ON retirement.id = retired.retirement_group_id
+         WHERE retired.contribution_id = NEW.id
+           AND retirement.memory_owner_id = NEW.memory_owner_id
+      )
       BEGIN
         SELECT RAISE(ABORT, 'memory_fact_contribution_immutable');
       END;
@@ -268,9 +276,16 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         SELECT RAISE(ABORT, 'memory_fact_contribution_immutable');
       END;
 
-      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_delete_immutable
+      CREATE TRIGGER trg_memory_fact_contribution_delete_immutable
       BEFORE DELETE ON memory_fact_contributions
-      WHEN EXISTS (SELECT 1 FROM memory_facts WHERE id = OLD.fact_id)
+      WHEN NOT EXISTS (
+        SELECT 1
+          FROM memory_retired_fact_contributions AS retired
+          JOIN memory_source_retirement_groups AS retirement
+            ON retirement.id = retired.retirement_group_id
+         WHERE retired.contribution_id = OLD.id
+           AND retirement.memory_owner_id = OLD.memory_owner_id
+      )
       BEGIN
         SELECT RAISE(ABORT, 'memory_fact_contribution_immutable');
       END;
@@ -504,8 +519,8 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
   });
 }
 
-/** Privileged full-reset boundary; ordinary contribution deletion remains impossible. */
-export function clearFactContributionLedgerForStructuredReset(db: MemoryDb): void {
+/** Drop the causal parent ledger inside the privileged full-reset boundary. */
+export function dropFactContributionLedgerForStructuredReset(db: MemoryDb): void {
   runMemoryDatabaseSavepoint(db, (database) => {
     dropFactContributionFactReferenceTriggers(database);
     database.execSync(`
@@ -514,6 +529,5 @@ export function clearFactContributionLedgerForStructuredReset(db: MemoryDb): voi
       DROP TABLE IF EXISTS memory_fact_contribution_sources;
       DROP TABLE IF EXISTS memory_fact_contributions;
     `);
-    ensureFactContributionSchema(database);
   });
 }

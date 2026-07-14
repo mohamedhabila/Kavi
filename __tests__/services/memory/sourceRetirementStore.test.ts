@@ -9,6 +9,7 @@ import { upsertEntity } from '../../../src/services/memory/entities';
 import type { PersistedExactMemorySourceIdentity } from '../../../src/services/memory/exactMemorySourceIdentity';
 import { recordFactWithContributionInTransaction } from '../../../src/services/memory/facts/mutations';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
+import { purgeRetiredCausalPayloadsInTransaction } from '../../../src/services/memory/retiredCausalPayloadPurge';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -126,6 +127,19 @@ function tableCount(table: string): number {
   return (
     getMemoryDb().getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
       ?.count ?? 0
+  );
+}
+
+function reinsertExactRow(
+  db: ReturnType<typeof getMemoryDb>,
+  table: string,
+  row: Readonly<Record<string, string | number | null>>,
+): void {
+  const columns = Object.keys(row);
+  db.runSync(
+    `INSERT INTO ${table}(${columns.join(', ')})
+     VALUES (${columns.map(() => '?').join(', ')})`,
+    ...columns.map((column) => row[column] ?? null),
   );
 }
 
@@ -248,9 +262,7 @@ describe('source retirement store', () => {
       (_, index) => `mfc_${index.toString(16).padStart(64, '0')}`,
     );
     expect(() =>
-      runMemoryTransaction(() =>
-        loadPriorRetiredFactContributionsInTransaction(db, overflow),
-      ),
+      runMemoryTransaction(() => loadPriorRetiredFactContributionsInTransaction(db, overflow)),
     ).toThrow('memory_source_retirement_lookup_contribution_ids_invalid');
   });
 
@@ -346,6 +358,17 @@ describe('source retirement store', () => {
   it('enforces parent identity, child counts, and immutable rows at the database boundary', () => {
     const db = getMemoryDb();
     const input = operation();
+    const unrelated = seedRetirableFact('unrelated-delete-guard');
+    const retiredContributionRow = db.getFirstSync<Record<string, string | number | null>>(
+      'SELECT * FROM memory_fact_contributions WHERE id = ?',
+      input.retiredContributionIds[0],
+    );
+    const retiredFactRow = db.getFirstSync<Record<string, string | number | null>>(
+      'SELECT * FROM memory_facts WHERE id = ?',
+      input.retiredFactIds[0],
+    );
+    if (!retiredContributionRow || !retiredFactRow)
+      throw new Error('retired parent fixture missing');
     runMemoryTransaction(() => persistSourceRetirementOperationInTransaction(db, input));
 
     expect(() =>
@@ -366,7 +389,7 @@ describe('source retirement store', () => {
     ).toThrow('memory_source_retirement_request_count_exceeded');
 
     const mutations = [
-      "UPDATE memory_source_retirement_groups SET retired_at = 501",
+      'UPDATE memory_source_retirement_groups SET retired_at = 501',
       'DELETE FROM memory_source_retirement_groups',
       "UPDATE memory_source_retirement_requests SET source_id = 'changed'",
       'DELETE FROM memory_source_retirement_requests',
@@ -381,19 +404,10 @@ describe('source retirement store', () => {
 
     expect(() =>
       db.runSync(
-        'DELETE FROM memory_fact_contributions WHERE id = ?',
-        input.retiredContributionIds[0],
-      ),
-    ).toThrow('immutable');
-    expect(() =>
-      db.runSync(
         "UPDATE memory_fact_contributions SET memory_owner_id = 'foreign-owner' WHERE id = ?",
         input.retiredContributionIds[0],
       ),
     ).toThrow('immutable');
-    expect(() =>
-      db.runSync('DELETE FROM memory_facts WHERE id = ?', input.retiredFactIds[0]),
-    ).toThrow('memory_retired_fact_parent_immutable');
     expect(() =>
       db.runSync(
         "UPDATE memory_facts SET memory_owner_id = 'foreign-owner' WHERE id = ?",
@@ -407,6 +421,81 @@ describe('source retirement store', () => {
         input.retiredFactIds[0],
       ).changes,
     ).toBe(1);
+    expect(
+      db.runSync(
+        'DELETE FROM memory_fact_contributions WHERE id = ?',
+        input.retiredContributionIds[0],
+      ).changes,
+    ).toBe(1);
+    expect(() => reinsertExactRow(db, 'memory_fact_contributions', retiredContributionRow)).toThrow(
+      'memory_fact_contribution_immutable',
+    );
+    expect(
+      db.runSync('DELETE FROM memory_facts WHERE id = ?', input.retiredFactIds[0]).changes,
+    ).toBe(1);
+    expect(() => reinsertExactRow(db, 'memory_facts', retiredFactRow)).toThrow(
+      'memory_retired_fact_replay_forbidden',
+    );
+    expect(() =>
+      db.runSync('DELETE FROM memory_fact_contributions WHERE id = ?', unrelated.contributionId),
+    ).toThrow('memory_fact_contribution_immutable');
+    expect(() => db.runSync('DELETE FROM memory_facts WHERE id = ?', unrelated.factId)).toThrow(
+      'memory_fact_delete_not_authorized',
+    );
+    expect(
+      runMemoryTransaction(() =>
+        loadVerifiedSourceRetirementOperationInTransaction(db, input.retirementGroupId),
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        retiredContributionIds: input.retiredContributionIds,
+        retiredFactIds: input.retiredFactIds,
+      }),
+    );
+
+    closeMemoryDb();
+    const reopened = getMemoryDb();
+    expect(() =>
+      reopened.runSync(
+        'DELETE FROM memory_fact_contributions WHERE id = ?',
+        unrelated.contributionId,
+      ),
+    ).toThrow('memory_fact_contribution_immutable');
+    expect(() =>
+      reopened.runSync('DELETE FROM memory_facts WHERE id = ?', unrelated.factId),
+    ).toThrow('memory_fact_delete_not_authorized');
+  });
+
+  it('treats an exact retry after committed payload purge as an idempotent no-op', () => {
+    const db = getMemoryDb();
+    const input = operation({ retirementGroupId: 'retirement-idempotent-purge' });
+
+    const first = runMemoryTransaction(() => {
+      persistSourceRetirementOperationInTransaction(db, input);
+      return purgeRetiredCausalPayloadsInTransaction(db, {
+        retiredContributionIds: input.retiredContributionIds,
+        retiredFactIds: input.retiredFactIds,
+      });
+    });
+    const replay = runMemoryTransaction(() =>
+      purgeRetiredCausalPayloadsInTransaction(db, {
+        retiredContributionIds: input.retiredContributionIds,
+        retiredFactIds: input.retiredFactIds,
+      }),
+    );
+
+    expect(first).toEqual({ contributionPayloads: 1, factPayloads: 1 });
+    expect(replay).toEqual({ contributionPayloads: 0, factPayloads: 0 });
+    expect(
+      runMemoryTransaction(() =>
+        loadVerifiedSourceRetirementOperationInTransaction(db, input.retirementGroupId),
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        retiredContributionIds: input.retiredContributionIds,
+        retiredFactIds: input.retiredFactIds,
+      }),
+    );
   });
 
   it('rolls back the complete operation even when its caller catches a child failure', () => {

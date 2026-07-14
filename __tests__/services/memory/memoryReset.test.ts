@@ -21,6 +21,7 @@ import {
 import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
 import { getMemoryDb } from '../../../src/services/memory/database';
 import { resetCanonicalMemoryForManagement } from '../../../src/services/memory/memoryReset';
+import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -69,19 +70,57 @@ describe('canonical memory management reset', () => {
     expect(tableCount('memory_retired_sources')).toBe(2);
     expect(tableCount('memory_retired_fact_contributions')).toBe(1);
     expect(tableCount('memory_retired_facts')).toBe(1);
-    expect(tableCount('memory_fact_contributions')).toBe(1);
-    expect(tableCount('memory_fact_contribution_sources')).toBe(2);
-    expect(rowForFact(seeded.fact.id)).toMatchObject({
-      invalid_at: expect.any(Number),
-      deleted_at: expect.any(Number),
-    });
+    expect(tableCount('memory_fact_contributions')).toBe(0);
+    expect(tableCount('memory_fact_contribution_sources')).toBe(0);
+    expect(rowForFact(seeded.fact.id)).toBeNull();
     expect(tableCount('memory_entities')).toBe(0);
     expect(tableCount('memory_working_blocks')).toBe(0);
+    expect(
+      JSON.stringify({
+        groups: getMemoryDb().getAllSync('SELECT * FROM memory_source_retirement_groups'),
+        requests: getMemoryDb().getAllSync('SELECT * FROM memory_source_retirement_requests'),
+        sources: getMemoryDb().getAllSync('SELECT * FROM memory_retired_sources'),
+        contributions: getMemoryDb().getAllSync('SELECT * FROM memory_retired_fact_contributions'),
+        facts: getMemoryDb().getAllSync('SELECT * FROM memory_retired_facts'),
+      }),
+    ).not.toContain('قيمة محفوظة');
+    expect(getMemoryDb().getFirstSync('PRAGMA secure_delete')).toEqual({ secure_delete: 1 });
     expect(notifications).toBe(1);
     expect(mockClearEmbeddingCache).toHaveBeenCalled();
 
     resetCanonicalMemoryForManagement();
     expect(tableCount('memory_source_retirement_groups')).toBe(1);
+  });
+
+  it('purges payload parents left by an earlier non-management retirement', () => {
+    const seeded = seedContribution('reset-prior-retirement', {
+      predicate: 'private-predicate',
+      objectText: 'PRIVATE-PRIOR-RETIREMENT-SENTINEL',
+    });
+    expect(
+      retireExactMemorySources({
+        reason: 'message_edit',
+        requestedSources: [seeded.messageSource],
+        retiredAt: 500,
+      }).status,
+    ).toBe('retired');
+    expect(tableCount('memory_fact_contributions')).toBe(1);
+    expect(rowForFact(seeded.fact.id)?.object_text).toBe('PRIVATE-PRIOR-RETIREMENT-SENTINEL');
+    getMemoryDb().runSync(
+      `INSERT INTO memory_fact_legacy_quarantine(fact_id, reason, quarantined_at)
+       VALUES (?, 'source_retired', 501)`,
+      seeded.fact.id,
+    );
+
+    resetCanonicalMemoryForManagement();
+
+    expect(tableCount('memory_fact_contributions')).toBe(0);
+    expect(tableCount('memory_facts')).toBe(0);
+    expect(tableCount('memory_fact_legacy_quarantine')).toBe(0);
+    expect(tableCount('memory_source_retirement_groups')).toBe(1);
+    expect(
+      JSON.stringify(getMemoryDb().getAllSync('SELECT * FROM memory_source_retirement_groups')),
+    ).not.toContain('PRIVATE-PRIOR-RETIREMENT-SENTINEL');
   });
 
   it('processes more than one 256-source request without widening source identity', () => {
@@ -100,10 +139,8 @@ describe('canonical memory management reset', () => {
     expect(tableCount('memory_retired_fact_contributions')).toBe(257);
     expect(tableCount('memory_retired_facts')).toBe(257);
     expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        `SELECT COUNT(*) AS count FROM memory_facts
-          WHERE invalid_at IS NULL OR deleted_at IS NULL`,
-      )?.count,
+      getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_facts')
+        ?.count,
     ).toBe(0);
   });
 

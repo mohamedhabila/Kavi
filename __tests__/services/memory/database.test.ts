@@ -1,6 +1,11 @@
 const mockCloseSync = jest.fn();
 const mockExecSync = jest.fn();
-const mockDatabase = { closeSync: mockCloseSync, execSync: mockExecSync };
+const mockGetFirstSync = jest.fn(() => ({ secure_delete: 1 }));
+const mockDatabase = {
+  closeSync: mockCloseSync,
+  execSync: mockExecSync,
+  getFirstSync: mockGetFirstSync,
+};
 const mockOpenDatabaseSync = jest.fn(() => mockDatabase);
 
 jest.mock('expo-sqlite', () => ({
@@ -14,6 +19,8 @@ describe('memory database lifecycle', () => {
     closeMemoryDb();
     mockCloseSync.mockReset();
     mockExecSync.mockReset();
+    mockGetFirstSync.mockReset();
+    mockGetFirstSync.mockReturnValue({ secure_delete: 1 });
     mockOpenDatabaseSync.mockClear();
   });
 
@@ -26,11 +33,13 @@ describe('memory database lifecycle', () => {
     expect(getMemoryDb()).toBe(mockDatabase);
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(1);
     expect(mockOpenDatabaseSync).toHaveBeenCalledWith('kavi-memory.db');
-    expect(mockExecSync).toHaveBeenNthCalledWith(1, 'DROP TABLE IF EXISTS memory_chunks');
+    expect(mockExecSync).toHaveBeenNthCalledWith(1, 'PRAGMA secure_delete = ON');
+    expect(mockExecSync).toHaveBeenNthCalledWith(2, 'DROP TABLE IF EXISTS memory_chunks');
     expect(mockExecSync).toHaveBeenNthCalledWith(
-      2,
+      3,
       'DROP TABLE IF EXISTS memory_product_experience_observations;',
     );
+    expect(mockGetFirstSync).toHaveBeenCalledWith('PRAGMA secure_delete');
   });
 
   it('closes the active database and permits a clean reopen', () => {
@@ -40,7 +49,7 @@ describe('memory database lifecycle', () => {
 
     getMemoryDb();
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
-    expect(mockExecSync).toHaveBeenCalledTimes(4);
+    expect(mockExecSync).toHaveBeenCalledTimes(6);
   });
 
   it('retries cleanup with a fresh database after cleanup fails', () => {
@@ -53,6 +62,16 @@ describe('memory database lifecycle', () => {
 
     expect(getMemoryDb()).toBe(mockDatabase);
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
-    expect(mockExecSync).toHaveBeenCalledTimes(3);
+    expect(mockExecSync).toHaveBeenCalledTimes(4);
+  });
+
+  it('fails closed and closes the handle when secure deletion is unavailable', () => {
+    mockGetFirstSync.mockReturnValueOnce({ secure_delete: 0 });
+
+    expect(() => getMemoryDb()).toThrow('memory_database_secure_delete_unavailable');
+    expect(mockCloseSync).toHaveBeenCalledTimes(1);
+
+    expect(getMemoryDb()).toBe(mockDatabase);
+    expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
   });
 });

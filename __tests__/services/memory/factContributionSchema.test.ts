@@ -520,7 +520,10 @@ describe('fact contribution schema', () => {
       ),
     ).toThrow('memory_fact_contribution_supersession_immutable');
 
-    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id);
+    expect(() =>
+      contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id),
+    ).toThrow('memory_fact_delete_not_authorized');
+    clearStructuredMemory();
 
     expect(
       contribution.db.getFirstSync<{ count: number }>(
@@ -627,7 +630,7 @@ describe('fact contribution schema', () => {
 
     expect(() =>
       contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id),
-    ).toThrow('memory_fact_contribution_predecessor_delete_committed');
+    ).toThrow('memory_fact_delete_not_authorized');
 
     expect(
       contribution.db.getFirstSync<{ count: number }>(
@@ -640,8 +643,10 @@ describe('fact contribution schema', () => {
       )?.count,
     ).toBe(1);
 
-    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id);
-    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id);
+    expect(() =>
+      contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id),
+    ).toThrow('memory_fact_delete_not_authorized');
+    clearStructuredMemory();
 
     expect(
       contribution.db.getFirstSync<{ count: number }>(
@@ -655,7 +660,7 @@ describe('fact contribution schema', () => {
     ).toBe(0);
   });
 
-  it('allows an explicit successor teardown before deleting its predecessor', () => {
+  it('requires retirement or privileged cleanup before successor teardown', () => {
     ensureFactSchema();
     const predecessor = createFact('blue');
     const successor = createFact('green');
@@ -680,8 +685,10 @@ describe('fact contribution schema', () => {
       successor.id,
     );
 
-    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id);
-    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id);
+    expect(() =>
+      contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id),
+    ).toThrow('memory_fact_delete_not_authorized');
+    clearStructuredMemory();
 
     expect(
       contribution.db.getFirstSync<{ count: number }>(

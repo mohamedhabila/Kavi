@@ -11,6 +11,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { resetCanonicalMemoryForManagement } from '../../../src/services/memory/memoryReset';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -227,13 +228,16 @@ describe('fact contribution supersession snapshot schema', () => {
     const contributionId = contributionIdForFact(successor.id);
 
     expect(() => db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id)).toThrow(
-      'memory_fact_contribution_predecessor_delete_committed',
+      'memory_fact_delete_not_authorized',
     );
     expect(
       db.getFirstSync('SELECT id FROM memory_facts WHERE id = ?', predecessor.id),
     ).not.toBeNull();
 
-    db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id);
+    expect(() => db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id)).toThrow(
+      'memory_fact_delete_not_authorized',
+    );
+    resetCanonicalMemoryForManagement();
     expect(
       db.getFirstSync<{ count: number }>(
         `SELECT COUNT(*) AS count
@@ -257,7 +261,6 @@ describe('fact contribution supersession snapshot schema', () => {
       )?.count,
     ).toBe(0);
 
-    expect(() => db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id)).not.toThrow();
     expect(db.getFirstSync('SELECT id FROM memory_facts WHERE id = ?', predecessor.id)).toBeNull();
     expect(() => assertFactContributionAdmissionIntegrity(db)).not.toThrow();
   });

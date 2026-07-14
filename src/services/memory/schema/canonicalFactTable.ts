@@ -122,11 +122,13 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'trg_memory_fact_explicit_override_parent_identity_immutable',
     'trg_memory_fact_explicit_override_parent_insert_immutable',
     'trg_memory_retired_fact_parent_delete',
+    'trg_memory_retired_fact_parent_insert',
     'trg_memory_retired_fact_parent_identity_update',
   ]);
   const sourceRetirementFactReferenceTriggerNames = [
     'trg_memory_retired_fact_parent',
     'trg_memory_retired_fact_parent_delete',
+    'trg_memory_retired_fact_parent_insert',
     'trg_memory_retired_fact_parent_identity_update',
   ] as const;
   const schemaObjects = db.getAllSync<{ type: string; name: string; sql: string }>(

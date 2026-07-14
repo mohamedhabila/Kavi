@@ -29,7 +29,7 @@ import {
 import { ensureEpisodeAccessPolicySchema } from './episodes/accessPolicySchema';
 import { ensureEpisodeRetrievalIndexSchema } from './episodes/retrievalIndex';
 import {
-  clearFactContributionLedgerForStructuredReset,
+  dropFactContributionLedgerForStructuredReset,
   ensureFactContributionSchema,
   isFactContributionSchemaResetRequired,
 } from './factContributionSchema';
@@ -564,7 +564,7 @@ export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>
     for (const table of FULL_RESET_DROPPED_RETIREMENT_TABLES) {
       database.execSync(`DROP TABLE IF EXISTS ${table}`);
     }
-    clearFactContributionLedgerForStructuredReset(database);
+    dropFactContributionLedgerForStructuredReset(database);
     const factsExist = database.getFirstSync<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_facts'",
     );
@@ -583,6 +583,7 @@ export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>
       );
       if (exists) database.runSync(`DELETE FROM ${table}`);
     }
+    ensureFactContributionSchema(database);
     ensureSourceRetirementSchema(database);
   });
 }

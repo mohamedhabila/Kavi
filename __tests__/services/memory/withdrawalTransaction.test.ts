@@ -63,6 +63,7 @@ interface SeededLineage {
   otherThreadJobId: string;
   otherKindJobId: string;
   evidenceIds: string[];
+  targetContributionIds: string[];
   targetWorkingBlockScopeKey: string;
 }
 
@@ -369,6 +370,12 @@ function seedAuthoritativeLineage(): SeededLineage {
     otherThreadJobId: otherThreadJob.id,
     otherKindJobId: otherKindJob.id,
     evidenceIds: [targetEvidence.id, episodeEvidence.id],
+    targetContributionIds: getMemoryDb()
+      .getAllSync<{ id: string }>(
+        'SELECT id FROM memory_fact_contributions WHERE fact_id = ? ORDER BY id',
+        target.id,
+      )
+      .map((row) => row.id),
     targetWorkingBlockScopeKey: buildWorkingBlockScopeKey({
       conversationId: CONVERSATION_ID,
       threadId: THREAD_ID,
@@ -398,6 +405,15 @@ afterEach(() => {
 describe('atomic memory withdrawal', () => {
   it('purges only authoritative artifacts and seals a content-free retirement receipt', () => {
     const seeded = seedAuthoritativeLineage();
+    expect(
+      JSON.stringify(
+        getMemoryDb().getAllSync(
+          `SELECT payload_json FROM memory_fact_contributions
+            WHERE id IN (${seeded.targetContributionIds.map(() => '?').join(', ')})`,
+          ...seeded.targetContributionIds,
+        ),
+      ),
+    ).toContain(PRIVATE_VALUE);
     const notificationSpy = jest.spyOn(memoryChangeNotifications, 'notifyStructuredMemoryChanged');
     notificationSpy.mockClear();
 
@@ -423,16 +439,15 @@ describe('atomic memory withdrawal', () => {
     expect(JSON.stringify(result)).not.toContain(PRIVATE_VALUE);
     expect(notificationSpy).toHaveBeenLastCalledWith(CONVERSATION_ID);
 
-    expect(ids('memory_facts')).toEqual(
-      expect.arrayContaining([seeded.targetFactId, seeded.collisionFactId]),
-    );
-    expect(ids('memory_facts')).toHaveLength(2);
+    expect(ids('memory_facts')).toEqual([seeded.collisionFactId]);
     expect(
-      getMemoryDb().getFirstSync<{ deleted_at: number }>(
-        'SELECT deleted_at FROM memory_facts WHERE id = ?',
-        seeded.targetFactId,
-      ),
-    ).toEqual({ deleted_at: 5_000 });
+      getMemoryDb().getFirstSync('SELECT id FROM memory_facts WHERE id = ?', seeded.targetFactId),
+    ).toBeNull();
+    expect(ids('memory_fact_contributions')).toEqual([]);
+    expect(ids('memory_retired_fact_contributions', 'contribution_id')).toEqual(
+      seeded.targetContributionIds,
+    );
+    expect(ids('memory_fact_contribution_sources', 'contribution_id')).toEqual([]);
     expect(ids('memory_entities')).toContain(seeded.sharedEntityId);
     expect(ids('memory_entities')).not.toContain(seeded.orphanEntityId);
     expect(ids('memory_fact_evidence')).toEqual([]);
@@ -563,6 +578,20 @@ describe('atomic memory withdrawal', () => {
       ),
     ).toBe(false);
     expect(JSON.stringify(verifiedRetirement)).not.toContain(PRIVATE_VALUE);
+    expect(
+      JSON.stringify({
+        facts: getMemoryDb().getAllSync('SELECT * FROM memory_facts'),
+        contributions: getMemoryDb().getAllSync('SELECT * FROM memory_fact_contributions'),
+        episodes: getMemoryDb().getAllSync('SELECT * FROM memory_episodes'),
+        evidence: getMemoryDb().getAllSync('SELECT * FROM memory_fact_evidence'),
+        reflections: getMemoryDb().getAllSync('SELECT * FROM memory_reflections'),
+        workingBlocks: getMemoryDb().getAllSync('SELECT * FROM memory_working_blocks'),
+        ingestionJobs: getMemoryDb().getAllSync('SELECT * FROM memory_ingestion_jobs'),
+        ingestionSnapshots: getMemoryDb().getAllSync(
+          'SELECT * FROM memory_ingestion_source_snapshots',
+        ),
+      }),
+    ).not.toContain(PRIVATE_VALUE);
 
     const residualProbe = probeMemoryWithdrawalResiduals(getMemoryDb(), {
       factIds: [seeded.targetFactId],

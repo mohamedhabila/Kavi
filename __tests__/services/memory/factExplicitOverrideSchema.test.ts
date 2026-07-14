@@ -9,7 +9,10 @@ import {
   ensureFactExplicitOverrideSchema,
 } from '../../../src/services/memory/factExplicitOverrideSchema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
+import {
+  recordFactWithApplicability,
+  recordFactWithContribution,
+} from '../../../src/services/memory/facts/mutations';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
 import {
   clearStructuredMemory,
@@ -77,6 +80,32 @@ function seedFact(): MemoryFact {
       ],
     },
   ).fact;
+}
+
+function seedUncontributedFact(): MemoryFact {
+  nextFact += 1;
+  const suffix = String(nextFact);
+  const subject = upsertEntity({ type: 'self', name: 'user', now: 100 });
+  return recordFactWithApplicability(
+    {
+      subjectId: subject.id,
+      predicate: `schema_override_uncontributed_${suffix}`,
+      objectText: `value-uncontributed-${suffix}`,
+      scope: 'global',
+      sourceMessageId: `legacy-message-${suffix}`,
+      sourceTurnId: `legacy-turn-${suffix}`,
+      now: 100,
+    },
+    { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+  ).fact;
+}
+
+function authorizeLegacyFactDeletion(factId: string): void {
+  getMemoryDb().runSync(
+    `INSERT INTO memory_fact_legacy_quarantine(fact_id, reason, quarantined_at)
+     VALUES (?, 'identity_invalid', 250)`,
+    factId,
+  );
 }
 
 function requireOwner(fact: MemoryFact): string {
@@ -416,7 +445,7 @@ describe('fact explicit override schema', () => {
 
   it('cleans overrides only on hard deletion and preserves soft-retired intent', () => {
     ensureFactSchema();
-    const hardDeleted = seedFact();
+    const hardDeleted = seedUncontributedFact();
     const retired = seedFact();
     insertOverride(hardDeleted.id, requireOwner(hardDeleted), {
       pinnedOverride: 1,
@@ -427,6 +456,7 @@ describe('fact explicit override schema', () => {
       reviewStateAt: 200,
     });
 
+    authorizeLegacyFactDeletion(hardDeleted.id);
     getMemoryDb().runSync('DELETE FROM memory_facts WHERE id = ?', hardDeleted.id);
     getMemoryDb().runSync(
       'UPDATE memory_facts SET deleted_at = 300, updated_at = 300 WHERE id = ?',
@@ -518,8 +548,22 @@ describe('fact explicit override schema', () => {
       'trg_memory_fact_explicit_override_update_guard',
     ]);
 
-    getMemoryDb().runSync('DELETE FROM memory_facts WHERE id = ?', fact.id);
-    expect(overrideCount()).toBe(0);
+    const disposable = seedUncontributedFact();
+    insertOverride(disposable.id, requireOwner(disposable), {
+      pinnedOverride: 1,
+      pinnedAt: 300,
+      createdAt: 300,
+      updatedAt: 300,
+    });
+    authorizeLegacyFactDeletion(disposable.id);
+    getMemoryDb().runSync('DELETE FROM memory_facts WHERE id = ?', disposable.id);
+    expect(overrideCount()).toBe(1);
+    expect(
+      getMemoryDb().getFirstSync(
+        'SELECT fact_id FROM memory_fact_explicit_overrides WHERE fact_id = ?',
+        fact.id,
+      ),
+    ).toEqual({ fact_id: fact.id });
   });
 
   it('preserves explicit intent when the canonical fact is retired', () => {

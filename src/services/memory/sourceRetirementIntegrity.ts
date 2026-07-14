@@ -15,7 +15,6 @@ type MemoryDb = ReturnType<typeof getMemoryDb>;
 
 const SCHEMA_RESET_REQUIRED = 'memory_source_retirement_schema_reset_required';
 const GROUP_PAGE_SIZE = 128;
-const OWNERSHIP_BATCH_SIZE = 400;
 
 interface RetirementGroupRow {
   id: string;
@@ -83,30 +82,6 @@ function loadSources(
     groupId,
     limit + 1,
   );
-}
-
-function assertOwnedIds(
-  db: MemoryDb,
-  input: Readonly<{
-    table: 'memory_fact_contributions' | 'memory_facts';
-    idColumn: 'id';
-    memoryOwnerId: string;
-    ids: ReadonlyArray<string>;
-  }>,
-): void {
-  let matched = 0;
-  for (let offset = 0; offset < input.ids.length; offset += OWNERSHIP_BATCH_SIZE) {
-    const batch = input.ids.slice(offset, offset + OWNERSHIP_BATCH_SIZE);
-    matched +=
-      db.getFirstSync<{ count: number }>(
-        `SELECT COUNT(*) AS count FROM ${input.table}
-          WHERE memory_owner_id = ?
-            AND ${input.idColumn} IN (${batch.map(() => '?').join(', ')})`,
-        input.memoryOwnerId,
-        ...batch,
-      )?.count ?? 0;
-  }
-  if (matched !== input.ids.length) failIntegrity();
 }
 
 function verifyPersistedOperation(
@@ -184,18 +159,6 @@ function verifyPersistedOperation(
     ),
     verified.retiredFactsCommitment,
   );
-  assertOwnedIds(db, {
-    table: 'memory_fact_contributions',
-    idColumn: 'id',
-    memoryOwnerId: parent.memory_owner_id,
-    ids: verified.retiredContributionIds,
-  });
-  assertOwnedIds(db, {
-    table: 'memory_facts',
-    idColumn: 'id',
-    memoryOwnerId: parent.memory_owner_id,
-    ids: verified.retiredFactIds,
-  });
   return verified;
 }
 
@@ -221,17 +184,18 @@ export function loadIntegrityVerifiedSourceRetirementOperation(
 export function assertAllSourceRetirementOperationsIntegrity(db: MemoryDb): void {
   let afterId: string | null = null;
   for (;;) {
-    const rows: Array<{ id: string }> = afterId === null
-      ? db.getAllSync<{ id: string }>(
-          'SELECT id FROM memory_source_retirement_groups ORDER BY id LIMIT ?',
-          GROUP_PAGE_SIZE,
-        )
-      : db.getAllSync<{ id: string }>(
-          `SELECT id FROM memory_source_retirement_groups
+    const rows: Array<{ id: string }> =
+      afterId === null
+        ? db.getAllSync<{ id: string }>(
+            'SELECT id FROM memory_source_retirement_groups ORDER BY id LIMIT ?',
+            GROUP_PAGE_SIZE,
+          )
+        : db.getAllSync<{ id: string }>(
+            `SELECT id FROM memory_source_retirement_groups
             WHERE id > ? ORDER BY id LIMIT ?`,
-          afterId,
-          GROUP_PAGE_SIZE,
-        );
+            afterId,
+            GROUP_PAGE_SIZE,
+          );
     if (rows.length === 0) return;
     for (const row of rows) {
       if (!loadIntegrityVerifiedSourceRetirementOperation(db, row.id)) failIntegrity();

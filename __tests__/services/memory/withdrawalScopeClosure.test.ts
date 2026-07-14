@@ -351,16 +351,11 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     }),
   );
   expect(notificationSpy).toHaveBeenLastCalledWith(CONVERSATION_ID);
-  expect(ids('memory_facts')).toEqual(
-    expect.arrayContaining([target.id, duplicateFactId, retainedFact.id]),
-  );
-  expect(ids('memory_facts')).toHaveLength(3);
+  expect(ids('memory_facts')).toEqual(expect.arrayContaining([duplicateFactId, retainedFact.id]));
+  expect(ids('memory_facts')).toHaveLength(2);
   expect(
-    getMemoryDb().getFirstSync<{ deleted_at: number }>(
-      'SELECT deleted_at FROM memory_facts WHERE id = ?',
-      target.id,
-    ),
-  ).toEqual({ deleted_at: 3_000 });
+    getMemoryDb().getFirstSync('SELECT id FROM memory_facts WHERE id = ?', target.id),
+  ).toBeNull();
   const verifiedRetirement = loadVerifiedFactRetirement(target.id);
   expect(verifiedRetirement).toMatchObject({
     reason: 'fact_withdrawal',

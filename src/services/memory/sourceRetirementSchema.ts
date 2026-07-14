@@ -317,14 +317,6 @@ const TRIGGER_DDL = Object.freeze({
     CREATE TRIGGER trg_memory_retired_fact_delete_immutable
     BEFORE DELETE ON memory_retired_facts
     BEGIN SELECT RAISE(ABORT, 'memory_retired_fact_immutable'); END`,
-  trg_memory_retired_fact_contribution_parent_delete: `
-    CREATE TRIGGER trg_memory_retired_fact_contribution_parent_delete
-    BEFORE DELETE ON memory_fact_contributions
-    WHEN EXISTS (
-      SELECT 1 FROM memory_retired_fact_contributions
-       WHERE contribution_id = OLD.id
-    )
-    BEGIN SELECT RAISE(ABORT, 'memory_retired_fact_contribution_parent_immutable'); END`,
   trg_memory_retired_fact_contribution_parent_identity_update: `
     CREATE TRIGGER trg_memory_retired_fact_contribution_parent_identity_update
     BEFORE UPDATE OF id, memory_owner_id ON memory_fact_contributions
@@ -332,15 +324,35 @@ const TRIGGER_DDL = Object.freeze({
      AND EXISTS (
        SELECT 1 FROM memory_retired_fact_contributions
         WHERE contribution_id = OLD.id
-     )
+    )
     BEGIN SELECT RAISE(ABORT, 'memory_retired_fact_contribution_parent_immutable'); END`,
   trg_memory_retired_fact_parent_delete: `
     CREATE TRIGGER trg_memory_retired_fact_parent_delete
     BEFORE DELETE ON memory_facts
-    WHEN EXISTS (
-      SELECT 1 FROM memory_retired_facts WHERE fact_id = OLD.id
+    WHEN NOT EXISTS (
+      SELECT 1
+        FROM memory_retired_facts AS retired
+        JOIN memory_source_retirement_groups AS retirement
+          ON retirement.id = retired.retirement_group_id
+       WHERE retired.fact_id = OLD.id
+         AND retirement.memory_owner_id = OLD.memory_owner_id
     )
-    BEGIN SELECT RAISE(ABORT, 'memory_retired_fact_parent_immutable'); END`,
+      AND NOT EXISTS (
+        SELECT 1 FROM memory_fact_legacy_quarantine WHERE fact_id = OLD.id
+      )
+    BEGIN SELECT RAISE(ABORT, 'memory_fact_delete_not_authorized'); END`,
+  trg_memory_retired_fact_parent_insert: `
+    CREATE TRIGGER trg_memory_retired_fact_parent_insert
+    BEFORE INSERT ON memory_facts
+    WHEN EXISTS (
+      SELECT 1
+        FROM memory_retired_facts AS retired
+        JOIN memory_source_retirement_groups AS retirement
+          ON retirement.id = retired.retirement_group_id
+       WHERE retired.fact_id = NEW.id
+         AND retirement.memory_owner_id = NEW.memory_owner_id
+    )
+    BEGIN SELECT RAISE(ABORT, 'memory_retired_fact_replay_forbidden'); END`,
   trg_memory_retired_fact_parent_identity_update: `
     CREATE TRIGGER trg_memory_retired_fact_parent_identity_update
     BEFORE UPDATE OF id, memory_owner_id ON memory_facts
@@ -352,16 +364,14 @@ const TRIGGER_DDL = Object.freeze({
 });
 
 const EXTERNAL_PARENT_TRIGGERS = Object.freeze({
-  trg_memory_retired_fact_contribution_parent_delete: 'memory_fact_contributions',
   trg_memory_retired_fact_contribution_parent_identity_update: 'memory_fact_contributions',
   trg_memory_retired_fact_parent_delete: 'memory_facts',
+  trg_memory_retired_fact_parent_insert: 'memory_facts',
   trg_memory_retired_fact_parent_identity_update: 'memory_facts',
 });
 const INTERNAL_TRIGGER_DDL = Object.freeze(
   Object.fromEntries(
-    Object.entries(TRIGGER_DDL).filter(
-      ([name]) => !Object.hasOwn(EXTERNAL_PARENT_TRIGGERS, name),
-    ),
+    Object.entries(TRIGGER_DDL).filter(([name]) => !Object.hasOwn(EXTERNAL_PARENT_TRIGGERS, name)),
   ),
 );
 

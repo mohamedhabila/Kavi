@@ -116,9 +116,9 @@ describe('source retirement schema', () => {
       ),
     ).toBeNull();
     expect(
-      db.getAllSync<{ name: string }>('PRAGMA table_info(memory_source_retirement_groups)').map(
-        (row) => row.name,
-      ),
+      db
+        .getAllSync<{ name: string }>('PRAGMA table_info(memory_source_retirement_groups)')
+        .map((row) => row.name),
     ).toEqual(['id', 'reason', 'retired_at']);
   });
 
@@ -128,9 +128,7 @@ describe('source retirement schema', () => {
       const db = getMemoryDb();
       db.execSync(`CREATE TABLE ${tableName} (id TEXT PRIMARY KEY)`);
 
-      expect(() => ensureFactSchema()).toThrow(
-        'memory_source_retirement_schema_reset_required',
-      );
+      expect(() => ensureFactSchema()).toThrow('memory_source_retirement_schema_reset_required');
       expect(
         db.getFirstSync<{ name: string }>(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -149,9 +147,7 @@ describe('source retirement schema', () => {
       )
     `);
 
-    expect(() => ensureFactSchema()).toThrow(
-      'memory_source_retirement_schema_reset_required',
-    );
+    expect(() => ensureFactSchema()).toThrow('memory_source_retirement_schema_reset_required');
     expect(retirementTableNames()).toEqual(['memory_retired_facts']);
   });
 
@@ -159,9 +155,7 @@ describe('source retirement schema', () => {
     const db = getMemoryDb();
     db.execSync("CREATE VIEW memory_retired_facts AS SELECT 'fact-1' AS fact_id");
 
-    expect(() => ensureFactSchema()).toThrow(
-      'memory_source_retirement_schema_reset_required',
-    );
+    expect(() => ensureFactSchema()).toThrow('memory_source_retirement_schema_reset_required');
     expect(
       db.getFirstSync<{ type: string }>(
         "SELECT type FROM sqlite_master WHERE name = 'memory_retired_facts'",
@@ -169,19 +163,17 @@ describe('source retirement schema', () => {
     ).toBe('view');
   });
 
-  it('rejects a weakened external parent-protection trigger', () => {
+  it('rejects a weakened external parent-identity trigger', () => {
     const db = getMemoryDb();
     ensureFactSchema();
     db.execSync(`
-      DROP TRIGGER trg_memory_retired_fact_parent_delete;
-      CREATE TRIGGER trg_memory_retired_fact_parent_delete
-      BEFORE DELETE ON memory_facts
+      DROP TRIGGER trg_memory_retired_fact_parent_identity_update;
+      CREATE TRIGGER trg_memory_retired_fact_parent_identity_update
+      BEFORE UPDATE OF id, memory_owner_id ON memory_facts
       BEGIN SELECT 1; END;
     `);
     resetFactSchemaCacheForTests();
 
-    expect(() => ensureFactSchema()).toThrow(
-      'memory_source_retirement_schema_reset_required',
-    );
+    expect(() => ensureFactSchema()).toThrow('memory_source_retirement_schema_reset_required');
   });
 });

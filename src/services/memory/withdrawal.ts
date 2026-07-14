@@ -1,9 +1,11 @@
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
-import { runMemoryTransaction } from './access/transaction';
+import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/transaction';
+import { checkpointMemoryDatabaseAfterSensitiveDeletion } from './database';
 import type { VerifiedFactContributionAggregate } from './factContributionAggregateTypes';
 import type { PersistedExactMemorySourceIdentity } from './exactMemorySourceIdentity';
 import type { FactRow } from './facts/types';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import { purgeRetiredCausalPayloadsInTransaction } from './retiredCausalPayloadPurge';
 import { newId } from './schema';
 import { loadCompleteActiveRetirementGraphInTransaction } from './sourceRetirementActiveGraph';
 import { retireExactMemorySources } from './sourceRetirementCoordinator';
@@ -76,9 +78,7 @@ function activeSourcesForFact(
   );
 }
 
-function verifiedPriorWithdrawal(
-  factId: string,
-): Readonly<MemoryWithdrawalReceipt> | null {
+function verifiedPriorWithdrawal(factId: string): Readonly<MemoryWithdrawalReceipt> | null {
   const db = getSchemaReadyMemoryDb();
   const prior = db.getFirstSync<RetiredFactRow>(
     'SELECT retirement_group_id FROM memory_retired_facts WHERE fact_id = ? LIMIT 1',
@@ -154,12 +154,12 @@ export function withdrawMemoryFact(factId: string, now = Date.now()): WithdrawMe
       factIds: operation.retiredFactIds,
       scopedSources: fencedSources,
     });
-    const cleanup = cleanupRetiredMemoryArtifactsInTransaction(
-      db,
-      lineage,
-      fencedSources,
-      now,
-    );
+    const cleanup = cleanupRetiredMemoryArtifactsInTransaction(db, lineage, fencedSources, now);
+    purgeRetiredCausalPayloadsInTransaction(db, {
+      retiredContributionIds: operation.retiredContributionIds,
+      retiredFactIds: operation.retiredFactIds,
+    });
+    runAfterMemoryTransactionCommit(checkpointMemoryDatabaseAfterSensitiveDeletion);
 
     return {
       status: 'withdrawn' as const,
