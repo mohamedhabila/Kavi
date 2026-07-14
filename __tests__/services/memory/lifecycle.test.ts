@@ -54,7 +54,7 @@ import type { Message } from '../../../src/types/message';
 import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { drainRecordedTurn, messages } from '../../helpers/memoryLifecycle';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
-import { memoryRememberExecution } from '../../helpers/memoryRememberExecution';
+import { memoryRememberArgs, memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -238,11 +238,22 @@ describe('recordCompletedTurnForMemory', () => {
   });
 
   it('keeps the tool-owned child write in the parent namespace without post-turn duplication', async () => {
+    const userMessageText = '主体🧑 label /workspace/release-checklist.md';
+    const rememberArgs = memoryRememberArgs({
+      userMessageId: 'u-shared-1',
+      userMessageText,
+      subjectRef: { kind: 'self' },
+      subjectMention: '🧑',
+      predicate: 'preferred label',
+      value: '/workspace/release-checklist.md',
+      scope: 'conversation',
+      confidence: 0.95,
+    });
     const childMessages: Message[] = [
       {
         id: 'u-shared-1',
         role: 'user',
-        content: 'My preferred label is "/workspace/release-checklist.md".',
+        content: userMessageText,
         timestamp: 1,
       },
       {
@@ -255,13 +266,7 @@ describe('recordCompletedTurnForMemory', () => {
           {
             id: 'tc-memory-1',
             name: 'memory_remember',
-            arguments: JSON.stringify({
-              subject: 'user',
-              predicate: 'preferred label',
-              value: '/workspace/release-checklist.md',
-              scope: 'conversation',
-              confidence: 0.95,
-            }),
+            arguments: JSON.stringify(rememberArgs),
             status: 'completed',
           },
         ],
@@ -269,21 +274,12 @@ describe('recordCompletedTurnForMemory', () => {
     ];
 
     const toolWrite = executeMemoryRemember(
-      {
-        subject: 'user',
-        subjectType: 'self',
-        predicate: 'preferred label',
-        value: '/workspace/release-checklist.md',
-        scope: 'conversation',
-        confidence: 0.95,
-        originConversationId: 'parent-conv-shared',
-        originThreadId: 'child-conv-shared',
-      },
+      rememberArgs,
       memoryRememberExecution({
         memoryConversationId: 'parent-conv-shared',
         sourceThreadId: 'child-conv-shared',
         userMessageId: 'u-shared-1',
-        userMessageText: 'My preferred label is "/workspace/release-checklist.md".',
+        userMessageText,
       }),
     );
     expect(toolWrite.ok).toBe(true);

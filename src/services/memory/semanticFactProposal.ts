@@ -11,6 +11,7 @@ export const SEMANTIC_FACT_PROPOSAL_SCOPES = [
   'project',
   'conversation',
   'session',
+  'persona',
 ] as const satisfies readonly MemoryFactScope[];
 
 export const SEMANTIC_FACT_PROPOSAL_OPERATIONS = ['record', 'replace_current'] as const;

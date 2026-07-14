@@ -16,7 +16,6 @@ import type {
   MemoryRememberExecutionContext,
   MemoryRecallExecutionContext,
 } from '../../services/memory/memoryTools';
-import { resolvePriorUserMessageIdentity } from '../../services/memory/priorUserMessageIdentity';
 import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
 import { createExplicitMemoryRecallGrant } from '../../services/memory/explicitMemoryRecallGrant';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
@@ -80,6 +79,7 @@ function resolveExecutionMemoryContext(
 }
 
 function withRecallExecutionContext(
+  args: unknown,
   conversationId: string,
   memoryConversationId: string,
   context?: ToolExecutionContext,
@@ -87,17 +87,24 @@ function withRecallExecutionContext(
   const execution = resolveExecutionMemoryContext(conversationId, memoryConversationId, context);
   const currentUserMessage = context?.currentUserMessage;
   const executionRunId = context?.executionRunId;
-  if (!currentUserMessage || !executionRunId) return execution;
+  const toolCallId = context?.toolCallId;
+  if (!currentUserMessage || !executionRunId || !toolCallId) return execution;
+  const explicitRequestEvidence =
+    args && typeof args === 'object' && !Array.isArray(args)
+      ? (args as { explicitRequestEvidence?: unknown }).explicitRequestEvidence
+      : undefined;
 
   const requestIdentity = {
     currentUserMessageId: currentUserMessage.id,
     currentUserMessageText: currentUserMessage.text,
     executionRunId,
+    toolCallId,
     agentRunId: context?.agentRunId ?? null,
   };
   try {
     const explicitUserRequestGrant = createExplicitMemoryRecallGrant({
       ...requestIdentity,
+      explicitRequestEvidence,
       scope: resolveLocalMemoryAccessScope({
         memoryConversationId: execution.memoryConversationId,
         sourceThreadId: execution.sourceThreadId,
@@ -140,17 +147,9 @@ function withExecutionMemoryContext(
   const taskId = executionMemoryContext.taskId;
   const currentUserMessage = context?.currentUserMessage;
   if (!currentUserMessage || !executionClaim || sourceRunId === undefined) return null;
-  const conversation = useChatStore
-    .getState()
-    .conversations.find((candidate) => candidate.id === conversationId);
-  const priorUserIdentity = currentUserMessage
-    ? resolvePriorUserMessageIdentity(conversation?.messages ?? [], currentUserMessage.id)
-    : null;
-  const priorUserMessageId =
-    priorUserIdentity?.status === 'resolved'
-      ? (priorUserIdentity.priorUserMessageId ?? undefined)
-      : undefined;
   const rememberContext: MemoryRememberExecutionContext = {
+    personaId: executionMemoryContext.personaId,
+    sourceRunId,
     executionClaim,
     requestEvidence: {
       memoryConversationId,
@@ -158,54 +157,9 @@ function withExecutionMemoryContext(
       taskId,
       userMessageId: currentUserMessage.id,
       userMessageText: currentUserMessage.text,
-      ...(priorUserMessageId ? { priorUserMessageId } : {}),
     },
   };
-  const scope = source.scope as MemoryRememberArgs['scope'];
-  const common = {
-    subject: source.subject as string,
-    subjectType: source.subjectType,
-    predicate: source.predicate as string,
-    value: source.value as string,
-    confidence: source.confidence,
-    pinned: source.pinned,
-    scope,
-    sourceSummary: source.sourceSummary,
-    importance: source.importance,
-    sourceRunId,
-  };
-  if (scope === 'global') return { args: common, context: rememberContext };
-  if (scope === 'persona') {
-    return {
-      args: common,
-      context: {
-        ...rememberContext,
-        personaId: executionMemoryContext.personaId,
-      },
-    };
-  }
-  if (scope === 'conversation' || scope === 'project') {
-    return {
-      args: {
-        ...common,
-        originConversationId: memoryConversationId,
-        originThreadId: conversationId,
-      },
-      context: rememberContext,
-    };
-  }
-  if (scope === 'session') {
-    return {
-      args: {
-        ...common,
-        originConversationId: memoryConversationId,
-        originThreadId: conversationId,
-        originTaskId: taskId ?? null,
-      },
-      context: rememberContext,
-    };
-  }
-  return { args: common, context: rememberContext };
+  return { args: source as MemoryRememberArgs, context: rememberContext };
 }
 
 export async function executeBuiltinMemoryTool(
@@ -251,7 +205,7 @@ export async function executeBuiltinMemoryTool(
   if (name === 'memory_recall') {
     return executeMemoryRecall(
       args,
-      withRecallExecutionContext(conversationId, memoryConversationId, context),
+      withRecallExecutionContext(args, conversationId, memoryConversationId, context),
     );
   }
   if (name === 'memory_remember') {

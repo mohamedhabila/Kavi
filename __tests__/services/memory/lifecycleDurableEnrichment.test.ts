@@ -46,12 +46,13 @@ import {
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { persistMemoryRemember } from '../../../src/services/memory/memoryRememberPersistence';
+import { bindMemoryRememberSemanticEvidence } from '../../../src/services/memory/memoryRememberSemanticEvidence';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
 import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
-import { memoryRememberExecution } from '../../helpers/memoryRememberExecution';
+import { memoryRememberArgs, memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -477,25 +478,35 @@ describe('durable memory enrichment retries', () => {
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
     expect(getConsolidationState(threadId)).toBeNull();
     const dateNow = jest.spyOn(Date, 'now').mockReturnValue(101);
+    const correctionText = 'My preferred channel is WhatsApp.';
+    const correctionContext = memoryRememberExecution({
+      memoryConversationId: threadId,
+      sourceThreadId: threadId,
+      userMessageId: 'u-causal-successor',
+      userMessageText: correctionText,
+      claimedAt: 101,
+    });
+    const correctionArgs = memoryRememberArgs({
+      userMessageId: 'u-causal-successor',
+      userMessageText: correctionText,
+      subjectRef: { kind: 'self' },
+      predicate: 'preferred_channel',
+      value: 'WhatsApp',
+      scope: 'conversation',
+      operation: 'replace_current',
+      pinned: false,
+    });
+    const semanticEvidence = bindMemoryRememberSemanticEvidence(
+      correctionArgs.semanticEvidence,
+      correctionContext.requestEvidence,
+    );
+    if (!semanticEvidence.valid) throw new Error(semanticEvidence.code);
     const successorCorrection = persistMemoryRemember(
       {
-        subject: 'user',
-        subjectType: 'self',
-        predicate: 'preferred_channel',
-        value: 'WhatsApp',
+        semanticEvidence: semanticEvidence.evidence,
         pinned: false,
-        scope: 'conversation',
-        originConversationId: threadId,
-        originThreadId: threadId,
       },
-      memoryRememberExecution({
-        memoryConversationId: threadId,
-        sourceThreadId: threadId,
-        userMessageId: 'u-causal-successor',
-        userMessageText: 'My preferred channel is WhatsApp.',
-        priorUserMessageId: 'u-causal-prior',
-        claimedAt: 101,
-      }),
+      correctionContext,
     );
     dateNow.mockRestore();
     expect(successorCorrection).toMatchObject({

@@ -51,7 +51,7 @@ function persistedFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
 }
 
 describe('paired oracle evidence seeding', () => {
-  it('uses the product memory tool shape while forcing isolated runtime provenance', async () => {
+  it('translates a private oracle fact into strict semantic evidence with code-owned provenance', async () => {
     let sourceMessageId = '';
     const executeTool = jest.fn(
       async ({ conversationId, workspaceConversationId, userEvidence }) => {
@@ -85,11 +85,6 @@ describe('paired oracle evidence seeding', () => {
           importance: 0.8,
           pinned: true,
           scope: 'global',
-          originConversationId: 'DECLARED-ORIGIN',
-          originThreadId: 'DECLARED-THREAD',
-          originTaskId: 'DECLARED-TASK',
-          sourceRunId: 'DECLARED-RUN',
-          sourceSummary: 'DECLARED-SUMMARY',
         },
       ],
     };
@@ -111,18 +106,29 @@ describe('paired oracle evidence seeding', () => {
       conversationId: 'isolated-thread',
       workspaceConversationId: 'isolated-workspace',
       args: {
-        subject: 'user',
-        subjectType: 'self',
-        predicate: 'preference',
-        value: 'tea',
-        confidence: 0.9,
-        importance: 0.8,
+        semanticEvidence: {
+          version: 1,
+          subject_ref: { kind: 'self' },
+          subject_type: 'self',
+          predicate: 'preference',
+          value: 'tea',
+          scope: 'conversation',
+          importance: 0.8,
+          confidence: 0.9,
+          source_message_id: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
+          operation: 'record',
+          assertion_class: 'current_direct',
+          evidence_quote: '⟦self⟧\npreference\ntea',
+          sensitivity: 'normal',
+          subject_quote: '⟦self⟧',
+          predicate_quote: 'preference',
+          value_quote: 'tea',
+        },
         pinned: true,
-        scope: 'conversation',
       },
       userEvidence: {
         messageId: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
-        text: 'My preference is tea.',
+        text: '⟦self⟧\npreference\ntea',
       },
       executionClaim: {
         executionRunId: expect.stringMatching(/^e2e-oracle-execution-[a-f0-9]{64}$/u),
@@ -130,19 +136,9 @@ describe('paired oracle evidence seeding', () => {
         claimedAt: 1_700_000_000_000,
       },
     });
-    const serializedArgs = JSON.stringify(executeTool.mock.calls[0][0].args);
-    for (const sentinel of [
-      'DECLARED-ORIGIN',
-      'DECLARED-THREAD',
-      'DECLARED-TASK',
-      'DECLARED-RUN',
-      'DECLARED-SUMMARY',
-    ]) {
-      expect(serializedArgs).not.toContain(sentinel);
-    }
   });
 
-  it('preserves every predicate unit in synthetic grounding evidence', async () => {
+  it('builds exact structural evidence without linguistic tokenization', async () => {
     let sourceMessageId = '';
     const executeTool = jest.fn(async ({ userEvidence }) => {
       sourceMessageId = userEvidence.messageId;
@@ -186,7 +182,9 @@ describe('paired oracle evidence seeding', () => {
         }),
     });
 
-    expect(executeTool.mock.calls[0][0].userEvidence.text).toBe('My preferred channel is Signal.');
+    expect(executeTool.mock.calls[0][0].userEvidence.text).toBe(
+      '⟦self⟧\npreferred_channel\nSignal',
+    );
   });
 
   it('fails closed when the product result or persisted provenance is invalid', async () => {
@@ -248,6 +246,28 @@ describe('paired oracle evidence seeding', () => {
 
   it('rejects non-canonical or over-limit declarations before invoking the tool', async () => {
     const executeTool = jest.fn();
+    const providerProvenanceDeclaration = {
+      interface: 'memory_remember',
+      allowSeeding: true,
+      facts: [
+        {
+          subject: 'user',
+          predicate: 'preference',
+          value: 'tea',
+          scope: 'global',
+          originConversationId: 'provider-controlled-origin',
+        },
+      ],
+    } as unknown as E2EOracleEvidenceDeclaration;
+    await expect(
+      seedE2EOracleEvidence({
+        declaration: providerProvenanceDeclaration,
+        conversationId: 'isolated-thread',
+        workspaceConversationId: 'isolated-workspace',
+        executeTool,
+      }),
+    ).rejects.toThrow('unsupported fields');
+
     const duplicateDeclaration: E2EOracleEvidenceDeclaration = {
       interface: 'memory_remember',
       allowSeeding: true,

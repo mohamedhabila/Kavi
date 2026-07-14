@@ -3,7 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { memoryRememberExecution } from '../../helpers/memoryRememberExecution';
+import { memoryRememberArgs, memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { findEntityByName, upsertEntity } from '../../../src/services/memory/entities';
@@ -70,31 +70,34 @@ function remember(input: {
   confidence?: number;
   pinned?: boolean;
   importance?: number;
-  sourceSummary?: string;
+  operation?: 'record' | 'replace_current';
 }) {
   const value = input.value ?? 'Mo';
+  const userMessageId = input.userMessageId ?? 'user-display-name';
+  const userMessageText = input.userMessageText ?? `主体🧑 display_name ${value}`;
   const context = memoryRememberExecution({
-    userMessageId: input.userMessageId ?? 'user-display-name',
-    userMessageText: input.userMessageText ?? `My preferred display name is ${value}.`,
+    userMessageId,
+    userMessageText,
     executionRunId: input.executionRunId,
     toolCallId: input.toolCallId,
     claimedAt: input.claimedAt ?? 100,
+    sourceRunId: input.sourceRunId,
   });
   return {
     context,
     result: executeMemoryRemember(
-      {
-        subject: 'user',
-        subjectType: 'self',
+      memoryRememberArgs({
+        userMessageId,
+        userMessageText,
+        subjectRef: { kind: 'self' },
         predicate: 'preferred display name',
         value,
         scope: 'global',
-        ...(input.sourceRunId !== undefined ? { sourceRunId: input.sourceRunId } : {}),
-        ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
+        operation: input.operation ?? 'record',
+        confidence: input.confidence,
         ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
-        ...(input.importance !== undefined ? { importance: input.importance } : {}),
-        ...(input.sourceSummary !== undefined ? { sourceSummary: input.sourceSummary } : {}),
-      },
+        importance: input.importance,
+      }),
       context,
     ),
   };
@@ -165,7 +168,6 @@ describe('memory_remember fact contributions', () => {
       confidence: 0.95,
       pinned: true,
       importance: 0.9,
-      sourceSummary: 'User confirmed the preference.',
     });
 
     expect(first.result).toMatchObject({ ok: true, status: 'created' });
@@ -179,7 +181,6 @@ describe('memory_remember fact contributions', () => {
       confidence: 0.95,
       pinned: true,
       importance: 0.9,
-      sourceSummary: 'User confirmed the preference.',
     });
     expect(listFacts()).toEqual([
       expect.objectContaining({
@@ -245,38 +246,45 @@ describe('memory_remember fact contributions', () => {
   });
 
   it('replays a changed-value correction without duplicating its durable history', () => {
+    const firstMessage = '主体🧑 duration 20 minutes';
     const firstContext = memoryRememberExecution({
       userMessageId: 'user-duration-old',
-      userMessageText: 'I usually keep sprint reviews to 20 minutes.',
+      userMessageText: firstMessage,
       executionRunId: 'execution-duration-old',
       toolCallId: 'tool-duration-old',
       claimedAt: 600,
     });
     const first = executeMemoryRemember(
-      {
-        subject: 'user',
-        subjectType: 'self',
+      memoryRememberArgs({
+        userMessageId: 'user-duration-old',
+        userMessageText: firstMessage,
+        subjectRef: { kind: 'self' },
+        subjectMention: '🧑',
         predicate: 'sprint review duration preference',
         value: '20 minutes',
         scope: 'global',
-      },
+        operation: 'record',
+      }),
       firstContext,
     );
+    const correctionMessage = '主体🧑 duration 30 minutes';
     const correctionContext = memoryRememberExecution({
       userMessageId: 'user-duration-new',
-      userMessageText: 'Actually, make that 30 minutes from now on, not 20.',
-      priorUserMessageId: 'user-duration-old',
+      userMessageText: correctionMessage,
       executionRunId: 'execution-duration-new',
       toolCallId: 'tool-duration-new',
       claimedAt: 601,
     });
-    const correctionInput = {
-      subject: 'user',
-      subjectType: 'self' as const,
-      predicate: 'provider-invented-duration-label',
+    const correctionInput = memoryRememberArgs({
+      userMessageId: 'user-duration-new',
+      userMessageText: correctionMessage,
+      subjectRef: { kind: 'self' },
+      subjectMention: '🧑',
+      predicate: 'sprint review duration preference',
       value: '30 minutes',
-      scope: 'global' as const,
-    };
+      scope: 'global',
+      operation: 'replace_current',
+    });
     const corrected = executeMemoryRemember(correctionInput, correctionContext);
 
     expect(first).toMatchObject({ ok: true });
@@ -288,7 +296,6 @@ describe('memory_remember fact contributions', () => {
     )!;
     expect(aliases(correction.id)).toEqual([
       { source_kind: 'message', source_id: 'user-duration-new' },
-      { source_kind: 'message', source_id: 'user-duration-old' },
     ]);
     expect(tableCount('memory_fact_contribution_supersessions')).toBe(1);
     const countsBeforeReplay = {
@@ -319,39 +326,27 @@ describe('memory_remember fact contributions', () => {
       edges: tableCount('memory_fact_contribution_supersessions'),
     }).toEqual(countsBeforeReplay);
 
+    const changedMessage = '主体🧑 exact 30 minutes';
     const changedEvidenceText = executeMemoryRemember(
-      correctionInput,
+      memoryRememberArgs({
+        userMessageId: 'user-duration-new',
+        userMessageText: changedMessage,
+        subjectRef: { kind: 'self' },
+        subjectMention: '🧑',
+        predicate: 'sprint review duration preference',
+        value: '30 minutes',
+        scope: 'global',
+        operation: 'replace_current',
+      }),
       memoryRememberExecution({
         userMessageId: 'user-duration-new',
-        userMessageText: 'Please save 30 minutes.',
-        priorUserMessageId: 'user-duration-old',
+        userMessageText: changedMessage,
         executionRunId: 'execution-duration-new',
         toolCallId: 'tool-duration-new',
         claimedAt: 601,
       }),
     );
-    expect(changedEvidenceText).toMatchObject({ ok: false, code: 'grounding_required' });
-    expect({
-      facts: tableCount('memory_facts'),
-      evidence: tableCount('memory_fact_evidence'),
-      contributions: tableCount('memory_fact_contributions'),
-      aliases: tableCount('memory_fact_contribution_sources'),
-      snapshots: tableCount('memory_fact_contribution_supersession_snapshots'),
-      edges: tableCount('memory_fact_contribution_supersessions'),
-    }).toEqual(countsBeforeReplay);
-
-    const mismatchedPriorAlias = executeMemoryRemember(
-      correctionInput,
-      memoryRememberExecution({
-        userMessageId: 'user-duration-new',
-        userMessageText: 'Actually, make that 30 minutes from now on, not 20.',
-        priorUserMessageId: 'different-prior-message',
-        executionRunId: 'execution-duration-new',
-        toolCallId: 'tool-duration-new',
-        claimedAt: 601,
-      }),
-    );
-    expect(mismatchedPriorAlias).toMatchObject({ ok: false, code: 'internal' });
+    expect(changedEvidenceText).toMatchObject({ ok: false, code: 'internal' });
     expect({
       facts: tableCount('memory_facts'),
       evidence: tableCount('memory_fact_evidence'),
@@ -363,26 +358,27 @@ describe('memory_remember fact contributions', () => {
   });
 
   it.each([
-    ['missing claim and evidence', undefined, 'internal'],
+    ['missing execution context', undefined, 'internal', false],
     [
-      'ungrounded request',
+      'mismatched semantic source',
       memoryRememberExecution({
         userMessageId: 'user-ungrounded',
-        userMessageText: 'Please save something.',
+        userMessageText: '主体🧑 value Mo',
       }),
       'grounding_required',
+      true,
     ],
-  ] as const)('fails %s before any write', (_label, context, code) => {
-    const result = executeMemoryRemember(
-      {
-        subject: 'user',
-        subjectType: 'self',
-        predicate: 'preferred display name',
-        value: 'Mo',
-        scope: 'global',
-      },
-      context as never,
-    );
+  ] as const)('fails %s before any write', (_label, context, code, wrongSource) => {
+    const input = memoryRememberArgs({
+      userMessageId: wrongSource ? 'different-message' : 'user-missing-context',
+      userMessageText: '主体🧑 value Mo',
+      subjectRef: { kind: 'self' },
+      subjectMention: '🧑',
+      predicate: 'preferred display name',
+      value: 'Mo',
+      scope: 'global',
+    });
+    const result = executeMemoryRemember(input, context as never);
     expect(result).toMatchObject({ ok: false, code });
     expect(tableCount('memory_entities')).toBe(0);
     expect(tableCount('memory_facts')).toBe(0);
@@ -400,13 +396,15 @@ describe('memory_remember fact contributions', () => {
     });
     expect(
       executeMemoryRemember(
-        {
-          subject: 'user',
-          subjectType: 'self',
+        memoryRememberArgs({
+          userMessageId: 'user-secret',
+          userMessageText: 'My API key is sk-private-secret.',
+          subjectRef: { kind: 'self' },
           predicate: 'API key',
           value: 'sk-private-secret',
           scope: 'global',
-        },
+          sensitivity: 'restricted',
+        }),
         restrictedContext,
       ),
     ).toMatchObject({ ok: false, code: 'permission_denied' });
@@ -420,17 +418,19 @@ describe('memory_remember fact contributions', () => {
     expect(
       executeMemoryRemember(
         {
-          subject: 'user',
-          subjectType: 'self',
-          predicate: 'preferred display name',
-          value: 'Mo',
-          scope: 'conversation',
+          ...memoryRememberArgs({
+            userMessageId: 'user-scope-mismatch',
+            userMessageText: 'My preferred display name is Mo.',
+            subjectRef: { kind: 'self' },
+            predicate: 'preferred display name',
+            value: 'Mo',
+            scope: 'conversation',
+          }),
           originConversationId: 'different-root',
-          originThreadId: 'request-thread',
-        },
+        } as never,
         mismatchedContext,
       ),
-    ).toMatchObject({ ok: false, code: 'grounding_required' });
+    ).toMatchObject({ ok: false, code: 'invalid_args' });
 
     insertRetiredMemorySourceForTest({
       retirementGroupId: 'retired-memory-tool-source',
@@ -466,6 +466,7 @@ describe('memory_remember fact contributions', () => {
       executionRunId: 'execution-stale',
       toolCallId: 'tool-stale',
       claimedAt: 799,
+      operation: 'replace_current',
     });
 
     expect(first.result).toMatchObject({ ok: true });

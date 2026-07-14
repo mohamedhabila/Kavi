@@ -25,11 +25,7 @@ export function isExactMemoryRememberRequestEvidence(
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const evidence = value as Partial<MemoryRememberRequestEvidence>;
   const keys = Object.keys(value).sort().join(',');
-  if (
-    keys !== 'memoryConversationId,sourceThreadId,taskId,userMessageId,userMessageText' &&
-    keys !==
-      'memoryConversationId,priorUserMessageId,sourceThreadId,taskId,userMessageId,userMessageText'
-  ) {
+  if (keys !== 'memoryConversationId,sourceThreadId,taskId,userMessageId,userMessageText') {
     return false;
   }
   return (
@@ -37,8 +33,6 @@ export function isExactMemoryRememberRequestEvidence(
     isExactMemoryScopeId(evidence.sourceThreadId) &&
     (evidence.taskId === null || isExactMemoryScopeId(evidence.taskId)) &&
     isExactMemoryProvenanceId(evidence.userMessageId) &&
-    typeof evidence.userMessageText === 'string' &&
-    (evidence.priorUserMessageId === undefined ||
-      isExactMemoryProvenanceId(evidence.priorUserMessageId))
+    typeof evidence.userMessageText === 'string'
   );
 }

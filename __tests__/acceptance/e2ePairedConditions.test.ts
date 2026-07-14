@@ -293,7 +293,7 @@ describe('paired E2E condition contract', () => {
     expect(() => validateE2EPairedExecutionPlan(plan)).toThrow('stale condition config hash');
   });
 
-  it('requires explicit oracle permission and canonical bounded product facts', () => {
+  it('requires explicit oracle permission and canonical bounded oracle facts', () => {
     const invariant = makeInvariant();
     expect(() => makeCondition('oracle_evidence', invariant)).toThrow(
       'explicitly allowed memory_remember declaration',
@@ -314,8 +314,6 @@ describe('paired E2E condition contract', () => {
       confidence: 0.9,
       pinned: true,
       scope: 'global' as const,
-      originConversationId: null,
-      sourceSummary: 'Declared synthetic oracle fact.',
       importance: 1,
     };
     const oracle = makeCondition('oracle_evidence', invariant, {
@@ -326,6 +324,22 @@ describe('paired E2E condition contract', () => {
     expect(oracle.oracleEvidence?.facts).toEqual([duplicateFact]);
     expect(oracle.conditionConfig.oracleEvidenceCount).toBe(1);
     expect(oracle.conditionConfig.oracleEvidenceHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+
+    expect(() =>
+      makeCondition('oracle_evidence', invariant, {
+        interface: 'memory_remember',
+        allowSeeding: true,
+        facts: [
+          {
+            subject: 'user',
+            predicate: 'preference',
+            value: 'tea',
+            originConversationId: 'provider-controlled-origin',
+            sourceRunId: 'provider-controlled-run',
+          } as never,
+        ],
+      }),
+    ).toThrow('unsupported fields');
 
     expect(() =>
       makeCondition('oracle_evidence', invariant, {

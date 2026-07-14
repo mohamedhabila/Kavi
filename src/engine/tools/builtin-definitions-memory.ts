@@ -35,7 +35,7 @@ export const MEMORY_RECALL_TOOL: ToolDefinition = {
   description:
     'Recall structured facts from the living-memory fact store. Filter by subject (entity name), predicate (relation), or pinnedOnly. ' +
     'Returns only facts authorized for the exact current owner, workspace, thread, persona, and task. Each result has a binding use, ask, or abstain policy. ' +
-    'Sensitive facts require the current user message to request one exact subject and predicate; broad or model-initiated recall cannot expose them. Restricted facts are never returned. ' +
+    'Sensitive facts require explicitRequestEvidence copied from one exact current-user request for the same subject and predicate. The canonical predicate may differ from the natural relation_quote; product code binds both to the exact request. Broad or model-initiated recall cannot expose sensitive facts. Restricted facts are never returned. ' +
     'Use this when you need exact, structured recall of what is known about a subject; use memory_search when the subject or predicate is not known yet. ' +
     'If recall supports a same-turn request to write, create, send, update, open, or otherwise act, continue to the action tool with the recalled facts before final delivery.',
   input_schema: {
@@ -60,6 +60,59 @@ export const MEMORY_RECALL_TOOL: ToolDefinition = {
       },
       pinnedOnly: { type: 'boolean', description: 'Return only pinned facts.' },
       limit: { type: 'number', description: 'Max facts to return (default 50, hard cap 50).' },
+      explicitRequestEvidence: {
+        type: 'object',
+        description:
+          'Strict typed evidence for a current-user request to expose one exact sensitive subject and predicate. Omit for ordinary recall.',
+        additionalProperties: false,
+        properties: {
+          version: { type: 'number', enum: [1] },
+          source_message_id: { type: 'string', minLength: 1, maxLength: 120 },
+          evidence_quote: { type: 'string', minLength: 1, maxLength: 600 },
+          subject_ref: {
+            oneOf: [
+              {
+                type: 'object',
+                properties: { kind: { type: 'string', enum: ['self'] } },
+                required: ['kind'],
+                additionalProperties: false,
+              },
+              {
+                type: 'object',
+                properties: {
+                  kind: { type: 'string', enum: ['named'] },
+                  label: { type: 'string', minLength: 1, maxLength: 80 },
+                },
+                required: ['kind', 'label'],
+                additionalProperties: false,
+              },
+            ],
+          },
+          subject_quote: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 160,
+            description: 'Exact subject mention copied from evidence_quote.',
+          },
+          predicate: { type: 'string', minLength: 1, maxLength: 80 },
+          relation_quote: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 200,
+            description:
+              'Exact natural-language relation/request phrase copied from evidence_quote; it need not equal the canonical predicate.',
+          },
+        },
+        required: [
+          'version',
+          'source_message_id',
+          'evidence_quote',
+          'subject_ref',
+          'subject_quote',
+          'predicate',
+          'relation_quote',
+        ],
+      },
     },
     required: [],
     additionalProperties: false,
@@ -78,50 +131,113 @@ export const MEMORY_RECALL_TOOL: ToolDefinition = {
 export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
   name: 'memory_remember',
   description:
-    'Record a structured fact (subject, predicate, value) in the living-memory fact store. ' +
-    'Preserve user-supplied subject, predicate, and value labels exactly, especially opaque ids, snake_case predicates, codes, contact names, and tokens; do not rename predicates or translate values. ' +
-    'For an I/my/me statement, use subject "user" with subjectType "self"; never put the preference topic in the subject field. Self candidates are canonicalized to "user" only after one code-owned, unquoted, non-negated current-user clause binds the user, proposed relation, and exact value. A non-user fact requires the exact subject label and value in the code-owned current user message. Otherwise the write fails without changing current memory. Use distinct subjects or predicates for parallel valid values. ' +
-    'Use a high confidence (≥ 0.85) only when you have direct user confirmation; otherwise leave confidence at the default to mark the fact as a candidate.',
+    'Record one structured fact using strict provider-neutral semantic evidence. ' +
+    'semanticEvidence is untrusted model output: copy exact current-user evidence, subject, relation, and value quotes. The canonical predicate may differ from predicate_quote; code binds every quote to the current message before writing. ' +
+    'Use assertion_class=current_direct only for a present, direct assertion by the current user; quoted, historical, hypothetical, third-party, and uncertain content has no write authority. ' +
+    'Use operation=record only when no current fact exists for the exact subject, predicate, and scope; use replace_current only to replace exactly one current fact. ' +
+    'Code binds the evidence to the current message, owner scope, execution claim, and replay identity before any write.',
   input_schema: {
     type: 'object',
     properties: {
-      subject: {
-        type: 'string',
-        description: 'Exact entity label supplied by the user (e.g. "user", "project-x").',
+      semanticEvidence: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          version: { type: 'number', enum: [1] },
+          subject_ref: {
+            oneOf: [
+              {
+                type: 'object',
+                properties: { kind: { type: 'string', enum: ['self'] } },
+                required: ['kind'],
+                additionalProperties: false,
+              },
+              {
+                type: 'object',
+                properties: {
+                  kind: { type: 'string', enum: ['named'] },
+                  label: { type: 'string', minLength: 1, maxLength: 80 },
+                },
+                required: ['kind', 'label'],
+                additionalProperties: false,
+              },
+            ],
+          },
+          subject_type: {
+            type: 'string',
+            enum: ['self', 'person', 'place', 'org', 'project', 'thing', 'concept', 'event'],
+          },
+          predicate: { type: 'string', minLength: 1, maxLength: 80 },
+          value: { type: 'string', minLength: 1, maxLength: 200 },
+          scope: {
+            type: 'string',
+            enum: ['global', 'project', 'conversation', 'session', 'persona'],
+          },
+          importance: { type: 'number', minimum: 0, maximum: 1 },
+          confidence: { type: 'number', minimum: 0, maximum: 1 },
+          source_message_id: { type: 'string', minLength: 1, maxLength: 120 },
+          operation: { type: 'string', enum: ['record', 'replace_current'] },
+          assertion_class: {
+            type: 'string',
+            enum: [
+              'current_direct',
+              'historical',
+              'hypothetical',
+              'quoted',
+              'third_party',
+              'uncertain',
+            ],
+          },
+          evidence_quote: { type: 'string', minLength: 1, maxLength: 600 },
+          sensitivity: {
+            type: 'string',
+            enum: ['normal', 'personal', 'sensitive', 'restricted'],
+          },
+          subject_quote: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 160,
+            description: 'Exact subject mention copied from evidence_quote.',
+          },
+          predicate_quote: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 200,
+            description:
+              'Exact relation phrase copied from evidence_quote; it need not equal predicate.',
+          },
+          value_quote: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 200,
+            description: 'Exact value text copied from evidence_quote; must equal value.',
+          },
+        },
+        required: [
+          'version',
+          'subject_ref',
+          'subject_type',
+          'predicate',
+          'value',
+          'scope',
+          'importance',
+          'confidence',
+          'source_message_id',
+          'operation',
+          'assertion_class',
+          'evidence_quote',
+          'sensitivity',
+          'subject_quote',
+          'predicate_quote',
+          'value_quote',
+        ],
       },
-      subjectType: {
-        type: 'string',
-        enum: ['self', 'person', 'project', 'concept', 'system'],
-        description:
-          'Use "self" only for an I/my/me fact and pair it with subject "user"; otherwise use the actual entity type.',
-      },
-      predicate: {
-        type: 'string',
-        description:
-          'Exact relation/predicate label supplied by the user; preserve opaque and snake_case labels.',
-      },
-      value: {
-        type: 'string',
-        description:
-          'Exact object text/value supplied by the user (≤ 200 chars); preserve opaque labels, codes, tokens, and contact names.',
-      },
-      confidence: {
-        type: 'number',
-        description: '0..1 confidence estimate; review state and evidence authority are separate.',
-      },
-      scope: {
-        type: 'string',
-        enum: ['global', 'project', 'conversation', 'session', 'persona'],
-        description: 'Where this fact belongs. Use global only for stable profile/preferences.',
-      },
-      sourceSummary: { type: 'string', description: 'Short evidence note or reason.' },
-      importance: { type: 'number', description: '0..1 importance used for recall and decay.' },
       pinned: {
         type: 'boolean',
         description: 'Pin the new fact so it always appears in the focus header.',
       },
     },
-    required: ['subject', 'predicate', 'value', 'scope'],
+    required: ['semanticEvidence'],
     additionalProperties: false,
   },
   contract: {

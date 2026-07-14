@@ -23,7 +23,7 @@ import {
   setMemoryFactPinnedForManagement,
   forgetMemoryFactForManagement,
 } from '../../src/services/memory/memoryTools';
-import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
+import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -49,19 +49,46 @@ afterEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false });
 });
 
-function groundedRequest(
-  userMessageId: string,
-  userMessageText: string,
-  priorUserMessageId?: string,
-) {
-  return memoryRememberExecution({ userMessageId, userMessageText, priorUserMessageId });
+function groundedRequest(userMessageId: string, userMessageText: string) {
+  return memoryRememberExecution({ userMessageId, userMessageText });
 }
 
-function rememberOk(
-  args: Parameters<typeof executeMemoryRemember>[0],
+interface TestRememberInput {
+  subject: string;
+  subjectType?: 'self' | 'person' | 'place' | 'org' | 'project' | 'thing' | 'concept' | 'event';
+  predicate: string;
+  value: string;
+  scope: 'global' | 'project' | 'conversation' | 'session' | 'persona';
+  operation?: 'record' | 'replace_current';
+  confidence?: number;
+  importance?: number;
+  pinned?: boolean;
+}
+
+function testRememberArgs(
+  input: TestRememberInput,
   context: Parameters<typeof executeMemoryRemember>[1],
 ) {
-  const result = executeMemoryRemember(args, context);
+  return memoryRememberArgs({
+    userMessageId: context.requestEvidence.userMessageId,
+    userMessageText: context.requestEvidence.userMessageText,
+    subjectRef:
+      input.subject === 'user' || input.subjectType === 'self'
+        ? { kind: 'self' }
+        : { kind: 'named', label: input.subject },
+    subjectType: input.subjectType,
+    predicate: input.predicate,
+    value: input.value,
+    scope: input.scope,
+    operation: input.operation,
+    confidence: input.confidence,
+    importance: input.importance,
+    pinned: input.pinned,
+  });
+}
+
+function rememberOk(args: TestRememberInput, context: Parameters<typeof executeMemoryRemember>[1]) {
+  const result = executeMemoryRemember(testRememberArgs(args, context), context);
   if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result)}`);
   return result;
 }
@@ -81,15 +108,21 @@ function explicitOverride(factId: string) {
 describe('executeMemoryRemember', () => {
   it('fails before direct-service writes when long-term memory is disabled', () => {
     useSettingsStore.setState({ disableLongTermMemory: true });
-
+    const context = groundedRequest(
+      'user-disabled',
+      'disabled-subject private value is must-not-persist.',
+    );
     const result = executeMemoryRemember(
-      {
-        subject: 'disabled-subject',
-        predicate: 'private_value',
-        value: 'must-not-persist',
-        scope: 'global',
-      },
-      groundedRequest('user-disabled', 'disabled-subject private value is must-not-persist.'),
+      testRememberArgs(
+        {
+          subject: 'disabled-subject',
+          predicate: 'private_value',
+          value: 'must-not-persist',
+          scope: 'global',
+        },
+        context,
+      ),
+      context,
     );
 
     expect(result).toMatchObject({ ok: false, code: 'memory_disabled' });
@@ -162,6 +195,7 @@ describe('executeMemoryRemember', () => {
         predicate: 'role',
         value: 'Munich',
         scope: 'global',
+        operation: 'replace_current',
       },
       groundedRequest('user-munich', 'My role is Munich.'),
     );
@@ -177,30 +211,35 @@ describe('executeMemoryRemember', () => {
     }
   });
 
-  it('ignores provider-supplied supersedePrior=false and keeps current state singular', () => {
+  it('rejects removed provider supersession controls without compatibility fallback', () => {
     rememberOk(
       { subject: 'user', predicate: 'role', value: 'Berlin', scope: 'global' },
       groundedRequest('user-residence-berlin', 'My role is Berlin.'),
     );
-    const next = rememberOk(
+    const context = groundedRequest('user-munich', 'My role is Munich.');
+    const next = executeMemoryRemember(
       {
-        subject: 'user',
-        predicate: 'role',
-        value: 'Munich',
-        scope: 'global',
+        ...testRememberArgs(
+          {
+            subject: 'user',
+            predicate: 'role',
+            value: 'Munich',
+            scope: 'global',
+            operation: 'replace_current',
+          },
+          context,
+        ),
         supersedePrior: false,
-      } as Parameters<typeof executeMemoryRemember>[0] & { supersedePrior: false },
-      groundedRequest('user-munich', 'My role is Munich.'),
+      } as never,
+      context,
     );
 
-    expect(next.status).toBe('created');
-    expect(next.superseded).toEqual([{ id: expect.any(String), invalidAt: expect.any(Number) }]);
-    expect(Object.keys(next.superseded[0]).sort()).toEqual(['id', 'invalidAt']);
+    expect(next).toMatchObject({ ok: false, code: 'invalid_args' });
 
     const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'role' });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
-      expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
+      expect(recall.facts.map((fact) => fact.value)).toEqual(['Berlin']);
     }
   });
 
@@ -210,7 +249,16 @@ describe('executeMemoryRemember', () => {
       groundedRequest('user-lives-berlin', 'My preferred display name is Berlin.'),
     );
     const next = executeMemoryRemember(
-      { subject: 'user', predicate: 'Preferred_Display_Name', value: 'Munich', scope: 'global' },
+      testRememberArgs(
+        {
+          subject: 'user',
+          predicate: 'Preferred_Display_Name',
+          value: 'Munich',
+          scope: 'global',
+          operation: 'replace_current',
+        },
+        groundedRequest('user-unrelated', 'Please remember something for later.'),
+      ),
       groundedRequest('user-unrelated', 'Please remember something for later.'),
     );
     expect(next).toMatchObject({ ok: false, code: 'grounding_required' });
@@ -224,21 +272,24 @@ describe('executeMemoryRemember', () => {
       { subject: 'user', predicate: 'Preferred_Display_Name', value: 'Berlin', scope: 'global' },
       groundedRequest('user-global-berlin', 'My preferred display name is Berlin.'),
     );
+    const context = memoryRememberExecution({
+      memoryConversationId: 'conv-1',
+      sourceThreadId: 'thread-1',
+      userMessageId: 'user-conversation-munich',
+      userMessageText: 'My preferred display name is Munich.',
+    });
     const next = executeMemoryRemember(
-      {
-        subject: 'user',
-        predicate: 'Preferred_Display_Name',
-        value: 'Munich',
-        scope: 'conversation',
-        originConversationId: 'conv-1',
-        originThreadId: 'thread-1',
-      },
-      memoryRememberExecution({
-        memoryConversationId: 'conv-1',
-        sourceThreadId: 'thread-1',
-        userMessageId: 'user-conversation-munich',
-        userMessageText: 'My preferred display name is Munich.',
-      }),
+      testRememberArgs(
+        {
+          subject: 'user',
+          predicate: 'Preferred_Display_Name',
+          value: 'Munich',
+          scope: 'conversation',
+          operation: 'replace_current',
+        },
+        context,
+      ),
+      context,
     );
 
     expect(next).toMatchObject({ ok: false, code: 'grounding_required' });
@@ -254,39 +305,40 @@ describe('executeMemoryRemember', () => {
   });
 
   it('rejects laundering a task fact into a durable conversation scope', () => {
+    const taskContext = memoryRememberExecution({
+      memoryConversationId: 'conv-1',
+      sourceThreadId: 'thread-1',
+      taskId: 'task-1',
+      userMessageId: 'user-staging-next-step',
+      userMessageText: 'release-task next_step is Run staging validation.',
+    });
     rememberOk(
       {
         subject: 'release-task',
         predicate: 'next_step',
         value: 'Run staging validation',
         scope: 'session',
-        originConversationId: 'conv-1',
-        originThreadId: 'thread-1',
-        originTaskId: 'task-1',
       },
-      memoryRememberExecution({
-        memoryConversationId: 'conv-1',
-        sourceThreadId: 'thread-1',
-        taskId: 'task-1',
-        userMessageId: 'user-staging-next-step',
-        userMessageText: 'release-task next_step is Run staging validation.',
-      }),
+      taskContext,
     );
+    const conversationContext = memoryRememberExecution({
+      memoryConversationId: 'conv-1',
+      sourceThreadId: 'thread-1',
+      userMessageId: 'user-production-next-step',
+      userMessageText: 'release-task next_step is Run production validation.',
+    });
     const next = executeMemoryRemember(
-      {
-        subject: 'release-task',
-        predicate: 'next_step',
-        value: 'Run production validation',
-        scope: 'conversation',
-        originConversationId: 'conv-1',
-        originThreadId: 'thread-1',
-      },
-      memoryRememberExecution({
-        memoryConversationId: 'conv-1',
-        sourceThreadId: 'thread-1',
-        userMessageId: 'user-production-next-step',
-        userMessageText: 'release-task next_step is Run production validation.',
-      }),
+      testRememberArgs(
+        {
+          subject: 'release-task',
+          predicate: 'next_step',
+          value: 'Run production validation',
+          scope: 'conversation',
+          operation: 'replace_current',
+        },
+        conversationContext,
+      ),
+      conversationContext,
     );
 
     expect(next).toMatchObject({ ok: false, code: 'grounding_required' });
@@ -303,7 +355,7 @@ describe('executeMemoryRemember', () => {
 
   it('rejects missing required args', () => {
     const result = executeMemoryRemember(
-      { subject: '', predicate: 'p', value: 'v', scope: 'global' } as any,
+      { subject: '', predicate: 'p', value: 'v', scope: 'global' } as never,
       groundedRequest('user-invalid-subject', 'My p is v.'),
     );
     expect(result.ok).toBe(false);
@@ -311,25 +363,28 @@ describe('executeMemoryRemember', () => {
   });
 
   it('requires code-owned persona identity and serializes the exact binding', () => {
+    const missingContext = groundedRequest('user-tone-missing-persona', 'My role is warm.');
     const missing = executeMemoryRemember(
-      { subject: 'user', predicate: 'role', value: 'warm', scope: 'persona' },
-      groundedRequest('user-tone-missing-persona', 'My role is warm.'),
+      testRememberArgs(
+        { subject: 'user', predicate: 'role', value: 'warm', scope: 'persona' },
+        missingContext,
+      ),
+      missingContext,
     );
-    expect(missing).toMatchObject({ ok: false, code: 'invalid_args' });
+    expect(missing).toMatchObject({ ok: false, code: 'grounding_required' });
     expect(findEntityByName('user')).toBeNull();
 
+    const personaContext = memoryRememberExecution({
+      userMessageId: 'user-tone-recorded',
+      userMessageText: 'My role is warm.',
+      personaId: 'assistant-persona',
+    });
     const recorded = executeMemoryRemember(
-      {
-        subject: 'user',
-        predicate: 'role',
-        value: 'warm',
-        scope: 'persona',
-      },
-      memoryRememberExecution({
-        userMessageId: 'user-tone-recorded',
-        userMessageText: 'My role is warm.',
-        personaId: 'assistant-persona',
-      }),
+      testRememberArgs(
+        { subject: 'user', predicate: 'role', value: 'warm', scope: 'persona' },
+        personaContext,
+      ),
+      personaContext,
     );
     expect(recorded).toMatchObject({
       ok: true,
@@ -338,18 +393,24 @@ describe('executeMemoryRemember', () => {
   });
 
   it('rejects an incomplete session before creating its subject entity', () => {
+    const context = groundedRequest(
+      'user-rejected-session',
+      'rejected-session draft state is open.',
+    );
     const result = executeMemoryRemember(
-      {
-        subject: 'rejected-session',
-        predicate: 'draft_state',
-        value: 'open',
-        scope: 'session',
-        originConversationId: 'conversation-1',
-      },
-      groundedRequest('user-rejected-session', 'rejected-session draft state is open.'),
+      testRememberArgs(
+        {
+          subject: 'rejected-session',
+          predicate: 'draft_state',
+          value: 'open',
+          scope: 'session',
+        },
+        context,
+      ),
+      context,
     );
 
-    expect(result).toMatchObject({ ok: false, code: 'invalid_args' });
+    expect(result).toMatchObject({ ok: false, code: 'grounding_required' });
     expect(findEntityByName('rejected-session')).toBeNull();
   });
 });
@@ -479,8 +540,6 @@ describe('executeMemoryPin / executeMemoryUnpin', () => {
         predicate: 'status',
         value: 'ready',
         scope: 'conversation',
-        originConversationId: 'other-root',
-        originThreadId: 'other-thread',
       },
       memoryRememberExecution({
         memoryConversationId: 'other-root',
@@ -655,8 +714,6 @@ describe('executeMemoryForget', () => {
         predicate: 'private_note',
         value: 'remove-me',
         scope: 'conversation',
-        originConversationId: 'other-root',
-        originThreadId: 'other-thread',
       },
       memoryRememberExecution({
         memoryConversationId: 'other-root',

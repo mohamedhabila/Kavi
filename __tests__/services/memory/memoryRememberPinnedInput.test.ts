@@ -3,7 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { memoryRememberExecution } from '../../helpers/memoryRememberExecution';
+import { memoryRememberArgs, memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { findEntityByName } from '../../../src/services/memory/entities';
 import { listFacts } from '../../../src/services/memory/facts/queries';
@@ -22,18 +22,22 @@ function rememberDisplayName(input: {
   claimedAt: number;
   pinned?: boolean;
 }) {
+  const userMessageText = `表示名の主体🧑は${input.value}`;
   return executeMemoryRemember(
-    {
-      subject: 'user',
-      subjectType: 'self',
+    memoryRememberArgs({
+      userMessageId: input.userMessageId,
+      userMessageText,
+      subjectRef: { kind: 'self' },
+      subjectMention: '🧑',
       predicate: 'preferred display name',
       value: input.value,
       scope: 'global',
+      operation: input.claimedAt === 100 || input.claimedAt === 200 ? 'record' : 'replace_current',
       ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
-    },
+    }),
     memoryRememberExecution({
       userMessageId: input.userMessageId,
-      userMessageText: `My preferred display name is ${input.value}.`,
+      userMessageText,
       claimedAt: input.claimedAt,
     }),
   );
@@ -107,17 +111,21 @@ describe('memory_remember pinned input', () => {
   });
 
   it('rejects a provided non-boolean pin before writing memory state', () => {
+    const userMessageText = 'malformed-pin-subject status ready';
+    const malformed = memoryRememberArgs({
+      userMessageId: 'user-malformed-pin',
+      userMessageText,
+      subjectRef: { kind: 'named', label: 'malformed-pin-subject' },
+      predicate: 'status',
+      value: 'ready',
+      scope: 'global',
+    }) as unknown as { pinned: string };
+    malformed.pinned = 'false';
     const result = executeMemoryRemember(
-      {
-        subject: 'malformed-pin-subject',
-        predicate: 'status',
-        value: 'ready',
-        pinned: 'false',
-        scope: 'global',
-      } as unknown as Parameters<typeof executeMemoryRemember>[0],
+      malformed as unknown as Parameters<typeof executeMemoryRemember>[0],
       memoryRememberExecution({
         userMessageId: 'user-malformed-pin',
-        userMessageText: 'malformed-pin-subject status is ready.',
+        userMessageText,
         claimedAt: 300,
       }),
     );

@@ -1,14 +1,12 @@
+import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import {
-  isExactMemoryScopeId,
   requireMemoryAccessScopeIdentity,
   type RequiredMemoryAccessScopeIdentity,
 } from './memoryScopeIdentity';
 
-/**
- * Opaque, one-use authority for exposing one sensitive predicate to one user
- * request. The binding lives only in this module's WeakMap, so copying or
- * reconstructing the visible object cannot manufacture authority.
- */
+export const EXPLICIT_MEMORY_RECALL_EVIDENCE_VERSION = 1 as const;
+
+/** Opaque one-use authority. Provider arguments cannot construct this value. */
 export interface ExplicitMemoryRecallGrant {
   readonly kind: 'explicit_memory_recall_grant';
 }
@@ -17,20 +15,22 @@ interface ExplicitMemoryRecallGrantBinding {
   currentUserMessageId: string;
   currentUserMessageText: string;
   executionRunId: string;
+  toolCallId: string;
   agentRunId: string | null;
   scope: RequiredMemoryAccessScopeIdentity;
   requestedSubject: string;
   requestedPredicate: string;
-  subjectKey: string;
-  predicateKey: string;
+  replayIdentity: string;
 }
 
 export interface ExplicitMemoryRecallGrantRequest {
   currentUserMessageId: string;
   currentUserMessageText: string;
   executionRunId: string;
+  toolCallId: string;
   agentRunId: string | null;
   scope: RequiredMemoryAccessScopeIdentity;
+  explicitRequestEvidence: unknown;
 }
 
 export interface ExplicitMemoryRecallGrantValidation {
@@ -38,6 +38,7 @@ export interface ExplicitMemoryRecallGrantValidation {
   currentUserMessageId: string | undefined;
   currentUserMessageText: string | undefined;
   executionRunId: string | undefined;
+  toolCallId: string | undefined;
   agentRunId: string | null | undefined;
   scope: RequiredMemoryAccessScopeIdentity;
   subject: unknown;
@@ -45,127 +46,69 @@ export interface ExplicitMemoryRecallGrantValidation {
   all: unknown;
 }
 
+const EVIDENCE_FIELDS = new Set([
+  'version',
+  'source_message_id',
+  'evidence_quote',
+  'subject_ref',
+  'subject_quote',
+  'predicate',
+  'relation_quote',
+]);
 const grantBindings = new WeakMap<object, ExplicitMemoryRecallGrantBinding>();
-const LABEL_PATTERN = /^[\p{L}\p{N}_](?:[\p{L}\p{N}_.:'’/+ -]{0,78}[\p{L}\p{N}_])?$/u;
-
-function exactLabel(value: string): string | null {
-  const trimmed = value.trim();
-  const normalized = trimmed.normalize('NFKC');
-  if (!trimmed || trimmed !== value || trimmed.length > 80 || !LABEL_PATTERN.test(normalized)) {
-    return null;
-  }
-  return trimmed;
-}
-
-function exactRecallLabelKey(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const label = exactLabel(value);
-  return label
-    ? label
-        .normalize('NFKC')
-        .toLowerCase()
-        .split(/[ _-]+/u)
-        .join('\u0000')
-    : null;
-}
-
-function unquoteExactLabel(value: string): string | null {
-  const trimmed = value.trim();
-  if (trimmed.length >= 2) {
-    const first = trimmed[0];
-    const last = trimmed[trimmed.length - 1];
-    if ((first === '`' && last === '`') || (first === '"' && last === '"')) {
-      return exactLabel(trimmed.slice(1, -1));
-    }
-  }
-  return exactLabel(trimmed);
-}
-
-function stripOneTerminalPunctuation(value: string): string {
-  return /[.?!]$/u.test(value) ? value.slice(0, -1) : value;
-}
-
-/**
- * Deliberately narrow request grammar. If product code cannot derive exactly
- * one subject and predicate from the raw current-user message, no grant exists
- * and recall stays on the automatic-prompt sensitivity policy.
- */
-export function deriveExplicitMemoryRecallTarget(
-  currentUserMessageText: string,
-): Readonly<{ subject: string; predicate: string }> | null {
-  if (
-    typeof currentUserMessageText !== 'string' ||
-    currentUserMessageText !== currentUserMessageText.trim() ||
-    currentUserMessageText.length === 0 ||
-    currentUserMessageText.length > 500 ||
-    /[\r\n\p{C}]/u.test(currentUserMessageText)
-  ) {
-    return null;
-  }
-  const text = stripOneTerminalPunctuation(currentUserMessageText);
-  if (/[.?!]/u.test(text)) return null;
-
-  const coordinate = text.match(
-    /^(?:please +)?(?:recall|retrieve|show me|tell me|what do you remember about) +(?:the +)?predicate +(.+?) +(?:for|about) +(?:the +)?subject +(.+)$/iu,
-  );
-  if (coordinate) {
-    const predicate = unquoteExactLabel(coordinate[1] ?? '');
-    const subject = unquoteExactLabel(coordinate[2] ?? '');
-    return subject && predicate ? Object.freeze({ subject, predicate }) : null;
-  }
-
-  const self = text.match(
-    /^(?:please +)?(?:what (?:is|was)|what(?:'s|\u2019s)|tell me|recall|retrieve|show me|do you remember|what do you remember about) +my +(.+)$/iu,
-  );
-  if (self) {
-    const predicate = unquoteExactLabel(self[1] ?? '');
-    return predicate ? Object.freeze({ subject: 'user', predicate }) : null;
-  }
-
-  const named = text.match(
-    /^(?:please +)?(?:what (?:is|was)|what(?:'s|\u2019s)|tell me|recall|retrieve|show me|do you remember|what do you remember about) +(.+?)(?:'s|\u2019s) +(.+)$/iu,
-  );
-  if (!named) return null;
-  const subject = unquoteExactLabel(named[1] ?? '');
-  const predicate = unquoteExactLabel(named[2] ?? '');
-  return subject && predicate ? Object.freeze({ subject, predicate }) : null;
-}
-
-function exactNullableId(value: unknown): value is string | null {
-  return value === null || isExactMemoryScopeId(value);
-}
+const issuedReplayIdentities = new Set<string>();
+const consumedReplayIdentities = new Set<string>();
+const consumedReplayIdentityOrder: string[] = [];
+const MAX_CONSUMED_REPLAY_IDENTITIES = 4_096;
 
 export function createExplicitMemoryRecallGrant(
   request: ExplicitMemoryRecallGrantRequest,
 ): ExplicitMemoryRecallGrant | null {
   try {
     if (
-      !isExactMemoryScopeId(request.currentUserMessageId) ||
-      !isExactMemoryScopeId(request.executionRunId) ||
-      !exactNullableId(request.agentRunId)
+      !isExactMemoryProvenanceId(request.currentUserMessageId) ||
+      !isExactMemoryProvenanceId(request.executionRunId) ||
+      !isExactMemoryProvenanceId(request.toolCallId) ||
+      !exactNullableProvenanceId(request.agentRunId)
     ) {
       return null;
     }
-    const target = deriveExplicitMemoryRecallTarget(request.currentUserMessageText);
+    const target = bindExplicitRequestEvidence(
+      request.explicitRequestEvidence,
+      request.currentUserMessageId,
+      request.currentUserMessageText,
+    );
     if (!target) return null;
-    const subjectKey = exactRecallLabelKey(target.subject);
-    const predicateKey = exactRecallLabelKey(target.predicate);
-    if (!subjectKey || !predicateKey) return null;
     const scope = requireMemoryAccessScopeIdentity(request.scope);
-    const grant = Object.freeze({
-      kind: 'explicit_memory_recall_grant' as const,
-    });
+    const replayIdentity = JSON.stringify([
+      request.executionRunId,
+      request.toolCallId,
+      request.currentUserMessageId,
+      scope.memoryOwnerId,
+      scope.memoryConversationId,
+      scope.sourceThreadId,
+      scope.personaId,
+      scope.taskId,
+    ]);
+    if (
+      issuedReplayIdentities.has(replayIdentity) ||
+      consumedReplayIdentities.has(replayIdentity)
+    ) {
+      return null;
+    }
+    const grant = Object.freeze({ kind: 'explicit_memory_recall_grant' as const });
     grantBindings.set(grant, {
       currentUserMessageId: request.currentUserMessageId,
       currentUserMessageText: request.currentUserMessageText,
       executionRunId: request.executionRunId,
+      toolCallId: request.toolCallId,
       agentRunId: request.agentRunId,
       scope,
       requestedSubject: target.subject,
       requestedPredicate: target.predicate,
-      subjectKey,
-      predicateKey,
+      replayIdentity,
     });
+    issuedReplayIdentities.add(replayIdentity);
     return grant;
   } catch {
     return null;
@@ -175,7 +118,96 @@ export function createExplicitMemoryRecallGrant(
 export function discardExplicitMemoryRecallGrant(
   grant: ExplicitMemoryRecallGrant | undefined,
 ): void {
-  if (grant && typeof grant === 'object') grantBindings.delete(grant);
+  if (!grant || typeof grant !== 'object') return;
+  const binding = grantBindings.get(grant);
+  if (!binding) return;
+  grantBindings.delete(grant);
+  consumeReplayIdentity(binding.replayIdentity);
+}
+
+/** Consumes authority on the first validation attempt, including a mismatch. */
+export function consumeExplicitMemoryRecallGrant(
+  validation: ExplicitMemoryRecallGrantValidation,
+): boolean {
+  const grant = validation.grant;
+  if (!grant || typeof grant !== 'object') return false;
+  const binding = grantBindings.get(grant);
+  if (!binding) return false;
+  grantBindings.delete(grant);
+  consumeReplayIdentity(binding.replayIdentity);
+  return (
+    validation.all !== true &&
+    validation.subject === binding.requestedSubject &&
+    validation.predicate === binding.requestedPredicate &&
+    validation.currentUserMessageId === binding.currentUserMessageId &&
+    validation.currentUserMessageText === binding.currentUserMessageText &&
+    validation.executionRunId === binding.executionRunId &&
+    validation.toolCallId === binding.toolCallId &&
+    (validation.agentRunId ?? null) === binding.agentRunId &&
+    sameScope(validation.scope, binding.scope)
+  );
+}
+
+export function resetExplicitMemoryRecallGrantStateForTests(): void {
+  issuedReplayIdentities.clear();
+  consumedReplayIdentities.clear();
+  consumedReplayIdentityOrder.splice(0);
+}
+
+function bindExplicitRequestEvidence(
+  raw: unknown,
+  currentUserMessageId: string,
+  currentUserMessageText: string,
+): Readonly<{ subject: string; predicate: string }> | null {
+  if (!isPlainRecord(raw) || !hasExactFields(raw, EVIDENCE_FIELDS)) return null;
+  if (raw.version !== EXPLICIT_MEMORY_RECALL_EVIDENCE_VERSION) return null;
+  if (raw.source_message_id !== currentUserMessageId) return null;
+  const evidenceQuote = exactString(raw.evidence_quote, 600);
+  const predicate = exactString(raw.predicate, 80);
+  const subjectQuote = exactString(raw.subject_quote, 160);
+  const relationQuote = exactString(raw.relation_quote, 200);
+  const subject = decodeSubjectRef(raw.subject_ref);
+  if (
+    !evidenceQuote ||
+    !predicate ||
+    !subjectQuote ||
+    !relationQuote ||
+    !subject ||
+    !currentUserMessageText.includes(evidenceQuote)
+  ) {
+    return null;
+  }
+  if (!evidenceQuote.includes(subjectQuote) || !evidenceQuote.includes(relationQuote)) {
+    return null;
+  }
+  if (subject.kind === 'named' && subjectQuote !== subject.label) {
+    return null;
+  }
+  return Object.freeze({
+    subject: subject.kind === 'self' ? 'user' : subject.label,
+    predicate,
+  });
+}
+
+function decodeSubjectRef(
+  raw: unknown,
+): { kind: 'self' } | { kind: 'named'; label: string } | null {
+  if (!isPlainRecord(raw)) return null;
+  const keys = Object.keys(raw).sort().join(',');
+  if (raw.kind === 'self') return keys === 'kind' ? { kind: 'self' } : null;
+  if (raw.kind !== 'named' || keys !== 'kind,label') return null;
+  const label = exactString(raw.label, 80);
+  return label ? { kind: 'named', label } : null;
+}
+
+function consumeReplayIdentity(identity: string): void {
+  issuedReplayIdentities.delete(identity);
+  if (consumedReplayIdentities.has(identity)) return;
+  consumedReplayIdentities.add(identity);
+  consumedReplayIdentityOrder.push(identity);
+  if (consumedReplayIdentityOrder.length <= MAX_CONSUMED_REPLAY_IDENTITIES) return;
+  const expired = consumedReplayIdentityOrder.shift();
+  if (expired) consumedReplayIdentities.delete(expired);
 }
 
 function sameScope(
@@ -191,27 +223,26 @@ function sameScope(
   );
 }
 
-/** Consumes authority on the first validation attempt, including a mismatch. */
-export function consumeExplicitMemoryRecallGrant(
-  validation: ExplicitMemoryRecallGrantValidation,
-): boolean {
-  const grant = validation.grant;
-  if (!grant || typeof grant !== 'object') return false;
-  const binding = grantBindings.get(grant);
-  if (!binding) return false;
-  grantBindings.delete(grant);
-  const subjectKey = exactRecallLabelKey(validation.subject);
-  const predicateKey = exactRecallLabelKey(validation.predicate);
-  return (
-    validation.all !== true &&
-    subjectKey !== null &&
-    subjectKey === binding.subjectKey &&
-    predicateKey !== null &&
-    predicateKey === binding.predicateKey &&
-    validation.currentUserMessageId === binding.currentUserMessageId &&
-    validation.currentUserMessageText === binding.currentUserMessageText &&
-    validation.executionRunId === binding.executionRunId &&
-    (validation.agentRunId ?? null) === binding.agentRunId &&
-    sameScope(validation.scope, binding.scope)
-  );
+function exactNullableProvenanceId(value: unknown): value is string | null {
+  return value === null || isExactMemoryProvenanceId(value);
+}
+
+function exactString(value: unknown, maxLength: number): string | null {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value === value.trim() &&
+    value.length <= maxLength
+    ? value
+    : null;
+}
+
+function hasExactFields(value: Record<string, unknown>, expected: ReadonlySet<string>): boolean {
+  const keys = Object.keys(value);
+  return keys.length === expected.size && keys.every((key) => expected.has(key));
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

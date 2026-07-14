@@ -1,4 +1,3 @@
-import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
 import {
   E2E_PAIRED_ROUTE_CONDITIONS,
   validateE2EPairedInvariantConfig,
@@ -37,20 +36,26 @@ const MEMORY_REMEMBER_KEYS = new Set([
   'confidence',
   'pinned',
   'scope',
-  'originConversationId',
-  'originThreadId',
-  'originTaskId',
-  'sourceRunId',
-  'sourceSummary',
   'importance',
 ]);
 
 export type E2EPairedCondition = (typeof E2E_PAIRED_CONDITIONS)[number];
 
+export interface E2EOracleFactDeclaration {
+  subject: string;
+  subjectType?: (typeof MEMORY_ENTITY_TYPES)[number];
+  predicate: string;
+  value: string;
+  confidence?: number;
+  pinned?: boolean;
+  scope?: (typeof MEMORY_FACT_SCOPES)[number];
+  importance?: number;
+}
+
 export type E2EOracleEvidenceDeclaration = Readonly<{
   interface: 'memory_remember';
   allowSeeding: true;
-  facts: ReadonlyArray<Readonly<MemoryRememberArgs>>;
+  facts: ReadonlyArray<Readonly<E2EOracleFactDeclaration>>;
 }>;
 
 export type E2EPairedConditionBehavior = Readonly<{
@@ -118,12 +123,6 @@ function requireUnitInterval(value: unknown, label: string): number {
   return value;
 }
 
-function canonicalNullableString(value: unknown, label: string, maxLength: number): string | null {
-  if (value === null) return null;
-  if (typeof value !== 'string') throw new Error(`${label} must be a string or null.`);
-  return requireTrimmed(value, label, maxLength);
-}
-
 export function validateE2EOracleEvidenceDeclaration(
   evidence: E2EOracleEvidenceDeclaration | undefined,
 ): E2EOracleEvidenceDeclaration {
@@ -137,7 +136,7 @@ export function validateE2EOracleEvidenceDeclaration(
     throw new Error(`oracle_evidence accepts at most ${E2E_MAX_ORACLE_FACTS} declared facts.`);
   }
 
-  const canonicalFacts = new Map<string, Readonly<MemoryRememberArgs>>();
+  const canonicalFacts = new Map<string, Readonly<E2EOracleFactDeclaration>>();
   for (const [index, fact] of evidence.facts.entries()) {
     if (!fact || typeof fact !== 'object' || Array.isArray(fact)) {
       throw new Error(`oracleEvidence.facts[${index}] must be an object.`);
@@ -145,7 +144,7 @@ export function validateE2EOracleEvidenceDeclaration(
     if (Object.keys(fact).some((key) => !MEMORY_REMEMBER_KEYS.has(key))) {
       throw new Error(`oracleEvidence.facts[${index}] contains unsupported fields.`);
     }
-    const canonicalFact: MemoryRememberArgs = {
+    const canonicalFact: E2EOracleFactDeclaration = {
       subject: requireTrimmed(fact.subject, `oracleEvidence.facts[${index}].subject`, 80),
       predicate: requireTrimmed(fact.predicate, `oracleEvidence.facts[${index}].predicate`, 80),
       value: requireTrimmed(fact.value, `oracleEvidence.facts[${index}].value`, 200),
@@ -175,7 +174,6 @@ export function validateE2EOracleEvidenceDeclaration(
       }
       canonicalFact.scope = fact.scope;
     }
-    canonicalOptionalOracleStrings(canonicalFact, fact, index);
     if (fact.importance !== undefined) {
       canonicalFact.importance = requireUnitInterval(
         fact.importance,
@@ -189,36 +187,6 @@ export function validateE2EOracleEvidenceDeclaration(
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([, fact]) => fact);
   return deepFreeze({ interface: 'memory_remember', allowSeeding: true, facts });
-}
-
-function canonicalOptionalOracleStrings(
-  target: MemoryRememberArgs,
-  source: Readonly<MemoryRememberArgs>,
-  index: number,
-): void {
-  const assign = (
-    key:
-      | 'originConversationId'
-      | 'originThreadId'
-      | 'originTaskId'
-      | 'sourceRunId'
-      | 'sourceSummary',
-    maxLength: number,
-  ): void => {
-    const value = source[key];
-    if (value !== undefined) {
-      target[key] = canonicalNullableString(
-        value,
-        `oracleEvidence.facts[${index}].${key}`,
-        maxLength,
-      );
-    }
-  };
-  assign('originConversationId', 512);
-  assign('originThreadId', 512);
-  assign('originTaskId', 512);
-  assign('sourceRunId', 512);
-  assign('sourceSummary', 1_000);
 }
 
 function buildConditionBehavior(

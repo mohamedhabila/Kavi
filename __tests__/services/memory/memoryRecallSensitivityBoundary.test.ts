@@ -3,11 +3,10 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb } from '../../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import {
   createExplicitMemoryRecallGrant,
-  deriveExplicitMemoryRecallTarget,
-  type ExplicitMemoryRecallGrant,
+  resetExplicitMemoryRecallGrantStateForTests,
 } from '../../../src/services/memory/explicitMemoryRecallGrant';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
@@ -29,20 +28,56 @@ const BASE_EXECUTION = {
   taskId: 'sensitivity-task',
   now: 1_000,
 } as const;
+const SUBJECT = 'user';
+const PREDICATE = '属性_医療42';
+const VALUE = '値_π_成功_error';
+const ORDINARY_PREDICATE = '表示_theme_42';
+const ORDINARY_VALUE = '普通_値';
+const RESTRICTED_PREDICATE = '保管庫_secret_42';
+const RESTRICTED_VALUE = '絶対に返さない';
+const MESSAGE = '请显示我保存的健康资料';
 const REQUEST_IDENTITY = {
-  currentUserMessageId: 'user-message-sensitive-1',
-  currentUserMessageText: 'What is my medical_status?',
-  executionRunId: 'execution-sensitive-1',
-  agentRunId: 'agent-sensitive-1',
+  currentUserMessageId: 'user-message-sensitive-natural',
+  currentUserMessageText: MESSAGE,
+  executionRunId: 'execution-sensitive-natural',
+  toolCallId: 'tool-call-sensitive-natural',
+  agentRunId: 'agent-sensitive-natural',
 } as const;
+type RequestIdentity = NonNullable<MemoryRecallExecutionContext['requestIdentity']>;
+
+function explicitEvidence(
+  input: {
+    messageId?: string;
+    message?: string;
+    predicate?: string;
+    relationQuote?: string;
+    overrides?: Record<string, unknown>;
+  } = {},
+): Record<string, unknown> {
+  return {
+    version: 1,
+    source_message_id: input.messageId ?? REQUEST_IDENTITY.currentUserMessageId,
+    evidence_quote: input.message ?? MESSAGE,
+    subject_ref: { kind: 'self' },
+    subject_quote: '我',
+    predicate: input.predicate ?? PREDICATE,
+    relation_quote: input.relationQuote ?? '健康资料',
+    ...input.overrides,
+  };
+}
 
 function explicitExecution(
-  overrides: Partial<MemoryRecallExecutionContext> = {},
+  input: {
+    requestIdentity?: RequestIdentity;
+    evidence?: unknown;
+    executionOverrides?: Partial<MemoryRecallExecutionContext>;
+  } = {},
 ): MemoryRecallExecutionContext {
-  const execution = { ...BASE_EXECUTION, ...overrides };
-  const requestIdentity = overrides.requestIdentity ?? REQUEST_IDENTITY;
+  const execution = { ...BASE_EXECUTION, ...input.executionOverrides };
+  const requestIdentity = input.requestIdentity ?? REQUEST_IDENTITY;
   const explicitUserRequestGrant = createExplicitMemoryRecallGrant({
     ...requestIdentity,
+    explicitRequestEvidence: input.evidence ?? explicitEvidence(),
     scope: resolveLocalMemoryAccessScope({
       memoryConversationId: execution.memoryConversationId,
       sourceThreadId: execution.sourceThreadId,
@@ -50,93 +85,43 @@ function explicitExecution(
       taskId: execution.taskId,
     }),
   });
-  if (!explicitUserRequestGrant) throw new Error('expected exact explicit recall grant');
-  return { ...execution, requestIdentity, explicitUserRequestGrant };
+  return {
+    ...execution,
+    requestIdentity,
+    ...(explicitUserRequestGrant ? { explicitUserRequestGrant } : {}),
+  };
 }
 
 function factValues(result: ReturnType<typeof executeMemoryRecall>): string[] {
   return result.ok ? result.facts.map((fact) => fact.value) : [];
 }
 
+function recordFact(
+  predicate: string,
+  value: string,
+  sensitivity: 'normal' | 'sensitive' | 'restricted',
+): void {
+  const entity = upsertEntity({ name: SUBJECT, type: 'self', now: 50 });
+  const fact = recordFactWithApplicability(
+    { subjectId: entity.id, predicate, objectText: value, scope: 'global', now: 100 },
+    { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+  );
+  getMemoryDb().runSync(
+    `UPDATE memory_facts SET sensitivity = ?, sensitivity_policy_version = 2 WHERE id = ?`,
+    sensitivity,
+    fact.fact.id,
+  );
+}
+
 beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
+  resetExplicitMemoryRecallGrantStateForTests();
   ensureFactSchema();
-  const subject = upsertEntity({ name: 'user', type: 'self', now: 50 });
-  recordFactWithApplicability(
-    {
-      subjectId: subject.id,
-      predicate: 'favorite_color',
-      objectText: 'green',
-      scope: 'global',
-      now: 100,
-    },
-    { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
-  );
-  recordFactWithApplicability(
-    {
-      subjectId: subject.id,
-      predicate: 'medical_status',
-      objectText: 'sensitive medical value',
-      scope: 'global',
-      now: 101,
-    },
-    { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
-  );
-  recordFactWithApplicability(
-    {
-      subjectId: subject.id,
-      predicate: 'medical_information',
-      objectText: 'sensitive medical information',
-      scope: 'global',
-      now: 102,
-    },
-    { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
-  );
-  recordFactWithApplicability(
-    {
-      subjectId: subject.id,
-      predicate: 'vault_secret',
-      objectText: 'restricted value',
-      scope: 'global',
-      now: 103,
-    },
-    { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
-  );
-  const project = upsertEntity({ name: 'project_alpha', type: 'project', now: 50 });
-  recordFactWithApplicability(
-    {
-      subjectId: project.id,
-      predicate: 'emergency_contact',
-      objectText: 'sensitive project value',
-      scope: 'global',
-      now: 104,
-    },
-    { factClass: 'objective', sourceAuthority: 'grounded_user' },
-  );
-  const alice = upsertEntity({ name: 'alice', type: 'person', now: 50 });
-  recordFactWithApplicability(
-    {
-      subjectId: alice.id,
-      predicate: 'contact_details',
-      objectText: 'sensitive contact details',
-      scope: 'global',
-      now: 105,
-    },
-    { factClass: 'objective', sourceAuthority: 'grounded_user' },
-  );
-  const oconnor = upsertEntity({ name: 'O’Connor', type: 'person', now: 50 });
-  recordFactWithApplicability(
-    {
-      subjectId: oconnor.id,
-      predicate: 'contact_details',
-      objectText: 'sensitive O’Connor contact details',
-      scope: 'global',
-      now: 106,
-    },
-    { factClass: 'objective', sourceAuthority: 'grounded_user' },
-  );
+  recordFact(PREDICATE, VALUE, 'sensitive');
+  recordFact(ORDINARY_PREDICATE, ORDINARY_VALUE, 'normal');
+  recordFact(RESTRICTED_PREDICATE, RESTRICTED_VALUE, 'restricted');
 });
 
 afterEach(() => {
@@ -144,265 +129,177 @@ afterEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
 });
 
-describe('agent-facing sensitive recall boundary', () => {
-  it('defaults ordinary provider recall to automatic-prompt visibility', () => {
+describe('typed sensitive-recall authority', () => {
+  it('preserves ordinary automatic recall while hiding sensitive facts by default', () => {
     expect(
       factValues(
-        executeMemoryRecall({ subject: 'user', predicate: 'medical_status' }, BASE_EXECUTION),
+        executeMemoryRecall({ subject: SUBJECT, predicate: ORDINARY_PREDICATE }, BASE_EXECUTION),
+      ),
+    ).toEqual([ORDINARY_VALUE]);
+    expect(
+      factValues(executeMemoryRecall({ subject: SUBJECT, predicate: PREDICATE }, BASE_EXECUTION)),
+    ).toEqual([]);
+  });
+
+  it('binds a natural mixed-script request to a canonical predicate not present in its prose', () => {
+    expect(MESSAGE).not.toContain(PREDICATE);
+    const evidence = explicitEvidence();
+    const result = executeMemoryRecall(
+      { subject: SUBJECT, predicate: PREDICATE, explicitRequestEvidence: evidence },
+      explicitExecution({ evidence }),
+    );
+    expect(factValues(result)).toEqual([VALUE]);
+  });
+
+  it.each([
+    ['wrong source', { source_message_id: 'different-message' }],
+    ['wrong evidence quote', { evidence_quote: `${MESSAGE}!` }],
+    ['wrong subject quote', { subject_quote: 'missing subject' }],
+    ['wrong relation quote', { relation_quote: 'missing relation' }],
+    ['extra field', { provider_authorized: true }],
+  ])('rejects %s without exposing sensitive content', (_label, override) => {
+    const evidence = explicitEvidence({ overrides: override });
+    const result = executeMemoryRecall(
+      { subject: SUBJECT, predicate: PREDICATE, explicitRequestEvidence: evidence },
+      explicitExecution({ evidence }),
+    );
+    expect(factValues(result)).toEqual([]);
+  });
+
+  it('never returns permanently restricted facts even with valid typed evidence', () => {
+    const message = '请显示我保存的保险库资料';
+    const identity: RequestIdentity = {
+      currentUserMessageId: 'user-message-restricted-natural',
+      currentUserMessageText: message,
+      executionRunId: 'execution-restricted-natural',
+      toolCallId: 'tool-call-restricted-natural',
+      agentRunId: 'agent-restricted-natural',
+    };
+    const evidence = explicitEvidence({
+      messageId: identity.currentUserMessageId,
+      message,
+      predicate: RESTRICTED_PREDICATE,
+      relationQuote: '保险库资料',
+    });
+    expect(
+      factValues(
+        executeMemoryRecall(
+          {
+            subject: SUBJECT,
+            predicate: RESTRICTED_PREDICATE,
+            explicitRequestEvidence: evidence,
+          },
+          explicitExecution({ requestIdentity: identity, evidence }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('allows one exact use and rejects immediate replay of its execution identity', () => {
+    const evidence = explicitEvidence();
+    const execution = explicitExecution({ evidence });
+    expect(
+      factValues(
+        executeMemoryRecall(
+          { subject: SUBJECT, predicate: PREDICATE, explicitRequestEvidence: evidence },
+          execution,
+        ),
+      ),
+    ).toEqual([VALUE]);
+    expect(
+      factValues(
+        executeMemoryRecall(
+          { subject: SUBJECT, predicate: PREDICATE, explicitRequestEvidence: evidence },
+          execution,
+        ),
       ),
     ).toEqual([]);
     expect(
-      factValues(
-        executeMemoryRecall({ subject: 'user', predicate: 'favorite_color' }, BASE_EXECUTION),
-      ),
-    ).toEqual(['green']);
-  });
-
-  it('exposes only the exact sensitive predicate explicitly requested by the current user', () => {
-    const result = executeMemoryRecall(
-      { subject: 'user', predicate: 'medical_status' },
-      explicitExecution(),
-    );
-
-    expect(factValues(result)).toEqual(['sensitive medical value']);
-  });
-
-  it.each([
-    "What's my medical status?",
-    'What\u2019s my medical status?',
-    "What's my medical-status?",
-  ])('binds separator-only predicate variants for %s', (currentUserMessageText) => {
-    const requestIdentity = {
-      ...REQUEST_IDENTITY,
-      currentUserMessageId: `user-message-${currentUserMessageText.charCodeAt(4)}`,
-      currentUserMessageText,
-    };
-    const result = executeMemoryRecall(
-      { subject: 'user', predicate: 'medical_status' },
-      explicitExecution({ requestIdentity }),
-    );
-
-    expect(factValues(result)).toEqual(['sensitive medical value']);
-  });
-
-  it('binds separator-only variants in both named subject and predicate labels', () => {
-    const requestIdentity = {
-      ...REQUEST_IDENTITY,
-      currentUserMessageId: 'user-message-project-alpha',
-      currentUserMessageText: "What's project alpha's emergency contact?",
-    };
-    const result = executeMemoryRecall(
-      { subject: 'project_alpha', predicate: 'emergency_contact' },
-      explicitExecution({ requestIdentity }),
-    );
-
-    expect(factValues(result)).toEqual(['sensitive project value']);
-  });
-
-  it.each([
-    "What's my Medical Information?",
-    "What's my \uff4d\uff45\uff44\uff49\uff43\uff41\uff4c \uff49\uff4e\uff46\uff4f\uff52\uff4d\uff41\uff54\uff49\uff4f\uff4e?",
-  ])('binds case and NFKC variants to medical_information for %s', (currentUserMessageText) => {
-    const requestIdentity = {
-      ...REQUEST_IDENTITY,
-      currentUserMessageId: `user-message-medical-${currentUserMessageText.length}`,
-      currentUserMessageText,
-    };
-    const result = executeMemoryRecall(
-      { subject: 'user', predicate: 'MEDICAL_INFORMATION' },
-      explicitExecution({ requestIdentity }),
-    );
-
-    expect(factValues(result)).toEqual(['sensitive medical information']);
-  });
-
-  it('binds Alice/alice and predicate case for the exact contact_details request', () => {
-    const requestIdentity = {
-      ...REQUEST_IDENTITY,
-      currentUserMessageId: 'user-message-alice-contact',
-      currentUserMessageText: "What's Alice's contact details?",
-    };
-    const result = executeMemoryRecall(
-      { subject: 'alice', predicate: 'CONTACT_DETAILS' },
-      explicitExecution({ requestIdentity }),
-    );
-
-    expect(factValues(result)).toEqual(['sensitive contact details']);
-  });
-
-  it('binds an exact apostrophized subject without broadening the predicate', () => {
-    const requestIdentity = {
-      ...REQUEST_IDENTITY,
-      currentUserMessageId: 'user-message-oconnor-contact',
-      currentUserMessageText: "What's O’Connor's contact details?",
-    };
-    const result = executeMemoryRecall(
-      { subject: 'o’connor', predicate: 'contact_details' },
-      explicitExecution({ requestIdentity }),
-    );
-
-    expect(factValues(result)).toEqual(['sensitive O’Connor contact details']);
-  });
-
-  it.each([
-    ['near synonym', "What's my health information?", 'medical_information'],
-    ['non-separator punctuation', "What's my medical/information?", 'medical_information'],
-  ] as const)(
-    'does not expand a natural label through %s',
-    (_label, currentUserMessageText, predicate) => {
-      const requestIdentity = {
+      createExplicitMemoryRecallGrant({
         ...REQUEST_IDENTITY,
-        currentUserMessageId: `user-message-negative-${predicate}`,
-        currentUserMessageText,
-      };
-      const result = executeMemoryRecall(
-        { subject: 'user', predicate },
-        explicitExecution({ requestIdentity }),
-      );
+        explicitRequestEvidence: evidence,
+        scope: resolveLocalMemoryAccessScope({
+          memoryConversationId: BASE_EXECUTION.memoryConversationId,
+          sourceThreadId: BASE_EXECUTION.sourceThreadId,
+          personaId: BASE_EXECUTION.personaId,
+          taskId: BASE_EXECUTION.taskId,
+        }),
+      }),
+    ).toBeNull();
+  });
 
-      expect(factValues(result)).toEqual([]);
+  it.each([
+    ['execution run', { executionRunId: 'different-execution-run' }],
+    ['tool call', { toolCallId: 'different-tool-call' }],
+    ['message id', { currentUserMessageId: 'different-message-id' }],
+    ['message text', { currentUserMessageText: `${MESSAGE}!` }],
+    ['agent run', { agentRunId: 'different-agent-run' }],
+  ] satisfies ReadonlyArray<readonly [string, Partial<RequestIdentity>]>)(
+    'rejects a %s identity mismatch and consumes the grant',
+    (_label, requestIdentityOverride) => {
+      const evidence = explicitEvidence();
+      const execution = explicitExecution({ evidence });
+      expect(
+        factValues(
+          executeMemoryRecall(
+            { subject: SUBJECT, predicate: PREDICATE, explicitRequestEvidence: evidence },
+            {
+              ...execution,
+              requestIdentity: { ...REQUEST_IDENTITY, ...requestIdentityOverride },
+            },
+          ),
+        ),
+      ).toEqual([]);
+      expect(
+        factValues(
+          executeMemoryRecall(
+            { subject: SUBJECT, predicate: PREDICATE, explicitRequestEvidence: evidence },
+            execution,
+          ),
+        ),
+      ).toEqual([]);
     },
   );
 
-  it.each([
-    ['all=true', { all: true }],
-    ['missing predicate', { subject: 'user' }],
-    ['different predicate', { subject: 'user', predicate: 'favorite_color' }],
-    ['different subject', { subject: 'someone-else', predicate: 'medical_status' }],
-  ] as const)('does not broaden an exact grant through %s', (_label, args) => {
-    const result = executeMemoryRecall(args, explicitExecution());
-
-    expect(factValues(result)).not.toContain('sensitive medical value');
-    expect(factValues(result)).not.toContain('restricted value');
-  });
-
-  it.each([
-    [
-      'message id',
-      { requestIdentity: { ...REQUEST_IDENTITY, currentUserMessageId: 'user-message-other' } },
-    ],
-    [
-      'message text',
+  it('consumes authority on subject, predicate, broad-query, or scope mismatch', () => {
+    const cases = [
+      { args: { subject: 'different', predicate: PREDICATE } },
+      { args: { subject: SUBJECT, predicate: 'different' } },
+      { args: { subject: SUBJECT, predicate: PREDICATE, all: true } },
       {
-        requestIdentity: {
-          ...REQUEST_IDENTITY,
-          currentUserMessageText: 'What is my other_status?',
-        },
+        args: { subject: SUBJECT, predicate: PREDICATE },
+        execution: { sourceThreadId: 'different-thread' },
       },
-    ],
-    [
-      'execution run',
-      { requestIdentity: { ...REQUEST_IDENTITY, executionRunId: 'execution-sensitive-other' } },
-    ],
-    [
-      'agent run',
-      { requestIdentity: { ...REQUEST_IDENTITY, agentRunId: 'agent-sensitive-other' } },
-    ],
-  ] as const)('rejects a grant with mismatched %s identity', (_label, mismatch) => {
-    const granted = explicitExecution();
-    const result = executeMemoryRecall(
-      { subject: 'user', predicate: 'medical_status' },
-      { ...granted, ...mismatch },
-    );
-
-    expect(factValues(result)).toEqual([]);
-  });
-
-  it.each([
-    ['conversation', { memoryConversationId: 'sensitivity-root-other' }],
-    ['thread', { sourceThreadId: 'sensitivity-thread-other' }],
-    ['persona', { personaId: 'sensitivity-persona-other' }],
-    ['task', { taskId: 'sensitivity-task-other' }],
-  ] as const)('rejects replay in the wrong %s scope', (_label, scopeOverride) => {
-    const granted = explicitExecution();
-    const result = executeMemoryRecall(
-      { subject: 'user', predicate: 'medical_status' },
-      { ...granted, ...scopeOverride },
-    );
-    expect(factValues(result)).toEqual([]);
-  });
-
-  it('rejects one-use grant replay after successful or broadened validation', () => {
-    const replayGrant = explicitExecution();
-    const first = executeMemoryRecall(
-      { subject: 'user', predicate: 'medical_status' },
-      replayGrant,
-    );
-    const replay = executeMemoryRecall(
-      { subject: 'user', predicate: 'medical_status' },
-      replayGrant,
-    );
-    expect(factValues(first)).toEqual(['sensitive medical value']);
-    expect(factValues(replay)).toEqual([]);
-
-    const broadenedGrant = explicitExecution();
-    executeMemoryRecall({ all: true }, broadenedGrant);
-    expect(
-      factValues(
-        executeMemoryRecall({ subject: 'user', predicate: 'medical_status' }, broadenedGrant),
-      ),
-    ).toEqual([]);
-  });
-
-  it('rejects structurally forged grants and keeps restricted facts permanently invisible', () => {
-    const forged = Object.freeze({
-      kind: 'explicit_memory_recall_grant' as const,
-    }) as ExplicitMemoryRecallGrant;
-    expect(
-      factValues(
-        executeMemoryRecall(
-          { subject: 'user', predicate: 'medical_status' },
-          {
-            ...BASE_EXECUTION,
-            requestIdentity: REQUEST_IDENTITY,
-            explicitUserRequestGrant: forged,
-          },
+    ];
+    for (const [index, testCase] of cases.entries()) {
+      resetExplicitMemoryRecallGrantStateForTests();
+      const identity: RequestIdentity = {
+        ...REQUEST_IDENTITY,
+        executionRunId: `${REQUEST_IDENTITY.executionRunId}-${index}`,
+        toolCallId: `${REQUEST_IDENTITY.toolCallId}-${index}`,
+      };
+      const evidence = explicitEvidence();
+      const base = explicitExecution({ requestIdentity: identity, evidence });
+      expect(
+        factValues(
+          executeMemoryRecall(
+            { ...testCase.args, explicitRequestEvidence: evidence },
+            { ...base, ...testCase.execution },
+          ),
         ),
-      ),
-    ).toEqual([]);
-
-    const restrictedIdentity = {
-      ...REQUEST_IDENTITY,
-      currentUserMessageId: 'user-message-restricted-1',
-      currentUserMessageText: 'What is my vault_secret?',
-    };
-    expect(
-      factValues(
-        executeMemoryRecall(
-          { subject: 'user', predicate: 'vault_secret' },
-          explicitExecution({ requestIdentity: restrictedIdentity }),
-        ),
-      ),
-    ).toEqual([]);
+      ).toEqual([]);
+    }
   });
 
-  it('fails closed when the request cannot name one exact subject and predicate', () => {
-    expect(
-      deriveExplicitMemoryRecallTarget('Tell me everything you remember about me.'),
-    ).toBeNull();
-    expect(deriveExplicitMemoryRecallTarget('Recall my medical_status. Then continue.')).toBeNull();
-    expect(deriveExplicitMemoryRecallTarget('What is my medical_status?')).toEqual({
-      subject: 'user',
-      predicate: 'medical_status',
-    });
-    expect(deriveExplicitMemoryRecallTarget("What's my medical status?")).toEqual({
-      subject: 'user',
-      predicate: 'medical status',
-    });
-    expect(deriveExplicitMemoryRecallTarget('What\u2019s my medical-status?')).toEqual({
-      subject: 'user',
-      predicate: 'medical-status',
-    });
-    expect(deriveExplicitMemoryRecallTarget("What's my medical_information?")).toEqual({
-      subject: 'user',
-      predicate: 'medical_information',
-    });
-    expect(deriveExplicitMemoryRecallTarget("What's my contact_details?")).toEqual({
-      subject: 'user',
-      predicate: 'contact_details',
-    });
-    expect(
-      deriveExplicitMemoryRecallTarget('Recall predicate `medical_status` for subject `user`.'),
-    ).toEqual({ subject: 'user', predicate: 'medical_status' });
+  it('does not accept a provider-forged visible grant object', () => {
+    const result = executeMemoryRecall(
+      { subject: SUBJECT, predicate: PREDICATE, explicitRequestEvidence: explicitEvidence() },
+      {
+        ...BASE_EXECUTION,
+        requestIdentity: REQUEST_IDENTITY,
+        explicitUserRequestGrant: { kind: 'explicit_memory_recall_grant' },
+      },
+    );
+    expect(factValues(result)).toEqual([]);
   });
 });

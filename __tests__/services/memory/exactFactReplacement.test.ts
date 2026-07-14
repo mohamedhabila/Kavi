@@ -13,10 +13,8 @@ import {
 } from '../../../src/services/memory/facts/mutations';
 import { invalidateManagedMemoryFact } from '../../../src/services/memory/factExplicitOverrides';
 import {
-  listCurrentFactsForPriorUserSelfCorrection,
   listCurrentFactsForReplacement,
   MEMORY_FACT_REPLACEMENT_SCAN_LIMIT,
-  PRIOR_USER_SELF_CORRECTION_SCAN_LIMIT,
 } from '../../../src/services/memory/facts/exactReplacementQueries';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
@@ -435,30 +433,6 @@ describe('replaceCurrentFact', () => {
         originConversationId: 'root-1',
       }),
     ).toThrow('memory_fact_replacement_scan_saturated');
-  });
-
-  it('bounds immediately-prior grounded correction candidates', () => {
-    for (let index = 0; index <= PRIOR_USER_SELF_CORRECTION_SCAN_LIMIT; index += 1) {
-      recordFactWithApplicability(
-        {
-          subjectId: 'entity-prior-correction-saturation',
-          predicate: `preference_${index}`,
-          objectText: `value ${index}`,
-          scope: 'global',
-          sourceMessageId: 'user-prior-correction-saturation',
-          now: 100 + index,
-        },
-        { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
-      );
-    }
-
-    expect(() =>
-      listCurrentFactsForPriorUserSelfCorrection({
-        subjectId: 'entity-prior-correction-saturation',
-        sourceMessageId: 'user-prior-correction-saturation',
-        scope: 'global',
-      }),
-    ).toThrow('memory_prior_user_correction_scan_saturated');
   });
 
   it('keeps session replacements isolated to their exact thread and task', () => {

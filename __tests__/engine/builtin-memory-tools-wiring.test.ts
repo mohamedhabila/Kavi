@@ -25,7 +25,8 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
+import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 const MEMORY_EXECUTION_SCOPE = {
   memoryConversationId: 'memory-tools-conversation',
@@ -41,6 +42,36 @@ function groundedRequest(userMessageId: string, userMessageText: string) {
     userMessageId,
     userMessageText,
   });
+}
+
+function groundedArgs(input: {
+  userMessageId: string;
+  userMessageText: string;
+  subject: string;
+  predicate: string;
+  value: string;
+  operation?: 'record' | 'replace_current';
+  importance?: number;
+}) {
+  return memoryRememberArgs({
+    userMessageId: input.userMessageId,
+    userMessageText: input.userMessageText,
+    subjectRef:
+      input.subject === 'user' ? { kind: 'self' } : { kind: 'named', label: input.subject },
+    predicate: input.predicate,
+    value: input.value,
+    scope: 'global',
+    operation: input.operation,
+    importance: input.importance,
+  });
+}
+
+function parseOutcome(
+  outcome: ToolRuntimeOutcome,
+  expectedStatus: ToolRuntimeOutcome['status'] = 'completed',
+) {
+  expect(outcome.status).toBe(expectedStatus);
+  return JSON.parse(outcome.content);
 }
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -105,17 +136,22 @@ describe('living-memory tool wiring', () => {
     }
   });
 
-  it('declares exact label preservation for structured memory writes', () => {
-    expect(MEMORY_REMEMBER_TOOL.description).toContain('Preserve user-supplied subject');
-    expect(MEMORY_REMEMBER_TOOL.description).toContain('do not rename predicates');
-    expect(MEMORY_REMEMBER_TOOL.input_schema.properties.subject.description).toContain(
-      'Exact entity label supplied by the user',
+  it('declares strict provider-neutral semantic evidence for memory writes', () => {
+    expect(MEMORY_REMEMBER_TOOL.description).toContain('strict provider-neutral');
+    const evidence = MEMORY_REMEMBER_TOOL.input_schema.properties.semanticEvidence;
+    expect(evidence.additionalProperties).toBe(false);
+    expect(evidence.required).toEqual(
+      expect.arrayContaining([
+        'source_message_id',
+        'assertion_class',
+        'evidence_quote',
+        'subject_quote',
+        'predicate_quote',
+        'value_quote',
+      ]),
     );
-    expect(MEMORY_REMEMBER_TOOL.input_schema.properties.predicate.description).toContain(
-      'Exact relation/predicate label supplied by the user',
-    );
-    expect(MEMORY_REMEMBER_TOOL.input_schema.properties.value.description).toContain(
-      'Exact object text/value supplied by the user',
+    expect(evidence.properties.assertion_class.enum).toEqual(
+      expect.arrayContaining(['current_direct', 'quoted', 'third_party', 'uncertain']),
     );
   });
 
@@ -138,9 +174,7 @@ describe('living-memory tool wiring', () => {
   });
 
   it('keeps runtime-owned memory provenance out of the provider-facing write schema', () => {
-    expect(MEMORY_REMEMBER_TOOL.input_schema.required).toEqual(
-      expect.arrayContaining(['subject', 'predicate', 'value', 'scope']),
-    );
+    expect(MEMORY_REMEMBER_TOOL.input_schema.required).toEqual(['semanticEvidence']);
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originConversationId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originThreadId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originTaskId');
@@ -148,16 +182,16 @@ describe('living-memory tool wiring', () => {
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceRunId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('requestEvidence');
     expect(MEMORY_REMEMBER_TOOL.input_schema.additionalProperties).toBe(false);
-    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).toHaveProperty('sourceSummary');
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceSummary');
     expect(MEMORY_RECALL_TOOL.input_schema.properties).not.toHaveProperty('originConversationId');
     expect(MEMORY_RECALL_TOOL.input_schema.properties).not.toHaveProperty('originTaskId');
     expect(MEMORY_RECALL_TOOL.input_schema.properties).not.toHaveProperty('includeHistory');
+    expect(MEMORY_RECALL_TOOL.input_schema.properties).toHaveProperty('explicitRequestEvidence');
     expect(MEMORY_RECALL_TOOL.input_schema.additionalProperties).toBe(false);
   });
 
   it('lists structured fact-memory tools under the memory category', async () => {
-    const raw = await executeToolCatalog({ category: 'memory' });
-    const result = JSON.parse(raw);
+    const result = parseOutcome(await executeToolCatalog({ category: 'memory' }));
     const seen = JSON.stringify(result);
     for (const name of STRUCTURED_MEMORY_CATALOG_TOOL_NAMES) {
       expect(seen).toContain(name);
@@ -165,17 +199,16 @@ describe('living-memory tool wiring', () => {
   });
 
   it('memory_remember → memory_recall round-trip via the wrapper executors', () => {
-    const remembered = JSON.parse(
+    const remembered = parseOutcome(
       executeMemoryRemember(
-        {
+        groundedArgs({
+          userMessageId: 'user-prefers',
+          userMessageText: 'I prefer dark mode.',
           subject: 'user',
           predicate: 'preference',
           value: 'dark mode',
-          confidence: 0.9,
-          scope: 'global',
           importance: 0.8,
-          sourceSummary: 'User confirmed directly.',
-        },
+        }),
         groundedRequest('user-prefers', 'I prefer dark mode.'),
       ),
     );
@@ -184,40 +217,46 @@ describe('living-memory tool wiring', () => {
     expect(remembered.fact.scope).toBe('global');
     expect(remembered.fact.importance).toBe(0.8);
 
-    const recalled = JSON.parse(
+    const recalled = parseOutcome(
       executeMemoryRecall({ subject: 'user', predicate: 'preference' }, MEMORY_EXECUTION_SCOPE),
     );
     expect(recalled.ok).toBe(true);
     expect(recalled.facts).toHaveLength(1);
     expect(recalled.facts[0].value).toBe('dark mode');
-    expect(recalled.facts[0].sourceSummary).toBe('User confirmed directly.');
+    expect(recalled.facts[0].sourceSummary).toBeNull();
     expect(recalled.facts[0].policy).toEqual({ action: 'use', reason: 'eligible' });
   });
 
   it('memory_recall can list all valid facts without a subject hint', () => {
-    JSON.parse(
+    parseOutcome(
       executeMemoryRemember(
-        {
+        groundedArgs({
+          userMessageId: 'user-review-duration',
+          userMessageText: 'I usually keep architecture reviews to 30 minutes.',
           subject: 'user',
-          subjectType: 'self',
           predicate: 'usual architecture review duration',
           value: '30 minutes',
-          scope: 'global',
-        },
+        }),
         groundedRequest(
           'user-review-duration',
           'I usually keep architecture reviews to 30 minutes.',
         ),
       ),
     );
-    JSON.parse(
+    parseOutcome(
       executeMemoryRemember(
-        { subject: 'project', predicate: 'name', value: 'Kavi', scope: 'global' },
+        groundedArgs({
+          userMessageId: 'user-project-name',
+          userMessageText: 'project name is Kavi.',
+          subject: 'project',
+          predicate: 'name',
+          value: 'Kavi',
+        }),
         groundedRequest('user-project-name', 'project name is Kavi.'),
       ),
     );
 
-    const recalled = JSON.parse(
+    const recalled = parseOutcome(
       executeMemoryRecall({ all: true, limit: 10 }, MEMORY_EXECUTION_SCOPE),
     );
 
@@ -235,46 +274,64 @@ describe('living-memory tool wiring', () => {
   });
 
   it('memory_pin / memory_unpin flip the pinned flag', () => {
-    const r = JSON.parse(
+    const r = parseOutcome(
       executeMemoryRemember(
-        { subject: 'user', predicate: 'timezone', value: 'UTC+1', scope: 'global' },
+        groundedArgs({
+          userMessageId: 'user-timezone',
+          userMessageText: 'My timezone is UTC+1.',
+          subject: 'user',
+          predicate: 'timezone',
+          value: 'UTC+1',
+        }),
         groundedRequest('user-timezone', 'My timezone is UTC+1.'),
       ),
     );
     const factId = r.fact.id;
 
-    const pinned = JSON.parse(executeMemoryPin({ factId }, MEMORY_EXECUTION_SCOPE));
+    const pinned = parseOutcome(executeMemoryPin({ factId }, MEMORY_EXECUTION_SCOPE));
     expect(pinned.ok).toBe(true);
     expect(pinned.fact.pinned).toBe(true);
 
-    const unpinned = JSON.parse(executeMemoryUnpin({ factId }, MEMORY_EXECUTION_SCOPE));
+    const unpinned = parseOutcome(executeMemoryUnpin({ factId }, MEMORY_EXECUTION_SCOPE));
     expect(unpinned.ok).toBe(true);
     expect(unpinned.fact.pinned).toBe(false);
   });
 
   it('memory_forget withdraws without returning the private value', () => {
-    const r = JSON.parse(
+    const r = parseOutcome(
       executeMemoryRemember(
-        { subject: 'user', predicate: 'name', value: 'Alice', scope: 'global' },
+        groundedArgs({
+          userMessageId: 'user-name-forget',
+          userMessageText: 'My name is Alice.',
+          subject: 'user',
+          predicate: 'name',
+          value: 'Alice',
+        }),
         groundedRequest('user-name-forget', 'My name is Alice.'),
       ),
     );
     const factId = r.fact.id;
 
-    const withdrawn = JSON.parse(executeMemoryForget({ factId }, MEMORY_EXECUTION_SCOPE));
+    const withdrawn = parseOutcome(executeMemoryForget({ factId }, MEMORY_EXECUTION_SCOPE));
     expect(withdrawn.ok).toBe(true);
     expect(withdrawn.action).toBe('withdrawal');
     expect(JSON.stringify(withdrawn)).not.toContain('Alice');
   });
 
   it('memory invalidation preserves correction history through its own executor', () => {
-    const r = JSON.parse(
+    const r = parseOutcome(
       executeMemoryRemember(
-        { subject: 'user', predicate: 'name', value: 'Alice', scope: 'global' },
+        groundedArgs({
+          userMessageId: 'user-name-invalidate',
+          userMessageText: 'My name is Alice.',
+          subject: 'user',
+          predicate: 'name',
+          value: 'Alice',
+        }),
         groundedRequest('user-name-invalidate', 'My name is Alice.'),
       ),
     );
-    const invalidated = JSON.parse(
+    const invalidated = parseOutcome(
       executeMemoryInvalidate({ factId: r.fact.id }, MEMORY_EXECUTION_SCOPE),
     );
     expect(invalidated).toEqual(
@@ -283,11 +340,12 @@ describe('living-memory tool wiring', () => {
   });
 
   it('returns structured errors as JSON instead of throwing', () => {
-    const result = JSON.parse(
+    const result = parseOutcome(
       executeMemoryRemember(
-        { subject: '', predicate: '', value: '', scope: 'global' } as any,
+        { subject: '', predicate: '', value: '', scope: 'global' } as never,
         groundedRequest('user-invalid-memory', 'Invalid memory request.'),
       ),
+      'failed',
     );
     expect(result.ok).toBe(false);
     expect(typeof result.error).toBe('string');

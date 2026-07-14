@@ -42,7 +42,10 @@ jest.mock('../../src/engine/tools/builtin-memory', () => ({
 }));
 
 import { executeBuiltinMemoryTool } from '../../src/engine/tools/toolBuiltinMemoryExecution';
-import { consumeExplicitMemoryRecallGrant } from '../../src/services/memory/explicitMemoryRecallGrant';
+import {
+  consumeExplicitMemoryRecallGrant,
+  resetExplicitMemoryRecallGrantStateForTests,
+} from '../../src/services/memory/explicitMemoryRecallGrant';
 
 const BASE_PARAMS = {
   conversationId: 'child-thread',
@@ -53,6 +56,7 @@ const BASE_PARAMS = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  resetExplicitMemoryRecallGrantStateForTests();
   mockExecuteMemoryRecall.mockReturnValue('{"ok":true}');
   mockExecuteMemorySearch.mockResolvedValue('{"ok":true}');
   mockExecuteMemoryRemember.mockResolvedValue('{"ok":true}');
@@ -66,11 +70,24 @@ describe('builtin memory execution scope', () => {
       claimedAt: 2_000_000_000_000,
     });
     const providerArgs = {
-      subject: 'user',
-      predicate: 'timezone',
-      value: 'UTC+1',
-      scope: 'global',
-      sourceRunId: 'provider-forged-run',
+      semanticEvidence: {
+        version: 1,
+        subject_ref: { kind: 'self' },
+        subject_type: 'self',
+        predicate: 'timezone',
+        value: 'UTC+1',
+        scope: 'global',
+        importance: 0.8,
+        confidence: 0.95,
+        source_message_id: 'user-message-remember',
+        operation: 'record',
+        assertion_class: 'current_direct',
+        evidence_quote: 'My timezone is UTC+1.',
+        sensitivity: 'personal',
+        subject_quote: 'My',
+        predicate_quote: 'timezone',
+        value_quote: 'UTC+1',
+      },
     };
 
     await executeBuiltinMemoryTool({
@@ -88,30 +105,20 @@ describe('builtin memory execution scope', () => {
       args: providerArgs,
     });
 
-    expect(mockExecuteMemoryRemember).toHaveBeenCalledWith(
-      {
-        ...providerArgs,
-        sourceRunId: 'agent-run-remember',
+    expect(mockExecuteMemoryRemember).toHaveBeenCalledWith(providerArgs, {
+      personaId: 'coder',
+      sourceRunId: 'agent-run-remember',
+      executionClaim,
+      requestEvidence: {
+        memoryConversationId: 'delegated-memory-scope',
+        sourceThreadId: 'child-thread',
+        taskId: 'active-task',
+        userMessageId: 'user-message-remember',
+        userMessageText: 'My timezone is UTC+1.',
       },
-      {
-        executionClaim,
-        requestEvidence: {
-          memoryConversationId: 'delegated-memory-scope',
-          sourceThreadId: 'child-thread',
-          taskId: 'active-task',
-          userMessageId: 'user-message-remember',
-          userMessageText: 'My timezone is UTC+1.',
-        },
-      },
-    );
-    expect(mockExecuteMemoryRemember.mock.calls[0]?.[0]).not.toHaveProperty('executionClaim');
-    expect(providerArgs).toEqual({
-      subject: 'user',
-      predicate: 'timezone',
-      value: 'UTC+1',
-      scope: 'global',
-      sourceRunId: 'provider-forged-run',
     });
+    expect(mockExecuteMemoryRemember.mock.calls[0]?.[0]).not.toHaveProperty('executionClaim');
+    expect(providerArgs).not.toHaveProperty('sourceRunId');
   });
 
   it.each([
@@ -198,10 +205,19 @@ describe('builtin memory execution scope', () => {
   });
 
   it('creates exact sensitive-recall authority only from code-owned request identity', async () => {
-    const args = { subject: 'user', predicate: 'medical_status' };
+    const explicitRequestEvidence = {
+      version: 1,
+      source_message_id: 'user-message-sensitive',
+      evidence_quote: '请显示我保存的健康资料',
+      subject_ref: { kind: 'self' },
+      subject_quote: '我',
+      predicate: 'medical_status',
+      relation_quote: '健康资料',
+    };
+    const args = { subject: 'user', predicate: 'medical_status', explicitRequestEvidence };
     const currentUserMessage = {
       id: 'user-message-sensitive',
-      text: 'What is my medical_status?',
+      text: '请显示我保存的健康资料',
     };
     await executeBuiltinMemoryTool({
       ...BASE_PARAMS,
@@ -209,6 +225,7 @@ describe('builtin memory execution scope', () => {
         ...BASE_PARAMS.context,
         currentUserMessage,
         executionRunId: 'execution-sensitive',
+        toolCallId: 'tool-call-sensitive',
         agentRunId: 'agent-sensitive',
       },
       name: 'memory_recall',
@@ -221,6 +238,7 @@ describe('builtin memory execution scope', () => {
         currentUserMessageId: currentUserMessage.id,
         currentUserMessageText: currentUserMessage.text,
         executionRunId: 'execution-sensitive',
+        toolCallId: 'tool-call-sensitive',
         agentRunId: 'agent-sensitive',
       },
       explicitUserRequestGrant: { kind: 'explicit_memory_recall_grant' },
@@ -235,7 +253,8 @@ describe('builtin memory execution scope', () => {
         personaId: 'coder',
         taskId: 'active-task',
       },
-      ...args,
+      subject: args.subject,
+      predicate: args.predicate,
       all: undefined,
     };
     expect(consumeExplicitMemoryRecallGrant(validation)).toBe(true);
@@ -252,6 +271,7 @@ describe('builtin memory execution scope', () => {
           text: 'Tell me everything you remember about me.',
         },
         executionRunId: 'execution-broad',
+        toolCallId: 'tool-call-broad',
         agentRunId: 'agent-broad',
       },
       name: 'memory_recall',

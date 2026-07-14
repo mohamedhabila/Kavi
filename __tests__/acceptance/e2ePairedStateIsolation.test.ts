@@ -25,7 +25,7 @@ import { editPromptEligibleWorkingBlock } from '../../src/services/memory/workin
 import { executeMemoryRemember } from '../../src/services/memory/memoryTools';
 import { getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
-import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
+import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 describe('paired E2E state isolation', () => {
   it('keeps the reset verification list synchronized with mutable memory tables', () => {
@@ -65,19 +65,20 @@ describe('paired E2E state isolation', () => {
     writeWorkspaceRelativeFile('state-isolation', 'private.txt', 'PRIVATE-WORKSPACE');
     expect(
       executeMemoryRemember(
-        {
-          subject: 'user',
+        memoryRememberArgs({
+          userMessageId: 'state-isolation-user',
+          userMessageText: '主体🧑 label PRIVATE-MEMORY',
+          subjectRef: { kind: 'self' },
+          subjectMention: '🧑',
           predicate: 'preferred label',
           value: 'PRIVATE-MEMORY',
           scope: 'conversation',
-          originConversationId: 'state-isolation',
-          originThreadId: 'state-isolation',
-        },
+        }),
         memoryRememberExecution({
           memoryConversationId: 'state-isolation',
           sourceThreadId: 'state-isolation',
           userMessageId: 'state-isolation-user',
-          userMessageText: 'My preferred label is "PRIVATE-MEMORY".',
+          userMessageText: '主体🧑 label PRIVATE-MEMORY',
         }),
       ),
     ).toMatchObject({ ok: true });
@@ -114,19 +115,20 @@ describe('paired E2E state isolation', () => {
     });
     expect(
       executeMemoryRemember(
-        {
-          subject: 'user',
+        memoryRememberArgs({
+          userMessageId: 'paired-isolation-user',
+          userMessageText: '主体🧑 label MUST-NOT-CROSS-CONDITIONS',
+          subjectRef: { kind: 'self' },
+          subjectMention: '🧑',
           predicate: 'preferred label',
           value: 'MUST-NOT-CROSS-CONDITIONS',
           scope: 'conversation',
-          originConversationId: 'paired-isolation',
-          originThreadId: 'paired-isolation',
-        },
+        }),
         memoryRememberExecution({
           memoryConversationId: 'paired-isolation',
           sourceThreadId: 'paired-isolation',
           userMessageId: 'paired-isolation-user',
-          userMessageText: 'My preferred label is "MUST-NOT-CROSS-CONDITIONS".',
+          userMessageText: '主体🧑 label MUST-NOT-CROSS-CONDITIONS',
         }),
       ),
     ).toMatchObject({ ok: true });

@@ -1,10 +1,6 @@
 import { findEntityByName } from '../entities';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
-import {
-  listCurrentFactsForPriorUserSelfCorrection,
-  listCurrentFactsForReplacement,
-} from './exactReplacementQueries';
-import { isExactMemoryProvenanceId } from '../memoryProvenanceIdentity';
+import { listCurrentFactsForReplacement } from './exactReplacementQueries';
 import { hasCurrentFactForSubjectPredicate } from './queries';
 import type { MemoryFact, MemoryFactScope } from './types';
 
@@ -77,33 +73,4 @@ export function resolveCurrentFactsForReplacement(
     currentFacts,
     hasAnyCurrentFact: currentFacts.length > 0 || hasAnyCurrentFact,
   };
-}
-
-export function resolvePriorUserSelfCorrectionFacts(
-  input: {
-    subject: string;
-    sourceMessageId: string;
-    scope: MemoryFactScope;
-  },
-  context: CurrentReplacementResolutionContext,
-): MemoryFact[] {
-  const subject = input.subject.trim();
-  if (!subject || !isExactMemoryProvenanceId(input.sourceMessageId)) return [];
-  const entity = findEntityByName(subject);
-  if (!entity || !hasRequiredScopeIdentity(input.scope, context)) return [];
-  return listCurrentFactsForPriorUserSelfCorrection({
-    subjectId: entity.id,
-    sourceMessageId: input.sourceMessageId,
-    scope: input.scope,
-    ...(input.scope === 'persona' ? { personaId: context.personaId } : {}),
-    ...(input.scope === 'project' || input.scope === 'conversation' || input.scope === 'session'
-      ? {
-          originConversationId: context.memoryConversationId,
-          ...(isExactMemoryScopeId(context.sourceThreadId)
-            ? { originThreadId: context.sourceThreadId }
-            : {}),
-        }
-      : {}),
-    ...(input.scope === 'session' ? { originTaskId: context.taskId } : {}),
-  });
 }

@@ -177,7 +177,7 @@ Return STRICT JSON only — no prose, no markdown fences. Schema:
       "subject_ref": {"kind": "self"} | {"kind": "named", "label": "exact subject label"},
       "predicate": "concise stable relation label",
       "value": "exact value copied from the evidence quote",
-      "scope": "global" | "project" | "conversation" | "session",
+      "scope": "global" | "project" | "conversation" | "session" | "persona",
       "importance": 0.0,
       "confidence": 0.0,
       "source_message_id": "exact id of the current user message",
@@ -216,7 +216,8 @@ Rules:
   subject, predicate, and value labels when they are given, including opaque IDs,
   checksums, codes, and tokens. The assistant does not need to restate the fact.
 - Up to 5 new_facts, 5 open_threads, 2 notable.
-- Use global scope only for stable user profile/preferences. Use conversation
+- Use global scope only for stable user profile/preferences. Use persona only
+  for a stable fact explicitly limited to the active persona. Use conversation
   or session for active-task details. Use project for repo/workspace facts.
 - value strings <= 200 chars. labels <= 80 chars. active_focus <= 600 chars.
 - If nothing is worth recording, return empty arrays and null active_focus.

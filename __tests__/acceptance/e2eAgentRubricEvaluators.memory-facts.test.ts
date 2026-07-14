@@ -7,10 +7,13 @@ import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluator
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { executeMemoryRemember } from '../../src/engine/tools/builtin-memory';
 import { getMemoryDb } from '../../src/services/memory/database';
-import {
-  buildE2ERubricResultWithMemoryEvidence as buildResultWithMemoryEvidence,
-} from '../helpers/e2eRubricResult';
-import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
+import { buildE2ERubricResultWithMemoryEvidence as buildResultWithMemoryEvidence } from '../helpers/e2eRubricResult';
+import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
+
+function parseCompletedOutcome(outcome: { status: string; content: string }) {
+  expect(outcome.status).toBe('completed');
+  return JSON.parse(outcome.content);
+}
 
 beforeEach(() => {
   resetE2EMemorySandbox();
@@ -19,16 +22,16 @@ beforeEach(() => {
 describe('evaluateE2ERubric memory facts', () => {
   it('checks memory_fact from captured SQLite evidence', () => {
     const conversationId = 'conv-memory-fact';
-    const rememberResult = JSON.parse(
+    const rememberResult = parseCompletedOutcome(
       executeMemoryRemember(
-        {
-          subject: 'e2e-entity-i1',
+        memoryRememberArgs({
+          userMessageId: 'user-memory-fact',
+          userMessageText: 'e2e-entity-i1 artifact_token is E2E-MEM-42.',
+          subjectRef: { kind: 'named', label: 'e2e-entity-i1' },
           predicate: 'artifact_token',
           value: 'E2E-MEM-42',
           scope: 'conversation',
-          originConversationId: conversationId,
-          originThreadId: conversationId,
-        },
+        }),
         memoryRememberExecution({
           memoryConversationId: conversationId,
           sourceThreadId: conversationId,
@@ -72,16 +75,16 @@ describe('evaluateE2ERubric memory facts', () => {
 
   it('checks memory_fact_absent against the current replacement', () => {
     const conversationId = 'conv-memory-fact-update';
-    const oldResult = JSON.parse(
+    const oldResult = parseCompletedOutcome(
       executeMemoryRemember(
-        {
-          subject: 'e2e-entity-update',
+        memoryRememberArgs({
+          userMessageId: 'msg-memory-fact-old',
+          userMessageText: 'e2e-entity-update artifact_token is E2E-OLD.',
+          subjectRef: { kind: 'named', label: 'e2e-entity-update' },
           predicate: 'artifact_token',
           value: 'E2E-OLD',
           scope: 'conversation',
-          originConversationId: conversationId,
-          originThreadId: conversationId,
-        },
+        }),
         memoryRememberExecution({
           memoryConversationId: conversationId,
           sourceThreadId: conversationId,
@@ -91,16 +94,17 @@ describe('evaluateE2ERubric memory facts', () => {
       ),
     );
     expect(oldResult.ok).toBe(true);
-    const newResult = JSON.parse(
+    const newResult = parseCompletedOutcome(
       executeMemoryRemember(
-        {
-          subject: 'e2e-entity-update',
+        memoryRememberArgs({
+          userMessageId: 'msg-memory-fact-update',
+          userMessageText: 'e2e-entity-update artifact_token is E2E-NEW.',
+          subjectRef: { kind: 'named', label: 'e2e-entity-update' },
           predicate: 'artifact_token',
           value: 'E2E-NEW',
           scope: 'conversation',
-          originConversationId: conversationId,
-          originThreadId: conversationId,
-        },
+          operation: 'replace_current',
+        }),
         memoryRememberExecution({
           memoryConversationId: conversationId,
           sourceThreadId: conversationId,
@@ -134,14 +138,16 @@ describe('evaluateE2ERubric memory facts', () => {
 
   it('does not treat an expired persisted fact as current evidence', () => {
     const conversationId = 'conv-memory-expired';
-    const rememberResult = JSON.parse(
+    const rememberResult = parseCompletedOutcome(
       executeMemoryRemember(
-        {
-          subject: 'e2e-expired-subject',
+        memoryRememberArgs({
+          userMessageId: 'msg-memory-expired',
+          userMessageText: 'e2e-expired-subject temporary_code is EXPIRED-CODE.',
+          subjectRef: { kind: 'named', label: 'e2e-expired-subject' },
           predicate: 'temporary_code',
           value: 'EXPIRED-CODE',
           scope: 'global',
-        },
+        }),
         memoryRememberExecution({
           memoryConversationId: conversationId,
           sourceThreadId: conversationId,

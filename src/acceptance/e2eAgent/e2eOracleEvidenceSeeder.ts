@@ -6,6 +6,7 @@ import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
 import { isCanonicalSelfMemorySubject } from '../../services/memory/memorySubjectIdentity';
 import {
   validateE2EOracleEvidenceDeclaration,
+  type E2EOracleFactDeclaration,
   type E2EOracleEvidenceDeclaration,
 } from './e2ePairedConditions';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
@@ -30,16 +31,31 @@ type OracleMemoryToolExecutor = (params: {
 
 type OraclePersistedFactReader = (factId: string) => MemoryFact | null | undefined;
 
-function buildIsolatedOracleFact(fact: Readonly<MemoryRememberArgs>): MemoryRememberArgs {
+function buildIsolatedOracleFact(
+  fact: Readonly<E2EOracleFactDeclaration>,
+  userEvidence: OracleUserEvidence,
+): MemoryRememberArgs {
+  const selfSubject = isCanonicalSelfMemorySubject(fact.subject);
   return {
-    subject: fact.subject,
-    predicate: fact.predicate,
-    value: fact.value,
-    ...(fact.subjectType !== undefined ? { subjectType: fact.subjectType } : {}),
-    ...(fact.confidence !== undefined ? { confidence: fact.confidence } : {}),
+    semanticEvidence: {
+      version: 1,
+      subject_ref: selfSubject ? { kind: 'self' } : { kind: 'named', label: fact.subject },
+      subject_type: selfSubject ? 'self' : (fact.subjectType ?? 'concept'),
+      predicate: fact.predicate,
+      value: fact.value,
+      scope: 'conversation',
+      importance: fact.importance ?? 0.5,
+      confidence: fact.confidence ?? 0.9,
+      source_message_id: userEvidence.messageId,
+      operation: 'record',
+      assertion_class: 'current_direct',
+      evidence_quote: userEvidence.text,
+      sensitivity: 'normal',
+      subject_quote: selfSubject ? '⟦self⟧' : fact.subject,
+      predicate_quote: fact.predicate,
+      value_quote: fact.value,
+    },
     ...(fact.pinned !== undefined ? { pinned: fact.pinned } : {}),
-    ...(fact.importance !== undefined ? { importance: fact.importance } : {}),
-    scope: 'conversation',
   };
 }
 
@@ -58,17 +74,9 @@ const executeProductMemoryTool: OracleMemoryToolExecutor = async (params) =>
   });
 
 function buildOracleUserEvidence(
-  fact: Readonly<MemoryRememberArgs>,
+  fact: Readonly<E2EOracleFactDeclaration>,
   index: number,
 ): OracleUserEvidence {
-  const predicateUnits = Array.from(
-    fact.predicate.normalize('NFKC').matchAll(/[\p{L}\p{M}\p{N}]+/gu),
-    (match) => match[0],
-  );
-  if (predicateUnits.length === 0)
-    throw new Error(`Oracle memory_remember fact ${index} has no predicate units.`);
-  const predicateLabel = predicateUnits.join(' ');
-  const predicateHead = predicateUnits.at(-1)!;
   const canonical = stableStringify({
     index,
     subject: fact.subject,
@@ -77,9 +85,7 @@ function buildOracleUserEvidence(
   });
   return {
     messageId: `e2e-oracle-evidence-${stableHash(canonical).slice('sha256:'.length)}`,
-    text: isCanonicalSelfMemorySubject(fact.subject)
-      ? `My ${predicateLabel} is ${fact.value}.`
-      : `${fact.subject} ${predicateHead} is ${fact.value}.`,
+    text: `${isCanonicalSelfMemorySubject(fact.subject) ? '⟦self⟧' : fact.subject}\n${fact.predicate}\n${fact.value}`,
   };
 }
 
@@ -148,7 +154,7 @@ function validateSeedResult(
 
 function validatePersistedSeed(
   fact: MemoryFact | null | undefined,
-  expected: Readonly<MemoryRememberArgs>,
+  expected: Readonly<E2EOracleFactDeclaration>,
   identity: { conversationId: string; workspaceConversationId: string },
   userEvidence: OracleUserEvidence,
   index: number,
@@ -165,7 +171,8 @@ function validatePersistedSeed(
     fact.sourceSummary !== null ||
     fact.predicate !== expected.predicate ||
     fact.objectText !== expected.value ||
-    fact.factClass !== 'subjective_user' ||
+    fact.factClass !==
+      (isCanonicalSelfMemorySubject(expected.subject) ? 'subjective_user' : 'objective') ||
     fact.sourceAuthority !== 'grounded_user'
   ) {
     throw new Error(`Oracle memory_remember fact ${index} persisted untrusted provenance.`);
@@ -211,7 +218,7 @@ export async function seedE2EOracleEvidence(input: {
     const executionClaim = buildOracleExecutionClaim(userEvidence, index, seedRunId, baseClaimedAt);
     const outcome = await executeTool({
       name: 'memory_remember',
-      args: buildIsolatedOracleFact(fact),
+      args: buildIsolatedOracleFact(fact, userEvidence),
       userEvidence,
       executionClaim,
       ...identity,

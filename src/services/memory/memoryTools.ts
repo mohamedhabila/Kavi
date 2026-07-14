@@ -18,9 +18,8 @@
 // structured living-memory fact store.
 // ---------------------------------------------------------------------------
 
-import { findEntityByName, type EntityType } from './entities';
+import { findEntityByName } from './entities';
 import { markFactsRecalled } from './facts/factAccessMutations';
-import { requireFactScopeIdentity } from './facts/scopeIdentity';
 import { listFacts, listFactsForRecallEligibleScan } from './facts/queries';
 import { requireMemoryFactScope, type MemoryFactScope } from './facts/types';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
@@ -60,7 +59,6 @@ import {
   type MemoryRememberRequestEvidence,
 } from './memoryRememberPersistence';
 import { serializeMemoryFact } from './memoryFactSerialization';
-import { canonicalizeMemorySubject, isCanonicalSelfMemorySubject } from './memorySubjectIdentity';
 import {
   consumeExplicitMemoryRecallGrant,
   discardExplicitMemoryRecallGrant,
@@ -71,6 +69,7 @@ import {
   isExactMemoryRememberExecutionClaim,
   isExactMemoryRememberRequestEvidence,
 } from './memoryRememberExecutionAuthority';
+import { bindMemoryRememberSemanticEvidence } from './memoryRememberSemanticEvidence';
 export {
   executeMemoryForget,
   executeMemoryInvalidate,
@@ -202,6 +201,8 @@ export interface MemoryRecallArgs {
   all?: boolean;
   pinnedOnly?: boolean;
   limit?: number;
+  /** Untrusted typed request evidence; product code may exchange it for one-use authority. */
+  explicitRequestEvidence?: unknown;
 }
 
 export interface MemoryRecallExecutionContext {
@@ -215,6 +216,7 @@ export interface MemoryRecallExecutionContext {
     currentUserMessageId: string;
     currentUserMessageText: string;
     executionRunId: string;
+    toolCallId: string;
     agentRunId: string | null;
   };
   /** Ephemeral one-use authority created from requestIdentity by product code. */
@@ -243,6 +245,7 @@ const MEMORY_RECALL_ARG_KEYS = new Set([
   'all',
   'pinnedOnly',
   'limit',
+  'explicitRequestEvidence',
 ]);
 const MEMORY_RECALL_POLICY_INSTRUCTION =
   'Memory fact policy is binding: use only action=use; ask the user before relying on action=ask; never assert or act on action=abstain.';
@@ -317,6 +320,7 @@ export function executeMemoryRecall(
       currentUserMessageId: execution.requestIdentity?.currentUserMessageId,
       currentUserMessageText: execution.requestIdentity?.currentUserMessageText,
       executionRunId: execution.requestIdentity?.executionRunId,
+      toolCallId: execution.requestIdentity?.toolCallId,
       agentRunId: execution.requestIdentity?.agentRunId,
       scope: memoryScope,
       subject: args.subject,
@@ -446,25 +450,15 @@ export function executeMemoryRecall(
 // ── memory_remember ──────────────────────────────────────────────────────
 
 export interface MemoryRememberArgs {
-  subject: string;
-  /** Defaults to 'concept'; use 'self' for the user, 'project'/'person'/etc. for entities. */
-  subjectType?: EntityType;
-  predicate: string;
-  value: string;
-  confidence?: number;
+  semanticEvidence: unknown;
   pinned?: boolean;
-  scope: MemoryFactScope;
-  originConversationId?: string | null;
-  originThreadId?: string | null;
-  originTaskId?: string | null;
-  sourceRunId?: string | null;
-  sourceSummary?: string | null;
-  importance?: number;
 }
 
 export interface MemoryRememberExecutionContext {
   /** Code-owned persona identity; never accepted from provider tool arguments. */
   personaId?: string;
+  /** Code-owned producer run identity; never accepted from provider tool arguments. */
+  sourceRunId: string | null;
   /** Exact code-owned request evidence; never accepted from provider tool arguments. */
   requestEvidence: MemoryRememberRequestEvidence;
   /** Persisted effect authority; never accepted from provider tool arguments. */
@@ -484,60 +478,39 @@ export function executeMemoryRemember(
   }
   if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
   ensureFactSchema();
+  if (
+    !args ||
+    typeof args !== 'object' ||
+    Array.isArray(args) ||
+    Object.keys(args).some((key) => key !== 'semanticEvidence' && key !== 'pinned') ||
+    !Object.prototype.hasOwnProperty.call(args, 'semanticEvidence')
+  ) {
+    return err(
+      'invalid_args',
+      'memory_remember requires only semanticEvidence and optional pinned.',
+    );
+  }
   if (args.pinned !== undefined && typeof args.pinned !== 'boolean') {
     return err('invalid_args', 'pinned must be a boolean');
   }
-  const rawSubject = trimNonEmpty(args.subject, 80);
-  const predicate = trimNonEmpty(args.predicate, 80);
-  const value = trimNonEmpty(args.value, 200);
-  if (!rawSubject) return err('invalid_args', 'subject is required');
-  const normalizedSubject = canonicalizeMemorySubject(rawSubject);
-  const selfSubjectCandidate =
-    isCanonicalSelfMemorySubject(normalizedSubject) || args.subjectType === 'self';
-  const subject = selfSubjectCandidate ? 'user' : normalizedSubject;
-  if (!predicate) return err('invalid_args', 'predicate is required');
-  if (!value) return err('invalid_args', 'value is required');
-  if (typeof args.subject === 'string' && args.subject.trim().length > 80) {
-    return err('invalid_args', 'subject must be at most 80 characters');
-  }
-  if (typeof args.predicate === 'string' && args.predicate.trim().length > 80) {
-    return err('invalid_args', 'predicate must be at most 80 characters');
-  }
-  if (typeof args.value === 'string' && args.value.trim().length > 200) {
-    return err('invalid_args', 'value must be at most 200 characters');
-  }
-
-  const subjectType: EntityType = selfSubjectCandidate ? 'self' : (args.subjectType ?? 'concept');
-
-  let scope: MemoryFactScope;
-  try {
-    scope = requireMemoryFactScope(args.scope);
-    requireFactScopeIdentity(args, scope);
-    if (scope === 'persona' && !isExactMemoryScopeId(context.personaId)) {
-      throw new Error('memory_fact_persona_id_required');
-    }
-  } catch (error) {
-    return err('invalid_args', error instanceof Error ? error.message : 'invalid memory scope');
+  const semantic = bindMemoryRememberSemanticEvidence(
+    args.semanticEvidence,
+    context.requestEvidence,
+  );
+  if (!semantic.valid) {
+    return semantic.code === 'invalid_contract'
+      ? err('invalid_args', `memory_remember semantic evidence is invalid (${semantic.code}).`)
+      : err(
+          'grounding_required',
+          `memory_remember semantic evidence is not bound to the current request (${semantic.code}).`,
+        );
   }
 
   try {
     const persisted = persistMemoryRemember(
       {
-        subject,
-        subjectType,
-        predicate,
-        value,
-        confidence: typeof args.confidence === 'number' ? args.confidence : undefined,
+        semanticEvidence: semantic.evidence,
         ...(args.pinned !== undefined ? { pinned: args.pinned } : {}),
-        scope,
-        ...(args.originConversationId !== undefined
-          ? { originConversationId: args.originConversationId }
-          : {}),
-        ...(args.originThreadId !== undefined ? { originThreadId: args.originThreadId } : {}),
-        ...(args.originTaskId !== undefined ? { originTaskId: args.originTaskId } : {}),
-        ...(args.sourceRunId !== undefined ? { sourceRunId: args.sourceRunId } : {}),
-        ...(args.sourceSummary !== undefined ? { sourceSummary: args.sourceSummary } : {}),
-        ...(typeof args.importance === 'number' ? { importance: args.importance } : {}),
       },
       context,
     );
