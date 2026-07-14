@@ -5,6 +5,7 @@ import {
   needsApprovalWithContext,
   useApprovalStore,
 } from '../../src/services/remote/approvalStore';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('E2E scenario environment', () => {
   let uninstallEnvironment: (() => void) | null = null;
@@ -33,15 +34,15 @@ describe('E2E scenario environment', () => {
     uninstallEnvironment = installE2EScenarioEnvironment();
 
     expect(needsApprovalWithContext('calendar_list', {})).toBe(false);
-    expect(
-      JSON.parse(
-        (await tryExecuteNativeToolInEnvironment({
-          name: 'calendar_list',
-          argsString: '{}',
-          conversationId: 'during-e2e',
-        }))!,
-      ),
-    ).toEqual([expect.objectContaining({ id: 'e2e-cal-1' })]);
+    const outcome = await tryExecuteNativeToolInEnvironment({
+      name: 'calendar_list',
+      argsString: '{}',
+      conversationId: 'during-e2e',
+    });
+    expect(outcome).not.toBeNull();
+    expect(parseCompletedToolOutcome(outcome!)).toEqual([
+      expect.objectContaining({ id: 'e2e-cal-1' }),
+    ]);
 
     uninstallEnvironment();
     uninstallEnvironment = null;

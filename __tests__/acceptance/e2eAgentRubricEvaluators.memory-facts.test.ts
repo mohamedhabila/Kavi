@@ -9,11 +9,7 @@ import { executeMemoryRemember } from '../../src/engine/tools/builtin-memory';
 import { getMemoryDb } from '../../src/services/memory/database';
 import { buildE2ERubricResultWithMemoryEvidence as buildResultWithMemoryEvidence } from '../helpers/e2eRubricResult';
 import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
-
-function parseCompletedOutcome(outcome: { status: string; content: string }) {
-  expect(outcome.status).toBe('completed');
-  return JSON.parse(outcome.content);
-}
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 beforeEach(() => {
   resetE2EMemorySandbox();
@@ -22,7 +18,7 @@ beforeEach(() => {
 describe('evaluateE2ERubric memory facts', () => {
   it('checks memory_fact from captured SQLite evidence', () => {
     const conversationId = 'conv-memory-fact';
-    const rememberResult = parseCompletedOutcome(
+    const rememberResult = parseCompletedToolOutcome(
       executeMemoryRemember(
         memoryRememberArgs({
           userMessageId: 'user-memory-fact',
@@ -75,7 +71,7 @@ describe('evaluateE2ERubric memory facts', () => {
 
   it('checks memory_fact_absent against the current replacement', () => {
     const conversationId = 'conv-memory-fact-update';
-    const oldResult = parseCompletedOutcome(
+    const oldResult = parseCompletedToolOutcome(
       executeMemoryRemember(
         memoryRememberArgs({
           userMessageId: 'msg-memory-fact-old',
@@ -94,7 +90,7 @@ describe('evaluateE2ERubric memory facts', () => {
       ),
     );
     expect(oldResult.ok).toBe(true);
-    const newResult = parseCompletedOutcome(
+    const newResult = parseCompletedToolOutcome(
       executeMemoryRemember(
         memoryRememberArgs({
           userMessageId: 'msg-memory-fact-update',
@@ -138,7 +134,7 @@ describe('evaluateE2ERubric memory facts', () => {
 
   it('does not treat an expired persisted fact as current evidence', () => {
     const conversationId = 'conv-memory-expired';
-    const rememberResult = parseCompletedOutcome(
+    const rememberResult = parseCompletedToolOutcome(
       executeMemoryRemember(
         memoryRememberArgs({
           userMessageId: 'msg-memory-expired',

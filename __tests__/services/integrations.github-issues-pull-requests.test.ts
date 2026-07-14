@@ -4,6 +4,7 @@ import {
   mockFetch,
   mockGetSecure,
 } from '../helpers/serviceIntegrationsHarness';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Service Integrations', () => {
   installServiceIntegrationsReset();
@@ -27,7 +28,7 @@ describe('Service Integrations', () => {
         body: 'Details',
         labels: ['bug', 'urgent'],
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data.number).toBe(42);
     });
 
@@ -62,7 +63,7 @@ describe('Service Integrations', () => {
       const result = await skill.tools.find((tool) => tool.name === 'issues')!.handler!({
         repo: 'user/repo',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data).toHaveLength(1);
       expect(data[0].number).toBe(1);
@@ -97,7 +98,7 @@ describe('Service Integrations', () => {
         head: 'feature/test',
         body: 'Ready for review',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.number).toBe(9);
       expect(data.base).toBe('main');
@@ -137,7 +138,7 @@ describe('Service Integrations', () => {
         head: 'feature/test',
         base: 'main',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.number).toBe(11);
       expect(data.created).toBe(false);

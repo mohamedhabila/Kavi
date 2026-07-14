@@ -2,6 +2,7 @@ import { executeToolCatalog } from '../../src/engine/tools/builtin-tool-catalog'
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
 import { buildCapabilitySummary } from '../../src/engine/tools/builtin-tool-catalogCapabilitySummary';
 import { TOOL_CATALOG_CATEGORIES } from '../../src/engine/tools/builtin-tool-catalogConfig';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('tool_catalog contract consistency', () => {
   it('returns capability summaries that match registry contracts for static categories', async () => {
@@ -13,7 +14,7 @@ describe('tool_catalog contract consistency', () => {
       }
 
       const result = await executeToolCatalog({ category });
-      const parsed = JSON.parse(result) as {
+      const parsed = parseCompletedToolOutcome(result) as {
         tools: Array<{
           name: string;
           capabilitySummary: ReturnType<typeof buildCapabilitySummary>;

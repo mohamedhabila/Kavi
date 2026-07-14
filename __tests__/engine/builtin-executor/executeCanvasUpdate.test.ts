@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { executeCanvasUpdate } from '../../helpers/builtinExecutorHarness';
+import { failedToolContent, parseCompletedToolOutcome } from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeCanvasUpdate', () => {
@@ -11,7 +12,7 @@ describe('Builtin Tool Executor', () => {
         surfaceId: 'nonexistent',
         components: [{ id: 'c1', type: 'text', props: { text: 'v2' } }],
       });
-      expect(result).toContain('Error');
+      expect(failedToolContent(result)).toContain('Error');
     });
 
     it('updates an existing surface', async () => {
@@ -30,7 +31,7 @@ describe('Builtin Tool Executor', () => {
         surfaceId: 'surf-1',
         components: [{ id: 'c1', type: 'text', props: { text: 'v2' } }],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('updated');
     });
 
@@ -51,7 +52,7 @@ describe('Builtin Tool Executor', () => {
         surfaceId: 'surf-2',
         dataOperations: [{ path: 'items', op: 'set', value: [1, 2] }],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('updated');
     });
 
@@ -74,7 +75,7 @@ describe('Builtin Tool Executor', () => {
         html: '<html><body>Updated</body></html>',
         patch: [{ path: '/items', op: 'set', value: [1, 2, 3] }],
       } as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('updated');
       expect(processCanvasMessage).toHaveBeenCalledWith(
@@ -113,7 +114,7 @@ describe('Builtin Tool Executor', () => {
         surfaceId: 'surf-html',
         contentEdits: [{ oldText: '<h1>Old title</h1>', newText: '<h1>New title</h1>' }],
       } as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('updated');
       expect(parsed.appliedUpdates).toContain('contentEdits:1');
@@ -168,7 +169,7 @@ describe('Builtin Tool Executor', () => {
           },
         },
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('updated');
       expect(parsed.appliedUpdates).toContain('directoryPath:canvas/app');
@@ -211,7 +212,7 @@ describe('Builtin Tool Executor', () => {
         surfaceId: 'surf-components',
         componentOperations: [{ op: 'replace', path: '/0/props/text', value: 'after' }],
       } as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('updated');
       expect(parsed.appliedUpdates).toContain('componentOperations:1');
@@ -245,7 +246,7 @@ describe('Builtin Tool Executor', () => {
         ],
       } as any);
 
-      expect(result).toContain('did not match oldText');
+      expect(failedToolContent(result)).toContain('did not match oldText');
       expect(processCanvasMessage).not.toHaveBeenCalled();
     });
   });

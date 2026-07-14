@@ -7,6 +7,7 @@ import {
   mockFetch,
   mockGetSecure,
 } from '../helpers/serviceIntegrationsHarness';
+import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Service Integrations', () => {
   installServiceIntegrationsReset();
@@ -52,7 +53,7 @@ describe('Service Integrations', () => {
         repo: 'user/repo',
         branch: 'feature/test',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.created).toBe(true);
       expect(data.baseBranch).toBe('main');
@@ -106,7 +107,7 @@ describe('Service Integrations', () => {
         repo: 'user/repo',
         branch: 'feature/test',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.created).toBe(true);
       expect(data.sha).toBe('final-sha');
@@ -153,7 +154,7 @@ describe('Service Integrations', () => {
         repo: 'user/repo',
         branch: 'feature/test',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.created).toBe(false);
       expect(data.sha).toBe('remote-sha');
@@ -210,7 +211,7 @@ describe('Service Integrations', () => {
         message: 'Update docs',
         changes: [{ path: 'README.md', content: 'Updated docs' }],
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.commitSha).toBe('commit-sha');
       expect(data.changedFiles).toEqual(['README.md']);
@@ -277,7 +278,7 @@ describe('Service Integrations', () => {
           },
         },
       );
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.commitSha).toBe('commit-sha');
       expect(JSON.parse(mockFetch.mock.calls[2][1].body).content).toBe('Workspace docs');
@@ -287,27 +288,31 @@ describe('Service Integrations', () => {
     it('commit_files should reject changes that specify both content and filePath', async () => {
       const skill = createGitHubSkill();
 
-      await expect(
-        skill.tools.find((tool) => tool.name === 'commit_files')!.handler!({
-          repo: 'user/repo',
-          branch: 'feature/test',
-          message: 'Bad commit',
-          changes: [{ path: 'README.md', content: 'inline', filePath: 'drafts/README.md' }],
-        }),
-      ).rejects.toThrow('must include exactly one of content or filePath');
+      expect(
+        failedToolContent(
+          await skill.tools.find((tool) => tool.name === 'commit_files')!.handler!({
+            repo: 'user/repo',
+            branch: 'feature/test',
+            message: 'Bad commit',
+            changes: [{ path: 'README.md', content: 'inline', filePath: 'drafts/README.md' }],
+          }),
+        ),
+      ).toContain('must include exactly one of content or filePath');
     });
 
     it('commit_files should reject filePath usage when no conversation workspace context is available', async () => {
       const skill = createGitHubSkill();
 
-      await expect(
-        skill.tools.find((tool) => tool.name === 'commit_files')!.handler!({
-          repo: 'user/repo',
-          branch: 'feature/test',
-          message: 'Bad commit',
-          changes: [{ path: 'README.md', filePath: 'drafts/README.md' }],
-        }),
-      ).rejects.toThrow('no conversation workspace is available');
+      expect(
+        failedToolContent(
+          await skill.tools.find((tool) => tool.name === 'commit_files')!.handler!({
+            repo: 'user/repo',
+            branch: 'feature/test',
+            message: 'Bad commit',
+            changes: [{ path: 'README.md', filePath: 'drafts/README.md' }],
+          }),
+        ),
+      ).toContain('no conversation workspace is available');
     });
 
     it('commit_files should surface workflow permission errors with phase context', async () => {

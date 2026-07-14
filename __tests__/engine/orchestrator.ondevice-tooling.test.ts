@@ -15,7 +15,7 @@ jest.mock('../../src/services/llm/LlmService', () => ({
 }));
 
 jest.mock('../../src/engine/tools/index', () => ({
-  executeTool: jest.fn().mockResolvedValue('tool result'),
+  executeTool: jest.fn().mockResolvedValue({ status: 'completed', content: 'tool result' }),
   normalizeToolName: jest.fn((name: string) => name),
 }));
 

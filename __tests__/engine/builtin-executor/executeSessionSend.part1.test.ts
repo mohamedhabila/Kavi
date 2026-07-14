@@ -8,6 +8,11 @@ import {
   mockBuildLeastPrivilegeWorkerMemoryBundle,
   mockChatStoreState,
 } from '../../helpers/builtinExecutorHarness';
+import {
+  failedToolContent,
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSend part 1', () => {
@@ -19,7 +24,7 @@ describe('Builtin Tool Executor', () => {
         },
         MOCK_PROVIDER,
       );
-      expect(result).toContain('Error');
+      expect(failedToolContent(result)).toContain('Error');
     });
 
     it('returns running status for active session', async () => {
@@ -29,7 +34,7 @@ describe('Builtin Tool Executor', () => {
         { sessionId: 'running-1', message: 'ping' },
         MOCK_PROVIDER,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.message).toContain('still processing');
     });
@@ -46,7 +51,7 @@ describe('Builtin Tool Executor', () => {
         { sessionId: 'done-1', message: '   ' as any },
         MOCK_PROVIDER,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
 
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('Worker message must be a non-empty string.');
@@ -135,7 +140,7 @@ describe('Builtin Tool Executor', () => {
         { sessionId: 'old-123', message: 'Tell me more' },
         MOCK_PROVIDER,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.sessionId).toBe('new-123');
       expect(parsed.previousSessionId).toBe('old-123');

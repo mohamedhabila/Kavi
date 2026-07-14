@@ -3,6 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { executeSessionSpawn, mockChatStoreState } from '../../helpers/builtinExecutorHarness';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSpawn part 2', () => {
@@ -101,7 +105,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.workstreamId).toBeUndefined();
       expect(launchSubAgent).toHaveBeenCalledWith(
@@ -147,7 +151,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed).toMatchObject({
         status: 'error',
         code: 'invalid_argument_shape',
@@ -193,7 +197,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('blocked');
       expect(parsed.error).toContain('workstream-1');
       expect(parsed.dependsOnWorkstreams).toEqual(['workstream-1']);
@@ -245,7 +249,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('blocked');
       expect(parsed.error).toContain('already running');
       expect(parsed.sessionId).toBe('sub-review-1');
@@ -286,7 +290,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.workstreamId).toBe('workstream-2');
       expect(launchSubAgent).toHaveBeenCalledWith(
@@ -333,7 +337,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.workstreamId).toBe('workstream-2');
       expect(launchSubAgent).toHaveBeenCalledWith(

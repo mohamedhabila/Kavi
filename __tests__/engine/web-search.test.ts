@@ -4,6 +4,7 @@ import {
   WEB_SEARCH_TOOL,
 } from '../../src/engine/tools/web-search';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const mockGetSecure = jest.fn();
 jest.mock('../../src/services/storage/SecureStorage', () => ({
@@ -62,15 +63,15 @@ describe('executeWebSearch', () => {
   });
 
   it('returns an error when queries is missing or empty', async () => {
-    const missing = JSON.parse(await executeWebSearch({}));
+    const missing = parseFailedToolOutcome(await executeWebSearch({}));
     expect(missing.error).toBe('At least one search query is required');
 
-    const empty = JSON.parse(await executeWebSearch({ queries: [''] }));
+    const empty = parseFailedToolOutcome(await executeWebSearch({ queries: [''] }));
     expect(empty.error).toBe('At least one search query is required');
   });
 
   it('fails closed when no search provider is configured', async () => {
-    const parsed = JSON.parse(await executeWebSearch({ queries: ['test query'] }));
+    const parsed = parseFailedToolOutcome(await executeWebSearch({ queries: ['test query'] }));
     expect(parsed.error).toBe(
       'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi.',
     );
@@ -85,14 +86,14 @@ describe('executeWebSearch', () => {
       ok: true,
       json: async () => ({
         web: {
-          results: [
-            { title: 'Result 1', url: 'https://r1.com', description: 'ignored summary' },
-          ],
+          results: [{ title: 'Result 1', url: 'https://r1.com', description: 'ignored summary' }],
         },
       }),
     });
 
-    const parsed = JSON.parse(await executeWebSearch({ queries: ['canonical single query'] }));
+    const parsed = parseCompletedToolOutcome(
+      await executeWebSearch({ queries: ['canonical single query'] }),
+    );
 
     expect(parsed.provider).toBe('brave');
     expect(parsed.query).toBeUndefined();
@@ -128,7 +129,7 @@ describe('executeWebSearch', () => {
         }),
       });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeWebSearch({
         queries: ['openai responses docs', 'gemini generatecontent docs'],
       }),
@@ -195,7 +196,7 @@ describe('executeWebSearch', () => {
       }),
     });
 
-    const parsed = JSON.parse(await executeWebSearch({ queries: ['top 5 only'] }));
+    const parsed = parseCompletedToolOutcome(await executeWebSearch({ queries: ['top 5 only'] }));
 
     expect(parsed.searches).toEqual([
       {
@@ -238,7 +239,7 @@ describe('executeWebSearch', () => {
       }),
     });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeWebSearch({
         queries: ['OpenAI structured outputs developer documentation'],
       }),
@@ -288,7 +289,7 @@ describe('executeWebSearch', () => {
       }),
     });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeWebSearch({
         queries: ['site:platform.openai.com "Responses" api'],
       }),
@@ -325,12 +326,17 @@ describe('executeWebSearch', () => {
       ok: true,
       json: async () => ({
         web: {
-          results: [{ title: 'Responses reference', url: 'https://developers.openai.com/api/reference/responses/overview' }],
+          results: [
+            {
+              title: 'Responses reference',
+              url: 'https://developers.openai.com/api/reference/responses/overview',
+            },
+          ],
         },
       }),
     });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeWebSearch({
         queries: ['site:openai.com "Responses" api', 'site:openai.com "Responses" api'],
       }),
@@ -360,13 +366,19 @@ describe('executeWebSearch', () => {
       ok: true,
       json: async () => ({
         results: [
-          { title: 'Responses overview', url: 'https://developers.openai.com/api/reference/responses/overview' },
-          { title: 'Create response', url: 'https://developers.openai.com/api/reference/responses/create' },
+          {
+            title: 'Responses overview',
+            url: 'https://developers.openai.com/api/reference/responses/overview',
+          },
+          {
+            title: 'Create response',
+            url: 'https://developers.openai.com/api/reference/responses/create',
+          },
         ],
       }),
     });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeWebSearch({
         queries: ['site:developers.openai.com "Responses" api'],
         freshness: 'week',
@@ -417,9 +429,7 @@ describe('executeWebSearch', () => {
       ok: true,
       json: async () => ({
         output: [],
-        citations: [
-          'https://docs.anthropic.com/en/docs/claude-code/overview',
-        ],
+        citations: ['https://docs.anthropic.com/en/docs/claude-code/overview'],
       }),
     });
 
@@ -449,18 +459,16 @@ describe('executeWebSearch', () => {
     (globalThis as any).DOMException = undefined;
 
     try {
-      mockFetch
-        .mockRejectedValueOnce(abortError)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            web: {
-              results: [{ title: 'Recovered', url: 'https://retry.example.com' }],
-            },
-          }),
-        });
+      mockFetch.mockRejectedValueOnce(abortError).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          web: {
+            results: [{ title: 'Recovered', url: 'https://retry.example.com' }],
+          },
+        }),
+      });
 
-      const parsed = JSON.parse(await executeWebSearch({ queries: [query] }));
+      const parsed = parseCompletedToolOutcome(await executeWebSearch({ queries: [query] }));
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(parsed.searches).toEqual([
         {
@@ -488,8 +496,8 @@ describe('executeWebSearch', () => {
       }),
     });
 
-    const first = JSON.parse(await executeWebSearch({ queries: [query] }));
-    const second = JSON.parse(await executeWebSearch({ queries: [query] }));
+    const first = parseCompletedToolOutcome(await executeWebSearch({ queries: [query] }));
+    const second = parseCompletedToolOutcome(await executeWebSearch({ queries: [query] }));
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(first.searches).toEqual(second.searches);

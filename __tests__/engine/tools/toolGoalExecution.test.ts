@@ -4,6 +4,10 @@ import {
   parseUpdateGoalsArgs,
 } from '../../../src/engine/tools/toolGoalExecution';
 import { UPDATE_GOALS_TOOL } from '../../../src/engine/tools/goal-definitions';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('toolGoalExecution', () => {
   describe('update_goals schema contract', () => {
@@ -232,13 +236,17 @@ describe('toolGoalExecution', () => {
 
     it('returns errors for invalid calls and accepts a strict complete preview', () => {
       expect(
-        JSON.parse(executeUpdateGoals({ action: 'add', id: 'g1', name: 'Build' })).status,
+        parseCompletedToolOutcome(executeUpdateGoals({ action: 'add', id: 'g1', name: 'Build' }))
+          .status,
       ).toBe('ok');
       expect(
-        JSON.parse(executeUpdateGoals({ action: 'invalid', id: 'g1', name: 'X' })).status,
+        parseFailedToolOutcome(executeUpdateGoals({ action: 'invalid', id: 'g1', name: 'X' }))
+          .status,
       ).toBe('error');
       expect(
-        JSON.parse(executeUpdateGoals({ action: 'complete', id: 'g1', name: 'Build' })),
+        parseCompletedToolOutcome(
+          executeUpdateGoals({ action: 'complete', id: 'g1', name: 'Build' }),
+        ),
       ).toMatchObject({ status: 'ok', action: 'complete' });
     });
   });

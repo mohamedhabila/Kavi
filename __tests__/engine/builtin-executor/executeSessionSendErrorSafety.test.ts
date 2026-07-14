@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { executeSessionSend, MOCK_PROVIDER } from '../../helpers/builtinExecutorHarness';
+import { parseFailedToolOutcome } from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSend — error safety', () => {
@@ -18,7 +19,7 @@ describe('Builtin Tool Executor', () => {
         { sessionId: 'old-789', message: 'more' },
         MOCK_PROVIDER,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('string error');
     });
@@ -41,7 +42,7 @@ describe('Builtin Tool Executor', () => {
         },
       });
 
-      const parsed = JSON.parse(
+      const parsed = parseFailedToolOutcome(
         await executeSessionSend({ sessionId: 'old-789', message: 'more' }, MOCK_PROVIDER),
       );
 

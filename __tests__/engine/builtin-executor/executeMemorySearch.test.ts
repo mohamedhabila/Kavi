@@ -33,6 +33,10 @@ jest.mock('../../../src/services/memory/memoryScopeStore', () => ({
 
 import { executeMemorySearch } from '../../helpers/builtinExecutorHarness';
 import { makeScoredFact } from '../../helpers/memoryFactFixtures';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 const MEMORY_SEARCH_SCOPE = {
   memoryConversationId: 'conversation-1',
@@ -58,7 +62,7 @@ describe('Builtin Tool Executor', () => {
 
     it('searches the structured living-memory fact store for a query', async () => {
       const result = await executeMemorySearch({ query: 'test search' }, MEMORY_SEARCH_SCOPE);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed).toHaveProperty('results');
       expect(parsed.method).toBe('living_memory');
       expect(parsed.index).toBe('memory_facts');
@@ -74,7 +78,7 @@ describe('Builtin Tool Executor', () => {
 
     it('handles missing query gracefully', async () => {
       const result = await executeMemorySearch({ query: '' }, MEMORY_SEARCH_SCOPE);
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed).toEqual(
         expect.objectContaining({
           results: [],
@@ -121,7 +125,7 @@ describe('Builtin Tool Executor', () => {
         { query: 'durable enrichment', maxResults: 5 },
         MEMORY_SEARCH_SCOPE,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.method).toBe('living_memory');
       expect(parsed.index).toBe('memory_facts');
@@ -146,7 +150,7 @@ describe('Builtin Tool Executor', () => {
         { query: 'fallback', maxResults: 5 },
         MEMORY_SEARCH_SCOPE,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.method).toBe('living_memory');
       expect(parsed.index).toBe('memory_facts');
       expect(parsed.degraded).toBe(true);
@@ -175,7 +179,7 @@ describe('Builtin Tool Executor', () => {
         throw new Error('injected observation read failure');
       });
 
-      const parsed = JSON.parse(
+      const parsed = parseCompletedToolOutcome(
         await executeMemorySearch({ query: 'remembered workflow' }, MEMORY_SEARCH_SCOPE),
       );
 
@@ -206,7 +210,7 @@ describe('Builtin Tool Executor', () => {
         scoredFacts: [],
       });
 
-      const parsed = JSON.parse(
+      const parsed = parseCompletedToolOutcome(
         await executeMemorySearch({ query: 'possible preference' }, MEMORY_SEARCH_SCOPE),
       );
 
@@ -249,7 +253,7 @@ describe('Builtin Tool Executor', () => {
         scoredFacts: [],
       });
 
-      const parsed = JSON.parse(
+      const parsed = parseCompletedToolOutcome(
         await executeMemorySearch({ query: 'release receipt procedure' }, MEMORY_SEARCH_SCOPE),
       );
 
@@ -277,7 +281,7 @@ describe('Builtin Tool Executor', () => {
         scoredFacts: [sensitive],
       });
 
-      const parsed = JSON.parse(
+      const parsed = parseCompletedToolOutcome(
         await executeMemorySearch({ query: 'private profile' }, MEMORY_SEARCH_SCOPE),
       );
 

@@ -3,6 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { executeSessionSpawn, mockChatStoreState } from '../../helpers/builtinExecutorHarness';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSpawn part 3', () => {
@@ -93,7 +97,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.workstreamId).toBe('workstream-2');
       expect(launchSubAgent).toHaveBeenCalledWith(
@@ -154,7 +158,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.workstreamId).toBeUndefined();
       expect(launchSubAgent).toHaveBeenCalledWith(
@@ -180,7 +184,7 @@ describe('Builtin Tool Executor', () => {
         models: ['gpt-5.4'],
         enabled: true,
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('spawn failed');
     });
@@ -202,7 +206,7 @@ describe('Builtin Tool Executor', () => {
         },
         undefined,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('completed');
       expect(waitForSubAgentResultPromise).toHaveBeenCalledWith(expect.any(Promise), 180000);
     });
@@ -227,7 +231,7 @@ describe('Builtin Tool Executor', () => {
         }),
       });
 
-      const parsed = JSON.parse(
+      const parsed = parseCompletedToolOutcome(
         await executeSessionSpawn(
           { prompt: 'Research something', waitForCompletion: true },
           'parent-conv-1',

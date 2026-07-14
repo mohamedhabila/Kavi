@@ -20,6 +20,7 @@ import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/servic
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 let subjectIndex = 0;
@@ -75,23 +76,21 @@ async function manage(input: {
   useChatStore.setState({
     conversations: [{ id: threadId, personaId: input.personaId ?? 'default' }],
   } as never);
-  return JSON.parse(
-    await executeTool(
-      'memory_manage',
-      JSON.stringify({ action: input.action, factId: input.factId }),
-      threadId,
-      {
-        memoryConversationId: input.rootId ?? 'root-a',
-        ...(input.taskId
-          ? {
-              controlGraphGoals: [
-                createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
-              ],
-            }
-          : {}),
-      },
-    ),
-  ) as Record<string, unknown>;
+  return executeTool(
+    'memory_manage',
+    JSON.stringify({ action: input.action, factId: input.factId }),
+    threadId,
+    {
+      memoryConversationId: input.rootId ?? 'root-a',
+      ...(input.taskId
+        ? {
+            controlGraphGoals: [
+              createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
+            ],
+          }
+        : {}),
+    },
+  );
 }
 
 async function forget(input: {
@@ -105,18 +104,16 @@ async function forget(input: {
   useChatStore.setState({
     conversations: [{ id: threadId, personaId: input.personaId ?? 'default' }],
   } as never);
-  return JSON.parse(
-    await executeTool('memory_forget', JSON.stringify({ factId: input.factId }), threadId, {
-      memoryConversationId: input.rootId ?? 'root-a',
-      ...(input.taskId
-        ? {
-            controlGraphGoals: [
-              createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
-            ],
-          }
-        : {}),
-    }),
-  ) as Record<string, unknown>;
+  return executeTool('memory_forget', JSON.stringify({ factId: input.factId }), threadId, {
+    memoryConversationId: input.rootId ?? 'root-a',
+    ...(input.taskId
+      ? {
+          controlGraphGoals: [
+            createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
+          ],
+        }
+      : {}),
+  });
 }
 
 beforeEach(() => {
@@ -170,7 +167,9 @@ describe('raw memory tool executor fact action authorization', () => {
     'allows pinning a $label only from its exact code-owned scope',
     async ({ fact, execution }) => {
       const seeded = seedFact(fact);
-      const result = await manage({ action: 'pin', factId: seeded.id, ...execution });
+      const result = parseCompletedToolOutcome(
+        await manage({ action: 'pin', factId: seeded.id, ...execution }),
+      );
 
       expect(result).toMatchObject({ ok: true, status: 'pinned' });
       expect(getFactById(seeded.id)?.pinned).toBe(true);
@@ -205,7 +204,9 @@ describe('raw memory tool executor fact action authorization', () => {
     },
   ])('denies pinning a fact from a $label without mutating it', async ({ fact, execution }) => {
     const seeded = seedFact(fact);
-    const result = await manage({ action: 'pin', factId: seeded.id, ...execution });
+    const result = parseFailedToolOutcome(
+      await manage({ action: 'pin', factId: seeded.id, ...execution }),
+    );
 
     expect(result).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(seeded.id)?.pinned).toBe(false);
@@ -218,13 +219,22 @@ describe('raw memory tool executor fact action authorization', () => {
       rootId: 'root-a',
       threadId: 'thread-a',
     });
-    await manage({ action: 'pin', factId: unpinFact.id, rootId: 'root-a', threadId: 'thread-a' });
-    const deniedUnpin = await manage({
-      action: 'unpin',
-      factId: unpinFact.id,
-      rootId: 'root-a',
-      threadId: 'thread-b',
-    });
+    parseCompletedToolOutcome(
+      await manage({
+        action: 'pin',
+        factId: unpinFact.id,
+        rootId: 'root-a',
+        threadId: 'thread-a',
+      }),
+    );
+    const deniedUnpin = parseFailedToolOutcome(
+      await manage({
+        action: 'unpin',
+        factId: unpinFact.id,
+        rootId: 'root-a',
+        threadId: 'thread-b',
+      }),
+    );
 
     const factToInvalidate = seedFact({
       scope: 'session',
@@ -232,13 +242,15 @@ describe('raw memory tool executor fact action authorization', () => {
       threadId: 'thread-a',
       taskId: 'task-a',
     });
-    const deniedInvalidate = await manage({
-      action: 'invalidate',
-      factId: factToInvalidate.id,
-      rootId: 'root-a',
-      threadId: 'thread-a',
-      taskId: 'task-b',
-    });
+    const deniedInvalidate = parseFailedToolOutcome(
+      await manage({
+        action: 'invalidate',
+        factId: factToInvalidate.id,
+        rootId: 'root-a',
+        threadId: 'thread-a',
+        taskId: 'task-b',
+      }),
+    );
 
     expect(deniedUnpin).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(unpinFact.id)?.pinned).toBe(true);
@@ -254,7 +266,7 @@ describe('raw memory tool executor fact action authorization', () => {
       fact.id,
     );
 
-    const result = await manage({ action: 'pin', factId: fact.id });
+    const result = parseFailedToolOutcome(await manage({ action: 'pin', factId: fact.id }));
 
     expect(result).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(fact.id)?.pinned).toBe(false);
@@ -293,7 +305,8 @@ describe('raw memory tool executor fact action authorization', () => {
     },
   ])('authorizes memory_forget against the $label', async ({ fact, execution, allowed }) => {
     const seeded = seedFact(fact);
-    const result = await forget({ factId: seeded.id, ...execution });
+    const outcome = await forget({ factId: seeded.id, ...execution });
+    const result = allowed ? parseCompletedToolOutcome(outcome) : parseFailedToolOutcome(outcome);
 
     if (allowed) {
       expect(result).toMatchObject({ ok: true, action: 'withdrawal', factId: seeded.id });
@@ -311,7 +324,7 @@ describe('raw memory tool executor fact action authorization', () => {
       seeded.id,
     );
 
-    const result = await forget({ factId: seeded.id });
+    const result = parseFailedToolOutcome(await forget({ factId: seeded.id }));
 
     expect(result).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(seeded.id)).not.toBeNull();

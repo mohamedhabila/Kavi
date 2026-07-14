@@ -8,8 +8,14 @@ jest.mock('../../src/services/canvas/renderer', () => ({
   getSurface: jest.fn().mockReturnValue(undefined),
   getAllSurfaces: jest.fn().mockReturnValue([]),
   getFocusedCanvasSurfaceId: jest.fn().mockReturnValue(null),
-  requestCanvasEval: jest.fn().mockResolvedValue('eval_result'),
-  requestCanvasSnapshot: jest.fn().mockResolvedValue('data:image/png;base64,'),
+  requestCanvasEval: jest.fn().mockResolvedValue({
+    status: 'completed',
+    content: 'eval_result',
+  }),
+  requestCanvasSnapshot: jest.fn().mockResolvedValue({
+    status: 'completed',
+    content: 'data:image/png;base64,',
+  }),
   setCanvasEventHandler: jest.fn(),
   resolveCanvasEval: jest.fn(),
   resolveCanvasSnapshot: jest.fn(),
@@ -152,9 +158,12 @@ beforeEach(() => {
   renderer.getFocusedCanvasSurfaceId.mockReset();
   renderer.getFocusedCanvasSurfaceId.mockReturnValue(null);
   renderer.requestCanvasEval.mockReset();
-  renderer.requestCanvasEval.mockResolvedValue('eval_result');
+  renderer.requestCanvasEval.mockResolvedValue({ status: 'completed', content: 'eval_result' });
   renderer.requestCanvasSnapshot.mockReset();
-  renderer.requestCanvasSnapshot.mockResolvedValue('data:image/png;base64,');
+  renderer.requestCanvasSnapshot.mockResolvedValue({
+    status: 'completed',
+    content: 'data:image/png;base64,',
+  });
   mockChatStoreState.conversations = [];
   mockSettingsState.linkUnderstandingEnabled = true;
   mockSettingsState.mediaUnderstandingEnabled = true;

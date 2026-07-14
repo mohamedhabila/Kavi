@@ -3,6 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { clearWebFetchCaches, executeWebFetch } from '../../src/engine/tools/web-fetch';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
+import {
+  completedToolContent,
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../helpers/toolRuntimeOutcome';
 
 // Mock SecureStorage
 const mockGetSecure = jest.fn();
@@ -29,19 +35,23 @@ afterAll(() => {
   global.fetch = originalFetch;
 });
 
-function firstFetch(result: string): Record<string, any> {
-  return JSON.parse(result).fetches[0];
+function firstFetch(
+  outcome: ToolRuntimeOutcome,
+  expectedStatus: ToolRuntimeOutcome['status'] = 'completed',
+): Record<string, any> {
+  expect(outcome.status).toBe(expectedStatus);
+  return JSON.parse(outcome.content).fetches[0];
 }
 
 describe('executeWebFetch', () => {
   it('returns error when URL is empty', async () => {
     const result = await executeWebFetch({ urls: [''] });
-    const parsed = JSON.parse(result);
+    const parsed = parseFailedToolOutcome(result);
     expect(parsed.error).toBe('At least one URL is required');
   });
 
   it('returns error when URL is blocked by SSRF', async () => {
-    const parsed = firstFetch(await executeWebFetch({ urls: ['http://internal.local'] }));
+    const parsed = firstFetch(await executeWebFetch({ urls: ['http://internal.local'] }), 'failed');
     expect(parsed.error).toContain('security policy');
   });
 
@@ -200,7 +210,10 @@ describe('executeWebFetch', () => {
     mockFetch.mockResolvedValueOnce(notFoundResponse);
     mockFetch.mockResolvedValueOnce(notFoundResponse);
 
-    const parsed = firstFetch(await executeWebFetch({ urls: ['https://example.com/missing'] }));
+    const parsed = firstFetch(
+      await executeWebFetch({ urls: ['https://example.com/missing'] }),
+      'failed',
+    );
     expect(parsed.error).toContain('404');
   });
 
@@ -222,6 +235,7 @@ describe('executeWebFetch', () => {
 
     const parsed = firstFetch(
       await executeWebFetch({ urls: ['https://example.com/missing-html'] }),
+      'failed',
     );
 
     expect(parsed.error).toContain('404');
@@ -272,7 +286,10 @@ describe('executeWebFetch', () => {
       statusText: 'Internal Server Error',
     });
 
-    const parsed = firstFetch(await executeWebFetch({ urls: ['https://example.com/bad'] }));
+    const parsed = firstFetch(
+      await executeWebFetch({ urls: ['https://example.com/bad'] }),
+      'failed',
+    );
     expect(parsed.error).toBe('Fetch failed after direct and fallback attempts.');
     expect(parsed.directError).toContain('Direct fail');
     expect(parsed.fallbackError).toContain('HTTP 500');
@@ -283,7 +300,10 @@ describe('executeWebFetch', () => {
     mockFetch.mockRejectedValueOnce(new Error('Connection timeout'));
     mockGetSecure.mockResolvedValue(null);
 
-    const parsed = firstFetch(await executeWebFetch({ urls: ['https://example.com/timeout'] }));
+    const parsed = firstFetch(
+      await executeWebFetch({ urls: ['https://example.com/timeout'] }),
+      'failed',
+    );
     expect(parsed.error).toContain('Connection timeout');
   });
 
@@ -310,9 +330,7 @@ describe('executeWebFetch', () => {
         get: (h: string) => (h === 'content-type' ? 'text/html' : null),
       },
       text: () =>
-        Promise.resolve(
-          '<html><body><main><h1>Heading</h1><p>Content</p></main></body></html>',
-        ),
+        Promise.resolve('<html><body><main><h1>Heading</h1><p>Content</p></main></body></html>'),
     });
 
     const parsed = firstFetch(
@@ -367,7 +385,7 @@ describe('executeWebFetch', () => {
     });
 
     // First call
-    await executeWebFetch({ urls: ['https://cache-test.com'] });
+    completedToolContent(await executeWebFetch({ urls: ['https://cache-test.com'] }));
     // Second call should use cache
     const parsed = firstFetch(await executeWebFetch({ urls: ['https://cache-test.com'] }));
     expect(parsed.content).toBe('cached content');
@@ -383,6 +401,7 @@ describe('executeWebFetch', () => {
 
     const parsed = firstFetch(
       await executeWebFetch({ urls: ['https://example.com/string-throw'] }),
+      'failed',
     );
     expect(parsed.error).toContain('network down');
   });
@@ -394,7 +413,10 @@ describe('executeWebFetch', () => {
     // Firecrawl also throws non-Error
     mockFetch.mockRejectedValueOnce(404);
 
-    const parsed = firstFetch(await executeWebFetch({ urls: ['https://example.com/obj-throw'] }));
+    const parsed = firstFetch(
+      await executeWebFetch({ urls: ['https://example.com/obj-throw'] }),
+      'failed',
+    );
     expect(parsed.error).toBe('Fetch failed after direct and fallback attempts.');
     expect(parsed.directError).toContain('ECONNRESET');
     expect(parsed.fallbackError).toContain('404');
@@ -477,7 +499,7 @@ describe('executeWebFetch', () => {
         text: () => Promise.resolve('second'),
       });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeWebFetch({
         urls: ['https://example.com/one', 'https://example.com/two'],
       }),

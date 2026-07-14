@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { executeSessionHistory, MOCK_PROVIDER } from '../../helpers/builtinExecutorHarness';
+import { completedToolContent, parseCompletedToolOutcome } from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionHistory', () => {
@@ -68,7 +69,7 @@ describe('Builtin Tool Executor', () => {
       });
 
       const result = await executeSessionHistory({ sessionId: 'hist-1', maxMessages: 4 });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.historySource).toBe('persisted-transcript');
       expect(parsed.conversationSummary).toBe('Repository inspection completed.');
@@ -109,7 +110,7 @@ describe('Builtin Tool Executor', () => {
       getSessionContext.mockReturnValueOnce(undefined);
 
       const result = await executeSessionHistory({ sessionId: 'hist-2', maxMessages: 6 });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.historySource).toBe('activity-log');
       expect(parsed.messages.length).toBeGreaterThan(0);
@@ -118,7 +119,7 @@ describe('Builtin Tool Executor', () => {
           role: 'assistant',
         }),
       );
-      expect(typeof result).toBe('string');
+      expect(typeof completedToolContent(result)).toBe('string');
     });
   });
 });

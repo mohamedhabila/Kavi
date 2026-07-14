@@ -207,16 +207,52 @@ jest.mock('../../src/utils/id', () => ({
   generateId: () => `gen-${++mockIdCounter}`,
 }));
 
-import { executeAgentsConfigure, executeAgentsList, executeAgentsSwitch } from '../../src/engine/tools/builtin-agents';
-import { executeExpoEasBuild, executeExpoEasCreateProject, executeExpoEasDeployWeb, executeExpoEasListProjects, executeExpoEasProbe, executeExpoEasStatus, executeExpoEasSubmit, executeExpoEasUpdate } from '../../src/engine/tools/builtin-expoProjectExecution';
-import { executeExpoEasGraphql, executeExpoEasWorkflowRuns, executeExpoEasWorkflowStatus, executeExpoEasWorkflowWait } from '../../src/engine/tools/builtin-expoWorkflowExecution';
-import { executeMessageEffect, executePollCreate } from '../../src/engine/tools/builtin-interaction';
-import { executeSessionCancel, executeSessionYield } from '../../src/engine/tools/builtin-session-control';
-import { executeSessionHistory, executeSessionOutput, executeSessionSurfaceOutput } from '../../src/engine/tools/builtin-session-history';
+import {
+  executeAgentsConfigure,
+  executeAgentsList,
+  executeAgentsSwitch,
+} from '../../src/engine/tools/builtin-agents';
+import {
+  executeExpoEasBuild,
+  executeExpoEasCreateProject,
+  executeExpoEasDeployWeb,
+  executeExpoEasListProjects,
+  executeExpoEasProbe,
+  executeExpoEasStatus,
+  executeExpoEasSubmit,
+  executeExpoEasUpdate,
+} from '../../src/engine/tools/builtin-expoProjectExecution';
+import {
+  executeExpoEasGraphql,
+  executeExpoEasWorkflowRuns,
+  executeExpoEasWorkflowStatus,
+  executeExpoEasWorkflowWait,
+} from '../../src/engine/tools/builtin-expoWorkflowExecution';
+import {
+  executeMessageEffect,
+  executePollCreate,
+} from '../../src/engine/tools/builtin-interaction';
+import {
+  executeSessionCancel,
+  executeSessionYield,
+} from '../../src/engine/tools/builtin-session-control';
+import {
+  executeSessionHistory,
+  executeSessionOutput,
+  executeSessionSurfaceOutput,
+} from '../../src/engine/tools/builtin-session-history';
 import { executeSessionStatus } from '../../src/engine/tools/builtin-session-status';
 import { executeSessionWait } from '../../src/engine/tools/builtin-session-wait';
 import { executeSpeak } from '../../src/engine/tools/builtin-media';
-import { executeSshDeletePath, executeSshExec, executeSshListDirectory, executeSshMakeDirectory, executeSshReadFile, executeSshRenamePath, executeSshWriteFile } from '../../src/engine/tools/builtin-ssh';
+import {
+  executeSshDeletePath,
+  executeSshExec,
+  executeSshListDirectory,
+  executeSshMakeDirectory,
+  executeSshReadFile,
+  executeSshRenamePath,
+  executeSshWriteFile,
+} from '../../src/engine/tools/builtin-ssh';
 import { executeWait } from '../../src/engine/tools/builtin-utility';
 
 export {
@@ -342,7 +378,10 @@ export function installBuiltinExecutorWrapperReset(): void {
     mockRenameSshPath.mockResolvedValue(undefined);
     mockDeleteSshPath.mockResolvedValue(undefined);
     mockMakeSshDirectory.mockResolvedValue(undefined);
-    mockEnhancedExec.mockResolvedValue(JSON.stringify({ kind: 'enhanced', status: 'ok' }));
+    mockEnhancedExec.mockResolvedValue({
+      status: 'completed',
+      content: JSON.stringify({ kind: 'enhanced', status: 'ok' }),
+    });
     mockAsyncStorageGetItem.mockResolvedValue('{}');
     mockAsyncStorageSetItem.mockResolvedValue(undefined);
 

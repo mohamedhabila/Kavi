@@ -83,6 +83,16 @@ jest.mock('expo-contacts', () => ({
   },
 }));
 
+jest.mock('expo-calendar', () => ({
+  EntityTypes: { EVENT: 'event' },
+  requestCalendarPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
+}));
+
+jest.mock('expo-location', () => ({
+  Accuracy: { Balanced: 3 },
+  requestForegroundPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
+}));
+
 import {
   executeCalendarCreate,
   executeCalendarEvents,
@@ -120,6 +130,11 @@ import {
   executeShareText,
   executeShareUrl,
 } from '../../src/engine/tools/native/share/executor';
+import {
+  failedToolContent,
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../helpers/toolRuntimeOutcome';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -198,20 +213,20 @@ beforeEach(() => {
 describe('executeClipboardRead', () => {
   it('returns clipboard text', async () => {
     mockGetStringAsync.mockResolvedValue('Hello from clipboard');
-    const result = JSON.parse(await executeClipboardRead());
+    const result = parseCompletedToolOutcome(await executeClipboardRead());
     expect(result).toEqual({ status: 'read', text: 'Hello from clipboard', empty: false });
   });
 
   it('returns a structured empty clipboard result', async () => {
     mockGetStringAsync.mockResolvedValue('');
-    const result = JSON.parse(await executeClipboardRead());
+    const result = parseCompletedToolOutcome(await executeClipboardRead());
     expect(result).toEqual({ status: 'read', text: '', empty: true });
   });
 });
 
 describe('executeClipboardWrite', () => {
   it('copies text and returns confirmation', async () => {
-    const result = JSON.parse(await executeClipboardWrite({ text: 'Copy me' }));
+    const result = parseCompletedToolOutcome(await executeClipboardWrite({ text: 'Copy me' }));
     expect(result).toEqual({ status: 'written', characterCount: 7 });
     expect(mockSetStringAsync).toHaveBeenCalledWith('Copy me');
   });
@@ -219,20 +234,24 @@ describe('executeClipboardWrite', () => {
 
 describe('typed native actions', () => {
   it('opens reviewed URLs without canOpenURL preflight', async () => {
-    const parsed = JSON.parse(await executeOpenUrl({ url: 'https://example.com/docs' }));
+    const parsed = parseCompletedToolOutcome(
+      await executeOpenUrl({ url: 'https://example.com/docs' }),
+    );
     expect(parsed.status).toBe('opened');
     expect(parsed.code).toBe('open_url_completed');
     expect(mockOpenURL).toHaveBeenCalledWith('https://example.com/docs');
   });
 
   it('rejects disallowed open_url schemes', async () => {
-    const parsed = JSON.parse(await executeOpenUrl({ url: 'ftp://example.com/archive' }));
+    const parsed = parseFailedToolOutcome(
+      await executeOpenUrl({ url: 'ftp://example.com/archive' }),
+    );
     expect(parsed.code).toBe('disallowed_url_scheme');
     expect(mockOpenURL).not.toHaveBeenCalled();
   });
 
   it('composes email with the native composer when available', async () => {
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeEmailCompose({
         recipients: ['jane@example.com'],
         subject: 'Project update',
@@ -255,7 +274,7 @@ describe('typed native actions', () => {
   it('falls back to mailto when the composer is unavailable and no attachments are requested', async () => {
     mockMailIsAvailable.mockResolvedValue(false);
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeEmailCompose({
         recipients: ['jane@example.com'],
         subject: 'Hello',
@@ -271,7 +290,7 @@ describe('typed native actions', () => {
 
   it('returns SMS composer status', async () => {
     mockSmsSendAsync.mockResolvedValue({ result: 'unknown' });
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeSmsCompose({
         recipients: ['+12125550101'],
         message: 'Hello',
@@ -285,7 +304,7 @@ describe('typed native actions', () => {
     reactNative.Platform.OS = 'android';
     mockSmsSendAsync.mockResolvedValue({ result: 'unknown' });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeSmsCompose({
         recipients: ['+12125550101'],
         message: 'Hello',
@@ -312,7 +331,7 @@ describe('typed native actions', () => {
   });
 
   it('normalizes phone calls before opening the dialer', async () => {
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executePhoneCall({ number: '212-555-0101', defaultCountry: 'US' }),
     );
     expect(parsed.status).toBe('opened');
@@ -322,7 +341,9 @@ describe('typed native actions', () => {
   it('opens maps using the platform builder', async () => {
     const reactNative = jest.requireMock('react-native') as { Platform: { OS: string } };
     reactNative.Platform.OS = 'ios';
-    const parsed = JSON.parse(await executeMapsOpen({ query: '1600 Amphitheatre Parkway' }));
+    const parsed = parseCompletedToolOutcome(
+      await executeMapsOpen({ query: '1600 Amphitheatre Parkway' }),
+    );
     expect(parsed.status).toBe('opened');
     expect(mockOpenURL).toHaveBeenCalledWith(
       'http://maps.apple.com/?q=1600%20Amphitheatre%20Parkway',
@@ -330,7 +351,7 @@ describe('typed native actions', () => {
   });
 
   it('uses privacy-first contacts pick flow', async () => {
-    const parsed = JSON.parse(await executeContactsPick());
+    const parsed = parseCompletedToolOutcome(await executeContactsPick());
     expect(parsed.status).toBe('picked');
     expect(parsed.details.contact.id).toBe('contact-1');
     expect(mockContactsPresentPickerAsync).toHaveBeenCalled();
@@ -346,15 +367,17 @@ describe('typed native actions', () => {
       status: 'granted',
     });
 
-    const parsed = JSON.parse(await executeContactsManageAccess());
+    const parsed = parseCompletedToolOutcome(await executeContactsManageAccess());
     expect(parsed.status).toBe('updated');
     expect(parsed.code).toBe('contacts_access_updated');
     expect(mockContactsPresentAccessPickerAsync).toHaveBeenCalled();
   });
 
   it('opens native contact viewer and editor flows', async () => {
-    const viewed = JSON.parse(await executeContactsView({ id: 'contact-1' }));
-    const edited = JSON.parse(await executeContactsEdit({ id: 'contact-1', firstName: 'Janet' }));
+    const viewed = parseCompletedToolOutcome(await executeContactsView({ id: 'contact-1' }));
+    const edited = parseCompletedToolOutcome(
+      await executeContactsEdit({ id: 'contact-1', firstName: 'Janet' }),
+    );
 
     expect(viewed.status).toBe('opened');
     expect(edited.status).toBe('opened');
@@ -373,7 +396,7 @@ describe('typed native actions', () => {
   });
 
   it('opens native create-contact flow', async () => {
-    const parsed = JSON.parse(await executeContactsCreate({ firstName: 'Taylor' }));
+    const parsed = parseCompletedToolOutcome(await executeContactsCreate({ firstName: 'Taylor' }));
     expect(parsed.status).toBe('opened');
     expect(mockContactsPresentFormAsync).toHaveBeenCalledWith(
       undefined,
@@ -383,10 +406,12 @@ describe('typed native actions', () => {
   });
 
   it('supports full contact search and full contact read aliases', async () => {
-    const searched = JSON.parse(await executeContactsSearch({ query: 'Jane' }));
-    const fullSearch = JSON.parse(await executeContactsSearchFull({ query: 'Jane', limit: 5 }));
-    const fetched = JSON.parse(await executeContactsGet({ id: 'contact-1' }));
-    const fullFetch = JSON.parse(await executeContactsGetFull({ id: 'contact-1' }));
+    const searched = parseCompletedToolOutcome(await executeContactsSearch({ query: 'Jane' }));
+    const fullSearch = parseCompletedToolOutcome(
+      await executeContactsSearchFull({ query: 'Jane', limit: 5 }),
+    );
+    const fetched = parseCompletedToolOutcome(await executeContactsGet({ id: 'contact-1' }));
+    const fullFetch = parseCompletedToolOutcome(await executeContactsGetFull({ id: 'contact-1' }));
 
     expect(searched.status).toBe('completed');
     expect(fullSearch.status).toBe('completed');
@@ -396,7 +421,7 @@ describe('typed native actions', () => {
   });
 
   it('shares contacts through the native contact flow', async () => {
-    const parsed = JSON.parse(
+    const parsed = parseCompletedToolOutcome(
       await executeContactsShare({ id: 'contact-1', message: 'Reach out' }),
     );
     expect(parsed.status).toBe('handed_off');
@@ -404,14 +429,14 @@ describe('typed native actions', () => {
   });
 
   it('supports text, URL, file, and contact share flows', async () => {
-    const textResult = JSON.parse(await executeShareText({ text: 'Hello' }));
-    const urlResult = JSON.parse(
+    const textResult = parseCompletedToolOutcome(await executeShareText({ text: 'Hello' }));
+    const urlResult = parseCompletedToolOutcome(
       await executeShareUrl({ url: 'https://example.com', message: 'Read this' }),
     );
-    const fileResult = JSON.parse(
+    const fileResult = parseCompletedToolOutcome(
       await executeShareFile({ fileUri: 'file:///tmp/report.pdf', mimeType: 'application/pdf' }),
     );
-    const contactResult = JSON.parse(await executeShareContact({ id: 'contact-1' }));
+    const contactResult = parseCompletedToolOutcome(await executeShareContact({ id: 'contact-1' }));
 
     expect(textResult.status).toBe('handed_off');
     expect(urlResult.status).toBe('handed_off');
@@ -431,24 +456,24 @@ describe('typed native actions', () => {
 
 describe('legacy native utilities', () => {
   it('still handles unavailable calendar and location modules gracefully', async () => {
-    const calendarList = JSON.parse(await executeCalendarList());
-    const calendarEvents = JSON.parse(
+    const calendarList = parseFailedToolOutcome(await executeCalendarList());
+    const calendarEvents = parseFailedToolOutcome(
       await executeCalendarEvents({ startDate: '2024-01-01', endDate: '2024-01-31' }),
     );
-    const calendarCreate = JSON.parse(
+    const calendarCreate = parseFailedToolOutcome(
       await executeCalendarCreate({
         title: 'Meeting',
         startDate: '2024-01-01T10:00:00Z',
         endDate: '2024-01-01T11:00:00Z',
       }),
     );
-    const calendarUpdate = JSON.parse(
+    const calendarUpdate = parseFailedToolOutcome(
       await executeCalendarUpdate({
         id: 'event-1',
         title: 'Updated meeting',
       }),
     );
-    const location = JSON.parse(await executeLocationCurrent());
+    const location = parseFailedToolOutcome(await executeLocationCurrent());
 
     expect(calendarList.error || calendarList.status).toBeDefined();
     expect(calendarEvents.error || calendarEvents.status).toBeDefined();
@@ -460,21 +485,23 @@ describe('legacy native utilities', () => {
 
 describe('executeNativeTool', () => {
   it('routes the new native tools through the dispatcher', async () => {
-    const emailResult = JSON.parse(
+    const emailResult = parseCompletedToolOutcome(
       await executeNativeTool(
         'email_compose',
         JSON.stringify({ recipients: ['jane@example.com'] }),
       ),
     );
-    const smsResult = JSON.parse(
+    const smsResult = parseCompletedToolOutcome(
       await executeNativeTool(
         'sms_compose',
         JSON.stringify({ recipients: ['+12125550101'], message: 'Hi' }),
       ),
     );
-    const contactResult = JSON.parse(await executeNativeTool('contacts_pick', '{}'));
-    const accessResult = JSON.parse(await executeNativeTool('contacts_manage_access', '{}'));
-    const shareResult = JSON.parse(
+    const contactResult = parseCompletedToolOutcome(await executeNativeTool('contacts_pick', '{}'));
+    const accessResult = parseCompletedToolOutcome(
+      await executeNativeTool('contacts_manage_access', '{}'),
+    );
+    const shareResult = parseCompletedToolOutcome(
       await executeNativeTool('share_file', JSON.stringify({ fileUri: 'file:///tmp/report.pdf' })),
     );
 
@@ -487,11 +514,11 @@ describe('executeNativeTool', () => {
 
   it('rejects composite share calls without an explicit kind', async () => {
     const result = await executeNativeTool('share', '{}');
-    expect(result).toContain('share requires kind');
+    expect(failedToolContent(result)).toContain('share requires kind');
   });
 
   it('routes calendar update through the dispatcher', async () => {
-    const result = JSON.parse(
+    const result = parseFailedToolOutcome(
       await executeNativeTool(
         'calendar_update_event',
         JSON.stringify({ id: 'event-1', title: 'Updated meeting' }),
@@ -503,11 +530,11 @@ describe('executeNativeTool', () => {
 
   it('returns error for unknown native tools', async () => {
     const result = await executeNativeTool('nonexistent', '{}');
-    expect(result).toContain('unknown native tool');
+    expect(failedToolContent(result)).toContain('unknown native tool');
   });
 
   it('returns error for invalid JSON', async () => {
     const result = await executeNativeTool('clipboard_read', 'not-json');
-    expect(result).toContain('invalid tool arguments JSON');
+    expect(failedToolContent(result)).toContain('invalid tool arguments JSON');
   });
 });

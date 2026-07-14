@@ -3,6 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { executeAudioTranscribe } from '../../helpers/builtinExecutorHarness';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeAudioTranscribe', () => {
@@ -25,7 +29,7 @@ describe('Builtin Tool Executor', () => {
       const promise = executeAudioTranscribe({ durationMs: 100 });
       await flushPromisesAndTimers();
       const result = await promise;
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('transcribed');
       expect(parsed.text).toBe('hello');
     });
@@ -36,7 +40,7 @@ describe('Builtin Tool Executor', () => {
       const promise = executeAudioTranscribe({});
       await flushPromisesAndTimers();
       const result = await promise;
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toContain('No audio');
     });
@@ -45,7 +49,7 @@ describe('Builtin Tool Executor', () => {
       const voice = require('../../../src/services/voice/voice');
       voice.startRecording.mockRejectedValueOnce(new Error('mic denied'));
       const result = await executeAudioTranscribe({});
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('mic denied');
     });

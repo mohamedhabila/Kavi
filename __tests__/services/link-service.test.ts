@@ -37,11 +37,18 @@ describe('runLinkUnderstanding', () => {
   });
 
   it('extracts and enriches a single link', async () => {
-    mockExecuteWebFetch.mockResolvedValue(
-      JSON.stringify({
-        fetches: [{ requestedUrl: 'https://example.com', title: 'Example', content: 'Page content here.' }],
+    mockExecuteWebFetch.mockResolvedValue({
+      status: 'completed',
+      content: JSON.stringify({
+        fetches: [
+          {
+            requestedUrl: 'https://example.com',
+            title: 'Example',
+            content: 'Page content here.',
+          },
+        ],
       }),
-    );
+    });
 
     const result = await runLinkUnderstanding('Check https://example.com', {
       enabled: true,
@@ -58,14 +65,15 @@ describe('runLinkUnderstanding', () => {
   });
 
   it('handles multiple links in parallel', async () => {
-    mockExecuteWebFetch.mockResolvedValue(
-      JSON.stringify({
+    mockExecuteWebFetch.mockResolvedValue({
+      status: 'completed',
+      content: JSON.stringify({
         fetches: [
           { requestedUrl: 'https://a.com', content: 'First.' },
           { requestedUrl: 'https://b.com', content: 'Second.' },
         ],
       }),
-    );
+    });
 
     const result = await runLinkUnderstanding('See https://a.com and https://b.com', {
       enabled: true,
@@ -78,9 +86,12 @@ describe('runLinkUnderstanding', () => {
   });
 
   it('respects maxLinks option', async () => {
-    mockExecuteWebFetch.mockResolvedValue(
-      JSON.stringify({ fetches: [{ requestedUrl: 'https://a.com', content: 'Content.' }] }),
-    );
+    mockExecuteWebFetch.mockResolvedValue({
+      status: 'completed',
+      content: JSON.stringify({
+        fetches: [{ requestedUrl: 'https://a.com', content: 'Content.' }],
+      }),
+    });
 
     await runLinkUnderstanding('https://a.com https://b.com https://c.com', {
       enabled: true,
@@ -102,7 +113,10 @@ describe('runLinkUnderstanding', () => {
   });
 
   it('handles JSON response with error field', async () => {
-    mockExecuteWebFetch.mockResolvedValue(JSON.stringify({ error: 'Rate limited' }));
+    mockExecuteWebFetch.mockResolvedValue({
+      status: 'failed',
+      content: JSON.stringify({ error: 'Rate limited' }),
+    });
 
     const result = await runLinkUnderstanding('See https://limited.com', {
       enabled: true,
@@ -114,9 +128,12 @@ describe('runLinkUnderstanding', () => {
 
   it('preserves original body prefix in enriched result', async () => {
     const body = 'Please analyze this: https://example.com';
-    mockExecuteWebFetch.mockResolvedValue(
-      JSON.stringify({ fetches: [{ requestedUrl: 'https://example.com', content: 'Analyzed.' }] }),
-    );
+    mockExecuteWebFetch.mockResolvedValue({
+      status: 'completed',
+      content: JSON.stringify({
+        fetches: [{ requestedUrl: 'https://example.com', content: 'Analyzed.' }],
+      }),
+    });
 
     const result = await runLinkUnderstanding(body, { enabled: true });
 

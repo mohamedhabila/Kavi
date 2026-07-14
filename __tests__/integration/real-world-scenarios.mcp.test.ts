@@ -10,6 +10,7 @@ import {
   formatMcpResult,
   executeMcpTool,
 } from '../../src/services/mcp/bridge';
+import { failedToolContent } from '../helpers/toolRuntimeOutcome';
 
 describe('Real MCP Registry integration', () => {
   let fetchedEntries: McpHubEntry[] = [];
@@ -176,8 +177,9 @@ describe('Real MCP Registry integration', () => {
   it('handles MCP tool execution with disconnected server', async () => {
     const clients = new Map();
     const result = await executeMcpTool(clients, 'mcp__test-server__my_tool', '{}');
-    expect(result).toContain('Error');
-    expect(result).toContain('not connected');
+    const content = failedToolContent(result);
+    expect(content).toContain('Error');
+    expect(content).toContain('not connected');
   });
 });
 
@@ -237,7 +239,8 @@ describe('End-to-end MCP flow with real fetched data', () => {
     // 5. Try to execute against no connected server and confirm graceful failure.
     const clients = new Map();
     const result = await executeMcpTool(clients, toolDef.name, '{"query":"test"}');
-    expect(result).toContain('Error');
-    expect(result).toContain('not connected');
+    const content = failedToolContent(result);
+    expect(content).toContain('Error');
+    expect(content).toContain('not connected');
   });
 });

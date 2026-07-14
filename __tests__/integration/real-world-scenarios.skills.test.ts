@@ -17,6 +17,7 @@ import {
   unregisterSkill,
   getLoadedSkill,
 } from '../../src/services/skills/manager';
+import { failedToolContent } from '../helpers/toolRuntimeOutcome';
 
 describe('Real ClawHub Skills integration', () => {
   let fetchedSkills: Array<{
@@ -321,8 +322,8 @@ gh issue list --repo owner/repo
 
   it('handles skill tool execution for unloaded skill', async () => {
     const result = await executeSkillTool('skill__nonexistent__action', '{}');
-    expect(result).toContain('Error');
-    expect(result).toContain('not loaded');
+    expect(failedToolContent(result)).toContain('Error');
+    expect(failedToolContent(result)).toContain('not loaded');
   });
 });
 

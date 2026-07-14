@@ -3,6 +3,11 @@
 // ---------------------------------------------------------------------------
 
 import { executeCanvasCreate } from '../../helpers/builtinExecutorHarness';
+import {
+  completedToolContent,
+  failedToolContent,
+  parseCompletedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeCanvasCreate', () => {
@@ -11,14 +16,14 @@ describe('Builtin Tool Executor', () => {
         title: 'Test Canvas',
         components: [{ id: 'c1', type: 'text', props: { text: 'Hello' } }],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('created');
       expect(parsed.surfaceId).toContain('surface-');
     });
 
     it('handles missing components', async () => {
       const result = await executeCanvasCreate({ title: 'Empty', components: [] });
-      expect(typeof result).toBe('string');
+      expect(typeof completedToolContent(result)).toBe('string');
     });
 
     it('normalizes HTML aliases and derives the title when needed', async () => {
@@ -27,7 +32,7 @@ describe('Builtin Tool Executor', () => {
       const result = await executeCanvasCreate({
         html: '<html><head><title>Alias Title</title></head><body><h1>Hello</h1></body></html>',
       } as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('created');
       expect(parsed.title).toBe('Alias Title');
@@ -54,7 +59,7 @@ describe('Builtin Tool Executor', () => {
             '<html><head><title>File Canvas</title></head><body><h1>Hi</h1></body></html>',
         },
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('created');
       expect(parsed.title).toBe('File Canvas');
@@ -101,7 +106,7 @@ describe('Builtin Tool Executor', () => {
           },
         },
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('created');
       expect(parsed.sourceBundle).toEqual(
@@ -168,7 +173,7 @@ describe('Builtin Tool Executor', () => {
           },
         },
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('created');
       expect(parsed.title).toBe('Directory Canvas');
@@ -244,7 +249,7 @@ describe('Builtin Tool Executor', () => {
           },
         },
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.sourceBundle.importedFiles).toEqual([
         'canvas/site/index.html',
@@ -274,8 +279,9 @@ describe('Builtin Tool Executor', () => {
         },
       );
 
-      expect(result).toContain('multiple HTML files');
-      expect(result).toContain('entryFile');
+      const content = failedToolContent(result);
+      expect(content).toContain('multiple HTML files');
+      expect(content).toContain('entryFile');
     });
 
     it('rejects canvas_create when both content and filePath are provided', async () => {
@@ -290,7 +296,7 @@ describe('Builtin Tool Executor', () => {
         },
       );
 
-      expect(result).toContain('content, filePath, or directoryPath');
+      expect(failedToolContent(result)).toContain('content, filePath, or directoryPath');
     });
 
     it('rejects non-html file paths for canvas_create', async () => {
@@ -304,7 +310,7 @@ describe('Builtin Tool Executor', () => {
         },
       );
 
-      expect(result).toContain('.html or .htm');
+      expect(failedToolContent(result)).toContain('.html or .htm');
     });
 
     it('rejects non-html file contents for canvas_create', async () => {
@@ -318,7 +324,7 @@ describe('Builtin Tool Executor', () => {
         },
       );
 
-      expect(result).toContain('must contain HTML markup');
+      expect(failedToolContent(result)).toContain('must contain HTML markup');
     });
   });
 });

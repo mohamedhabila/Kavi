@@ -1,5 +1,18 @@
-import { processCanvasMessage, getSurface, renderSurfaceToHtml, clearAllSurfaces, requestCanvasRead, resolveCanvasRead, setCanvasEventHandler } from '../../src/services/canvas/renderer';
+import {
+  processCanvasMessage,
+  getSurface,
+  renderSurfaceToHtml,
+  clearAllSurfaces,
+  requestCanvasRead,
+  resolveCanvasRead,
+  setCanvasEventHandler,
+} from '../../src/services/canvas/renderer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  failedToolContent,
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../helpers/toolRuntimeOutcome';
 
 describe('Canvas Renderer', () => {
   beforeEach(() => {
@@ -32,7 +45,7 @@ describe('Canvas Renderer', () => {
 
     it('returns error for non-existent surface', async () => {
       const result = await requestCanvasEval('no-such-surface', 'code');
-      expect(result).toContain('Error: surface not found');
+      expect(failedToolContent(result)).toContain('Error: surface not found');
     });
 
     it('resolves immediately when no event handler is registered', async () => {
@@ -43,7 +56,7 @@ describe('Canvas Renderer', () => {
         components: [],
       });
       const result = await requestCanvasEval('ev-test', '1+1');
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('eval_dispatched');
       expect(parsed.note).toContain('Canvas preview is not available yet');
     });
@@ -58,7 +71,7 @@ describe('Canvas Renderer', () => {
 
       resolveCanvasEval('ev2', 'My Title');
       const result = await promise;
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('eval_completed');
       expect(parsed.result).toBe('My Title');
       setHandler({});
@@ -72,7 +85,7 @@ describe('Canvas Renderer', () => {
       const promise = requestCanvasEval('ev3', 'slowOp()');
       jest.advanceTimersByTime(11_000);
       const result = await promise;
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('timeout');
       jest.useRealTimers();
       setHandler({});
@@ -105,7 +118,7 @@ describe('Canvas Renderer', () => {
       });
 
       const result = await requestCanvasRead('read-html');
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('read_completed');
       expect(parsed.contentType).toBe('raw_html');
@@ -129,7 +142,7 @@ describe('Canvas Renderer', () => {
       });
 
       const result = await requestCanvasRead('read-components', { mode: 'source' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('read_completed');
       expect(parsed.contentType).toBe('generated_html');
@@ -152,7 +165,7 @@ describe('Canvas Renderer', () => {
       });
 
       const result = await requestCanvasRead('read-url');
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('read_completed');
       expect(parsed.contentType).toBe('url');
@@ -185,7 +198,7 @@ describe('Canvas Renderer', () => {
       });
 
       const result = await requestCanvasRead('read-live', { mode: 'dom', maxChars: 4096 });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('read_completed');
       expect(parsed.modeUsed).toBe('dom');
@@ -209,7 +222,7 @@ describe('Canvas Renderer', () => {
 
     it('returns error for non-existent surface', async () => {
       const result = await requestCanvasSnapshot('no-surf', 'png');
-      expect(result).toContain('Error: surface not found');
+      expect(failedToolContent(result)).toContain('Error: surface not found');
     });
 
     it('resolves immediately when no snapshot handler registered', async () => {
@@ -220,7 +233,7 @@ describe('Canvas Renderer', () => {
         components: [],
       });
       const result = await requestCanvasSnapshot('snap1', 'png');
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('snapshot_requested');
       expect(parsed.note).toContain('Canvas preview is not available yet');
     });
@@ -240,7 +253,7 @@ describe('Canvas Renderer', () => {
 
       resolveCanvasSnapshot('snap2', { dataUri: 'data:image/jpeg;base64,abc' });
       const result = await promise;
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('snapshot_captured');
       expect(parsed.dataUri).toBe('data:image/jpeg;base64,abc');
       setHandler({});
@@ -259,7 +272,7 @@ describe('Canvas Renderer', () => {
       const promise = requestCanvasSnapshot('snap3', 'png');
       jest.advanceTimersByTime(16_000);
       const result = await promise;
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('timeout');
       jest.useRealTimers();
       setHandler({});
@@ -291,7 +304,7 @@ describe('Canvas Renderer', () => {
 
       resolveCanvasSnapshot('b64-test', { dataUri: longDataUri });
       const result = await promise;
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('snapshot_captured');
       const base64Payload = String(parsed.dataUri).split(',')[1] || '';
@@ -321,7 +334,7 @@ describe('Canvas Renderer', () => {
 
       resolveCanvasSnapshot('b64-short', { dataUri: shortDataUri });
       const result = await promise;
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.dataUri).toBe(shortDataUri);
 

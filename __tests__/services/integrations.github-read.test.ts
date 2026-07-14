@@ -4,6 +4,7 @@ import {
   mockFetch,
   mockGetSecure,
 } from '../helpers/serviceIntegrationsHarness';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Service Integrations', () => {
   installServiceIntegrationsReset();
@@ -72,7 +73,7 @@ describe('Service Integrations', () => {
 
       const skill = createGitHubSkill();
       const result = await skill.tools.find((tool) => tool.name === 'repos')!.handler!({});
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data[0].name).toBe('user/repo');
     });
 
@@ -98,7 +99,7 @@ describe('Service Integrations', () => {
       const result = await skill.tools.find((tool) => tool.name === 'issues')!.handler!({
         repo: 'user/repo',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data[0].number).toBe(1);
     });
 
@@ -124,7 +125,7 @@ describe('Service Integrations', () => {
         path: 'README.md',
         ref: 'main',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.content).toBe('Hello');
       expect(mockFetch.mock.calls[0][0]).toBe(
@@ -155,7 +156,7 @@ describe('Service Integrations', () => {
         path: 'https://github.com/user/repo/blob/main/docs/guide.md?plain=1',
         ref: 'refs/heads/main',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.path).toBe('docs/guide.md');
       expect(mockFetch.mock.calls[0][0]).toBe(

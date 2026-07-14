@@ -3,6 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { executeSessionSpawn, MOCK_PROVIDER } from '../../helpers/builtinExecutorHarness';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSpawn part 1', () => {
@@ -22,7 +26,7 @@ describe('Builtin Tool Executor', () => {
         },
         undefined,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.sessionId).toContain('sub-');
     });
@@ -40,7 +44,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(launchSubAgent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -108,7 +112,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(launchSubAgent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -133,7 +137,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(launchSubAgent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -158,7 +162,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(launchSubAgent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -213,7 +217,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(launchSubAgent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -243,7 +247,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('blocked');
       expect(parsed.error).toContain('Maximum sub-agent spawn depth');
       expect(launchSubAgent).not.toHaveBeenCalled();
@@ -268,7 +272,7 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
 
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('Worker prompt must be a non-empty string.');
       expect(launchSubAgent).not.toHaveBeenCalled();

@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { executeCanvasDelete } from '../../helpers/builtinExecutorHarness';
+import { parseCompletedToolOutcome } from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeCanvasDelete', () => {
@@ -13,7 +14,7 @@ describe('Builtin Tool Executor', () => {
       );
 
       const result = await executeCanvasDelete({ surfaceId: 'any-surface' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('deleted');
     });
   });

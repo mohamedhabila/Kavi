@@ -7,6 +7,7 @@ import {
   prepareJavaScriptWorkspaceExecution,
   preparePythonWorkspaceExecution,
 } from '../../src/engine/tools/toolWorkspaceSnapshots';
+import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 jest.mock('../../src/services/python/pyodideBridge', () => ({
   executePython: jest.fn(),
@@ -25,10 +26,6 @@ const mockedPersistJavaScriptWorkspaceChanges = jest.mocked(persistJavaScriptWor
 const mockedPreparePythonWorkspaceExecution = jest.mocked(preparePythonWorkspaceExecution);
 const mockedPersistPythonWorkspaceFiles = jest.mocked(persistPythonWorkspaceFiles);
 
-function parseResult(result: string): Record<string, unknown> {
-  return JSON.parse(result) as Record<string, unknown>;
-}
-
 describe('code execution tools', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -39,7 +36,7 @@ describe('code execution tools', () => {
   it('returns a structured JavaScript completion contract', async () => {
     const result = await executeJavascript({ code: 'return 2 + 2;' }, 'conversation-1');
 
-    expect(parseResult(result)).toEqual(
+    expect(parseCompletedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'completed',
         workspaceMutationState: 'none_observed',
@@ -54,7 +51,7 @@ describe('code execution tools', () => {
       'conversation-1',
     );
 
-    expect(parseResult(result)).toEqual(
+    expect(parseFailedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'failed',
         isError: true,
@@ -75,7 +72,7 @@ describe('code execution tools', () => {
       [{ path: 'result.txt', content: 'done' }],
       [],
     );
-    expect(parseResult(result)).toEqual(
+    expect(parseCompletedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'completed',
         workspaceMutationState: 'applied',
@@ -92,7 +89,7 @@ describe('code execution tools', () => {
       'conversation-1',
     );
 
-    expect(parseResult(result)).toEqual(
+    expect(parseFailedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'effect_failed',
         isError: true,
@@ -107,7 +104,7 @@ describe('code execution tools', () => {
 
     const result = await executePythonTool({ code: 'print(42)' }, 'conversation-1', 'workspace-1');
 
-    expect(parseResult(result)).toEqual(
+    expect(parseCompletedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'completed',
         workspaceMutationState: 'none_observed',
@@ -130,14 +127,14 @@ describe('code execution tools', () => {
       'workspace-1',
     );
 
-    expect(parseResult(malformed)).toEqual(
+    expect(parseFailedToolOutcome(malformed)).toEqual(
       expect.objectContaining({
         status: 'failed',
         isError: true,
         failureKind: 'invalid_request',
       }),
     );
-    expect(parseResult(failed)).toEqual(
+    expect(parseFailedToolOutcome(failed)).toEqual(
       expect.objectContaining({
         status: 'failed',
         isError: true,
@@ -162,7 +159,7 @@ describe('code execution tools', () => {
       'workspace-1',
     );
 
-    expect(parseResult(result)).toEqual(
+    expect(parseFailedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'timed_out',
         isError: true,
@@ -177,7 +174,7 @@ describe('code execution tools', () => {
 
     const result = await executePythonTool({ code: 'print(42)' }, 'conversation-1', 'workspace-1');
 
-    expect(parseResult(result)).toEqual(
+    expect(parseFailedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'failed',
         isError: true,
@@ -199,7 +196,7 @@ describe('code execution tools', () => {
     );
 
     expect(mockedPersistPythonWorkspaceFiles).toHaveBeenCalledWith('workspace-1', files);
-    expect(parseResult(result)).toEqual(
+    expect(parseCompletedToolOutcome(result)).toEqual(
       expect.objectContaining({ status: 'completed', workspaceMutationState: 'applied' }),
     );
   });
@@ -214,7 +211,7 @@ describe('code execution tools', () => {
 
     const result = await executePythonTool({ code: 'print(42)' }, 'conversation-1', 'workspace-1');
 
-    expect(parseResult(result)).toEqual(
+    expect(parseFailedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'effect_failed',
         isError: true,

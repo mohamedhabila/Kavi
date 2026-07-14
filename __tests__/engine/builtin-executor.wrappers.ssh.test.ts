@@ -10,14 +10,15 @@ import {
   mockAsyncStorageSetItem,
   mockEnhancedExec,
 } from '../helpers/builtinExecutorWrappersHarness';
+import { completedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('builtin-executor wrapper coverage', () => {
   installBuiltinExecutorWrapperReset();
 
   it('uses enhanced SSH execution when background mode or custom timeout is requested', async () => {
-    await expect(executeSshExec({ command: 'tail -f logs', background: true })).resolves.toBe(
-      JSON.stringify({ kind: 'enhanced', status: 'ok' }),
-    );
+    expect(
+      completedToolContent(await executeSshExec({ command: 'tail -f logs', background: true })),
+    ).toBe(JSON.stringify({ kind: 'enhanced', status: 'ok' }));
     expect(mockEnhancedExec).toHaveBeenCalledWith(
       'tail -f logs',
       expect.objectContaining({ background: true }),
@@ -25,22 +26,28 @@ describe('builtin-executor wrapper coverage', () => {
   });
 
   it('runs SSH wrappers and normalizes exec, file, and directory payloads', async () => {
-    const exec = JSON.parse(await executeSshExec({ command: 'pwd', cwd: '/srv/app' }));
+    const exec = parseCompletedToolOutcome(
+      await executeSshExec({ command: 'pwd', cwd: '/srv/app' }),
+    );
     await Promise.resolve();
     await Promise.resolve();
 
-    const list = JSON.parse(await executeSshListDirectory({ path: '/srv/app' }));
-    const read = JSON.parse(await executeSshReadFile({ path: '/srv/app/README.md' }));
-    const write = JSON.parse(
+    const list = parseCompletedToolOutcome(await executeSshListDirectory({ path: '/srv/app' }));
+    const read = parseCompletedToolOutcome(
+      await executeSshReadFile({ path: '/srv/app/README.md' }),
+    );
+    const write = parseCompletedToolOutcome(
       await executeSshWriteFile({ path: '/srv/app/file.txt', content: 'hello' }),
     );
-    const rename = JSON.parse(
+    const rename = parseCompletedToolOutcome(
       await executeSshRenamePath({ oldPath: '/srv/app/file.txt', newPath: '/srv/app/file-2.txt' }),
     );
-    const remove = JSON.parse(
+    const remove = parseCompletedToolOutcome(
       await executeSshDeletePath({ path: '/srv/app/file-2.txt', recursive: true }),
     );
-    const mkdir = JSON.parse(await executeSshMakeDirectory({ path: '/srv/app/new-dir' }));
+    const mkdir = parseCompletedToolOutcome(
+      await executeSshMakeDirectory({ path: '/srv/app/new-dir' }),
+    );
 
     expect(exec).toEqual(
       expect.objectContaining({

@@ -7,6 +7,7 @@ import {
   mockBuildLeastPrivilegeWorkerMemoryBundle,
   mockChatStoreState,
 } from '../../helpers/builtinExecutorHarness';
+import { parseFailedToolOutcome } from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSpawn part 4', () => {
@@ -311,7 +312,7 @@ describe('Builtin Tool Executor', () => {
         },
       });
 
-      const parsed = JSON.parse(
+      const parsed = parseFailedToolOutcome(
         await executeSessionSpawn(
           { prompt: 'Research the task' },
           'parent-conv-1',

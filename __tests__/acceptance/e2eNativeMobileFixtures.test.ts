@@ -13,6 +13,7 @@ import {
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 import { installNativeToolExecutionEnvironment } from '../../src/engine/tools/native/executionEnvironment';
 import { executeToolInner } from '../../src/engine/tools/toolDispatchRouter';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('E2E native mobile fixtures', () => {
   let uninstallEnvironment: () => void;
@@ -115,13 +116,13 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ text: 'E2E-CLIPBOARD-42' }),
       'conv-mobile-e2e',
     );
-    expect(JSON.parse(writeRaw.content)).toEqual({
+    expect(parseCompletedToolOutcome(writeRaw)).toEqual({
       status: 'clipboard_written',
       textLength: 16,
     });
 
     const readRaw = await executeToolInner('clipboard_read', '{}', 'conv-mobile-e2e');
-    expect(JSON.parse(readRaw.content)).toEqual({
+    expect(parseCompletedToolOutcome(readRaw)).toEqual({
       status: 'clipboard_read',
       text: 'E2E-CLIPBOARD-42',
       textLength: 16,
@@ -156,7 +157,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    const created = JSON.parse(createRaw.content);
+    const created = parseCompletedToolOutcome(createRaw);
     expect(created).toEqual(
       expect.objectContaining({
         status: 'created_verified',
@@ -169,7 +170,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ id: created.eventId, title: 'Updated Review' }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(updateRaw.content)).toEqual({
+    expect(parseCompletedToolOutcome(updateRaw)).toEqual({
       status: 'updated_verified',
       eventId: 'e2e-event-1',
       event: expect.objectContaining({
@@ -183,7 +184,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ id: created.eventId, title: 'Updated Review' }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(duplicateUpdateRaw.content)).toEqual({
+    expect(parseCompletedToolOutcome(duplicateUpdateRaw)).toEqual({
       status: 'updated_verified',
       eventId: 'e2e-event-1',
       idempotent: true,
@@ -206,7 +207,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ query: 'E2E Station' }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(mapsRaw.content)).toEqual({
+    expect(parseCompletedToolOutcome(mapsRaw)).toEqual({
       status: 'maps_opened',
       targetKind: 'query',
     });
@@ -224,7 +225,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    const created = JSON.parse(createRaw.content);
+    const created = parseCompletedToolOutcome(createRaw);
     expect(created).toEqual(
       expect.objectContaining({
         status: 'created_verified',
@@ -245,7 +246,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(updateRaw.content)).toEqual(
+    expect(parseCompletedToolOutcome(updateRaw)).toEqual(
       expect.objectContaining({
         status: 'updated_verified',
         eventId: 'e2e-event-1',
@@ -265,7 +266,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-calendar-e2e',
     );
-    expect(JSON.parse(eventsRaw.content)).toEqual([
+    expect(parseCompletedToolOutcome(eventsRaw)).toEqual([
       expect.objectContaining({
         id: 'e2e-event-1',
         calendarId: 'e2e-cal-1',
@@ -287,7 +288,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ query: 'Avery' }),
       'conv-mobile-contact-e2e',
     );
-    expect(JSON.parse(contactsRaw.content)).toEqual([
+    expect(parseCompletedToolOutcome(contactsRaw)).toEqual([
       expect.objectContaining({
         id: 'e2e-contact-avery',
         phoneNumbers: [expect.objectContaining({ number: '+15550101001' })],
@@ -301,7 +302,7 @@ describe('E2E native mobile fixtures', () => {
       }),
       'conv-mobile-contact-e2e',
     );
-    expect(JSON.parse(smsRaw.content)).toEqual({
+    expect(parseCompletedToolOutcome(smsRaw)).toEqual({
       status: 'sms_composer_opened',
       recipientCount: 1,
       messageLength: 11,
@@ -344,7 +345,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ title: 'E2E', body: 'Ping', delaySeconds: 60 }),
       'conv-mobile-notification-e2e',
     );
-    const scheduled = JSON.parse(scheduleRaw.content);
+    const scheduled = parseCompletedToolOutcome(scheduleRaw);
     expect(scheduled.status).toBe('notification_scheduled');
 
     const cancelRaw = await executeToolInner(
@@ -352,7 +353,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({ id: scheduled.id }),
       'conv-mobile-notification-e2e',
     );
-    expect(JSON.parse(cancelRaw.content)).toEqual({
+    expect(parseCompletedToolOutcome(cancelRaw)).toEqual({
       status: 'notification_cancelled',
       id: 'e2e-notification-scheduled',
       cancelled: true,

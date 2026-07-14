@@ -29,7 +29,7 @@ jest.mock('../../src/services/llm/LlmService', () => {
 });
 
 jest.mock('../../src/engine/tools/index', () => ({
-  executeTool: jest.fn().mockResolvedValue('tool result'),
+  executeTool: jest.fn().mockResolvedValue({ status: 'completed', content: 'tool result' }),
   normalizeToolName: jest.fn((name: string) => name.trim()),
 }));
 
@@ -362,7 +362,7 @@ beforeEach(() => {
   (getSkillToolDefinitions as jest.Mock).mockReset();
   (getSkillToolDefinitions as jest.Mock).mockReturnValue([]);
   (executeTool as jest.Mock).mockReset();
-  (executeTool as jest.Mock).mockResolvedValue('tool result');
+  (executeTool as jest.Mock).mockResolvedValue({ status: 'completed', content: 'tool result' });
   (observeExternalToolResultDurability as jest.Mock).mockReset();
   (observeExternalToolResultDurability as jest.Mock).mockResolvedValue({ kind: 'not_external' });
   (getProviderApiKey as jest.Mock).mockReset();

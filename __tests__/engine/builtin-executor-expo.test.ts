@@ -84,8 +84,14 @@ jest.mock('../../src/services/canvas/renderer', () => ({
   getSurface: jest.fn().mockReturnValue(undefined),
   getAllSurfaces: jest.fn().mockReturnValue([]),
   getFocusedCanvasSurfaceId: jest.fn().mockReturnValue(null),
-  requestCanvasEval: jest.fn().mockResolvedValue('eval_result'),
-  requestCanvasSnapshot: jest.fn().mockResolvedValue('data:image/png;base64,'),
+  requestCanvasEval: jest.fn().mockResolvedValue({
+    status: 'completed',
+    content: 'eval_result',
+  }),
+  requestCanvasSnapshot: jest.fn().mockResolvedValue({
+    status: 'completed',
+    content: 'data:image/png;base64,',
+  }),
 }));
 
 jest.mock('../../src/services/agents/subAgent', () => ({
@@ -206,7 +212,13 @@ jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(),
 }));
 
-import { executeExpoEasBuild, executeExpoEasCreateProject, executeExpoEasListProjects, executeExpoEasProbe, executeExpoEasStatus } from '../../src/engine/tools/builtin-expoProjectExecution';
+import {
+  executeExpoEasBuild,
+  executeExpoEasCreateProject,
+  executeExpoEasListProjects,
+  executeExpoEasProbe,
+  executeExpoEasStatus,
+} from '../../src/engine/tools/builtin-expoProjectExecution';
 import { executeExpoEasWorkflowStatus } from '../../src/engine/tools/builtin-expoWorkflowExecution';
 import * as expoProjectState from '../../src/services/expo/projectState';
 import * as expoProjectAutomation from '../../src/services/expo/projectAutomation';
@@ -215,13 +227,16 @@ import * as expoProjectSync from '../../src/services/expo/projectSync';
 import * as expoProjectResolution from '../../src/services/expo/projectResolution';
 import * as expoWorkflowMonitoring from '../../src/services/expo/workflowMonitoring';
 import * as expoWorkflowActions from '../../src/services/expo/workflowActions';
+import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor Expo wrappers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (expoProjectAutomation.getExpoAutomationSummary as jest.Mock).mockReturnValue(mockAutomation);
     (expoProjectState.getExpoProjectDisplayOwner as jest.Mock).mockReturnValue('kavi');
-    (expoProjectAutomation.getExpoProjectExecutionMode as jest.Mock).mockReturnValue('eas-workflow');
+    (expoProjectAutomation.getExpoProjectExecutionMode as jest.Mock).mockReturnValue(
+      'eas-workflow',
+    );
     (expoProjectAutomation.getExpoProjectReadiness as jest.Mock).mockReturnValue({
       launchable: true,
       reason: 'ready',
@@ -230,27 +245,29 @@ describe('Builtin Tool Executor Expo wrappers', () => {
     (expoProjectState.resolveExpoAccount as jest.Mock).mockReturnValue(mockAccount);
     (expoProjectState.resolveExpoProject as jest.Mock).mockReturnValue(mockProject);
     (expoProjectSync.listExpoProjects as jest.Mock).mockResolvedValue([mockProjectListing]);
-    (expoProjectResolution.resolveExpoProjectForExecutionTask as jest.Mock).mockImplementation(({ projectRef }) => {
-      if (
-        projectRef === 'expo-project-1' ||
-        projectRef === 'eas-project-1' ||
-        projectRef === '@kavi/kavi-app'
-      ) {
+    (expoProjectResolution.resolveExpoProjectForExecutionTask as jest.Mock).mockImplementation(
+      ({ projectRef }) => {
+        if (
+          projectRef === 'expo-project-1' ||
+          projectRef === 'eas-project-1' ||
+          projectRef === '@kavi/kavi-app'
+        ) {
+          return Promise.resolve({
+            status: 'resolved',
+            project: mockProjectListing,
+            candidates: [mockProjectListing],
+            reason: 'project-ref',
+            synced: false,
+          });
+        }
         return Promise.resolve({
-          status: 'resolved',
-          project: mockProjectListing,
+          status: 'not_found',
           candidates: [mockProjectListing],
-          reason: 'project-ref',
+          reason: 'no-matching-project',
           synced: false,
         });
-      }
-      return Promise.resolve({
-        status: 'not_found',
-        candidates: [mockProjectListing],
-        reason: 'no-matching-project',
-        synced: false,
-      });
-    });
+      },
+    );
   });
 
   it('returns lean project listings without repeated automation metadata', async () => {
@@ -269,7 +286,7 @@ describe('Builtin Tool Executor Expo wrappers', () => {
       },
     ]);
 
-    const parsed = JSON.parse(await executeExpoEasListProjects({}));
+    const parsed = parseCompletedToolOutcome(await executeExpoEasListProjects({}));
 
     expect(parsed.summary).toBe('Found 1 Expo project. Default project: expo-project-1.');
     expect(parsed.preferredFlow).toBe('commit-driven-eas-workflow');
@@ -296,7 +313,9 @@ describe('Builtin Tool Executor Expo wrappers', () => {
   });
 
   it('adds repo-first automation guidance to Expo status responses', async () => {
-    const parsed = JSON.parse(await executeExpoEasStatus({ projectId: 'expo-project-1' }));
+    const parsed = parseCompletedToolOutcome(
+      await executeExpoEasStatus({ projectId: 'expo-project-1' }),
+    );
 
     expect(parsed.summary).toBe('@kavi/kavi-app: Ready.');
     expect(parsed.preferredFlow).toBe('commit-driven-eas-workflow');
@@ -314,7 +333,7 @@ describe('Builtin Tool Executor Expo wrappers', () => {
   });
 
   it('returns a structured correction for invalid Expo project references', async () => {
-    const parsed = JSON.parse(await executeExpoEasStatus({ projectId: 'Expo' }));
+    const parsed = parseFailedToolOutcome(await executeExpoEasStatus({ projectId: 'Expo' }));
 
     expect(parsed.status).toBe('invalid_project_reference');
     expect(parsed.argumentName).toBe('projectId');
@@ -332,7 +351,7 @@ describe('Builtin Tool Executor Expo wrappers', () => {
   });
 
   it('returns a structured correction for missing Expo project references', async () => {
-    const parsed = JSON.parse(await executeExpoEasWorkflowStatus({} as any));
+    const parsed = parseFailedToolOutcome(await executeExpoEasWorkflowStatus({} as any));
 
     expect(expoWorkflowMonitoring.inspectExpoWorkflowRun).not.toHaveBeenCalled();
     expect(parsed.status).toBe('missing_project_reference');
@@ -364,7 +383,9 @@ describe('Builtin Tool Executor Expo wrappers', () => {
       synced: false,
     });
 
-    const parsed = JSON.parse(await executeExpoEasCreateProject({ name: 'Duplicate App' }));
+    const parsed = parseCompletedToolOutcome(
+      await executeExpoEasCreateProject({ name: 'Duplicate App' }),
+    );
 
     expect(expoProjectCreation.createExpoProject).not.toHaveBeenCalled();
     expect(parsed.status).toBe('redirected_existing_project');
@@ -389,8 +410,12 @@ describe('Builtin Tool Executor Expo wrappers', () => {
       note: 'This was a manual workflow dispatch.',
     });
 
-    const probeParsed = JSON.parse(await executeExpoEasProbe({ projectId: 'expo-project-1' }));
-    const buildParsed = JSON.parse(await executeExpoEasBuild({ projectId: 'expo-project-1' }));
+    const probeParsed = parseCompletedToolOutcome(
+      await executeExpoEasProbe({ projectId: 'expo-project-1' }),
+    );
+    const buildParsed = parseCompletedToolOutcome(
+      await executeExpoEasBuild({ projectId: 'expo-project-1' }),
+    );
 
     expect(probeParsed.summary).toBe('Expo workflow ready');
     expect(probeParsed.automation).toBeUndefined();
@@ -443,7 +468,9 @@ describe('Builtin Tool Executor Expo wrappers', () => {
       guidance: 'Inspect failure logs first and then fix dependencies before retrying.',
     });
 
-    const parsed = JSON.parse(await executeExpoEasWorkflowStatus({ projectId: 'expo-project-1' }));
+    const parsed = parseCompletedToolOutcome(
+      await executeExpoEasWorkflowStatus({ projectId: 'expo-project-1' }),
+    );
 
     expect(parsed.summary).toContain('Workflow workflow-run-77: FAILURE (FAILURE).');
     expect(parsed.summary).toContain('@kavi/private-package not found');

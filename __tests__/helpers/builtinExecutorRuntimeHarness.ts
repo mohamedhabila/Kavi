@@ -3,30 +3,33 @@ jest.mock('../../src/services/canvas/renderer', () => ({
   getSurface: jest.fn().mockReturnValue(undefined),
   getAllSurfaces: jest.fn().mockReturnValue([]),
   getFocusedCanvasSurfaceId: jest.fn().mockReturnValue(null),
-  requestCanvasEval: jest.fn().mockResolvedValue(
-    JSON.stringify({
+  requestCanvasEval: jest.fn().mockResolvedValue({
+    status: 'completed',
+    content: JSON.stringify({
       status: 'eval_dispatched',
       surfaceId: 'surf-1',
       note: 'Canvas screen is not active. Navigate to Canvas to see results.',
     }),
-  ),
-  requestCanvasRead: jest.fn().mockResolvedValue(
-    JSON.stringify({
+  }),
+  requestCanvasRead: jest.fn().mockResolvedValue({
+    status: 'completed',
+    content: JSON.stringify({
       status: 'read_completed',
       surfaceId: 'surf-1',
       modeUsed: 'source',
       contentType: 'raw_html',
       content: '<html></html>',
     }),
-  ),
-  requestCanvasSnapshot: jest.fn().mockResolvedValue(
-    JSON.stringify({
+  }),
+  requestCanvasSnapshot: jest.fn().mockResolvedValue({
+    status: 'completed',
+    content: JSON.stringify({
       status: 'snapshot_requested',
       surfaceId: 'surf-1',
       format: 'png',
       note: 'Canvas screen is not active. Navigate to Canvas to capture.',
     }),
-  ),
+  }),
 }));
 
 jest.mock('../../src/services/agents/subAgent', () => ({
@@ -286,32 +289,35 @@ export function installBuiltinExecutorRuntimeReset(): void {
     renderer.getFocusedCanvasSurfaceId.mockReset();
     renderer.getFocusedCanvasSurfaceId.mockReturnValue(null);
     renderer.requestCanvasEval.mockReset();
-    renderer.requestCanvasEval.mockResolvedValue(
-      JSON.stringify({
+    renderer.requestCanvasEval.mockResolvedValue({
+      status: 'completed',
+      content: JSON.stringify({
         status: 'eval_dispatched',
         surfaceId: 'surf-1',
         note: 'Canvas screen is not active. Navigate to Canvas to see results.',
       }),
-    );
+    });
     renderer.requestCanvasRead.mockReset();
-    renderer.requestCanvasRead.mockResolvedValue(
-      JSON.stringify({
+    renderer.requestCanvasRead.mockResolvedValue({
+      status: 'completed',
+      content: JSON.stringify({
         status: 'read_completed',
         surfaceId: 'surf-1',
         modeUsed: 'source',
         contentType: 'raw_html',
         content: '<html></html>',
       }),
-    );
+    });
     renderer.requestCanvasSnapshot.mockReset();
-    renderer.requestCanvasSnapshot.mockResolvedValue(
-      JSON.stringify({
+    renderer.requestCanvasSnapshot.mockResolvedValue({
+      status: 'completed',
+      content: JSON.stringify({
         status: 'snapshot_requested',
         surfaceId: 'surf-1',
         format: 'png',
         note: 'Canvas screen is not active. Navigate to Canvas to capture.',
       }),
-    );
+    });
     mcpManager.getAllStatuses.mockReturnValue([]);
     useSkillsStore.getState.mockReturnValue({
       getEnabled: () => [],

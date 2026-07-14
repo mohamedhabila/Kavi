@@ -2,6 +2,7 @@ import {
   executeToolCatalog,
   installBuiltinExecutorRuntimeReset,
 } from '../helpers/builtinExecutorRuntimeHarness';
+import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('builtin executor tool catalog', () => {
   installBuiltinExecutorRuntimeReset();
@@ -9,7 +10,7 @@ describe('builtin executor tool catalog', () => {
   describe('executeToolCatalog', () => {
     it('returns only categories backed by visible registered tools', async () => {
       const result = await executeToolCatalog({});
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.categories).toBeDefined();
       expect(Array.isArray(parsed.categories)).toBe(true);
       expect(parsed.categories.length).toBeGreaterThan(0);
@@ -33,7 +34,7 @@ describe('builtin executor tool catalog', () => {
 
     it('filters by category', async () => {
       const result = await executeToolCatalog({ category: 'canvas' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.category).toBe('canvas');
       expect(parsed.purpose).toContain('session canvas previews');
       expect(parsed.tools).toBeDefined();
@@ -44,7 +45,7 @@ describe('builtin executor tool catalog', () => {
 
     it('returns browser tools when filtering by browser', async () => {
       const result = await executeToolCatalog({ category: 'browser' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.category).toBe('browser');
       expect(parsed.purpose).toContain('control websites interactively');
@@ -59,7 +60,7 @@ describe('builtin executor tool catalog', () => {
 
     it('returns the full calendar mutation workflow when filtering by calendar', async () => {
       const result = await executeToolCatalog({ category: 'calendar' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.category).toBe('calendar');
       expect(parsed.tools.map((tool: any) => tool.name)).toEqual(
@@ -78,7 +79,7 @@ describe('builtin executor tool catalog', () => {
         query: 'calendar create update event',
         capabilities: ['create', 'update', 'write'],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.mode).toBe('search');
       expect(parsed.capabilities).toEqual(['write']);
@@ -94,7 +95,7 @@ describe('builtin executor tool catalog', () => {
         query: 'calendar create update event',
         capabilities: ['create', 'update', 'write'],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.mode).toBe('search');
       expect(parsed.category).toBe('native');
@@ -110,7 +111,7 @@ describe('builtin executor tool catalog', () => {
         query: 'calendar create update event',
         capabilities: ['create', 'update', 'write'],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.mode).toBe('search');
       expect(parsed.category).toBeUndefined();
@@ -125,7 +126,7 @@ describe('builtin executor tool catalog', () => {
         query: 'schedule meeting',
         capabilities: ['write'],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.mode).toBe('search');
       expect(parsed.category).toBe('calendar');
@@ -140,7 +141,7 @@ describe('builtin executor tool catalog', () => {
         query: 'E2E Native Review Updated by E2E',
         capabilities: ['read', 'write', 'verify'],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       const toolNames = parsed.tools.map((tool: any) => tool.name);
 
       expect(parsed.mode).toBe('search');
@@ -158,7 +159,7 @@ describe('builtin executor tool catalog', () => {
 
     it('returns the full category tool list without activation scaffolding', async () => {
       const result = await executeToolCatalog({ category: 'files' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.category).toBe('files');
       expect(parsed.tools.map((tool: any) => tool.name)).toEqual(
@@ -179,7 +180,7 @@ describe('builtin executor tool catalog', () => {
 
     it('returns both javascript and python when filtering by code', async () => {
       const result = await executeToolCatalog({ category: 'code' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.category).toBe('code');
       expect(parsed.tools).toEqual(
@@ -192,7 +193,7 @@ describe('builtin executor tool catalog', () => {
 
     it('returns both image generation and image editing when filtering by media', async () => {
       const result = await executeToolCatalog({ category: 'media' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.category).toBe('media');
       expect(parsed.purpose).toContain('generate, or edit media');
@@ -206,7 +207,7 @@ describe('builtin executor tool catalog', () => {
 
     it('preserves the explicit category tool order for activation', async () => {
       const result = await executeToolCatalog({ category: 'expo' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       const listedNames = parsed.tools.map((tool: any) => tool.name);
 
       expect(listedNames.slice(0, 4)).toEqual([
@@ -246,13 +247,13 @@ describe('builtin executor tool catalog', () => {
       ]);
 
       const result = await executeToolCatalog({ category: 'github' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.category).toBe('github');
       expect(parsed.tools).toEqual([]);
 
       const skillsResult = await executeToolCatalog({ category: 'skills' });
-      const skills = JSON.parse(skillsResult);
+      const skills = parseCompletedToolOutcome(skillsResult);
       expect(skills.tools).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ name: 'skill__github__repos' }),
@@ -267,7 +268,7 @@ describe('builtin executor tool catalog', () => {
 
     it('returns a structured error for unknown categories', async () => {
       const result = await executeToolCatalog({ category: 'unknown' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
 
       expect(parsed.error).toContain('Unknown tool_catalog category');
       expect(parsed.availableCategories).toContain('files');
@@ -319,7 +320,7 @@ describe('builtin executor tool catalog', () => {
       ]);
 
       const result = await executeToolCatalog({});
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.mode).toBe('overview');
       expect(parsed.totalMcpTools).toBe(1);
@@ -391,7 +392,7 @@ describe('builtin executor tool catalog', () => {
         },
       ]);
 
-      const mcpResult = JSON.parse(await executeToolCatalog({ category: 'mcp' }));
+      const mcpResult = parseCompletedToolOutcome(await executeToolCatalog({ category: 'mcp' }));
       expect(mcpResult.mode).toBe('category');
       expect(mcpResult.tools).toEqual([
         expect.objectContaining({
@@ -407,7 +408,9 @@ describe('builtin executor tool catalog', () => {
         }),
       ]);
 
-      const skillsResult = JSON.parse(await executeToolCatalog({ category: 'skills' }));
+      const skillsResult = parseCompletedToolOutcome(
+        await executeToolCatalog({ category: 'skills' }),
+      );
       expect(skillsResult.mode).toBe('category');
       expect(skillsResult.skills).toEqual([
         expect.objectContaining({
@@ -436,7 +439,7 @@ describe('builtin executor tool catalog', () => {
         },
       ]);
 
-      const result = JSON.parse(
+      const result = parseCompletedToolOutcome(
         await executeToolCatalog(
           { category: 'mcp' },
           { availableToolNames: new Set(['tool_catalog']) },
@@ -471,7 +474,7 @@ describe('builtin executor tool catalog', () => {
         },
       ]);
 
-      const result = JSON.parse(
+      const result = parseCompletedToolOutcome(
         await executeToolCatalog(
           { category: 'mcp' },
           { visibleToolNames: new Set(['tool_catalog']) },

@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { executeCanvasUpdate } from '../../helpers/builtinExecutorHarness';
+import { failedToolContent, parseCompletedToolOutcome } from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeCanvasUpdate — content (raw HTML) update', () => {
@@ -15,7 +16,7 @@ describe('Builtin Tool Executor', () => {
         surfaceId: 'surf-html',
         content: '<h1>Updated HTML</h1>',
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('updated');
       expect(processCanvasMessage).toHaveBeenCalledWith({
         type: 'updateContent',
@@ -35,7 +36,7 @@ describe('Builtin Tool Executor', () => {
         content: '<div>HTML</div>',
         components: [{ id: 'c1', type: 'text', props: { text: 'Hi' } }],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('updated');
       expect(processCanvasMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'updateContent' }),
@@ -62,7 +63,7 @@ describe('Builtin Tool Executor', () => {
             '<html><body><main>Updated from file</main></body></html>',
         },
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('updated');
       expect(parsed.appliedUpdates).toContain('filePath:canvas/updated.html');
@@ -105,7 +106,7 @@ describe('Builtin Tool Executor', () => {
         },
       );
 
-      expect(result).toContain('content, filePath, or directoryPath');
+      expect(failedToolContent(result)).toContain('content, filePath, or directoryPath');
     });
 
     it('rejects canvas_update when filePath and contentEdits are both provided', async () => {
@@ -132,7 +133,9 @@ describe('Builtin Tool Executor', () => {
         },
       );
 
-      expect(result).toContain('content, filePath, directoryPath, or contentEdits');
+      expect(failedToolContent(result)).toContain(
+        'content, filePath, directoryPath, or contentEdits',
+      );
     });
 
     it('rejects canvas_update filePath without workspace context', async () => {
@@ -146,7 +149,7 @@ describe('Builtin Tool Executor', () => {
         filePath: 'canvas/updated.html',
       } as any);
 
-      expect(result).toContain('requires an active conversation workspace');
+      expect(failedToolContent(result)).toContain('requires an active conversation workspace');
     });
   });
 });

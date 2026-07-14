@@ -57,9 +57,14 @@ const BASE_PARAMS = {
 beforeEach(() => {
   jest.clearAllMocks();
   resetExplicitMemoryRecallGrantStateForTests();
-  mockExecuteMemoryRecall.mockReturnValue('{"ok":true}');
-  mockExecuteMemorySearch.mockResolvedValue('{"ok":true}');
-  mockExecuteMemoryRemember.mockResolvedValue('{"ok":true}');
+  const completedOutcome = { status: 'completed', content: '{"ok":true}' };
+  mockExecuteMemoryRecall.mockReturnValue(completedOutcome);
+  mockExecuteMemorySearch.mockResolvedValue(completedOutcome);
+  mockExecuteMemoryRemember.mockReturnValue(completedOutcome);
+  mockExecuteMemoryPin.mockReturnValue(completedOutcome);
+  mockExecuteMemoryUnpin.mockReturnValue(completedOutcome);
+  mockExecuteMemoryInvalidate.mockReturnValue(completedOutcome);
+  mockExecuteMemoryForget.mockReturnValue(completedOutcome);
 });
 
 describe('builtin memory execution scope', () => {

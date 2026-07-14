@@ -35,6 +35,11 @@ import {
   installBuiltinExecutorRuntimeReset,
 } from '../helpers/builtinExecutorRuntimeHarness';
 import { makeScoredFact } from '../helpers/memoryFactFixtures';
+import {
+  failedToolContent,
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../helpers/toolRuntimeOutcome';
 
 describe('builtin executor interaction, agent, and memory tools', () => {
   installBuiltinExecutorRuntimeReset();
@@ -55,7 +60,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
         question: 'Pick a plan',
         options: ['Alpha', ' Beta ', ''],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('created');
       expect(parsed.poll.options).toHaveLength(2);
       expect(parsed.poll.options[1].label).toBe('Beta');
@@ -63,10 +68,10 @@ describe('builtin executor interaction, agent, and memory tools', () => {
 
     it('validates message effect ids', async () => {
       const result = await executeMessageEffect({ effectId: 'confetti' });
-      expect(JSON.parse(result).effectId).toBe('confetti');
+      expect(parseCompletedToolOutcome(result).effectId).toBe('confetti');
 
       const invalid = await executeMessageEffect({ effectId: 'unknown' });
-      expect(JSON.parse(invalid).status).toBe('error');
+      expect(parseFailedToolOutcome(invalid).status).toBe('error');
     });
   });
 
@@ -74,7 +79,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
     it('speaks text with default provider', async () => {
       const voice = require('../../src/services/voice/voice');
       const result = await executeSpeak({ text: 'Hello world' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('spoken');
       expect(parsed.textLength).toBe(11);
       expect(parsed.provider).toBe('system');
@@ -84,7 +89,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
     it('speaks with specified provider', async () => {
       const voice = require('../../src/services/voice/voice');
       const result = await executeSpeak({ text: 'Hi', provider: 'openai' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.provider).toBe('openai');
       expect(voice.speakText).toHaveBeenCalledWith('Hi', 'openai');
     });
@@ -94,7 +99,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
       voice.speakText.mockRejectedValueOnce(new Error('TTS unavailable'));
 
       const result = await executeSpeak({ text: 'Hi' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toContain('TTS unavailable');
     });
@@ -103,7 +108,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
   describe('executeAgentsList', () => {
     it('returns built-in personas', async () => {
       const result = await executeAgentsList();
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.agents).toBeDefined();
       expect(parsed.agents.length).toBeGreaterThanOrEqual(2);
 
@@ -116,7 +121,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
   describe('executeAgentsSwitch', () => {
     it('switches to an existing persona', async () => {
       const result = await executeAgentsSwitch({ personaId: 'coder' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('switched');
       expect(parsed.personaId).toBe('coder');
       expect(parsed.name).toBe('Coder');
@@ -124,8 +129,9 @@ describe('builtin executor interaction, agent, and memory tools', () => {
 
     it('returns error for unknown persona', async () => {
       const result = await executeAgentsSwitch({ personaId: 'unknown' });
-      expect(result).toContain('Error');
-      expect(result).toContain('persona not found');
+      const content = failedToolContent(result);
+      expect(content).toContain('Error');
+      expect(content).toContain('persona not found');
     });
   });
 
@@ -136,7 +142,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
         name: 'My Agent',
         systemPrompt: 'You are a custom agent.',
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('created');
       expect(parsed.persona.name).toBe('My Agent');
     });
@@ -153,7 +159,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
         name: 'Agent B',
         temperature: 0.7,
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('configured');
       expect(parsed.persona.name).toBe('Agent B');
     });
@@ -215,7 +221,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
           taskId: null,
         },
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.method).toBe('living_memory');
       expect(parsed.results).toHaveLength(2);
       expect(parsed.results[0].citation).toBe('[1] run-1');

@@ -15,7 +15,7 @@ jest.mock('../../src/services/llm/LlmService', () => ({
 }));
 
 jest.mock('../../src/engine/tools/index', () => ({
-  executeTool: jest.fn().mockResolvedValue('tool result'),
+  executeTool: jest.fn().mockResolvedValue({ status: 'completed', content: 'tool result' }),
   normalizeToolName: jest.fn((name: string) => name),
 }));
 
@@ -167,7 +167,7 @@ beforeEach(() => {
   (LlmService as any).mockImplementation(() => ({
     streamMessage: mockStreamMessage,
   }));
-  (executeTool as jest.Mock).mockResolvedValue('tool result');
+  (executeTool as jest.Mock).mockResolvedValue({ status: 'completed', content: 'tool result' });
 });
 
 describe('Orchestrator Anthropic hardening', () => {
@@ -368,8 +368,9 @@ describe('Orchestrator Anthropic hardening', () => {
   });
 
   it('re-prompts pending Anthropic sessions instead of auto-monitoring them', async () => {
-    (executeTool as jest.Mock).mockResolvedValueOnce(
-      JSON.stringify({
+    (executeTool as jest.Mock).mockResolvedValueOnce({
+      status: 'completed',
+      content: JSON.stringify({
         status: 'completed',
         sessionIds: ['sub-1'],
         sessionCount: 1,
@@ -377,7 +378,7 @@ describe('Orchestrator Anthropic hardening', () => {
         pendingCount: 0,
         sessions: [{ sessionId: 'sub-1', status: 'completed', output: 'Worker finished.' }],
       }),
-    );
+    });
 
     mockStreamMessage
       .mockImplementationOnce(() =>

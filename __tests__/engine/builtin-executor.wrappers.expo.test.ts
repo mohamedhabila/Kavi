@@ -15,16 +15,17 @@ import {
   mockCreateExpoProject,
   mockListExpoProjects,
 } from '../helpers/builtinExecutorWrappersHarness';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('builtin-executor wrapper coverage', () => {
   installBuiltinExecutorWrapperReset();
 
   it('normalizes Expo list, create, and status payloads with automation guidance', async () => {
-    const list = JSON.parse(await executeExpoEasListProjects({ refresh: true }));
-    const created = JSON.parse(
+    const list = parseCompletedToolOutcome(await executeExpoEasListProjects({ refresh: true }));
+    const created = parseCompletedToolOutcome(
       await executeExpoEasCreateProject({ accountId: 'acct-1', name: 'Kavi' }),
     );
-    const status = JSON.parse(await executeExpoEasStatus({ projectId: 'expo-1' }));
+    const status = parseCompletedToolOutcome(await executeExpoEasStatus({ projectId: 'expo-1' }));
 
     expect(list).toEqual(
       expect.objectContaining({
@@ -53,27 +54,33 @@ describe('builtin-executor wrapper coverage', () => {
   });
 
   it('normalizes Expo probe, action, workflow, and GraphQL wrapper payloads', async () => {
-    const probe = JSON.parse(await executeExpoEasProbe({ projectId: 'expo-1' }));
-    const build = JSON.parse(
+    const probe = parseCompletedToolOutcome(await executeExpoEasProbe({ projectId: 'expo-1' }));
+    const build = parseCompletedToolOutcome(
       await executeExpoEasBuild({ projectId: 'expo-1', platform: 'android' }),
     );
-    const update = JSON.parse(await executeExpoEasUpdate({ projectId: 'expo-1', branch: 'main' }));
-    const submit = JSON.parse(await executeExpoEasSubmit({ projectId: 'expo-1', platform: 'ios' }));
-    const deploy = JSON.parse(
+    const update = parseCompletedToolOutcome(
+      await executeExpoEasUpdate({ projectId: 'expo-1', branch: 'main' }),
+    );
+    const submit = parseCompletedToolOutcome(
+      await executeExpoEasSubmit({ projectId: 'expo-1', platform: 'ios' }),
+    );
+    const deploy = parseCompletedToolOutcome(
       await executeExpoEasDeployWeb({ projectId: 'expo-1', alias: 'prod' }),
     );
-    const runs = JSON.parse(await executeExpoEasWorkflowRuns({ projectId: 'expo-1', limit: 5 }));
-    const workflowStatus = JSON.parse(
+    const runs = parseCompletedToolOutcome(
+      await executeExpoEasWorkflowRuns({ projectId: 'expo-1', limit: 5 }),
+    );
+    const workflowStatus = parseCompletedToolOutcome(
       await executeExpoEasWorkflowStatus({ projectId: 'expo-1', workflowRunId: 'run-1' }),
     );
-    const workflowWait = JSON.parse(
+    const workflowWait = parseCompletedToolOutcome(
       await executeExpoEasWorkflowWait({
         projectId: 'expo-1',
         workflowRunId: 'run-1',
         timeoutMs: 1000,
       }),
     );
-    const graphql = JSON.parse(
+    const graphql = parseCompletedToolOutcome(
       await executeExpoEasGraphql({ query: '{ viewer { id } }', projectId: 'expo-1' }),
     );
 

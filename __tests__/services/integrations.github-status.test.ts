@@ -4,6 +4,7 @@ import {
   mockFetch,
   mockGetSecure,
 } from '../helpers/serviceIntegrationsHarness';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Service Integrations', () => {
   installServiceIntegrationsReset();
@@ -50,7 +51,7 @@ describe('Service Integrations', () => {
         repo: 'user/repo',
         branch: 'feature/test',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.runs).toHaveLength(1);
       expect(data.runs[0].conclusion).toBe('failure');
@@ -122,7 +123,7 @@ describe('Service Integrations', () => {
         repo: 'user/repo',
         branch: 'feature/test',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
 
       expect(data.state).toBe('failure');
       expect(data.summary.statuses.failing).toBe(1);

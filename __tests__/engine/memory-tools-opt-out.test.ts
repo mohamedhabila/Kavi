@@ -27,7 +27,9 @@ import { useChatStore } from '../../src/store/useChatStore';
 import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { createGoal } from '../../src/engine/goals/types';
 import type { ToolExecutionContext } from '../../src/engine/tools/toolExecutionContext';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
+import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -45,13 +47,12 @@ async function executeGroundedRemember(input: {
   userMessageId: string;
   userMessageText: string;
   context?: ToolExecutionContext;
-}): Promise<string> {
+}): Promise<ToolRuntimeOutcome> {
   const memoryConversationId = input.context?.memoryConversationId ?? input.threadId;
   const execution = memoryRememberExecution({
     memoryConversationId,
     sourceThreadId: input.threadId,
-    taskId:
-      input.context?.controlGraphGoals?.find((goal) => goal.status === 'active')?.id ?? null,
+    taskId: input.context?.controlGraphGoals?.find((goal) => goal.status === 'active')?.id ?? null,
     userMessageId: input.userMessageId,
     userMessageText: input.userMessageText,
   });
@@ -86,8 +87,8 @@ describe('structured memory tool executor — opt-out gate', () => {
     'returns permission_denied for %s when disableLongTermMemory is true',
     async (toolName) => {
       useSettingsStore.setState({ disableLongTermMemory: true });
-      const raw = await executeTool(toolName, '{}', 'conv-1');
-      const parsed = JSON.parse(raw);
+      const outcome = await executeTool(toolName, '{}', 'conv-1');
+      const parsed = parseFailedToolOutcome(outcome);
       expect(parsed.ok).toBe(false);
       expect(parsed.code).toBe('permission_denied');
       expect(typeof parsed.error).toBe('string');
@@ -95,7 +96,7 @@ describe('structured memory tool executor — opt-out gate', () => {
   );
 
   it('still honors explicit memory_forget withdrawal while memory is disabled', async () => {
-    const remembered = JSON.parse(
+    const remembered = parseCompletedToolOutcome(
       await executeGroundedRemember({
         args: {
           subject: 'user',
@@ -111,12 +112,12 @@ describe('structured memory tool executor — opt-out gate', () => {
     );
     useSettingsStore.setState({ disableLongTermMemory: true });
 
-    const raw = await executeTool(
+    const outcome = await executeTool(
       'memory_forget',
       JSON.stringify({ factId: remembered.fact.id }),
       'conv-1',
     );
-    const result = JSON.parse(raw);
+    const result = parseCompletedToolOutcome(outcome);
 
     expect(result).toEqual(expect.objectContaining({ ok: true, action: 'withdrawal' }));
     expect(JSON.stringify(result)).not.toContain('30 minutes');
@@ -124,7 +125,7 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('rejects memory_manage withdrawal aliases and keeps correction gated under opt-out', async () => {
-    const remembered = JSON.parse(
+    const remembered = parseCompletedToolOutcome(
       await executeGroundedRemember({
         args: {
           subject: 'user',
@@ -140,14 +141,14 @@ describe('structured memory tool executor — opt-out gate', () => {
     );
     useSettingsStore.setState({ disableLongTermMemory: true });
 
-    const withdrawnAlias = JSON.parse(
+    const withdrawnAlias = parseFailedToolOutcome(
       await executeTool(
         'memory_manage',
         JSON.stringify({ action: 'forget', factId: remembered.fact.id }),
         'conv-1',
       ),
     );
-    const invalidated = JSON.parse(
+    const invalidated = parseFailedToolOutcome(
       await executeTool(
         'memory_manage',
         JSON.stringify({ action: 'invalidate', factId: remembered.fact.id }),
@@ -162,36 +163,40 @@ describe('structured memory tool executor — opt-out gate', () => {
   it.each(['PIN', 'UNPIN', 'INVALIDATE', 'FORGET'])(
     'rejects non-canonical memory_manage action %s',
     async (action) => {
-      const raw = await executeTool(
+      const outcome = await executeTool(
         'memory_manage',
         JSON.stringify({ action, factId: 'fact-1' }),
         'conv-1',
       );
-      expect(JSON.parse(raw)).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
+      expect(parseFailedToolOutcome(outcome)).toEqual(
+        expect.objectContaining({ ok: false, code: 'invalid_args' }),
+      );
     },
   );
 
   it.each(['pin', 'unpin', 'invalidate'])(
     'rejects extra runtime fields for memory_manage action=%s',
     async (action) => {
-      const raw = await executeTool(
+      const outcome = await executeTool(
         'memory_manage',
         JSON.stringify({ action, factId: 'fact-1', mode: 'delete' }),
         'conv-1',
       );
-      expect(JSON.parse(raw)).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
+      expect(parseFailedToolOutcome(outcome)).toEqual(
+        expect.objectContaining({ ok: false, code: 'invalid_args' }),
+      );
     },
   );
 
   it('does NOT short-circuit when disableLongTermMemory is false', async () => {
     useSettingsStore.setState({ disableLongTermMemory: false });
-    const raw = await executeTool('memory_recall', JSON.stringify({ all: true }), 'conv-1');
-    const parsed = JSON.parse(raw);
+    const outcome = await executeTool('memory_recall', JSON.stringify({ all: true }), 'conv-1');
+    const parsed = parseCompletedToolOutcome(outcome);
     expect(parsed.code).not.toBe('permission_denied');
   });
 
   it('adds runtime conversation provenance to memory_remember writes', async () => {
-    const raw = await executeGroundedRemember({
+    const outcome = await executeGroundedRemember({
       args: {
         subject: 'user',
         predicate: 'timezone',
@@ -202,7 +207,7 @@ describe('structured memory tool executor — opt-out gate', () => {
       userMessageId: 'user-runtime-timezone',
       userMessageText: 'My timezone is UTC+1.',
     });
-    const parsed = JSON.parse(raw);
+    const parsed = parseCompletedToolOutcome(outcome);
 
     expect(parsed.ok).toBe(true);
     expect(parsed.fact.scope).toBe('conversation');
@@ -211,7 +216,7 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('writes memory_remember facts to the explicit memory namespace with source-thread provenance', async () => {
-    const raw = await executeGroundedRemember({
+    const outcome = await executeGroundedRemember({
       args: {
         subject: 'project',
         predicate: 'release_artifact',
@@ -226,7 +231,7 @@ describe('structured memory tool executor — opt-out gate', () => {
         workspaceConversationId: 'parent-runtime-files',
       },
     });
-    const parsed = JSON.parse(raw);
+    const parsed = parseCompletedToolOutcome(outcome);
 
     expect(parsed.ok).toBe(true);
     expect(parsed.fact.scope).toBe('conversation');
@@ -235,7 +240,7 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('ignores provider-supplied null provenance for memory_remember writes', async () => {
-    const raw = await executeGroundedRemember({
+    const outcome = await executeGroundedRemember({
       args: {
         subject: 'project',
         predicate: 'build_marker',
@@ -256,7 +261,7 @@ describe('structured memory tool executor — opt-out gate', () => {
         agentRunId: 'runtime-run',
       },
     });
-    const parsed = JSON.parse(raw);
+    const parsed = parseCompletedToolOutcome(outcome);
 
     expect(parsed.ok).toBe(true);
     expect(parsed.fact.scope).toBe('project');
@@ -270,7 +275,7 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('ignores provider-supplied provenance overrides for memory_remember writes', async () => {
-    const raw = await executeGroundedRemember({
+    const outcome = await executeGroundedRemember({
       args: {
         subject: 'project',
         predicate: 'build_marker',
@@ -290,7 +295,7 @@ describe('structured memory tool executor — opt-out gate', () => {
         workspaceConversationId: 'parent-runtime-files',
       },
     });
-    const parsed = JSON.parse(raw);
+    const parsed = parseCompletedToolOutcome(outcome);
 
     expect(parsed.ok).toBe(true);
     expect(parsed.fact.scope).toBe('conversation');
@@ -302,7 +307,7 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('rejects a present non-exact code-owned agent run instead of trimming it', async () => {
-    const raw = await executeGroundedRemember({
+    const outcome = await executeGroundedRemember({
       args: {
         subject: 'project',
         predicate: 'build_marker',
@@ -316,7 +321,7 @@ describe('structured memory tool executor — opt-out gate', () => {
       context: { agentRunId: ' runtime-run ' },
     });
 
-    expect(JSON.parse(raw)).toMatchObject({ ok: false, code: 'internal' });
+    expect(parseFailedToolOutcome(outcome)).toMatchObject({ ok: false, code: 'internal' });
     expect(listFacts()).toEqual([]);
   });
 
@@ -334,7 +339,7 @@ describe('structured memory tool executor — opt-out gate', () => {
         }),
       ],
     };
-    const raw = await executeGroundedRemember({
+    const outcome = await executeGroundedRemember({
       args: {
         subject: 'project',
         predicate: 'release_artifact',
@@ -346,7 +351,7 @@ describe('structured memory tool executor — opt-out gate', () => {
       userMessageText: 'project release_artifact is artifact-task.',
       context,
     });
-    const parsed = JSON.parse(raw);
+    const parsed = parseCompletedToolOutcome(outcome);
     const storedFact = listFacts({ originConversationId: 'parent-runtime-memory' })[0];
 
     expect(parsed.ok).toBe(true);
@@ -359,7 +364,7 @@ describe('structured memory tool executor — opt-out gate', () => {
     useChatStore.setState({
       conversations: [{ id: 'persona-thread', personaId: 'assistant-persona' }],
     } as never);
-    const global = JSON.parse(
+    const global = parseCompletedToolOutcome(
       await executeGroundedRemember({
         args: {
           subject: 'user',
@@ -373,7 +378,7 @@ describe('structured memory tool executor — opt-out gate', () => {
         context: { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
       }),
     );
-    const persona = JSON.parse(
+    const persona = parseCompletedToolOutcome(
       await executeGroundedRemember({
         args: {
           subject: 'user',
@@ -411,7 +416,7 @@ describe('structured memory tool executor — opt-out gate', () => {
   });
 
   it('rejects session memory without an active task instead of changing scope', async () => {
-    const parsed = JSON.parse(
+    const parsed = parseFailedToolOutcome(
       await executeGroundedRemember({
         args: {
           subject: 'project',

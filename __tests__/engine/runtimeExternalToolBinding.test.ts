@@ -117,7 +117,7 @@ describe('runtime-external tool binding', () => {
     );
     if (!handlerBinding) throw new Error('handler binding missing');
 
-    const replacementHandler = jest.fn(async () => 'replacement result');
+    const replacementHandler = jest.fn(async () => completedToolOutcome('replacement result'));
     handlerMutation.tools[0].handler = replacementHandler;
 
     expect(handlerBinding.isCurrent()).toBe(false);

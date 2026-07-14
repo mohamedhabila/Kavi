@@ -21,7 +21,9 @@ jest.mock('../../src/services/llm/LlmService', () => ({
   })),
 }));
 
-const mockExecuteTool = jest.fn().mockResolvedValue('tool result');
+const mockExecuteTool = jest
+  .fn()
+  .mockResolvedValue({ status: 'completed', content: 'tool result' });
 jest.mock('../../src/engine/tools/index', () => ({
   executeTool: (...args: any[]) => mockExecuteTool(...args),
   normalizeToolName: jest.fn((name: string) => name.trim()),
@@ -145,7 +147,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockStreamMessage.mockReset();
   mockExecuteTool.mockReset();
-  mockExecuteTool.mockResolvedValue('tool result');
+  mockExecuteTool.mockResolvedValue({ status: 'completed', content: 'tool result' });
   mockWorkspaceTargets = [];
 });
 

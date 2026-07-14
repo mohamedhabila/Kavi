@@ -5,6 +5,7 @@ import {
   registerBuiltInServiceSkills,
   registerCodeOwnedSkill,
 } from '../helpers/serviceIntegrationsHarness';
+import { failedToolContent } from '../helpers/toolRuntimeOutcome';
 
 describe('Service Integrations', () => {
   installServiceIntegrationsReset();
@@ -21,16 +22,14 @@ describe('Service Integrations', () => {
       mockFetch.mockRejectedValueOnce('DNS failure');
       const skill = createKnowledgeSkill();
       const result = await skill.tools[0].handler!({ topic: 'test' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toBe('DNS failure');
+      expect(failedToolContent(result)).toContain('DNS failure');
     });
 
     it('define_word handles non-Error thrown value', async () => {
       mockFetch.mockRejectedValueOnce(42);
       const skill = createKnowledgeSkill();
       const result = await skill.tools[1].handler!({ word: 'test' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toBe('42');
+      expect(failedToolContent(result)).toContain('42');
     });
   });
 });

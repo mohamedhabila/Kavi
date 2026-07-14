@@ -1,9 +1,10 @@
 import { executeToolDescribe } from '../../src/engine/tools/builtin-tool-describe';
+import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('executeToolDescribe', () => {
   it('returns full contract for a built-in tool', async () => {
     const result = await executeToolDescribe({ name: 'memory_recall' });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.mode).toBe('describe');
     expect(parsed.tool.name).toBe('memory_recall');
@@ -22,7 +23,7 @@ describe('executeToolDescribe', () => {
 
   it('returns structured error for unknown tools', async () => {
     const result = await executeToolDescribe({ name: 'not_a_real_tool_xyz' });
-    const parsed = JSON.parse(result);
+    const parsed = parseFailedToolOutcome(result);
 
     expect(parsed.error).toContain('Unknown tool');
   });
@@ -32,7 +33,7 @@ describe('executeToolDescribe', () => {
       { name: 'memory_recall' },
       { availableToolNames: new Set(['tool_catalog']) },
     );
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.tool.name).toBe('memory_recall');
     expect(parsed.tool.activation).toMatchObject({
@@ -48,6 +49,6 @@ describe('executeToolDescribe', () => {
       { visibleToolNames: new Set(['tool_catalog', 'tool_describe', 'wait']) },
     );
 
-    expect(JSON.parse(result)).toEqual({ error: 'Unknown tool: sessions_spawn' });
+    expect(parseFailedToolOutcome(result)).toEqual({ error: 'Unknown tool: sessions_spawn' });
   });
 });

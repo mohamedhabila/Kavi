@@ -4,6 +4,7 @@ import {
   mockFetch,
   mockGetSecure,
 } from '../helpers/serviceIntegrationsHarness';
+import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Service Integrations', () => {
   installServiceIntegrationsReset();
@@ -37,14 +38,16 @@ describe('Service Integrations', () => {
 
       const skill = createFinanceSkill();
       const result = await skill.tools[0].handler!({ symbol: 'AAPL' });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data).toBeDefined();
     });
 
     it('stock_quote should throw if no API key', async () => {
       mockGetSecure.mockResolvedValue(null);
       const skill = createFinanceSkill();
-      await expect(skill.tools[0].handler!({ symbol: 'AAPL' })).rejects.toThrow('not configured');
+      expect(failedToolContent(await skill.tools[0].handler!({ symbol: 'AAPL' }))).toContain(
+        'not configured',
+      );
     });
 
     it('crypto_price should return data', async () => {
@@ -55,7 +58,7 @@ describe('Service Integrations', () => {
 
       const skill = createFinanceSkill();
       const result = await skill.tools[1].handler!({ coinId: 'bitcoin' });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data).toBeDefined();
       expect(data.coinId).toBe('bitcoin');
     });
@@ -67,7 +70,9 @@ describe('Service Integrations', () => {
         text: async () => 'Rate limited',
       });
       const skill = createFinanceSkill();
-      await expect(skill.tools[1].handler!({ coinId: 'bitcoin' })).rejects.toThrow();
+      expect(failedToolContent(await skill.tools[1].handler!({ coinId: 'bitcoin' }))).toContain(
+        '429',
+      );
     });
 
     it('exchange_rate should return data', async () => {
@@ -90,7 +95,7 @@ describe('Service Integrations', () => {
         fromCurrency: 'USD',
         toCurrency: 'JPY',
       });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data.fromCurrency).toBe('USD');
       expect(data.toCurrency).toBe('JPY');
       expect(data.exchangeRate).toBe('157.42000000');

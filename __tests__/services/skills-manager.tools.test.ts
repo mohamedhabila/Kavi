@@ -10,6 +10,11 @@ import {
   unregisterSkill,
 } from '../helpers/skillsManagerHarness';
 import type { Skill, ToolDefinition } from '../helpers/skillsManagerHarness';
+import {
+  completedToolContent,
+  failedToolContent,
+  parseCompletedToolOutcome,
+} from '../helpers/toolRuntimeOutcome';
 
 beforeEach(resetSkillsManagerTestState);
 
@@ -28,7 +33,10 @@ describe('Skill Registration', () => {
           properties: { name: { type: 'string' } },
           required: ['name'],
         },
-        handler: async (args: any) => `Hello, ${args.name}!`,
+        handler: async (args: any) => ({
+          status: 'completed',
+          content: `Hello, ${args.name}!`,
+        }),
       },
     ],
   };
@@ -136,7 +144,10 @@ describe('executeSkillTool', () => {
           name: 'greet',
           description: 'Greets',
           input_schema: { type: 'object', properties: {} },
-          handler: async (args: any) => `Hi ${args.name}`,
+          handler: async (args: any) => ({
+            status: 'completed',
+            content: `Hi ${args.name}`,
+          }),
         },
       ],
     };
@@ -146,7 +157,7 @@ describe('executeSkillTool', () => {
       'skill__exec-skill__greet',
       JSON.stringify({ name: 'World' }),
     );
-    expect(result).toBe('Hi World');
+    expect(completedToolContent(result)).toBe('Hi World');
   });
 
   it('passes execution context to the handler', async () => {
@@ -160,11 +171,13 @@ describe('executeSkillTool', () => {
           name: 'inspect',
           description: 'Reads execution context',
           input_schema: { type: 'object', properties: {} },
-          handler: async (_args, context) =>
-            JSON.stringify({
+          handler: async (_args, context) => ({
+            status: 'completed',
+            content: JSON.stringify({
               conversationId: context.conversationId,
               fileContent: await context.readConversationFile?.('note.txt'),
             }),
+          }),
         },
       ],
     });
@@ -174,7 +187,7 @@ describe('executeSkillTool', () => {
       readConversationFile: async () => 'workspace note',
     });
 
-    expect(JSON.parse(result)).toEqual({
+    expect(parseCompletedToolOutcome(result)).toEqual({
       conversationId: 'conv-ctx',
       fileContent: 'workspace note',
     });
@@ -184,12 +197,12 @@ describe('executeSkillTool', () => {
 
   it('returns error for invalid tool name', async () => {
     const result = await executeSkillTool('bad_name', '{}');
-    expect(result).toContain('Error');
+    expect(failedToolContent(result)).toContain('Error');
   });
 
   it('returns error for unloaded skill', async () => {
     const result = await executeSkillTool('skill__missing__tool', '{}');
-    expect(result).toContain('not loaded');
+    expect(failedToolContent(result)).toContain('not loaded');
   });
 
   it('returns error for missing tool in skill', async () => {
@@ -201,7 +214,7 @@ describe('executeSkillTool', () => {
       tools: [],
     });
     const result = await executeSkillTool('skill__empty-skill__missing', '{}');
-    expect(result).toContain('not found');
+    expect(failedToolContent(result)).toContain('not found');
   });
 
   it('returns error for invalid JSON args', async () => {
@@ -215,12 +228,12 @@ describe('executeSkillTool', () => {
           name: 'test',
           description: 'Test',
           input_schema: { type: 'object', properties: {} },
-          handler: async () => 'ok',
+          handler: async () => ({ status: 'completed', content: 'ok' }),
         },
       ],
     });
     const result = await executeSkillTool('skill__json-skill__test', 'not-json');
-    expect(result).toContain('invalid');
+    expect(failedToolContent(result)).toContain('invalid');
   });
 
   it('returns error when handler is missing', async () => {
@@ -238,7 +251,7 @@ describe('executeSkillTool', () => {
       ],
     });
     const result = await executeSkillTool('skill__no-handler__test', '{}');
-    expect(result).toContain('no handler');
+    expect(failedToolContent(result)).toContain('no handler');
   });
 
   it('catches handler errors', async () => {
@@ -259,7 +272,7 @@ describe('executeSkillTool', () => {
       ],
     });
     const result = await executeSkillTool('skill__err-skill__boom', '{}');
-    expect(result).toContain('Boom!');
+    expect(failedToolContent(result)).toContain('Boom!');
   });
 });
 

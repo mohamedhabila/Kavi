@@ -3,12 +3,16 @@
 // ---------------------------------------------------------------------------
 
 import { executePdfRead } from '../../helpers/builtinExecutorHarness';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executePdfRead', () => {
     it('returns info for local PDF path', async () => {
       const result = await executePdfRead({ path: '/mock/docs/test.pdf' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('unsupported');
     });
 
@@ -23,7 +27,7 @@ describe('Builtin Tool Executor', () => {
       });
 
       const result = await executePdfRead({ path: 'https://example.com/doc.pdf' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('extracted');
       expect(parsed.method).toBe('html_rendition');
       expect(parsed.content).toContain('Important document content');
@@ -51,7 +55,7 @@ describe('Builtin Tool Executor', () => {
       (global as any).fetch = mockFetch;
 
       const result = await executePdfRead({ path: 'https://example.com/doc.pdf' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('fetched_but_not_parsed');
       expect(parsed.suggestion).toContain('PDF text extraction');
 
@@ -66,7 +70,7 @@ describe('Builtin Tool Executor', () => {
       });
 
       const result = await executePdfRead({ path: 'https://example.com/doc.txt' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('extracted');
       expect(parsed.method).toBe('direct_text');
       expect(parsed.content).toContain('Plain text document');
@@ -81,7 +85,7 @@ describe('Builtin Tool Executor', () => {
       });
 
       const result = await executePdfRead({ path: 'https://example.com/missing.pdf' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.error).toContain('HTTP 404');
       delete (global as any).fetch;
     });
@@ -91,7 +95,7 @@ describe('Builtin Tool Executor', () => {
       (global as any).fetch = mockFetch;
 
       const result = await executePdfRead({ path: 'https://example.com/fail.pdf' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.error).toContain('Network error');
 
       delete (global as any).fetch;

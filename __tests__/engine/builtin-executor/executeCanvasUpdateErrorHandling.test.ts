@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { executeCanvasUpdate } from '../../helpers/builtinExecutorHarness';
+import { parseFailedToolOutcome } from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeCanvasUpdate — error handling', () => {
@@ -18,7 +19,7 @@ describe('Builtin Tool Executor', () => {
         surfaceId: 'surf-1',
         components: [{ id: 'c1', type: 'text', props: { text: 'v2' } }],
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('render crash');
     });

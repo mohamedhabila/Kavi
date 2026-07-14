@@ -12,7 +12,11 @@ describe('native tool execution environment', () => {
   });
 
   it('forwards a native request only while the environment is installed', async () => {
-    const tryExecute = jest.fn(async () => '{"status":"fixture"}');
+    const fixtureOutcome = {
+      status: 'completed',
+      content: '{"status":"fixture"}',
+    } as const;
+    const tryExecute = jest.fn(async () => fixtureOutcome);
     const request = {
       name: 'calendar_list',
       argsString: '{}',
@@ -22,7 +26,7 @@ describe('native tool execution environment', () => {
     expect(await tryExecuteNativeToolInEnvironment(request)).toBeNull();
 
     uninstallEnvironment = installNativeToolExecutionEnvironment({ tryExecute });
-    expect(await tryExecuteNativeToolInEnvironment(request)).toBe('{"status":"fixture"}');
+    expect(await tryExecuteNativeToolInEnvironment(request)).toEqual(fixtureOutcome);
     expect(tryExecute).toHaveBeenCalledWith(request);
 
     uninstallEnvironment();

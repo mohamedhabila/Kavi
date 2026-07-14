@@ -1,4 +1,5 @@
 import { executeToolCatalog } from '../../src/engine/tools/builtin-tool-catalog';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 import {
   searchToolCatalogEntries,
   tokenizeStructuralIdentifiers,
@@ -49,7 +50,7 @@ describe('builtin-tool-catalogSearch', () => {
 
   it('resolves near category identifiers structurally', async () => {
     const result = await executeToolCatalog({ category: 'agent' });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed).toMatchObject({
       mode: 'category',
@@ -63,7 +64,7 @@ describe('builtin-tool-catalogSearch', () => {
       query: 'pdf_read',
       capabilities: ['read'],
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.mode).toBe('search');
     expect(parsed.query).toBe('pdf_read');
@@ -76,7 +77,7 @@ describe('builtin-tool-catalogSearch', () => {
       query: 'worker-chain evidence handoff',
       capabilities: ['coordinate'],
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.mode).toBe('search');
     expect(parsed.capabilities).toEqual(['coordinate']);
@@ -90,7 +91,7 @@ describe('builtin-tool-catalogSearch', () => {
       query: 'sms',
       capabilities: ['push'],
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     const toolNames = parsed.tools.map((tool: { name: string }) => tool.name);
 
     expect(parsed.capabilities).toEqual(['push']);
@@ -107,7 +108,7 @@ describe('builtin-tool-catalogSearch', () => {
       query: 'sms_compose',
       capabilities: ['write'],
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     const toolNames = parsed.tools.map((tool: { name: string }) => tool.name);
 
     expect(toolNames).toEqual(
@@ -124,7 +125,7 @@ describe('builtin-tool-catalogSearch', () => {
       query: 'agent coordination',
       capabilities: ['coordinate'],
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     const toolNames = parsed.tools.map((tool: { name: string }) => tool.name);
 
     expect(toolNames).toEqual(expect.arrayContaining(['sessions_spawn']));
@@ -136,7 +137,7 @@ describe('builtin-tool-catalogSearch', () => {
       category: 'calendar',
       capabilities: ['write'],
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.mode).toBe('search');
     expect(parsed.category).toBe('calendar');
@@ -155,7 +156,7 @@ describe('builtin-tool-catalogSearch', () => {
     const result = await executeToolCatalog({
       query: 'delegated worker workstream evidence',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.mode).toBe('search');
     expect(parsed.tools.map((tool: { name: string }) => tool.name)).toEqual(
@@ -167,7 +168,7 @@ describe('builtin-tool-catalogSearch', () => {
     const result = await executeToolCatalog({
       query: 'waitForCompletion workstreamId',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.mode).toBe('search');
     expect(parsed.tools.map((tool: { name: string }) => tool.name)).toEqual(
@@ -183,7 +184,7 @@ describe('builtin-tool-catalogSearch', () => {
       },
       { availableToolNames: new Set(['tool_catalog']) },
     );
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     const memoryRecall = parsed.tools.find(
       (tool: { name: string }) => tool.name === 'memory_recall',
     );
@@ -209,7 +210,7 @@ describe('builtin-tool-catalogSearch', () => {
       },
       { availableToolNames: new Set(['tool_catalog', 'memory_recall']) },
     );
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     const memoryRecall = parsed.tools.find(
       (tool: { name: string }) => tool.name === 'memory_recall',
     );
@@ -224,13 +225,13 @@ describe('builtin-tool-catalogSearch', () => {
 
   it('does not reveal tools outside the code-owned catalog visibility boundary', async () => {
     const visibleToolNames = new Set(['tool_catalog', 'tool_describe', 'memory_recall', 'wait']);
-    const search = JSON.parse(
+    const search = parseCompletedToolOutcome(
       await executeToolCatalog({ query: 'sessions_spawn delegated worker' }, { visibleToolNames }),
     );
-    const sessionsCategory = JSON.parse(
+    const sessionsCategory = parseCompletedToolOutcome(
       await executeToolCatalog({ category: 'sessions' }, { visibleToolNames }),
     );
-    const overview = JSON.parse(await executeToolCatalog({}, { visibleToolNames }));
+    const overview = parseCompletedToolOutcome(await executeToolCatalog({}, { visibleToolNames }));
 
     expect(search.tools.map((entry: { name: string }) => entry.name)).not.toContain(
       'sessions_spawn',

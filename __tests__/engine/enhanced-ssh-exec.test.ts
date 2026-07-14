@@ -43,9 +43,10 @@ jest.mock('../../src/services/remote/store', () => ({
 }));
 
 jest.mock('../../src/engine/tools/enhancedExec', () => ({
-  enhancedExec: jest
-    .fn()
-    .mockResolvedValue(JSON.stringify({ status: 'background', jobId: 'bg-1' })),
+  enhancedExec: jest.fn().mockResolvedValue({
+    status: 'completed',
+    content: JSON.stringify({ status: 'background', jobId: 'bg-1' }),
+  }),
   getBackgroundJob: (...args: any[]) => mockGetBackgroundJob(...args),
 }));
 
@@ -58,8 +59,8 @@ jest.mock('../../src/services/canvas/renderer', () => ({
   processCanvasMessage: jest.fn(),
   getSurface: jest.fn(),
   getAllSurfaces: jest.fn().mockReturnValue([]),
-  requestCanvasEval: jest.fn().mockResolvedValue(''),
-  requestCanvasSnapshot: jest.fn().mockResolvedValue(''),
+  requestCanvasEval: jest.fn().mockResolvedValue({ status: 'completed', content: '' }),
+  requestCanvasSnapshot: jest.fn().mockResolvedValue({ status: 'completed', content: '' }),
 }));
 
 jest.mock('../../src/services/agents/subAgent', () => ({
@@ -135,9 +136,17 @@ jest.mock('../../src/services/expo/workflowActions', () => ({
   runExpoProjectAction: jest.fn(),
 }));
 
-import { executeSshBackgroundJobStatus, executeSshBackgroundJobWait, executeSshExec, executeSshListDirectory, executeSshReadFile, getLastWorkingDirectory } from '../../src/engine/tools/builtin-ssh';
+import {
+  executeSshBackgroundJobStatus,
+  executeSshBackgroundJobWait,
+  executeSshExec,
+  executeSshListDirectory,
+  executeSshReadFile,
+  getLastWorkingDirectory,
+} from '../../src/engine/tools/builtin-ssh';
 import { enhancedExec } from '../../src/engine/tools/enhancedExec';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { completedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -159,7 +168,7 @@ describe('executeSshExec', () => {
       }),
     );
 
-    expect(result).toContain('background');
+    expect(completedToolContent(result)).toContain('background');
   });
 
   it('delegates to enhancedExec when timeoutMs is provided', async () => {
@@ -183,7 +192,7 @@ describe('executeSshExec', () => {
     });
 
     expect(enhancedExec).not.toHaveBeenCalled();
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.status).toBe('executed');
     expect(parsed.command).toBe('ls -la');
   });
@@ -204,7 +213,7 @@ describe('executeSshExec', () => {
       command: 'npm install',
       targetId: 't1',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.status).toBe('executed');
     expect(parsed.summary).toContain('completed on t1');
@@ -226,7 +235,7 @@ describe('executeSshListDirectory', () => {
     );
 
     const result = await executeSshListDirectory({ targetId: 't1', path: '/home/user/project' });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.status).toBe('listed');
     expect(parsed.count).toBe(45);
@@ -246,7 +255,7 @@ describe('SSH background monitoring tools', () => {
     });
 
     const result = await executeSshBackgroundJobStatus({ jobId: 'bg-1' });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.jobId).toBe('bg-1');
     expect(parsed.status).toBe('running');
@@ -281,7 +290,7 @@ describe('SSH background monitoring tools', () => {
 
     await jest.advanceTimersByTimeAsync(100);
     const result = await waitPromise;
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.status).toBe('completed');
     expect(parsed.summary).toContain('completed');
@@ -301,7 +310,7 @@ describe('executeSshReadFile', () => {
       targetId: 't1',
       path: '/home/user/project/build.log',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.status).toBe('read');
     expect(parsed.content).toBeUndefined();

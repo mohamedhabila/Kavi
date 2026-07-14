@@ -7,6 +7,10 @@ import {
   MOCK_PROVIDER,
   mockHydrateProviderForRequest,
 } from '../../helpers/builtinExecutorHarness';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSend part 2', () => {
@@ -39,7 +43,7 @@ describe('Builtin Tool Executor', () => {
         { sessionId: 'old-222', message: 'Tell me more', waitForCompletion: true },
         MOCK_PROVIDER,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('completed');
       expect(parsed.sessionId).toBe('new-222');
@@ -83,7 +87,7 @@ describe('Builtin Tool Executor', () => {
         }),
       });
 
-      const parsed = JSON.parse(
+      const parsed = parseCompletedToolOutcome(
         await executeSessionSend(
           { sessionId: 'old-333', message: 'Tell me more', waitForCompletion: true },
           MOCK_PROVIDER,
@@ -354,7 +358,7 @@ describe('Builtin Tool Executor', () => {
         MOCK_PROVIDER,
         'gpt-5.4-mini',
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
 
       expect(parsed.status).toBe('error');
       expect(parsed.error).toContain('Worker provider "Anthropic" has no API key configured.');
@@ -373,7 +377,7 @@ describe('Builtin Tool Executor', () => {
         { sessionId: 'old-456', message: 'more' },
         MOCK_PROVIDER,
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toContain('spawn failed');
     });

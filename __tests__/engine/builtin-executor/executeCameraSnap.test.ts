@@ -3,12 +3,16 @@
 // ---------------------------------------------------------------------------
 
 import { executeCameraSnap } from '../../helpers/builtinExecutorHarness';
+import {
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeCameraSnap', () => {
     it('takes a photo', async () => {
       const result = await executeCameraSnap({});
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('captured');
     });
 
@@ -16,7 +20,7 @@ describe('Builtin Tool Executor', () => {
       const ImagePicker = require('expo-image-picker');
       ImagePicker.launchCameraAsync.mockResolvedValueOnce({ canceled: true, assets: [] });
       const result = await executeCameraSnap({});
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('cancelled');
     });
 
@@ -24,14 +28,14 @@ describe('Builtin Tool Executor', () => {
       const ImagePicker = require('expo-image-picker');
       ImagePicker.launchCameraAsync.mockRejectedValueOnce(new Error('Camera denied'));
       const result = await executeCameraSnap({});
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('Camera denied');
     });
 
     it('uses front camera when specified', async () => {
       const result = await executeCameraSnap({ camera: 'front', quality: 0.5 });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('captured');
     });
   });

@@ -10,20 +10,29 @@ import {
   mockSpeakText,
   mockUpdatePersonaInConversation,
 } from '../helpers/builtinExecutorWrappersHarness';
+import {
+  failedToolContent,
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../helpers/toolRuntimeOutcome';
 
 describe('builtin-executor wrapper coverage', () => {
   installBuiltinExecutorWrapperReset();
 
   it('validates poll creation and supported message effects', async () => {
-    expect(JSON.parse(await executePollCreate({ question: '', options: ['A', 'B'] }))).toEqual({
+    expect(
+      parseFailedToolOutcome(await executePollCreate({ question: '', options: ['A', 'B'] })),
+    ).toEqual({
       status: 'error',
       error: 'Poll question is required',
     });
     expect(
-      JSON.parse(await executePollCreate({ question: 'Question', options: ['Only one'] })),
+      parseFailedToolOutcome(
+        await executePollCreate({ question: 'Question', options: ['Only one'] }),
+      ),
     ).toEqual({ status: 'error', error: 'At least two poll options are required' });
 
-    const poll = JSON.parse(
+    const poll = parseCompletedToolOutcome(
       await executePollCreate({
         question: '  Ship it?  ',
         options: [' Yes ', 'No', ' Maybe '],
@@ -47,28 +56,34 @@ describe('builtin-executor wrapper coverage', () => {
       },
     });
 
-    expect(JSON.parse(await executeMessageEffect({ effectId: 'invalid' }))).toEqual({
+    expect(parseFailedToolOutcome(await executeMessageEffect({ effectId: 'invalid' }))).toEqual({
       status: 'error',
       error: 'Unsupported effect. Use confetti, balloons, or spotlight.',
     });
-    expect(JSON.parse(await executeMessageEffect({ effectId: '  CONFETTI ' }))).toEqual({
+    expect(
+      parseCompletedToolOutcome(await executeMessageEffect({ effectId: '  CONFETTI ' })),
+    ).toEqual({
       status: 'applied',
       effectId: 'confetti',
     });
   });
 
   it('speaks text successfully and returns an error payload when TTS fails', async () => {
-    const success = JSON.parse(await executeSpeak({ text: 'Hello world', provider: 'system' }));
+    const success = parseCompletedToolOutcome(
+      await executeSpeak({ text: 'Hello world', provider: 'system' }),
+    );
     expect(success).toEqual({ status: 'spoken', textLength: 11, provider: 'system' });
     expect(mockSpeakText).toHaveBeenCalledWith('Hello world', 'system');
 
     mockSpeakText.mockRejectedValueOnce(new Error('tts failed'));
-    const failure = JSON.parse(await executeSpeak({ text: 'Hello world', provider: 'system' }));
+    const failure = parseFailedToolOutcome(
+      await executeSpeak({ text: 'Hello world', provider: 'system' }),
+    );
     expect(failure).toEqual({ status: 'error', error: 'tts failed' });
   });
 
   it('lists agents, switches personas, and configures built-in, custom, and new personas', async () => {
-    const listed = JSON.parse(await executeAgentsList());
+    const listed = parseCompletedToolOutcome(await executeAgentsList());
     expect(listed.agents).toEqual([
       {
         id: 'default',
@@ -86,15 +101,17 @@ describe('builtin-executor wrapper coverage', () => {
       },
     ]);
 
-    await expect(executeAgentsSwitch({ personaId: 'missing' }, 'conv-1')).resolves.toBe(
+    expect(failedToolContent(await executeAgentsSwitch({ personaId: 'missing' }, 'conv-1'))).toBe(
       'Error: persona not found: missing. Use agents_list to see available personas.',
     );
 
-    const switched = JSON.parse(await executeAgentsSwitch({ personaId: 'default' }, 'conv-1'));
+    const switched = parseCompletedToolOutcome(
+      await executeAgentsSwitch({ personaId: 'default' }, 'conv-1'),
+    );
     expect(switched).toEqual({ status: 'switched', personaId: 'default', name: 'Assistant' });
     expect(mockUpdatePersonaInConversation).toHaveBeenCalledWith('conv-1', 'default');
 
-    const builtInConfigured = JSON.parse(
+    const builtInConfigured = parseCompletedToolOutcome(
       await executeAgentsConfigure({
         personaId: 'default',
         name: 'Assistant Pro',
@@ -110,7 +127,7 @@ describe('builtin-executor wrapper coverage', () => {
       temperature: 0.2,
     });
 
-    const customConfigured = JSON.parse(
+    const customConfigured = parseCompletedToolOutcome(
       await executeAgentsConfigure({
         personaId: 'custom-reviewer',
         name: 'Reviewer Pro',
@@ -122,7 +139,7 @@ describe('builtin-executor wrapper coverage', () => {
       persona: { id: 'custom-reviewer', name: 'Reviewer Pro' },
     });
 
-    const created = JSON.parse(
+    const created = parseCompletedToolOutcome(
       await executeAgentsConfigure({
         personaId: 'new-specialist',
         systemPrompt: 'Handle niche tasks',

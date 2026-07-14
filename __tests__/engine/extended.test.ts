@@ -10,6 +10,11 @@ import {
 } from '../../src/engine/tools/extended';
 import { executeWriteFile } from '../../src/engine/tools/toolWorkspaceCoreExecution';
 import * as workspaceSourceFiles from '../../src/services/workspaces/sourceFiles';
+import {
+  failedToolContent,
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../helpers/toolRuntimeOutcome';
 
 // Mock expo-file-system
 jest.mock('expo-file-system', () => {
@@ -116,7 +121,7 @@ function setupWorkspace(conversationId: string, files: Record<string, string>) {
 
 describe('executeWriteFile', () => {
   it('returns the code-owned path and content digest after exact readback verification', async () => {
-    const result = JSON.parse(
+    const result = parseCompletedToolOutcome(
       await executeWriteFile({ path: 'reports/final.md', content: 'done' }, 'write-test'),
     );
 
@@ -140,7 +145,7 @@ describe('executeWriteFile', () => {
       size: 7,
     });
 
-    const result = JSON.parse(
+    const result = parseFailedToolOutcome(
       await executeWriteFile({ path: 'reports/final.md', content: 'done' }, 'write-test'),
     );
 
@@ -177,7 +182,7 @@ describe('executeFileEdit', () => {
       },
       CONV,
     );
-    expect(JSON.parse(result)).toEqual(
+    expect(parseCompletedToolOutcome(result)).toEqual(
       expect.objectContaining({
         status: 'edited',
         path: 'app.ts',
@@ -206,7 +211,7 @@ describe('executeFileEdit', () => {
       CONV,
     );
 
-    expect(JSON.parse(result)).toEqual(
+    expect(parseCompletedToolOutcome(result)).toEqual(
       expect.objectContaining({ status: 'edited', path: 'multi.ts', editCount: 2 }),
     );
     expect(__getStore()[`file:///mock/documents/workspace/${CONV}/multi.ts`]).toBe(
@@ -228,7 +233,7 @@ describe('executeFileEdit', () => {
       CONV,
     );
 
-    expect(result).toContain('did not match oldText');
+    expect(failedToolContent(result)).toContain('did not match oldText');
     expect(__getStore()[`file:///mock/documents/workspace/${CONV}/atomic.ts`]).toBe(
       'alpha\nbeta\n',
     );
@@ -239,8 +244,9 @@ describe('executeFileEdit', () => {
       { path: 'missing.ts', edits: [{ oldText: 'x', newText: 'y' }] },
       CONV,
     );
-    expect(result).toContain('Error');
-    expect(result).toContain('not found');
+    const content = failedToolContent(result);
+    expect(content).toContain('Error');
+    expect(content).toContain('not found');
   });
 
   it('returns error if oldText not found in file', async () => {
@@ -249,7 +255,7 @@ describe('executeFileEdit', () => {
       { path: 'file.ts', edits: [{ oldText: 'goodbye', newText: 'hi' }] },
       CONV,
     );
-    expect(result).toContain('not found');
+    expect(failedToolContent(result)).toContain('not found');
   });
 
   it('returns error if oldText matches multiple times', async () => {
@@ -258,8 +264,9 @@ describe('executeFileEdit', () => {
       { path: 'dup.ts', edits: [{ oldText: 'foo', newText: 'qux' }] },
       CONV,
     );
-    expect(result).toContain('3 times');
-    expect(result).toContain('must be unique');
+    const content = failedToolContent(result);
+    expect(content).toContain('3 times');
+    expect(content).toContain('must be unique');
   });
 
   it('strips path traversal from path', async () => {
@@ -272,14 +279,15 @@ describe('executeFileEdit', () => {
       CONV,
     );
     // Path gets sanitized — either finds the safe.ts or returns not found
-    expect(typeof result).toBe('string');
+    expect(typeof failedToolContent(result)).toBe('string');
   });
 
   it('returns a friendly error when edits are missing', async () => {
     setupWorkspace(CONV, { 'safe.ts': 'content' });
     const result = await executeFileEdit({ path: 'safe.ts' } as any, CONV);
-    expect(result).toContain('Error');
-    expect(result).toContain('edits');
+    const content = failedToolContent(result);
+    expect(content).toContain('Error');
+    expect(content).toContain('edits');
   });
 
   it('does not accept the removed oldText/newText fallback', async () => {
@@ -293,7 +301,7 @@ describe('executeFileEdit', () => {
       CONV,
     );
 
-    expect(result).toContain('edits');
+    expect(failedToolContent(result)).toContain('edits');
     expect(__getStore()[`file:///mock/documents/workspace/${CONV}/legacy.ts`]).toBe('content');
   });
 });
@@ -308,7 +316,7 @@ describe('executeGlobSearch', () => {
       'style.css': 'css',
     });
     const result = await executeGlobSearch({ pattern: '*.ts' }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.count).toBe(1);
     expect(parsed.matches).toContain('app.ts');
     expect(parsed.matches).not.toContain('index.js');
@@ -322,7 +330,7 @@ describe('executeGlobSearch', () => {
     });
     __getDirs().add(`file:///mock/documents/workspace/${CONV}/src`);
     const result = await executeGlobSearch({ pattern: '**/*.ts' }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.count).toBe(2);
     expect(parsed.matches).toEqual(expect.arrayContaining(['src/a.ts', 'src/b.ts']));
   });
@@ -333,7 +341,7 @@ describe('executeGlobSearch', () => {
     });
 
     const result = await executeGlobSearch({ pattern: '**/*', path: '.' }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.path).toBe('.');
     expect(parsed.count).toBeGreaterThan(0);
@@ -343,15 +351,16 @@ describe('executeGlobSearch', () => {
   it('returns no matches message', async () => {
     setupWorkspace(CONV, { 'app.ts': 'content' });
     const result = await executeGlobSearch({ pattern: '*.py' }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.count).toBe(0);
     expect(parsed.summary).toContain('No files matched');
   });
 
   it('returns error for non-existent directory', async () => {
     const result = await executeGlobSearch({ pattern: '*.ts', path: 'nonexistent' }, CONV);
-    expect(result).toContain('Error');
-    expect(result).toContain('not found');
+    const content = failedToolContent(result);
+    expect(content).toContain('Error');
+    expect(content).toContain('not found');
   });
 
   it('searches in subdirectory when path is given', async () => {
@@ -362,15 +371,16 @@ describe('executeGlobSearch', () => {
     });
     __getDirs().add(`file:///mock/documents/workspace/${CONV}/src`);
     const result = await executeGlobSearch({ pattern: '*.ts', path: 'src' }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.path).toBe('src');
     expect(parsed.matches).toEqual(expect.arrayContaining(['app.ts', 'index.ts']));
   });
 
   it('returns a friendly error when pattern is missing', async () => {
     const result = await executeGlobSearch({ pattern: undefined as any }, CONV);
-    expect(result).toContain('Error');
-    expect(result).toContain('pattern');
+    const content = failedToolContent(result);
+    expect(content).toContain('Error');
+    expect(content).toContain('pattern');
   });
 });
 
@@ -383,7 +393,7 @@ describe('executeTextSearch', () => {
       'b.ts': 'function hello() {}',
     });
     const result = await executeTextSearch({ query: 'hello' }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.count).toBe(2);
     expect(parsed.matches).toEqual(
       expect.arrayContaining([
@@ -396,7 +406,7 @@ describe('executeTextSearch', () => {
   it('returns no matches message', async () => {
     setupWorkspace(CONV, { 'a.ts': 'content' });
     const result = await executeTextSearch({ query: 'nonexistent' }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.count).toBe(0);
     expect(parsed.summary).toContain('No text matches');
   });
@@ -404,7 +414,7 @@ describe('executeTextSearch', () => {
   it('supports regex search', async () => {
     setupWorkspace(CONV, { 'code.ts': 'const x = 42;\nlet y = 100;' });
     const result = await executeTextSearch({ query: '\\d+', isRegex: true }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.isRegex).toBe(true);
     expect(parsed.matches[0].path).toBe('code.ts');
   });
@@ -412,19 +422,20 @@ describe('executeTextSearch', () => {
   it('returns error for invalid regex', async () => {
     setupWorkspace(CONV, { 'a.ts': 'content' });
     const result = await executeTextSearch({ query: '[invalid', isRegex: true }, CONV);
-    expect(result).toContain('invalid regex');
+    expect(failedToolContent(result)).toContain('invalid regex');
   });
 
   it('returns error for non-existent directory', async () => {
     const result = await executeTextSearch({ query: 'test', path: 'missing' }, CONV);
-    expect(result).toContain('Error');
-    expect(result).toContain('not found');
+    const content = failedToolContent(result);
+    expect(content).toContain('Error');
+    expect(content).toContain('not found');
   });
 
   it('includes line numbers in results', async () => {
     setupWorkspace(CONV, { 'lines.ts': 'line1\nfind me\nline3' });
     const result = await executeTextSearch({ query: 'find me' }, CONV);
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     expect(parsed.matches).toEqual(
       expect.arrayContaining([expect.objectContaining({ path: 'lines.ts', line: 2 })]),
     );
@@ -433,7 +444,8 @@ describe('executeTextSearch', () => {
   it('rejects non-boolean isRegex values', async () => {
     setupWorkspace(CONV, { 'lines.ts': 'line1\nfind me\nline3' });
     const result = await executeTextSearch({ query: 'find me', isRegex: 'true' as any }, CONV);
-    expect(result).toContain('Error');
-    expect(result).toContain('isRegex');
+    const content = failedToolContent(result);
+    expect(content).toContain('Error');
+    expect(content).toContain('isRegex');
   });
 });

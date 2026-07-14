@@ -63,8 +63,23 @@ jest.mock('expo-file-system', () => ({
   },
   Paths: { cache: '/tmp/cache', document: '/tmp/doc' },
 }));
-import { useRemoteStore, resetRemoteStore, startRemoteJob, updateRemoteJob, addRemoteArtifact, openRemoteSession, closeRemoteSession, updateRemoteSession } from '../../src/services/remote/store';
-import { executeMcpTool, parseMcpToolName, formatMcpResult, mcpToolToDefinition } from '../../src/services/mcp/bridge';
+import {
+  useRemoteStore,
+  resetRemoteStore,
+  startRemoteJob,
+  updateRemoteJob,
+  addRemoteArtifact,
+  openRemoteSession,
+  closeRemoteSession,
+  updateRemoteSession,
+} from '../../src/services/remote/store';
+import {
+  executeMcpTool,
+  parseMcpToolName,
+  formatMcpResult,
+  mcpToolToDefinition,
+} from '../../src/services/mcp/bridge';
+import { completedToolContent, failedToolContent } from '../helpers/toolRuntimeOutcome';
 beforeEach(() => {
   resetRemoteStore();
   mockSecureStore.clear();
@@ -292,7 +307,7 @@ describe('MCP Bridge: tool execution tracking', () => {
     const clients = new Map([['test-server', mockClient as any]]);
 
     const result = await executeMcpTool(clients, 'mcp__test-server__my_tool', '{"key":"value"}');
-    expect(result).toBe('result data');
+    expect(completedToolContent(result)).toBe('result data');
 
     const state = useRemoteStore.getState();
     const jobs = Object.values(state.jobs);
@@ -317,7 +332,7 @@ describe('MCP Bridge: tool execution tracking', () => {
     const clients = new Map([['fail-server', mockClient as any]]);
 
     const result = await executeMcpTool(clients, 'mcp__fail-server__broken_tool', '{}');
-    expect(result).toContain('timeout');
+    expect(failedToolContent(result)).toContain('timeout');
 
     const state = useRemoteStore.getState();
     const jobs = Object.values(state.jobs);
@@ -336,7 +351,7 @@ describe('MCP Bridge: tool execution tracking', () => {
     const clients = new Map([['dc-server', mockClient as any]]);
 
     const result = await executeMcpTool(clients, 'mcp__dc-server__tool', '{}');
-    expect(result).toContain('disconnected');
+    expect(failedToolContent(result)).toContain('disconnected');
     expect(mockClient.callTool).not.toHaveBeenCalled();
   });
 
@@ -348,17 +363,17 @@ describe('MCP Bridge: tool execution tracking', () => {
     const clients = new Map([['json-server', mockClient as any]]);
 
     const result = await executeMcpTool(clients, 'mcp__json-server__tool', 'not-json');
-    expect(result).toContain('invalid tool arguments');
+    expect(failedToolContent(result)).toContain('invalid tool arguments');
     expect(mockClient.callTool).not.toHaveBeenCalled();
   });
 
   test('executeMcpTool with unknown server returns error', async () => {
     const result = await executeMcpTool(new Map(), 'mcp__unknown__tool', '{}');
-    expect(result).toContain('not connected');
+    expect(failedToolContent(result)).toContain('not connected');
   });
 
   test('executeMcpTool with invalid tool name returns error', async () => {
     const result = await executeMcpTool(new Map(), 'bad_name', '{}');
-    expect(result).toContain('invalid MCP tool name');
+    expect(failedToolContent(result)).toContain('invalid MCP tool name');
   });
 });

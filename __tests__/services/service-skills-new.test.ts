@@ -7,6 +7,7 @@ import { createCommunicationSkill } from '../../src/services/integrations/commun
 import { createKnowledgeSkill } from '../../src/services/integrations/knowledge/skill';
 import { createMediaSkill } from '../../src/services/integrations/media/skill';
 import { createProductivitySkill } from '../../src/services/integrations/productivity/skill';
+import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Productivity Skill', () => {
   const skill = createProductivitySkill();
@@ -27,7 +28,7 @@ describe('Productivity Skill', () => {
     it('sets a timer with valid seconds', async () => {
       const timer = skill.tools.find((t) => t.name === 'timer')!;
       const result = await timer.handler!({ seconds: 60, label: 'Focus' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('timer_set');
       expect(parsed.seconds).toBe(60);
       expect(parsed.label).toBe('Focus');
@@ -37,7 +38,7 @@ describe('Productivity Skill', () => {
     it('caps timer at 3600 seconds', async () => {
       const timer = skill.tools.find((t) => t.name === 'timer')!;
       const result = await timer.handler!({ seconds: 99999 });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.seconds).toBe(3600);
     });
   });
@@ -46,22 +47,21 @@ describe('Productivity Skill', () => {
     it('converts km to miles', async () => {
       const convert = skill.tools.find((t) => t.name === 'unit_convert')!;
       const result = await convert.handler!({ value: 10, from: 'km', to: 'mi' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.result).toBeCloseTo(6.21371, 2);
     });
 
     it('converts Celsius to Fahrenheit', async () => {
       const convert = skill.tools.find((t) => t.name === 'unit_convert')!;
       const result = await convert.handler!({ value: 100, from: '°C', to: '°F' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.result).toBe(212);
     });
 
     it('returns error for unsupported conversion', async () => {
       const convert = skill.tools.find((t) => t.name === 'unit_convert')!;
       const result = await convert.handler!({ value: 1, from: 'parsec', to: 'lightyear' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toContain('Unsupported');
+      expect(failedToolContent(result)).toContain('Unsupported');
     });
   });
 
@@ -69,36 +69,33 @@ describe('Productivity Skill', () => {
     it('evaluates simple expression', async () => {
       const calc = skill.tools.find((t) => t.name === 'calculate')!;
       const result = await calc.handler!({ expression: '2 + 3 * 4' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.result).toBe(14);
     });
 
     it('evaluates expression with sqrt', async () => {
       const calc = skill.tools.find((t) => t.name === 'calculate')!;
       const result = await calc.handler!({ expression: 'sqrt(144)' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.result).toBe(12);
     });
 
     it('handles invalid expression', async () => {
       const calc = skill.tools.find((t) => t.name === 'calculate')!;
       const result = await calc.handler!({ expression: 'invalid()()' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toBeDefined();
+      expect(failedToolContent(result)).toContain('Invalid expression');
     });
 
     it('rejects unsupported characters before expression evaluation', async () => {
       const calc = skill.tools.find((t) => t.name === 'calculate')!;
       const result = await calc.handler!({ expression: '<script>alert(1)</script>' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toBe('Expression contains unsupported characters');
+      expect(failedToolContent(result)).toContain('Expression contains unsupported characters');
     });
 
     it('rejects non-finite calculation results', async () => {
       const calc = skill.tools.find((t) => t.name === 'calculate')!;
       const result = await calc.handler!({ expression: '1 / 0' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toBe('Expression did not produce a finite number');
+      expect(failedToolContent(result)).toContain('Expression did not produce a finite number');
     });
   });
 });
@@ -127,7 +124,7 @@ describe('Communication Skill', () => {
         context: 'Reschedule to Friday',
         tone: 'casual',
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('draft_generated');
       expect(parsed.subject).toBe('Meeting');
       expect(parsed.tone).toBe('casual');
@@ -138,7 +135,7 @@ describe('Communication Skill', () => {
     it('returns translation request', async () => {
       const translate = skill.tools.find((t) => t.name === 'translate')!;
       const result = await translate.handler!({ text: 'Hello', to: 'Spanish' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('translate_request');
       expect(parsed.to).toBe('Spanish');
     });
@@ -160,7 +157,7 @@ describe('Media Skill', () => {
     it('generates QR code URL', async () => {
       const qr = skill.tools.find((t) => t.name === 'generate_qr')!;
       const result = await qr.handler!({ data: 'https://example.com', size: 512 });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('generated');
       expect(parsed.url).toContain('qrserver.com');
       expect(parsed.url).toContain('512x512');
@@ -200,7 +197,7 @@ describe('Knowledge Skill', () => {
 
       const wiki = skill.tools.find((t) => t.name === 'wikipedia_summary')!;
       const result = await wiki.handler!({ topic: 'JavaScript' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.title).toBe('JavaScript');
       expect(parsed.extract).toContain('programming language');
     });
@@ -210,8 +207,7 @@ describe('Knowledge Skill', () => {
 
       const wiki = skill.tools.find((t) => t.name === 'wikipedia_summary')!;
       const result = await wiki.handler!({ topic: 'nonexistent_topic_xyzzy' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toContain('404');
+      expect(failedToolContent(result)).toContain('404');
     });
 
     it('handles fetch failure', async () => {
@@ -219,8 +215,7 @@ describe('Knowledge Skill', () => {
 
       const wiki = skill.tools.find((t) => t.name === 'wikipedia_summary')!;
       const result = await wiki.handler!({ topic: 'test' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toContain('Network error');
+      expect(failedToolContent(result)).toContain('Network error');
     });
   });
 
@@ -251,7 +246,7 @@ describe('Knowledge Skill', () => {
 
       const define = skill.tools.find((t) => t.name === 'define_word')!;
       const result = await define.handler!({ word: 'example' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.word).toBe('example');
       expect(parsed.meanings[0].partOfSpeech).toBe('noun');
     });
@@ -264,8 +259,7 @@ describe('Knowledge Skill', () => {
 
       const define = skill.tools.find((t) => t.name === 'define_word')!;
       const result = await define.handler!({ word: 'xyzzy' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toContain('not found');
+      expect(failedToolContent(result)).toContain('not found');
     });
 
     it('handles API error', async () => {
@@ -273,8 +267,7 @@ describe('Knowledge Skill', () => {
 
       const define = skill.tools.find((t) => t.name === 'define_word')!;
       const result = await define.handler!({ word: 'xyzzy' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toContain('404');
+      expect(failedToolContent(result)).toContain('404');
     });
 
     it('handles fetch failure', async () => {
@@ -282,8 +275,7 @@ describe('Knowledge Skill', () => {
 
       const define = skill.tools.find((t) => t.name === 'define_word')!;
       const result = await define.handler!({ word: 'test' });
-      const parsed = JSON.parse(result);
-      expect(parsed.error).toContain('Network failed');
+      expect(failedToolContent(result)).toContain('Network failed');
     });
   });
 });
@@ -295,7 +287,7 @@ describe('Media Skill — additional tests', () => {
     it('returns describe request with default detail', async () => {
       const describe = skill.tools.find((t) => t.name === 'describe_image')!;
       const result = await describe.handler!({ url: 'https://example.com/img.png' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('describe_request');
       expect(parsed.detail).toBe('brief');
     });
@@ -305,7 +297,7 @@ describe('Media Skill — additional tests', () => {
     it('returns palette request with defaults', async () => {
       const palette = skill.tools.find((t) => t.name === 'color_palette')!;
       const result = await palette.handler!({});
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('palette_request');
       expect(parsed.count).toBe(5);
       expect(parsed.theme).toBe('harmonious');
@@ -314,7 +306,7 @@ describe('Media Skill — additional tests', () => {
     it('accepts custom count and theme', async () => {
       const palette = skill.tools.find((t) => t.name === 'color_palette')!;
       const result = await palette.handler!({ count: 8, theme: 'ocean' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.count).toBe(8);
       expect(parsed.theme).toBe('ocean');
     });
@@ -328,7 +320,7 @@ describe('Communication Skill — additional tests', () => {
     it('uses default tone when not specified', async () => {
       const draft = skill.tools.find((t) => t.name === 'draft_email')!;
       const result = await draft.handler!({ subject: 'Hi', context: 'Greetings' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.tone).toBe('formal');
       expect(parsed.to).toBe('(recipient)');
     });
@@ -338,7 +330,7 @@ describe('Communication Skill — additional tests', () => {
     it('auto-detects source language by default', async () => {
       const translate = skill.tools.find((t) => t.name === 'translate')!;
       const result = await translate.handler!({ text: 'Bonjour', to: 'English' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.from).toBe('auto');
     });
   });

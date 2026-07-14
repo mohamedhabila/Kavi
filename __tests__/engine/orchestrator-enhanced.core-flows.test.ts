@@ -16,7 +16,7 @@ jest.mock('../../src/services/llm/LlmService', () => ({
   })),
 }));
 jest.mock('../../src/engine/tools/index', () => ({
-  executeTool: jest.fn().mockResolvedValue('tool result'),
+  executeTool: jest.fn().mockResolvedValue({ status: 'completed', content: 'tool result' }),
   normalizeToolName: jest.fn((name: string) => name.trim()),
 }));
 jest.mock('../../src/services/events/bus', () => ({
@@ -504,7 +504,13 @@ describe('runOrchestrator — compaction resilience', () => {
     );
 
     expect(mockStreamMessage).toHaveBeenCalledTimes(2);
-    expect(mockStreamMessage.mock.calls.every((call) => String(call[0][0]?.content).includes(JSON.stringify(createWorkflowTaskAnchor(anchorMessage))))).toBe(true);
+    expect(
+      mockStreamMessage.mock.calls.every((call) =>
+        String(call[0][0]?.content).includes(
+          JSON.stringify(createWorkflowTaskAnchor(anchorMessage)),
+        ),
+      ),
+    ).toBe(true);
     expect(compactSpy.mock.calls.some(([params]) => params.forceTier === 'aggressive')).toBe(true);
     if ((callbacks.onCompaction as jest.Mock).mock.calls.length > 0) {
       expect(callbacks.onCompaction).toHaveBeenCalledWith(

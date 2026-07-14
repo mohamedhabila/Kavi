@@ -92,13 +92,14 @@ describe('Orchestrator', () => {
     });
 
     it('should stop repeated tool_catalog discovery after a few identical category results', async () => {
-      (executeTool as jest.Mock).mockResolvedValue(
-        JSON.stringify({
+      (executeTool as jest.Mock).mockResolvedValue({
+        status: 'completed',
+        content: JSON.stringify({
           mode: 'category',
           category: 'browser',
           tools: [{ name: 'browser_navigate', description: 'Navigate browser pages.' }],
         }),
-      );
+      });
 
       const toolCallEvent = {
         type: 'tool_call',

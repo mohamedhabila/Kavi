@@ -31,6 +31,7 @@ import {
   cancelBackgroundJob,
   cleanupBackgroundJobs,
 } from '../../src/engine/tools/enhancedExec';
+import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 // The enhancedExec + startBackgroundExec functions require SSH and store
 // interaction that we test indirectly. These tests focus on the background
@@ -64,7 +65,7 @@ describe('background job management', () => {
     try {
       const result = await enhancedExec('pwd', { timeoutMs: 30_000, targetId: 'target-1' });
 
-      expect(JSON.parse(result)).toMatchObject({
+      expect(parseCompletedToolOutcome(result)).toMatchObject({
         status: 'executed',
         targetId: 'target-1',
         output: 'ok',

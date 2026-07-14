@@ -4,6 +4,7 @@ import {
   mockFetch,
   mockGetSecure,
 } from '../helpers/serviceIntegrationsHarness';
+import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Service Integrations', () => {
   installServiceIntegrationsReset();
@@ -21,7 +22,7 @@ describe('Service Integrations', () => {
     it('current tool should throw if no API key', async () => {
       mockGetSecure.mockResolvedValue(null);
       const skill = createWeatherSkill();
-      await expect(skill.tools[0].handler!({ location: 'London' })).rejects.toThrow(
+      expect(failedToolContent(await skill.tools[0].handler!({ location: 'London' }))).toContain(
         'not configured',
       );
     });
@@ -46,7 +47,7 @@ describe('Service Integrations', () => {
 
       const skill = createWeatherSkill();
       const result = await skill.tools[0].handler!({ location: 'London' });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data.location).toBe('London');
       expect(data.temp).toBe(15);
       expect(data.coordinates).toEqual({ lat: 51.5072, lon: -0.1276 });
@@ -57,7 +58,7 @@ describe('Service Integrations', () => {
     it('forecast tool should throw if no API key', async () => {
       mockGetSecure.mockResolvedValue(null);
       const skill = createWeatherSkill();
-      await expect(skill.tools[1].handler!({ location: 'London' })).rejects.toThrow(
+      expect(failedToolContent(await skill.tools[1].handler!({ location: 'London' }))).toContain(
         'not configured',
       );
     });
@@ -83,7 +84,7 @@ describe('Service Integrations', () => {
 
       const skill = createWeatherSkill();
       const result = await skill.tools[1].handler!({ location: 'London' });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data.location).toBe('London');
       expect(data.forecasts.length).toBe(5);
       expect(mockFetch.mock.calls[0][0]).toContain('/geo/1.0/direct');
@@ -105,7 +106,7 @@ describe('Service Integrations', () => {
 
       const skill = createWeatherSkill();
       const result = await skill.tools[0].handler!({ lat: 30.0444, lon: 31.2357 });
-      const data = JSON.parse(result);
+      const data = parseCompletedToolOutcome(result);
       expect(data.location).toBe('Cairo');
       expect(data.coordinates).toEqual({ lat: 30.0444, lon: 31.2357 });
       expect(mockFetch).toHaveBeenCalledTimes(1);

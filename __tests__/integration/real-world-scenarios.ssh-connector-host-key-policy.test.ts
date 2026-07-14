@@ -63,13 +63,27 @@ jest.mock('expo-file-system', () => ({
   },
   Paths: { cache: '/tmp/cache', document: '/tmp/doc' },
 }));
-import { useRemoteStore, resetRemoteStore, startRemoteJob, openRemoteSession } from '../../src/services/remote/store';
+import {
+  useRemoteStore,
+  resetRemoteStore,
+  startRemoteJob,
+  openRemoteSession,
+} from '../../src/services/remote/store';
 import { executeMcpTool } from '../../src/services/mcp/bridge';
-import { getSshHostKeyPolicy, getSshHostKeyPolicyLabel, getSshHostFingerprint } from '../../src/services/ssh/connector';
+import { failedToolContent } from '../helpers/toolRuntimeOutcome';
+import {
+  getSshHostKeyPolicy,
+  getSshHostKeyPolicyLabel,
+  getSshHostFingerprint,
+} from '../../src/services/ssh/connector';
 import { buildRemoteCommandCenterSnapshot } from '../../src/services/remote/commandCenter';
 import { resolveSkillExecutionPlan } from '../../src/services/skills/routing';
 import { buildSkillEligibilityContext } from '../../src/services/skills/eligibility';
-import type { SshTargetConfig, BrowserProviderConfig, McpServerConfig } from '../../src/types/remote';
+import type {
+  SshTargetConfig,
+  BrowserProviderConfig,
+  McpServerConfig,
+} from '../../src/types/remote';
 function makeSshTarget(overrides: Partial<SshTargetConfig> = {}): SshTargetConfig {
   return {
     id: 'ssh-1',
@@ -355,7 +369,7 @@ describe('Edge Cases: concurrent operations and data integrity', () => {
     const clients = new Map([['err-srv', mockClient as any]]);
 
     const result = await executeMcpTool(clients, 'mcp__err-srv__denied_tool', '{}');
-    expect(result).toContain('Permission denied');
+    expect(failedToolContent(result)).toContain('Permission denied');
 
     const jobs = Object.values(useRemoteStore.getState().jobs);
     expect(jobs[0].status).toBe('failed');

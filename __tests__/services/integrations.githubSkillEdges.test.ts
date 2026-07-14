@@ -7,6 +7,7 @@ const mockFetch = jest.fn();
 
 import { getSecure } from '../../src/services/storage/SecureStorage';
 import { createGitHubSkill } from '../../src/services/integrations/github/skill';
+import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const mockGetSecure = getSecure as jest.Mock;
 
@@ -46,7 +47,7 @@ describe('GitHub skill edge cases', () => {
       path: '',
       ref: 'refs/heads/main',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed).toEqual([
       expect.objectContaining({
@@ -103,7 +104,7 @@ describe('GitHub skill edge cases', () => {
       message: 'Remove obsolete docs',
       changes: [{ path: 'docs/old.md', delete: true }],
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
     const treeRequest = JSON.parse(mockFetch.mock.calls[3][1].body);
 
     expect(parsed.changedFiles).toEqual(['docs/old.md']);
@@ -116,14 +117,16 @@ describe('GitHub skill edge cases', () => {
   });
 
   it('commit_files rejects blank commit messages before calling GitHub', async () => {
-    await expect(
-      getGitHubTool('commit_files').handler!({
-        repo: 'user/repo',
-        branch: 'feature/test',
-        message: '   ',
-        changes: [{ path: 'README.md', content: 'Updated' }],
-      }),
-    ).rejects.toThrow('GitHub commit message is required');
+    expect(
+      failedToolContent(
+        await getGitHubTool('commit_files').handler!({
+          repo: 'user/repo',
+          branch: 'feature/test',
+          message: '   ',
+          changes: [{ path: 'README.md', content: 'Updated' }],
+        }),
+      ),
+    ).toContain('GitHub commit message is required');
 
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -165,14 +168,16 @@ describe('GitHub skill edge cases', () => {
         json: async () => [],
       });
 
-    await expect(
-      getGitHubTool('create_pull_request').handler!({
-        repo: 'user/repo',
-        title: 'Existing PR',
-        head: 'feature/test',
-        base: 'main',
-      }),
-    ).rejects.toThrow('A pull request already exists');
+    expect(
+      failedToolContent(
+        await getGitHubTool('create_pull_request').handler!({
+          repo: 'user/repo',
+          title: 'Existing PR',
+          head: 'feature/test',
+          base: 'main',
+        }),
+      ),
+    ).toContain('A pull request already exists');
   });
 
   it('workflow_runs resolves the repository default branch when no target is provided', async () => {
@@ -205,7 +210,7 @@ describe('GitHub skill edge cases', () => {
       });
 
     const result = await getGitHubTool('workflow_runs').handler!({ repo: 'user/repo' });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.ref).toBe('main');
     expect(parsed.branch).toBe('main');
@@ -251,7 +256,7 @@ describe('GitHub skill edge cases', () => {
       repo: 'user/repo',
       pullNumber: 5,
     });
-    const parsed = JSON.parse(result);
+    const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.pullNumber).toBe(5);
     expect(parsed.baseBranch).toBe('main');

@@ -6,6 +6,11 @@ import {
   executeCanvasSnapshot,
   installBuiltinExecutorRuntimeReset,
 } from '../helpers/builtinExecutorRuntimeHarness';
+import {
+  failedToolContent,
+  parseCompletedToolOutcome,
+  parseFailedToolOutcome,
+} from '../helpers/toolRuntimeOutcome';
 
 describe('builtin executor canvas runtime', () => {
   installBuiltinExecutorRuntimeReset();
@@ -13,8 +18,9 @@ describe('builtin executor canvas runtime', () => {
   describe('executeCanvasNavigate', () => {
     it('returns error for non-existent surface', async () => {
       const result = await executeCanvasNavigate({ surfaceId: 'none', url: 'https://example.com' });
-      expect(result).toContain('Error');
-      expect(result).toContain('unable to find canvas surface');
+      const content = failedToolContent(result);
+      expect(content).toContain('Error');
+      expect(content).toContain('unable to find canvas surface');
     });
 
     it('processes navigate message for existing surface', async () => {
@@ -27,7 +33,7 @@ describe('builtin executor canvas runtime', () => {
         surfaceId: 'surf-1',
         url: 'https://example.com',
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('navigated');
       expect(parsed.url).toBe('https://example.com/');
       expect(processCanvasMessage).toHaveBeenCalledWith({
@@ -48,8 +54,9 @@ describe('builtin executor canvas runtime', () => {
         url: 'file:///tmp/index.html',
       });
 
-      expect(result).toContain('Error');
-      expect(result).toContain('http or https');
+      const content = failedToolContent(result);
+      expect(content).toContain('Error');
+      expect(content).toContain('http or https');
       expect(processCanvasMessage).not.toHaveBeenCalled();
     });
 
@@ -72,7 +79,7 @@ describe('builtin executor canvas runtime', () => {
         canvas: 'wrong-name',
         url: 'https://example.com/app',
       } as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('navigated');
       expect(parsed.surfaceId).toBe('surf-9');
@@ -85,11 +92,10 @@ describe('builtin executor canvas runtime', () => {
     });
   });
 
-
   describe('executeCanvasEval', () => {
     it('returns JSON error for non-existent surface', async () => {
       const result = await executeCanvasEval({ surfaceId: 'none', script: 'alert(1)' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toContain('unable to find canvas surface');
     });
@@ -99,12 +105,17 @@ describe('builtin executor canvas runtime', () => {
       getSurface.mockImplementation((id: string) =>
         id === 'surf-1' ? { id: 'surf-1', title: 'Test' } : undefined,
       );
-      requestCanvasEval.mockResolvedValueOnce(
-        JSON.stringify({ status: 'eval_completed', surfaceId: 'surf-1', result: '42' }),
-      );
+      requestCanvasEval.mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
+          status: 'eval_completed',
+          surfaceId: 'surf-1',
+          result: '42',
+        }),
+      });
 
       const result = await executeCanvasEval({ surfaceId: 'surf-1', script: 'return 42' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('eval_completed');
       expect(requestCanvasEval).toHaveBeenCalledWith('surf-1', 'return 42');
     });
@@ -121,15 +132,20 @@ describe('builtin executor canvas runtime', () => {
       getSurface.mockImplementation((id: string) =>
         id === 'surf-1' ? { id: 'surf-1', title: 'Test' } : undefined,
       );
-      requestCanvasEval.mockResolvedValueOnce(
-        JSON.stringify({ status: 'eval_completed', surfaceId: 'surf-1', result: 'ok' }),
-      );
+      requestCanvasEval.mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
+          status: 'eval_completed',
+          surfaceId: 'surf-1',
+          result: 'ok',
+        }),
+      });
 
       const result = await executeCanvasEval({
         surface: 'missing-surface',
         code: 'document.title',
       } as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('eval_completed');
       expect(parsed.note).toContain('Using focused surface');
@@ -143,7 +159,7 @@ describe('builtin executor canvas runtime', () => {
       );
 
       const result = await executeCanvasEval({ surfaceId: 'surf-1' } as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
 
       expect(parsed.status).toBe('error');
       expect(parsed.error).toContain('script');
@@ -169,7 +185,7 @@ describe('builtin executor canvas runtime', () => {
       getFocusedCanvasSurfaceId.mockReturnValueOnce('surf-1');
 
       const result = await executeCanvasList({});
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('listed');
       expect(parsed.count).toBe(1);
@@ -193,18 +209,19 @@ describe('builtin executor canvas runtime', () => {
       getSurface.mockImplementation((id: string) =>
         id === 'surf-1' ? { id: 'surf-1', title: 'Read Test' } : undefined,
       );
-      requestCanvasRead.mockResolvedValueOnce(
-        JSON.stringify({
+      requestCanvasRead.mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
           status: 'read_completed',
           surfaceId: 'surf-1',
           modeUsed: 'source',
           contentType: 'raw_html',
           content: '<html><body>Read me</body></html>',
         }),
-      );
+      });
 
       const result = await executeCanvasRead({ surfaceId: 'surf-1' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('read_completed');
       expect(parsed.contentType).toBe('raw_html');
@@ -228,22 +245,23 @@ describe('builtin executor canvas runtime', () => {
       getSurface.mockImplementation((id: string) =>
         id === 'surf-3' ? { id: 'surf-3', title: 'Live Preview' } : undefined,
       );
-      requestCanvasRead.mockResolvedValueOnce(
-        JSON.stringify({
+      requestCanvasRead.mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
           status: 'read_completed',
           surfaceId: 'surf-3',
           modeUsed: 'dom',
           contentType: 'live_dom',
           content: '<html>dom</html>',
         }),
-      );
+      });
 
       const result = await executeCanvasRead({
         canvas: 'missing-surface',
         readMode: 'dom',
         maxLength: 4096,
       } as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('read_completed');
       expect(parsed.note).toContain('Using focused surface');
@@ -251,14 +269,16 @@ describe('builtin executor canvas runtime', () => {
     });
   });
 
-
   describe('executeCanvasSnapshot', () => {
     it('returns error for non-existent surface', async () => {
       const { requestCanvasSnapshot } = require('../../src/services/canvas/renderer');
-      requestCanvasSnapshot.mockResolvedValueOnce(`Error: surface not found: none`);
+      requestCanvasSnapshot.mockResolvedValueOnce({
+        status: 'failed',
+        content: 'Error: surface not found: none',
+      });
 
       const result = await executeCanvasSnapshot({ surfaceId: 'none' });
-      expect(result).toContain('Error');
+      expect(failedToolContent(result)).toContain('Error');
     });
 
     it('requests snapshot with default format', async () => {
@@ -266,12 +286,17 @@ describe('builtin executor canvas runtime', () => {
       getSurface.mockImplementation((id: string) =>
         id === 'surf-1' ? { id: 'surf-1', title: 'Snap' } : undefined,
       );
-      requestCanvasSnapshot.mockResolvedValueOnce(
-        JSON.stringify({ status: 'snapshot_captured', surfaceId: 'surf-1', format: 'png' }),
-      );
+      requestCanvasSnapshot.mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
+          status: 'snapshot_captured',
+          surfaceId: 'surf-1',
+          format: 'png',
+        }),
+      });
 
       const result = await executeCanvasSnapshot({ surfaceId: 'surf-1' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('snapshot_captured');
       expect(requestCanvasSnapshot).toHaveBeenCalledWith('surf-1', 'png', undefined);
     });
@@ -281,16 +306,21 @@ describe('builtin executor canvas runtime', () => {
       getSurface.mockImplementation((id: string) =>
         id === 'surf-1' ? { id: 'surf-1', title: 'Snap' } : undefined,
       );
-      requestCanvasSnapshot.mockResolvedValueOnce(
-        JSON.stringify({ status: 'snapshot_captured', surfaceId: 'surf-1', format: 'jpeg' }),
-      );
+      requestCanvasSnapshot.mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
+          status: 'snapshot_captured',
+          surfaceId: 'surf-1',
+          format: 'jpeg',
+        }),
+      });
 
       const result = await executeCanvasSnapshot({
         surfaceId: 'surf-1',
         format: 'jpeg',
         quality: 0.5,
       });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
       expect(requestCanvasSnapshot).toHaveBeenCalledWith('surf-1', 'jpeg', 0.5);
       expect(parsed.status).toBe('snapshot_captured');
     });
@@ -307,12 +337,17 @@ describe('builtin executor canvas runtime', () => {
       getSurface.mockImplementation((id: string) =>
         id === 'surf-7' ? { id: 'surf-7', title: 'Preview' } : undefined,
       );
-      requestCanvasSnapshot.mockResolvedValueOnce(
-        JSON.stringify({ status: 'snapshot_captured', surfaceId: 'surf-7', format: 'png' }),
-      );
+      requestCanvasSnapshot.mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
+          status: 'snapshot_captured',
+          surfaceId: 'surf-7',
+          format: 'png',
+        }),
+      });
 
       const result = await executeCanvasSnapshot({} as any);
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.status).toBe('snapshot_captured');
       expect(parsed.note).toContain('Using focused surface');

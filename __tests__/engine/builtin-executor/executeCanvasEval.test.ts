@@ -3,12 +3,13 @@
 // ---------------------------------------------------------------------------
 
 import { executeCanvasEval } from '../../helpers/builtinExecutorHarness';
+import { completedToolContent, parseFailedToolOutcome } from '../../helpers/toolRuntimeOutcome';
 
 describe('Builtin Tool Executor', () => {
   describe('executeCanvasEval', () => {
     it('returns error for non-existent surface', async () => {
       const result = await executeCanvasEval({ surfaceId: 'missing', script: 'console.log(1)' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toContain('unable to find canvas surface');
     });
@@ -19,7 +20,7 @@ describe('Builtin Tool Executor', () => {
         id === 'surf-1' ? { id: 'surf-1', title: 'Test' } : undefined,
       );
       const result = await executeCanvasEval({ surfaceId: 'surf-1', script: '1+1' });
-      expect(result).toBe('eval_result');
+      expect(completedToolContent(result)).toBe('eval_result');
     });
 
     it('catches eval errors and returns JSON', async () => {
@@ -29,7 +30,7 @@ describe('Builtin Tool Executor', () => {
       );
       requestCanvasEval.mockRejectedValueOnce(new Error('eval syntax error'));
       const result = await executeCanvasEval({ surfaceId: 'surf-1', script: 'bad((' });
-      const parsed = JSON.parse(result);
+      const parsed = parseFailedToolOutcome(result);
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('eval syntax error');
     });

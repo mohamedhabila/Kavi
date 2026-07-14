@@ -10,6 +10,7 @@ import {
   McpToolEntry,
 } from '../../src/services/mcp/bridge';
 import { resetRemoteStore, useRemoteStore } from '../../src/services/remote/store';
+import { completedToolContent, failedToolContent } from '../helpers/toolRuntimeOutcome';
 
 // We test bridge functions directly; manager is tested via its public API.
 
@@ -189,13 +190,13 @@ describe('executeMcpTool', () => {
   it('returns error for invalid tool name', async () => {
     const clients = new Map();
     const result = await executeMcpTool(clients, 'bad_name', '{}');
-    expect(result).toContain('invalid MCP tool name');
+    expect(failedToolContent(result)).toContain('invalid MCP tool name');
   });
 
   it('returns error when server not connected', async () => {
     const clients = new Map();
     const result = await executeMcpTool(clients, 'mcp__server1__tool', '{}');
-    expect(result).toContain('not connected');
+    expect(failedToolContent(result)).toContain('not connected');
   });
 
   it('returns error when client is disconnected', async () => {
@@ -205,7 +206,7 @@ describe('executeMcpTool', () => {
     };
     const clients = new Map([['server1', mockClient as any]]);
     const result = await executeMcpTool(clients, 'mcp__server1__tool', '{}');
-    expect(result).toContain('disconnected');
+    expect(failedToolContent(result)).toContain('disconnected');
   });
 
   it('returns error for invalid JSON args', async () => {
@@ -215,7 +216,7 @@ describe('executeMcpTool', () => {
     };
     const clients = new Map([['server1', mockClient as any]]);
     const result = await executeMcpTool(clients, 'mcp__server1__tool', 'not-json');
-    expect(result).toContain('invalid tool arguments');
+    expect(failedToolContent(result)).toContain('invalid tool arguments');
   });
 
   it('returns error when arguments JSON is not an object', async () => {
@@ -225,7 +226,7 @@ describe('executeMcpTool', () => {
     };
     const clients = new Map([['server1', mockClient as any]]);
     const result = await executeMcpTool(clients, 'mcp__server1__tool', '[]');
-    expect(result).toContain('arguments must be a JSON object');
+    expect(failedToolContent(result)).toContain('arguments must be a JSON object');
     expect(mockClient.callTool).not.toHaveBeenCalled();
   });
 
@@ -240,7 +241,7 @@ describe('executeMcpTool', () => {
       isToolAllowed: () => false,
     });
 
-    expect(result).toContain('not allowed');
+    expect(failedToolContent(result)).toContain('not allowed');
     expect(mockClient.callTool).not.toHaveBeenCalled();
   });
 
@@ -258,7 +259,7 @@ describe('executeMcpTool', () => {
       'mcp__server1__my_tool',
       JSON.stringify({ key: 'value' }),
     );
-    expect(result).toBe('Tool result');
+    expect(completedToolContent(result)).toBe('Tool result');
     expect(mockClient.callTool).toHaveBeenCalledWith('my_tool', { key: 'value' }, undefined);
     expect(Object.values(useRemoteStore.getState().jobs)).toHaveLength(1);
     expect(Object.values(useRemoteStore.getState().sessions)).toHaveLength(1);
@@ -271,7 +272,7 @@ describe('executeMcpTool', () => {
     };
     const clients = new Map([['server1', mockClient as any]]);
     const result = await executeMcpTool(clients, 'mcp__server1__tool', '{}');
-    expect(result).toContain('Connection lost');
+    expect(failedToolContent(result)).toContain('Connection lost');
     expect(Object.values(useRemoteStore.getState().jobs)[0]?.status).toBe('failed');
   });
 

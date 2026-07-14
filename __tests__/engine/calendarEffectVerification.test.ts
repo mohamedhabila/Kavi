@@ -5,6 +5,7 @@ import {
 } from '../../src/engine/tools/native/calendar/executor';
 import { resolveToolEffectCompletionRequirement } from '../../src/engine/toolExecution/toolEffectCompletionContract';
 import { buildToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';
+import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const mockRequestCalendarPermissionsAsync = jest.fn();
 const mockGetCalendarsAsync = jest.fn();
@@ -42,7 +43,7 @@ describe('calendar effect verification', () => {
       allDay: false,
     });
 
-    const result = JSON.parse(
+    const result = parseCompletedToolOutcome(
       await executeCalendarCreate({ title: 'Planning', startDate, endDate }, calendarRuntime),
     );
 
@@ -74,7 +75,8 @@ describe('calendar effect verification', () => {
       endDate: new Date('2026-07-11T10:00:00.000Z'),
       allDay: false,
     });
-    const resultText = await executeCalendarCreate(JSON.parse(argumentsText), calendarRuntime);
+    const outcome = await executeCalendarCreate(JSON.parse(argumentsText), calendarRuntime);
+    const resultText = failedToolContent(outcome);
 
     expect(JSON.parse(resultText)).toMatchObject({
       status: 'created_unverified',
@@ -102,7 +104,7 @@ describe('calendar effect verification', () => {
     mockUpdateEventAsync.mockResolvedValue(undefined);
     mockGetEventAsync.mockResolvedValue({ id: 'event-1', title: 'Updated planning' });
 
-    const result = JSON.parse(
+    const result = parseCompletedToolOutcome(
       await executeCalendarUpdate({ id: 'event-1', title: 'Updated planning' }, calendarRuntime),
     );
 
