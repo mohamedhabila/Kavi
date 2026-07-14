@@ -19,6 +19,7 @@ function tool(
 describe('conversation-mode tool authority', () => {
   const ordinaryTools = [
     tool('memory_recall', 'memory'),
+    tool('memory_remember', 'memory'),
     tool('memory_manage', 'memory'),
     tool('memory_forget', 'memory'),
     tool('web_search', 'web'),
@@ -26,13 +27,12 @@ describe('conversation-mode tool authority', () => {
   ];
   const orchestrationTools = [
     tool('update_goals', 'goals'),
-    tool('memory_remember', 'memory'),
     tool('sessions_spawn', 'sessions'),
     tool('sessions_history', 'sessions'),
     tool('custom_worker_control', 'sessions'),
   ];
 
-  it('keeps ordinary assistant and memory-read tools but removes provider-owned orchestration and passive memory writes from chitchat', () => {
+  it('keeps ordinary assistant and grounded memory tools but removes orchestration from chitchat', () => {
     const filtered = filterToolsForConversationMode(
       [...ordinaryTools, ...orchestrationTools],
       'chitchat',

@@ -45,7 +45,10 @@ const STABLE_TOOL_SURFACE_ORDER_VALUES = [
 export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
   DEFAULT_CORE_TOOL_ORDER,
 );
-const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['memory_recall']);
+const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'memory_recall',
+  'memory_remember',
+]);
 const STABLE_TOOL_SURFACE_ORDER = new Map(
   [...STABLE_TOOL_SURFACE_ORDER_VALUES, 'tool_catalog', 'tool_describe'].map((name, index) => [
     name,

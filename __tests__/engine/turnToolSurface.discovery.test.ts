@@ -115,6 +115,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
 
     expect(selected.map((tool) => tool.name)).toEqual([
       'memory_recall',
+      'memory_remember',
       'tool_catalog',
       'tool_describe',
     ]);
