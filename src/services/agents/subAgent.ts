@@ -103,6 +103,7 @@ const sessionContextManager = createSubAgentSessionContextManager({
 });
 const {
   sanitizePersistedAgentSnapshot,
+  hydratePersistedAgentSnapshot,
   refreshSubAgentArtifacts,
   appendTranscriptMessage,
   appendActivity,
@@ -122,6 +123,7 @@ const registryPersistenceManager = createSubAgentRegistryPersistenceManager({
   activeSubAgents,
   sessionContextManager,
   sanitizePersistedAgentSnapshot,
+  hydratePersistedAgentSnapshot,
   cloneSubAgentConfig,
   buildSubAgentSystemPrompt,
   buildInitialSubAgentMessages,

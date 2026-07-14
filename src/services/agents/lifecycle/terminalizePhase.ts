@@ -5,6 +5,7 @@ import type {
   SubAgentConfig,
   SubAgentResult,
   SubAgentSnapshot,
+  SubAgentTerminationCause,
 } from '../../../types/subAgent';
 import { cloneAttachments } from '../../../utils/messageAttachments';
 import type { PersistRegistryBestEffortOutcome, SessionContextStoreParams } from './sessionContext';
@@ -37,6 +38,7 @@ function buildTerminalResult(
   toolsUsed: string[],
   iterations: number,
   status: SubAgentResult['status'],
+  terminationCause: SubAgentTerminationCause,
   depth: number,
   artifacts?: SubAgentSnapshot['artifacts'],
   error?: string,
@@ -48,6 +50,7 @@ function buildTerminalResult(
     toolsUsed,
     iterations,
     status,
+    terminationCause,
     ...(error ? { error } : {}),
     depth: depth + 1,
     ...(artifacts?.length ? { artifacts: cloneAttachments(artifacts) } : {}),
@@ -161,6 +164,7 @@ export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapsh
 
   params.refreshArtifacts(params.subAgent, params.transcriptMessages);
   params.subAgent.status = 'completed';
+  params.subAgent.terminationCause = 'completed';
   params.subAgent.output = truncatedOutput;
   params.subAgent.completionState = params.completionState;
   params.subAgent.toolsUsed = uniqueToolsUsed;
@@ -213,6 +217,7 @@ export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapsh
     uniqueToolsUsed,
     params.iterations,
     'completed',
+    'completed',
     params.depth,
     params.subAgent.artifacts,
   );
@@ -231,6 +236,7 @@ export async function finalizeFailedSubAgentRun<TAgent extends SubAgentSnapshot>
   toolsUsed: string[];
   iterations: number;
   status: Exclude<SubAgentResult['status'], 'completed'>;
+  terminationCause: Exclude<SubAgentTerminationCause, 'completed'>;
   error?: string;
   terminalMessage: string;
   subAgent: TAgent;
@@ -262,6 +268,7 @@ export async function finalizeFailedSubAgentRun<TAgent extends SubAgentSnapshot>
 
   params.refreshArtifacts(params.subAgent, params.transcriptMessages);
   params.subAgent.status = params.status;
+  params.subAgent.terminationCause = params.terminationCause;
   params.subAgent.output = terminalOutput;
   params.subAgent.completionState = params.completionState;
   params.subAgent.toolsUsed = uniqueToolsUsed;
@@ -315,6 +322,7 @@ export async function finalizeFailedSubAgentRun<TAgent extends SubAgentSnapshot>
     uniqueToolsUsed,
     params.iterations,
     params.status,
+    params.terminationCause,
     params.depth,
     params.subAgent.artifacts,
     params.error,

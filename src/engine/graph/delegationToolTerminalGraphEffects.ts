@@ -91,6 +91,7 @@ function buildWorkerSnapshotFromTerminalRecord(
     startedAt: Date.now(),
     updatedAt: Date.now(),
     status: 'completed',
+    terminationCause: 'completed',
     completionState: 'verified_success',
     sandboxPolicy: 'inherit',
     launchState: 'terminal',

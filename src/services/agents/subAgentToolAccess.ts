@@ -1,4 +1,7 @@
-import { normalizeToolName } from '../../engine/tools/toolNameNormalization';
+import {
+  isRegisteredToolName,
+  normalizeToolName,
+} from '../../engine/tools/toolNameNormalization';
 import {
   filterRuntimeAvailableToolNames,
   getRuntimeToolAvailabilityContext,
@@ -85,8 +88,11 @@ export function resolveSubAgentToolAccess(params: {
   const runtimeToolAvailability = getRuntimeToolAvailabilityContext();
   const hasExplicitToolsConfig = hasExplicitToolConfiguration(params.tools);
   const requestedToolNames = normalizeConfiguredToolNames(params.tools);
+  const structurallyAvailableToolNames = requestedToolNames?.filter(
+    (toolName) => isDynamicToolName(toolName) || isRegisteredToolName(toolName),
+  );
   const configuredPreferredTools = filterRuntimeAvailableToolNames(
-    requestedToolNames,
+    structurallyAvailableToolNames,
     runtimeToolAvailability,
   );
   const allowedToolNames: string[] | undefined = (() => {

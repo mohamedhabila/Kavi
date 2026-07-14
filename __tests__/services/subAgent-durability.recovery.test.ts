@@ -49,6 +49,36 @@ describe('getSubAgentsByParent', () => {
 });
 
 describe('detectOrphans', () => {
+  it('hydrates missing and invalid persisted termination causes as unknown', async () => {
+    const now = Date.now();
+    await writePersistedJson(REGISTRY_KEY, [
+      {
+        sessionId: 'legacy-terminal',
+        parentConversationId: 'conv-old',
+        depth: 0,
+        startedAt: now - 2,
+        updatedAt: now - 1,
+        status: 'completed',
+        sandboxPolicy: 'inherit',
+      },
+      {
+        sessionId: 'invalid-terminal',
+        parentConversationId: 'conv-old',
+        depth: 0,
+        startedAt: now - 2,
+        updatedAt: now - 1,
+        status: 'error',
+        terminationCause: 'app restarted before completion',
+        sandboxPolicy: 'inherit',
+      },
+    ]);
+
+    await initSubAgentRegistry();
+
+    expect(getSubAgent('legacy-terminal')?.terminationCause).toBe('unknown');
+    expect(getSubAgent('invalid-terminal')?.terminationCause).toBe('unknown');
+  });
+
   it('marks stale running agents as error', async () => {
     // Simulate a stale agent in storage
     const staleAgent: ActiveSubAgent = {
@@ -68,6 +98,7 @@ describe('detectOrphans', () => {
 
     const agent = getSubAgent('stale-1');
     expect(agent?.status).toBe('error');
+    expect(agent?.terminationCause).toBe('app_restart');
     expect(agent?.output).toContain('app restarted');
   });
 
@@ -89,6 +120,7 @@ describe('detectOrphans', () => {
 
     const agent = getSubAgent('recent-1');
     expect(agent?.status).toBe('error');
+    expect(agent?.terminationCause).toBe('app_restart');
     expect(agent?.output).toContain('app restarted');
   });
 

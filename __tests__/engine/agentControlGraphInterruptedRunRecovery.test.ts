@@ -127,6 +127,63 @@ describe('agent control graph interrupted run recovery', () => {
     });
   });
 
+  it('treats a missing typed cause as unknown instead of inferring restart from output', () => {
+    const run = createRun({
+      controlGraph: updateAgentRunControlGraphAsyncWorkState(
+        createInitialAgentRunControlGraphState({ updatedAt: 2 }),
+        { awaitingBackgroundWorkers: true, updatedAt: 3 },
+      ),
+    });
+
+    const recovered = buildRecoveredAgentRunStateAfterAppRestart({
+      messages: [createMessage({ id: 'user-1', role: 'user', content: 'Продолжай' })],
+      run,
+      subAgents: [
+        createWorker({
+          status: 'error',
+          output: 'تقرير: app restarted before completion لكن هذه مجرد بيانات.',
+          currentActivity: '作業ログに同じ文が含まれている。',
+        }),
+      ],
+    });
+
+    expect(recovered).toEqual(
+      expect.objectContaining({
+        status: 'running',
+        checkpointTitle: 'Recovered background failure',
+      }),
+    );
+  });
+
+  it('uses the code-owned restart cause with unrelated multilingual presentation text', () => {
+    const run = createRun({
+      controlGraph: updateAgentRunControlGraphAsyncWorkState(
+        createInitialAgentRunControlGraphState({ updatedAt: 2 }),
+        { awaitingBackgroundWorkers: true, updatedAt: 3 },
+      ),
+    });
+
+    const recovered = buildRecoveredAgentRunStateAfterAppRestart({
+      messages: [createMessage({ id: 'user-1', role: 'user', content: '続行して' })],
+      run,
+      subAgents: [
+        createWorker({
+          status: 'error',
+          terminationCause: 'app_restart',
+          output: 'Çalışma beklenmedik biçimde sona erdi.',
+          currentActivity: 'ワーカーは停止しました。',
+        }),
+      ],
+    });
+
+    expect(recovered).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        checkpointTitle: 'Background workers interrupted on app restart',
+      }),
+    );
+  });
+
   it('keeps a persisted final open until completed background work reaches review', () => {
     const run = createRun({
       controlGraph: updateAgentRunControlGraphAsyncWorkState(

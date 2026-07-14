@@ -36,6 +36,7 @@ describe('delegation completion evidence', () => {
       serializeTerminalSessionResult({
         sessionId: 'worker-1',
         status: 'completed',
+        terminationCause: 'completed',
         completionState: 'verified_success',
         output: 'Verified result',
         toolsUsed: ['read_file'],
@@ -45,6 +46,7 @@ describe('delegation completion evidence', () => {
     ).toEqual(
       expect.objectContaining({
         status: 'completed',
+        terminationCause: 'completed',
         completionState: 'verified_success',
       }),
     );

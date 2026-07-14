@@ -1,5 +1,9 @@
 import type { Message } from '../../../types/message';
-import type { SubAgentResult, SubAgentSnapshot } from '../../../types/subAgent';
+import type {
+  SubAgentResult,
+  SubAgentSnapshot,
+  SubAgentTerminationCause,
+} from '../../../types/subAgent';
 import { generateId } from '../../../utils/id';
 import { createSubAgentExecutionSession } from '../subAgentExecutionSession';
 import type { SubAgentExecutionRuntimeState } from '../subAgentOrchestratorCallbacks';
@@ -119,6 +123,10 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
     toolResultPreviews: [],
   };
   let terminalCompletionState: SubAgentResult['completionState'];
+  let failureCause: Extract<
+    SubAgentTerminationCause,
+    'tool_failure' | 'internal_failure' | 'unknown'
+  > = workerToolSelectionRejectedMessage ? 'tool_failure' : 'unknown';
   const requireStructuredExecutionEvidence = Boolean(params.config.workstreamId?.trim());
   const systemPrompt = buildSubAgentSystemPrompt(params.config, depth);
   const { transcriptToolCalls, checkpointSessionContext, persistSessionContextNow, trackToolCall } =
@@ -266,6 +274,7 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       },
     });
 
+    failureCause = 'unknown';
     terminalCompletionState = await resolveWorkerOutput('completed');
     const pendingVerifiedProcedureObservation =
       orchestratorResult.terminalDisposition === 'final_candidate' &&
@@ -282,6 +291,7 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
         })
       : undefined;
 
+    failureCause = 'internal_failure';
     return finalizeCompletedSubAgentRun({
       sessionId,
       depth,
@@ -334,9 +344,18 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
           : `Worker failed: ${errMsg}`;
     const errorMessage =
       status === 'cancelled' ? undefined : isTimeout || isIterationLimit ? terminalMessage : errMsg;
+    const terminationCause: Exclude<SubAgentTerminationCause, 'completed'> = isCancelled
+      ? 'cancelled'
+      : isTimeout
+        ? 'timeout'
+        : isIterationLimit
+          ? 'iteration_limit'
+          : failureCause;
 
+    failureCause = 'unknown';
     terminalCompletionState = await resolveWorkerOutput(status);
 
+    failureCause = 'internal_failure';
     return finalizeFailedSubAgentRun({
       sessionId,
       depth,
@@ -350,6 +369,7 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       toolsUsed: runtimeState.toolsUsed,
       iterations: runtimeState.iterations,
       status,
+      terminationCause,
       error: errorMessage,
       terminalMessage,
       subAgent,

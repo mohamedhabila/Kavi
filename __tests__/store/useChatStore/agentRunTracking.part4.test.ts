@@ -6,7 +6,7 @@ import { useChatStore } from '../../helpers/chatStoreHarness';
 
 describe('useChatStore', () => {
   describe('agent run tracking part 4', () => {
-    it('should keep failed background-worker runs active for background review on app restart', () => {
+    it('keeps typed provider failures in review even when arbitrary output contains restart prose', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-9',
@@ -41,8 +41,9 @@ describe('useChatStore', () => {
             startedAt: 1700000010200,
             updatedAt: 1700000010900,
             status: 'error',
+            terminationCause: 'provider_failure',
             sandboxPolicy: 'inherit',
-            output: 'Worker failed while running the verification command.',
+            output: 'تعذّر الاتصال. app restarted before completion. Это только текст вывода.',
           },
         ],
         {
@@ -100,9 +101,10 @@ describe('useChatStore', () => {
             startedAt: 1700000012200,
             updatedAt: 1700000012900,
             status: 'error',
+            terminationCause: 'app_restart',
             sandboxPolicy: 'inherit',
-            output: 'Worker was interrupted because the app restarted before completion.',
-            currentActivity: 'Worker was interrupted because the app restarted before completion.',
+            output: 'توقف العامل قبل اكتمال المهمة.',
+            currentActivity: 'プロセスは終了しました。',
           },
         ],
         {

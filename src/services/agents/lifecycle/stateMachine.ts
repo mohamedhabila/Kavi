@@ -2,6 +2,7 @@ import type { Conversation } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import type { SubAgentSnapshot, SubAgentStatus } from '../../../types/subAgent';
 import { isExactDurableScopeId } from '../../../utils/durableScopeIdentity';
+import { decodeSubAgentTerminationCause } from '../../../utils/subAgentTermination';
 
 export function isTerminalSubAgentStatus(status: SubAgentStatus): boolean {
   return status !== 'running';
@@ -225,6 +226,7 @@ function mergeTerminalSnapshot(
     parentSessionId: terminalSnapshot.parentSessionId ?? fallbackSnapshot.parentSessionId,
     agentRunId: terminalSnapshot.agentRunId ?? fallbackSnapshot.agentRunId,
     name: terminalSnapshot.name ?? fallbackSnapshot.name,
+    terminationCause: decodeSubAgentTerminationCause(terminalSnapshot.terminationCause),
     output: terminalSnapshot.output ?? fallbackSnapshot.output,
     completionState: terminalSnapshot.completionState ?? fallbackSnapshot.completionState,
     outcomeReconciliation:
@@ -270,6 +272,7 @@ export function resolveDisplayedSubAgentSnapshot(
     parentSessionId: preferredSnapshot.parentSessionId ?? fallbackSnapshot.parentSessionId,
     agentRunId: preferredSnapshot.agentRunId ?? fallbackSnapshot.agentRunId,
     name: preferredSnapshot.name ?? fallbackSnapshot.name,
+    terminationCause: decodeSubAgentTerminationCause(preferredSnapshot.terminationCause),
     output: preferredSnapshot.output ?? fallbackSnapshot.output,
     completionState: preferredSnapshot.completionState ?? fallbackSnapshot.completionState,
     outcomeReconciliation:

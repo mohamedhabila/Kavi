@@ -64,6 +64,7 @@ export async function prepareSubAgentSession<
       toolsUsed: [],
       iterations: 0,
       status: 'error',
+      terminationCause: 'preflight_rejected',
       error,
       depth,
     };
@@ -77,6 +78,7 @@ export async function prepareSubAgentSession<
       toolsUsed: [],
       iterations: 0,
       status: 'error',
+      terminationCause: 'preflight_rejected',
       error,
       depth,
     };
@@ -89,6 +91,7 @@ export async function prepareSubAgentSession<
       toolsUsed: [],
       iterations: 0,
       status: 'error',
+      terminationCause: 'preflight_rejected',
       error: `Max spawn depth ${params.maxSpawnDepth} exceeded`,
       depth,
     };
@@ -107,6 +110,7 @@ export async function prepareSubAgentSession<
       toolsUsed: [],
       iterations: 0,
       status: 'error',
+      terminationCause: 'preflight_rejected',
       error: spawnPreflight.error,
       depth,
     };
@@ -119,6 +123,7 @@ export async function prepareSubAgentSession<
       toolsUsed: [],
       iterations: 0,
       status: 'error',
+      terminationCause: 'preflight_rejected',
       error: 'Sub-agent prompt must be a non-empty string.',
       depth,
     };

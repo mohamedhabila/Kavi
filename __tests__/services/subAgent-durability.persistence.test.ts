@@ -25,7 +25,12 @@ describe('persistence', () => {
     await spawnSubAgent({ parentConversationId: 'conv-1', prompt: 'test' }, mockProvider);
 
     await flushPendingStorageWrites(REGISTRY_KEY);
-    expect(readPersistedJson(REGISTRY_KEY)).toEqual(expect.any(Array));
+    expect(readPersistedJson<Array<Record<string, unknown>>>(REGISTRY_KEY)).toEqual([
+      expect.objectContaining({
+        status: 'completed',
+        terminationCause: 'completed',
+      }),
+    ]);
   });
 
   it('persists resumable bounded session context snapshots for completed workers', async () => {

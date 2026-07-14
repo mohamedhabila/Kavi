@@ -65,6 +65,7 @@ export function serializeTerminalSessionResult(
   return {
     sessionId: result.sessionId,
     status: result.status,
+    terminationCause: result.terminationCause,
     completionState: result.completionState,
     ...outputPayload,
     ...(includeGuidance && outputPayload.hasOutput === true

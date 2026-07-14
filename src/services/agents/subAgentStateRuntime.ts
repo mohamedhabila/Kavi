@@ -8,6 +8,7 @@ import {
 import { OUTPUT_TRUNCATION } from './lifecycle/runConfig';
 import { normalizePreviewText } from './lifecycle/runText';
 import { truncateTranscriptText } from './lifecycle/sessionContextMessages';
+import { hydrateSubAgentTerminationCause } from '../../utils/subAgentTermination';
 
 type ProgressChanges<TAgent extends SubAgentSnapshot> = Partial<
   Pick<
@@ -90,6 +91,10 @@ export function createSubAgentStateRuntime<TAgent extends SubAgentSnapshot>(para
         : {}),
       ...(sanitizedArtifacts ? { artifacts: sanitizedArtifacts } : {}),
     };
+  }
+
+  function hydratePersistedAgentSnapshot(agent: TAgent): TAgent {
+    return hydrateSubAgentTerminationCause(params.cloneAgent(agent));
   }
 
   function refreshSubAgentArtifacts(agent: TAgent, messages: Message[]): void {
@@ -212,6 +217,7 @@ export function createSubAgentStateRuntime<TAgent extends SubAgentSnapshot>(para
 
   return {
     sanitizePersistedAgentSnapshot,
+    hydratePersistedAgentSnapshot,
     refreshSubAgentArtifacts,
     appendTranscriptMessage,
     appendActivity,

@@ -7,14 +7,20 @@ import {
   installBuiltinExecutorRuntimeReset,
 } from '../helpers/builtinExecutorRuntimeHarness';
 
+function parseCompletedOutcome(outcome: { status: string; content: string }) {
+  expect(outcome.status).toBe('completed');
+  return JSON.parse(outcome.content);
+}
+
 describe('builtin executor session control', () => {
   installBuiltinExecutorRuntimeReset();
 
   describe('executeSessionHistory', () => {
     it('returns error for non-existent session', async () => {
       const result = await executeSessionHistory({ sessionId: 'none' });
-      expect(result).toContain('Error');
-      expect(result).toContain('session not found');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('Error');
+      expect(result.content).toContain('session not found');
     });
 
     it('returns history for existing session', async () => {
@@ -27,7 +33,7 @@ describe('builtin executor session control', () => {
       });
 
       const result = await executeSessionHistory({ sessionId: 'sub-1' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedOutcome(result);
       expect(parsed.sessionId).toBe('sub-1');
       expect(parsed.status).toBe('completed');
       expect(parsed.messages).toHaveLength(1);
@@ -39,7 +45,8 @@ describe('builtin executor session control', () => {
   describe('executeSessionStatus', () => {
     it('returns error for non-existent session', async () => {
       const result = await executeSessionStatus({ sessionId: 'none' });
-      expect(result).toContain('Error');
+      expect(result.status).toBe('failed');
+      expect(result.content).toContain('Error');
     });
 
     it('returns status for existing session', async () => {
@@ -54,7 +61,7 @@ describe('builtin executor session control', () => {
       });
 
       const result = await executeSessionStatus({ sessionId: 'sub-1' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedOutcome(result);
       expect(parsed.sessionId).toBe('sub-1');
       expect(parsed.status).toBe('running');
       expect(parsed.hasOutput).toBe(true);
@@ -86,7 +93,7 @@ describe('builtin executor session control', () => {
       });
 
       const result = await executeSessionOutput({ sessionId: 'sub-1' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedOutcome(result);
 
       expect(parsed.status).toBe('completed');
       expect(parsed.output).toContain('completion_state: verified_success');
@@ -108,7 +115,7 @@ describe('builtin executor session control', () => {
       });
 
       const result = await executeSessionCancel({ sessionId: 'sub-1', reason: 'Wrong approach' });
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedOutcome(result);
 
       expect(cancelSubAgent).toHaveBeenCalledWith('sub-1', 'Wrong approach');
       expect(parsed.status).toBe('cancel_requested');
@@ -119,7 +126,7 @@ describe('builtin executor session control', () => {
   describe('executeSessionYield', () => {
     it('returns a terminal finalize signal when there are no running sub-agents', async () => {
       const result = await executeSessionYield({}, 'conv-1');
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedOutcome(result);
 
       expect(parsed.status).toBe('completed');
       expect(parsed.finalizeSupervisor).toBe(true);
@@ -141,7 +148,7 @@ describe('builtin executor session control', () => {
         { message: 'Waiting for background worker' },
         'conv-1',
       );
-      const parsed = JSON.parse(result);
+      const parsed = parseCompletedOutcome(result);
 
       expect(parsed.status).toBe('checkpointed');
       expect(parsed.autoResumeSupported).toBe(false);

@@ -1,6 +1,10 @@
 import type { Conversation } from '../../../types/conversation';
 import type { SubAgentActivityEntry, SubAgentSnapshot } from '../../../types/subAgent';
 import { cloneAttachments } from '../../../utils/messageAttachments';
+import {
+  decodeSubAgentTerminationCause,
+  hydrateSubAgentTerminationCause,
+} from '../../../utils/subAgentTermination';
 import { normalizeFinalizationOutputText } from '../finalizationText';
 import { cloneSubAgentSnapshot, isTerminalSubAgentStatus } from './stateMachine';
 
@@ -18,7 +22,10 @@ export function buildRecoveredTerminalSnapshotMap(
 
       const existing = recoveredSnapshots.get(snapshot.sessionId);
       if (!existing || snapshot.updatedAt >= existing.updatedAt) {
-        recoveredSnapshots.set(snapshot.sessionId, cloneSubAgentSnapshot(snapshot));
+        recoveredSnapshots.set(
+          snapshot.sessionId,
+          hydrateSubAgentTerminationCause(cloneSubAgentSnapshot(snapshot)),
+        );
       }
     }
   }
@@ -39,6 +46,7 @@ export function applyRecoveredTerminalSnapshot<TAgent extends SubAgentSnapshot>(
   agent.updatedAt = Math.max(agent.updatedAt, snapshot.updatedAt);
   agent.deadlineAt = snapshot.deadlineAt;
   agent.status = snapshot.status;
+  agent.terminationCause = decodeSubAgentTerminationCause(snapshot.terminationCause);
   agent.sandboxPolicy = snapshot.sandboxPolicy;
   agent.launchState = snapshot.launchState ?? agent.launchState;
   agent.output = snapshot.output ?? agent.output;
@@ -79,12 +87,11 @@ export function interruptRecoveredRunningAgent<TAgent extends SubAgentSnapshot>(
   const existingOutput = normalizeFinalizationOutputText(agent.output);
 
   agent.status = 'error';
+  agent.terminationCause = 'app_restart';
   agent.launchState = 'terminal';
-  agent.output = existingOutput?.includes(interruptionMessage)
-    ? existingOutput
-    : existingOutput
-      ? `${existingOutput}\n\n[${interruptionMessage}]`
-      : interruptionMessage;
+  agent.output = existingOutput
+    ? `${existingOutput}\n\n[${interruptionMessage}]`
+    : interruptionMessage;
   agent.modelResponsePendingSince = undefined;
   agent.currentActivity = interruptionMessage;
   agent.activeToolName = undefined;

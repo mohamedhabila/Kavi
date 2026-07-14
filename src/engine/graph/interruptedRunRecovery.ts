@@ -10,13 +10,9 @@ import {
   getAgentRunPendingAsyncOperations,
   isAgentRunAwaitingBackgroundWorkers,
 } from '../../services/agents/agentRunAsyncState';
-import {
-  hasBlockedBlockingGoals,
-  hasResumableBlockingGoals,
-} from '../goals/types';
+import { hasBlockedBlockingGoals, hasResumableBlockingGoals } from '../goals/types';
 import { isAgentControlGraphAtPersistedFinalDeliveryBoundary } from './persistedFinalDelivery';
-
-const APP_RESTART_INTERRUPTION_MARKER = 'app restarted before completion';
+import { decodeSubAgentTerminationCause } from '../../utils/subAgentTermination';
 
 export type RecoveredAgentRunState =
   | {
@@ -30,14 +26,13 @@ export type RecoveredAgentRunState =
   | undefined;
 
 function isAppRestartInterruptedWorker(
-  worker: Pick<SubAgentSnapshot, 'status' | 'output' | 'currentActivity'>,
+  worker: Pick<SubAgentSnapshot, 'status' | 'terminationCause'>,
 ): boolean {
   if (worker.status !== 'error' && worker.status !== 'timeout' && worker.status !== 'cancelled') {
     return false;
   }
 
-  const detail = `${worker.output ?? ''}\n${worker.currentActivity ?? ''}`.toLowerCase();
-  return detail.includes(APP_RESTART_INTERRUPTION_MARKER);
+  return decodeSubAgentTerminationCause(worker.terminationCause) === 'app_restart';
 }
 
 export function buildRecoveredAgentRunStateAfterAppRestart(params: {

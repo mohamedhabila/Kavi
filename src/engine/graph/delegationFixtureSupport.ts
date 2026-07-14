@@ -57,6 +57,7 @@ function buildDelegationWorkerSnapshot(
     startedAt: 10,
     updatedAt: 20,
     status: 'completed',
+    terminationCause: 'completed',
     completionState: 'verified_success',
     sandboxPolicy: 'inherit',
     launchState: 'terminal',

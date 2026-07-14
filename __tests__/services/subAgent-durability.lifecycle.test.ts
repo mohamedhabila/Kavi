@@ -73,6 +73,7 @@ describe('spawnSubAgent — depth guard', () => {
     );
 
     expect(result.status).toBe('error');
+    expect(result.terminationCause).toBe('preflight_rejected');
     expect(result.output).toContain('maximum sub-agent spawn depth');
     expect(result.sessionId).toBe('');
   });
@@ -95,6 +96,7 @@ describe('spawnSubAgent — depth guard', () => {
     );
 
     expect(result.status).toBe('completed');
+    expect(result.terminationCause).toBe('completed');
     expect(result.depth).toBe(1);
     expect(result.output).toBe('hello');
   });
@@ -210,12 +212,27 @@ describe('announce system', () => {
     unsub();
 
     expect(result.status).toBe('timeout');
+    expect(result.terminationCause).toBe('timeout');
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ event: 'started' }),
         expect.objectContaining({ event: 'timeout', status: 'timeout' }),
       ]),
     );
+  });
+
+  it('uses unknown for untyped orchestrator failures instead of classifying prose', async () => {
+    (runOrchestrator as jest.Mock).mockRejectedValue(
+      new Error('供給者と道具と内部失敗と書かれた任意のテキスト'),
+    );
+
+    const result = await spawnSubAgent(
+      { parentConversationId: 'conv-1', prompt: 'Проверь задачу' },
+      mockProvider,
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.terminationCause).toBe('unknown');
   });
 
   it('unsubscribes correctly', async () => {
@@ -368,6 +385,25 @@ describe('output truncation', () => {
 });
 
 describe('sub-agent toolFilter pass-through', () => {
+  it('records a code-owned tool-surface rejection without inspecting error text', async () => {
+    const result = await spawnSubAgent(
+      {
+        parentConversationId: 'conv-1',
+        prompt: 'افحص المشروع',
+        tools: ['tool_that_is_not_installed'],
+      },
+      mockProvider,
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        terminationCause: 'tool_failure',
+      }),
+    );
+    expect(runOrchestrator).not.toHaveBeenCalled();
+  });
+
   it('uses config.tools to build the worker tool surface passed to runOrchestrator', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();

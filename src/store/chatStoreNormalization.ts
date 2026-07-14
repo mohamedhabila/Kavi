@@ -7,9 +7,20 @@ import { sanitizeConversationForPersistence } from './chatPersistence';
 import { capMessages } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
 import { isValidModelProjectionOwner } from '../utils/modelProjectionOwner';
+import { hydrateSubAgentTerminationCause } from '../utils/subAgentTermination';
 
 function normalizePersistedMessages(messages: Message[] | undefined): Message[] {
-  return normalizeLegacyAssistantMessages(messages ?? []);
+  return normalizeLegacyAssistantMessages(messages ?? []).map((message) =>
+    message.subAgentEvent
+      ? {
+          ...message,
+          subAgentEvent: {
+            ...message.subAgentEvent,
+            snapshot: hydrateSubAgentTerminationCause(message.subAgentEvent.snapshot),
+          },
+        }
+      : message,
+  );
 }
 
 function normalizePersistedConversation(conversation: Conversation): Conversation {

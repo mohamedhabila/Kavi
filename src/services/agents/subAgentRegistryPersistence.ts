@@ -31,6 +31,7 @@ type RegistryPersistenceManagerParams<TAgent extends RegistryAgentSnapshot> = {
     | 'reset'
   >;
   sanitizePersistedAgentSnapshot: (agent: TAgent) => TAgent;
+  hydratePersistedAgentSnapshot: (agent: TAgent) => TAgent;
   cloneSubAgentConfig: (config: SubAgentConfig) => SubAgentConfig;
   buildSubAgentSystemPrompt: (
     config: Pick<SubAgentConfig, 'systemPrompt' | 'memoryBundle' | 'agentRunId' | 'workstreamId'>,
@@ -116,11 +117,16 @@ export function createSubAgentRegistryPersistenceManager<TAgent extends Registry
 
     if (rawRegistry) {
       try {
-        const entries: TAgent[] = JSON.parse(rawRegistry);
-        for (const entry of entries) {
-          if (!entry?.sessionId) {
+        const entries: unknown = JSON.parse(rawRegistry);
+        if (!Array.isArray(entries)) {
+          throw new Error('Malformed sub-agent registry');
+        }
+        for (const candidate of entries) {
+          if (!candidate || typeof candidate !== 'object') {
             continue;
           }
+          const entry = params.hydratePersistedAgentSnapshot(candidate as TAgent);
+          if (!entry.sessionId) continue;
 
           params.activeSubAgents.set(entry.sessionId, entry);
           loadedSessionIds.add(entry.sessionId);

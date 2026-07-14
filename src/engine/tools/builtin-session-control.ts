@@ -18,6 +18,7 @@ export async function executeSessionCancel(args: {
     return completedToolOutcome(
       JSON.stringify({
         status: agent.status,
+        terminationCause: agent.terminationCause,
         sessionId: args.sessionId,
         message: 'Session is already in a terminal state.',
         outputPreview: agent.output?.slice(0, 1000),
@@ -30,6 +31,7 @@ export async function executeSessionCancel(args: {
     JSON.stringify({
       status: 'cancel_requested',
       sessionId: args.sessionId,
+      terminationCause: cancelled?.terminationCause,
       currentActivity: cancelled?.currentActivity,
       message:
         'Cancellation requested. Wait for the worker to reach a terminal state with sessions_wait, then respawn with corrected instructions if needed.',

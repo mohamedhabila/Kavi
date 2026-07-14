@@ -119,6 +119,7 @@ describe('terminal worker outcome ordering', () => {
     await finalizeCompletedSubAgentRun(commonParams(agent, order));
 
     expect(order).toEqual(['persist:pending', 'reconcile', 'persist:completed', 'signal-terminal']);
+    expect(agent.terminationCause).toBe('completed');
     expect(mockReconcile).toHaveBeenCalledWith(
       expect.objectContaining({
         agent,
@@ -146,12 +147,14 @@ describe('terminal worker outcome ordering', () => {
     await finalizeFailedSubAgentRun({
       ...commonParams(agent, order),
       status: 'error',
+      terminationCause: 'internal_failure',
       error: 'storage unavailable',
       completionState: 'blocked',
     });
 
     expect(order).toEqual(['persist:pending', 'reconcile', 'persist:completed', 'signal-terminal']);
     expect(agent.status).toBe('error');
+    expect(agent.terminationCause).toBe('internal_failure');
   });
 
   it('commits verified procedure evidence only after the reconciled terminal state is durable', async () => {

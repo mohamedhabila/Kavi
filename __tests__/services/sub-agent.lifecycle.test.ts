@@ -161,6 +161,7 @@ describe('Sub-Agent Service', () => {
 
         await expect(started.resultPromise).resolves.toMatchObject({
           status: 'error',
+          terminationCause: 'internal_failure',
           error: expect.stringContaining('stalled before bootstrapping'),
         });
         expect(getSubAgent(started.sessionId)?.launchState).toBe('terminal');
@@ -184,11 +185,13 @@ describe('Sub-Agent Service', () => {
 
       const cancelled = cancelSubAgent(launched.sessionId, 'Stop before bootstrap');
       expect(cancelled?.status).toBe('cancelled');
+      expect(cancelled?.terminationCause).toBe('cancelled');
 
       await jest.runOnlyPendingTimersAsync();
 
       expect(runOrchestrator).not.toHaveBeenCalled();
       expect(getSubAgent(launched.sessionId)?.status).toBe('cancelled');
+      expect(getSubAgent(launched.sessionId)?.terminationCause).toBe('cancelled');
     });
   });
 

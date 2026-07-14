@@ -8,14 +8,8 @@ export type SubAgentAnnounceEvent =
   | 'cancelled'
   | 'progress';
 
-export type SubAgentTerminalEvent = Exclude<
-  SubAgentAnnounceEvent,
-  'started' | 'progress'
->;
-type SubAgentNonTerminalEvent = Extract<
-  SubAgentAnnounceEvent,
-  'started' | 'progress'
->;
+export type SubAgentTerminalEvent = Exclude<SubAgentAnnounceEvent, 'started' | 'progress'>;
+type SubAgentNonTerminalEvent = Extract<SubAgentAnnounceEvent, 'started' | 'progress'>;
 
 export type ScheduledSubAgentLaunchControl = {
   handle: ReturnType<typeof setTimeout>;
@@ -185,6 +179,7 @@ export function createSubAgentRuntimeSignalsManager<TAgent extends SubAgentSnaps
     clearQueuedLaunchWatch(sessionId);
 
     agent.status = 'error';
+    agent.terminationCause = 'internal_failure';
     agent.launchState = 'terminal';
     agent.output = message;
     agent.currentActivity = params.normalizePreviewText(message, params.maxToolResultPreviewChars);

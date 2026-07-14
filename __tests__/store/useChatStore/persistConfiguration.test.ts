@@ -224,6 +224,68 @@ describe('useChatStore', () => {
       expect(merged.activeConversationId).toBe('conv-merge');
     });
 
+    it('hydrates missing and invalid persisted worker termination causes as unknown', () => {
+      const persistOptions = (useChatStore as any).persist.getOptions();
+      const workerSnapshot = {
+        parentConversationId: 'conv-worker-causes',
+        depth: 0,
+        startedAt: 1,
+        updatedAt: 2,
+        status: 'error',
+        sandboxPolicy: 'inherit',
+      };
+      const merged = persistOptions.merge(
+        {
+          conversations: [
+            {
+              id: 'conv-worker-causes',
+              title: 'Worker causes',
+              messages: [
+                {
+                  id: 'worker-legacy',
+                  role: 'assistant',
+                  content: 'نص محفوظ',
+                  timestamp: 2,
+                  subAgentEvent: {
+                    type: 'sub-agent',
+                    event: 'error',
+                    snapshot: { ...workerSnapshot, sessionId: 'worker-legacy' },
+                  },
+                },
+                {
+                  id: 'worker-invalid',
+                  role: 'assistant',
+                  content: '保存されたテキスト',
+                  timestamp: 3,
+                  subAgentEvent: {
+                    type: 'sub-agent',
+                    event: 'error',
+                    snapshot: {
+                      ...workerSnapshot,
+                      sessionId: 'worker-invalid',
+                      terminationCause: 'app restarted before completion',
+                    },
+                  },
+                },
+              ],
+              createdAt: 1,
+              updatedAt: 3,
+              providerId: 'p1',
+              systemPrompt: 'sys',
+            },
+          ],
+          activeConversationId: 'conv-worker-causes',
+        },
+        useChatStore.getState(),
+      );
+
+      expect(
+        merged.conversations[0].messages.map(
+          (message: any) => message.subAgentEvent.snapshot.terminationCause,
+        ),
+      ).toEqual(['unknown', 'unknown']);
+    });
+
     it('strips legacy persisted async run mirrors without reviving graph async work', () => {
       const persistOptions = (useChatStore as any).persist.getOptions();
       const pendingOperation = {

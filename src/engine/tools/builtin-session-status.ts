@@ -47,6 +47,7 @@ export async function executeSessionStatus(args: {
     JSON.stringify({
       sessionId: args.sessionId,
       status: agent.status,
+      terminationCause: agent.terminationCause,
       startedAt: agent.startedAt,
       updatedAt: agent.updatedAt,
       deadlineAt: statusPayload.deadlineAt,

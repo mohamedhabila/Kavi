@@ -115,6 +115,7 @@ export async function executeSessionList(): Promise<ToolRuntimeOutcome> {
         name: agent.name,
         parentConversationId: agent.parentConversationId,
         status: agent.status,
+        terminationCause: agent.terminationCause,
         depth: agent.depth,
         startedAt: agent.startedAt,
         launchState: agent.launchState,
@@ -163,6 +164,7 @@ export async function executeSessionHistory(args: {
   const history = {
     sessionId: args.sessionId,
     status: agent.status,
+    terminationCause: agent.terminationCause,
     startedAt: agent.startedAt,
     currentActivity: agent.currentActivity,
     historySource:
@@ -199,6 +201,7 @@ export async function executeSessionOutput(args: {
     JSON.stringify({
       sessionId: args.sessionId,
       status: agent.status,
+      terminationCause: agent.terminationCause,
       hasOutput: output.length > 0,
       output,
       ...(agent.lastToolResultPreview

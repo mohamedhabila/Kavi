@@ -8,6 +8,7 @@ import {
   interruptRecoveredRunningAgent,
 } from './lifecycleRecovery';
 import type { SubAgentLifecycleManagerParams } from './lifecycleManagerTypes';
+import { decodeSubAgentTerminationCause } from '../../../utils/subAgentTermination';
 
 export function buildResultFromSnapshot(agent: SubAgentSnapshot): SubAgentResult {
   const output = agent.output || '';
@@ -19,6 +20,7 @@ export function buildResultFromSnapshot(agent: SubAgentSnapshot): SubAgentResult
     toolsUsed: agent.toolsUsed ? [...new Set(agent.toolsUsed)] : [],
     iterations: agent.iterations || 0,
     status,
+    terminationCause: decodeSubAgentTerminationCause(agent.terminationCause),
     ...(status === 'error' && output ? { error: output } : {}),
     depth: agent.depth + 1,
     ...(agent.artifacts?.length ? { artifacts: cloneAttachments(agent.artifacts) } : {}),
@@ -136,6 +138,7 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
     const existingOutput = normalizeFinalizationOutputText(agent.output);
 
     agent.status = 'error';
+    agent.terminationCause = 'internal_failure';
     agent.launchState = 'terminal';
     agent.output = existingOutput ? `${existingOutput}\n\n[${terminalMessage}]` : terminalMessage;
     agent.currentActivity = params.normalizePreviewText(
@@ -244,6 +247,7 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
     } else {
       params.clearQueuedLaunchWatch(sessionId);
       agent.status = 'cancelled';
+      agent.terminationCause = 'cancelled';
       agent.launchState = 'terminal';
       agent.output = normalizedReason;
       agent.modelResponsePendingSince = undefined;

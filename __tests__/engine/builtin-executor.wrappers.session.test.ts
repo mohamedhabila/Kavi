@@ -17,6 +17,11 @@ import {
   mockWaitForSubAgentCompletion,
 } from '../helpers/builtinExecutorWrappersHarness';
 
+function parseCompletedOutcome(outcome: { status: string; content: string }) {
+  expect(outcome.status).toBe('completed');
+  return JSON.parse(outcome.content);
+}
+
 describe('builtin-executor wrapper coverage', () => {
   installBuiltinExecutorWrapperReset();
 
@@ -33,7 +38,7 @@ describe('builtin-executor wrapper coverage', () => {
       ],
     });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedOutcome(
       await executeSessionHistory({ sessionId: 'session-1', maxMessages: 1 }),
     );
     expect(parsed.status).toBe('completed');
@@ -46,9 +51,10 @@ describe('builtin-executor wrapper coverage', () => {
 
   it('returns a missing-session error for session history', async () => {
     mockGetSubAgent.mockReturnValue(undefined);
-    await expect(executeSessionHistory({ sessionId: 'missing' })).resolves.toBe(
-      'Error: session not found: missing',
-    );
+    await expect(executeSessionHistory({ sessionId: 'missing' })).resolves.toEqual({
+      status: 'failed',
+      content: 'Error: session not found: missing',
+    });
   });
 
   it('returns full terminal output without transcript history for sessions_output', async () => {
@@ -61,7 +67,9 @@ describe('builtin-executor wrapper coverage', () => {
       activityLog: [{ kind: 'tool', text: 'Checked files', timestamp: 1 }],
     });
 
-    const parsed = JSON.parse(await executeSessionOutput({ sessionId: 'session-1' }));
+    const parsed = parseCompletedOutcome(
+      await executeSessionOutput({ sessionId: 'session-1' }),
+    );
     expect(parsed).toEqual({
       sessionId: 'session-1',
       status: 'completed',
@@ -83,7 +91,9 @@ describe('builtin-executor wrapper coverage', () => {
       activityLog: [],
     });
 
-    const parsed = JSON.parse(await executeSessionOutput({ sessionId: 'session-2' }));
+    const parsed = parseCompletedOutcome(
+      await executeSessionOutput({ sessionId: 'session-2' }),
+    );
     expect(parsed).toEqual({
       sessionId: 'session-2',
       status: 'running',
@@ -103,7 +113,7 @@ describe('builtin-executor wrapper coverage', () => {
       activityLog: [],
     });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedOutcome(
       await executeSessionSurfaceOutput({
         sessionId: 'session-surface',
         prefix: 'Preface:\n',
@@ -134,7 +144,7 @@ describe('builtin-executor wrapper coverage', () => {
       activityLog: [],
     });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedOutcome(
       await executeSessionSurfaceOutput({ sessionId: 'session-running-surface' }),
     );
 
@@ -181,7 +191,7 @@ describe('builtin-executor wrapper coverage', () => {
         iterations: 1,
       });
 
-    const running = JSON.parse(await executeSessionStatus({ sessionId: 'run-1' }));
+    const running = parseCompletedOutcome(await executeSessionStatus({ sessionId: 'run-1' }));
     expect(running.status).toBe('running');
     expect(running.hasNewActivity).toBe(true);
     expect(running.canCancel).toBe(true);
@@ -190,7 +200,7 @@ describe('builtin-executor wrapper coverage', () => {
     expect(mockPruneStaleCommandPolls).toHaveBeenCalled();
     expect(mockRecordCommandPoll).toHaveBeenCalled();
 
-    const terminal = JSON.parse(await executeSessionStatus({ sessionId: 'done-1' }));
+    const terminal = parseCompletedOutcome(await executeSessionStatus({ sessionId: 'done-1' }));
     expect(terminal.status).toBe('completed');
     expect(terminal.recommendedWaitMs).toBeUndefined();
     expect(terminal.canCancel).toBe(false);
@@ -215,7 +225,9 @@ describe('builtin-executor wrapper coverage', () => {
       artifacts: [],
     });
 
-    const parsed = JSON.parse(await executeSessionWait({ sessionId: 'session-1' }, 'conv-1'));
+    const parsed = parseCompletedOutcome(
+      await executeSessionWait({ sessionId: 'session-1' }, 'conv-1'),
+    );
 
     expect(mockWaitForSubAgentCompletion).toHaveBeenCalledWith('session-1', 180000);
     expect(parsed.status).toBe('completed');
@@ -265,7 +277,7 @@ describe('builtin-executor wrapper coverage', () => {
         artifacts: [],
       });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedOutcome(
       await executeSessionWait({ sessionIds: ['session-1', 'session-2'] }, 'conv-1'),
     );
 
@@ -316,7 +328,7 @@ describe('builtin-executor wrapper coverage', () => {
       artifacts: [],
     });
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedOutcome(
       await executeSessionWait({ sessionId: 'session-graph-1' }, 'conv-1'),
     );
 
@@ -341,7 +353,9 @@ describe('builtin-executor wrapper coverage', () => {
     });
     mockWaitForSubAgentCompletion.mockResolvedValueOnce(null);
 
-    const parsed = JSON.parse(await executeSessionWait({ sessionId: 'session-2' }, 'conv-1'));
+    const parsed = parseCompletedOutcome(
+      await executeSessionWait({ sessionId: 'session-2' }, 'conv-1'),
+    );
 
     expect(mockWaitForSubAgentCompletion).toHaveBeenCalledWith('session-2', 180000);
     expect(parsed.status).toBe('running');
@@ -364,7 +378,7 @@ describe('builtin-executor wrapper coverage', () => {
     });
     mockWaitForSubAgentCompletion.mockResolvedValueOnce(null);
 
-    const parsed = JSON.parse(
+    const parsed = parseCompletedOutcome(
       await executeSessionWait({ sessionId: 'session-3', waitTimeoutMs: 5000 }, 'conv-1'),
     );
 
@@ -394,7 +408,7 @@ describe('builtin-executor wrapper coverage', () => {
       iterations: 0,
     });
 
-    const parsed = JSON.parse(await executeSessionStatus({ sessionId: 'queued-1' }));
+    const parsed = parseCompletedOutcome(await executeSessionStatus({ sessionId: 'queued-1' }));
     expect(parsed.launchState).toBe('queued');
     expect(parsed.lastProgressAt).toBe(now - 60_000);
     expect(parsed.idleMs).toBeGreaterThanOrEqual(59_000);
@@ -423,7 +437,9 @@ describe('builtin-executor wrapper coverage', () => {
       iterations: 0,
     });
 
-    const parsed = JSON.parse(await executeSessionStatus({ sessionId: 'responding-1' }));
+    const parsed = parseCompletedOutcome(
+      await executeSessionStatus({ sessionId: 'responding-1' }),
+    );
     expect(parsed.awaitingModelResponse).toBe(true);
     expect(parsed.modelResponsePendingSince).toBe(now - 60_000);
     expect(parsed.modelResponseWaitMs).toBeGreaterThanOrEqual(59_000);
@@ -445,7 +461,9 @@ describe('builtin-executor wrapper coverage', () => {
     });
     mockWaitForSubAgentCompletion.mockResolvedValueOnce(null);
 
-    const parsed = JSON.parse(await executeSessionWait({ sessionId: 'responding-2' }, 'conv-1'));
+    const parsed = parseCompletedOutcome(
+      await executeSessionWait({ sessionId: 'responding-2' }, 'conv-1'),
+    );
 
     expect(parsed.status).toBe('running');
     expect(parsed.pendingSessions).toHaveLength(1);
@@ -468,14 +486,15 @@ describe('builtin-executor wrapper coverage', () => {
       .mockReturnValueOnce({ sessionId: 'run-1', status: 'running', currentActivity: 'Working' });
     mockCancelSubAgent.mockReturnValue({ currentActivity: 'Stopping now' });
 
-    await expect(executeSessionCancel({ sessionId: 'missing' })).resolves.toBe(
-      'Error: session not found: missing',
-    );
+    await expect(executeSessionCancel({ sessionId: 'missing' })).resolves.toEqual({
+      status: 'failed',
+      content: 'Error: session not found: missing',
+    });
 
-    const terminal = JSON.parse(await executeSessionCancel({ sessionId: 'done-1' }));
+    const terminal = parseCompletedOutcome(await executeSessionCancel({ sessionId: 'done-1' }));
     expect(terminal.message).toContain('already in a terminal state');
 
-    const running = JSON.parse(
+    const running = parseCompletedOutcome(
       await executeSessionCancel({ sessionId: 'run-1', reason: 'Wrong task' }),
     );
     expect(running.status).toBe('cancel_requested');
@@ -495,7 +514,7 @@ describe('builtin-executor wrapper coverage', () => {
       { sessionId: 'done-1', status: 'completed', startedAt: 2 },
     ]);
 
-    const empty = JSON.parse(await executeSessionYield({}, 'conv-1'));
+    const empty = parseCompletedOutcome(await executeSessionYield({}, 'conv-1'));
     expect(empty).toEqual({
       status: 'completed',
       message: 'Supervisor checkpoint recorded.',
@@ -505,7 +524,7 @@ describe('builtin-executor wrapper coverage', () => {
         'No running sub-agent sessions remain for this conversation. Finalize the supervisor response instead of waiting again.',
     });
 
-    const yielded = JSON.parse(
+    const yielded = parseCompletedOutcome(
       await executeSessionYield({ message: '  Checkpoint now  ' }, 'conv-1'),
     );
     expect(yielded.status).toBe('checkpointed');
@@ -530,13 +549,17 @@ describe('builtin-executor wrapper coverage', () => {
     try {
       const shortWait = executeWait({ ms: 1, reason: 'short' });
       jest.advanceTimersByTime(100);
-      await expect(shortWait).resolves.toBe(
-        JSON.stringify({ status: 'waited', waitedMs: 100, reason: 'short' }),
-      );
+      await expect(shortWait).resolves.toEqual({
+        status: 'completed',
+        content: JSON.stringify({ status: 'waited', waitedMs: 100, reason: 'short' }),
+      });
 
       const longWait = executeWait({ ms: 999999 });
       jest.advanceTimersByTime(60000);
-      await expect(longWait).resolves.toBe(JSON.stringify({ status: 'waited', waitedMs: 60000 }));
+      await expect(longWait).resolves.toEqual({
+        status: 'completed',
+        content: JSON.stringify({ status: 'waited', waitedMs: 60000 }),
+      });
     } finally {
       jest.useRealTimers();
     }

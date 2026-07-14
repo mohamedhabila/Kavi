@@ -4,6 +4,17 @@ import type { Message } from './message';
 
 export type SubAgentStatus = 'running' | 'completed' | 'timeout' | 'error' | 'cancelled';
 export type SubAgentCompletionState = 'verified_success' | 'blocked' | 'incomplete';
+export type SubAgentTerminationCause =
+  | 'completed'
+  | 'app_restart'
+  | 'timeout'
+  | 'cancelled'
+  | 'provider_failure'
+  | 'tool_failure'
+  | 'internal_failure'
+  | 'preflight_rejected'
+  | 'iteration_limit'
+  | 'unknown';
 
 export type SubAgentOutcomeReconciliationCode =
   | 'pending'
@@ -50,6 +61,7 @@ export interface SubAgentSnapshot {
   updatedAt: number;
   deadlineAt?: number;
   status: SubAgentStatus;
+  terminationCause?: SubAgentTerminationCause;
   sandboxPolicy: SubAgentSandboxPolicy;
   launchState?: SubAgentLaunchState;
   output?: string;
@@ -157,6 +169,7 @@ export interface SubAgentResult {
   toolsUsed: string[];
   iterations: number;
   status: 'completed' | 'timeout' | 'error' | 'cancelled';
+  terminationCause: SubAgentTerminationCause;
   error?: string;
   depth: number;
   artifacts?: Attachment[];
