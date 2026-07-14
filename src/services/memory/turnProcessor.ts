@@ -252,7 +252,6 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   if (priorUserIdentity.status === 'invalid') {
     return skippedProcessTurnResult('source_identity_invalid');
   }
-  const priorUserMessageId = priorUserIdentity.priorUserMessageId;
   const structuralResult: ConsolidatorResult = {
     episodeSummary: structural.episodeSummary || null,
     newFacts: structural.facts,
@@ -315,7 +314,6 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     const mergedResult = mergeProviderIntoStructural(structural, outcome.result, {
       currentUserMessageId: user?.id,
       currentUserMessage: user?.content ?? '',
-      priorUserMessageId,
       memoryConversationId,
       threadId: input.threadId,
       taskId: input.taskId,

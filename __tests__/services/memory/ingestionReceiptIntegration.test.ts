@@ -264,14 +264,18 @@ describe('memory ingestion receipt integration', () => {
         JSON.stringify({
           new_facts: [
             {
-              subject: 'user',
+              version: 1,
+              subject_ref: { kind: 'self' },
               predicate: 'preferred_channel',
               value: 'Signal',
               scope: 'conversation',
-              operation: 'replace_current',
+              importance: 0.8,
+              confidence: 0.95,
+              source_message_id: 'user-provider-receipt',
+              operation: 'record',
               assertion_class: 'current_direct',
-              evidence_message_ids: ['user-provider-receipt'],
               evidence_quote: 'My preferred channel is Signal.',
+              sensitivity: 'personal',
             },
           ],
           episode_summary: null,

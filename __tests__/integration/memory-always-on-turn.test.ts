@@ -151,17 +151,18 @@ describe('memory always-on turn integration', () => {
             content: JSON.stringify({
               new_facts: [
                 {
-                  subject: 'user',
+                  version: 1,
+                  subject_ref: { kind: 'self' },
                   predicate: 'usual_weekly_planning_meeting_duration',
                   value: '25 minutes',
                   scope: 'global',
                   importance: 0.8,
                   confidence: 0.95,
-                  evidence_message_ids: ['user-1'],
-                  operation: 'insert',
+                  source_message_id: 'user-1',
+                  operation: 'record',
                   assertion_class: 'current_direct',
                   evidence_quote: userContent,
-                  reason: 'Explicit durable user preference.',
+                  sensitivity: 'personal',
                 },
               ],
               episode_summary: null,

@@ -243,12 +243,18 @@ describe('durable memory enrichment retries', () => {
             content: JSON.stringify({
               new_facts: [
                 {
-                  subject: 'release',
+                  version: 1,
+                  subject_ref: { kind: 'named', label: 'release' },
                   predicate: 'release_title',
                   value: 'Production Mobile Release',
                   scope: 'conversation',
+                  importance: 0.7,
                   confidence: 0.9,
-                  evidence_message_ids: ['u-retry'],
+                  source_message_id: 'u-retry',
+                  operation: 'record',
+                  assertion_class: 'current_direct',
+                  evidence_quote: 'release title is Production Mobile Release',
+                  sensitivity: 'normal',
                 },
               ],
               episode_summary: 'Created the production mobile release artifact.',
@@ -404,14 +410,18 @@ describe('durable memory enrichment retries', () => {
               content: JSON.stringify({
                 new_facts: [
                   {
-                    subject: 'user',
+                    version: 1,
+                    subject_ref: { kind: 'self' },
                     predicate: 'preferred_channel',
                     value: 'Signal',
                     scope: 'conversation',
+                    importance: 0.8,
+                    confidence: 0.95,
+                    source_message_id: 'u-causal-prior',
                     operation: 'replace_current',
                     assertion_class: 'current_direct',
-                    evidence_message_ids: ['u-causal-prior'],
                     evidence_quote: 'My preferred channel is Signal',
+                    sensitivity: 'personal',
                   },
                 ],
                 episode_summary: null,
@@ -430,14 +440,18 @@ describe('durable memory enrichment retries', () => {
               content: JSON.stringify({
                 new_facts: [
                   {
-                    subject: 'user',
+                    version: 1,
+                    subject_ref: { kind: 'self' },
                     predicate: 'preferred_channel',
                     value: 'WhatsApp',
                     scope: 'conversation',
+                    importance: 0.8,
+                    confidence: 0.95,
+                    source_message_id: 'u-causal-successor',
                     operation: 'replace_current',
                     assertion_class: 'current_direct',
-                    evidence_message_ids: ['u-causal-successor'],
                     evidence_quote: 'My preferred channel is WhatsApp',
+                    sensitivity: 'personal',
                   },
                 ],
                 episode_summary: null,

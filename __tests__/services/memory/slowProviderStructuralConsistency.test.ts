@@ -105,10 +105,18 @@ function providerPayload(value: string): string {
   return JSON.stringify({
     new_facts: [
       {
-        subject: 'release',
+        version: 1,
+        subject_ref: { kind: 'self' },
         predicate: 'provider_confirmation',
         value,
+        scope: 'conversation',
+        importance: 0.5,
         confidence: 0.9,
+        source_message_id: 'wrong-source',
+        operation: 'record',
+        assertion_class: 'current_direct',
+        evidence_quote: value,
+        sensitivity: 'normal',
       },
     ],
     episode_summary: `Provider confirmed ${value}.`,

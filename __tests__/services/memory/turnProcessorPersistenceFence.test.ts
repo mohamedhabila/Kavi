@@ -31,10 +31,18 @@ function validPayload(): string {
   return JSON.stringify({
     new_facts: [
       {
-        subject: 'user',
+        version: 1,
+        subject_ref: { kind: 'self' },
         predicate: 'prefers',
-        value: 'quiet mornings',
+        value: 'this',
+        scope: 'conversation',
+        importance: 0.7,
         confidence: 0.9,
+        source_message_id: 'user-fenced',
+        operation: 'record',
+        assertion_class: 'current_direct',
+        evidence_quote: 'Remember this.',
+        sensitivity: 'normal',
       },
     ],
     episode_summary: 'Must not persist.',

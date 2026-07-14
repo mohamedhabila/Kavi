@@ -39,9 +39,24 @@ function buildConversation(): Conversation {
   } as Conversation;
 }
 
-function payload(predicate: string, value: string): string {
+function payload(predicate: string, sourceMessageId: string, value: string): string {
   return JSON.stringify({
-    new_facts: [{ subject: 'user', predicate, value, confidence: 0.9 }],
+    new_facts: [
+      {
+        version: 1,
+        subject_ref: { kind: 'self' },
+        predicate,
+        value,
+        scope: 'conversation',
+        importance: 0.7,
+        confidence: 0.9,
+        source_message_id: sourceMessageId,
+        operation: 'record',
+        assertion_class: 'current_direct',
+        evidence_quote: value,
+        sensitivity: 'normal',
+      },
+    ],
     episode_summary: null,
     active_focus: null,
     open_threads: [],
@@ -80,11 +95,11 @@ it('does not re-extract a committed turn after recovery interrupts the next turn
       await secondTurnGate;
     }
     return firstOwnerCall === 1
-      ? payload('turn_one_checkpoint', 'original turn one')
-      : payload('stale_turn_two', 'stale turn two');
+      ? payload('turn_one_checkpoint', 'u-per-turn-checkpoint-0', 'Turn one')
+      : payload('stale_turn_two', 'u-per-turn-checkpoint-1', 'Turn two');
   });
   const recoveredExtractor = jest.fn(async () =>
-    payload('recovered_turn_two', 'recovered turn two'),
+    payload('recovered_turn_two', 'u-per-turn-checkpoint-1', 'Turn two'),
   );
 
   const firstOwner = seedConversation({

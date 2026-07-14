@@ -69,6 +69,24 @@ function makeMsg(overrides: Partial<Message> = {}): Message {
   } as Message;
 }
 
+function providerProposal(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 1,
+    subjectRef: { kind: 'self' },
+    predicate: 'preference',
+    value: 'value',
+    scope: 'conversation',
+    importance: 0.7,
+    confidence: 0.9,
+    sourceMessageId: 'user-current',
+    operation: 'record',
+    assertionClass: 'current_direct',
+    evidenceQuote: 'value',
+    sensitivity: 'normal',
+    ...overrides,
+  };
+}
+
 describe('validateMemoryTurnPublication', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -362,8 +380,8 @@ describe('processIngestionTurn', () => {
       result: {
         episodeSummary: 'P',
         newFacts: [
-          { subject: 'user', predicate: 'name', value: 'Mo' }, // duplicate
-          { subject: 'user', predicate: 'age', value: '30' },
+          providerProposal({ predicate: 'name', value: 'Mo', evidenceQuote: 'Mo' }),
+          providerProposal({ predicate: 'age', value: '30', evidenceQuote: '30' }),
         ],
         activeFocus: null,
         openThreads: [],
@@ -375,7 +393,7 @@ describe('processIngestionTurn', () => {
       episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
-        makeMsg({ role: 'user', content: 'Hey' }),
+        makeMsg({ id: 'user-current', role: 'user', content: 'Hey' }),
         makeMsg({
           id: 'assistant-evidence-absent',
           role: 'assistant',
@@ -402,9 +420,11 @@ describe('processIngestionTurn', () => {
         episodeSummary: 'P',
         newFacts: [
           {
-            subject: 'knowu-user',
+            ...providerProposal(),
+            subjectRef: { kind: 'named', label: 'knowu-user' },
             predicate: 'preferred_message_contact',
             value: 'e2e-contact-avery',
+            evidenceQuote: 'knowu-user e2e-contact-avery',
           },
         ],
         activeFocus: null,
@@ -417,7 +437,11 @@ describe('processIngestionTurn', () => {
       episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
-        makeMsg({ role: 'user', content: 'Remember a structured preference.' }),
+        makeMsg({
+          id: 'user-current',
+          role: 'user',
+          content: 'Remember knowu-user e2e-contact-avery as a structured preference.',
+        }),
         makeMsg({
           id: 'assistant-structural-precedence',
           role: 'assistant',
@@ -463,11 +487,18 @@ describe('processIngestionTurn', () => {
         episodeSummary: 'P',
         newFacts: [
           {
-            subject: 'direct-longmem-user',
+            ...providerProposal(),
+            subjectRef: { kind: 'named', label: 'direct-longmem-user' },
             predicate: 'preferred_message_contact',
             value: 'Avery from the action request',
+            evidenceQuote: 'direct-longmem-user Avery from the action request',
           },
-          { subject: 'direct-longmem-user', predicate: 'last_sms_message', value: 'drafted' },
+          providerProposal({
+            subjectRef: { kind: 'named', label: 'direct-longmem-user' },
+            predicate: 'last_sms_message',
+            value: 'drafted',
+            evidenceQuote: 'direct-longmem-user drafted',
+          }),
         ],
         activeFocus: null,
         openThreads: [],
@@ -479,7 +510,11 @@ describe('processIngestionTurn', () => {
       episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
-        makeMsg({ role: 'user', content: 'Use the current preference to complete the task.' }),
+        makeMsg({
+          id: 'user-current',
+          role: 'user',
+          content: 'Use the current preference to complete the task.',
+        }),
         makeMsg({
           id: 'assistant-no-provider-invention',
           role: 'assistant',
@@ -493,12 +528,7 @@ describe('processIngestionTurn', () => {
 
     const persisted = mockApplyConsolidatorResult.mock.calls[1][0];
     expect(persisted.newFacts).toEqual([]);
-    expect(mockListFacts).toHaveBeenCalledWith(
-      expect.objectContaining({
-        subjectId: 'entity-direct-longmem-user',
-        predicate: 'preferred_message_contact',
-      }),
-    );
+    expect(mockListFacts).not.toHaveBeenCalled();
   });
 
   it('updates the consolidation cursor after processing', async () => {

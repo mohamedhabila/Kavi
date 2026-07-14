@@ -95,10 +95,10 @@ async function ingest(input: {
   predicate: string;
   value: string;
   quote?: string;
-  scope?: 'global' | 'conversation' | 'project' | 'persona';
-  operation?: 'insert' | 'replace_current';
+  scope?: 'global' | 'conversation' | 'project' | 'session';
+  operation?: 'record' | 'replace_current';
   assertionClass?: ConsolidatorAssertionClass;
-  evidenceMessageIds?: string[];
+  sourceMessageId?: string;
   enrichedContent?: string;
   priorMessages?: Message[];
 }) {
@@ -113,14 +113,18 @@ async function ingest(input: {
       JSON.stringify({
         new_facts: [
           {
-            subject: 'user',
+            version: 1,
+            subject_ref: { kind: 'self' },
             predicate: input.predicate,
             value: input.value,
             scope: input.scope ?? 'global',
+            importance: 0.8,
+            confidence: 0.95,
+            source_message_id: input.sourceMessageId ?? 'user-current',
             operation: input.operation ?? 'replace_current',
             assertion_class: input.assertionClass ?? 'current_direct',
-            evidence_message_ids: input.evidenceMessageIds ?? ['user-current'],
             evidence_quote: input.quote ?? input.userContent,
+            sensitivity: 'personal',
           },
         ],
         episode_summary: null,
@@ -193,7 +197,7 @@ describe('grounded passive memory corrections', () => {
           evidenceMessageId: 'user-current',
           expectedCurrentFactId: old.id,
           assertionClass: 'current_direct',
-          evidenceQuote: fixture.message.replace(/[.]$/u, ''),
+          evidenceQuote: fixture.message,
         },
       },
     });
@@ -203,7 +207,7 @@ describe('grounded passive memory corrections', () => {
     expect(listFactEvidence(current[0]!.id)).toEqual([
       expect.objectContaining({
         messageId: 'user-current',
-        quote: fixture.message.replace(/[.]$/u, ''),
+        quote: fixture.message,
       }),
     ]);
   });
@@ -233,7 +237,7 @@ describe('grounded passive memory corrections', () => {
       userContent: 'I moved to Utrecht.',
       predicate: 'lives_in',
       value: 'Utrecht',
-      operation: 'insert',
+      operation: 'record',
     });
     expect(listFacts({ subjectId: old.subjectId, predicate: 'lives_in' })).toEqual([
       expect.objectContaining({ id: old.id }),
@@ -292,14 +296,18 @@ describe('grounded passive memory corrections', () => {
       extractor: async () =>
         JSON.stringify({
           new_facts: ['Utrecht', 'Paris'].map((value) => ({
-            subject: 'user',
+            version: 1,
+            subject_ref: { kind: 'self' },
             predicate: 'lives_in',
             value,
             scope: 'global',
+            importance: 0.8,
+            confidence: 0.95,
+            source_message_id: 'user-current',
             operation: 'replace_current',
             assertion_class: 'current_direct',
-            evidence_message_ids: ['user-current'],
             evidence_quote: 'I am considering Utrecht or Paris.',
+            sensitivity: 'personal',
           })),
           episode_summary: null,
           active_focus: null,
@@ -361,7 +369,7 @@ describe('grounded passive memory corrections', () => {
       userContent: 'I moved to Utrecht.',
       predicate: 'lives_in',
       value: 'Paris',
-      evidenceMessageIds: ['assistant-current'],
+      sourceMessageId: 'assistant-current',
     });
     expect(listFacts({ subjectId: old.subjectId, predicate: 'lives_in' })).toEqual([
       expect.objectContaining({ id: old.id }),
@@ -373,7 +381,7 @@ describe('grounded passive memory corrections', () => {
       userContent: 'I moved to Utrecht.',
       predicate: 'lives_in',
       value: 'Utrecht',
-      operation: 'insert',
+      operation: 'record',
     });
 
     const user = upsertEntity({ name: 'user', type: 'self', now: 400 });
@@ -390,7 +398,7 @@ describe('grounded passive memory corrections', () => {
     expect(current[0].attributes.memoryWrite).not.toHaveProperty('expectedCurrentFactId');
   });
 
-  it('preserves the persisted predicate across a direct self-bound correction', async () => {
+  it('does not guess a persisted predicate from different provider semantics', async () => {
     const old = seedGroundedCurrent('usual_design_review_duration', '30 minutes', 'user-prior');
 
     const result = await ingest({
@@ -401,9 +409,9 @@ describe('grounded passive memory corrections', () => {
       priorMessages: priorTurn(),
     });
 
-    expect(result.invalidatedFactIds).toEqual([old.id]);
+    expect(result.invalidatedFactIds).toEqual([]);
     expect(listFacts({ subjectId: old.subjectId, predicate: old.predicate })).toEqual([
-      expect.objectContaining({ objectText: '45 minutes', sourceMessageId: 'user-current' }),
+      expect.objectContaining({ id: old.id, objectText: '30 minutes', invalidAt: null }),
     ]);
     expect(listFacts({ predicate: 'design_review_default_duration_minutes' })).toEqual([]);
   });
@@ -481,19 +489,17 @@ describe('grounded passive memory corrections', () => {
   );
 
   it.each([
-    { evidenceMessageIds: ['assistant-current'], label: 'wrong provider source message' },
+    { sourceMessageId: 'assistant-current', label: 'wrong provider source message' },
     { quote: 'I moved to Paris.', label: 'provider quote absent from user text' },
-  ])('re-derives a no-target proposal despite a $label', async (overrides) => {
+  ])('rejects a no-target proposal with a $label', async (overrides) => {
     await ingest({
       userContent: 'I moved to Utrecht.',
       predicate: 'lives_in',
       value: 'Utrecht',
       quote: overrides.quote,
-      evidenceMessageIds: overrides.evidenceMessageIds,
+      sourceMessageId: overrides.sourceMessageId,
     });
-    expect(listFacts({ predicate: 'lives_in' })).toEqual([
-      expect.objectContaining({ objectText: 'Utrecht', sourceMessageId: 'user-current' }),
-    ]);
+    expect(listFacts({ predicate: 'lives_in' })).toEqual([]);
   });
 
   it('rejects a no-target proposal whose value is absent from user evidence', async () => {

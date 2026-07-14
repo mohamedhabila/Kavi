@@ -360,13 +360,18 @@ describe('recordCompletedTurnForMemory', () => {
             content: JSON.stringify({
               new_facts: [
                 {
-                  subject: 'user',
+                  version: 1,
+                  subject_ref: { kind: 'self' },
                   predicate: 'project_title',
                   value: 'Android Release Build Validation',
                   scope: 'conversation',
-                  confidence: 0.9,
                   importance: 0.7,
-                  evidence_message_ids: ['u-1'],
+                  confidence: 0.9,
+                  source_message_id: 'u-1',
+                  operation: 'record',
+                  assertion_class: 'current_direct',
+                  evidence_quote: 'My project title is Android Release Build Validation.',
+                  sensitivity: 'personal',
                 },
               ],
               episode_summary: null,
@@ -501,7 +506,7 @@ describe('recordCompletedTurnForMemory', () => {
       structuredOutput: {
         name: 'memory_consolidation',
         mimeType: 'application/json',
-        strict: false,
+        strict: true,
         schema: expect.objectContaining({
           additionalProperties: false,
           required: ['new_facts', 'episode_summary', 'active_focus', 'open_threads', 'notable'],

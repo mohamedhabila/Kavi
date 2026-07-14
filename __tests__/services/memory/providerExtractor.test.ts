@@ -54,7 +54,22 @@ describe('extractProviderEnrichment', () => {
       status: 'valid',
       result: {
         episodeSummary: 'User likes tea',
-        newFacts: [{ subject: 'user', predicate: 'prefers', value: 'tea' }],
+        newFacts: [
+          {
+            version: 1,
+            subjectRef: { kind: 'self' },
+            predicate: 'prefers',
+            value: 'tea',
+            scope: 'global',
+            importance: 0.7,
+            confidence: 0.9,
+            sourceMessageId: 'user-current',
+            operation: 'record',
+            assertionClass: 'current_direct',
+            evidenceQuote: 'I prefer tea',
+            sensitivity: 'personal',
+          },
+        ],
         activeFocus: 'Beverage preferences',
         openThreads: [],
         notable: [],

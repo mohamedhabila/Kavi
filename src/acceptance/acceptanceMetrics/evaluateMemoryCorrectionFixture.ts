@@ -60,14 +60,18 @@ export async function evaluateMemoryCorrectionFixture(
       JSON.stringify({
         new_facts: [
           {
-            subject: 'user',
+            version: 1,
+            subject_ref: { kind: 'self' },
             predicate: fixture.predicate,
             value: fixture.proposedValue,
             scope: 'global',
+            importance: 0.8,
+            confidence: 0.95,
+            source_message_id: userMessageId,
             operation: 'replace_current',
             assertion_class: fixture.assertionClass,
-            evidence_message_ids: [userMessageId],
             evidence_quote: fixture.userMessage,
+            sensitivity: 'personal',
           },
         ],
         episode_summary: null,

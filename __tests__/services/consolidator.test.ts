@@ -1,7 +1,3 @@
-// ---------------------------------------------------------------------------
-// Tests — Memory consolidator (single-pass extractor + persistence)
-// ---------------------------------------------------------------------------
-
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
   return makeExpoSqliteMock();
@@ -19,6 +15,7 @@ import {
   parseConsolidatorOutput,
   applyThreadLocalConsolidatorResult,
 } from '../../src/services/memory/consolidator';
+import { semanticFactProposalJson } from '../helpers/semanticFactProposalFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const THREAD_LOCAL_PRODUCER = CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport;
@@ -208,6 +205,17 @@ describe('buildConsolidatorPrompt', () => {
 });
 
 describe('parseConsolidatorOutput', () => {
+  const validProposal = (overrides: Record<string, unknown> = {}) =>
+    semanticFactProposalJson(
+      { id: 'user-current', text: 'I live in Berlin' },
+      {
+        predicate: 'lives_in',
+        value: 'Berlin',
+        scope: 'global',
+        sensitivity: 'personal',
+        ...overrides,
+      },
+    );
   const validPayload = (overrides: Record<string, unknown> = {}) => ({
     episode_summary: null,
     new_facts: [],
@@ -220,7 +228,7 @@ describe('parseConsolidatorOutput', () => {
   it('returns valid for a strict canonical JSON payload', () => {
     const raw = JSON.stringify({
       ...validPayload(),
-      new_facts: [{ subject: 'user', predicate: 'lives_in', value: 'Berlin', confidence: 0.9 }],
+      new_facts: [validProposal()],
       active_focus: 'Setting up after relocating.',
       open_threads: ['Suggest a SIM card provider'],
       notable: ['User just moved to Berlin'],
@@ -230,7 +238,8 @@ describe('parseConsolidatorOutput', () => {
     if (outcome.status !== 'valid') throw new Error('expected valid outcome');
     expect(outcome.result.newFacts).toHaveLength(1);
     expect(outcome.result.newFacts[0]).toMatchObject({
-      subject: 'user',
+      version: 1,
+      subjectRef: { kind: 'self' },
       predicate: 'lives_in',
       value: 'Berlin',
       confidence: 0.9,
@@ -281,9 +290,8 @@ describe('parseConsolidatorOutput', () => {
     const raw = JSON.stringify(
       validPayload({
         new_facts: Array.from({ length: 6 }, (_, i) => ({
-          subject: 'user',
+          ...validProposal(),
           predicate: `p${i}`,
-          value: `v${i}`,
         })),
       }),
     );
@@ -297,8 +305,12 @@ describe('parseConsolidatorOutput', () => {
     const raw = JSON.stringify(
       validPayload({
         new_facts: [
-          { subject: 'user', predicate: 'has_name', value: 'Mo' },
-          { subject: 'user', predicate: 'lives_in' },
+          validProposal({ predicate: 'has_name', value: 'Mo', evidence_quote: 'My name is Mo' }),
+          (() => {
+            const invalid = validProposal();
+            delete invalid.value;
+            return invalid;
+          })(),
         ],
       }),
     );
@@ -309,31 +321,24 @@ describe('parseConsolidatorOutput', () => {
   });
 
   it.each([
-    [{ subject: 'user', predicate: 'p', object: 'v' }, 'unexpected_field'],
+    [{ ...validProposal(), object: 'v' }, 'unexpected_field'],
     [
       {
-        subject: 'user',
-        predicate: 'p',
-        value: 'v',
+        ...validProposal(),
         assertionClass: 'current_direct',
       },
       'unexpected_field',
     ],
     [
       {
-        subject: 'user',
-        predicate: 'p',
-        value: 'v',
+        ...validProposal(),
         evidenceQuote: 'v',
       },
       'unexpected_field',
     ],
-    [{ subject: 'user', predicate: 'p', value: 'v', confidence: 'high' }, 'invalid_field_value'],
-    [{ subject: 'user', predicate: 'p', value: 'v', confidence: 2 }, 'invalid_field_value'],
-    [
-      { subject: 'user', predicate: 'p', value: 'v', evidence_message_ids: ['ok', 2] },
-      'invalid_field_type',
-    ],
+    [{ ...validProposal(), confidence: 'high' }, 'invalid_field_value'],
+    [{ ...validProposal(), confidence: 2 }, 'invalid_field_value'],
+    [{ ...validProposal(), evidence_message_ids: ['ok', 2] }, 'unexpected_field'],
   ])('rejects aliases and invalid fact field values: %p', (fact, code) => {
     expect(parseConsolidatorOutput(JSON.stringify(validPayload({ new_facts: [fact] })))).toEqual({
       status: 'schema_invalid',

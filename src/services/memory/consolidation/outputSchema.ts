@@ -1,4 +1,11 @@
 import type { StructuredOutputOptions } from '../../llm/support/contracts';
+import { MEMORY_FACT_SENSITIVITY_LEVELS } from '../facts/applicabilityProvenance';
+import {
+  SEMANTIC_FACT_ASSERTION_CLASSES,
+  SEMANTIC_FACT_PROPOSAL_OPERATIONS,
+  SEMANTIC_FACT_PROPOSAL_SCOPES,
+  SEMANTIC_FACT_PROPOSAL_VERSION,
+} from '../semanticFactProposal';
 
 const nullableString = (maxLength: number): Record<string, unknown> => ({
   type: ['string', 'null'],
@@ -8,9 +15,7 @@ const nullableString = (maxLength: number): Record<string, unknown> => ({
 export const MEMORY_CONSOLIDATION_OUTPUT_SCHEMA: StructuredOutputOptions = {
   name: 'memory_consolidation',
   mimeType: 'application/json',
-  // Optional fact metadata must remain optional. Deterministic admission code,
-  // not the provider schema, decides which proposed fields carry authority.
-  strict: false,
+  strict: true,
   schema: {
     type: 'object',
     additionalProperties: false,
@@ -22,36 +27,57 @@ export const MEMORY_CONSOLIDATION_OUTPUT_SCHEMA: StructuredOutputOptions = {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['subject', 'predicate', 'value'],
+          required: [
+            'version',
+            'subject_ref',
+            'predicate',
+            'value',
+            'scope',
+            'importance',
+            'confidence',
+            'source_message_id',
+            'operation',
+            'assertion_class',
+            'evidence_quote',
+            'sensitivity',
+          ],
           properties: {
-            subject: { type: 'string', minLength: 1, maxLength: 80 },
+            version: { type: 'integer', enum: [SEMANTIC_FACT_PROPOSAL_VERSION] },
+            subject_ref: {
+              anyOf: [
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['kind'],
+                  properties: { kind: { type: 'string', enum: ['self'] } },
+                },
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['kind', 'label'],
+                  properties: {
+                    kind: { type: 'string', enum: ['named'] },
+                    label: { type: 'string', minLength: 1, maxLength: 80 },
+                  },
+                },
+              ],
+            },
             predicate: { type: 'string', minLength: 1, maxLength: 80 },
             value: { type: 'string', minLength: 1, maxLength: 200 },
             scope: {
               type: 'string',
-              enum: ['global', 'project', 'conversation', 'session'],
+              enum: [...SEMANTIC_FACT_PROPOSAL_SCOPES],
             },
             importance: { type: 'number', minimum: 0, maximum: 1 },
             confidence: { type: 'number', minimum: 0, maximum: 1 },
-            evidence_message_ids: {
-              type: 'array',
-              maxItems: 8,
-              items: { type: 'string', minLength: 1, maxLength: 120 },
-            },
-            operation: { type: 'string', enum: ['insert', 'replace_current'] },
+            source_message_id: { type: 'string', minLength: 1, maxLength: 120 },
+            operation: { type: 'string', enum: [...SEMANTIC_FACT_PROPOSAL_OPERATIONS] },
             assertion_class: {
               type: 'string',
-              enum: [
-                'current_direct',
-                'historical',
-                'hypothetical',
-                'quoted',
-                'third_party',
-                'uncertain',
-              ],
+              enum: [...SEMANTIC_FACT_ASSERTION_CLASSES],
             },
             evidence_quote: { type: 'string', minLength: 1, maxLength: 600 },
-            reason: { type: 'string', minLength: 1, maxLength: 240 },
+            sensitivity: { type: 'string', enum: [...MEMORY_FACT_SENSITIVITY_LEVELS] },
           },
         },
       },

@@ -267,10 +267,18 @@ describe('withdrawal ingestion replay fence', () => {
         JSON.stringify({
           new_facts: [
             {
-              subject: 'migration-user',
+              version: 1,
+              subject_ref: { kind: 'self' },
               predicate: 'private_value',
-              value: 'withdraw migration value',
+              value: 'remember this',
+              scope: 'conversation',
+              importance: 0.8,
               confidence: 0.9,
+              source_message_id: userMessageId,
+              operation: 'record',
+              assertion_class: 'current_direct',
+              evidence_quote: 'remember this',
+              sensitivity: 'sensitive',
             },
           ],
           episode_summary: 'must not return',

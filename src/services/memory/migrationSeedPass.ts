@@ -42,6 +42,7 @@ import {
 } from './migrationStateStore';
 import { resolveCodeOwnedMemoryPersonaId } from './memoryScopeIdentity';
 import { CONSOLIDATION_FACT_PRODUCER_IDS } from './consolidation/factContributionIdentity';
+import { mergeProviderIntoStructural } from './providerFactReconciliation';
 
 const logger = createLogger('memory.migrationSeedPass');
 
@@ -457,10 +458,20 @@ async function seedClaimedConversation(
           results,
         );
       }
+      const admittedResult = mergeProviderIntoStructural(
+        { episodeSummary: '', facts: [] },
+        outcome.result,
+        {
+          currentUserMessageId: turn.userMessage.id,
+          currentUserMessage: turn.userMessage.content?.toString() ?? '',
+          memoryConversationId: conv.id,
+          threadId: conv.id,
+        },
+      );
       if (!input.dryRun) {
         const nextSeededTurns = seededTurns + 1;
         const checkpointAt = input.now ?? Date.now();
-        applyConsolidatorResult(outcome.result, {
+        applyConsolidatorResult(admittedResult, {
           now: turnNow,
           conversationId: conv.id,
           threadId: conv.id,
@@ -484,7 +495,7 @@ async function seedClaimedConversation(
             }),
         });
       }
-      results.push(outcome.result);
+      results.push(admittedResult);
       lastSeededMessageId = turn.assistantMessage.id;
       seededTurns += 1;
     } catch {

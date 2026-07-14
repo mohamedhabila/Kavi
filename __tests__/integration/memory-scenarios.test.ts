@@ -119,15 +119,18 @@ function makeExtractor(): jest.Mock {
       return JSON.stringify({
         new_facts: [
           {
-            subject: 'user',
+            version: 1,
+            subject_ref: { kind: 'self' },
             predicate: 'preferred_server',
             value: 'acme-prod-cluster',
-            confidence: 0.9,
             scope: 'conversation',
-            operation: 'replace_current',
+            importance: 0.8,
+            confidence: 0.9,
+            source_message_id: 'u-7',
+            operation: 'record',
             assertion_class: 'current_direct',
-            evidence_message_ids: ['u-7'],
             evidence_quote: 'My preferred server is acme-prod-cluster.',
+            sensitivity: 'normal',
           },
         ],
         episode_summary: 'The user prefers acme-prod-cluster as a server.',
@@ -191,12 +194,14 @@ describe('memory integration: 200-message thread', () => {
       expect(preferenceFacts).toHaveLength(1);
       expect(preferenceFacts[0].objectText).toBe('acme-prod-cluster');
 
-      // active_focus should be scoped to this thread, not written globally.
+      // Provider-authored focus remains untrusted and must not become a working-memory
+      // instruction through this direct consolidation path. The production ingestion
+      // queue separately preserves the code-owned thread title.
       const focus = getWorkingBlock('active_focus', {
         conversationId: THREAD,
         threadId: THREAD,
       });
-      expect(focus?.content?.trim().length ?? 0).toBeGreaterThan(0);
+      expect(focus).toBeNull();
 
       // Recall at "turn 250" — query 50 turns after the thread ends should
       // surface the deployment fact when the user asks about deployment.

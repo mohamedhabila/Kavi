@@ -34,6 +34,10 @@ import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
+import {
+  currentUserSourceFromConsolidatorPrompt,
+  semanticFactProposalJson,
+} from '../../helpers/semanticFactProposalFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -85,22 +89,16 @@ function buildConversation(
   } as unknown as Conversation;
 }
 
-const PASSING_EXTRACTOR = jest.fn(async () =>
-  JSON.stringify({
-    new_facts: [
-      {
-        subject: 'user',
-        predicate: 'likes',
-        value: 'fact-from-seed',
-        confidence: 0.9,
-      },
-    ],
+const PASSING_EXTRACTOR = jest.fn(async (prompt: string) => {
+  const source = currentUserSourceFromConsolidatorPrompt(prompt);
+  return JSON.stringify({
+    new_facts: [semanticFactProposalJson(source, { predicate: 'migration_memory' })],
     episode_summary: null,
     active_focus: null,
     open_threads: [],
     notable: [],
-  }),
-);
+  });
+});
 
 beforeEach(() => {
   PASSING_EXTRACTOR.mockClear();
@@ -182,12 +180,10 @@ describe('seedConversation', () => {
     resolveExtractor?.(
       JSON.stringify({
         new_facts: [
-          {
-            subject: 'user',
-            predicate: 'likes',
-            value: 'must-not-persist',
-            confidence: 0.9,
-          },
+          semanticFactProposalJson(
+            { id: 'u-in-flight-opt-out-0', text: 'u-u-in-flight-opt-out-0' },
+            { predicate: 'migration_memory' },
+          ),
         ],
         episode_summary: null,
         active_focus: null,

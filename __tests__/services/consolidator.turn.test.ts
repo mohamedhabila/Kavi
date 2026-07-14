@@ -38,7 +38,22 @@ describe('consolidateTurn', () => {
   it('extracts a valid result without writing memory state', async () => {
     const extractor = buildExtractor({
       episode_summary: null,
-      new_facts: [{ subject: 'user', predicate: 'has_name', value: 'Mo' }],
+      new_facts: [
+        {
+          version: 1,
+          subject_ref: { kind: 'self' },
+          predicate: 'has_name',
+          value: 'Mo',
+          scope: 'global',
+          importance: 0.8,
+          confidence: 0.95,
+          source_message_id: 'user-current',
+          operation: 'record',
+          assertion_class: 'current_direct',
+          evidence_quote: 'My name is Mo.',
+          sensitivity: 'personal',
+        },
+      ],
       active_focus: 'Saying hello.',
       open_threads: [],
       notable: [],
