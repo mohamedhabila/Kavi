@@ -161,7 +161,6 @@ function processClaimedTurn(input: {
     graphGoalEvidence: GRAPH_EVIDENCE,
     sourceRunId: 'run-structural-consistency',
     now: input.job.sourceAt,
-    skipWorkingMemorySync: true,
     canPersist: () => ownsIngestionClaim(input.job.id, input.claimToken, input.claimNow()),
     commitStructuralCheckpoint: () =>
       markIngestionJobStructuralComplete(input.job.id, input.claimNow(), input.claimToken),

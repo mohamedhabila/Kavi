@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // Tests — Deterministic (Structural) Memory Extractor
 // ---------------------------------------------------------------------------
-// Pure function tests: no mocks, no SQLite, no English heuristics.
-// All extraction is structural (tool metadata, code blocks, markdown syntax).
+// Pure function tests: no mocks, no SQLite, no natural-language heuristics.
+// Semantic fallback is content-free; only verified tool evidence may create facts.
 // ---------------------------------------------------------------------------
 
 import {
@@ -35,32 +35,49 @@ const baseInput = {
 // ── Episode summary ─────────────────────────────────────────────────────────
 
 describe('extractStructuralMemory — episode summary', () => {
-  it('includes user message preview and tool names', () => {
+  function descriptor(result: ReturnType<typeof extractStructuralMemory>) {
+    return JSON.parse(result.episodeSummary) as Record<string, unknown>;
+  }
+
+  it('persists only content-free turn structure and completed tool counts', () => {
     const result = extractStructuralMemory({
       ...baseInput,
-      userMessage: 'Deploy to staging',
+      userMessage: 'secret user prose must never be copied',
       messages: [
-        msg({ role: 'user', content: 'Deploy to staging' }),
+        msg({ role: 'user', content: 'secret user prose must never be copied' }),
         msg({
           role: 'assistant',
-          content: 'OK',
-          toolCalls: [{ name: 'execute_shell', arguments: '{}' }],
+          content: 'secret assistant prose must never be copied',
+          toolCalls: [{ id: 'call-1', name: 'execute_shell', arguments: '{}' }],
         }),
+        msg({ role: 'tool', toolCallId: 'call-1', content: 'secret tool result' }),
       ],
     });
-    expect(result.episodeSummary).toContain('Deploy to staging');
-    expect(result.episodeSummary).toContain('[execute_shell]');
+
+    expect(descriptor(result)).toEqual({
+      kind: 'structural_turn',
+      version: 1,
+      messageCount: 3,
+      toolCallCount: 1,
+      completedToolCallCount: 1,
+      hasCodeBlock: false,
+      hasAttachments: false,
+    });
+    expect(result.episodeSummary).not.toContain('secret');
+    expect(result.episodeSummary).not.toContain('execute_shell');
   });
 
-  it('marks [code] when code blocks are present', () => {
+  it('records only code-block presence', () => {
     const result = extractStructuralMemory({
       ...baseInput,
-      messages: [msg({ role: 'assistant', content: '```typescript\nconst x = 1;\n```' })],
+      messages: [msg({ role: 'assistant', content: '```typescript\nconst secret = 1;\n```' })],
     });
-    expect(result.episodeSummary).toContain('[code]');
+    expect(descriptor(result)).toMatchObject({ hasCodeBlock: true });
+    expect(result.episodeSummary).not.toContain('typescript');
+    expect(result.episodeSummary).not.toContain('secret');
   });
 
-  it('marks [attachments] when messages have attachments', () => {
+  it('records only attachment presence', () => {
     const result = extractStructuralMemory({
       ...baseInput,
       messages: [
@@ -71,7 +88,8 @@ describe('extractStructuralMemory — episode summary', () => {
         }),
       ],
     });
-    expect(result.episodeSummary).toContain('[attachments]');
+    expect(descriptor(result)).toMatchObject({ hasAttachments: true });
+    expect(result.episodeSummary).not.toContain('file:///img.png');
   });
 
   it('preserves attachment presence from a content-minimal ingestion snapshot', () => {
@@ -111,33 +129,26 @@ describe('extractStructuralMemory — episode summary', () => {
 
     expect(snapshot.turnMessages[0]).toMatchObject({ hasAttachments: true });
     expect(
-      extractStructuralMemory({ ...baseInput, messages: snapshot.turnMessages }).episodeSummary,
-    ).toContain('[attachments]');
+      descriptor(extractStructuralMemory({ ...baseInput, messages: snapshot.turnMessages })),
+    ).toMatchObject({ hasAttachments: true });
   });
 
-  it('falls back to "Turn completed" when no signals exist', () => {
+  it('uses the same closed descriptor when no optional signals exist', () => {
     const result = extractStructuralMemory({
       ...baseInput,
       userMessage: '',
       assistantMessage: '',
       messages: [],
     });
-    expect(result.episodeSummary).toBe('Turn completed');
-  });
-
-  it('caps episode summary at 600 chars', () => {
-    const longUser = 'a'.repeat(1000);
-    const result = extractStructuralMemory({
-      ...baseInput,
-      userMessage: longUser,
-      messages: [
-        msg({
-          role: 'assistant',
-          toolCalls: [{ name: 'very_long_tool_name_that_adds_more_chars', arguments: '{}' }],
-        }),
-      ],
+    expect(descriptor(result)).toEqual({
+      kind: 'structural_turn',
+      version: 1,
+      messageCount: 0,
+      toolCallCount: 0,
+      completedToolCallCount: 0,
+      hasCodeBlock: false,
+      hasAttachments: false,
     });
-    expect(result.episodeSummary.length).toBeLessThanOrEqual(600);
   });
 });
 
@@ -169,10 +180,10 @@ describe('sliceClosedTurnMessages', () => {
   });
 });
 
-// ── Focus inference ─────────────────────────────────────────────────────────
+// ── Content-free semantic fallback ─────────────────────────────────────────
 
-describe('extractStructuralMemory — focus inference', () => {
-  it('uses only the closed turn window when source message ids are provided', () => {
+describe('extractStructuralMemory — semantic fallback', () => {
+  it('uses only the closed turn window for its content-free descriptor', () => {
     const user = msg({ id: 'u-2', role: 'user', content: 'recall scope-b' });
     const assistant = msg({ id: 'a-2', role: 'assistant', content: 'acknowledged' });
     const result = extractStructuralMemory({
@@ -193,128 +204,35 @@ describe('extractStructuralMemory — focus inference', () => {
       ],
     });
 
-    expect(result.activeFocus).toBeNull();
     expect(result.episodeSummary).not.toContain('update_goals');
-  });
-  it('infers focus from tool calls', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
-      messages: [msg({ role: 'assistant', toolCalls: [{ name: 'write_file', arguments: '{}' }] })],
+    expect(JSON.parse(result.episodeSummary)).toMatchObject({
+      messageCount: 2,
+      toolCallCount: 0,
     });
-    expect(result.activeFocus).toContain('Running:');
-    expect(result.activeFocus).toContain('write_file');
   });
 
-  it('infers focus from code blocks with languages', () => {
+  it.each([
+    ['tool metadata', 'Run this', 'write_file'],
+    ['code fence', '```python\nprint(1)\n```', null],
+    ['Western checklist', '- [ ] Fix auth\n1. Update docs', null],
+    ['Arabic list', '١. راجع الموعد\n- [ ] اتصل بالطبيب', null],
+    ['Japanese list', '1. 予定を確認\n- [ ] 予約する', null],
+  ])('does not infer focus or open threads from %s', (_label, content, toolName) => {
     const result = extractStructuralMemory({
       ...baseInput,
-      messages: [
-        msg({ role: 'assistant', content: '```python\nprint(1)\n```\n```rust\nfn main(){}\n```' }),
-      ],
-    });
-    expect(result.activeFocus).toContain('Coding:');
-    expect(result.activeFocus).toContain('python');
-    expect(result.activeFocus).toContain('rust');
-  });
-
-  it('prefers thread title prefix when available', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
-      threadTitle: 'API Refactor',
-      messages: [msg({ role: 'assistant', toolCalls: [{ name: 'read_file', arguments: '{}' }] })],
-    });
-    expect(result.activeFocus).toContain('API Refactor');
-    expect(result.activeFocus).toContain('Running:');
-  });
-
-  it('falls back to thread title alone when no tools or code', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
-      threadTitle: 'Daily standup notes',
-      messages: [msg({ role: 'user', content: 'Hello' })],
-    });
-    expect(result.activeFocus).toContain('Daily standup notes');
-  });
-
-  it('returns null when no structural signals exist', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
-      messages: [msg({ role: 'user', content: 'Hello' })],
-    });
-    expect(result.activeFocus).toBeNull();
-  });
-
-  it('caps focus at 600 chars', () => {
-    const longTitle = 'A'.repeat(1000);
-    const result = extractStructuralMemory({
-      ...baseInput,
-      threadTitle: longTitle,
-      messages: [msg({ role: 'assistant', toolCalls: [{ name: 'x', arguments: '{}' }] })],
-    });
-    expect(result.activeFocus!.length).toBeLessThanOrEqual(600);
-  });
-});
-
-// ── Open threads ────────────────────────────────────────────────────────────
-
-describe('extractStructuralMemory — open threads', () => {
-  it('extracts unchecked markdown checklist items', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
-      messages: [
-        msg({ role: 'user', content: '- [ ] Fix auth\n- [x] Done item\n- [ ] Update docs' }),
-      ],
-    });
-    expect(result.openThreads).toContain('Fix auth');
-    expect(result.openThreads).toContain('Update docs');
-    expect(result.openThreads).not.toContain('Done item');
-  });
-
-  it('extracts numbered list items as potential steps', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
-      messages: [msg({ role: 'user', content: '1. First step\n2. Second step\n3. Third step' })],
-    });
-    expect(result.openThreads).toContain('First step');
-    expect(result.openThreads).toContain('Second step');
-  });
-
-  it('caps open threads at 5 items', () => {
-    const items = Array.from({ length: 10 }, (_, i) => `- [ ] Task ${i}`).join('\n');
-    const result = extractStructuralMemory({
-      ...baseInput,
-      messages: [msg({ role: 'user', content: items })],
-    });
-    expect(result.openThreads.length).toBeLessThanOrEqual(5);
-  });
-
-  it('drops very short or very long items', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
-      messages: [msg({ role: 'user', content: '- [ ] OK\n- [ ] ' + 'x'.repeat(100) })],
-    });
-    expect(result.openThreads).toHaveLength(0);
-  });
-
-  it('returns empty array when no checklist or numbered list exists', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
-      messages: [msg({ role: 'assistant', content: 'Just some text' })],
-    });
-    expect(result.openThreads).toEqual([]);
-  });
-
-  it('does not promote assistant-authored lists into prompt-visible open threads', () => {
-    const result = extractStructuralMemory({
-      ...baseInput,
+      threadTitle: 'private title',
       messages: [
         msg({
-          role: 'assistant',
-          content: '- [ ] unsupported assistant suggestion\n1. unsupported assistant step',
+          role: toolName ? 'assistant' : 'user',
+          content,
+          toolCalls: toolName ? [{ name: toolName, arguments: '{}' }] : undefined,
         }),
       ],
     });
-    expect(result.openThreads).toEqual([]);
+
+    expect(result.episodeSummary).not.toContain('private title');
+    expect(result.episodeSummary).not.toContain(content);
+    if (toolName) expect(result.episodeSummary).not.toContain(toolName);
   });
 });
 
@@ -424,7 +342,7 @@ describe('extractStructuralMemory — structural facts', () => {
     expect(result.facts).toEqual([]);
   });
 
-  it('extracts sub-agent delegation facts', () => {
+  it('never persists delegated prompt prose as a structural fact', () => {
     const result = extractStructuralMemory({
       ...baseInput,
       messages: [
@@ -435,16 +353,15 @@ describe('extractStructuralMemory — structural facts', () => {
             {
               id: 'spawn-1',
               name: 'sessions_spawn',
-              arguments: JSON.stringify({ prompt: 'Write tests' }),
+              arguments: JSON.stringify({ prompt: 'private delegated prompt' }),
             },
           ],
         }),
         msg({ id: 'spawn-result-1', role: 'tool', toolCallId: 'spawn-1', content: 'created' }),
       ],
     });
-    const fact = result.facts.find((f) => f.predicate === 'delegated_task');
-    expect(fact).toBeDefined();
-    expect(fact!.value).toContain('Write tests');
+    expect(result.facts).toEqual([]);
+    expect(result.episodeSummary).not.toContain('private delegated prompt');
   });
 
   it('caps facts at 5 items', () => {

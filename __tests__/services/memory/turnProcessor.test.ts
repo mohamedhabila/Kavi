@@ -54,7 +54,7 @@ jest.mock('../../../src/services/memory/facts/exactReplacementQueries', () => ({
 
 import {
   processIngestionTurn,
-  syncWorkingMemoryFromTurn,
+  validateMemoryTurnPublication,
 } from '../../../src/services/memory/turnProcessor';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
@@ -69,7 +69,7 @@ function makeMsg(overrides: Partial<Message> = {}): Message {
   } as Message;
 }
 
-describe('syncWorkingMemoryFromTurn', () => {
+describe('validateMemoryTurnPublication', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useSettingsStore.setState({ disableLongTermMemory: false } as never);
@@ -77,13 +77,11 @@ describe('syncWorkingMemoryFromTurn', () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'tool-only turn',
       facts: [],
-      activeFocus: 'calendar planning',
-      openThreads: [],
     });
   });
 
   it('returns processed=true for tool-only closed turns', () => {
-    const result = syncWorkingMemoryFromTurn({
+    const result = validateMemoryTurnPublication({
       threadId: 'conv-tool-only',
       messages: [
         makeMsg({ role: 'user', content: 'plan-weekend-trip-42' }),
@@ -101,7 +99,7 @@ describe('syncWorkingMemoryFromTurn', () => {
 
     expect(result.processed).toBe(true);
     expect(result.skipped).toBeUndefined();
-    expect(mockExtractStructuralMemory).toHaveBeenCalled();
+    expect(mockExtractStructuralMemory).not.toHaveBeenCalled();
   });
 });
 
@@ -115,8 +113,6 @@ describe('processIngestionTurn', () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'User asked about API',
       facts: [],
-      activeFocus: null,
-      openThreads: [],
     });
     mockApplyConsolidatorResult.mockReturnValue({
       recordedFacts: [],
@@ -226,15 +222,13 @@ describe('processIngestionTurn', () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'Deploy turn',
       facts: [{ subject: 'system', predicate: 'deployed', value: 'yes' }],
-      activeFocus: 'Deployment',
-      openThreads: ['Verify staging'],
     });
     mockApplyConsolidatorResult.mockReturnValue({
       recordedFacts: [{ inputIndex: 0, factId: 'f1' }],
       resolvedFacts: [{ inputIndex: 0, factId: 'f1' }],
       invalidatedFactIds: [],
-      activeFocusUpdated: true,
-      openThreadsUpdated: true,
+      activeFocusUpdated: false,
+      openThreadsUpdated: false,
       episodeId: 'ep1',
     });
 
@@ -258,14 +252,14 @@ describe('processIngestionTurn', () => {
     expect(result.episodeId).toBe('ep1');
     expect(result.deterministicFactIds).toEqual(['f1']);
     expect(result.enriched).toBe(false);
-    expect(result.activeFocusUpdated).toBe(true);
-    expect(result.openThreadsUpdated).toBe(true);
+    expect(result.activeFocusUpdated).toBe(false);
+    expect(result.openThreadsUpdated).toBe(false);
     expect(mockApplyConsolidatorResult).toHaveBeenCalledWith(
       expect.objectContaining({
         episodeSummary: 'Deploy turn',
         newFacts: [{ subject: 'system', predicate: 'deployed', value: 'yes' }],
-        activeFocus: 'Deployment',
-        openThreads: ['Verify staging'],
+        activeFocus: null,
+        openThreads: [],
       }),
       expect.objectContaining({ skipWorkingMemoryWrites: true }),
     );
@@ -279,8 +273,6 @@ describe('processIngestionTurn', () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'Structural',
       facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
-      activeFocus: null,
-      openThreads: [],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
       status: 'provider_error',
@@ -322,8 +314,6 @@ describe('processIngestionTurn', () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'Structural before preemption',
       facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
-      activeFocus: null,
-      openThreads: [],
     });
     const controller = new AbortController();
     mockExtractProviderEnrichment.mockImplementationOnce(async () => {
@@ -366,8 +356,6 @@ describe('processIngestionTurn', () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'S',
       facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
-      activeFocus: null,
-      openThreads: [],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
       status: 'valid',
@@ -407,8 +395,6 @@ describe('processIngestionTurn', () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'S',
       facts: [{ subject: 'knowu-user', predicate: 'preferred_message_contact', value: 'Avery' }],
-      activeFocus: null,
-      openThreads: [],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
       status: 'valid',
@@ -470,8 +456,6 @@ describe('processIngestionTurn', () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'S',
       facts: [],
-      activeFocus: null,
-      openThreads: [],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
       status: 'valid',

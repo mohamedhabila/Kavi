@@ -366,7 +366,6 @@ async function insertTrajectory(
     graphGoalEvidence,
     sourceRunId: id,
     now,
-    skipWorkingMemorySync: true,
     episodeAccess: {
       personaId: 'longmemeval-v2',
       shareability: 'thread_only',

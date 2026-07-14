@@ -76,7 +76,6 @@ export async function evaluateMemoryCorrectionFixture(
         notable: [],
       }),
     now: now + 2,
-    skipWorkingMemorySync: true,
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
   });
 

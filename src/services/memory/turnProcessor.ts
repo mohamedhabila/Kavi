@@ -1,15 +1,14 @@
 // ---------------------------------------------------------------------------
 // Kavi — Turn Processor (Always-On Memory Ingestion)
 // ---------------------------------------------------------------------------
-// Two-phase ingestion aligned with human memory:
-//   1. syncWorkingMemoryFromTurn — immediate Layer-1 update (focus, threads)
+// Two-phase ingestion aligned with durable authority:
+//   1. validateMemoryTurnPublication — validate the exact closed publication window
 //   2. processIngestionTurn — durable consolidation via ingestion queue
 //
-// Structural signals only in the sync path; provider enrichment runs async.
+// Semantic working-memory updates require valid provider enrichment and run async.
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
-import { createLogger } from '../../utils/logger';
 import type {
   ConsolidatorExtractor,
   ConsolidatorOutcome,
@@ -20,33 +19,26 @@ import type {
 import { extractStructuralMemory } from './deterministicExtractor';
 import { extractProviderEnrichment } from './providerExtractor';
 import { ensureFactSchema } from './schema';
-import { editPromptEligibleWorkingBlock } from './workingBlocks';
-import { composeActiveFocusContent } from './focus';
 import { canWriteLongTermMemory } from './policy';
 import { finalizeProviderTurn, persistStructuralTurn } from './turnPersistence';
 import type { EpisodeShareability } from './episodes/accessPolicyTypes';
-import {
-  resolveCodeOwnedMemoryConversationId,
-  resolveCodeOwnedMemoryTaskId,
-} from './memoryScopeIdentity';
+import { resolveCodeOwnedMemoryConversationId } from './memoryScopeIdentity';
 import { mergeProviderIntoStructural } from './providerFactReconciliation';
 import {
   resolveSealedPriorUserMessageIdentity,
   type MemoryMessageIdentity,
 } from './priorUserMessageIdentity';
 import {
-  skippedSyncWorkingMemoryResult,
-  type SyncWorkingMemoryResult,
-} from './syncWorkingMemoryResult';
+  skippedMemoryTurnPublicationValidation,
+  type MemoryTurnPublicationValidation,
+} from './turnPublicationValidation';
 import {
   resolveClosedTurnEndingAt,
   type ExactClosedTurnFailureReason,
   type ExactClosedTurnResolution,
 } from './closedTurn';
 
-export type { SyncWorkingMemoryResult } from './syncWorkingMemoryResult';
-
-const logger = createLogger('memory.turnProcessor');
+export type { MemoryTurnPublicationValidation } from './turnPublicationValidation';
 
 export interface ProcessTurnInput {
   threadId: string;
@@ -65,7 +57,6 @@ export interface ProcessTurnInput {
   sealedPriorUserMessageId?: string;
   /** Code-owned provenance context used only to verify the sealed prior identity. */
   priorIdentityMessages?: MemoryMessageIdentity[];
-  skipWorkingMemorySync?: boolean;
   episodeAccess?: {
     personaId: string;
     shareability: EpisodeShareability;
@@ -210,83 +201,22 @@ function buildTurnInput(
   };
 }
 
-function fitBlockLines(lines: string[], maxChars: number): string {
-  const joined = lines.filter((line) => line.trim().length > 0).join('\n');
-  return joined.length <= maxChars ? joined : joined.slice(0, maxChars);
-}
-
-function applyWorkingMemoryFromStructural(
-  structural: ReturnType<typeof extractStructuralMemory>,
-  input: ProcessTurnInput,
-  now: number,
-): { activeFocusUpdated: boolean; openThreadsUpdated: boolean } {
-  let activeFocusUpdated = false;
-  let openThreadsUpdated = false;
-  const scope = {
-    conversationId: resolveMemoryConversationId(input),
-    threadId: resolveMemoryConversationId(input),
-    taskId: input.taskId,
-  };
-
-  const taskId = resolveCodeOwnedMemoryTaskId(input.taskId);
-  if (structural.activeFocus && !taskId) {
-    try {
-      const activeFocus = composeActiveFocusContent({
-        threadTitle: input.threadTitle,
-        activeFocus: structural.activeFocus,
-      });
-      editPromptEligibleWorkingBlock('active_focus', activeFocus, scope, { now });
-      activeFocusUpdated = true;
-    } catch (error) {
-      logger.devWarn(
-        'Working memory focus update failed:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }
-
-  if (structural.openThreads.length > 0) {
-    try {
-      editPromptEligibleWorkingBlock(
-        'open_threads',
-        fitBlockLines(structural.openThreads, 800),
-        scope,
-        { now },
-      );
-      openThreadsUpdated = true;
-    } catch (error) {
-      logger.devWarn(
-        'Working memory open-threads update failed:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }
-
-  return { activeFocusUpdated, openThreadsUpdated };
-}
-
 /**
- * Synchronous Layer-1 working-memory update. Never throws into the chat path.
+ * Synchronous source-bound publication validation. Semantic state is provider-owned.
  */
-export function syncWorkingMemoryFromTurn(input: ProcessTurnInput): SyncWorkingMemoryResult {
+export function validateMemoryTurnPublication(
+  input: ProcessTurnInput,
+): MemoryTurnPublicationValidation {
   ensureFactSchema();
   if (!canWriteLongTermMemory()) {
-    return skippedSyncWorkingMemoryResult('opt_out');
+    return skippedMemoryTurnPublicationValidation('opt_out');
   }
-  const now = input.now ?? Date.now();
   const closedTurn = resolveExactClosedTurn(input);
   if (closedTurn.status === 'invalid') {
-    return skippedSyncWorkingMemoryResult(exactClosedTurnSkipReason(closedTurn.reason));
+    return skippedMemoryTurnPublicationValidation(exactClosedTurnSkipReason(closedTurn.reason));
   }
-  const { user, assistant } = closedTurn;
-
-  const structural = extractStructuralMemory(buildTurnInput(user, assistant, input));
-  const working = applyWorkingMemoryFromStructural(structural, input, now);
-
   return {
     processed: true,
-    activeFocusUpdated: working.activeFocusUpdated,
-    openThreadsUpdated: working.openThreadsUpdated,
     sourceEndMessageId: closedTurn.sourceEndMessageId,
     sourceStartMessageId: closedTurn.sourceStartMessageId,
     priorUserMessageId: closedTurn.priorUserMessageId,
@@ -323,15 +253,11 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     return skippedProcessTurnResult('source_identity_invalid');
   }
   const priorUserMessageId = priorUserIdentity.priorUserMessageId;
-  if (!input.skipWorkingMemorySync) {
-    applyWorkingMemoryFromStructural(structural, input, now);
-  }
-
   const structuralResult: ConsolidatorResult = {
     episodeSummary: structural.episodeSummary || null,
     newFacts: structural.facts,
-    activeFocus: structural.activeFocus,
-    openThreads: structural.openThreads,
+    activeFocus: null,
+    openThreads: [],
     notable: [],
   };
   if (!canWriteLongTermMemory()) {

@@ -216,14 +216,11 @@ export function mergeProviderIntoStructural(
     mergedFacts.push(decision.fact);
     seen.add(key);
   }
-  const threadSet = new Set(structural.openThreads);
-  for (const thread of provider.openThreads) threadSet.add(thread);
-
   return {
     episodeSummary: episodeSummary || null,
     newFacts: mergedFacts,
-    activeFocus: provider.activeFocus ?? structural.activeFocus,
-    openThreads: Array.from(threadSet).slice(0, 5),
+    activeFocus: provider.activeFocus,
+    openThreads: provider.openThreads.slice(0, 5),
     notable: provider.notable ?? [],
   };
 }

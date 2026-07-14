@@ -61,7 +61,6 @@ describe('graph evidence ingestion bridge', () => {
       taskId: TASK_ID,
       sourceRunId: 'run-graph-1',
       graphGoalEvidence: [evidence],
-      skipWorkingMemorySync: true,
     });
 
     expect(result.processed).toBe(true);
@@ -97,7 +96,6 @@ describe('graph evidence ingestion bridge', () => {
       taskId: TASK_ID,
       sourceRunId: 'run-graph-replay',
       graphGoalEvidence: [evidence],
-      skipWorkingMemorySync: true,
     };
 
     await processIngestionTurn({ ...input, now: 100 });
@@ -158,7 +156,6 @@ describe('graph evidence ingestion bridge', () => {
       taskId: TASK_ID,
       sourceRunId: 'run-graph-structured',
       graphGoalEvidence: [agentRunEvidence],
-      skipWorkingMemorySync: true,
     });
 
     expect(result.agentRunMemoryFactIds.length).toBeGreaterThan(0);
@@ -194,7 +191,6 @@ describe('graph evidence ingestion bridge', () => {
       taskId: TASK_ID,
       sourceRunId: 'run-graph-malformed',
       graphGoalEvidence: [malformedAgentRunEvidence],
-      skipWorkingMemorySync: true,
     });
 
     expect(result.processed).toBe(true);

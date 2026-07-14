@@ -194,7 +194,6 @@ describe('memory ingestion receipt integration', () => {
         messages: closedFileTurn('race'),
         sourceEndMessageId: job.sourceEndMessageId,
         now: 200,
-        skipWorkingMemorySync: true,
         canPersist: () => true,
         commitPersistenceReceipt: ({ providerOutcome, ...writeSet }) => {
           expect(providerOutcome).toEqual({ status: 'not_requested' });
@@ -260,7 +259,6 @@ describe('memory ingestion receipt integration', () => {
       messages,
       sourceEndMessageId: job.sourceEndMessageId,
       now: 300,
-      skipWorkingMemorySync: true,
       canPersist: () => true,
       extractor: async () =>
         JSON.stringify({

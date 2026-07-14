@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // Bridges the app shell to memory services.
 //
-// recordCompletedTurnForMemory — sync Layer-1 update + enqueue async ingestion.
+// recordCompletedTurnForMemory — validate publication + enqueue async ingestion.
 // runMemoryMigrationTick — periodic archived-thread backfill.
 // runMemoryBackgroundFlush — drains the ingestion queue on background.
 //
@@ -27,9 +27,7 @@ import {
 } from './ingestionQueue';
 import { runMigrationSeedPass, type RunSeedPassResult } from './migrationSeedPass';
 import { resolveConsolidationExtractor } from './consolidation/turnPipeline';
-import { syncWorkingMemoryFromTurn } from './turnProcessor';
-import { editPromptEligibleWorkingBlock, getWorkingBlock } from './workingBlocks';
-import { ACTIVE_FOCUS_MEMORY_CHAR_LIMIT, composeActiveFocusContent } from './focus';
+import { validateMemoryTurnPublication } from './turnProcessor';
 import { resolveConversationModel } from '../llm/support/providerSupport';
 import {
   requireExactMemoryScopeId,
@@ -194,48 +192,6 @@ export interface RecordCompletedTurnForMemoryResult {
     | 'source_identity_invalid';
 }
 
-function composeConversationFocusFromThreadTitle(
-  threadTitle: string,
-  existingContent: string | undefined,
-): string {
-  return composeActiveFocusContent({
-    threadTitle,
-    activeFocus: existingContent,
-    maxChars: ACTIVE_FOCUS_MEMORY_CHAR_LIMIT,
-  });
-}
-
-function syncConversationFocusFromThreadTitle(input: {
-  memoryConversationId: string;
-  threadTitle?: string;
-  now?: number;
-}): boolean {
-  const threadId = requireExactMemoryScopeId(
-    input.memoryConversationId,
-    'memory_scope_conversation_id_invalid',
-  );
-  const threadTitle = input.threadTitle?.trim();
-  if (!threadId || !threadTitle) return false;
-
-  const scope = { conversationId: threadId, threadId };
-  try {
-    const existing = getWorkingBlock('active_focus', scope)?.content;
-    if (existing?.includes(threadTitle)) {
-      return false;
-    }
-    const content = composeConversationFocusFromThreadTitle(threadTitle, existing);
-    if (!content) return false;
-    editPromptEligibleWorkingBlock('active_focus', content, scope, { now: input.now });
-    return true;
-  } catch (error) {
-    logger.devWarn(
-      'Conversation focus metadata sync failed:',
-      error instanceof Error ? error.message : String(error),
-    );
-    return false;
-  }
-}
-
 function closedTurnSkipReason(
   reason: ExactClosedTurnFailureReason,
 ): 'no_closed_turn' | 'source_identity_invalid' {
@@ -243,8 +199,8 @@ function closedTurnSkipReason(
 }
 
 /**
- * Record a completed turn for memory. Sync Layer-1 update is immediate;
- * durable consolidation is enqueued and drained asynchronously.
+ * Record a completed turn for memory. Exact source validation is immediate;
+ * semantic working memory and durable consolidation run through provider-backed ingestion.
  */
 export async function recordCompletedTurnForMemory(
   input: RecordCompletedTurnForMemoryInput,
@@ -319,8 +275,7 @@ export async function recordCompletedTurnForMemory(
     | {
         disposition: 'enqueued';
         job: NonNullable<ReturnType<typeof enqueueIngestionJob>>;
-        syncResult: ReturnType<typeof syncWorkingMemoryFromTurn>;
-        conversationFocusUpdated: boolean;
+        validation: ReturnType<typeof validateMemoryTurnPublication>;
       };
   try {
     publication = runMemoryTransaction(() => {
@@ -347,7 +302,7 @@ export async function recordCompletedTurnForMemory(
       });
       if (!job) return { disposition: 'withdrawn' as const };
 
-      const syncResult = syncWorkingMemoryFromTurn({
+      const validation = validateMemoryTurnPublication({
         threadId: input.threadId,
         memoryConversationId,
         sourceEndMessageId: closedTurn.sourceEndMessageId,
@@ -358,20 +313,15 @@ export async function recordCompletedTurnForMemory(
         now: input.now,
       });
       if (
-        !syncResult.processed ||
-        syncResult.sourceStartMessageId !== closedTurn.sourceStartMessageId ||
-        syncResult.sourceEndMessageId !== closedTurn.sourceEndMessageId ||
-        syncResult.priorUserMessageId !== closedTurn.priorUserMessageId
+        !validation.processed ||
+        validation.sourceStartMessageId !== closedTurn.sourceStartMessageId ||
+        validation.sourceEndMessageId !== closedTurn.sourceEndMessageId ||
+        validation.priorUserMessageId !== closedTurn.priorUserMessageId
       ) {
         throw new Error('memory_turn_working_projection_source_mismatch');
       }
-      const conversationFocusUpdated = syncConversationFocusFromThreadTitle({
-        memoryConversationId,
-        threadTitle: input.threadTitle,
-        now: input.now,
-      });
       if (!isMemoryPolicyEpochCurrent(policyEpoch)) throw new Error(policyChangedError);
-      return { disposition: 'enqueued' as const, job, syncResult, conversationFocusUpdated };
+      return { disposition: 'enqueued' as const, job, validation };
     });
   } catch (error) {
     if (!(error instanceof Error) || error.message !== policyChangedError) throw error;
@@ -402,9 +352,8 @@ export async function recordCompletedTurnForMemory(
     jobId: publication.job.id,
     episodeId: null,
     factIds: [],
-    activeFocusUpdated:
-      publication.syncResult.activeFocusUpdated || publication.conversationFocusUpdated,
-    openThreadsUpdated: publication.syncResult.openThreadsUpdated,
+    activeFocusUpdated: false,
+    openThreadsUpdated: false,
     enriched: false,
   };
 }

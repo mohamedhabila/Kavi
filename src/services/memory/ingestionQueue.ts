@@ -312,7 +312,6 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
         shareability: 'thread_only',
       },
       now: job.sourceAt,
-      skipWorkingMemorySync: true,
       deferStructuralFinalization: structuralCheckpointOnly,
       providerSignal: activeAttempt.controller.signal,
       onExecutionResourceResolved: (resource) => {

@@ -5,9 +5,9 @@
 // Uses message metadata, tool calls, and message structure — never language
 // patterns or regex. Works for any language, code, mixed content.
 //
-// Design: episodes and working blocks are created from structure alone.
-// Fact extraction requires semantic understanding and is delegated to the
-// active chat provider when available.
+// Design: provider-unavailable episodes contain only content-free structure.
+// Semantic summaries, focus, open threads, and facts require provider evidence.
+// Exact tool outcomes may contribute only code-owned structured facts.
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
@@ -20,17 +20,11 @@ import type {
 const MAX_STRUCTURAL_FACTS = 5;
 
 export interface StructuralExtraction {
-  /** Always created from the turn structure */
+  /** Content-free descriptor used until semantic provider enrichment succeeds. */
   episodeSummary: string;
-  /** Focus inferred from structure (tool calls, code blocks, thread title) */
-  activeFocus: string | null;
-  /** Open threads from explicit tool evidence or checklist structure */
-  openThreads: string[];
   /** Facts extracted from universal structural signals only */
   facts: ConsolidatorFact[];
 }
-
-const MAX_FOCUS_CHARS = 600;
 
 /**
  * Restrict structural extraction to the closed turn window so prior-turn tool
@@ -66,133 +60,39 @@ export function extractStructuralMemory(input: ConsolidatorTurnInput): Structura
     input.sourceUserMessageId,
     input.sourceAssistantMessageId,
   );
-  const userText = (input.userMessage ?? '').trim();
-
-  // Episode is always built from structure
-  const episodeSummary = buildStructuralEpisodeSummary(messages, userText);
-
-  // Focus is inferred from structural signals
-  const activeFocus = inferStructuralFocus(messages, input.threadTitle);
-
-  // Open threads from explicit checklist / todo structure in messages
-  const openThreads = extractStructuredOpenThreads(messages);
+  const episodeSummary = buildStructuralEpisodeSummary(messages);
 
   // Facts: only from structural signals that are language-independent
   const facts = extractStructuralFacts(messages);
 
-  return { episodeSummary, activeFocus, openThreads, facts };
+  return { episodeSummary, facts };
 }
 
 // ── Episode summary (language-agnostic) ────────────────────────────────────
 
 function buildStructuralEpisodeSummary(
   messages: ConsolidatorSourceMessage[],
-  userText: string,
 ): string {
-  const parts: string[] = [];
-
-  // User intent from first user message in window
-  const userPreview = userText.slice(0, 120).trim();
-  if (userPreview) parts.push(userPreview);
-
-  // Tool call summary (universal)
-  const toolNames = new Set<string>();
-  for (const m of messages) {
-    for (const tc of m.toolCalls ?? []) {
-      if (tc.name) toolNames.add(tc.name);
-    }
-  }
-  if (toolNames.size > 0) {
-    parts.push(`[${Array.from(toolNames).join(', ')}]`);
-  }
-
-  // Code block presence (structural signal)
-  const hasCode = messages.some((m) => (m.content ?? '').includes('```'));
-  if (hasCode) parts.push('[code]');
-
-  // Attachment presence
+  const completedToolCallIds = new Set(
+    messages.flatMap((message) =>
+      message.role === 'tool' && message.toolCallId ? [message.toolCallId] : [],
+    ),
+  );
+  const toolCalls = messages.flatMap((message) => message.toolCalls ?? []);
   const hasAttachments = messages.some(
     (message) => message.hasAttachments === true || (message.attachments ?? []).length > 0,
   );
-  if (hasAttachments) parts.push('[attachments]');
-
-  return parts.join(' | ').slice(0, 600) || 'Turn completed';
-}
-
-// ── Focus inference (structural) ───────────────────────────────────────────
-
-function inferStructuralFocus(messages: Message[], threadTitle?: string): string | null {
-  const toolCalls = messages.flatMap((m) => m.toolCalls ?? []);
-  const toolNames = toolCalls.map((tc) => tc.name).filter(Boolean);
-
-  // If tools ran, focus is the tool workflow
-  if (toolNames.length > 0) {
-    const unique = Array.from(new Set(toolNames)).slice(0, 4);
-    const focus = `Running: ${unique.join(', ')}`;
-    return threadTitle
-      ? `${threadTitle} — ${focus}`.slice(0, MAX_FOCUS_CHARS)
-      : focus.slice(0, MAX_FOCUS_CHARS);
-  }
-
-  // If code blocks exist, focus is coding
-  const codeLangs = extractCodeLanguages(messages);
-  if (codeLangs.length > 0) {
-    const focus = `Coding: ${codeLangs.join(', ')}`;
-    return threadTitle
-      ? `${threadTitle} — ${focus}`.slice(0, MAX_FOCUS_CHARS)
-      : focus.slice(0, MAX_FOCUS_CHARS);
-  }
-
-  // Fallback to thread title
-  if (threadTitle) {
-    return `Working on: ${threadTitle.slice(0, MAX_FOCUS_CHARS - 14)}`;
-  }
-
-  return null;
-}
-
-function extractCodeLanguages(messages: Message[]): string[] {
-  const langs = new Set<string>();
-  for (const m of messages) {
-    const content = m.content ?? '';
-    const matches = content.match(/```([a-zA-Z0-9_+-]+)/g);
-    if (matches) {
-      for (const match of matches) {
-        const lang = match.slice(3).trim().toLowerCase();
-        if (lang && lang !== 'plaintext') langs.add(lang);
-      }
-    }
-  }
-  return Array.from(langs).slice(0, 3);
-}
-
-// ── Open threads (structural) ──────────────────────────────────────────────
-
-function extractStructuredOpenThreads(messages: Message[]): string[] {
-  const threads: string[] = [];
-
-  for (const m of messages) {
-    if (m.role !== 'user') continue;
-    const content = m.content ?? '';
-    // Check for explicit checklist items (markdown task lists)
-    const checklistMatches = content.match(/- \[ \]\s*(.+)/g);
-    if (checklistMatches) {
-      for (const match of checklistMatches) {
-        const item = match.replace(/- \[ \]\s*/, '').trim();
-        if (item.length > 3 && item.length <= 80) threads.push(item);
-      }
-    }
-    // Check for numbered lists that might be steps
-    const numberedMatches = content.match(/^\d+\.\s+(.{5,80})$/gm);
-    if (numberedMatches) {
-      for (const match of numberedMatches.slice(0, 3)) {
-        const item = match.replace(/^\d+\.\s*/, '').trim();
-        if (item.length > 3 && !threads.includes(item)) threads.push(item);
-      }
-    }
-  }
-
-  return threads.slice(0, 5);
+  return JSON.stringify({
+    kind: 'structural_turn',
+    version: 1,
+    messageCount: messages.length,
+    toolCallCount: toolCalls.length,
+    completedToolCallCount: toolCalls.filter(
+      (toolCall) => toolCall.id && completedToolCallIds.has(toolCall.id),
+    ).length,
+    hasCodeBlock: messages.some((message) => (message.content ?? '').includes('```')),
+    hasAttachments,
+  });
 }
 
 // ── Structural facts (language-agnostic) ───────────────────────────────────
@@ -241,36 +141,6 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
           }
         } catch {
           // Skip malformed args
-        }
-      }
-    }
-  }
-
-  // Fact 2: Sub-agent spawning — structural
-  for (const m of messages) {
-    for (const tc of m.toolCalls ?? []) {
-      const evidenceMessageId = tc.id ? observedToolResults.get(tc.id) : undefined;
-      if (tc.name === 'sessions_spawn' && evidenceMessageId) {
-        try {
-          const args = JSON.parse(tc.arguments ?? '{}');
-          const prompt = args.prompt ?? '';
-          facts.push({
-            subject: 'system',
-            predicate: 'delegated_task',
-            value: prompt.slice(0, 160),
-            scope: 'conversation',
-            importance: 0.65,
-            confidence: 0.85,
-            evidenceMessageIds: [evidenceMessageId],
-            reason: 'Sub-agent invocation and matching result observed.',
-            sealedApplicability: {
-              factClass: 'workflow',
-              sourceAuthority: 'tool_observed',
-            },
-          });
-          if (facts.length >= MAX_STRUCTURAL_FACTS) return facts;
-        } catch {
-          // Skip
         }
       }
     }

@@ -129,7 +129,6 @@ async function ingest(input: {
         notable: [],
       }),
     now: 300,
-    skipWorkingMemorySync: true,
   });
 }
 
@@ -308,7 +307,6 @@ describe('grounded passive memory corrections', () => {
           notable: [],
         }),
       now: 300,
-      skipWorkingMemorySync: true,
     });
 
     expect(listFacts({ subjectId: old.subjectId, predicate: 'lives_in' })).toEqual([

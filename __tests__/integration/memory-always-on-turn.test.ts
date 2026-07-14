@@ -99,7 +99,7 @@ describe('memory always-on turn integration', () => {
     );
   });
 
-  it('updates working memory synchronously before queue drain', async () => {
+  it('does not synthesize semantic working memory before provider enrichment', async () => {
     const messages = makeClosedTurn('plan trip', 'Working on itinerary');
     const recorded = await recordCompletedTurnForMemory({
       threadId: 'conv-sync',
@@ -115,11 +115,15 @@ describe('memory always-on turn integration', () => {
       conversationId: 'conv-sync',
       threadId: 'conv-sync',
     });
-    expect((focus?.content ?? '').length).toBeGreaterThan(0);
+    expect(focus).toBeNull();
 
     expect(recorded.jobId).not.toBeNull();
     await waitForIngestionJobTerminal(recorded.jobId!);
-    expect(listEpisodes({ threadId: 'conv-sync' }).length).toBeGreaterThan(0);
+    const episodes = listEpisodes({ threadId: 'conv-sync' });
+    expect(episodes.length).toBeGreaterThan(0);
+    expect(JSON.parse(episodes[0].summary)).toMatchObject({ kind: 'structural_turn', version: 1 });
+    expect(episodes[0].summary).not.toContain('plan trip');
+    expect(episodes[0].summary).not.toContain('Trip planning');
   });
 
   it('grounds and recalls a natural chitchat memory request without a memory-write tool', async () => {

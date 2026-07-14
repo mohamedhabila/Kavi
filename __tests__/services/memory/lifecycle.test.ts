@@ -78,7 +78,7 @@ beforeEach(() => {
 });
 
 describe('recordCompletedTurnForMemory', () => {
-  it('always processes turns and creates an episode even without a provider', async () => {
+  it('creates only a content-free episode when no semantic provider is available', async () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-live',
       threadTitle: 'Release hardening',
@@ -90,7 +90,7 @@ describe('recordCompletedTurnForMemory', () => {
     expect(result.processed).toBe(true);
     expect(result.enqueued).toBe(true);
     expect(result.episodeId).toBeNull();
-    expect(result.activeFocusUpdated).toBe(true);
+    expect(result.activeFocusUpdated).toBe(false);
     expect(result.enriched).toBe(false);
 
     await drainRecordedTurn();
@@ -98,19 +98,24 @@ describe('recordCompletedTurnForMemory', () => {
     // Episode was created
     const episodes = listEpisodes({ threadId: 'conv-live' });
     expect(episodes.length).toBeGreaterThanOrEqual(1);
+    expect(JSON.parse(episodes[0].summary)).toMatchObject({
+      kind: 'structural_turn',
+      version: 1,
+    });
+    expect(episodes[0].summary).not.toContain('Android Release Build Validation');
+    expect(episodes[0].summary).not.toContain('Release hardening');
     expect(getEpisodeAccessPolicy(getMemoryDb(), episodes[0].id)).toMatchObject({
       scope: { personaId: 'default', taskId: null },
       shareability: 'thread_only',
       sensitivity: 'normal',
     });
 
-    // Focus block updated
     expect(
       getWorkingBlock('active_focus', {
         conversationId: 'conv-live',
         threadId: 'conv-live',
-      })?.content,
-    ).toContain('Release hardening');
+      }),
+    ).toBeNull();
 
     // Cursor advanced
     expect(getConsolidationState('conv-live')?.lastConsolidatedMessageId).toBe('a-1');
@@ -637,7 +642,7 @@ describe('recordCompletedTurnForMemory', () => {
     ).toBeNull();
   });
 
-  it('keeps conversation focus separate from graph task-scoped turn memory', async () => {
+  it('does not synthesize conversation or task focus without provider semantics', async () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-task-focus',
       threadTitle: 'thread-focus-anchor',
@@ -648,13 +653,13 @@ describe('recordCompletedTurnForMemory', () => {
     });
 
     expect(result.processed).toBe(true);
-    expect(result.activeFocusUpdated).toBe(true);
+    expect(result.activeFocusUpdated).toBe(false);
     expect(
       getWorkingBlock('active_focus', {
         conversationId: 'conv-task-focus',
         threadId: 'conv-task-focus',
-      })?.content,
-    ).toBe('thread-focus-anchor');
+      }),
+    ).toBeNull();
     expect(
       getWorkingBlock('active_focus', {
         conversationId: 'conv-task-focus',
