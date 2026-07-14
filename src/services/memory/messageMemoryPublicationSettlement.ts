@@ -17,6 +17,7 @@ import {
 import { getIngestionJobForSourceTurn } from './ingestionQueueStore';
 import { hasSealedIngestionJobIdentity } from './ingestionQueueIdentity';
 import { canWriteLongTermMemory } from './policy';
+import { advanceConsolidationCursorPastExcludedPublications } from './consolidation/publicationExclusion';
 import {
   publishConversationTurnMemory,
   type MemoryTurnPublicationResult,
@@ -52,6 +53,7 @@ export interface MessageMemoryPublicationSettlementDependencies {
     sourceEndMessageId: string,
     disposition: MessageMemoryPublicationDisposition,
   ): TransitionMessageMemoryPublicationResult;
+  advanceOptOutCursor?(conversation: Conversation, sourceEndMessageId: string): void;
   flushChatState(): Promise<void>;
 }
 
@@ -80,6 +82,13 @@ const DEFAULT_DEPENDENCIES: MessageMemoryPublicationSettlementDependencies = {
     useChatStore
       .getState()
       .transitionMessageMemoryPublication(conversationId, sourceEndMessageId, disposition),
+  advanceOptOutCursor: (conversation, sourceEndMessageId) => {
+    advanceConsolidationCursorPastExcludedPublications({
+      threadId: conversation.id,
+      messages: conversation.messages,
+      sourceEndMessageIds: [sourceEndMessageId],
+    });
+  },
   flushChatState: flushChatStorePersistenceNow,
 };
 
@@ -147,6 +156,14 @@ async function transitionOpenSourceToTerminal(params: {
   disposition: TerminalPublicationDisposition;
   sourceEndMessageId: string;
 }): Promise<MessageMemoryPublicationSettlementResult> {
+  if (params.disposition === 'opt_out') {
+    const source = readExactSource(
+      params.dependencies,
+      params.conversationId,
+      params.sourceEndMessageId,
+    );
+    params.dependencies.advanceOptOutCursor?.(source.conversation, params.sourceEndMessageId);
+  }
   const transition = params.dependencies.transitionMessageMemoryPublication(
     params.conversationId,
     params.sourceEndMessageId,

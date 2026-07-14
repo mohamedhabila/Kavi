@@ -3,6 +3,7 @@ import {
   isAssistantFinalResponsePlaceholder,
   isFinalAssistantMessage,
 } from '../../../utils/assistantMessageMetadata';
+import { latestExcludedMemoryPublicationIndex } from './publicationExclusion';
 import { getConsolidationState, type ConsolidationStateRow } from './schedulerState';
 
 export const DEFAULT_TURN_THRESHOLD = 8;
@@ -51,7 +52,7 @@ export interface CountableTurnsInput {
 
 /** Number of `user`/`assistant` turns strictly after the anchor. */
 export function countNewTurns(input: CountableTurnsInput): number {
-  const idx = findIndexById(input.messages, input.lastConsolidatedMessageId);
+  const idx = latestExcludedMemoryPublicationIndex(input.messages, input.lastConsolidatedMessageId);
   let count = 0;
   for (let i = idx + 1; i < input.messages.length; i += 1) {
     const message = input.messages[i];
@@ -65,7 +66,7 @@ export function unconsolidatedWindow(
   lastConsolidatedMessageId: string | null | undefined,
   anchorMessageId: string | null | undefined,
 ): Message[] {
-  const start = findIndexById(messages, lastConsolidatedMessageId) + 1;
+  const start = latestExcludedMemoryPublicationIndex(messages, lastConsolidatedMessageId) + 1;
   const anchorIndex = findIndexById(messages, anchorMessageId);
   const end = anchorIndex >= 0 ? anchorIndex + 1 : messages.length;
   return messages.slice(Math.max(start, 0), Math.max(end, start));

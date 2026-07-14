@@ -37,6 +37,7 @@ import {
   unconsolidatedWindow,
   type ConsolidationTriggerReason,
 } from './consolidation/schedulerEvaluation';
+import { advanceConsolidationCursorPastExcludedPublications } from './consolidation/publicationExclusion';
 import {
   getConsolidationState,
   listDirtyThreadIds,
@@ -84,6 +85,11 @@ export interface MarkThreadDirtyResult {
 }
 
 export function markThreadDirtyForMemory(input: MarkThreadDirtyInput): MarkThreadDirtyResult {
+  advanceConsolidationCursorPastExcludedPublications({
+    threadId: input.threadId,
+    messages: input.messages,
+    ...(typeof input.now === 'number' ? { now: input.now } : {}),
+  });
   if (input.disableLongTermMemory) {
     return { marked: false, newTurns: 0, skipped: 'opt_out' };
   }
@@ -124,8 +130,8 @@ export interface RunConsolidationInput {
   consolidationProvider?: string | null;
   /**
    * Privacy — long-term memory opt-out. When `true` the scheduler is a no-op AND
-   * the per-thread dirty cursor is left untouched, so re-enabling the
-   * setting later resumes from the same anchor without losing turns.
+   * terminal opt-out receipts advance the exclusion cursor. Re-enabling starts
+   * strictly after excluded turns.
    */
   disableLongTermMemory?: boolean;
   /** Provided by the caller — the LLM call. Required when `shouldRun`. */
@@ -164,6 +170,11 @@ export interface RunConsolidationResult {
 export async function maybeRunConsolidation(
   input: RunConsolidationInput,
 ): Promise<RunConsolidationResult> {
+  advanceConsolidationCursorPastExcludedPublications({
+    threadId: input.threadId,
+    messages: input.messages,
+    ...(typeof input.now === 'number' ? { now: input.now } : {}),
+  });
   if (input.disableLongTermMemory) {
     return { ran: false, skipped: 'opt_out', newTurns: 0, idleMs: 0 };
   }

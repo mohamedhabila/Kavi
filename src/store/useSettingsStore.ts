@@ -8,6 +8,7 @@ import {
   normalizeMemoryConsolidationMode,
   resolveConsolidationProviderIdForMode,
 } from '../services/memory/memoryConsolidationMode';
+import { prepareLongTermMemoryOptOut } from '../services/memory/memoryOptOutTransition';
 import { createDefaultSettingsDataState, type SettingsState } from './settingsStoreTypes';
 import {
   clampMaxLinks,
@@ -27,7 +28,7 @@ import {
 
 export const useSettingsStore = create<SettingsState>()(
   persist<SettingsState, [], [], AppSettings>(
-    (set) => ({
+    (set, get) => ({
       ...createDefaultSettingsDataState(),
 
       addProvider: (provider) =>
@@ -332,9 +333,22 @@ export const useSettingsStore = create<SettingsState>()(
             typeof model === 'string' && model.trim().length > 0 ? model.trim() : null,
         }),
 
-      setDisableLongTermMemory: (disabled) => set({ disableLongTermMemory: Boolean(disabled) }),
+      setDisableLongTermMemory: (disabled) => {
+        const nextDisabled = Boolean(disabled);
+        if (nextDisabled && get().disableLongTermMemory !== true) {
+          prepareLongTermMemoryOptOut();
+        }
+        set({ disableLongTermMemory: nextDisabled });
+      },
 
-      replaceAllSettings: (settings) =>
+      replaceAllSettings: (settings) => {
+        if (
+          hasOwnSetting(settings, 'disableLongTermMemory') &&
+          Boolean(settings.disableLongTermMemory) &&
+          get().disableLongTermMemory !== true
+        ) {
+          prepareLongTermMemoryOptOut();
+        }
         set((state) => {
           const sshTargets = settings.sshTargets ?? state.sshTargets;
           const browserProviders = settings.browserProviders ?? state.browserProviders;
@@ -406,7 +420,8 @@ export const useSettingsStore = create<SettingsState>()(
               ? Boolean(settings.disableLongTermMemory)
               : state.disableLongTermMemory,
           };
-        }),
+        });
+      },
     }),
     {
       name: STORAGE_KEYS.SETTINGS,
