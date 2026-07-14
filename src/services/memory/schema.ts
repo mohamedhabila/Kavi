@@ -24,6 +24,7 @@ import { ensureEpisodeRetrievalIndexSchema } from './episodes/retrievalIndex';
 import {
   clearFactContributionLedgerForStructuredReset,
   ensureFactContributionSchema,
+  isFactContributionSchemaResetRequired,
 } from './factContributionSchema';
 import { ensureFactContributionAdmissionSchema } from './factContributionAdmissionSchema';
 import {
@@ -566,7 +567,12 @@ export function clearStructuredMemory(): void {
   try {
     ensureFactSchema();
   } catch (error) {
-    if (!isFactContributionAdmissionIntegrityFailure(error)) throw error;
+    if (
+      !isFactContributionAdmissionIntegrityFailure(error) &&
+      !isFactContributionSchemaResetRequired(error)
+    ) {
+      throw error;
+    }
     clearStructuredMemoryDatabase(getMemoryDb());
     schemaReady = false;
     ensureFactSchema();

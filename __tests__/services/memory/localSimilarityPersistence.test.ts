@@ -4,7 +4,8 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { replaceCurrentFact } from '../../../src/services/memory/facts/exactReplacement';
-import { recordFact, setFactLocalSimilarity } from '../../../src/services/memory/facts/mutations';
+import { setFactLocalSimilarity } from '../../../src/services/memory/facts/factAccessMutations';
+import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { getFactById } from '../../../src/services/memory/facts/queries';
 import {
   createCurrentLocalSimilarityVector,

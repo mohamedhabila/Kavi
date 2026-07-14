@@ -5,7 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { invalidateManagedMemoryFact } from '../../../src/services/memory/factExplicitOverrides';
-import { setFactLocalSimilarity } from '../../../src/services/memory/facts/mutations';
+import { setFactLocalSimilarity } from '../../../src/services/memory/facts/factAccessMutations';
 import { createCurrentLocalSimilarityVector } from '../../../src/services/memory/localSimilarity';
 import type { RecallFactsTiming } from '../../../src/services/memory/factRecall';
 import {

@@ -117,6 +117,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
   ]);
   const canonicalFactTriggers = new Set([
     'trg_memory_fact_delete_contributions',
+    'trg_memory_fact_predecessor_delete_committed',
     'trg_memory_fact_delete_explicit_override',
     'trg_memory_fact_explicit_override_parent_identity_immutable',
     'trg_memory_fact_explicit_override_parent_insert_immutable',

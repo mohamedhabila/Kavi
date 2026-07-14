@@ -5,13 +5,20 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { persistFactContributionSupersessionsInTransaction } from '../../../src/services/memory/factContributionSupersessionStore';
+import { decodeMemoryFactContributionPayload } from '../../../src/services/memory/factContributionCodec';
+import {
+  assertFactContributionSupersessionReplayInTransaction,
+  loadVerifiedFactContributionSupersessionPlanInTransaction,
+  prepareFactContributionSupersessionPlanInTransaction,
+  type FactContributionSupersessionParentMetadata,
+  type FactContributionSupersessionSemantics,
+} from '../../../src/services/memory/factContributionSupersessionStore';
 import { replaceCurrentFactWithContribution } from '../../../src/services/memory/facts/exactReplacement';
 import {
   recordFactWithApplicability,
   recordFactWithContribution,
 } from '../../../src/services/memory/facts/mutations';
-import type { MemoryFact, RecordFactInput } from '../../../src/services/memory/facts/types';
+import type { RecordFactInput } from '../../../src/services/memory/facts/types';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -67,6 +74,62 @@ function contributionIdFor(factId: string): string {
     'SELECT id FROM memory_fact_contributions WHERE fact_id = ? LIMIT 1',
     factId,
   )!.id;
+}
+
+interface ContributionParentRow {
+  id: string;
+  fact_id: string;
+  memory_owner_id: string;
+  contributed_at: number;
+  payload_version: number;
+  payload_json: string;
+  payload_sha256: string;
+  payload_byte_length: number;
+  supersession_set_version: number;
+  supersession_set_count: number;
+  supersession_set_sha256: string;
+}
+
+function contributionParent(contributionId: string): {
+  parent: FactContributionSupersessionParentMetadata;
+  commitment: { version: 1; count: number; sha256: string };
+} {
+  const row = getMemoryDb().getFirstSync<ContributionParentRow>(
+    'SELECT * FROM memory_fact_contributions WHERE id = ? LIMIT 1',
+    contributionId,
+  );
+  if (!row || row.supersession_set_version !== 1) throw new Error('test contribution missing');
+  return {
+    parent: {
+      contributionId: row.id,
+      factId: row.fact_id,
+      memoryOwnerId: row.memory_owner_id,
+      contributedAt: row.contributed_at,
+      payload: decodeMemoryFactContributionPayload({
+        payloadVersion: row.payload_version,
+        payloadJson: row.payload_json,
+        payloadSha256: row.payload_sha256,
+        payloadByteLength: row.payload_byte_length,
+      }),
+    },
+    commitment: {
+      version: 1,
+      count: row.supersession_set_count,
+      sha256: row.supersession_set_sha256,
+    },
+  };
+}
+
+function assertSupersessionReplay(
+  contributionId: string,
+  semantics: FactContributionSupersessionSemantics,
+): void {
+  const { commitment, parent } = contributionParent(contributionId);
+  const plan = loadVerifiedFactContributionSupersessionPlanInTransaction({
+    contributionId,
+    commitment,
+  });
+  assertFactContributionSupersessionReplayInTransaction({ parent, plan, semantics });
 }
 
 function supersessionCounts(): { snapshots: number; edges: number } {
@@ -158,18 +221,8 @@ describe('fact contribution supersession store', () => {
         WHERE id = ?`,
       created.fact.id,
     );
-    const laterProjection: MemoryFact = {
-      ...created.fact,
-      pinned: false,
-      reviewState: 'rejected',
-      sensitivity: 'restricted',
-    };
-
     expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        contributionId: contributionIdFor(created.fact.id),
-        contributionStatus: 'replayed',
-        successor: laterProjection,
+      assertSupersessionReplay(contributionIdFor(created.fact.id), {
         superseded: [],
         pinnedInputExplicit: true,
         reviewStateInputExplicit: true,
@@ -205,15 +258,12 @@ describe('fact contribution supersession store', () => {
     );
 
     expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        contributionId: contributionIdFor(created.fact.id),
-        contributionStatus: 'replayed',
-        successor: created.fact,
+      assertSupersessionReplay(contributionIdFor(created.fact.id), {
         superseded: [],
         pinnedInputExplicit: false,
         reviewStateInputExplicit: false,
       }),
-    ).toThrow('memory_fact_contribution_supersession_snapshot_invalid');
+    ).toThrow('memory_fact_contribution_supersession_commitment_mismatch');
   });
 
   it('fails admission when explicit projection flags are corrupted to omission', () => {
@@ -274,26 +324,46 @@ describe('fact contribution supersession store', () => {
     const contributionId = contributionIdFor(created.fact.id);
 
     expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        contributionId,
-        contributionStatus: 'replayed',
-        successor: created.fact,
+      assertSupersessionReplay(contributionId, {
         superseded: [created.superseded[0]!],
         pinnedInputExplicit: false,
         reviewStateInputExplicit: false,
       }),
     ).toThrow('memory_fact_contribution_supersession_replay_mismatch');
     expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        contributionId,
-        contributionStatus: 'replayed',
-        successor: created.fact,
+      assertSupersessionReplay(contributionId, {
         superseded: created.superseded,
         pinnedInputExplicit: true,
         reviewStateInputExplicit: false,
       }),
     ).toThrow('memory_fact_contribution_supersession_replay_mismatch');
     expect(supersessionCounts()).toEqual({ snapshots: 1, edges: 2 });
+  });
+
+  it('replays opaque predecessor ids in canonical ordinal order', () => {
+    const subject = upsertEntity({ type: 'self', name: 'user', now: 1 });
+    const first = recordFactWithApplicability(globalFact(subject.id, 'blue', 100), grounded).fact;
+    const second = recordFactWithApplicability(globalFact(subject.id, 'red', 110), grounded).fact;
+    const supplementaryId = 'fact_\u{10000}';
+    const bmpId = 'fact_\uFFFD';
+    getMemoryDb().runSync('UPDATE memory_facts SET id = ? WHERE id = ?', supplementaryId, first.id);
+    getMemoryDb().runSync('UPDATE memory_facts SET id = ? WHERE id = ?', bmpId, second.id);
+
+    const created = recordFactWithContribution(
+      globalFact(subject.id, 'green', 200, { supersedePrior: true }),
+      grounded,
+      context(200),
+    );
+    expect(created.superseded.map((fact) => fact.id).sort()).toEqual(
+      [supplementaryId, bmpId].sort(),
+    );
+    expect(() =>
+      assertSupersessionReplay(contributionIdFor(created.fact.id), {
+        superseded: created.superseded,
+        pinnedInputExplicit: false,
+        reviewStateInputExplicit: false,
+      }),
+    ).not.toThrow();
   });
 
   it('rejects replay after the durable successor becomes inactive', () => {
@@ -304,10 +374,8 @@ describe('fact contribution supersession store', () => {
       grounded,
       context(200),
     );
-    const replay = {
-      contributionId: contributionIdFor(created.fact.id),
-      contributionStatus: 'replayed' as const,
-      successor: created.fact,
+    const contributionId = contributionIdFor(created.fact.id);
+    const semantics = {
       superseded: [],
       pinnedInputExplicit: false,
       reviewStateInputExplicit: false,
@@ -317,7 +385,7 @@ describe('fact contribution supersession store', () => {
       'UPDATE memory_facts SET invalid_at = 250, updated_at = 250 WHERE id = ?',
       created.fact.id,
     );
-    expect(() => persistFactContributionSupersessionsInTransaction(replay)).toThrow(
+    expect(() => assertSupersessionReplay(contributionId, semantics)).toThrow(
       'memory_fact_contribution_replay_target_changed',
     );
 
@@ -325,7 +393,7 @@ describe('fact contribution supersession store', () => {
       'UPDATE memory_facts SET invalid_at = NULL, deleted_at = 260, updated_at = 260 WHERE id = ?',
       created.fact.id,
     );
-    expect(() => persistFactContributionSupersessionsInTransaction(replay)).toThrow(
+    expect(() => assertSupersessionReplay(contributionId, semantics)).toThrow(
       'memory_fact_contribution_replay_target_changed',
     );
     expect(supersessionCounts()).toEqual({ snapshots: 1, edges: 1 });
@@ -341,36 +409,43 @@ describe('fact contribution supersession store', () => {
     const contributionId = contributionIdFor(created.fact.id);
 
     expect(supersessionCounts()).toEqual({ snapshots: 0, edges: 0 });
+    const semantics = {
+      superseded: [],
+      pinnedInputExplicit: false,
+      reviewStateInputExplicit: false,
+    };
+    expect(() => assertSupersessionReplay(contributionId, semantics)).not.toThrow();
+    const { commitment, parent } = contributionParent(contributionId);
     expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        contributionId,
-        contributionStatus: 'replayed',
-        successor: { ...created.fact, createdAt: 101 },
-        superseded: [],
-        pinnedInputExplicit: false,
-        reviewStateInputExplicit: false,
+      prepareFactContributionSupersessionPlanInTransaction({
+        parent,
+        semantics: {
+          superseded: [{ id: 'unexpected-predecessor', invalidAt: 100 }],
+          pinnedInputExplicit: false,
+          reviewStateInputExplicit: false,
+        },
       }),
-    ).toThrow('memory_fact_contribution_supersession_successor_mismatch');
+    ).toThrow('memory_fact_contribution_supersession_operation_mismatch');
+    const plan = loadVerifiedFactContributionSupersessionPlanInTransaction({
+      contributionId,
+      commitment,
+    });
     expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        contributionId,
-        contributionStatus: 'replayed',
-        successor: created.fact,
-        superseded: [],
-        pinnedInputExplicit: false,
-        reviewStateInputExplicit: false,
+      assertFactContributionSupersessionReplayInTransaction({
+        parent: { ...parent, contributionId: `mfc_${'0'.repeat(64)}` },
+        plan,
+        semantics: {
+          superseded: [],
+          pinnedInputExplicit: false,
+          reviewStateInputExplicit: false,
+        },
       }),
-    ).not.toThrow();
-    expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        contributionId: `mfc_${'0'.repeat(64)}`,
-        contributionStatus: 'replayed',
-        successor: created.fact,
-        superseded: [],
-        pinnedInputExplicit: false,
-        reviewStateInputExplicit: false,
-      }),
-    ).toThrow('memory_fact_contribution_supersession_successor_mismatch');
+    ).toThrow('memory_fact_contribution_supersession_replay_mismatch');
+
+    getMemoryDb().runSync('UPDATE memory_facts SET created_at = 101 WHERE id = ?', created.fact.id);
+    expect(() => assertSupersessionReplay(contributionId, semantics)).toThrow(
+      'memory_fact_contribution_supersession_successor_mismatch',
+    );
   });
 
   it('rejects malformed flags and predecessor clocks before creating children', () => {
@@ -381,28 +456,29 @@ describe('fact contribution supersession store', () => {
       context(300),
     );
     const contributionId = contributionIdFor(created.fact.id);
-    const base = {
-      contributionId,
-      contributionStatus: 'created' as const,
-      successor: created.fact,
-      pinnedInputExplicit: false,
-      reviewStateInputExplicit: false,
-    };
+    const { parent } = contributionParent(contributionId);
 
     expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        ...base,
-        pinnedInputExplicit: 0 as never,
-        superseded: [],
+      prepareFactContributionSupersessionPlanInTransaction({
+        parent,
+        semantics: {
+          pinnedInputExplicit: 0 as never,
+          reviewStateInputExplicit: false,
+          superseded: [],
+        },
       }),
     ).toThrow('memory_fact_contribution_supersession_projection_intent_invalid');
     expect(() =>
-      persistFactContributionSupersessionsInTransaction({
-        ...base,
-        superseded: [
-          { id: 'predecessor-a', invalidAt: 300 },
-          { id: 'predecessor-b', invalidAt: 301 },
-        ],
+      prepareFactContributionSupersessionPlanInTransaction({
+        parent,
+        semantics: {
+          pinnedInputExplicit: false,
+          reviewStateInputExplicit: false,
+          superseded: [
+            { id: 'predecessor-a', invalidAt: 300 },
+            { id: 'predecessor-b', invalidAt: 301 },
+          ],
+        },
       }),
     ).toThrow('memory_fact_contribution_supersession_timestamp_mismatch');
     expect(supersessionCounts()).toEqual({ snapshots: 0, edges: 0 });

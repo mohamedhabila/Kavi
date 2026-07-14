@@ -14,7 +14,7 @@ import {
   type MemoryForgetArgs,
   type MemoryInvalidateArgs,
 } from '../../services/memory/memoryTools';
-import { markFactsRecalled } from '../../services/memory/facts/mutations';
+import { markFactsRecalled } from '../../services/memory/facts/factAccessMutations';
 import { getEntityById } from '../../services/memory/entities';
 import { recallFactSelectionForQuery } from '../../services/memory/factRecall';
 import type { MemoryFact, MemoryFactScope } from '../../services/memory/facts/types';

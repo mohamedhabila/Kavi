@@ -219,6 +219,11 @@ it('keeps the final contribution store fenced independently of replay loading', 
         fact,
         payload: normalizeRecordFactMutation(input, grounded),
         context: contributionContext(),
+        supersession: {
+          superseded: [],
+          pinnedInputExplicit: false,
+          reviewStateInputExplicit: false,
+        },
       }),
     ),
   ).toThrow(MemoryPersistenceSourceWithdrawnError);

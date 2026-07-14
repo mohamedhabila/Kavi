@@ -1,5 +1,9 @@
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import {
+  buildFactContributionSourceChildCommitment,
+  type MemoryFactContributionChildCommitment,
+} from './factContributionChildCommitments';
+import {
   buildMemoryFactContributionId,
   decodeMemoryFactContributionPayload,
   encodeMemoryFactContributionPayload,
@@ -11,6 +15,16 @@ import {
   type MemoryFactContributionSourceAlias,
   type MemoryFactContributionSourceScope,
 } from './factContributionCodec';
+import {
+  assertFactContributionSupersessionOperation,
+  assertFactContributionSupersessionReplayInTransaction,
+  loadVerifiedFactContributionSupersessionPlanInTransaction,
+  persistFactContributionSupersessionPlanInTransaction,
+  prepareFactContributionSupersessionPlanInTransaction,
+  type FactContributionSupersessionParentMetadata,
+  type FactContributionSupersessionPlan,
+  type FactContributionSupersessionSemantics,
+} from './factContributionSupersessionStore';
 import { hasExactFactContentIdentity } from './facts/contentIdentity';
 import type { FactRow, MemoryFact } from './facts/types';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
@@ -34,6 +48,7 @@ export interface MemoryFactContributionReplay {
   factId: string;
   payload: MemoryFactContributionPayloadV1;
   sourceAliases: ReadonlyArray<MemoryFactContributionSourceAlias>;
+  supersessionPlan: FactContributionSupersessionPlan;
 }
 
 interface ContributionRow {
@@ -45,6 +60,12 @@ interface ContributionRow {
   task_id: string;
   producer_id: string;
   producer_event_id: string;
+  source_set_version: number;
+  source_set_count: number;
+  source_set_sha256: string;
+  supersession_set_version: number;
+  supersession_set_count: number;
+  supersession_set_sha256: string;
   payload_version: number;
   payload_json: string;
   payload_sha256: string;
@@ -53,6 +74,11 @@ interface ContributionRow {
 }
 
 interface ContributionSourceRow {
+  contribution_id: string;
+  memory_owner_id: string;
+  memory_conversation_id: string;
+  source_thread_id: string;
+  task_id: string;
   source_kind: string;
   source_id: string;
 }
@@ -134,7 +160,12 @@ function assertPayloadSourcesHaveAliases(
   }
 }
 
-function rowMatches(row: ContributionRow, expected: Omit<ContributionRow, 'id'>): boolean {
+type ContributionReplayExpected = Omit<
+  ContributionRow,
+  'id' | 'supersession_set_version' | 'supersession_set_count' | 'supersession_set_sha256'
+>;
+
+function rowMatches(row: ContributionRow, expected: ContributionReplayExpected): boolean {
   return (
     row.fact_id === expected.fact_id &&
     row.memory_owner_id === expected.memory_owner_id &&
@@ -143,6 +174,9 @@ function rowMatches(row: ContributionRow, expected: Omit<ContributionRow, 'id'>)
     row.task_id === expected.task_id &&
     row.producer_id === expected.producer_id &&
     row.producer_event_id === expected.producer_event_id &&
+    row.source_set_version === expected.source_set_version &&
+    row.source_set_count === expected.source_set_count &&
+    row.source_set_sha256 === expected.source_set_sha256 &&
     row.payload_version === expected.payload_version &&
     row.payload_json === expected.payload_json &&
     row.payload_sha256 === expected.payload_sha256 &&
@@ -151,13 +185,95 @@ function rowMatches(row: ContributionRow, expected: Omit<ContributionRow, 'id'>)
   );
 }
 
-function sourceRowsMatch(
-  actual: ReadonlyArray<ContributionSourceRow>,
+function sourceAliasesMatch(
+  actual: ReadonlyArray<MemoryFactContributionSourceAlias>,
   expected: ReadonlyArray<MemoryFactContributionSourceAlias>,
 ): boolean {
   if (actual.length !== expected.length) return false;
-  const actualKeys = new Set(actual.map((row) => `${row.source_kind}\u0000${row.source_id}`));
+  const actualKeys = new Set(actual.map((alias) => `${alias.sourceKind}\u0000${alias.sourceId}`));
   return expected.every((alias) => actualKeys.has(`${alias.sourceKind}\u0000${alias.sourceId}`));
+}
+
+function exactSourceAliases(
+  rows: ReadonlyArray<ContributionSourceRow>,
+  contributionId: string,
+  scope: MemoryFactContributionSourceScope,
+): ReadonlyArray<MemoryFactContributionSourceAlias> {
+  if (
+    rows.some(
+      (row) =>
+        row.contribution_id !== contributionId ||
+        row.memory_owner_id !== scope.memoryOwnerId ||
+        row.memory_conversation_id !== scope.memoryConversationId ||
+        row.source_thread_id !== scope.sourceThreadId ||
+        row.task_id !== scope.taskId ||
+        (row.source_kind !== 'message' && row.source_kind !== 'turn' && row.source_kind !== 'run'),
+    )
+  ) {
+    fail('memory_fact_contribution_replay_mismatch');
+  }
+  try {
+    return normalizeMemoryFactContributionSourceAliases(
+      rows.map((row) => ({
+        sourceKind: row.source_kind as MemoryFactContributionSourceAlias['sourceKind'],
+        sourceId: row.source_id,
+      })),
+    );
+  } catch {
+    return fail('memory_fact_contribution_replay_mismatch');
+  }
+}
+
+function commitmentMatches(
+  commitment: MemoryFactContributionChildCommitment,
+  version: number,
+  count: number,
+  sha256: string,
+): boolean {
+  return (
+    commitment.version === version && commitment.count === count && commitment.sha256 === sha256
+  );
+}
+
+function sourceCommitment(input: {
+  contributionId: string;
+  scope: MemoryFactContributionSourceScope;
+  aliases: ReadonlyArray<MemoryFactContributionSourceAlias>;
+}): MemoryFactContributionChildCommitment {
+  try {
+    return buildFactContributionSourceChildCommitment({
+      contributionId: input.contributionId,
+      scope: input.scope,
+      sourceAliases: input.aliases,
+    });
+  } catch {
+    return fail('memory_fact_contribution_replay_mismatch');
+  }
+}
+
+function verifiedSupersessionPlan(
+  contributionId: string,
+  commitment: { version: number; count: number; sha256: string },
+  parent: FactContributionSupersessionParentMetadata,
+): FactContributionSupersessionPlan {
+  if (commitment.version !== 1) {
+    return fail('memory_fact_contribution_replay_mismatch');
+  }
+  const sealedCommitment: MemoryFactContributionChildCommitment = {
+    version: 1,
+    count: commitment.count,
+    sha256: commitment.sha256,
+  };
+  try {
+    const plan = loadVerifiedFactContributionSupersessionPlanInTransaction({
+      contributionId,
+      commitment: sealedCommitment,
+    });
+    assertFactContributionSupersessionOperation({ parent, plan });
+    return plan;
+  } catch {
+    return fail('memory_fact_contribution_replay_mismatch');
+  }
 }
 
 function normalizeWriteContext(context: MemoryFactContributionWriteContext): {
@@ -229,16 +345,7 @@ export function loadFactContributionReplayFromAliasCandidates(input: {
     }
     return null;
   }
-  const sourceRows = db.getAllSync<ContributionSourceRow>(
-    `SELECT source_kind, source_id
-       FROM memory_fact_contribution_sources
-      WHERE contribution_id = ?
-      ORDER BY source_kind ASC, source_id ASC`,
-    id,
-  );
-  const matchedAliases = expectedAliasSets.find((aliases) => sourceRowsMatch(sourceRows, aliases));
   if (
-    !matchedAliases ||
     row.memory_owner_id !== scope.memoryOwnerId ||
     row.memory_conversation_id !== scope.memoryConversationId ||
     row.source_thread_id !== scope.sourceThreadId ||
@@ -248,17 +355,62 @@ export function loadFactContributionReplayFromAliasCandidates(input: {
   ) {
     fail('memory_fact_contribution_replay_mismatch');
   }
+  const sourceRows = db.getAllSync<ContributionSourceRow>(
+    `SELECT contribution_id, memory_owner_id, memory_conversation_id, source_thread_id,
+            task_id, source_kind, source_id
+       FROM memory_fact_contribution_sources
+      WHERE contribution_id = ?
+      ORDER BY source_kind ASC, source_id ASC`,
+    id,
+  );
+  const durableAliases = exactSourceAliases(sourceRows, id, scope);
+  const durableSourceCommitment = sourceCommitment({
+    contributionId: id,
+    scope,
+    aliases: durableAliases,
+  });
+  if (
+    !commitmentMatches(
+      durableSourceCommitment,
+      row.source_set_version,
+      row.source_set_count,
+      row.source_set_sha256,
+    )
+  ) {
+    fail('memory_fact_contribution_replay_mismatch');
+  }
+  const matchedAliases = expectedAliasSets.find((aliases) =>
+    sourceAliasesMatch(durableAliases, aliases),
+  );
+  if (!matchedAliases) fail('memory_fact_contribution_replay_mismatch');
+  const payload = decodeMemoryFactContributionPayload({
+    payloadVersion: row.payload_version,
+    payloadJson: row.payload_json,
+    payloadSha256: row.payload_sha256,
+    payloadByteLength: row.payload_byte_length,
+  });
+  const supersessionPlan = verifiedSupersessionPlan(
+    id,
+    {
+      version: row.supersession_set_version,
+      count: row.supersession_set_count,
+      sha256: row.supersession_set_sha256,
+    },
+    {
+      contributionId: id,
+      factId: row.fact_id,
+      memoryOwnerId: row.memory_owner_id,
+      contributedAt: row.contributed_at,
+      payload,
+    },
+  );
   assertNormalizedSourceAliasesAreWritable(scope, matchedAliases);
   return {
     id,
     factId: row.fact_id,
-    payload: decodeMemoryFactContributionPayload({
-      payloadVersion: row.payload_version,
-      payloadJson: row.payload_json,
-      payloadSha256: row.payload_sha256,
-      payloadByteLength: row.payload_byte_length,
-    }),
+    payload,
     sourceAliases: matchedAliases,
+    supersessionPlan,
   };
 }
 
@@ -272,11 +424,12 @@ export function loadFactContributionReplay(
   });
 }
 
-/** Persist one immutable contribution while the owning fact transaction is active. */
+/** Persist one complete immutable contribution aggregate while its fact transaction is active. */
 export function persistFactContributionInTransaction(input: {
   fact: MemoryFact;
   payload: MemoryFactContributionPayloadV1;
   context: MemoryFactContributionWriteContext;
+  supersession: FactContributionSupersessionSemantics;
 }): MemoryFactContributionWriteReceipt {
   const db = getSchemaReadyMemoryDb();
   const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
@@ -291,6 +444,7 @@ export function persistFactContributionInTransaction(input: {
   assertSourceScopeMatchesPayload(input.payload, scope);
   assertPayloadSourcesHaveAliases(input.payload, aliases);
 
+  const sourceSet = sourceCommitment({ contributionId: id, scope, aliases });
   const expected = {
     fact_id: input.fact.id,
     memory_owner_id: scope.memoryOwnerId,
@@ -299,11 +453,21 @@ export function persistFactContributionInTransaction(input: {
     task_id: scope.taskId,
     producer_id: producer.producerId,
     producer_event_id: producer.producerEventId,
+    source_set_version: sourceSet.version,
+    source_set_count: sourceSet.count,
+    source_set_sha256: sourceSet.sha256,
     payload_version: encoded.payloadVersion,
     payload_json: encoded.payloadJson,
     payload_sha256: encoded.payloadSha256,
     payload_byte_length: encoded.payloadByteLength,
     contributed_at: input.payload.input.now,
+  };
+  const parent = {
+    contributionId: id,
+    factId: input.fact.id,
+    memoryOwnerId: scope.memoryOwnerId,
+    contributedAt: input.payload.input.now,
+    payload: input.payload,
   };
   const existing = db.getFirstSync<ContributionRow>(
     'SELECT * FROM memory_fact_contributions WHERE id = ? LIMIT 1',
@@ -311,24 +475,45 @@ export function persistFactContributionInTransaction(input: {
   );
   if (existing) {
     const sources = db.getAllSync<ContributionSourceRow>(
-      `SELECT source_kind, source_id
+      `SELECT contribution_id, memory_owner_id, memory_conversation_id, source_thread_id,
+              task_id, source_kind, source_id
          FROM memory_fact_contribution_sources
         WHERE contribution_id = ?
         ORDER BY source_kind ASC, source_id ASC`,
       id,
     );
-    if (!rowMatches(existing, expected) || !sourceRowsMatch(sources, aliases)) {
+    const durableAliases = exactSourceAliases(sources, id, scope);
+    if (!rowMatches(existing, expected) || !sourceAliasesMatch(durableAliases, aliases)) {
       fail('memory_fact_contribution_replay_mismatch');
     }
+    const supersessionPlan = verifiedSupersessionPlan(
+      id,
+      {
+        version: existing.supersession_set_version,
+        count: existing.supersession_set_count,
+        sha256: existing.supersession_set_sha256,
+      },
+      parent,
+    );
+    assertFactContributionSupersessionReplayInTransaction({
+      parent,
+      plan: supersessionPlan,
+      semantics: input.supersession,
+    });
     return { id, status: 'replayed' };
   }
 
+  const supersessionPlan = prepareFactContributionSupersessionPlanInTransaction({
+    parent,
+    semantics: input.supersession,
+  });
   db.runSync(
     `INSERT INTO memory_fact_contributions(
        id, fact_id, memory_owner_id, memory_conversation_id, source_thread_id, task_id,
-       producer_id, producer_event_id, payload_version, payload_json, payload_sha256,
-       payload_byte_length, contributed_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       producer_id, producer_event_id, source_set_version, source_set_count, source_set_sha256,
+       supersession_set_version, supersession_set_count, supersession_set_sha256,
+       payload_version, payload_json, payload_sha256, payload_byte_length, contributed_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     expected.fact_id,
     expected.memory_owner_id,
@@ -337,6 +522,12 @@ export function persistFactContributionInTransaction(input: {
     expected.task_id,
     expected.producer_id,
     expected.producer_event_id,
+    expected.source_set_version,
+    expected.source_set_count,
+    expected.source_set_sha256,
+    supersessionPlan.commitment.version,
+    supersessionPlan.commitment.count,
+    supersessionPlan.commitment.sha256,
     expected.payload_version,
     expected.payload_json,
     expected.payload_sha256,
@@ -358,5 +549,6 @@ export function persistFactContributionInTransaction(input: {
       alias.sourceId,
     );
   }
+  persistFactContributionSupersessionPlanInTransaction(supersessionPlan);
   return { id, status: 'created' };
 }

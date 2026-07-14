@@ -1,6 +1,7 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryTransaction } from '../access/transaction';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
+import { isExactMemoryProvenanceId } from '../memoryProvenanceIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../memorySensitivityPolicy';
 import {
@@ -15,14 +16,17 @@ import {
   requireMemoryFactReviewState,
   type SealedFactApplicabilityProvenance,
 } from './applicabilityProvenance';
-import { recordFactWithApplicability, recordFactWithContributionInTransaction } from './mutations';
+import {
+  recordExactReplacementFactWithContributionInTransaction,
+  recordFactWithApplicability,
+} from './mutations';
 import {
   FactContributionMaterializationConflict,
   setFactSensitivityFloorInTransaction,
 } from './factContributionMaterialization';
 import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
 import { requireFactScopeIdentity } from './scopeIdentity';
-import { normalizeRecordFactMutation } from './mutationNormalization';
+import { normalizeExactReplacementFactMutation } from './mutationNormalization';
 import {
   canonicalizeExactReplacementPredecessorInTransaction,
   ExactReplacementReplayTargetChanged,
@@ -139,8 +143,8 @@ function replaceCurrentFactInternal(
   sealedApplicability?: SealedFactApplicabilityProvenance,
   contributionContext?: MemoryFactContributionWriteContext,
 ): ReplaceCurrentFactResult {
-  const expectedCurrentFactId = input.expectedCurrentFactId.trim();
-  if (!expectedCurrentFactId) {
+  const expectedCurrentFactId = input.expectedCurrentFactId;
+  if (!isExactMemoryProvenanceId(expectedCurrentFactId)) {
     return { fact: null, status: 'conflict', superseded: [], conflict: 'target_missing' };
   }
   const predicate = input.predicate.trim();
@@ -207,7 +211,11 @@ function replaceCurrentFactInternal(
           supersedePrior: false,
           now,
         };
-        const replayPayload = normalizeRecordFactMutation(replayInput, sealedApplicability);
+        const replayPayload = normalizeExactReplacementFactMutation(
+          replayInput,
+          replacementReplay.predecessor.id,
+          sealedApplicability,
+        );
         assertMemoryFactContributionReplayPayload(contributionReplay, replayPayload);
         if (
           replacementReplay.pinnedInputExplicit !== (input.pinned !== undefined) ||
@@ -278,8 +286,9 @@ function replaceCurrentFactInternal(
             ...(current.persona_id ? { personaId: current.persona_id } : {}),
           } as const);
         const duplicate = contributionContext
-          ? recordFactWithContributionInTransaction(
+          ? recordExactReplacementFactWithContributionInTransaction(
               duplicateInput,
+              current.id,
               duplicateApplicability,
               contributionContext,
               {
@@ -344,8 +353,9 @@ function replaceCurrentFactInternal(
       }
       const superseded = rowToFact({ ...current, invalid_at: now, updated_at: now });
       const created = contributionContext
-        ? recordFactWithContributionInTransaction(
+        ? recordExactReplacementFactWithContributionInTransaction(
             causalReplacementInput,
+            current.id,
             replacementApplicability,
             contributionContext,
             {

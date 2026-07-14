@@ -1,66 +1,101 @@
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
-import { decodeMemoryFactContributionPayload } from './factContributionCodec';
-import type { MemoryFactContributionWriteReceipt } from './factContributionStore';
+import {
+  buildFactContributionSupersessionChildCommitment,
+  MEMORY_FACT_CONTRIBUTION_CHILD_COMMITMENT_VERSION,
+  MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES,
+  type FactContributionSupersessionEdgeCommitmentRow,
+  type FactContributionSupersessionSnapshotCommitmentRow,
+  type MemoryFactContributionChildCommitment,
+} from './factContributionChildCommitments';
+import {
+  encodeMemoryFactContributionPayload,
+  type MemoryFactContributionPayloadV1,
+} from './factContributionCodec';
+import { isFactContributionSupersessionAuthorized } from './factContributionOperation';
 import {
   closedMemoryFactReviewState,
   closedMemoryFactSensitivity,
   type MemoryFactReviewState,
   type MemoryFactSensitivity,
 } from './facts/applicabilityProvenance';
+import { hasExactFactContentIdentity } from './facts/contentIdentity';
 import type { FactRow, MemoryFact } from './facts/types';
 import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from './memorySensitivityPolicy';
+import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 
 const SNAPSHOT_VERSION = 1;
-const MAX_POLICY_VERSION = 2_147_483_647;
 const CONTRIBUTION_ID_PATTERN = /^mfc_[0-9a-f]{64}$/u;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 
-interface ContributionRow {
-  fact_id: string;
-  memory_owner_id: string;
-  payload_version: number;
-  payload_json: string;
-  payload_sha256: string;
-  payload_byte_length: number;
-  contributed_at: number;
-}
+type StoredSuccessorProjection = Readonly<{
+  pinned: 0 | 1;
+  reviewState: MemoryFactReviewState;
+  sensitivity: MemoryFactSensitivity;
+  sensitivityPolicyVersion: number;
+}>;
 
-interface SupersessionSnapshotRow {
-  contribution_id: string;
-  successor_fact_id: string;
-  superseded_at: number;
-  snapshot_version: number;
-  pinned_input_explicit: number;
-  review_state_input_explicit: number;
-  successor_pinned_baseline: number;
-  successor_review_state_baseline: string;
-  successor_sensitivity_floor: string;
-  successor_sensitivity_policy_version: number;
-}
-
-interface SupersessionEdgeRow {
-  predecessor_fact_id: string;
-  successor_fact_id: string;
-  superseded_at: number;
-}
-
-interface ExpectedSupersessionEdge {
+type ExpectedSupersessionEdge = Readonly<{
   predecessorFactId: string;
   successorFactId: string;
   supersededAt: number;
+}>;
+
+interface ParentCommitmentRow {
+  supersession_set_version: number;
+  supersession_set_count: number;
+  supersession_set_sha256: string;
 }
 
-export interface PersistFactContributionSupersessionsInput {
+export interface FactContributionSupersessionParentMetadata {
   contributionId: string;
-  contributionStatus: MemoryFactContributionWriteReceipt['status'];
-  successor: MemoryFact;
+  factId: string;
+  memoryOwnerId: string;
+  contributedAt: number;
+  payload: MemoryFactContributionPayloadV1;
+}
+
+export interface FactContributionSupersessionSemantics {
   superseded: ReadonlyArray<Pick<MemoryFact, 'id' | 'invalidAt'>>;
   pinnedInputExplicit: boolean;
   reviewStateInputExplicit: boolean;
 }
 
+export interface FactContributionSupersessionPlan {
+  contributionId: string;
+  snapshot: Readonly<FactContributionSupersessionSnapshotCommitmentRow> | null;
+  edges: ReadonlyArray<Readonly<FactContributionSupersessionEdgeCommitmentRow>>;
+  commitment: Readonly<MemoryFactContributionChildCommitment>;
+}
+
 function fail(code: string): never {
   throw new Error(code);
+}
+
+function compareOrdinal(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function requireContributionId(value: unknown): string {
+  if (typeof value !== 'string' || !CONTRIBUTION_ID_PATTERN.test(value)) {
+    fail('memory_fact_contribution_supersession_contribution_id_invalid');
+  }
+  return value;
+}
+
+function requireFactId(value: unknown): string {
+  if (!isExactMemoryProvenanceId(value)) {
+    fail('memory_fact_contribution_supersession_successor_invalid');
+  }
+  return value;
+}
+
+function requireMemoryOwnerId(value: unknown): string {
+  if (!isExactMemoryScopeId(value)) {
+    fail('memory_fact_contribution_supersession_owner_invalid');
+  }
+  return value;
 }
 
 function requireSafeTimestamp(value: unknown): number {
@@ -84,17 +119,6 @@ function requireStoredBooleanFlag(value: unknown): 0 | 1 {
   return value;
 }
 
-function requirePolicyVersion(value: unknown): number {
-  if (
-    !Number.isSafeInteger(value) ||
-    (value as number) < 1 ||
-    (value as number) > MAX_POLICY_VERSION
-  ) {
-    fail('memory_fact_contribution_supersession_snapshot_invalid');
-  }
-  return value as number;
-}
-
 function requireReviewState(value: unknown): MemoryFactReviewState {
   const reviewState = closedMemoryFactReviewState(value);
   if (!reviewState) fail('memory_fact_contribution_supersession_snapshot_invalid');
@@ -107,30 +131,42 @@ function requireSensitivity(value: unknown): MemoryFactSensitivity {
   return sensitivity;
 }
 
-function requireContributionStatus(value: unknown): MemoryFactContributionWriteReceipt['status'] {
-  if (value !== 'created' && value !== 'replayed') {
-    fail('memory_fact_contribution_supersession_status_invalid');
+function requireCurrentPolicyVersion(value: unknown): number {
+  if (value !== MEMORY_FACT_SENSITIVITY_POLICY_VERSION) {
+    fail('memory_fact_contribution_supersession_snapshot_invalid');
   }
   return value;
 }
 
-function requireSuccessor(input: unknown): MemoryFact {
-  if (!input || typeof input !== 'object') {
-    fail('memory_fact_contribution_supersession_successor_invalid');
-  }
-  const successor = input as MemoryFact;
+function requireCommittedPolicyVersion(value: unknown): number {
   if (
-    typeof successor.id !== 'string' ||
-    successor.id.length < 1 ||
-    successor.id.length > 512 ||
-    typeof successor.pinned !== 'boolean' ||
-    !closedMemoryFactReviewState(successor.reviewState) ||
-    !closedMemoryFactSensitivity(successor.sensitivity)
+    !Number.isSafeInteger(value) ||
+    (value as number) < 1 ||
+    (value as number) > MEMORY_FACT_SENSITIVITY_POLICY_VERSION
   ) {
-    fail('memory_fact_contribution_supersession_successor_invalid');
+    fail('memory_fact_contribution_supersession_snapshot_invalid');
   }
-  requireSafeTimestamp(successor.createdAt);
-  return successor;
+  return value as number;
+}
+
+function normalizeParent(
+  input: FactContributionSupersessionParentMetadata,
+): FactContributionSupersessionParentMetadata {
+  if (!input || typeof input !== 'object') {
+    fail('memory_fact_contribution_supersession_parent_invalid');
+  }
+  const parent = {
+    contributionId: requireContributionId(input.contributionId),
+    factId: requireFactId(input.factId),
+    memoryOwnerId: requireMemoryOwnerId(input.memoryOwnerId),
+    contributedAt: requireSafeTimestamp(input.contributedAt),
+    payload: input.payload,
+  };
+  encodeMemoryFactContributionPayload(parent.payload);
+  if (parent.payload.input.now !== parent.contributedAt) {
+    fail('memory_fact_contribution_supersession_timestamp_mismatch');
+  }
+  return parent;
 }
 
 function normalizeExpectedEdges(
@@ -140,6 +176,9 @@ function normalizeExpectedEdges(
   if (!Array.isArray(superseded)) {
     fail('memory_fact_contribution_supersession_invalid');
   }
+  if (superseded.length > MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES) {
+    fail('memory_fact_contribution_supersession_invalid');
+  }
   const seen = new Set<string>();
   const edges = superseded.map((candidate) => {
     if (!candidate || typeof candidate !== 'object') {
@@ -147,9 +186,7 @@ function normalizeExpectedEdges(
     }
     const predecessor = candidate as Pick<MemoryFact, 'id' | 'invalidAt'>;
     if (
-      typeof predecessor.id !== 'string' ||
-      predecessor.id.length < 1 ||
-      predecessor.id.length > 512 ||
+      !isExactMemoryProvenanceId(predecessor.id) ||
       predecessor.id === successorFactId ||
       seen.has(predecessor.id)
     ) {
@@ -162,7 +199,7 @@ function normalizeExpectedEdges(
       supersededAt: requireSafeTimestamp(predecessor.invalidAt),
     };
   });
-  edges.sort((left, right) => left.predecessorFactId.localeCompare(right.predecessorFactId));
+  edges.sort((left, right) => compareOrdinal(left.predecessorFactId, right.predecessorFactId));
   if (edges.length > 1) {
     const expectedTimestamp = edges[0]!.supersededAt;
     if (edges.some((edge) => edge.supersededAt !== expectedTimestamp)) {
@@ -172,296 +209,347 @@ function normalizeExpectedEdges(
   return edges;
 }
 
-function readSnapshot(contributionId: string): SupersessionSnapshotRow | null {
-  return getSchemaReadyMemoryDb().getFirstSync<SupersessionSnapshotRow>(
-    `SELECT contribution_id, successor_fact_id, superseded_at, snapshot_version,
+function expectedEdgesForSemantics(
+  input: FactContributionSupersessionSemantics,
+  successorFactId: string,
+): {
+  expectedEdges: ExpectedSupersessionEdge[];
+  pinnedInputExplicit: 0 | 1;
+  reviewStateInputExplicit: 0 | 1;
+} {
+  if (!input || typeof input !== 'object') {
+    fail('memory_fact_contribution_supersession_invalid');
+  }
+  return {
+    expectedEdges: normalizeExpectedEdges(input.superseded, successorFactId),
+    pinnedInputExplicit: requireBooleanFlag(input.pinnedInputExplicit),
+    reviewStateInputExplicit: requireBooleanFlag(input.reviewStateInputExplicit),
+  };
+}
+
+function requireActiveSuccessor(parentInput: FactContributionSupersessionParentMetadata): {
+  parent: FactContributionSupersessionParentMetadata;
+  successorCreatedAt: number;
+  projection: StoredSuccessorProjection;
+} {
+  const parent = normalizeParent(parentInput);
+  const db = getSchemaReadyMemoryDb();
+  const row = db.getFirstSync<FactRow>(
+    'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
+    parent.factId,
+  );
+  if (!row) fail('memory_fact_contribution_supersession_successor_mismatch');
+  const memoryOwnerId = row.memory_owner_id ?? null;
+  const createdAt = requireSafeTimestamp(row.created_at);
+  if (
+    parent.memoryOwnerId !== getLocalMemoryVaultOwnerId(db) ||
+    memoryOwnerId !== parent.memoryOwnerId ||
+    createdAt > parent.contributedAt ||
+    !hasExactFactContentIdentity(
+      {
+        memoryOwnerId: row.memory_owner_id,
+        memoryKind: row.memory_kind,
+        scope: row.scope,
+        originConversationId: row.origin_conversation_id,
+        originThreadId: row.origin_thread_id,
+        originTaskId: row.origin_task_id,
+        personaId: row.persona_id,
+        subjectId: row.subject_id,
+        predicate: row.predicate,
+        objectText: row.object_text,
+        objectEntityId: row.object_entity_id,
+      },
+      {
+        ...parent.payload.input,
+        memoryOwnerId: parent.memoryOwnerId,
+        personaId: parent.payload.applicability.personaId,
+      },
+    )
+  ) {
+    fail('memory_fact_contribution_supersession_successor_mismatch');
+  }
+  if (row.invalid_at !== null || row.deleted_at !== null) {
+    fail('memory_fact_contribution_replay_target_changed');
+  }
+  return {
+    parent,
+    successorCreatedAt: createdAt,
+    projection: Object.freeze({
+      pinned: requireStoredBooleanFlag(row.pinned),
+      reviewState: requireReviewState(row.review_state),
+      sensitivity: requireSensitivity(row.sensitivity),
+      sensitivityPolicyVersion: requireCurrentPolicyVersion(row.sensitivity_policy_version),
+    }),
+  };
+}
+
+function assertProjectionIntent(input: {
+  payload: MemoryFactContributionPayloadV1;
+  projection: Pick<StoredSuccessorProjection, 'pinned' | 'reviewState'>;
+  pinnedInputExplicit: 0 | 1;
+  reviewStateInputExplicit: 0 | 1;
+}): void {
+  if (
+    (input.pinnedInputExplicit === 1
+      ? input.payload.input.pinned !== (input.projection.pinned === 1)
+      : input.payload.input.pinned !== false) ||
+    (input.reviewStateInputExplicit === 1
+      ? input.payload.input.reviewState !== input.projection.reviewState
+      : input.payload.input.reviewState !== 'auto')
+  ) {
+    fail('memory_fact_contribution_supersession_projection_mismatch');
+  }
+}
+
+function freezePlan(input: {
+  contributionId: string;
+  snapshot: FactContributionSupersessionSnapshotCommitmentRow | null;
+  edges: ReadonlyArray<FactContributionSupersessionEdgeCommitmentRow>;
+  commitment: MemoryFactContributionChildCommitment;
+}): FactContributionSupersessionPlan {
+  const snapshot = input.snapshot ? Object.freeze({ ...input.snapshot }) : null;
+  const edges = Object.freeze(input.edges.map((edge) => Object.freeze({ ...edge })));
+  return Object.freeze({
+    contributionId: input.contributionId,
+    snapshot,
+    edges,
+    commitment: Object.freeze({ ...input.commitment }),
+  });
+}
+
+function buildPlan(input: {
+  contributionId: string;
+  snapshot: FactContributionSupersessionSnapshotCommitmentRow | null;
+  edges: ReadonlyArray<FactContributionSupersessionEdgeCommitmentRow>;
+}): FactContributionSupersessionPlan {
+  const commitment = buildFactContributionSupersessionChildCommitment(input);
+  return freezePlan({ ...input, commitment });
+}
+
+function readSnapshot(
+  contributionId: string,
+): FactContributionSupersessionSnapshotCommitmentRow | null {
+  const row =
+    getSchemaReadyMemoryDb().getFirstSync<FactContributionSupersessionSnapshotCommitmentRow>(
+      `SELECT contribution_id, successor_fact_id, superseded_at, snapshot_version,
             pinned_input_explicit, review_state_input_explicit, successor_pinned_baseline,
             successor_review_state_baseline, successor_sensitivity_floor,
             successor_sensitivity_policy_version
        FROM memory_fact_contribution_supersession_snapshots
       WHERE contribution_id = ?
       LIMIT 1`,
-    contributionId,
+      contributionId,
+    );
+  return row ? { ...row } : null;
+}
+
+function readEdges(contributionId: string): FactContributionSupersessionEdgeCommitmentRow[] {
+  return getSchemaReadyMemoryDb()
+    .getAllSync<FactContributionSupersessionEdgeCommitmentRow>(
+      `SELECT contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
+         FROM memory_fact_contribution_supersessions
+        WHERE contribution_id = ?
+        ORDER BY predecessor_fact_id ASC`,
+      contributionId,
+    )
+    .map((row) => ({ ...row }))
+    .sort((left, right) => compareOrdinal(left.predecessor_fact_id, right.predecessor_fact_id));
+}
+
+function commitmentMatches(
+  actual: MemoryFactContributionChildCommitment,
+  expected: MemoryFactContributionChildCommitment,
+): boolean {
+  return (
+    actual.version === expected.version &&
+    actual.count === expected.count &&
+    actual.sha256 === expected.sha256
   );
 }
 
-function readEdges(contributionId: string): SupersessionEdgeRow[] {
-  return getSchemaReadyMemoryDb().getAllSync<SupersessionEdgeRow>(
-    `SELECT predecessor_fact_id, successor_fact_id, superseded_at
-       FROM memory_fact_contribution_supersessions
-      WHERE contribution_id = ?
-      ORDER BY predecessor_fact_id ASC`,
-    contributionId,
-  );
-}
-
-function requireContribution(
-  contributionId: string,
-  successor: MemoryFact,
-): { contribution: ContributionRow; successorCreatedAt: number } {
-  const db = getSchemaReadyMemoryDb();
-  const contribution = db.getFirstSync<ContributionRow>(
-    `SELECT fact_id, memory_owner_id, payload_version, payload_json, payload_sha256,
-            payload_byte_length, contributed_at
-       FROM memory_fact_contributions
-      WHERE id = ?
-      LIMIT 1`,
-    contributionId,
-  );
-  if (!contribution) {
-    fail('memory_fact_contribution_supersession_successor_mismatch');
+function requireCommitment(input: unknown): MemoryFactContributionChildCommitment {
+  if (!input || typeof input !== 'object') {
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
   }
-  const contributedAt = requireSafeTimestamp(contribution.contributed_at);
-  const persistedSuccessor = db.getFirstSync<
-    Pick<FactRow, 'id' | 'memory_owner_id' | 'invalid_at' | 'deleted_at' | 'created_at'>
-  >(
-    `SELECT id, memory_owner_id, invalid_at, deleted_at, created_at
-       FROM memory_facts
-      WHERE id = ?
-      LIMIT 1`,
-    successor.id,
-  );
-  if (!persistedSuccessor) {
-    fail('memory_fact_contribution_supersession_successor_mismatch');
-  }
-  const successorCreatedAt = requireSafeTimestamp(persistedSuccessor.created_at);
+  const commitment = input as MemoryFactContributionChildCommitment;
   if (
-    contribution.fact_id !== successor.id ||
-    contribution.memory_owner_id !== getLocalMemoryVaultOwnerId(db) ||
-    successor.memoryOwnerId !== contribution.memory_owner_id ||
-    successor.createdAt !== successorCreatedAt ||
-    persistedSuccessor.memory_owner_id !== contribution.memory_owner_id
+    commitment.version !== MEMORY_FACT_CONTRIBUTION_CHILD_COMMITMENT_VERSION ||
+    !Number.isSafeInteger(commitment.count) ||
+    commitment.count < 0 ||
+    typeof commitment.sha256 !== 'string' ||
+    !SHA256_PATTERN.test(commitment.sha256)
   ) {
-    fail('memory_fact_contribution_supersession_successor_mismatch');
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
   }
-  if (persistedSuccessor.invalid_at !== null || persistedSuccessor.deleted_at !== null) {
-    fail('memory_fact_contribution_replay_target_changed');
-  }
-  return {
-    contribution: { ...contribution, contributed_at: contributedAt },
-    successorCreatedAt,
-  };
+  return commitment;
 }
 
-function assertSnapshotHeader(
-  snapshot: SupersessionSnapshotRow,
-  input: {
-    contributionId: string;
-    successorFactId: string;
-    pinnedInputExplicit: 0 | 1;
-    reviewStateInputExplicit: 0 | 1;
-    contributedAt: number;
-    successorCreatedAt: number;
-  },
-): void {
-  if (
-    snapshot.contribution_id !== input.contributionId ||
-    snapshot.successor_fact_id !== input.successorFactId ||
-    snapshot.snapshot_version !== SNAPSHOT_VERSION ||
-    snapshot.superseded_at !== input.contributedAt ||
-    snapshot.superseded_at !== input.successorCreatedAt ||
-    requireStoredBooleanFlag(snapshot.pinned_input_explicit) !== input.pinnedInputExplicit ||
-    requireStoredBooleanFlag(snapshot.review_state_input_explicit) !==
-      input.reviewStateInputExplicit
-  ) {
-    fail('memory_fact_contribution_supersession_replay_mismatch');
-  }
-  requireSafeTimestamp(snapshot.superseded_at);
+function assertVerifiedSnapshotSafety(plan: FactContributionSupersessionPlan): void {
+  const snapshot = plan.snapshot;
+  if (!snapshot) return;
+  requireStoredBooleanFlag(snapshot.pinned_input_explicit);
+  requireStoredBooleanFlag(snapshot.review_state_input_explicit);
   requireStoredBooleanFlag(snapshot.successor_pinned_baseline);
   requireReviewState(snapshot.successor_review_state_baseline);
   requireSensitivity(snapshot.successor_sensitivity_floor);
-  const policyVersion = requirePolicyVersion(snapshot.successor_sensitivity_policy_version);
-  if (policyVersion > MEMORY_FACT_SENSITIVITY_POLICY_VERSION) {
-    fail('memory_fact_contribution_supersession_snapshot_invalid');
-  }
+  requireCommittedPolicyVersion(snapshot.successor_sensitivity_policy_version);
 }
 
-function assertExactEdges(
-  actual: ReadonlyArray<SupersessionEdgeRow>,
-  expected: ReadonlyArray<ExpectedSupersessionEdge>,
-  snapshot: SupersessionSnapshotRow,
+function assertPlanIntegrity(plan: FactContributionSupersessionPlan): void {
+  if (!plan || typeof plan !== 'object' || !Array.isArray(plan.edges)) {
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
+  }
+  let rebuilt: MemoryFactContributionChildCommitment;
+  try {
+    rebuilt = buildFactContributionSupersessionChildCommitment({
+      contributionId: requireContributionId(plan.contributionId),
+      snapshot: plan.snapshot,
+      edges: plan.edges,
+    });
+  } catch {
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
+  }
+  if (!commitmentMatches(rebuilt, requireCommitment(plan.commitment))) {
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
+  }
+  assertVerifiedSnapshotSafety(plan);
+}
+
+function assertOperationMatchesPredecessors(
+  parent: FactContributionSupersessionParentMetadata,
+  predecessorFactIds: ReadonlyArray<string>,
 ): void {
-  if (actual.length !== expected.length || actual.length === 0) {
-    fail('memory_fact_contribution_supersession_replay_mismatch');
-  }
-  for (let index = 0; index < actual.length; index += 1) {
-    const row = actual[index]!;
-    const edge = expected[index]!;
-    if (
-      row.predecessor_fact_id !== edge.predecessorFactId ||
-      row.successor_fact_id !== edge.successorFactId ||
-      row.superseded_at !== edge.supersededAt ||
-      row.successor_fact_id !== snapshot.successor_fact_id ||
-      row.superseded_at !== snapshot.superseded_at
-    ) {
-      fail('memory_fact_contribution_supersession_replay_mismatch');
-    }
-  }
-}
-
-function assertSealedReplayChildren(
-  input: {
-    contributionId: string;
-    successorFactId: string;
-    pinnedInputExplicit: 0 | 1;
-    reviewStateInputExplicit: 0 | 1;
-    contributedAt: number;
-    successorCreatedAt: number;
-  },
-  expectedEdges: ReadonlyArray<ExpectedSupersessionEdge>,
-): void {
-  const snapshot = readSnapshot(input.contributionId);
-  const actualEdges = readEdges(input.contributionId);
-  if (!snapshot) {
-    if (actualEdges.length !== 0 || expectedEdges.length !== 0) {
-      fail('memory_fact_contribution_supersession_replay_mismatch');
-    }
-    return;
-  }
-  assertSnapshotHeader(snapshot, input);
-  if (actualEdges.length === 0) {
-    fail('memory_fact_contribution_supersession_replay_mismatch');
-  }
-  if (expectedEdges.length === 0) {
-    for (const edge of actualEdges) {
-      if (
-        edge.successor_fact_id !== snapshot.successor_fact_id ||
-        edge.superseded_at !== snapshot.superseded_at ||
-        typeof edge.predecessor_fact_id !== 'string' ||
-        edge.predecessor_fact_id.length < 1 ||
-        edge.predecessor_fact_id.length > 512
-      ) {
-        fail('memory_fact_contribution_supersession_replay_mismatch');
-      }
-    }
-    return;
-  }
-  assertExactEdges(actualEdges, expectedEdges, snapshot);
-}
-
-function requireCreatedSuccessorProjection(input: {
-  contribution: ContributionRow;
-  successor: MemoryFact;
-  supersededAt: number;
-}): {
-  pinned: 0 | 1;
-  reviewState: MemoryFactReviewState;
-  sensitivity: MemoryFactSensitivity;
-  sensitivityPolicyVersion: number;
-} {
-  const db = getSchemaReadyMemoryDb();
-  const row = db.getFirstSync<FactRow>(
-    'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
-    input.successor.id,
-  );
-  if (!row) {
-    fail('memory_fact_contribution_supersession_successor_mismatch');
-  }
-  const rowPinned = requireStoredBooleanFlag(row.pinned);
-  const rowReviewState = requireReviewState(row.review_state);
-  const rowSensitivity = requireSensitivity(row.sensitivity);
-  const rowPolicyVersion = requirePolicyVersion(row.sensitivity_policy_version);
   if (
-    row.id !== input.successor.id ||
-    row.memory_owner_id !== getLocalMemoryVaultOwnerId(db) ||
-    input.contribution.fact_id !== row.id ||
-    input.contribution.memory_owner_id !== row.memory_owner_id ||
-    input.contribution.contributed_at !== input.supersededAt ||
-    row.created_at !== input.supersededAt ||
-    input.successor.createdAt !== row.created_at ||
-    input.successor.memoryOwnerId !== row.memory_owner_id ||
-    input.successor.pinned !== (rowPinned === 1) ||
-    input.successor.reviewState !== rowReviewState ||
-    input.successor.sensitivity !== rowSensitivity
+    !isFactContributionSupersessionAuthorized({
+      operation: parent.payload.operation,
+      supersedePrior: parent.payload.input.supersedePrior,
+      contributedFactId: parent.factId,
+      predecessorFactIds,
+    })
   ) {
-    fail('memory_fact_contribution_supersession_successor_mismatch');
+    fail('memory_fact_contribution_supersession_operation_mismatch');
   }
-  if (rowPolicyVersion !== MEMORY_FACT_SENSITIVITY_POLICY_VERSION) {
-    fail('memory_fact_contribution_supersession_snapshot_invalid');
-  }
-  return {
-    pinned: rowPinned,
-    reviewState: rowReviewState,
-    sensitivity: rowSensitivity,
-    sensitivityPolicyVersion: rowPolicyVersion,
-  };
 }
 
-function assertBaselineMatchesCausalPresence(input: {
-  contribution: ContributionRow;
-  projection: {
-    pinned: 0 | 1;
-    reviewState: MemoryFactReviewState;
-  };
-  pinnedInputExplicit: 0 | 1;
-  reviewStateInputExplicit: 0 | 1;
+/** Prove that the committed children are authorized by the payload's sealed operation. */
+export function assertFactContributionSupersessionOperation(input: {
+  parent: FactContributionSupersessionParentMetadata;
+  plan: FactContributionSupersessionPlan;
 }): void {
-  const payload = decodeMemoryFactContributionPayload({
-    payloadVersion: input.contribution.payload_version,
-    payloadJson: input.contribution.payload_json,
-    payloadSha256: input.contribution.payload_sha256,
-    payloadByteLength: input.contribution.payload_byte_length,
-  });
-  if (
-    (input.pinnedInputExplicit === 1
-      ? payload.input.pinned !== (input.projection.pinned === 1)
-      : payload.input.pinned !== false) ||
-    (input.reviewStateInputExplicit === 1
-      ? payload.input.reviewState !== input.projection.reviewState
-      : payload.input.reviewState !== 'auto')
-  ) {
-    fail('memory_fact_contribution_supersession_projection_mismatch');
+  if (!input || typeof input !== 'object') {
+    fail('memory_fact_contribution_supersession_operation_mismatch');
   }
+  const parent = normalizeParent(input.parent);
+  assertPlanIntegrity(input.plan);
+  if (input.plan.contributionId !== parent.contributionId) {
+    fail('memory_fact_contribution_supersession_operation_mismatch');
+  }
+  assertOperationMatchesPredecessors(
+    parent,
+    input.plan.edges.map((edge) => edge.predecessor_fact_id),
+  );
 }
 
-/** Persist or validate the sealed child set for one contributed fact supersession. */
-export function persistFactContributionSupersessionsInTransaction(
-  input: PersistFactContributionSupersessionsInput,
-): void {
-  if (
-    typeof input?.contributionId !== 'string' ||
-    !CONTRIBUTION_ID_PATTERN.test(input.contributionId)
-  ) {
-    fail('memory_fact_contribution_supersession_contribution_id_invalid');
+/** Prepare the exact supersession children and their parent commitment before parent insertion. */
+export function prepareFactContributionSupersessionPlanInTransaction(input: {
+  parent: FactContributionSupersessionParentMetadata;
+  semantics: FactContributionSupersessionSemantics;
+}): FactContributionSupersessionPlan {
+  if (!input || typeof input !== 'object') {
+    fail('memory_fact_contribution_supersession_invalid');
   }
-  const contributionStatus = requireContributionStatus(input.contributionStatus);
-  const successor = requireSuccessor(input.successor);
-  const pinnedInputExplicit = requireBooleanFlag(input.pinnedInputExplicit);
-  const reviewStateInputExplicit = requireBooleanFlag(input.reviewStateInputExplicit);
-  const expectedEdges = normalizeExpectedEdges(input.superseded, successor.id);
-  const parent = requireContribution(input.contributionId, successor);
-  const contribution = parent.contribution;
-  const validationInput = {
-    contributionId: input.contributionId,
-    successorFactId: successor.id,
-    pinnedInputExplicit,
-    reviewStateInputExplicit,
-    contributedAt: contribution.contributed_at,
-    successorCreatedAt: parent.successorCreatedAt,
+  const { parent, projection, successorCreatedAt } = requireActiveSuccessor(input.parent);
+  const semantics = expectedEdgesForSemantics(input.semantics, parent.factId);
+  assertOperationMatchesPredecessors(
+    parent,
+    semantics.expectedEdges.map((edge) => edge.predecessorFactId),
+  );
+  if (semantics.expectedEdges.length === 0) {
+    return buildPlan({ contributionId: parent.contributionId, snapshot: null, edges: [] });
+  }
+  const supersededAt = semantics.expectedEdges[0]!.supersededAt;
+  if (supersededAt !== parent.contributedAt || successorCreatedAt !== parent.contributedAt) {
+    fail('memory_fact_contribution_supersession_timestamp_mismatch');
+  }
+  assertProjectionIntent({
+    payload: parent.payload,
+    projection,
+    pinnedInputExplicit: semantics.pinnedInputExplicit,
+    reviewStateInputExplicit: semantics.reviewStateInputExplicit,
+  });
+  const snapshot: FactContributionSupersessionSnapshotCommitmentRow = {
+    contribution_id: parent.contributionId,
+    successor_fact_id: parent.factId,
+    superseded_at: supersededAt,
+    snapshot_version: SNAPSHOT_VERSION,
+    pinned_input_explicit: semantics.pinnedInputExplicit,
+    review_state_input_explicit: semantics.reviewStateInputExplicit,
+    successor_pinned_baseline: projection.pinned,
+    successor_review_state_baseline: projection.reviewState,
+    successor_sensitivity_floor: projection.sensitivity,
+    successor_sensitivity_policy_version: projection.sensitivityPolicyVersion,
   };
+  const edges = semantics.expectedEdges.map((edge) => ({
+    contribution_id: parent.contributionId,
+    predecessor_fact_id: edge.predecessorFactId,
+    successor_fact_id: edge.successorFactId,
+    superseded_at: edge.supersededAt,
+  }));
+  return buildPlan({ contributionId: parent.contributionId, snapshot, edges });
+}
 
-  if (contributionStatus === 'replayed') {
-    assertSealedReplayChildren(validationInput, expectedEdges);
-    return;
+/** Load children only after their exact set matches the immutable parent commitment. */
+export function loadVerifiedFactContributionSupersessionPlanInTransaction(input: {
+  contributionId: string;
+  commitment: MemoryFactContributionChildCommitment;
+}): FactContributionSupersessionPlan {
+  if (!input || typeof input !== 'object') {
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
   }
+  const contributionId = requireContributionId(input.contributionId);
+  const expectedCommitment = requireCommitment(input.commitment);
+  const snapshot = readSnapshot(contributionId);
+  const edges = readEdges(contributionId);
+  let plan: FactContributionSupersessionPlan;
+  try {
+    plan = buildPlan({ contributionId, snapshot, edges });
+  } catch {
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
+  }
+  if (!commitmentMatches(plan.commitment, expectedCommitment)) {
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
+  }
+  assertVerifiedSnapshotSafety(plan);
+  return plan;
+}
 
-  const existingSnapshot = readSnapshot(input.contributionId);
-  const existingEdges = readEdges(input.contributionId);
-  if (existingSnapshot || existingEdges.length > 0) {
+/** Persist a prepared child set beneath the already-inserted committed parent. */
+export function persistFactContributionSupersessionPlanInTransaction(
+  plan: FactContributionSupersessionPlan,
+): void {
+  assertPlanIntegrity(plan);
+  const db = getSchemaReadyMemoryDb();
+  const parent = db.getFirstSync<ParentCommitmentRow>(
+    `SELECT supersession_set_version, supersession_set_count, supersession_set_sha256
+       FROM memory_fact_contributions
+      WHERE id = ?
+      LIMIT 1`,
+    plan.contributionId,
+  );
+  if (
+    !parent ||
+    !commitmentMatches(plan.commitment, {
+      version: parent.supersession_set_version as 1,
+      count: parent.supersession_set_count,
+      sha256: parent.supersession_set_sha256,
+    })
+  ) {
+    fail('memory_fact_contribution_supersession_commitment_mismatch');
+  }
+  if (readSnapshot(plan.contributionId) || readEdges(plan.contributionId).length > 0) {
     fail('memory_fact_contribution_supersession_replay_mismatch');
   }
-  if (expectedEdges.length === 0) return;
-
-  const db = getSchemaReadyMemoryDb();
-  const supersededAt = expectedEdges[0]!.supersededAt;
-  const projection = requireCreatedSuccessorProjection({ contribution, successor, supersededAt });
-  assertBaselineMatchesCausalPresence({
-    contribution,
-    projection,
-    pinnedInputExplicit,
-    reviewStateInputExplicit,
-  });
-
+  if (!plan.snapshot) return;
   db.runSync(
     `INSERT INTO memory_fact_contribution_supersession_snapshots(
        contribution_id, successor_fact_id, superseded_at, snapshot_version,
@@ -469,26 +557,101 @@ export function persistFactContributionSupersessionsInTransaction(
        successor_review_state_baseline, successor_sensitivity_floor,
        successor_sensitivity_policy_version
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    input.contributionId,
-    successor.id,
-    supersededAt,
-    SNAPSHOT_VERSION,
-    pinnedInputExplicit,
-    reviewStateInputExplicit,
-    projection.pinned,
-    projection.reviewState,
-    projection.sensitivity,
-    projection.sensitivityPolicyVersion,
+    plan.snapshot.contribution_id,
+    plan.snapshot.successor_fact_id,
+    plan.snapshot.superseded_at,
+    plan.snapshot.snapshot_version,
+    plan.snapshot.pinned_input_explicit,
+    plan.snapshot.review_state_input_explicit,
+    plan.snapshot.successor_pinned_baseline,
+    plan.snapshot.successor_review_state_baseline,
+    plan.snapshot.successor_sensitivity_floor,
+    plan.snapshot.successor_sensitivity_policy_version,
   );
-  for (const edge of expectedEdges) {
+  for (const edge of plan.edges) {
     db.runSync(
       `INSERT INTO memory_fact_contribution_supersessions(
          contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
        ) VALUES (?, ?, ?, ?)`,
-      input.contributionId,
-      edge.predecessorFactId,
-      edge.successorFactId,
-      edge.supersededAt,
+      edge.contribution_id,
+      edge.predecessor_fact_id,
+      edge.successor_fact_id,
+      edge.superseded_at,
     );
+  }
+  loadVerifiedFactContributionSupersessionPlanInTransaction({
+    contributionId: plan.contributionId,
+    commitment: plan.commitment,
+  });
+}
+
+/** Verify replay intent against an already commitment-verified immutable child set. */
+export function assertFactContributionSupersessionReplayInTransaction(input: {
+  parent: FactContributionSupersessionParentMetadata;
+  plan: FactContributionSupersessionPlan;
+  semantics: FactContributionSupersessionSemantics;
+}): void {
+  if (!input || typeof input !== 'object') {
+    fail('memory_fact_contribution_supersession_replay_mismatch');
+  }
+  assertPlanIntegrity(input.plan);
+  const { parent, successorCreatedAt } = requireActiveSuccessor(input.parent);
+  if (input.plan.contributionId !== parent.contributionId) {
+    fail('memory_fact_contribution_supersession_replay_mismatch');
+  }
+  assertOperationMatchesPredecessors(
+    parent,
+    input.plan.edges.map((edge) => edge.predecessor_fact_id),
+  );
+  const semantics = expectedEdgesForSemantics(input.semantics, parent.factId);
+  const snapshot = input.plan.snapshot;
+  if (!snapshot) {
+    if (input.plan.edges.length !== 0 || semantics.expectedEdges.length !== 0) {
+      fail('memory_fact_contribution_supersession_replay_mismatch');
+    }
+    assertProjectionIntent({
+      payload: parent.payload,
+      projection: {
+        pinned: parent.payload.input.pinned ? 1 : 0,
+        reviewState: parent.payload.input.reviewState,
+      },
+      pinnedInputExplicit: semantics.pinnedInputExplicit,
+      reviewStateInputExplicit: semantics.reviewStateInputExplicit,
+    });
+    return;
+  }
+  if (
+    snapshot.successor_fact_id !== parent.factId ||
+    snapshot.superseded_at !== parent.contributedAt ||
+    successorCreatedAt !== parent.contributedAt ||
+    snapshot.snapshot_version !== SNAPSHOT_VERSION ||
+    snapshot.pinned_input_explicit !== semantics.pinnedInputExplicit ||
+    snapshot.review_state_input_explicit !== semantics.reviewStateInputExplicit
+  ) {
+    fail('memory_fact_contribution_supersession_replay_mismatch');
+  }
+  assertProjectionIntent({
+    payload: parent.payload,
+    projection: {
+      pinned: requireStoredBooleanFlag(snapshot.successor_pinned_baseline),
+      reviewState: requireReviewState(snapshot.successor_review_state_baseline),
+    },
+    pinnedInputExplicit: semantics.pinnedInputExplicit,
+    reviewStateInputExplicit: semantics.reviewStateInputExplicit,
+  });
+  if (semantics.expectedEdges.length === 0) return;
+  if (semantics.expectedEdges.length !== input.plan.edges.length) {
+    fail('memory_fact_contribution_supersession_replay_mismatch');
+  }
+  for (let index = 0; index < semantics.expectedEdges.length; index += 1) {
+    const expected = semantics.expectedEdges[index]!;
+    const actual = input.plan.edges[index]!;
+    if (
+      actual.predecessor_fact_id !== expected.predecessorFactId ||
+      actual.successor_fact_id !== expected.successorFactId ||
+      actual.superseded_at !== expected.supersededAt
+    ) {
+      fail('memory_fact_contribution_supersession_replay_mismatch');
+    }
   }
 }

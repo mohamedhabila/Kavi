@@ -4,11 +4,9 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
-import { runMemoryTransaction } from '../../../src/services/memory/access/transaction';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { assertFactContributionAdmissionIntegrity } from '../../../src/services/memory/factContributionAdmissionIntegrity';
 import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
-import type { FactRow } from '../../../src/services/memory/facts/types';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -36,6 +34,7 @@ function createContributedFact(input: {
   now: number;
   pinned?: boolean;
   reviewState?: 'auto' | 'verified';
+  supersedePrior?: boolean;
 }) {
   return recordFactWithContribution(
     {
@@ -46,6 +45,7 @@ function createContributedFact(input: {
       sourceMessageId: input.messageId,
       pinned: input.pinned,
       reviewState: input.reviewState,
+      supersedePrior: input.supersedePrior,
       now: input.now,
     },
     { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
@@ -65,31 +65,6 @@ function contributionIdForFact(factId: string): string {
   );
   if (!row) throw new Error('test_contribution_missing');
   return row.id;
-}
-
-function insertSnapshot(input: {
-  contributionId: string;
-  successor: FactRow;
-  pinnedInputExplicit: 0 | 1;
-  reviewStateInputExplicit: 0 | 1;
-}): void {
-  getMemoryDb().runSync(
-    `INSERT INTO memory_fact_contribution_supersession_snapshots(
-       contribution_id, successor_fact_id, superseded_at, snapshot_version,
-       pinned_input_explicit, review_state_input_explicit, successor_pinned_baseline,
-       successor_review_state_baseline, successor_sensitivity_floor,
-       successor_sensitivity_policy_version
-     ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
-    input.contributionId,
-    input.successor.id,
-    input.successor.created_at,
-    input.pinnedInputExplicit,
-    input.reviewStateInputExplicit,
-    input.successor.pinned,
-    input.successor.review_state,
-    input.successor.sensitivity,
-    input.successor.sensitivity_policy_version,
-  );
 }
 
 describe('fact contribution supersession snapshot schema', () => {
@@ -127,85 +102,82 @@ describe('fact contribution supersession snapshot schema', () => {
     ).toContain('WITHOUT ROWID');
   });
 
-  it('seals the successor baseline and removes an orphaned snapshot with its final edge', () => {
+  it('creates one sealed product aggregate and rejects child mutation', () => {
     const subject = upsertEntity({ type: 'self', name: 'user', now: 50 });
-    const predecessor = createContributedFact({
+    const firstPredecessor = createContributedFact({
       subjectId: subject.id,
       objectText: 'blue',
       messageId: 'message-1',
       eventId: 'event-1',
       now: 100,
     });
+    const secondPredecessor = createContributedFact({
+      subjectId: subject.id,
+      objectText: 'red',
+      messageId: 'message-2',
+      eventId: 'event-2',
+      now: 110,
+    });
     const successor = createContributedFact({
       subjectId: subject.id,
       objectText: 'green',
-      messageId: 'message-2',
-      eventId: 'event-2',
+      messageId: 'message-3',
+      eventId: 'event-3',
       now: 200,
       pinned: true,
       reviewState: 'verified',
+      supersedePrior: true,
     });
     const db = getMemoryDb();
     const contributionId = contributionIdForFact(successor.id);
-    const successorRow = db.getFirstSync<FactRow>(
-      'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
-      successor.id,
-    );
-    if (!successorRow) throw new Error('test_successor_missing');
-    db.runSync(
-      'UPDATE memory_facts SET invalid_at = ?, updated_at = ? WHERE id = ?',
-      200,
-      200,
-      predecessor.id,
-    );
 
-    expect(() =>
-      db.runSync(
-        `INSERT INTO memory_fact_contribution_supersessions(
-           contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
-         ) VALUES (?, ?, ?, ?)`,
+    expect(
+      db.getFirstSync(
+        `SELECT supersession_set_version, supersession_set_count,
+                supersession_set_sha256
+           FROM memory_fact_contributions
+          WHERE id = ?`,
         contributionId,
-        predecessor.id,
-        successor.id,
-        200,
       ),
-    ).toThrow('memory_fact_contribution_supersession_parent_invalid');
-    expect(() =>
-      db.runSync(
-        `INSERT INTO memory_fact_contribution_supersession_snapshots(
-           contribution_id, successor_fact_id, superseded_at, snapshot_version,
-           pinned_input_explicit, review_state_input_explicit, successor_pinned_baseline,
-           successor_review_state_baseline, successor_sensitivity_floor,
-           successor_sensitivity_policy_version
-         ) VALUES (?, ?, 200, 1, 1, 1, 0, 'verified', ?, ?)`,
-        contributionId,
-        successor.id,
-        successorRow.sensitivity,
-        successorRow.sensitivity_policy_version,
-      ),
-    ).toThrow('memory_fact_contribution_supersession_snapshot_parent_invalid');
-
-    insertSnapshot({
-      contributionId,
-      successor: successorRow,
-      pinnedInputExplicit: 1,
-      reviewStateInputExplicit: 1,
+    ).toEqual({
+      supersession_set_version: 1,
+      supersession_set_count: 3,
+      supersession_set_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
-    db.runSync(
-      `INSERT INTO memory_fact_contribution_supersessions(
-         contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
-       ) VALUES (?, ?, ?, ?)`,
-      contributionId,
-      predecessor.id,
-      successor.id,
-      200,
-    );
-
-    db.runSync(
-      `UPDATE memory_facts
-          SET sensitivity_policy_version = sensitivity_policy_version + 1
-        WHERE id = ?`,
-      successor.id,
+    expect(
+      db.getFirstSync(
+        `SELECT successor_fact_id, superseded_at, snapshot_version,
+                pinned_input_explicit, review_state_input_explicit,
+                successor_pinned_baseline, successor_review_state_baseline,
+                successor_sensitivity_floor
+           FROM memory_fact_contribution_supersession_snapshots
+          WHERE contribution_id = ?`,
+        contributionId,
+      ),
+    ).toEqual({
+      successor_fact_id: successor.id,
+      superseded_at: 200,
+      snapshot_version: 1,
+      pinned_input_explicit: 1,
+      review_state_input_explicit: 1,
+      successor_pinned_baseline: 1,
+      successor_review_state_baseline: 'verified',
+      successor_sensitivity_floor: successor.sensitivity,
+    });
+    expect(
+      db.getAllSync(
+        `SELECT predecessor_fact_id, successor_fact_id, superseded_at
+           FROM memory_fact_contribution_supersessions
+          WHERE contribution_id = ?
+          ORDER BY predecessor_fact_id ASC`,
+        contributionId,
+      ),
+    ).toEqual(
+      [firstPredecessor.id, secondPredecessor.id].sort().map((predecessorFactId) => ({
+        predecessor_fact_id: predecessorFactId,
+        successor_fact_id: successor.id,
+        superseded_at: 200,
+      })),
     );
     expect(() => assertFactContributionAdmissionIntegrity(db)).not.toThrow();
     expect(() =>
@@ -218,14 +190,50 @@ describe('fact contribution supersession snapshot schema', () => {
     ).toThrow('memory_fact_contribution_supersession_snapshot_immutable');
     expect(() =>
       db.runSync(
-        `DELETE FROM memory_fact_contribution_supersession_snapshots
+        `UPDATE memory_fact_contribution_supersessions
+            SET superseded_at = superseded_at + 1
           WHERE contribution_id = ?`,
         contributionId,
       ),
-    ).toThrow('memory_fact_contribution_supersession_snapshot_immutable');
+    ).toThrow('memory_fact_contribution_supersession_immutable');
+    expect(() =>
+      db.runSync(
+        `DELETE FROM memory_fact_contribution_supersessions
+          WHERE contribution_id = ? AND predecessor_fact_id = ?`,
+        contributionId,
+        firstPredecessor.id,
+      ),
+    ).toThrow('memory_fact_contribution_supersession_immutable');
+  });
 
-    db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id);
+  it('guards committed predecessors until successor teardown removes the aggregate', () => {
+    const subject = upsertEntity({ type: 'self', name: 'user', now: 50 });
+    const predecessor = createContributedFact({
+      subjectId: subject.id,
+      objectText: 'blue',
+      messageId: 'message-teardown-predecessor',
+      eventId: 'event-teardown-predecessor',
+      now: 100,
+    });
+    const successor = createContributedFact({
+      subjectId: subject.id,
+      objectText: 'green',
+      messageId: 'message-teardown-successor',
+      eventId: 'event-teardown-successor',
+      now: 200,
+      supersedePrior: true,
+    });
+    const db = getMemoryDb();
+    const contributionId = contributionIdForFact(successor.id);
 
+    expect(() => db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id)).toThrow(
+      'memory_fact_contribution_predecessor_delete_committed',
+    );
+    expect(
+      db.getFirstSync('SELECT id FROM memory_facts WHERE id = ?', predecessor.id),
+    ).not.toBeNull();
+
+    db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id);
     expect(
       db.getFirstSync<{ count: number }>(
         `SELECT COUNT(*) AS count
@@ -236,125 +244,76 @@ describe('fact contribution supersession snapshot schema', () => {
     ).toBe(0);
     expect(
       db.getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count
+           FROM memory_fact_contribution_supersessions
+          WHERE contribution_id = ?`,
+        contributionId,
+      )?.count,
+    ).toBe(0);
+    expect(
+      db.getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM memory_fact_contributions WHERE id = ?',
         contributionId,
       )?.count,
-    ).toBe(1);
+    ).toBe(0);
+
+    expect(() => db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id)).not.toThrow();
+    expect(db.getFirstSync('SELECT id FROM memory_facts WHERE id = ?', predecessor.id)).toBeNull();
     expect(() => assertFactContributionAdmissionIntegrity(db)).not.toThrow();
-  });
-
-  it('rejects two causal successors for one predecessor', () => {
-    const subject = upsertEntity({ type: 'self', name: 'user', now: 50 });
-    const predecessor = createContributedFact({
-      subjectId: subject.id,
-      objectText: 'blue',
-      messageId: 'message-fork-predecessor',
-      eventId: 'event-fork-predecessor',
-      now: 100,
-    });
-    const firstSuccessor = createContributedFact({
-      subjectId: subject.id,
-      objectText: 'green',
-      messageId: 'message-fork-first',
-      eventId: 'event-fork-first',
-      now: 200,
-    });
-    const secondSuccessor = createContributedFact({
-      subjectId: subject.id,
-      objectText: 'red',
-      messageId: 'message-fork-second',
-      eventId: 'event-fork-second',
-      now: 200,
-    });
-    const db = getMemoryDb();
-    const firstContributionId = contributionIdForFact(firstSuccessor.id);
-    const secondContributionId = contributionIdForFact(secondSuccessor.id);
-    const firstRow = db.getFirstSync<FactRow>(
-      'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
-      firstSuccessor.id,
-    );
-    const secondRow = db.getFirstSync<FactRow>(
-      'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
-      secondSuccessor.id,
-    );
-    if (!firstRow || !secondRow) throw new Error('test_successor_missing');
-    db.runSync(
-      'UPDATE memory_facts SET invalid_at = 200, updated_at = 200 WHERE id = ?',
-      predecessor.id,
-    );
-    insertSnapshot({
-      contributionId: firstContributionId,
-      successor: firstRow,
-      pinnedInputExplicit: 0,
-      reviewStateInputExplicit: 0,
-    });
-    db.runSync(
-      `INSERT INTO memory_fact_contribution_supersessions(
-         contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
-       ) VALUES (?, ?, ?, 200)`,
-      firstContributionId,
-      predecessor.id,
-      firstSuccessor.id,
-    );
-
-    expect(() =>
-      runMemoryTransaction(() => {
-        insertSnapshot({
-          contributionId: secondContributionId,
-          successor: secondRow,
-          pinnedInputExplicit: 0,
-          reviewStateInputExplicit: 0,
-        });
-        db.runSync(
-          `INSERT INTO memory_fact_contribution_supersessions(
-             contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
-           ) VALUES (?, ?, ?, 200)`,
-          secondContributionId,
-          predecessor.id,
-          secondSuccessor.id,
-        );
-      }),
-    ).toThrow();
-    expect(
-      db.getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_fact_contribution_supersession_snapshots',
-      )?.count,
-    ).toBe(1);
   });
 
   it('fails admission while a snapshot has no exact predecessor edge', () => {
     const subject = upsertEntity({ type: 'self', name: 'user', now: 50 });
-    const predecessor = createContributedFact({
+    const firstPredecessor = createContributedFact({
       subjectId: subject.id,
       objectText: 'blue',
       messageId: 'message-orphan-1',
       eventId: 'event-orphan-1',
       now: 100,
     });
+    createContributedFact({
+      subjectId: subject.id,
+      objectText: 'red',
+      messageId: 'message-orphan-2',
+      eventId: 'event-orphan-2',
+      now: 110,
+    });
     const successor = createContributedFact({
       subjectId: subject.id,
       objectText: 'green',
-      messageId: 'message-orphan-2',
-      eventId: 'event-orphan-2',
+      messageId: 'message-orphan-3',
+      eventId: 'event-orphan-3',
       now: 200,
+      supersedePrior: true,
     });
     const db = getMemoryDb();
     const contributionId = contributionIdForFact(successor.id);
-    const successorRow = db.getFirstSync<FactRow>(
-      'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
-      successor.id,
+    db.execSync(
+      'DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_immutable;',
     );
-    if (!successorRow) throw new Error('test_successor_missing');
     db.runSync(
-      'UPDATE memory_facts SET invalid_at = 200, updated_at = 200 WHERE id = ?',
-      predecessor.id,
-    );
-    insertSnapshot({
+      `DELETE FROM memory_fact_contribution_supersessions
+        WHERE contribution_id = ? AND predecessor_fact_id = ?`,
       contributionId,
-      successor: successorRow,
-      pinnedInputExplicit: 0,
-      reviewStateInputExplicit: 0,
-    });
+      firstPredecessor.id,
+    );
+
+    expect(
+      db.getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count
+           FROM memory_fact_contribution_supersession_snapshots
+          WHERE contribution_id = ?`,
+        contributionId,
+      )?.count,
+    ).toBe(1);
+    expect(
+      db.getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count
+           FROM memory_fact_contribution_supersessions
+          WHERE contribution_id = ?`,
+        contributionId,
+      )?.count,
+    ).toBe(1);
 
     expect(() => assertFactContributionAdmissionIntegrity(db)).toThrow(
       'memory_fact_contribution_admission_integrity_invalid',

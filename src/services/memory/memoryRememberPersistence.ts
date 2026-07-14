@@ -393,18 +393,25 @@ export function persistMemoryRemember(
           replay?.payload.input.attributes,
         ),
       };
-      const result =
-        decision.operation === 'replace_current'
-          ? replaceCurrentFactWithContribution(
-              { ...recordInput, expectedCurrentFactId: decision.target.id },
-              applicability,
-              contributionContext,
-            )
-          : recordFactWithContribution(
-              { ...recordInput, supersedePrior: false },
-              applicability,
-              contributionContext,
-            );
+      const replacementTargetId =
+        replay?.payload.operation.kind === 'exact_replacement'
+          ? replay.payload.operation.expectedCurrentFactId
+          : replay
+            ? null
+            : decision.operation === 'replace_current'
+              ? decision.target.id
+              : null;
+      const result = replacementTargetId
+        ? replaceCurrentFactWithContribution(
+            { ...recordInput, expectedCurrentFactId: replacementTargetId },
+            applicability,
+            contributionContext,
+          )
+        : recordFactWithContribution(
+            { ...recordInput, supersedePrior: false },
+            applicability,
+            contributionContext,
+          );
       if (result.status === 'conflict') {
         throw new MemoryRememberConflict(result.conflict);
       }

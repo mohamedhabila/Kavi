@@ -10,12 +10,11 @@ jest.mock('expo-sqlite', () => {
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { upsertEntity } from '../../src/services/memory/entities';
+import { recordFact, recordFactWithApplicability } from '../../src/services/memory/facts/mutations';
 import {
   markFactsRecalled,
-  recordFact,
-  recordFactWithApplicability,
   setFactLocalSimilarity,
-} from '../../src/services/memory/facts/mutations';
+} from '../../src/services/memory/facts/factAccessMutations';
 import {
   invalidateManagedMemoryFact,
   setManagedMemoryFactPinned,

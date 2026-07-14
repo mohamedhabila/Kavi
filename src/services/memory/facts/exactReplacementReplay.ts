@@ -7,7 +7,6 @@ import {
   type MemoryFactContributionReplay,
   type MemoryFactContributionWriteContext,
 } from '../factContributionStore';
-import { persistFactContributionSupersessionsInTransaction } from '../factContributionSupersessionStore';
 import { loadFactExplicitOverrideInTransaction } from '../factExplicitOverrideState';
 import {
   classifyMemoryFactSensitivity,
@@ -32,25 +31,6 @@ import {
 
 const SNAPSHOT_VERSION = 1;
 const CONTRIBUTION_ID_PATTERN = /^mfc_[0-9a-f]{64}$/u;
-
-interface SupersessionSnapshotRow {
-  contribution_id: string;
-  successor_fact_id: string;
-  superseded_at: number;
-  snapshot_version: number;
-  pinned_input_explicit: number;
-  review_state_input_explicit: number;
-  successor_pinned_baseline: number;
-  successor_review_state_baseline: string;
-  successor_sensitivity_floor: string;
-  successor_sensitivity_policy_version: number;
-}
-
-interface SupersessionEdgeRow {
-  predecessor_fact_id: string;
-  successor_fact_id: string;
-  superseded_at: number;
-}
 
 export interface ExactReplacementReplayState {
   contributionId: string;
@@ -226,24 +206,7 @@ export function loadExactReplacementReplayInTransaction(
   if (!CONTRIBUTION_ID_PATTERN.test(replay.id)) {
     fail('memory_fact_contribution_supersession_contribution_id_invalid');
   }
-  const db = getSchemaReadyMemoryDb();
-  const snapshot = db.getFirstSync<SupersessionSnapshotRow>(
-    `SELECT contribution_id, successor_fact_id, superseded_at, snapshot_version,
-            pinned_input_explicit, review_state_input_explicit, successor_pinned_baseline,
-            successor_review_state_baseline, successor_sensitivity_floor,
-            successor_sensitivity_policy_version
-       FROM memory_fact_contribution_supersession_snapshots
-      WHERE contribution_id = ?
-      LIMIT 1`,
-    replay.id,
-  );
-  const edges = db.getAllSync<SupersessionEdgeRow>(
-    `SELECT predecessor_fact_id, successor_fact_id, superseded_at
-       FROM memory_fact_contribution_supersessions
-      WHERE contribution_id = ?
-      ORDER BY predecessor_fact_id ASC`,
-    replay.id,
-  );
+  const { snapshot, edges } = replay.supersessionPlan;
   if (!snapshot) {
     if (edges.length > 0) fail('memory_fact_contribution_supersession_replay_mismatch');
     return null;
@@ -271,6 +234,7 @@ export function loadExactReplacementReplayInTransaction(
     fail('memory_fact_contribution_supersession_replay_mismatch');
   }
 
+  const db = getSchemaReadyMemoryDb();
   const successor = db.getFirstSync<FactRow>(
     'SELECT * FROM memory_facts WHERE id = ? LIMIT 1',
     snapshot.successor_fact_id,
@@ -333,23 +297,26 @@ export function finalizeExactReplacementReplayInTransaction(input: {
   payload: MemoryFactContributionPayloadV1;
   context: MemoryFactContributionWriteContext;
 }): ReplaceCurrentFactResult {
+  if (
+    input.payload.operation.kind !== 'exact_replacement' ||
+    input.payload.operation.expectedCurrentFactId !== input.state.predecessor.id
+  ) {
+    fail('memory_fact_contribution_replay_mismatch');
+  }
   const fact = repairReplaySuccessorProjection(input.state);
   const superseded = rowToFact(input.state.predecessor);
   const contribution = persistFactContributionInTransaction({
     fact,
     payload: input.payload,
     context: input.context,
+    supersession: {
+      superseded: [superseded],
+      pinnedInputExplicit: input.state.pinnedInputExplicit,
+      reviewStateInputExplicit: input.state.reviewStateInputExplicit,
+    },
   });
   if (contribution.id !== input.replay.id || contribution.status !== 'replayed') {
     fail('memory_fact_contribution_replay_mismatch');
   }
-  persistFactContributionSupersessionsInTransaction({
-    contributionId: contribution.id,
-    contributionStatus: contribution.status,
-    successor: fact,
-    superseded: [superseded],
-    pinnedInputExplicit: input.state.pinnedInputExplicit,
-    reviewStateInputExplicit: input.state.reviewStateInputExplicit,
-  });
   return { fact, status: 'duplicate', superseded: [] };
 }

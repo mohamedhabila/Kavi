@@ -56,6 +56,7 @@ function contributionPayload(
 ): MemoryFactContributionPayloadV1 {
   return {
     version: 1,
+    operation: { kind: 'record' },
     applicability: {
       factClass: 'subjective_user',
       sourceAuthority: 'grounded_user',
@@ -98,6 +99,12 @@ function insertContribution(input: {
   subjectId: string;
   objectText: string;
   producer: MemoryFactContributionProducerIdentity;
+  sourceSetVersion?: number;
+  sourceSetCount?: number;
+  sourceSetSha256?: string;
+  supersessionSetVersion?: number;
+  supersessionSetCount?: number;
+  supersessionSetSha256?: string;
 }) {
   const db = getMemoryDb();
   const scope = normalizeMemoryFactContributionSourceScope({
@@ -116,9 +123,10 @@ function insertContribution(input: {
   const inserted = db.runSync(
     `INSERT INTO memory_fact_contributions(
        id, fact_id, memory_owner_id, memory_conversation_id, source_thread_id, task_id,
-       producer_id, producer_event_id, payload_version, payload_json, payload_sha256,
-       payload_byte_length, contributed_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       producer_id, producer_event_id, source_set_version, source_set_count, source_set_sha256,
+       supersession_set_version, supersession_set_count, supersession_set_sha256,
+       payload_version, payload_json, payload_sha256, payload_byte_length, contributed_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     input.factId,
     scope.memoryOwnerId,
@@ -127,6 +135,12 @@ function insertContribution(input: {
     scope.taskId,
     input.producer.producerId,
     input.producer.producerEventId,
+    input.sourceSetVersion ?? 1,
+    input.sourceSetCount ?? 1,
+    input.sourceSetSha256 ?? '1'.repeat(64),
+    input.supersessionSetVersion ?? 1,
+    input.supersessionSetCount ?? 0,
+    input.supersessionSetSha256 ?? '2'.repeat(64),
     encoded.payloadVersion,
     encoded.payloadJson,
     encoded.payloadSha256,
@@ -161,6 +175,86 @@ function insertSupersessionSnapshot(contributionId: string, successor: MemoryFac
 }
 
 describe('fact contribution schema', () => {
+  it.each([
+    ['legacy', ''],
+    ['partial', ', source_set_version INTEGER NOT NULL'],
+  ])('requires an explicit structured reset for a %s parent shape', (_shape, extraColumn) => {
+    const db = getMemoryDb();
+    db.execSync(`
+      CREATE TABLE memory_fact_contributions(
+        id TEXT PRIMARY KEY
+        ${extraColumn}
+      );
+    `);
+
+    expect(() => ensureFactSchema()).toThrow('memory_fact_contribution_schema_reset_required');
+    expect(() => clearStructuredMemory()).not.toThrow();
+    const columns = db
+      .getAllSync<{ name: string }>('PRAGMA table_info(memory_fact_contributions)')
+      .map((column) => column.name);
+    expect(columns.filter((column) => column.includes('_set_'))).toEqual([
+      'source_set_version',
+      'source_set_count',
+      'source_set_sha256',
+      'supersession_set_version',
+      'supersession_set_count',
+      'supersession_set_sha256',
+    ]);
+  });
+
+  it('requires bounded immutable child-set commitments on every parent', () => {
+    ensureFactSchema();
+    const fact = createFact('blue');
+    const columns = getMemoryDb()
+      .getAllSync<{ name: string }>('PRAGMA table_info(memory_fact_contributions)')
+      .map((column) => column.name);
+    expect(columns.slice(8, 14)).toEqual([
+      'source_set_version',
+      'source_set_count',
+      'source_set_sha256',
+      'supersession_set_version',
+      'supersession_set_count',
+      'supersession_set_sha256',
+    ]);
+
+    const invalidCommitments = [
+      { sourceSetVersion: 2 },
+      { sourceSetCount: 0 },
+      { sourceSetCount: 65 },
+      { sourceSetCount: 1.5 },
+      { sourceSetSha256: 'A'.repeat(64) },
+      { supersessionSetVersion: 2 },
+      { supersessionSetCount: 1 },
+      { supersessionSetCount: 258 },
+      { supersessionSetCount: 2.5 },
+      { supersessionSetSha256: 'G'.repeat(64) },
+    ];
+    for (const [index, commitments] of invalidCommitments.entries()) {
+      expect(() =>
+        insertContribution({
+          factId: fact.id,
+          subjectId: fact.subjectId,
+          objectText: fact.objectText,
+          producer: {
+            producerId: 'commitment_schema',
+            producerEventId: `invalid-${index}`,
+          },
+          ...commitments,
+        }),
+      ).toThrow();
+    }
+
+    const noSupersession = insertContribution({
+      factId: fact.id,
+      subjectId: fact.subjectId,
+      objectText: fact.objectText,
+      producer: { producerId: 'commitment_schema', producerEventId: 'no-supersession' },
+    });
+    expect(() => insertSupersessionSnapshot(noSupersession.id, fact)).toThrow(
+      'memory_fact_contribution_supersession_snapshot_parent_invalid',
+    );
+  });
+
   it('persists one immutable idempotent contribution with multiple exact source aliases', () => {
     ensureFactSchema();
     const fact = createFact('blue');
@@ -170,6 +264,7 @@ describe('fact contribution schema', () => {
       subjectId: fact.subjectId,
       objectText: fact.objectText,
       producer,
+      sourceSetCount: 3,
     });
     expect(first.inserted.changes).toBe(1);
     expect(() =>
@@ -178,6 +273,7 @@ describe('fact contribution schema', () => {
         subjectId: fact.subjectId,
         objectText: fact.objectText,
         producer,
+        sourceSetCount: 3,
       }),
     ).toThrow('memory_fact_contribution_immutable');
     const uppercaseShaId = buildMemoryFactContributionId({
@@ -191,16 +287,20 @@ describe('fact contribution schema', () => {
       first.db.runSync(
         `INSERT INTO memory_fact_contributions(
            id, fact_id, memory_owner_id, memory_conversation_id, source_thread_id, task_id,
-           producer_id, producer_event_id, payload_version, payload_json, payload_sha256,
+           producer_id, producer_event_id, source_set_version, source_set_count,
+           source_set_sha256, supersession_set_version, supersession_set_count,
+           supersession_set_sha256, payload_version, payload_json, payload_sha256,
            payload_byte_length, contributed_at
          ) VALUES (?, ?, ?, ?, ?, ?, 'turn_structural', 'assistant-message:uppercase-sha',
-                   ?, ?, ?, ?, 100)`,
+                   1, 1, ?, 1, 0, ?, ?, ?, ?, ?, 100)`,
         uppercaseShaId,
         fact.id,
         first.scope.memoryOwnerId,
         first.scope.memoryConversationId,
         first.scope.sourceThreadId,
         first.scope.taskId,
+        '1'.repeat(64),
+        '2'.repeat(64),
         first.encoded.payloadVersion,
         first.encoded.payloadJson,
         first.encoded.payloadSha256.toUpperCase(),
@@ -247,6 +347,19 @@ describe('fact contribution schema', () => {
     ]);
     expect(() =>
       first.db.runSync(
+        `INSERT INTO memory_fact_contribution_sources(
+           contribution_id, memory_owner_id, memory_conversation_id, source_thread_id,
+           task_id, source_kind, source_id
+         ) VALUES (?, ?, ?, ?, ?, 'message', 'source-overflow')`,
+        first.id,
+        first.scope.memoryOwnerId,
+        first.scope.memoryConversationId,
+        first.scope.sourceThreadId,
+        first.scope.taskId,
+      ),
+    ).toThrow('memory_fact_contribution_source_count_exceeded');
+    expect(() =>
+      first.db.runSync(
         `UPDATE memory_fact_contributions SET producer_id = 'changed' WHERE id = ?`,
         first.id,
       ),
@@ -255,10 +368,14 @@ describe('fact contribution schema', () => {
       first.db.runSync(
         `INSERT OR REPLACE INTO memory_fact_contributions(
            id, fact_id, memory_owner_id, memory_conversation_id, source_thread_id, task_id,
-           producer_id, producer_event_id, payload_version, payload_json, payload_sha256,
+           producer_id, producer_event_id, source_set_version, source_set_count,
+           source_set_sha256, supersession_set_version, supersession_set_count,
+           supersession_set_sha256, payload_version, payload_json, payload_sha256,
            payload_byte_length, contributed_at
          ) SELECT id, fact_id, memory_owner_id, memory_conversation_id, source_thread_id, task_id,
-                  producer_id, producer_event_id, payload_version, payload_json, payload_sha256,
+                  producer_id, producer_event_id, source_set_version, source_set_count,
+                  source_set_sha256, supersession_set_version, supersession_set_count,
+                  supersession_set_sha256, payload_version, payload_json, payload_sha256,
                   payload_byte_length, contributed_at
              FROM memory_fact_contributions
             WHERE id = ?`,
@@ -300,12 +417,14 @@ describe('fact contribution schema', () => {
       subjectId: successor.subjectId,
       objectText: successor.objectText,
       producer: { producerId: 'memory_tool', producerEventId: 'tool-call-1' },
+      supersessionSetCount: 3,
     });
     insertSupersessionSnapshot(contribution.id, successor);
     const crossOwner = createFact('red');
     const crossPredicate = createFact('yellow');
     const crossScope = createFact('purple');
     const differentMemoryKind = createFact('orange');
+    const overflowPredecessor = createFact('black');
     contribution.db.runSync(
       "UPDATE memory_facts SET memory_owner_id = 'vault-owner-other' WHERE id = ?",
       crossOwner.id,
@@ -337,9 +456,10 @@ describe('fact contribution schema', () => {
       differentMemoryKind.id,
     );
     contribution.db.runSync(
-      'UPDATE memory_facts SET invalid_at = 100, updated_at = 100 WHERE id IN (?, ?)',
+      'UPDATE memory_facts SET invalid_at = 100, updated_at = 100 WHERE id IN (?, ?, ?)',
       differentMemoryKind.id,
       predecessor.id,
+      overflowPredecessor.id,
     );
     contribution.db.runSync(
       `INSERT INTO memory_fact_contribution_supersessions(
@@ -368,6 +488,16 @@ describe('fact contribution schema', () => {
       predecessor.id,
       successor.id,
     );
+    expect(() =>
+      contribution.db.runSync(
+        `INSERT INTO memory_fact_contribution_supersessions(
+           contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
+         ) VALUES (?, ?, ?, 100)`,
+        contribution.id,
+        overflowPredecessor.id,
+        successor.id,
+      ),
+    ).toThrow('memory_fact_contribution_supersession_parent_invalid');
     expect(() =>
       contribution.db.runSync(
         'DELETE FROM memory_fact_contributions WHERE id = ?',
@@ -466,7 +596,7 @@ describe('fact contribution schema', () => {
     ).toThrow('memory_fact_contribution_immutable');
   });
 
-  it('removes an owned edge when its predecessor fact is deleted', () => {
+  it('protects a committed predecessor until its live successor parent is torn down', () => {
     ensureFactSchema();
     const predecessor = createFact('blue');
     const successor = createFact('green');
@@ -475,6 +605,7 @@ describe('fact contribution schema', () => {
       subjectId: successor.subjectId,
       objectText: successor.objectText,
       producer: { producerId: 'memory_tool', producerEventId: 'predecessor-delete' },
+      supersessionSetCount: 2,
     });
     insertSupersessionSnapshot(contribution.id, successor);
     contribution.db.runSync(
@@ -489,7 +620,27 @@ describe('fact contribution schema', () => {
       predecessor.id,
       successor.id,
     );
+    contribution.db.runSync(
+      'UPDATE memory_facts SET invalid_at = 101, updated_at = 101 WHERE id = ?',
+      successor.id,
+    );
 
+    expect(() =>
+      contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id),
+    ).toThrow('memory_fact_contribution_predecessor_delete_committed');
+
+    expect(
+      contribution.db.getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_contribution_supersessions',
+      )?.count,
+    ).toBe(1);
+    expect(
+      contribution.db.getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_contributions',
+      )?.count,
+    ).toBe(1);
+
+    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id);
     contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id);
 
     expect(
@@ -501,10 +652,10 @@ describe('fact contribution schema', () => {
       contribution.db.getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM memory_fact_contributions',
       )?.count,
-    ).toBe(1);
+    ).toBe(0);
   });
 
-  it('deletes a supersession pair without depending on SQLite row order', () => {
+  it('allows an explicit successor teardown before deleting its predecessor', () => {
     ensureFactSchema();
     const predecessor = createFact('blue');
     const successor = createFact('green');
@@ -513,6 +664,7 @@ describe('fact contribution schema', () => {
       subjectId: successor.subjectId,
       objectText: successor.objectText,
       producer: { producerId: 'memory_tool', producerEventId: 'pair-delete' },
+      supersessionSetCount: 2,
     });
     insertSupersessionSnapshot(contribution.id, successor);
     contribution.db.runSync(
@@ -528,11 +680,8 @@ describe('fact contribution schema', () => {
       successor.id,
     );
 
-    contribution.db.runSync(
-      'DELETE FROM memory_facts WHERE id IN (?, ?)',
-      predecessor.id,
-      successor.id,
-    );
+    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', successor.id);
+    contribution.db.runSync('DELETE FROM memory_facts WHERE id = ?', predecessor.id);
 
     expect(
       contribution.db.getFirstSync<{ count: number }>(

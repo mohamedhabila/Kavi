@@ -1,14 +1,13 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
-import { runMemoryStatement } from '../access/crud';
 import { newId, safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
+import { MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES } from '../factContributionChildCommitments';
 import {
   persistFactContributionInTransaction,
   type MemoryFactContributionWriteReceipt,
   type MemoryFactContributionWriteContext,
 } from '../factContributionStore';
-import { persistFactContributionSupersessionsInTransaction } from '../factContributionSupersessionStore';
 import { loadVerifiedFactContributionReplay } from '../factContributionReplay';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
@@ -24,15 +23,16 @@ import {
   mergeDuplicateReviewState,
   mergeDuplicateSensitivity,
 } from './duplicateMetadata';
-import { requireFactMutationTimestamp } from './mutationValidation';
-import { normalizeRecordFactMutation } from './mutationNormalization';
+import {
+  normalizeExactReplacementFactMutation,
+  normalizeRecordFactMutation,
+} from './mutationNormalization';
 import { hasPersistedSourceEvidence } from './sourceEvidence';
+import { buildSupersedePriorQuery } from './supersessionQuery';
 import {
   buildFactLocalSimilarityText,
   createCurrentLocalSimilarityVector,
-  requireCurrentLocalSimilarityVector,
   serializeCurrentLocalSimilarityVector,
-  type LocalSimilarityVector,
 } from '../localSimilarity';
 import {
   closedMemoryFactClass,
@@ -53,58 +53,7 @@ import {
   type RecordFactInput,
   type RecordFactResult,
 } from './types';
-
-type MemorySqlBindValue = string | number | null;
-
-function buildSupersedePriorQuery(
-  input: RecordFactInput,
-  scope: NonNullable<RecordFactInput['scope']>,
-  memoryOwnerId: string,
-  personaId: string | null,
-): { sql: string; params: MemorySqlBindValue[] } {
-  const clauses = [
-    'subject_id = ?',
-    'predicate = ? COLLATE NOCASE',
-    'invalid_at IS NULL',
-    'deleted_at IS NULL',
-    'memory_owner_id = ?',
-  ];
-  const params: MemorySqlBindValue[] = [input.subjectId, input.predicate, memoryOwnerId];
-
-  clauses.push('scope = ?');
-  params.push(scope);
-
-  if (scope === 'global') {
-    clauses.push('persona_id IS NULL');
-    clauses.push('origin_conversation_id IS NULL');
-    clauses.push('origin_thread_id IS NULL');
-    clauses.push('origin_task_id IS NULL');
-  } else if (scope === 'persona') {
-    clauses.push('persona_id = ?');
-    params.push(personaId);
-    clauses.push('origin_conversation_id IS NULL');
-    clauses.push('origin_thread_id IS NULL');
-    clauses.push('origin_task_id IS NULL');
-  } else if (scope === 'session') {
-    clauses.push('persona_id IS NULL');
-    clauses.push('origin_conversation_id = ?');
-    params.push(input.originConversationId!);
-    clauses.push('origin_thread_id = ?');
-    params.push(input.originThreadId!);
-    clauses.push('origin_task_id = ?');
-    params.push(input.originTaskId!);
-  } else if (scope === 'conversation' || scope === 'project') {
-    clauses.push('persona_id IS NULL');
-    clauses.push('origin_conversation_id = ?');
-    params.push(input.originConversationId!);
-    clauses.push('origin_task_id IS NULL');
-  }
-
-  return {
-    sql: `SELECT * FROM memory_facts WHERE ${clauses.join(' AND ')}`,
-    params,
-  };
-}
+import type { MemoryFactContributionPayloadV1 } from '../factContributionCodec';
 
 function hasExactSupersessionScopeIdentity(
   fact: FactRow,
@@ -189,12 +138,64 @@ export function recordFactWithContributionInTransaction(
   contributionStatus: MemoryFactContributionWriteReceipt['status'];
 } {
   const payload = normalizeRecordFactMutation(input, applicability);
+  return recordNormalizedFactWithContributionInTransaction(
+    input,
+    applicability,
+    context,
+    payload,
+    options,
+  );
+}
+
+/** Persist one exact replacement against its immutable original predecessor target. */
+export function recordExactReplacementFactWithContributionInTransaction(
+  input: RecordFactInput,
+  expectedCurrentFactId: string,
+  applicability: SealedFactApplicabilityProvenance,
+  context: MemoryFactContributionWriteContext,
+  options: RecordFactWithContributionOptions = {},
+): {
+  result: RecordFactResult;
+  contributionId: string;
+  contributionStatus: MemoryFactContributionWriteReceipt['status'];
+} {
+  const payload = normalizeExactReplacementFactMutation(
+    input,
+    expectedCurrentFactId,
+    applicability,
+  );
+  return recordNormalizedFactWithContributionInTransaction(
+    input,
+    applicability,
+    context,
+    payload,
+    options,
+  );
+}
+
+function recordNormalizedFactWithContributionInTransaction(
+  input: RecordFactInput,
+  applicability: SealedFactApplicabilityProvenance,
+  context: MemoryFactContributionWriteContext,
+  payload: MemoryFactContributionPayloadV1,
+  options: RecordFactWithContributionOptions,
+): {
+  result: RecordFactResult;
+  contributionId: string;
+  contributionStatus: MemoryFactContributionWriteReceipt['status'];
+} {
   const replay = loadVerifiedFactContributionReplay({ context, payload });
   const materializationInput = options.materializationInput ?? input;
   const materializationPayload =
     materializationInput === input
       ? payload
-      : normalizeRecordFactMutation(materializationInput, applicability);
+      : payload.operation.kind === 'exact_replacement'
+        ? normalizeExactReplacementFactMutation(
+            materializationInput,
+            payload.operation.expectedCurrentFactId,
+            applicability,
+          )
+        : normalizeRecordFactMutation(materializationInput, applicability);
   const recorded = recordNormalizedFactInTransaction(materializationPayload, true, replay?.factId);
   if (options.expectedStatus !== undefined && recorded.status !== options.expectedStatus) {
     throw new FactContributionMaterializationConflict();
@@ -212,14 +213,11 @@ export function recordFactWithContributionInTransaction(
     fact: result.fact,
     payload,
     context,
-  });
-  persistFactContributionSupersessionsInTransaction({
-    contributionId: contribution.id,
-    contributionStatus: contribution.status,
-    successor: result.fact,
-    superseded: result.superseded,
-    pinnedInputExplicit: input.pinned !== undefined,
-    reviewStateInputExplicit: input.reviewState !== undefined,
+    supersession: {
+      superseded: result.superseded,
+      pinnedInputExplicit: input.pinned !== undefined,
+      reviewStateInputExplicit: input.reviewState !== undefined,
+    },
   });
   return {
     result,
@@ -239,7 +237,7 @@ function recordFactInTransaction(
 }
 
 function recordNormalizedFactInTransaction(
-  payload: ReturnType<typeof normalizeRecordFactMutation>,
+  payload: MemoryFactContributionPayloadV1,
   incomingIsSealed: boolean,
   expectedReplayFactId?: string,
 ): RecordFactResult {
@@ -522,6 +520,9 @@ function recordNormalizedFactInTransaction(
           provenance.personaId,
         ),
       );
+    if (priors.length > MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES) {
+      throw new Error('memory_fact_supersession_limit_exceeded');
+    }
     for (const prior of priors) {
       db.runSync(
         `UPDATE memory_facts
@@ -640,54 +641,4 @@ function recordNormalizedFactInTransaction(
   replaceFactRetrievalTerms(fact);
   runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(fact.originConversationId));
   return { fact, status: 'created', superseded };
-}
-
-export function markFactsRecalled(ids: string[], now = Date.now()): number {
-  requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
-  getSchemaReadyMemoryDb();
-  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
-  if (uniqueIds.length === 0) return 0;
-  const result = runMemoryStatement(
-    `UPDATE memory_facts
-       SET access_count = access_count + 1,
-           last_recalled_at = ?,
-           last_accessed_at = ?,
-           updated_at = ?
-       WHERE id IN (${uniqueIds.map(() => '?').join(', ')})
-         AND deleted_at IS NULL`,
-    now,
-    now,
-    now,
-    ...uniqueIds,
-  );
-  return result.changes ?? 0;
-}
-
-/**
- * Persist one current, validated local-similarity vector for a fact.
- */
-export function setFactLocalSimilarity(
-  id: string,
-  localSimilarity: LocalSimilarityVector,
-  now = Date.now(),
-): boolean {
-  requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
-  const validated = requireCurrentLocalSimilarityVector(localSimilarity);
-  const serialized = serializeCurrentLocalSimilarityVector(validated);
-  const result = runMemoryStatement(
-    `UPDATE memory_facts
-       SET local_similarity_model = ?,
-           local_similarity_dimensions = ?,
-           local_similarity_vector = ?,
-           local_similarity_updated_at = ?
-       WHERE id = ? AND deleted_at IS NULL`,
-    validated.model,
-    validated.dimensions,
-    serialized,
-    now,
-    id,
-  );
-  const changed = (result.changes ?? 0) > 0;
-  if (changed) runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
-  return changed;
 }

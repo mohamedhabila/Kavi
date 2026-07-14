@@ -12,6 +12,7 @@ import {
 function payload(attributes: Record<string, unknown> = {}): MemoryFactContributionPayloadV1 {
   return {
     version: 1,
+    operation: { kind: 'record' },
     applicability: {
       factClass: 'subjective_user',
       sourceAuthority: 'grounded_user',
@@ -76,6 +77,7 @@ describe('fact contribution codec', () => {
     const nonCanonicalJson = JSON.stringify({
       input: parsed.input,
       version: 1,
+      operation: parsed.operation,
       applicability: parsed.applicability,
     });
     expect(() =>
@@ -95,6 +97,35 @@ describe('fact contribution codec', () => {
         ...payload(),
         input: { ...payload().input, objectText: 'x'.repeat(16 * 1024 + 1) },
       }),
+    ).toThrow('memory_fact_contribution_payload_invalid');
+  });
+
+  it('seals an exact replacement target without accepting legacy or broad supersession shapes', () => {
+    const exactReplacement: MemoryFactContributionPayloadV1 = {
+      ...payload(),
+      operation: { kind: 'exact_replacement', expectedCurrentFactId: 'fact-predecessor' },
+    };
+
+    expect(
+      decodeMemoryFactContributionPayload(encodeMemoryFactContributionPayload(exactReplacement)),
+    ).toEqual(exactReplacement);
+    expect(() =>
+      encodeMemoryFactContributionPayload({
+        ...exactReplacement,
+        input: { ...exactReplacement.input, supersedePrior: true },
+      }),
+    ).toThrow('memory_fact_contribution_payload_invalid');
+    expect(() =>
+      encodeMemoryFactContributionPayload({
+        ...payload(),
+        operation: { kind: 'exact_replacement' },
+      } as never),
+    ).toThrow('memory_fact_contribution_payload_invalid');
+    expect(() =>
+      encodeMemoryFactContributionPayload({
+        ...payload(),
+        operation: { kind: 'record', expectedCurrentFactId: 'fact-predecessor' },
+      } as never),
     ).toThrow('memory_fact_contribution_payload_invalid');
   });
 

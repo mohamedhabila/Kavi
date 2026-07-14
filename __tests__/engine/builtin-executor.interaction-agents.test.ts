@@ -9,7 +9,7 @@ jest.mock('../../src/services/memory/facts/observations', () => ({
   loadActiveMemoryFactConflictSignals: jest.fn().mockReturnValue([]),
 }));
 
-jest.mock('../../src/services/memory/facts/mutations', () => ({
+jest.mock('../../src/services/memory/facts/factAccessMutations', () => ({
   markFactsRecalled: (...args: any[]) => mockMarkFactsRecalled(...args),
 }));
 

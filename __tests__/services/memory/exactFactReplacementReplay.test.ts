@@ -14,6 +14,7 @@ import {
   setScopedMemoryFactReviewState,
 } from '../../../src/services/memory/factExplicitOverrides';
 import { loadFactExplicitOverrideInTransaction } from '../../../src/services/memory/factExplicitOverrideState';
+import { decodeMemoryFactContributionPayload } from '../../../src/services/memory/factContributionCodec';
 import type { MemoryFactContributionWriteContext } from '../../../src/services/memory/factContributionStore';
 import { replaceCurrentFactWithContribution } from '../../../src/services/memory/facts/exactReplacement';
 import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
@@ -162,6 +163,28 @@ describe('contributed exact replacement replay', () => {
         status: 'duplicate',
         fact: { id: seeded.successor.id },
         superseded: [],
+      });
+      const contribution = getMemoryDb().getFirstSync<{
+        payload_version: number;
+        payload_json: string;
+        payload_sha256: string;
+        payload_byte_length: number;
+      }>(
+        `SELECT payload_version, payload_json, payload_sha256, payload_byte_length
+           FROM memory_fact_contributions
+          WHERE fact_id = ?`,
+        seeded.successor.id,
+      );
+      expect(
+        decodeMemoryFactContributionPayload({
+          payloadVersion: contribution?.payload_version,
+          payloadJson: contribution?.payload_json,
+          payloadSha256: contribution?.payload_sha256,
+          payloadByteLength: contribution?.payload_byte_length,
+        }).operation,
+      ).toEqual({
+        kind: 'exact_replacement',
+        expectedCurrentFactId: seeded.predecessor.id,
       });
       expect(rowCounts()).toEqual(countsBeforeReplay);
     },

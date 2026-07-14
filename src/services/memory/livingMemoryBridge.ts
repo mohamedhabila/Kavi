@@ -55,7 +55,7 @@ import { selectMemoryApplicabilityResolutionFactIds } from './memoryApplicabilit
 import { loadActiveMemoryFactConflictSignals } from './facts/observations';
 import type { RequiredMemoryAccessScopeIdentity } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
-import { markFactsRecalled } from './facts/mutations';
+import { markFactsRecalled } from './facts/factAccessMutations';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 import { revalidateAutomaticPromptEpisodeSelection } from './episodes/automaticPromptAccess';

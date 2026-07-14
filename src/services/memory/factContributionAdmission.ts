@@ -7,6 +7,10 @@ import {
   type MemoryFactContributionSourceScope,
 } from './factContributionCodec';
 import {
+  buildFactContributionSourceChildCommitment,
+  buildFactContributionSupersessionChildCommitment,
+} from './factContributionChildCommitments';
+import {
   assertFactContributionAdmissionIntegrity,
   buildLegacyFactSnapshotPayload,
 } from './factContributionAdmissionIntegrity';
@@ -169,6 +173,16 @@ function prepareLegacyContribution(input: {
     }),
   };
   const contributionId = buildMemoryFactContributionId({ scope: input.scope, producer });
+  const sourceSetCommitment = buildFactContributionSourceChildCommitment({
+    contributionId,
+    scope: input.scope,
+    sourceAliases: input.aliases,
+  });
+  const supersessionSetCommitment = buildFactContributionSupersessionChildCommitment({
+    contributionId,
+    snapshot: null,
+    edges: [],
+  });
   return {
     contribution: [
       contributionId,
@@ -179,6 +193,12 @@ function prepareLegacyContribution(input: {
       input.scope.taskId,
       producer.producerId,
       producer.producerEventId,
+      sourceSetCommitment.version,
+      sourceSetCommitment.count,
+      sourceSetCommitment.sha256,
+      supersessionSetCommitment.version,
+      supersessionSetCommitment.count,
+      supersessionSetCommitment.sha256,
       encoded.payloadVersion,
       encoded.payloadJson,
       encoded.payloadSha256,
@@ -214,6 +234,12 @@ function persistLegacyContributions(
       'task_id',
       'producer_id',
       'producer_event_id',
+      'source_set_version',
+      'source_set_count',
+      'source_set_sha256',
+      'supersession_set_version',
+      'supersession_set_count',
+      'supersession_set_sha256',
       'payload_version',
       'payload_json',
       'payload_sha256',

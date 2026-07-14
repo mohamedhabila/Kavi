@@ -30,7 +30,9 @@ export const MEMORY_FACT_CONTRIBUTION_LIMITS = Object.freeze({
   jsonKeyBytes: 256,
 });
 
-const CONTRIBUTION_KEYS = ['applicability', 'input', 'version'] as const;
+const CONTRIBUTION_KEYS = ['applicability', 'input', 'operation', 'version'] as const;
+const RECORD_OPERATION_KEYS = ['kind'] as const;
+const EXACT_REPLACEMENT_OPERATION_KEYS = ['expectedCurrentFactId', 'kind'] as const;
 const APPLICABILITY_KEYS = ['factClass', 'personaId', 'sourceAuthority'] as const;
 const INPUT_KEYS = [
   'attributes',
@@ -143,8 +145,13 @@ export interface NormalizedRecordFactContributionInput {
   now: number;
 }
 
+export type MemoryFactContributionOperationV1 =
+  | { kind: 'record' }
+  | { kind: 'exact_replacement'; expectedCurrentFactId: string };
+
 export interface MemoryFactContributionPayloadV1 {
   version: typeof MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION;
+  operation: MemoryFactContributionOperationV1;
   input: NormalizedRecordFactContributionInput;
   applicability: NormalizedFactApplicabilityProvenance;
 }
@@ -310,14 +317,26 @@ function validNormalizedInput(value: unknown): value is NormalizedRecordFactCont
   return true;
 }
 
+function validOperation(value: unknown): value is MemoryFactContributionOperationV1 {
+  if (!isPlainRecord(value) || typeof value.kind !== 'string') return false;
+  if (value.kind === 'record') return hasExactKeys(value, RECORD_OPERATION_KEYS);
+  return (
+    value.kind === 'exact_replacement' &&
+    hasExactKeys(value, EXACT_REPLACEMENT_OPERATION_KEYS) &&
+    isExactMemoryProvenanceId(value.expectedCurrentFactId)
+  );
+}
+
 function validPayload(value: unknown): value is MemoryFactContributionPayloadV1 {
   if (!isPlainRecord(value) || !hasExactKeys(value, CONTRIBUTION_KEYS)) return false;
   if (
     value.version !== MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION ||
+    !validOperation(value.operation) ||
     !validNormalizedInput(value.input)
   ) {
     return false;
   }
+  if (value.operation.kind === 'exact_replacement' && value.input.supersedePrior) return false;
   return validApplicability(value.applicability, value.input.scope);
 }
 

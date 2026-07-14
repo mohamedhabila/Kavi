@@ -8,12 +8,14 @@ import { requireFactScopeIdentity } from './scopeIdentity';
 import { clamp01, normalizeDecayPolicy, normalizeFactKind, type RecordFactInput } from './types';
 import {
   MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION,
+  type MemoryFactContributionOperationV1,
   type MemoryFactContributionPayloadV1,
 } from '../factContributionCodec';
+import { requireExactMemoryProvenanceId } from '../memoryProvenanceIdentity';
 
-/** Resolve every default exactly once before a fact mutation or contribution write. */
-export function normalizeRecordFactMutation(
+function normalizeFactMutation(
   input: RecordFactInput,
+  operation: MemoryFactContributionOperationV1,
   sealedApplicability?: SealedFactApplicabilityProvenance,
 ): MemoryFactContributionPayloadV1 {
   const now = requireFactMutationTimestamp(
@@ -48,6 +50,7 @@ export function normalizeRecordFactMutation(
 
   return {
     version: MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION,
+    operation,
     applicability,
     input: {
       subjectId: input.subjectId,
@@ -79,4 +82,31 @@ export function normalizeRecordFactMutation(
       now,
     },
   };
+}
+
+/** Resolve every default exactly once before a fact mutation or contribution write. */
+export function normalizeRecordFactMutation(
+  input: RecordFactInput,
+  sealedApplicability?: SealedFactApplicabilityProvenance,
+): MemoryFactContributionPayloadV1 {
+  return normalizeFactMutation(input, { kind: 'record' }, sealedApplicability);
+}
+
+/** Seal the exact predecessor identity that one contributed replacement was admitted against. */
+export function normalizeExactReplacementFactMutation(
+  input: RecordFactInput,
+  expectedCurrentFactId: string,
+  sealedApplicability?: SealedFactApplicabilityProvenance,
+): MemoryFactContributionPayloadV1 {
+  return normalizeFactMutation(
+    input,
+    {
+      kind: 'exact_replacement',
+      expectedCurrentFactId: requireExactMemoryProvenanceId(
+        expectedCurrentFactId,
+        'memory_fact_exact_replacement_target_invalid',
+      ),
+    },
+    sealedApplicability,
+  );
 }

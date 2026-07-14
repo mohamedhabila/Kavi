@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { findEntityByName, type EntityType } from './entities';
-import { markFactsRecalled } from './facts/mutations';
+import { markFactsRecalled } from './facts/factAccessMutations';
 import { requireFactScopeIdentity } from './facts/scopeIdentity';
 import { listFacts, listFactsForRecallEligibleScan } from './facts/queries';
 import { requireMemoryFactScope, type MemoryFactScope } from './facts/types';

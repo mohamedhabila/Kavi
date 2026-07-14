@@ -3,12 +3,19 @@ import {
   buildMemoryFactContributionId,
   decodeMemoryFactContributionPayload,
   encodeMemoryFactContributionPayload,
-  normalizeMemoryFactContributionSourceAliases,
   normalizeMemoryFactContributionSourceScope,
   requireMemoryFactContributionProducerIdentity,
   type MemoryFactContributionPayloadV1,
   type MemoryFactContributionSourceAlias,
 } from './factContributionCodec';
+import {
+  assertFactContributionSourceChildCommitment,
+  assertFactContributionSupersessionChildCommitment,
+  type FactContributionAdmissionSourceRow as ContributionSourceRow,
+  type FactContributionAdmissionSupersessionRow as ContributionSupersessionRow,
+  type FactContributionAdmissionSupersessionSnapshotRow as ContributionSupersessionSnapshotRow,
+} from './factContributionAdmissionCommitments';
+import { isFactContributionSupersessionAuthorized } from './factContributionOperation';
 import {
   closedMemoryFactClass,
   closedMemoryFactReviewState,
@@ -42,21 +49,17 @@ interface ContributionRow {
   task_id: string;
   producer_id: string;
   producer_event_id: string;
+  source_set_version: unknown;
+  source_set_count: unknown;
+  source_set_sha256: unknown;
+  supersession_set_version: unknown;
+  supersession_set_count: unknown;
+  supersession_set_sha256: unknown;
   payload_version: number;
   payload_json: string;
   payload_sha256: string;
   payload_byte_length: number;
   contributed_at: number;
-}
-
-interface ContributionSourceRow {
-  contribution_id: string;
-  memory_owner_id: string;
-  memory_conversation_id: string;
-  source_thread_id: string;
-  task_id: string;
-  source_kind: string;
-  source_id: string;
 }
 
 interface RetiredSourceRow {
@@ -66,26 +69,6 @@ interface RetiredSourceRow {
   task_id: string;
   source_kind: string;
   source_id: string;
-}
-
-interface ContributionSupersessionRow {
-  contribution_id: string;
-  predecessor_fact_id: string;
-  successor_fact_id: string;
-  superseded_at: number;
-}
-
-interface ContributionSupersessionSnapshotRow {
-  contribution_id: unknown;
-  successor_fact_id: unknown;
-  superseded_at: unknown;
-  snapshot_version: unknown;
-  pinned_input_explicit: unknown;
-  review_state_input_explicit: unknown;
-  successor_pinned_baseline: unknown;
-  successor_review_state_baseline: unknown;
-  successor_sensitivity_floor: unknown;
-  successor_sensitivity_policy_version: unknown;
 }
 
 interface ContributionSupersessionSnapshot {
@@ -223,6 +206,7 @@ export function buildLegacyFactSnapshotPayload(row: FactRow): MemoryFactContribu
   const reviewState = closedMemoryFactReviewState(row.review_state) ?? fail();
   const payload: MemoryFactContributionPayloadV1 = {
     version: 1,
+    operation: { kind: 'record' },
     applicability: {
       factClass,
       sourceAuthority,
@@ -262,30 +246,6 @@ export function buildLegacyFactSnapshotPayload(row: FactRow): MemoryFactContribu
   return payload;
 }
 
-function exactSourceRows(
-  rows: ReadonlyArray<ContributionSourceRow>,
-  contribution: ContributionRow,
-): MemoryFactContributionSourceAlias[] {
-  if (
-    rows.some(
-      (row) =>
-        row.memory_owner_id !== contribution.memory_owner_id ||
-        row.memory_conversation_id !== contribution.memory_conversation_id ||
-        row.source_thread_id !== contribution.source_thread_id ||
-        row.task_id !== contribution.task_id ||
-        (row.source_kind !== 'message' && row.source_kind !== 'turn' && row.source_kind !== 'run'),
-    )
-  ) {
-    return fail();
-  }
-  return normalizeMemoryFactContributionSourceAliases(
-    rows.map((row) => ({
-      sourceKind: row.source_kind as MemoryFactContributionSourceAlias['sourceKind'],
-      sourceId: row.source_id,
-    })),
-  );
-}
-
 function assertPayloadScope(
   payload: MemoryFactContributionPayloadV1,
   contribution: ContributionRow,
@@ -321,7 +281,7 @@ function assertContributionIntegrity(
   fact: FactRow,
   contribution: ContributionRow,
   memoryOwnerId: string,
-  sourceRows: ReadonlyArray<ContributionSourceRow>,
+  aliases: ReadonlyArray<MemoryFactContributionSourceAlias>,
   retiredSourceKeys: ReadonlySet<string>,
 ): MemoryFactContributionPayloadV1 {
   if (
@@ -374,7 +334,6 @@ function assertContributionIntegrity(
     fail();
   }
   assertPayloadScope(payload, contribution);
-  const aliases = exactSourceRows(sourceRows, contribution);
   assertPayloadAliases(payload, aliases);
   for (const alias of aliases) {
     if (
@@ -517,6 +476,11 @@ export function assertFactContributionAdmissionIntegrity(db: MemoryDb): void {
   const facts = new Map(
     db.getAllSync<FactRow>('SELECT * FROM memory_facts').map((fact) => [fact.id, fact]),
   );
+  const contributions = new Map(
+    db
+      .getAllSync<ContributionRow>('SELECT * FROM memory_fact_contributions ORDER BY id ASC')
+      .map((contribution) => [contribution.id, contribution]),
+  );
   const sourceRowsByContribution = new Map<string, ContributionSourceRow[]>();
   for (const source of db.getAllSync<ContributionSourceRow>(
     `SELECT contribution_id, memory_owner_id, memory_conversation_id, source_thread_id,
@@ -526,6 +490,33 @@ export function assertFactContributionAdmissionIntegrity(db: MemoryDb): void {
     const rows = sourceRowsByContribution.get(source.contribution_id) ?? [];
     rows.push(source);
     sourceRowsByContribution.set(source.contribution_id, rows);
+  }
+  const rawSnapshots = new Map<string, ContributionSupersessionSnapshotRow>();
+  for (const snapshot of db.getAllSync<ContributionSupersessionSnapshotRow>(
+    `SELECT contribution_id, successor_fact_id, superseded_at, snapshot_version,
+            pinned_input_explicit, review_state_input_explicit, successor_pinned_baseline,
+            successor_review_state_baseline, successor_sensitivity_floor,
+            successor_sensitivity_policy_version
+       FROM memory_fact_contribution_supersession_snapshots`,
+  )) {
+    if (rawSnapshots.has(snapshot.contribution_id)) fail();
+    rawSnapshots.set(snapshot.contribution_id, snapshot);
+  }
+  const supersessionRowsByContribution = new Map<string, ContributionSupersessionRow[]>();
+  for (const supersession of db.getAllSync<ContributionSupersessionRow>(
+    `SELECT contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
+       FROM memory_fact_contribution_supersessions`,
+  )) {
+    const rows = supersessionRowsByContribution.get(supersession.contribution_id) ?? [];
+    rows.push(supersession);
+    supersessionRowsByContribution.set(supersession.contribution_id, rows);
+  }
+  if (
+    Array.from(sourceRowsByContribution.keys()).some((id) => !contributions.has(id)) ||
+    Array.from(rawSnapshots.keys()).some((id) => !contributions.has(id)) ||
+    Array.from(supersessionRowsByContribution.keys()).some((id) => !contributions.has(id))
+  ) {
+    fail();
   }
   const retiredSourceKeys = new Set(
     db
@@ -537,36 +528,42 @@ export function assertFactContributionAdmissionIntegrity(db: MemoryDb): void {
       .map(exactSourceKey),
   );
   const contributionCounts = new Map<string, number>();
-  const contributions = new Map(
-    db
-      .getAllSync<ContributionRow>('SELECT * FROM memory_fact_contributions ORDER BY id ASC')
-      .map((contribution) => [contribution.id, contribution]),
-  );
   const payloads = new Map<string, MemoryFactContributionPayloadV1>();
   for (const contribution of contributions.values()) {
     const fact = facts.get(contribution.fact_id) ?? fail();
-    payloads.set(
-      contribution.id,
-      assertContributionIntegrity(
-        fact,
-        contribution,
-        memoryOwnerId,
-        sourceRowsByContribution.get(contribution.id) ?? [],
-        retiredSourceKeys,
-      ),
+    const aliases = assertFactContributionSourceChildCommitment(
+      contribution,
+      sourceRowsByContribution.get(contribution.id) ?? [],
     );
+    const supersessionRows = supersessionRowsByContribution.get(contribution.id) ?? [];
+    assertFactContributionSupersessionChildCommitment(
+      contribution,
+      rawSnapshots.get(contribution.id) ?? null,
+      supersessionRows,
+    );
+    const payload = assertContributionIntegrity(
+      fact,
+      contribution,
+      memoryOwnerId,
+      aliases,
+      retiredSourceKeys,
+    );
+    if (
+      !isFactContributionSupersessionAuthorized({
+        operation: payload.operation,
+        supersedePrior: payload.input.supersedePrior,
+        contributedFactId: contribution.fact_id,
+        predecessorFactIds: supersessionRows.map((row) => row.predecessor_fact_id),
+      })
+    ) {
+      fail();
+    }
+    payloads.set(contribution.id, payload);
     contributionCounts.set(fact.id, (contributionCounts.get(fact.id) ?? 0) + 1);
   }
-  if (Array.from(sourceRowsByContribution.keys()).some((id) => !contributions.has(id))) fail();
   const snapshots = new Map<string, ContributionSupersessionSnapshot>();
   const snapshotSuccessorFactIds = new Set<string>();
-  for (const rawSnapshot of db.getAllSync<ContributionSupersessionSnapshotRow>(
-    `SELECT contribution_id, successor_fact_id, superseded_at, snapshot_version,
-            pinned_input_explicit, review_state_input_explicit, successor_pinned_baseline,
-            successor_review_state_baseline, successor_sensitivity_floor,
-            successor_sensitivity_policy_version
-       FROM memory_fact_contribution_supersession_snapshots`,
-  )) {
+  for (const rawSnapshot of rawSnapshots.values()) {
     const snapshot = decodeSupersessionSnapshot(rawSnapshot);
     if (
       snapshots.has(snapshot.contributionId) ||
@@ -580,17 +577,16 @@ export function assertFactContributionAdmissionIntegrity(db: MemoryDb): void {
   }
   const snapshotEdgeCounts = new Map<string, number>();
   const supersededPredecessorFactIds = new Set<string>();
-  for (const supersession of db.getAllSync<ContributionSupersessionRow>(
-    `SELECT contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
-       FROM memory_fact_contribution_supersessions`,
-  )) {
-    if (supersededPredecessorFactIds.has(supersession.predecessor_fact_id)) fail();
-    supersededPredecessorFactIds.add(supersession.predecessor_fact_id);
-    assertSupersessionIntegrity(supersession, facts, contributions, payloads, snapshots);
-    snapshotEdgeCounts.set(
-      supersession.contribution_id,
-      (snapshotEdgeCounts.get(supersession.contribution_id) ?? 0) + 1,
-    );
+  for (const supersessions of supersessionRowsByContribution.values()) {
+    for (const supersession of supersessions) {
+      if (supersededPredecessorFactIds.has(supersession.predecessor_fact_id)) fail();
+      supersededPredecessorFactIds.add(supersession.predecessor_fact_id);
+      assertSupersessionIntegrity(supersession, facts, contributions, payloads, snapshots);
+      snapshotEdgeCounts.set(
+        supersession.contribution_id,
+        (snapshotEdgeCounts.get(supersession.contribution_id) ?? 0) + 1,
+      );
+    }
   }
   if (Array.from(snapshots.keys()).some((id) => !snapshotEdgeCounts.has(id))) fail();
   for (const fact of facts.values()) {

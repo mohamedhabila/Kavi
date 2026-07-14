@@ -52,6 +52,7 @@ describe('legacy fact admission scaling', () => {
       DELETE FROM memory_fact_contribution_admission;
     `);
     const runSpy = jest.spyOn(db, 'runSync');
+    const getAllSpy = jest.spyOn(db, 'getAllSync');
 
     expect(admitLegacyFactContributions(db, 2_000)).toMatchObject({
       admittedCount: 1_000,
@@ -63,6 +64,17 @@ describe('legacy fact admission scaling', () => {
         (sql.includes('INSERT INTO memory_fact_contributions(') ||
           sql.includes('INSERT INTO memory_fact_contribution_sources(')),
     );
-    expect(ledgerInserts.length).toBeLessThan(30);
+    const parentBatchCount = Math.ceil(1_000 / Math.floor(800 / 19));
+    const sourceBatchCount = Math.ceil(1_000 / Math.floor(800 / 7));
+    expect(ledgerInserts).toHaveLength(parentBatchCount + sourceBatchCount);
+    expect(ledgerInserts.every((call) => call.length - 1 <= 800)).toBe(true);
+    const childSetReads = getAllSpy.mock.calls.filter(
+      ([sql]) =>
+        typeof sql === 'string' &&
+        (sql.includes('FROM memory_fact_contribution_sources') ||
+          sql.includes('FROM memory_fact_contribution_supersession_snapshots') ||
+          sql.includes('FROM memory_fact_contribution_supersessions')),
+    );
+    expect(childSetReads).toHaveLength(3);
   });
 });

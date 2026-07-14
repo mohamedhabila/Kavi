@@ -7,9 +7,14 @@ import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/databas
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { admitLegacyFactContributions } from '../../../src/services/memory/factContributionAdmission';
 import {
+  decodeMemoryFactContributionPayload,
+  encodeMemoryFactContributionPayload,
+} from '../../../src/services/memory/factContributionCodec';
+import {
   recordFactWithApplicability,
   recordFactWithContribution,
 } from '../../../src/services/memory/facts/mutations';
+import { replaceCurrentFactWithContribution } from '../../../src/services/memory/facts/exactReplacement';
 import {
   addFactEvidence,
   recordThreadLocalEpisode,
@@ -207,6 +212,90 @@ describe('fact contribution admission integrity', () => {
     );
   });
 
+  it.each(['missing', 'extra', 'replaced', 'scope-tampered', 'orphan'] as const)(
+    'fails closed when a contribution source child is %s',
+    (corruption) => {
+      const fact = exactConversationLegacyFact(`source_child_${corruption}`);
+      reopenLegacyBoundary();
+      const db = getMemoryDb();
+      admitLegacyFactContributions(db, 500);
+      const parent = db.getFirstSync<{
+        id: string;
+        memory_owner_id: string;
+        memory_conversation_id: string;
+        source_thread_id: string;
+        task_id: string;
+      }>(
+        `SELECT id, memory_owner_id, memory_conversation_id, source_thread_id, task_id
+           FROM memory_fact_contributions WHERE fact_id = ?`,
+        fact.id,
+      )!;
+      db.execSync(`
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_parent_insert;
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_count;
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_immutable;
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_delete_immutable;
+      `);
+      if (corruption === 'missing') {
+        db.runSync(
+          `DELETE FROM memory_fact_contribution_sources
+            WHERE contribution_id = ? AND source_kind = 'turn'`,
+          parent.id,
+        );
+      } else if (corruption === 'replaced') {
+        db.runSync(
+          `UPDATE memory_fact_contribution_sources SET source_id = 'replaced-source'
+            WHERE contribution_id = ? AND source_kind = 'turn'`,
+          parent.id,
+        );
+      } else if (corruption === 'scope-tampered') {
+        db.runSync(
+          `UPDATE memory_fact_contribution_sources
+              SET memory_conversation_id = 'different-conversation'
+            WHERE contribution_id = ? AND source_kind = 'turn'`,
+          parent.id,
+        );
+      } else {
+        db.runSync(
+          `INSERT INTO memory_fact_contribution_sources(
+             contribution_id, memory_owner_id, memory_conversation_id, source_thread_id,
+             task_id, source_kind, source_id
+           ) VALUES (?, ?, ?, ?, ?, 'message', ?)`,
+          corruption === 'orphan' ? 'orphan-contribution' : parent.id,
+          parent.memory_owner_id,
+          parent.memory_conversation_id,
+          parent.source_thread_id,
+          parent.task_id,
+          `${corruption}-source`,
+        );
+      }
+
+      expect(() => admitLegacyFactContributions(db, 600)).toThrow(
+        'memory_fact_contribution_admission_integrity_failed',
+      );
+    },
+  );
+
+  it.each(['source_set_sha256', 'supersession_set_sha256'] as const)(
+    'fails closed when the parent %s commitment is externally corrupted',
+    (column) => {
+      const fact = exactConversationLegacyFact(`parent_${column}`);
+      reopenLegacyBoundary();
+      const db = getMemoryDb();
+      admitLegacyFactContributions(db, 500);
+      db.execSync('DROP TRIGGER IF EXISTS trg_memory_fact_contribution_immutable;');
+      db.runSync(
+        `UPDATE memory_fact_contributions SET ${column} = ? WHERE fact_id = ?`,
+        '0'.repeat(64),
+        fact.id,
+      );
+
+      expect(() => admitLegacyFactContributions(db, 600)).toThrow(
+        'memory_fact_contribution_admission_integrity_failed',
+      );
+    },
+  );
+
   it('fails closed on an orphan supersession edge and permits explicit recovery', () => {
     getMemoryDb().execSync(`
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_parent_insert;
@@ -269,6 +358,239 @@ describe('fact contribution admission integrity', () => {
       'memory_fact_contribution_admission_integrity_failed',
     );
   });
+
+  it('fails closed when sealed record intent no longer authorizes committed predecessors', () => {
+    const subject = upsertEntity({ name: 'user', type: 'self', now: 100 });
+    const contributionContext = (eventId: string, messageId: string) => ({
+      memoryConversationId: 'conversation-1',
+      sourceThreadId: 'thread-1',
+      taskId: null,
+      producer: { producerId: 'operation_integrity_test', producerEventId: eventId },
+      sourceAliases: [{ sourceKind: 'message' as const, sourceId: messageId }],
+    });
+    recordFactWithContribution(
+      {
+        subjectId: subject.id,
+        predicate: 'favorite_color',
+        objectText: 'blue',
+        scope: 'global',
+        sourceMessageId: 'operation-message-1',
+        now: 100,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+      contributionContext('operation-event-1', 'operation-message-1'),
+    );
+    const successor = recordFactWithContribution(
+      {
+        subjectId: subject.id,
+        predicate: 'favorite_color',
+        objectText: 'green',
+        scope: 'global',
+        sourceMessageId: 'operation-message-2',
+        supersedePrior: true,
+        now: 200,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+      contributionContext('operation-event-2', 'operation-message-2'),
+    );
+    const db = getMemoryDb();
+    const row = db.getFirstSync<{
+      id: string;
+      payload_version: number;
+      payload_json: string;
+      payload_sha256: string;
+      payload_byte_length: number;
+    }>('SELECT * FROM memory_fact_contributions WHERE fact_id = ?', successor.fact.id)!;
+    const payload = decodeMemoryFactContributionPayload({
+      payloadVersion: row.payload_version,
+      payloadJson: row.payload_json,
+      payloadSha256: row.payload_sha256,
+      payloadByteLength: row.payload_byte_length,
+    });
+    const encoded = encodeMemoryFactContributionPayload({
+      ...payload,
+      input: { ...payload.input, supersedePrior: false },
+    });
+    db.execSync('DROP TRIGGER IF EXISTS trg_memory_fact_contribution_immutable;');
+    db.runSync(
+      `UPDATE memory_fact_contributions
+          SET payload_version = ?, payload_json = ?, payload_sha256 = ?, payload_byte_length = ?
+        WHERE id = ?`,
+      encoded.payloadVersion,
+      encoded.payloadJson,
+      encoded.payloadSha256,
+      encoded.payloadByteLength,
+      row.id,
+    );
+
+    expect(() => admitLegacyFactContributions(db, 500)).toThrow(
+      'memory_fact_contribution_admission_integrity_failed',
+    );
+  });
+
+  it('fails closed when an exact replacement target is changed after commit', () => {
+    const subject = upsertEntity({ name: 'user', type: 'self', now: 100 });
+    const contributionContext = (eventId: string, messageId: string) => ({
+      memoryConversationId: 'conversation-1',
+      sourceThreadId: 'thread-1',
+      taskId: null,
+      producer: { producerId: 'replacement_operation_test', producerEventId: eventId },
+      sourceAliases: [{ sourceKind: 'message' as const, sourceId: messageId }],
+    });
+    const predecessor = recordFactWithContribution(
+      {
+        subjectId: subject.id,
+        predicate: 'favorite_color',
+        objectText: 'blue',
+        scope: 'global',
+        sourceMessageId: 'replacement-operation-message-1',
+        now: 100,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+      contributionContext('replacement-operation-event-1', 'replacement-operation-message-1'),
+    ).fact;
+    const replacement = replaceCurrentFactWithContribution(
+      {
+        subjectId: subject.id,
+        predicate: 'favorite_color',
+        objectText: 'green',
+        scope: 'global',
+        sourceMessageId: 'replacement-operation-message-2',
+        expectedCurrentFactId: predecessor.id,
+        now: 200,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+      contributionContext('replacement-operation-event-2', 'replacement-operation-message-2'),
+    );
+    if (replacement.status === 'conflict') throw new Error('unexpected replacement conflict');
+    const db = getMemoryDb();
+    const row = db.getFirstSync<{
+      id: string;
+      payload_version: number;
+      payload_json: string;
+      payload_sha256: string;
+      payload_byte_length: number;
+    }>('SELECT * FROM memory_fact_contributions WHERE fact_id = ?', replacement.fact.id)!;
+    const payload = decodeMemoryFactContributionPayload({
+      payloadVersion: row.payload_version,
+      payloadJson: row.payload_json,
+      payloadSha256: row.payload_sha256,
+      payloadByteLength: row.payload_byte_length,
+    });
+    if (payload.operation.kind !== 'exact_replacement') {
+      throw new Error('exact replacement operation missing');
+    }
+    const encoded = encodeMemoryFactContributionPayload({
+      ...payload,
+      operation: {
+        kind: 'exact_replacement',
+        expectedCurrentFactId: replacement.fact.id,
+      },
+    });
+    db.execSync('DROP TRIGGER IF EXISTS trg_memory_fact_contribution_immutable;');
+    db.runSync(
+      `UPDATE memory_fact_contributions
+          SET payload_version = ?, payload_json = ?, payload_sha256 = ?, payload_byte_length = ?
+        WHERE id = ?`,
+      encoded.payloadVersion,
+      encoded.payloadJson,
+      encoded.payloadSha256,
+      encoded.payloadByteLength,
+      row.id,
+    );
+
+    expect(() => admitLegacyFactContributions(db, 500)).toThrow(
+      'memory_fact_contribution_admission_integrity_failed',
+    );
+  });
+
+  it.each(['missing-edge', 'extra-edge', 'replaced-edge', 'missing-snapshot'] as const)(
+    'fails closed when a committed supersession child set has a %s',
+    (corruption) => {
+      const subject = upsertEntity({ name: 'user', type: 'self', now: 100 });
+      const contributionContext = (eventId: string, messageId: string) => ({
+        memoryConversationId: 'conversation-1',
+        sourceThreadId: 'thread-1',
+        taskId: null,
+        producer: { producerId: 'child_set_test', producerEventId: eventId },
+        sourceAliases: [{ sourceKind: 'message' as const, sourceId: messageId }],
+      });
+      recordFactWithContribution(
+        {
+          subjectId: subject.id,
+          predicate: 'favorite_color',
+          objectText: 'blue',
+          scope: 'global',
+          sourceMessageId: 'message-1',
+          now: 100,
+        },
+        { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+        contributionContext('event-1', 'message-1'),
+      );
+      recordFactWithContribution(
+        {
+          subjectId: subject.id,
+          predicate: 'favorite_color',
+          objectText: 'green',
+          scope: 'global',
+          sourceMessageId: 'message-2',
+          supersedePrior: true,
+          now: 200,
+        },
+        { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+        contributionContext('event-2', 'message-2'),
+      );
+      const db = getMemoryDb();
+      const child = db.getFirstSync<{
+        contribution_id: string;
+        successor_fact_id: string;
+        superseded_at: number;
+      }>(
+        `SELECT contribution_id, successor_fact_id, superseded_at
+           FROM memory_fact_contribution_supersessions`,
+      )!;
+      db.execSync(`
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_snapshot_immutable;
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_snapshot_delete_immutable;
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_parent_insert;
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_immutable;
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_immutable;
+        DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_snapshot;
+      `);
+      if (corruption === 'missing-edge') {
+        db.runSync(
+          'DELETE FROM memory_fact_contribution_supersessions WHERE contribution_id = ?',
+          child.contribution_id,
+        );
+      } else if (corruption === 'extra-edge') {
+        db.runSync(
+          `INSERT INTO memory_fact_contribution_supersessions(
+             contribution_id, predecessor_fact_id, successor_fact_id, superseded_at
+           ) VALUES (?, 'extra-predecessor', ?, ?)`,
+          child.contribution_id,
+          child.successor_fact_id,
+          child.superseded_at,
+        );
+      } else if (corruption === 'replaced-edge') {
+        db.runSync(
+          `UPDATE memory_fact_contribution_supersessions
+              SET predecessor_fact_id = 'replacement-predecessor'
+            WHERE contribution_id = ?`,
+          child.contribution_id,
+        );
+      } else {
+        db.runSync(
+          `DELETE FROM memory_fact_contribution_supersession_snapshots
+            WHERE contribution_id = ?`,
+          child.contribution_id,
+        );
+      }
+
+      expect(() => admitLegacyFactContributions(db, 500)).toThrow(
+        'memory_fact_contribution_admission_integrity_failed',
+      );
+    },
+  );
 
   it('allows an explicit full-memory clear to recover an unbacked post-boundary fact', () => {
     exactConversationLegacyFact('clear_unbacked');

@@ -1,7 +1,42 @@
 import { runMemoryDatabaseSavepoint } from './access/databaseSavepoint';
 import type { getMemoryDb } from './database';
+import { MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES } from './factContributionChildCommitments';
+import { MEMORY_FACT_CONTRIBUTION_LIMITS } from './factContributionCodec';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
+
+const REQUIRED_CHILD_SET_COMMITMENT_COLUMNS = [
+  'source_set_version',
+  'source_set_count',
+  'source_set_sha256',
+  'supersession_set_version',
+  'supersession_set_count',
+  'supersession_set_sha256',
+] as const;
+const SCHEMA_RESET_REQUIRED = 'memory_fact_contribution_schema_reset_required';
+
+export function isFactContributionSchemaResetRequired(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(SCHEMA_RESET_REQUIRED);
+}
+
+function assertFreshFactContributionParentSchema(db: MemoryDb): void {
+  const parentExists = db.getFirstSync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_fact_contributions'",
+  );
+  if (!parentExists) return;
+  const columns = db
+    .getAllSync<{ name: string }>('PRAGMA table_info(memory_fact_contributions)')
+    .map((column) => column.name);
+  const commitmentColumns = columns.filter(
+    (column) => column.startsWith('source_set_') || column.startsWith('supersession_set_'),
+  );
+  if (
+    commitmentColumns.length !== REQUIRED_CHILD_SET_COMMITMENT_COLUMNS.length ||
+    REQUIRED_CHILD_SET_COMMITMENT_COLUMNS.some((column) => !commitmentColumns.includes(column))
+  ) {
+    throw new Error(SCHEMA_RESET_REQUIRED);
+  }
+}
 
 /** Remove only triggers that reference memory_facts before its canonical table rebuild. */
 export function dropFactContributionFactReferenceTriggers(db: MemoryDb): void {
@@ -11,6 +46,7 @@ export function dropFactContributionFactReferenceTriggers(db: MemoryDb): void {
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_parent_insert;
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_immutable;
     DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_immutable;
+    DROP TRIGGER IF EXISTS trg_memory_fact_predecessor_delete_committed;
     DROP TRIGGER IF EXISTS trg_memory_fact_delete_contributions;
   `);
 }
@@ -18,6 +54,7 @@ export function dropFactContributionFactReferenceTriggers(db: MemoryDb): void {
 /** Canonical immutable ledger substrate. Population and replay are owned by later slices. */
 export function ensureFactContributionSchema(db: MemoryDb): void {
   runMemoryDatabaseSavepoint(db, (database) => {
+    assertFreshFactContributionParentSchema(database);
     database.execSync(`
       CREATE TABLE IF NOT EXISTS memory_fact_contributions (
         id TEXT PRIMARY KEY
@@ -30,6 +67,37 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         task_id TEXT NOT NULL CHECK(LENGTH(task_id) <= 160),
         producer_id TEXT NOT NULL CHECK(LENGTH(producer_id) BETWEEN 1 AND 160),
         producer_event_id TEXT NOT NULL CHECK(LENGTH(producer_event_id) BETWEEN 1 AND 512),
+        source_set_version INTEGER NOT NULL CHECK(
+          TYPEOF(source_set_version) = 'integer'
+          AND source_set_version = 1
+        ),
+        source_set_count INTEGER NOT NULL CHECK(
+          TYPEOF(source_set_count) = 'integer'
+          AND source_set_count BETWEEN 1 AND ${MEMORY_FACT_CONTRIBUTION_LIMITS.sourceAliases}
+        ),
+        source_set_sha256 TEXT NOT NULL CHECK(
+          TYPEOF(source_set_sha256) = 'text'
+          AND LENGTH(source_set_sha256) = 64
+          AND source_set_sha256 NOT GLOB '*[^0-9a-f]*'
+        ),
+        supersession_set_version INTEGER NOT NULL CHECK(
+          TYPEOF(supersession_set_version) = 'integer'
+          AND supersession_set_version = 1
+        ),
+        supersession_set_count INTEGER NOT NULL CHECK(
+          TYPEOF(supersession_set_count) = 'integer'
+          AND (
+            supersession_set_count = 0
+            OR supersession_set_count BETWEEN 2 AND ${
+              MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES + 1
+            }
+          )
+        ),
+        supersession_set_sha256 TEXT NOT NULL CHECK(
+          TYPEOF(supersession_set_sha256) = 'text'
+          AND LENGTH(supersession_set_sha256) = 64
+          AND supersession_set_sha256 NOT GLOB '*[^0-9a-f]*'
+        ),
         payload_version INTEGER NOT NULL CHECK(payload_version = 1),
         payload_json TEXT NOT NULL CHECK(LENGTH(payload_json) > 0),
         payload_sha256 TEXT NOT NULL
@@ -149,6 +217,7 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_parent_insert;
+      DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_count;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_source_delete_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_snapshot_parent_insert;
@@ -159,6 +228,7 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_immutable;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_supersession_delete_snapshot;
       DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_dependents;
+      DROP TRIGGER IF EXISTS trg_memory_fact_predecessor_delete_committed;
       DROP TRIGGER IF EXISTS trg_memory_fact_delete_contributions;
 
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_parent_insert
@@ -226,6 +296,26 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
         SELECT RAISE(ABORT, 'memory_fact_contribution_source_immutable');
       END;
 
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_source_count
+      BEFORE INSERT ON memory_fact_contribution_sources
+      WHEN EXISTS (
+        SELECT 1
+          FROM memory_fact_contributions AS contribution
+         WHERE contribution.id = NEW.contribution_id
+           AND contribution.memory_owner_id = NEW.memory_owner_id
+           AND contribution.memory_conversation_id = NEW.memory_conversation_id
+           AND contribution.source_thread_id = NEW.source_thread_id
+           AND contribution.task_id = NEW.task_id
+           AND (
+             SELECT COUNT(*)
+               FROM memory_fact_contribution_sources AS source
+              WHERE source.contribution_id = NEW.contribution_id
+           ) >= contribution.source_set_count
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_source_count_exceeded');
+      END;
+
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_contribution_source_delete_immutable
       BEFORE DELETE ON memory_fact_contribution_sources
       WHEN EXISTS (
@@ -244,6 +334,7 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
          WHERE contribution.id = NEW.contribution_id
            AND contribution.fact_id = NEW.successor_fact_id
            AND contribution.memory_owner_id = successor.memory_owner_id
+           AND contribution.supersession_set_count >= 2
            AND contribution.contributed_at = NEW.superseded_at
            AND successor.created_at = NEW.superseded_at
            AND successor.invalid_at IS NULL
@@ -289,6 +380,11 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
           JOIN memory_facts AS successor ON successor.id = NEW.successor_fact_id
          WHERE contribution.id = NEW.contribution_id
            AND contribution.fact_id = NEW.successor_fact_id
+           AND (
+             SELECT COUNT(*)
+               FROM memory_fact_contribution_supersessions AS edge
+              WHERE edge.contribution_id = NEW.contribution_id
+           ) < contribution.supersession_set_count - 1
            AND snapshot.successor_fact_id = NEW.successor_fact_id
            AND snapshot.superseded_at = NEW.superseded_at
            AND predecessor.memory_owner_id = contribution.memory_owner_id
@@ -383,6 +479,20 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
          WHERE contribution_id = OLD.id;
       END;
 
+      CREATE TRIGGER IF NOT EXISTS trg_memory_fact_predecessor_delete_committed
+      BEFORE DELETE ON memory_facts
+      WHEN EXISTS (
+        SELECT 1
+          FROM memory_fact_contribution_supersessions AS edge
+          JOIN memory_fact_contributions AS contribution
+            ON contribution.id = edge.contribution_id
+           AND contribution.fact_id = edge.successor_fact_id
+         WHERE edge.predecessor_fact_id = OLD.id
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_fact_contribution_predecessor_delete_committed');
+      END;
+
       CREATE TRIGGER IF NOT EXISTS trg_memory_fact_delete_contributions
       AFTER DELETE ON memory_facts
       BEGIN
@@ -397,8 +507,13 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
 /** Privileged full-reset boundary; ordinary contribution deletion remains impossible. */
 export function clearFactContributionLedgerForStructuredReset(db: MemoryDb): void {
   runMemoryDatabaseSavepoint(db, (database) => {
-    database.execSync('DROP TRIGGER IF EXISTS trg_memory_fact_contribution_delete_immutable;');
-    database.runSync('DELETE FROM memory_fact_contributions');
+    dropFactContributionFactReferenceTriggers(database);
+    database.execSync(`
+      DROP TABLE IF EXISTS memory_fact_contribution_supersessions;
+      DROP TABLE IF EXISTS memory_fact_contribution_supersession_snapshots;
+      DROP TABLE IF EXISTS memory_fact_contribution_sources;
+      DROP TABLE IF EXISTS memory_fact_contributions;
+    `);
     ensureFactContributionSchema(database);
   });
 }

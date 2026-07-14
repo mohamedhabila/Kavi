@@ -634,7 +634,16 @@ describe('atomic contributed fact mutations', () => {
           "UPDATE memory_facts SET memory_owner_id = 'foreign-owner' WHERE id = ?",
           fact.id,
         );
-        persistFactContributionInTransaction({ fact, payload, context: context('event-owner') });
+        persistFactContributionInTransaction({
+          fact,
+          payload,
+          context: context('event-owner'),
+          supersession: {
+            superseded: [],
+            pinnedInputExplicit: false,
+            reviewStateInputExplicit: false,
+          },
+        });
       }),
     ).toThrow('memory_fact_contribution_fact_mismatch');
     expect(factRows()[0]!.memory_owner_id).toBe(owner);
@@ -644,6 +653,11 @@ describe('atomic contributed fact mutations', () => {
         fact,
         payload: normalizeRecordFactMutation(globalFact(subject, 'green'), grounded),
         context: context('event-content'),
+        supersession: {
+          superseded: [],
+          pinnedInputExplicit: false,
+          reviewStateInputExplicit: false,
+        },
       }),
     ).toThrow('memory_fact_contribution_fact_mismatch');
     expect(contributionCount()).toBe(0);
