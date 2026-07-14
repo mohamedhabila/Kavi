@@ -346,27 +346,20 @@ describe('Service Integrations', () => {
         });
 
       const skill = createGitHubSkill();
-
-      let thrown: Error | null = null;
-      try {
+      const content = failedToolContent(
         await skill.tools.find((tool) => tool.name === 'commit_files')!.handler!({
           repo: 'user/repo',
           branch: 'feature/test',
           message: 'Update workflow',
           changes: [{ path: '.github/workflows/ci.yml', content: 'name: CI' }],
-        });
-      } catch (error) {
-        thrown = error as Error;
-      }
-
-      expect(thrown).toBeInstanceOf(Error);
-      expect(thrown?.message).toContain(
-        'GitHub commit_files while creating the next tree was forbidden',
+        }),
       );
-      expect(thrown?.message).toContain(
+
+      expect(content).toContain('GitHub commit_files while creating the next tree was forbidden');
+      expect(content).toContain(
         "Committing to .github/workflows/ requires the 'Workflows' permission",
       );
-      expect(thrown?.message).toContain(
+      expect(content).toContain(
         'Required permission: Contents: write and Workflows: write when modifying .github/workflows/.',
       );
     });

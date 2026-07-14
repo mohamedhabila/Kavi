@@ -9,6 +9,7 @@ import * as budgetManager from '../../src/services/context/budgetManager';
 import type { Message } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { createWorkflowTaskAnchor } from '../../src/engine/graph/workflowTaskAnchor';
+import type { ToolMessageOutcome } from '../../src/engine/toolExecution/toolMessageOutcome';
 const mockStreamMessage = jest.fn();
 jest.mock('../../src/services/llm/LlmService', () => ({
   LlmService: jest.fn().mockImplementation(() => ({
@@ -186,7 +187,7 @@ describe('runOrchestrator — simple text response', () => {
     expect(callbacks.onStateChange).toHaveBeenCalledWith('idle');
   });
 
-  it('forces a no-tools clarification turn for low-signal user input', async () => {
+  it('forces a no-tools clarification turn for structurally empty user input', async () => {
     const { isSlashCommand } = require('../../src/services/commands/parser');
     isSlashCommand.mockReturnValue(false);
 
@@ -201,7 +202,7 @@ describe('runOrchestrator — simple text response', () => {
     );
 
     const callbacks = makeCallbacks();
-    await runOrchestrator(makeOptions([makeMsg('user', '---')]), callbacks);
+    await runOrchestrator(makeOptions([makeMsg('user', '   ')]), callbacks);
 
     const firstTurnMessages = mockStreamMessage.mock.calls[0][0] as Array<{
       role: string;
@@ -299,7 +300,7 @@ describe('runOrchestrator — tool execution', () => {
 
     const callbacks = makeCallbacks({
       onToolMessage: jest.fn(
-        () =>
+        (_outcome: ToolMessageOutcome) =>
           new Promise<void>((resolve) => {
             notifyToolMessageStarted?.();
             releaseToolMessage = () => {
@@ -319,7 +320,12 @@ describe('runOrchestrator — tool execution', () => {
     );
     await toolMessageStarted;
 
-    expect(callbacks.onToolMessage).toHaveBeenCalledWith('tc-sequenced', 'tool result');
+    expect(callbacks.onToolMessage).toHaveBeenCalledWith({
+      version: 1,
+      toolCallId: 'tc-sequenced',
+      status: 'completed',
+      content: 'tool result',
+    });
     expect(mockStreamMessage).toHaveBeenCalledTimes(1);
 
     releaseToolMessage?.();

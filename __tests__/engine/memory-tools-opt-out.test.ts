@@ -28,7 +28,7 @@ import { executeToolInner as executeTool } from '../../src/engine/tools/toolDisp
 import { createGoal } from '../../src/engine/goals/types';
 import type { ToolExecutionContext } from '../../src/engine/tools/toolExecutionContext';
 import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
-import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
+import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
 import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -98,13 +98,14 @@ describe('structured memory tool executor — opt-out gate', () => {
   it('still honors explicit memory_forget withdrawal while memory is disabled', async () => {
     const remembered = parseCompletedToolOutcome(
       await executeGroundedRemember({
-        args: {
-          subject: 'user',
-          subjectType: 'self',
+        args: memoryRememberArgs({
+          userMessageId: 'user-review-duration-withdrawal',
+          userMessageText: 'I usually keep architecture reviews to 30 minutes.',
+          subjectRef: { kind: 'self' },
           predicate: 'usual architecture review duration',
           value: '30 minutes',
           scope: 'global',
-        },
+        }),
         threadId: 'conv-1',
         userMessageId: 'user-review-duration-withdrawal',
         userMessageText: 'I usually keep architecture reviews to 30 minutes.',
@@ -127,13 +128,14 @@ describe('structured memory tool executor — opt-out gate', () => {
   it('rejects memory_manage withdrawal aliases and keeps correction gated under opt-out', async () => {
     const remembered = parseCompletedToolOutcome(
       await executeGroundedRemember({
-        args: {
-          subject: 'user',
-          subjectType: 'self',
+        args: memoryRememberArgs({
+          userMessageId: 'user-review-duration-manage',
+          userMessageText: 'I usually keep architecture reviews to 45 minutes.',
+          subjectRef: { kind: 'self' },
           predicate: 'usual architecture review duration',
           value: '45 minutes',
           scope: 'global',
-        },
+        }),
         threadId: 'conv-1',
         userMessageId: 'user-review-duration-manage',
         userMessageText: 'I usually keep architecture reviews to 45 minutes.',
@@ -197,12 +199,14 @@ describe('structured memory tool executor — opt-out gate', () => {
 
   it('adds runtime conversation provenance to memory_remember writes', async () => {
     const outcome = await executeGroundedRemember({
-      args: {
-        subject: 'user',
+      args: memoryRememberArgs({
+        userMessageId: 'user-runtime-timezone',
+        userMessageText: 'My timezone is UTC+1.',
+        subjectRef: { kind: 'self' },
         predicate: 'timezone',
         value: 'UTC+1',
         scope: 'conversation',
-      },
+      }),
       threadId: 'conv-runtime-memory',
       userMessageId: 'user-runtime-timezone',
       userMessageText: 'My timezone is UTC+1.',
@@ -217,12 +221,14 @@ describe('structured memory tool executor — opt-out gate', () => {
 
   it('writes memory_remember facts to the explicit memory namespace with source-thread provenance', async () => {
     const outcome = await executeGroundedRemember({
-      args: {
-        subject: 'project',
+      args: memoryRememberArgs({
+        userMessageId: 'user-release-artifact',
+        userMessageText: 'project release_artifact is artifact-build.',
+        subjectRef: { kind: 'named', label: 'project' },
         predicate: 'release_artifact',
         value: 'artifact-build',
         scope: 'conversation',
-      },
+      }),
       threadId: 'child-runtime-memory',
       userMessageId: 'user-release-artifact',
       userMessageText: 'project release_artifact is artifact-build.',
@@ -239,13 +245,17 @@ describe('structured memory tool executor — opt-out gate', () => {
     expect(parsed.fact.originThreadId).toBe('child-runtime-memory');
   });
 
-  it('ignores provider-supplied null provenance for memory_remember writes', async () => {
+  it('rejects provider-supplied null provenance for memory_remember writes', async () => {
     const outcome = await executeGroundedRemember({
       args: {
-        subject: 'project',
-        predicate: 'build_marker',
-        value: 'artifact-null',
-        scope: 'project',
+        ...memoryRememberArgs({
+          userMessageId: 'user-build-marker-null',
+          userMessageText: 'project build_marker is artifact-null.',
+          subjectRef: { kind: 'named', label: 'project' },
+          predicate: 'build_marker',
+          value: 'artifact-null',
+          scope: 'project',
+        }),
         originConversationId: null,
         originThreadId: null,
         originTaskId: 'model-task',
@@ -261,26 +271,27 @@ describe('structured memory tool executor — opt-out gate', () => {
         agentRunId: 'runtime-run',
       },
     });
-    const parsed = parseCompletedToolOutcome(outcome);
+    const parsed = parseFailedToolOutcome(outcome);
 
-    expect(parsed.ok).toBe(true);
-    expect(parsed.fact.scope).toBe('project');
-    expect(parsed.fact.originConversationId).toBe('parent-runtime-memory');
-    expect(parsed.fact.originThreadId).toBe('child-runtime-memory');
-    expect(parsed.fact.originTaskId).toBeNull();
-    expect(parsed.fact.sourceMessageId).toBe('user-build-marker-null');
-    expect(listFacts({ originConversationId: 'parent-runtime-memory' })[0]?.sourceRunId).toBe(
-      'runtime-run',
-    );
+    expect(parsed).toMatchObject({
+      ok: false,
+      code: 'invalid_args',
+      error: 'memory_remember requires only semanticEvidence and optional pinned.',
+    });
+    expect(listFacts({ originConversationId: 'parent-runtime-memory' })).toEqual([]);
   });
 
-  it('ignores provider-supplied provenance overrides for memory_remember writes', async () => {
+  it('rejects provider-supplied provenance overrides for memory_remember writes', async () => {
     const outcome = await executeGroundedRemember({
       args: {
-        subject: 'project',
-        predicate: 'build_marker',
-        value: 'artifact-hostile',
-        scope: 'conversation',
+        ...memoryRememberArgs({
+          userMessageId: 'user-build-marker-hostile',
+          userMessageText: 'project build_marker is artifact-hostile.',
+          subjectRef: { kind: 'named', label: 'project' },
+          predicate: 'build_marker',
+          value: 'artifact-hostile',
+          scope: 'conversation',
+        }),
         originConversationId: 'wrong-parent',
         originThreadId: 'wrong-child',
         originTaskId: 'wrong-run',
@@ -295,26 +306,26 @@ describe('structured memory tool executor — opt-out gate', () => {
         workspaceConversationId: 'parent-runtime-files',
       },
     });
-    const parsed = parseCompletedToolOutcome(outcome);
+    const parsed = parseFailedToolOutcome(outcome);
 
-    expect(parsed.ok).toBe(true);
-    expect(parsed.fact.scope).toBe('conversation');
-    expect(parsed.fact.originConversationId).toBe('parent-runtime-memory');
-    expect(parsed.fact.originThreadId).toBe('child-runtime-memory');
-    expect(parsed.fact.originTaskId).toBeNull();
-    expect(parsed.fact.sourceMessageId).toBe('user-build-marker-hostile');
-    expect(listFacts({ originConversationId: 'parent-runtime-memory' })[0]?.sourceRunId).toBeNull();
+    expect(parsed).toMatchObject({
+      ok: false,
+      code: 'invalid_args',
+      error: 'memory_remember requires only semanticEvidence and optional pinned.',
+    });
+    expect(listFacts({ originConversationId: 'parent-runtime-memory' })).toEqual([]);
   });
 
   it('rejects a present non-exact code-owned agent run instead of trimming it', async () => {
     const outcome = await executeGroundedRemember({
-      args: {
-        subject: 'project',
+      args: memoryRememberArgs({
+        userMessageId: 'user-invalid-runtime-run',
+        userMessageText: 'project build_marker is artifact-invalid-run.',
+        subjectRef: { kind: 'named', label: 'project' },
         predicate: 'build_marker',
         value: 'artifact-invalid-run',
         scope: 'global',
-        sourceRunId: 'provider-forged-run',
-      },
+      }),
       threadId: 'child-runtime-memory',
       userMessageId: 'user-invalid-runtime-run',
       userMessageText: 'project build_marker is artifact-invalid-run.',
@@ -340,12 +351,14 @@ describe('structured memory tool executor — opt-out gate', () => {
       ],
     };
     const outcome = await executeGroundedRemember({
-      args: {
-        subject: 'project',
+      args: memoryRememberArgs({
+        userMessageId: 'user-release-artifact-task',
+        userMessageText: 'project release_artifact is artifact-task.',
+        subjectRef: { kind: 'named', label: 'project' },
         predicate: 'release_artifact',
         value: 'artifact-task',
         scope: 'session',
-      },
+      }),
       threadId: 'child-runtime-memory',
       userMessageId: 'user-release-artifact-task',
       userMessageText: 'project release_artifact is artifact-task.',
@@ -366,12 +379,14 @@ describe('structured memory tool executor — opt-out gate', () => {
     } as never);
     const global = parseCompletedToolOutcome(
       await executeGroundedRemember({
-        args: {
-          subject: 'user',
+        args: memoryRememberArgs({
+          userMessageId: 'user-global-timezone',
+          userMessageText: 'My timezone is UTC+1.',
+          subjectRef: { kind: 'self' },
           predicate: 'timezone',
           value: 'UTC+1',
           scope: 'global',
-        },
+        }),
         threadId: 'persona-thread',
         userMessageId: 'user-global-timezone',
         userMessageText: 'My timezone is UTC+1.',
@@ -380,12 +395,14 @@ describe('structured memory tool executor — opt-out gate', () => {
     );
     const persona = parseCompletedToolOutcome(
       await executeGroundedRemember({
-        args: {
-          subject: 'user',
+        args: memoryRememberArgs({
+          userMessageId: 'user-persona-role',
+          userMessageText: 'My role is warm.',
+          subjectRef: { kind: 'self' },
           predicate: 'role',
           value: 'warm',
           scope: 'persona',
-        },
+        }),
         threadId: 'persona-thread',
         userMessageId: 'user-persona-role',
         userMessageText: 'My role is warm.',
@@ -418,12 +435,14 @@ describe('structured memory tool executor — opt-out gate', () => {
   it('rejects session memory without an active task instead of changing scope', async () => {
     const parsed = parseFailedToolOutcome(
       await executeGroundedRemember({
-        args: {
-          subject: 'project',
+        args: memoryRememberArgs({
+          userMessageId: 'user-session-without-task',
+          userMessageText: 'project draft_state is open.',
+          subjectRef: { kind: 'named', label: 'project' },
           predicate: 'draft_state',
           value: 'open',
           scope: 'session',
-        },
+        }),
         threadId: 'thread-1',
         userMessageId: 'user-session-without-task',
         userMessageText: 'project draft_state is open.',
@@ -431,8 +450,8 @@ describe('structured memory tool executor — opt-out gate', () => {
       }),
     );
 
-    expect(parsed).toMatchObject({ ok: false, code: 'invalid_args' });
-    expect(parsed.error).toContain('memory_fact_origin_task_id_required');
+    expect(parsed).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(parsed.error).toContain('session_identity_unavailable');
     expect(listFacts()).toEqual([]);
   });
 });

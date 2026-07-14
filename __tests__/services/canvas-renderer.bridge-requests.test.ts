@@ -69,7 +69,7 @@ describe('Canvas Renderer', () => {
       const promise = requestCanvasEval('ev2', 'document.title');
       expect(onEval).toHaveBeenCalledWith('ev2', 'document.title');
 
-      resolveCanvasEval('ev2', 'My Title');
+      resolveCanvasEval('ev2', { succeeded: true, content: 'My Title' });
       const result = await promise;
       const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('eval_completed');
@@ -93,7 +93,7 @@ describe('Canvas Renderer', () => {
 
     it('resolveCanvasEval ignores unknown surfaceId', () => {
       // Should not throw
-      resolveCanvasEval('unknown-surface', 'value');
+      resolveCanvasEval('unknown-surface', { succeeded: true, content: 'value' });
     });
   });
   describe('requestCanvasRead', () => {

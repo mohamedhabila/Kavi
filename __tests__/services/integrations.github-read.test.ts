@@ -4,7 +4,7 @@ import {
   mockFetch,
   mockGetSecure,
 } from '../helpers/serviceIntegrationsHarness';
-import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
+import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('Service Integrations', () => {
   installServiceIntegrationsReset();
@@ -180,24 +180,19 @@ describe('Service Integrations', () => {
         });
 
       const skill = createGitHubSkill();
-
-      let thrown: Error | null = null;
-      try {
+      const content = failedToolContent(
         await skill.tools.find((tool) => tool.name === 'read_file')!.handler!({
           repo: 'user/repo',
           path: 'missing.txt',
           ref: 'refs/heads/main',
-        });
-      } catch (error) {
-        thrown = error as Error;
-      }
+        }),
+      );
 
-      expect(thrown).toBeInstanceOf(Error);
-      expect(thrown?.message).toContain('GitHub read_file returned 404');
-      expect(thrown?.message).toContain(
+      expect(content).toContain('GitHub read_file returned 404');
+      expect(content).toContain(
         'The repository is reachable, so the path or ref is the most likely missing resource.',
       );
-      expect(thrown?.message).toContain('Required permission: Contents: read.');
+      expect(content).toContain('Required permission: Contents: read.');
     });
 
     it('branches should explain when the token cannot access the target repository', async () => {
@@ -217,22 +212,17 @@ describe('Service Integrations', () => {
         });
 
       const skill = createGitHubSkill();
-
-      let thrown: Error | null = null;
-      try {
+      const content = failedToolContent(
         await skill.tools.find((tool) => tool.name === 'branches')!.handler!({
           repo: 'user/private-repo',
-        });
-      } catch (error) {
-        thrown = error as Error;
-      }
+        }),
+      );
 
-      expect(thrown).toBeInstanceOf(Error);
-      expect(thrown?.message).toContain('GitHub branches returned 404');
-      expect(thrown?.message).toContain(
+      expect(content).toContain('GitHub branches returned 404');
+      expect(content).toContain(
         'The repository may not exist, or the token may not be granted to this private repository.',
       );
-      expect(thrown?.message).toContain('Required permission: Contents: read.');
+      expect(content).toContain('Required permission: Contents: read.');
     });
   });
 });

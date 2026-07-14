@@ -93,6 +93,20 @@ import {
   parseCompletedToolOutcome,
   parseFailedToolOutcome,
 } from '../helpers/toolRuntimeOutcome';
+import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
+
+function expectNativeCompletionOrFailure(
+  outcome: ToolRuntimeOutcome,
+  assertCompletedPayload: (payload: Record<string, unknown>) => void,
+): void {
+  const payload = JSON.parse(outcome.content) as Record<string, unknown>;
+  if (outcome.status === 'completed') {
+    assertCompletedPayload(payload);
+    return;
+  }
+
+  expect(payload).toEqual({ error: expect.any(String) });
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -101,16 +115,18 @@ beforeEach(() => {
 describe('Device Status Tool', () => {
   it('returns battery and network info or error', async () => {
     const result = await executeDeviceStatus();
-    const parsed = parseCompletedToolOutcome(result);
-    expect(parsed.battery).toBeDefined();
+    expectNativeCompletionOrFailure(result, (parsed) => {
+      expect(parsed.battery).toBeDefined();
+    });
   });
 });
 
 describe('Device Info Tool', () => {
   it('returns device hardware info or error', async () => {
     const result = await executeDeviceInfo();
-    const parsed = parseCompletedToolOutcome(result);
-    expect(parsed.platform).toBe('ios');
+    expectNativeCompletionOrFailure(result, (parsed) => {
+      expect(parsed.platform).toBe('ios');
+    });
   });
 });
 
@@ -173,7 +189,11 @@ describe('Camera Clip Tool', () => {
   it('handles camera cancellation or error', async () => {
     const result = await executeCameraClip({});
     const parsed = parseFailedToolOutcome(result);
-    expect(parsed.status).toBe('cancelled');
+    if (parsed.status === 'cancelled') {
+      expect(parsed).toEqual({ status: 'cancelled' });
+    } else {
+      expect(parsed).toEqual({ error: expect.any(String) });
+    }
   });
 });
 
@@ -189,14 +209,16 @@ describe('Screen Record Tool', () => {
 describe('Haptic Feedback Tool', () => {
   it('triggers haptic feedback (or degrades gracefully)', async () => {
     const result = await executeHapticFeedback({ type: 'success' });
-    const parsed = parseCompletedToolOutcome(result);
-    expect(parsed.status).toBe('triggered');
+    expectNativeCompletionOrFailure(result, (parsed) => {
+      expect(parsed).toEqual({ status: 'triggered', type: 'success' });
+    });
   });
 
   it('defaults to medium type', async () => {
     const result = await executeHapticFeedback({});
-    const parsed = parseCompletedToolOutcome(result);
-    expect(parsed).toEqual({ status: 'triggered', type: 'medium' });
+    expectNativeCompletionOrFailure(result, (parsed) => {
+      expect(parsed).toEqual({ status: 'triggered', type: 'medium' });
+    });
   });
 });
 
@@ -215,12 +237,16 @@ describe('Notification Cancel Tool', () => {
 describe('Native Tool Dispatcher — New Tools', () => {
   it('routes device_status correctly', async () => {
     const result = await executeNativeTool('device_status', '{}');
-    expect(typeof completedToolContent(result)).toBe('string');
+    expectNativeCompletionOrFailure(result, (parsed) => {
+      expect(parsed.battery).toBeDefined();
+    });
   });
 
   it('routes device_info correctly', async () => {
     const result = await executeNativeTool('device_info', '{}');
-    expect(typeof completedToolContent(result)).toBe('string');
+    expectNativeCompletionOrFailure(result, (parsed) => {
+      expect(parsed.platform).toBe('ios');
+    });
   });
 
   it('routes device_permissions correctly', async () => {
@@ -235,7 +261,9 @@ describe('Native Tool Dispatcher — New Tools', () => {
 
   it('routes haptic_feedback correctly', async () => {
     const result = await executeNativeTool('haptic_feedback', '{"type":"light"}');
-    expect(typeof completedToolContent(result)).toBe('string');
+    expectNativeCompletionOrFailure(result, (parsed) => {
+      expect(parsed).toEqual({ status: 'triggered', type: 'light' });
+    });
   });
 
   it('routes screen_record correctly', async () => {

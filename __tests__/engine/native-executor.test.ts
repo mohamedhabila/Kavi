@@ -498,7 +498,7 @@ describe('executeNativeTool', () => {
       ),
     );
     const contactResult = parseCompletedToolOutcome(await executeNativeTool('contacts_pick', '{}'));
-    const accessResult = parseCompletedToolOutcome(
+    const accessResult = parseFailedToolOutcome(
       await executeNativeTool('contacts_manage_access', '{}'),
     );
     const shareResult = parseCompletedToolOutcome(

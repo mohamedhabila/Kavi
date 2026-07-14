@@ -14,8 +14,9 @@ jest.mock('../../src/services/remote/approvalStore', () => {
 import { createGoal } from '../../src/engine/goals/types';
 import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { upsertEntity } from '../../src/services/memory/entities';
-import { recordFactWithApplicability } from '../../src/services/memory/facts/mutations';
+import { recordFactWithContribution } from '../../src/services/memory/facts/mutations';
 import { getFactById } from '../../src/services/memory/facts/queries';
+import { codeOwnedMemorySensitivityDeclaration } from '../../src/services/memory/memorySensitivityPolicy';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
@@ -46,12 +47,15 @@ function seedFact(input: {
     name: `subject-${input.scope}-${subjectIndex}`,
     type: 'concept',
   });
-  return recordFactWithApplicability(
+  const sourceId = `memory-action-source-${subjectIndex}`;
+  return recordFactWithContribution(
     {
       subjectId: subject.id,
       predicate: 'status',
       objectText: 'ready',
       scope: input.scope,
+      sourceMessageId: `${sourceId}-message`,
+      sourceTurnId: `${sourceId}-turn`,
       ...(input.rootId ? { originConversationId: input.rootId } : {}),
       ...(input.threadId ? { originThreadId: input.threadId } : {}),
       ...(input.taskId ? { originTaskId: input.taskId } : {}),
@@ -61,6 +65,20 @@ function seedFact(input: {
       sourceAuthority: 'tool_observed',
       ...(input.personaId ? { personaId: input.personaId } : {}),
     },
+    {
+      memoryConversationId: input.rootId ?? `${sourceId}-root`,
+      sourceThreadId: input.threadId ?? `${sourceId}-thread`,
+      taskId: input.taskId ?? null,
+      producer: {
+        producerId: 'memory_fact_action_authorization_test',
+        producerEventId: `${sourceId}-event`,
+      },
+      sourceAliases: [
+        { sourceKind: 'message', sourceId: `${sourceId}-message` },
+        { sourceKind: 'turn', sourceId: `${sourceId}-turn` },
+      ],
+    },
+    codeOwnedMemorySensitivityDeclaration(),
   ).fact;
 }
 

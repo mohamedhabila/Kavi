@@ -9,6 +9,7 @@ import {
 } from '../../src/engine/orchestrator';
 import type { Message } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import type { ToolMessageOutcome } from '../../src/engine/toolExecution/toolMessageOutcome';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@ function makeCallbacks(): OrchestratorCallbacks & { calls: Record<string, any[]>
     onToolCallStart: jest.fn((tc) => calls.onToolCallStart.push(tc)),
     onToolCallComplete: jest.fn((tc) => calls.onToolCallComplete.push(tc)),
     onAssistantMessage: jest.fn(),
-    onToolMessage: jest.fn((id, result) => calls.onToolMessage.push({ id, result })),
+    onToolMessage: jest.fn((outcome: ToolMessageOutcome) => calls.onToolMessage.push(outcome)),
     onError: jest.fn((err) => calls.onError.push(err)),
     onUsage: jest.fn(),
     onDone: jest.fn(() => calls.onDone.push(true)),
@@ -290,7 +291,8 @@ describe('Orchestrator — toolFilter', () => {
     expect(callbacks.calls.onToolCallStart).toHaveLength(0);
     expect(callbacks.calls.onToolCallComplete).toHaveLength(0);
     expect(callbacks.calls.onToolMessage).toHaveLength(1);
-    expect(callbacks.calls.onToolMessage[0]?.result).toContain('not allowed');
+    expect(callbacks.calls.onToolMessage[0]?.content).toContain('not allowed');
+    expect(callbacks.calls.onToolMessage[0]?.status).toBe('failed');
   });
 
   it('allows a tool call when toolFilter returns true', async () => {
@@ -372,7 +374,8 @@ describe('Orchestrator — toolFilter', () => {
     expect(callbacks.calls.onToolCallStart).toHaveLength(0);
     expect(callbacks.calls.onToolCallComplete).toHaveLength(0);
     expect(callbacks.calls.onToolMessage).toHaveLength(1);
-    expect(callbacks.calls.onToolMessage[0]?.result).toContain('not registered');
+    expect(callbacks.calls.onToolMessage[0]?.content).toContain('not registered');
+    expect(callbacks.calls.onToolMessage[0]?.status).toBe('failed');
   });
 
   it('uses a deliberately pinned tool surface when toolFilter is undefined', async () => {
@@ -414,7 +417,12 @@ describe('Orchestrator — toolFilter', () => {
       expect.any(Object),
     );
     expect(callbacks.calls.onToolMessage).toHaveLength(1);
-    expect(callbacks.calls.onToolMessage[0]?.result).toBe('tool result');
+    expect(callbacks.calls.onToolMessage[0]).toEqual({
+      version: 1,
+      toolCallId: 'tc3',
+      status: 'completed',
+      content: 'tool result',
+    });
   });
 
   it.each([
@@ -423,9 +431,8 @@ describe('Orchestrator — toolFilter', () => {
       argumentsJson: '{"action":"add","id":"chat-loop","name":"Chat loop"}',
     },
     {
-      toolName: 'memory_remember',
-      argumentsJson:
-        '{"subject":"user","predicate":"preference","value":"quiet restaurants","scope":"global"}',
+      toolName: 'sessions_spawn',
+      argumentsJson: '{"task":"Continue this conversation in a worker"}',
     },
   ])(
     'does not advertise or execute $toolName for a chitchat conversation',
@@ -471,7 +478,7 @@ describe('Orchestrator — toolFilter', () => {
       expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
         'sessions_spawn',
       );
-      expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
+      expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).toContain(
         'memory_remember',
       );
       expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
@@ -484,7 +491,8 @@ describe('Orchestrator — toolFilter', () => {
         'read_file',
       );
       expect(mockExecuteTool).not.toHaveBeenCalled();
-      expect(callbacks.calls.onToolMessage[0]?.result).toContain('not allowed');
+      expect(callbacks.calls.onToolMessage[0]?.content).toContain('not allowed');
+      expect(callbacks.calls.onToolMessage[0]?.status).toBe('failed');
       expect(callbacks.calls.onDone).toHaveLength(1);
     },
   );
