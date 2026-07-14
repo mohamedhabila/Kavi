@@ -33,6 +33,7 @@ import {
   assertMemoryPublicationLockedSourcesUnchanged,
   preserveCodeOwnedMessageMemoryPublications,
 } from './chatMessageMemoryPublicationMutationFence';
+import { resolveRewindUserMessageEligibility } from './chatStoreUserMessageRewind';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 
@@ -292,35 +293,18 @@ export function createMessageStoreActions(
       let shouldCheckpoint = false;
 
       set((state) => {
-        const conversationIndexes = state.conversations.flatMap((conversation, index) =>
-          conversation.id === conversationId ? [index] : [],
-        );
-        if (conversationIndexes.length === 0) return state;
-        if (conversationIndexes.length !== 1) {
-          result = { status: 'rejected', reason: 'conversation_identity_invalid' };
+        const eligibility = resolveRewindUserMessageEligibility({
+          conversations: state.conversations,
+          conversationId,
+          messageId,
+        });
+        if (eligibility.status === 'rejected') {
+          result = eligibility;
           return state;
         }
-
-        const conversationIndex = conversationIndexes[0];
+        const { conversationIndex, messageIndex } = eligibility;
         const conversation = state.conversations[conversationIndex];
-        const messageIndexes = conversation.messages.flatMap((message, index) =>
-          message.id === messageId ? [index] : [],
-        );
-        if (messageIndexes.length === 0) {
-          result = { status: 'rejected', reason: 'message_unavailable' };
-          return state;
-        }
-        if (messageIndexes.length !== 1) {
-          result = { status: 'rejected', reason: 'message_identity_invalid' };
-          return state;
-        }
-
-        const messageIndex = messageIndexes[0];
         const message = conversation.messages[messageIndex];
-        if (message.role !== 'user') {
-          result = { status: 'rejected', reason: 'message_ineligible' };
-          return state;
-        }
 
         const existingMessageIds = new Set(conversation.messages.map((candidate) => candidate.id));
         let replacementMessageId = generateId();

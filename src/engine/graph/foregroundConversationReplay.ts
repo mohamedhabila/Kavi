@@ -8,6 +8,11 @@ export const FOREGROUND_RETRY_REWIND_REASON =
 
 type RewindConversationActions = {
   cancelConversationRunForRewind: (conversationId: string, reason: string) => void;
+  retireConversationSourcesForRewind: (
+    conversationId: string,
+    messageId: string,
+    reason: 'message_edit' | 'message_retry',
+  ) => void;
   rewindUserMessageForResend: (
     conversationId: string,
     messageId: string,
@@ -49,13 +54,20 @@ export function applyForegroundEditedResend(params: {
     params.conversationId,
     FOREGROUND_EDIT_RESEND_REWIND_REASON,
   );
-  return (
-    params.actions.rewindUserMessageForResend(
-      params.conversationId,
-      params.editingMessageId,
-      params.text,
-    ).status === 'applied'
+  params.actions.retireConversationSourcesForRewind(
+    params.conversationId,
+    params.editingMessageId,
+    'message_edit',
   );
+  const result = params.actions.rewindUserMessageForResend(
+    params.conversationId,
+    params.editingMessageId,
+    params.text,
+  );
+  if (result.status === 'rejected') {
+    throw new Error(`foreground_conversation_rewind_commit_${result.reason}`);
+  }
+  return true;
 }
 
 export function applyForegroundRetryResend(params: {
@@ -84,11 +96,18 @@ export function applyForegroundRetryResend(params: {
     params.conversationId,
     FOREGROUND_RETRY_REWIND_REASON,
   );
-  return (
-    params.actions.rewindUserMessageForResend(
-      params.conversationId,
-      retryUserMessage.id,
-      retryUserMessage.content,
-    ).status === 'applied'
+  params.actions.retireConversationSourcesForRewind(
+    params.conversationId,
+    retryUserMessage.id,
+    'message_retry',
   );
+  const result = params.actions.rewindUserMessageForResend(
+    params.conversationId,
+    retryUserMessage.id,
+    retryUserMessage.content,
+  );
+  if (result.status === 'rejected') {
+    throw new Error(`foreground_conversation_rewind_commit_${result.reason}`);
+  }
+  return true;
 }

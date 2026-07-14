@@ -4,6 +4,7 @@ import { importConversationWorkspaceAttachment } from '../../../services/convers
 import { createAgentRunIdentityKey } from '../../../services/agents/agentRunIdentity';
 import { getComposerDraftKey } from '../../../screens/chatComposerDrafts';
 import { waitForPersistedAgentRecoveryReadiness } from '../../../services/startupRecovery';
+import { retireConversationSourcesForRewind } from '../../../services/memory/conversationSourceRetirement';
 import { waitForModelProjectionAvailability } from '../../../store/modelProjectionOwnership';
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
 import { useChatStore } from '../../../store/useChatStore';
@@ -140,6 +141,13 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       });
     },
     [abortForegroundRequestForConversation, clearPendingRunState, getConversation],
+  );
+
+  const retireMemorySourcesForRewind = useCallback(
+    (conversationId: string, messageId: string, reason: 'message_edit' | 'message_retry') => {
+      retireConversationSourcesForRewind({ conversationId, messageId, reason });
+    },
+    [],
   );
 
   const waitForConversationWriteAvailability = useCallback(
@@ -308,17 +316,23 @@ export function useForegroundConversationActions(params: UseForegroundConversati
           return;
         }
         writeIntent = beginModelProjectionIntent(conversationId, 'conversation-write');
-        if (
-          applyForegroundEditedResend({
+        let applied = false;
+        try {
+          applied = applyForegroundEditedResend({
             actions: {
               cancelConversationRunForRewind,
+              retireConversationSourcesForRewind: retireMemorySourcesForRewind,
               rewindUserMessageForResend,
             },
             conversationId,
             editingMessageId: editingMessageId ?? undefined,
             text,
-          })
-        ) {
+          });
+        } catch (error) {
+          setChatError(error instanceof Error ? error.message : String(error));
+          return;
+        }
+        if (applied) {
           setEditingMessageId(null);
           setEditingContent(undefined);
           const execution = handleResend(conversationId);
@@ -340,8 +354,10 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       handleResend,
       releaseConversationWrite,
       reserveConversationWrite,
+      retireMemorySourcesForRewind,
       setEditingContent,
       setEditingMessageId,
+      setChatError,
       waitForConversationWriteAvailability,
     ],
   );
@@ -361,17 +377,23 @@ export function useForegroundConversationActions(params: UseForegroundConversati
           return;
         }
         writeIntent = beginModelProjectionIntent(conversationId, 'conversation-write');
-        if (
-          applyForegroundRetryResend({
+        let applied = false;
+        try {
+          applied = applyForegroundRetryResend({
             actions: {
               cancelConversationRunForRewind,
+              retireConversationSourcesForRewind: retireMemorySourcesForRewind,
               rewindUserMessageForResend,
             },
             assistantMessageId: messageId,
             conversation: getConversation(conversationId) ?? activeConversation,
             conversationId,
-          })
-        ) {
+          });
+        } catch (error) {
+          setChatError(error instanceof Error ? error.message : String(error));
+          return;
+        }
+        if (applied) {
           const execution = handleResend(conversationId);
           writeIntent.release();
           writeIntent = undefined;
@@ -391,6 +413,8 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       handleResend,
       releaseConversationWrite,
       reserveConversationWrite,
+      retireMemorySourcesForRewind,
+      setChatError,
       activeConversation,
       waitForConversationWriteAvailability,
     ],
