@@ -14,6 +14,7 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { resolveMemoryPolicyVisibleToolNames } from './memoryPolicyCatalogVisibility';
 
 export type ExecuteToolDescribeArgs = {
   name?: string;
@@ -23,6 +24,10 @@ export async function executeToolDescribe(
   args: ExecuteToolDescribeArgs,
   options?: ExecuteToolCatalogOptions,
 ): Promise<ToolRuntimeOutcome> {
+  const policyOptions: ExecuteToolCatalogOptions = {
+    availableToolNames: resolveMemoryPolicyVisibleToolNames(options?.availableToolNames),
+    visibleToolNames: resolveMemoryPolicyVisibleToolNames(options?.visibleToolNames),
+  };
   const requestedName = typeof args.name === 'string' ? normalizeToolName(args.name) : '';
   if (!requestedName) {
     return failedToolOutcome(
@@ -32,7 +37,7 @@ export async function executeToolDescribe(
     );
   }
 
-  if (!isToolCatalogVisible(requestedName, options)) {
+  if (!isToolCatalogVisible(requestedName, policyOptions)) {
     return failedToolOutcome(
       JSON.stringify({
         error: `Unknown tool: ${requestedName}`,
@@ -56,7 +61,7 @@ export async function executeToolDescribe(
           input_schema: registryTool.input_schema,
           contract: registryTool.contract,
           capabilitySummary: buildCapabilitySummary(registryTool),
-          activation: buildToolCatalogActivation(registryTool.name, options),
+          activation: buildToolCatalogActivation(registryTool.name, policyOptions),
         },
       }),
     );
@@ -64,7 +69,7 @@ export async function executeToolDescribe(
 
   const dynamicMatches = searchToolCatalogEntries({
     query: requestedName,
-    options,
+    options: policyOptions,
     limit: 5,
   }).filter((tool) => normalizeToolName(tool.name) === requestedName);
 

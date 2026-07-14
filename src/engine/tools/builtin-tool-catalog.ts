@@ -29,6 +29,7 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { resolveMemoryPolicyVisibleToolNames } from './memoryPolicyCatalogVisibility';
 
 function hasCatalogSearchArgs(args: ExecuteToolCatalogArgs): boolean {
   const query = typeof args.query === 'string' ? args.query.trim() : '';
@@ -113,8 +114,8 @@ export async function executeToolCatalog(
   args: ExecuteToolCatalogArgs,
   options?: ExecuteToolCatalogOptions,
 ): Promise<ToolRuntimeOutcome> {
-  const availableToolNames = options?.availableToolNames;
-  const visibleToolNames = options?.visibleToolNames;
+  const availableToolNames = resolveMemoryPolicyVisibleToolNames(options?.availableToolNames);
+  const visibleToolNames = resolveMemoryPolicyVisibleToolNames(options?.visibleToolNames);
   const staticVisibleTools = [...TOOL_DEFINITIONS, ...ALL_NATIVE_TOOL_DEFINITIONS].filter(
     (tool) => visibleToolNames?.has(tool.name) ?? true,
   );

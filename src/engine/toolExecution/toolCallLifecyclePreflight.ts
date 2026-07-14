@@ -15,6 +15,10 @@ import type {
   ToolExecutionLifecycleParams,
   ToolExecutionLifecycleResult,
 } from './toolCallLifecycleTypes';
+import {
+  buildMemoryDisabledToolResult,
+  isToolAllowedForMemoryPolicy,
+} from '../tools/memoryPolicyToolAuthority';
 
 function completePreflightFailure(params: {
   lifecycle: ToolExecutionLifecycleParams;
@@ -85,6 +89,13 @@ function isOnGroundedToolSurface(
   return tools.some((tool) => resolveRegisteredToolName(tool.name) === toolName);
 }
 
+function findGroundedToolDeclaration(
+  toolName: string,
+  tools: ToolExecutionLifecycleParams['groundedRequestScopedTools'],
+) {
+  return tools?.find((tool) => resolveRegisteredToolName(tool.name) === toolName);
+}
+
 export function resolveToolCallPreflight(
   params: ToolExecutionLifecycleParams,
   effectiveToolCall: RuntimeToolCallInput,
@@ -115,6 +126,24 @@ export function resolveToolCallPreflight(
       failureKind: 'tool_filter',
       preflightBlockedKind: 'tool_filter',
       notifyBlocked: true,
+    });
+  }
+
+  const groundedDeclaration = findGroundedToolDeclaration(
+    canonicalToolCall.name,
+    params.groundedRequestScopedTools,
+  );
+  if (groundedDeclaration && !isToolAllowedForMemoryPolicy(groundedDeclaration)) {
+    return completePreflightFailure({
+      lifecycle: params,
+      effectiveToolCall: canonicalToolCall,
+      idPrefix: params.idPrefixes.filtered,
+      content: buildMemoryDisabledToolResult(),
+      failureKind: 'tool_filter',
+      preflightBlockedKind: 'tool_filter',
+      notifyBlocked: true,
+      notifyStart: true,
+      notifyComplete: true,
     });
   }
 

@@ -9,6 +9,7 @@ import { resolveAgentExecutionTurnContract } from '../agentExecutionTurnContract
 import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOperations';
 import { extractDiscoveryActivatedToolNames } from '../discoveryToolActivation';
 import { resolveDefaultGroundedRequestScopedTools } from '../turnToolSurface';
+import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
 
 export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
@@ -29,6 +30,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     turnPinnedCount: number;
   };
 }> {
+  const policyAuthorizedTools = filterToolsForMemoryPolicy(params.allTools);
   const pendingAsyncMonitorToolNames = new Set(
     getPendingTrackedAsyncOperationToolNames(params.trackedAsyncOperations),
   );
@@ -51,7 +53,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   );
 
   const groundedRequestScopedTools = await resolveDefaultGroundedRequestScopedTools({
-    allTools: params.allTools,
+    allTools: policyAuthorizedTools,
     conversationMode: params.conversationMode,
     observedToolNames: params.completedWorkflowToolNames,
     goals,
@@ -64,11 +66,11 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
   );
   const pinnedToolNames = Array.from(
-    new Set(resolveGoalCapabilityToolNames(goals, params.allTools)),
+    new Set(resolveGoalCapabilityToolNames(goals, policyAuthorizedTools)),
   ).filter((name) => groundedToolNames.has(name));
   const turnContract = resolveAgentExecutionTurnContract({
     goals,
-    tools: params.allTools,
+    tools: policyAuthorizedTools,
     groundedToolNames: groundedRequestScopedTools.map((tool) => tool.name),
   });
 
