@@ -113,8 +113,11 @@ describe('agent control graph terminal outcomes', () => {
   it.each([
     ['loop_detected', 'blocked', 'loop_detected'],
     ['tool_batch_incomplete', 'blocked', 'tool_failure'],
-    ['incomplete_batch', 'blocked', 'tool_failure'],
-    ['workflow_route_blocked', 'blocked', 'route_blocked'],
+    ['tool_effect_reconciliation_required', 'blocked', 'tool_failure'],
+    ['route_blocked', 'blocked', 'route_blocked'],
+    ['workflow_route_blocked', 'blocked', 'terminal_blocked'],
+    ['the tool route is unavailable', 'blocked', 'terminal_blocked'],
+    ['مسار الأداة غير متاح', 'blocked', 'terminal_blocked'],
     ['missing_required_side_effect', 'blocked', 'missing_required_side_effect'],
     ['empty_final_text_after_recovery', 'blocked', 'terminal_blocked'],
     ['max_iterations', 'finalized', 'terminal_blocked'],

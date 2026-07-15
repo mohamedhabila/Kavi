@@ -9,6 +9,12 @@ const SUCCESSFUL_GRAPH_STATUSES = new Set<AgentControlGraphOutcomeState['status'
   'awaiting_review',
 ]);
 
+const TOOL_FAILURE_GRAPH_REASONS = new Set([
+  'tool_failure',
+  'tool_batch_incomplete',
+  'tool_effect_reconciliation_required',
+]);
+
 function resolveGraphOutcomeReason(state: AgentControlGraphOutcomeState): string {
   return state.terminalReason?.trim() || state.finalizationHoldReason?.trim() || state.status;
 }
@@ -136,15 +142,10 @@ export function classifyAgentControlGraphTerminalReason(
   if (reason === 'user_cancelled' || state.status === 'cancelled') {
     return 'user_cancelled';
   }
-  if (reason === 'route_blocked' || reason.includes('route')) {
+  if (reason === 'route_blocked') {
     return 'route_blocked';
   }
-  if (
-    reason === 'tool_failure' ||
-    reason.includes('tool') ||
-    reason.includes('incomplete_batch') ||
-    reason.includes('batch_incomplete')
-  ) {
+  if (TOOL_FAILURE_GRAPH_REASONS.has(reason)) {
     return 'tool_failure';
   }
 
