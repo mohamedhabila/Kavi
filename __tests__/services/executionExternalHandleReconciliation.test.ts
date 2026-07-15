@@ -503,7 +503,7 @@ describe('production external handle recovery vertical slice', () => {
     });
     const blockedProvider = inspectors(null);
     blockedProvider.inspectGitHubWorkflowRun.mockRejectedValueOnce(
-      new GitHubApiError(401, 'unauthorized'),
+      new GitHubApiError({ status: 401, detail: 'unauthorized' }),
     );
     const blocked = await coordinatePersistedExecutionRecovery(
       { runId: 'run-1' },

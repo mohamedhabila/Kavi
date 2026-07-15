@@ -17,11 +17,7 @@ import {
   normalizeGitHubRepo,
   normalizeGitHubRef,
 } from './normalize';
-import {
-  ensureGitHubBranch,
-  getGitHubBranchHeadShaWithRetry,
-  getGitHubToken,
-} from './repository';
+import { ensureGitHubBranch, getGitHubBranchHeadShaWithRetry, getGitHubToken } from './repository';
 import { createGitHubApiTool } from './skillToolFactory';
 
 export function createGitHubRepositoryTools(): SkillToolDefinition[] {
@@ -305,11 +301,10 @@ export function createGitHubRepositoryTools(): SkillToolDefinition[] {
             });
           } catch (error) {
             if (error instanceof GitHubApiError && error.status === 403 && workflowTouched) {
-              throw new GitHubApiError(
-                403,
-                `${error.message}. Committing to .github/workflows/ requires the 'Workflows' permission on the GitHub token. Update the token permissions in GitHub Settings > Fine-grained tokens.`,
-                error.responseBody,
-              );
+              throw new GitHubApiError({
+                status: 403,
+                detail: `${error.detail}. Committing to .github/workflows/ requires the 'Workflows' permission on the GitHub token. Update the token permissions in GitHub Settings > Fine-grained tokens.`,
+              });
             }
             throw error;
           }

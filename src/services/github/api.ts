@@ -4,15 +4,25 @@ export const GITHUB_API_VERSION = '2026-03-10';
 type GitHubApiResponseType = 'json' | 'text' | 'void';
 
 export class GitHubApiError extends Error {
-  status: number;
-  responseBody?: string;
+  readonly status: number;
+  readonly detail: string;
 
-  constructor(status: number, message: string, responseBody?: string) {
-    super(message);
+  constructor(params: { status: number; detail?: string }) {
+    const detail = sanitizeGitHubApiErrorDetail(params.detail || '') || 'Request failed';
+    super(`GitHub API ${params.status}: ${detail}`);
     this.name = 'GitHubApiError';
-    this.status = status;
-    this.responseBody = responseBody;
+    this.status = params.status;
+    this.detail = detail;
   }
+}
+
+function sanitizeGitHubApiErrorDetail(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 500);
 }
 
 function headersInitToRecord(headers?: HeadersInit): Record<string, string> {
@@ -31,10 +41,10 @@ function headersInitToRecord(headers?: HeadersInit): Record<string, string> {
   return { ...(headers as Record<string, string>) };
 }
 
-function parseGitHubApiErrorMessage(body: string, fallback: string): string {
+function parseGitHubApiErrorDetail(body: string, fallback: string): string {
   const trimmed = body.trim();
   if (!trimmed) {
-    return fallback;
+    return sanitizeGitHubApiErrorDetail(fallback);
   }
 
   try {
@@ -47,15 +57,10 @@ function parseGitHubApiErrorMessage(body: string, fallback: string): string {
         (parsed.errors || []).map((entry) => String(entry.message || entry.code || '').trim()),
       )
       .filter(Boolean);
-    return pieces.join(' · ') || fallback;
+    return sanitizeGitHubApiErrorDetail(pieces.join(' · ') || fallback);
   } catch {
-    return trimmed.slice(0, 500) || fallback;
+    return sanitizeGitHubApiErrorDetail(trimmed || fallback);
   }
-}
-
-function buildGitHubApiErrorMessage(status: number, statusText: string, body: string): string {
-  const detail = parseGitHubApiErrorMessage(body, statusText || `GitHub API error ${status}`);
-  return `GitHub API ${status}: ${detail}`;
 }
 
 export function getGitHubRequestHeaders(token: string, headers?: HeadersInit): HeadersInit {
@@ -82,11 +87,13 @@ export async function githubApi<T>(
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new GitHubApiError(
-      response.status,
-      buildGitHubApiErrorMessage(response.status, response.statusText, body),
-      body.slice(0, 1000),
-    );
+    throw new GitHubApiError({
+      status: response.status,
+      detail: parseGitHubApiErrorDetail(
+        body,
+        response.statusText || `GitHub API error ${response.status}`,
+      ),
+    });
   }
 
   if (response.status === 204 || options.responseType === 'void') {

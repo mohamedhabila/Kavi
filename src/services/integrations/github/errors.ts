@@ -2,16 +2,6 @@ import { GitHubApiError } from '../../github/api';
 import { getGitHubRepoMetadata } from './repository';
 import type { GitHubRepoAccessState, GitHubToolErrorContext } from './types';
 
-function isGenericGitHubErrorMessage(message: string): boolean {
-  const summary = message.replace(/^GitHub API \d+:\s*/i, '').trim();
-  return (
-    !summary ||
-    /^(not found|resource not found|forbidden|unprocessable entity|validation failed|conflict)$/i.test(
-      summary,
-    )
-  );
-}
-
 function formatGitHubErrorTarget(context: GitHubToolErrorContext): string {
   const parts = [
     context.repo ? `repo "${context.repo}"` : undefined,
@@ -45,7 +35,7 @@ async function buildGitHubToolError(
 
   const target = formatGitHubErrorTarget(context) || 'the requested resource';
   const phase = context.phase ? ` while ${context.phase}` : '';
-  const detail = isGenericGitHubErrorMessage(error.message) ? '' : ` ${error.message}.`;
+  const detail = error.detail ? ` Provider detail: ${error.detail}.` : '';
   const hints: string[] = [];
 
   if (error.status === 404) {
