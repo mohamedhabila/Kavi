@@ -310,6 +310,33 @@ describe('DefaultContextEngine', () => {
       expect(result.result?.summary).toContain('Workflow workflow-run-77: FAILURE');
     });
 
+    it('summarizes structured tool evidence without privileging English field names', () => {
+      const summary = buildStructuredSummary(
+        [
+          {
+            ...makeToolMsg(
+              'tool-arabic',
+              'tc-arabic',
+              JSON.stringify({ النتيجة: 'تم تحديث الموعد', الحالة: 'مكتمل' }),
+            ),
+            toolCalls: [
+              {
+                id: 'tc-arabic',
+                name: 'calendar_update',
+                arguments: JSON.stringify({ المعرف: 'موعد-٧' }),
+                status: 'completed',
+              },
+            ],
+          },
+        ],
+        'selective',
+      );
+
+      expect(summary).toContain('calendar_update');
+      expect(summary).toContain('تم تحديث الموعد');
+      expect(summary).not.toContain('Files:');
+    });
+
     it('returns not compacted when nothing to summarize', async () => {
       const messages = [makeMsg('user', 'Hello')];
       const result = await engine.compact({

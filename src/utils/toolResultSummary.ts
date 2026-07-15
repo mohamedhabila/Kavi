@@ -20,47 +20,6 @@ function truncateText(value: string, maxChars: number): string {
   return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
 }
 
-function summarizeFailureLogs(value: unknown, maxChars: number): string | undefined {
-  if (!Array.isArray(value) || value.length === 0) {
-    return undefined;
-  }
-
-  const first = value.find(
-    (entry) => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
-  ) as Record<string, unknown> | undefined;
-  if (!first) {
-    return undefined;
-  }
-
-  const source = typeof first.source === 'string' ? collapseWhitespace(first.source) : '';
-  const excerpt = typeof first.excerpt === 'string' ? collapseWhitespace(first.excerpt) : '';
-  if (!excerpt) {
-    return undefined;
-  }
-
-  return truncateText(source ? `${source}: ${excerpt}` : excerpt, maxChars);
-}
-
-function summarizeStructuredField(
-  parsed: Record<string, unknown>,
-  keys: string[],
-  maxChars: number,
-): string | undefined {
-  for (const key of keys) {
-    const value = parsed[key];
-    if (typeof value !== 'string') {
-      continue;
-    }
-
-    const normalized = collapseWhitespace(value);
-    if (normalized) {
-      return truncateText(normalized, maxChars);
-    }
-  }
-
-  return undefined;
-}
-
 export function extractToolResultSummary(
   content: string,
   maxChars = TOOL_RESULT_SUMMARY_MAX_CHARS,
@@ -76,39 +35,11 @@ export function extractToolResultSummary(
 
   try {
     const parsed = JSON.parse(trimmed) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return truncateText(collapseWhitespace(trimmed), maxChars);
-    }
-
-    const record = parsed as Record<string, unknown>;
-    const structuredSummary = summarizeStructuredField(
-      record,
-      [
-        'summary',
-        'outputExcerpt',
-        'resultPreview',
-        'message',
-        'note',
-        'failureSummary',
-        'error',
-        'path',
-        'preview',
-      ],
-      maxChars,
-    );
-    if (structuredSummary) {
-      return structuredSummary;
-    }
-
-    const failureSummary = summarizeFailureLogs(record.failureLogs, maxChars);
-    if (failureSummary) {
-      return failureSummary;
-    }
+    const serialized = JSON.stringify(parsed);
+    return truncateText(collapseWhitespace(serialized ?? trimmed), maxChars);
   } catch {
     return truncateText(collapseWhitespace(trimmed), maxChars);
   }
-
-  return truncateText(collapseWhitespace(trimmed), maxChars);
 }
 
 export function buildToolResultPlaceholder(

@@ -47,7 +47,6 @@ export function buildStructuredSummary(
   const userRequests: string[] = [];
   const assistantConclusions: string[] = [];
   const toolSummaries: string[] = [];
-  const filesModified = new Set<string>();
   let toolCallCount = 0;
 
   for (const msg of messages) {
@@ -62,24 +61,9 @@ export function buildStructuredSummary(
       const lines = msg.content.split('\n').filter((line) => line.trim());
       const conclusion = lines.slice(0, 3).join(' ').slice(0, ASSISTANT_CONCLUSION_CHARS);
       if (conclusion) assistantConclusions.push(conclusion);
-
-      const fileRefs = msg.content.match(
-        /[\w/.-]+\.(ts|js|json|md|py|tsx|jsx|css|html|yaml|yml)\b/g,
-      );
-      if (fileRefs) {
-        for (const file of fileRefs.slice(0, 10)) filesModified.add(file);
-      }
     } else if (msg.role === 'tool') {
       toolCallCount += 1;
       const toolName = msg.toolCalls?.[0]?.name || 'unknown';
-
-      try {
-        const args = JSON.parse(msg.toolCalls?.[0]?.arguments || '{}');
-        if (args.path || args.file_path) filesModified.add(args.path || args.file_path);
-        if (args.filePath) filesModified.add(args.filePath);
-      } catch {
-        // Malformed tool arguments do not prevent conversation compaction.
-      }
 
       const resultPreview = extractToolResultSummary(content, TOOL_RESULT_SUMMARY_CHARS);
       if (resultPreview) {
@@ -118,11 +102,6 @@ export function buildStructuredSummary(
   }
   if (stateLines.length > 0) {
     sections.push(`## Current State\n${stateLines.join('\n')}`);
-  }
-
-  if (filesModified.size > 0) {
-    const files = Array.from(filesModified).slice(-15);
-    sections.push(`## Context to Preserve\nFiles: ${files.join(', ')}`);
   }
 
   const focusText = (hints?.focusBlock ?? '').trim();
