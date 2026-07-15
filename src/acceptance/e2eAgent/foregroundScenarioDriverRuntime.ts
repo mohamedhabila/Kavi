@@ -28,7 +28,7 @@ import {
   getIngestionJob,
   type IngestionJob,
 } from '../../services/memory/ingestionQueue';
-import { listIngestionPersistenceReceipts } from '../../services/memory/ingestionReceiptStore';
+import { listIngestionDurabilityReceipts } from '../../services/memory/ingestionStructuralReceiptStore';
 import { loadIngestionJobRuntimeContext } from '../../services/memory/lifecycle';
 import { publishConversationTurnMemory } from '../../services/memory/turnPublication';
 import { createAgentRunFinalResponse } from '../../screens/agentRunFinalResponse';
@@ -363,7 +363,7 @@ export async function settleForegroundScenarioMemory(
         return {
           publication: result,
           job,
-          receipts: result.jobId ? listIngestionPersistenceReceipts(result.jobId) : [],
+          receipts: result.jobId ? listIngestionDurabilityReceipts(result.jobId) : [],
         };
       }),
     ),

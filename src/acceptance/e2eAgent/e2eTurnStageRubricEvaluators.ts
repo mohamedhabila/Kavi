@@ -160,7 +160,11 @@ export function evaluateE2ETurnStageRubric(
       }
       if (
         rubric.providerOutcome !== undefined &&
-        !receipts.some((receipt) => receipt.providerOutcome === rubric.providerOutcome)
+        !receipts.some(
+          (receipt) =>
+            receipt.phase === 'provider_final' &&
+            receipt.providerOutcome === rubric.providerOutcome,
+        )
       ) {
         return {
           fixtureId,

@@ -10,10 +10,7 @@ import {
   getIngestionJob,
   type IngestionJob,
 } from '../../src/services/memory/ingestionQueue';
-import {
-  listIngestionPersistenceReceipts,
-  type IngestionPersistenceReceipt,
-} from '../../src/services/memory/ingestionReceiptStore';
+import { listIngestionDurabilityReceipts } from '../../src/services/memory/ingestionStructuralReceiptStore';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundScenarioDriver';
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
@@ -23,10 +20,14 @@ import {
 } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import type { Conversation } from '../../src/types/conversation';
-import type { LlmProviderConfig } from '../../src/types/provider';
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
+import {
+  makeCompletedForegroundScenarioJob as makeCompletedJob,
+  makeForegroundScenarioProvider as makeProvider,
+  makeForegroundScenarioProviderReceipt as makeReceipt,
+  makeOriginalForegroundScenarioConversation as makeOriginalConversation,
+} from '../helpers/foregroundScenarioDriverFixtures';
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(),
@@ -51,8 +52,8 @@ jest.mock('../../src/services/memory/lifecycle', () => ({
   loadIngestionJobRuntimeContext: jest.fn(() => ({})),
   recordCompletedTurnForMemory: jest.fn(),
 }));
-jest.mock('../../src/services/memory/ingestionReceiptStore', () => ({
-  listIngestionPersistenceReceipts: jest.fn(),
+jest.mock('../../src/services/memory/ingestionStructuralReceiptStore', () => ({
+  listIngestionDurabilityReceipts: jest.fn(),
 }));
 jest.mock('../../src/store/chatStorePersistence', () => ({
   flushChatStorePersistenceNow: jest.fn(async () => undefined),
@@ -65,84 +66,7 @@ const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMem
 const mockedGetIngestionJob = jest.mocked(getIngestionJob);
 const mockedDrainIngestionQueueWithWakeup = jest.mocked(drainIngestionQueueWithWakeup);
 const mockedCancelScheduledIngestionDrain = jest.mocked(cancelScheduledIngestionDrain);
-const mockedListIngestionPersistenceReceipts = jest.mocked(listIngestionPersistenceReceipts);
-
-function makeProvider(id: string): LlmProviderConfig {
-  return {
-    id,
-    name: id,
-    enabled: true,
-    kind: 'remote',
-    protocol: 'openai-chat',
-    providerFamily: 'custom',
-    baseUrl: `https://${id}.example.com`,
-    apiKey: `${id}-key`,
-    model: `${id}-model`,
-  };
-}
-
-function makeOriginalConversation(): Conversation {
-  return {
-    id: 'original-conversation',
-    title: 'Original conversation',
-    messages: [],
-    providerId: 'original-provider',
-    systemPrompt: 'Original prompt',
-    createdAt: 1,
-    updatedAt: 1,
-  };
-}
-
-function makeCompletedJob(id: string): IngestionJob {
-  return {
-    id,
-    threadId: 'scenario-conversation',
-    threadTitle: 'Scenario title',
-    memoryConversationId: 'scenario-conversation',
-    taskId: null,
-    sourceRunId: null,
-    chatProviderId: 'scenario-provider',
-    chatModel: 'scenario-provider-model',
-    sourceStartMessageId: null,
-    sourceEndMessageId: `assistant-${id}`,
-    sourceAt: 1,
-    reason: 'turn_completed',
-    status: 'completed_enriched',
-    attemptCount: 1,
-    providerEnrichment: true,
-    providerOutcome: 'valid',
-    outcomeCode: null,
-    nextAttemptAt: null,
-    leaseExpiresAt: null,
-    claimToken: null,
-    structuralCompletedAt: 2,
-    createdAt: 1,
-    updatedAt: 2,
-    completedAt: 2,
-  };
-}
-
-function makeReceipt(
-  jobId: string,
-  overrides: Partial<IngestionPersistenceReceipt> = {},
-): IngestionPersistenceReceipt {
-  return {
-    jobId,
-    attemptNumber: 1,
-    episodeId: `episode-${jobId}`,
-    deterministicFactIds: [`deterministic-${jobId}`],
-    providerFactIds: [`provider-${jobId}`],
-    invalidatedFactIds: [],
-    bridgedEvidenceFactIds: [],
-    agentRunMemoryFactIds: [],
-    activeFocusUpdated: true,
-    openThreadsUpdated: false,
-    providerOutcome: 'valid',
-    providerOutcomeCode: null,
-    persistedAt: 2,
-    ...overrides,
-  };
-}
+const mockedListIngestionDurabilityReceipts = jest.mocked(listIngestionDurabilityReceipts);
 
 describe('runForegroundScenario', () => {
   beforeEach(async () => {
@@ -182,7 +106,7 @@ describe('runForegroundScenario', () => {
       };
     });
     mockedGetIngestionJob.mockImplementation((jobId) => jobs.get(jobId) ?? null);
-    mockedListIngestionPersistenceReceipts.mockImplementation((jobId) => [makeReceipt(jobId)]);
+    mockedListIngestionDurabilityReceipts.mockImplementation((jobId) => [makeReceipt(jobId)]);
 
     let responseSequence = 0;
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
@@ -274,7 +198,14 @@ describe('runForegroundScenario', () => {
         {
           publication: { disposition: 'enqueued', jobId: 'job-1' },
           job: { status: 'completed_enriched' },
-          receipts: [{ jobId: 'job-1', attemptNumber: 1, providerOutcome: 'valid' }],
+          receipts: [
+            {
+              phase: 'provider_final',
+              jobId: 'job-1',
+              attemptNumber: 1,
+              providerOutcome: 'valid',
+            },
+          ],
         },
       ],
     });
@@ -296,7 +227,12 @@ describe('runForegroundScenario', () => {
     });
     expect(result.turns[1].memory).toHaveLength(1);
     expect(result.turns[1].memory[0]?.receipts).toEqual([makeReceipt('job-2')]);
-    expect(mockedListIngestionPersistenceReceipts.mock.calls).toEqual([['job-1'], ['job-2']]);
+    expect(mockedListIngestionDurabilityReceipts.mock.calls).toEqual([
+      ['job-1'],
+      ['job-2'],
+      ['job-1'],
+      ['job-2'],
+    ]);
     expect(Object.isFrozen(result.turns[1].memory[0]?.receipts)).toBe(true);
     expect(Object.isFrozen(result.turns[1].memory[0]?.receipts[0])).toBe(true);
     expect(Object.keys(result.turns[1].memory[0]?.receipts[0] ?? {}).sort()).toEqual(
@@ -311,6 +247,7 @@ describe('runForegroundScenario', () => {
         'jobId',
         'openThreadsUpdated',
         'persistedAt',
+        'phase',
         'providerFactIds',
         'providerOutcome',
         'providerOutcomeCode',
@@ -659,7 +596,7 @@ describe('runForegroundScenario', () => {
       providerOutcomeCode: 'invalid_json',
       providerFactIds: [],
     });
-    mockedListIngestionPersistenceReceipts.mockReturnValue([priorAttemptReceipt]);
+    mockedListIngestionDurabilityReceipts.mockReturnValue([priorAttemptReceipt]);
     mockedDrainIngestionQueueWithWakeup.mockResolvedValueOnce({
       attempted: 1,
       completed: 0,
@@ -694,6 +631,6 @@ describe('runForegroundScenario', () => {
         receipts: [priorAttemptReceipt],
       },
     ]);
-    expect(mockedListIngestionPersistenceReceipts).toHaveBeenCalledWith(pendingJob.id);
+    expect(mockedListIngestionDurabilityReceipts).toHaveBeenCalledWith(pendingJob.id);
   });
 });

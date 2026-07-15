@@ -52,6 +52,8 @@ export type E2ERedactedMemoryDeltaEvidence = {
 
 export type E2ERedactedMemoryReceiptEvidence = {
   receiptCount: number;
+  structuralCheckpointReceiptCount: number;
+  providerFinalReceiptCount: number;
   maxAttemptNumber: number;
   episodeCount: number;
   deterministicFactCount: number;
@@ -149,16 +151,15 @@ function buildCollectionDelta(
   };
 }
 
-function sumReceiptArrayLengths(
+function countUniqueReceiptIds(
   receipts: ForegroundScenarioMemorySnapshot['receipts'],
   key:
     | 'deterministicFactIds'
-    | 'providerFactIds'
     | 'invalidatedFactIds'
     | 'bridgedEvidenceFactIds'
     | 'agentRunMemoryFactIds',
 ): number {
-  return receipts.reduce((sum, receipt) => sum + receipt[key].length, 0);
+  return new Set(receipts.flatMap((receipt) => receipt[key])).size;
 }
 
 function buildMemoryReceiptEvidence(
@@ -169,25 +170,45 @@ function buildMemoryReceiptEvidence(
   }
   return {
     receiptCount: receipts.length,
+    structuralCheckpointReceiptCount: receipts.filter(
+      (receipt) => receipt.phase === 'structural_checkpoint',
+    ).length,
+    providerFinalReceiptCount: receipts.filter(
+      (receipt) => receipt.phase === 'provider_final',
+    ).length,
     maxAttemptNumber: receipts.reduce(
       (maximum, receipt) => Math.max(maximum, receipt.attemptNumber),
       0,
     ),
-    episodeCount: receipts.filter((receipt) => receipt.episodeId !== null).length,
-    deterministicFactCount: sumReceiptArrayLengths(receipts, 'deterministicFactIds'),
-    providerFactCount: sumReceiptArrayLengths(receipts, 'providerFactIds'),
-    invalidatedFactCount: sumReceiptArrayLengths(receipts, 'invalidatedFactIds'),
-    bridgedEvidenceFactCount: sumReceiptArrayLengths(receipts, 'bridgedEvidenceFactIds'),
-    agentRunMemoryFactCount: sumReceiptArrayLengths(receipts, 'agentRunMemoryFactIds'),
-    activeFocusUpdateCount: receipts.filter((receipt) => receipt.activeFocusUpdated).length,
-    openThreadsUpdateCount: receipts.filter((receipt) => receipt.openThreadsUpdated).length,
+    episodeCount: new Set(
+      receipts.flatMap((receipt) => (receipt.episodeId === null ? [] : [receipt.episodeId])),
+    ).size,
+    deterministicFactCount: countUniqueReceiptIds(receipts, 'deterministicFactIds'),
+    providerFactCount: new Set(
+      receipts.flatMap((receipt) =>
+        receipt.phase === 'provider_final' ? receipt.providerFactIds : [],
+      ),
+    ).size,
+    invalidatedFactCount: countUniqueReceiptIds(receipts, 'invalidatedFactIds'),
+    bridgedEvidenceFactCount: countUniqueReceiptIds(receipts, 'bridgedEvidenceFactIds'),
+    agentRunMemoryFactCount: countUniqueReceiptIds(receipts, 'agentRunMemoryFactIds'),
+    activeFocusUpdateCount: new Set(
+      receipts.flatMap((receipt) => (receipt.activeFocusUpdated ? [receipt.jobId] : [])),
+    ).size,
+    openThreadsUpdateCount: new Set(
+      receipts.flatMap((receipt) => (receipt.openThreadsUpdated ? [receipt.jobId] : [])),
+    ).size,
     providerOutcomeCounts: enumCounts(
-      receipts.map((receipt) => receipt.providerOutcome),
+      receipts.flatMap((receipt) =>
+        receipt.phase === 'provider_final' ? [receipt.providerOutcome] : [],
+      ),
       INGESTION_PROVIDER_OUTCOMES,
       'memory.receipt.providerOutcome',
     ),
     providerOutcomeCodeCounts: enumCounts(
-      receipts.map((receipt) => receipt.providerOutcomeCode),
+      receipts.flatMap((receipt) =>
+        receipt.phase === 'provider_final' ? [receipt.providerOutcomeCode] : [],
+      ),
       INGESTION_RECEIPT_OUTCOME_CODES,
       'memory.receipt.providerOutcomeCode',
     ),

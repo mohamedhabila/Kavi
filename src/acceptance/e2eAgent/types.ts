@@ -13,6 +13,7 @@ import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
 import type { MemoryFactScope } from '../../services/memory/facts/types';
+import type { IngestionProviderOutcome } from '../../services/memory/ingestionQueue';
 import type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioExecutionContextSnapshot,
@@ -248,7 +249,7 @@ export type E2ERubric =
   | {
       kind: 'turn_memory_receipt';
       turnIndex: number;
-      providerOutcome?: ForegroundScenarioMemorySnapshot['receipts'][number]['providerOutcome'];
+      providerOutcome?: IngestionProviderOutcome;
     }
   | {
       kind: 'turn_lifecycle_boundary';

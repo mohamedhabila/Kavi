@@ -36,6 +36,7 @@ import {
   resolveForegroundScenarioTurnRun,
   settleForegroundScenarioMemory,
 } from './foregroundScenarioDriverRuntime';
+import { sealForegroundScenarioMemoryEvidenceAfterProviderWait } from './foregroundScenarioMemoryEvidence';
 import {
   cloneAndFreeze,
   type ForegroundScenarioDriverInput,
@@ -45,6 +46,7 @@ import {
   type ForegroundScenarioTurnSnapshot,
 } from './foregroundScenarioDriverTypes';
 import { E2E_DEFAULT_MEMORY_TIMEOUT_MS } from './thresholds';
+import { E2E_PUBLIC_INGESTION_PROVIDER_OUTCOMES } from './e2eTraceMemoryPolicy';
 
 export type {
   ForegroundScenarioCompletionSnapshot,
@@ -68,6 +70,7 @@ const SCENARIO_WALL_CLOCK_TIMEOUT_ERROR = 'Foreground scenario wall-clock deadli
 // Provider enrichment owns a 30-second request deadline; keep settlement
 // independently bounded while allowing persistence and polling to finish.
 const FOREGROUND_PRODUCT_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((tool) => tool.name));
+const PROVIDER_OUTCOME_EVIDENCE_VALUES = new Set(E2E_PUBLIC_INGESTION_PROVIDER_OUTCOMES);
 
 let scenarioRunTail: Promise<void> = Promise.resolve();
 
@@ -144,6 +147,24 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
   validateRequiredPositiveNumber(input.scenarioTimeoutMs, 'scenarioTimeoutMs');
   validatePositiveNumber(input.timeoutMs, 'timeoutMs');
   validatePositiveNumber(input.memoryTimeoutMs, 'memoryTimeoutMs');
+  if (input.providerOutcomeEvidenceRequirements !== undefined) {
+    const requirementKeys = new Set<string>();
+    for (const requirement of input.providerOutcomeEvidenceRequirements) {
+      if (
+        !Number.isSafeInteger(requirement.turnIndex) ||
+        requirement.turnIndex < 0 ||
+        requirement.turnIndex >= input.turns.length ||
+        !PROVIDER_OUTCOME_EVIDENCE_VALUES.has(requirement.providerOutcome)
+      ) {
+        throw new Error('providerOutcomeEvidenceRequirements contains an invalid requirement.');
+      }
+      const key = `${requirement.turnIndex}:${requirement.providerOutcome}`;
+      if (requirementKeys.has(key)) {
+        throw new Error('providerOutcomeEvidenceRequirements must not contain duplicates.');
+      }
+      requirementKeys.add(key);
+    }
+  }
   if (
     input.allowedToolNames !== undefined &&
     (input.allowedToolNames.length === 0 ||
@@ -478,11 +499,21 @@ async function runScenarioIsolated(
       .conversations.find((candidate) => candidate.id === currentConversationId);
     if (!finalConversation)
       throw new Error(`Conversation ${currentConversationId} is unavailable.`);
+    const providerEvidenceTimeoutMs = Math.min(
+      input.memoryTimeoutMs ?? E2E_DEFAULT_MEMORY_TIMEOUT_MS,
+      remainingScenarioTimeMs(scenarioDeadline),
+    );
+    const sealedMemory = await sealForegroundScenarioMemoryEvidenceAfterProviderWait({
+      memoryScope,
+      turns: turnSnapshots,
+      requirements: input.providerOutcomeEvidenceRequirements ?? [],
+      timeoutMs: providerEvidenceTimeoutMs,
+    });
     return cloneAndFreeze({
       conversationId: input.conversationId,
       finalConversation,
-      memoryFinalState: previousMemoryState,
-      turns: turnSnapshots,
+      memoryFinalState: sealedMemory.memoryFinalState,
+      turns: sealedMemory.turns,
     }) as ForegroundScenarioDriverResult;
   } finally {
     useChatStore.setState(chatSnapshot, true);

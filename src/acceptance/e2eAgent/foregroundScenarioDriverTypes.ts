@@ -1,5 +1,6 @@
 import type { IngestionJob } from '../../services/memory/ingestionQueue';
-import type { IngestionPersistenceReceipt } from '../../services/memory/ingestionReceiptStore';
+import type { IngestionProviderOutcome } from '../../services/memory/ingestionQueueStore';
+import type { IngestionDurabilityReceipt } from '../../services/memory/ingestionStructuralReceiptStore';
 import type { MemoryTurnPublicationResult } from '../../services/memory/turnPublication';
 import type { AgentRun, AgentRunControlGraphStatus, AgentRunStatus } from '../../types/agentRun';
 import type { Conversation, ConversationMode } from '../../types/conversation';
@@ -26,6 +27,11 @@ export type ForegroundScenarioRouteDirective =
   | 'forced_agentic';
 
 export type ForegroundScenarioLifecycleBoundary = 'app_relaunch' | 'new_conversation';
+
+export type ForegroundScenarioProviderOutcomeEvidenceRequirement = Readonly<{
+  turnIndex: number;
+  providerOutcome: IngestionProviderOutcome;
+}>;
 
 export type ForegroundScenarioLifecycleSnapshot =
   | Readonly<{
@@ -64,6 +70,11 @@ export type ForegroundScenarioDriverInput = {
   maxTokens?: number;
   timeoutMs?: number;
   memoryTimeoutMs?: number;
+  /**
+   * Evaluator-owned provider evidence requirements. Product turns still settle at
+   * the structural checkpoint; these are considered only after every chat turn.
+   */
+  providerOutcomeEvidenceRequirements?: ReadonlyArray<ForegroundScenarioProviderOutcomeEvidenceRequirement>;
   disableLongTermMemory?: boolean;
   allowedToolNames?: ReadonlyArray<string>;
   beforeTurns?: (identity: {
@@ -86,7 +97,7 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
 export type ForegroundScenarioMemorySnapshot = Readonly<{
   publication: DeepReadonly<MemoryTurnPublicationResult>;
   job: DeepReadonly<IngestionJob> | null;
-  receipts: ReadonlyArray<DeepReadonly<IngestionPersistenceReceipt>>;
+  receipts: ReadonlyArray<DeepReadonly<IngestionDurabilityReceipt>>;
 }>;
 
 export type ForegroundScenarioMemoryTurnEvidence = Readonly<{

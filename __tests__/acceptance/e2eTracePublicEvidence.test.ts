@@ -180,6 +180,7 @@ function buildPrivateEvidenceResult(): E2EScenarioResult {
             },
             receipts: [
               {
+                phase: 'provider_final',
                 jobId: 'PRIVATE-JOB-ID',
                 attemptNumber: 1,
                 episodeId: 'PRIVATE-EPISODE-ID',
@@ -307,6 +308,8 @@ describe('public immutable E2E evidence projection', () => {
         },
         persistenceReceipts: {
           receiptCount: 1,
+          structuralCheckpointReceiptCount: 0,
+          providerFinalReceiptCount: 1,
           maxAttemptNumber: 1,
           episodeCount: 1,
           deterministicFactCount: 1,
@@ -445,6 +448,49 @@ describe('public immutable E2E evidence projection', () => {
     expect(() => buildE2EScenarioTraceSummary({ result })).toThrow(
       'Memory receipt jobId does not match its turn publication jobId.',
     );
+  });
+
+  it('reports structural durability without exposing its exact source identity', () => {
+    const result = buildPrivateEvidenceResult();
+    const record = result.turnTraces[0]!.memory[0]!;
+    record.receipts = [
+      {
+        phase: 'structural_checkpoint',
+        jobId: 'PRIVATE-JOB-ID',
+        attemptNumber: 1,
+        source: {
+          memoryConversationId: 'PRIVATE-MEMORY-CONVERSATION',
+          sourceThreadId: 'PRIVATE-SOURCE-THREAD',
+          personaId: 'PRIVATE-PERSONA',
+          taskId: 'PRIVATE-TASK',
+          sourceRunId: 'PRIVATE-RUN-ID',
+          sourceStartMessageId: 'PRIVATE-SOURCE-START',
+          sourceEndMessageId: 'PRIVATE-SOURCE-END',
+          sourceSnapshotSha256: 'a'.repeat(64),
+          sourceAt: 1,
+        },
+        episodeId: 'PRIVATE-EPISODE-ID',
+        deterministicFactIds: ['PRIVATE-STRUCTURAL-FACT-ID'],
+        invalidatedFactIds: [],
+        bridgedEvidenceFactIds: [],
+        agentRunMemoryFactIds: [],
+        activeFocusUpdated: false,
+        openThreadsUpdated: false,
+        persistedAt: 2,
+      },
+    ];
+
+    const trace = buildE2EScenarioTraceSummary({ result });
+    expect(trace.turns[0]!.memoryDelta.persistenceReceipts).toMatchObject({
+      receiptCount: 1,
+      structuralCheckpointReceiptCount: 1,
+      providerFinalReceiptCount: 0,
+      deterministicFactCount: 1,
+      providerFactCount: 0,
+      providerOutcomeCounts: [],
+    });
+    expect(JSON.stringify(trace)).not.toContain('PRIVATE-SOURCE');
+    expect(JSON.stringify(trace)).not.toContain('PRIVATE-STRUCTURAL-FACT-ID');
   });
 
   it('counts facts as active only within the captured validity window', () => {

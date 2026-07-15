@@ -48,6 +48,7 @@ function buildTurn(overrides: Partial<TurnTrace> = {}): TurnTrace {
         job: null,
         receipts: [
           {
+            phase: 'provider_final',
             jobId: 'job-1',
             attemptNumber: 1,
             episodeId: 'episode-1',
@@ -432,6 +433,51 @@ describe('turn stage-attribution rubrics', () => {
         turnIndex: 1,
       }),
     ).toMatchObject({ passed: true });
+
+    const structuralOnlyTurn = buildTurn({
+      memory: buildTurn().memory.map((snapshot) => ({
+        ...snapshot,
+        receipts: [
+          {
+            phase: 'structural_checkpoint' as const,
+            jobId: 'job-1',
+            attemptNumber: 1,
+            source: {
+              memoryConversationId: 'conversation-1',
+              sourceThreadId: 'conversation-1',
+              personaId: 'default',
+              taskId: null,
+              sourceRunId: null,
+              sourceStartMessageId: 'user-1',
+              sourceEndMessageId: 'assistant-1',
+              sourceSnapshotSha256: 'a'.repeat(64),
+              sourceAt: 10,
+            },
+            episodeId: 'episode-1',
+            deterministicFactIds: ['fact-structural'],
+            invalidatedFactIds: [],
+            bridgedEvidenceFactIds: [],
+            agentRunMemoryFactIds: [],
+            activeFocusUpdated: false,
+            openThreadsUpdated: false,
+            persistedAt: 12,
+          },
+        ],
+      })),
+    });
+    expect(
+      evaluateE2ERubric(buildResult(structuralOnlyTurn), {
+        kind: 'turn_memory_receipt',
+        turnIndex: 1,
+      }),
+    ).toMatchObject({ passed: true });
+    expect(
+      evaluateE2ERubric(buildResult(structuralOnlyTurn), {
+        kind: 'turn_memory_receipt',
+        turnIndex: 1,
+        providerOutcome: 'valid',
+      }),
+    ).toMatchObject({ passed: false });
     expect(
       evaluateE2ERubric(buildResult(), {
         kind: 'turn_memory_receipt',
