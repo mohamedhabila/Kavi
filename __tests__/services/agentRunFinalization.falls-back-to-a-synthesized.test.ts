@@ -31,7 +31,7 @@ describe('agentRunFinalization', () => {
 
     expect(output).toBeUndefined();
   });
-  it('summarizes workflow evidence results instead of echoing structured entry payloads', () => {
+  it('summarizes workflow evidence results without privileging English field names', () => {
     const preview = summarizeFinalizationToolResultPreview(
       JSON.stringify({
         status: 'ok',
@@ -43,9 +43,15 @@ describe('agentRunFinalization', () => {
       }),
     );
 
-    expect(preview).toBe('2 evidence entries recorded');
+    expect(preview).toContain('$["status"]="ok"');
+    expect(preview).toContain('$["recorded"]=2');
+    expect(preview).toContain('$["totalEntries"]=6');
+    expect(preview).toContain('$["latestEntries"][0]["title"]="Root cause"');
+    expect(preview).toContain(
+      '$["latestEntries"][0]["content"]="Large body that should not be echoed verbatim."',
+    );
   });
-  it('preserves short structured tool outputs alongside generic summaries', () => {
+  it('preserves every short structured field without schema-specific inference', () => {
     const preview = summarizeFinalizationToolResultPreview(
       JSON.stringify({
         summary: 'Python execution completed.',
@@ -54,7 +60,22 @@ describe('agentRunFinalization', () => {
       }),
     );
 
-    expect(preview).toBe('Python execution completed.; output: C58P');
+    expect(preview).toBe(
+      '$["summary"]="Python execution completed."; $["status"]="completed"; $["output"]="C58P"',
+    );
+  });
+  it('preserves multilingual structured evidence with no English-key requirement', () => {
+    const preview = summarizeFinalizationToolResultPreview(
+      JSON.stringify({
+        '状態': '完了',
+        'النتيجة': 'تم إنشاء التذكير',
+        '的地': { '名前': '東京' },
+      }),
+    );
+
+    expect(preview).toBe(
+      '$["状態"]="完了"; $["النتيجة"]="تم إنشاء التذكير"; $["的地"]["名前"]="東京"',
+    );
   });
   it('builds a finalization prompt from transcript evidence and terminal deliverables', () => {
     const prompt = buildAgentRunFinalizationPrompt({

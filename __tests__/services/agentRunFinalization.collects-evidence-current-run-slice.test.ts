@@ -403,9 +403,15 @@ describe('agentRunFinalization', () => {
       }),
     );
 
-    expect(preview).toBe(
-      '1/1 sessions completed; preview: Patched the workflow and verified the fix.; output captured (5200 chars)',
+    expect(preview).toContain('$["status"]="completed"');
+    expect(preview).toContain('$["sessionCount"]=1');
+    expect(preview).toContain('$["completedCount"]=1');
+    expect(preview).toContain('$["outputChars"]=5200');
+    expect(preview).toContain(
+      '$["outputPreview"]="Patched the workflow and verified the fix."',
     );
+    expect(preview?.length).toBeLessThanOrEqual(320);
+    expect(preview).not.toContain('Patched the workflow and verified the fix.'.repeat(10));
   });
   it('promotes short terminal tool outputs to direct finalization deliverables', () => {
     const messages: Message[] = [
