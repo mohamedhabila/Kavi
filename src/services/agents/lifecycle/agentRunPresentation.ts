@@ -84,13 +84,3 @@ export function getAgentRunDisplayPhase(run: AgentRun): AgentRunPhase | undefine
 export function getLatestAgentRunToolCheckpoint(run: AgentRun): AgentRunCheckpoint | undefined {
   return [...run.checkpoints].reverse().find((checkpoint) => checkpoint.kind === 'tool');
 }
-
-export function extractToolNameFromCheckpointTitle(title: string): string | undefined {
-  const normalized = title.trim();
-  if (!normalized) {
-    return undefined;
-  }
-
-  const match = normalized.match(/^Tool(?:\s+\w+)?\s*:\s*(.+)$/i);
-  return match?.[1]?.trim() || undefined;
-}

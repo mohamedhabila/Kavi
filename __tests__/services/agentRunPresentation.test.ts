@@ -1,6 +1,5 @@
 import {
   buildAgentRunSummaryText,
-  extractToolNameFromCheckpointTitle,
   formatAgentRunCheckpointKind,
   formatAgentRunStatusLabel,
   getAgentRunDisplayPhase,
@@ -96,14 +95,5 @@ describe('agentRunPresentation', () => {
         checkpoints: [{ kind: 'note', title: 'Only note' }],
       } as any),
     ).toBeUndefined();
-  });
-
-  it('extracts tool names from checkpoint titles', () => {
-    expect(extractToolNameFromCheckpointTitle('')).toBeUndefined();
-    expect(extractToolNameFromCheckpointTitle('Tool: read_file')).toBe('read_file');
-    expect(extractToolNameFromCheckpointTitle('Tool completed: sessions_wait')).toBe(
-      'sessions_wait',
-    );
-    expect(extractToolNameFromCheckpointTitle('Run complete')).toBeUndefined();
   });
 });
