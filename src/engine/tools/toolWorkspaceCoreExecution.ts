@@ -9,6 +9,7 @@ import {
 } from '../../services/workspaces/sourceFiles';
 import {
   completedToolOutcome,
+  completedToolOutcomeWithExactResultEvidence,
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
@@ -24,7 +25,7 @@ export async function executeReadFile(
   const source = resolveConversationWorkspaceSource(conversationId, fallbackConversationId);
   try {
     const result = await readWorkspaceSourceTextFile(source, pathArg.value!);
-    return completedToolOutcome(result.content);
+    return completedToolOutcomeWithExactResultEvidence(result.content);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return failedToolOutcome(`Error: ${message}`);
