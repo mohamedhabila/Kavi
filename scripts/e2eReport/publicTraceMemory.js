@@ -106,6 +106,8 @@ function projectMemoryReceiptEvidence(value) {
   const output = {};
   for (const key of [
     'receiptCount',
+    'structuralCheckpointReceiptCount',
+    'providerFinalReceiptCount',
     'maxAttemptNumber',
     'episodeCount',
     'deterministicFactCount',
@@ -131,10 +133,12 @@ function projectMemoryReceiptEvidence(value) {
   if (
     !providerOutcomeCounts ||
     !providerOutcomeCodeCounts ||
+    output.structuralCheckpointReceiptCount + output.providerFinalReceiptCount !==
+      output.receiptCount ||
     providerOutcomeCounts.reduce((sum, entry) => sum + entry.count, 0) !==
-      output.receiptCount ||
+      output.providerFinalReceiptCount ||
     providerOutcomeCodeCounts.reduce((sum, entry) => sum + entry.count, 0) >
-      output.receiptCount ||
+      output.providerFinalReceiptCount ||
     output.episodeCount > output.receiptCount ||
     output.activeFocusUpdateCount > output.receiptCount ||
     output.openThreadsUpdateCount > output.receiptCount

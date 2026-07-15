@@ -489,6 +489,7 @@ describe('public immutable E2E evidence projection', () => {
       providerFactCount: 0,
       providerOutcomeCounts: [],
     });
+    expect(projectPublicRedactedTrace(trace)).not.toBeNull();
     expect(JSON.stringify(trace)).not.toContain('PRIVATE-SOURCE');
     expect(JSON.stringify(trace)).not.toContain('PRIVATE-STRUCTURAL-FACT-ID');
   });
