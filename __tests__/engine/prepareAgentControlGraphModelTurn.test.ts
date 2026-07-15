@@ -408,11 +408,16 @@ describe('prepareAgentControlGraphModelTurn', () => {
     });
 
     expect(result.preparedTurn.enrichedSystemPrompt).toBe('System with private memory');
-    expect(result.preparedTurn.memoryReadFence).toEqual({
+    expect(result.preparedTurn.memoryReadFence).toMatchObject({
       readEpoch: 0,
       memoryFreePrompt: {
         enrichedSystemPrompt: 'Memory-free system',
         enrichedSystemPromptSections: [{ text: 'Memory-free system' }],
+      },
+      memoryDisabledTurn: {
+        enrichedSystemPrompt: 'Memory-free system',
+        selectedTools: [writeTool],
+        toolsForIteration: [writeTool],
       },
     });
   });

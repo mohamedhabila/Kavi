@@ -10,11 +10,13 @@ import {
 import type { Message } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import type { ToolMessageOutcome } from '../../src/engine/toolExecution/toolMessageOutcome';
+import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
 const mockStreamMessage = jest.fn();
 let mockWorkspaceTargets: any[] = [];
+let mockDisableLongTermMemory = false;
 
 jest.mock('../../src/services/llm/LlmService', () => ({
   LlmService: jest.fn().mockImplementation(() => ({
@@ -91,6 +93,7 @@ jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: {
     getState: () => ({
       workspaceTargets: mockWorkspaceTargets,
+      disableLongTermMemory: mockDisableLongTermMemory,
     }),
   },
 }));
@@ -150,6 +153,7 @@ beforeEach(() => {
   mockExecuteTool.mockReset();
   mockExecuteTool.mockResolvedValue({ status: 'completed', content: 'tool result' });
   mockWorkspaceTargets = [];
+  mockDisableLongTermMemory = false;
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -205,6 +209,125 @@ describe('Orchestrator — toolFilter', () => {
       'web_fetch',
       'web_search',
     ]);
+  });
+
+  it('cannot re-advertise disabled memory capabilities through caller tool selection', async () => {
+    mockDisableLongTermMemory = true;
+    mockStreamMessage.mockReturnValueOnce(
+      makeStream([
+        { type: 'token', content: 'Memory is disabled.' },
+        { type: 'done', content: 'Memory is disabled.' },
+      ]),
+    );
+
+    const callbacks = makeCallbacks();
+    const memoryTools = ['memory_recall', 'memory_remember', 'memory_forget'];
+    const options: OrchestratorOptions = {
+      provider,
+      model: 'gpt-test',
+      conversationId: 'conv-memory-policy-filter',
+      systemPrompt: 'Test',
+      messages: [makeMsg('user', 'Remember this preference')],
+      explicitToolSurfaceToolNames: [...memoryTools, 'web_search'],
+      toolFilter: (name) => memoryTools.includes(name) || name === 'web_search',
+    };
+
+    await runOrchestrator(options, callbacks);
+
+    const [, streamOptions] = mockStreamMessage.mock.calls[0];
+    expect(streamOptions.tools.map((tool: { name: string }) => tool.name).sort()).toEqual([
+      'memory_forget',
+      'web_search',
+    ]);
+    const [requestMessages] = mockStreamMessage.mock.calls[0];
+    expect(requestMessages[0].content).toContain(MEMORY_DISABLED_RUNTIME_CAPABILITY);
+  });
+
+  it('advertises memory capabilities normally while the policy is enabled', async () => {
+    mockStreamMessage.mockReturnValueOnce(
+      makeStream([
+        { type: 'token', content: 'Done' },
+        { type: 'done', content: 'Done' },
+      ]),
+    );
+
+    const callbacks = makeCallbacks();
+    const memoryTools = ['memory_recall', 'memory_remember', 'memory_forget'];
+    await runOrchestrator(
+      {
+        provider,
+        model: 'gpt-test',
+        conversationId: 'conv-memory-policy-enabled',
+        systemPrompt: 'Test',
+        messages: [makeMsg('user', 'Remember this preference')],
+        explicitToolSurfaceToolNames: memoryTools,
+        toolFilter: (name) => memoryTools.includes(name),
+      },
+      callbacks,
+    );
+
+    const [, streamOptions] = mockStreamMessage.mock.calls[0];
+    expect(streamOptions.tools.map((tool: { name: string }) => tool.name).sort()).toEqual(
+      memoryTools.sort(),
+    );
+    const [requestMessages] = mockStreamMessage.mock.calls[0];
+    expect(requestMessages[0].content).not.toContain(MEMORY_DISABLED_RUNTIME_CAPABILITY);
+  });
+
+  it('revokes memory capabilities and updates policy truth within an active run', async () => {
+    mockExecuteTool.mockImplementationOnce(async () => {
+      mockDisableLongTermMemory = true;
+      return { status: 'completed', content: 'search complete' };
+    });
+    mockStreamMessage
+      .mockReturnValueOnce(
+        makeStream([
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc-policy-transition',
+              name: 'web_search',
+              arguments: '{"queries":["release status"]}',
+            },
+          },
+          { type: 'done', content: '' },
+        ]),
+      )
+      .mockReturnValueOnce(
+        makeStream([
+          { type: 'token', content: 'Memory is disabled.' },
+          { type: 'done', content: 'Memory is disabled.' },
+        ]),
+      );
+
+    const callbacks = makeCallbacks();
+    const explicitTools = ['memory_recall', 'memory_remember', 'memory_forget', 'web_search'];
+    await runOrchestrator(
+      {
+        provider,
+        model: 'gpt-test',
+        conversationId: 'conv-memory-policy-transition',
+        systemPrompt: 'Test',
+        messages: [makeMsg('user', 'Check the release and remember the result')],
+        explicitToolSurfaceToolNames: explicitTools,
+        toolFilter: (name) => explicitTools.includes(name),
+      },
+      callbacks,
+    );
+
+    const firstTools = mockStreamMessage.mock.calls[0][1].tools.map(
+      (tool: { name: string }) => tool.name,
+    );
+    const secondTools = mockStreamMessage.mock.calls[1][1].tools.map(
+      (tool: { name: string }) => tool.name,
+    );
+    expect(firstTools).toEqual(expect.arrayContaining(['memory_recall', 'memory_remember']));
+    expect(secondTools).not.toContain('memory_recall');
+    expect(secondTools).not.toContain('memory_remember');
+    expect(secondTools).toContain('memory_forget');
+    expect(mockStreamMessage.mock.calls[1][0][0].content).toContain(
+      MEMORY_DISABLED_RUNTIME_CAPABILITY,
+    );
   });
 
   it('passes the filtered callable tool inventory into executeTool context', async () => {

@@ -11,6 +11,7 @@ import {
   buildMemoryPromptDispatchGuard,
   removeLivingMemoryFromPreparedTurn,
 } from '../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
+import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
 
 const mockIsObservationRevisionCurrent = jest.fn(() => true);
 jest.mock('../../src/services/memory/verifiedProcedure/observationRevision', () => ({
@@ -102,9 +103,9 @@ describe('verified procedure advisory prompt', () => {
     useSettingsStore.setState({ disableLongTermMemory: true } as never);
 
     expect(() => guard?.()).toThrow('memory_prompt_epoch_expired');
-    expect(removeLivingMemoryFromPreparedTurn(result).enrichedSystemPrompt).toBe(
-      'Base system prompt',
-    );
+    const memoryDisabledTurn = removeLivingMemoryFromPreparedTurn(result);
+    expect(memoryDisabledTurn.enrichedSystemPrompt).toContain('Base system prompt');
+    expect(memoryDisabledTurn.enrichedSystemPrompt).toContain(MEMORY_DISABLED_RUNTIME_CAPABILITY);
   });
 
   it('fences dispatch when targeted invalidation advances the observation revision', async () => {
@@ -140,6 +141,14 @@ describe('verified procedure advisory prompt', () => {
         memoryFreePrompt: {
           enrichedSystemPrompt: 'Independent memory-free system',
           enrichedSystemPromptSections: [{ text: 'Independent memory-free system' }],
+        },
+        memoryDisabledTurn: {
+          ...base,
+          enrichedSystemPrompt: `Independent memory-free system\n\n${MEMORY_DISABLED_RUNTIME_CAPABILITY}`,
+          enrichedSystemPromptSections: [
+            { text: 'Independent memory-free system' },
+            { text: MEMORY_DISABLED_RUNTIME_CAPABILITY },
+          ],
         },
       },
     };

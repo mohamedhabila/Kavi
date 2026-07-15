@@ -8,6 +8,7 @@ import {
   initializeMemoryPolicyObservation,
 } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
 
 jest.mock('../../src/engine/graph/agentTurnRequestBudget', () => {
   const actual = jest.requireActual('../../src/engine/graph/agentTurnRequestBudget');
@@ -35,6 +36,18 @@ const toolDefinition: ToolDefinition = {
     },
   },
 } as ToolDefinition;
+
+const memoryRememberToolDefinition: ToolDefinition = {
+  name: 'memory_remember',
+  description: 'Record a durable memory.',
+  input_schema: { type: 'object', properties: {} },
+  contract: {
+    category: 'memory',
+    capabilities: ['write'],
+    resourceKinds: ['memory'],
+    sideEffects: ['local_artifact'],
+  },
+};
 
 const coordinateToolDefinition: ToolDefinition = {
   name: 'update_goals',
@@ -144,7 +157,7 @@ describe('agent control graph model turn execution', () => {
         },
       }));
     const llm = {
-      streamMessage: jest.fn((_messages: unknown) =>
+      streamMessage: jest.fn((_messages: unknown, _options?: unknown) =>
         createStream([
           { type: 'token', content: 'Safe response.' },
           { type: 'done', completion: { completionStatus: 'complete', finishReason: 'stop' } },
@@ -183,7 +196,18 @@ describe('agent control graph model turn execution', () => {
             enrichedSystemPrompt: 'Memory-free system',
             enrichedSystemPromptSections: [{ text: 'Memory-free system', cacheable: true }],
           },
+          memoryDisabledTurn: createPreparedTurn({
+            enrichedSystemPrompt: `Memory-free system\n\n${MEMORY_DISABLED_RUNTIME_CAPABILITY}`,
+            enrichedSystemPromptSections: [
+              { text: 'Memory-free system', cacheable: true },
+              { text: MEMORY_DISABLED_RUNTIME_CAPABILITY },
+            ],
+            selectedTools: [toolDefinition],
+            toolsForIteration: [toolDefinition],
+          }),
         },
+        selectedTools: [toolDefinition, memoryRememberToolDefinition],
+        toolsForIteration: [toolDefinition, memoryRememberToolDefinition],
       }),
       recordPerformanceMetrics: jest.fn(),
       reportUsage: jest.fn(),
@@ -216,11 +240,23 @@ describe('agent control graph model turn execution', () => {
     await expect(execution).resolves.toMatchObject({ fullContent: 'Safe response.' });
     expect(mockedPrepareAgentTurnRequestBudget).toHaveBeenCalledTimes(2);
     expect(mockedPrepareAgentTurnRequestBudget.mock.calls[1]?.[0]).toMatchObject({
-      enrichedSystemPrompt: 'Memory-free system',
+      enrichedSystemPrompt: expect.stringContaining('Memory-free system'),
       livingMemory: null,
       workingMessages: safeWorkingMessages,
     });
+    expect(mockedPrepareAgentTurnRequestBudget.mock.calls[1]?.[0].enrichedSystemPrompt).toContain(
+      MEMORY_DISABLED_RUNTIME_CAPABILITY,
+    );
+    expect(
+      mockedPrepareAgentTurnRequestBudget.mock.calls[1]?.[0].toolsForIteration?.map(
+        (tool) => tool.name,
+      ),
+    ).toEqual(['write_file']);
     expect(llm.streamMessage).toHaveBeenCalledTimes(1);
+    const dispatchedOptions = llm.streamMessage.mock.calls[0]?.[1] as {
+      tools: ToolDefinition[];
+    };
+    expect(dispatchedOptions.tools.map((tool) => tool.name)).toEqual(['write_file']);
     expect(JSON.stringify(llm.streamMessage.mock.calls[0]?.[0])).not.toContain(
       'PRIVATE LIVING MEMORY',
     );

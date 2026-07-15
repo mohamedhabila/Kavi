@@ -52,7 +52,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
       .filter(Boolean),
   );
 
-  const groundedRequestScopedTools = await resolveDefaultGroundedRequestScopedTools({
+  const resolvedGroundedRequestScopedTools = await resolveDefaultGroundedRequestScopedTools({
     allTools: policyAuthorizedTools,
     conversationMode: params.conversationMode,
     observedToolNames: params.completedWorkflowToolNames,
@@ -62,15 +62,20 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
     sessionActivatedToolNames: params.sessionActivatedToolNames,
   });
+  // Tool selection may suspend while policy changes. Re-authorize the complete
+  // result after the async boundary so stale memory capabilities never reach
+  // prompt construction, pinning, or provider dispatch.
+  const currentPolicyAuthorizedTools = filterToolsForMemoryPolicy(params.allTools);
+  const groundedRequestScopedTools = filterToolsForMemoryPolicy(resolvedGroundedRequestScopedTools);
   const groundedToolNames = new Set(
     groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
   );
   const pinnedToolNames = Array.from(
-    new Set(resolveGoalCapabilityToolNames(goals, policyAuthorizedTools)),
+    new Set(resolveGoalCapabilityToolNames(goals, currentPolicyAuthorizedTools)),
   ).filter((name) => groundedToolNames.has(name));
   const turnContract = resolveAgentExecutionTurnContract({
     goals,
-    tools: policyAuthorizedTools,
+    tools: currentPolicyAuthorizedTools,
     groundedToolNames: groundedRequestScopedTools.map((tool) => tool.name),
   });
 

@@ -26,7 +26,7 @@ export interface PrepareAgentTurnParams {
   toolingEnabledForProvider: boolean;
 }
 
-export interface PreparedAgentTurn {
+export interface PreparedAgentTurnCore {
   enrichedSystemPrompt: string;
   enrichedSystemPromptSections: ReturnType<
     typeof buildAgentTurnPromptBundle
@@ -35,6 +35,9 @@ export interface PreparedAgentTurn {
   selectedToolTokenEstimate: number;
   selectedTools: ToolDefinition[];
   toolsForIteration: ToolDefinition[] | undefined;
+}
+
+export interface PreparedAgentTurn extends PreparedAgentTurnCore {
   memoryReadFence?: {
     readEpoch: number;
     verifiedProcedureObservationRevision?: VerifiedProcedureObservationRevision;
@@ -44,6 +47,7 @@ export interface PreparedAgentTurn {
         typeof buildAgentTurnPromptBundle
       >['enrichedSystemPromptSections'];
     };
+    memoryDisabledTurn: PreparedAgentTurnCore;
   };
 }
 

@@ -28,6 +28,7 @@ export interface AgentTurnPromptBundleParams {
   maxToolIterations: number;
   resolvedPrompt: string;
   runtimeContext?: string | null;
+  runtimePolicyPrompt?: string | null;
   selectedTools: ToolDefinition[];
   skillPrompts: string;
   toolingEnabledForProvider: boolean;
@@ -58,6 +59,7 @@ export function buildAgentTurnPromptBundle(
     params.toolingEnabledForProvider,
     textOnlyPrompt,
   );
+  appendSystemPromptSection(baseSystemPromptSections, params.runtimePolicyPrompt);
   for (const section of params.livingMemorySections ?? []) {
     appendSystemPromptSection(baseSystemPromptSections, section.text, {
       cacheable: section.cacheable === true,

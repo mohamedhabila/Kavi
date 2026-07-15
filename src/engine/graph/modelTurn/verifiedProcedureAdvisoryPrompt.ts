@@ -8,6 +8,7 @@ import {
 } from '../../prompts/orchestratorPromptSections';
 import type { PreparedAgentTurn } from '../agentTurnPreparation';
 import {
+  buildMemoryDisabledPolicyIndependentTurn,
   isPreparedMemoryReadCurrent,
   removeLivingMemoryFromPreparedTurn,
 } from './memoryPromptDispatchFence';
@@ -48,6 +49,9 @@ export async function appendVerifiedProcedureAdvisoryPrompt(
     enrichedSystemPrompt: preparedTurn.enrichedSystemPrompt,
     enrichedSystemPromptSections: preparedTurn.enrichedSystemPromptSections,
   };
+  const memoryDisabledTurn =
+    preparedTurn.memoryReadFence?.memoryDisabledTurn ??
+    buildMemoryDisabledPolicyIndependentTurn(preparedTurn);
   const enrichedSystemPromptSections = orderSystemPromptSectionsForCaching([
     ...preparedTurn.enrichedSystemPromptSections,
     { text: advisory.section, cacheable: false },
@@ -60,6 +64,7 @@ export async function appendVerifiedProcedureAdvisoryPrompt(
       readEpoch: advisory.readEpoch,
       verifiedProcedureObservationRevision: advisory.observationRevision,
       memoryFreePrompt,
+      memoryDisabledTurn,
     },
   };
   return isMemoryReadEpochCurrent(advisory.readEpoch) &&
