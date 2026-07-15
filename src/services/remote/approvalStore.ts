@@ -4,7 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { RemoteApprovalRequest } from '../../types/remote';
+import type {
+  RemoteApprovalDecisionPolicy,
+  RemoteApprovalRequest,
+} from '../../types/remote';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
 import { describeToolInvocation } from '../security/toolPrivacy';
@@ -33,6 +36,76 @@ export type { ApprovalScope, CommandRiskAssessment, RiskLevel } from './approval
 export type { ApprovalAnalytics } from './approvalAnalytics';
 export type { AllowlistEntry, ApprovalPolicy, PersonaPolicyOverride } from './approvalPolicy';
 
+const STANDARD_APPROVAL_DECISION_POLICY = Object.freeze({
+  persistentApproval: 'allowed',
+  expiryFallback: 'global-policy',
+} as const satisfies RemoteApprovalDecisionPolicy);
+
+export const ONE_SHOT_APPROVAL_DECISION_POLICY = Object.freeze({
+  persistentApproval: 'forbidden',
+  expiryFallback: 'reject',
+} as const satisfies RemoteApprovalDecisionPolicy);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isStandardDecisionPolicy(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.persistentApproval === 'allowed' &&
+    value.expiryFallback === 'global-policy'
+  );
+}
+
+function isOneShotDecisionPolicy(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.persistentApproval === 'forbidden' &&
+    value.expiryFallback === 'reject'
+  );
+}
+
+function normalizeDecisionPolicy(
+  value: unknown,
+  invalidFallback: 'standard' | 'one-shot',
+): RemoteApprovalDecisionPolicy {
+  if (isStandardDecisionPolicy(value)) {
+    return { ...STANDARD_APPROVAL_DECISION_POLICY };
+  }
+  if (isOneShotDecisionPolicy(value)) {
+    return { ...ONE_SHOT_APPROVAL_DECISION_POLICY };
+  }
+  return invalidFallback === 'standard'
+    ? { ...STANDARD_APPROVAL_DECISION_POLICY }
+    : { ...ONE_SHOT_APPROVAL_DECISION_POLICY };
+}
+
+function normalizePersistedRequests(
+  value: unknown,
+  fallbacks: {
+    missingPolicy: 'standard' | 'one-shot';
+    invalidPolicy: 'standard' | 'one-shot';
+  },
+): Record<string, RemoteApprovalRequest> {
+  if (!isRecord(value)) return {};
+
+  const requests: Record<string, RemoteApprovalRequest> = {};
+  for (const [id, rawRequest] of Object.entries(value)) {
+    if (!isRecord(rawRequest)) continue;
+    requests[id] = {
+      ...(rawRequest as unknown as RemoteApprovalRequest),
+      decisionPolicy: normalizeDecisionPolicy(
+        rawRequest.decisionPolicy,
+        rawRequest.decisionPolicy === undefined
+          ? fallbacks.missingPolicy
+          : fallbacks.invalidPolicy,
+      ),
+    };
+  }
+  return requests;
+}
+
 interface ApprovalStoreState {
   requests: Record<string, RemoteApprovalRequest>;
   policy: ApprovalPolicy;
@@ -48,6 +121,7 @@ interface ApprovalStoreState {
     description: string;
     riskLevel?: RiskLevel;
     riskReasons?: string[];
+    decisionPolicy?: RemoteApprovalDecisionPolicy;
   }) => string;
   approveRequest: (id: string) => void;
   approveAlways: (id: string) => void;
@@ -107,6 +181,10 @@ export const useApprovalStore = create<ApprovalStoreState>()(
           expiresAt: now + timeoutMs,
           riskLevel: params.riskLevel,
           riskReasons: params.riskReasons,
+          decisionPolicy:
+            params.decisionPolicy === undefined
+              ? { ...STANDARD_APPROVAL_DECISION_POLICY }
+              : normalizeDecisionPolicy(params.decisionPolicy, 'one-shot'),
         };
         set((state) => ({
           requests: trimRequests({ ...state.requests, [id]: request }),
@@ -137,7 +215,13 @@ export const useApprovalStore = create<ApprovalStoreState>()(
       approveAlways: (id) =>
         set((state) => {
           const req = state.requests[id];
-          if (!req || req.status !== 'pending') return state;
+          if (
+            !req ||
+            req.status !== 'pending' ||
+            !isStandardDecisionPolicy(req.decisionPolicy)
+          ) {
+            return state;
+          }
           const now = Date.now();
           const key = req.toolName || 'unknown';
           const entry: AllowlistEntry = { key, addedAt: now };
@@ -300,22 +384,61 @@ export const useApprovalStore = create<ApprovalStoreState>()(
     {
       name: 'kavi-approvals',
       storage: createJSONStorage(() => AsyncStorage),
-      version: 2,
-      migrate: (persisted: any, version: number) => {
+      version: 3,
+      migrate: (persistedState: unknown, version: number) => {
+        const persisted = isRecord(persistedState) ? persistedState : {};
+        let migrated: Record<string, unknown> = { ...persisted };
+
         if (version < 2) {
-          return {
-            ...persisted,
-            allowlist: persisted.allowlist || [],
-            analytics: persisted.analytics || DEFAULT_ANALYTICS,
+          const persistedPolicy = isRecord(migrated.policy) ? migrated.policy : {};
+          migrated = {
+            ...migrated,
+            allowlist: Array.isArray(migrated.allowlist) ? migrated.allowlist : [],
+            analytics: isRecord(migrated.analytics) ? migrated.analytics : DEFAULT_ANALYTICS,
             policy: {
               ...DEFAULT_POLICY,
-              ...(persisted.policy || {}),
-              expiryFallback: persisted.policy?.expiryFallback || 'reject',
-              personaOverrides: persisted.policy?.personaOverrides || [],
+              ...persistedPolicy,
+              expiryFallback: persistedPolicy.expiryFallback || 'reject',
+              personaOverrides: Array.isArray(persistedPolicy.personaOverrides)
+                ? persistedPolicy.personaOverrides
+                : [],
             },
           };
         }
-        return persisted;
+
+        if (version < 3) {
+          migrated = {
+            ...migrated,
+            requests: normalizePersistedRequests(migrated.requests, {
+              missingPolicy: 'standard',
+              invalidPolicy: 'one-shot',
+            }),
+          };
+        }
+
+        return migrated;
+      },
+      merge: (persistedState, currentState) => {
+        if (!isRecord(persistedState)) return currentState;
+
+        return {
+          ...currentState,
+          requests: Object.prototype.hasOwnProperty.call(persistedState, 'requests')
+            ? normalizePersistedRequests(persistedState.requests, {
+                missingPolicy: 'one-shot',
+                invalidPolicy: 'one-shot',
+              })
+            : currentState.requests,
+          policy: isRecord(persistedState.policy)
+            ? (persistedState.policy as unknown as ApprovalPolicy)
+            : currentState.policy,
+          allowlist: Array.isArray(persistedState.allowlist)
+            ? (persistedState.allowlist as AllowlistEntry[])
+            : currentState.allowlist,
+          analytics: isRecord(persistedState.analytics)
+            ? (persistedState.analytics as unknown as ApprovalAnalytics)
+            : currentState.analytics,
+        };
       },
     },
   ),
@@ -369,6 +492,7 @@ export function requestToolApproval(params: {
   description: string;
   args?: Record<string, unknown>;
   personaId?: string;
+  decisionPolicy?: RemoteApprovalDecisionPolicy;
 }): Promise<'approved' | 'rejected' | 'expired'> {
   const store = useApprovalStore.getState();
   const timeoutMs = store.policy.timeoutMs;
@@ -385,6 +509,7 @@ export function requestToolApproval(params: {
     description: presentation.description,
     riskLevel: risk.level,
     riskReasons: risk.reasons,
+    decisionPolicy: params.decisionPolicy,
   });
 
   return new Promise((resolve) => {
@@ -405,7 +530,7 @@ export function requestToolApproval(params: {
     const expiryTimer = setTimeout(() => {
       const request = useApprovalStore.getState().getRequest(requestId);
       if (request?.status === 'pending') {
-        if (expiryFallback === 'approve') {
+        if (isStandardDecisionPolicy(request.decisionPolicy) && expiryFallback === 'approve') {
           useApprovalStore.getState().approveRequest(requestId);
         } else {
           useApprovalStore.getState().expireRequest(requestId);

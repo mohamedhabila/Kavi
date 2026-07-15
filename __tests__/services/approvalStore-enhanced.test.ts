@@ -5,6 +5,7 @@
 import {
   useApprovalStore,
   needsApprovalWithContext,
+  ONE_SHOT_APPROVAL_DECISION_POLICY,
   assessToolRisk,
   analyzeCommandRisk,
 } from '../../src/services/remote/approvalStore';
@@ -153,6 +154,20 @@ describe('approveAlways', () => {
     const req = useApprovalStore.getState().getRequest(id);
     expect(req!.status).toBe('approved');
     expect(useApprovalStore.getState().allowlist.length).toBeGreaterThan(0);
+  });
+
+  it('does not resolve or persist a one-shot request', () => {
+    const id = useApprovalStore.getState().createRequest({
+      title: 'Remember observed fact',
+      description: 'Store one approved observation',
+      toolName: 'memory_remember',
+      decisionPolicy: ONE_SHOT_APPROVAL_DECISION_POLICY,
+    });
+
+    useApprovalStore.getState().approveAlways(id);
+
+    expect(useApprovalStore.getState().getRequest(id)?.status).toBe('pending');
+    expect(useApprovalStore.getState().allowlist).toHaveLength(0);
   });
 });
 

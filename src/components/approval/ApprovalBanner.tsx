@@ -76,6 +76,9 @@ const ApprovalCard: React.FC<{
   const riskColor = RISK_COLORS[riskLevel]?.(colors) || colors.textSecondary;
   const borderColor =
     riskLevel === 'critical' || riskLevel === 'high' ? colors.danger : colors.warning;
+  const allowsPersistentApproval =
+    request.decisionPolicy?.persistentApproval === 'allowed' &&
+    request.decisionPolicy.expiryFallback === 'global-policy';
 
   return (
     <View style={[styles.card, { borderColor }]}>
@@ -111,14 +114,16 @@ const ApprovalCard: React.FC<{
           <ShieldX size={14} color={colors.danger} />
           <Text style={styles.rejectText}>{t('approvalBanner.reject')}</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.alwaysAllowBtn}
-          onPress={onAlwaysAllow}
-          accessibilityRole="button"
-        >
-          <CheckCheck size={14} color={colors.primary} />
-          <Text style={styles.alwaysAllowText}>{t('approvalBanner.alwaysAllow')}</Text>
-        </TouchableOpacity>
+        {allowsPersistentApproval && (
+          <TouchableOpacity
+            style={styles.alwaysAllowBtn}
+            onPress={onAlwaysAllow}
+            accessibilityRole="button"
+          >
+            <CheckCheck size={14} color={colors.primary} />
+            <Text style={styles.alwaysAllowText}>{t('approvalBanner.alwaysAllow')}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.approveBtn} onPress={onApprove} accessibilityRole="button">
           <ShieldCheck size={14} color={colors.onPrimary} />
           <Text style={styles.approveText}>{t('approvalBanner.approve')}</Text>

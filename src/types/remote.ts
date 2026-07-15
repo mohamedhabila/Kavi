@@ -171,6 +171,22 @@ export interface RemoteArtifact {
   createdAt: number;
 }
 
+/**
+ * Decision authority attached to an individual approval request.
+ *
+ * The union deliberately prevents a non-persistable approval from inheriting
+ * a global auto-approve-on-expiry policy.
+ */
+export type RemoteApprovalDecisionPolicy =
+  | {
+      persistentApproval: 'allowed';
+      expiryFallback: 'global-policy';
+    }
+  | {
+      persistentApproval: 'forbidden';
+      expiryFallback: 'reject';
+    };
+
 export interface RemoteApprovalRequest {
   id: string;
   targetId?: string;
@@ -185,6 +201,7 @@ export interface RemoteApprovalRequest {
   resolvedAt?: number;
   riskLevel?: 'low' | 'medium' | 'high' | 'critical';
   riskReasons?: string[];
+  decisionPolicy: RemoteApprovalDecisionPolicy;
 }
 
 export interface RemoteJobRecord {

@@ -133,6 +133,10 @@ describe('ApprovalBanner', () => {
         riskLevel: 'critical',
         riskReasons: ['writes to prod', 'restarts service'],
         targetId: 'prod-server',
+        decisionPolicy: {
+          persistentApproval: 'allowed',
+          expiryFallback: 'global-policy',
+        },
       },
     };
 
@@ -148,5 +152,32 @@ describe('ApprovalBanner', () => {
     expect(mockApprovalStoreState.rejectRequest).toHaveBeenCalledWith('critical');
     expect(mockApprovalStoreState.approveAlways).toHaveBeenCalledWith('critical');
     expect(mockApprovalStoreState.approveRequest).toHaveBeenCalledWith('critical');
+  });
+
+  it('hides persistent approval while keeping one-shot approve and reject actions', () => {
+    mockApprovalStoreState.requests = {
+      memory: {
+        id: 'memory',
+        status: 'pending',
+        title: 'Remember observed fact',
+        description: 'Store one fact from this tool result',
+        requestedAt: Date.now() - 1000,
+        riskLevel: 'medium',
+        decisionPolicy: {
+          persistentApproval: 'forbidden',
+          expiryFallback: 'reject',
+        },
+      },
+    };
+
+    const { getByText, queryByText } = render(<ApprovalBanner />);
+
+    expect(queryByText('Always allow')).toBeNull();
+    fireEvent.press(getByText('Reject'));
+    fireEvent.press(getByText('Approve'));
+
+    expect(mockApprovalStoreState.rejectRequest).toHaveBeenCalledWith('memory');
+    expect(mockApprovalStoreState.approveRequest).toHaveBeenCalledWith('memory');
+    expect(mockApprovalStoreState.approveAlways).not.toHaveBeenCalled();
   });
 });

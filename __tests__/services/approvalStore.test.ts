@@ -6,6 +6,7 @@ import {
   useApprovalStore,
   needsApproval,
   needsApprovalWithContext,
+  ONE_SHOT_APPROVAL_DECISION_POLICY,
   requestToolApproval,
 } from '../../src/services/remote/approvalStore';
 
@@ -50,6 +51,23 @@ describe('useApprovalStore', () => {
       expect(req!.requestedAt).toBeGreaterThan(0);
       expect(req!.expiresAt).toBeGreaterThan(req!.requestedAt);
       expect(req!.resolvedAt).toBeUndefined();
+      expect(req!.decisionPolicy).toEqual({
+        persistentApproval: 'allowed',
+        expiryFallback: 'global-policy',
+      });
+    });
+
+    it('stores a one-shot decision policy on the request', () => {
+      const id = useApprovalStore.getState().createRequest({
+        title: 'Remember observed fact',
+        description: 'Store a fact derived from an approved tool result',
+        decisionPolicy: ONE_SHOT_APPROVAL_DECISION_POLICY,
+      });
+
+      expect(useApprovalStore.getState().getRequest(id)?.decisionPolicy).toEqual({
+        persistentApproval: 'forbidden',
+        expiryFallback: 'reject',
+      });
     });
 
     it('trims requests to MAX_REQUESTS limit', () => {
@@ -301,5 +319,96 @@ describe('requestToolApproval', () => {
     expect(result).toBe('expired');
 
     jest.useRealTimers();
+  });
+
+  it('never auto-approves a one-shot request when the global expiry fallback approves', async () => {
+    jest.useFakeTimers();
+    useApprovalStore.getState().setPolicy({ timeoutMs: 1000, expiryFallback: 'approve' });
+
+    const promise = requestToolApproval({
+      toolName: 'memory_remember',
+      description: 'Remember an observed fact',
+      decisionPolicy: ONE_SHOT_APPROVAL_DECISION_POLICY,
+    });
+
+    await jest.advanceTimersByTimeAsync(1250);
+
+    await expect(promise).resolves.toBe('expired');
+    expect(useApprovalStore.getState().getPendingRequests()).toHaveLength(0);
+
+    jest.useRealTimers();
+  });
+
+  it('retains the global expiry fallback for ordinary requests', async () => {
+    jest.useFakeTimers();
+    useApprovalStore.getState().setPolicy({ timeoutMs: 1000, expiryFallback: 'approve' });
+
+    const promise = requestToolApproval({
+      toolName: 'ssh_exec',
+      description: 'Run an approved command',
+    });
+
+    await jest.advanceTimersByTimeAsync(1250);
+
+    await expect(promise).resolves.toBe('approved');
+
+    jest.useRealTimers();
+  });
+});
+
+describe('approval request persistence schema', () => {
+  it('migrates legacy requests to the ordinary decision policy', async () => {
+    const migrate = useApprovalStore.persist.getOptions().migrate;
+    expect(migrate).toBeDefined();
+
+    const migrated = (await migrate!(
+      {
+        requests: {
+          legacy: {
+            id: 'legacy',
+            title: 'Legacy request',
+            description: 'Created before request decision policies',
+            status: 'pending',
+            requestedAt: 1,
+          },
+        },
+      },
+      2,
+    )) as any;
+
+    expect(migrated.requests.legacy.decisionPolicy).toEqual({
+      persistentApproval: 'allowed',
+      expiryFallback: 'global-policy',
+    });
+  });
+
+  it('fails closed when a current persisted request has an invalid decision policy', () => {
+    const merge = useApprovalStore.persist.getOptions().merge;
+    expect(merge).toBeDefined();
+
+    const current = useApprovalStore.getState();
+    const merged = merge!(
+      {
+        requests: {
+          malformed: {
+            id: 'malformed',
+            title: 'Malformed request',
+            description: 'Has an invalid persisted policy',
+            status: 'pending',
+            requestedAt: 1,
+            decisionPolicy: {
+              persistentApproval: 'allowed',
+              expiryFallback: 'reject',
+            },
+          },
+        },
+      },
+      current,
+    ) as typeof current;
+
+    expect(merged.requests.malformed.decisionPolicy).toEqual({
+      persistentApproval: 'forbidden',
+      expiryFallback: 'reject',
+    });
   });
 });
