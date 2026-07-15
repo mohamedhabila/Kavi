@@ -189,6 +189,30 @@ describe('Builtin Tool Executor', () => {
       expect(parsed.error).toBe('spawn failed');
     });
 
+    it('does not infer a spawn policy code from arbitrary exception text', async () => {
+      const { launchSubAgent } = require('../../../src/services/agents/subAgent');
+      launchSubAgent.mockRejectedValueOnce(new Error('MAX_SPAWN_DEPTH upstream diagnostic'));
+
+      const parsed = parseFailedToolOutcome(
+        await executeSessionSpawn({ prompt: 'fail' }, 'conv-1', {
+          id: 'test',
+          name: 'Test',
+          type: 'openai',
+          apiKey: 'k',
+          baseUrl: 'u',
+          model: 'gpt-5.4',
+          models: ['gpt-5.4'],
+          enabled: true,
+        }),
+      );
+
+      expect(parsed).toMatchObject({
+        status: 'error',
+        errorClass: 'Error',
+        error: 'MAX_SPAWN_DEPTH upstream diagnostic',
+      });
+    });
+
     it('can wait for completion when requested', async () => {
       const { waitForSubAgentResultPromise } = require('../../../src/services/agents/subAgent');
       const result = await executeSessionSpawn(

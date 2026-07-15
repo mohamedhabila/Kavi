@@ -277,11 +277,7 @@ export async function executeSessionSpawn(
   } catch (err: unknown) {
     let message: string;
     let errorClass = 'unknown';
-    if (err instanceof Error && err.message.includes('MAX_SPAWN_DEPTH')) {
-      errorClass = 'max_spawn_depth';
-      message =
-        'Max sub-agent nesting depth exceeded. Consider breaking the task into parallel agents instead.';
-    } else if (err instanceof TypeError) {
+    if (err instanceof TypeError) {
       errorClass = 'type_error';
       message = `Configuration error: ${err.message}. Check that a provider is properly configured.`;
     } else {
