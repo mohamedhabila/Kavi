@@ -15,7 +15,10 @@ import {
 } from '../goals/types';
 import { serializeGoalMutationToolErrors } from '../goals/mutationErrors';
 import { validateGoalMutation, validateGoalReferences } from '../goals/validation';
-import { parseUpdateGoalsArgs } from '../tools/toolGoalExecution';
+import {
+  parseUpdateGoalsArgs,
+  type UpdateGoalsArgumentError,
+} from '../tools/toolGoalExecution';
 import { syncGoalTasksFromMutation } from '../../services/memory/tasks';
 import type { AgentControlGraphEvent } from './agentControlGraph';
 import type { ToolExecutionOutcome } from './toolExecutionOutcomeResolution';
@@ -92,17 +95,18 @@ function buildCanonicalUpdateGoalsContent(params: {
 }
 
 function serializeParsedUpdateGoalsErrors(
-  errors: ReadonlyArray<string>,
+  errors: ReadonlyArray<UpdateGoalsArgumentError>,
   args: unknown,
 ): Array<Record<string, unknown>> {
   const goalId =
     args && typeof args === 'object' && typeof (args as Record<string, unknown>).id === 'string'
       ? ((args as Record<string, unknown>).id as string).trim()
       : '';
-  return errors.map((message) => ({
+  return errors.map((error) => ({
     ...(goalId ? { goalId } : {}),
-    code: message.startsWith('name is required') ? 'missing_title' : 'invalid_lifecycle',
-    message,
+    code: error.code,
+    ...(error.field ? { field: error.field } : {}),
+    message: error.message,
   }));
 }
 
@@ -407,7 +411,7 @@ export function canonicalizeToolExecutionOutcome(params: {
       const content = buildCanonicalUpdateGoalsContent({
         status: 'error',
         action: parsed.mutation.action,
-        errors: parsed.errors,
+        errors: parsed.errors.map((error) => error.message),
         structuredErrors: serializeParsedUpdateGoalsErrors(parsed.errors, args),
       });
       return {

@@ -39,6 +39,33 @@ const OPTIONAL_STRING_LIST_FIELDS = [
   'successCriteria',
 ] as const;
 
+export type UpdateGoalsArgumentErrorCode =
+  | 'invalid_action'
+  | 'unsupported_field'
+  | 'missing_id'
+  | 'missing_title'
+  | 'invalid_field_type'
+  | 'invalid_status'
+  | 'invalid_completion_policy'
+  | 'provider_owned_field'
+  | 'invalid_user_constraint_retention'
+  | 'invalid_lifecycle'
+  | 'invalid_success_criteria';
+
+export type UpdateGoalsArgumentError = Readonly<{
+  code: UpdateGoalsArgumentErrorCode;
+  message: string;
+  field?: string;
+}>;
+
+function argumentError(
+  code: UpdateGoalsArgumentErrorCode,
+  message: string,
+  field?: string,
+): UpdateGoalsArgumentError {
+  return { code, message, ...(field ? { field } : {}) };
+}
+
 function omitAdapterNullOptionals(args: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...args };
   for (const field of ALLOWED_UPDATE_GOALS_ROOT_FIELDS) {
@@ -90,22 +117,46 @@ function normalizeParsedGoal(
   };
 }
 
-function validateUpdateGoalsRootShape(args: Record<string, unknown>): string[] {
+function validateUpdateGoalsRootShape(args: Record<string, unknown>): UpdateGoalsArgumentError[] {
   const unknownFields = Object.keys(args).filter(
     (field) => !ALLOWED_UPDATE_GOALS_ROOT_FIELDS.has(field),
   );
   if (unknownFields.length > 0) {
-    return [`Unsupported update_goals field(s): ${unknownFields.sort().join(', ')}.`];
+    return [
+      argumentError(
+        'unsupported_field',
+        `Unsupported update_goals field(s): ${unknownFields.sort().join(', ')}.`,
+        unknownFields.sort()[0],
+      ),
+    ];
   }
   if (typeof args.id !== 'string' || !args.id.trim()) {
-    return ['id is required for update_goals and must be a non-empty string.'];
+    return [
+      argumentError(
+        'missing_id',
+        'id is required for update_goals and must be a non-empty string.',
+        'id',
+      ),
+    ];
   }
   if (typeof args.name !== 'string' || !args.name.trim()) {
-    return ['name is required for update_goals and must be a non-empty string.'];
+    return [
+      argumentError(
+        'missing_title',
+        'name is required for update_goals and must be a non-empty string.',
+        'name',
+      ),
+    ];
   }
   for (const field of OPTIONAL_STRING_FIELDS) {
     if (args[field] !== undefined && typeof args[field] !== 'string') {
-      return [`${field} must be a string when supplied.`];
+      return [
+        argumentError(
+          'invalid_field_type',
+          `${field} must be a string when supplied.`,
+          field,
+        ),
+      ];
     }
   }
   for (const field of OPTIONAL_STRING_LIST_FIELDS) {
@@ -114,17 +165,35 @@ function validateUpdateGoalsRootShape(args: Record<string, unknown>): string[] {
       (!Array.isArray(args[field]) ||
         !(args[field] as unknown[]).every((entry) => typeof entry === 'string'))
     ) {
-      return [`${field} must be an array containing only strings.`];
+      return [
+        argumentError(
+          'invalid_field_type',
+          `${field} must be an array containing only strings.`,
+          field,
+        ),
+      ];
     }
   }
   if (args.status !== undefined && parseGoalStatus(args.status) === undefined) {
-    return ['status must be one of: pending, active, completed, blocked.'];
+    return [
+      argumentError(
+        'invalid_status',
+        'status must be one of: pending, active, completed, blocked.',
+        'status',
+      ),
+    ];
   }
   if (
     args.completionPolicy !== undefined &&
     normalizeGoalCompletionPolicy(args.completionPolicy) === undefined
   ) {
-    return ['completionPolicy must be either blocking or persistent.'];
+    return [
+      argumentError(
+        'invalid_completion_policy',
+        'completionPolicy must be either blocking or persistent.',
+        'completionPolicy',
+      ),
+    ];
   }
   return [];
 }
@@ -133,7 +202,7 @@ function parseUserConstraintRetention(params: {
   args: Record<string, unknown>;
   action: AgentGoalMutation['action'];
   completionPolicy: AgentGoalMutation['goals'][number]['completionPolicy'];
-}): { retain?: true; errors: string[] } {
+}): { retain?: true; errors: UpdateGoalsArgumentError[] } {
   for (const unsupported of [
     'userConstraints',
     'sourceMessageId',
@@ -145,7 +214,11 @@ function parseUserConstraintRetention(params: {
     if (Object.prototype.hasOwnProperty.call(params.args, unsupported)) {
       return {
         errors: [
-          `${unsupported} is unsupported. Supply only retainCurrentUserConstraint: true; source identity and retained text are code-owned.`,
+          argumentError(
+            'provider_owned_field',
+            `${unsupported} is unsupported. Supply only retainCurrentUserConstraint: true; source identity and retained text are code-owned.`,
+            unsupported,
+          ),
         ],
       };
     }
@@ -154,24 +227,58 @@ function parseUserConstraintRetention(params: {
     return { errors: [] };
   }
   if (params.args.retainCurrentUserConstraint !== true) {
-    return { errors: ['retainCurrentUserConstraint must be true when supplied.'] };
+    return {
+      errors: [
+        argumentError(
+          'invalid_user_constraint_retention',
+          'retainCurrentUserConstraint must be true when supplied.',
+          'retainCurrentUserConstraint',
+        ),
+      ],
+    };
   }
   if (params.action !== 'add' && params.action !== 'update') {
     return {
       errors: [
-        'retainCurrentUserConstraint is supported only for add or update actions on blocking goals.',
+        argumentError(
+          'invalid_user_constraint_retention',
+          'retainCurrentUserConstraint is supported only for add or update actions on blocking goals.',
+          'retainCurrentUserConstraint',
+        ),
       ],
     };
   }
   if (params.args.status === 'completed') {
-    return { errors: ['Completed goals cannot retain the current user statement.'] };
+    return {
+      errors: [
+        argumentError(
+          'invalid_lifecycle',
+          'Completed goals cannot retain the current user statement.',
+          'status',
+        ),
+      ],
+    };
   }
   if (params.completionPolicy === 'persistent') {
-    return { errors: ['Persistent goals cannot retain current user constraint statements.'] };
+    return {
+      errors: [
+        argumentError(
+          'invalid_user_constraint_retention',
+          'Persistent goals cannot retain current user constraint statements.',
+          'completionPolicy',
+        ),
+      ],
+    };
   }
   if (params.action === 'add' && params.completionPolicy !== 'blocking') {
     return {
-      errors: ['retainCurrentUserConstraint on add requires completionPolicy "blocking".'],
+      errors: [
+        argumentError(
+          'invalid_user_constraint_retention',
+          'retainCurrentUserConstraint on add requires completionPolicy "blocking".',
+          'completionPolicy',
+        ),
+      ],
     };
   }
   return { retain: true, errors: [] };
@@ -179,14 +286,15 @@ function parseUserConstraintRetention(params: {
 
 export function buildUpdateGoalsResult(params: {
   mutation: AgentGoalMutation;
-  validationErrors: string[];
+  validationErrors: ReadonlyArray<UpdateGoalsArgumentError>;
 }): string {
   if (params.validationErrors.length > 0) {
     return JSON.stringify(
       {
         status: 'error',
         action: params.mutation.action,
-        errors: params.validationErrors,
+        errors: params.validationErrors.map((error) => error.message),
+        structuredErrors: params.validationErrors,
       },
       null,
       2,
@@ -211,7 +319,7 @@ export function buildUpdateGoalsResult(params: {
 
 export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   mutation: AgentGoalMutation;
-  errors: string[];
+  errors: UpdateGoalsArgumentError[];
 } {
   const normalizedArgs = omitAdapterNullOptionals(args);
   const action = normalizedArgs.action;
@@ -226,7 +334,11 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
     return {
       mutation: { action: 'add', goals: [] },
       errors: [
-        `Invalid action: ${action}. Must be one of: add, complete, activate, block, remove, update.`,
+        argumentError(
+          'invalid_action',
+          `Invalid action: ${action}. Must be one of: add, complete, activate, block, remove, update.`,
+          'action',
+        ),
       ],
     };
   }
@@ -235,7 +347,13 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   if (Object.prototype.hasOwnProperty.call(normalizedArgs, 'evidence')) {
     return {
       mutation: { action, goals: [] },
-      errors: ['evidence is code-owned and cannot be supplied by update_goals.'],
+      errors: [
+        argumentError(
+          'provider_owned_field',
+          'evidence is code-owned and cannot be supplied by update_goals.',
+          'evidence',
+        ),
+      ],
     };
   }
   const constraints = parseUserConstraintRetention({
@@ -253,13 +371,25 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   if (completionPolicy === 'persistent' && normalizedArgs.successCriteria !== undefined) {
     return {
       mutation: { action, goals: [] },
-      errors: ['Persistent goals must omit successCriteria.'],
+      errors: [
+        argumentError(
+          'invalid_success_criteria',
+          'Persistent goals must omit successCriteria.',
+          'successCriteria',
+        ),
+      ],
     };
   }
   if ((action === 'add' || action === 'update') && normalizedArgs.status === 'completed') {
     return {
       mutation: { action, goals: [] },
-      errors: ['Use action "complete" for the canonical goal completion transition.'],
+      errors: [
+        argumentError(
+          'invalid_lifecycle',
+          'Use action "complete" for the canonical goal completion transition.',
+          'status',
+        ),
+      ],
     };
   }
   const parsedGoal = normalizeParsedGoal(normalizedArgs, constraints.retain);

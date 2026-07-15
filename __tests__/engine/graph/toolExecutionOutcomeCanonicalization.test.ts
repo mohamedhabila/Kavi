@@ -47,6 +47,39 @@ function applyGraphEvents(
 }
 
 describe('canonicalizeToolExecutionOutcome', () => {
+  it('routes argument repair from typed validation codes instead of diagnostic text', () => {
+    const snapshotRef = { current: createInitialAgentRunControlGraphState() };
+    const outcome = canonicalizeToolExecutionOutcome({
+      outcome: makeUpdateGoalsOutcome(),
+      toolName: 'update_goals',
+      executableToolCalls: [
+        {
+          name: 'update_goals',
+          arguments: JSON.stringify({ action: 'add', id: 'typed-repair', name: '' }),
+        },
+      ],
+      getGraphSnapshot: () => snapshotRef.current,
+      applyGraphEvents: (events) => applyGraphEvents(snapshotRef, events),
+      conversationId: 'conv-test',
+      warn: jest.fn(),
+    });
+
+    expect(JSON.parse(outcome.toolMessage.content)).toMatchObject({
+      status: 'error',
+      structuredErrors: [
+        {
+          code: 'missing_title',
+          field: 'name',
+          goalId: 'typed-repair',
+        },
+      ],
+      repair: {
+        code: 'missing_title',
+        missingFields: ['name'],
+      },
+    });
+  });
+
   it('captures the entire code-owned current user message from boolean retention intent', () => {
     const snapshotRef = { current: createInitialAgentRunControlGraphState() };
     const args = {
@@ -434,6 +467,7 @@ describe('canonicalizeToolExecutionOutcome', () => {
           arguments: '{}',
           timestamp: 1,
           result: '[{"id":"default","allowsModifications":true}]',
+          status: 'completed',
         },
       ],
       getGraphSnapshot: () => snapshotRef.current,

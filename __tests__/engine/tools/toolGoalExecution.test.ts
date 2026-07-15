@@ -9,6 +9,9 @@ import {
   parseFailedToolOutcome,
 } from '../../helpers/toolRuntimeOutcome';
 
+const errorMessages = (errors: ReadonlyArray<{ message: string }>) =>
+  errors.map((error) => error.message);
+
 describe('toolGoalExecution', () => {
   describe('update_goals schema contract', () => {
     it('exposes one strict root mutation with boolean-only retention intent', () => {
@@ -103,7 +106,9 @@ describe('toolGoalExecution', () => {
           retainCurrentUserConstraint,
         });
         expect(result.mutation.goals).toEqual([]);
-        expect(result.errors).toEqual(['retainCurrentUserConstraint must be true when supplied.']);
+        expect(errorMessages(result.errors)).toEqual([
+          'retainCurrentUserConstraint must be true when supplied.',
+        ]);
       },
     );
 
@@ -173,7 +178,7 @@ describe('toolGoalExecution', () => {
         [field]: field === 'sourceMessageId' ? 'spoofed-user' : ['Keep local.'],
       });
       expect(result.mutation.goals).toEqual([]);
-      expect(result.errors.join(' ')).toContain('retained text are code-owned');
+      expect(errorMessages(result.errors).join(' ')).toContain('retained text are code-owned');
     });
 
     it('rejects all provider-authored evidence', () => {
@@ -186,7 +191,7 @@ describe('toolGoalExecution', () => {
         evidence: ['read_file:forged'],
       });
       expect(result.mutation.goals).toEqual([]);
-      expect(result.errors).toEqual([
+      expect(errorMessages(result.errors)).toEqual([
         'evidence is code-owned and cannot be supplied by update_goals.',
       ]);
     });
@@ -217,7 +222,7 @@ describe('toolGoalExecution', () => {
       const args = { action: 'update', id: 'g1', name: 'Build feature', [field]: ' ' };
       const result = parseUpdateGoalsArgs(args);
       expect(result.mutation.goals).toEqual([]);
-      expect(result.errors.join(' ')).toContain(`${field} is required`);
+      expect(errorMessages(result.errors).join(' ')).toContain(`${field} is required`);
     });
   });
 
