@@ -6,24 +6,34 @@ import { useSkillsStore } from '../skills/manager';
 import { saveManagedSkillBundle } from '../skills/storage';
 import type { SkillBundleFiles } from './bundleParser';
 import { parseInstalledSkillData, type InstalledSkillData } from './manifestResolver';
-import type { SkillInstallResult } from './installTypes';
+import type { SkillInstallFailureKind, SkillInstallResult } from './installTypes';
 
 type ResolvedInstalledSkillData = Extract<InstalledSkillData, { metadata: unknown }>;
 
 function resolveInstalledSkillData(
   parsed: InstalledSkillData | null,
   compatibilityMessage: string,
-): { ok: true; data: ResolvedInstalledSkillData } | { ok: false; error: string } {
+):
+  | { ok: true; data: ResolvedInstalledSkillData }
+  | { ok: false; failureKind: SkillInstallFailureKind; error: string } {
   if (!parsed) {
-    return { ok: false, error: 'Skill manifest is missing a name.' };
+    return {
+      ok: false,
+      failureKind: 'invalid_manifest',
+      error: 'Skill manifest is missing a name.',
+    };
   }
   if ('error' in parsed) {
-    return { ok: false, error: parsed.error };
+    return { ok: false, failureKind: 'invalid_manifest', error: parsed.error };
   }
 
   const compatibility = getSkillCompatibility(parsed.metadata);
   if (!compatibility.compatible) {
-    return { ok: false, error: compatibility.reason || compatibilityMessage };
+    return {
+      ok: false,
+      failureKind: 'compatibility',
+      error: compatibility.reason || compatibilityMessage,
+    };
   }
 
   return { ok: true, data: parsed };
@@ -36,13 +46,21 @@ export async function installSkillFromBundleFiles(
 ): Promise<SkillInstallResult> {
   const content = bundleFiles.textFiles['SKILL.md'];
   if (!content) {
-    return { success: false, error: 'Skill bundle is missing SKILL.md.' };
+    return {
+      success: false,
+      failureKind: 'invalid_manifest',
+      error: 'Skill bundle is missing SKILL.md.',
+    };
   }
 
   const parsed = parseInstalledSkillData(content, fallback, {}, bundleFiles.textFiles);
   const resolved = resolveInstalledSkillData(parsed, 'This skill is not compatible with mobile.');
   if (!resolved.ok) {
-    return { success: false, error: resolved.error };
+    return {
+      success: false,
+      failureKind: resolved.failureKind,
+      error: resolved.error,
+    };
   }
 
   const entry: SkillEntry = {
@@ -73,7 +91,11 @@ export async function persistUpdatedSkillEntry(
 ): Promise<SkillInstallResult> {
   const resolved = resolveInstalledSkillData(parsed, compatibilityMessage);
   if (!resolved.ok) {
-    return { success: false, error: resolved.error };
+    return {
+      success: false,
+      failureKind: resolved.failureKind,
+      error: resolved.error,
+    };
   }
 
   const managedEntry = await saveManagedSkillBundle(

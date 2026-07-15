@@ -12,7 +12,11 @@ import type { SkillInstallResult } from './installTypes';
 export type { SkillInstallResult } from './installTypes';
 
 function formatInstallError(err: unknown): SkillInstallResult {
-  return { success: false, error: err instanceof Error ? err.message : String(err) };
+  return {
+    success: false,
+    failureKind: 'unexpected',
+    error: err instanceof Error ? err.message : String(err),
+  };
 }
 
 function buildEntryFallback(entry: SkillEntry, version: string): Partial<ClawHubSkill> {
@@ -83,7 +87,11 @@ export async function installSkillFromUrl(url: string): Promise<SkillInstallResu
       const detail = await getSkillDetail(clawHubFileUrl.slug);
       const version = clawHubFileUrl.version || detail?.version;
       if (!version) {
-        return { success: false, error: 'ClawHub did not provide a skill version.' };
+        return {
+          success: false,
+          failureKind: 'source_unavailable',
+          error: 'ClawHub did not provide a skill version.',
+        };
       }
       return installClawHubSkillBundle(
         clawHubFileUrl.slug,
@@ -101,7 +109,11 @@ export async function installSkillFromUrl(url: string): Promise<SkillInstallResu
     });
 
     if (!res.ok) {
-      return { success: false, error: `Failed to fetch skill: HTTP ${res.status}` };
+      return {
+        success: false,
+        failureKind: 'transport',
+        error: `Failed to fetch skill: HTTP ${res.status}`,
+      };
     }
 
     return installSkillFromContent(await res.text(), {
@@ -119,7 +131,11 @@ export async function installSkillFromHub(skill: ClawHubSkill): Promise<SkillIns
       ? skill.version
       : (await getSkillDetail(skill.id))?.version;
     if (!version) {
-      return { success: false, error: 'ClawHub did not provide a skill version.' };
+      return {
+        success: false,
+        failureKind: 'source_unavailable',
+        error: 'ClawHub did not provide a skill version.',
+      };
     }
 
     return installClawHubSkillBundle(skill.id, version, skill);
@@ -168,10 +184,18 @@ export async function updateSkillFromHub(
   latestVersion: string,
 ): Promise<SkillInstallResult> {
   if (entry.source.source !== 'clawhub') {
-    return { success: false, error: 'Skill was not installed from ClawHub' };
+    return {
+      success: false,
+      failureKind: 'invalid_source',
+      error: 'Skill was not installed from ClawHub',
+    };
   }
   if (!entry.source.id) {
-    return { success: false, error: 'ClawHub skill ID is unavailable.' };
+    return {
+      success: false,
+      failureKind: 'invalid_source',
+      error: 'ClawHub skill ID is unavailable.',
+    };
   }
 
   try {
@@ -218,7 +242,11 @@ export async function refreshSkillEntryFromSource(entry: SkillEntry): Promise<Sk
   }
 
   if (!entry.source.url) {
-    return { success: false, error: 'Skill source URL is unavailable.' };
+    return {
+      success: false,
+      failureKind: 'invalid_source',
+      error: 'Skill source URL is unavailable.',
+    };
   }
 
   try {
@@ -227,7 +255,11 @@ export async function refreshSkillEntryFromSource(entry: SkillEntry): Promise<Sk
     });
 
     if (!res.ok) {
-      return { success: false, error: `Failed to refresh skill: HTTP ${res.status}` };
+      return {
+        success: false,
+        failureKind: 'transport',
+        error: `Failed to refresh skill: HTTP ${res.status}`,
+      };
     }
 
     const content = await res.text();

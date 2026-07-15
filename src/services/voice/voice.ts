@@ -16,6 +16,7 @@ import {
   speakWithSystem,
 } from './voicePlayback';
 import type { TTSProvider } from './voicePlayback';
+import { VoiceOperationError } from './voiceErrors';
 
 export type { RecordedAudioFileSnapshot } from './voiceAudioFiles';
 export { waitForRecordedAudioFile } from './voiceAudioFiles';
@@ -27,10 +28,7 @@ export {
   startRecording,
   stopRecording,
 } from './voiceRecording';
-export type {
-  RecordingPermissionResult,
-  RecordingStatusSnapshot,
-} from './voiceRecording';
+export type { RecordingPermissionResult, RecordingStatusSnapshot } from './voiceRecording';
 export { stopSpeaking } from './voicePlayback';
 
 export interface STTResult {
@@ -45,7 +43,8 @@ export async function transcribeAudio(
 ): Promise<STTResult> {
   const backend = await resolveSpeechBackend();
   if (!backend) {
-    throw new Error(
+    throw new VoiceOperationError(
+      'provider_unavailable',
       'No compatible speech provider available. Configure OpenAI or Groq in Settings.',
     );
   }
@@ -53,15 +52,18 @@ export async function transcribeAudio(
   const fileSnapshot = await waitForRecordedAudioFile(audioUri, { minimumBytes: 1 });
   if (fileSnapshot.inspected) {
     if (!fileSnapshot.exists) {
-      throw new Error('Recorded audio file is unavailable');
+      throw new VoiceOperationError('invalid_recording', 'Recorded audio file is unavailable');
     }
 
     if (fileSnapshot.sizeBytes <= 0) {
-      throw new Error('Recorded audio file is empty');
+      throw new VoiceOperationError('invalid_recording', 'Recorded audio file is empty');
     }
 
     if (fileSnapshot.sizeBytes > MAX_TRANSCRIPTION_FILE_SIZE_BYTES) {
-      throw new Error('Audio file exceeds the 25 MB transcription limit');
+      throw new VoiceOperationError(
+        'invalid_recording',
+        'Audio file exceeds the 25 MB transcription limit',
+      );
     }
   }
 
@@ -79,22 +81,44 @@ export async function transcribeAudio(
     formData.append('language', options.language);
   }
 
-  const res = await fetch(`${backend.baseUrl}/audio/transcriptions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${backend.apiKey}` },
-    body: formData,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${backend.baseUrl}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${backend.apiKey}` },
+      body: formData,
+    });
+  } catch (error) {
+    throw new VoiceOperationError('transport', 'Speech transcription request failed', {
+      cause: error,
+    });
+  }
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Whisper API error: ${res.status} ${err}`);
+    throw new VoiceOperationError(
+      'provider_response',
+      `Whisper API error: ${res.status}${err ? ` ${err}` : ''}`,
+      { status: res.status },
+    );
   }
 
-  const data = await res.json();
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch (error) {
+    throw new VoiceOperationError('provider_response', 'Speech provider returned invalid JSON', {
+      status: res.status,
+      cause: error,
+    });
+  }
+
+  const payload: Record<string, unknown> =
+    typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
   return {
-    text: data.text || '',
-    language: data.language,
-    duration: data.duration,
+    text: typeof payload.text === 'string' ? payload.text : '',
+    language: typeof payload.language === 'string' ? payload.language : undefined,
+    duration: typeof payload.duration === 'number' ? payload.duration : undefined,
   };
 }
 

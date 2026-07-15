@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { Attachment } from '../../src/types/attachment';
 import { useChatVoiceRecorder } from '../../src/components/chat/useChatVoiceRecorder';
+import { VoiceOperationError } from '../../src/services/voice/voiceErrors';
 
 const mockStartRecording = jest.fn();
 const mockStopRecording = jest.fn();
@@ -301,5 +302,73 @@ describe('useChatVoiceRecorder', () => {
     expect(mockPersistVoiceNoteAttachment).toHaveBeenCalled();
     expect(result.current.phase).toBe('idle');
     expect(result.current.errorMessage).toBeNull();
+  });
+
+  it('uses the structured permission result instead of interpreting native prose', async () => {
+    mockEnsureRecordingPermission.mockResolvedValue({ granted: false, requested: true });
+
+    const { result } = renderHook(() =>
+      useChatVoiceRecorder({ messages, onVoiceNoteReady: jest.fn() }),
+    );
+
+    await act(async () => {
+      result.current.pressableHandlers.onPressIn({ nativeEvent: { pageY: 240 } } as any);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.errorMessage).toBe(messages.microphonePermissionDenied);
+    });
+    expect(mockStartRecording).not.toHaveBeenCalled();
+  });
+
+  it('maps a typed invalid recording to no-speech presentation across languages', async () => {
+    mockGetRecordingStatus.mockReturnValue({
+      ...activeRecordingStatus,
+      durationMillis: 900,
+    });
+    mockTranscribeAudio.mockRejectedValue(
+      new VoiceOperationError('invalid_recording', 'تعذر فك ترميز التسجيل'),
+    );
+
+    const { result } = renderHook(() =>
+      useChatVoiceRecorder({ messages, onVoiceNoteReady: jest.fn() }),
+    );
+
+    await act(async () => {
+      result.current.pressableHandlers.onPressIn({ nativeEvent: { pageY: 240 } } as any);
+      await Promise.resolve();
+    });
+    act(() => {
+      jest.advanceTimersByTime(400);
+    });
+    await act(async () => {
+      result.current.pressableHandlers.onPressOut({ nativeEvent: { pageY: 240 } } as any);
+    });
+
+    await waitFor(() => {
+      expect(result.current.errorMessage).toBe(messages.noSpeechDetected);
+    });
+  });
+
+  it('does not infer recorder failure categories from arbitrary prose', async () => {
+    mockStartRecording.mockRejectedValue(
+      new Error('A compatible microphone transport is temporarily unavailable'),
+    );
+
+    const { result } = renderHook(() =>
+      useChatVoiceRecorder({ messages, onVoiceNoteReady: jest.fn() }),
+    );
+
+    await act(async () => {
+      result.current.pressableHandlers.onPressIn({ nativeEvent: { pageY: 240 } } as any);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.errorMessage).toBe(
+        'A compatible microphone transport is temporarily unavailable',
+      );
+    });
   });
 });

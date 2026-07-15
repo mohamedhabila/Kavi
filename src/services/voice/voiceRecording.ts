@@ -1,5 +1,5 @@
 import { setVoiceAudioMode } from './voiceAudioMode';
-import { getErrorMessageWithCauses } from './voiceErrors';
+import { getErrorMessageWithCauses, VoiceOperationError } from './voiceErrors';
 import { stopSpeaking } from './voicePlayback';
 
 let recording: any = null;
@@ -103,7 +103,7 @@ export async function startRecording(): Promise<void> {
 
   const perm = await requestRecordingPermissionsAsync();
   if (!perm.granted) {
-    throw new Error('Microphone permission denied');
+    throw new VoiceOperationError('permission_denied', 'Microphone permission denied');
   }
 
   await stopSpeaking();
@@ -145,7 +145,8 @@ export async function startRecording(): Promise<void> {
   }
 
   await setVoiceAudioMode('playback');
-  throw new Error(
+  throw new VoiceOperationError(
+    'unexpected',
     `Failed to prepare the audio recorder with supported presets (${preparationErrors.join('; ')})`,
   );
 }

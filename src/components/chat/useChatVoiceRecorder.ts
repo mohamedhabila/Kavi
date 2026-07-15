@@ -9,6 +9,7 @@ import {
   transcribeAudio,
   waitForRecordedAudioFile,
 } from '../../services/voice/voice';
+import { VoiceOperationError } from '../../services/voice/voiceErrors';
 import {
   compactVoiceWaveformLevels,
   deleteVoiceNoteFile,
@@ -56,21 +57,19 @@ function resolveRecorderErrorMessage(
   error: unknown,
   messages: UseChatVoiceRecorderMessages,
 ): string {
+  if (error instanceof VoiceOperationError) {
+    if (error.kind === 'invalid_recording') {
+      return messages.noSpeechDetected;
+    }
+    if (error.kind === 'permission_denied') {
+      return messages.microphonePermissionDenied;
+    }
+    return error.message.trim() || messages.genericFailure;
+  }
+
   const message = error instanceof Error ? error.message.trim() : String(error).trim();
   if (!message) {
     return messages.genericFailure;
-  }
-
-  if (
-    /could not be decoded|format is not supported|recorded audio file is empty|recorded audio file is unavailable|audio file exceeds/i.test(
-      message,
-    )
-  ) {
-    return messages.noSpeechDetected;
-  }
-
-  if (/permission denied|microphone/i.test(message)) {
-    return messages.microphonePermissionDenied;
   }
 
   return message;
@@ -310,7 +309,7 @@ export function useChatVoiceRecorder({
 
         const permission = await ensureRecordingPermission();
         if (!permission.granted) {
-          throw new Error('Microphone permission denied');
+          throw new VoiceOperationError('permission_denied', 'Microphone permission denied');
         }
 
         if (permission.requested) {

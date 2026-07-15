@@ -1,3 +1,30 @@
+export type VoiceOperationFailureKind =
+  | 'permission_denied'
+  | 'invalid_recording'
+  | 'provider_unavailable'
+  | 'transport'
+  | 'provider_response'
+  | 'unexpected';
+
+export class VoiceOperationError extends Error {
+  readonly kind: VoiceOperationFailureKind;
+  readonly status?: number;
+
+  constructor(
+    kind: VoiceOperationFailureKind,
+    message: string,
+    options?: { status?: number; cause?: unknown },
+  ) {
+    super(message);
+    this.name = 'VoiceOperationError';
+    this.kind = kind;
+    this.status = options?.status;
+    if (options?.cause !== undefined) {
+      (this as Error & { cause?: unknown }).cause = options.cause;
+    }
+  }
+}
+
 export function getErrorMessageWithCauses(error: unknown): string {
   const messages: string[] = [];
   let current: unknown = error;

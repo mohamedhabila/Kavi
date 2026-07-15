@@ -231,10 +231,9 @@ export const SkillsScreen: React.FC = () => {
             Alert.alert(t('skills.skillCreated'), skill.name);
           }
         } else {
-          const alertTitle = result.error?.toLowerCase().includes('compatible')
-            ? t('skills.installBlocked')
-            : t('common.error');
-          Alert.alert(alertTitle, result.error || t('skills.installFailed'));
+          const alertTitle =
+            result.failureKind === 'compatibility' ? t('skills.installBlocked') : t('common.error');
+          Alert.alert(alertTitle, result.error);
         }
       } catch (err: unknown) {
         Alert.alert(t('common.error'), err instanceof Error ? err.message : String(err));
@@ -280,10 +279,11 @@ export const SkillsScreen: React.FC = () => {
               Alert.alert(t('skills.skillCreated'), result.skillEntry?.metadata.name || trimmedUrl);
             }
           } else {
-            const alertTitle = result.error?.toLowerCase().includes('compatible')
-              ? t('skills.installBlocked')
-              : t('common.error');
-            Alert.alert(alertTitle, result.error || t('skills.installFailed'));
+            const alertTitle =
+              result.failureKind === 'compatibility'
+                ? t('skills.installBlocked')
+                : t('common.error');
+            Alert.alert(alertTitle, result.error);
           }
         })
         .catch((err: any) => {

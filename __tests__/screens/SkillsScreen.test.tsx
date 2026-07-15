@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { SkillsScreen } from '../../src/screens/SkillsScreen';
 
 const mockListClawHubSkills = jest.fn();
@@ -488,6 +489,79 @@ describe('SkillsScreen', () => {
 
     expect(await findByText('Set Up GitHub Skill')).toBeTruthy();
     expect(await findByText('GitHub Personal Access Token')).toBeTruthy();
+  });
+
+  it('uses the typed compatibility failure for the blocked-install presentation', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockInstallSkillFromHub.mockResolvedValueOnce({
+      success: false,
+      failureKind: 'compatibility',
+      error: 'هذه المهارة تتطلب سطح تنفيذ آخر.',
+    });
+    mockListClawHubSkills.mockResolvedValueOnce({
+      skills: [
+        {
+          id: 'external-runtime',
+          name: 'External Runtime',
+          description: 'Requires another execution surface',
+          version: '1.0.0',
+          author: 'ClawHub',
+          tags: [],
+          downloads: 1,
+          rating: 1,
+          installUrl: 'https://example.com/external-runtime',
+        },
+      ],
+      nextCursor: null,
+    });
+
+    const { getByLabelText, getByText } = render(<SkillsScreen />);
+    fireEvent.press(getByText('Browse'));
+    await waitFor(() => expect(getByText('External Runtime')).toBeTruthy());
+    fireEvent.press(getByLabelText('Install'));
+
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith('Install blocked', 'هذه المهارة تتطلب سطح تنفيذ آخر.'),
+    );
+    alertSpy.mockRestore();
+  });
+
+  it('does not infer an install category from provider prose', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockInstallSkillFromHub.mockResolvedValueOnce({
+      success: false,
+      failureKind: 'transport',
+      error: 'The compatible registry endpoint is temporarily unavailable.',
+    });
+    mockListClawHubSkills.mockResolvedValueOnce({
+      skills: [
+        {
+          id: 'registry-timeout',
+          name: 'Registry Timeout',
+          description: 'Fixture',
+          version: '1.0.0',
+          author: 'ClawHub',
+          tags: [],
+          downloads: 1,
+          rating: 1,
+          installUrl: 'https://example.com/registry-timeout',
+        },
+      ],
+      nextCursor: null,
+    });
+
+    const { getByLabelText, getByText } = render(<SkillsScreen />);
+    fireEvent.press(getByText('Browse'));
+    await waitFor(() => expect(getByText('Registry Timeout')).toBeTruthy());
+    fireEvent.press(getByLabelText('Install'));
+
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Error',
+        'The compatible registry endpoint is temporarily unavailable.',
+      ),
+    );
+    alertSpy.mockRestore();
   });
 
   it('saves configured skill secrets from the setup modal', async () => {
