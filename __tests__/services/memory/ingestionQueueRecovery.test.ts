@@ -13,17 +13,7 @@ jest.mock('../../../src/services/memory/consolidation/paths', () => ({
 }));
 
 jest.mock('../../../src/services/memory/turnProcessor', () => ({
-  processIngestionTurn: jest.fn(async () => ({
-    processed: true,
-    episodeId: 'ep-1',
-    deterministicFactIds: ['fact-1'],
-    providerFactIds: [],
-    invalidatedFactIds: [],
-    activeFocusUpdated: true,
-    openThreadsUpdated: false,
-    enriched: false,
-    providerOutcome: { status: 'not_requested' },
-  })),
+  processIngestionTurn: jest.fn(),
 }));
 
 import {
@@ -56,6 +46,7 @@ import {
 } from '../../../src/services/memory/ingestionQueueStore';
 import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import { resolveMockedIngestionTurn } from '../../helpers/ingestionQueueProcessFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -90,6 +81,9 @@ beforeEach(() => {
   ensureFactSchema();
   __resetOnDeviceGuardsForTests();
   __resetIngestionQueueForTests();
+  mockedProcessIngestionTurn.mockImplementation(
+    resolveMockedIngestionTurn(processResult({ status: 'not_requested' })),
+  );
 });
 
 afterEach(() => {
@@ -531,8 +525,10 @@ describe('ingestion queue recovery and diagnostics', () => {
       now: 100,
     });
 
-    mockedProcessIngestionTurn.mockResolvedValueOnce(
-      processResult({ status: 'provider_error', code: 'provider_request_failed' }),
+    mockedProcessIngestionTurn.mockImplementationOnce(
+      resolveMockedIngestionTurn(
+        processResult({ status: 'provider_error', code: 'provider_request_failed' }),
+      ),
     );
     const retrying = enqueueIngestionJob({
       personaId: 'default',

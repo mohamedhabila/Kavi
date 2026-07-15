@@ -485,6 +485,33 @@ describe('ensureFactSchema', () => {
     expect(indexNames('memory_ingestion_receipts')).toContain(
       'idx_ingestion_receipts_persisted_at',
     );
+    expect(columnNames('memory_ingestion_structural_receipts')).toEqual(
+      expect.arrayContaining([
+        'job_id',
+        'attempt_number',
+        'memory_conversation_id',
+        'source_thread_id',
+        'persona_id',
+        'task_id',
+        'source_run_id',
+        'source_start_message_id',
+        'source_end_message_id',
+        'source_snapshot_sha256',
+        'source_at',
+        'episode_id',
+        'deterministic_fact_ids_json',
+        'provider_fact_ids_json',
+        'invalidated_fact_ids_json',
+        'bridged_evidence_fact_ids_json',
+        'agent_run_memory_fact_ids_json',
+        'active_focus_updated',
+        'open_threads_updated',
+        'persisted_at',
+      ]),
+    );
+    expect(indexNames('memory_ingestion_structural_receipts')).toContain(
+      'idx_ingestion_structural_receipts_persisted_at',
+    );
   });
 
   it('is idempotent and preserves existing rows across migration calls', () => {

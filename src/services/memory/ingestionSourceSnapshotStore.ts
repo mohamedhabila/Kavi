@@ -109,6 +109,7 @@ function failActiveSnapshot(
       jobId,
     )?.status === 'failed'
   ) {
+    db.runSync('DELETE FROM memory_ingestion_structural_receipts WHERE job_id = ?', jobId);
     db.runSync('DELETE FROM memory_ingestion_receipts WHERE job_id = ?', jobId);
   }
   return true;

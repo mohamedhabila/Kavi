@@ -185,12 +185,17 @@ function collectEpisodeIds(
   }
   for (let offset = 0; offset < jobIds.length; offset += BATCH_SIZE) {
     const batch = jobIds.slice(offset, offset + BATCH_SIZE);
-    for (const row of db.getAllSync<{ episode_id: string }>(
-      `SELECT episode_id FROM memory_ingestion_receipts
-        WHERE job_id IN (${batch.map(() => '?').join(', ')}) AND episode_id IS NOT NULL`,
-      ...batch,
-    )) {
-      ids.add(row.episode_id);
+    for (const table of [
+      'memory_ingestion_structural_receipts',
+      'memory_ingestion_receipts',
+    ] as const) {
+      for (const row of db.getAllSync<{ episode_id: string }>(
+        `SELECT episode_id FROM ${table}
+          WHERE job_id IN (${batch.map(() => '?').join(', ')}) AND episode_id IS NOT NULL`,
+        ...batch,
+      )) {
+        ids.add(row.episode_id);
+      }
     }
   }
   for (let offset = 0; offset < retiredFactIds.length; offset += BATCH_SIZE) {
@@ -350,6 +355,7 @@ function assertNoResiduals(
     ['memory_ingestion_jobs', 'id', input.jobIds],
     ['memory_ingestion_source_snapshots', 'job_id', input.jobIds],
     ['memory_ingestion_job_sources', 'job_id', input.jobIds],
+    ['memory_ingestion_structural_receipts', 'job_id', input.jobIds],
     ['memory_ingestion_receipts', 'job_id', input.jobIds],
     ['memory_episodes', 'id', input.episodeIds],
     ['memory_episode_access_policies', 'episode_id', input.episodeIds],
@@ -503,6 +509,7 @@ export function cleanupSourceLifecycleArtifactsInTransaction(
       );
     }
   }
+  deleteIds(db, 'memory_ingestion_structural_receipts', 'job_id', jobIds);
   deleteIds(db, 'memory_ingestion_receipts', 'job_id', jobIds);
   const ingestionJobs = deleteIds(db, 'memory_ingestion_jobs', 'id', jobIds);
   const causal = purgeRetiredCausalPayloadsInTransaction(db, {

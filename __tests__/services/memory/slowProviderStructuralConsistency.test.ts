@@ -9,6 +9,11 @@ import {
   commitIngestionPersistenceReceipt,
   listIngestionPersistenceReceipts,
 } from '../../../src/services/memory/ingestionReceiptStore';
+import {
+  commitIngestionStructuralCheckpointReceipt,
+  listIngestionDurabilityReceipts,
+  listIngestionStructuralCheckpointReceipts,
+} from '../../../src/services/memory/ingestionStructuralReceiptStore';
 import { __resetIngestionQueueForTests } from '../../../src/services/memory/ingestionQueue';
 import { recoverStaleIngestionJobs } from '../../../src/services/memory/ingestionQueueRecovery';
 import {
@@ -16,7 +21,6 @@ import {
   enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   INGESTION_PROCESSING_LEASE_MS,
-  markIngestionJobStructuralComplete,
   ownsIngestionClaim,
   type IngestionJob,
   type IngestionProviderOutcome,
@@ -158,6 +162,8 @@ function processClaimedTurn(input: {
   claimNow: () => number;
   messages: Message[];
   extractor: (prompt: string) => Promise<string>;
+  providerSignal?: AbortSignal;
+  rejectCheckpointAfterCommit?: boolean;
 }) {
   return processIngestionTurn({
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
@@ -166,12 +172,27 @@ function processClaimedTurn(input: {
     messages: input.messages,
     sourceEndMessageId: input.job.sourceEndMessageId,
     extractor: input.extractor,
+    providerSignal: input.providerSignal,
     graphGoalEvidence: GRAPH_EVIDENCE,
     sourceRunId: 'run-structural-consistency',
     now: input.job.sourceAt,
     canPersist: () => ownsIngestionClaim(input.job.id, input.claimToken, input.claimNow()),
-    commitStructuralCheckpoint: () =>
-      markIngestionJobStructuralComplete(input.job.id, input.claimNow(), input.claimToken),
+    commitStructuralCheckpoint: ({ providerOutcome, ...receipt }) => {
+      const committed = commitIngestionStructuralCheckpointReceipt({
+        ...receipt,
+        jobId: input.job.id,
+        claimToken: input.claimToken,
+        persistedAt: input.claimNow(),
+      });
+      if (input.rejectCheckpointAfterCommit === true) {
+        throw new Error('Memory structural checkpoint rejected');
+      }
+      return {
+        ...receipt,
+        activeFocusUpdated: committed.activeFocusUpdated,
+        providerOutcome,
+      };
+    },
     commitPersistenceReceipt: (receipt: TurnPersistenceReceipt) => {
       commitIngestionPersistenceReceipt({
         ...receipt,
@@ -219,6 +240,48 @@ afterEach(() => {
 });
 
 describe('slow provider structural consistency', () => {
+  it('rolls back structural memory and its receipt when the checkpoint transition fails', async () => {
+    const messages = closedToolTurn('atomic-rollback');
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'thread-structural-atomic-rollback',
+      threadTitle: null,
+      memoryConversationId: 'memory-structural-atomic-rollback',
+      taskId: null,
+      sourceStartMessageId: messages[0].id,
+      sourceEndMessageId: messages.at(-1)!.id,
+      sourceRunId: 'run-structural-consistency',
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 100,
+    })!;
+    const claimToken = claimIngestionJob(job.id, 100)!;
+    const extractor = jest.fn(async () => providerPayload('must-not-run'));
+
+    await expect(
+      processClaimedTurn({
+        job,
+        claimToken,
+        claimNow: () => 100,
+        messages,
+        extractor,
+        rejectCheckpointAfterCommit: true,
+      }),
+    ).rejects.toThrow('Memory structural checkpoint rejected');
+
+    expect(extractor).not.toHaveBeenCalled();
+    expect(listEpisodes({ conversationId: job.memoryConversationId })).toEqual([]);
+    expect(scopedFacts(job)).toEqual([]);
+    expect(listIngestionStructuralCheckpointReceipts(job.id)).toEqual([]);
+    expect(getIngestionJob(job.id)).toMatchObject({
+      status: 'processing',
+      structuralCompletedAt: null,
+    });
+  });
+
   it('makes every provider-independent lane readable before enrichment settles', async () => {
     const messages = closedToolTurn('slow');
     const job = enqueueIngestionJob({
@@ -268,6 +331,20 @@ describe('slow provider structural consistency', () => {
       factsBeforeProvider.some((fact) => fact.objectText.includes('release manifest exists')),
     ).toBe(true);
     expect(listIngestionPersistenceReceipts(job.id)).toEqual([]);
+    expect(listIngestionStructuralCheckpointReceipts(job.id)).toEqual([
+      expect.objectContaining({
+        phase: 'structural_checkpoint',
+        jobId: job.id,
+        attemptNumber: 1,
+        source: expect.objectContaining({
+          memoryConversationId: job.memoryConversationId,
+          sourceThreadId: job.threadId,
+          sourceRunId: job.sourceRunId,
+          sourceEndMessageId: job.sourceEndMessageId,
+        }),
+        episodeId: episodesBeforeProvider[0].id,
+      }),
+    ]);
 
     const wait = jest.fn(async () => undefined);
     await expect(
@@ -304,6 +381,70 @@ describe('slow provider structural consistency', () => {
     expect(finalFacts.some((fact) => fact.objectText === 'stable')).toBe(false);
     expect(new Set(finalFacts.map((fact) => fact.id)).size).toBe(finalFacts.length);
     expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
+    expect(listIngestionDurabilityReceipts(job.id).map((receipt) => receipt.phase)).toEqual([
+      'structural_checkpoint',
+      'provider_final',
+    ]);
+  });
+
+  it('preserves immediate next-turn memory after provider interruption and database reopen', async () => {
+    const messages = closedToolTurn('relaunch-handoff');
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'thread-relaunch-handoff',
+      threadTitle: null,
+      memoryConversationId: 'memory-relaunch-handoff',
+      taskId: null,
+      sourceStartMessageId: messages[0].id,
+      sourceEndMessageId: messages.at(-1)!.id,
+      sourceRunId: 'run-structural-consistency',
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 100,
+    })!;
+    const claimToken = claimIngestionJob(job.id, 100)!;
+    const provider = deferred<string>();
+    const controller = new AbortController();
+    const processing = processClaimedTurn({
+      job,
+      claimToken,
+      claimNow: () => 100,
+      messages,
+      extractor: () => provider.promise,
+      providerSignal: controller.signal,
+    });
+    const receiptBeforeInterruption = listIngestionStructuralCheckpointReceipts(job.id)[0]!;
+    expect(receiptBeforeInterruption.phase).toBe('structural_checkpoint');
+
+    controller.abort();
+    provider.resolve(providerPayload('interrupted-provider-output'));
+    await expect(processing).resolves.toMatchObject({
+      processed: false,
+      skipped: 'provider_preempted',
+    });
+
+    closeMemoryDb();
+    resetFactSchemaCacheForTests();
+    ensureFactSchema();
+
+    expect(listIngestionStructuralCheckpointReceipts(job.id)).toEqual([
+      receiptBeforeInterruption,
+    ]);
+    expect(scopedFacts(job).some((fact) => fact.predicate === 'file_operation')).toBe(true);
+    expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
+    const wait = jest.fn(async () => undefined);
+    await expect(
+      waitForNextTurnMemoryConsistency({
+        memoryConversationId: job.memoryConversationId,
+        sourceThreadId: job.threadId,
+        sourceEndMessageId: job.sourceEndMessageId,
+        clock: { now: () => 101, wait },
+      }),
+    ).resolves.toMatchObject({ outcome: 'completed', waitedMs: 0 });
+    expect(wait).not.toHaveBeenCalled();
   });
 
   it('reconciles a checkpoint gap on retry without duplicate memory or a stale-owner receipt', async () => {
@@ -338,6 +479,7 @@ describe('slow provider structural consistency', () => {
     const structuralEvidenceRows = evidenceRowCount();
     expect(structuralFactIds.length).toBeGreaterThan(2);
     expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
+    expect(listIngestionStructuralCheckpointReceipts(job.id)).toHaveLength(1);
 
     const staleAt = 100 + INGESTION_PROCESSING_LEASE_MS;
     expect(recoverStaleIngestionJobs(staleAt)).toEqual({
@@ -372,6 +514,7 @@ describe('slow provider structural consistency', () => {
     expect(receipt!.agentRunMemoryFactIds.length).toBeGreaterThan(0);
     expect(receipt!.bridgedEvidenceFactIds.length).toBeGreaterThan(0);
     expect(listIngestionPersistenceReceipts(job.id)).toHaveLength(1);
+    expect(listIngestionStructuralCheckpointReceipts(job.id)).toHaveLength(2);
     expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
     const afterRetry = scopedFacts(job);
     expect(structuralFactIds.every((id) => afterRetry.some((fact) => fact.id === id))).toBe(true);
@@ -421,6 +564,7 @@ describe('slow provider structural consistency', () => {
     });
     const structuralIds = scopedFacts(job).map((fact) => fact.id);
     expect(structuralIds.length).toBeGreaterThan(0);
+    expect(listIngestionStructuralCheckpointReceipts(job.id)).toHaveLength(1);
 
     useSettingsStore.setState({ disableLongTermMemory: true } as never);
     provider.resolve(providerPayload('must-not-persist'));
@@ -434,5 +578,6 @@ describe('slow provider structural consistency', () => {
     expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
     expect(getIngestionJob(job.id)).toBeNull();
     expect(listIngestionPersistenceReceipts(job.id)).toEqual([]);
+    expect(listIngestionStructuralCheckpointReceipts(job.id)).toEqual([]);
   });
 });

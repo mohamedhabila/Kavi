@@ -392,6 +392,13 @@ export function discardPendingIngestionJobs(): number {
   return runMemoryTransaction(() => {
     const db = getMemoryDb();
     db.runSync(
+      `DELETE FROM memory_ingestion_structural_receipts
+        WHERE job_id IN (
+          SELECT id FROM memory_ingestion_jobs
+           WHERE status IN ('pending', 'processing', 'retrying')
+        )`,
+    );
+    db.runSync(
       `DELETE FROM memory_ingestion_receipts
         WHERE job_id IN (
           SELECT id FROM memory_ingestion_jobs
@@ -410,6 +417,14 @@ export function discardIngestionJob(jobId: string): boolean {
   ensureFactSchema();
   return runMemoryTransaction(() => {
     const db = getMemoryDb();
+    db.runSync(
+      `DELETE FROM memory_ingestion_structural_receipts
+        WHERE job_id IN (
+          SELECT id FROM memory_ingestion_jobs
+           WHERE id = ? AND status IN ('pending', 'processing', 'retrying')
+        )`,
+      jobId,
+    );
     db.runSync(
       `DELETE FROM memory_ingestion_receipts
         WHERE job_id IN (

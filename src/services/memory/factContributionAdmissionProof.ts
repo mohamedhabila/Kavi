@@ -203,7 +203,17 @@ export function buildLegacyFactAdmissionProofIndex(db: MemoryDb): LegacyFactAdmi
     `SELECT job_id, deterministic_fact_ids_json, provider_fact_ids_json,
             invalidated_fact_ids_json, bridged_evidence_fact_ids_json,
             agent_run_memory_fact_ids_json
-       FROM memory_ingestion_receipts`,
+       FROM (
+         SELECT job_id, deterministic_fact_ids_json, provider_fact_ids_json,
+                invalidated_fact_ids_json, bridged_evidence_fact_ids_json,
+                agent_run_memory_fact_ids_json
+           FROM memory_ingestion_receipts
+         UNION ALL
+         SELECT job_id, deterministic_fact_ids_json, provider_fact_ids_json,
+                invalidated_fact_ids_json, bridged_evidence_fact_ids_json,
+                agent_run_memory_fact_ids_json
+           FROM memory_ingestion_structural_receipts
+       )`,
   )) {
     const decodedColumns = new Map(
       RECEIPT_VALIDATION_COLUMNS.map((column) => [column, parseReceiptFactIds(receipt[column])]),

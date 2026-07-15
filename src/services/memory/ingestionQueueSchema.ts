@@ -11,6 +11,7 @@ type MemoryDb = ReturnType<typeof getMemoryDb>;
 const INGESTION_JOBS_TABLE = 'memory_ingestion_jobs';
 const DURABLE_INGESTION_JOBS_TABLE = 'memory_ingestion_jobs_durable';
 const INGESTION_RECEIPTS_TABLE = 'memory_ingestion_receipts';
+const INGESTION_STRUCTURAL_RECEIPTS_TABLE = 'memory_ingestion_structural_receipts';
 const INGESTION_SOURCE_SNAPSHOTS_TABLE = 'memory_ingestion_source_snapshots';
 
 function createDurableIngestionJobsTable(
@@ -273,6 +274,60 @@ function ensureIngestionReceiptsTable(db: MemoryDb): void {
     );
     CREATE INDEX IF NOT EXISTS idx_ingestion_receipts_persisted_at
       ON ${INGESTION_RECEIPTS_TABLE}(persisted_at, job_id);
+    CREATE TRIGGER IF NOT EXISTS trg_memory_ingestion_receipt_immutable
+      BEFORE UPDATE ON ${INGESTION_RECEIPTS_TABLE}
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_ingestion_receipt_immutable');
+      END;
+  `);
+}
+
+function ensureIngestionStructuralReceiptsTable(db: MemoryDb): void {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS ${INGESTION_STRUCTURAL_RECEIPTS_TABLE} (
+      job_id TEXT NOT NULL,
+      attempt_number INTEGER NOT NULL CHECK(attempt_number > 0),
+      memory_conversation_id TEXT NOT NULL CHECK(LENGTH(TRIM(memory_conversation_id)) > 0),
+      source_thread_id TEXT NOT NULL CHECK(LENGTH(TRIM(source_thread_id)) > 0),
+      persona_id TEXT NOT NULL CHECK(LENGTH(TRIM(persona_id)) > 0),
+      task_id TEXT,
+      source_run_id TEXT,
+      source_start_message_id TEXT,
+      source_end_message_id TEXT NOT NULL CHECK(LENGTH(source_end_message_id) > 0),
+      source_snapshot_sha256 TEXT NOT NULL
+        CHECK(
+          LENGTH(source_snapshot_sha256) = 64
+          AND source_snapshot_sha256 = LOWER(source_snapshot_sha256)
+          AND source_snapshot_sha256 NOT GLOB '*[^0-9a-f]*'
+        ),
+      source_at INTEGER NOT NULL CHECK(source_at >= 0),
+      episode_id TEXT,
+      deterministic_fact_ids_json TEXT NOT NULL,
+      provider_fact_ids_json TEXT NOT NULL CHECK(provider_fact_ids_json = '[]'),
+      invalidated_fact_ids_json TEXT NOT NULL,
+      bridged_evidence_fact_ids_json TEXT NOT NULL,
+      agent_run_memory_fact_ids_json TEXT NOT NULL,
+      active_focus_updated INTEGER NOT NULL CHECK(active_focus_updated IN (0, 1)),
+      open_threads_updated INTEGER NOT NULL CHECK(open_threads_updated IN (0, 1)),
+      persisted_at INTEGER NOT NULL CHECK(persisted_at >= 0),
+      PRIMARY KEY (job_id, attempt_number),
+      CHECK(task_id IS NULL OR LENGTH(TRIM(task_id)) > 0),
+      CHECK(source_run_id IS NULL OR LENGTH(source_run_id) > 0),
+      CHECK(source_start_message_id IS NULL OR LENGTH(source_start_message_id) > 0),
+      CHECK(episode_id IS NULL OR LENGTH(episode_id) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ingestion_structural_receipts_persisted_at
+      ON ${INGESTION_STRUCTURAL_RECEIPTS_TABLE}(persisted_at, job_id);
+    CREATE TRIGGER IF NOT EXISTS trg_memory_ingestion_structural_receipt_immutable
+      BEFORE UPDATE ON ${INGESTION_STRUCTURAL_RECEIPTS_TABLE}
+      BEGIN
+        SELECT RAISE(ABORT, 'memory_ingestion_structural_receipt_immutable');
+      END;
+    CREATE TRIGGER IF NOT EXISTS trg_memory_ingestion_job_structural_receipt_cleanup
+      AFTER DELETE ON ${INGESTION_JOBS_TABLE}
+      BEGIN
+        DELETE FROM ${INGESTION_STRUCTURAL_RECEIPTS_TABLE} WHERE job_id = OLD.id;
+      END;
   `);
 }
 
@@ -672,6 +727,8 @@ function ensureSourceIdentity(db: MemoryDb): void {
         ON memory_ingestion_jobs(thread_id, source_end_message_id);
       DELETE FROM memory_ingestion_receipts
         WHERE job_id NOT IN (SELECT id FROM memory_ingestion_jobs);
+      DELETE FROM memory_ingestion_structural_receipts
+        WHERE job_id NOT IN (SELECT id FROM memory_ingestion_jobs);
     `);
     db.execSync('COMMIT');
   } catch (error) {
@@ -685,6 +742,7 @@ export function ensureIngestionQueueSchema(db: MemoryDb): void {
   ensureIngestionSourceSnapshotsTable(db);
   migrateLegacyIngestionQueue(db);
   ensureIngestionReceiptsTable(db);
+  ensureIngestionStructuralReceiptsTable(db);
   ensureIndexes(db);
   ensureIngestionSourceSnapshotGuards(db);
   failUnsealedActiveJobs(db);

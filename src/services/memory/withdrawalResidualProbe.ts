@@ -338,12 +338,14 @@ export function probeMemoryWithdrawalResiduals(
       plan.ingestionJobIds,
     ),
     ingestionJobs: countIds(db, 'memory_ingestion_jobs', 'id', plan.ingestionJobIds),
-    ingestionReceipts: countIds(
-      db,
-      'memory_ingestion_receipts',
-      'job_id',
-      plan.ingestionReceiptJobIds,
-    ),
+    ingestionReceipts:
+      countIds(
+        db,
+        'memory_ingestion_structural_receipts',
+        'job_id',
+        plan.ingestionReceiptJobIds,
+      ) +
+      countIds(db, 'memory_ingestion_receipts', 'job_id', plan.ingestionReceiptJobIds),
     retrievalEvents: retrievalEventResiduals(db, plan.factIds, plan.episodeIds),
     exports: exportResiduals(plan),
     queueReplayFences: queueReplayFenceResiduals(db, plan.sources),

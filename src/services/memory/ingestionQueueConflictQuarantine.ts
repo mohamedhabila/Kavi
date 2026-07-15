@@ -81,6 +81,7 @@ export function failUnsealedActiveJobs(db: MemoryDb): void {
     const outcomeCode = isExactMemoryScopeId(row.persona_id)
       ? 'source_identity_invalid'
       : 'persona_scope_missing';
+    db.runSync('DELETE FROM memory_ingestion_structural_receipts WHERE job_id = ?', row.id);
     db.runSync('DELETE FROM memory_ingestion_receipts WHERE job_id = ?', row.id);
     db.runSync(
       `UPDATE memory_ingestion_jobs
@@ -169,7 +170,13 @@ function collectConflictingSourceArtifacts(
       `SELECT episode_id, deterministic_fact_ids_json, provider_fact_ids_json,
               bridged_evidence_fact_ids_json, agent_run_memory_fact_ids_json
          FROM memory_ingestion_receipts
+        WHERE job_id = ?
+       UNION ALL
+       SELECT episode_id, deterministic_fact_ids_json, provider_fact_ids_json,
+              bridged_evidence_fact_ids_json, agent_run_memory_fact_ids_json
+         FROM memory_ingestion_structural_receipts
         WHERE job_id = ?`,
+      row.id,
       row.id,
     );
     const receiptFactIds = Array.from(
@@ -373,6 +380,7 @@ export function quarantineConflictingSourceDuplicates(db: MemoryDb): void {
     if (group.length < 2 || new Set(group.map(ingestionIdentityKey)).size === 1) continue;
     quarantineConflictingSourceArtifacts(db, group);
     for (const row of group) {
+      db.runSync('DELETE FROM memory_ingestion_structural_receipts WHERE job_id = ?', row.id);
       db.runSync('DELETE FROM memory_ingestion_receipts WHERE job_id = ?', row.id);
       db.runSync(
         `UPDATE memory_ingestion_jobs

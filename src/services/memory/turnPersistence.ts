@@ -32,7 +32,7 @@ interface TurnPersistenceContext {
 export interface PersistStructuralTurnInput extends TurnPersistenceContext {
   result: ConsolidatorResult;
   finalize: boolean;
-  commitStructuralCheckpoint?: () => boolean;
+  commitStructuralCheckpoint?: (receipt: TurnPersistenceReceipt) => TurnPersistenceReceipt;
   commitPersistenceReceipt?: (receipt: TurnPersistenceReceipt) => void;
 }
 
@@ -147,13 +147,14 @@ export function persistStructuralTurn(input: PersistStructuralTurnInput): TurnPe
       agentRunMemoryFactIds: unique(agentRunMemory.factIds),
     };
 
+    const committedStructuralReceipt = input.commitStructuralCheckpoint
+      ? input.commitStructuralCheckpoint(receipt)
+      : receipt;
     if (input.finalize) {
       advanceCursor(input);
-      input.commitPersistenceReceipt?.(receipt);
-    } else if (input.commitStructuralCheckpoint && !input.commitStructuralCheckpoint()) {
-      throw new Error('Memory structural checkpoint rejected');
+      input.commitPersistenceReceipt?.(committedStructuralReceipt);
     }
-    return receipt;
+    return committedStructuralReceipt;
   });
 }
 

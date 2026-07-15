@@ -19,6 +19,7 @@ export const USER_RESET_CLEARED_STRUCTURED_MEMORY_TABLES = [
   'memory_working_blocks',
   'memory_consolidation_state',
   'memory_migration_state',
+  'memory_ingestion_structural_receipts',
   'memory_ingestion_receipts',
   'memory_ingestion_jobs',
   'memory_ingestion_source_snapshots',

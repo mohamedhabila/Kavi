@@ -37,6 +37,7 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import { resolveMockedIngestionTurn } from '../../helpers/ingestionQueueProcessFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -60,6 +61,14 @@ function processResult(
     bridgedEvidenceFactIds: [],
     agentRunMemoryFactIds: [],
   };
+}
+
+function mockProcessResultOnce(
+  providerOutcome: Awaited<ReturnType<typeof processIngestionTurn>>['providerOutcome'],
+): void {
+  mockedProcessIngestionTurn.mockImplementationOnce(
+    resolveMockedIngestionTurn(processResult(providerOutcome)),
+  );
 }
 
 async function flushScheduledIngestion(rounds = 20): Promise<void> {
@@ -88,9 +97,7 @@ afterEach(() => {
 
 describe('ingestion queue structural priority', () => {
   it('processes a new durable checkpoint before an older enrichment retry', async () => {
-    mockedProcessIngestionTurn.mockResolvedValueOnce(
-      processResult({ status: 'provider_error', code: 'provider_request_failed' }),
-    );
+    mockProcessResultOnce({ status: 'provider_error', code: 'provider_request_failed' });
     const enrichmentRetry = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'conv-enrichment-retry',
@@ -131,7 +138,7 @@ describe('ingestion queue structural priority', () => {
     expect(listPendingIngestionJobs(1, dueAt)).toEqual([
       expect.objectContaining({ id: newTurn.id, structuralCompletedAt: null }),
     ]);
-    mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'not_requested' }));
+    mockProcessResultOnce({ status: 'not_requested' });
     await drainIngestionQueue({
       maxJobs: 1,
       now: dueAt,
@@ -145,9 +152,7 @@ describe('ingestion queue structural priority', () => {
 
   it('checkpoints an adjacent turn without letting its enrichment overtake a retrying prior turn', async () => {
     const threadId = 'conv-causal-retry';
-    mockedProcessIngestionTurn.mockResolvedValueOnce(
-      processResult({ status: 'provider_error', code: 'provider_request_failed' }),
-    );
+    mockProcessResultOnce({ status: 'provider_error', code: 'provider_request_failed' });
     const prior = enqueueIngestionJob({
       personaId: 'persona-before-switch',
       threadId,
@@ -189,7 +194,7 @@ describe('ingestion queue structural priority', () => {
     ]);
     expect(getNextPendingIngestionAttemptAt()).toBe(101);
 
-    mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'not_requested' }));
+    mockProcessResultOnce({ status: 'not_requested' });
     await drainIngestionQueue({ maxJobs: 1, now: 101 });
 
     expect(getIngestionJob(correction.id)).toEqual(
@@ -207,7 +212,7 @@ describe('ingestion queue structural priority', () => {
     expect(getNextPendingIngestionAttemptAt()).toBe(dueAt);
     expect(listPendingIngestionJobs(3, dueAt)).toEqual([expect.objectContaining({ id: prior.id })]);
 
-    mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'valid' }));
+    mockProcessResultOnce({ status: 'valid' });
     await drainIngestionQueue({ maxJobs: 1, now: dueAt });
 
     expect(getIngestionJob(prior.id)?.status).toBe('completed_enriched');
@@ -215,7 +220,7 @@ describe('ingestion queue structural priority', () => {
       expect.objectContaining({ id: correction.id }),
     ]);
 
-    mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'valid' }));
+    mockProcessResultOnce({ status: 'valid' });
     await drainIngestionQueue({ maxJobs: 1, now: dueAt });
 
     expect(getIngestionJob(correction.id)).toEqual(
@@ -235,13 +240,10 @@ describe('ingestion queue structural priority', () => {
     jest.useFakeTimers({ now: 100 });
     try {
       const threadId = 'conv-causal-checkpoint-wake';
-      mockedProcessIngestionTurn
-        .mockResolvedValueOnce(
-          processResult({ status: 'provider_error', code: 'provider_request_failed' }),
-        )
-        .mockResolvedValueOnce(processResult({ status: 'not_requested' }))
-        .mockResolvedValueOnce(processResult({ status: 'valid' }))
-        .mockResolvedValueOnce(processResult({ status: 'valid' }));
+      mockProcessResultOnce({ status: 'provider_error', code: 'provider_request_failed' });
+      mockProcessResultOnce({ status: 'not_requested' });
+      mockProcessResultOnce({ status: 'valid' });
+      mockProcessResultOnce({ status: 'valid' });
       const prior = enqueueIngestionJob({
         personaId: 'default',
         threadId,

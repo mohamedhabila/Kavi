@@ -368,12 +368,14 @@ export function cleanupRetiredMemoryArtifactsInTransaction(
         ).changes ?? 0),
       0,
     ),
-    ingestionReceipts: deleteIds(
-      db,
-      'memory_ingestion_receipts',
-      'job_id',
-      lineage.receiptDeletionJobIds,
-    ),
+    ingestionReceipts:
+      deleteIds(
+        db,
+        'memory_ingestion_structural_receipts',
+        'job_id',
+        lineage.receiptDeletionJobIds,
+      ) +
+      deleteIds(db, 'memory_ingestion_receipts', 'job_id', lineage.receiptDeletionJobIds),
     ingestionSourceSnapshots: ingestionSourceSnapshotCount,
     ingestionJobs: deleteIds(db, 'memory_ingestion_jobs', 'id', lineage.jobIds),
     retrievalEvents: scrubRetrievalEvents(db, factIds, episodeIds),

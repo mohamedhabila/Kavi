@@ -46,6 +46,12 @@ import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 import { encodeIngestionSourceSnapshot } from '../../../src/services/memory/ingestionSourceSnapshot';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import {
+  commitMockedIngestionTurnReceipts,
+  commitMockedStructuralReceipt,
+  resolveMockedIngestionTurn,
+} from '../../helpers/ingestionQueueProcessFixture';
+import '../../helpers/chatStoreHarness';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -106,7 +112,9 @@ beforeEach(() => {
   __resetIngestionQueueForTests();
   initializeMemoryPolicyObservation();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
-  mockedProcessIngestionTurn.mockResolvedValue(processResult({ status: 'not_requested' }));
+  mockedProcessIngestionTurn.mockImplementation(
+    resolveMockedIngestionTurn(processResult({ status: 'not_requested' })),
+  );
 });
 
 afterEach(() => {
@@ -123,7 +131,7 @@ describe('ingestion queue scheduling and job context', () => {
       markAttemptStarted = resolve;
     });
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
-      input.commitStructuralCheckpoint?.();
+      commitMockedStructuralReceipt(input, processResult({ status: 'not_requested' }));
       markAttemptStarted?.();
       await new Promise<void>((resolve) => {
         input.providerSignal?.addEventListener('abort', () => resolve(), { once: true });
@@ -202,11 +210,14 @@ describe('ingestion queue scheduling and job context', () => {
   });
 
   it('wakes a retry at its due time and stops scheduling after success', async () => {
-    mockedProcessIngestionTurn
-      .mockResolvedValueOnce(
+    mockedProcessIngestionTurn.mockImplementationOnce(
+      resolveMockedIngestionTurn(
         processResult({ status: 'provider_error', code: 'provider_request_failed' }),
-      )
-      .mockResolvedValueOnce(processResult({ status: 'valid' }));
+      ),
+    );
+    mockedProcessIngestionTurn.mockImplementationOnce(
+      resolveMockedIngestionTurn(processResult({ status: 'valid' })),
+    );
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'conv-auto-retry',
@@ -282,10 +293,13 @@ describe('ingestion queue scheduling and job context', () => {
     const firstAttemptStarted = new Promise<void>((resolve) => {
       markFirstAttemptStarted = resolve;
     });
-    mockedProcessIngestionTurn.mockImplementationOnce(async () => {
+    mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
       markFirstAttemptStarted?.();
       await firstAttemptHeld;
-      return processResult({ status: 'not_requested' });
+      return commitMockedIngestionTurnReceipts(
+        input,
+        processResult({ status: 'not_requested' }),
+      );
     });
     const firstJob = enqueueIngestionJob({
       personaId: 'default',
@@ -483,7 +497,7 @@ describe('ingestion queue scheduling and job context', () => {
       markAttemptStarted?.();
       await attemptHeld;
       return input.canPersist?.()
-        ? processResult({ status: 'valid' })
+        ? commitMockedIngestionTurnReceipts(input, processResult({ status: 'valid' }))
         : { ...processResult({ status: 'valid' }), processed: false, skipped: 'claim_lost' };
     });
     const job = enqueueIngestionJob({
@@ -534,9 +548,12 @@ describe('ingestion queue scheduling and job context', () => {
       providerEnrichment: true,
       now: 100,
     })!;
-    mockedProcessIngestionTurn.mockImplementationOnce(async () => {
+    mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
       jest.setSystemTime(30_100);
-      return processResult({ status: 'provider_error', code: 'provider_request_failed' });
+      return commitMockedIngestionTurnReceipts(
+        input,
+        processResult({ status: 'provider_error', code: 'provider_request_failed' }),
+      );
     });
 
     await processIngestionJob({
@@ -566,7 +583,7 @@ describe('ingestion queue scheduling and job context', () => {
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
       jest.setSystemTime(100 + INGESTION_PROCESSING_LEASE_MS);
       return input.canPersist?.()
-        ? processResult({ status: 'valid' })
+        ? commitMockedIngestionTurnReceipts(input, processResult({ status: 'valid' }))
         : { ...processResult({ status: 'valid' }), processed: false, skipped: 'claim_lost' };
     });
 

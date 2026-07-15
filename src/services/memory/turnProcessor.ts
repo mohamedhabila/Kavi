@@ -66,7 +66,7 @@ export interface ProcessTurnInput {
   /** Queue receipt committed atomically with the source-bound memory transaction. */
   commitPersistenceReceipt?: (receipt: TurnPersistenceReceipt) => void;
   /** Queue structural checkpoint committed atomically before optional provider work. */
-  commitStructuralCheckpoint?: () => boolean;
+  commitStructuralCheckpoint?: (receipt: TurnPersistenceReceipt) => TurnPersistenceReceipt;
   /** Persist a readable structural checkpoint without finalizing the source cursor or receipt. */
   deferStructuralFinalization?: boolean;
 }

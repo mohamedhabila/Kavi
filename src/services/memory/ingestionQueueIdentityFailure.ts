@@ -14,6 +14,7 @@ export function failIngestionJobForInvalidIdentity(
   const failedAt = requireIngestionTimestamp(now, 'memory_ingestion_clock_invalid');
   return runMemoryTransaction(() => {
     const db = getMemoryDb();
+    db.runSync('DELETE FROM memory_ingestion_structural_receipts WHERE job_id = ?', jobId);
     db.runSync('DELETE FROM memory_ingestion_receipts WHERE job_id = ?', jobId);
     const result = db.runSync(
       `UPDATE memory_ingestion_jobs

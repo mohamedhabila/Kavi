@@ -13,17 +13,7 @@ jest.mock('../../../src/services/memory/consolidation/paths', () => ({
 }));
 
 jest.mock('../../../src/services/memory/turnProcessor', () => ({
-  processIngestionTurn: jest.fn(async () => ({
-    processed: true,
-    episodeId: 'ep-1',
-    deterministicFactIds: ['fact-1'],
-    providerFactIds: [],
-    invalidatedFactIds: [],
-    activeFocusUpdated: true,
-    openThreadsUpdated: false,
-    enriched: false,
-    providerOutcome: { status: 'not_requested' },
-  })),
+  processIngestionTurn: jest.fn(),
 }));
 
 import {
@@ -32,6 +22,7 @@ import {
   enqueueIngestionJob as enqueueStrictIngestionJob,
   getIngestionJob,
   INGESTION_RETRY_BASE_DELAY_MS,
+  listIngestionDurabilityReceipts,
   listPendingIngestionJobs,
 } from '../../../src/services/memory/ingestionQueue';
 import type { EnqueueIngestionJobInput } from '../../../src/services/memory/ingestionQueue';
@@ -49,6 +40,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
+import { resolveMockedIngestionTurn } from '../../helpers/ingestionQueueProcessFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
@@ -111,6 +103,9 @@ beforeEach(() => {
   ensureFactSchema();
   __resetOnDeviceGuardsForTests();
   __resetIngestionQueueForTests();
+  mockedProcessIngestionTurn.mockImplementation(
+    resolveMockedIngestionTurn(processResult({ status: 'not_requested' })),
+  );
 });
 
 afterEach(() => {
@@ -254,6 +249,7 @@ describe('ingestionQueue', () => {
         unrelatedEpisode.id,
       ),
     ).toEqual({ episode_id: unrelatedEpisode.id });
+
   });
 
   it('enqueues and deduplicates pending jobs for the same turn', () => {
@@ -418,7 +414,9 @@ describe('ingestionQueue', () => {
   it.each(['valid', 'empty_valid'] as const)(
     'records %s provider validation separately from structural-only completion',
     async (providerStatus) => {
-      mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: providerStatus }));
+      mockedProcessIngestionTurn.mockImplementationOnce(
+        resolveMockedIngestionTurn(processResult({ status: providerStatus })),
+      );
       const job = enqueueIngestionJob({
         personaId: 'default',
         threadId: `conv-${providerStatus}`,
@@ -452,8 +450,10 @@ describe('ingestionQueue', () => {
   );
 
   it('retries malformed provider output with a deterministic due time', async () => {
-    mockedProcessIngestionTurn.mockResolvedValueOnce(
-      processResult({ status: 'malformed', code: 'invalid_json' }),
+    mockedProcessIngestionTurn.mockImplementationOnce(
+      resolveMockedIngestionTurn(
+        processResult({ status: 'malformed', code: 'invalid_json' }),
+      ),
     );
     const job = enqueueIngestionJob({
       personaId: 'default',
@@ -496,8 +496,10 @@ describe('ingestionQueue', () => {
     let now = 100;
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
-      mockedProcessIngestionTurn.mockResolvedValueOnce(
-        processResult({ status: 'schema_invalid', code: 'invalid_field_type' }),
+      mockedProcessIngestionTurn.mockImplementationOnce(
+        resolveMockedIngestionTurn(
+          processResult({ status: 'schema_invalid', code: 'invalid_field_type' }),
+        ),
       );
       const result = await drainIngestionQueue({
         now,
@@ -559,5 +561,30 @@ describe('ingestionQueue', () => {
       }
     }
     expect(columnNamesForQueue()).not.toContain('error');
+  });
+
+  it('fails closed when a processed turn omits its durability callbacks', async () => {
+    mockedProcessIngestionTurn.mockResolvedValueOnce(
+      processResult({ status: 'not_requested' }),
+    );
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'conv-missing-durability-receipts',
+      sourceStartMessageId: 'user-missing-durability-receipts',
+      sourceEndMessageId: 'assistant-missing-durability-receipts',
+      now: 100,
+    })!;
+
+    await expect(drainIngestionQueue({ now: 100 })).resolves.toEqual(
+      expect.objectContaining({ completed: 0, retrying: 1 }),
+    );
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({
+        status: 'retrying',
+        outcomeCode: 'processing_error',
+        structuralCompletedAt: null,
+      }),
+    );
+    expect(listIngestionDurabilityReceipts(job.id)).toEqual([]);
   });
 });

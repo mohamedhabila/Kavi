@@ -34,6 +34,10 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
+import {
+  commitMockedProviderFinalReceipt,
+  commitMockedStructuralReceipt,
+} from '../../helpers/ingestionQueueProcessFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -145,10 +149,15 @@ describe('ingestion queue resource-aware preemption', () => {
     });
     let providerSignal: AbortSignal | undefined;
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
-      expect(input.commitStructuralCheckpoint?.()).toBe(true);
+      const structural = commitMockedStructuralReceipt(
+        input,
+        processResult({ status: 'not_requested' }),
+      );
       providerSignal = input.providerSignal;
       markAttemptStarted?.();
-      return providerResult;
+      const result = await providerResult;
+      commitMockedProviderFinalReceipt(input, result, structural);
+      return result;
     });
     const job = enqueueJob('remote-survives');
 
@@ -178,7 +187,7 @@ describe('ingestion queue resource-aware preemption', () => {
       markAttemptStarted = resolve;
     });
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
-      input.commitStructuralCheckpoint?.();
+      commitMockedStructuralReceipt(input, processResult({ status: 'not_requested' }));
       markAttemptStarted?.();
       await new Promise<void>((resolve) => {
         input.providerSignal?.addEventListener('abort', () => resolve(), { once: true });
@@ -214,7 +223,7 @@ describe('ingestion queue resource-aware preemption', () => {
       markAttemptStarted = resolve;
     });
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
-      input.commitStructuralCheckpoint?.();
+      commitMockedStructuralReceipt(input, processResult({ status: 'not_requested' }));
       markAttemptStarted?.();
       await new Promise<void>((resolve) => {
         input.providerSignal?.addEventListener('abort', () => resolve(), { once: true });
@@ -250,7 +259,7 @@ describe('ingestion queue resource-aware preemption', () => {
     });
     let providerSignal: AbortSignal | undefined;
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
-      input.commitStructuralCheckpoint?.();
+      commitMockedStructuralReceipt(input, processResult({ status: 'not_requested' }));
       providerSignal = input.providerSignal;
       markAttemptStarted?.();
       await new Promise<void>((resolve) => {

@@ -120,7 +120,9 @@ it('rolls back every structural lane when the atomic checkpoint is rejected', as
       sourceEndMessageId: 'assistant-fenced',
       extractor,
       canPersist: () => true,
-      commitStructuralCheckpoint: () => false,
+      commitStructuralCheckpoint: () => {
+        throw new Error('Memory structural checkpoint rejected');
+      },
     }),
   ).rejects.toThrow('Memory structural checkpoint rejected');
 

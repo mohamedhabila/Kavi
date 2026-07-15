@@ -13,17 +13,7 @@ jest.mock('../../../src/services/memory/consolidation/paths', () => ({
 }));
 
 jest.mock('../../../src/services/memory/turnProcessor', () => ({
-  processIngestionTurn: jest.fn(async () => ({
-    processed: true,
-    episodeId: 'ep-1',
-    deterministicFactIds: ['fact-1'],
-    providerFactIds: [],
-    invalidatedFactIds: [],
-    activeFocusUpdated: true,
-    openThreadsUpdated: false,
-    enriched: false,
-    providerOutcome: { status: 'not_requested' },
-  })),
+  processIngestionTurn: jest.fn(),
 }));
 
 import {
@@ -45,6 +35,7 @@ import {
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
+import { resolveMockedIngestionTurn } from '../../helpers/ingestionQueueProcessFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
@@ -83,6 +74,21 @@ beforeEach(() => {
   ensureFactSchema();
   __resetOnDeviceGuardsForTests();
   __resetIngestionQueueForTests();
+  mockedProcessIngestionTurn.mockImplementation(
+    resolveMockedIngestionTurn({
+      processed: true,
+      episodeId: 'ep-1',
+      deterministicFactIds: ['fact-1'],
+      providerFactIds: [],
+      invalidatedFactIds: [],
+      activeFocusUpdated: true,
+      openThreadsUpdated: false,
+      enriched: false,
+      providerOutcome: { status: 'not_requested' },
+      bridgedEvidenceFactIds: [],
+      agentRunMemoryFactIds: [],
+    }),
+  );
 });
 
 afterEach(() => {

@@ -131,6 +131,20 @@ describe('memory ingestion persistence receipts', () => {
     expect(getIngestionJob(jobId)?.status).toBe('processing');
   });
 
+  it('seals provider-final receipts against in-place mutation', () => {
+    const { jobId, claimToken } = claimedJob('immutable');
+    commitIngestionPersistenceReceipt(receiptInput(jobId, claimToken));
+
+    expect(() =>
+      getMemoryDb().runSync(
+        `UPDATE memory_ingestion_receipts
+            SET persisted_at = persisted_at + 1
+          WHERE job_id = ? AND attempt_number = 1`,
+        jobId,
+      ),
+    ).toThrow('memory_ingestion_receipt_immutable');
+  });
+
   it('rolls the receipt back when the queue transition aborts', () => {
     const { jobId, claimToken } = claimedJob('rollback');
     getMemoryDb().execSync(`

@@ -15,6 +15,7 @@ import {
   commitIngestionPersistenceReceipt,
   type IngestionReceiptProviderOutcomeCode,
 } from './ingestionReceiptStore';
+import { commitIngestionStructuralCheckpointReceipt } from './ingestionStructuralReceiptStore';
 import { hasSealedIngestionJobIdentity } from './ingestionQueueIdentity';
 import {
   claimIngestionJobWithSourceSnapshot,
@@ -28,7 +29,6 @@ import {
   getNextPendingIngestionAttemptAt,
   INGESTION_RETRY_BASE_DELAY_MS,
   listPendingIngestionJobs,
-  markIngestionJobStructuralComplete,
   ownsIngestionClaim,
   retryOrCompleteIngestionJob,
 } from './ingestionQueueStore';
@@ -89,6 +89,17 @@ export type {
   IngestionPersistenceReceipt,
   IngestionReceiptProviderOutcomeCode,
 } from './ingestionReceiptStore';
+export {
+  getIngestionStructuralCheckpointReceipt,
+  listIngestionDurabilityReceipts,
+  listIngestionStructuralCheckpointReceipts,
+} from './ingestionStructuralReceiptStore';
+export type {
+  IngestionDurabilityReceipt,
+  IngestionProviderFinalReceipt,
+  IngestionStructuralCheckpointReceipt,
+  IngestionStructuralReceiptSource,
+} from './ingestionStructuralReceiptStore';
 export type {
   EnqueueIngestionJobInput,
   IngestionJob,
@@ -105,11 +116,11 @@ function preserveThreadTitleFocus(input: {
   memoryConversationId: string;
   threadTitle?: string;
   now: number;
-}): void {
+}): boolean {
   const threadId = input.memoryConversationId;
   const threadTitle = input.threadTitle?.trim();
   if (!isExactMemoryScopeId(threadId) || !threadTitle) {
-    return;
+    return false;
   }
 
   const scope = { conversationId: threadId, threadId };
@@ -120,7 +131,26 @@ function preserveThreadTitleFocus(input: {
   });
   if (content && content !== existing?.trim()) {
     editPromptEligibleWorkingBlock('active_focus', content, scope, { now: input.now });
+    return true;
   }
+  return false;
+}
+
+function commitPostIngestionDurableState(input: {
+  memoryConversationId: string;
+  threadTitle?: string;
+  taskId: string | null;
+  sourceAt: number;
+  now: number;
+}): Readonly<{ activeFocusUpdated: boolean }> {
+  const activeFocusUpdated = preserveThreadTitleFocus(input);
+  refreshThreadReflection({
+    threadId: input.memoryConversationId,
+    taskId: input.taskId,
+    periodAt: input.sourceAt,
+    now: input.now,
+  });
+  return { activeFocusUpdated };
 }
 
 export interface ProcessIngestionJobInput {
@@ -288,6 +318,30 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
   const structuralCheckpointOnly = claimed.mode === 'structural_checkpoint';
   const activeAttempt = beginActiveIngestionAttempt(job.id);
   let remoteProviderEnrichment = false;
+  let postIngestionStateCommitted = false;
+  let postIngestionActiveFocusUpdated = false;
+  let structuralReceiptCommitted = false;
+  let providerFinalReceiptCommitted = false;
+
+  const commitPostIngestionState = (
+    now: number,
+    refreshAfterEnrichment = false,
+  ): Readonly<{ activeFocusUpdated: boolean }> => {
+    if (postIngestionStateCommitted && !refreshAfterEnrichment) {
+      return { activeFocusUpdated: postIngestionActiveFocusUpdated };
+    }
+    const committed = commitPostIngestionDurableState({
+      memoryConversationId: job.memoryConversationId,
+      threadTitle: job.threadTitle ?? undefined,
+      taskId: job.taskId,
+      sourceAt: job.sourceAt,
+      now,
+    });
+    postIngestionActiveFocusUpdated =
+      postIngestionActiveFocusUpdated || committed.activeFocusUpdated;
+    postIngestionStateCommitted = true;
+    return { activeFocusUpdated: postIngestionActiveFocusUpdated };
+  };
 
   try {
     const turnResult = await runConsolidation({
@@ -318,26 +372,40 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
         remoteProviderEnrichment = resource === 'remote';
       },
       canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
-      commitStructuralCheckpoint: () => {
-        const checkpointed = markIngestionJobStructuralComplete(
-          job.id,
-          input.now ?? Date.now(),
+      commitStructuralCheckpoint: ({ providerOutcome, ...writeSet }) => {
+        const receiptAt = input.now ?? Date.now();
+        const durableState = commitPostIngestionState(receiptAt);
+        const committed = commitIngestionStructuralCheckpointReceipt({
+          ...writeSet,
+          activeFocusUpdated:
+            writeSet.activeFocusUpdated || durableState.activeFocusUpdated,
+          jobId: job.id,
           claimToken,
-        );
-        if (checkpointed && remoteProviderEnrichment) {
+          persistedAt: receiptAt,
+        });
+        structuralReceiptCommitted = true;
+        if (remoteProviderEnrichment) {
           protectActiveRemoteIngestionAttemptFromForeground(activeAttempt);
         }
-        return checkpointed;
+        return {
+          ...writeSet,
+          activeFocusUpdated: committed.activeFocusUpdated,
+          providerOutcome,
+        };
       },
       commitPersistenceReceipt: ({ providerOutcome, ...writeSet }) => {
         const receiptAt = input.now ?? Date.now();
+        const durableState = commitPostIngestionState(receiptAt, true);
         commitIngestionPersistenceReceipt({
           ...writeSet,
+          activeFocusUpdated:
+            writeSet.activeFocusUpdated || durableState.activeFocusUpdated,
           ...mapReceiptProviderOutcome(providerOutcome),
           jobId: job.id,
           claimToken,
           persistedAt: receiptAt,
         });
+        providerFinalReceiptCommitted = true;
       },
     });
     if (turnResult.skipped === 'opt_out' || !canWriteLongTermMemory()) {
@@ -353,6 +421,13 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       };
     }
     const transitionAt = input.now ?? Date.now();
+    if (
+      turnResult.processed &&
+      (!structuralReceiptCommitted ||
+        (!structuralCheckpointOnly && !providerFinalReceiptCommitted))
+    ) {
+      throw new Error('memory_ingestion_durability_receipt_missing');
+    }
     const receiptJob = getIngestionJob(job.id);
     let status: IngestionJobStatus;
     if (
@@ -361,17 +436,6 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     ) {
       status = receiptJob.status;
     } else {
-      if (
-        turnResult.processed &&
-        (receiptJob?.structuralCompletedAt ?? null) === null &&
-        !markIngestionJobStructuralComplete(job.id, transitionAt, claimToken)
-      ) {
-        return {
-          processed: false,
-          status: getIngestionJob(job.id)?.status,
-          skipped: 'claim_lost',
-        };
-      }
       if (structuralCheckpointOnly && turnResult.processed) {
         const transition = deferIngestionEnrichmentAfterStructuralCheckpoint({
           jobId: job.id,
@@ -416,27 +480,6 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       }
     }
 
-    if (turnResult.processed) {
-      try {
-        preserveThreadTitleFocus({
-          memoryConversationId: job.memoryConversationId,
-          threadTitle: job.threadTitle ?? undefined,
-          now: transitionAt,
-        });
-      } catch {
-        logger.devWarn(`Ingestion job ${job.id} focus refresh skipped`);
-      }
-      try {
-        refreshThreadReflection({
-          threadId: job.memoryConversationId,
-          taskId: job.taskId,
-          periodAt: job.sourceAt,
-          now: transitionAt,
-        });
-      } catch {
-        logger.devWarn(`Ingestion job ${job.id} reflection refresh skipped`);
-      }
-    }
     return {
       processed: turnResult.processed,
       status,

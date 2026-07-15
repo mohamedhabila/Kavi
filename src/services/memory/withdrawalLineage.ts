@@ -614,7 +614,17 @@ export function collectMemoryWithdrawalLineage(
         lineageFieldReferences(row.source_episode_ids_json, episodeIds),
     );
   const receipts = db
-    .getAllSync<WithdrawalIngestionReceiptRow>('SELECT * FROM memory_ingestion_receipts')
+    .getAllSync<WithdrawalIngestionReceiptRow>(
+      `SELECT job_id, episode_id, deterministic_fact_ids_json, provider_fact_ids_json,
+              invalidated_fact_ids_json, bridged_evidence_fact_ids_json,
+              agent_run_memory_fact_ids_json
+         FROM memory_ingestion_receipts
+       UNION ALL
+       SELECT job_id, episode_id, deterministic_fact_ids_json, provider_fact_ids_json,
+              invalidated_fact_ids_json, bridged_evidence_fact_ids_json,
+              agent_run_memory_fact_ids_json
+         FROM memory_ingestion_structural_receipts`,
+    )
     .filter((row) => receiptReferencesLineage(row, factIds, episodeIds));
   const receiptJobIds = new Set(receipts.map((row) => row.job_id));
   const jobsById = new Map(selectIngestionJobsByIds(db, receiptJobIds).map((row) => [row.id, row]));

@@ -9,7 +9,7 @@ const MAX_STAGED_BINDINGS = 800;
 const REJECTION_STAGE = 'temp_memory_fact_legacy_rejections';
 const RETRIEVAL_STAGE = 'temp_memory_fact_legacy_retrieval_rewrites';
 const REFLECTION_STAGE = 'temp_memory_fact_legacy_reflection_rewrites';
-const RECEIPT_STAGE = 'temp_memory_fact_legacy_receipt_rewrites';
+const RECEIPT_STAGE = 'temp_memory_fact_legacy_receipt_deletions';
 const RECEIPT_FACT_ID_COLUMNS = [
   'deterministic_fact_ids_json',
   'provider_fact_ids_json',
@@ -72,14 +72,10 @@ function ensureEmptyWorkingStages(db: MemoryDb): void {
       reflection_id TEXT PRIMARY KEY
     );
     CREATE TEMP TABLE IF NOT EXISTS ${RECEIPT_STAGE} (
+      receipt_phase TEXT NOT NULL CHECK(receipt_phase IN ('provider_final', 'structural_checkpoint')),
       job_id TEXT NOT NULL,
       attempt_number INTEGER NOT NULL,
-      deterministic_fact_ids_json TEXT NOT NULL,
-      provider_fact_ids_json TEXT NOT NULL,
-      invalidated_fact_ids_json TEXT NOT NULL,
-      bridged_evidence_fact_ids_json TEXT NOT NULL,
-      agent_run_memory_fact_ids_json TEXT NOT NULL,
-      PRIMARY KEY(job_id, attempt_number)
+      PRIMARY KEY(receipt_phase, job_id, attempt_number)
     );
     DELETE FROM ${REJECTION_STAGE};
     DELETE FROM ${RETRIEVAL_STAGE};
@@ -193,44 +189,39 @@ function scrubReflections(db: MemoryDb, factIds: ReadonlySet<string>, quarantine
 }
 
 function scrubReceipts(db: MemoryDb, factIds: ReadonlySet<string>): void {
-  const rewrites: SqlValue[][] = [];
-  for (const row of db.getAllSync<ReceiptRow>('SELECT * FROM memory_ingestion_receipts')) {
-    const filtered = RECEIPT_FACT_ID_COLUMNS.map((column) => withoutFactIds(row[column], factIds));
-    if (!filtered.some(({ references }) => references)) continue;
-    rewrites.push([row.job_id, row.attempt_number, ...filtered.map(({ json }) => json)]);
+  const deletions: SqlValue[][] = [];
+  for (const [phase, table] of [
+    ['provider_final', 'memory_ingestion_receipts'],
+    ['structural_checkpoint', 'memory_ingestion_structural_receipts'],
+  ] as const) {
+    for (const row of db.getAllSync<ReceiptRow>(`SELECT * FROM ${table}`)) {
+      if (
+        !RECEIPT_FACT_ID_COLUMNS.some(
+          (column) => withoutFactIds(row[column], factIds).references,
+        )
+      ) {
+        continue;
+      }
+      deletions.push([phase, row.job_id, row.attempt_number]);
+    }
   }
-  stageRows(db, RECEIPT_STAGE, ['job_id', 'attempt_number', ...RECEIPT_FACT_ID_COLUMNS], rewrites);
+  stageRows(db, RECEIPT_STAGE, ['receipt_phase', 'job_id', 'attempt_number'], deletions);
   db.runSync(
-    `UPDATE memory_ingestion_receipts
-        SET deterministic_fact_ids_json = (
-              SELECT rewrite.deterministic_fact_ids_json FROM ${RECEIPT_STAGE} AS rewrite
-               WHERE rewrite.job_id = memory_ingestion_receipts.job_id
-                 AND rewrite.attempt_number = memory_ingestion_receipts.attempt_number
-            ),
-            provider_fact_ids_json = (
-              SELECT rewrite.provider_fact_ids_json FROM ${RECEIPT_STAGE} AS rewrite
-               WHERE rewrite.job_id = memory_ingestion_receipts.job_id
-                 AND rewrite.attempt_number = memory_ingestion_receipts.attempt_number
-            ),
-            invalidated_fact_ids_json = (
-              SELECT rewrite.invalidated_fact_ids_json FROM ${RECEIPT_STAGE} AS rewrite
-               WHERE rewrite.job_id = memory_ingestion_receipts.job_id
-                 AND rewrite.attempt_number = memory_ingestion_receipts.attempt_number
-            ),
-            bridged_evidence_fact_ids_json = (
-              SELECT rewrite.bridged_evidence_fact_ids_json FROM ${RECEIPT_STAGE} AS rewrite
-               WHERE rewrite.job_id = memory_ingestion_receipts.job_id
-                 AND rewrite.attempt_number = memory_ingestion_receipts.attempt_number
-            ),
-            agent_run_memory_fact_ids_json = (
-              SELECT rewrite.agent_run_memory_fact_ids_json FROM ${RECEIPT_STAGE} AS rewrite
-               WHERE rewrite.job_id = memory_ingestion_receipts.job_id
-                 AND rewrite.attempt_number = memory_ingestion_receipts.attempt_number
-            )
+    `DELETE FROM memory_ingestion_receipts
       WHERE EXISTS (
-        SELECT 1 FROM ${RECEIPT_STAGE} AS rewrite
-         WHERE rewrite.job_id = memory_ingestion_receipts.job_id
-           AND rewrite.attempt_number = memory_ingestion_receipts.attempt_number
+        SELECT 1 FROM ${RECEIPT_STAGE} AS deletion
+         WHERE deletion.receipt_phase = 'provider_final'
+           AND deletion.job_id = memory_ingestion_receipts.job_id
+           AND deletion.attempt_number = memory_ingestion_receipts.attempt_number
+      )`,
+  );
+  db.runSync(
+    `DELETE FROM memory_ingestion_structural_receipts
+      WHERE EXISTS (
+        SELECT 1 FROM ${RECEIPT_STAGE} AS deletion
+         WHERE deletion.receipt_phase = 'structural_checkpoint'
+           AND deletion.job_id = memory_ingestion_structural_receipts.job_id
+           AND deletion.attempt_number = memory_ingestion_structural_receipts.attempt_number
       )`,
   );
 }
