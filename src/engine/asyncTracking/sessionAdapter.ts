@@ -12,7 +12,6 @@ export function applyTrackedSessionToolResult(
   trackedOperations: Map<string, TrackedAsyncOperation>,
   toolName: string,
   toolArguments: string,
-  toolResult: string,
   parsedResult: Record<string, unknown> | undefined,
 ): boolean {
   if (!/^sessions_/.test(toolName)) {
@@ -22,7 +21,16 @@ export function applyTrackedSessionToolResult(
   const fallbackSessionId = extractStringArg(toolArguments, 'sessionId');
 
   switch (toolName) {
-    case 'sessions_spawn':
+    case 'sessions_spawn': {
+      const sessionId =
+        typeof parsedResult?.sessionId === 'string' ? parsedResult.sessionId.trim() : undefined;
+      const status = readSessionStatus(parsedResult?.status);
+      if (sessionId && status) {
+        upsertTrackedSession(trackedOperations, { sessionId, status, toolName, toolArguments });
+      }
+      return true;
+    }
+
     case 'sessions_send': {
       const sessionId =
         typeof parsedResult?.sessionId === 'string' ? parsedResult.sessionId.trim() : undefined;
@@ -30,6 +38,12 @@ export function applyTrackedSessionToolResult(
       if (sessionId && status) {
         upsertTrackedSession(trackedOperations, { sessionId, status, toolName, toolArguments });
       }
+      markMissingTrackedSessionFailed(
+        trackedOperations,
+        toolName,
+        toolArguments,
+        parsedResult?.code,
+      );
       return true;
     }
 
@@ -46,11 +60,22 @@ export function applyTrackedSessionToolResult(
       if (sessionId && status) {
         upsertTrackedSession(trackedOperations, { sessionId, status, toolName, toolArguments });
       }
-      markMissingTrackedSessionFailed(trackedOperations, toolName, toolArguments, toolResult);
+      markMissingTrackedSessionFailed(
+        trackedOperations,
+        toolName,
+        toolArguments,
+        parsedResult?.code,
+      );
       return true;
     }
 
     case 'sessions_wait': {
+      markMissingTrackedSessionFailed(
+        trackedOperations,
+        toolName,
+        toolArguments,
+        parsedResult?.code,
+      );
       const sessionCount =
         typeof parsedResult?.sessionCount === 'number' ? parsedResult.sessionCount : undefined;
       const waitedForConversationSessions = parsedResult?.waitedForConversationSessions === true;

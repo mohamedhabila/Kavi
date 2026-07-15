@@ -45,6 +45,7 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { failedSessionNotFoundOutcome } from './builtin-session-errors';
 
 export async function executeSessionSend(
   args: {
@@ -57,7 +58,7 @@ export async function executeSessionSend(
   inheritedModel?: string,
 ): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
+  if (!agent) return failedSessionNotFoundOutcome(args.sessionId);
 
   if (agent.status === 'running') {
     return completedToolOutcome(

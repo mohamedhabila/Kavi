@@ -12,15 +12,7 @@ export function applyTrackedAsyncToolResult(
 ): void {
   const parsedResult = parseJsonRecord(toolResult);
 
-  if (
-    applyTrackedSessionToolResult(
-      trackedOperations,
-      toolName,
-      toolArguments,
-      toolResult,
-      parsedResult,
-    )
-  ) {
+  if (applyTrackedSessionToolResult(trackedOperations, toolName, toolArguments, parsedResult)) {
     return;
   }
 

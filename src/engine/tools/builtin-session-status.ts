@@ -11,17 +11,14 @@ import {
   sessionStatusPollState,
 } from './builtin-session-statusSupport';
 import { TERMINAL_SESSION_OUTPUT_GUIDANCE } from './builtin-session-resultSupport';
-import {
-  completedToolOutcome,
-  failedToolOutcome,
-  type ToolRuntimeOutcome,
-} from '../../types/toolRuntimeOutcome';
+import { completedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
+import { failedSessionNotFoundOutcome } from './builtin-session-errors';
 
 export async function executeSessionStatus(args: {
   sessionId: string;
 }): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
+  if (!agent) return failedSessionNotFoundOutcome(args.sessionId);
 
   pruneStaleCommandPolls(sessionStatusPollState);
 

@@ -53,7 +53,12 @@ describe('builtin-executor wrapper coverage', () => {
     mockGetSubAgent.mockReturnValue(undefined);
     await expect(executeSessionHistory({ sessionId: 'missing' })).resolves.toEqual({
       status: 'failed',
-      content: 'Error: session not found: missing',
+      content: JSON.stringify({
+        status: 'failed',
+        code: 'session_not_found',
+        sessionId: 'missing',
+        message: 'Session not found.',
+      }),
     });
   });
 
@@ -67,9 +72,7 @@ describe('builtin-executor wrapper coverage', () => {
       activityLog: [{ kind: 'tool', text: 'Checked files', timestamp: 1 }],
     });
 
-    const parsed = parseCompletedOutcome(
-      await executeSessionOutput({ sessionId: 'session-1' }),
-    );
+    const parsed = parseCompletedOutcome(await executeSessionOutput({ sessionId: 'session-1' }));
     expect(parsed).toEqual({
       sessionId: 'session-1',
       status: 'completed',
@@ -91,9 +94,7 @@ describe('builtin-executor wrapper coverage', () => {
       activityLog: [],
     });
 
-    const parsed = parseCompletedOutcome(
-      await executeSessionOutput({ sessionId: 'session-2' }),
-    );
+    const parsed = parseCompletedOutcome(await executeSessionOutput({ sessionId: 'session-2' }));
     expect(parsed).toEqual({
       sessionId: 'session-2',
       status: 'running',
@@ -437,9 +438,7 @@ describe('builtin-executor wrapper coverage', () => {
       iterations: 0,
     });
 
-    const parsed = parseCompletedOutcome(
-      await executeSessionStatus({ sessionId: 'responding-1' }),
-    );
+    const parsed = parseCompletedOutcome(await executeSessionStatus({ sessionId: 'responding-1' }));
     expect(parsed.awaitingModelResponse).toBe(true);
     expect(parsed.modelResponsePendingSince).toBe(now - 60_000);
     expect(parsed.modelResponseWaitMs).toBeGreaterThanOrEqual(59_000);
@@ -488,7 +487,12 @@ describe('builtin-executor wrapper coverage', () => {
 
     await expect(executeSessionCancel({ sessionId: 'missing' })).resolves.toEqual({
       status: 'failed',
-      content: 'Error: session not found: missing',
+      content: JSON.stringify({
+        status: 'failed',
+        code: 'session_not_found',
+        sessionId: 'missing',
+        message: 'Session not found.',
+      }),
     });
 
     const terminal = parseCompletedOutcome(await executeSessionCancel({ sessionId: 'done-1' }));

@@ -57,6 +57,7 @@ export async function executeSessionWait(
     return failedToolOutcome(
       JSON.stringify({
         status: 'error',
+        code: 'session_not_found',
         error:
           missingSessionIds.length === 1
             ? `session not found: ${missingSessionIds[0]}`

@@ -14,6 +14,7 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { failedSessionNotFoundOutcome } from './builtin-session-errors';
 
 type SessionHistoryMessage = {
   role: Message['role'] | 'system';
@@ -140,7 +141,7 @@ export async function executeSessionHistory(args: {
   maxMessages?: number;
 }): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
+  if (!agent) return failedSessionNotFoundOutcome(args.sessionId);
 
   const maxSize = 80 * 1024;
   const maxPerMessage = 4000;
@@ -181,7 +182,7 @@ export async function executeSessionOutput(args: {
   sessionId: string;
 }): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
+  if (!agent) return failedSessionNotFoundOutcome(args.sessionId);
 
   if (agent.status === 'running') {
     return completedToolOutcome(
@@ -226,7 +227,7 @@ export async function executeSessionSurfaceOutput(args: {
   trim?: boolean;
 }): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
-  if (!agent) return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
+  if (!agent) return failedSessionNotFoundOutcome(args.sessionId);
 
   if (agent.status === 'running') {
     return completedToolOutcome(

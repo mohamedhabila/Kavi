@@ -19,8 +19,12 @@ describe('builtin executor session control', () => {
     it('returns error for non-existent session', async () => {
       const result = await executeSessionHistory({ sessionId: 'none' });
       expect(result.status).toBe('failed');
-      expect(result.content).toContain('Error');
-      expect(result.content).toContain('session not found');
+      expect(JSON.parse(result.content)).toEqual({
+        status: 'failed',
+        code: 'session_not_found',
+        sessionId: 'none',
+        message: 'Session not found.',
+      });
     });
 
     it('returns history for existing session', async () => {
@@ -41,12 +45,16 @@ describe('builtin executor session control', () => {
     });
   });
 
-
   describe('executeSessionStatus', () => {
     it('returns error for non-existent session', async () => {
       const result = await executeSessionStatus({ sessionId: 'none' });
       expect(result.status).toBe('failed');
-      expect(result.content).toContain('Error');
+      expect(JSON.parse(result.content)).toEqual({
+        status: 'failed',
+        code: 'session_not_found',
+        sessionId: 'none',
+        message: 'Session not found.',
+      });
     });
 
     it('returns status for existing session', async () => {

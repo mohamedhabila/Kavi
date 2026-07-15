@@ -121,9 +121,9 @@ export function markMissingTrackedSessionFailed(
   trackedOperations: Map<string, TrackedAsyncOperation>,
   toolName: string,
   toolArguments: string,
-  toolResult: string,
+  resultCode: unknown,
 ): void {
-  if (!/^Error:\s*session not found:/i.test(toolResult)) {
+  if (resultCode !== 'session_not_found') {
     return;
   }
 

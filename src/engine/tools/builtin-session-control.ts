@@ -1,9 +1,6 @@
 import { cancelSubAgent, getSubAgent, getSubAgentsByParent } from '../../services/agents/subAgent';
-import {
-  completedToolOutcome,
-  failedToolOutcome,
-  type ToolRuntimeOutcome,
-} from '../../types/toolRuntimeOutcome';
+import { completedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
+import { failedSessionNotFoundOutcome } from './builtin-session-errors';
 
 export async function executeSessionCancel(args: {
   sessionId: string;
@@ -11,7 +8,7 @@ export async function executeSessionCancel(args: {
 }): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
   if (!agent) {
-    return failedToolOutcome(`Error: session not found: ${args.sessionId}`);
+    return failedSessionNotFoundOutcome(args.sessionId);
   }
 
   if (agent.status !== 'running') {
