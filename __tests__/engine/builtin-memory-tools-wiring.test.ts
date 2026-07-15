@@ -148,11 +148,10 @@ describe('living-memory tool wiring', () => {
       'confidence',
       'operation',
       'assertion_class',
-      'evidence_quote',
       'sensitivity',
     ];
     expect(evidence.additionalProperties).toBe(false);
-    expect(evidence.properties.version.enum).toEqual([2]);
+    expect(evidence.properties.version.enum).toEqual([3]);
     expect(Object.keys(evidence.properties)).toEqual(fields);
     expect(evidence.required).toEqual(fields);
     expect(evidence.properties.assertion_class.enum).toEqual(

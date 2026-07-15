@@ -76,7 +76,7 @@ describe('builtin memory execution scope', () => {
     });
     const providerArgs = {
       semanticEvidence: {
-        version: 2,
+        version: 3,
         subject_ref: { kind: 'self' },
         subject_type: 'self',
         predicate: 'timezone',
@@ -86,7 +86,6 @@ describe('builtin memory execution scope', () => {
         confidence: 0.95,
         operation: 'record',
         assertion_class: 'current_direct',
-        evidence_quote: 'My timezone is UTC+1.',
         sensitivity: 'personal',
       },
     };

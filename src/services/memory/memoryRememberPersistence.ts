@@ -39,6 +39,7 @@ import {
   type BoundMemoryRememberSemanticEvidence,
 } from './memoryRememberSemanticEvidence';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { sha256HexUtf8 } from '../../utils/sha256';
 
 export interface MemoryRememberPersistenceInput {
   semanticEvidence: BoundMemoryRememberSemanticEvidence;
@@ -112,7 +113,10 @@ class MemoryRememberConflict extends Error {
   }
 }
 
-function memoryWriteAttributes(fact: ConsolidatorFact): Record<string, unknown> {
+function memoryWriteAttributes(
+  fact: ConsolidatorFact,
+  evidenceSourceSha256: string,
+): Record<string, unknown> {
   const admittedWrite = fact.admittedWrite!;
   return {
     memoryWrite: {
@@ -124,15 +128,17 @@ function memoryWriteAttributes(fact: ConsolidatorFact): Record<string, unknown> 
         : {}),
       assertionClass: fact.assertionClass,
       evidenceQuote: fact.evidenceQuote,
+      evidenceSourceSha256,
     },
   };
 }
 
 function replayStableMemoryWriteAttributes(
   fact: ConsolidatorFact,
+  evidenceSourceSha256: string,
   priorAttributes: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  const incoming = memoryWriteAttributes(fact);
+  const incoming = memoryWriteAttributes(fact, evidenceSourceSha256);
   if (!priorAttributes) return incoming;
   const priorMemoryWrite = priorAttributes.memoryWrite;
   if (
@@ -145,6 +151,9 @@ function replayStableMemoryWriteAttributes(
   const prior = priorMemoryWrite as Record<string, unknown>;
   if (prior.operation !== 'insert' && prior.operation !== 'replace_current') {
     throw new Error('memory_remember_replay_metadata_invalid');
+  }
+  if (prior.evidenceSourceSha256 !== evidenceSourceSha256) {
+    throw new Error('memory_remember_replay_evidence_mismatch');
   }
   const priorDecision: Record<string, unknown> = { operation: prior.operation };
   if (prior.operation === 'replace_current') {
@@ -181,6 +190,13 @@ export function persistMemoryRemember(
   }
   const evidence = context.requestEvidence;
   const semanticProposal = semantic.proposal;
+  const evidenceSourceSha256 = sha256HexUtf8(evidence.userMessageText);
+  if (
+    semanticProposal.sourceMessageId !== evidence.userMessageId ||
+    semantic.sourceMessageSha256 !== evidenceSourceSha256
+  ) {
+    throw new Error('memory_remember_bound_evidence_changed');
+  }
   const subject =
     semanticProposal.subjectRef.kind === 'self'
       ? CANONICAL_SELF_MEMORY_SUBJECT
@@ -275,7 +291,7 @@ export function persistMemoryRemember(
     operation: 'replace_current',
     assertionClass: 'current_direct',
     evidenceMessageIds: [evidence.userMessageId],
-    evidenceQuote: semanticProposal.evidenceQuote,
+    evidenceQuote: semantic.evidenceSpan,
   };
   const decision = evaluateGroundedReplacement(proposal, {
     currentUserMessageId: evidence.userMessageId,
@@ -344,6 +360,7 @@ export function persistMemoryRemember(
         sourceMessageId: evidence.userMessageId,
         attributes: replayStableMemoryWriteAttributes(
           admittedFact,
+          evidenceSourceSha256,
           replay?.payload.input.attributes,
         ),
       };

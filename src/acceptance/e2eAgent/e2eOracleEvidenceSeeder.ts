@@ -3,7 +3,7 @@ import { createConversationFileContext } from '../../engine/tools/toolWorkspaceF
 import { getFactById } from '../../services/memory/facts/queries';
 import type { MemoryFact } from '../../services/memory/facts/types';
 import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
-import type { MemoryRememberSemanticEvidenceV2Input } from '../../services/memory/memoryRememberSemanticEvidence';
+import type { MemoryRememberSemanticEvidenceV3Input } from '../../services/memory/memoryRememberSemanticEvidence';
 import { isCanonicalSelfMemorySubject } from '../../services/memory/memorySubjectIdentity';
 import {
   validateE2EOracleEvidenceDeclaration,
@@ -32,13 +32,10 @@ type OracleMemoryToolExecutor = (params: {
 
 type OraclePersistedFactReader = (factId: string) => MemoryFact | null | undefined;
 
-function buildIsolatedOracleFact(
-  fact: Readonly<E2EOracleFactDeclaration>,
-  userEvidence: OracleUserEvidence,
-): MemoryRememberArgs {
+function buildIsolatedOracleFact(fact: Readonly<E2EOracleFactDeclaration>): MemoryRememberArgs {
   const selfSubject = isCanonicalSelfMemorySubject(fact.subject);
-  const semanticEvidence: MemoryRememberSemanticEvidenceV2Input = {
-    version: 2,
+  const semanticEvidence: MemoryRememberSemanticEvidenceV3Input = {
+    version: 3,
     subject_ref: selfSubject ? { kind: 'self' } : { kind: 'named', label: fact.subject },
     subject_type: selfSubject ? 'self' : (fact.subjectType ?? 'concept'),
     predicate: fact.predicate,
@@ -48,7 +45,6 @@ function buildIsolatedOracleFact(
     confidence: fact.confidence ?? 0.9,
     operation: 'record',
     assertion_class: 'current_direct',
-    evidence_quote: userEvidence.text,
     sensitivity: 'normal',
   };
   return {
@@ -216,7 +212,7 @@ export async function seedE2EOracleEvidence(input: {
     const executionClaim = buildOracleExecutionClaim(userEvidence, index, seedRunId, baseClaimedAt);
     const outcome = await executeTool({
       name: 'memory_remember',
-      args: buildIsolatedOracleFact(fact, userEvidence),
+      args: buildIsolatedOracleFact(fact),
       userEvidence,
       executionClaim,
       ...identity,

@@ -6,13 +6,20 @@ jest.mock('expo-sqlite', () => {
 import { memoryRememberArgs, memoryRememberExecution } from '../../helpers/memoryRememberExecution';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { findEntityByName } from '../../../src/services/memory/entities';
+import { listFactEvidence } from '../../../src/services/memory/episodes/queries';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import { executeMemoryRemember } from '../../../src/services/memory/memoryTools';
+import { persistMemoryRemember } from '../../../src/services/memory/memoryRememberPersistence';
+import {
+  bindMemoryRememberSemanticEvidence,
+  resolveBoundMemoryRememberSemanticEvidence,
+} from '../../../src/services/memory/memoryRememberSemanticEvidence';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import { sha256HexUtf8 } from '../../../src/utils/sha256';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const MESSAGE_ID = 'message-opaque-authority';
@@ -92,12 +99,6 @@ describe('typed memory_remember semantic authority', () => {
 
   it.each([
     [
-      'evidence quote',
-      (input: ReturnType<typeof args>) => {
-        (input.semanticEvidence as Record<string, unknown>).evidence_quote = `${MESSAGE}!`;
-      },
-    ],
-    [
       'value',
       (input: ReturnType<typeof args>) => {
         (input.semanticEvidence as Record<string, unknown>).value = '不存在_value';
@@ -120,11 +121,231 @@ describe('typed memory_remember semantic authority', () => {
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
   });
 
-  it.each(['source_message_id', 'subject_quote', 'predicate_quote', 'value_quote'] as const)(
-    'rejects removed semantic field %s without a compatibility fallback',
-    (field) => {
+  it.each([
+    {
+      language: 'Arabic',
+      subject: 'مشروع-نورس',
+      value: 'جاهز-٧٢',
+    },
+    {
+      language: 'Japanese',
+      subject: '計画-星',
+      value: '準備完了-四二',
+    },
+    {
+      language: 'Chinese',
+      subject: '项目-青鸟',
+      value: '状态-完成',
+    },
+    {
+      language: 'opaque combining-mark text',
+      subject: 'unit-e\u0301',
+      value: 'state-a\u030Angstro\u0308m',
+    },
+  ])(
+    'derives the same minimal exact evidence structure for $language without language rules',
+    ({ subject, value }) => {
+      const closest = `${subject}⇢${value}`;
+      const userMessageText = `${subject}${'◇'.repeat(40)}${value}${'◇'.repeat(20)}${closest}｜${value}`;
+      const input = memoryRememberArgs({
+        userMessageText,
+        subjectRef: { kind: 'named', label: subject },
+        subjectType: 'concept',
+        predicate: 'opaque-relation',
+        value,
+      });
+      const request = memoryRememberExecution({
+        userMessageId: `message-${subject}`,
+        userMessageText,
+      }).requestEvidence;
+
+      const bound = bindMemoryRememberSemanticEvidence(input.semanticEvidence, request);
+      expect(bound.valid).toBe(true);
+      if (!bound.valid) throw new Error(bound.code);
+      expect(resolveBoundMemoryRememberSemanticEvidence(bound.evidence)?.evidenceSpan).toBe(
+        closest,
+      );
+    },
+  );
+
+  it('persists only the code-derived minimal span as source evidence', () => {
+    const subject = '项目-青鸟';
+    const value = '状态-完成';
+    const minimalSpan = `${subject}⇢${value}`;
+    const userMessageText = `${subject}${'界'.repeat(40)}${value}${'界'.repeat(20)}${minimalSpan}`;
+    const result = executeMemoryRemember(
+      memoryRememberArgs({
+        userMessageText,
+        subjectRef: { kind: 'named', label: subject },
+        subjectType: 'project',
+        predicate: 'opaque_state',
+        value,
+        scope: 'conversation',
+      }),
+      memoryRememberExecution({
+        memoryConversationId: 'memory-root-minimal',
+        sourceThreadId: 'thread-minimal',
+        userMessageId: 'message-minimal-span',
+        userMessageText,
+        executionRunId: 'execution-minimal-span',
+        toolCallId: 'tool-minimal-span',
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    const [fact] = listFacts({ predicate: 'opaque_state' });
+    expect(fact?.attributes).toMatchObject({
+      memoryWrite: {
+        evidenceMessageId: 'message-minimal-span',
+        evidenceQuote: minimalSpan,
+        evidenceSourceSha256: sha256HexUtf8(userMessageText),
+      },
+    });
+    expect(listFactEvidence(fact!.id)).toEqual([
+      expect.objectContaining({ messageId: 'message-minimal-span', quote: minimalSpan }),
+    ]);
+  });
+
+  it('rejects request evidence changed after the opaque binding was created', () => {
+    const context = execution();
+    const input = args();
+    const bound = bindMemoryRememberSemanticEvidence(
+      input.semanticEvidence,
+      context.requestEvidence,
+    );
+    expect(bound.valid).toBe(true);
+    if (!bound.valid) throw new Error(bound.code);
+    context.requestEvidence.userMessageText = `changed :: ${SUBJECT} :: ${VALUE}`;
+
+    expect(() => persistMemoryRemember({ semanticEvidence: bound.evidence }, context)).toThrow(
+      'memory_remember_bound_evidence_changed',
+    );
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+  });
+
+  it('grounds self facts from the exact value without requiring a language-specific self token', () => {
+    const input = memoryRememberArgs({
+      userMessageText: 'المنطقة الزمنية الحالية هي أفريقيا/القاهرة',
+      subjectRef: { kind: 'self' },
+      subjectType: 'self',
+      predicate: 'timezone',
+      value: 'أفريقيا/القاهرة',
+    });
+    const request = memoryRememberExecution({
+      userMessageId: 'message-self-arabic',
+      userMessageText: 'المنطقة الزمنية الحالية هي أفريقيا/القاهرة',
+    }).requestEvidence;
+
+    const bound = bindMemoryRememberSemanticEvidence(input.semanticEvidence, request);
+    expect(bound.valid).toBe(true);
+    if (!bound.valid) throw new Error(bound.code);
+    expect(resolveBoundMemoryRememberSemanticEvidence(bound.evidence)?.evidenceSpan).toBe(
+      'أفريقيا/القاهرة',
+    );
+  });
+
+  it('keeps Unicode normalization code-owned and fails closed on a non-identical form', () => {
+    const decomposed = 'Cafe\u0301';
+    const input = args({ value: 'Café' });
+    const result = executeMemoryRemember(
+      input,
+      execution({ userMessageText: `${SUBJECT} :: ${decomposed}` }),
+    );
+    expect(result).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+  });
+
+  it('matches JSON Schema character limits for astral subject labels and values', () => {
+    const subject = '😀'.repeat(80);
+    const value = '🚀'.repeat(200);
+    const userMessageText = `${subject}⇢${value}`;
+    const input = memoryRememberArgs({
+      userMessageText,
+      subjectRef: { kind: 'named', label: subject },
+      subjectType: 'thing',
+      predicate: 'astral_limit',
+      value,
+    });
+    const request = memoryRememberExecution({
+      userMessageId: 'message-astral-limit',
+      userMessageText,
+    }).requestEvidence;
+
+    const bound = bindMemoryRememberSemanticEvidence(input.semanticEvidence, request);
+    expect(bound.valid).toBe(true);
+    if (!bound.valid) throw new Error(bound.code);
+    expect(resolveBoundMemoryRememberSemanticEvidence(bound.evidence)?.evidenceSpan).toBe(
+      userMessageText,
+    );
+
+    const oversized = memoryRememberArgs({
+      userMessageText: `${subject}😀⇢${value}`,
+      subjectRef: { kind: 'named', label: `${subject}😀` },
+      subjectType: 'thing',
+      predicate: 'astral_limit',
+      value,
+    });
+    expect(
+      bindMemoryRememberSemanticEvidence(oversized.semanticEvidence, {
+        ...request,
+        userMessageText: `${subject}😀⇢${value}`,
+      }),
+    ).toEqual({ valid: false, code: 'invalid_contract' });
+  });
+
+  it('finds the nearest exact pair without retaining repeated occurrence arrays', () => {
+    const repeated = '◇'.repeat(200_000);
+    const subject = '★';
+    const value = '◇';
+    const userMessageText = `${repeated}|${subject}${value}`;
+    const input = memoryRememberArgs({
+      userMessageText,
+      subjectRef: { kind: 'named', label: subject },
+      subjectType: 'concept',
+      predicate: 'opaque_relation',
+      value,
+    });
+    const request = memoryRememberExecution({
+      userMessageId: 'message-repeated-occurrences',
+      userMessageText,
+    }).requestEvidence;
+
+    const bound = bindMemoryRememberSemanticEvidence(input.semanticEvidence, request);
+    expect(bound.valid).toBe(true);
+    if (!bound.valid) throw new Error(bound.code);
+    expect(resolveBoundMemoryRememberSemanticEvidence(bound.evidence)?.evidenceSpan).toBe(
+      `${subject}${value}`,
+    );
+  });
+
+  it('rejects a minimal exact evidence span above the resource bound', () => {
+    const userMessageText = `${SUBJECT}${'界'.repeat(600)}${VALUE}`;
+    const result = executeMemoryRemember(args({ userMessageText }), execution({ userMessageText }));
+    expect(result).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+  });
+
+  it.each([
+    'evidence_quote',
+    'source_message_id',
+    'subject_quote',
+    'predicate_quote',
+    'value_quote',
+  ] as const)('rejects removed semantic field %s without a compatibility fallback', (field) => {
+    const input = args();
+    (input.semanticEvidence as Record<string, unknown>)[field] = 'forged';
+    expect(executeMemoryRemember(input, execution())).toMatchObject({
+      ok: false,
+      code: 'invalid_args',
+    });
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+  });
+
+  it.each([1, 2])(
+    'rejects the v%s semantic contract without a compatibility fallback',
+    (version) => {
       const input = args();
-      (input.semanticEvidence as Record<string, unknown>)[field] = 'forged';
+      (input.semanticEvidence as Record<string, unknown>).version = version;
       expect(executeMemoryRemember(input, execution())).toMatchObject({
         ok: false,
         code: 'invalid_args',
@@ -132,16 +353,6 @@ describe('typed memory_remember semantic authority', () => {
       expect(listFacts({ includeInvalidated: true })).toEqual([]);
     },
   );
-
-  it('rejects the v1 semantic contract without a compatibility fallback', () => {
-    const input = args();
-    (input.semanticEvidence as Record<string, unknown>).version = 1;
-    expect(executeMemoryRemember(input, execution())).toMatchObject({
-      ok: false,
-      code: 'invalid_args',
-    });
-    expect(listFacts({ includeInvalidated: true })).toEqual([]);
-  });
 
   it('rejects the removed legacy argument surface without compatibility fallback', () => {
     const result = executeMemoryRemember(
@@ -175,10 +386,8 @@ describe('typed memory_remember semantic authority', () => {
     const nextMessage = `${SUBJECT} :: ${PREDICATE} :: 次の値`;
     const result = executeMemoryRemember(
       args({
-        userMessageId: 'message-operation-mismatch',
         userMessageText: nextMessage,
         value: '次の値',
-        evidenceQuote: nextMessage,
         operation: 'record',
       }),
       execution({
@@ -206,7 +415,6 @@ describe('typed memory_remember semantic authority', () => {
       args({
         userMessageText: changedMessage,
         value: '改変値',
-        evidenceQuote: changedMessage,
       }),
       execution({ userMessageText: changedMessage }),
     );

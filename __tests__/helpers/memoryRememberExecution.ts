@@ -2,7 +2,7 @@ import type {
   MemoryRememberArgs,
   MemoryRememberExecutionContext,
 } from '../../src/services/memory/memoryTools';
-import type { MemoryRememberSemanticEvidenceV2Input } from '../../src/services/memory/memoryRememberSemanticEvidence';
+import type { MemoryRememberSemanticEvidenceV3Input } from '../../src/services/memory/memoryRememberSemanticEvidence';
 import type {
   SemanticFactAssertionClass,
   SemanticFactProposalOperation,
@@ -62,15 +62,13 @@ export function memoryRememberArgs(input: {
   scope?: SemanticFactProposalScope;
   operation?: SemanticFactProposalOperation;
   assertionClass?: SemanticFactAssertionClass;
-  evidenceQuote?: string;
   importance?: number;
   confidence?: number;
   sensitivity?: 'normal' | 'personal' | 'sensitive' | 'restricted';
   pinned?: boolean;
 }): MemoryRememberArgs {
-  const evidenceQuote = input.evidenceQuote ?? input.userMessageText;
-  const semanticEvidence: MemoryRememberSemanticEvidenceV2Input = {
-    version: 2,
+  const semanticEvidence: MemoryRememberSemanticEvidenceV3Input = {
+    version: 3,
     subject_ref:
       input.subjectRef.kind === 'self'
         ? { kind: 'self' }
@@ -83,7 +81,6 @@ export function memoryRememberArgs(input: {
     confidence: input.confidence ?? 0.9,
     operation: input.operation ?? 'record',
     assertion_class: input.assertionClass ?? 'current_direct',
-    evidence_quote: evidenceQuote,
     sensitivity: input.sensitivity ?? 'normal',
   };
   return {

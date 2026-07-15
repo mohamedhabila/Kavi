@@ -356,7 +356,7 @@ describe('memory_remember fact contributions', () => {
       'mismatched current evidence',
       memoryRememberExecution({
         userMessageId: 'user-ungrounded',
-        userMessageText: '主体🧑 value Mo',
+        userMessageText: '主体🧑 value 不同',
       }),
       'grounding_required',
       true,
