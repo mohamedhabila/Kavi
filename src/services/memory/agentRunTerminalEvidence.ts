@@ -61,15 +61,18 @@ function currentMobilePlatform(): 'android' | 'ios' | null {
 export function buildAgentRunTerminalEvidence(run: AgentRun): string | null {
   const platform = currentMobilePlatform();
   const graph = run.controlGraph;
-  const blockingGoals = graph?.goals?.filter(isBlockingGoal) ?? [];
-  const observedToolCallIds = graph?.observedToolResults.map((result) => result.id) ?? [];
+  if (!graph || !Array.isArray(graph.goals) || !Array.isArray(graph.observedToolResults)) {
+    return null;
+  }
+  const blockingGoals = graph.goals.filter(isBlockingGoal);
+  const observedToolCallIds = graph.observedToolResults.map((result) => result.id);
   const goal = fitAgentRunText(run.goal, MAX_GOAL_CHARS).trim();
   if (
     !platform ||
     !isExactMemoryProvenanceId(run.id) ||
     !goal ||
     run.status !== 'completed' ||
-    graph?.status !== 'finalized' ||
+    graph.status !== 'finalized' ||
     blockingGoals.some((candidate) => candidate.status !== 'completed') ||
     observedToolCallIds.length > MAX_TOOL_CALL_COUNT ||
     !observedToolCallIds.every(isExactMemoryProvenanceId) ||

@@ -75,6 +75,16 @@ describe('agent-run terminal evidence', () => {
         }),
       ),
     ).toBeNull();
+    expect(
+      buildAgentRunTerminalEvidence(
+        completedRun({
+          controlGraph: {
+            status: 'finalized',
+            goals: completedRun().controlGraph!.goals,
+          } as AgentRun['controlGraph'],
+        }),
+      ),
+    ).toBeNull();
   });
 
   it('keeps persistent goals non-blocking and appends proof after graph evidence', () => {
