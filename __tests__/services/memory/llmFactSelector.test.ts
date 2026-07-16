@@ -4,6 +4,26 @@ jest.mock('../../../src/services/llm/messageService', () => ({
   sendLlmMessage: (...args: unknown[]) => mockSendLlmMessage(...args),
 }));
 
+jest.mock('../../../src/services/memory/memoryAuthority', () => ({
+  captureMemoryAuthoritySnapshot: () => ({
+    processEpochs: { restrictive: 0, projection: 0 },
+    restrictiveRevision: {
+      kind: 'restrictive',
+      memoryOwnerId: 'selector-unit-test-owner',
+      value: 0,
+    },
+    projectionRevision: {
+      kind: 'projection',
+      memoryOwnerId: 'selector-unit-test-owner',
+      value: 0,
+    },
+    policy: { enabled: true, revision: 0 },
+  }),
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent: () => true,
+  isDurableMemoryPolicyEnabled: () => true,
+  setDurableMemoryPolicyEnabled: jest.fn(),
+}));
+
 import { createLlmMemoryFactSelector } from '../../../src/services/memory/llmFactSelector';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
 import type { LlmProviderConfig } from '../../../src/types/provider';
@@ -183,6 +203,56 @@ describe('createLlmMemoryFactSelector', () => {
     expect(payload.candidates?.[0]?.text).toContain('Late evidence section');
   });
 
+  it('keeps structured app identity visible in evidence-span selector candidates', async () => {
+    mockSendLlmMessage.mockResolvedValue({
+      output_parsed: { selectedFactIds: ['fact-target'] },
+    });
+    const provider: LlmProviderConfig = {
+      id: 'test-provider',
+      name: 'Test Provider',
+      kind: 'remote',
+      protocol: 'openai-responses',
+      providerFamily: 'openai',
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      enabled: true,
+      capabilityHints: { supportsStructuredOutput: true },
+    };
+    const selector = createLlmMemoryFactSelector({ provider, model: 'test-model' });
+
+    await selector?.({
+      query: 'incident management form',
+      limit: 1,
+      candidates: [
+        {
+          fact: fact(
+            'fact-target',
+            JSON.stringify({
+              sourceRunId: 'run-target',
+              domain: 'mobile',
+              environment: 'incident-management',
+              observedControlSequence: [{ role: 'textbox', label: 'Incident title' }],
+            }),
+            'evidence_span',
+          ),
+          score: 0.4,
+          textScore: 0.2,
+          relevanceScore: 0.2,
+        },
+      ],
+    });
+
+    const params = mockSendLlmMessage.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
+      candidates?: Array<{ text?: string }>;
+    };
+    expect(payload.candidates?.[0]?.text).toContain('"domain":"mobile"');
+    expect(payload.candidates?.[0]?.text).toContain('"environment":"incident-management"');
+  });
+
   it('exposes compact query coverage for selector candidate comparison', async () => {
     mockSendLlmMessage.mockResolvedValue({
       output_parsed: { selectedFactIds: ['fact-target'] },
@@ -253,9 +323,7 @@ describe('createLlmMemoryFactSelector', () => {
     expect(payload.candidates?.[0]?.matchedQueryUnits).toEqual(
       expect.arrayContaining(['surface', 'alpha', 'target']),
     );
-    expect(payload.candidates?.[1]?.matchedQueryUnits).toEqual(
-      expect.arrayContaining(['target']),
-    );
+    expect(payload.candidates?.[1]?.matchedQueryUnits).toEqual(expect.arrayContaining(['target']));
     expect(payload.candidates?.[0]?.queryUnitCoverage ?? 0).toBeGreaterThan(
       payload.candidates?.[1]?.queryUnitCoverage ?? 0,
     );

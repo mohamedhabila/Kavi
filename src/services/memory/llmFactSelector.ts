@@ -14,6 +14,11 @@ import {
 } from './controlSequenceCompaction';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
+import {
+  captureMemoryAuthoritySnapshot,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+  type MemoryAuthoritySnapshot,
+} from './memoryAuthority';
 
 const logger = createLogger('memory.llmFactSelector');
 
@@ -36,6 +41,8 @@ export interface LlmMemorySelectorConfig {
   timeoutMs?: number;
   maxTokens?: number;
   memoryReadEpoch?: number;
+  /** Exact projection generation captured by the retrieval that owns this selector. */
+  memoryAuthoritySnapshot?: MemoryAuthoritySnapshot;
 }
 
 const SELECTION_SCHEMA: StructuredOutputOptions = {
@@ -156,7 +163,9 @@ function compactObservedAffordanceComplementForSelector(params: {
   const indexed = observedAffordances
     .map((entry, index) => {
       const hits = matchedQueryUnitSet(JSON.stringify(entry), queryUnits);
-      const complementaryHitCount = Array.from(hits).filter((unit) => !controlHits.has(unit)).length;
+      const complementaryHitCount = Array.from(hits).filter(
+        (unit) => !controlHits.has(unit),
+      ).length;
       return {
         index,
         value: entry,
@@ -175,7 +184,9 @@ function compactObservedAffordanceComplementForSelector(params: {
     .slice(0, MAX_SELECTOR_AFFORDANCE_COMPLEMENT_ITEMS);
 
   if (indexed.length === 0) return undefined;
-  const selected = indexed.sort((left, right) => left.index - right.index).map((entry) => entry.value);
+  const selected = indexed
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.value);
   return fitUnknownValue(selected, MAX_STEP_TEXT_CHARS, MAX_SELECTOR_AFFORDANCE_COMPLEMENT_ITEMS);
 }
 
@@ -335,6 +346,8 @@ function selectorEvidenceText(
     const compact = {
       sourceRunId: parsed.sourceRunId,
       goal: fitUnknownValue(parsed.goal, 500),
+      domain: fitUnknownValue(parsed.domain, 120),
+      environment: fitUnknownValue(parsed.environment, 160),
       sequence: parsed.sequence,
       ...step,
     };
@@ -349,6 +362,8 @@ function selectorEvidenceText(
   }
   const compact = {
     sourceRunId: parsed.sourceRunId,
+    domain: fitUnknownValue(parsed.domain, 120),
+    environment: fitUnknownValue(parsed.environment, 160),
     status: fitUnknownValue(parsed.status, 120),
     outcome: fitUnknownValue(parsed.outcome, 500),
     evidenceSlices: selectStepsForPrompt(parsed.evidenceSlices, queryUnits, anchorUnitSets),
@@ -416,9 +431,21 @@ export function createLlmMemoryFactSelector(
   if (!model) return undefined;
   const memoryReadEpoch = config.memoryReadEpoch ?? captureMemoryReadEpoch();
   if (memoryReadEpoch === null || !isMemoryReadEpochCurrent(memoryReadEpoch)) return undefined;
+  const memoryAuthoritySnapshot =
+    config.memoryAuthoritySnapshot ?? captureMemoryAuthoritySnapshot();
+  if (!memoryAuthoritySnapshot) return undefined;
+
+  const isSelectorAuthorityCurrent = (): boolean =>
+    isMemoryReadEpochCurrent(memoryReadEpoch) &&
+    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(memoryAuthoritySnapshot);
+  const assertSelectorDispatchAuthorized = (): void => {
+    if (!isSelectorAuthorityCurrent()) {
+      throw new Error('memory_fact_selector_authority_revoked');
+    }
+  };
 
   return async ({ query, limit, candidates }) => {
-    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return { factIds: [] };
+    if (!isSelectorAuthorityCurrent()) return { factIds: [] };
     if (candidates.length === 0) return { factIds: [] };
     const queryUnits = tokenizeLexicalUnits(query);
     const anchorUnitSets = quotedSpanUnitSets(query, SELECTOR_QUOTED_ANCHOR_LIMIT);
@@ -441,7 +468,7 @@ export function createLlmMemoryFactSelector(
     ];
 
     try {
-      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return { factIds: [] };
+      if (!isSelectorAuthorityCurrent()) return { factIds: [] };
       const response = await sendLlmMessage({
         provider,
         messages,
@@ -453,12 +480,13 @@ export function createLlmMemoryFactSelector(
           reasoning_effort: 'none',
           signal: createTimeoutSignal(config.timeoutMs ?? DEFAULT_SELECTOR_TIMEOUT_MS),
           structuredOutput: SELECTION_SCHEMA,
+          requestDispatchGuard: assertSelectorDispatchAuthorized,
         },
       });
-      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return { factIds: [] };
+      if (!isSelectorAuthorityCurrent()) return { factIds: [] };
       return { factIds: parsedFactIds(response).slice(0, limit) };
     } catch (error) {
-      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return { factIds: [] };
+      if (!isSelectorAuthorityCurrent()) return { factIds: [] };
       logger.devWarn(
         'Memory fact selector failed:',
         error instanceof Error ? error.message : String(error),
