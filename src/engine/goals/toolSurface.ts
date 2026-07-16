@@ -99,9 +99,14 @@ function isMemoryResourceTool(tool: Pick<ToolDefinition, 'contract'> | undefined
   return (tool?.contract?.resourceKinds ?? []).includes('memory');
 }
 
-function isDefaultMobileDiscoveryTool(tool: Pick<ToolDefinition, 'contract'> | undefined): boolean {
+function isDefaultMobileDiscoveryTool(
+  tool: Pick<ToolDefinition, 'contract' | 'input_schema'> | undefined,
+): boolean {
   const contract = tool?.contract;
   const workflowContract = normalizeToolWorkflowContract(contract);
+  if ((tool?.input_schema.required?.length ?? 0) > 0) {
+    return false;
+  }
   if (!normalizeTagList(contract?.resourceKinds).includes('device')) {
     return false;
   }
@@ -589,6 +594,7 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
     Array.from(toolByName.values()).filter((tool) =>
       selectedNames.has(normalizeToolName(tool.name)),
     ),
+    stablePrefixToolNames,
   ).map((tool) => {
     const normalizedName = normalizeToolName(tool.name);
     return withPromptCachePlacement(
@@ -598,10 +604,18 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
   });
 }
 
-function orderTurnToolSurface(tools: ReadonlyArray<ToolDefinition>): ToolDefinition[] {
+function orderTurnToolSurface(
+  tools: ReadonlyArray<ToolDefinition>,
+  stablePrefixToolNames: ReadonlySet<string>,
+): ToolDefinition[] {
   return [...tools].sort((left, right) => {
     const leftName = normalizeToolName(left.name);
     const rightName = normalizeToolName(right.name);
+    const leftStable = stablePrefixToolNames.has(leftName);
+    const rightStable = stablePrefixToolNames.has(rightName);
+    if (leftStable !== rightStable) {
+      return leftStable ? -1 : 1;
+    }
     const leftOrder = STABLE_TOOL_SURFACE_ORDER.get(leftName);
     const rightOrder = STABLE_TOOL_SURFACE_ORDER.get(rightName);
 

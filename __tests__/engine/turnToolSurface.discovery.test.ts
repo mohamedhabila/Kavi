@@ -1,5 +1,9 @@
 import { resolveDefaultGroundedRequestScopedTools } from '../../src/engine/graph/turnToolSurface';
 import { resolveTurnToolSurface } from '../../src/engine/goals/toolSurface';
+import {
+  CALENDAR_EVENTS_TOOL,
+  CALENDAR_LIST_TOOL,
+} from '../../src/engine/tools/native/calendar/definitions';
 import { resourceFlowTools, tools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
 describe('resolveDefaultGroundedRequestScopedTools', () => {
@@ -99,6 +103,28 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(names.has('contacts_search')).toBe(true);
     expect(names.has('sms_compose')).toBe(false);
     expect(names.has('contacts_get')).toBe(false);
+  });
+
+  it('keeps stable mobile discovery tools ahead of dynamically activated consumers', () => {
+    const selected = resolveTurnToolSurface({
+      allTools: [CALENDAR_EVENTS_TOOL, CALENDAR_LIST_TOOL],
+      goals: [],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(['calendar_events']),
+      includeToolCatalog: false,
+    });
+
+    expect(
+      selected.map((tool) => ({
+        name: tool.name,
+        placement: tool.promptCache?.placement,
+      })),
+    ).toEqual([
+      { name: 'calendar_list', placement: 'stable_prefix' },
+      { name: 'calendar_events', placement: 'dynamic_suffix' },
+    ]);
   });
 
   it('keeps an unscoped chitchat turn closed over external state', () => {
