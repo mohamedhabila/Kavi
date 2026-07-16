@@ -1,3 +1,8 @@
+jest.mock('../../src/services/memory/policy', () => ({
+  ...jest.requireActual('../../src/services/memory/policy'),
+  isLongTermMemoryEnabled: jest.fn(() => true),
+}));
+
 import { executeToolCatalog } from '../../src/engine/tools/builtin-tool-catalog';
 import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 import {
@@ -36,6 +41,37 @@ describe('builtin-tool-catalogSearch', () => {
 
     expect(matches.map((tool) => tool.name)).toEqual(
       expect.arrayContaining(['contacts_search', 'sms_compose']),
+    );
+  });
+
+  it('preserves related structural matches in mixed multi-tool queries', async () => {
+    const result = await executeToolCatalog({
+      category: 'mobile',
+      query: 'clipboard share sheet notification',
+      capabilities: [
+        'discover',
+        'read',
+        'write',
+        'commit',
+        'push',
+        'deploy',
+        'monitor',
+        'wait',
+        'verify',
+        'coordinate',
+        'compute',
+      ],
+    });
+    const parsed = parseCompletedToolOutcome(result);
+    const toolNames = parsed.tools.map((tool: { name: string }) => tool.name);
+
+    expect(toolNames).toEqual(
+      expect.arrayContaining([
+        'clipboard',
+        'share',
+        'notification_schedule',
+        'notification_cancel',
+      ]),
     );
   });
 

@@ -220,7 +220,10 @@ function searchInitialCatalogEntries(
       searchIndex.some((entry) => entry.name.toLowerCase() === token),
     ),
   );
-  if (exactIdentifierTokens.size > 1) {
+  if (
+    exactIdentifierTokens.size > 1 &&
+    exactIdentifierTokens.size === params.queryTokens.length
+  ) {
     return searchIndex.filter(
       (entry) =>
         exactIdentifierTokens.has(entry.name.toLowerCase()) &&
