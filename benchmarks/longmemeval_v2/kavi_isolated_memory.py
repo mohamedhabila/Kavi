@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -89,6 +90,7 @@ class KaviMemoryRuntimeClient:
         self.request_counter = 0
         self.lock = threading.Lock()
         self.stderr_lines: list[str] = []
+        self.closed = False
 
         self.db_dir.mkdir(parents=True, exist_ok=True)
         self._ensure_runtime_bundle()
@@ -129,6 +131,7 @@ class KaviMemoryRuntimeClient:
 
     def call(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
+            require(not self.closed, "Kavi memory runtime is closed")
             if self.process.poll() is not None:
                 raise RuntimeError(
                     f"Kavi memory runtime exited with {self.process.returncode}. "
@@ -155,17 +158,22 @@ class KaviMemoryRuntimeClient:
             return result if isinstance(result, dict) else {}
 
     def close(self) -> None:
-        process = getattr(self, "process", None)
-        if process is None or process.poll() is not None:
+        if self.closed:
             return
+        process = getattr(self, "process", None)
         try:
-            self.call({"op": "shutdown"})
-        except Exception:
-            process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
+            if process is not None and process.poll() is None:
+                try:
+                    self.call({"op": "shutdown"})
+                except Exception:
+                    process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+        finally:
+            self.closed = True
+            atexit.unregister(self.close)
 
 
 @register_memory
@@ -206,6 +214,7 @@ class KaviIsolatedMemory(Memory):
         self.db_dir = self.instance_dir / "db"
         self.trace_dir: Path | None = None
         self.last_query_metadata: dict[str, object] | None = None
+        self.last_runtime_stats: dict[str, object] | None = None
 
         runtime_bundle_path = Path(runtime_bundle_value).resolve()
 
@@ -371,15 +380,22 @@ class KaviIsolatedMemory(Memory):
         memory_context: list[MemoryContextItem],
     ) -> dict[str, object] | None:
         metadata = self.last_query_metadata or {}
-        return {
+        stats = metadata.get("stats")
+        if isinstance(stats, dict):
+            self.last_runtime_stats = dict(stats)
+        result = {
             "memory_type": self.memory_type,
             "returned_items": len(memory_context),
             "duration_seconds": metadata.get("duration_seconds"),
-            "stats": metadata.get("stats"),
+            "stats": stats,
+            "workspace_retained": False,
         }
+        self.client.close()
+        shutil.rmtree(self.instance_dir)
+        return result
 
     def _save_backend(self, output_dir: Path) -> None:
-        stats = self.client.call({"op": "stats"})
+        stats = self.last_runtime_stats or self.client.call({"op": "stats"})
         (output_dir / "kavi_memory_runtime_stats.json").write_text(
             json.dumps(stats, indent=2, ensure_ascii=True) + "\n",
             encoding="utf-8",

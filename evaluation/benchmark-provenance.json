@@ -19,7 +19,7 @@
         "integrationKind": "upstream_memory_backend_patch",
         "roots": ["benchmarks/longmemeval_v2"],
         "sourceDigestAlgorithm": "sha256_versionable_path_nul_bytes_nul_v2",
-        "sourceSha256": "4fdd21f3a23a9a8af445510d09fc93eb4e6ed9d1ae14f7e0e42d8ece4676a4f7",
+        "sourceSha256": "b6246dc152fdee54dfad82f50623644ee000d4c4abbb7547cadc284d78ddf469",
         "modifiesUpstream": true
       },
       "upstream": {

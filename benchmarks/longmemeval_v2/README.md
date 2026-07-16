@@ -34,6 +34,12 @@ by Kavi's app flows:
 - query-time retrieval runs through `buildUnifiedMemoryAccessContext` in
   `agentic` mode and returns Kavi living-memory sections.
 
+Each upstream question owns a one-shot runtime. After its query result, trace,
+and runtime statistics are captured, the adapter closes the Node process and
+removes that question's SQLite workspace. The score-bearing prompt row and
+query trace remain; transient databases do not accumulate across the full
+451-question run.
+
 ## Smoke
 
 ```bash
