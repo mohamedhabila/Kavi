@@ -7,7 +7,8 @@ import {
 
 export const CALENDAR_LIST_TOOL: ToolDefinition = {
   name: 'calendar_list',
-  description: 'List all calendars on the device.',
+  description:
+    'List calendars on the device to verify calendar access and whether a writable calendar is available. This does not inspect free/busy time and requires no date range; use calendar_events only when events within a specific range are needed.',
   input_schema: { type: 'object', properties: {}, required: [] },
   contract: nativeContract({
     category: 'calendar',
@@ -27,7 +28,8 @@ export const CALENDAR_LIST_TOOL: ToolDefinition = {
 
 export const CALENDAR_EVENTS_TOOL: ToolDefinition = {
   name: 'calendar_events',
-  description: 'Get calendar events within a date range.',
+  description:
+    'Get calendar events within a specific date range. Use calendar_list instead when the request is only to verify calendar access or writable-calendar availability.',
   input_schema: {
     type: 'object',
     properties: {
