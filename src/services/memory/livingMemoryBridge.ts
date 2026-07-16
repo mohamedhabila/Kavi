@@ -18,6 +18,12 @@ import { createLogger } from '../../utils/logger';
 import { getEntityById } from './entities';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
+import {
+  captureMemoryAuthoritySnapshot,
+  isMemoryProjectionSnapshotCurrent,
+  isMemoryProjectionSnapshotDurablyCurrent,
+  type MemoryAuthoritySnapshot,
+} from './memoryAuthority';
 import type {
   RecallCandidateStrategy,
   RecallLocalSimilarityInput,
@@ -59,11 +65,23 @@ import { markFactsRecalled } from './facts/factAccessMutations';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 import { revalidateAutomaticPromptEpisodeSelection } from './episodes/automaticPromptAccess';
+import type { EpisodeRecallSelection } from './episodes/accessPolicyTypes';
+import {
+  earliestFutureMemoryValidityDeadline,
+  isMemoryValidityDeadlineCurrent,
+} from './memoryValidityDeadline';
+import {
+  isReceiptBackedProcedureLearningFact,
+  resolveApplicableReceiptBackedProcedure,
+  type ReceiptBackedProcedureRuntime,
+} from './receiptBackedProcedureRecall';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
 const FOCUS_BLOCK_LABEL = 'active_focus';
 const OPEN_THREADS_LABEL = 'open_threads';
+export const CURRENT_MEMORY_PRESENTATION_CONTRACT =
+  'Memory presentation contract: Retrieved Memory contains facts that product code has already checked for current scope, validity, authority, conflicts, sensitivity, and direct usability. Treat facts labeled policy=use as available context for the requested answer or action; their predicate may be a canonical identifier, so interpret subject, predicate, and value together. Do not ask the user to repeat them or call a memory read tool merely to verify a fact already shown here. Re-read memory only when the needed fact is absent, broader history is requested, or current evidence conflicts. Do not disclose superseded or historical values merely to explain a current answer; disclose them only when the user actually asks for history or comparison.';
 
 export interface BuildLivingMemorySectionsOptions {
   /** Working messages (after enrichment). Used for last-assistant timestamp + recall query. */
@@ -83,6 +101,10 @@ export interface BuildLivingMemorySectionsOptions {
   recallLimit?: number;
   /** When true, skip recall entirely (e.g. for tool-only iterations). */
   disableRecall?: boolean;
+  /** Evaluation seam for a same-path learning-off ablation. Production leaves this false. */
+  disableExperienceLearningRecall?: boolean;
+  /** Exact runtime override for procedure drift validation in integration tests. */
+  receiptBackedProcedureRuntime?: ReceiptBackedProcedureRuntime;
   /**
    * When the user has opted out of long-term memory,
    * the bridge returns the empty output so no working state, focus header or
@@ -117,18 +139,24 @@ export interface BuildLivingMemorySectionsOptions {
   localSimilarity?: RecallLocalSimilarityInput;
   /** One enabled read generation spanning barrier, selector, prompt, and telemetry. */
   memoryReadEpoch?: number;
+  /** Exact projection generation spanning every read, selector, and telemetry write. */
+  memoryAuthoritySnapshot?: MemoryAuthoritySnapshot;
 }
 
 export interface LivingMemoryBridgeOutput {
   /** Enabled policy generation that authorizes these prompt sections. */
   memoryReadEpoch?: number;
+  /** Exact restrictive and projection generation captured before retrieval assembly. */
+  memoryAuthoritySnapshot?: MemoryAuthoritySnapshot;
+  /** Earliest expiry of any fact or episode authorization projected into this prompt. */
+  validUntil?: number;
   /** Sections to append to the existing system-prompt sections array. */
   sections: SystemPromptSection[];
   /** Stable hash of the provider-cacheable prefix. Memory sections are dynamic until epoch admission. */
   cacheableSignature: string;
-  /** Trimmed `active_focus` block content (for compaction `focusBlock` param). */
+  /** Trimmed `active_focus` block content used by memory-aware app surfaces. */
   focusBlockText: string;
-  /** Open-thread labels split on newlines (for compaction `openThreads` param). */
+  /** Open-thread labels split on newlines for memory-aware app surfaces. */
   openThreadLabels: string[];
   /** Milliseconds since the last assistant turn (or user turn). */
   idleSinceLastTurnMs?: number;
@@ -174,6 +202,20 @@ const EMPTY_OUTPUT: LivingMemoryBridgeOutput = {
   recalledEpisodeCount: 0,
   applicabilityPolicy: emptyMemoryApplicabilitySummary('disabled'),
 };
+
+export function resolveLivingMemoryValidUntil(input: {
+  facts: ReadonlyArray<Pick<PromptMemoryFact, 'expiresAt'>>;
+  episodeSelections: ReadonlyArray<Pick<EpisodeRecallSelection, 'policyExpiresAt'>>;
+  now: number;
+}): number | undefined {
+  return earliestFutureMemoryValidityDeadline(
+    [
+      ...input.facts.map((fact) => fact.expiresAt),
+      ...input.episodeSelections.map((selection) => selection.policyExpiresAt),
+    ],
+    input.now,
+  );
+}
 
 function safeGetWorkingBlock(
   label: 'active_focus' | 'open_threads',
@@ -256,9 +298,9 @@ function resolveApplicabilityScope(
 }
 
 /**
- * Build the per-request memory-aware sections + the inputs the compaction
- * engine needs (focus / open threads / idle gap). Safe to call once per
- * request; reuse the result across iterations of the same user turn.
+ * Build one authority-bound memory projection plus the inputs the compaction
+ * engine needs (focus / open threads / idle gap). A session may reuse this
+ * result only while its attached projection snapshot remains current.
  */
 export async function buildLivingMemorySections(
   options: BuildLivingMemorySectionsOptions,
@@ -300,9 +342,8 @@ export async function buildLivingMemorySections(
     candidateStrategy,
     localSimilarity,
     memoryReadEpoch: requestedMemoryReadEpoch,
+    memoryAuthoritySnapshot: requestedMemoryAuthoritySnapshot,
   } = options;
-
-  const memoryReadEpoch = requestedMemoryReadEpoch ?? captureMemoryReadEpoch();
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return EMPTY_OUTPUT;
@@ -310,14 +351,20 @@ export async function buildLivingMemorySections(
 
   // When the user has opted out of long-term memory, bail before any working-state or recall query
   // so the SQLite path is not touched and the prompt stays stateless.
-  if (
-    disableLongTermMemory ||
-    consistencyBarrier?.outcome === 'opt_out' ||
-    memoryReadEpoch === null ||
-    !isMemoryReadEpochCurrent(memoryReadEpoch)
-  ) {
+  if (disableLongTermMemory || consistencyBarrier?.outcome === 'opt_out') {
     return EMPTY_OUTPUT;
   }
+
+  const memoryReadEpoch = requestedMemoryReadEpoch ?? captureMemoryReadEpoch();
+  if (memoryReadEpoch === null || !isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
+  const initialMemoryAuthoritySnapshot =
+    requestedMemoryAuthoritySnapshot ?? captureMemoryAuthoritySnapshot();
+  if (!initialMemoryAuthoritySnapshot) return EMPTY_OUTPUT;
+  let memoryAuthoritySnapshot: MemoryAuthoritySnapshot = initialMemoryAuthoritySnapshot;
+  const isProjectionCurrent = (): boolean =>
+    isMemoryProjectionSnapshotCurrent(memoryAuthoritySnapshot) &&
+    isMemoryProjectionSnapshotDurablyCurrent(memoryAuthoritySnapshot);
+  if (!isProjectionCurrent()) return EMPTY_OUTPUT;
 
   const resolvedTaskId = taskId;
   let activeTaskTitle: string | null = null;
@@ -386,7 +433,9 @@ export async function buildLivingMemorySections(
   let retrievalTimings: RetrievalOrchestratorTimings | undefined;
   let retrievalState: PromptAssemblyRetrievalState = disableRecall ? 'disabled' : 'completed';
   const factSelector = !disableRecall
-    ? createLlmMemoryFactSelector(retrievalLlm ? { ...retrievalLlm, memoryReadEpoch } : undefined)
+    ? createLlmMemoryFactSelector(
+        retrievalLlm ? { ...retrievalLlm, memoryReadEpoch, memoryAuthoritySnapshot } : undefined,
+      )
     : null;
   if (!disableRecall) {
     const retrievalStarted = Date.now();
@@ -406,7 +455,9 @@ export async function buildLivingMemorySections(
         ...(localSimilarity ? { localSimilarity } : {}),
         memoryReadEpoch,
       });
-      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
+      if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) {
+        return EMPTY_OUTPUT;
+      }
       recalledFacts = retrieval.facts;
       resolutionFacts = retrieval.resolutionFacts;
       recalledEpisodeSelections = retrieval.episodeSelections.flatMap((selection) => {
@@ -420,7 +471,9 @@ export async function buildLivingMemorySections(
       recalledEpisodes = recalledEpisodeSelections.map((selection) => selection.episode);
       retrievalTimings = retrieval.timings;
     } catch (error) {
-      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
+      if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) {
+        return EMPTY_OUTPUT;
+      }
       logger.devWarn(
         'livingMemoryBridge.orchestrateMemoryRetrieval failed:',
         error instanceof Error ? error.message : String(error),
@@ -483,9 +536,40 @@ export async function buildLivingMemorySections(
     ];
   });
   const resolutionFactIds = selectMemoryApplicabilityResolutionFactIds(applicableFacts);
-  const assemblyVisibleFacts = applicableFacts.filter(
+  let assemblyVisibleFacts = applicableFacts.filter(
     (fact) => fact.applicability?.action === 'use' || resolutionFactIds.has(fact.id),
   );
+  const applicableProcedureSections: string[] = [];
+  const procedureFactIds = new Set(
+    assemblyVisibleFacts
+      .filter(isReceiptBackedProcedureLearningFact)
+      .map((fact) => fact.id),
+  );
+  if (procedureFactIds.size > 0) {
+    const validProcedureFactIds = new Set<string>();
+    if (!options.disableExperienceLearningRecall) {
+      for (const fact of assemblyVisibleFacts) {
+        if (!procedureFactIds.has(fact.id) || fact.applicability?.action !== 'use') continue;
+        const applicable = await resolveApplicableReceiptBackedProcedure({
+          fact,
+          memoryOwnerId: applicabilityScope.memoryOwnerId,
+          asOf: now,
+          ...(options.receiptBackedProcedureRuntime
+            ? { runtime: options.receiptBackedProcedureRuntime }
+            : {}),
+        });
+        if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) {
+          return EMPTY_OUTPUT;
+        }
+        if (!applicable) continue;
+        validProcedureFactIds.add(fact.id);
+        applicableProcedureSections.push(applicable.section);
+      }
+    }
+    assemblyVisibleFacts = assemblyVisibleFacts.filter(
+      (fact) => !procedureFactIds.has(fact.id) || validProcedureFactIds.has(fact.id),
+    );
+  }
   const applicabilitySummary: MemoryApplicabilitySummary = {
     ...applicability.summary,
     promptVisibleFactCount: assemblyVisibleFacts.length,
@@ -496,8 +580,11 @@ export async function buildLivingMemorySections(
   const directlyUsableFacts = assemblyVisibleFacts.filter(
     (fact) => fact.applicability?.action === 'use',
   );
+  const directlyUsableEvidenceFacts = directlyUsableFacts.filter(
+    (fact) => !isReceiptBackedProcedureLearningFact(fact),
+  );
   const localEvidencePrompt = buildLocalEvidencePrompt({
-    facts: directlyUsableFacts,
+    facts: directlyUsableEvidenceFacts,
     episodeSelections: recalledEpisodeSelections,
     currentScope: applicabilityScope,
     asOf: now,
@@ -506,11 +593,20 @@ export async function buildLivingMemorySections(
   if (localEvidencePrompt.diagnostics.outcome === 'failed' && retrievalState === 'completed') {
     retrievalState = 'degraded';
   }
+  const validUntil = resolveLivingMemoryValidUntil({
+    facts: assemblyVisibleFacts,
+    episodeSelections: recalledEpisodeSelections,
+    now,
+  });
 
   const dynamicAddenda: string[] = [];
+  if (directlyUsableFacts.length > 0) {
+    dynamicAddenda.push(CURRENT_MEMORY_PRESENTATION_CONTRACT);
+  }
   if (activeTaskTitle) {
     dynamicAddenda.push(`Active task: ${activeTaskTitle}`);
   }
+  dynamicAddenda.push(...applicableProcedureSections);
   let reflectionBlock = '';
   if (conversationId) {
     const reflectionStarted = Date.now();
@@ -532,7 +628,9 @@ export async function buildLivingMemorySections(
   }
 
   const subjectLabelsStarted = Date.now();
-  const factsForPrompt = withFactSubjectLabels(assemblyVisibleFacts);
+  const factsForPrompt = withFactSubjectLabels(
+    assemblyVisibleFacts.filter((fact) => !isReceiptBackedProcedureLearningFact(fact)),
+  );
   timings.subjectLabelsMs += Date.now() - subjectLabelsStarted;
   const assembleStarted = Date.now();
   const assembled = assemblePrompt({
@@ -552,14 +650,20 @@ export async function buildLivingMemorySections(
   const idleSinceLastTurnMs =
     typeof idleAnchor === 'number' ? Math.max(now - idleAnchor, 0) : undefined;
 
-  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
-  markFactsRecalled(
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) return EMPTY_OUTPUT;
+  const recallMutation = markFactsRecalled(
     assemblyVisibleFacts.map((fact) => fact.id),
     now,
+    { expectedAuthoritySnapshot: memoryAuthoritySnapshot },
   );
+  if (recallMutation.status === 'authority_stale') return EMPTY_OUTPUT;
+  if (recallMutation.status === 'updated') {
+    if (!recallMutation.authorityContinuation) return EMPTY_OUTPUT;
+    memoryAuthoritySnapshot = recallMutation.authorityContinuation;
+  }
 
   const eventStarted = Date.now();
-  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) return EMPTY_OUTPUT;
   const retrievalEvent = await recordPromptAssemblyRetrievalEvent({
     query,
     ...(conversationId ? { memoryConversationId: conversationId } : {}),
@@ -574,14 +678,23 @@ export async function buildLivingMemorySections(
     createdAt: now,
     memoryReadEpoch,
   });
-  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) return EMPTY_OUTPUT;
   timings.recordRetrievalEventMs += Date.now() - eventStarted;
   timings.totalMs = Date.now() - totalStarted;
   if (retrievalTimings) timings.retrieval = retrievalTimings;
 
-  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
+  const finalObservedAt = options.now === undefined ? Date.now() : now;
+  if (
+    !isMemoryReadEpochCurrent(memoryReadEpoch) ||
+    !isProjectionCurrent() ||
+    !isMemoryValidityDeadlineCurrent(validUntil, finalObservedAt)
+  ) {
+    return EMPTY_OUTPUT;
+  }
   return {
     memoryReadEpoch,
+    memoryAuthoritySnapshot,
+    ...(validUntil === undefined ? {} : { validUntil }),
     sections,
     cacheableSignature: assembled.cacheableSignature,
     focusBlockText,

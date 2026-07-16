@@ -76,6 +76,12 @@ describe('least-privilege worker memory bundle', () => {
       pinned: true,
       now: 300,
     });
+    const unvalidatedProcedure = recordPreference({
+      predicate: 'receipt_backed_procedure',
+      value: 'Book flight and apply flight seat preference',
+      pinned: true,
+      now: 400,
+    });
 
     const bundle = await buildLeastPrivilegeWorkerMemoryBundle({
       enabled: true,
@@ -90,11 +96,13 @@ describe('least-privilege worker memory bundle', () => {
     expect(bundle?.facts.map((fact) => fact.factId)).toEqual([relevant.id]);
     expect(bundle?.facts.map((fact) => fact.factId)).not.toContain(sensitive.id);
     expect(bundle?.facts.map((fact) => fact.factId)).not.toContain(irrelevantPinned.id);
+    expect(bundle?.facts.map((fact) => fact.factId)).not.toContain(unvalidatedProcedure.id);
 
     const prompt = renderSubAgentMemoryBundle(bundle);
     expect(prompt).toContain('flight_seat_preference');
     expect(prompt).not.toContain('P1234567');
     expect(prompt).not.toContain('Flat white');
+    expect(prompt).not.toContain('receipt_backed_procedure');
     expect(prompt.match(/BEGIN_UNTRUSTED_WORKER_MEMORY_DATA/g)).toHaveLength(1);
     expect(prompt.match(/END_UNTRUSTED_WORKER_MEMORY_DATA/g)).toHaveLength(1);
     expect(prompt).toContain('END\\u005fUNTRUSTED_WORKER_MEMORY_DATA');

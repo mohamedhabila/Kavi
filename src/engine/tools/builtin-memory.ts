@@ -28,6 +28,10 @@ import type {
   MemoryApplicabilitySummary,
 } from '../../services/memory/memoryApplicabilityTypes';
 import { projectAgentRunExperienceViews } from '../../services/memory/experienceRecords';
+import {
+  isReceiptBackedProcedureLearningFact,
+  resolveApplicableReceiptBackedProcedure,
+} from '../../services/memory/receiptBackedProcedureRecall';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from '../../services/memory/policy';
 import {
   completedToolOutcome,
@@ -82,6 +86,7 @@ interface MemorySearchCandidate {
   score: number | null;
   relevanceScore: number | null;
   applicability: MemoryApplicabilityAnnotation;
+  procedureAdvisory?: string;
 }
 
 function formatSearchResult(entry: MemorySearchCandidate, index: number): object {
@@ -102,7 +107,32 @@ function formatSearchResult(entry: MemorySearchCandidate, index: number): object
     relevance: entry.score === null ? null : `${Math.round(entry.score * 100)}%`,
     policy: applicability,
     ...(experienceViews.length > 0 ? { experienceViews } : {}),
+    ...(entry.procedureAdvisory ? { procedureAdvisory: entry.procedureAdvisory } : {}),
   };
+}
+
+async function revalidateMemorySearchProcedures(input: {
+  candidates: ReadonlyArray<MemorySearchCandidate>;
+  memoryOwnerId: string;
+  asOf: number;
+}): Promise<MemorySearchCandidate[]> {
+  const validated: MemorySearchCandidate[] = [];
+  for (const candidate of input.candidates) {
+    if (!isReceiptBackedProcedureLearningFact(candidate.fact)) {
+      validated.push(candidate);
+      continue;
+    }
+    if (candidate.applicability.action !== 'use') continue;
+    const applicable = await resolveApplicableReceiptBackedProcedure({
+      fact: candidate.fact,
+      memoryOwnerId: input.memoryOwnerId,
+      asOf: input.asOf,
+    });
+    if (applicable) {
+      validated.push({ ...candidate, procedureAdvisory: applicable.section });
+    }
+  }
+  return validated;
 }
 
 function searchSourceForFact(entry: Pick<MemorySearchCandidate, 'fact'>): string {
@@ -231,16 +261,24 @@ export async function executeMemorySearch(
         ...(persistedConflicts.length > 0 ? { externalEvidence: persistedConflicts } : {}),
       },
     });
-    const selected = selectSearchCandidates({
+    const policySelected = selectSearchCandidates({
       scoredFacts: selection.scoredFacts,
       resolutionFacts: selection.resolutionFacts,
       decisions: applicability.factDecisions,
       limit: maxResults,
     });
+    const selected = await revalidateMemorySearchProcedures({
+      candidates: policySelected,
+      memoryOwnerId: memoryScope.memoryOwnerId,
+      asOf: now,
+    });
     const applicabilitySummary: MemoryApplicabilitySummary = {
       ...applicability.summary,
       promptVisibleFactCount: selected.length,
-      promptBudgetDroppedFactCount: applicability.summary.promptVisibleFactCount - selected.length,
+      promptBudgetDroppedFactCount: Math.max(
+        0,
+        applicability.summary.promptVisibleFactCount - selected.length,
+      ),
     };
     if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
     markFactsRecalled(

@@ -139,8 +139,7 @@ describe('living-memory tool wiring', () => {
     const evidence = MEMORY_REMEMBER_TOOL.input_schema.properties.semanticEvidence;
     const fields = [
       'version',
-      'subject_ref',
-      'subject_type',
+      'subject',
       'predicate',
       'value',
       'scope',
@@ -151,9 +150,31 @@ describe('living-memory tool wiring', () => {
       'sensitivity',
     ];
     expect(evidence.additionalProperties).toBe(false);
-    expect(evidence.properties.version.enum).toEqual([3]);
+    expect(evidence.properties.version.enum).toEqual([4]);
+    expect(evidence.properties.value.description).toContain(
+      'Smallest atomic exact value copied verbatim',
+    );
+    expect(evidence.properties.scope.description).toContain(
+      'When the user explicitly asks to remember a fact without limiting its context, prefer global',
+    );
+    expect(MEMORY_RECALL_TOOL.input_schema.properties.scope.description).toContain(
+      'Omit it when the stored scope is not already known',
+    );
+    expect(MEMORY_RECALL_TOOL.input_schema.properties.subject.description).toContain(
+      'for the current user, use "user"',
+    );
     expect(Object.keys(evidence.properties)).toEqual(fields);
     expect(evidence.required).toEqual(fields);
+    expect(evidence.properties.subject.oneOf).toEqual([
+      expect.objectContaining({
+        required: ['kind'],
+        additionalProperties: false,
+      }),
+      expect.objectContaining({
+        required: ['kind', 'label', 'type'],
+        additionalProperties: false,
+      }),
+    ]);
     expect(evidence.properties.assertion_class.enum).toEqual(
       expect.arrayContaining(['current_direct', 'quoted', 'third_party', 'uncertain']),
     );

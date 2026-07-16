@@ -19,6 +19,7 @@ import {
 } from '../memory/memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from '../memory/memoryScopeStore';
 import { isExactMemoryProvenanceId } from '../memory/memoryProvenanceIdentity';
+import { RECEIPT_BACKED_PROCEDURE_PREDICATE } from '../memory/receiptBackedProcedurePromotion';
 import { orchestrateMemoryRetrieval } from '../memory/retrievalOrchestrator';
 import { tokenizeLexicalUnits } from '../memory/ranking/lexical';
 
@@ -384,6 +385,10 @@ export async function buildLeastPrivilegeWorkerMemoryBundle(input: {
         (fact) =>
           usableFactIds.has(fact.id) && relevantIds.has(fact.id) && fact.sensitivity === 'normal',
       )
+      // Procedure indexes are executable guidance only after current runtime,
+      // permission, contract, and source-evidence validation. Workers receive
+      // evidence, not unvalidated procedure instructions.
+      .filter((fact) => fact.predicate !== RECEIPT_BACKED_PROCEDURE_PREDICATE)
       .map(factBundleRecord)
       .filter((fact): fact is SubAgentMemoryBundleFact => !!fact)
       .slice(0, WORKER_MEMORY_FACT_LIMIT);
