@@ -472,19 +472,19 @@ export interface MemoryRememberExecutionContext {
 function memoryRememberGroundingError(reason: string): string {
   switch (reason) {
     case 'session_identity_unavailable':
-      return 'memory_remember scope=session requires an active user task identity. Keep the exact subject unchanged and retry with the durability scope the user intended; use global when the user requested durable memory without a narrower context.';
+      return 'session_identity_unavailable: memory_remember scope=session requires an active user task identity. Keep the exact subject unchanged and retry with the durability scope the user intended; use global when the user requested durable memory without a narrower context.';
     case 'persona_identity_unavailable':
-      return 'memory_remember scope=persona requires an active persona identity. Keep the exact subject unchanged and use global unless the user intentionally limited the fact to one persona.';
+      return 'persona_identity_unavailable: memory_remember scope=persona requires an active persona identity. Keep the exact subject unchanged and use global unless the user intentionally limited the fact to one persona.';
     case 'project_identity_unavailable':
-      return 'memory_remember scope=project requires an active project identity. Keep the exact subject unchanged and choose a scope supported by the current context.';
+      return 'project_identity_unavailable: memory_remember scope=project requires an active project identity. Keep the exact subject unchanged and choose a scope supported by the current context.';
     case 'conversation_identity_unavailable':
-      return 'memory_remember scope=conversation requires the current conversation identity. Keep the exact subject unchanged and retry only after the conversation scope is available.';
+      return 'conversation_identity_unavailable: memory_remember scope=conversation requires the current conversation identity. Keep the exact subject unchanged and retry only after the conversation scope is available.';
     case 'operation_mismatch':
-      return 'memory_remember operation does not match the current fact state for this exact subject, predicate, and scope. Use record for no current fact and replace_current for exactly one current fact.';
+      return 'operation_mismatch: memory_remember operation does not match the current fact state for this exact subject, predicate, and scope. Use record for no current fact and replace_current for exactly one current fact.';
     case 'no_compatible_current_fact':
-      return 'memory_remember found current state under a different scope. Do not create a conflicting duplicate; recall the exact fact state and preserve its intended scope before retrying.';
+      return 'no_compatible_current_fact: memory_remember found current state under a different scope. Do not create a conflicting duplicate; recall the exact fact state and preserve its intended scope before retrying.';
     case 'ambiguous_current_fact':
-      return 'memory_remember found more than one compatible current fact. Resolve the stored conflict before changing it.';
+      return 'ambiguous_current_fact: memory_remember found more than one compatible current fact. Resolve the stored conflict before changing it.';
     default:
       return `memory_remember could not bind this write to exact current-user evidence (${reason}).`;
   }
