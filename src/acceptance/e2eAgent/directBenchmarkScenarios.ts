@@ -429,6 +429,58 @@ export const DIRECT_BEAM_LONG_DIALOGUE_MULTI_PROBE: E2EScenario = {
       scope: 'global',
     },
     {
+      kind: 'turn_memory_answer',
+      turnIndex: 7,
+      answer: {
+        kind: 'fact_values',
+        requiredValues: [
+          'BEAM-ROUTE-A',
+          'BEAM-MEAL-NEW',
+          'BEAM-WINDOW-9',
+          'BEAM-CHANNEL-7',
+        ],
+        forbiddenValues: ['BEAM-MEAL-OLD'],
+      },
+    },
+    {
+      kind: 'turn_memory_selection',
+      turnIndex: 7,
+      requiredFacts: [
+        {
+          subject: 'beam-user',
+          predicate: 'route_code',
+          value: 'BEAM-ROUTE-A',
+          scope: 'global',
+        },
+        {
+          subject: 'beam-user',
+          predicate: 'meal_preference',
+          value: 'BEAM-MEAL-NEW',
+          scope: 'global',
+        },
+        {
+          subject: 'beam-user',
+          predicate: 'reminder_window',
+          value: 'BEAM-WINDOW-9',
+          scope: 'global',
+        },
+        {
+          subject: 'beam-team',
+          predicate: 'escalation_channel',
+          value: 'BEAM-CHANNEL-7',
+          scope: 'global',
+        },
+      ],
+      forbiddenFacts: [
+        {
+          subject: 'beam-user',
+          predicate: 'meal_preference',
+          value: 'BEAM-MEAL-OLD',
+          scope: 'global',
+        },
+      ],
+    },
+    {
       kind: 'workspace_file',
       path: 'artifacts/beam-memory-probes.txt',
       contains: 'ROUTE=BEAM-ROUTE-A',
@@ -499,28 +551,28 @@ export const DIRECT_LONGMEMEVAL_V2_EXPERIENCE_RUNBOOK: E2EScenario = {
       subject: 'expense-app',
       predicate: 'default_workspace',
       value: 'TEAM-EXPENSE-E2E',
-      scope: 'project',
+      scope: 'global',
     },
     {
       kind: 'memory_fact',
       subject: 'expense-app',
       predicate: 'submit_path',
       value: 'NEW-SUBMIT-PATH-E2E',
-      scope: 'project',
+      scope: 'global',
     },
     {
       kind: 'memory_fact_absent',
       subject: 'expense-app',
       predicate: 'submit_path',
       value: 'OLD-SUBMIT-PATH-E2E',
-      scope: 'project',
+      scope: 'global',
     },
     {
       kind: 'memory_fact',
       subject: 'expense-app',
       predicate: 'workflow_gotcha',
       value: 'ATTACHMENT-BEFORE-SUBMIT-E2E',
-      scope: 'project',
+      scope: 'global',
     },
     {
       kind: 'workspace_file',
