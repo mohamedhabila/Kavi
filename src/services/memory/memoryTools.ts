@@ -461,8 +461,33 @@ export interface MemoryRememberExecutionContext {
   sourceRunId: string | null;
   /** Exact code-owned request evidence; never accepted from provider tool arguments. */
   requestEvidence: MemoryRememberRequestEvidence;
+  /** Opaque current-run authorities for exact successful code-owned read results. */
+  toolObservedEvidence?: ReadonlyArray<
+    import('./toolObservedMemoryEvidence').ToolObservedMemoryEvidenceCapability
+  >;
   /** Persisted effect authority; never accepted from provider tool arguments. */
   executionClaim: AuthorizedToolEffectExecutionClaim;
+}
+
+function memoryRememberGroundingError(reason: string): string {
+  switch (reason) {
+    case 'session_identity_unavailable':
+      return 'memory_remember scope=session requires an active user task identity. Keep the exact subject unchanged and retry with the durability scope the user intended; use global when the user requested durable memory without a narrower context.';
+    case 'persona_identity_unavailable':
+      return 'memory_remember scope=persona requires an active persona identity. Keep the exact subject unchanged and use global unless the user intentionally limited the fact to one persona.';
+    case 'project_identity_unavailable':
+      return 'memory_remember scope=project requires an active project identity. Keep the exact subject unchanged and choose a scope supported by the current context.';
+    case 'conversation_identity_unavailable':
+      return 'memory_remember scope=conversation requires the current conversation identity. Keep the exact subject unchanged and retry only after the conversation scope is available.';
+    case 'operation_mismatch':
+      return 'memory_remember operation does not match the current fact state for this exact subject, predicate, and scope. Use record for no current fact and replace_current for exactly one current fact.';
+    case 'no_compatible_current_fact':
+      return 'memory_remember found current state under a different scope. Do not create a conflicting duplicate; recall the exact fact state and preserve its intended scope before retrying.';
+    case 'ambiguous_current_fact':
+      return 'memory_remember found more than one compatible current fact. Resolve the stored conflict before changing it.';
+    default:
+      return `memory_remember could not bind this write to exact current-user evidence (${reason}).`;
+  }
 }
 
 export function executeMemoryRemember(
@@ -496,14 +521,56 @@ export function executeMemoryRemember(
   const semantic = bindMemoryRememberSemanticEvidence(
     args.semanticEvidence,
     context.requestEvidence,
+    context.toolObservedEvidence,
   );
   if (!semantic.valid) {
-    return semantic.code === 'invalid_contract'
-      ? err('invalid_args', `memory_remember semantic evidence is invalid (${semantic.code}).`)
-      : err(
-          'grounding_required',
-          `memory_remember semantic evidence is not bound to the current request (${semantic.code}).`,
+    switch (semantic.code) {
+      case 'invalid_contract':
+        return err(
+          'invalid_args',
+          'memory_remember semanticEvidence must match the declared schema exactly; include no undeclared fields.',
         );
+      case 'value_not_grounded':
+        return err(
+          'grounding_required',
+          'memory_remember semanticEvidence.value must be the smallest atomic exact substring copied from the current user message; include only the current semantic object and exclude assertion/correction wording and superseded alternatives.',
+        );
+      case 'subject_not_grounded':
+        return err(
+          'grounding_required',
+          'memory_remember named-subject labels must be copied exactly from the current user message; use subject.kind=self for the current user.',
+        );
+      case 'evidence_span_limit_exceeded':
+        return err(
+          'grounding_required',
+          'memory_remember subject and value are too far apart in the current user message; record one smaller exact fact.',
+        );
+      case 'non_current_assertion':
+        return err(
+          'grounding_required',
+          'memory_remember accepts current_direct only from the current user message and quoted only from one verified current-run read result.',
+        );
+      case 'tool_observation_named_subject_required':
+        return err(
+          'grounding_required',
+          'A tool-observed memory fact requires one exact named subject from the verified result; tool results cannot establish a self fact.',
+        );
+      case 'tool_observation_replace_forbidden':
+        return err(
+          'grounding_required',
+          'A tool-observed memory fact may only record new evidence; it cannot replace a current fact.',
+        );
+      case 'tool_observation_not_grounded':
+        return err(
+          'grounding_required',
+          'The named subject and value must both appear exactly in one verified current-run read result.',
+        );
+      case 'tool_observation_ambiguous':
+        return err(
+          'grounding_required',
+          'More than one verified current-run read result contains this subject and value; narrow the evidence before remembering it.',
+        );
+    }
   }
 
   try {
@@ -515,10 +582,7 @@ export function executeMemoryRemember(
       context,
     );
     if (persisted.status === 'grounding_required') {
-      return err(
-        'grounding_required',
-        `memory_remember requires exact current-user grounding before changing this fact (${persisted.reason}).`,
-      );
+      return err('grounding_required', memoryRememberGroundingError(persisted.reason));
     }
     if (persisted.status === 'restricted_content') {
       return err('permission_denied', 'Credentials and authentication secrets are not stored.');
