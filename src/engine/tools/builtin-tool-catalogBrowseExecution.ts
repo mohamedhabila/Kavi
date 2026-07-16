@@ -14,6 +14,7 @@ import type {
   ToolCatalogSearchToolEntry,
   ToolCatalogSkillCatalog,
 } from './builtin-tool-catalogTypes';
+import { buildToolCatalogWorkflowEdges } from './builtin-tool-catalogWorkflowEdges';
 
 type ToolCatalogStaticCategoryParams = {
   requestedCategory: string;
@@ -109,20 +110,24 @@ export function buildToolCatalogStaticCategoryResponse(
   const tools = names
     .map((name) => params.staticToolMap.get(name))
     .filter((tool): tool is ToolCatalogDescribedTool => Boolean(tool));
+  const projectedTools = tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    category: params.requestedCategory,
+    source: 'built-in' as const,
+    schemaVersion: TOOL_CATALOG_ENTRY_SCHEMA_VERSION,
+    schemaDigest: buildToolSchemaDigest(tool.input_schema),
+    capabilitySummary: buildCapabilitySummary(tool),
+    activation: buildToolCatalogActivation(tool.name, {
+      availableToolNames: params.availableToolNames,
+    }),
+  }));
   return JSON.stringify({
     mode: 'category',
     category: params.requestedCategory,
     purpose: selectedCategory.purpose,
-    tools: tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      schemaVersion: TOOL_CATALOG_ENTRY_SCHEMA_VERSION,
-      schemaDigest: buildToolSchemaDigest(tool.input_schema),
-      capabilitySummary: buildCapabilitySummary(tool),
-      activation: buildToolCatalogActivation(tool.name, {
-        availableToolNames: params.availableToolNames,
-      }),
-    })),
+    tools: projectedTools.map(({ category: _category, source: _source, ...tool }) => tool),
+    workflowEdges: buildToolCatalogWorkflowEdges(projectedTools),
   });
 }
 

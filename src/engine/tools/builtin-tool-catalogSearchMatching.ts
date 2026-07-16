@@ -89,9 +89,6 @@ export function entryMatchesCategory(
   if (!category) {
     return true;
   }
-  if (category === 'native' && entry.resourceKindTokens.has('device')) {
-    return true;
-  }
   return scoreStructuralIdentifierToken(category, entry.category) > 0;
 }
 

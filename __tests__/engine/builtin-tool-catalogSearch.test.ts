@@ -188,6 +188,23 @@ describe('builtin-tool-catalogSearch', () => {
     );
   });
 
+  it('publishes structural producer-consumer edges for dependent tool workflows', async () => {
+    const result = await executeToolCatalog({
+      category: 'notifications',
+      query: 'schedule cancel notification',
+      capabilities: ['write'],
+    });
+    const parsed = parseCompletedToolOutcome(result);
+
+    expect(parsed.workflowEdges).toContainEqual({
+      producer: 'notification_schedule',
+      consumer: 'notification_cancel',
+      resourceKinds: ['notification_id'],
+      producerCallableNow: true,
+      consumerCallableNow: true,
+    });
+  });
+
   it('discovers delegation tools from declared metadata without capability hints', async () => {
     const result = await executeToolCatalog({
       query: 'delegated worker workstream evidence',

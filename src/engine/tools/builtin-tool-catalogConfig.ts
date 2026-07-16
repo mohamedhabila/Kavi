@@ -134,6 +134,18 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
   },
   native: {
     tools: [
+      'calendar_list',
+      'calendar_events',
+      'calendar_create_event',
+      'calendar_update_event',
+      'contacts_pick',
+      'contacts_manage_access',
+      'contacts_form',
+      'contacts_share',
+      'contacts_search',
+      'contacts_get',
+      'contacts_search_full',
+      'contacts_get_full',
       'email_compose',
       'sms_compose',
       'phone_call',

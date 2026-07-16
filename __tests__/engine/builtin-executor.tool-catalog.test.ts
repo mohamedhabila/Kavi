@@ -102,7 +102,7 @@ describe('builtin executor tool catalog', () => {
       expect(parsed.totalMatches).toBeGreaterThanOrEqual(2);
     });
 
-    it('treats native catalog search as the structured device-resource family', async () => {
+    it('uses explicit native catalog membership without leaking unrelated device automation', async () => {
       const result = await executeToolCatalog({
         category: 'native',
         query: 'calendar create update event',
@@ -116,6 +116,7 @@ describe('builtin executor tool catalog', () => {
       expect(parsed.tools.map((tool: any) => tool.name)).toEqual(
         expect.arrayContaining(['calendar_create_event', 'calendar_update_event']),
       );
+      expect(parsed.tools.map((tool: any) => tool.name)).not.toContain('cron');
     });
 
     it('does not let unknown search categories suppress structural query matches', async () => {

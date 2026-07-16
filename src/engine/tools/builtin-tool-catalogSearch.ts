@@ -17,6 +17,7 @@ import {
   scoreEntryQueryMatch,
 } from './builtin-tool-catalogSearchMatching';
 import { tokenizeStructuralIdentifiers } from './builtin-tool-catalogSearchTokens';
+import { buildToolCatalogWorkflowEdges } from './builtin-tool-catalogWorkflowEdges';
 
 export {
   buildToolCatalogActivation,
@@ -160,6 +161,18 @@ export function buildToolCatalogSearchResponse(params: {
     });
   }
   const tools = searchResult.tools;
+  const projectedTools = tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    category: tool.category,
+    source: tool.source,
+    schemaVersion: tool.schemaVersion,
+    ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
+    ...(tool.serverName ? { serverName: tool.serverName } : {}),
+    ...(tool.skillName ? { skillName: tool.skillName } : {}),
+    capabilitySummary: tool.capabilitySummary,
+    activation: tool.activation,
+  }));
 
   return JSON.stringify({
     mode: 'search',
@@ -172,18 +185,8 @@ export function buildToolCatalogSearchResponse(params: {
           relaxationReason: 'query_or_workflow_match_without_all_requested_capabilities',
         }
       : {}),
-    tools: tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      category: tool.category,
-      source: tool.source,
-      schemaVersion: tool.schemaVersion,
-      ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
-      ...(tool.serverName ? { serverName: tool.serverName } : {}),
-      ...(tool.skillName ? { skillName: tool.skillName } : {}),
-      capabilitySummary: tool.capabilitySummary,
-      activation: tool.activation,
-    })),
+    tools: projectedTools,
+    workflowEdges: buildToolCatalogWorkflowEdges(projectedTools),
     totalMatches: tools.length,
   });
 }
