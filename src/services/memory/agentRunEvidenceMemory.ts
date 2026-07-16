@@ -27,6 +27,11 @@ import { recordFactWithContribution } from './facts/mutations';
 import { requireExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { requireExactMemoryScopeId } from './memoryScopeIdentity';
 import { ensureFactSchema } from './schema';
+import {
+  classifyMemoryFactSensitivity,
+  codeOwnedMemorySensitivityDeclaration,
+} from './memorySensitivityPolicy';
+import { isInternalAgentControlToolName } from './agentRunExperienceEvidencePolicy';
 
 export interface AgentRunEvidenceMemoryInput {
   messages?: ReadonlyArray<Message>;
@@ -129,9 +134,7 @@ function directlyObservedEvidenceSlice(step: AgentRunStep): JsonRecord {
 }
 
 function definedRecord(value: JsonRecord): JsonRecord {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  );
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
 function stepHasStructurallyDirectEvidence(step: AgentRunStep): boolean {
@@ -337,6 +340,8 @@ function ingestRecord(
   fallbackSourceRunId?: string,
 ): boolean {
   if (!hasAgentRunEvidence(record)) return false;
+  const toolName = stringField(record, 'toolName') ?? stringField(record, 'tool_name');
+  if (isInternalAgentControlToolName(toolName)) return false;
   const sourceRunId = resolveSourceRunId(record, fallbackSourceRunId);
   if (!sourceRunId) return false;
   const bundle = getBundle(bundles, sourceRunId);
@@ -386,27 +391,18 @@ function ingestEvidence(
 }
 
 function requireExactAgentRunSourceScope(input: AgentRunEvidenceMemoryInput): void {
-  requireExactMemoryScopeId(
-    input.conversationId,
-    'memory_agent_run_conversation_scope_invalid',
-  );
+  requireExactMemoryScopeId(input.conversationId, 'memory_agent_run_conversation_scope_invalid');
   requireExactMemoryScopeId(input.threadId, 'memory_agent_run_thread_scope_invalid');
   if (input.taskId !== null) {
     requireExactMemoryScopeId(input.taskId, 'memory_agent_run_task_scope_invalid');
   }
   if (input.sourceRunId !== undefined) {
-    requireExactMemoryProvenanceId(
-      input.sourceRunId,
-      'memory_agent_run_source_run_id_invalid',
-    );
+    requireExactMemoryProvenanceId(input.sourceRunId, 'memory_agent_run_source_run_id_invalid');
   }
 }
 
 function requireAgentRunPersistenceIdentity(input: AgentRunEvidenceMemoryInput): void {
-  requireExactMemoryProvenanceId(
-    input.sourceTurnId,
-    'memory_agent_run_source_turn_id_invalid',
-  );
+  requireExactMemoryProvenanceId(input.sourceTurnId, 'memory_agent_run_source_turn_id_invalid');
   if (!Number.isSafeInteger(input.now) || input.now < 0) {
     throw new Error('memory_agent_run_timestamp_invalid');
   }
@@ -429,6 +425,17 @@ function recordBundleFact(
 ): string | null {
   const trimmed = objectText.trim();
   if (!trimmed) return null;
+  const sensitivityDeclaration = codeOwnedMemorySensitivityDeclaration();
+  if (
+    classifyMemoryFactSensitivity({
+      declaredSensitivity: sensitivityDeclaration.sensitivity,
+      predicate,
+      objectText: trimmed,
+      attributes,
+    }) === 'restricted'
+  ) {
+    return null;
+  }
   const authorityMultiplier =
     kind !== 'agent_run' || bundleHasObservedSourceEvidence(bundle)
       ? 1
@@ -474,6 +481,7 @@ function recordBundleFact(
         { sourceKind: 'run', sourceId: bundle.sourceRunId },
       ],
     },
+    sensitivityDeclaration,
   );
   return recorded.fact.id;
 }

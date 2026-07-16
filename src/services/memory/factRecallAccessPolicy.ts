@@ -11,6 +11,7 @@ import {
   type RequiredMemoryAccessScopeIdentity,
 } from './memoryScopeIdentity';
 import type { MemoryApplicabilityUseIntent } from './memoryApplicabilityTypes';
+import { isReusableAgentRunExperienceFact } from './agentRunExperienceEvidencePolicy';
 
 export interface FactRecallAccessContext {
   scope: RequiredMemoryAccessScopeIdentity;
@@ -93,7 +94,8 @@ export function canFactEnterRecallCandidates(
     fact.validAt > context.asOf ||
     fact.createdAt > context.asOf ||
     (fact.invalidAt !== null && fact.invalidAt <= context.asOf) ||
-    (fact.expiresAt !== null && fact.expiresAt <= context.asOf)
+    (fact.expiresAt !== null && fact.expiresAt <= context.asOf) ||
+    !isReusableAgentRunExperienceFact(fact)
   ) {
     return false;
   }

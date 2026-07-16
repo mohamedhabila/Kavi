@@ -40,6 +40,62 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(listFacts({ originConversationId: 'conv-agent-memory' })).toHaveLength(0);
   });
 
+  it('does not persist internal control-plane tool results as experience evidence', () => {
+    const result = recordAgentRunEvidenceMemory({
+      evidence: [
+        `agent:${JSON.stringify({
+          trajectory_id: 'run-internal-memory',
+          state_index: 1,
+          toolName: 'memory_remember',
+          toolResult: '{"value":"superseded-contact"}',
+          status: 'completed',
+        })}`,
+        `agent:${JSON.stringify({
+          trajectory_id: 'run-external-observation',
+          state_index: 1,
+          toolName: 'contacts_search',
+          toolResult: '{"name":"current-contact"}',
+          status: 'completed',
+        })}`,
+      ],
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-control-plane',
+      now: 10,
+    });
+
+    expect(result.consumedEvidence).toHaveLength(1);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    expect(result.factIds).toHaveLength(facts.length);
+    expect(facts.map((fact) => fact.objectText).join('\n')).not.toContain(
+      'superseded-contact',
+    );
+    expect(facts.map((fact) => fact.objectText).join('\n')).toContain('current-contact');
+  });
+
+  it('does not persist structurally restricted agent-run content', () => {
+    const syntheticStructuredSecret = `gh${'p_'}${'abcdefghijklmnopqrstuvwxyz'}${'ABCDEFGHIJ'}`;
+    const result = recordAgentRunEvidenceMemory({
+      evidence: [
+        `agent:${JSON.stringify({
+          trajectory_id: 'run-restricted',
+          goal: syntheticStructuredSecret,
+          state_index: 1,
+          action: 'opaque-action',
+        })}`,
+      ],
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-restricted',
+      now: 10,
+    });
+
+    expect(result.factIds).toEqual([]);
+    expect(listFacts({ originConversationId: 'conv-agent-memory' })).toEqual([]);
+  });
+
   it('stores unsuccessful agent-run evidence with lower answer authority', () => {
     const evidence = [
       `agent:${JSON.stringify({

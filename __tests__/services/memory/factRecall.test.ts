@@ -112,6 +112,35 @@ describe('recallFactsForQuery — text-only (no embedding config)', () => {
     expect(facts).toHaveLength(0);
   });
 
+  it('excludes internal control-plane results from reusable experience recall', async () => {
+    const subject = upsertEntity({ name: 'message-contact', type: 'concept' });
+    const internal = recordFact({
+      subjectId: subject.id,
+      predicate: 'evidence_span',
+      objectText: '{"value":"Morgan","toolName":"memory_remember"}',
+      attributes: { toolName: 'memory_remember' },
+      memoryKind: 'evidence_span',
+      scope: 'conversation',
+      originConversationId: 'fact-recall-root',
+      originThreadId: 'fact-recall-root',
+    });
+    const external = recordFact({
+      subjectId: subject.id,
+      predicate: 'evidence_span',
+      objectText: '{"value":"Avery","toolName":"contacts_search"}',
+      attributes: { toolName: 'contacts_search' },
+      memoryKind: 'evidence_span',
+      scope: 'conversation',
+      originConversationId: 'fact-recall-root',
+      originThreadId: 'fact-recall-root',
+    });
+
+    const facts = await recallFactsForQuery('message contact Morgan Avery');
+
+    expect(facts.map((fact) => fact.id)).not.toContain(internal.fact.id);
+    expect(facts.map((fact) => fact.id)).toContain(external.fact.id);
+  });
+
   it('respects the limit option', async () => {
     const user = upsertEntity({ name: 'user', type: 'self' });
     for (let i = 0; i < 5; i++) {
@@ -341,6 +370,137 @@ describe('recallScoredFactsForQuery', () => {
     });
 
     expect(scored.map((entry) => entry.fact.id)).toEqual([pinned.fact.id, selected.fact.id]);
+  });
+
+  it('keeps one relevant direct semantic fact when structural evidence crowds the selector', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    const currentPreference = recordFact({
+      subjectId: user.id,
+      predicate: 'design review duration',
+      objectText: '45 minutes',
+      importance: 0.9,
+      memoryKind: 'semantic_fact',
+    });
+    const recentRun = recordFact({
+      subjectId: user.id,
+      predicate: 'agent_run',
+      objectText: 'design review calendar event titled Organic design review was created',
+      importance: 0.9,
+      memoryKind: 'agent_run',
+      sourceRunId: 'run-calendar',
+      supersedePrior: false,
+    });
+    const recentEvidence = recordFact({
+      subjectId: user.id,
+      predicate: 'evidence_span',
+      objectText: 'verified calendar event title Organic design review',
+      importance: 0.9,
+      memoryKind: 'evidence_span',
+      sourceRunId: 'run-calendar',
+      supersedePrior: false,
+    });
+
+    const scored = await recallScoredFactsForQuery(
+      'recap my current design review duration and calendar event title',
+      {
+        limit: 4,
+        selector: async () => ({
+          factIds: [recentRun.fact.id, recentEvidence.fact.id],
+        }),
+      },
+    );
+
+    expect(scored.map((entry) => entry.fact.id)).toEqual(
+      expect.arrayContaining([
+        currentPreference.fact.id,
+        recentRun.fact.id,
+        recentEvidence.fact.id,
+      ]),
+    );
+  });
+
+  it('admits a selected semantic fact before earlier structural results exhaust the limit', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    const currentPreference = recordFact({
+      subjectId: user.id,
+      predicate: 'design review duration',
+      objectText: '45 minutes',
+      importance: 0.9,
+      memoryKind: 'semantic_fact',
+    });
+    const structural = Array.from({ length: 4 }, (_, index) =>
+      recordFact({
+        subjectId: user.id,
+        predicate: 'evidence_span',
+        objectText: `design review calendar evidence ${index}`,
+        importance: 0.9,
+        memoryKind: 'evidence_span',
+        sourceRunId: `run-calendar-${index}`,
+        supersedePrior: false,
+      }),
+    );
+
+    const scored = await recallScoredFactsForQuery(
+      'recap my current design review duration and calendar evidence',
+      {
+        limit: 4,
+        selector: async () => ({
+          factIds: [...structural.map((entry) => entry.fact.id), currentPreference.fact.id],
+        }),
+      },
+    );
+
+    expect(scored).toHaveLength(4);
+    expect(scored.map((entry) => entry.fact.id)).toContain(currentPreference.fact.id);
+  });
+
+  it('does not let workflow records satisfy the answer-semantic anchor', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    const currentPreference = recordFact({
+      subjectId: user.id,
+      predicate: 'design review duration',
+      objectText: '45 minutes',
+      importance: 0.9,
+      memoryKind: 'semantic_fact',
+    });
+    const workflowRecords = Array.from({ length: 3 }, (_, index) =>
+      recordFactWithApplicability(
+        {
+          subjectId: user.id,
+          predicate: 'file_operation',
+          objectText: `read_file workflow-${index}.txt`,
+          importance: 0.9,
+          memoryKind: 'semantic_fact',
+          scope: 'conversation',
+          originConversationId: 'fact-recall-root',
+          originThreadId: 'fact-recall-root',
+          supersedePrior: false,
+        },
+        { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+      ),
+    );
+    const evidence = recordFact({
+      subjectId: user.id,
+      predicate: 'evidence_span',
+      objectText: 'verified design review calendar event',
+      importance: 0.9,
+      memoryKind: 'evidence_span',
+      sourceRunId: 'run-calendar-workflow-anchor',
+      supersedePrior: false,
+    });
+
+    const scored = await recallScoredFactsForQuery(
+      'recap my current design review duration and verified calendar event',
+      {
+        limit: 4,
+        selector: async () => ({
+          factIds: [...workflowRecords.map((entry) => entry.fact.id), evidence.fact.id],
+        }),
+      },
+    );
+
+    expect(scored).toHaveLength(4);
+    expect(scored.map((entry) => entry.fact.id)).toContain(currentPreference.fact.id);
   });
 
   it('falls back to the local ranking when the semantic selector returns no usable ids', async () => {
