@@ -77,6 +77,11 @@ export type AgentControlGraphEvent =
       timestamp?: number;
     }
   | {
+      type: 'FINAL_CANDIDATE_INVALIDATED';
+      reason: 'delivery_boundary_failed';
+      timestamp?: number;
+    }
+  | {
       type: 'GOALS_UPDATED';
       goals: AgentGoal[];
       reason?: string;

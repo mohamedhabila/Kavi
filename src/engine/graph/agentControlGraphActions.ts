@@ -137,6 +137,20 @@ export function createAgentControlGraphActions() {
         audit: appendAudit(context.audit, event, event.reason ?? 'final candidate ready'),
       };
     }),
+    recordFinalCandidateInvalidated: assignAgentControlGraph(
+      ({ context, event }: AgentControlGraphAssignArgs) => {
+        if (event.type !== 'FINAL_CANDIDATE_INVALIDATED') {
+          return {};
+        }
+        return {
+          expectedToolCalls: [],
+          observedToolResults: [],
+          terminalReason: undefined,
+          updatedAt: getTimestamp(event),
+          audit: appendAudit(context.audit, event, event.reason),
+        };
+      },
+    ),
     recordGoalsUpdated: assignAgentControlGraph(({ context, event }: AgentControlGraphAssignArgs) => {
       if (event.type !== 'GOALS_UPDATED') {
         return {};

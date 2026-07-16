@@ -207,7 +207,13 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
         },
       },
       awaiting_review: {
-        on: TERMINAL_TRANSITIONS,
+        on: {
+          FINAL_CANDIDATE_INVALIDATED: {
+            target: 'ready',
+            actions: 'recordFinalCandidateInvalidated',
+          },
+          ...TERMINAL_TRANSITIONS,
+        },
       },
       blocked: {
         type: 'final',

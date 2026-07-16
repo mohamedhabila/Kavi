@@ -31,6 +31,43 @@ export function createAgentControlGraphRuntimeTerminal(params: {
     }
   };
 
+  const publishStagedAssistant = (args: {
+    content: string;
+    metadata: AssistantMessageMetadata;
+    stageEvent: Extract<AgentControlGraphEvent, { type: 'FINAL_CANDIDATE_READY' }>;
+    toolCalls?: ToolCall[];
+    providerReplay?: MessageProviderReplay;
+    beforeAssistantDelivery?: () => void;
+  }): void => {
+    args.beforeAssistantDelivery?.();
+    let candidatePublicationStarted = false;
+    try {
+      candidatePublicationStarted = true;
+      params.applyEvents([args.stageEvent]);
+      args.beforeAssistantDelivery?.();
+      params.callbacks.onAssistantMessage(
+        args.content,
+        args.toolCalls ?? [],
+        args.providerReplay,
+        args.metadata,
+      );
+    } catch (error: unknown) {
+      if (candidatePublicationStarted) {
+        try {
+          params.applyEvents([
+            {
+              type: 'FINAL_CANDIDATE_INVALIDATED',
+              reason: 'delivery_boundary_failed',
+            },
+          ]);
+        } catch (rollbackError: unknown) {
+          params.warn?.('Agent control graph final candidate rollback failed', rollbackError);
+        }
+      }
+      throw error;
+    }
+  };
+
   const finishTerminalRunWithGraphEvent = async (args: {
     graphEvent: TerminalGraphEvent;
     state: 'idle' | 'error';
@@ -41,6 +78,7 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       providerReplay?: MessageProviderReplay;
       metadata: AssistantMessageMetadata;
     };
+    beforeAssistantDelivery?: () => void;
     error?: Error;
   }): Promise<void> => {
     const deliveredAssistant = args.assistant
@@ -59,24 +97,23 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       deliveredAssistant?.assistantMetadata?.completionStatus === 'complete' &&
       deliveredAssistant.assistantMetadata.terminalReason !== 'max_iterations' &&
       hasSettledFinalAssistantMetadata(deliveredAssistant);
-    if (acknowledgesConstraintDelivery && args.assistant) {
-      params.callbacks.onAssistantMessage(
-        args.assistant.content,
-        args.assistant.toolCalls ?? [],
-        args.assistant.providerReplay,
-        args.assistant.metadata,
-      );
+    if (args.assistant) {
+      publishStagedAssistant({
+        content: args.assistant.content,
+        metadata: args.assistant.metadata,
+        stageEvent: {
+          type: 'FINAL_CANDIDATE_READY',
+          reason: args.graphEvent.reason,
+        },
+        toolCalls: args.assistant.toolCalls,
+        providerReplay: args.assistant.providerReplay,
+        beforeAssistantDelivery: args.beforeAssistantDelivery,
+      });
+    }
+    if (acknowledgesConstraintDelivery) {
       params.applyEvents([{ type: 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED' }, args.graphEvent]);
     } else {
       params.applyEvents([args.graphEvent]);
-      if (args.assistant) {
-        params.callbacks.onAssistantMessage(
-          args.assistant.content,
-          args.assistant.toolCalls ?? [],
-          args.assistant.providerReplay,
-          args.assistant.metadata,
-        );
-      }
     }
     params.callbacks.onStateChange(args.state);
     await emitTerminalSessionEnd(args.sessionEndReason);
@@ -97,6 +134,7 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       providerReplay?: MessageProviderReplay;
       assistantMetadata: AssistantMessageMetadata;
       sessionEndReason?: string;
+      beforeAssistantDelivery?: () => void;
     }): Promise<void> {
       await finishTerminalRunWithGraphEvent({
         graphEvent: args.graphEvent,
@@ -108,6 +146,7 @@ export function createAgentControlGraphRuntimeTerminal(params: {
           providerReplay: args.providerReplay,
           metadata: args.assistantMetadata,
         },
+        beforeAssistantDelivery: args.beforeAssistantDelivery,
       });
     },
     async finishWithGraphFinalCandidateEvent(args: {
@@ -116,14 +155,15 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       providerReplay?: MessageProviderReplay;
       assistantMetadata: AssistantMessageMetadata;
       sessionEndReason?: string;
+      beforeAssistantDelivery?: () => void;
     }): Promise<void> {
-      params.applyEvents([args.graphEvent]);
-      params.callbacks.onAssistantMessage(
-        args.content,
-        [],
-        args.providerReplay,
-        args.assistantMetadata,
-      );
+      publishStagedAssistant({
+        content: args.content,
+        metadata: args.assistantMetadata,
+        stageEvent: args.graphEvent,
+        providerReplay: args.providerReplay,
+        beforeAssistantDelivery: args.beforeAssistantDelivery,
+      });
       params.callbacks.onStateChange('idle');
       await emitTerminalSessionEnd(args.sessionEndReason);
       params.callbacks.onDone();

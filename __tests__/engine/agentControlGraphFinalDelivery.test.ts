@@ -50,7 +50,11 @@ describe('agent control graph final delivery helpers', () => {
         candidateMessage: {
           role: 'assistant',
           content: 'Final answer.',
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'stop',
+          },
         },
       }),
     ).toEqual({ type: 'ready', candidatePreview: 'Final answer.' });
@@ -61,7 +65,11 @@ describe('agent control graph final delivery helpers', () => {
           role: 'assistant',
           content: 'Draft answer from a tool turn.',
           toolCalls: [{ id: 'tc-1', name: 'read_file', arguments: '{}', status: 'completed' }],
-          assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+          assistantMetadata: {
+            kind: 'intermediate',
+            completionStatus: 'complete',
+            finishReason: 'tool_calls',
+          },
         },
       }),
     ).toEqual(expect.objectContaining({ type: 'recover', reason: 'non_plain_final_candidate' }));
@@ -93,7 +101,11 @@ describe('agent control graph final delivery helpers', () => {
       candidateMessage: {
         role: 'assistant',
         content: '   ',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
       },
     });
 
@@ -143,7 +155,11 @@ describe('agent control graph final delivery helpers', () => {
         candidateMessage: {
           role: 'assistant',
           content: 'Worker event',
-          assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'incomplete',
+            finishReason: 'response_failed',
+          },
           subAgentEvent: {
             type: 'sub-agent',
             event: 'completed',
