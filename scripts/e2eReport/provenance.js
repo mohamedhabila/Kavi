@@ -1,6 +1,6 @@
 const { createHash } = require('crypto');
 
-const PUBLIC_MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+const PUBLIC_MODEL_ID_SEGMENT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const PUBLIC_REVISION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const GIT_SHA_PATTERN = /^[a-f0-9]{7,64}$/u;
 const PUBLIC_HOSTED_FAMILIES = new Set([
@@ -50,13 +50,18 @@ function requireNonEmptyString(value, label) {
 
 function assertPublicModelId(value) {
   const normalized = requireNonEmptyString(value, 'Public model id');
+  const segments = normalized.split('/');
   if (
     normalized.length > 192 ||
-    !PUBLIC_MODEL_ID_PATTERN.test(normalized) ||
-    normalized === '.' ||
-    normalized === '..'
+    segments.some(
+      (segment) =>
+        !segment ||
+        segment === '.' ||
+        segment === '..' ||
+        !PUBLIC_MODEL_ID_SEGMENT_PATTERN.test(segment),
+    )
   ) {
-    throw new Error('Public model id must be a path-free model identifier');
+    throw new Error('Public model id must be a safe registry model identifier');
   }
   return normalized;
 }

@@ -100,7 +100,19 @@ describe('e2eRunReport scoring and reliability', () => {
     expect(() => resolveE2ERunMetadata(compatibleBase, {})).toThrow('require E2E_PUBLIC_MODEL_ID');
     expect(() =>
       resolveE2ERunMetadata({ ...compatibleBase, model: '../private/model.gguf' }, {}),
-    ).toThrow('path-free model identifier');
+    ).toThrow('safe registry model identifier');
+    expect(() =>
+      resolveE2ERunMetadata({ ...compatibleBase, model: '/private/model.gguf' }, {}),
+    ).toThrow('safe registry model identifier');
+    expect(() =>
+      resolveE2ERunMetadata({ ...compatibleBase, model: 'qwen/../private-model' }, {}),
+    ).toThrow('safe registry model identifier');
+    expect(() =>
+      resolveE2ERunMetadata({ ...compatibleBase, model: 'https://models.example/model' }, {}),
+    ).toThrow('safe registry model identifier');
+    expect(() =>
+      resolveE2ERunMetadata({ ...compatibleBase, model: 'qwen//qwen3.5-9b' }, {}),
+    ).toThrow('safe registry model identifier');
     expect(() =>
       resolveE2ERunMetadata({ ...compatibleBase, model: 'safe-model', gitSha: 'private-sha' }, {}),
     ).toThrow('hexadecimal revision');
@@ -125,6 +137,22 @@ describe('e2eRunReport scoring and reliability', () => {
         { E2E_PUBLIC_HOSTED_FAMILY: 'private-family' },
       ),
     ).toThrow('supported public family');
+  });
+
+  it('accepts a slash-delimited public registry model identifier', () => {
+    const metadata = resolveE2ERunMetadata(
+      {
+        providerKey: 'compatible',
+        gitSha: 'c'.repeat(40),
+        modelLocator: '/Users/private/model.gguf',
+        model: 'qwen/qwen3.5-9b',
+        providerEndpoint: 'http://127.0.0.1:11434/v1',
+      },
+      {},
+    );
+
+    expect(metadata.model).toBe('qwen/qwen3.5-9b');
+    expect(metadata.modelIdentitySource).toBe('explicit-public-id');
   });
 
   it('buildE2ERunReport aggregates totals and pass counts', () => {
