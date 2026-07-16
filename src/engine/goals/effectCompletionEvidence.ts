@@ -36,6 +36,7 @@ export interface EffectReceiptEvidence {
   evidenceVersion: 2;
   receiptVersion: 2;
   receiptId: string;
+  toolCallId: string;
   toolName: string;
   contractIdentity: ToolContractIdentity;
   executionRunId: string;
@@ -48,6 +49,7 @@ export interface EffectReceiptEvidence {
   requestDigest: ToolEffectDigest;
   resultDigest: ToolEffectDigest;
   resource: EffectCompletionResource;
+  recordedAt: number;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -183,6 +185,7 @@ export function parseToolEffectReceiptEvidence(value: string): EffectReceiptEvid
     evidenceVersion: 2,
     receiptVersion: receipt.version,
     receiptId: receipt.receiptId,
+    toolCallId: receipt.toolCallId,
     toolName: receipt.toolName,
     contractIdentity: receipt.contractIdentity,
     executionRunId: receipt.executionRunId,
@@ -195,6 +198,7 @@ export function parseToolEffectReceiptEvidence(value: string): EffectReceiptEvid
     requestDigest: receipt.requestDigest,
     resultDigest: receipt.resultDigest,
     resource,
+    recordedAt: receipt.recordedAt,
   };
 }
 

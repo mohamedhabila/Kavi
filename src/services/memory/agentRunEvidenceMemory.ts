@@ -1,4 +1,17 @@
 import type { Message } from '../../types/message';
+import type {
+  ToolContractIdentity,
+  ToolEffectDigest,
+  ToolEffectKind,
+  ToolEffectState,
+  ToolEffectTransportState,
+  ToolEffectVerificationState,
+  ToolExecutionState,
+} from '../../types/toolEffectReceipt';
+import {
+  parseToolEffectReceiptEvidence,
+  type EffectCompletionResource,
+} from '../../engine/goals/effectCompletionEvidence';
 import {
   STEP_TEXT_LIMITS,
   boundedSteps,
@@ -32,6 +45,10 @@ import {
   codeOwnedMemorySensitivityDeclaration,
 } from './memorySensitivityPolicy';
 import { isInternalAgentControlToolName } from './agentRunExperienceEvidencePolicy';
+import {
+  parseAgentRunTerminalEvidence,
+  type AgentRunTerminalEvidence,
+} from './agentRunTerminalEvidence';
 
 export interface AgentRunEvidenceMemoryInput {
   messages?: ReadonlyArray<Message>;
@@ -65,6 +82,25 @@ interface AgentRunBundle {
   risks: Set<string>;
   summaries: Set<string>;
   steps: AgentRunStep[];
+  effectReceipts: AgentRunEffectReceiptEvidence[];
+  terminalEvidence?: AgentRunTerminalEvidence;
+}
+
+export interface AgentRunEffectReceiptEvidence {
+  receiptId: string;
+  toolCallId: string;
+  toolName: string;
+  contractIdentity: ToolContractIdentity;
+  executionRunId: string;
+  transportState: ToolEffectTransportState;
+  executionState?: ToolExecutionState;
+  effectKind: ToolEffectKind;
+  effectState: ToolEffectState;
+  verificationState: ToolEffectVerificationState;
+  requestDigest: ToolEffectDigest;
+  resultDigest: ToolEffectDigest;
+  resource: EffectCompletionResource;
+  recordedAt: number;
 }
 
 const MAX_RUNS_PER_TURN = 16;
@@ -207,6 +243,7 @@ function getBundle(
     risks: new Set(),
     summaries: new Set(),
     steps: [],
+    effectReceipts: [],
   };
   bundles.set(exactSourceRunId, created);
   return created;
@@ -383,6 +420,62 @@ function ingestEvidence(
 ): string[] {
   const consumed: string[] = [];
   for (const entry of evidence) {
+    const receipt = parseToolEffectReceiptEvidence(entry);
+    if (receipt) {
+      if (fallbackSourceRunId && receipt.executionRunId !== fallbackSourceRunId) {
+        throw new Error('memory_agent_run_receipt_run_mismatch');
+      }
+      const bundle = getBundle(bundles, receipt.executionRunId);
+      if (!bundle) continue;
+      const normalized: AgentRunEffectReceiptEvidence = {
+        receiptId: receipt.receiptId,
+        toolCallId: receipt.toolCallId,
+        toolName: receipt.toolName,
+        contractIdentity: receipt.contractIdentity,
+        executionRunId: receipt.executionRunId,
+        transportState: receipt.transportState,
+        ...(receipt.executionState ? { executionState: receipt.executionState } : {}),
+        effectKind: receipt.effectKind,
+        effectState: receipt.effectState,
+        verificationState: receipt.verificationState,
+        requestDigest: receipt.requestDigest,
+        resultDigest: receipt.resultDigest,
+        resource: receipt.resource,
+        recordedAt: receipt.recordedAt,
+      };
+      const prior = bundle.effectReceipts.find(
+        (candidate) => candidate.receiptId === normalized.receiptId,
+      );
+      if (prior && JSON.stringify(prior) !== JSON.stringify(normalized)) {
+        throw new Error('memory_agent_run_receipt_conflict');
+      }
+      if (!prior) bundle.effectReceipts.push(normalized);
+      bundle.tools.add(fitAgentRunText(normalized.toolName, 160));
+      consumed.push(entry);
+      continue;
+    }
+    const terminal = parseAgentRunTerminalEvidence(entry);
+    if (terminal) {
+      if (fallbackSourceRunId && terminal.sourceRunId !== fallbackSourceRunId) {
+        throw new Error('memory_agent_run_terminal_run_mismatch');
+      }
+      const bundle = getBundle(bundles, terminal.sourceRunId);
+      if (!bundle) continue;
+      if (
+        bundle.terminalEvidence &&
+        JSON.stringify(bundle.terminalEvidence) !== JSON.stringify(terminal)
+      ) {
+        throw new Error('memory_agent_run_terminal_conflict');
+      }
+      bundle.terminalEvidence = terminal;
+      bundle.goal = terminal.goal;
+      bundle.status = terminal.runStatus;
+      bundle.outcome = terminal.graphStatus;
+      bundle.domain ??= 'mobile-assistant';
+      bundle.environment ??= `kavi-${terminal.platform}`;
+      consumed.push(entry);
+      continue;
+    }
     const record = parseJsonPayload(entry);
     if (!record) continue;
     if (ingestRecord(bundles, record, fallbackSourceRunId)) {
@@ -503,6 +596,13 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
   const decisions = Array.from(bundle.decisions).slice(0, 12);
   const risks = Array.from(bundle.risks).slice(0, 12);
   const summaries = Array.from(bundle.summaries).slice(0, 12);
+  const effectReceipts = [...bundle.effectReceipts]
+    .sort((left, right) =>
+      left.recordedAt !== right.recordedAt
+        ? left.recordedAt - right.recordedAt
+        : left.receiptId.localeCompare(right.receiptId),
+    )
+    .slice(0, 32);
   const baseAttributes: JsonRecord = definedRecord({
     sourceRunId: bundle.sourceRunId,
     sourceActorId: input.sourceActorId,
@@ -514,6 +614,8 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     environment: bundle.environment,
     stepCount: bundle.steps.length,
     tools,
+    terminalEvidence: bundle.terminalEvidence,
+    effectReceipts,
   });
 
   const agentRunRecord = compactAgentRunRecord({
@@ -527,6 +629,8 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
       domain: bundle.domain,
       environment: bundle.environment,
       tools,
+      terminalEvidence: bundle.terminalEvidence,
+      effectReceipts,
     },
     evidenceSlices,
     sources,

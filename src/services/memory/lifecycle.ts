@@ -35,6 +35,7 @@ import {
   resolveCodeOwnedMemoryPersonaId,
 } from './memoryScopeIdentity';
 import { encodeIngestionSourceSnapshot } from './ingestionSourceSnapshot';
+import { collectAgentRunMemoryEvidence } from './agentRunTerminalEvidence';
 import {
   resolveClosedTurnEndingAt,
   type ExactClosedTurnFailureReason,
@@ -266,7 +267,7 @@ export async function recordCompletedTurnForMemory(
     sourceStartMessageId: closedTurn.sourceStartMessageId,
     sourceEndMessageId: closedTurn.sourceEndMessageId,
     priorUserMessageId: closedTurn.priorUserMessageId,
-    graphGoalEvidence: sourceRun?.controlGraph?.goals?.flatMap((goal) => goal.evidence) ?? [],
+    graphGoalEvidence: collectAgentRunMemoryEvidence(sourceRun),
   });
 
   const policyChangedError = 'memory_turn_publication_policy_changed';

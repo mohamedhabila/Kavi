@@ -7,6 +7,7 @@ import {
 } from '../../../services/agents/lifecycle/agentRunStateMachine';
 import { resolveClosedTurnEndingAt } from '../../../services/memory/closedTurn';
 import { encodeIngestionSourceSnapshot } from '../../../services/memory/ingestionSourceSnapshot';
+import { collectAgentRunMemoryEvidence } from '../../../services/memory/agentRunTerminalEvidence';
 import type { ForegroundRunTerminalStatus } from './terminalLifecycle';
 
 type TerminalMemoryConversation = Pick<Conversation, 'agentRuns' | 'messages'>;
@@ -102,6 +103,6 @@ export function fingerprintForegroundTerminalMemorySource(params: {
     sourceStartMessageId: closedTurn.sourceStartMessageId,
     sourceEndMessageId: closedTurn.sourceEndMessageId,
     priorUserMessageId: closedTurn.priorUserMessageId,
-    graphGoalEvidence: sourceRun?.controlGraph?.goals?.flatMap((goal) => goal.evidence) ?? [],
+    graphGoalEvidence: collectAgentRunMemoryEvidence(sourceRun),
   }).payloadSha256;
 }
