@@ -7,11 +7,11 @@ import type { StreamUsage } from '../../support/contracts';
 
 export function createCompletionMetadata(
   completionStatus: AssistantCompletionStatus,
-  finishReason?: string,
+  finishReason: string,
 ): AssistantCompletionMetadata {
   return {
     completionStatus,
-    ...(finishReason ? { finishReason } : {}),
+    finishReason,
   };
 }
 
@@ -87,7 +87,12 @@ export function normalizeAnthropicCompletion(
     return undefined;
   }
 
-  if (normalizedReason === 'end_turn' || normalizedReason === 'tool_use') {
+  if (
+    normalizedReason === 'end_turn' ||
+    normalizedReason === 'refusal' ||
+    normalizedReason === 'stop_sequence' ||
+    normalizedReason === 'tool_use'
+  ) {
     return createCompletionMetadata('complete', normalizedReason);
   }
 

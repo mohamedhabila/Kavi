@@ -1,4 +1,8 @@
 import type { Message, ToolCall } from '../../types/message';
+import {
+  hasTerminalAssistantCompletionMetadata,
+  isValidAssistantMessageMetadata,
+} from '../../utils/assistantMessageMetadata';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import {
   resolvePriorUserMessageIdentity,
@@ -162,10 +166,7 @@ export function prepareIngestionSourceSnapshot(
   const sourceEnd = resolveUniqueMessageIdentity(input.messages, input.sourceEndMessageId);
   if (
     sourceEnd.status === 'invalid' ||
-    sourceEnd.message.role !== 'assistant' ||
-    sourceEnd.message.assistantMetadata?.kind !== 'final' ||
-    sourceEnd.message.assistantMetadata.completionStatus !== 'complete' ||
-    sourceEnd.message.assistantMetadata.finishReason === 'yielded'
+    !hasTerminalAssistantCompletionMetadata(sourceEnd.message)
   ) {
     fail('memory_ingestion_source_snapshot_source_end_unavailable');
   }
@@ -284,8 +285,6 @@ function projectToolCall(
 }
 function projectAssistantMetadata(
   message: Message,
-  textByteLimit: number,
-  tracker: TruncationTracker,
   limits: IngestionSourceSnapshotLimits,
 ): IngestionSourceSnapshotAssistantMetadata | undefined {
   const metadata = message.assistantMetadata;
@@ -293,26 +292,20 @@ function projectAssistantMetadata(
   if (
     message.role !== 'assistant' ||
     !ASSISTANT_KINDS.has(metadata.kind) ||
-    !ASSISTANT_COMPLETION_STATUSES.has(metadata.completionStatus)
+    !ASSISTANT_COMPLETION_STATUSES.has(metadata.completionStatus) ||
+    !isValidAssistantMessageMetadata(metadata)
   ) {
     fail('memory_ingestion_source_snapshot_assistant_metadata_invalid');
   }
-  const projected: IngestionSourceSnapshotAssistantMetadata = {
+  return {
     kind: metadata.kind,
     completionStatus: metadata.completionStatus,
-  };
-  if (metadata.finishReason !== undefined) {
-    if (typeof metadata.finishReason !== 'string') {
-      fail('memory_ingestion_source_snapshot_assistant_metadata_invalid');
-    }
-    projected.finishReason = boundedText(
+    finishReason: requireBoundedExactText(
       metadata.finishReason,
-      Math.min(textByteLimit, limits.metadataTextBytes),
-      'message',
-      tracker,
-    );
-  }
-  return projected;
+      limits.metadataTextBytes,
+      'memory_ingestion_source_snapshot_assistant_metadata_invalid',
+    ),
+  };
 }
 function projectMessage(
   message: Message,
@@ -377,7 +370,7 @@ function projectMessage(
     fail('memory_ingestion_source_snapshot_message_invalid');
   }
   if (message.isError) projected.isError = true;
-  const metadata = projectAssistantMetadata(message, textByteLimit, tracker, limits);
+  const metadata = projectAssistantMetadata(message, limits);
   if (metadata) projected.assistantMetadata = metadata;
   return projected;
 }

@@ -97,7 +97,6 @@ function sourceMessages(): Message[] {
       providerReplay: {
         anthropicBlocks: [{ private: 'anthropic-replay-secret' }],
       },
-      subAgentEvent: { private: 'sub-agent-snapshot-secret' } as never,
     },
   ];
 }
@@ -353,9 +352,22 @@ describe('ingestion source snapshot codec', () => {
     const incomplete = sourceMessages();
     incomplete[incomplete.length - 1] = {
       ...incomplete.at(-1)!,
-      assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'incomplete',
+        finishReason: 'response_failed',
+      },
     };
     expect(() => encode(incomplete)).toThrow(
+      'memory_ingestion_source_snapshot_source_end_unavailable',
+    );
+
+    const subAgentEvent = sourceMessages();
+    subAgentEvent[subAgentEvent.length - 1] = {
+      ...subAgentEvent.at(-1)!,
+      subAgentEvent: { private: 'sub-agent-snapshot-secret' } as never,
+    };
+    expect(() => encode(subAgentEvent)).toThrow(
       'memory_ingestion_source_snapshot_source_end_unavailable',
     );
   });

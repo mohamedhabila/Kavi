@@ -1,4 +1,8 @@
 import type { Message, ToolCall } from '../../types/message';
+import {
+  isDeliverableAssistantCompletionMetadata,
+  isValidAssistantMessageMetadata,
+} from '../../utils/assistantMessageMetadata';
 import type {
   IngestionSourceSnapshotLimits,
   IngestionSourceSnapshotMessage,
@@ -50,12 +54,13 @@ function validateToolName(value: unknown, maxBytes: number): value is string {
 function validateAssistantMetadata(value: unknown, maxBytes: number): boolean {
   if (!isRecord(value)) return false;
   return (
-    hasOnlyOptionalKeys(value, ['kind', 'completionStatus'], ['finishReason']) &&
+    hasOnlyKeys(value, ['kind', 'completionStatus', 'finishReason']) &&
     typeof value.kind === 'string' &&
     ASSISTANT_KINDS.has(value.kind) &&
     typeof value.completionStatus === 'string' &&
     ASSISTANT_COMPLETION_STATUSES.has(value.completionStatus) &&
-    (value.finishReason === undefined || validateText(value.finishReason, maxBytes))
+    isValidAssistantMessageMetadata(value) &&
+    validateText(value.finishReason, maxBytes)
   );
 }
 function validateToolCall(
@@ -215,9 +220,7 @@ export function validateIngestionSourceSnapshotPayload(
     hasUnexpectedUser ||
     last.id !== value.sourceEndMessageId ||
     last.role !== 'assistant' ||
-    last.assistantMetadata?.kind !== 'final' ||
-    last.assistantMetadata.completionStatus !== 'complete' ||
-    last.assistantMetadata.finishReason === 'yielded' ||
+    !isDeliverableAssistantCompletionMetadata(last.assistantMetadata) ||
     (value.priorUserMessageId !== null && ids.has(value.priorUserMessageId))
   ) {
     return false;

@@ -70,6 +70,7 @@ export async function* streamLlmMessage(params: {
           type: 'done',
           completion: {
             completionStatus: 'complete',
+            finishReason: 'local_runtime_done',
           },
         };
       }

@@ -53,6 +53,8 @@ export type AssistantMessageKind = 'intermediate' | 'final';
 
 export interface AssistantMessageMetadata extends AssistantCompletionMetadata {
   kind: AssistantMessageKind;
+  /** Exact provider- or code-owned terminal reason. Final validity fails closed without it. */
+  finishReason: string;
   /** Exact code-owned retrieval event that supplied selected memory to this final response. */
   memoryRetrievalEventId?: string;
 }

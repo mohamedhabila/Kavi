@@ -104,11 +104,26 @@ export type StreamedToolCall = {
   raw?: Record<string, any>;
 };
 
-export type StreamEvent = {
-  type: 'token' | 'reasoning' | 'tool_call' | 'done' | 'usage';
-  content?: string;
-  toolCall?: StreamedToolCall;
-  usage?: StreamUsage;
-  providerReplay?: MessageProviderReplay;
-  completion?: AssistantCompletionMetadata;
-};
+export type StreamEvent =
+  | {
+      type: 'token';
+      content: string;
+    }
+  | {
+      type: 'reasoning';
+      content: string;
+    }
+  | {
+      type: 'tool_call';
+      toolCall: StreamedToolCall;
+    }
+  | {
+      type: 'usage';
+      usage: StreamUsage;
+    }
+  | {
+      type: 'done';
+      completion: AssistantCompletionMetadata;
+      content?: string;
+      providerReplay?: MessageProviderReplay;
+    };
