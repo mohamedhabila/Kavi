@@ -243,6 +243,7 @@ describe('assemblePrompt - product memory groups', () => {
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('observedAffordances');
     expect(text).toContain('availableActions');
+    expect(text).toContain('semantically similar control or value');
     expect(text).toContain('Incident Actions');
     expect(text).toContain('Incident Mobile');
     expect(text).toContain('Incident Portal');
@@ -270,6 +271,7 @@ describe('assemblePrompt - product memory groups', () => {
     expect(text).toContain('"domain":"mobile"');
     expect(text).toContain('"environment":"incident-management"');
     expect(text).toContain('Incident title');
+    expect(text).toContain('nearby non-input control is not a field');
   });
 
   it('renders observed control source order for action and column evidence', () => {

@@ -132,6 +132,8 @@ describe('createLlmMemoryFactSelector', () => {
     expect(params.messages[0]?.content).toContain('evidence slate');
     expect(params.messages[0]?.content).toContain('distinct sourceRunId');
     expect(params.messages[0]?.content).toContain('smallest sufficient set');
+    expect(params.messages[0]?.content).toContain('semantic similarity is not exact identity');
+    expect(params.messages[0]?.content).toContain('most complete relevant observed inventory');
     expect(params.messages[0]?.content).not.toContain('targetSelected');
     const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
       maxSelected?: number;
