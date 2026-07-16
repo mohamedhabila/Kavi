@@ -6,6 +6,7 @@
 import { ToolDefinition } from '../../../types/tool';
 import { SESSION_SPAWN_TOOL } from '../builtin-definitions-sessions';
 import { UPDATE_GOALS_TOOL } from '../goal-definitions';
+import { REQUEST_CLARIFICATION_TOOL } from '../requestClarificationDefinition';
 import {
   PYTHON_EXTENSION_EXAMPLES,
   PYTHON_EXTENSION_POLICY,
@@ -13,6 +14,7 @@ import {
 } from '../../../services/python/guidance';
 
 export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
+  REQUEST_CLARIFICATION_TOOL,
   {
     name: 'read_file',
     description:

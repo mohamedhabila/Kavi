@@ -117,7 +117,10 @@ export const DIRECT_TAU_USER_COORDINATION_STATE: E2EScenario = {
     {
       kind: 'turn_clarification',
       turnIndex: 0,
-      requiredMissingFields: ['recipient', 'message_body'],
+      requiredMissingInformation: [
+        { semanticRole: 'recipient' },
+        { semanticRole: 'content' },
+      ],
     },
     { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
     { kind: 'turn_completion', turnIndex: 0, field: 'execution', expected: true },

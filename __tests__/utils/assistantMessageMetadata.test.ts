@@ -79,6 +79,25 @@ describe('assistantMessageMetadata', () => {
     expect(hasTerminalAssistantCompletionMetadata(forgedMessage)).toBe(false);
   });
 
+  it('admits code-owned clarification delivery as a complete terminal response', () => {
+    const metadata = buildAssistantMessageMetadata('final', {
+      completionStatus: 'complete',
+      finishReason: 'request_clarification',
+    });
+    const message = makeMessage({
+      content: 'Who should receive the message, and what should it say?',
+      assistantMetadata: metadata,
+    });
+
+    expect(metadata).toEqual({
+      kind: 'final',
+      completionStatus: 'complete',
+      finishReason: 'request_clarification',
+    });
+    expect(hasCompleteFinalAssistantMetadata(message)).toBe(true);
+    expect(hasTerminalAssistantCompletionMetadata(message)).toBe(true);
+  });
+
   it('requires a nonempty plain final before terminal closure', () => {
     const metadata = buildAssistantMessageMetadata('final', {
       completionStatus: 'complete',

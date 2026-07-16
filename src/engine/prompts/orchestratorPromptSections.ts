@@ -1,12 +1,32 @@
 import type { Message } from '../../types/message';
 
+export type SystemPromptSectionPurpose =
+  | 'base_prompt'
+  | 'execution_mode'
+  | 'forced_text'
+  | 'goals'
+  | 'living_memory'
+  | 'memory_policy'
+  | 'runtime_context'
+  | 'runtime_guidance'
+  | 'safety'
+  | 'skills'
+  | 'verified_procedure'
+  | 'workflow_runtime'
+  | 'workflow_task_anchor';
+
 export type SystemPromptSection = {
   text: string;
   cacheable?: boolean;
+  /** Code-owned purpose used for budgeting and policy; never inferred from rendered text. */
+  purpose: SystemPromptSectionPurpose;
 };
 
 export const DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT =
   'Passive memory runs only after final delivery. Acknowledge the information itself. Without verified current-turn durable-memory write evidence, never say it was remembered, saved, stored, or updated, and never promise to remember or save it.';
+
+export const MEMORY_MINIMAL_DISCLOSURE_CONTRACT =
+  'Treat recalled memory as context, not a disclosure checklist. Include only remembered details needed for the current request; do not volunteer superseded values or unrelated remembered context.';
 
 export function formatUtcOffset(offsetMinutesWestOfUtc: number): string {
   const totalMinutes = -offsetMinutesWestOfUtc;
@@ -25,6 +45,8 @@ export function buildRuntimePromptSection(options: { toolExecutionAvailable: boo
     'Use the runtime_context block for request time and timezone.',
     'Use external-state tools only when the requested answer or action requires live data; mentioning a meeting, deadline, person, or schedule alone does not request inspection.',
     DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT,
+    MEMORY_MINIMAL_DISCLOSURE_CONTRACT,
+    'Answer the requested scope directly. Add only context or caveats needed for correctness, safety, or the next required user decision.',
     'Final answers report completed work or a real blocker, not an unfinished plan.',
   ];
   if (!options.toolExecutionAvailable) {
@@ -34,10 +56,12 @@ export function buildRuntimePromptSection(options: { toolExecutionAvailable: boo
   return [
     ...universalGuidance,
     'With tools, batch independent calls and sequence only dependencies.',
+    'When user-owned information is genuinely required before safe or complete execution and cannot be obtained from visible context, memory, or a read-only tool, call request_clarification with stable semantic field keys and one question. Do not combine it with another tool call.',
     'Use the highest-leverage tool. Launch a self-contained worker directly; omit worker tools unless needed to narrow scope.',
     'If requested app state or a side effect needs a tool absent from the surface, use discovery to expose it.',
     'When a durable artifact or external update is requested, create or update it before final delivery once content is available.',
     'Reading, search, recall, or verification is not completion when the request also requires action; continue to the action tool.',
+    'When the user provides exact file paths, read those paths directly; do not list parent directories merely to confirm that the named files exist.',
     'For web research, web_search discovers and web_fetch reads. Fetch known URLs directly, batch independent fetches, compare sources, and re-search only if needed.',
   ].join('\n');
 }
@@ -103,7 +127,7 @@ export function getUserMessagePromptContent(
 export function appendSystemPromptSection(
   sections: SystemPromptSection[],
   text: string | null | undefined,
-  options: { cacheable?: boolean } = {},
+  options: { cacheable?: boolean; purpose: SystemPromptSectionPurpose },
 ): void {
   if (typeof text !== 'string' || text.trim().length === 0) {
     return;
@@ -111,6 +135,7 @@ export function appendSystemPromptSection(
 
   sections.push({
     text,
+    purpose: options.purpose,
     ...(options.cacheable ? { cacheable: true } : {}),
   });
 }
@@ -175,19 +200,22 @@ export function buildSystemPromptSections(
   const runtimeContextSection = formatRuntimeContextSection(runtimeContext);
   const toolExecutionAvailable = toolingEnabled && !textOnlyTurn;
 
-  appendSystemPromptSection(sections, prompt, { cacheable: true });
+  appendSystemPromptSection(sections, prompt, { cacheable: true, purpose: 'base_prompt' });
   appendSystemPromptSection(sections, buildRuntimePromptSection({ toolExecutionAvailable }), {
     cacheable: true,
+    purpose: 'runtime_guidance',
   });
-  appendSystemPromptSection(sections, safetySection, { cacheable: true });
-  appendSystemPromptSection(sections, runtimeContextSection);
+  appendSystemPromptSection(sections, safetySection, { cacheable: true, purpose: 'safety' });
+  appendSystemPromptSection(sections, runtimeContextSection, { purpose: 'runtime_context' });
   appendSystemPromptSection(
     sections,
     buildExecutionModePromptSection({ toolingEnabled, textOnlyTurn }),
+    { purpose: 'execution_mode' },
   );
-  appendSystemPromptSection(sections, workflowRuntimePrompt);
+  appendSystemPromptSection(sections, workflowRuntimePrompt, { purpose: 'workflow_runtime' });
   appendSystemPromptSection(sections, toolingEnabled ? skillsSection : '', {
     cacheable: true,
+    purpose: 'skills',
   });
   return orderSystemPromptSectionsForCaching(sections);
 }

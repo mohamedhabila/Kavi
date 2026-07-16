@@ -4,9 +4,15 @@ import {
   descriptorForToolName,
   descriptorHasProducerEffect,
 } from '../../engine/tools/toolLifecycleSemantics';
+import {
+  isRequestClarificationSemanticRole,
+  isRequestInformationKey,
+  parseRequestClarificationToolResult,
+  REQUEST_CLARIFICATION_TOOL_NAME,
+} from '../../services/agents/requestClarification';
 import { evaluateE2EMemoryProbeRubric } from './e2eMemoryProbeRubricEvaluators';
 import type {
-  E2EClarificationMissingField,
+  E2EClarificationMissingInformation,
   E2ERubric,
   E2EScenarioResult,
   E2EScenarioTurnTrace,
@@ -32,29 +38,6 @@ type E2ETurnStageRubric = Extract<
 type E2ETurnCompletionRubric = Extract<E2ERubric, { kind: 'turn_completion' }>;
 const TURN_COMPLETION_FIELDS = new Set(['execution', 'final_response', 'agent_run']);
 const NATIVE_TOOL_NAMES = new Set(ALL_NATIVE_TOOL_DEFINITIONS.map((tool) => tool.name));
-const CLARIFICATION_FIELD_PATTERNS = {
-  event_title: [
-    /\b(?:event|meeting|appointment)\s+(?:name|title)\b/iu,
-    /\bwhat\s+(?:should|is)\s+(?:the\s+)?(?:event|meeting|appointment)\s+(?:be\s+)?called\b/iu,
-  ],
-  message_body: [
-    /\b(?:message|text)\s+(?:body|content|wording)\b/iu,
-    /\bwhat\s+(?:message|text)\s+(?:should\s+i\s+send|would\s+you\s+like)\b/iu,
-  ],
-  new_start_time: [
-    /\b(?:new|updated|different|desired|preferred|target|specific)\s+(?:start(?:ing)?\s+)?(?:date(?:\s+and\s+time)?|time|schedule)\b/iu,
-    /\bwhat\s+(?:new\s+)?(?:date|time)\b/iu,
-    /\bwhen\s+(?:should|would|do|can|could|you(?:'d|\s+would)?)\b/iu,
-  ],
-  recipient: [
-    /\b(?:message|email|text)\s+recipient\b/iu,
-    /\b(?:who|whom)\s+(?:should|would|do|are)\b/iu,
-  ],
-} as const;
-const CLARIFICATION_INTENT_PATTERN =
-  /(?:\?|\b(?:need|missing|provide|choose|specify|tell\s+me|let\s+me\s+know|what|which|when|who|whom|could\s+you|can\s+you|please)\b)/iu;
-const NEGATED_CLARIFICATION_PATTERN =
-  /\b(?:nothing|no\s+(?:detail|information|field))\s+(?:is\s+)?missing\b|\b(?:do\s+not|don't|no\s+need\s+to)\s+(?:provide|specify|tell)\b/iu;
 
 function findTurnTrace(
   result: E2EScenarioResult,
@@ -216,13 +199,22 @@ export function evaluateE2ETurnStageRubric(
     }
 
     case 'turn_clarification': {
-      const fields: ReadonlyArray<E2EClarificationMissingField> = rubric.requiredMissingFields;
+      const requirements: ReadonlyArray<E2EClarificationMissingInformation> =
+        rubric.requiredMissingInformation;
       if (
-        !Array.isArray(fields) ||
-        fields.length === 0 ||
-        new Set(fields).size !== fields.length ||
-        fields.some(
-          (field) => !Object.prototype.hasOwnProperty.call(CLARIFICATION_FIELD_PATTERNS, field),
+        !Array.isArray(requirements) ||
+        requirements.length === 0 ||
+        new Set(
+          requirements.map(
+            (requirement) => `${requirement.semanticRole}:${requirement.key ?? '*'}`,
+          ),
+        ).size !== requirements.length ||
+        requirements.some(
+          (requirement) =>
+            !requirement ||
+            typeof requirement !== 'object' ||
+            !isRequestClarificationSemanticRole(requirement.semanticRole) ||
+            (requirement.key !== undefined && !isRequestInformationKey(requirement.key)),
         )
       ) {
         return {
@@ -231,33 +223,68 @@ export function evaluateE2ETurnStageRubric(
           detail: `turn ${rubric.turnIndex} clarification expectation is invalid`,
         };
       }
-      const response = turn.finalAssistant?.text.trim() ?? '';
-      if (
-        !response ||
-        !CLARIFICATION_INTENT_PATTERN.test(response) ||
-        NEGATED_CLARIFICATION_PATTERN.test(response)
-      ) {
+      const clarificationCall = turn.toolCalls.find(
+        (call) => call.name === REQUEST_CLARIFICATION_TOOL_NAME,
+      );
+      const clarificationResult = clarificationCall
+        ? turn.toolResults.find(
+            (result) =>
+              result.toolCallId === clarificationCall.id &&
+              result.name === REQUEST_CLARIFICATION_TOOL_NAME &&
+              !result.isError,
+          )
+        : undefined;
+      const clarification = clarificationResult
+        ? parseRequestClarificationToolResult(clarificationResult.content)
+        : undefined;
+      if (!clarification) {
         return {
           fixtureId,
           passed: false,
-          detail: `turn ${rubric.turnIndex} did not produce an affirmative clarification request`,
+          detail: `turn ${rubric.turnIndex} did not record a valid structured clarification request`,
         };
       }
-      const missingFields = fields.filter(
-        (field: E2EClarificationMissingField) =>
-          !CLARIFICATION_FIELD_PATTERNS[field].some((pattern: RegExp) => pattern.test(response)),
+      const missingRequirements = requirements.filter(
+        (requirement) =>
+          !clarification.requiredInformation.some(
+            (entry) =>
+              entry.semanticRole === requirement.semanticRole &&
+              (requirement.key === undefined || entry.key === requirement.key),
+          ),
       );
-      if (missingFields.length > 0) {
+      if (missingRequirements.length > 0) {
         return {
           fixtureId,
           passed: false,
-          detail: `turn ${rubric.turnIndex} clarification omitted fields: ${missingFields.join(',')}`,
+          detail:
+            `turn ${rubric.turnIndex} clarification omitted information: ` +
+            missingRequirements
+              .map(
+                (requirement) =>
+                  `${requirement.semanticRole}:${requirement.key ?? '*'}`,
+              )
+              .join(','),
+        };
+      }
+      const response = turn.finalAssistant?.text.trim() ?? '';
+      if (!response || !response.includes(clarification.question)) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `turn ${rubric.turnIndex} did not deliver the registered clarification question`,
         };
       }
       return {
         fixtureId,
         passed: true,
-        detail: `turn ${rubric.turnIndex} clarification requested fields: ${fields.join(',')}`,
+        detail:
+          `turn ${rubric.turnIndex} clarification requested information: ` +
+          requirements
+            .map(
+              (requirement) =>
+                `${requirement.semanticRole}:${requirement.key ?? '*'}`,
+            )
+            .join(','),
       };
     }
 

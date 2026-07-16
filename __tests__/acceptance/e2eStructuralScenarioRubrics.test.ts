@@ -38,6 +38,10 @@ import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageM
 
 const mockRunOrchestrator = jest.fn();
 const completedOrchestratorRun = { terminalDisposition: 'final_candidate' as const };
+const completeFinalMetadata = buildAssistantMessageMetadata('final', {
+  completionStatus: 'complete',
+  finishReason: 'stop',
+});
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: (...args: unknown[]) => mockRunOrchestrator(...args),
@@ -217,12 +221,7 @@ describe('E2E thin runner fixtures', () => {
         );
       }
       invocation += 1;
-      callbacks.onAssistantMessage(
-        'acknowledged',
-        [],
-        undefined,
-        buildAssistantMessageMetadata('final'),
-      );
+      callbacks.onAssistantMessage('acknowledged', [], undefined, completeFinalMetadata);
       callbacks.onAgentControlGraphStateChange(firstGraph);
       callbacks.onDone();
       return completedOrchestratorRun;
@@ -325,7 +324,10 @@ describe('E2E benchmark structural completion criteria', () => {
       {
         kind: 'turn_clarification',
         turnIndex: 0,
-        requiredMissingFields: ['recipient', 'message_body'],
+        requiredMissingInformation: [
+          { semanticRole: 'recipient' },
+          { semanticRole: 'content' },
+        ],
       },
       { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
       { kind: 'turn_completion', turnIndex: 0, field: 'execution', expected: true },
@@ -476,12 +478,7 @@ describe('E2E structural mobile assistant scenarios', () => {
     resetE2EMemorySandbox();
     mockRunOrchestrator.mockReset();
     mockRunOrchestrator.mockImplementation(async (_options, callbacks) => {
-      callbacks.onAssistantMessage(
-        'acknowledged',
-        [],
-        undefined,
-        buildAssistantMessageMetadata('final'),
-      );
+      callbacks.onAssistantMessage('acknowledged', [], undefined, completeFinalMetadata);
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
       return completedOrchestratorRun;
@@ -593,12 +590,7 @@ describe('E2E structural mobile assistant scenarios', () => {
       const turn = invocation;
       invocation += 1;
 
-      callbacks.onAssistantMessage(
-        'acknowledged',
-        [],
-        undefined,
-        buildAssistantMessageMetadata('final'),
-      );
+      callbacks.onAssistantMessage('acknowledged', [], undefined, completeFinalMetadata);
       const goals = turn === 0 ? goalsAfterScopeA : goalsAfterScopeB;
       syncActiveGoalFocusFromGraphTransition({
         threadId: options.conversationId,

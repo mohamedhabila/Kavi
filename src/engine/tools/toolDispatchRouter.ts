@@ -29,6 +29,7 @@ import { executeProviderAwareTool } from './providerAwareToolExecution';
 import { resolveToolWorkspaceContext, type ToolExecutionContext } from './toolExecutionContext';
 import { executePythonTool } from './toolPythonExecution';
 import { executeUpdateGoals } from './toolGoalExecution';
+import { executeRequestClarification } from './toolRequestClarificationExecution';
 import { createConversationFileContext } from './toolWorkspaceFiles';
 import { executeListFiles, executeReadFile, executeWriteFile } from './toolWorkspaceCoreExecution';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
@@ -286,6 +287,8 @@ export async function executeToolInner(
       return executePythonTool(args, conversationId, workspaceConversationId, context);
     case 'update_goals':
       return executeUpdateGoals(args);
+    case 'request_clarification':
+      return executeRequestClarification(args);
 
     // Extended tools
     case 'web_fetch':

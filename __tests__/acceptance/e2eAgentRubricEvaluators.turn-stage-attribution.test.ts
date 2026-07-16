@@ -1,5 +1,6 @@
 import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluators';
 import type { E2ERubric, E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
+import { buildRequestClarificationToolResult } from '../../src/services/agents/requestClarification';
 
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
@@ -189,36 +190,95 @@ describe('turn stage-attribution rubrics', () => {
     );
   });
 
-  it('grades canonical missing-field clarification semantics and rejects negation', () => {
+  it('grades structured missing-field clarification independently of user-facing language', () => {
     const rubric = {
       kind: 'turn_clarification',
       turnIndex: 1,
-      requiredMissingFields: ['new_start_time'],
+      requiredMissingInformation: [{ semanticRole: 'time' }],
     } as const;
-    const withResponse = (text: string) =>
-      buildResult(buildTurn({ finalAssistant: { ...buildTurn().finalAssistant!, text } }));
+    const question = 'ما الوقت الجديد الذي تريده لبداية الموعد؟';
+    const clarificationResult = JSON.stringify(
+      buildRequestClarificationToolResult({
+        fields: [
+          {
+            key: 'new_start_time',
+            requiredFor: 'execution',
+            semanticRole: 'time',
+          },
+        ],
+        question,
+      }),
+    );
+    const structured = buildResult(
+      buildTurn({
+        finalAssistant: {
+          ...buildTurn().finalAssistant!,
+          text: `I need one detail before acting.\n\n${question}`,
+        },
+        toolCalls: [
+          {
+            id: 'tc-clarify',
+            name: 'request_clarification',
+            arguments: JSON.stringify({
+              missing_information: [
+                {
+                  key: 'new_start_time',
+                  required_for: 'execution',
+                  semantic_role: 'time',
+                },
+              ],
+              question,
+            }),
+          },
+        ],
+        toolResults: [
+          {
+            toolCallId: 'tc-clarify',
+            name: 'request_clarification',
+            content: clarificationResult,
+            isError: false,
+          },
+        ],
+      }),
+    );
 
-    expect(
-      evaluateE2ERubric(
-        withResponse('Please tell me when you would like the event moved.'),
-        rubric,
-      ),
-    ).toMatchObject({
+    expect(evaluateE2ERubric(structured, rubric)).toMatchObject({
       fixtureId: 'stage-attribution:turn-1:turn_clarification',
       passed: true,
-      detail: 'turn 1 clarification requested fields: new_start_time',
-    });
-    expect(evaluateE2ERubric(withResponse('The time is currently 14:00.'), rubric)).toMatchObject({
-      passed: false,
+      detail: 'turn 1 clarification requested information: time:*',
     });
     expect(
       evaluateE2ERubric(
-        withResponse('Nothing is missing; no need to provide a new start time.'),
+        buildResult(
+          buildTurn({
+            finalAssistant: {
+              ...buildTurn().finalAssistant!,
+              text: 'Please provide a new start time.',
+            },
+          }),
+        ),
         rubric,
       ),
     ).toMatchObject({
       passed: false,
-      detail: 'turn 1 did not produce an affirmative clarification request',
+      detail: 'turn 1 did not record a valid structured clarification request',
+    });
+    expect(
+      evaluateE2ERubric(
+        buildResult(
+          buildTurn({
+            ...structured.turnTraces[0],
+            finalAssistant: {
+              ...structured.turnTraces[0]!.finalAssistant!,
+              text: 'A different question.',
+            },
+          }),
+        ),
+        rubric,
+      ),
+    ).toMatchObject({
+      passed: false,
+      detail: 'turn 1 did not deliver the registered clarification question',
     });
   });
 

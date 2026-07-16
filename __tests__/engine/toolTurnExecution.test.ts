@@ -1,5 +1,10 @@
 import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
 import type { PendingAgentToolCall } from '../../src/engine/graph/modelTurnExecutionTypes';
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import {
   executeAgentControlGraphToolTurn,
   type ExecuteAgentControlGraphToolTurnParams,
@@ -8,7 +13,15 @@ import type { Message } from '../../src/types/message';
 import type { ToolDefinition } from '../../src/types/tool';
 import { detectLoops } from '../../src/engine/loopDetection';
 import { executeToolExecutionBatch } from '../../src/engine/toolExecution/toolExecutionBatch';
+import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
+import {
+  buildModelTurnMemoryPolicyBinding,
+  POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+} from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
+import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
 
 jest.mock('../../src/engine/loopDetection', () => {
   const actual = jest.requireActual('../../src/engine/loopDetection');
@@ -22,12 +35,17 @@ jest.mock('../../src/engine/toolExecution/toolExecutionBatch', () => ({
   executeToolExecutionBatch: jest.fn(),
 }));
 
+jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
+  executeToolCallLifecycle: jest.fn(),
+}));
+
 jest.mock('../../src/engine/graph/toolExecutionOutcomeResolution', () => ({
   resolveAgentControlGraphToolExecutionOutcomes: jest.fn(),
 }));
 
 const mockedDetectLoops = jest.mocked(detectLoops);
 const mockedExecuteToolExecutionBatch = jest.mocked(executeToolExecutionBatch);
+const mockedExecuteToolCallLifecycle = jest.mocked(executeToolCallLifecycle);
 const mockedResolveToolExecutionOutcomes = jest.mocked(
   resolveAgentControlGraphToolExecutionOutcomes,
 );
@@ -136,6 +154,7 @@ function createParams(
     providerReplay: undefined,
     completion: undefined,
     pendingToolCalls: [createPendingToolCall()],
+    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     workingMessages: [
       {
         id: 'msg_user_1',
@@ -150,14 +169,58 @@ function createParams(
 
 describe('toolTurnExecution', () => {
   beforeEach(() => {
+    useSettingsStore.setState({ disableLongTermMemory: false });
+    initializeMemoryPolicyObservation();
     mockedDetectLoops.mockReset();
     mockedExecuteToolExecutionBatch.mockReset();
+    mockedExecuteToolCallLifecycle.mockReset();
     mockedResolveToolExecutionOutcomes.mockReset();
     mockedResolveToolExecutionOutcomes.mockImplementation(async (params: any) => ({
       status: 'continued',
       lastPendingAsyncSignature: 'next-signature',
       workingMessages: params.workingMessages,
     }));
+  });
+
+  afterEach(() => {
+    useSettingsStore.setState({ disableLongTermMemory: false });
+  });
+
+  it('does not persist or dispatch a tool plan invalidated during async batch planning', async () => {
+    const memoryFence = captureCurrentModelTurnMemoryFence();
+    let releasePlan!: () => void;
+    let markPlanStarted!: () => void;
+    const planStarted = new Promise<void>((resolve) => {
+      markPlanStarted = resolve;
+    });
+    const verifiedProcedureSession = {
+      observePlannedBatch: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            releasePlan = resolve;
+            markPlanStarted();
+          }),
+      ),
+    };
+    mockedDetectLoops.mockReturnValue({ loopDetected: false, level: 'none' } as never);
+    const params = createParams({
+      memoryPolicyBinding: buildModelTurnMemoryPolicyBinding(memoryFence),
+      verifiedProcedureSession: verifiedProcedureSession as never,
+    });
+
+    const execution = executeAgentControlGraphToolTurn(params);
+    await planStarted;
+    useSettingsStore.setState({ disableLongTermMemory: true });
+    releasePlan();
+
+    await expect(execution).rejects.toThrow('memory_prompt_epoch_expired');
+    expect(params.callbacks.onAssistantMessage).not.toHaveBeenCalled();
+    expect(mockedExecuteToolExecutionBatch).not.toHaveBeenCalled();
+    const graphEvents = (params.applyGraphEvents as jest.Mock).mock.calls.flatMap(
+      ([events]) => events,
+    );
+    expect(graphEvents.some((event) => event.type === 'GOALS_UPDATED')).toBe(false);
+    expect(graphEvents.some((event) => event.type === 'MODEL_TURN_COMPLETED')).toBe(false);
   });
 
   it('blocks the run when a critical loop is detected before tool execution', async () => {
@@ -231,9 +294,89 @@ describe('toolTurnExecution', () => {
     );
   });
 
-  it('commits code-owned effect completion goals before the tool batch begins', async () => {
+  it('makes structured clarification exclusive before assistant staging or tool execution', async () => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolExecutionBatch.mockResolvedValue([]);
+    const params = createParams({
+      pendingToolCalls: [
+        createPendingToolCall({ id: 'tc-write', name: 'write_file' }),
+        createPendingToolCall({
+          id: 'tc-clarify',
+          name: 'request_clarification',
+          arguments: JSON.stringify({
+            missing_information: [
+              {
+                key: 'recipient',
+                required_for: 'execution',
+                semantic_role: 'recipient',
+              },
+              {
+                key: 'message_body',
+                required_for: 'execution',
+                semantic_role: 'content',
+              },
+            ],
+            question: 'Who should receive the message, and what should it say?',
+          }),
+        }),
+        createPendingToolCall({
+          id: 'tc-sms',
+          name: 'sms_compose',
+          arguments: '{"recipients":["+15550000001"],"message":"guess"}',
+        }),
+      ],
+    });
+
+    await executeAgentControlGraphToolTurn(params);
+
+    expect(params.callbacks.onAssistantMessage).toHaveBeenCalledWith(
+      'Working on it',
+      [
+        expect.objectContaining({
+          id: 'tc-clarify',
+          name: 'request_clarification',
+        }),
+      ],
+      undefined,
+      expect.any(Object),
+    );
+    expect(mockedExecuteToolExecutionBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executableToolCalls: [
+          expect.objectContaining({
+            id: 'tc-clarify',
+            name: 'request_clarification',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('commits code-owned effect completion goals before the tool batch begins', async () => {
+    mockedDetectLoops.mockReturnValue({ loopDetected: false });
+    mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle: any) => {
+      expect(lifecycle.controlGraphGoals).toEqual([
+        expect.objectContaining({
+          status: 'active',
+          completionPolicy: 'blocking',
+          successCriteria: [expect.stringMatching(/^evidence\.effect:/u)],
+        }),
+      ]);
+      expect(
+        lifecycle.workflowToolCallBlocker(lifecycle.tc.name, lifecycle.tc.arguments),
+      ).toBeUndefined();
+      return {
+        toolCallId: lifecycle.tc.id,
+        effectiveToolName: lifecycle.tc.name,
+        result: '{}',
+        toolMessage: createToolMessage(),
+      };
+    });
+    mockedExecuteToolExecutionBatch.mockImplementation(async (batch: any) => [
+      await batch.executePendingToolCall(batch.executableToolCalls[0], 0, {
+        previewCompletedToolNames: new Set(),
+      }),
+    ]);
     let snapshot = { goals: [] as any[] };
     const applyGraphEvents = jest.fn((events: any[]) => {
       const goalsUpdated = events.find((event) => event.type === 'GOALS_UPDATED');
@@ -257,6 +400,7 @@ describe('toolTurnExecution', () => {
     expect(materialization).toEqual(
       expect.objectContaining({
         reason: 'effect_completion_contract:add',
+        projectToMemoryTasks: false,
         goals: [
           expect.objectContaining({
             status: 'active',
@@ -374,4 +518,8 @@ describe('toolTurnExecution', () => {
     expect(result.warningInjectedThisRound).toBe(true);
     expect(result.workingMessages.some((message) => message.role === 'system')).toBe(true);
   });
+});
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
 });

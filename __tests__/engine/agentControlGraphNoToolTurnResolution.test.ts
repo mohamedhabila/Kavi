@@ -1,87 +1,10 @@
-import {
-  createInitialAgentControlGraphSnapshot,
-  reduceAgentControlGraph,
-  type AgentControlTurnDirectives,
-} from '../../src/engine/graph/agentControlGraph';
 import { applyGraphScenarioEvents, buildGraphScenarioSnapshot } from './helpers/graphScenario';
 import { resolveAgentControlGraphNoToolTurn } from '../../src/engine/graph/noToolTurnResolution';
-import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
-import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
-import type { AgentGoal } from '../../src/types/agentRun';
-import type { Message } from '../../src/types/message';
-import type { ToolDefinition } from '../../src/types/tool';
-
-const baseTurnDirectives: AgentControlTurnDirectives = {
-  forceFinalText: false,
-  requireWorkflowTool: false,
-  incompleteFinalTextRecoveryCount: 0,
-};
-
-const tools: ToolDefinition[] = [
-  {
-    name: 'write_file',
-    description: 'Create or update files in the active workspace.',
-    input_schema: { type: 'object', properties: {} },
-  },
-];
-
-function createControlGraphWithGoals(goals: AgentGoal[]) {
-  return reduceAgentControlGraph(createInitialAgentControlGraphSnapshot(), [
-    { type: 'GOALS_UPDATED', goals, timestamp: Date.now() },
-  ]);
-}
-
-function createPendingOperation(
-  overrides: Partial<TrackedAsyncOperation> = {},
-): TrackedAsyncOperation {
-  return {
-    key: 'session:worker-1',
-    kind: 'session',
-    resourceId: 'worker-1',
-    displayName: 'Worker 1',
-    status: 'running',
-    lastUpdatedByTool: 'sessions_spawn',
-    updatedAt: 1000,
-    monitorToolNames: ['sessions_wait'],
-    waitToolName: 'sessions_wait',
-    waitArgs: { sessionId: 'worker-1' },
-    ...overrides,
-  };
-}
-
-function buildBaseParams() {
-  const workingMessages: Message[] = [];
-  return {
-    iteration: 3,
-    trackedAsyncOperations: new Map<string, TrackedAsyncOperation>(),
-    consecutivePendingAsyncNoToolTurns: 0,
-    turnAssistantContent: 'final answer',
-    modelTurnAssistantContent: 'final answer',
-    reasoning: '',
-    providerReplay: undefined,
-    completion: {
-      completionStatus: 'complete' as const,
-      finishReason: 'stop',
-    },
-    controlGraph: createInitialAgentControlGraphSnapshot(),
-    toolingEnabledForProvider: true,
-    selectedToolCount: tools.length,
-    selectedToolNames: new Set(tools.map((tool) => tool.name)),
-    selectedTools: tools,
-    allTools: tools,
-    effectiveForceTextThisTurn: false,
-    recoveryDirectives: baseTurnDirectives,
-    nextFinalizationMaxTokens: 4096,
-    workingMessages,
-    applyGraphEvents: jest.fn(),
-    resetIncompleteFinalTextRecovery: jest.fn(),
-    recordTurnDirectives: jest.fn(),
-    finishWithGraphFinalCandidateEvent: jest.fn().mockResolvedValue(undefined),
-    finishWithGraphTerminalEvent: jest.fn().mockResolvedValue(undefined),
-    onContinueThinking: jest.fn().mockResolvedValue(undefined),
-    onFinalizationHeld: jest.fn(),
-  };
-}
+import {
+  baseTurnDirectives,
+  buildBaseParams,
+  createPendingOperation,
+} from './helpers/noToolTurnResolution';
 
 describe('agent control graph no-tool turn resolution', () => {
   it('holds when pending async work still needs monitoring', async () => {
@@ -306,6 +229,127 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.onContinueThinking).toHaveBeenCalledWith('empty_response_retry');
   });
 
+  it('grounds an empty-response recovery in completed tool results without repeating failed tools', async () => {
+    const params = buildBaseParams();
+    params.turnAssistantContent = '';
+    params.modelTurnAssistantContent = '';
+    params.effectiveForceTextThisTurn = true;
+    params.selectedToolNames = new Set<string>();
+    params.selectedToolCount = 0;
+    params.toolCallHistory = [
+      {
+        id: 'contacts-1',
+        name: 'contacts_search',
+        arguments: '{"query":"Avery"}',
+        timestamp: 1,
+        status: 'completed',
+        result: '{"contacts":[{"name":"Avery"}]}',
+      },
+      {
+        id: 'calendar-1',
+        name: 'calendar_create',
+        arguments: '{}',
+        timestamp: 2,
+        status: 'failed',
+        result: '{"error":"permission_denied"}',
+      },
+      {
+        id: 'sms-1',
+        name: 'sms_compose',
+        arguments: '{"recipients":["+15550000001"],"message":"Running late"}',
+        timestamp: 3,
+        status: 'completed',
+        result: '{"status":"sms_composer_opened"}',
+      },
+    ];
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    const recoveryPrompt = params.workingMessages.at(-1)?.content ?? '';
+    expect(recoveryPrompt).toContain(
+      'Code-owned execution already recorded these tools as completed: contacts_search, sms_compose.',
+    );
+    expect(recoveryPrompt).toContain('Treat their tool-result messages as the source of truth');
+    expect(recoveryPrompt).not.toContain('calendar_create');
+  });
+
+  it('retries provider tool-call markup emitted during a forced final delivery', async () => {
+    const params = buildBaseParams();
+    const rawToolMarkup = [
+      '<tool_call>',
+      '<function=read_file>',
+      '<parameter=path>',
+      'artifacts/week-plan.txt',
+      '</parameter>',
+      '</function>',
+      '</tool_call>',
+    ].join('\n');
+    params.turnAssistantContent = rawToolMarkup;
+    params.modelTurnAssistantContent = rawToolMarkup;
+    params.effectiveForceTextThisTurn = true;
+    params.selectedToolNames = new Set<string>();
+    params.selectedToolCount = 0;
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    expect(params.applyGraphEvents).toHaveBeenCalledWith([
+      {
+        type: 'FINALIZATION_HELD',
+        reason: 'malformed_tool_call_retry',
+      },
+    ]);
+    expect(params.recordTurnDirectives).toHaveBeenCalledWith(
+      {
+        forceFinalText: true,
+        forcedTextReason: 'empty_delivery_recovery',
+        incompleteFinalTextRecoveryCount: 1,
+      },
+      'malformed_tool_call_retry',
+    );
+    expect(params.workingMessages.at(-1)?.content).toContain(
+      '[SYSTEM INVALID FINAL RESPONSE RETRY]',
+    );
+    expect(params.workingMessages.at(-1)?.content).toContain('verified tool results');
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+  });
+
+  it('blocks raw tool markup after one final-delivery recovery', async () => {
+    const params = buildBaseParams();
+    params.turnAssistantContent = '<tool_call><function=calendar_events></function></tool_call>';
+    params.modelTurnAssistantContent = params.turnAssistantContent;
+    params.effectiveForceTextThisTurn = true;
+    params.selectedToolNames = new Set<string>();
+    params.selectedToolCount = 0;
+    params.recoveryDirectives = {
+      ...baseTurnDirectives,
+      forceFinalText: true,
+      forcedTextReason: 'empty_delivery_recovery',
+      incompleteFinalTextRecoveryCount: 1,
+    };
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({ status: 'finalized' });
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graphEvent: {
+          type: 'BLOCKED',
+          reason: 'empty_final_text_after_recovery',
+        },
+        content: expect.stringContaining('no usable response'),
+      }),
+    );
+  });
+
   it('escalates the token budget for an empty forced-text exhaustion recovery', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
@@ -411,290 +455,5 @@ describe('agent control graph no-tool turn resolution', () => {
         },
       }),
     );
-  });
-
-  it('finalizes passive no-goal turns even when goal mutation is available', async () => {
-    const params = buildBaseParams();
-    params.selectedToolNames = new Set(['write_file', GOAL_BOOTSTRAP_TOOL_NAME]);
-    params.selectedToolCount = params.selectedToolNames.size;
-    params.turnAssistantContent = 'No problem.';
-    params.modelTurnAssistantContent = 'No problem.';
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({ status: 'finalized' });
-    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: 'No problem.',
-        graphEvent: {
-          type: 'FINAL_CANDIDATE_READY',
-          reason: 'stop',
-        },
-      }),
-    );
-    expect(params.onFinalizationHeld).not.toHaveBeenCalled();
-    expect(params.onContinueThinking).not.toHaveBeenCalled();
-  });
-
-  it('auto-completes goals and finalizes when update_goals is not on the turn surface', async () => {
-    const goals: AgentGoal[] = [
-      {
-        id: 'g1',
-        title: 'Build feature',
-        status: 'active',
-        dependencies: [],
-        evidence: ['write_file:artifacts/e2e.txt'],
-        successCriteria: ['evidence.prefix:write_file', 'evidence.min:1'],
-        createdAt: 1000,
-        updatedAt: 1000,
-      },
-    ];
-    const params = buildBaseParams();
-    params.controlGraph = createControlGraphWithGoals(goals);
-    params.selectedToolNames = new Set(['write_file']);
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({ status: 'finalized' });
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      expect.objectContaining({
-        type: 'GOALS_UPDATED',
-        reason: 'completion_gate:auto_complete',
-      }),
-    ]);
-    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalled();
-    expect(params.onContinueThinking).not.toHaveBeenCalled();
-  });
-
-  it('auto-completes and finalizes when active goal evidence is satisfied', async () => {
-    const goals: AgentGoal[] = [
-      {
-        id: 'g1',
-        title: 'Build feature',
-        status: 'active',
-        dependencies: [],
-        evidence: ['write_file:artifacts/e2e.txt'],
-        successCriteria: ['evidence.prefix:write_file', 'evidence.min:1'],
-        createdAt: 1000,
-        updatedAt: 1000,
-      },
-    ];
-    const params = buildBaseParams();
-    params.controlGraph = createControlGraphWithGoals(goals);
-    params.selectedToolNames = new Set(['write_file', GOAL_BOOTSTRAP_TOOL_NAME]);
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({ status: 'finalized' });
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      expect.objectContaining({
-        type: 'GOALS_UPDATED',
-        reason: 'completion_gate:auto_complete',
-      }),
-    ]);
-    expect(params.recordTurnDirectives).not.toHaveBeenCalled();
-    expect(params.onFinalizationHeld).not.toHaveBeenCalled();
-    expect(params.onContinueThinking).not.toHaveBeenCalled();
-    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalled();
-  });
-
-  it('finalizes with default persistent pending goals when no blocking goal is active', async () => {
-    const goals: AgentGoal[] = [
-      {
-        id: 'g1',
-        title: 'Build feature',
-        status: 'pending',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1000,
-        updatedAt: 1000,
-      },
-    ];
-    const params = buildBaseParams();
-    params.controlGraph = createControlGraphWithGoals(goals);
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({ status: 'finalized' });
-    expect(params.applyGraphEvents).not.toHaveBeenCalledWith([
-      {
-        type: 'FINALIZATION_HELD',
-        reason: 'goals_incomplete',
-      },
-    ]);
-    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalled();
-    expect(params.onContinueThinking).not.toHaveBeenCalled();
-  });
-
-  it('holds on incomplete blocking goals when no goal is active', async () => {
-    const goals: AgentGoal[] = [
-      {
-        id: 'g1',
-        title: 'Build feature',
-        status: 'pending',
-        completionPolicy: 'blocking',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1000,
-        updatedAt: 1000,
-      },
-    ];
-    const params = buildBaseParams();
-    params.controlGraph = createControlGraphWithGoals(goals);
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({
-      status: 'continued',
-      nextConsecutivePendingAsyncNoToolTurns: 0,
-    });
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      {
-        type: 'FINALIZATION_HELD',
-        reason: 'goals_incomplete',
-      },
-    ]);
-    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
-    expect(params.onContinueThinking).toHaveBeenCalledWith('goals_incomplete');
-  });
-
-  it('finalizes after successful read-only evidence when no goal is required', async () => {
-    const params = buildBaseParams();
-    params.selectedToolNames = new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'calendar_list', 'memory_recall']);
-    params.selectedToolCount = params.selectedToolNames.size;
-    params.toolCallHistory = [
-      {
-        id: 'tc-calendar',
-        name: 'calendar_list',
-        arguments: '{}',
-        timestamp: 1,
-        result: JSON.stringify([{ id: 'default', allowsModifications: true }]),
-      },
-      {
-        id: 'tc-memory',
-        name: 'memory_recall',
-        arguments: '{"query":"calendar preferences"}',
-        timestamp: 2,
-        result: JSON.stringify({ facts: [] }),
-      },
-    ];
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({ status: 'finalized' });
-    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalledTimes(1);
-    expect(params.onContinueThinking).not.toHaveBeenCalled();
-  });
-
-  it('holds once when successful tool output can feed an unrun downstream tool', async () => {
-    const workflowTools: ToolDefinition[] = [
-      {
-        name: 'calendar_create_event',
-        description: 'Create a new calendar event.',
-        input_schema: { type: 'object', properties: {} },
-        contract: {
-          produces: [{ kind: 'calendar_event' }],
-        },
-      },
-      {
-        name: 'calendar_update_event',
-        description: 'Update an existing calendar event.',
-        input_schema: { type: 'object', properties: {} },
-        contract: {
-          consumes: [{ kind: 'calendar_event' }],
-        },
-      },
-    ];
-    const params = buildBaseParams();
-    params.allTools = workflowTools;
-    params.selectedTools = workflowTools;
-    params.selectedToolNames = new Set(workflowTools.map((tool) => tool.name));
-    params.selectedToolCount = workflowTools.length;
-    params.toolCallHistory = [
-      {
-        id: 'tc-calendar-create',
-        name: 'calendar_create_event',
-        arguments: '{"title":"Review"}',
-        timestamp: 1,
-        result: JSON.stringify({ status: 'created', eventId: 'evt-1' }),
-      },
-    ];
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({
-      status: 'continued',
-      nextConsecutivePendingAsyncNoToolTurns: 1,
-    });
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      {
-        type: 'FINALIZATION_HELD',
-        reason: 'workflow_continuation',
-      },
-    ]);
-    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
-    expect(params.onContinueThinking).toHaveBeenCalledWith('workflow_continuation');
-    expect(params.workingMessages.at(-1)?.content).toContain('calendar_update_event');
-  });
-
-  it('continues incomplete final text in the graph layer', async () => {
-    const params = buildBaseParams();
-    params.turnAssistantContent = 'partial final answer';
-    params.modelTurnAssistantContent = 'partial final answer';
-    params.completion = {
-      completionStatus: 'incomplete',
-      finishReason: 'length',
-    };
-    params.nextFinalizationMaxTokens = 8192;
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({
-      status: 'continued',
-      nextConsecutivePendingAsyncNoToolTurns: 0,
-    });
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      {
-        type: 'FINALIZATION_HELD',
-        reason: 'incomplete_delivery_continuation',
-      },
-    ]);
-    expect(params.recordTurnDirectives).toHaveBeenCalledWith(
-      expect.objectContaining({
-        forceFinalText: true,
-        forcedTextReason: 'incomplete_delivery_continuation',
-        maxTokensOverride: 8192,
-        incompleteFinalTextRecoveryCount: 1,
-        incompleteFinalTextContinuationPrefix: 'partial final answer',
-      }),
-      'incomplete_delivery_continuation',
-    );
-    expect(params.workingMessages.at(-2)).toEqual(
-      expect.objectContaining({
-        role: 'assistant',
-        content: 'partial final answer',
-      }),
-    );
-    expect(params.workingMessages.at(-1)?.content).toContain('[SYSTEM FINAL ANSWER CONTINUE]');
-    expect(params.onContinueThinking).toHaveBeenCalledWith('incomplete_delivery_continuation');
-  });
-
-  it('finalizes the run when no graph-side recovery is needed', async () => {
-    const params = buildBaseParams();
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({ status: 'finalized' });
-    expect(params.resetIncompleteFinalTextRecovery).toHaveBeenCalledWith('finalization_complete');
-    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        graphEvent: {
-          type: 'FINAL_CANDIDATE_READY',
-          reason: 'stop',
-        },
-        content: 'final answer',
-        sessionEndReason: 'final_candidate_ready',
-      }),
-    );
-    expect(params.onContinueThinking).not.toHaveBeenCalled();
   });
 });

@@ -52,7 +52,7 @@ describe('E2E benchmark manifest stage attribution', () => {
       {
         kind: 'turn_clarification',
         turnIndex: 1,
-        requiredMissingFields: ['new_start_time'],
+        requiredMissingInformation: [{ semanticRole: 'time' }],
       },
       {
         kind: 'turn_native_invocation_count',

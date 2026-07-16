@@ -22,7 +22,11 @@ import {
   parseEffectCompletionCriterion,
   parseToolEffectReceiptEvidence,
 } from '../goals/effectCompletionEvidence';
-import { isBlockingGoal, type AgentGoal } from '../goals/types';
+import {
+  isBlockingGoal,
+  isCodeOwnedEffectCompletionGoal,
+  type AgentGoal,
+} from '../goals/types';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
 import {
   buildDelegationEvidenceAutoCompleteEvent,
@@ -39,6 +43,20 @@ import {
   buildToolMessageOutcome,
   type ToolMessageOutcome,
 } from '../toolExecution/toolMessageOutcome';
+import {
+  parseRequestClarificationToolResult,
+  REQUEST_CLARIFICATION_TOOL_NAME,
+  type RequestClarificationToolResult,
+} from '../../services/agents/requestClarification';
+import {
+  REQUEST_FRAME_VERSION,
+  type RequestFrame,
+} from '../../services/agents/requestFrame';
+import { resolveRequestDecision } from '../../services/agents/requestDecisionPolicy';
+import {
+  projectRequestUnderstanding,
+  summarizeRequestUnderstanding,
+} from '../../services/agents/requestUnderstandingProjection';
 
 export interface ToolExecutionOutcome {
   index: number;
@@ -127,8 +145,54 @@ function hasNewlyCompletedBlockingGoal(params: {
   after: ReadonlyArray<AgentGoal> | undefined;
 }): boolean {
   return (params.after ?? []).some(
-    (goal) => isBlockingGoal(goal) && goal.status === 'completed' && !params.before.has(goal.id),
+    (goal) =>
+      isBlockingGoal(goal) &&
+      !isCodeOwnedEffectCompletionGoal(goal) &&
+      goal.status === 'completed' &&
+      !params.before.has(goal.id),
   );
+}
+
+function buildTerminalFailedEffectGuardRemovalEvent(params: {
+  goals: ReadonlyArray<AgentGoal>;
+  receiptEvidence: string | undefined;
+}): AgentControlGraphEvent | null {
+  const receipt = params.receiptEvidence
+    ? parseToolEffectReceiptEvidence(params.receiptEvidence)
+    : null;
+  if (
+    !receipt ||
+    (receipt.effectState !== 'failed' && receipt.effectState !== 'cancelled')
+  ) {
+    return null;
+  }
+
+  const removableGoalIds = new Set(
+    params.goals
+      .filter(
+        (goal) =>
+          isCodeOwnedEffectCompletionGoal(goal) &&
+          (goal.status === 'active' || goal.status === 'blocked') &&
+          (goal.successCriteria ?? []).some((criterion) => {
+            const effectCriterion = parseEffectCompletionCriterion(criterion);
+            return effectCriterion
+              ? effectReceiptEvidenceTargetsCriterion(receipt, effectCriterion)
+              : false;
+          }),
+      )
+      .map((goal) => goal.id),
+  );
+  if (removableGoalIds.size === 0) {
+    return null;
+  }
+
+  return {
+    type: 'GOALS_UPDATED',
+    goals: params.goals.filter((goal) => !removableGoalIds.has(goal.id)),
+    reason: 'effect_completion_contract:terminal_failed_retired',
+    projectToMemoryTasks: false,
+    timestamp: Date.now(),
+  };
 }
 
 function buildAppliedUnverifiedEffectGoalBlockEvent(params: {
@@ -178,6 +242,43 @@ function buildAppliedUnverifiedEffectGoalBlockEvent(params: {
   };
 }
 
+function buildClarificationRequestUnderstanding(params: {
+  graphSnapshot: AgentRunControlGraphState;
+  request: RequestClarificationToolResult;
+}) {
+  const routing = params.graphSnapshot.requestUnderstanding?.routing;
+  if (!routing || routing.status !== 'known') {
+    return undefined;
+  }
+  const baseFrame: RequestFrame = {
+    version: REQUEST_FRAME_VERSION,
+    mode: routing.mode,
+    input: {
+      kind: routing.inputKind,
+      attachmentCount: routing.attachmentCount,
+    },
+    continuation: routing.continuation,
+    requiredInformation: [],
+    decision: {
+      action: 'act',
+      reason: 'actionable_input',
+    },
+  };
+  const clarificationFrame = resolveRequestDecision({
+    frame: baseFrame,
+    requiredInformation: params.request.requiredInformation,
+    policyDisposition: 'allowed',
+    permissionState: 'not_required',
+    awaitingExternalOperation: false,
+  });
+  return summarizeRequestUnderstanding(
+    projectRequestUnderstanding({
+      requestFrame: clarificationFrame,
+      goals: params.graphSnapshot.goals,
+    }),
+  );
+}
+
 export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   iteration: number;
   executableToolCalls: ReadonlyArray<{ name: string; arguments: string }>;
@@ -219,7 +320,10 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   }) => boolean;
   getModelTurnBlocker: () => string | undefined;
   finishWithGraphTerminalEvent: (params: {
-    graphEvent: Extract<AgentControlGraphEvent, { type: 'BLOCKED' } | { type: 'YIELDED' }>;
+    graphEvent: Extract<
+      AgentControlGraphEvent,
+      { type: 'BLOCKED' } | { type: 'FINALIZED' } | { type: 'YIELDED' }
+    >;
     content: string;
     assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
     sessionEndReason?: string;
@@ -239,6 +343,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   let workingMessages = params.workingMessages;
   const canonicalToolExecutionOutcomes: CanonicalToolExecutionOutcome[] = [];
   let graphMutationBoundaryReached = false;
+  let clarificationRequest: RequestClarificationToolResult | undefined;
 
   for (const outcome of [...params.toolExecutionOutcomes].sort(
     (left, right) => left.index - right.index,
@@ -273,6 +378,20 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         executableToolCall?.name ||
         canonicalOutcome.toolCallId,
     );
+    if (
+      toolName === REQUEST_CLARIFICATION_TOOL_NAME &&
+      !canonicalOutcome.toolMessage.isError
+    ) {
+      const parsedClarification = parseRequestClarificationToolResult(
+        canonicalOutcome.toolMessage.content,
+      );
+      if (!parsedClarification) {
+        throw new Error('request_clarification_result_invalid');
+      }
+      clarificationRequest ??= parsedClarification;
+    }
+    const toolResultCanAdvanceWorkflow =
+      toolName !== 'update_goals' && toolName !== REQUEST_CLARIFICATION_TOOL_NAME;
     updateToolCallHistoryResult({
       history: params.toolCallHistory,
       toolCallId: canonicalOutcome.toolCallId,
@@ -298,7 +417,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       effectPolicy.effects.every((effect) => effect === 'none');
     const structuralGoalEvidenceStrings =
       !canonicalOutcome.toolMessage.isError &&
-      toolName !== 'update_goals' &&
+      toolResultCanAdvanceWorkflow &&
       (canonicalOutcome.effectReceipt?.effectState === 'none' || isCodeOwnedEffectFreeTool)
         ? buildToolGoalEvidenceStrings({
             toolName,
@@ -345,7 +464,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
 
     // ── Auto-link tool results to active goal evidence ───────────────────
     let delegationEvidenceApplied = false;
-    if (!canonicalOutcome.toolMessage.isError && toolName !== 'update_goals') {
+    if (!canonicalOutcome.toolMessage.isError && toolResultCanAdvanceWorkflow) {
       const snapshot = params.getGraphSnapshot();
       const delegationTerminal = buildDelegationToolTerminalGraphEvents({
         toolName,
@@ -366,7 +485,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       }
     }
 
-    if (toolName !== 'update_goals') {
+    if (toolResultCanAdvanceWorkflow) {
       const evidenceRoutableGoals = (params.getGraphSnapshot().goals ?? []).filter(
         (goal) => goal.status === 'active' || goal.status === 'blocked',
       );
@@ -397,6 +516,14 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         if (unverifiedEffectBlockEvent) {
           params.applyGraphEvents([unverifiedEffectBlockEvent]);
         }
+        const terminalFailedEffectGuardRemovalEvent =
+          buildTerminalFailedEffectGuardRemovalEvent({
+            goals: params.getGraphSnapshot().goals ?? [],
+            receiptEvidence: effectReceiptEvidenceStrings[0],
+          });
+        if (terminalFailedEffectGuardRemovalEvent) {
+          params.applyGraphEvents([terminalFailedEffectGuardRemovalEvent]);
+        }
         if (routedEvidence.length > 0) {
           const satisfiedGoals = findEvidenceSatisfiedGoals(params.getGraphSnapshot().goals ?? []);
           if (satisfiedGoals.length > 0) {
@@ -412,7 +539,10 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       }
     }
 
-    if (!canonicalOutcome.skipWorkflowProgress) {
+    if (
+      !canonicalOutcome.skipWorkflowProgress &&
+      toolName !== REQUEST_CLARIFICATION_TOOL_NAME
+    ) {
       params.publishWorkflowToolResultProgress({
         toolMessage: canonicalOutcome.toolMessage,
         tools: params.groundedRequestScopedTools,
@@ -434,6 +564,39 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   }
 
   await params.yieldToUiFrame();
+
+  if (clarificationRequest) {
+    const requestUnderstanding = buildClarificationRequestUnderstanding({
+      graphSnapshot: params.getGraphSnapshot(),
+      request: clarificationRequest,
+    });
+    if (requestUnderstanding) {
+      params.applyGraphEvents([
+        {
+          type: 'REQUEST_UNDERSTANDING_PROJECTED',
+          projection: requestUnderstanding,
+          iteration: params.iteration,
+        },
+      ]);
+    }
+    await params.finishWithGraphTerminalEvent({
+      graphEvent: {
+        type: 'FINALIZED',
+        reason: 'request_clarification',
+      },
+      content: clarificationRequest.question,
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'complete',
+        finishReason: 'request_clarification',
+      }),
+      sessionEndReason: 'request_clarification',
+    });
+    return {
+      status: 'finalized',
+      lastPendingAsyncSignature: params.lastPendingAsyncSignature,
+      workingMessages,
+    };
+  }
 
   if (canonicalToolExecutionOutcomes.some((outcome) => outcome.effectReconciliationRequired)) {
     await params.finishWithGraphTerminalEvent({

@@ -17,6 +17,8 @@ import { buildAgentControlGraphLoopRecoveryDecision } from './loopRecovery';
 import { buildLoopDetectedObservabilityDetail } from './graphObservability';
 import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
 import { trimAgentControlGraphPendingToolCallsAfterYield } from './sessionsYield';
+import { normalizeToolName } from '../tools/toolNameNormalization';
+import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
 export type PrepareAgentControlGraphToolTurnResult =
   | {
@@ -33,7 +35,10 @@ export type PrepareAgentControlGraphToolTurnResult =
     }
   | {
       status: 'prepared';
+      assistantMetadata: AssistantMessageMetadata;
+      assistantToolTurnContent: string;
       executableToolCalls: ReadonlyArray<PendingAgentToolCall>;
+      toolCallObjects: ToolCall[];
       warningInjectedThisRound: boolean;
       workingMessages: Message[];
       loopObservabilityDetail?: string;
@@ -52,23 +57,20 @@ export interface PrepareAgentControlGraphToolTurnParams {
   pendingToolCalls: ReadonlyArray<PendingAgentToolCall>;
   goals?: ReadonlyArray<AgentGoal>;
   workingMessages: Message[];
-  callbacks: {
-    onAssistantMessage: (
-      content: string,
-      toolCalls?: ToolCall[],
-      providerReplay?: MessageProviderReplay,
-      assistantCompletion?: AssistantMessageMetadata,
-    ) => void;
-  };
-  yieldToUiFrame: () => Promise<void>;
 }
 
-export async function prepareAgentControlGraphToolTurn(
+export function prepareAgentControlGraphToolTurn(
   params: PrepareAgentControlGraphToolTurnParams,
-): Promise<PrepareAgentControlGraphToolTurnResult> {
-  const executableToolCalls = trimAgentControlGraphPendingToolCallsAfterYield(
+): PrepareAgentControlGraphToolTurnResult {
+  const yieldedToolCalls = trimAgentControlGraphPendingToolCallsAfterYield(
     params.pendingToolCalls,
   );
+  const clarificationToolCall = yieldedToolCalls.find(
+    (toolCall) => normalizeToolName(toolCall.name) === REQUEST_CLARIFICATION_TOOL_NAME,
+  );
+  const executableToolCalls = clarificationToolCall
+    ? [clarificationToolCall]
+    : yieldedToolCalls;
   const loopCheck = detectLoops(params.toolCallHistory, params.stagnationSignatures, {
     goals: params.goals,
   });
@@ -83,14 +85,7 @@ export async function prepareAgentControlGraphToolTurn(
     content: params.turnAssistantContent,
     toolCalls: toolCallObjects,
   });
-
-  params.callbacks.onAssistantMessage(
-    assistantToolTurnContent,
-    toolCallObjects,
-    params.providerReplay,
-    buildAssistantMessageMetadata('intermediate', params.completion),
-  );
-  await params.yieldToUiFrame();
+  const assistantMetadata = buildAssistantMessageMetadata('intermediate', params.completion);
 
   const workingMessages = [...params.workingMessages];
   workingMessages.push({
@@ -101,6 +96,7 @@ export async function prepareAgentControlGraphToolTurn(
     timestamp: Date.now(),
     reasoning: params.reasoning || undefined,
     providerReplay: params.providerReplay,
+    assistantMetadata,
   });
 
   const loopRecoveryDecision = buildAgentControlGraphLoopRecoveryDecision({
@@ -137,7 +133,10 @@ export async function prepareAgentControlGraphToolTurn(
 
   return {
     status: 'prepared',
+    assistantMetadata,
+    assistantToolTurnContent,
     executableToolCalls,
+    toolCallObjects,
     warningInjectedThisRound,
     workingMessages,
     ...(loopObservabilityDetail && loopRecoveryDecision.type === 'warning'

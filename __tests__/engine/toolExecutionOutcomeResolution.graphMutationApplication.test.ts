@@ -3,7 +3,10 @@ import {
   buildEffectCompletionCriterion,
   buildToolEffectReceiptEvidence,
 } from '../../src/engine/goals/effectCompletionEvidence';
-import type { AgentGoal } from '../../src/engine/goals/types';
+import {
+  CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+  type AgentGoal,
+} from '../../src/engine/goals/types';
 import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
 import {
   applyGoalGraphEvents,
@@ -13,6 +16,15 @@ import {
   extractGoalEvidenceEvents,
   tool,
 } from '../helpers/toolExecutionOutcomeHarness';
+import {
+  buildRequestClarificationToolResult,
+  type RequestClarification,
+} from '../../src/services/agents/requestClarification';
+import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
+import {
+  projectRequestUnderstanding,
+  summarizeRequestUnderstanding,
+} from '../../src/services/agents/requestUnderstandingProjection';
 
 describe('tool execution outcome resolution', () => {
   it('reconciles and completes new goal criteria with existing graph evidence', async () => {
@@ -297,6 +309,191 @@ describe('tool execution outcome resolution', () => {
     );
   });
 
+  it('does not treat a completed code-owned effect guard as whole-workflow completion', async () => {
+    const params = buildBaseParams();
+    const requestDigest = `sha256:${'7'.repeat(64)}` as const;
+    const receipt: ToolEffectReceipt = {
+      version: 2,
+      receiptId: `ter_${'7'.repeat(32)}`,
+      toolCallId: 'tc-calendar-create',
+      toolName: 'calendar_create_event',
+      executionRunId: 'execution-run-1',
+      contractIdentity: {
+        kind: 'code_owned',
+        version: 1,
+        toolName: 'calendar_create_event',
+        schemaDigest: `sha256:${'7'.repeat(64)}`,
+        capabilityContractDigest: `sha256:${'7'.repeat(64)}`,
+        workflowContractDigest: `sha256:${'7'.repeat(64)}`,
+        effectContractDigest: `sha256:${'7'.repeat(64)}`,
+        executionPolicyDigest: `sha256:${'7'.repeat(64)}`,
+      },
+      transportState: 'returned',
+      effectKind: 'calendar.create',
+      effectState: 'applied',
+      verificationState: 'verified',
+      requestDigest,
+      resultDigest: `sha256:${'8'.repeat(64)}`,
+      resource: { kind: 'calendar_event', id: 'event-1' },
+      recordedAt: 1,
+    };
+    const criterion = buildEffectCompletionCriterion({
+      effectKind: 'calendar.create',
+      requestDigest,
+      resource: { kind: 'calendar_event', id: '*' },
+      verificationState: 'verified',
+    });
+    let graph = {
+      goals: [
+        createGoal({
+          id: 'effect-calendar-create',
+          title: 'Verify calendar_create_event effect',
+          status: 'active',
+          owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+          completionPolicy: 'blocking',
+          successCriteria: [criterion],
+        }),
+      ],
+    };
+    params.getGraphSnapshot = jest.fn(() => graph);
+    params.applyGraphEvents = jest.fn((events) => {
+      graph = applyGoalGraphEvents(graph, events);
+    });
+    params.groundedRequestScopedTools = [
+      tool({
+        name: 'calendar_create_event',
+        contract: {
+          capabilities: ['write'],
+          resourceKinds: ['device'],
+        },
+      }),
+    ];
+    params.executableToolCalls = [
+      {
+        name: 'calendar_create_event',
+        arguments: '{"title":"Review"}',
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-calendar-create',
+        toolMessage: createToolMessage({
+          id: 'tc-calendar-create',
+          name: 'calendar_create_event',
+          content: '{"status":"created_verified","eventId":"event-1"}',
+        }),
+        effectReceipt: receipt,
+      },
+    ];
+
+    await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(graph.goals[0]?.status).toBe('completed');
+    expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasCompletedBlockingGoal: false,
+        hasIncompleteBlockingGoal: false,
+      }),
+    );
+  });
+
+  it('retires a code-owned effect guard after a definitive failed receipt', async () => {
+    const params = buildBaseParams();
+    const requestDigest = `sha256:${'9'.repeat(64)}` as const;
+    const receipt: ToolEffectReceipt = {
+      version: 2,
+      receiptId: `ter_${'9'.repeat(32)}`,
+      toolCallId: 'tc-memory-failed',
+      toolName: 'memory_remember',
+      executionRunId: 'execution-run-1',
+      contractIdentity: {
+        kind: 'code_owned',
+        version: 1,
+        toolName: 'memory_remember',
+        schemaDigest: `sha256:${'9'.repeat(64)}`,
+        capabilityContractDigest: `sha256:${'9'.repeat(64)}`,
+        workflowContractDigest: `sha256:${'9'.repeat(64)}`,
+        effectContractDigest: `sha256:${'9'.repeat(64)}`,
+        executionPolicyDigest: `sha256:${'9'.repeat(64)}`,
+      },
+      transportState: 'returned',
+      effectKind: 'memory.write',
+      effectState: 'failed',
+      verificationState: 'unverified',
+      requestDigest,
+      resultDigest: `sha256:${'a'.repeat(64)}`,
+      recordedAt: 1,
+    };
+    const criterion = buildEffectCompletionCriterion({
+      effectKind: 'memory.write',
+      requestDigest,
+      resource: { kind: 'memory_fact', id: '*' },
+      verificationState: 'verified',
+    });
+    let graph = {
+      goals: [
+        createGoal({
+          id: 'effect-memory-write',
+          title: 'Verify memory_remember effect',
+          status: 'active',
+          owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+          completionPolicy: 'blocking',
+          successCriteria: [criterion],
+        }),
+      ],
+    };
+    params.getGraphSnapshot = jest.fn(() => graph);
+    params.applyGraphEvents = jest.fn((events) => {
+      graph = applyGoalGraphEvents(graph, events);
+    });
+    params.groundedRequestScopedTools = [
+      tool({
+        name: 'memory_remember',
+        contract: {
+          capabilities: ['write'],
+          resourceKinds: ['memory'],
+        },
+      }),
+    ];
+    params.executableToolCalls = [
+      {
+        name: 'memory_remember',
+        arguments: '{"semanticEvidence":{}}',
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-memory-failed',
+        toolMessage: createToolMessage({
+          id: 'tc-memory-failed',
+          name: 'memory_remember',
+          content: '{"status":"rejected","code":"grounding_required"}',
+          isError: true,
+        }),
+        effectReceipt: receipt,
+      },
+    ];
+
+    await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(graph.goals).toEqual([]);
+    expect(params.applyGraphEvents).toHaveBeenCalledWith([
+      expect.objectContaining({
+        type: 'GOALS_UPDATED',
+        reason: 'effect_completion_contract:terminal_failed_retired',
+        projectToMemoryTasks: false,
+      }),
+    ]);
+    expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasCompletedBlockingGoal: false,
+        hasIncompleteBlockingGoal: false,
+      }),
+    );
+  });
+
   it('keeps newer persistent focus active for stale mixed-batch activation', async () => {
     const params = buildBaseParams();
     let graph = {
@@ -467,6 +664,94 @@ describe('tool execution outcome resolution', () => {
         sessionEndReason: 'yielded',
       }),
     );
+    expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
+  });
+
+  it('records structured missing information and finalizes directly with the registered question', async () => {
+    const params = buildBaseParams();
+    const clarification: RequestClarification = {
+      fields: [
+        { key: 'recipient', requiredFor: 'execution', semanticRole: 'recipient' },
+        { key: 'message_body', requiredFor: 'execution', semanticRole: 'content' },
+      ],
+      question: 'Who is the recipient, and what should the message say?',
+    };
+    const entryFrame = buildGraphEntryRequestFrame({
+      text: 'Draft a message for me.',
+      attachmentCount: 0,
+      mode: 'agentic',
+      continuation: 'new',
+    });
+    params.getGraphSnapshot = jest.fn().mockReturnValue({
+      goals: [],
+      requestUnderstanding: summarizeRequestUnderstanding(
+        projectRequestUnderstanding({ requestFrame: entryFrame, goals: [] }),
+      ),
+    });
+    params.executableToolCalls = [
+      {
+        name: 'request_clarification',
+        arguments: JSON.stringify({
+          missing_information: [
+            {
+              key: 'recipient',
+              required_for: 'execution',
+              semantic_role: 'recipient',
+            },
+            {
+              key: 'message_body',
+              required_for: 'execution',
+              semantic_role: 'content',
+            },
+          ],
+          question: clarification.question,
+        }),
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-clarify',
+        toolMessage: createToolMessage({
+          id: 'tc-clarify',
+          name: 'request_clarification',
+          content: JSON.stringify(buildRequestClarificationToolResult(clarification)),
+        }),
+      },
+    ];
+
+    const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(result.status).toBe('finalized');
+    expect(params.publishWorkflowToolResultProgress).not.toHaveBeenCalled();
+    expect(params.recordPostToolFinalTextDirective).not.toHaveBeenCalled();
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graphEvent: {
+          type: 'FINALIZED',
+          reason: 'request_clarification',
+        },
+        content: clarification.question,
+        sessionEndReason: 'request_clarification',
+      }),
+    );
+    expect(params.applyGraphEvents).toHaveBeenCalledWith([
+      expect.objectContaining({
+        type: 'REQUEST_UNDERSTANDING_PROJECTED',
+        projection: expect.objectContaining({
+          routing: expect.objectContaining({
+            status: 'known',
+            decisionAction: 'clarify',
+            decisionReason: 'required_information_missing',
+          }),
+          registeredRequiredInformation: expect.objectContaining({
+            status: 'known',
+            count: 2,
+            unresolvedCount: 2,
+          }),
+        }),
+      }),
+    ]);
     expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
   });
 });

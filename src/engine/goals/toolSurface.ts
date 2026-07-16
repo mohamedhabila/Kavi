@@ -16,8 +16,10 @@ import { normalizeToolName } from '../tools/toolNameNormalization';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from './bootstrap';
 import { resolveSuccessCriterionSurfaceHints } from './completionEvidence';
 import type { AgentGoal } from './types';
+import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
 export const DEFAULT_CORE_TOOL_ORDER = [
+  REQUEST_CLARIFICATION_TOOL_NAME,
   GOAL_BOOTSTRAP_TOOL_NAME,
   'memory_recall',
   'memory_remember',
@@ -27,6 +29,7 @@ export const DEFAULT_CORE_TOOL_ORDER = [
 ] as const;
 
 const STABLE_TOOL_SURFACE_ORDER_VALUES = [
+  REQUEST_CLARIFICATION_TOOL_NAME,
   GOAL_BOOTSTRAP_TOOL_NAME,
   'memory_recall',
   'memory_remember',
@@ -46,6 +49,7 @@ export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
   DEFAULT_CORE_TOOL_ORDER,
 );
 const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  REQUEST_CLARIFICATION_TOOL_NAME,
   'memory_recall',
   'memory_remember',
 ]);

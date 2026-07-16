@@ -72,6 +72,7 @@ const CODE_COMPLETE_DELIVERABLE_FINISH_REASONS = new Set([
   'graph_expected_output',
   'graph_finalized',
   'loop_detected',
+  'request_clarification',
   'scheduler_completion_recovered',
   'synthesized_from_evidence',
   'tool_batch_incomplete',

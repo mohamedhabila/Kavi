@@ -110,7 +110,7 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
     {
       kind: 'turn_clarification',
       turnIndex: 6,
-      requiredMissingFields: ['new_start_time'],
+      requiredMissingInformation: [{ semanticRole: 'time' }],
     },
     { kind: 'turn_final_response_token', turnIndex: 8, token: CALENDAR_EVENT_TITLE },
     { kind: 'turn_final_response_token', turnIndex: 8, token: '45' },

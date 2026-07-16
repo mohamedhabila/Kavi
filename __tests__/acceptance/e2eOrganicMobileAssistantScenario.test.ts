@@ -161,7 +161,7 @@ describe('organic mobile-assistant continuity scenario', () => {
     expect(scenario.rubrics).toContainEqual({
       kind: 'turn_clarification',
       turnIndex: 6,
-      requiredMissingFields: ['new_start_time'],
+      requiredMissingInformation: [{ semanticRole: 'time' }],
     });
     expect(scenario.rubrics).toContainEqual({
       kind: 'turn_native_invocation_count',

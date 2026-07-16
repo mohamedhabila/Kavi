@@ -28,6 +28,7 @@ import type {
   ForegroundScenarioUserSnapshot,
 } from './foregroundScenarioDriverTypes';
 import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
+import type { RequestClarificationSemanticRole } from '../../services/agents/requestClarification';
 
 export type E2EToolCallRecord = {
   id: string;
@@ -196,11 +197,10 @@ export type E2EMemoryProbeAnswerExpectation =
       exactText: string;
     }>;
 
-export type E2EClarificationMissingField =
-  | 'event_title'
-  | 'message_body'
-  | 'new_start_time'
-  | 'recipient';
+export type E2EClarificationMissingInformation = Readonly<{
+  semanticRole: RequestClarificationSemanticRole;
+  key?: string;
+}>;
 
 export type E2ERubric =
   | { kind: 'workspace_file'; path: string; contains?: string }
@@ -260,7 +260,7 @@ export type E2ERubric =
   | {
       kind: 'turn_clarification';
       turnIndex: number;
-      requiredMissingFields: ReadonlyArray<E2EClarificationMissingField>;
+      requiredMissingInformation: ReadonlyArray<E2EClarificationMissingInformation>;
     }
   | {
       kind: 'turn_native_invocation_count';
