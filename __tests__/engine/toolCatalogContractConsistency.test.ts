@@ -1,10 +1,22 @@
+jest.mock('../../src/services/memory/policy', () => ({
+  ...jest.requireActual('../../src/services/memory/policy'),
+  isLongTermMemoryEnabled: jest.fn(() => true),
+}));
+
 import { executeToolCatalog } from '../../src/engine/tools/builtin-tool-catalog';
+import { TOOL_CATALOG_TOOL } from '../../src/engine/tools/builtin-definitions-coordination';
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
 import { buildCapabilitySummary } from '../../src/engine/tools/builtin-tool-catalogCapabilitySummary';
 import { TOOL_CATALOG_CATEGORIES } from '../../src/engine/tools/builtin-tool-catalogConfig';
 import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('tool_catalog contract consistency', () => {
+  it('constrains category arguments to the code-owned catalog taxonomy', () => {
+    expect(TOOL_CATALOG_TOOL.input_schema.properties?.category?.enum).toEqual(
+      expect.arrayContaining(Object.keys(TOOL_CATALOG_CATEGORIES)),
+    );
+  });
+
   it('returns capability summaries that match registry contracts for static categories', async () => {
     const mismatches: string[] = [];
 

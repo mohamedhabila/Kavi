@@ -22,6 +22,7 @@ describe('builtin executor tool catalog', () => {
       expect(categoryNames).toContain('browser');
       expect(categoryNames).toContain('canvas');
       expect(categoryNames).toContain('native');
+      expect(categoryNames).toContain('notifications');
       expect(categoryNames).toContain('media');
       expect(categoryNames).toContain('web');
       expect(categoryNames).toContain('code');
@@ -71,6 +72,18 @@ describe('builtin executor tool catalog', () => {
           'calendar_update_event',
         ]),
       );
+    });
+
+    it('returns the complete notification lifecycle when filtering by notifications', async () => {
+      const result = await executeToolCatalog({ category: 'notifications' });
+      const parsed = parseCompletedToolOutcome(result);
+
+      expect(parsed.category).toBe('notifications');
+      expect(parsed.tools.map((tool: any) => tool.name)).toEqual([
+        'notification_send',
+        'notification_schedule',
+        'notification_cancel',
+      ]);
     });
 
     it('ignores unsupported capability filters without hiding category matches', async () => {

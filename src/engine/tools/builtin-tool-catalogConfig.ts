@@ -128,6 +128,10 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
     purpose:
       'Pick, inspect, edit, create, and share device contacts with privacy-first native flows.',
   },
+  notifications: {
+    tools: ['notification_send', 'notification_schedule', 'notification_cancel'],
+    purpose: 'Send, schedule, and cancel local device notifications.',
+  },
   native: {
     tools: [
       'email_compose',

@@ -1,4 +1,5 @@
 import { ToolDefinition } from '../../types/tool';
+import { TOOL_CATALOG_AVAILABLE_CATEGORIES } from './builtin-tool-catalogConfig';
 
 export const TOOL_CATALOG_TOOL: ToolDefinition = {
   name: 'tool_catalog',
@@ -10,7 +11,8 @@ export const TOOL_CATALOG_TOOL: ToolDefinition = {
       category: {
         type: 'string',
         description:
-          'Optional category filter: files, browser, workspace, web, canvas, ssh, expo, sessions, agents, calendar, contacts, native, media, memory, automation, code, pdf, interaction, mcp, skills, github.',
+          'Optional category filter from the declared enum, including calendar, contacts, notifications, native device actions, and installed extension domains.',
+        enum: TOOL_CATALOG_AVAILABLE_CATEGORIES,
       },
       query: {
         type: 'string',

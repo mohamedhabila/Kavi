@@ -3,7 +3,8 @@ import { nativeContract, RECOVERABLE_PLATFORM_ERRORS } from '../shared';
 
 export const NOTIFICATION_SEND_TOOL: ToolDefinition = {
   name: 'notification_send',
-  description: 'Send a local notification immediately to the user.',
+  description:
+    'Send a local notification immediately to the user. This does not cancel or replace a scheduled notification.',
   input_schema: {
     type: 'object',
     properties: {
@@ -28,7 +29,8 @@ export const NOTIFICATION_SEND_TOOL: ToolDefinition = {
 
 export const NOTIFICATION_SCHEDULE_TOOL: ToolDefinition = {
   name: 'notification_schedule',
-  description: 'Schedule a local notification after a delay in seconds.',
+  description:
+    'Schedule a local notification after a delay in seconds. The result includes the id required by notification_cancel.',
   input_schema: {
     type: 'object',
     properties: {
@@ -56,7 +58,8 @@ export const NOTIFICATION_SCHEDULE_TOOL: ToolDefinition = {
 
 export const NOTIFICATION_CANCEL_TOOL: ToolDefinition = {
   name: 'notification_cancel',
-  description: 'Cancel a scheduled local notification by id.',
+  description:
+    'Cancel a scheduled local notification using the exact id returned by notification_schedule.',
   input_schema: {
     type: 'object',
     properties: {
