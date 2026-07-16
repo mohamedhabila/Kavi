@@ -26,7 +26,10 @@ import {
 } from './chatPersistencePrimitives';
 import { compactPersistedToolContent } from './persistedToolContent';
 import { sanitizeToolEffectReceipts } from '../utils/toolEffectReceipt';
-import { isMemoryRetrievalEventId } from '../utils/assistantMessageMetadata';
+import {
+  isMemoryRetrievalEventId,
+  isValidAssistantMessageMetadata,
+} from '../utils/assistantMessageMetadata';
 import {
   isEligibleMessageMemoryPublicationSource,
   normalizeMessageMemoryPublication,
@@ -38,17 +41,10 @@ function sanitizeAssistantMetadata(
   if (!metadata) {
     return undefined;
   }
-  if (
-    !isPlainRecord(metadata) ||
-    (metadata.kind !== 'intermediate' && metadata.kind !== 'final') ||
-    (metadata.completionStatus !== 'complete' && metadata.completionStatus !== 'incomplete')
-  ) {
+  if (!isPlainRecord(metadata) || !isValidAssistantMessageMetadata(metadata)) {
     return undefined;
   }
-  const finishReason =
-    typeof metadata.finishReason === 'string'
-      ? truncateText(metadata.finishReason, MAX_PERSISTED_LOG_TITLE_CHARS)
-      : undefined;
+  const finishReason = metadata.finishReason;
   const terminalReason =
     typeof metadata.terminalReason === 'string'
       ? truncateText(metadata.terminalReason, MAX_PERSISTED_LOG_DETAIL_CHARS)
@@ -56,7 +52,7 @@ function sanitizeAssistantMetadata(
   return {
     kind: metadata.kind,
     completionStatus: metadata.completionStatus,
-    ...(finishReason ? { finishReason } : {}),
+    finishReason,
     ...(terminalReason ? { terminalReason } : {}),
     ...(isMemoryRetrievalEventId(metadata.memoryRetrievalEventId)
       ? { memoryRetrievalEventId: metadata.memoryRetrievalEventId }

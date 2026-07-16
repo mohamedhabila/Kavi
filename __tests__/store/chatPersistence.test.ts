@@ -55,6 +55,7 @@ describe('chatPersistence', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
+            finishReason: 'stop',
             memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
           },
         }),
@@ -68,6 +69,7 @@ describe('chatPersistence', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
+            finishReason: 'stop',
             memoryRetrievalEventId: '../private-query',
           },
         }),

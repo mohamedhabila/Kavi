@@ -4,6 +4,7 @@ import { shareConversationWorkspaceFile } from '../../services/share/localShare'
 import type { Attachment } from '../../types/attachment';
 import type { Conversation } from '../../types/conversation';
 import type { Message } from '../../types/message';
+import { hasCompleteFinalAssistantMetadata } from '../../utils/assistantMessageMetadata';
 import { CHAT_SOURCE_MESSAGE_PAGE_SIZE } from '../chatScreenDisplayState';
 import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
 import {
@@ -147,9 +148,8 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
       }
       const message = activeConversation.messages.find((candidate) => candidate.id === messageId);
       if (
-        message?.role !== 'assistant' ||
-        message.assistantMetadata?.kind !== 'final' ||
-        message.assistantMetadata.completionStatus !== 'complete' ||
+        !message ||
+        !hasCompleteFinalAssistantMetadata(message) ||
         message.assistantMetadata.memoryRetrievalEventId !== eventId
       ) {
         return null;

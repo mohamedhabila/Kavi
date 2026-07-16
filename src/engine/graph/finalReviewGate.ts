@@ -1,5 +1,5 @@
 import type { Message } from '../../types/message';
-import { isAssistantFinalResponsePlaceholder } from '../../utils/assistantMessageMetadata';
+import { isDeliverableAssistantCompletionMetadata } from '../../utils/assistantMessageMetadata';
 
 export const AGENT_CONTROL_GRAPH_FINAL_REVIEW_RECOVERY_TITLE = 'Final delivery recovery queued';
 export const AGENT_CONTROL_GRAPH_FINAL_REVIEW_RECOVERY_DETAIL =
@@ -10,7 +10,7 @@ export type AgentControlGraphFinalReviewRecoveryReason =
   | 'non_plain_final_candidate'
   | 'incomplete_final_candidate'
   | 'empty_final_candidate'
-  | 'placeholder_final_candidate';
+  | 'non_deliverable_final_candidate';
 
 export type AgentControlGraphFinalReviewGate =
   | { type: 'ready'; candidatePreview: string }
@@ -36,8 +36,8 @@ function buildFinalReviewRecoveryDetail(
       return 'Final review is deferred because the latest assistant response is not a complete final answer.';
     case 'empty_final_candidate':
       return 'Final review is deferred because the latest final answer has no visible text.';
-    case 'placeholder_final_candidate':
-      return 'Final review is deferred because the latest final answer is only a placeholder.';
+    case 'non_deliverable_final_candidate':
+      return 'Final review is deferred because typed completion metadata marks the latest answer as non-deliverable.';
     default:
       return AGENT_CONTROL_GRAPH_FINAL_REVIEW_RECOVERY_DETAIL;
   }
@@ -96,13 +96,14 @@ export function buildAgentControlGraphFinalReviewGate(params: {
 
   if (
     candidate.assistantMetadata?.kind !== 'final' ||
-    candidate.assistantMetadata.completionStatus !== 'complete'
+    candidate.assistantMetadata.completionStatus !== 'complete' ||
+    !candidate.assistantMetadata.finishReason?.trim()
   ) {
     return buildRecoverGate('incomplete_final_candidate');
   }
 
-  if (isAssistantFinalResponsePlaceholder(candidate as Message)) {
-    return buildRecoverGate('placeholder_final_candidate');
+  if (!isDeliverableAssistantCompletionMetadata(candidate.assistantMetadata)) {
+    return buildRecoverGate('non_deliverable_final_candidate');
   }
 
   return {

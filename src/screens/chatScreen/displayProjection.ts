@@ -5,7 +5,7 @@ import {
 import type { AgentRun } from '../../types/agentRun';
 import type { Message } from '../../types/message';
 import {
-  hasCompleteFinalAssistantMetadata,
+  hasTypedCompleteFinalAssistantMetadata,
   isPendingReviewAssistantMessage,
 } from '../../utils/assistantMessageMetadata';
 
@@ -22,7 +22,7 @@ export function isVisibleAssistantMessageForAgentRun(message: Message, run?: Age
     return true;
   }
 
-  return !hasCompleteFinalAssistantMetadata(message);
+  return !hasTypedCompleteFinalAssistantMetadata(message);
 }
 
 export function filterVisibleAssistantMessagesForAgentRun(

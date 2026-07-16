@@ -1,7 +1,6 @@
 import type { AgentRun } from '../types/agentRun';
 import type { Conversation, ConversationMode } from '../types/conversation';
 import type { Message } from '../types/message';
-import { normalizeLegacyAssistantMessages } from '../utils/assistantMessageMetadata';
 import { normalizePersistedAgentRun } from './agentRuns/shared';
 import { sanitizeConversationForPersistence } from './chatPersistence';
 import { capMessages } from './chatStoreHelpers';
@@ -10,7 +9,7 @@ import { isValidModelProjectionOwner } from '../utils/modelProjectionOwner';
 import { hydrateSubAgentTerminationCause } from '../utils/subAgentTermination';
 
 function normalizePersistedMessages(messages: Message[] | undefined): Message[] {
-  return normalizeLegacyAssistantMessages(messages ?? []).map((message) =>
+  return (messages ?? []).map((message) =>
     message.subAgentEvent
       ? {
           ...message,

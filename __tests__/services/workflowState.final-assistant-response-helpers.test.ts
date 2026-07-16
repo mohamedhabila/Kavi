@@ -68,6 +68,7 @@ describe('final assistant response helpers', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       },
     ];
@@ -145,6 +146,7 @@ describe('final assistant response helpers', () => {
         assistantMetadata: {
           kind: 'intermediate',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       },
       {
@@ -227,7 +229,11 @@ describe('final assistant response helpers', () => {
         role: 'assistant',
         content: 'Worker completed the delegated task.',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
         subAgentEvent: {
           type: 'sub-agent',
           event: 'completed',
@@ -248,7 +254,11 @@ describe('final assistant response helpers', () => {
         role: 'assistant',
         content: 'The owning response is complete.',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
       },
       {
         id: 'msg-worker',
@@ -294,6 +304,7 @@ describe('final assistant response helpers', () => {
         assistantMetadata: {
           kind: 'intermediate',
           completionStatus: 'complete',
+          finishReason: 'tool_calls',
         },
       },
       {

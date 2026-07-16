@@ -3,6 +3,7 @@ import type {
   MessageMemoryPublication,
   MessageMemoryPublicationDisposition,
 } from '../types/message';
+import { hasTerminalAssistantCompletionMetadata } from './assistantMessageMetadata';
 
 const TERMINAL_DISPOSITIONS = new Set<MessageMemoryPublicationDisposition>([
   'enqueued',
@@ -89,13 +90,7 @@ export function isTerminalMessageMemoryPublication(
 
 /** Structural source gate shared by the code-owned store action and persistence sanitizer. */
 export function isEligibleMessageMemoryPublicationSource(message: Message): boolean {
-  return (
-    message.role === 'assistant' &&
-    !message.subAgentEvent &&
-    message.assistantMetadata?.kind === 'final' &&
-    message.assistantMetadata.completionStatus === 'complete' &&
-    message.assistantMetadata.finishReason !== 'yielded'
-  );
+  return hasTerminalAssistantCompletionMetadata(message);
 }
 
 /**

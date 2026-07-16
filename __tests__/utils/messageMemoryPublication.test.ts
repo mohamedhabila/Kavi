@@ -35,15 +35,29 @@ describe('message memory publication', () => {
       role: 'assistant' as const,
       content: 'Done',
       timestamp: 1,
-      assistantMetadata: { kind: 'final' as const, completionStatus: 'complete' as const },
+      assistantMetadata: {
+        kind: 'final' as const,
+        completionStatus: 'complete' as const,
+        finishReason: 'stop',
+      },
     };
 
     expect(isEligibleMessageMemoryPublicationSource(final)).toBe(true);
+    expect(
+      isEligibleMessageMemoryPublicationSource({
+        ...final,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      }),
+    ).toBe(false);
     expect(isEligibleMessageMemoryPublicationSource({ ...final, role: 'user' })).toBe(false);
     expect(
       isEligibleMessageMemoryPublicationSource({
         ...final,
-        assistantMetadata: { ...final.assistantMetadata, completionStatus: 'incomplete' },
+        assistantMetadata: {
+          ...final.assistantMetadata,
+          completionStatus: 'incomplete',
+          finishReason: 'response_failed',
+        },
       }),
     ).toBe(false);
     expect(

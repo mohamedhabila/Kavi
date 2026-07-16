@@ -59,8 +59,9 @@ describe('assistantBubbleTranscript', () => {
             },
           ],
           assistantMetadata: {
-            kind: 'final',
+            kind: 'intermediate',
             completionStatus: 'complete',
+            finishReason: 'tool_calls',
           },
         },
         {

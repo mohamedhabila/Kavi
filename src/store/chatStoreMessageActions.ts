@@ -4,10 +4,7 @@ import { generateId } from '../utils/id';
 import { generateConversationTitle, isPlaceholderTitle } from '../utils/conversation';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
 import { extractToolCallAttachments, mergeAttachmentLists } from '../utils/messageAttachments';
-import {
-  mergeAssistantMessageMetadata,
-  normalizeLegacyAssistantMessages,
-} from '../utils/assistantMessageMetadata';
+import { mergeAssistantMessageMetadata } from '../utils/assistantMessageMetadata';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import {
   areAssistantMessageMetadataEqual,
@@ -112,15 +109,13 @@ export function createMessageStoreActions(
     },
 
     applyConversationCompaction: (conversationId, messages) => {
-      const normalizedMessages = normalizeLegacyAssistantMessages(messages);
-
       set((state) => {
         const conversations = updateConversationById(
           state.conversations,
           conversationId,
           (conversation) => {
             const nextMessages = capMessages(
-              preserveCodeOwnedMessageMemoryPublications(conversation.messages, normalizedMessages),
+              preserveCodeOwnedMessageMemoryPublications(conversation.messages, messages),
             );
             if (nextMessages.length === 0) {
               return conversation;

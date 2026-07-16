@@ -133,6 +133,7 @@ describe('MessageBubble actions', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
+            finishReason: 'stop',
             memoryRetrievalEventId: '../not-code-owned',
           },
         }}
@@ -148,6 +149,7 @@ describe('MessageBubble actions', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'incomplete',
+            finishReason: 'response_failed',
             memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
           },
         }}
@@ -163,6 +165,7 @@ describe('MessageBubble actions', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
+            finishReason: 'stop',
             memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
           },
         }}
@@ -183,6 +186,7 @@ describe('MessageBubble actions', () => {
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
+        finishReason: 'stop',
         memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
       },
     });
@@ -230,6 +234,7 @@ describe('MessageBubble actions', () => {
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
+        finishReason: 'stop',
         memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
       },
     });
@@ -264,6 +269,7 @@ describe('MessageBubble actions', () => {
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
+        finishReason: 'stop',
         memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
       },
     });

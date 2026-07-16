@@ -60,6 +60,7 @@ describe('displayProjection', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
+            finishReason: 'stop',
           },
         }),
       ),
@@ -73,6 +74,7 @@ describe('displayProjection', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
+            finishReason: 'stop',
           },
         }),
         makeRun(),
@@ -89,6 +91,7 @@ describe('displayProjection', () => {
         assistantMetadata: {
           kind: 'intermediate',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       }),
       makeMessage({
@@ -97,6 +100,7 @@ describe('displayProjection', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       }),
     ];

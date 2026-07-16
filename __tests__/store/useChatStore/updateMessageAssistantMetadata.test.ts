@@ -2,13 +2,15 @@ import { useChatStore } from '../../helpers/chatStoreHarness';
 
 describe('useChatStore updateMessageAssistantMetadata', () => {
   it.each([
-    'terminal_review_pending',
-    'response_failed',
-    'graph_finalized',
-    'synthesized_from_evidence',
-    'graph_expected_output',
-    'fallback_from_evidence',
-  ])('preserves code-owned memory attribution for the %s lifecycle rewrite', (finishReason) => {
+    ['terminal_review_pending', 'incomplete'],
+    ['response_failed', 'incomplete'],
+    ['graph_finalized', 'complete'],
+    ['synthesized_from_evidence', 'complete'],
+    ['graph_expected_output', 'complete'],
+    ['fallback_from_evidence', 'complete'],
+  ] as const)(
+    'preserves code-owned memory attribution for the %s lifecycle rewrite',
+    (finishReason, completionStatus) => {
     const conversationId = useChatStore.getState().createConversation('p1', 's');
     useChatStore.getState().addMessage(conversationId, {
       id: 'assistant-1',
@@ -17,13 +19,14 @@ describe('useChatStore updateMessageAssistantMetadata', () => {
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
+        finishReason: 'stop',
         memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
       },
     });
 
     useChatStore.getState().updateMessageAssistantMetadata(conversationId, 'assistant-1', {
       kind: 'final',
-      completionStatus: 'incomplete',
+      completionStatus,
       finishReason,
     });
 
@@ -32,11 +35,12 @@ describe('useChatStore updateMessageAssistantMetadata', () => {
       .conversations.find((conversation) => conversation.id === conversationId)?.messages[0];
     expect(message?.assistantMetadata).toEqual({
       kind: 'final',
-      completionStatus: 'incomplete',
+      completionStatus,
       finishReason,
       memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
     });
-  });
+    },
+  );
 
   it('replaces attribution only when the next model turn supplies an exact event', () => {
     const conversationId = useChatStore.getState().createConversation('p1', 's');
@@ -47,6 +51,7 @@ describe('useChatStore updateMessageAssistantMetadata', () => {
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
+        finishReason: 'stop',
         memoryRetrievalEventId: 'retrieval_event_m123_1_old',
       },
     });
@@ -54,6 +59,7 @@ describe('useChatStore updateMessageAssistantMetadata', () => {
     useChatStore.getState().updateMessageAssistantMetadata(conversationId, 'assistant-1', {
       kind: 'final',
       completionStatus: 'complete',
+      finishReason: 'stop',
       memoryRetrievalEventId: 'retrieval_event_m123_2_new',
     });
 
@@ -72,6 +78,7 @@ describe('useChatStore updateMessageAssistantMetadata', () => {
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
+        finishReason: 'stop',
         memoryRetrievalEventId: 'retrieval_event_m123_1_old',
       },
     });

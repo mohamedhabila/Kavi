@@ -62,7 +62,11 @@ describe('resolvePreferredAgentRunFinalResponseMessageId', () => {
     const messages = [
       makeMessage('user-1', { role: 'user', content: 'Research this' }),
       makeMessage('assistant-current', {
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
       }),
     ];
     expect(
@@ -108,11 +112,19 @@ describe('resolvePreferredAgentRunFinalResponseMessageId', () => {
       makeMessage('user-1', { role: 'user', content: 'Reply in Dutch.' }),
       makeMessage('assistant-old', {
         content: 'Old answer',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
       }),
       makeMessage('assistant-tool', {
         content: '',
-        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
         toolCalls: [
           { id: 'call-1', name: 'update_goals', arguments: '{}', status: 'completed' },
         ],

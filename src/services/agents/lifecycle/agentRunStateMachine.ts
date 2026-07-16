@@ -2,10 +2,7 @@ import type { AgentRun, AgentRunStatus } from '../../../types/agentRun';
 import type { Conversation } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import type { SubAgentCompletionState, SubAgentSnapshot } from '../../../types/subAgent';
-import {
-  hasCompleteFinalAssistantMetadata,
-  isAssistantFinalResponsePlaceholder,
-} from '../../../utils/assistantMessageMetadata';
+import { hasCompleteFinalAssistantMetadata } from '../../../utils/assistantMessageMetadata';
 
 export type AgentRunMessageScope = {
   userMessageId: string;
@@ -129,7 +126,6 @@ export function getLatestAssistantProjectionFinalResponse(
   const projection = [...assistantMessages].reverse().find((message) => !message.subAgentEvent);
   return projection &&
     hasCompleteFinalAssistantMetadata(projection) &&
-    !isAssistantFinalResponsePlaceholder(projection) &&
     hasVisibleFinalAssistantText(projection)
     ? projection
     : undefined;

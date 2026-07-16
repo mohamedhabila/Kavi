@@ -3,19 +3,19 @@ import {
   type AgentRunMessageScope,
   getAgentRunMessageSlice,
 } from '../../../services/agents/lifecycle/agentRunStateMachine';
-import { isAssistantFinalResponsePlaceholder } from '../../../utils/assistantMessageMetadata';
+import {
+  isDeliverableAssistantCompletionMetadata,
+  isPendingReviewAssistantMessage,
+} from '../../../utils/assistantMessageMetadata';
 
 export function isReusableAgentRunAssistantMessage(message: Message): boolean {
   return message.role === 'assistant' && !message.subAgentEvent;
 }
 
 function isPreferredAgentRunFinalCandidate(message: Message): boolean {
-  const metadata = message.assistantMetadata;
   return (
-    metadata?.kind === 'final' &&
-    (metadata.completionStatus === 'complete' ||
-      (metadata.completionStatus === 'incomplete' &&
-        metadata.finishReason === 'terminal_review_pending'))
+    isDeliverableAssistantCompletionMetadata(message.assistantMetadata) ||
+    isPendingReviewAssistantMessage(message)
   );
 }
 
@@ -82,10 +82,6 @@ export function findLatestPreferredAgentRunAssistantMessageId(
 
     if (isReusableAgentRunAssistantMessage(message)) {
       if (!hasVisibleAssistantOutput(message)) {
-        return undefined;
-      }
-
-      if (isAssistantFinalResponsePlaceholder(message)) {
         return undefined;
       }
 

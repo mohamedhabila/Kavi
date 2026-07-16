@@ -14,7 +14,11 @@ function rawPersistedState(memoryPublication?: unknown) {
             role: 'assistant',
             content: 'Persisted final',
             timestamp: 1,
-            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
             ...(memoryPublication !== undefined ? { memoryPublication } : {}),
           },
         ],
@@ -35,7 +39,11 @@ describe('message memory publication persistence', () => {
         makeTestMessage(1, {
           role: 'assistant',
           content: 'Final response',
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'stop',
+          },
           memoryPublication: {
             version: 1,
             disposition: 'enqueued',
@@ -68,6 +76,7 @@ describe('message memory publication persistence', () => {
               : {
                   kind: 'final',
                   completionStatus: incomplete ? 'incomplete' : 'complete',
+                  finishReason: incomplete ? 'response_failed' : 'stop',
                 },
             memoryPublication: receipt as any,
           }),
@@ -100,6 +109,71 @@ describe('message memory publication persistence', () => {
       kind: 'final',
       completionStatus: 'complete',
       finishReason: 'stop',
+    });
+  });
+
+  it.each([
+    {
+      label: 'unknown complete disposition',
+      metadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'plausible_but_unowned_success',
+      },
+    },
+    {
+      label: 'tool disposition on a final response',
+      metadata: { kind: 'final', completionStatus: 'complete', finishReason: 'tool_calls' },
+    },
+    {
+      label: 'final code disposition on an intermediate response',
+      metadata: {
+        kind: 'intermediate',
+        completionStatus: 'complete',
+        finishReason: 'graph_finalized',
+      },
+    },
+    {
+      label: 'mismatched incomplete disposition',
+      metadata: { kind: 'final', completionStatus: 'complete', finishReason: 'response_failed' },
+    },
+  ])('drops assistant metadata with an invalid $label', ({ metadata }) => {
+    const persisted = sanitizeConversationForPersistence(
+      makeTestConversation({
+        messages: [
+          makeTestMessage(1, {
+            role: 'assistant',
+            content: 'Persisted response',
+            assistantMetadata: metadata as any,
+          }),
+        ],
+      }),
+    );
+
+    expect(persisted.messages[0].assistantMetadata).toBeUndefined();
+  });
+
+  it('persists only a valid intermediate tool disposition combination', () => {
+    const persisted = sanitizeConversationForPersistence(
+      makeTestConversation({
+        messages: [
+          makeTestMessage(1, {
+            role: 'assistant',
+            content: '',
+            assistantMetadata: {
+              kind: 'intermediate',
+              completionStatus: 'complete',
+              finishReason: 'tool_calls',
+            },
+          }),
+        ],
+      }),
+    );
+
+    expect(persisted.messages[0].assistantMetadata).toEqual({
+      kind: 'intermediate',
+      completionStatus: 'complete',
+      finishReason: 'tool_calls',
     });
   });
 

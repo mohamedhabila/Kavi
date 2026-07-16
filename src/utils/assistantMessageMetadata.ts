@@ -6,6 +6,97 @@ import {
 } from '../types/message';
 
 const MEMORY_RETRIEVAL_EVENT_ID_PATTERN = /^retrieval_event_[A-Za-z0-9][A-Za-z0-9._:-]{0,111}$/u;
+const ASSISTANT_FINISH_REASON_PATTERN = /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/u;
+
+/** Provider protocol dispositions that terminate a text response successfully. */
+const PROVIDER_COMPLETE_TEXT_FINISH_REASONS = new Set([
+  'completed',
+  'done_marker',
+  'end_turn',
+  'local_runtime_done',
+  'message_stop',
+  'refusal',
+  'response.completed',
+  'stop',
+  'stop_sequence',
+]);
+
+/** Provider protocol dispositions that hand control to one or more emitted tools. */
+const PROVIDER_COMPLETE_TOOL_FINISH_REASONS = new Set(['tool_call', 'tool_calls', 'tool_use']);
+
+/** Provider protocol dispositions that did not produce a complete response. */
+const PROVIDER_INCOMPLETE_FINISH_REASONS = new Set([
+  'blocklist',
+  'cancelled',
+  'content_filter',
+  'error',
+  'failed',
+  'image_other',
+  'image_prohibited_content',
+  'image_recitation',
+  'image_safety',
+  'in_progress',
+  'incomplete',
+  'language',
+  'length',
+  'malformed_function_call',
+  'max_completion_tokens',
+  'max_output_tokens',
+  'max_tokens',
+  'model_context_window_exceeded',
+  'network_interruption',
+  'no_image',
+  'other',
+  'pause_turn',
+  'prohibited_content',
+  'queued',
+  'recitation',
+  'requires_action',
+  'response.cancelled',
+  'response.failed',
+  'response.incomplete',
+  'safety',
+  'spii',
+  'stream_ended_without_done_marker',
+  'stream_ended_without_finish_reason',
+  'stream_ended_without_message_stop',
+  'stream_ended_without_terminal_event',
+  'too_many_tool_calls',
+  'unexpected_tool_call',
+]);
+
+/** Code-owned final dispositions that contain a deliverable assistant response. */
+const CODE_COMPLETE_DELIVERABLE_FINISH_REASONS = new Set([
+  'command_result',
+  'fallback_from_evidence',
+  'graph_expected_output',
+  'graph_finalized',
+  'loop_detected',
+  'scheduler_completion_recovered',
+  'synthesized_from_evidence',
+  'tool_batch_incomplete',
+]);
+
+/** Code-owned terminal outcomes that must not be treated as a delivered response. */
+const CODE_COMPLETE_NON_DELIVERABLE_FINISH_REASONS = new Set([
+  'fallback_missing_final_response',
+  'max_iterations',
+  'yielded',
+]);
+
+/** Code-owned incomplete or pending lifecycle dispositions. */
+const CODE_INCOMPLETE_FINISH_REASONS = new Set([
+  'app_restarted',
+  'app_restarted_before_start',
+  'empty_final_text_after_recovery',
+  'interrupted_before_start',
+  'missing_completion_metadata',
+  'post_surface_response_pending',
+  'response_failed',
+  'surfaced_worker_output_pending',
+  'terminal_review_pending',
+  'tool_effect_reconciliation_required',
+]);
 const ATTRIBUTION_PRESERVING_FINISH_REASONS = new Set([
   'terminal_review_pending',
   'response_failed',
@@ -28,6 +119,89 @@ const UNSETTLED_FINAL_FINISH_REASONS = new Set([
   'yielded',
 ]);
 
+export const MISSING_ASSISTANT_COMPLETION_FINISH_REASON = 'missing_completion_metadata';
+
+function normalizeAssistantFinishReasonCode(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !ASSISTANT_FINISH_REASON_PATTERN.test(value)) {
+    return undefined;
+  }
+  return value.toLowerCase();
+}
+
+function isProviderCompleteFinishReasonCode(value: string): boolean {
+  return (
+    PROVIDER_COMPLETE_TEXT_FINISH_REASONS.has(value) ||
+    PROVIDER_COMPLETE_TOOL_FINISH_REASONS.has(value)
+  );
+}
+
+function isKnownCompleteFinishReasonCode(value: string): boolean {
+  return (
+    isProviderCompleteFinishReasonCode(value) ||
+    CODE_COMPLETE_DELIVERABLE_FINISH_REASONS.has(value) ||
+    CODE_COMPLETE_NON_DELIVERABLE_FINISH_REASONS.has(value)
+  );
+}
+
+function isKnownIncompleteFinishReasonCode(value: string): boolean {
+  return PROVIDER_INCOMPLETE_FINISH_REASONS.has(value) || CODE_INCOMPLETE_FINISH_REASONS.has(value);
+}
+
+export function isAssistantFinishReason(value: unknown): value is string {
+  const finishReason = normalizeAssistantFinishReasonCode(value);
+  return Boolean(
+    finishReason &&
+    (isKnownCompleteFinishReasonCode(finishReason) ||
+      isKnownIncompleteFinishReasonCode(finishReason)),
+  );
+}
+
+function normalizeAssistantFinishReason(value: unknown): string | undefined {
+  return isAssistantFinishReason(value) ? value : undefined;
+}
+
+export function isCompleteProviderAssistantCompletionMetadata(
+  completion: AssistantCompletionMetadata | undefined,
+): boolean {
+  const finishReason = normalizeAssistantFinishReasonCode(completion?.finishReason);
+  return (
+    completion?.completionStatus === 'complete' &&
+    finishReason !== undefined &&
+    isProviderCompleteFinishReasonCode(finishReason)
+  );
+}
+
+export function isValidAssistantMessageMetadata(
+  metadata: unknown,
+): metadata is AssistantMessageMetadata {
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+    return false;
+  }
+  const candidate = metadata as Partial<AssistantMessageMetadata>;
+  if (candidate.kind !== 'intermediate' && candidate.kind !== 'final') {
+    return false;
+  }
+  const finishReason = normalizeAssistantFinishReasonCode(candidate.finishReason);
+  if (!finishReason) {
+    return false;
+  }
+
+  if (candidate.completionStatus === 'incomplete') {
+    return isKnownIncompleteFinishReasonCode(finishReason);
+  }
+  if (candidate.completionStatus !== 'complete') {
+    return false;
+  }
+  if (candidate.kind === 'intermediate') {
+    return isProviderCompleteFinishReasonCode(finishReason);
+  }
+  return (
+    PROVIDER_COMPLETE_TEXT_FINISH_REASONS.has(finishReason) ||
+    CODE_COMPLETE_DELIVERABLE_FINISH_REASONS.has(finishReason) ||
+    CODE_COMPLETE_NON_DELIVERABLE_FINISH_REASONS.has(finishReason)
+  );
+}
+
 export function isMemoryRetrievalEventId(value: unknown): value is string {
   return typeof value === 'string' && MEMORY_RETRIEVAL_EVENT_ID_PATTERN.test(value);
 }
@@ -36,12 +210,24 @@ export function buildAssistantMessageMetadata(
   kind: AssistantMessageKind,
   completion?: AssistantCompletionMetadata,
 ): AssistantMessageMetadata {
-  return {
-    kind,
-    completionStatus: completion?.completionStatus ?? 'complete',
-    ...(completion?.finishReason ? { finishReason: completion.finishReason } : {}),
-    ...(completion?.terminalReason ? { terminalReason: completion.terminalReason } : {}),
-  };
+  const finishReason = normalizeAssistantFinishReason(completion?.finishReason);
+  const candidate = finishReason
+    ? {
+        kind,
+        completionStatus: completion?.completionStatus ?? 'incomplete',
+        finishReason,
+        ...(completion?.terminalReason ? { terminalReason: completion.terminalReason } : {}),
+      }
+    : undefined;
+  if (!candidate || !isValidAssistantMessageMetadata(candidate)) {
+    return {
+      kind,
+      completionStatus: 'incomplete',
+      finishReason: MISSING_ASSISTANT_COMPLETION_FINISH_REASON,
+      ...(completion?.terminalReason ? { terminalReason: completion.terminalReason } : {}),
+    };
+  }
+  return candidate;
 }
 
 export function mergeAssistantMessageMetadata(
@@ -73,139 +259,62 @@ export function isFinalAssistantMessage(message: Message): boolean {
   );
 }
 
-const MAX_TOOL_ITERATIONS_PLACEHOLDER_PATTERN =
-  /^I[\u2019']ve reached the maximum number of tool iterations\b/i;
-const BACKGROUND_WORKER_WAIT_PLACEHOLDER_PATTERNS = [
-  /^Waiting for \d+ background workers? to finish\.?$/i,
-  /^Waiting for background (?:agent|worker) results\.?$/i,
-];
-
-export function isAssistantFinalResponsePlaceholder(message: Message): boolean {
-  if (!isFinalAssistantMessage(message)) {
+export function isDeliverableAssistantCompletionMetadata(
+  metadata: AssistantMessageMetadata | undefined,
+): metadata is AssistantMessageMetadata {
+  if (!isValidAssistantMessageMetadata(metadata)) {
     return false;
   }
-
-  const normalizedContent = message.content.trim();
-  const normalizedFinishReason = message.assistantMetadata?.finishReason?.trim().toLowerCase();
-
-  if (normalizedFinishReason === 'max_iterations' || normalizedFinishReason === 'yielded') {
-    return true;
-  }
-
-  if (MAX_TOOL_ITERATIONS_PLACEHOLDER_PATTERN.test(normalizedContent)) {
-    return true;
-  }
-
-  return BACKGROUND_WORKER_WAIT_PLACEHOLDER_PATTERNS.some((pattern) =>
-    pattern.test(normalizedContent),
-  );
-}
-
-function isAssistantExecutionArtifact(message: Message): boolean {
+  const finishReason = normalizeAssistantFinishReasonCode(metadata.finishReason);
   return (
-    message.role === 'assistant' &&
-    (!!message.subAgentEvent || (message.toolCalls?.length ?? 0) > 0)
+    metadata.kind === 'final' &&
+    metadata.completionStatus === 'complete' &&
+    finishReason !== undefined &&
+    (PROVIDER_COMPLETE_TEXT_FINISH_REASONS.has(finishReason) ||
+      CODE_COMPLETE_DELIVERABLE_FINISH_REASONS.has(finishReason))
   );
 }
 
-function buildLegacyAssistantMetadata(
+type TerminalAssistantMessage = Message & {
+  role: 'assistant';
+  assistantMetadata: AssistantMessageMetadata;
+};
+
+export function hasTerminalAssistantCompletionMetadata(
   message: Message,
-  isFinal: boolean,
-): AssistantMessageMetadata | undefined {
-  if (message.role !== 'assistant' || message.subAgentEvent) {
-    return undefined;
-  }
-
-  if ((message.toolCalls?.length ?? 0) > 0) {
-    return buildAssistantMessageMetadata('intermediate', {
-      completionStatus: message.isError ? 'incomplete' : 'complete',
-      finishReason: 'legacy_migration',
-    });
-  }
-
-  if (message.content.trim().length === 0) {
-    return undefined;
-  }
-
-  return buildAssistantMessageMetadata(isFinal ? 'final' : 'intermediate', {
-    completionStatus: message.isError ? 'incomplete' : 'complete',
-    finishReason: 'legacy_migration',
-  });
-}
-
-export function normalizeLegacyAssistantMessages(messages: Message[]): Message[] {
-  if (!messages.some((message) => message.role === 'assistant' && !message.assistantMetadata)) {
-    return messages;
-  }
-
-  let didChange = false;
-  const normalizedMessages = [...messages];
-
-  let sliceStart = 0;
-  while (sliceStart < messages.length) {
-    let sliceEnd = sliceStart + 1;
-    while (sliceEnd < messages.length && messages[sliceEnd].role !== 'user') {
-      sliceEnd += 1;
-    }
-
-    const runMessages = messages.slice(sliceStart, sliceEnd);
-    let lastExecutionArtifactIndex = -1;
-    let lastFinalAssistantCandidateIndex = -1;
-
-    runMessages.forEach((message, localIndex) => {
-      if (message.role === 'tool' || isAssistantExecutionArtifact(message)) {
-        lastExecutionArtifactIndex = localIndex;
-      }
-
-      if (isFinalAssistantMessage(message)) {
-        lastFinalAssistantCandidateIndex = localIndex;
-      }
-    });
-
-    runMessages.forEach((message, localIndex) => {
-      if (message.role !== 'assistant' || message.assistantMetadata) {
-        return;
-      }
-
-      const assistantMetadata = buildLegacyAssistantMetadata(
-        message,
-        localIndex === lastFinalAssistantCandidateIndex && localIndex > lastExecutionArtifactIndex,
-      );
-      if (!assistantMetadata) {
-        return;
-      }
-
-      normalizedMessages[sliceStart + localIndex] = {
-        ...message,
-        assistantMetadata,
-      };
-      didChange = true;
-    });
-
-    sliceStart = sliceEnd;
-  }
-
-  return didChange ? normalizedMessages : messages;
-}
-
-export function hasCompleteFinalAssistantMetadata(message: Message): boolean {
-  if (!isFinalAssistantMessage(message)) {
-    return false;
-  }
-
+): message is TerminalAssistantMessage {
   return (
-    message.assistantMetadata?.kind === 'final' &&
-    message.assistantMetadata.completionStatus === 'complete'
+    isFinalAssistantMessage(message) &&
+    isDeliverableAssistantCompletionMetadata(message.assistantMetadata)
   );
+}
+
+/** Any explicit complete plain final, including a typed terminal non-delivery outcome. */
+export function hasTypedCompleteFinalAssistantMetadata(message: Message): boolean {
+  return (
+    isFinalAssistantMessage(message) &&
+    isValidAssistantMessageMetadata(message.assistantMetadata) &&
+    message.assistantMetadata.kind === 'final' &&
+    message.assistantMetadata.completionStatus === 'complete' &&
+    normalizeAssistantFinishReasonCode(message.assistantMetadata.finishReason) !== undefined
+  );
+}
+
+export function hasCompleteFinalAssistantMetadata(
+  message: Message,
+): message is TerminalAssistantMessage {
+  return isFinalAssistantMessage(message) && hasTerminalAssistantCompletionMetadata(message);
 }
 
 /** True only when a visible final response has explicit, non-pending terminal metadata. */
 export function hasSettledFinalAssistantMetadata(message: Message): boolean {
   if (!isFinalAssistantMessage(message)) return false;
-  const finishReason = message.assistantMetadata?.finishReason ?? '';
+  if (!isValidAssistantMessageMetadata(message.assistantMetadata)) return false;
+  const finishReason = normalizeAssistantFinishReasonCode(message.assistantMetadata.finishReason);
+  if (!finishReason) return false;
   if (UNSETTLED_FINAL_FINISH_REASONS.has(finishReason)) return false;
   return (
-    message.assistantMetadata?.kind === 'final' &&
+    message.assistantMetadata.kind === 'final' &&
     (message.assistantMetadata.completionStatus === 'complete' ||
       (message.assistantMetadata.completionStatus === 'incomplete' &&
         SETTLED_INCOMPLETE_FINISH_REASONS.has(finishReason)))

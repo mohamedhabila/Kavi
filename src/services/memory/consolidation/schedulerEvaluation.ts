@@ -1,8 +1,5 @@
 import type { Message } from '../../../types/message';
-import {
-  isAssistantFinalResponsePlaceholder,
-  isFinalAssistantMessage,
-} from '../../../utils/assistantMessageMetadata';
+import { hasCompleteFinalAssistantMetadata } from '../../../utils/assistantMessageMetadata';
 import { latestExcludedMemoryPublicationIndex } from './publicationExclusion';
 import { getConsolidationState, type ConsolidationStateRow } from './schedulerState';
 
@@ -24,11 +21,7 @@ function findIndexById(messages: Message[], id: string | null | undefined): numb
 }
 
 export function isConsolidatableAssistantMessage(message: Message | undefined): message is Message {
-  if (!message || !isFinalAssistantMessage(message)) return false;
-  if (isAssistantFinalResponsePlaceholder(message)) return false;
-  const metadata = message.assistantMetadata;
-  if (!metadata) return true;
-  return metadata.kind === 'final' && metadata.completionStatus === 'complete';
+  return Boolean(message && hasCompleteFinalAssistantMetadata(message));
 }
 
 export function lastAssistantMessage(messages: Message[]): Message | undefined {

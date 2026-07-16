@@ -1,6 +1,7 @@
 import type { AgentRun, AgentRunTerminalReason } from '../../../types/agentRun';
 import type { ConversationLogEntry } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
+import { isDeliverableAssistantCompletionMetadata } from '../../../utils/assistantMessageMetadata';
 import { classifyAgentControlGraphTerminalReason } from '../terminalOutcome';
 
 type ReviewCandidateMessage = Pick<
@@ -36,7 +37,8 @@ export function buildAgentControlGraphTerminalReviewCompletion(
 
   const reason =
     controlGraph.terminalReason?.trim() || controlGraph.finalizationHoldReason?.trim() || 'blocked';
-  const blocked = controlGraph.status === 'blocked' || controlGraph.terminalReason === 'max_iterations';
+  const blocked =
+    controlGraph.status === 'blocked' || controlGraph.terminalReason === 'max_iterations';
   const title = blocked ? 'Run blocked' : 'Run failed';
   const detail = `The control graph reached an unsuccessful ${controlGraph.status} state before review: ${reason}.`;
 
@@ -59,7 +61,6 @@ export function shouldMarkCandidatePendingReview(
     candidateMessage?.role === 'assistant' &&
     !candidateMessage.subAgentEvent &&
     (candidateMessage.toolCalls?.length ?? 0) === 0 &&
-    candidateMessage.assistantMetadata?.kind === 'final' &&
-    candidateMessage.assistantMetadata.completionStatus === 'complete'
+    isDeliverableAssistantCompletionMetadata(candidateMessage.assistantMetadata)
   );
 }

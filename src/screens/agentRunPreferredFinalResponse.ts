@@ -2,7 +2,8 @@ import { useChatStore } from '../store/useChatStore';
 import { AgentRun } from '../types/agentRun';
 import {
   buildAssistantMessageMetadata,
-  isAssistantFinalResponsePlaceholder,
+  isDeliverableAssistantCompletionMetadata,
+  isPendingReviewAssistantMessage,
 } from '../utils/assistantMessageMetadata';
 import { findLatestPreferredAgentRunAssistantMessageId } from '../engine/graph/foregroundRun/assistantMessages';
 import { buildAgentRunMessageScope } from '../services/agents/lifecycle/agentRunStateMachine';
@@ -51,7 +52,8 @@ export function tryDeliverPreferredFinalResponse(params: {
     preferredAssistantMessage?.role === 'assistant' &&
     !preferredAssistantMessage.subAgentEvent &&
     (preferredAssistantMessage.toolCalls?.length ?? 0) === 0 &&
-    !isAssistantFinalResponsePlaceholder(preferredAssistantMessage)
+    (isDeliverableAssistantCompletionMetadata(preferredAssistantMessage.assistantMetadata) ||
+      isPendingReviewAssistantMessage(preferredAssistantMessage))
       ? preferredAssistantMessage.content.trim()
       : '';
 

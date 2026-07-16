@@ -22,6 +22,7 @@ function renderCallbacks(params?: { completionStatus?: 'complete' | 'incomplete'
     assistantMetadata: {
       kind: 'final',
       completionStatus: params?.completionStatus ?? 'complete',
+      finishReason: params?.completionStatus === 'incomplete' ? 'response_failed' : 'stop',
       memoryRetrievalEventId: EVENT_ID,
     },
   });

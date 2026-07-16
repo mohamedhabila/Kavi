@@ -88,6 +88,7 @@ describe('foregroundRun completion review', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       }),
     ];
@@ -177,7 +178,7 @@ describe('foregroundRun completion review', () => {
         id: 'msg-assistant-final',
         content: 'I could not send it because the recipient address is missing.',
         timestamp: 50,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }),
     ];
     useChatStore.setState((state) => ({
