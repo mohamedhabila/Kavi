@@ -11,12 +11,14 @@ const TERMINAL_EVIDENCE_KEYS = [
   'completedBlockingGoalCount',
   'goal',
   'graphStatus',
+  'observedToolCallIds',
   'platform',
   'runStatus',
   'sourceRunId',
   'version',
 ] as const;
 const MAX_GOAL_CHARS = 2_000;
+const MAX_TOOL_CALL_COUNT = 64;
 
 export interface AgentRunTerminalEvidence {
   version: 1;
@@ -26,6 +28,7 @@ export interface AgentRunTerminalEvidence {
   graphStatus: 'finalized';
   platform: 'android' | 'ios';
   completedBlockingGoalCount: number;
+  observedToolCallIds: ReadonlyArray<string>;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -59,6 +62,7 @@ export function buildAgentRunTerminalEvidence(run: AgentRun): string | null {
   const platform = currentMobilePlatform();
   const graph = run.controlGraph;
   const blockingGoals = graph?.goals?.filter(isBlockingGoal) ?? [];
+  const observedToolCallIds = graph?.observedToolResults.map((result) => result.id) ?? [];
   const goal = fitAgentRunText(run.goal, MAX_GOAL_CHARS).trim();
   if (
     !platform ||
@@ -66,7 +70,10 @@ export function buildAgentRunTerminalEvidence(run: AgentRun): string | null {
     !goal ||
     run.status !== 'completed' ||
     graph?.status !== 'finalized' ||
-    blockingGoals.some((candidate) => candidate.status !== 'completed')
+    blockingGoals.some((candidate) => candidate.status !== 'completed') ||
+    observedToolCallIds.length > MAX_TOOL_CALL_COUNT ||
+    !observedToolCallIds.every(isExactMemoryProvenanceId) ||
+    new Set(observedToolCallIds).size !== observedToolCallIds.length
   ) {
     return null;
   }
@@ -78,6 +85,7 @@ export function buildAgentRunTerminalEvidence(run: AgentRun): string | null {
     graphStatus: 'finalized',
     platform,
     completedBlockingGoalCount: blockingGoals.length,
+    observedToolCallIds,
   };
   return `${AGENT_RUN_TERMINAL_EVIDENCE_PREFIX}${JSON.stringify(evidence)}`;
 }
@@ -90,30 +98,39 @@ export function parseAgentRunTerminalEvidence(value: string): AgentRunTerminalEv
   } catch {
     return null;
   }
-  if (!isPlainRecord(parsed) || !hasExactKeys(parsed)) return null;
+  return decodeAgentRunTerminalEvidence(parsed);
+}
+
+export function decodeAgentRunTerminalEvidence(value: unknown): AgentRunTerminalEvidence | null {
+  if (!isPlainRecord(value) || !hasExactKeys(value)) return null;
   if (
-    parsed.version !== 1 ||
-    !isExactMemoryProvenanceId(parsed.sourceRunId) ||
-    typeof parsed.goal !== 'string' ||
-    !parsed.goal.trim() ||
-    parsed.goal !== parsed.goal.trim() ||
-    parsed.goal.length > MAX_GOAL_CHARS ||
-    parsed.runStatus !== 'completed' ||
-    parsed.graphStatus !== 'finalized' ||
-    (parsed.platform !== 'android' && parsed.platform !== 'ios') ||
-    !Number.isSafeInteger(parsed.completedBlockingGoalCount) ||
-    (parsed.completedBlockingGoalCount as number) < 0
+    value.version !== 1 ||
+    !isExactMemoryProvenanceId(value.sourceRunId) ||
+    typeof value.goal !== 'string' ||
+    !value.goal.trim() ||
+    value.goal !== value.goal.trim() ||
+    value.goal.length > MAX_GOAL_CHARS ||
+    value.runStatus !== 'completed' ||
+    value.graphStatus !== 'finalized' ||
+    (value.platform !== 'android' && value.platform !== 'ios') ||
+    !Number.isSafeInteger(value.completedBlockingGoalCount) ||
+    (value.completedBlockingGoalCount as number) < 0 ||
+    !Array.isArray(value.observedToolCallIds) ||
+    value.observedToolCallIds.length > MAX_TOOL_CALL_COUNT ||
+    !value.observedToolCallIds.every(isExactMemoryProvenanceId) ||
+    new Set(value.observedToolCallIds).size !== value.observedToolCallIds.length
   ) {
     return null;
   }
   return {
     version: 1,
-    sourceRunId: parsed.sourceRunId,
-    goal: parsed.goal,
+    sourceRunId: value.sourceRunId,
+    goal: value.goal,
     runStatus: 'completed',
     graphStatus: 'finalized',
-    platform: parsed.platform,
-    completedBlockingGoalCount: parsed.completedBlockingGoalCount as number,
+    platform: value.platform,
+    completedBlockingGoalCount: value.completedBlockingGoalCount as number,
+    observedToolCallIds: value.observedToolCallIds,
   };
 }
 

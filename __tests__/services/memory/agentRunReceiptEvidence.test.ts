@@ -58,6 +58,7 @@ function terminal(sourceRunId = 'run-receipts'): string {
     graphStatus: 'finalized',
     platform: 'ios',
     completedBlockingGoalCount: 1,
+    observedToolCallIds: ['call-1', 'call-2'],
   };
   return `${AGENT_RUN_TERMINAL_EVIDENCE_PREFIX}${JSON.stringify(evidence)}`;
 }

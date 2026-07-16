@@ -15,6 +15,7 @@ function completedRun(overrides: Partial<AgentRun> = {}): AgentRun {
     status: 'completed',
     controlGraph: {
       status: 'finalized',
+      observedToolResults: [{ id: 'call-1', name: 'calendar_create_event' }],
       goals: [
         {
           id: 'goal-1',
@@ -44,6 +45,7 @@ describe('agent-run terminal evidence', () => {
       graphStatus: 'finalized',
       platform: 'ios',
       completedBlockingGoalCount: 1,
+      observedToolCallIds: ['call-1'],
     });
   });
 

@@ -597,11 +597,19 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
   const risks = Array.from(bundle.risks).slice(0, 12);
   const summaries = Array.from(bundle.summaries).slice(0, 12);
   const effectReceipts = [...bundle.effectReceipts]
-    .sort((left, right) =>
-      left.recordedAt !== right.recordedAt
+    .sort((left, right) => {
+      const order = bundle.terminalEvidence?.observedToolCallIds ?? [];
+      const leftIndex = order.indexOf(left.toolCallId);
+      const rightIndex = order.indexOf(right.toolCallId);
+      if (leftIndex >= 0 || rightIndex >= 0) {
+        if (leftIndex < 0) return 1;
+        if (rightIndex < 0) return -1;
+        if (leftIndex !== rightIndex) return leftIndex - rightIndex;
+      }
+      return left.recordedAt !== right.recordedAt
         ? left.recordedAt - right.recordedAt
-        : left.receiptId.localeCompare(right.receiptId),
-    )
+        : left.receiptId.localeCompare(right.receiptId);
+    })
     .slice(0, 32);
   const baseAttributes: JsonRecord = definedRecord({
     sourceRunId: bundle.sourceRunId,
