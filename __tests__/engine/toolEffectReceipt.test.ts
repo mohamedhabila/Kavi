@@ -246,8 +246,8 @@ describe('ToolEffectReceipt', () => {
       { status: 'handed_off' },
       {
         effectKind: 'share.handoff',
-        effectState: 'handed_off',
-        verificationState: 'unverified',
+        effectState: 'applied',
+        verificationState: 'verified',
       },
     ],
     [
@@ -256,18 +256,18 @@ describe('ToolEffectReceipt', () => {
       { status: 'handed_off' },
       {
         effectKind: 'share.handoff',
-        effectState: 'handed_off',
-        verificationState: 'unverified',
+        effectState: 'applied',
+        verificationState: 'verified',
       },
     ],
     [
       'generic clipboard write',
       'clipboard',
-      { status: 'written', characterCount: 5 },
+      { status: 'written_verified', characterCount: 5, verified: true },
       {
         effectKind: 'clipboard.write',
         effectState: 'applied',
-        verificationState: 'acknowledged',
+        verificationState: 'verified',
       },
     ],
     [
@@ -298,7 +298,7 @@ describe('ToolEffectReceipt', () => {
       {
         effectKind: 'notification.schedule',
         effectState: 'applied',
-        verificationState: 'acknowledged',
+        verificationState: 'verified',
         resource: { kind: 'notification', id: 'notification-7' },
         operationHandle: { kind: 'notification_schedule', id: 'notification-7' },
       },
@@ -348,7 +348,11 @@ describe('ToolEffectReceipt', () => {
       toolCallId: 'tc-clipboard-write',
       toolName: 'clipboard_write',
       argumentsText: '{"text":"hello"}',
-      resultText: JSON.stringify({ status: 'written', characterCount: 5 }),
+      resultText: JSON.stringify({
+        status: 'written_verified',
+        characterCount: 5,
+        verified: true,
+      }),
       transportState: 'returned',
       recordedAt: 228,
     });
@@ -371,7 +375,7 @@ describe('ToolEffectReceipt', () => {
       expect.objectContaining({
         effectKind: 'clipboard.write',
         effectState: 'applied',
-        verificationState: 'acknowledged',
+        verificationState: 'verified',
       }),
     );
   });

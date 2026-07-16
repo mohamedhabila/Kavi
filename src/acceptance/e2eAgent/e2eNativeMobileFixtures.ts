@@ -540,8 +540,9 @@ async function executeE2ENativeMobileTool(
       e2eNativeFixtureState.clipboard.text = e2eClipboardText;
       e2eNativeFixtureState.clipboard.writeCount += 1;
       return completedE2ENativeOutcome({
-        status: 'written',
+        status: 'written_verified',
         characterCount: e2eClipboardText.length,
+        verified: true,
       });
     case 'clipboard_read':
       e2eNativeFixtureState.clipboard.readCount += 1;
@@ -557,8 +558,9 @@ async function executeE2ENativeMobileTool(
         e2eNativeFixtureState.clipboard.text = e2eClipboardText;
         e2eNativeFixtureState.clipboard.writeCount += 1;
         return completedE2ENativeOutcome({
-          status: 'written',
+          status: 'written_verified',
           characterCount: e2eClipboardText.length,
+          verified: true,
         });
       }
       if (action === 'read') {

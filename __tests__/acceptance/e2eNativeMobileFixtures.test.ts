@@ -61,7 +61,7 @@ describe('E2E native mobile fixtures', () => {
       sequence: 1,
       toolName: 'clipboard_write',
       handled: true,
-      resultStatus: 'written',
+      resultStatus: 'written_verified',
       errorClass: null,
       stateBefore: { clipboard: { text: '', writeCount: 0 } },
       stateAfter: { clipboard: { text: 'PRIVATE-NATIVE-ARGUMENT', writeCount: 1 } },
@@ -117,8 +117,9 @@ describe('E2E native mobile fixtures', () => {
       'conv-mobile-e2e',
     );
     expect(parseCompletedToolOutcome(writeRaw)).toEqual({
-      status: 'written',
+      status: 'written_verified',
       characterCount: 16,
+      verified: true,
     });
 
     const readRaw = await executeToolInner('clipboard_read', '{}', 'conv-mobile-e2e');

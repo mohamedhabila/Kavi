@@ -225,10 +225,25 @@ describe('executeClipboardRead', () => {
 });
 
 describe('executeClipboardWrite', () => {
-  it('copies text and returns confirmation', async () => {
+  it('copies text and verifies exact readback', async () => {
+    mockGetStringAsync.mockResolvedValue('Copy me');
     const result = parseCompletedToolOutcome(await executeClipboardWrite({ text: 'Copy me' }));
-    expect(result).toEqual({ status: 'written', characterCount: 7 });
+    expect(result).toEqual({
+      status: 'written_verified',
+      characterCount: 7,
+      verified: true,
+    });
     expect(mockSetStringAsync).toHaveBeenCalledWith('Copy me');
+  });
+
+  it('reports an applied but unverified write when readback differs', async () => {
+    mockGetStringAsync.mockResolvedValue('Different');
+    const result = parseCompletedToolOutcome(await executeClipboardWrite({ text: 'Copy me' }));
+    expect(result).toEqual({
+      status: 'written_unverified',
+      characterCount: 7,
+      verified: false,
+    });
   });
 });
 

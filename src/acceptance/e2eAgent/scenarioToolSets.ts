@@ -28,7 +28,7 @@ export const E2E_GOAL_JSON_FIELD_SUCCESS_CRITERIA = [
 ];
 
 export const E2E_DEVICE_STATE_SUCCESS_CRITERIA = [
-  'evidence.json_field:status:written',
+  'evidence.json_field:status:written_verified',
   'evidence.json_field:status:read',
   'evidence.json_field:status:handed_off',
   'evidence.json_field:status:notification_scheduled',

@@ -645,7 +645,7 @@ describe('runE2EScenario product foreground integration', () => {
           sequence: 1,
           toolName: 'clipboard_write',
           handled: true,
-          resultStatus: 'written',
+          resultStatus: 'written_verified',
           errorClass: null,
         },
       ],

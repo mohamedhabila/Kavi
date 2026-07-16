@@ -425,7 +425,7 @@ describe('E2E benchmark structural completion criteria', () => {
     expect(
       areGoalSuccessCriteriaSatisfied(
         goal(E2E_DEVICE_STATE_SUCCESS_CRITERIA, [
-          'clipboard:{"status":"written"}',
+          'clipboard:{"status":"written_verified"}',
           'clipboard:{"status":"read"}',
           'share:{"status":"handed_off"}',
           'notification_schedule:{"status":"notification_scheduled"}',

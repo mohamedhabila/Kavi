@@ -38,17 +38,37 @@ describe('tool effect completion contracts', () => {
     ).resolves.toEqual({ kind: 'operational', toolName: 'mcp__docs__fetch' });
   });
 
-  it.each(['phone_call', 'share_text'])(
-    'keeps the handed-off %s action operational and non-completing',
-    async (toolName) => {
-      await expect(
-        resolveToolEffectCompletionRequirement({
-          toolName,
-          argumentsText: JSON.stringify({ value: 'test' }),
-        }),
-      ).resolves.toEqual({ kind: 'operational', toolName });
-    },
-  );
+  it('keeps the handed-off phone action operational and non-completing', async () => {
+    await expect(
+      resolveToolEffectCompletionRequirement({
+        toolName: 'phone_call',
+        argumentsText: JSON.stringify({ phoneNumber: '+15550100' }),
+      }),
+    ).resolves.toEqual({ kind: 'operational', toolName: 'phone_call' });
+  });
+
+  it('derives a verified completion contract for a share-sheet handoff', async () => {
+    const argumentsText = JSON.stringify({ text: 'test' });
+    const requestDigest = await digestToolEffectRequest(argumentsText);
+    const requirement = await resolveToolEffectCompletionRequirement({
+      toolName: 'share_text',
+      argumentsText,
+    });
+
+    expect(requirement).toEqual(
+      expect.objectContaining({
+        kind: 'effectful',
+        toolName: 'share_text',
+        criterion: {
+          effectKind: 'share.handoff',
+          requestDigest,
+          resource: { kind: 'effect_request', id: requestDigest },
+          verificationState: 'verified',
+        },
+        serializedCriterion: expect.stringMatching(/^evidence\.effect:/u),
+      }),
+    );
+  });
 
   it('keeps an acknowledged but unverifiable canvas mutation operational', async () => {
     await expect(

@@ -47,6 +47,7 @@ function executionOutcome(executionState: ToolExecutionState): ToolEffectResultO
 const APPLIED = outcome('applied', 'acknowledged');
 const VERIFIED = outcome('applied', 'verified');
 const HANDED_OFF = outcome('handed_off', 'unverified');
+const VERIFIED_HANDOFF = outcome('applied', 'verified');
 const CANCELLED = outcome('cancelled', 'unverified');
 const FAILED = outcome('failed', 'unverified');
 const UNKNOWN = outcome('unknown', 'unverified');
@@ -325,12 +326,16 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       { updated_verified: VERIFIED, updated_unverified: APPLIED },
       { resource: selector('calendar_event', 'result', ['eventId']) },
     ),
-    clipboard_write: effectful('clipboard.write', { written: APPLIED }),
+    clipboard_write: effectful('clipboard.write', {
+      written_verified: VERIFIED,
+      written_unverified: APPLIED,
+    }),
     clipboard: effectful(
       'clipboard.write',
       {
         read: outcome('none', 'not_applicable', 'observation.read'),
-        written: APPLIED,
+        written_verified: VERIFIED,
+        written_unverified: APPLIED,
       },
       { completion: { effectFreeWhen: { argumentPath: ['action'], values: ['read'] } } },
     ),
@@ -342,7 +347,14 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         fallback_opened: outcome('handed_off', 'unverified', 'communication.draft_handoff'),
       }),
     ),
-    sms_compose: effectful('communication.send', nativeOutcomes({ sent: APPLIED })),
+    sms_compose: effectful(
+      'communication.draft_handoff',
+      nativeOutcomes({
+        sent: VERIFIED,
+        unknown: VERIFIED,
+        sms_composer_opened: VERIFIED,
+      }),
+    ),
     phone_call: effectful('communication.call_handoff', nativeOutcomes({ opened: HANDED_OFF })),
     maps_open: effectful('navigation.open', nativeOutcomes({ opened: HANDED_OFF })),
     open_url: effectful('external.open', nativeOutcomes({ opened: HANDED_OFF })),
@@ -364,12 +376,15 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         completion: { effectFreeWhen: { argumentPath: ['action'], values: ['view'] } },
       },
     ),
-    contacts_share: effectful('share.handoff', nativeOutcomes({ handed_off: HANDED_OFF })),
-    share_contact: effectful('share.handoff', nativeOutcomes({ handed_off: HANDED_OFF })),
-    share_text: effectful('share.handoff', nativeOutcomes({ handed_off: HANDED_OFF })),
-    share_url: effectful('share.handoff', nativeOutcomes({ handed_off: HANDED_OFF })),
-    share_file: effectful('share.handoff', nativeOutcomes({ handed_off: HANDED_OFF })),
-    share: effectful('share.handoff', nativeOutcomes({ handed_off: HANDED_OFF })),
+    contacts_share: effectful(
+      'share.handoff',
+      nativeOutcomes({ handed_off: VERIFIED_HANDOFF }),
+    ),
+    share_contact: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
+    share_text: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
+    share_url: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
+    share_file: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
+    share: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     notification_send: effectful(
       'notification.send',
       { notification_accepted: outcome('accepted', 'acknowledged') },
@@ -380,7 +395,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ),
     notification_schedule: effectful(
       'notification.schedule',
-      { notification_scheduled: APPLIED },
+      { notification_scheduled: VERIFIED },
       {
         resource: selector('notification', 'result', ['id']),
         operationHandle: selector('notification_schedule', 'result', ['id']),
@@ -388,7 +403,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ),
     notification_cancel: effectful(
       'notification.cancel',
-      { notification_cancelled: APPLIED },
+      { notification_cancelled: VERIFIED },
       { resource: selector('notification', 'result', ['id']) },
     ),
     camera_clip: effectful('media.capture', { recorded: APPLIED, cancelled: CANCELLED }),
