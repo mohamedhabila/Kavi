@@ -81,6 +81,8 @@ export function compactRecord(value: JsonRecord): string {
   return JSON.stringify({
     sourceRunId: stringField(value, 'sourceRunId'),
     goal: fitAgentRunText(String(value.goal ?? ''), 360),
+    domain: fitAgentRunText(String(value.domain ?? ''), 160),
+    environment: fitAgentRunText(String(value.environment ?? ''), 160),
     status: fitAgentRunText(String(value.status ?? ''), 120),
     outcome: fitAgentRunText(String(value.outcome ?? ''), 120),
   });
@@ -162,6 +164,8 @@ function compactStructuredEvidenceRecord(value: JsonRecord): string | null {
       Object.entries({
         sourceRunId: stringField(value, 'sourceRunId'),
         goal: stringField(value, 'goal'),
+        domain: stringField(value, 'domain'),
+        environment: stringField(value, 'environment'),
         status: stringField(value, 'status'),
         outcome: stringField(value, 'outcome'),
         tools: Array.isArray(value.tools) ? value.tools.slice(0, 8) : undefined,

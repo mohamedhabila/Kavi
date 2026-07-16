@@ -76,8 +76,12 @@ function compactEvidenceSpanVariant(
   );
   const compact = Object.fromEntries(
     Object.entries({
+      goal: boundLocalEvidenceText(stringField(record, 'goal'), 80).value,
+      domain: boundLocalEvidenceText(stringField(record, 'domain'), 48).value,
+      environment: boundLocalEvidenceText(stringField(record, 'environment'), 64).value,
       stateIndex: numberField(record, 'stateIndex') ?? numberField(record, 'state_index'),
       sequence: numberField(record, 'sequence'),
+      url: boundLocalEvidenceText(stringField(record, 'url'), 96).value,
       toolName: boundLocalEvidenceText(
         stringField(record, 'toolName') ?? stringField(record, 'tool_name'),
         40,

@@ -213,6 +213,41 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(joined.length).toBeLessThan(12_500);
   });
 
+  it('binds observed evidence spans to their app and environment context', () => {
+    recordAgentRunEvidenceMemory({
+      evidence: [
+        `agent:${JSON.stringify({
+          trajectory_id: 'run-environment-context',
+          goal: 'Inspect the incident form',
+          domain: 'mobile',
+          environment: 'incident-management',
+          state_index: 3,
+          accessibility_tree: "[field-1] textbox 'Incident title', visible",
+          toolName: 'mobile_state',
+          status: 'completed',
+        })}`,
+      ],
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-environment-context',
+      now: 10,
+    });
+
+    const span = listFacts({ originConversationId: 'conv-agent-memory' }).find(
+      (fact) => fact.memoryKind === 'evidence_span',
+    );
+    expect(JSON.parse(span?.objectText ?? '{}')).toMatchObject({
+      sourceRunId: 'run-environment-context',
+      domain: 'mobile',
+      environment: 'incident-management',
+    });
+    expect(span?.attributes).toMatchObject({
+      domain: 'mobile',
+      environment: 'incident-management',
+    });
+  });
+
   it('preserves local observed control neighborhoods inside compact evidence spans', () => {
     const observedState = [
       ...Array.from({ length: 33 }, (_, index) => `[nav-${index}] link 'nav:${index}', visible`),

@@ -151,6 +151,8 @@ function evidenceSpanRecordForStep(
 ): string {
   return compactRecord({
     sourceRunId: bundle.sourceRunId,
+    domain: bundle.domain,
+    environment: bundle.environment,
     sequence,
     ...directlyObservedEvidenceSlice(step),
   });
@@ -508,6 +510,8 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     goal: bundle.goal,
     status: bundle.status,
     outcome: bundle.outcome,
+    domain: bundle.domain,
+    environment: bundle.environment,
     stepCount: bundle.steps.length,
     tools,
   });

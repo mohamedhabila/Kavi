@@ -113,6 +113,7 @@ function makeEpisodeSelection(
       taskId: episode.taskId,
       policyVersion: 1,
     },
+    policyExpiresAt: null,
     accessDecision: { authorized: true, reason: 'eligible' },
     relevanceScore: 1,
   } as EpisodeRecallSelection;
@@ -246,6 +247,29 @@ describe('assemblePrompt - product memory groups', () => {
     expect(text).toContain('Incident Mobile');
     expect(text).toContain('Incident Portal');
     expect(text).toContain('inputControlsPresent');
+  });
+
+  it('keeps structured app context visible on observed evidence spans', () => {
+    const out = assemblePrompt({
+      ...baseInput,
+      retrievedFacts: [
+        makeAgentFact('evidence-span', 'evidence_span', {
+          sourceRunId: 'run-mobile-context',
+          goal: 'Inspect the incident form',
+          domain: 'mobile',
+          environment: 'incident-management',
+          stateIndex: 2,
+          observedControlSequence: [
+            { role: 'textbox', label: 'Incident title', attributes: 'visible' },
+          ],
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('"domain":"mobile"');
+    expect(text).toContain('"environment":"incident-management"');
+    expect(text).toContain('Incident title');
   });
 
   it('renders observed control source order for action and column evidence', () => {

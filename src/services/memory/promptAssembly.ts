@@ -471,6 +471,8 @@ function compactEvidenceSpanPromptFields(
   const compact = dropEmptyPromptRecord({
     sourceRunId: parsed.sourceRunId,
     goal: fitPromptValue(parsed.goal),
+    domain: fitPromptValue(parsed.domain, 120),
+    environment: fitPromptValue(parsed.environment, 160),
     sequence: parsed.sequence,
     ...(step ?? {}),
   });
