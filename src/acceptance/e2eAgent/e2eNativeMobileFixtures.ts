@@ -540,15 +540,15 @@ async function executeE2ENativeMobileTool(
       e2eNativeFixtureState.clipboard.text = e2eClipboardText;
       e2eNativeFixtureState.clipboard.writeCount += 1;
       return completedE2ENativeOutcome({
-        status: 'clipboard_written',
-        textLength: e2eClipboardText.length,
+        status: 'written',
+        characterCount: e2eClipboardText.length,
       });
     case 'clipboard_read':
       e2eNativeFixtureState.clipboard.readCount += 1;
       return completedE2ENativeOutcome({
-        status: 'clipboard_read',
+        status: 'read',
         text: e2eClipboardText,
-        textLength: e2eClipboardText.length,
+        empty: e2eClipboardText.length === 0,
       });
     case 'clipboard': {
       const action = typeof args.action === 'string' ? args.action.toLowerCase() : '';
@@ -557,16 +557,16 @@ async function executeE2ENativeMobileTool(
         e2eNativeFixtureState.clipboard.text = e2eClipboardText;
         e2eNativeFixtureState.clipboard.writeCount += 1;
         return completedE2ENativeOutcome({
-          status: 'clipboard_written',
-          textLength: e2eClipboardText.length,
+          status: 'written',
+          characterCount: e2eClipboardText.length,
         });
       }
       if (action === 'read') {
         e2eNativeFixtureState.clipboard.readCount += 1;
         return completedE2ENativeOutcome({
-          status: 'clipboard_read',
+          status: 'read',
           text: e2eClipboardText,
-          textLength: e2eClipboardText.length,
+          empty: e2eClipboardText.length === 0,
         });
       }
       return failedE2ENativeOutcome({ status: 'validation_error', code: 'validation_error' });
@@ -576,19 +576,20 @@ async function executeE2ENativeMobileTool(
       e2eNativeFixtureState.share.kind = 'text';
       e2eNativeFixtureState.share.textLength = typeof args.text === 'string' ? args.text.length : 0;
       return completedE2ENativeOutcome({
-        status: 'share_sheet_opened',
-        kind: 'text',
-        textLength: e2eNativeFixtureState.share.textLength,
-        hasTitle: typeof args.title === 'string' && args.title.length > 0,
+        status: 'handed_off',
+        summary: 'Opened the native share sheet for text.',
+        details: { activityType: null },
+        code: 'share_handed_off',
       });
     case 'share':
       e2eNativeFixtureState.share.opened = true;
       e2eNativeFixtureState.share.kind = typeof args.kind === 'string' ? args.kind : 'text';
       e2eNativeFixtureState.share.textLength = typeof args.text === 'string' ? args.text.length : 0;
       return completedE2ENativeOutcome({
-        status: 'share_sheet_opened',
-        kind: e2eNativeFixtureState.share.kind,
-        textLength: e2eNativeFixtureState.share.textLength,
+        status: 'handed_off',
+        summary: 'Opened the native share sheet for text.',
+        details: { activityType: null },
+        code: 'share_handed_off',
       });
     case 'notification_send':
       e2eNativeFixtureState.notification.displayed = true;

@@ -425,9 +425,9 @@ describe('E2E benchmark structural completion criteria', () => {
     expect(
       areGoalSuccessCriteriaSatisfied(
         goal(E2E_DEVICE_STATE_SUCCESS_CRITERIA, [
-          'clipboard:{"status":"clipboard_written"}',
-          'clipboard:{"status":"clipboard_read"}',
-          'share:{"status":"share_sheet_opened"}',
+          'clipboard:{"status":"written"}',
+          'clipboard:{"status":"read"}',
+          'share:{"status":"handed_off"}',
           'notification_schedule:{"status":"notification_scheduled"}',
           'notification_cancel:{"status":"notification_cancelled"}',
         ]),
@@ -524,7 +524,7 @@ describe('E2E structural mobile assistant scenarios', () => {
     }
   });
 
-  it('keeps passive causal-memory learning turns free of tool calls and native side effects', () => {
+  it('keeps causal-memory learning turns free of native side effects', () => {
     const scenario = E2E_PAIRED_ONLY_SCENARIOS.find(
       (entry) => entry.id === 'paired-causal-global-preference',
     );
@@ -546,20 +546,11 @@ describe('E2E structural mobile assistant scenarios', () => {
           turnIndex: 1,
           expectedCount: 0,
         }),
-        expect.objectContaining({
-          kind: 'turn_tool_call_count',
-          turnIndex: 0,
-          scope: 'all',
-          expectedCount: 0,
-        }),
-        expect.objectContaining({
-          kind: 'turn_tool_call_count',
-          turnIndex: 1,
-          scope: 'all',
-          expectedCount: 0,
-        }),
       ]),
     );
+    expect(
+      neutralRubrics.some((rubric) => rubric.kind === 'turn_tool_call_count'),
+    ).toBe(false);
   });
 
   it('scoped goal-switch scenario satisfies task-scoped focus rubrics', async () => {

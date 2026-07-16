@@ -215,9 +215,19 @@ describe('ToolEffectReceipt', () => {
       'sms_compose',
       { status: 'unknown' },
       {
-        effectKind: 'communication.send',
-        effectState: 'unknown',
-        verificationState: 'unverified',
+        effectKind: 'communication.draft_handoff',
+        effectState: 'applied',
+        verificationState: 'verified',
+      },
+    ],
+    [
+      'opened SMS composer',
+      'sms_compose',
+      { status: 'sms_composer_opened' },
+      {
+        effectKind: 'communication.draft_handoff',
+        effectState: 'applied',
+        verificationState: 'verified',
       },
     ],
     [
@@ -238,6 +248,26 @@ describe('ToolEffectReceipt', () => {
         effectKind: 'share.handoff',
         effectState: 'handed_off',
         verificationState: 'unverified',
+      },
+    ],
+    [
+      'generic share handoff',
+      'share',
+      { status: 'handed_off' },
+      {
+        effectKind: 'share.handoff',
+        effectState: 'handed_off',
+        verificationState: 'unverified',
+      },
+    ],
+    [
+      'generic clipboard write',
+      'clipboard',
+      { status: 'written', characterCount: 5 },
+      {
+        effectKind: 'clipboard.write',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
       },
     ],
     [

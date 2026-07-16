@@ -75,6 +75,10 @@ const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMem
 const mockedGetIngestionJob = jest.mocked(getIngestionJob);
 const mockedCancelScheduledIngestionDrain = jest.mocked(cancelScheduledIngestionDrain);
 const completedOrchestratorRun = { terminalDisposition: 'final_candidate' as const };
+const completeFinalMetadata = buildAssistantMessageMetadata('final', {
+  completionStatus: 'complete',
+  finishReason: 'stop',
+});
 
 function buildFinalizedGraphSnapshot(
   overrides: Partial<AgentRunControlGraphState> = {},
@@ -194,7 +198,7 @@ describe('runE2EScenario product foreground integration', () => {
         'Completed response.',
         undefined,
         undefined,
-        buildAssistantMessageMetadata('final'),
+        completeFinalMetadata,
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onUsage?.({
@@ -216,7 +220,7 @@ describe('runE2EScenario product foreground integration', () => {
         `Response ${userTurnCounts.length}`,
         undefined,
         undefined,
-        buildAssistantMessageMetadata('final'),
+        completeFinalMetadata,
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
@@ -337,12 +341,7 @@ describe('runE2EScenario product foreground integration', () => {
       expect(readWorkspaceRelativeFile(options.workspaceConversationId, 'inbox/seed.txt')).toBe(
         'SEEDED-WORKSPACE-CONTENT',
       );
-      callbacks.onAssistantMessage(
-        'Seed read.',
-        undefined,
-        undefined,
-        buildAssistantMessageMetadata('final'),
-      );
+      callbacks.onAssistantMessage('Seed read.', undefined, undefined, completeFinalMetadata);
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
       return completedOrchestratorRun;
@@ -383,7 +382,7 @@ describe('runE2EScenario product foreground integration', () => {
         'Listed calendars.',
         undefined,
         undefined,
-        buildAssistantMessageMetadata('final'),
+        completeFinalMetadata,
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
@@ -407,12 +406,7 @@ describe('runE2EScenario product foreground integration', () => {
 
   it('maps the latest persisted control graph for each agentic turn', async () => {
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
-      callbacks.onAssistantMessage(
-        'Goal complete.',
-        undefined,
-        undefined,
-        buildAssistantMessageMetadata('final'),
-      );
+      callbacks.onAssistantMessage('Goal complete.', undefined, undefined, completeFinalMetadata);
       callbacks.onAgentControlGraphStateChange(
         buildFinalizedGraphSnapshot({
           activeTaskId: 'goal-a',
@@ -572,12 +566,7 @@ describe('runE2EScenario product foreground integration', () => {
           'scenario-conversation-cache-debug-run-paired-condition-a',
         );
         expect(options.workspaceConversationId).toBe(options.conversationId);
-        callbacks.onAssistantMessage(
-          'Isolated.',
-          undefined,
-          undefined,
-          buildAssistantMessageMetadata('final'),
-        );
+        callbacks.onAssistantMessage('Isolated.', undefined, undefined, completeFinalMetadata);
         callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
         callbacks.onDone();
         return completedOrchestratorRun;
@@ -636,7 +625,7 @@ describe('runE2EScenario product foreground integration', () => {
         'Clipboard updated.',
         undefined,
         undefined,
-        buildAssistantMessageMetadata('final'),
+        completeFinalMetadata,
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
@@ -656,7 +645,7 @@ describe('runE2EScenario product foreground integration', () => {
           sequence: 1,
           toolName: 'clipboard_write',
           handled: true,
-          resultStatus: 'clipboard_written',
+          resultStatus: 'written',
           errorClass: null,
         },
       ],
