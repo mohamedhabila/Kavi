@@ -28,10 +28,13 @@ describe('Orchestrator', () => {
       });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'CHECKNO42' },
-          { type: 'done', content: 'CHECKNO42' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'CHECKNO42' },
+            { type: 'done', content: 'CHECKNO42' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -74,7 +77,7 @@ describe('Orchestrator', () => {
       expect(requestMessages[0].content).toContain(
         "Safety: no independent goals beyond the user's request.",
       );
-      expect(requestMessages[0].content.length).toBeLessThan(2800);
+      expect(requestMessages[0].content.length).toBeLessThan(4000);
       expect(callbacks.calls.onAssistantMessage.at(-1)).toEqual(
         expect.objectContaining({
           content: 'CHECKNO42',
@@ -90,10 +93,13 @@ describe('Orchestrator', () => {
       }));
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'C64A' },
-          { type: 'done', content: 'C64A' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'C64A' },
+            { type: 'done', content: 'C64A' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

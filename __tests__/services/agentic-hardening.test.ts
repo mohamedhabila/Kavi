@@ -220,8 +220,11 @@ describe('SuperAgent system prompt — decision rules', () => {
 
   it('stops early on low-signal requests instead of manufacturing a workflow', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Low-signal or underspecified request');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('stop and ask one concrete clarification');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('do not plan, delegate, or invent work');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('ask one concrete question');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('do not plan, delegate, invent work');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'do not plan, delegate, invent work, or combine clarification with another tool call',
+    );
   });
 
   it('criticizes unreasonable process requests and narrows scope', () => {
