@@ -18,6 +18,7 @@ const MAX_SOURCE_FACTS = 2_000;
 const MAX_PROCEDURE_STEPS = 12;
 const MAX_UNIQUE_TOOLS = 7;
 const MAX_TASK_EXAMPLES = 5;
+const MAX_SUPPORT_RUNS = 8;
 const MAX_QUERY_CHARS = 2_000;
 const MAX_GOAL_CHARS = 2_000;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
@@ -129,6 +130,12 @@ function canonicalize(value: unknown): unknown {
 
 function canonicalJson(value: unknown): string {
   return JSON.stringify(canonicalize(value));
+}
+
+export function digestReceiptBackedToolContractIdentity(
+  identity: CodeOwnedToolContractIdentity,
+): `sha256:${string}` {
+  return `sha256:${sha256HexUtf8(canonicalJson(identity))}`;
 }
 
 const CONTRACT_KEYS = new Set([
@@ -440,7 +447,9 @@ export function buildReceiptBackedProcedureLearningArtifact(
   let invalidProcedureCount = 0;
   for (const grouped of groups.values()) {
     const first = grouped[0]!;
+    const groupedReceiptIds = grouped.flatMap((observation) => observation.receiptIds);
     if (
+      new Set(groupedReceiptIds).size !== groupedReceiptIds.length ||
       grouped.some(
         (observation) => canonicalJson(observation.contract) !== canonicalJson(first.contract),
       )
@@ -472,7 +481,8 @@ export function buildReceiptBackedProcedureLearningArtifact(
         right.observedAt !== left.observedAt
           ? right.observedAt - left.observedAt
           : left.runId.localeCompare(right.runId),
-      );
+      )
+      .slice(0, MAX_SUPPORT_RUNS);
     const taskExamples = Array.from(
       new Set(evidenceObservations.map((observation) => observation.goal)),
     ).slice(0, MAX_TASK_EXAMPLES);
@@ -486,7 +496,7 @@ export function buildReceiptBackedProcedureLearningArtifact(
       taskExamples,
       commonQueryTerms: commonQueryTerms(evidenceObservations),
       evidence: {
-        runIds: decision.evidence.runIds,
+        runIds: evidenceObservations.map((observation) => observation.runId).sort(),
         factIds: evidenceObservations.map((observation) => observation.factId).sort(),
         receiptIds: Array.from(
           new Set(evidenceObservations.flatMap((observation) => observation.receiptIds)),

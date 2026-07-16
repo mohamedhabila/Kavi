@@ -6,6 +6,7 @@ import {
 } from '../../../src/services/memory/receiptBackedProcedureLearning';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
 import type { CodeOwnedToolContractIdentity } from '../../../src/types/toolEffectReceipt';
+import { sha256HexUtf8 } from '../../../src/utils/sha256';
 
 const DIGEST = `sha256:${'1'.repeat(64)}` as const;
 
@@ -31,7 +32,7 @@ function receipt(params: {
   verificationState: 'not_applicable' | 'verified';
 }) {
   return {
-    receiptId: `ter_${params.index.toString(16).repeat(32)}`,
+    receiptId: `ter_${sha256HexUtf8(`${params.runId}:${params.index}`).slice(0, 32)}`,
     toolCallId: `call-${params.runId}-${params.index}`,
     toolName: params.toolName,
     contractIdentity: contract(params.toolName),
@@ -144,7 +145,10 @@ describe('receipt-backed procedure learning', () => {
         runId: 'run-1',
         domainId: 'calendar',
         environmentId: 'kavi-ios',
-        receiptIds: [`ter_${'1'.repeat(32)}`, `ter_${'2'.repeat(32)}`],
+        receiptIds: [
+          `ter_${sha256HexUtf8('run-1:1').slice(0, 32)}`,
+          `ter_${sha256HexUtf8('run-1:2').slice(0, 32)}`,
+        ],
         contract: expect.objectContaining({
           platform: 'ios',
           replayPolicy: {

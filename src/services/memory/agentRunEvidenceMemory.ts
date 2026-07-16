@@ -49,6 +49,7 @@ import {
   parseAgentRunTerminalEvidence,
   type AgentRunTerminalEvidence,
 } from './agentRunTerminalEvidence';
+import { promoteReceiptBackedProcedures } from './receiptBackedProcedurePromotion';
 
 export interface AgentRunEvidenceMemoryInput {
   messages?: ReadonlyArray<Message>;
@@ -720,7 +721,20 @@ export function recordAgentRunEvidenceMemory(
   if (bundles.size === 0) return { factIds: [], consumedEvidence };
   requireAgentRunPersistenceIdentity(input);
   const factIds = runMemoryTransaction(() =>
-    Array.from(bundles.values()).flatMap((bundle) => persistBundle(bundle, input)),
+    {
+      const sourceFactIds = Array.from(bundles.values()).flatMap((bundle) =>
+        persistBundle(bundle, input),
+      );
+      const learnedFactIds = promoteReceiptBackedProcedures({
+        sourceFactIds,
+        memoryConversationId: input.conversationId,
+        sourceThreadId: input.threadId,
+        taskId: input.taskId,
+        sourceTurnId: input.sourceTurnId,
+        now: input.now,
+      });
+      return [...sourceFactIds, ...learnedFactIds];
+    },
   );
   return { factIds, consumedEvidence };
 }
