@@ -6,7 +6,11 @@ import {
   registerCodeOwnedSkill,
   unregisterSkill,
 } from '../../src/services/skills/manager';
-import { CALENDAR_LIST_TOOL } from '../../src/engine/tools/native/calendar/definitions';
+import {
+  CALENDAR_EVENTS_TOOL,
+  CALENDAR_LIST_TOOL,
+  CALENDAR_UPDATE_TOOL,
+} from '../../src/engine/tools/native/calendar/definitions';
 import { ALL_NATIVE_TOOL_DEFINITIONS } from '../../src/engine/tools/native/definitions';
 import {
   CLIPBOARD_READ_TOOL,
@@ -378,6 +382,13 @@ describe('tool capability contracts', () => {
       }),
     );
     expect(NOTIFICATION_CANCEL_TOOL.contract?.consumes).toEqual([{ kind: 'notification_id' }]);
+    expect(CALENDAR_EVENTS_TOOL.contract).toEqual(
+      expect.objectContaining({
+        produces: [{ kind: 'calendar_event' }],
+        precedes: ['calendar_update_event'],
+      }),
+    );
+    expect(CALENDAR_UPDATE_TOOL.contract?.consumes).toEqual([{ kind: 'calendar_event' }]);
   });
 
   it('declares delegated session producer-consumer contracts for worker lifecycle chains', () => {

@@ -48,6 +48,8 @@ export const CALENDAR_EVENTS_TOOL: ToolDefinition = {
     riskHints: ['read_only', 'idempotent'],
     providesEvidence: ['verification'],
     workflowStages: ['inspect_resource', 'verify_evidence'],
+    produces: [{ kind: 'calendar_event' }],
+    precedes: ['calendar_update_event'],
   }),
 };
 
