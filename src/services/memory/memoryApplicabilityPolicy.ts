@@ -236,6 +236,13 @@ function normalizedFactValue(fact: MemoryFact): string {
   return fact.objectText.normalize('NFKC').replace(/\s+/gu, ' ').trim();
 }
 
+function participatesInCurrentValueConflict(fact: MemoryFact): boolean {
+  // Semantic facts describe the current value of a subject/predicate pair.
+  // Experience records are additive events or observations; several distinct
+  // runs, results, artifacts, and evidence spans are expected to coexist.
+  return fact.memoryKind === 'semantic_fact';
+}
+
 function conflictingCurrentFacts(
   facts: ReadonlyArray<MemoryFact>,
   bases: ReadonlyMap<string, FactBasis>,
@@ -245,6 +252,7 @@ function conflictingCurrentFacts(
   for (const fact of facts) {
     const basis = bases.get(fact.id)!;
     if (silentFactGate(fact, basis, context)) continue;
+    if (!participatesInCurrentValueConflict(fact)) continue;
     const key = factConflictKey(fact);
     const group = groups.get(key) ?? [];
     group.push(fact);

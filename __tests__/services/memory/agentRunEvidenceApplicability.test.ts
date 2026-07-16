@@ -123,6 +123,57 @@ describe('agent-run evidence applicability', () => {
     expect(direct.map((fact) => fact.id)).toEqual(spans.map((fact) => fact.id));
   });
 
+  it('keeps multiple directly observed spans from independent runs usable together', () => {
+    for (const [sourceRunId, observation] of [
+      ['run-observed-first', 'The first control is present.'],
+      ['run-observed-second', 'The second control is present.'],
+    ] as const) {
+      recordAgentRunEvidenceMemory({
+        evidence: [
+          `agent:${JSON.stringify({
+            trajectory_id: sourceRunId,
+            state_index: 1,
+            toolName: 'mobile_observer',
+            toolResult: observation,
+            status: 'completed',
+          })}`,
+        ],
+        conversationId: 'conv-observed-additive',
+        threadId: 'conv-observed-additive',
+        taskId: null,
+        sourceTurnId: `assistant-${sourceRunId}`,
+        now: sourceRunId === 'run-observed-first' ? 10 : 20,
+      });
+    }
+
+    const spans = listFacts({ originConversationId: 'conv-observed-additive' }).filter(
+      (fact) => fact.memoryKind === 'evidence_span',
+    );
+    expect(spans).toHaveLength(2);
+    const memoryScope = resolveLocalMemoryAccessScope({
+      memoryConversationId: 'conv-observed-additive',
+      sourceThreadId: 'conv-observed-additive',
+      personaId: 'default',
+      taskId: null,
+    });
+
+    expect(
+      applyMemoryApplicabilityPolicy({
+        facts: spans,
+        context: {
+          enabled: true,
+          now: 30,
+          useIntent: 'automatic_prompt',
+          scope: memoryScope,
+          conflictObservationReadState: 'available',
+        },
+      }).factDecisions,
+    ).toEqual([
+      expect.objectContaining({ action: 'use', reason: 'eligible' }),
+      expect.objectContaining({ action: 'use', reason: 'eligible' }),
+    ]);
+  });
+
   it('keeps summary-only runs assistant-inferred and silent for automatic use', () => {
     const result = recordAgentRunEvidenceMemory({
       evidence: [

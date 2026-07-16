@@ -357,6 +357,33 @@ describe('memory applicability policy', () => {
     }
   });
 
+  it('treats distinct experience records as additive rather than conflicting current values', () => {
+    const result = applyMemoryApplicabilityPolicy({
+      facts: [
+        makeMemoryFact({
+          id: 'evidence-1',
+          factClass: 'workflow',
+          sourceAuthority: 'tool_observed',
+          memoryKind: 'evidence_span',
+          objectText: '{"sourceRunId":"run-1","stateIndex":1}',
+        }),
+        makeMemoryFact({
+          id: 'evidence-2',
+          factClass: 'workflow',
+          sourceAuthority: 'tool_observed',
+          memoryKind: 'evidence_span',
+          objectText: '{"sourceRunId":"run-2","stateIndex":2}',
+        }),
+      ],
+      context: context(),
+    });
+
+    expect(result.factDecisions).toEqual([
+      expect.objectContaining({ factId: 'evidence-1', action: 'use', reason: 'eligible' }),
+      expect.objectContaining({ factId: 'evidence-2', action: 'use', reason: 'eligible' }),
+    ]);
+  });
+
   it('does not let hidden restricted or rejected facts influence an eligible fact', () => {
     const visible = makeMemoryFact({ id: 'visible', objectText: 'visible-value' });
     const result = applyMemoryApplicabilityPolicy({
