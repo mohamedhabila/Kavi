@@ -5,6 +5,12 @@ import type { PromptContextSupport } from '../prepareAgentControlGraphModelTurnT
 import type { ToolDefinition } from '../../../types/tool';
 import type { Message } from '../../../types/message';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from '../../../services/memory/policy';
+import {
+  captureMemoryAuthoritySnapshot,
+  isRestrictiveMemoryAuthoritySnapshotCurrent,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../services/memory/memoryAuthority';
+import { isMemoryValidityDeadlineCurrent } from '../../../services/memory/memoryValidityDeadline';
 import { messageMatchesWorkflowTaskAnchor } from '../workflowTaskAnchor';
 import { buildMemoryPolicyPromptSection } from '../../prompts/memoryPolicyPrompt';
 import {
@@ -22,13 +28,30 @@ export function buildPreparedModelTurnPrompt(params: {
   pinnedToolNames: ReadonlyArray<string>;
   promptContextSupport: PromptContextSupport;
   toolingEnabledForProvider: boolean;
+  workflowRuntimePrompt?: string | null;
   workingMessages: ReadonlyArray<Message>;
 }): PreparedAgentTurn {
   const currentReadEpoch = captureMemoryReadEpoch();
-  const longTermMemoryEnabled = currentReadEpoch !== null;
+  const livingMemoryAuthoritySnapshot = params.promptContextSupport.livingMemoryAuthoritySnapshot;
+  const livingMemoryAuthorityCurrent =
+    livingMemoryAuthoritySnapshot !== undefined &&
+    isRestrictiveMemoryAuthoritySnapshotCurrent(livingMemoryAuthoritySnapshot) &&
+    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(livingMemoryAuthoritySnapshot);
+  const currentMemoryAuthoritySnapshot =
+    livingMemoryAuthorityCurrent && livingMemoryAuthoritySnapshot
+      ? livingMemoryAuthoritySnapshot
+      : currentReadEpoch !== null
+        ? captureMemoryAuthoritySnapshot()
+        : null;
+  const longTermMemoryEnabled =
+    currentReadEpoch !== null && currentMemoryAuthoritySnapshot !== null;
   const groundedRequestScopedTools = filterToolsForMemoryPolicy(
     params.groundedRequestScopedTools,
     longTermMemoryEnabled,
+  );
+  const groundedToolNames = new Set(groundedRequestScopedTools.map((tool) => tool.name));
+  const policyAuthorizedPinnedToolNames = params.pinnedToolNames.filter((name) =>
+    groundedToolNames.has(name),
   );
   const hasCallableMemoryCapability =
     params.actionablePromptTurn &&
@@ -37,11 +60,19 @@ export function buildPreparedModelTurnPrompt(params: {
     groundedRequestScopedTools.some((tool) => !isToolAllowedForMemoryPolicy(tool, false));
   const livingMemoryReadEpoch = params.promptContextSupport.livingMemoryReadEpoch;
   const livingMemoryReadCurrent =
-    livingMemoryReadEpoch !== undefined && isMemoryReadEpochCurrent(livingMemoryReadEpoch);
+    livingMemoryReadEpoch !== undefined &&
+    isMemoryReadEpochCurrent(livingMemoryReadEpoch) &&
+    livingMemoryAuthorityCurrent &&
+    isMemoryValidityDeadlineCurrent(params.promptContextSupport.livingMemoryValidUntil);
   const memoryReadEpoch = livingMemoryReadCurrent
     ? livingMemoryReadEpoch
     : hasCallableMemoryCapability && currentReadEpoch !== null
       ? currentReadEpoch
+      : undefined;
+  const memoryAuthoritySnapshot = livingMemoryReadCurrent
+    ? livingMemoryAuthoritySnapshot
+    : memoryReadEpoch !== undefined
+      ? currentMemoryAuthoritySnapshot
       : undefined;
   const livingMemorySections = livingMemoryReadCurrent
     ? params.promptContextSupport.livingMemorySections
@@ -90,6 +121,7 @@ export function buildPreparedModelTurnPrompt(params: {
         runtimeContext: params.promptContextSupport.runtimeContext,
         runtimePolicyPrompt: buildMemoryPolicyPromptSection(options.longTermMemoryEnabled),
         skillPrompts: params.promptContextSupport.skillPrompts,
+        workflowRuntimePrompt: params.workflowRuntimePrompt,
         workflowTaskAnchor: transcriptCarriesSoleFirstTurnAnchor ? undefined : workflowTaskAnchor,
       },
       toolingEnabledForProvider: params.toolingEnabledForProvider,
@@ -97,33 +129,19 @@ export function buildPreparedModelTurnPrompt(params: {
   const preparedTurn = prepare({
     groundedTools: groundedRequestScopedTools,
     longTermMemoryEnabled,
-    pinnedTools: params.pinnedToolNames,
+    pinnedTools: policyAuthorizedPinnedToolNames,
     sections: livingMemorySections,
   });
-  if (memoryReadEpoch === undefined) return preparedTurn;
-  const memoryFreeTurn = prepare({
-    groundedTools: groundedRequestScopedTools,
-    longTermMemoryEnabled: true,
-    pinnedTools: params.pinnedToolNames,
-    sections: undefined,
-  });
-  const memoryDisabledTools = filterToolsForMemoryPolicy(params.groundedRequestScopedTools, false);
-  const memoryDisabledToolNames = new Set(memoryDisabledTools.map((tool) => tool.name));
-  const memoryDisabledTurn = prepare({
-    groundedTools: memoryDisabledTools,
-    longTermMemoryEnabled: false,
-    pinnedTools: params.pinnedToolNames.filter((name) => memoryDisabledToolNames.has(name)),
-    sections: undefined,
-  });
+  if (memoryReadEpoch === undefined || !memoryAuthoritySnapshot) return preparedTurn;
   return {
     ...preparedTurn,
     memoryReadFence: {
       readEpoch: memoryReadEpoch,
-      memoryFreePrompt: {
-        enrichedSystemPrompt: memoryFreeTurn.enrichedSystemPrompt,
-        enrichedSystemPromptSections: memoryFreeTurn.enrichedSystemPromptSections,
-      },
-      memoryDisabledTurn,
+      memoryAuthoritySnapshot,
+      ...(livingMemoryReadCurrent &&
+      params.promptContextSupport.livingMemoryValidUntil !== undefined
+        ? { validUntil: params.promptContextSupport.livingMemoryValidUntil }
+        : {}),
     },
   };
 }

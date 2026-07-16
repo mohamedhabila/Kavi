@@ -53,6 +53,21 @@ describe('buildAgentTurnPromptBundle', () => {
     expect(bundle.enrichedSystemPrompt).not.toContain('## Current Goals');
   });
 
+  it('adds structural workflow continuation guidance as dynamic runtime context', () => {
+    const bundle = buildAgentTurnPromptBundle({
+      ...baseParams,
+      workflowRuntimePrompt:
+        '## Available Workflow Continuations\n- notification_schedule → notification_cancel',
+    });
+
+    expect(bundle.enrichedSystemPrompt).toContain('notification_schedule → notification_cancel');
+    const workflowSection = bundle.enrichedSystemPromptSections.find(
+      (section) => section.purpose === 'workflow_runtime',
+    );
+    expect(workflowSection).toBeDefined();
+    expect(workflowSection?.cacheable).toBeUndefined();
+  });
+
   it('keeps cacheable sections as a contiguous provider-visible prefix after memory and goals are appended', () => {
     const bundle = buildAgentTurnPromptBundle({
       ...baseParams,

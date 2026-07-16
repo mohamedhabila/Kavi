@@ -2,6 +2,7 @@ import { buildPreparedModelTurnPrompt } from './modelTurn/buildPreparedPromptTur
 import { appendVerifiedProcedureAdvisoryPrompt } from './modelTurn/verifiedProcedureAdvisoryPrompt';
 import { resolveModelTurnGroundedToolSurface } from './modelTurn/resolveGroundedToolSurface';
 import { resolveModelTurnIterationRequest } from './modelTurn/resolveIterationRequest';
+import { buildWorkflowContinuationPrompt } from './workflowContinuationPrompt';
 import type {
   PrepareAgentControlGraphModelTurnParams,
   PreparedAgentControlGraphModelTurnReady,
@@ -51,6 +52,13 @@ export async function prepareAgentControlGraphModelTurn(
     pinnedToolNames: toolSurface.pinnedToolNames,
     promptContextSupport: params.promptContextSupport,
     toolingEnabledForProvider: iterationRequest.toolingEnabledForProvider,
+    workflowRuntimePrompt: buildWorkflowContinuationPrompt({
+      allTools: params.allTools,
+      completedToolNames: params.completedWorkflowToolNames,
+      selectedToolNames: new Set(
+        toolSurface.groundedRequestScopedTools.map((tool) => tool.name),
+      ),
+    }),
     workingMessages: params.workingMessages,
   });
   const preparedTurn = await appendVerifiedProcedureAdvisoryPrompt(

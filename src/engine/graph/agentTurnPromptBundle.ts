@@ -32,6 +32,7 @@ export interface AgentTurnPromptBundleParams {
   selectedTools: ToolDefinition[];
   skillPrompts: string;
   toolingEnabledForProvider: boolean;
+  workflowRuntimePrompt?: string | null;
   workflowTaskAnchor?: WorkflowTaskAnchor;
 }
 
@@ -55,14 +56,17 @@ export function buildAgentTurnPromptBundle(
     params.resolvedPrompt,
     params.runtimeContext ?? null,
     params.skillPrompts,
-    '',
+    params.workflowRuntimePrompt ?? '',
     params.toolingEnabledForProvider,
     textOnlyPrompt,
   );
-  appendSystemPromptSection(baseSystemPromptSections, params.runtimePolicyPrompt);
+  appendSystemPromptSection(baseSystemPromptSections, params.runtimePolicyPrompt, {
+    purpose: 'memory_policy',
+  });
   for (const section of params.livingMemorySections ?? []) {
     appendSystemPromptSection(baseSystemPromptSections, section.text, {
       cacheable: section.cacheable === true,
+      purpose: 'living_memory',
     });
   }
   appendSystemPromptSection(
@@ -70,8 +74,11 @@ export function buildAgentTurnPromptBundle(
     params.workflowTaskAnchor
       ? renderWorkflowTaskAnchorPromptSection(params.workflowTaskAnchor)
       : null,
+    { purpose: 'workflow_task_anchor' },
   );
-  appendSystemPromptSection(baseSystemPromptSections, params.goalsPromptSection);
+  appendSystemPromptSection(baseSystemPromptSections, params.goalsPromptSection, {
+    purpose: 'goals',
+  });
   const orderedBaseSystemPromptSections =
     orderSystemPromptSectionsForCaching(baseSystemPromptSections);
   const baseSystemPrompt = joinSystemPromptSections(orderedBaseSystemPromptSections);
@@ -83,6 +90,7 @@ export function buildAgentTurnPromptBundle(
             params.effectiveForceTextReasonThisTurn,
           ),
           cacheable: false,
+          purpose: 'forced_text',
         },
       ])
     : orderedBaseSystemPromptSections;
