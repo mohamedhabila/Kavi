@@ -10,6 +10,11 @@ export function assertMemoryTransactionActive(code: string): void {
   if (transactionDepth <= 0) throw new Error(code);
 }
 
+/** True only while this runtime owns a tracked memory transaction. */
+export function isMemoryTransactionActive(): boolean {
+  return transactionDepth > 0;
+}
+
 /**
  * Run side effects only after the outermost memory transaction commits.
  * Callers outside a transaction execute immediately.
@@ -85,11 +90,17 @@ export function runMemoryTransaction<T>(callback: () => T): T {
     result = runSynchronousTransactionCallback(callback);
     db.execSync('COMMIT');
   } catch (error) {
+    let rollbackError: unknown;
     try {
       db.execSync('ROLLBACK');
+    } catch (caughtRollbackError) {
+      rollbackError = caughtRollbackError;
     } finally {
       afterCommitCallbacks = null;
       transactionDepth -= 1;
+    }
+    if (rollbackError !== undefined) {
+      logger.error('Memory transaction rollback failed after the primary failure.', rollbackError);
     }
     throw error;
   }

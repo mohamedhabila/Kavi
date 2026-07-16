@@ -156,6 +156,37 @@ describe('memory transaction after-commit effects', () => {
     expect(recoveryEvents).toEqual(['begin', 'commit']);
   });
 
+  it('preserves the primary failure and resets state when rollback also fails', () => {
+    const events: string[] = [];
+    const failingDb = useManualAdapter(events);
+    failingDb.execSync.mockImplementation((statement: string) => {
+      if (statement.startsWith('BEGIN')) events.push('begin');
+      if (statement === 'ROLLBACK') {
+        events.push('rollback_failed');
+        throw new Error('rollback_failed');
+      }
+    });
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    expect(() =>
+      runMemoryTransaction(() => {
+        events.push('write');
+        throw new Error('primary_write_failure');
+      }),
+    ).toThrow('primary_write_failure');
+    expect(events).toEqual(['begin', 'write', 'rollback_failed']);
+    expect(consoleError).toHaveBeenCalledWith(
+      '[memory-transaction] Memory transaction rollback failed after the primary failure.',
+      expect.objectContaining({ message: 'rollback_failed' }),
+    );
+
+    const recoveryEvents: string[] = [];
+    useManualAdapter(recoveryEvents);
+    expect(runMemoryTransaction(() => 'recovered')).toBe('recovered');
+    expect(recoveryEvents).toEqual(['begin', 'commit']);
+    consoleError.mockRestore();
+  });
+
   it.each(['manual', 'native'] as const)(
     'rejects thenable callbacks before the %s adapter commits',
     (adapter) => {
