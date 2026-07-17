@@ -467,7 +467,7 @@ describe('bounded authorized cross-thread episode recall', () => {
       summary: 'release checklist target complete',
       endedAt: 500,
     });
-    seedEpisode({
+    const secondNewestRelevant = seedEpisode({
       suffix: 'state-second-old',
       threadId,
       summary: 'release checklist followup',
@@ -483,9 +483,10 @@ describe('bounded authorized cross-thread episode recall', () => {
     const loaded = load('release checklist target');
     expect(loaded.candidates[0]?.episode.id).toBe(semanticAnchor.id);
     expect(loaded.candidates[1]?.episode.id).toBe(newestRelevant.id);
+    expect(loaded.candidates[2]?.episode.id).toBe(secondNewestRelevant.id);
     expect(
       selectBoundedCrossThreadEpisodes(loaded).candidates.map(({ episode }) => episode.id),
-    ).toEqual([semanticAnchor.id, newestRelevant.id]);
+    ).toEqual([semanticAnchor.id, newestRelevant.id, secondNewestRelevant.id]);
   });
 
   it('preserves a distinct trajectory in the second relevance slot', () => {
@@ -509,7 +510,7 @@ describe('bounded authorized cross-thread episode recall', () => {
     });
 
     const selected = selectBoundedCrossThreadEpisodes(load('release checklist target')).candidates;
-    expect(selected.map(({ episode }) => episode.id)).toEqual([
+    expect(selected.slice(0, 2).map(({ episode }) => episode.id)).toEqual([
       semanticAnchor.id,
       distinctSecond.id,
     ]);

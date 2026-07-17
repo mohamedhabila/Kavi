@@ -88,10 +88,16 @@ function newerEpisode(left: MemoryEpisode, right: MemoryEpisode): boolean {
   return left.id.localeCompare(right.id) < 0;
 }
 
+function newestFirst(left: ScoredMemoryEpisode, right: ScoredMemoryEpisode): number {
+  if (newerEpisode(left.episode, right.episode)) return -1;
+  if (newerEpisode(right.episode, left.episode)) return 1;
+  return 0;
+}
+
 /**
- * Keep the strongest semantic match, but use a repeated slot from that same
- * trajectory for its newest relevant state instead of another older match.
- * A distinct second trajectory keeps its diversity slot.
+ * Keep the strongest semantic match, but use repeated slots from that same
+ * trajectory for its latest two relevant turns. This preserves a state update
+ * and its immediate follow-up. A distinct second trajectory keeps its slot.
  */
 export function selectSemanticAndRecentEpisodes(
   ranked: ReadonlyArray<ScoredMemoryEpisode>,
@@ -106,27 +112,19 @@ export function selectSemanticAndRecentEpisodes(
     return ranked.slice(0, limit);
   }
 
-  let newestRelevant = semanticAnchor;
-  for (const candidate of ranked) {
-    if (
-      sameEpisodeTrajectory(semanticAnchor.episode, candidate.episode) &&
-      newerEpisode(candidate.episode, newestRelevant.episode)
-    ) {
-      newestRelevant = candidate;
-    }
-  }
-  if (newestRelevant.episode.id === semanticAnchor.episode.id) {
-    return ranked.slice(0, limit);
-  }
+  const recentTrajectory = ranked
+    .filter((candidate) => sameEpisodeTrajectory(semanticAnchor.episode, candidate.episode))
+    .sort(newestFirst)
+    .slice(0, Math.min(2, limit));
+  const prioritizedIds = new Set([
+    semanticAnchor.episode.id,
+    ...recentTrajectory.map((candidate) => candidate.episode.id),
+  ]);
 
   return [
     semanticAnchor,
-    newestRelevant,
-    ...ranked.filter(
-      (candidate) =>
-        candidate.episode.id !== semanticAnchor.episode.id &&
-        candidate.episode.id !== newestRelevant.episode.id,
-    ),
+    ...recentTrajectory.filter((candidate) => candidate.episode.id !== semanticAnchor.episode.id),
+    ...ranked.filter((candidate) => !prioritizedIds.has(candidate.episode.id)),
   ].slice(0, limit);
 }
 
