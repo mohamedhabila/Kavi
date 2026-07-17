@@ -130,6 +130,7 @@ describe('duplicate fact metadata transitions', () => {
         objectText: 'Concise answers',
         scope: 'global',
         reviewState: 'auto',
+        sensitivityFloor: 'sensitive',
         sourceMessageId: 'message-2',
         now: 200,
       },
@@ -188,6 +189,7 @@ describe('duplicate fact metadata transitions', () => {
       {
         ...base,
         reviewState: 'pending_review',
+        sensitivityFloor: 'sensitive',
         sourceSummary: 'Medical condition discussed.',
         now: 200,
       },

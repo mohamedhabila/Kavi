@@ -2,8 +2,8 @@
 // Tests — Throttled Checksummed File-Generation Storage
 // ---------------------------------------------------------------------------
 
-import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
+import { sha256HexUtf8Async } from '../../src/utils/sha256Async';
 import {
   _getPendingWriteCount,
   _getStorageFileUris,
@@ -25,7 +25,7 @@ const expoFileSystemMock = jest.requireMock('expo-file-system') as {
 
 interface TestEnvelope {
   format: 'kavi.persisted-file-generation';
-  version: 1;
+  version: 2;
   generation: number;
   kind: 'value' | 'tombstone';
   checksum: string;
@@ -57,13 +57,10 @@ async function buildEnvelope(
   payload: string | null,
   kind: TestEnvelope['kind'] = 'value',
 ): Promise<string> {
-  const checksum = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    `${generation}\u0000${kind}\u0000${payload ?? ''}`,
-  );
+  const checksum = await sha256HexUtf8Async(`${generation}\u0000${kind}\u0000${payload ?? ''}`);
   return JSON.stringify({
     format: 'kavi.persisted-file-generation',
-    version: 1,
+    version: 2,
     generation,
     kind,
     checksum,

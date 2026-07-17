@@ -19,10 +19,13 @@ describe('Orchestrator', () => {
     it('loads local image attachments from disk for the API payload', async () => {
       legacyFileSystem.readAsStringAsync.mockResolvedValueOnce('diskimagebase64');
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -83,10 +86,13 @@ describe('Orchestrator', () => {
         ],
       });
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -132,10 +138,13 @@ describe('Orchestrator', () => {
 
     it('enables prompt caching while preserving the full planning budget for large actionable prompts', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -169,10 +178,13 @@ describe('Orchestrator', () => {
 
     it('keeps Gemini on native provider caching instead of synthesizing a generic cache key', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -206,10 +218,13 @@ describe('Orchestrator', () => {
 
     it('keeps runtime context in dynamic system sections and out of the active user turn', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

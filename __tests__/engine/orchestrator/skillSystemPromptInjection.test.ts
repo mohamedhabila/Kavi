@@ -16,10 +16,13 @@ describe('Orchestrator', () => {
   describe('Skill system prompt injection', () => {
     it('keeps the default runtime system prompt product-neutral', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'OK' },
-          { type: 'done', content: 'OK' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'OK' },
+            { type: 'done', content: 'OK' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -57,10 +60,13 @@ describe('Orchestrator', () => {
       });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'OK' },
-          { type: 'done', content: 'OK' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'OK' },
+            { type: 'done', content: 'OK' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -98,10 +104,13 @@ describe('Orchestrator', () => {
       });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'OK' },
-          { type: 'done', content: 'OK' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'OK' },
+            { type: 'done', content: 'OK' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -140,10 +149,13 @@ describe('Orchestrator', () => {
 
       mockStreamMessage.mockImplementationOnce(() => {
         // Capture the system prompt passed to the LLM
-        return createStreamGenerator([
-          { type: 'token', content: 'OK' },
-          { type: 'done', content: 'OK' },
-        ]);
+        return createStreamGenerator(
+          [
+            { type: 'token', content: 'OK' },
+            { type: 'done', content: 'OK' },
+          ],
+          'text',
+        );
       });
 
       const callbacks = makeCallbacks();

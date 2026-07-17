@@ -24,6 +24,13 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import {
+  captureMemoryAuthoritySnapshot,
+  isMemoryProjectionSnapshotCurrent,
+  isMemoryProjectionSnapshotDurablyCurrent,
+  isRestrictiveMemoryAuthoritySnapshotCurrent,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../src/services/memory/memoryAuthority';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const OVERRIDE_SQL = 'SELECT * FROM memory_fact_explicit_overrides WHERE fact_id = ?';
@@ -69,6 +76,12 @@ function recordGlobalLocationFact(objectText: string, now: number, sourceMessage
   });
 }
 
+function requireMemoryAuthority() {
+  const authority = captureMemoryAuthoritySnapshot();
+  if (!authority) throw new Error('expected enabled memory authority');
+  return authority;
+}
+
 describe('replaceCurrentFact same-value handling', () => {
   it('deduplicates an identical replacement without adding a history row', () => {
     const old = recordFact({
@@ -84,6 +97,7 @@ describe('replaceCurrentFact same-value handling', () => {
       now: 100,
     });
 
+    const beforeDuplicate = requireMemoryAuthority();
     const result = replaceGlobalLocationFact(old.fact.id, 'Utrecht', 200);
     expect(result).toMatchObject({
       status: 'duplicate',
@@ -96,11 +110,14 @@ describe('replaceCurrentFact same-value handling', () => {
         decayRate: 0.8,
       },
     });
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeDuplicate)).toBe(true);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeDuplicate)).toBe(true);
     expect(listFacts({ subjectId: 'entity-user', includeInvalidated: true })).toHaveLength(1);
   });
 
   it('creates a successor when the same text explicitly changes memory kind', () => {
     const current = recordGlobalLocationFact('Utrecht', 100).fact;
+    const beforeReplacement = requireMemoryAuthority();
 
     const result = replaceCurrentFact({
       expectedCurrentFactId: current.id,
@@ -117,8 +134,60 @@ describe('replaceCurrentFact same-value handling', () => {
       fact: { objectText: 'Utrecht', memoryKind: 'decision' },
       superseded: [{ id: current.id, invalidAt: 200 }],
     });
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeReplacement)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeReplacement)).toBe(false);
     if (result.status !== 'created') throw new Error('expected memory-kind successor');
     expect(result.fact.id).not.toBe(current.id);
+  });
+
+  it('revokes prepared memory when generic supersession changes the active fact', () => {
+    const current = recordGlobalLocationFact('Utrecht', 100).fact;
+    const beforeSupersession = requireMemoryAuthority();
+
+    const successor = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'lives_in',
+      objectText: 'Rotterdam',
+      scope: 'global',
+      supersedePrior: true,
+      now: 200,
+    });
+
+    expect(successor).toMatchObject({
+      status: 'created',
+      superseded: [{ id: current.id, invalidAt: 200 }],
+    });
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeSupersession)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeSupersession)).toBe(false);
+  });
+
+  it('refreshes future retrieval without revoking admitted work for a ranking change', () => {
+    recordFact({
+      subjectId: 'entity-user',
+      predicate: 'timezone',
+      objectText: 'Europe/Amsterdam',
+      scope: 'global',
+      confidence: 0.2,
+      sourceMessageId: 'timezone-source-1',
+      now: 100,
+    });
+    const beforeUpgrade = requireMemoryAuthority();
+
+    const upgraded = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'timezone',
+      objectText: 'Europe/Amsterdam',
+      scope: 'global',
+      confidence: 0.9,
+      sourceMessageId: 'timezone-source-2',
+      now: 200,
+    });
+
+    expect(upgraded).toMatchObject({ status: 'duplicate', fact: { confidence: 0.9 } });
+    expect(isMemoryProjectionSnapshotCurrent(beforeUpgrade)).toBe(false);
+    expect(isMemoryProjectionSnapshotDurablyCurrent(beforeUpgrade)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeUpgrade)).toBe(true);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeUpgrade)).toBe(true);
   });
 
   it('creates a successor when the same text explicitly changes object entity', () => {
@@ -214,6 +283,7 @@ describe('replaceCurrentFact same-value handling', () => {
       "UPDATE memory_facts SET pinned = 0, review_state = 'auto', sensitivity = 'normal' WHERE id = ?",
       fact.id,
     );
+    const beforeRepair = requireMemoryAuthority();
 
     expect(replaceGlobalLocationFact(fact.id, 'Utrecht', 300, sourceId)).toMatchObject({
       status: 'duplicate',
@@ -225,6 +295,8 @@ describe('replaceCurrentFact same-value handling', () => {
         updatedAt: 100,
       },
     });
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeRepair)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeRepair)).toBe(false);
     expect(db.getFirstSync(PROJECTION_SQL, fact.id)).toEqual(projectionBefore);
     expect(db.getFirstSync(OVERRIDE_SQL, fact.id)).toEqual(sidecarBefore);
   });

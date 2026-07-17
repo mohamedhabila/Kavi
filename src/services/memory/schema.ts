@@ -20,6 +20,7 @@ import {
   isSourceRetirementSchemaResetRequired,
 } from './sourceRetirementSchema';
 import { ensureVerifiedProcedureObservationSchema } from './verifiedProcedure/observationSchema';
+import { invalidateRestrictiveVerifiedProcedureAuthorityProcessEpoch } from './verifiedProcedure/observationAuthority';
 import {
   CLEARED_STRUCTURED_MEMORY_TABLES,
   FULL_RESET_DROPPED_RETIREMENT_PARENT_TRIGGERS,
@@ -28,6 +29,11 @@ import {
 } from './structuredMemoryTableRegistry';
 import { ensureEpisodeAccessPolicySchema } from './episodes/accessPolicySchema';
 import { ensureEpisodeRetrievalIndexSchema } from './episodes/retrievalIndex';
+import {
+  buildMigratedEpisodeSourceIdentityManifest,
+  decodeEpisodeSourceIdentityManifest,
+  encodeEpisodeSourceIdentityManifest,
+} from './episodes/sourceIdentity';
 import {
   dropFactContributionLedgerForStructuredReset,
   ensureFactContributionSchema,
@@ -42,7 +48,14 @@ import { ensureFactExplicitOverrideSchema } from './factExplicitOverrideSchema';
 import { ensureCanonicalFactTable } from './schema/canonicalFactTable';
 import { ensureFactContentIdentityV3 } from './schema/factContentIdentityV3';
 import { ensureFactSensitivityPolicyColumn } from './schema/factSensitivityPolicyColumn';
-import { ensureMemoryVaultIdentitySchema } from './memoryVaultIdentity';
+import { runAfterMemoryTransactionCommit } from './access/transaction';
+import { ensureMemoryVaultIdentitySchema, getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import {
+  advanceMemoryProjectionRevision,
+  advanceRestrictiveMemoryAuthorityRevisions,
+  invalidateMemoryProjectionProcessEpoch,
+  invalidateRestrictiveMemoryAuthorityProcessEpoch,
+} from './memoryAuthorityState';
 
 let schemaReady = false;
 
@@ -203,7 +216,8 @@ export function ensureFactSchema(): void {
       created_at INTEGER NOT NULL,
       deleted_at INTEGER,
       source_start_message_id TEXT,
-      source_end_message_id TEXT
+      source_end_message_id TEXT,
+      source_identity_manifest_json TEXT NOT NULL DEFAULT '{"version":1,"sources":[]}'
     );
     CREATE INDEX IF NOT EXISTS idx_episodes_conversation
       ON memory_episodes(conversation_id, deleted_at);
@@ -486,6 +500,12 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(
     db,
     'memory_episodes',
+    'source_identity_manifest_json',
+    `source_identity_manifest_json TEXT NOT NULL DEFAULT '{"version":1,"sources":[]}'`,
+  );
+  ensureColumn(
+    db,
+    'memory_episodes',
     'sensitivity',
     "sensitivity TEXT NOT NULL DEFAULT 'sensitive' CHECK(sensitivity IN ('normal', 'private', 'sensitive'))",
   );
@@ -525,6 +545,28 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
 }
 
 function ensureEpisodeSourceIdentity(db: ReturnType<typeof getMemoryDb>): void {
+  const rows = db.getAllSync<{
+    id: string;
+    source_start_message_id: string | null;
+    source_end_message_id: string | null;
+    source_identity_manifest_json: string;
+  }>(
+    `SELECT id, source_start_message_id, source_end_message_id, source_identity_manifest_json
+       FROM memory_episodes`,
+  );
+  for (const row of rows) {
+    const decoded = decodeEpisodeSourceIdentityManifest(row.source_identity_manifest_json);
+    const migrated = buildMigratedEpisodeSourceIdentityManifest({
+      sourceStartMessageId: row.source_start_message_id,
+      sourceEndMessageId: row.source_end_message_id,
+    });
+    if (decoded && (decoded.sources.length > 0 || migrated.sources.length === 0)) continue;
+    db.runSync(
+      'UPDATE memory_episodes SET source_identity_manifest_json = ? WHERE id = ?',
+      encodeEpisodeSourceIdentityManifest(migrated),
+      row.id,
+    );
+  }
   db.execSync(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_active_source_window
       ON memory_episodes(
@@ -558,6 +600,8 @@ export function resetFactSchemaCacheForTests(): void {
 
 export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>): void {
   runMemoryDatabaseSavepoint(db, (database) => {
+    const memoryOwnerId = getLocalMemoryVaultOwnerId(database);
+    advanceRestrictiveMemoryAuthorityRevisions(database, memoryOwnerId);
     for (const trigger of FULL_RESET_DROPPED_RETIREMENT_PARENT_TRIGGERS) {
       database.execSync(`DROP TRIGGER IF EXISTS ${trigger}`);
     }
@@ -585,6 +629,10 @@ export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>
     }
     ensureFactContributionSchema(database);
     ensureSourceRetirementSchema(database);
+  });
+  runAfterMemoryTransactionCommit(() => {
+    invalidateRestrictiveMemoryAuthorityProcessEpoch();
+    invalidateRestrictiveVerifiedProcedureAuthorityProcessEpoch();
   });
 }
 
@@ -616,49 +664,29 @@ function ensureFactTermStats(db: ReturnType<typeof getMemoryDb>): void {
     db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_fact_terms')?.count ??
     0;
   if (termsCount === 0) return;
-  db.execSync(`
-    INSERT OR REPLACE INTO memory_fact_term_stats(unit, memory_kind, fact_count, total_weight)
-    SELECT unit, memory_kind, COUNT(*) AS fact_count, SUM(weight) AS total_weight
-      FROM memory_fact_terms
-     GROUP BY unit, memory_kind;
-  `);
-}
-
-// ── Shared internal helpers ──────────────────────────────────────────────
-
-let idCounter = 0;
-export function newId(prefix: string): string {
-  idCounter = (idCounter + 1) >>> 0;
-  return `${prefix}_${Date.now().toString(36)}_${idCounter.toString(36)}_${Math.floor(
-    Math.random() * 0xffff,
-  ).toString(36)}`;
-}
-
-export function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-export function safeParseArray<T>(raw: string): T[] {
+  let promptProjectionChanged = false;
+  db.execSync('BEGIN IMMEDIATE TRANSACTION');
   try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
-  } catch {
-    return [];
+    const lockedStatsCount =
+      db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_fact_term_stats')
+        ?.count ?? 0;
+    const lockedTermsCount =
+      db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_fact_terms')
+        ?.count ?? 0;
+    if (lockedStatsCount === 0 && lockedTermsCount > 0) {
+      db.runSync(`
+        INSERT OR REPLACE INTO memory_fact_term_stats(unit, memory_kind, fact_count, total_weight)
+        SELECT unit, memory_kind, COUNT(*) AS fact_count, SUM(weight) AS total_weight
+          FROM memory_fact_terms
+         GROUP BY unit, memory_kind
+      `);
+      advanceMemoryProjectionRevision(db, getLocalMemoryVaultOwnerId(db));
+      promptProjectionChanged = true;
+    }
+    db.execSync('COMMIT');
+  } catch (error) {
+    db.execSync('ROLLBACK');
+    throw error;
   }
-}
-
-export function safeParseObject(raw: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-/** Escape SQL `LIKE` wildcards for use as a JSON-substring prefilter. */
-export function jsonLikeEscape(s: string): string {
-  return s.replace(/[\\%_]/g, '\\$&').replace(/"/g, '\\"');
+  if (promptProjectionChanged) invalidateMemoryProjectionProcessEpoch();
 }

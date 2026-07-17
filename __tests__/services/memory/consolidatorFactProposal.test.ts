@@ -24,6 +24,7 @@ function proposal(overrides: Record<string, unknown> = {}): Record<string, unkno
 
 function payload(newFacts: unknown[]): Record<string, unknown> {
   return {
+    episode_sensitivity: 'normal',
     episode_summary: null,
     new_facts: newFacts,
     active_focus: null,
@@ -54,6 +55,7 @@ describe('SemanticFactProposalV1 provider contract', () => {
     expect(MEMORY_CONSOLIDATION_OUTPUT_SCHEMA.strict).toBe(true);
     const schema = MEMORY_CONSOLIDATION_OUTPUT_SCHEMA.schema as any;
     const factSchema = schema.properties.new_facts.items;
+    expect(schema.required).toContain('episode_sensitivity');
     expect(factSchema.additionalProperties).toBe(false);
     expect(factSchema.required).toEqual([
       'version',

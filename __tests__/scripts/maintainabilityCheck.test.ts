@@ -24,6 +24,31 @@ describe('maintainability checks', () => {
     ]);
   });
 
+  it('ratchets exact legacy line budgets without creating broad exceptions', () => {
+    const atBudget = 'line\n'.repeat(705);
+    const aboveBudget = 'line\n'.repeat(706);
+
+    expect(
+      findMaintainabilityFailures(
+        [{ filePath: 'src/services/legacy.ts', content: atBudget }],
+        { lineBudgets: { 'src/services/legacy.ts': 705 } },
+      ),
+    ).toEqual([]);
+    expect(
+      findMaintainabilityFailures(
+        [{ filePath: 'src/services/legacy.ts', content: aboveBudget }],
+        { lineBudgets: { 'src/services/legacy.ts': 705 } },
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: 'line-count',
+        filePath: 'src/services/legacy.ts',
+        lines: 706,
+        maxLines: 705,
+      }),
+    ]);
+  });
+
   it('detects pass-through barrel files without flagging implementation exports', () => {
     expect(
       isPassThroughBarrel(

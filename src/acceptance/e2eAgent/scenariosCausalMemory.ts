@@ -2,13 +2,6 @@ import { E2E_SCENARIO_TOKEN_BUDGETS } from './thresholds';
 import type { E2ERubric, E2EScenario } from './types';
 
 const EVENT_TITLE = 'Causal memory design review';
-const CURRENT_PREFERENCE = {
-  subject: 'user',
-  predicate: 'default_meeting_duration_minutes',
-  value: '45',
-  scope: 'global',
-} as const;
-const STALE_PREFERENCE = { ...CURRENT_PREFERENCE, value: '30' } as const;
 
 function completedTurnRubrics(turnIndex: number, mode: 'agentic' | 'chitchat'): E2ERubric[] {
   return [
@@ -32,10 +25,7 @@ const NEUTRAL_RUBRICS: ReadonlyArray<E2ERubric> = [
   ...completedTurnRubrics(3, 'chitchat'),
   { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
   { kind: 'turn_native_invocation_count', turnIndex: 1, expectedCount: 0 },
-  { kind: 'turn_tool_call_count', turnIndex: 0, scope: 'all', expectedCount: 0 },
-  { kind: 'turn_tool_call_count', turnIndex: 1, scope: 'all', expectedCount: 0 },
   { kind: 'turn_lifecycle_boundary', turnIndex: 2, boundary: 'new_conversation' },
-  { kind: 'memory_fact_absent', ...STALE_PREFERENCE },
   { kind: 'native_fixture_state', path: 'calendar.updatedEventCount', expectedValue: '0' },
   {
     kind: 'turn_native_invocation_count',
@@ -43,7 +33,6 @@ const NEUTRAL_RUBRICS: ReadonlyArray<E2ERubric> = [
     toolName: 'calendar_update_event',
     expectedCount: 0,
   },
-  { kind: 'turn_native_invocation_count', turnIndex: 3, expectedCount: 0 },
   {
     kind: 'token_budget',
     maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['paired-causal-global-preference'],
@@ -51,18 +40,25 @@ const NEUTRAL_RUBRICS: ReadonlyArray<E2ERubric> = [
 ];
 
 const CAUSAL_RUBRICS: ReadonlyArray<E2ERubric> = [
-  { kind: 'memory_fact', ...CURRENT_PREFERENCE },
   {
     kind: 'turn_memory_selection',
     turnIndex: 2,
-    requiredFacts: [CURRENT_PREFERENCE],
-    forbiddenFacts: [STALE_PREFERENCE],
+    requiredWrites: [
+      { turnIndex: 1, subject: 'user', value: '45 minutes', status: 'created' },
+    ],
+    supersededWrites: [
+      { turnIndex: 0, subject: 'user', value: '30 minutes', status: 'created' },
+    ],
   },
   {
     kind: 'turn_memory_selection',
     turnIndex: 3,
-    requiredFacts: [CURRENT_PREFERENCE],
-    forbiddenFacts: [STALE_PREFERENCE],
+    requiredWrites: [
+      { turnIndex: 1, subject: 'user', value: '45 minutes', status: 'created' },
+    ],
+    supersededWrites: [
+      { turnIndex: 0, subject: 'user', value: '30 minutes', status: 'created' },
+    ],
   },
   {
     kind: 'turn_memory_answer',

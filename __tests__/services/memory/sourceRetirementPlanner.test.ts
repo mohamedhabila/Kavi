@@ -3,6 +3,8 @@ import type { PersistedExactMemorySourceIdentity } from '../../../src/services/m
 import type { FactContributionExplicitProjection } from '../../../src/services/memory/facts/factContributionProjection';
 import { planExactSourceRetirement } from '../../../src/services/memory/sourceRetirementPlanner';
 import { MEMORY_SOURCE_RETIREMENT_PLAN_LIMITS } from '../../../src/services/memory/sourceRetirementPlan';
+import { MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION } from '../../../src/services/memory/factContributionCodec';
+import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../../../src/services/memory/memorySensitivityPolicy';
 
 const OWNER_ID = 'owner_retirement_planner';
 const CONVERSATION_ID = 'conversation_retirement_planner';
@@ -68,7 +70,7 @@ function aggregate(
           successor_pinned_baseline: 0,
           successor_review_state_baseline: 'auto',
           successor_sensitivity_floor: 'normal',
-          successor_sensitivity_policy_version: 1,
+          successor_sensitivity_policy_version: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
         };
   const predicate = `state_${factId}`;
   const objectText = `value_${factId}`;
@@ -88,7 +90,7 @@ function aggregate(
     },
     contributedAt,
     payload: {
-      version: 1,
+      version: MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION,
       operation: { kind: 'record' },
       applicability: {
         factClass: 'subjective_user',
@@ -120,6 +122,7 @@ function aggregate(
         stability: 0.5,
         decayRate: 0.03,
         reviewState: 'auto',
+        sensitivityFloor: options.sensitivity ?? 'normal',
         memoryKind: 'semantic_fact',
         supersedePrior: predecessorFactIds.length > 0,
         now: contributedAt,
@@ -160,9 +163,9 @@ function aggregate(
       pinned: options.pinned ?? false,
       reviewState: options.reviewState ?? 'auto',
       sensitivity: options.sensitivity ?? 'normal',
-      sensitivityPolicyVersion: 1,
+      sensitivityPolicyVersion: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
     },
-    classifierContext: { subject: null, subjectType: null },
+    classifierContext: { subject: null },
     explicitProjection: options.explicitProjection ?? null,
   };
 }

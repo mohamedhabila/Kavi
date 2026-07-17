@@ -20,6 +20,11 @@ import {
 } from '../../helpers/sourceRetirementCoordinatorFixture';
 import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
 import { getMemoryDb } from '../../../src/services/memory/database';
+import {
+  captureMemoryAuthoritySnapshot,
+  isRestrictiveMemoryAuthoritySnapshotCurrent,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../src/services/memory/memoryAuthority';
 import { resetCanonicalMemoryForManagement } from '../../../src/services/memory/memoryReset';
 import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
 
@@ -48,12 +53,19 @@ function insertWorkingBlock(): void {
   );
 }
 
+function requireMemoryAuthority() {
+  const authority = captureMemoryAuthoritySnapshot();
+  if (!authority) throw new Error('expected enabled memory authority');
+  return authority;
+}
+
 describe('canonical memory management reset', () => {
   it('retires exact causal sources, preserves replay fences, and clears derived state', () => {
     const seeded = seedContribution('reset-one', {
       predicate: '状态',
       objectText: 'قيمة محفوظة',
     });
+    const beforeReset = requireMemoryAuthority();
     insertWorkingBlock();
     let notifications = 0;
     const unsubscribe = subscribeToMemoryChanges(() => {
@@ -62,6 +74,9 @@ describe('canonical memory management reset', () => {
 
     resetCanonicalMemoryForManagement();
     unsubscribe();
+
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeReset)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeReset)).toBe(false);
 
     expect(
       getMemoryDb().getFirstSync('SELECT reason FROM memory_source_retirement_groups'),
@@ -88,7 +103,10 @@ describe('canonical memory management reset', () => {
     expect(notifications).toBe(1);
     expect(mockClearEmbeddingCache).toHaveBeenCalled();
 
+    const beforeEmptyReset = requireMemoryAuthority();
     resetCanonicalMemoryForManagement();
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeEmptyReset)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeEmptyReset)).toBe(false);
     expect(tableCount('memory_source_retirement_groups')).toBe(1);
   });
 
@@ -146,6 +164,7 @@ describe('canonical memory management reset', () => {
 
   it('rolls the retirement ledger and projections back when cache cleanup fails', () => {
     const seeded = seedContribution('reset-cache-failure');
+    const beforeFailedReset = requireMemoryAuthority();
     mockGetEmbeddingCacheEntryCount.mockReturnValue(1);
     let notifications = 0;
     const unsubscribe = subscribeToMemoryChanges(() => {
@@ -162,5 +181,7 @@ describe('canonical memory management reset', () => {
     expect(tableCount('memory_retired_fact_contributions')).toBe(0);
     expect(rowForFact(seeded.fact.id)).toMatchObject({ invalid_at: null, deleted_at: null });
     expect(notifications).toBe(0);
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeFailedReset)).toBe(true);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeFailedReset)).toBe(true);
   });
 });

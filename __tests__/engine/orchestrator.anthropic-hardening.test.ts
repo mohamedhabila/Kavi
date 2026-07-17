@@ -7,6 +7,22 @@ import {
 } from '../../src/engine/orchestrator';
 import type { AssistantMessageMetadata } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import type { ToolMessageOutcome } from '../../src/engine/toolExecution/toolMessageOutcome';
+
+const mockMemoryAuthoritySnapshot = Object.freeze({
+  processEpochs: Object.freeze({ restrictive: 0, projection: 0 }),
+  restrictiveRevision: Object.freeze({
+    kind: 'restrictive' as const,
+    memoryOwnerId: 'test-memory-owner',
+    value: 0,
+  }),
+  projectionRevision: Object.freeze({
+    kind: 'projection' as const,
+    memoryOwnerId: 'test-memory-owner',
+    value: 0,
+  }),
+  policy: Object.freeze({ enabled: true as const, revision: 0 }),
+});
 
 jest.mock('../../src/services/llm/LlmService', () => ({
   LlmService: jest.fn().mockImplementation(() => ({
@@ -52,17 +68,37 @@ jest.mock('../../src/services/skills/manager', () => ({
 
 jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
   buildLivingMemorySections: jest.fn().mockResolvedValue({
+    memoryReadEpoch: 0,
+    memoryAuthoritySnapshot: mockMemoryAuthoritySnapshot,
     sections: [],
     cacheableSignature: '00000000',
     focusBlockText: '',
     openThreadLabels: [],
     recalledFactCount: 0,
+    recalledEpisodeCount: 0,
   }),
 }));
 
+jest.mock('../../src/services/memory/memoryAuthority', () => {
+  const actual = jest.requireActual('../../src/services/memory/memoryAuthority');
+  return {
+    ...actual,
+    captureMemoryAuthoritySnapshot: jest.fn(() => mockMemoryAuthoritySnapshot),
+    isMemoryProjectionSnapshotCurrent: jest.fn().mockReturnValue(true),
+    isMemoryProjectionSnapshotDurablyCurrent: jest.fn().mockReturnValue(true),
+    isRestrictiveMemoryAuthoritySnapshotCurrent: jest.fn().mockReturnValue(true),
+    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent: jest.fn().mockReturnValue(true),
+  };
+});
+
 jest.mock('../../src/services/memory/policy', () => ({
   canReadLongTermMemory: jest.fn().mockReturnValue(true),
+  canUseNetworkMemoryProvider: jest.fn().mockReturnValue(true),
+  canWriteLongTermMemory: jest.fn().mockReturnValue(true),
   captureMemoryReadEpoch: jest.fn().mockReturnValue(0),
+  getMemoryPolicyEpoch: jest.fn().mockReturnValue(0),
+  isLongTermMemoryEnabled: jest.fn().mockReturnValue(true),
+  isMemoryPolicyEpochCurrent: jest.fn().mockReturnValue(true),
   isMemoryReadEpochCurrent: jest.fn().mockReturnValue(true),
 }));
 
@@ -141,16 +177,29 @@ const makeCallbacks = (): OrchestratorCallbacks & { calls: Record<string, any[]>
           assistantMetadata,
         }),
     ),
-    onToolMessage: jest.fn((id: any, result: any) => calls.onToolMessage.push({ id, result })),
+    onToolMessage: jest.fn((outcome: ToolMessageOutcome) => calls.onToolMessage.push(outcome)),
     onError: jest.fn((error: any) => calls.onError.push(error)),
     onUsage: jest.fn((usage: any) => calls.onUsage.push(usage)),
     onDone: jest.fn(() => calls.onDone.push(true)),
   };
 };
 
-async function* createStreamGenerator(events: any[]) {
+async function* createStreamGenerator(events: any[], terminalDisposition?: 'text' | 'tool') {
   for (const event of events) {
-    yield event;
+    if (event?.type !== 'done' || event.completion !== undefined) {
+      yield event;
+      continue;
+    }
+    if (terminalDisposition === undefined) {
+      throw new Error('test_stream_completion_required');
+    }
+    yield {
+      ...event,
+      completion: {
+        completionStatus: 'complete',
+        finishReason: terminalDisposition === 'tool' ? 'tool_calls' : 'stop',
+      },
+    };
   }
 }
 
@@ -382,16 +431,22 @@ describe('Orchestrator Anthropic hardening', () => {
 
     mockStreamMessage
       .mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Worker output integrated.' },
-          { type: 'done', content: 'Worker output integrated.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Worker output integrated.' },
+            { type: 'done', content: 'Worker output integrated.' },
+          ],
+          'text',
+        ),
       )
       .mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Waiting for the delegated worker to finish.' },
-          { type: 'done', content: 'Waiting for the delegated worker to finish.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Waiting for the delegated worker to finish.' },
+            { type: 'done', content: 'Waiting for the delegated worker to finish.' },
+          ],
+          'text',
+        ),
       );
 
     const callbacks = makeCallbacks();

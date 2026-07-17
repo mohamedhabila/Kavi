@@ -155,7 +155,13 @@ describe('living-memory tool wiring', () => {
       'Smallest atomic exact value copied verbatim',
     );
     expect(evidence.properties.scope.description).toContain(
-      'When the user explicitly asks to remember a fact without limiting its context, prefer global',
+      'Global is visible in later conversations for the memory owner',
+    );
+    expect(evidence.properties.scope.description).toContain(
+      'Conversation is limited to the current conversation and is not visible in a newly created conversation',
+    );
+    expect(MEMORY_REMEMBER_TOOL.description).toContain(
+      'a narrower successful write does not satisfy a broader durability request',
     );
     expect(MEMORY_RECALL_TOOL.input_schema.properties.scope.description).toContain(
       'Omit it when the stored scope is not already known',
@@ -336,6 +342,17 @@ describe('living-memory tool wiring', () => {
     expect(withdrawn.ok).toBe(true);
     expect(withdrawn.action).toBe('withdrawal');
     expect(JSON.stringify(withdrawn)).not.toContain('Alice');
+  });
+
+  it('returns a definitive no-effect rejection for an unknown memory_forget factId', () => {
+    const rejected = parseOutcome(
+      executeMemoryForget({ factId: 'fact-missing' }, MEMORY_EXECUTION_SCOPE),
+      'failed',
+    );
+
+    expect(rejected).toEqual(
+      expect.objectContaining({ status: 'rejected', ok: false, code: 'not_found' }),
+    );
   });
 
   it('memory invalidation preserves correction history through its own executor', () => {

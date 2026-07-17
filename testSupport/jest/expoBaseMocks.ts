@@ -17,5 +17,14 @@ jest.mock('expo-crypto', () => {
       }
       return createHash('sha256').update(value).digest('hex');
     }),
+    digest: jest.fn(async (algorithm: string, value: ArrayBuffer | ArrayBufferView) => {
+      if (algorithm !== 'SHA-256') {
+        throw new Error(`Unsupported digest algorithm: ${algorithm}`);
+      }
+      const input = ArrayBuffer.isView(value)
+        ? Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+        : Buffer.from(value);
+      return Uint8Array.from(createHash('sha256').update(input).digest()).buffer;
+    }),
   };
 });

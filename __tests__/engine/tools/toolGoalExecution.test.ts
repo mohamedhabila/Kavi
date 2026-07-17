@@ -3,6 +3,7 @@ import {
   executeUpdateGoals,
   parseUpdateGoalsArgs,
 } from '../../../src/engine/tools/toolGoalExecution';
+import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER } from '../../../src/engine/goals/types';
 import { UPDATE_GOALS_TOOL } from '../../../src/engine/tools/goal-definitions';
 import {
   parseCompletedToolOutcome,
@@ -193,6 +194,23 @@ describe('toolGoalExecution', () => {
       expect(result.mutation.goals).toEqual([]);
       expect(errorMessages(result.errors)).toEqual([
         'evidence is code-owned and cannot be supplied by update_goals.',
+      ]);
+    });
+
+    it('rejects the code-owned effect-completion owner namespace', () => {
+      const result = parseUpdateGoalsArgs({
+        action: 'add',
+        id: 'g1',
+        name: 'Build feature',
+        owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+      });
+
+      expect(result.mutation.goals).toEqual([]);
+      expect(result.errors).toEqual([
+        expect.objectContaining({
+          code: 'provider_owned_field',
+          field: 'owner',
+        }),
       ]);
     });
 

@@ -57,6 +57,12 @@ export type AgentControlGraphEvent =
       timestamp?: number;
     }
   | {
+      type: 'MODEL_TURN_INVALIDATED';
+      iteration: number;
+      reason: 'memory_authority_changed';
+      timestamp?: number;
+    }
+  | {
       type: 'TOOL_RESULT_RECORDED';
       result: AgentControlToolResultRef;
       timestamp?: number;
@@ -85,6 +91,8 @@ export type AgentControlGraphEvent =
       type: 'GOALS_UPDATED';
       goals: AgentGoal[];
       reason?: string;
+      /** Internal completion bookkeeping must not become user-facing task memory. */
+      projectToMemoryTasks?: false;
       timestamp?: number;
     }
   | {

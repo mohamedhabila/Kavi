@@ -30,7 +30,11 @@ function addLockedTurn(
     role: 'assistant',
     content: '',
     timestamp: 2,
-    assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+    assistantMetadata: {
+      kind: 'intermediate',
+      completionStatus: 'complete',
+      finishReason: 'tool_calls',
+    },
     toolCalls: [
       {
         id: 'call-1',
@@ -82,7 +86,7 @@ function addNewerTail(conversationId: string): void {
     role: 'assistant',
     content: 'Keep this newer response.',
     timestamp: 6,
-    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
   });
 }
 
@@ -103,7 +107,7 @@ describe('chat memory publication mutation fences', () => {
         store.updateMessageAssistantMetadata(conversationId, 'final-1', {
           kind: 'final',
           completionStatus: 'complete',
-          finishReason: 'changed',
+          finishReason: 'refusal',
         }),
       ).toThrow(SOURCE_LOCKED_ERROR);
       expect(() =>
@@ -135,6 +139,40 @@ describe('chat memory publication mutation fences', () => {
           }),
         ]),
       );
+    },
+  );
+
+  it.each([null, 'enqueued'] as const)(
+    'blocks a new assistant turn after a %s publication until a new user turn starts',
+    (disposition) => {
+      const conversationId = addLockedTurn(disposition);
+      const store = useChatStore.getState();
+
+      expect(() =>
+        store.addMessage(conversationId, {
+          id: 'orphan-assistant',
+          role: 'assistant',
+          content: '',
+          timestamp: 5,
+        }),
+      ).toThrow('chat_message_memory_publication_turn_not_terminal');
+
+      expect(() =>
+        store.addMessage(conversationId, {
+          id: 'user-2',
+          role: 'user',
+          content: 'Start the next turn.',
+          timestamp: 6,
+        }),
+      ).not.toThrow();
+      expect(() =>
+        store.addMessage(conversationId, {
+          id: 'assistant-2',
+          role: 'assistant',
+          content: 'The next turn is independent.',
+          timestamp: 7,
+        }),
+      ).not.toThrow();
     },
   );
 
@@ -266,7 +304,7 @@ describe('chat memory publication mutation fences', () => {
         role: 'assistant',
         content: 'Compacted response',
         timestamp: 1,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
         memoryPublication: { version: 1, disposition: 'enqueued' },
       },
     ]);
@@ -282,7 +320,7 @@ describe('chat memory publication mutation fences', () => {
       role: 'assistant',
       content: 'Nothing should be retained.',
       timestamp: 1,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     });
     expect(
       store.transitionMessageMemoryPublication(conversationId, 'terminal-final', 'opt_out').status,
@@ -355,7 +393,7 @@ describe('chat memory publication mutation fences', () => {
           role: 'assistant',
           content: 'Final response',
           timestamp: 2,
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
         },
       }),
     ).toBe('claimed');

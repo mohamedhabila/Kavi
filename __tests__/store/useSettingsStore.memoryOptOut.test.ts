@@ -8,6 +8,7 @@ jest.mock('../../src/services/memory/memoryOptOutRetirement', () => ({
 }));
 
 import { retireActiveMemoryPublicationsBeforeOptOut } from '../../src/services/memory/memoryOptOutRetirement';
+import { isDurableMemoryPolicyEnabled } from '../../src/services/memory/memoryAuthority';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import {
   getConsolidationState,
@@ -82,14 +83,14 @@ describe('settings memory opt-out transition', () => {
     expect(retireActivePublications).toHaveBeenCalledTimes(1);
 
     useSettingsStore.getState().setDisableLongTermMemory(false);
-    expect(retireActivePublications).toHaveBeenCalledTimes(1);
+    expect(retireActivePublications).toHaveBeenCalledTimes(2);
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
 
     useSettingsStore.getState().setDisableLongTermMemory(true);
-    expect(retireActivePublications).toHaveBeenCalledTimes(2);
+    expect(retireActivePublications).toHaveBeenCalledTimes(3);
   });
 
-  it('keeps memory enabled when fence preparation fails', () => {
+  it('keeps the visible and durable policy disabled when retirement fails after fencing', () => {
     retireActivePublications.mockImplementation(() => {
       throw new Error('forced_opt_out_retirement_failure');
     });
@@ -97,7 +98,39 @@ describe('settings memory opt-out transition', () => {
     expect(() => useSettingsStore.getState().setDisableLongTermMemory(true)).toThrow(
       'forced_opt_out_retirement_failure',
     );
-    expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
+    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
+    expect(isDurableMemoryPolicyEnabled()).toBe(false);
+  });
+
+  it('keeps settings replacement fail-closed when retirement cannot settle', () => {
+    retireActivePublications.mockImplementation(() => {
+      throw new Error('forced_opt_out_retirement_failure');
+    });
+
+    expect(() =>
+      useSettingsStore
+        .getState()
+        .replaceAllSettings({ disableLongTermMemory: true, theme: 'light' }),
+    ).toThrow('forced_opt_out_retirement_failure');
+    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
+    expect(useSettingsStore.getState().theme).not.toBe('light');
+    expect(isDurableMemoryPolicyEnabled()).toBe(false);
+  });
+
+  it('refuses to re-enable while prior opt-out settlement still fails', () => {
+    retireActivePublications.mockImplementation(() => {
+      throw new Error('forced_opt_out_retirement_failure');
+    });
+    expect(() => useSettingsStore.getState().setDisableLongTermMemory(true)).toThrow(
+      'forced_opt_out_retirement_failure',
+    );
+
+    expect(() => useSettingsStore.getState().setDisableLongTermMemory(false)).toThrow(
+      'forced_opt_out_retirement_failure',
+    );
+    expect(retireActivePublications).toHaveBeenCalledTimes(2);
+    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
+    expect(isDurableMemoryPolicyEnabled()).toBe(false);
   });
 
   it('settles open obligations and only withdraws enqueued work proven active', () => {
@@ -211,7 +244,7 @@ describe('settings memory opt-out transition', () => {
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
 
     useSettingsStore.getState().replaceAllSettings({ disableLongTermMemory: false });
-    expect(retireActivePublications).toHaveBeenCalledTimes(1);
+    expect(retireActivePublications).toHaveBeenCalledTimes(2);
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
   });
 });

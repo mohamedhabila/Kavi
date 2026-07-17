@@ -27,6 +27,11 @@ import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/co
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+const CODE_OWNED_NORMAL_SENSITIVITY = {
+  version: 1,
+  source: 'code_owned',
+  sensitivity: 'normal',
+} as const;
 
 beforeEach(() => {
   closeMemoryDb();
@@ -44,12 +49,14 @@ it('checks queue ownership inside the same transaction as memory persistence', (
     applyThreadLocalConsolidatorResult(
       {
         episodeSummary: 'This stale attempt must not persist.',
+        episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
         newFacts: [
           {
             subject: 'user',
             predicate: 'prefers',
             value: 'quiet mornings',
             confidence: 0.9,
+            sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
           },
         ],
         activeFocus: null,
@@ -77,7 +84,7 @@ it('commits a final enriched-attempt receipt atomically with memory writes', () 
     threadTitle: null,
     memoryConversationId: 'conv-enriched-receipt',
     taskId: null,
-    sourceStartMessageId: null,
+    sourceStartMessageId: 'user-enriched-receipt',
     sourceEndMessageId: 'assistant-enriched-receipt',
     sourceRunId: null,
     sourceAt: 100,
@@ -93,6 +100,7 @@ it('commits a final enriched-attempt receipt atomically with memory writes', () 
   applyThreadLocalConsolidatorResult(
     {
       episodeSummary: 'The validated enrichment committed.',
+      episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
       newFacts: [],
       activeFocus: null,
       openThreads: [],
@@ -101,8 +109,23 @@ it('commits a final enriched-attempt receipt atomically with memory writes', () 
     {
       conversationId: job.memoryConversationId,
       threadId: job.threadId,
+      sourceUserMessageId: job.sourceStartMessageId ?? undefined,
       sourceAssistantMessageId: job.sourceEndMessageId,
       factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
+      messages: [
+        {
+          id: 'user-enriched-receipt',
+          role: 'user',
+          content: 'Validate the enrichment.',
+          timestamp: 100,
+        },
+        {
+          id: 'assistant-enriched-receipt',
+          role: 'assistant',
+          content: 'The validated enrichment committed.',
+          timestamp: 101,
+        },
+      ],
       canPersist: () => true,
       commitReceipt: () =>
         completeIngestionJob(job.id, 'completed_enriched', 'valid', 101, claimToken),
@@ -132,6 +155,7 @@ it('keeps durable persistence successful when working focus overflows', () => {
     applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
+        episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
         newFacts: [],
         activeFocus: 'x'.repeat(5_000),
         openThreads: [],

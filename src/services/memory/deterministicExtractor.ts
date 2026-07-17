@@ -16,6 +16,7 @@ import type {
   ConsolidatorSourceMessage,
   ConsolidatorTurnInput,
 } from './consolidator';
+import { codeOwnedMemorySensitivityDeclaration } from './memorySensitivityPolicy';
 
 const MAX_STRUCTURAL_FACTS = 5;
 
@@ -70,9 +71,7 @@ export function extractStructuralMemory(input: ConsolidatorTurnInput): Structura
 
 // ── Episode summary (language-agnostic) ────────────────────────────────────
 
-function buildStructuralEpisodeSummary(
-  messages: ConsolidatorSourceMessage[],
-): string {
+function buildStructuralEpisodeSummary(messages: ConsolidatorSourceMessage[]): string {
   const completedToolCallIds = new Set(
     messages.flatMap((message) =>
       message.role === 'tool' && message.toolCallId ? [message.toolCallId] : [],
@@ -136,6 +135,7 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
                 factClass: 'workflow',
                 sourceAuthority: 'tool_observed',
               },
+              sensitivityDeclaration: codeOwnedMemorySensitivityDeclaration(),
             });
             if (facts.length >= MAX_STRUCTURAL_FACTS) return facts;
           }

@@ -13,6 +13,7 @@ function makeAssistant(memoryRetrievalEventId?: string): Message {
     assistantMetadata: {
       kind: 'final',
       completionStatus: 'complete',
+      finishReason: 'stop',
       ...(memoryRetrievalEventId ? { memoryRetrievalEventId } : {}),
     },
   };

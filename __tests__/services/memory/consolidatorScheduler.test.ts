@@ -91,6 +91,7 @@ function seedDirtyThread(threadId: string, turns: number): Message[] {
 const STUB_EXTRACTOR = async () =>
   JSON.stringify({
     new_facts: [],
+    episode_sensitivity: 'normal',
     episode_summary: null,
     active_focus: 'still working on it',
     open_threads: [],
@@ -222,7 +223,7 @@ describe('maybeRunConsolidation gating', () => {
       userMsg('u-live', 1, 'Remember that I like concise plans.'),
       {
         ...asstMsg('a-live', 2, 'Got it.'),
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
     ] as Message[];
 

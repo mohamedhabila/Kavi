@@ -2,6 +2,7 @@ import type { SubAgentLifecycleEvent, SubAgentSnapshot } from './subAgent';
 import type { Attachment } from './attachment';
 import type { AgentRunTerminalReason } from './agentRun';
 import type { ToolEffectReceipt } from './toolEffectReceipt';
+import type { ModelTurnMemoryPolicyBinding } from '../engine/authority/modelTurnMemoryPolicyBinding';
 
 export interface ToolCall {
   id: string;
@@ -22,6 +23,7 @@ export interface ToolCall {
 }
 
 export type ToolCallFailureKind =
+  | 'authority_revoked'
   | 'workflow_guard'
   | 'tool_filter'
   | 'unknown_tool'
@@ -78,6 +80,18 @@ export interface MessageMemoryPublication {
   readonly disposition: MessageMemoryPublicationDisposition;
 }
 
+export type MessageCompactionProvenance =
+  | Readonly<{
+      version: 1;
+      dependency: 'transcript_only';
+    }>
+  | Readonly<{
+      version: 1;
+      dependency: 'memory_dependent';
+      /** Exact model-turn authorities whose memory-derived summaries remain represented. */
+      originatingMemoryPolicyBindings: ReadonlyArray<ModelTurnMemoryPolicyBinding>;
+    }>;
+
 export interface Message {
   id: string;
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -92,6 +106,8 @@ export interface Message {
   providerReplay?: MessageProviderReplay;
   assistantMetadata?: AssistantMessageMetadata;
   memoryPublication?: MessageMemoryPublication;
+  /** Code-owned provenance for synthetic context-compaction summaries. */
+  compactionProvenance?: MessageCompactionProvenance;
   effectId?: 'confetti' | 'balloons' | 'spotlight';
   subAgentEvent?: SubAgentMessageEvent;
 }

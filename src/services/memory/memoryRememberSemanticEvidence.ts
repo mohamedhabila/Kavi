@@ -16,14 +16,26 @@ import {
   type SemanticFactProposalV1,
   type SemanticFactSubjectRef,
 } from './semanticFactProposal';
+import {
+  deriveExactToolObservedMemoryEvidenceSpan,
+  resolveToolObservedMemoryEvidenceBinding,
+  type ToolObservedMemoryEvidenceCapability,
+} from './toolObservedMemoryEvidence';
 
-export const MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION = 3 as const;
+export const MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION = 4 as const;
 const MAX_MEMORY_REMEMBER_EVIDENCE_SPAN_LENGTH = 600;
 
-export interface MemoryRememberSemanticEvidenceV3Input {
+export type MemoryRememberSemanticSubjectV4 =
+  | Readonly<{ kind: 'self' }>
+  | Readonly<{
+      kind: 'named';
+      label: string;
+      type: Exclude<EntityType, 'self'>;
+    }>;
+
+export interface MemoryRememberSemanticEvidenceV4Input {
   readonly version: typeof MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION;
-  readonly subject_ref: SemanticFactSubjectRef;
-  readonly subject_type: EntityType;
+  readonly subject: MemoryRememberSemanticSubjectV4;
   readonly predicate: string;
   readonly value: string;
   readonly scope: SemanticFactProposalScope;
@@ -36,8 +48,7 @@ export interface MemoryRememberSemanticEvidenceV3Input {
 
 const MEMORY_REMEMBER_SEMANTIC_EVIDENCE_FIELDS = new Set([
   'version',
-  'subject_ref',
-  'subject_type',
+  'subject',
   'predicate',
   'value',
   'scope',
@@ -56,8 +67,8 @@ const NAMED_SUBJECT_TYPES = new Set<EntityType>([
   'concept',
   'event',
 ]);
-const SUBJECT_REF_SELF_FIELDS = new Set(['kind']);
-const SUBJECT_REF_NAMED_FIELDS = new Set(['kind', 'label']);
+const SUBJECT_SELF_FIELDS = new Set(['kind']);
+const SUBJECT_NAMED_FIELDS = new Set(['kind', 'label', 'type']);
 
 export interface BoundMemoryRememberSemanticEvidence {
   readonly kind: 'bound_memory_remember_semantic_evidence';
@@ -67,7 +78,21 @@ export interface MemoryRememberSemanticEvidenceBinding {
   proposal: Omit<SemanticFactProposalV1, 'evidenceQuote'>;
   subjectType: EntityType;
   evidenceSpan: string;
-  sourceMessageSha256: string;
+  source:
+    | Readonly<{
+        kind: 'current_user';
+        sourceMessageId: string;
+        sourceContentSha256: string;
+      }>
+    | Readonly<{
+        kind: 'tool_observed';
+        sourceMessageId: string;
+        sourceToolCallId: string;
+        sourceToolName: string;
+        sourceArgumentsSha256: string;
+        sourceContentSha256: string;
+        canonicalStaticContractDigest: string;
+      }>;
 }
 
 export type BindMemoryRememberSemanticEvidenceResult =
@@ -79,7 +104,11 @@ export type BindMemoryRememberSemanticEvidenceResult =
         | 'non_current_assertion'
         | 'subject_not_grounded'
         | 'value_not_grounded'
-        | 'evidence_span_limit_exceeded';
+        | 'evidence_span_limit_exceeded'
+        | 'tool_observation_not_grounded'
+        | 'tool_observation_ambiguous'
+        | 'tool_observation_named_subject_required'
+        | 'tool_observation_replace_forbidden';
     };
 
 const bindings = new WeakMap<object, MemoryRememberSemanticEvidenceBinding>();
@@ -87,6 +116,7 @@ const bindings = new WeakMap<object, MemoryRememberSemanticEvidenceBinding>();
 export function bindMemoryRememberSemanticEvidence(
   raw: unknown,
   request: MemoryRememberRequestEvidence,
+  toolObservedEvidence: ReadonlyArray<ToolObservedMemoryEvidenceCapability> = [],
 ): BindMemoryRememberSemanticEvidenceResult {
   if (!isPlainRecord(raw) || !hasExactFields(raw, MEMORY_REMEMBER_SEMANTIC_EVIDENCE_FIELDS)) {
     return { valid: false, code: 'invalid_contract' };
@@ -94,45 +124,104 @@ export function bindMemoryRememberSemanticEvidence(
   if (raw.version !== MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION) {
     return { valid: false, code: 'invalid_contract' };
   }
-  const decoded = decodeMemoryRememberSemanticProposal(raw, request.userMessageId);
+  const subject = decodeMemoryRememberSubject(raw.subject);
+  if (!subject) {
+    return { valid: false, code: 'invalid_contract' };
+  }
+  const decoded = decodeMemoryRememberSemanticProposal(raw, request.userMessageId, subject.ref);
   if (!decoded) {
     return { valid: false, code: 'invalid_contract' };
   }
-  const subjectType = decodeSubjectType(raw.subject_type, decoded);
-  if (!subjectType) {
-    return { valid: false, code: 'invalid_contract' };
+  if (decoded.assertionClass === 'current_direct') {
+    const grounding = deriveExactEvidenceSpan(
+      decoded.subjectRef,
+      decoded.value,
+      request.userMessageText,
+    );
+    if (grounding.valid) {
+      return bindEvidence({
+        proposal: decoded,
+        subjectType: subject.type,
+        evidenceSpan: grounding.evidenceSpan,
+        source: {
+          kind: 'current_user',
+          sourceMessageId: request.userMessageId,
+          sourceContentSha256: sha256HexUtf8(request.userMessageText),
+        },
+      });
+    }
+    return grounding;
   }
-  if (decoded.assertionClass !== 'current_direct') {
+  if (decoded.assertionClass !== 'quoted') {
     return { valid: false, code: 'non_current_assertion' };
   }
-  const grounding = deriveExactEvidenceSpan(
-    decoded.subjectRef,
-    decoded.value,
-    request.userMessageText,
-  );
-  if (!grounding.valid) return grounding;
+  if (decoded.operation !== 'record') {
+    return { valid: false, code: 'tool_observation_replace_forbidden' };
+  }
+  if (decoded.subjectRef.kind !== 'named') {
+    return { valid: false, code: 'tool_observation_named_subject_required' };
+  }
+  const subjectLabel = decoded.subjectRef.label;
 
+  const candidates = toolObservedEvidence.flatMap((capability) => {
+    const source = resolveToolObservedMemoryEvidenceBinding(capability);
+    if (!source) return [];
+    const grounding = deriveExactToolObservedMemoryEvidenceSpan(
+      capability,
+      subjectLabel,
+      decoded.value,
+    );
+    return grounding.ok ? [{ source, evidenceSpan: grounding.evidenceSpan }] : [];
+  });
+  if (candidates.length === 0) {
+    return { valid: false, code: 'tool_observation_not_grounded' };
+  }
+  if (candidates.length !== 1) {
+    return { valid: false, code: 'tool_observation_ambiguous' };
+  }
+  const candidate = candidates[0]!;
+  return bindEvidence({
+    proposal: {
+      ...decoded,
+      sourceMessageId: candidate.source.sourceMessageId,
+      scope:
+        decoded.scope === 'global' || decoded.scope === 'persona'
+          ? 'project'
+          : decoded.scope,
+      assertionClass: 'quoted',
+    },
+    subjectType: subject.type,
+    evidenceSpan: candidate.evidenceSpan,
+    source: {
+      kind: 'tool_observed',
+      sourceMessageId: candidate.source.sourceMessageId,
+      sourceToolCallId: candidate.source.sourceToolCallId,
+      sourceToolName: candidate.source.sourceToolName,
+      sourceArgumentsSha256: candidate.source.argumentsSha256,
+      sourceContentSha256: candidate.source.visibleResultSha256,
+      canonicalStaticContractDigest: candidate.source.canonicalStaticContractDigest,
+    },
+  });
+}
+
+function bindEvidence(
+  binding: MemoryRememberSemanticEvidenceBinding,
+): BindMemoryRememberSemanticEvidenceResult {
   const evidence = Object.freeze({
     kind: 'bound_memory_remember_semantic_evidence' as const,
   });
-  bindings.set(evidence, {
-    proposal: decoded,
-    subjectType,
-    evidenceSpan: grounding.evidenceSpan,
-    sourceMessageSha256: sha256HexUtf8(request.userMessageText),
-  });
+  bindings.set(evidence, binding);
   return { valid: true, evidence };
 }
 
 function decodeMemoryRememberSemanticProposal(
   raw: Record<string, unknown>,
   sourceMessageId: string,
+  subjectRef: SemanticFactSubjectRef,
 ): Omit<SemanticFactProposalV1, 'evidenceQuote'> | null {
-  const subjectRef = decodeSubjectRef(raw.subject_ref);
   const predicate = exactString(raw.predicate, 80);
   const value = exactString(raw.value, 200);
   if (
-    !subjectRef ||
     predicate === null ||
     value === null ||
     !isUnitNumber(raw.importance) ||
@@ -159,14 +248,22 @@ function decodeMemoryRememberSemanticProposal(
   };
 }
 
-function decodeSubjectRef(raw: unknown): SemanticFactSubjectRef | null {
+function decodeMemoryRememberSubject(
+  raw: unknown,
+): { ref: SemanticFactSubjectRef; type: EntityType } | null {
   if (!isPlainRecord(raw)) return null;
   if (raw.kind === 'self') {
-    return hasExactFields(raw, SUBJECT_REF_SELF_FIELDS) ? { kind: 'self' } : null;
+    return hasExactFields(raw, SUBJECT_SELF_FIELDS)
+      ? { ref: { kind: 'self' }, type: 'self' }
+      : null;
   }
-  if (raw.kind !== 'named' || !hasExactFields(raw, SUBJECT_REF_NAMED_FIELDS)) return null;
+  if (raw.kind !== 'named' || !hasExactFields(raw, SUBJECT_NAMED_FIELDS)) return null;
   const label = exactString(raw.label, 80);
-  return label === null ? null : { kind: 'named', label };
+  const type =
+    typeof raw.type === 'string' && NAMED_SUBJECT_TYPES.has(raw.type as EntityType)
+      ? (raw.type as Exclude<EntityType, 'self'>)
+      : null;
+  return label === null || type === null ? null : { ref: { kind: 'named', label }, type };
 }
 
 function exactString(raw: unknown, maximumLength: number): string | null {
@@ -230,12 +327,7 @@ function shortestCoveringBoundsInSource(
   let rightStart = firstRightStart;
   let best = coveringBounds(leftStart, left.length, rightStart, right.length);
   while (leftStart !== -1 && rightStart !== -1) {
-    const candidate = coveringBounds(
-      leftStart,
-      left.length,
-      rightStart,
-      right.length,
-    );
+    const candidate = coveringBounds(leftStart, left.length, rightStart, right.length);
     if (
       candidate.end - candidate.start < best.end - best.start ||
       (candidate.end - candidate.start === best.end - best.start && candidate.start < best.start)
@@ -281,16 +373,6 @@ export function resolveBoundMemoryRememberSemanticEvidence(
           subjectRef: { ...binding.proposal.subjectRef },
         },
       }
-    : null;
-}
-
-function decodeSubjectType(
-  raw: unknown,
-  proposal: Pick<SemanticFactProposalV1, 'subjectRef'>,
-): EntityType | null {
-  if (proposal.subjectRef.kind === 'self') return raw === 'self' ? 'self' : null;
-  return typeof raw === 'string' && NAMED_SUBJECT_TYPES.has(raw as EntityType)
-    ? (raw as EntityType)
     : null;
 }
 

@@ -4,6 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { memoryRememberArgs, memoryRememberExecution } from '../../helpers/memoryRememberExecution';
+import { bindReadFileEvidence } from '../../helpers/memoryRememberSemanticEvidence';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { findEntityByName } from '../../../src/services/memory/entities';
 import { listFactEvidence } from '../../../src/services/memory/episodes/queries';
@@ -107,9 +108,10 @@ describe('typed memory_remember semantic authority', () => {
     [
       'named subject',
       (input: ReturnType<typeof args>) => {
-        (input.semanticEvidence as Record<string, unknown>).subject_ref = {
+        (input.semanticEvidence as Record<string, unknown>).subject = {
           kind: 'named',
           label: '不存在_subject',
+          type: 'concept',
         };
       },
     ],
@@ -206,6 +208,157 @@ describe('typed memory_remember semantic authority', () => {
     ]);
   });
 
+  it('persists an exact named-subject fact from a verified current-run read result', () => {
+    const userMessageId = 'message-retain-release-policy';
+    const userMessageText = 'Inspect the release policy and retain its reusable constraint.';
+    const executionRunId = 'execution-retain-release-policy';
+    const sourceResult =
+      'Durable fact labels: subject mobile-release-workflow, predicate required_artifact_suffix, value .approved.txt.';
+    const toolObservedEvidence = bindReadFileEvidence({
+      executionRunId,
+      userMessageId,
+      userMessageText,
+      result: sourceResult,
+    });
+    expect(toolObservedEvidence).toHaveLength(1);
+
+    const result = executeMemoryRemember(
+      memoryRememberArgs({
+        userMessageText,
+        subjectRef: { kind: 'named', label: 'mobile-release-workflow' },
+        subjectType: 'project',
+        predicate: 'required_artifact_suffix',
+        value: '.approved.txt',
+        scope: 'global',
+        operation: 'record',
+        assertionClass: 'quoted',
+      }),
+      memoryRememberExecution({
+        memoryConversationId: 'memory-release-project',
+        sourceThreadId: 'thread-release-project',
+        userMessageId,
+        userMessageText,
+        executionRunId,
+        toolCallId: 'tool-call-remember-release-policy',
+        toolObservedEvidence,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      status: 'created',
+      fact: {
+        subject: 'mobile-release-workflow',
+        predicate: 'required_artifact_suffix',
+        value: '.approved.txt',
+        scope: 'project',
+        sourceMessageId: 'message-tool-read-release-policy',
+      },
+    });
+    const [fact] = listFacts({ predicate: 'required_artifact_suffix' });
+    expect(fact?.sourceAuthority).toBe('tool_observed');
+    expect(fact?.attributes).toMatchObject({
+      memoryWrite: {
+        authority: 'verified_tool_observation',
+        evidenceSourceKind: 'tool_observed',
+        sourceToolCallId: 'tool-call-read-release-policy',
+        sourceToolName: 'read_file',
+        evidenceSourceSha256: sha256HexUtf8(sourceResult),
+      },
+    });
+    expect(listFactEvidence(fact!.id)).toEqual([
+      expect.objectContaining({
+        messageId: 'message-tool-read-release-policy',
+        role: 'tool',
+        quote: 'mobile-release-workflow, predicate required_artifact_suffix, value .approved.txt',
+      }),
+    ]);
+  });
+
+  it.each([
+    ['replacement', { operation: 'replace_current' as const }],
+    ['self subject', { subjectRef: { kind: 'self' as const }, subjectType: 'self' as const }],
+  ])('rejects tool-observed %s without writing memory', (_label, override) => {
+    const caseId = _label.replace(/\s+/gu, '-');
+    const userMessageId = `message-tool-observed-reject-${caseId}`;
+    const userMessageText = 'Inspect and retain the exact result.';
+    const executionRunId = `execution-tool-observed-reject-${caseId}`;
+    const sourceResult = 'subject project-opaque value constraint-opaque';
+    const toolObservedEvidence = bindReadFileEvidence({
+      executionRunId,
+      userMessageId,
+      userMessageText,
+      result: sourceResult,
+    });
+    const result = executeMemoryRemember(
+      memoryRememberArgs({
+        userMessageText,
+        subjectRef: { kind: 'named', label: 'project-opaque' },
+        subjectType: 'project',
+        predicate: 'constraint',
+        value: 'constraint-opaque',
+        scope: 'project',
+        operation: 'record',
+        assertionClass: 'quoted',
+        ...override,
+      }),
+      memoryRememberExecution({
+        userMessageId,
+        userMessageText,
+        executionRunId,
+        toolCallId: `tool-call-tool-observed-reject-${caseId}`,
+        toolObservedEvidence,
+      }),
+    );
+    expect(result).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+  });
+
+  it.each(['global', 'persona'] as const)(
+    'narrows tool-observed %s scope to the project boundary',
+    (scope) => {
+      const userMessageId = `message-tool-observed-scope-${scope}`;
+      const userMessageText = 'Inspect and retain the exact result.';
+      const executionRunId = `execution-tool-observed-scope-${scope}`;
+      const sourceResult = 'subject project-opaque value constraint-opaque';
+      const toolObservedEvidence = bindReadFileEvidence({
+        executionRunId,
+        userMessageId,
+        userMessageText,
+        result: sourceResult,
+      });
+      const result = executeMemoryRemember(
+        memoryRememberArgs({
+          userMessageText,
+          subjectRef: { kind: 'named', label: 'project-opaque' },
+          subjectType: 'project',
+          predicate: 'constraint',
+          value: 'constraint-opaque',
+          scope,
+          operation: 'record',
+          assertionClass: 'quoted',
+        }),
+        memoryRememberExecution({
+          memoryConversationId: 'memory-tool-observed-scope',
+          sourceThreadId: 'thread-tool-observed-scope',
+          userMessageId,
+          userMessageText,
+          executionRunId,
+          toolCallId: `tool-call-tool-observed-scope-${scope}`,
+          toolObservedEvidence,
+        }),
+      );
+
+      expect(result).toMatchObject({
+        ok: true,
+        fact: {
+          scope: 'project',
+          originConversationId: 'memory-tool-observed-scope',
+        },
+      });
+    },
+  );
+
   it('rejects request evidence changed after the opaque binding was created', () => {
     const context = execution();
     const input = args();
@@ -252,6 +405,39 @@ describe('typed memory_remember semantic authority', () => {
       execution({ userMessageText: `${SUBJECT} :: ${decomposed}` }),
     );
     expect(result).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+  });
+
+  it('returns the current-user grounding failure without falling back to tool evidence', () => {
+    const input = memoryRememberArgs({
+      userMessageText: 'My usual review duration is 45 minutes.',
+      subjectRef: { kind: 'self' },
+      subjectType: 'self',
+      predicate: 'review_duration',
+      value: 'Usually uses 45 minutes.',
+      assertionClass: 'current_direct',
+    });
+    const result = executeMemoryRemember(
+      input,
+      memoryRememberExecution({
+        userMessageId: 'message-current-direct-no-fallback',
+        userMessageText: 'My usual review duration is 45 minutes.',
+        executionRunId: 'execution-current-direct-no-fallback',
+        toolCallId: 'tool-call-current-direct-no-fallback',
+        toolObservedEvidence: bindReadFileEvidence({
+          executionRunId: 'execution-current-direct-no-fallback',
+          userMessageId: 'message-current-direct-no-fallback',
+          userMessageText: 'My usual review duration is 45 minutes.',
+          result: 'Usually uses 45 minutes.',
+        }),
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'grounding_required',
+      error: expect.stringContaining('smallest atomic exact substring'),
+    });
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
   });
 
@@ -328,6 +514,8 @@ describe('typed memory_remember semantic authority', () => {
   it.each([
     'evidence_quote',
     'source_message_id',
+    'subject_ref',
+    'subject_type',
     'subject_quote',
     'predicate_quote',
     'value_quote',
@@ -341,7 +529,7 @@ describe('typed memory_remember semantic authority', () => {
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
   });
 
-  it.each([1, 2])(
+  it.each([1, 2, 3])(
     'rejects the v%s semantic contract without a compatibility fallback',
     (version) => {
       const input = args();
@@ -353,6 +541,33 @@ describe('typed memory_remember semantic authority', () => {
       expect(listFacts({ includeInvalidated: true })).toEqual([]);
     },
   );
+
+  it('keeps self and named subject typing inside one exact discriminated object', () => {
+    const selfWithNamedType = memoryRememberArgs({
+      userMessageText: 'My timezone is UTC+1.',
+      subjectRef: { kind: 'self' },
+      predicate: 'timezone',
+      value: 'UTC+1',
+    });
+    (selfWithNamedType.semanticEvidence as { subject: Record<string, unknown> }).subject.type =
+      'person';
+    expect(
+      executeMemoryRemember(
+        selfWithNamedType,
+        execution({
+          userMessageId: 'message-self-type-mismatch',
+          userMessageText: 'My timezone is UTC+1.',
+        }),
+      ),
+    ).toMatchObject({ ok: false, code: 'invalid_args' });
+
+    const namedWithoutType = args();
+    delete (namedWithoutType.semanticEvidence as { subject: Record<string, unknown> }).subject.type;
+    expect(executeMemoryRemember(namedWithoutType, execution())).toMatchObject({
+      ok: false,
+      code: 'invalid_args',
+    });
+  });
 
   it('rejects the removed legacy argument surface without compatibility fallback', () => {
     const result = executeMemoryRemember(

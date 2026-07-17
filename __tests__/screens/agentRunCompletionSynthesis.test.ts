@@ -148,6 +148,7 @@ describe('agentRunCompletionSynthesis', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       }),
     ];

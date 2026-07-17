@@ -59,7 +59,11 @@ function conversation(options: { completeFinal?: boolean } = {}): Conversation {
         role: 'assistant',
         content: '',
         timestamp: 2,
-        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
         toolCalls: [
           {
             id: 'tool-call-1',
@@ -80,6 +84,7 @@ function conversation(options: { completeFinal?: boolean } = {}): Conversation {
               assistantMetadata: {
                 kind: 'final' as const,
                 completionStatus: 'complete' as const,
+                finishReason: 'stop',
               },
             },
           ]

@@ -24,6 +24,8 @@ import {
 } from '../../helpers/memoryWithdrawalFixtures';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+  codeOwnedClosedTurnEpisodeFields,
   loadVerifiedFactRetirement,
   recordContributionBackedFact,
 } from '../../helpers/memoryRetirementTestFixtures';
@@ -92,6 +94,7 @@ it('closes exact fact and receipt lineage without deleting a different task scop
       sourceThreadId: 'thread-a',
       taskId: 'task-a',
       producerEventId: 'withdrawal-scope-closure-target',
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact;
   const receiptSupport = recordContributionBackedFact(
@@ -111,6 +114,7 @@ it('closes exact fact and receipt lineage without deleting a different task scop
       sourceThreadId: 'thread-c',
       taskId: 'task-c',
       producerEventId: 'withdrawal-scope-closure-receipt',
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact;
   if (receiptSupport.id !== target.id) {
@@ -137,6 +141,7 @@ it('closes exact fact and receipt lineage without deleting a different task scop
       sourceThreadId: 'thread-b',
       taskId: 'task-b',
       producerEventId: 'withdrawal-scope-closure-sibling',
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact.id;
   const retainedFact = recordContributionBackedFact(
@@ -160,6 +165,7 @@ it('closes exact fact and receipt lineage without deleting a different task scop
       sourceThreadId: 'thread-a',
       taskId: 'task-retained',
       producerEventId: 'withdrawal-scope-closure-retained',
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact;
 
@@ -168,9 +174,15 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     threadId: 'thread-a',
     taskId: 'task-a',
     summary: 'private episode a',
-    messageIds: ['message-a', 'message-a-chain'],
-    sourceStartMessageId: 'message-a',
-    sourceEndMessageId: 'turn-a',
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: 'message-a',
+      sourceAssistantMessageId: 'turn-a',
+      intermediateMessages: [
+        { id: 'message-a-chain', role: 'user', content: 'private chained source' },
+      ],
+      userContent: 'private episode a',
+      assistantContent: 'private episode a',
+    }),
     now: 300,
   });
   const episodeB = recordThreadLocalEpisode({
@@ -178,9 +190,12 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     threadId: 'thread-b',
     taskId: 'task-b',
     summary: 'private episode b',
-    messageIds: ['message-b'],
-    sourceStartMessageId: 'message-b',
-    sourceEndMessageId: 'turn-b',
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: 'message-b',
+      sourceAssistantMessageId: 'turn-b',
+      userContent: 'private episode b',
+      assistantContent: 'private episode b',
+    }),
     now: 301,
   });
   const chainedEpisode = recordThreadLocalEpisode({
@@ -188,9 +203,12 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     threadId: 'thread-a',
     taskId: 'task-a',
     summary: 'private chained episode',
-    messageIds: ['message-a-chain'],
-    sourceStartMessageId: 'message-a-chain',
-    sourceEndMessageId: 'turn-a-chain',
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: 'message-a-chain',
+      sourceAssistantMessageId: 'turn-a-chain',
+      userContent: 'private chained episode',
+      assistantContent: 'private chained episode',
+    }),
     now: 302,
   });
   const unrelatedEpisode = recordThreadLocalEpisode({
@@ -198,9 +216,12 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     threadId: 'thread-unrelated',
     taskId: 'task-a',
     summary: 'unrelated episode retained',
-    messageIds: ['message-a'],
-    sourceStartMessageId: 'message-a',
-    sourceEndMessageId: 'turn-a',
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: 'message-a',
+      sourceAssistantMessageId: 'turn-a',
+      userContent: 'unrelated episode retained',
+      assistantContent: 'unrelated episode retained',
+    }),
     now: 303,
   });
   if (!episodeA || !episodeB || !chainedEpisode || !unrelatedEpisode) {

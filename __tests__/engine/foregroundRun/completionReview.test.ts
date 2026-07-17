@@ -223,4 +223,76 @@ describe('foregroundRun completion review', () => {
       }),
     );
   });
+
+  it('finalizes a delivered approval rejection as cancellation without response recovery', async () => {
+    const run = buildRun();
+    run.controlGraph = {
+      ...run.controlGraph!,
+      status: 'cancelled',
+      terminalReason: 'user_approval_denied',
+    };
+    const cancellationNotice =
+      'Okay — I did not perform that action because you rejected the approval request. No effect was dispatched.';
+    useChatStore.setState((state) => ({
+      ...state,
+      conversations: [
+        {
+          id: 'conversation-1',
+          title: 'Rejected SMS',
+          messages: [
+            buildMessage({
+              id: 'msg-user',
+              role: 'user',
+              content: 'Send the message.',
+              timestamp: 10,
+            }),
+            buildMessage({
+              id: 'msg-assistant-final',
+              content: cancellationNotice,
+              timestamp: 50,
+              assistantMetadata: {
+                kind: 'final',
+                completionStatus: 'complete',
+                finishReason: 'user_approval_denied',
+              },
+            }),
+          ],
+          createdAt: 10,
+          updatedAt: 50,
+          logs: [],
+          agentRuns: [run],
+        } as never,
+      ],
+      activeConversationId: 'conversation-1',
+    }));
+    const finalizeTrackedRun = jest.fn().mockReturnValue(true);
+    const recoverAgentRunFinalPreview = jest.fn(async () => ({ recovered: false }));
+
+    await expect(
+      reviewForegroundRunCompletion({
+        appendConversationLog: jest.fn(),
+        assertNotAborted: jest.fn(),
+        conversationId: 'conversation-1',
+        finalizeTrackedRun,
+        flushChatState: jest.fn().mockResolvedValue(undefined),
+        recoverAgentRunFinalPreview,
+        resumeAgentRun: null,
+        runId: 'run-1',
+        signal: new AbortController().signal,
+        turnSummary: cancellationNotice,
+        updateAgentRunControlGraph: jest.fn(),
+        updateAgentRunSummary: jest.fn(),
+        updateMessageAssistantMetadata: jest.fn(),
+        setAgentRunPhase: jest.fn(),
+      }),
+    ).resolves.toEqual({ handled: true, terminalized: true });
+    expect(finalizeTrackedRun).toHaveBeenCalledWith(
+      'cancelled',
+      cancellationNotice,
+      'Run cancelled',
+      cancellationNotice,
+      'user_cancelled',
+    );
+    expect(recoverAgentRunFinalPreview).not.toHaveBeenCalled();
+  });
 });

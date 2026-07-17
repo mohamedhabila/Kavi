@@ -10,7 +10,7 @@ import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
 import { unrefTimerIfSupported } from '../../utils/timers';
 import { runConsolidation } from './consolidation/orchestrator';
-import { composeActiveFocusContent } from './focus';
+import { commitPostIngestionDurableState } from './ingestionPostProcessing';
 import {
   commitIngestionPersistenceReceipt,
   type IngestionReceiptProviderOutcomeCode,
@@ -43,7 +43,6 @@ import {
   finishActiveIngestionAttempt,
   preemptActiveIngestionAttempt,
   preemptActiveIngestionAttemptAndWait,
-  protectActiveRemoteIngestionAttemptFromForeground,
 } from './ingestionAttemptPreemption';
 import { recoverStaleIngestionJobs } from './ingestionQueueRecovery';
 import {
@@ -54,10 +53,8 @@ import {
   shouldAbortIngestionDueToMemoryPressure,
 } from './onDeviceGuards';
 import { canWriteLongTermMemory, registerMemoryOptOutHandler } from './policy';
-import { refreshThreadReflection } from './reflections';
-import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import type { ProcessTurnResult, TurnProviderOutcome } from './turnProcessor';
-import { editPromptEligibleWorkingBlock, getWorkingBlock } from './workingBlocks';
+import { resolveTurnEpisodeShareability } from './episodes/shareability';
 
 export {
   computeNextIngestionAttemptAt,
@@ -111,47 +108,6 @@ export type {
 export type { StaleIngestionRecoveryResult } from './ingestionQueueRecovery';
 
 const logger = createLogger('memory.ingestionQueue');
-
-function preserveThreadTitleFocus(input: {
-  memoryConversationId: string;
-  threadTitle?: string;
-  now: number;
-}): boolean {
-  const threadId = input.memoryConversationId;
-  const threadTitle = input.threadTitle?.trim();
-  if (!isExactMemoryScopeId(threadId) || !threadTitle) {
-    return false;
-  }
-
-  const scope = { conversationId: threadId, threadId };
-  const existing = getWorkingBlock('active_focus', scope)?.content;
-  const content = composeActiveFocusContent({
-    threadTitle,
-    activeFocus: existing,
-  });
-  if (content && content !== existing?.trim()) {
-    editPromptEligibleWorkingBlock('active_focus', content, scope, { now: input.now });
-    return true;
-  }
-  return false;
-}
-
-function commitPostIngestionDurableState(input: {
-  memoryConversationId: string;
-  threadTitle?: string;
-  taskId: string | null;
-  sourceAt: number;
-  now: number;
-}): Readonly<{ activeFocusUpdated: boolean }> {
-  const activeFocusUpdated = preserveThreadTitleFocus(input);
-  refreshThreadReflection({
-    threadId: input.memoryConversationId,
-    taskId: input.taskId,
-    periodAt: input.sourceAt,
-    now: input.now,
-  });
-  return { activeFocusUpdated };
-}
 
 export interface ProcessIngestionJobInput {
   jobId: string;
@@ -317,7 +273,6 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
   const { job, claimToken, sourceSnapshot } = claimed;
   const structuralCheckpointOnly = claimed.mode === 'structural_checkpoint';
   const activeAttempt = beginActiveIngestionAttempt(job.id);
-  let remoteProviderEnrichment = false;
   let postIngestionStateCommitted = false;
   let postIngestionActiveFocusUpdated = false;
   let structuralReceiptCommitted = false;
@@ -363,30 +318,23 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       sourceRunId: job.sourceRunId ?? undefined,
       episodeAccess: {
         personaId: job.personaId,
-        shareability: 'thread_only',
+        shareability: resolveTurnEpisodeShareability(job.taskId),
       },
       now: job.sourceAt,
       deferStructuralFinalization: structuralCheckpointOnly,
       providerSignal: activeAttempt.controller.signal,
-      onExecutionResourceResolved: (resource) => {
-        remoteProviderEnrichment = resource === 'remote';
-      },
       canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
       commitStructuralCheckpoint: ({ providerOutcome, ...writeSet }) => {
         const receiptAt = input.now ?? Date.now();
         const durableState = commitPostIngestionState(receiptAt);
         const committed = commitIngestionStructuralCheckpointReceipt({
           ...writeSet,
-          activeFocusUpdated:
-            writeSet.activeFocusUpdated || durableState.activeFocusUpdated,
+          activeFocusUpdated: writeSet.activeFocusUpdated || durableState.activeFocusUpdated,
           jobId: job.id,
           claimToken,
           persistedAt: receiptAt,
         });
         structuralReceiptCommitted = true;
-        if (remoteProviderEnrichment) {
-          protectActiveRemoteIngestionAttemptFromForeground(activeAttempt);
-        }
         return {
           ...writeSet,
           activeFocusUpdated: committed.activeFocusUpdated,
@@ -398,8 +346,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
         const durableState = commitPostIngestionState(receiptAt, true);
         commitIngestionPersistenceReceipt({
           ...writeSet,
-          activeFocusUpdated:
-            writeSet.activeFocusUpdated || durableState.activeFocusUpdated,
+          activeFocusUpdated: writeSet.activeFocusUpdated || durableState.activeFocusUpdated,
           ...mapReceiptProviderOutcome(providerOutcome),
           jobId: job.id,
           claimToken,
@@ -423,8 +370,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     const transitionAt = input.now ?? Date.now();
     if (
       turnResult.processed &&
-      (!structuralReceiptCommitted ||
-        (!structuralCheckpointOnly && !providerFinalReceiptCommitted))
+      (!structuralReceiptCommitted || (!structuralCheckpointOnly && !providerFinalReceiptCommitted))
     ) {
       throw new Error('memory_ingestion_durability_receipt_missing');
     }
@@ -664,11 +610,15 @@ async function runScheduledDrain(): Promise<void> {
     await drainIngestionQueueWithWakeup(runtime);
   } catch {
     logger.devWarn('Ingestion drain failed with processing_error');
+    if (canWriteLongTermMemory() && scheduledRuntime !== null) {
+      scheduleRetryWake(INGESTION_RETRY_BASE_DELAY_MS);
+    }
   } finally {
     drainRunning = false;
   }
 
   if (drainRequested && !drainMicrotaskScheduled) {
+    clearRetryWakeTimer();
     drainMicrotaskScheduled = true;
     queueMicrotask(() => void runScheduledDrain());
   }

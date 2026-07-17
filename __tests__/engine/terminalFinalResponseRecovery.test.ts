@@ -116,6 +116,33 @@ describe('terminal final response recovery selectors', () => {
     ]);
   });
 
+  it('does not replace a delivered approval-rejection cancellation notice', () => {
+    const cancelledConversation = conversation({
+      messages: [
+        message({ id: 'user-1', role: 'user', content: 'Send the message' }),
+        message({
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'No effect was dispatched because approval was rejected.',
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'user_approval_denied',
+          },
+        }),
+      ],
+      agentRuns: [run({ status: 'cancelled', terminalReason: 'user_cancelled' })],
+    });
+
+    expect(selectTerminalConversationsWithFinalResponseGaps([cancelledConversation])).toEqual([]);
+    expect(
+      selectTerminalFinalResponseRecoveryCandidates({
+        conversation: cancelledConversation,
+        hasProviderContext: true,
+      }),
+    ).toEqual([]);
+  });
+
   it('does not recover older terminal runs when a newer run is still running', () => {
     const olderRun = run({
       id: 'run-old',

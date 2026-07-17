@@ -57,8 +57,12 @@ async function discardInMemoryChatStateWithoutPersisting(): Promise<void> {
 export async function relaunchForegroundScenarioApp(params: {
   conversationId: string;
   memoryScope: MemoryScope;
-  memoryStateBefore: ForegroundScenarioMemoryFinalState;
-}): Promise<ForegroundScenarioLifecycleSnapshot> {
+}): Promise<
+  Readonly<{
+    lifecycle: ForegroundScenarioLifecycleSnapshot;
+    memoryState: ScopedMemoryEvidenceSnapshot;
+  }>
+> {
   const conversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === params.conversationId);
@@ -66,6 +70,9 @@ export async function relaunchForegroundScenarioApp(params: {
   const lastMessageId = conversation.messages[conversation.messages.length - 1]?.id ?? null;
 
   await cancelScheduledIngestionDrain();
+  const memoryStateAtClose = captureCompleteMemoryEvidenceForIsolatedEvaluation(
+    params.memoryScope,
+  );
   await flushChatStorePersistenceNow();
   await discardInMemoryChatStateWithoutPersisting();
   if (
@@ -80,14 +87,17 @@ export async function relaunchForegroundScenarioApp(params: {
   await useChatStore.persist.rehydrate();
   requirePersistedConversation(params.conversationId, lastMessageId);
   const reopenedMemory = captureCompleteMemoryEvidenceForIsolatedEvaluation(params.memoryScope);
-  if (durableMemoryIdentity(reopenedMemory) !== durableMemoryIdentity(params.memoryStateBefore)) {
+  if (durableMemoryIdentity(reopenedMemory) !== durableMemoryIdentity(memoryStateAtClose)) {
     throw new Error('Durable memory state changed across app relaunch.');
   }
 
   return {
-    boundary: 'app_relaunch',
-    chatStore: 'rehydrated',
-    memoryStore: 'reopened',
+    lifecycle: {
+      boundary: 'app_relaunch',
+      chatStore: 'rehydrated',
+      memoryStore: 'reopened',
+    },
+    memoryState: reopenedMemory,
   };
 }
 

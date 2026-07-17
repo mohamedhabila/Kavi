@@ -22,6 +22,7 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../src/types/toolRuntimeOutcome';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -75,6 +76,7 @@ function writeInput(
       },
     },
     approvalState: 'granted',
+    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     authority: authority(),
     execute,
     ...overrides,
@@ -130,6 +132,7 @@ function dynamicInput(
       executionRunId: `execution-run-${suffix}`,
     },
     approvalState: 'not_required',
+    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     authority: authority(),
     runtimeExternalEvidence: evidence,
     execute,
@@ -199,6 +202,35 @@ describe('authorized durable tool effect dispatch', () => {
       claimedAt: 100,
     });
     expect(Object.isFrozen(execute.mock.calls[0]![0])).toBe(true);
+  });
+
+  it('keeps durable identities distinct across separate effect calls', async () => {
+    const execute = jest.fn(async () => verifiedWriteResult());
+    const secondInput = writeInput(execute);
+
+    await expect(
+      dispatchAuthorizedToolEffect(writeInput(execute), { now: () => 100 }),
+    ).resolves.toMatchObject({ kind: 'executed' });
+    await expect(
+      dispatchAuthorizedToolEffect(
+        {
+          ...secondInput,
+          toolCallId: 'tool-call-write-2',
+          context: {
+            ...secondInput.context,
+            executionRunId: 'execution-run-2',
+          },
+        },
+        { now: () => 101 },
+      ),
+    ).resolves.toMatchObject({ kind: 'executed' });
+
+    const runIds = getExecutionJournalDb()
+      .getAllSync<{ id: string }>('SELECT id FROM execution_runs ORDER BY id ASC')
+      .map((row) => row.id);
+    expect(runIds).toHaveLength(2);
+    expect(new Set(runIds).size).toBe(2);
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -344,6 +376,7 @@ describe('authorized durable tool effect dispatch', () => {
         verificationState: 'verified',
       },
     });
+    if (result.kind !== 'executed') throw new Error('expected_executed_effect');
     expect(execute).toHaveBeenCalledTimes(1);
     expect(
       getExecutionJournalDb().getFirstSync(
@@ -365,6 +398,21 @@ describe('authorized durable tool effect dispatch', () => {
         'SELECT boundary, phase FROM execution_checkpoints ORDER BY sequence DESC LIMIT 1',
       ),
     ).toEqual({ boundary: 'terminal', phase: 'deliver' });
+    const persistedReceipt = getExecutionJournalDb().getFirstSync<{
+      receipt_digest: string;
+      receipt_json: string;
+      recorded_at: number;
+    }>('SELECT receipt_digest, receipt_json, recorded_at FROM execution_effect_receipts');
+    expect(persistedReceipt).toEqual({
+      receipt_digest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      receipt_json: JSON.stringify(result.receipt),
+      recorded_at: result.receipt.recordedAt,
+    });
+    expect(() =>
+      getExecutionJournalDb().runSync(
+        'UPDATE execution_effect_receipts SET persisted_at = persisted_at + 1',
+      ),
+    ).toThrow('execution_effect_receipt_immutable');
   });
 
   it('allows only one concurrent claimant to invoke the executor', async () => {
@@ -403,15 +451,43 @@ describe('authorized durable tool effect dispatch', () => {
     const firstExecutor = jest.fn(async () => verifiedWriteResult());
     const replayExecutor = jest.fn(async () => verifiedWriteResult());
 
-    await expect(
-      dispatchAuthorizedToolEffect(writeInput(firstExecutor), { now: () => 100 }),
-    ).resolves.toMatchObject({ kind: 'executed' });
+    const first = await dispatchAuthorizedToolEffect(writeInput(firstExecutor), {
+      now: () => 100,
+    });
+    expect(first).toMatchObject({ kind: 'executed' });
+    expect(count('execution_effect_receipts')).toBe(1);
+    closeExecutionJournalDb();
+
     const replay = await dispatchAuthorizedToolEffect(writeInput(replayExecutor), {
       now: () => 101,
     });
 
-    expect(replay).toMatchObject({ kind: 'reconciliation_required' });
+    expect(replay).toMatchObject({
+      kind: 'reconciliation_required',
+      reason: 'duplicate_suppressed',
+    });
     expect(replay.result).toContain('do not retry automatically');
+    expect(firstExecutor).toHaveBeenCalledTimes(1);
+    expect(replayExecutor).not.toHaveBeenCalled();
+    expect(count('execution_effect_receipts')).toBe(1);
+  });
+
+  it('rejects a persisted receipt digest conflict without executing again', async () => {
+    const firstExecutor = jest.fn(async () => verifiedWriteResult());
+    const replayExecutor = jest.fn(async () => verifiedWriteResult());
+
+    await expect(
+      dispatchAuthorizedToolEffect(writeInput(firstExecutor), { now: () => 100 }),
+    ).resolves.toMatchObject({ kind: 'executed' });
+    getExecutionJournalDb().execSync('DROP TRIGGER trg_execution_effect_receipts_immutable');
+    getExecutionJournalDb().runSync(
+      `UPDATE execution_effect_receipts SET receipt_digest = ?`,
+      'f'.repeat(64),
+    );
+
+    await expect(
+      dispatchAuthorizedToolEffect(writeInput(replayExecutor), { now: () => 101 }),
+    ).resolves.toMatchObject({ kind: 'blocked', reason: 'state_unavailable' });
     expect(firstExecutor).toHaveBeenCalledTimes(1);
     expect(replayExecutor).not.toHaveBeenCalled();
   });

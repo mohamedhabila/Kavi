@@ -2,6 +2,8 @@ import type { AgentGoal } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type { ToolDefinition } from '../../types/tool';
+import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
+import type { ToolObservedMemoryEvidenceCapability } from '../../services/memory/toolObservedMemoryEvidence';
 
 export interface CodeOwnedCurrentUserMessage {
   id: string;
@@ -27,6 +29,8 @@ export interface ToolExecutionContext {
   toolCallId?: string;
   /** Current lifecycle cancellation signal, revalidated immediately before effect dispatch. */
   executionSignal?: AbortSignal;
+  /** Code-owned authority bound to the exact model turn that proposed this call. */
+  modelTurnMemoryPolicyBinding?: ModelTurnMemoryPolicyBinding;
   /** Exact code-selected runtime declaration for dynamic MCP/skill receipt evidence. */
   runtimeToolDeclaration?: ToolDefinition;
   /** Internal receipt handoff; never populated from provider-authored arguments. */
@@ -37,6 +41,8 @@ export interface ToolExecutionContext {
   captureEffectReconciliationRequired?: () => void;
   /** Exact raw request message selected by product code; never provider supplied. */
   currentUserMessage?: CodeOwnedCurrentUserMessage;
+  /** Opaque authorities minted from successful code-owned reads in this execution run. */
+  toolObservedMemoryEvidence?: ReadonlyArray<ToolObservedMemoryEvidenceCapability>;
 }
 
 export type ResolvedToolWorkspaceContext = {

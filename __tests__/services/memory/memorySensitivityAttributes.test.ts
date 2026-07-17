@@ -2,17 +2,18 @@ import { classifyMemoryFactSensitivity } from '../../../src/services/memory/memo
 
 function classify(attributes: Record<string, unknown>): string {
   return classifyMemoryFactSensitivity({
+    declaredSensitivity: 'normal',
     subject: 'project',
-    subjectType: 'project',
     predicate: 'status',
     objectText: 'ready',
     attributes,
   });
 }
 
-it('classifies complete nested attribute keys and values', () => {
-  expect(classify({ auth: { refreshToken: 'opaque' } })).toBe('restricted');
-  expect(classify({ note: 'The medical history was reviewed.' })).toBe('sensitive');
+it('classifies complete nested attribute structure without interpreting labels', () => {
+  expect(classify({ auth: { refreshToken: `ghp_${'a'.repeat(36)}` } })).toBe('restricted');
+  expect(classify({ note: 'person@example.com' })).toBe('sensitive');
+  expect(classify({ auth: { refreshToken: 'opaque' } })).toBe('normal');
   expect(classify({ release: { state: 'ready' } })).toBe('normal');
 });
 
@@ -65,10 +66,10 @@ it('fails closed when a proxy prevents root inspection', () => {
   expect(classify(attributes)).toBe('restricted');
 });
 
-it('lets truncation dominate an otherwise lower classification', () => {
+it('lets truncation dominate a structurally sensitive value', () => {
   expect(
     classify({
-      note: 'The medical history was reviewed.',
+      note: 'person@example.com',
       oversized: 'x'.repeat(1_001),
     }),
   ).toBe('restricted');

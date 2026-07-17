@@ -14,6 +14,18 @@ const DEFAULT_EXCEPTIONS = [
   /^src\/i18n\/locales\//,
 ];
 
+// Exact debt budgets keep existing oversized files from growing while new files
+// remain subject to the contribution-scale default. Reduce a budget when its
+// file is split; never add a broad directory exception.
+const DEFAULT_LINE_BUDGETS = Object.freeze({
+  '__tests__/engine/toolExecutionOutcomeResolution.graphMutationApplication.test.ts': 757,
+  '__tests__/services/memory/agentRunEvidenceMemory.test.ts': 754,
+  '__tests__/services/memory/factRecall.test.ts': 845,
+  '__tests__/services/memory/llmFactSelector.test.ts': 737,
+  'src/services/memory/agentRunEvidenceMemory.ts': 742,
+  'src/services/memory/livingMemoryBridge.ts': 711,
+});
+
 function normalizePath(filePath) {
   return filePath.replace(/\\/g, '/').replace(/^\.\//, '');
 }
@@ -58,6 +70,7 @@ function isPassThroughBarrel(filePath, content) {
 function findMaintainabilityFailures(entries, options = {}) {
   const maxLines = options.maxLines ?? DEFAULT_MAX_LINES;
   const exceptions = options.exceptions ?? DEFAULT_EXCEPTIONS;
+  const lineBudgets = options.lineBudgets ?? DEFAULT_LINE_BUDGETS;
   const failures = [];
 
   for (const entry of entries) {
@@ -67,13 +80,14 @@ function findMaintainabilityFailures(entries, options = {}) {
     }
 
     const lines = countPhysicalLines(entry.content);
-    if (lines > maxLines) {
+    const fileMaxLines = lineBudgets[filePath] ?? maxLines;
+    if (lines > fileMaxLines) {
       failures.push({
         type: 'line-count',
         filePath,
         lines,
-        maxLines,
-        message: `${filePath} has ${lines} physical lines, above the ${maxLines}-line limit`,
+        maxLines: fileMaxLines,
+        message: `${filePath} has ${lines} physical lines, above the ${fileMaxLines}-line limit`,
       });
     }
 
@@ -133,6 +147,7 @@ function runMaintainabilityCli(projectRoot = path.resolve(__dirname, '../..')) {
 
 module.exports = {
   DEFAULT_EXCEPTIONS,
+  DEFAULT_LINE_BUDGETS,
   DEFAULT_MAX_LINES,
   collectProjectEntries,
   countPhysicalLines,

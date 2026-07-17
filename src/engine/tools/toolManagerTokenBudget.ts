@@ -12,6 +12,7 @@ const CORE_TOOL_TOKEN_BUDGET_NAMES = new Set([
   'web_search',
   'web_fetch',
 ]);
+const MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT = 60;
 
 export interface CompactToolDefinitionOptions {
   pinnedToolNames?: ReadonlySet<string>;
@@ -117,9 +118,9 @@ export function compressToolDescriptionMinimal(description: string): string {
       .map((sentence) => sentence.trim())
       .find(Boolean) ?? description.trim();
 
-  return firstSentence.length <= 160
+  return firstSentence.length <= MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT
     ? firstSentence
-    : `${firstSentence.slice(0, 157).trimEnd()}...`;
+    : `${firstSentence.slice(0, MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT - 1).trimEnd()}\u2026`;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, any> {

@@ -1,5 +1,5 @@
-import * as Crypto from 'expo-crypto';
 import { runMemoryTransaction } from './access/transaction';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import { RECALL_CANDIDATE_LIMITS } from './factRecallCandidateContract';
 import {
   MEMORY_RETRIEVAL_BARRIER_OUTCOMES,
@@ -25,7 +25,8 @@ import type {
   RecordMemoryRetrievalEventResult,
 } from './retrievalEventTypes';
 import type { MemoryRetrievalEventRow } from './retrievalEventRow';
-import { ensureFactSchema, newId } from './schema';
+import { ensureFactSchema } from './schema';
+import { newId } from './schemaValues';
 import { getMemoryDb } from './database';
 
 const MEMORY_RETRIEVAL_READ_LIMIT = MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT;
@@ -63,9 +64,7 @@ export async function buildMemoryRetrievalQueryFingerprint(
   }
   return {
     hashAlgorithm: 'sha256',
-    hash: (
-      await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, query)
-    ).toLowerCase(),
+    hash: await sha256HexUtf8Async(query),
     length: query.length,
     unitCount: units.size,
   };
@@ -81,12 +80,7 @@ export async function buildMemoryRetrievalScopeHash(
   if (structuralId !== structuralId.trim() || !STRUCTURAL_ID_PATTERN.test(structuralId)) {
     throw new RangeError('Retrieval scope id is not a bounded structural identifier.');
   }
-  return (
-    await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      `${domain}\u0000${structuralId}`,
-    )
-  ).toLowerCase();
+  return sha256HexUtf8Async(`${domain}\u0000${structuralId}`);
 }
 
 function ensureTable(): void {

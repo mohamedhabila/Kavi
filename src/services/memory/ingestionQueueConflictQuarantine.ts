@@ -281,9 +281,13 @@ function collectConflictingSourceArtifacts(
 function quarantineConflictingSourceArtifacts(
   db: MemoryDb,
   group: ReadonlyArray<PersistedIngestionIdentityRow>,
-): void {
+): boolean {
   const artifacts = collectConflictingSourceArtifacts(db, group);
   const episodeIds = artifacts.episodes.map((episode) => episode.id);
+  let promptProjectionChanged = false;
+  const recordChange = (changes: number | undefined): void => {
+    if ((changes ?? 0) > 0) promptProjectionChanged = true;
+  };
   const quarantineAt = Math.max(
     0,
     ...group.map((row) =>
@@ -293,38 +297,63 @@ function quarantineConflictingSourceArtifacts(
 
   eachArtifactBatch(episodeIds, (batch) => {
     const placeholders = batch.map(() => '?').join(', ');
-    db.runSync(`DELETE FROM memory_fact_evidence WHERE episode_id IN (${placeholders})`, ...batch);
-    db.runSync(
-      `DELETE FROM memory_episode_access_policies WHERE episode_id IN (${placeholders})`,
-      ...batch,
+    recordChange(
+      db.runSync(`DELETE FROM memory_fact_evidence WHERE episode_id IN (${placeholders})`, ...batch)
+        .changes,
     );
-    db.runSync(`DELETE FROM memory_episode_terms WHERE episode_id IN (${placeholders})`, ...batch);
-    db.runSync(
-      `UPDATE memory_episodes
-          SET deleted_at = COALESCE(deleted_at, ?)
-        WHERE id IN (${placeholders})`,
-      quarantineAt,
-      ...batch,
+    recordChange(
+      db.runSync(
+        `DELETE FROM memory_episode_access_policies WHERE episode_id IN (${placeholders})`,
+        ...batch,
+      ).changes,
+    );
+    recordChange(
+      db.runSync(`DELETE FROM memory_episode_terms WHERE episode_id IN (${placeholders})`, ...batch)
+        .changes,
+    );
+    recordChange(
+      db.runSync(
+        `UPDATE memory_episodes
+          SET deleted_at = ?
+        WHERE id IN (${placeholders})
+          AND deleted_at IS NULL`,
+        quarantineAt,
+        ...batch,
+      ).changes,
     );
   });
   eachArtifactBatch(artifacts.factIds, (batch) => {
     const placeholders = batch.map(() => '?').join(', ');
-    db.runSync(`DELETE FROM memory_fact_evidence WHERE fact_id IN (${placeholders})`, ...batch);
-    db.runSync(`DELETE FROM memory_fact_observations WHERE fact_id IN (${placeholders})`, ...batch);
-    db.runSync(`DELETE FROM memory_fact_terms WHERE fact_id IN (${placeholders})`, ...batch);
-    db.runSync(
-      `UPDATE memory_facts
+    recordChange(
+      db.runSync(`DELETE FROM memory_fact_evidence WHERE fact_id IN (${placeholders})`, ...batch)
+        .changes,
+    );
+    recordChange(
+      db.runSync(
+        `DELETE FROM memory_fact_observations WHERE fact_id IN (${placeholders})`,
+        ...batch,
+      ).changes,
+    );
+    const deletedTerms =
+      db.runSync(`DELETE FROM memory_fact_terms WHERE fact_id IN (${placeholders})`, ...batch)
+        .changes ?? 0;
+    recordChange(deletedTerms);
+    recordChange(
+      db.runSync(
+        `UPDATE memory_facts
           SET invalid_at = COALESCE(invalid_at, ?),
               deleted_at = COALESCE(deleted_at, ?),
               updated_at = MAX(updated_at, ?)
-        WHERE id IN (${placeholders})`,
-      quarantineAt,
-      quarantineAt,
-      quarantineAt,
-      ...batch,
+        WHERE id IN (${placeholders})
+          AND (invalid_at IS NULL OR deleted_at IS NULL)`,
+        quarantineAt,
+        quarantineAt,
+        quarantineAt,
+        ...batch,
+      ).changes,
     );
   });
-  if (artifacts.factIds.length > 0) {
+  if (promptProjectionChanged && artifacts.factIds.length > 0) {
     db.execSync(`
       DELETE FROM memory_fact_term_stats;
       INSERT INTO memory_fact_term_stats(unit, memory_kind, fact_count, total_weight)
@@ -336,18 +365,20 @@ function quarantineConflictingSourceArtifacts(
 
   for (const id of [...episodeIds, ...artifacts.factIds]) {
     const encoded = JSON.stringify(id);
-    db.runSync(
-      `UPDATE memory_reflections
+    recordChange(
+      db.runSync(
+        `UPDATE memory_reflections
           SET deleted_at = COALESCE(deleted_at, ?), updated_at = MAX(updated_at, ?)
         WHERE deleted_at IS NULL
           AND (
             INSTR(source_episode_ids_json, ?) > 0
             OR INSTR(source_fact_ids_json, ?) > 0
           )`,
-      quarantineAt,
-      quarantineAt,
-      encoded,
-      encoded,
+        quarantineAt,
+        quarantineAt,
+        encoded,
+        encoded,
+      ).changes,
     );
     db.runSync(
       `DELETE FROM memory_retrieval_events
@@ -357,9 +388,10 @@ function quarantineConflictingSourceArtifacts(
       encoded,
     );
   }
+  return promptProjectionChanged;
 }
 
-export function quarantineConflictingSourceDuplicates(db: MemoryDb): void {
+export function quarantineConflictingSourceDuplicates(db: MemoryDb): boolean {
   const rows = db.getAllSync<PersistedIngestionIdentityRow>(
     `SELECT id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
             source_run_id, chat_provider_id, chat_model, prior_user_message_id,
@@ -376,9 +408,11 @@ export function quarantineConflictingSourceDuplicates(db: MemoryDb): void {
     group.push(row);
     groups.set(key, group);
   }
+  let promptProjectionChanged = false;
   for (const group of groups.values()) {
     if (group.length < 2 || new Set(group.map(ingestionIdentityKey)).size === 1) continue;
-    quarantineConflictingSourceArtifacts(db, group);
+    promptProjectionChanged =
+      quarantineConflictingSourceArtifacts(db, group) || promptProjectionChanged;
     for (const row of group) {
       db.runSync('DELETE FROM memory_ingestion_structural_receipts WHERE job_id = ?', row.id);
       db.runSync('DELETE FROM memory_ingestion_receipts WHERE job_id = ?', row.id);
@@ -394,4 +428,5 @@ export function quarantineConflictingSourceDuplicates(db: MemoryDb): void {
       );
     }
   }
+  return promptProjectionChanged;
 }

@@ -5,12 +5,17 @@
 // conversation/task scoped so one thread cannot bleed into another prompt.
 // ---------------------------------------------------------------------------
 
-import { getMany, getOne, runMemoryStatement } from './access/crud';
+import { getMany, getOne } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
-import { runAfterMemoryTransactionCommit } from './access/transaction';
+import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/transaction';
 import { canWriteLongTermMemory } from './policy';
+import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import {
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from './memoryAuthority';
 
 export type WorkingBlockLabel =
   | 'active_focus'
@@ -147,73 +152,95 @@ export function editWorkingBlock(
   options: { now?: number; promptEligibility?: WorkingBlockPromptEligibility } = {},
 ): WorkingMemoryBlock {
   if (!canWriteLongTermMemory()) throw new Error('memory_disabled');
-  const db = getSchemaReadyMemoryDb();
-  const now = options.now ?? Date.now();
-  const def = definitionFor(label);
-  const trimmed = content.trim();
-  if (trimmed.length > def.charLimit) {
-    throw new Error(`working block "${label}" overflow: ${trimmed.length} > ${def.charLimit}`);
-  }
-  const conversationId = exactOptionalId(scope.conversationId, 'conversation');
-  const threadId = exactOptionalId(scope.threadId, 'thread') ?? conversationId;
-  const taskId = exactOptionalId(scope.taskId, 'task');
-  const promptEligibility = options.promptEligibility ?? 'untrusted';
-  if (promptEligibility !== 'trusted_structural' && promptEligibility !== 'untrusted') {
-    throw new Error('working_block_prompt_eligibility_invalid');
-  }
-  const scopeKey = buildWorkingBlockScopeKey({ conversationId, threadId, taskId });
-  const existing = db.getFirstSync<WorkingBlockRow>(
-    `SELECT * FROM memory_working_blocks WHERE label = ? AND scope_key = ? LIMIT 1`,
-    label,
-    scopeKey,
-  );
-  if (existing) {
-    db.runSync(
-      `UPDATE memory_working_blocks
-         SET content = ?, char_limit = ?, description = ?, conversation_id = ?, thread_id = ?, task_id = ?, prompt_eligibility = ?, updated_at = ?
-         WHERE label = ? AND scope_key = ?`,
-      trimmed,
-      def.charLimit,
-      def.description,
-      conversationId,
-      threadId,
-      taskId,
-      promptEligibility,
-      now,
+  return runMemoryTransaction(() => {
+    const db = getSchemaReadyMemoryDb();
+    const now = options.now ?? Date.now();
+    const def = definitionFor(label);
+    const trimmed = content.trim();
+    if (trimmed.length > def.charLimit) {
+      throw new Error(`working block "${label}" overflow: ${trimmed.length} > ${def.charLimit}`);
+    }
+    const conversationId = exactOptionalId(scope.conversationId, 'conversation');
+    const threadId = exactOptionalId(scope.threadId, 'thread') ?? conversationId;
+    const taskId = exactOptionalId(scope.taskId, 'task');
+    const promptEligibility = options.promptEligibility ?? 'untrusted';
+    if (promptEligibility !== 'trusted_structural' && promptEligibility !== 'untrusted') {
+      throw new Error('working_block_prompt_eligibility_invalid');
+    }
+    const scopeKey = buildWorkingBlockScopeKey({ conversationId, threadId, taskId });
+    const existing = db.getFirstSync<WorkingBlockRow>(
+      `SELECT * FROM memory_working_blocks WHERE label = ? AND scope_key = ? LIMIT 1`,
       label,
       scopeKey,
     );
-  } else {
-    db.runSync(
-      `INSERT INTO memory_working_blocks
-         (label, scope_key, conversation_id, thread_id, task_id, content, char_limit, description, prompt_eligibility, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    const projectionChanged = existing
+      ? existing.content !== trimmed || existing.prompt_eligibility !== promptEligibility
+      : trimmed.length > 0;
+    const replacedAdmittedProjection = Boolean(
+      existing &&
+      existing.content.length > 0 &&
+      (label === 'task_stack' || existing.prompt_eligibility === 'trusted_structural') &&
+      (existing.content !== trimmed || promptEligibility !== 'trusted_structural'),
+    );
+    if (existing) {
+      db.runSync(
+        `UPDATE memory_working_blocks
+           SET content = ?, char_limit = ?, description = ?, conversation_id = ?, thread_id = ?, task_id = ?, prompt_eligibility = ?, updated_at = ?
+           WHERE label = ? AND scope_key = ?`,
+        trimmed,
+        def.charLimit,
+        def.description,
+        conversationId,
+        threadId,
+        taskId,
+        promptEligibility,
+        now,
+        label,
+        scopeKey,
+      );
+    } else {
+      db.runSync(
+        `INSERT INTO memory_working_blocks
+           (label, scope_key, conversation_id, thread_id, task_id, content, char_limit, description, prompt_eligibility, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        label,
+        scopeKey,
+        conversationId,
+        threadId,
+        taskId,
+        trimmed,
+        def.charLimit,
+        def.description,
+        promptEligibility,
+        now,
+      );
+    }
+    if (projectionChanged) {
+      const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+      if (replacedAdmittedProjection) {
+        advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
+      } else if (
+        label === 'task_stack' ||
+        promptEligibility === 'trusted_structural' ||
+        existing?.prompt_eligibility === 'trusted_structural'
+      ) {
+        advanceMemoryProjectionInTransaction(db, memoryOwnerId);
+      }
+      runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(conversationId));
+    }
+    return {
       label,
       scopeKey,
       conversationId,
       threadId,
       taskId,
-      trimmed,
-      def.charLimit,
-      def.description,
+      content: trimmed,
+      charLimit: def.charLimit,
+      description: def.description,
       promptEligibility,
-      now,
-    );
-  }
-  const block = {
-    label,
-    scopeKey,
-    conversationId,
-    threadId,
-    taskId,
-    content: trimmed,
-    charLimit: def.charLimit,
-    description: def.description,
-    promptEligibility,
-    updatedAt: now,
-  };
-  runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(conversationId));
-  return block;
+      updatedAt: now,
+    };
+  });
 }
 
 export function editPromptEligibleWorkingBlock(
@@ -233,18 +260,28 @@ export function clearWorkingBlock(
   scope: WorkingBlockScope = {},
   now = Date.now(),
 ): boolean {
-  const scopeKey = buildWorkingBlockScopeKey(scope);
-  const result = runMemoryStatement(
-    `UPDATE memory_working_blocks SET content = '', updated_at = ? WHERE label = ? AND scope_key = ?`,
-    now,
-    label,
-    scopeKey,
-  );
-  const changed = (result.changes ?? 0) > 0;
-  if (changed) {
+  return runMemoryTransaction(() => {
+    const db = getSchemaReadyMemoryDb();
+    const scopeKey = buildWorkingBlockScopeKey(scope);
+    const existing = db.getFirstSync<WorkingBlockRow>(
+      `SELECT * FROM memory_working_blocks WHERE label = ? AND scope_key = ? LIMIT 1`,
+      label,
+      scopeKey,
+    );
+    if (!existing || existing.content.length === 0) return false;
+    const result = db.runSync(
+      `UPDATE memory_working_blocks SET content = '', updated_at = ? WHERE label = ? AND scope_key = ? AND content <> ''`,
+      now,
+      label,
+      scopeKey,
+    );
+    if ((result.changes ?? 0) !== 1) return false;
+    if (label === 'task_stack' || existing.prompt_eligibility === 'trusted_structural') {
+      advanceRestrictiveMemoryAuthorityInTransaction(db, getLocalMemoryVaultOwnerId(db));
+    }
     runAfterMemoryTransactionCommit(() =>
       notifyStructuredMemoryChanged(scope.conversationId ?? scope.threadId ?? null),
     );
-  }
-  return changed;
+    return true;
+  });
 }

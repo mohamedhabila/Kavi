@@ -475,6 +475,44 @@ describe('chatPersistence', () => {
     expect(Object.isFrozen(restartedReceipts?.[0])).toBe(true);
   });
 
+  it('removes only empty orphan drafts appended after a locked published final on restart', () => {
+    const persisted = partializeChatPersistState({
+      conversations: [
+        makeConversation({
+          messages: [
+            makeMessage(1, { role: 'user', content: 'Finish this task.' }),
+            makeMessage(2, {
+              role: 'assistant',
+              content: 'The task failed truthfully.',
+              assistantMetadata: {
+                kind: 'final',
+                completionStatus: 'complete',
+                finishReason: 'fallback_from_evidence',
+              },
+              memoryPublication: { version: 1, disposition: 'enqueued' },
+            }),
+            makeMessage(3, { role: 'assistant', content: '' }),
+          ],
+        }),
+      ],
+      activeConversationId: 'conv-1',
+      isLoading: false,
+    });
+
+    const restarted = normalizePersistedChatState(
+      JSON.parse(JSON.stringify(persisted)) as typeof persisted,
+    );
+
+    expect(restarted.conversations[0].messages.map((message) => message.id)).toEqual([
+      'msg-1',
+      'msg-2',
+    ]);
+    expect(restarted.conversations[0].messages[1].memoryPublication).toEqual({
+      version: 1,
+      disposition: 'enqueued',
+    });
+  });
+
   it('round-trips only content-free runtime-external receipt evidence', () => {
     const toolName = 'mcp__calendar__create_event';
     const receipt = makePersistedEffectReceipt({

@@ -62,10 +62,13 @@ describe('Orchestrator', () => {
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'final-answer' },
-          { type: 'done', content: 'final-answer' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'final-answer' },
+            { type: 'done', content: 'final-answer' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -103,37 +106,43 @@ describe('Orchestrator', () => {
 
     it('replays Gemini tool calls with preserved thought signatures', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc1',
-              name: 'read_file',
-              arguments: '{"path":"test.txt"}',
-              raw: {
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
                 id: 'tc1',
-                type: 'function',
-                extra_content: {
-                  google: {
-                    thought_signature: 'sig-A',
+                name: 'read_file',
+                arguments: '{"path":"test.txt"}',
+                raw: {
+                  id: 'tc1',
+                  type: 'function',
+                  extra_content: {
+                    google: {
+                      thought_signature: 'sig-A',
+                    },
                   },
-                },
-                function: {
-                  name: 'read_file',
-                  arguments: '{"path":"test.txt"}',
+                  function: {
+                    name: 'read_file',
+                    arguments: '{"path":"test.txt"}',
+                  },
                 },
               },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -181,25 +190,28 @@ describe('Orchestrator', () => {
 
     it('refuses unsigned Gemini tool turns instead of fabricating replay metadata', async () => {
       const missingSignatureToolTurn = () =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc1',
-              name: 'read_file',
-              arguments: '{"path":"test.txt"}',
-              raw: {
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
                 id: 'tc1',
-                type: 'function',
-                function: {
-                  name: 'read_file',
-                  arguments: '{"path":"test.txt"}',
+                name: 'read_file',
+                arguments: '{"path":"test.txt"}',
+                raw: {
+                  id: 'tc1',
+                  type: 'function',
+                  function: {
+                    name: 'read_file',
+                    arguments: '{"path":"test.txt"}',
+                  },
                 },
               },
             },
-          },
-          { type: 'done', content: '' },
-        ]);
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        );
 
       mockStreamMessage.mockImplementation(missingSignatureToolTurn);
 
@@ -230,10 +242,13 @@ describe('Orchestrator', () => {
 
     it('leaves replayed Gemini tool calls unchanged when exact metadata is missing', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -303,20 +318,26 @@ describe('Orchestrator', () => {
       (executeTool as jest.Mock).mockRejectedValueOnce(new Error('Permission denied'));
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"missing.txt"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"missing.txt"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Sorry, failed' },
-          { type: 'done', content: 'Sorry, failed' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Sorry, failed' },
+            { type: 'done', content: 'Sorry, failed' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -337,26 +358,33 @@ describe('Orchestrator', () => {
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
-    it('treats error-like tool result strings as failed outcomes', async () => {
-      (executeTool as jest.Mock).mockResolvedValueOnce(
-        'Error: HTTP 403: access denied by the configured credential.',
+    it('uses executor-owned failure status for opaque tool result content', async () => {
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'failed',
+        content: 'HTTP 403: access denied by the configured credential.',
+      });
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"secret.txt"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"secret.txt"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
-      );
-
-      mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Blocked by credentials.' },
-          { type: 'done', content: 'Blocked by credentials.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Blocked by credentials.' },
+            { type: 'done', content: 'Blocked by credentials.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

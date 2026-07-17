@@ -27,6 +27,7 @@ import {
   mockCancelSubAgent,
   mockRunOrchestrator,
 } from '../../../testSupport/chatScreen/serviceMocks';
+import { createAgentRunAbortError } from '../../../src/services/runtimeError';
 
 describe('ChatScreen run cancellation', () => {
   beforeEach(resetChatScreenTestEnvironment);
@@ -47,7 +48,7 @@ describe('ChatScreen run cancellation', () => {
   });
 
   it('does not show error for cancellation', async () => {
-    mockRunOrchestrator.mockRejectedValueOnce(new Error('Request cancelled'));
+    mockRunOrchestrator.mockRejectedValueOnce(createAgentRunAbortError('Request cancelled'));
     const { getByPlaceholderText, getByTestId, queryByText } = render(<ChatScreen />);
     const input = getByPlaceholderText('Message...');
     fireEvent.changeText(input, 'Cancel test');

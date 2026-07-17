@@ -42,6 +42,9 @@ import {
 } from '../../src/services/skills/manager';
 import type { ToolDefinition } from '../../src/types/tool';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
+import {
+  POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+} from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -95,6 +98,7 @@ function lifecycle(onToolCallComplete = jest.fn()): ToolExecutionLifecycleParams
     usePerformanceMetrics: false,
     agentRunId: 'agent-run-1',
     executionRunId: 'execution-run-1',
+    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     idPrefixes: {
       blocked: 'blocked',
       filtered: 'filtered',
@@ -223,6 +227,7 @@ describe('production tool lifecycle durable effect wiring', () => {
       {
         toolCallId: 'tool-call-memory-rejected',
         executionRunId: 'execution-run-memory-rejected',
+        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
       },
     );
@@ -267,6 +272,63 @@ describe('production tool lifecycle durable effect wiring', () => {
     ).toEqual({ run_status: 'failed', effect_status: 'failed' });
   });
 
+  it('keeps a scheduled-task precondition rejection repairable without reconciliation', async () => {
+    mockedNeedsApproval.mockReturnValue(false);
+    mockedExecuteToolInner.mockResolvedValue(
+      failedToolOutcome(
+        JSON.stringify({
+          status: 'rejected',
+          code: 'scheduled_job_target_required',
+          error: 'A task id or exact task name is required.',
+          repair: {
+            retryable: true,
+            code: 'scheduled_job_target_required',
+            missingFields: ['id', 'name'],
+            tool: 'cron',
+            retryArguments: { action: 'list' },
+          },
+        }),
+      ),
+    );
+    const captureEffectReceipt = jest.fn();
+
+    const result = await executeTool(
+      'cron',
+      JSON.stringify({ action: 'disable' }),
+      'conversation-1',
+      {
+        toolCallId: 'tool-call-cron-rejected',
+        executionRunId: 'execution-run-cron-rejected',
+        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+        captureEffectReceipt,
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(JSON.parse(result.content)).toMatchObject({
+      status: 'rejected',
+      code: 'scheduled_job_target_required',
+      repair: { retryable: true, tool: 'cron' },
+    });
+    expect(JSON.parse(result.content)).not.toHaveProperty(
+      'code',
+      'tool_effect_reconciliation_required',
+    );
+    expect(captureEffectReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effectKind: 'workflow.mutate',
+        effectState: 'failed',
+        verificationState: 'unverified',
+      }),
+    );
+    expect(
+      getExecutionJournalDb().getFirstSync(
+        `SELECT r.status AS run_status, e.status AS effect_status
+           FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
+      ),
+    ).toEqual({ run_status: 'failed', effect_status: 'failed' });
+  });
+
   it('fails closed for an effectful central dispatch without an execution-run identity', async () => {
     mockedNeedsApproval.mockReturnValue(false);
     mockedExecuteToolInner.mockResolvedValue(completedToolOutcome('{}'));
@@ -278,6 +340,7 @@ describe('production tool lifecycle durable effect wiring', () => {
       'conversation-1',
       {
         toolCallId: 'tool-call-missing-execution-run',
+        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         finalizeEffectReceiptCapture,
       },
     );

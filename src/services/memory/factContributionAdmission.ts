@@ -1,4 +1,5 @@
 import { runMemoryDatabaseSavepoint } from './access/databaseSavepoint';
+import { runAfterMemoryTransactionCommit } from './access/transaction';
 import type { getMemoryDb } from './database';
 import {
   buildMemoryFactContributionId,
@@ -29,6 +30,10 @@ import {
 import type { FactRow } from './facts/types';
 import { requireFactMutationTimestamp } from './facts/mutationValidation';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import {
+  advanceRestrictiveMemoryAuthorityRevisions,
+  invalidateRestrictiveMemoryAuthorityProcessEpoch,
+} from './memoryAuthorityState';
 import { sha256HexUtf8 } from '../../utils/sha256';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
@@ -307,7 +312,8 @@ export function admitLegacyFactContributions(
     return markerResult(marker, 'already_completed');
   }
 
-  return runMemoryDatabaseSavepoint(db, (database) => {
+  let restrictiveProjectionChanged = false;
+  const result = runMemoryDatabaseSavepoint<FactContributionAdmissionResult>(db, (database) => {
     const memoryOwnerId = getLocalMemoryVaultOwnerId(database);
     const proofIndex = buildLegacyFactAdmissionProofIndex(database);
     const contributedFactIds = new Set(
@@ -361,7 +367,14 @@ export function admitLegacyFactContributions(
       admissions.push({ row, scope: proof.scope, aliases: proof.aliases });
     }
     persistLegacyContributions(database, admissions);
-    quarantineLegacyFacts({ db: database, entries: quarantines, quarantinedAt: completedAt });
+    restrictiveProjectionChanged = quarantineLegacyFacts({
+      db: database,
+      entries: quarantines,
+      quarantinedAt: completedAt,
+    });
+    if (restrictiveProjectionChanged) {
+      advanceRestrictiveMemoryAuthorityRevisions(database, memoryOwnerId);
+    }
     assertRecoverableAdmissionIntegrity(database);
     database.runSync(
       `INSERT INTO memory_fact_contribution_admission(
@@ -380,4 +393,8 @@ export function admitLegacyFactContributions(
       quarantinedCount: quarantines.length,
     };
   });
+  if (restrictiveProjectionChanged) {
+    runAfterMemoryTransactionCommit(invalidateRestrictiveMemoryAuthorityProcessEpoch);
+  }
+  return result;
 }

@@ -20,13 +20,13 @@ describe('private KLAE artifact containment', () => {
 
   beforeEach(() => {
     fixture = createPrivateReleaseFixture(projectRoot);
-    gitSpy = jest.spyOn(childProcess, 'execFileSync').mockImplementation(
-      (_command: string, args: string[]) => {
+    gitSpy = jest
+      .spyOn(childProcess, 'execFileSync')
+      .mockImplementation((_command: string, args: string[]) => {
         if (args[0] === 'rev-parse') return `${fixture.expected.appCommitSha}\n`;
         if (args[0] === 'status') return '';
         throw new Error(`Unexpected Git command: ${args.join(' ')}`);
-      },
-    );
+      });
   });
 
   afterEach(() => {
@@ -36,7 +36,7 @@ describe('private KLAE artifact containment', () => {
 
   function validate() {
     return validatePrivateKlaeRelease({
-      projectRoot,
+      projectRoot: fixture.projectRoot,
       registryPath: fixture.registryPath,
       expected: fixture.expected,
     });

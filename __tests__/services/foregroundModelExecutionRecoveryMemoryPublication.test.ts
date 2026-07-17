@@ -42,7 +42,7 @@ function conversation(params: { receipt: 'open' | 'absent' }): Conversation {
         role: 'assistant',
         content: 'Done.',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
         ...(params.receipt === 'open'
           ? { memoryPublication: { version: 1 as const, disposition: null } }
           : {}),

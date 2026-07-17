@@ -14,6 +14,7 @@ import {
 import { requireExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { requireExactMemoryScopeId } from './memoryScopeIdentity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import { advanceRestrictiveMemoryAuthorityInTransaction } from './memoryAuthority';
 import {
   loadExistingSourceRetirementFencesInTransaction,
   loadVerifiedSourceRetirementOperationInTransaction,
@@ -372,6 +373,7 @@ export function retireConversationSourcesBeforeDeletion(input: {
       closedSources: Array.from(closedSources.values()),
       now: retiredAt,
     });
+    advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
     runAfterMemoryTransactionCommit(checkpointMemoryDatabaseAfterSensitiveDeletion);
   });
 

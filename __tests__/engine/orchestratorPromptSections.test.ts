@@ -4,6 +4,7 @@ import {
   DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT,
   getUserMessagePromptContent,
   joinSystemPromptSections,
+  MEMORY_MINIMAL_DISCLOSURE_CONTRACT,
   stripRuntimeContextFromUserContent,
 } from '../../src/engine/prompts/orchestratorPromptSections';
 import { splitCacheableSystemPromptSections } from '../../src/services/llm/core/systemPromptSections';
@@ -27,6 +28,12 @@ describe('orchestratorPromptSections', () => {
     expect(prompt).toContain('Runtime: mobile (React Native / Expo), channel mobile-app.');
     expect(prompt).toContain('Runtime context:');
     expect(prompt).toContain('With tools, batch independent calls and sequence only dependencies');
+    expect(prompt).toContain(
+      'An internal identifier for a named existing app resource is not user-owned missing information',
+    );
+    expect(prompt).toContain(
+      'use a unique name selector when supported, otherwise use read-only discovery',
+    );
     expect(prompt).toContain('Use the highest-leverage tool. Launch a self-contained worker');
     expect(prompt).toContain(
       'Use external-state tools only when the requested answer or action requires live data',
@@ -38,10 +45,22 @@ describe('orchestratorPromptSections', () => {
     expect(prompt).toContain('Without verified current-turn durable-memory write evidence');
     expect(prompt).toContain('never say it was remembered, saved, stored, or updated');
     expect(prompt).toContain('never promise to remember or save it');
+    expect(prompt).toContain(MEMORY_MINIMAL_DISCLOSURE_CONTRACT);
+    expect(prompt).toContain('do not volunteer superseded values');
+    expect(prompt).toContain(
+      'A retrieved memory fact labeled policy=use is already resolved input',
+    );
+    expect(prompt).toContain('do not request clarification for that parameter');
+    expect(prompt).toContain('Answer the requested scope directly');
     expect(prompt).not.toContain('Natural chitchat memory is recorded after the turn');
     expect(prompt).toContain(
       'Reading, search, recall, or verification is not completion when the request also requires action',
     );
+    expect(prompt).toContain(
+      'compare result fields and verified effects with every explicit requested outcome and constraint',
+    );
+    expect(prompt).toContain('When the user provides exact file paths, read those paths directly');
+    expect(prompt).toContain('do not list parent directories');
     expect(prompt).toContain('Fetch known URLs directly');
     expect(prompt).toContain('batch independent fetches');
     expect(prompt).not.toContain('site:host');

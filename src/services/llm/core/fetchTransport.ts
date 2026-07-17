@@ -6,6 +6,17 @@ export type LlmPerformFetch = (
   preferStreaming?: boolean,
 ) => Promise<Response>;
 
+/** Reauthorize every remote request at the final transport boundary, including adapter retries. */
+export function bindLlmPerformFetchDispatchGuard(
+  performFetch: LlmPerformFetch,
+  requestDispatchGuard: (() => void) | undefined,
+): LlmPerformFetch {
+  return (url, init, preferStreaming) => {
+    requestDispatchGuard?.();
+    return performFetch(url, init, preferStreaming);
+  };
+}
+
 function createAbortError(): Error {
   const error = new Error('Request cancelled');
   error.name = 'AbortError';

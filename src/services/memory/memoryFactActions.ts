@@ -42,13 +42,19 @@ export interface MemoryFactActionExecutionContext {
 }
 
 export interface MemoryFactActionError {
+  status: 'rejected' | 'failed_unknown';
   ok: false;
   error: string;
   code: 'invalid_args' | 'not_found' | 'memory_disabled' | 'permission_denied' | 'internal';
 }
 
 function error(code: MemoryFactActionError['code'], message: string): MemoryFactActionError {
-  return { ok: false, code, error: message };
+  return {
+    status: code === 'internal' ? 'failed_unknown' : 'rejected',
+    ok: false,
+    code,
+    error: message,
+  };
 }
 
 function exactFactId(value: unknown): string | null {

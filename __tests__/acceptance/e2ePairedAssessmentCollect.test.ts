@@ -1,6 +1,6 @@
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
-  return makeExpoSqliteMock();
+  return makeExpoSqliteMock({ fileBacked: true });
 });
 
 import { buildE2EPairedAssessmentPlan } from '../../src/acceptance/e2eAgent/e2ePairedAssessmentPlan';

@@ -4,7 +4,17 @@ export const createDefaultConversations = (): any[] => [
     title: 'Test Chat',
     messages: [
       { id: 'msg1', role: 'user', content: 'Hello', timestamp: Date.now() },
-      { id: 'msg2', role: 'assistant', content: 'Hi there!', timestamp: Date.now() },
+      {
+        id: 'msg2',
+        role: 'assistant',
+        content: 'Hi there!',
+        timestamp: Date.now(),
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
+      },
     ] as any[],
     createdAt: Date.now(),
     updatedAt: Date.now(),

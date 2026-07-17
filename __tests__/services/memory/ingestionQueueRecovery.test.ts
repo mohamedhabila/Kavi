@@ -47,6 +47,7 @@ import {
 import { getRuntimeProcessEpoch } from '../../../src/services/runtimeProcessEpoch';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
 import { resolveMockedIngestionTurn } from '../../helpers/ingestionQueueProcessFixture';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -91,7 +92,7 @@ afterEach(() => {
 });
 
 describe('ingestion queue recovery and diagnostics', () => {
-  it('reconciles an exact committed episode before recovering a foreign-process claim', () => {
+  it('reconciles an exact committed episode without spending a foreign-process interruption', () => {
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'thread-crash-window',
@@ -120,21 +121,72 @@ describe('ingestion queue recovery and diagnostics', () => {
     const episode = recordThreadLocalEpisode({
       conversationId: 'memory-crash-window',
       threadId: 'thread-crash-window',
-      sourceStartMessageId: 'user-crash-window',
-      sourceEndMessageId: 'assistant-crash-window',
-      messageIds: ['user-crash-window', 'assistant-crash-window'],
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'user-crash-window',
+        sourceAssistantMessageId: 'assistant-crash-window',
+      }),
       summary: 'The structural write committed before the queue transition.',
       now: 50,
     });
+    if (!episode) throw new Error('committed_episode_fixture_unavailable');
 
-    expect(recoverStaleIngestionJobs(100)).toEqual({ retrying: 0, degraded: 1, failed: 0 });
+    expect(recoverStaleIngestionJobs(100)).toEqual({ retrying: 1, degraded: 0, failed: 0 });
     expect(getIngestionJob(job.id)).toEqual(
       expect.objectContaining({
-        status: 'degraded',
-        structuralCompletedAt: episode!.createdAt,
+        status: 'retrying',
+        attemptCount: 4,
+        structuralCompletedAt: episode.createdAt,
         outcomeCode: 'stale_processing_lease',
+        nextAttemptAt: 100,
+        completedAt: null,
       }),
     );
+  });
+
+  it('does not exhaust a job through repeated mobile process interruptions', () => {
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'thread-relaunch-budget',
+      threadTitle: null,
+      memoryConversationId: 'memory-relaunch-budget',
+      taskId: null,
+      sourceStartMessageId: 'user-relaunch-budget',
+      sourceEndMessageId: 'assistant-relaunch-budget',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 10,
+    })!;
+
+    for (let restart = 0; restart < 8; restart += 1) {
+      getMemoryDb().runSync(
+        `UPDATE memory_ingestion_jobs
+            SET status = 'processing', attempt_count = attempt_count + 1,
+                next_attempt_at = NULL, lease_expires_at = 1_000,
+                claim_token = ?, claim_process_epoch = ?
+          WHERE id = ?`,
+        `claim-relaunch-${restart}`,
+        `${getRuntimeProcessEpoch()}-foreign-${restart}`,
+        job.id,
+      );
+
+      expect(recoverStaleIngestionJobs(100 + restart)).toEqual({
+        retrying: 1,
+        degraded: 0,
+        failed: 0,
+      });
+      expect(getIngestionJob(job.id)).toEqual(
+        expect.objectContaining({
+          status: 'retrying',
+          attemptCount: 0,
+          nextAttemptAt: 100 + restart,
+          completedAt: null,
+        }),
+      );
+    }
   });
 
   it('reconciles an exact committed fact when the turn produced no episode', () => {
@@ -496,7 +548,7 @@ describe('ingestion queue recovery and diagnostics', () => {
     expect(getIngestionJob(job.id)).toEqual(
       expect.objectContaining({
         status: 'completed_structural',
-        attemptCount: 2,
+        attemptCount: 1,
         claimToken: null,
         claimProcessEpoch: null,
         leaseExpiresAt: null,

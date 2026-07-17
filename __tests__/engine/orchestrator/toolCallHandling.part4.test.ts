@@ -18,10 +18,13 @@ describe('Orchestrator', () => {
   describe('Tool call handling part 4', () => {
     it('keeps Anthropic thinking enabled on lightweight direct turns without forcing tool use', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Merge sort uses divide and conquer.' },
-          { type: 'done', content: 'Merge sort uses divide and conquer.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Merge sort uses divide and conquer.' },
+            { type: 'done', content: 'Merge sort uses divide and conquer.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -55,10 +58,13 @@ describe('Orchestrator', () => {
 
     it('replays Anthropic assistant blocks and keeps thinking enabled in a replayable tool loop', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -140,10 +146,13 @@ describe('Orchestrator', () => {
 
     it('replays Anthropic redacted thinking blocks and keeps thinking enabled in a replayable tool loop', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -221,21 +230,28 @@ describe('Orchestrator', () => {
     });
 
     it('continues monitoring after sessions_yield records a checkpoint', async () => {
-      (executeTool as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify({ status: 'checkpointed', message: 'Waiting for workers' }),
-      );
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({ status: 'checkpointed', message: 'Waiting for workers' }),
+      });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'tool_call', toolCall: { id: 'tc1', name: 'sessions_yield', arguments: '{}' } },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'tool_call', toolCall: { id: 'tc1', name: 'sessions_yield', arguments: '{}' } },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Still monitoring workers.' },
-          { type: 'done', content: 'Still monitoring workers.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Still monitoring workers.' },
+            { type: 'done', content: 'Still monitoring workers.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -266,6 +282,7 @@ describe('Orchestrator', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       });
       expect(callbacks.onDone).toHaveBeenCalled();
@@ -274,26 +291,33 @@ describe('Orchestrator', () => {
 
     it('forces a final text-only turn after sessions_yield reports no running workers remain', async () => {
       useSuperAgentPersona();
-      (executeTool as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify({
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
           status: 'completed',
           message: 'Workers are finished',
           finalizeSupervisor: true,
           pendingSessions: [],
         }),
-      );
+      });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'tool_call', toolCall: { id: 'tc1', name: 'sessions_yield', arguments: '{}' } },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'tool_call', toolCall: { id: 'tc1', name: 'sessions_yield', arguments: '{}' } },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Final answer ready.' },
-          { type: 'done', content: 'Final answer ready.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Final answer ready.' },
+            { type: 'done', content: 'Final answer ready.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -327,6 +351,7 @@ describe('Orchestrator', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       });
       expect(callbacks.calls.onToolMessage[0]).toEqual(
@@ -338,17 +363,23 @@ describe('Orchestrator', () => {
 
     it('should require another tool after a monitoring tool result', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'tool_call', toolCall: { id: 'tc1', name: 'tool_catalog', arguments: '{}' } },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'tool_call', toolCall: { id: 'tc1', name: 'tool_catalog', arguments: '{}' } },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Still working' },
-          { type: 'done', content: 'Still working' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Still working' },
+            { type: 'done', content: 'Still working' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

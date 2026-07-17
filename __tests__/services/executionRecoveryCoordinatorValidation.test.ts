@@ -5,6 +5,9 @@ jest.mock('expo-crypto', () => {
     digestStringAsync: jest.fn(async (_algorithm: string, value: string) =>
       createHash('sha256').update(value, 'utf8').digest('hex'),
     ),
+    digest: jest.fn(async (_algorithm: string, value: Uint8Array) =>
+      Uint8Array.from(createHash('sha256').update(Buffer.from(value)).digest()).buffer,
+    ),
   };
 });
 

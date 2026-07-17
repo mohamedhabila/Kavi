@@ -17,7 +17,7 @@ import {
   loadFactContributionReplay,
   type MemoryFactContributionWriteContext,
 } from '../../../src/services/memory/factContributionStore';
-import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
+import { recordCodeOwnedTestFactWithContribution as recordFactWithContribution } from '../../helpers/factContributionWriteFixtures';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import {

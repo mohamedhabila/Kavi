@@ -20,6 +20,11 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import {
+  captureMemoryAuthoritySnapshot,
+  isMemoryProjectionSnapshotDurablyCurrent,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../src/services/memory/memoryAuthority';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -119,6 +124,8 @@ describe('local-similarity backfill', () => {
       currentVectorCount: 0,
       pendingVectorCount: 2,
     });
+    const beforeBackfill = captureMemoryAuthoritySnapshot();
+    if (!beforeBackfill) throw new Error('expected memory authority');
     expect(backfillCurrentFactLocalSimilarity({ limit: 1, now: 1_000 })).toEqual({
       processedCount: 1,
       hasMore: true,
@@ -136,6 +143,8 @@ describe('local-similarity backfill', () => {
       currentVectorCount: 2,
       pendingVectorCount: 0,
     });
+    expect(isMemoryProjectionSnapshotDurablyCurrent(beforeBackfill)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeBackfill)).toBe(true);
 
     const rows = getMemoryDb().getAllSync<{
       id: string;

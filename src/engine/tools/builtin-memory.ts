@@ -319,8 +319,8 @@ export async function executeMemorySearch(
 //
 // These are thin adapters over `services/memory/memoryTools.ts` that:
 //   • return JSON strings (matching the rest of the builtin executor convention)
-//   • surface MemoryToolError as `{ ok: false, error, message }` JSON instead
-//     of throwing, so the agent runtime can format them as tool-call errors
+//   • preserve the service's tagged rejection versus unknown-failure status
+//     instead of throwing, so durability can classify the effect fail-closed
 // ---------------------------------------------------------------------------
 
 function wrapMemoryToolResult(result: { ok: boolean }): ToolRuntimeOutcome {

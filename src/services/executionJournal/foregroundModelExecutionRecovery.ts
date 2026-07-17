@@ -30,6 +30,7 @@ import {
   settleMessageMemoryPublication,
   type MessageMemoryPublicationSettlementResult,
 } from '../memory/messageMemoryPublicationSettlement';
+import { AGENT_RUNTIME_ERROR_CODES, isAgentRuntimeErrorCode } from '../runtimeError';
 import {
   buildToolEffectRestartDispositionResolver,
   type ResolveToolEffectRestartDisposition,
@@ -429,7 +430,10 @@ function projectionState(
 }
 
 function classifyCompletionError(error: unknown): ForegroundModelRecoveryBlockReason {
-  return error instanceof Error && error.message.includes('generation_changed')
+  return isAgentRuntimeErrorCode(
+    error,
+    AGENT_RUNTIME_ERROR_CODES.FOREGROUND_MODEL_GENERATION_CHANGED,
+  )
     ? 'generation_changed'
     : 'journal_unavailable';
 }

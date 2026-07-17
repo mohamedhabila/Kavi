@@ -27,7 +27,7 @@ describe('useChatStore transitionMessageMemoryPublication', () => {
       id: 'assistant-final',
       role: 'assistant',
       content: 'The exact final response.',
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       memoryPublication: { version: 1, disposition: 'enqueued' },
     } as any);
 
@@ -94,7 +94,11 @@ describe('useChatStore transitionMessageMemoryPublication', () => {
       message: {
         role: 'assistant' as const,
         content: 'Incomplete',
-        assistantMetadata: { kind: 'final' as const, completionStatus: 'incomplete' as const },
+        assistantMetadata: {
+          kind: 'final' as const,
+          completionStatus: 'incomplete' as const,
+          finishReason: 'response_failed',
+        },
       },
     },
     {

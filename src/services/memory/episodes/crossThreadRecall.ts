@@ -267,6 +267,7 @@ export function loadAuthorizedCrossThreadEpisodeCandidates(input: {
         taskId: null,
         policyVersion: 1,
       },
+      policyExpiresAt: decision.policy.expiresAt,
       accessDecision: { authorized: true, reason: 'eligible' },
       relevanceScore: 0,
     });

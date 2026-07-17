@@ -19,7 +19,14 @@ export const MEMORY_CONSOLIDATION_OUTPUT_SCHEMA: StructuredOutputOptions = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['new_facts', 'episode_summary', 'active_focus', 'open_threads', 'notable'],
+    required: [
+      'new_facts',
+      'episode_summary',
+      'episode_sensitivity',
+      'active_focus',
+      'open_threads',
+      'notable',
+    ],
     properties: {
       new_facts: {
         type: 'array',
@@ -82,6 +89,10 @@ export const MEMORY_CONSOLIDATION_OUTPUT_SCHEMA: StructuredOutputOptions = {
         },
       },
       episode_summary: nullableString(1_200),
+      episode_sensitivity: {
+        type: 'string',
+        enum: [...MEMORY_FACT_SENSITIVITY_LEVELS],
+      },
       active_focus: nullableString(600),
       open_threads: {
         type: 'array',

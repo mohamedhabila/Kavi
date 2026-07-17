@@ -30,6 +30,7 @@ import {
 } from '../../src/services/memory/facts/queries';
 import { createCurrentLocalSimilarityVector } from '../../src/services/memory/localSimilarity';
 import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
   loadVerifiedFactRetirement,
   recordContributionBackedFact,
 } from '../helpers/memoryRetirementTestFixtures';
@@ -461,7 +462,7 @@ describe('recordFact', () => {
     ).toThrow('memory_fact_mutation_clock_invalid');
   });
 
-  it('withdrawMemoryFact tombstones the canonical row and excludes it from current reads', () => {
+  it('withdrawMemoryFact physically removes the canonical row from every fact read', () => {
     const f = recordContributionBackedFact(
       {
         subjectId: userId,
@@ -475,13 +476,15 @@ describe('recordFact', () => {
         memoryConversationId: 'fact-store-withdraw-conversation',
         sourceThreadId: 'fact-store-withdraw-thread',
         producerEventId: 'fact-store-withdraw-event',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
       },
     );
     expect(withdrawMemoryFact(f.fact.id).status).toBe('withdrawn');
     expect(listFacts({ subjectId: userId })).toHaveLength(0);
-    expect(getFactById(f.fact.id)).toEqual(
-      expect.objectContaining({ id: f.fact.id, deletedAt: expect.any(Number) }),
-    );
+    expect(getFactById(f.fact.id)).toBeNull();
+    expect(
+      getMemoryDb().getFirstSync('SELECT id FROM memory_facts WHERE id = ?', f.fact.id),
+    ).toBeNull();
     expect(listFacts({ subjectId: userId, includeDeleted: true })).toEqual([]);
     expect(loadVerifiedFactRetirement(f.fact.id)).toMatchObject({
       reason: 'fact_withdrawal',
@@ -550,6 +553,7 @@ describe('recordFact', () => {
         memoryConversationId: 'fact-store-index-conversation',
         sourceThreadId: 'fact-store-index-thread',
         producerEventId: 'fact-store-index-event',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
       },
     );
     const db = getMemoryDb();

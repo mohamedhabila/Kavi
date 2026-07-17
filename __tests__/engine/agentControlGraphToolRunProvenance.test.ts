@@ -8,11 +8,15 @@ jest.mock('../../src/engine/graph/toolTurnExecution', () => ({
 }));
 
 import { executePreparedAgentControlGraphPendingToolTurn } from '../../src/engine/graph/iterationPendingToolExecution';
+import type { ModelTurnMemoryPolicyBinding } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { executeAgentControlGraphToolTurn } from '../../src/engine/graph/toolTurnExecution';
 
 const executeToolTurnMock = executeAgentControlGraphToolTurn as jest.MockedFunction<
   typeof executeAgentControlGraphToolTurn
 >;
+const MEMORY_POLICY_BINDING_SENTINEL: ModelTurnMemoryPolicyBinding = Object.freeze({
+  kind: 'policy_independent',
+});
 
 describe('agent control graph tool run provenance', () => {
   beforeEach(() => {
@@ -73,6 +77,7 @@ describe('agent control graph tool run provenance', () => {
         },
       } as never,
       runtime: {
+        admittedMemoryContext: { livingMemory: null },
         activeProvider: {
           id: 'provider',
           name: 'Provider',
@@ -84,6 +89,7 @@ describe('agent control graph tool run provenance', () => {
         activeModel: 'model',
         consecutivePendingAsyncNoToolTurns: 0,
         lastPendingAsyncSignature: '',
+        lastModelTurnMemoryPolicyBinding: MEMORY_POLICY_BINDING_SENTINEL,
         llm: {} as never,
         warningInjectedThisRound: false,
         workingMessages: [],
@@ -91,6 +97,7 @@ describe('agent control graph tool run provenance', () => {
       contextWindow: 128_000,
       turnAssistantContent: '',
       reasoning: '',
+      memoryPolicyBinding: MEMORY_POLICY_BINDING_SENTINEL,
       pendingToolCalls: [
         {
           id: 'tc-1',
@@ -103,7 +110,11 @@ describe('agent control graph tool run provenance', () => {
     expect(executeToolTurnMock).toHaveBeenCalledWith(
       expect.objectContaining({
         agentRunId: 'run-provenance',
+        memoryPolicyBinding: MEMORY_POLICY_BINDING_SENTINEL,
       }),
+    );
+    expect(executeToolTurnMock.mock.calls[0]?.[0]?.memoryPolicyBinding).toBe(
+      MEMORY_POLICY_BINDING_SENTINEL,
     );
   });
 });

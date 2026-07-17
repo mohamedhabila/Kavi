@@ -10,8 +10,10 @@ export function ensureVerifiedProcedureObservationSchema(db: MemoryDb): void {
   db.execSync(`
     CREATE TABLE IF NOT EXISTS memory_verified_procedure_state (
       memory_owner_id TEXT PRIMARY KEY CHECK(length(memory_owner_id) BETWEEN 1 AND 160),
-      observation_revision INTEGER NOT NULL
-        CHECK(observation_revision BETWEEN 0 AND 9007199254740991)
+      restrictive_authority_revision INTEGER NOT NULL
+        CHECK(restrictive_authority_revision BETWEEN 0 AND 9007199254740991),
+      projection_revision INTEGER NOT NULL
+        CHECK(projection_revision BETWEEN restrictive_authority_revision AND 9007199254740991)
     );
     CREATE TABLE IF NOT EXISTS memory_verified_procedure_run_invalidations (
       memory_owner_id TEXT NOT NULL CHECK(length(memory_owner_id) BETWEEN 1 AND 160),
@@ -19,8 +21,8 @@ export function ensureVerifiedProcedureObservationSchema(db: MemoryDb): void {
         CHECK(length(source_run_id_hash) = 64)
         CHECK(source_run_id_hash NOT GLOB '*[^0-9a-f]*'),
       invalidated_at INTEGER NOT NULL CHECK(invalidated_at >= 0),
-      observation_revision INTEGER NOT NULL
-        CHECK(observation_revision BETWEEN 1 AND 9007199254740991),
+      restrictive_authority_revision INTEGER NOT NULL
+        CHECK(restrictive_authority_revision BETWEEN 1 AND 9007199254740991),
       PRIMARY KEY(memory_owner_id, source_run_id_hash)
     );
     CREATE TABLE IF NOT EXISTS memory_verified_procedure_observations (
@@ -99,7 +101,7 @@ export function ensureVerifiedProcedureObservationSchema(db: MemoryDb): void {
     CREATE INDEX IF NOT EXISTS idx_verified_procedure_run_invalidations_recent
       ON memory_verified_procedure_run_invalidations(
         memory_owner_id,
-        observation_revision DESC,
+        restrictive_authority_revision DESC,
         source_run_id_hash
       );
   `);

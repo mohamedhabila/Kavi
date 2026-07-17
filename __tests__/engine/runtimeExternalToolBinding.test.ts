@@ -51,6 +51,10 @@ describe('runtime-external tool binding', () => {
       status: 'failed',
       content:
         'Error: Tool effect was not executed because a code-owned tool-call identity is required.',
+      effectDispatchObservation: {
+        kind: 'not_claimed',
+        reason: 'tool_call_identity_required',
+      },
     });
     expect(directSkill.tools[0].handler).not.toHaveBeenCalled();
   });

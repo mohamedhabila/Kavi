@@ -7,6 +7,7 @@ import {
   codeOwnedToolContractIdentitiesEqual,
   digestToolContractIdentity,
 } from '../../../engine/toolExecution/toolContractIdentity';
+import type { DurableModelEffectAuthority } from '../../../engine/authority/modelTurnMemoryPolicyBinding';
 import type { ToolEffectDigest, ToolEffectReceipt } from '../../../types/toolEffectReceipt';
 import { decodeToolEffectReceipt } from '../../../utils/toolEffectReceipt';
 import { isExactMemoryProvenanceId } from '../memoryProvenanceIdentity';
@@ -19,7 +20,7 @@ import {
 } from './descriptorRegistry';
 
 const MAX_RAW_OUTCOME_TEXT_LENGTH = 65_536;
-const MAX_CALENDAR_COUNT = 64;
+const MAX_RESOURCE_COUNT = 64;
 const MAX_RESOURCE_ID_LENGTH = 1_024;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 
@@ -35,6 +36,7 @@ export type VerifiedProcedureRawOutcome = Readonly<{
 
 export type VerifiedProcedureLedgerRejectionReason =
   | 'ambiguous_coordinate'
+  | 'authority_revoked'
   | 'cancelled'
   | 'finalized'
   | 'invalid_linkage'
@@ -67,8 +69,16 @@ export type VerifiedProcedureLedgerCandidate = Readonly<{
 
 export type ClaimedVerifiedProcedureLedgerCandidate = Readonly<{
   candidate: VerifiedProcedureLedgerCandidate;
+  modelEffectAuthorities: readonly DurableModelEffectAuthority[];
   memoryPolicyEpoch: number;
   runIdDigest: ToolEffectDigest;
+}>;
+
+export type VerifiedProcedureAuthorityGuard = () => boolean;
+
+export type VerifiedProcedureFinalizationAuthority = Readonly<{
+  isCurrent: VerifiedProcedureAuthorityGuard;
+  modelEffectAuthorities: readonly DurableModelEffectAuthority[];
 }>;
 
 export type ObserveVerifiedProcedureOutcomeResult =
@@ -82,8 +92,8 @@ export type FinalizeVerifiedProcedureLedgerResult =
 
 type AcceptedStep = Readonly<{
   evidence: VerifiedProcedureStepEvidence;
-  writableCalendarIdHashes?: readonly ToolEffectDigest[];
-  selectedCalendarIdHash?: ToolEffectDigest;
+  observedResourceIdHashes?: readonly ToolEffectDigest[];
+  selectedResourceIdHash?: ToolEffectDigest;
 }>;
 
 const issuedLedgerCandidates = new WeakMap<
@@ -157,7 +167,7 @@ function parseJson(value: string): unknown {
 
 async function parseWritableCalendarHashes(resultText: string): Promise<ToolEffectDigest[] | null> {
   const value = parseJson(resultText);
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_CALENDAR_COUNT) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_RESOURCE_COUNT) {
     return null;
   }
   const writableIds: string[] = [];
@@ -173,6 +183,23 @@ async function parseWritableCalendarHashes(resultText: string): Promise<ToolEffe
   }
   if (writableIds.length === 0 || new Set(writableIds).size !== writableIds.length) return null;
   const hashes = await Promise.all(writableIds.map((id) => digestEvidence('calendar-link-id', id)));
+  return hashes.sort();
+}
+
+async function parseCalendarEventHashes(resultText: string): Promise<ToolEffectDigest[] | null> {
+  const value = parseJson(resultText);
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_RESOURCE_COUNT) {
+    return null;
+  }
+  const eventIds: string[] = [];
+  for (const event of value) {
+    if (!isPlainRecord(event) || !boundedLiteralId(event.id)) {
+      return null;
+    }
+    eventIds.push(event.id);
+  }
+  if (new Set(eventIds).size !== eventIds.length) return null;
+  const hashes = await Promise.all(eventIds.map((id) => digestEvidence('calendar-event-id', id)));
   return hashes.sort();
 }
 
@@ -201,6 +228,59 @@ async function parseCreateLinkage(params: {
   return digestEvidence('calendar-link-id', calendarId);
 }
 
+async function parseUpdateLinkage(params: {
+  argumentsText: string;
+  resultText: string;
+  receipt: ToolEffectReceipt;
+}): Promise<ToolEffectDigest | null> {
+  const argumentsValue = parseJson(params.argumentsText);
+  const resultValue = parseJson(params.resultText);
+  if (!isPlainRecord(argumentsValue) || !isPlainRecord(resultValue)) return null;
+  const eventId = argumentsValue.id;
+  const resultEventId = resultValue.eventId;
+  if (
+    !boundedLiteralId(eventId) ||
+    !boundedLiteralId(resultEventId) ||
+    eventId !== resultEventId ||
+    resultValue.status !== 'updated_verified' ||
+    params.receipt.resource?.kind !== 'calendar_event' ||
+    params.receipt.resource.id !== eventId
+  ) {
+    return null;
+  }
+  return digestEvidence('calendar-event-id', eventId);
+}
+
+async function parseSourceResourceHashes(
+  stepKey: VerifiedProcedureStepKey,
+  resultText: string,
+): Promise<ToolEffectDigest[] | null> {
+  switch (stepKey) {
+    case 'calendar-list':
+      return parseWritableCalendarHashes(resultText);
+    case 'calendar-events':
+      return parseCalendarEventHashes(resultText);
+    default:
+      return null;
+  }
+}
+
+async function parseTargetResourceHash(params: {
+  stepKey: VerifiedProcedureStepKey;
+  argumentsText: string;
+  resultText: string;
+  receipt: ToolEffectReceipt;
+}): Promise<ToolEffectDigest | null> {
+  switch (params.stepKey) {
+    case 'calendar-create-event':
+      return parseCreateLinkage(params);
+    case 'calendar-update-event':
+      return parseUpdateLinkage(params);
+    default:
+      return null;
+  }
+}
+
 function validCoordinate(input: VerifiedProcedureRawOutcome): boolean {
   return (
     Number.isSafeInteger(input.iteration) &&
@@ -219,10 +299,15 @@ function expectedStep(
 
 export interface VerifiedProcedureRunLedger {
   readonly descriptor: VerifiedProcedureDescriptor;
-  observe(input: VerifiedProcedureRawOutcome): Promise<ObserveVerifiedProcedureOutcomeResult>;
+  observe(
+    input: VerifiedProcedureRawOutcome,
+    authorityGuard: VerifiedProcedureAuthorityGuard,
+  ): Promise<ObserveVerifiedProcedureOutcomeResult>;
   markCancelled(): void;
   markAmbiguous(): void;
-  finalize(): Promise<FinalizeVerifiedProcedureLedgerResult>;
+  finalize(
+    authority: VerifiedProcedureFinalizationAuthority,
+  ): Promise<FinalizeVerifiedProcedureLedgerResult>;
 }
 
 class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger {
@@ -248,8 +333,11 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
     this.memoryPolicyEpoch = memoryPolicyEpoch;
   }
 
-  observe(input: VerifiedProcedureRawOutcome): Promise<ObserveVerifiedProcedureOutcomeResult> {
-    const operation = this.operationTail.then(() => this.observeLocked(input));
+  observe(
+    input: VerifiedProcedureRawOutcome,
+    authorityGuard: VerifiedProcedureAuthorityGuard,
+  ): Promise<ObserveVerifiedProcedureOutcomeResult> {
+    const operation = this.operationTail.then(() => this.observeLocked(input, authorityGuard));
     this.operationTail = operation.then(
       () => undefined,
       () => undefined,
@@ -265,36 +353,48 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
     this.reject('ambiguous_coordinate');
   }
 
-  async finalize(): Promise<FinalizeVerifiedProcedureLedgerResult> {
+  async finalize(
+    authority: VerifiedProcedureFinalizationAuthority,
+  ): Promise<FinalizeVerifiedProcedureLedgerResult> {
     await this.operationTail;
     if (this.rejectionReason) return { status: 'rejected', reason: this.rejectionReason };
     if (this.finalizationState !== 'open') return { status: 'rejected', reason: 'finalized' };
+    if (!this.finalizationAuthorityCurrent(authority)) {
+      return this.rejectResult('authority_revoked');
+    }
     this.finalizationState = 'finalizing';
     const startingRejectionGeneration = this.rejectionGeneration;
 
-    const list = this.acceptedByStep.get('calendar-list');
-    const create = this.acceptedByStep.get('calendar-create-event');
-    if (!list || !create || this.acceptedByStep.size !== this.descriptor.steps.length) {
+    const source = this.acceptedByStep.get(this.descriptor.steps[0].stepKey);
+    const target = this.acceptedByStep.get(this.descriptor.steps[1].stepKey);
+    if (!source || !target || this.acceptedByStep.size !== this.descriptor.steps.length) {
       return this.rejectResult('invalid_outcome');
     }
     if (
-      list.evidence.iteration >= create.evidence.iteration ||
-      list.evidence.recordedAt > create.evidence.recordedAt ||
-      !list.writableCalendarIdHashes ||
-      !create.selectedCalendarIdHash ||
-      !list.writableCalendarIdHashes.includes(create.selectedCalendarIdHash)
+      source.evidence.iteration >= target.evidence.iteration ||
+      source.evidence.recordedAt > target.evidence.recordedAt ||
+      !source.observedResourceIdHashes ||
+      !target.selectedResourceIdHash ||
+      !source.observedResourceIdHashes.includes(target.selectedResourceIdHash)
     ) {
       return this.rejectResult('invalid_linkage');
     }
 
     const linkageDigest = await digestEvidence('linkage-evidence', {
       procedureContractDigest: this.descriptor.contractDigest,
-      selectedCalendarIdHash: create.selectedCalendarIdHash,
-      writableCalendarIdHashes: list.writableCalendarIdHashes,
+      sourceStepKey: this.descriptor.linkage.sourceStepKey,
+      sourceResultSelector: this.descriptor.linkage.sourceResultSelector,
+      targetStepKey: this.descriptor.linkage.targetStepKey,
+      targetArgumentKey: this.descriptor.linkage.targetArgumentKey,
+      selectedResourceIdHash: target.selectedResourceIdHash,
+      observedResourceIdHashes: source.observedResourceIdHashes,
     });
+    if (!this.finalizationAuthorityCurrent(authority)) {
+      return this.rejectResult('authority_revoked');
+    }
     const interruptedAfterLinkage = this.interruptionSince(startingRejectionGeneration);
     if (interruptedAfterLinkage) return interruptedAfterLinkage;
-    const steps = Object.freeze([list.evidence, create.evidence]) as unknown as readonly [
+    const steps = Object.freeze([source.evidence, target.evidence]) as unknown as readonly [
       VerifiedProcedureStepEvidence,
       VerifiedProcedureStepEvidence,
     ];
@@ -305,6 +405,9 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
       linkageDigest,
       steps,
     });
+    if (!this.finalizationAuthorityCurrent(authority)) {
+      return this.rejectResult('authority_revoked');
+    }
     const interruptedAfterEvidence = this.interruptionSince(startingRejectionGeneration);
     if (interruptedAfterEvidence) return interruptedAfterEvidence;
     const candidate = Object.freeze({
@@ -313,13 +416,14 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
       procedureContractDigest: this.descriptor.contractDigest,
       evidenceId,
       linkageDigest,
-      observedAt: Math.max(list.evidence.recordedAt, create.evidence.recordedAt),
+      observedAt: Math.max(source.evidence.recordedAt, target.evidence.recordedAt),
       steps,
     });
     issuedLedgerCandidates.set(
       candidate,
       Object.freeze({
         candidate,
+        modelEffectAuthorities: Object.freeze([...authority.modelEffectAuthorities]),
         memoryPolicyEpoch: this.memoryPolicyEpoch,
         runIdDigest: this.runIdDigest,
       }),
@@ -333,9 +437,13 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
 
   private async observeLocked(
     input: VerifiedProcedureRawOutcome,
+    authorityGuard: VerifiedProcedureAuthorityGuard,
   ): Promise<ObserveVerifiedProcedureOutcomeResult> {
     if (this.rejectionReason) return { status: 'rejected', reason: this.rejectionReason };
     if (this.finalizationState !== 'open') return this.rejectResult('finalized');
+    if (!this.authorityGuardCurrent(authorityGuard)) {
+      return this.rejectResult('authority_revoked');
+    }
     const startingRejectionGeneration = this.rejectionGeneration;
     if (
       !validCoordinate(input) ||
@@ -353,6 +461,9 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
       digestVerifiedProcedureRunId(receipt.executionRunId),
       verifyToolEffectReceiptIntegrity(receipt),
     ]);
+    if (!this.authorityGuardCurrent(authorityGuard)) {
+      return this.rejectResult('authority_revoked');
+    }
     const interruptedAfterReceipt = this.interruptionSince(startingRejectionGeneration);
     if (interruptedAfterReceipt) return interruptedAfterReceipt;
     if (
@@ -374,6 +485,9 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
       digestToolEffectText(input.resultText),
       digestToolContractIdentity(receipt.contractIdentity),
     ]);
+    if (!this.authorityGuardCurrent(authorityGuard)) {
+      return this.rejectResult('authority_revoked');
+    }
     const interruptedAfterDigests = this.interruptionSince(startingRejectionGeneration);
     if (interruptedAfterDigests) return interruptedAfterDigests;
     if (requestDigest !== receipt.requestDigest || resultDigest !== receipt.resultDigest) {
@@ -394,7 +508,8 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
       recordedAt: receipt.recordedAt,
     });
     let accepted: AcceptedStep;
-    if (step.stepKey === 'calendar-list') {
+    const sourceStep = step.stepKey === this.descriptor.steps[0].stepKey;
+    if (sourceStep) {
       if (
         receipt.transportState !== 'returned' ||
         receipt.effectKind !== 'observation.read' ||
@@ -403,13 +518,19 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
       ) {
         return this.rejectResult('invalid_outcome');
       }
-      const writableCalendarIdHashes = await parseWritableCalendarHashes(input.resultText);
-      const interruptedAfterList = this.interruptionSince(startingRejectionGeneration);
-      if (interruptedAfterList) return interruptedAfterList;
-      if (!writableCalendarIdHashes) return this.rejectResult('invalid_outcome');
+      const observedResourceIdHashes = await parseSourceResourceHashes(
+        step.stepKey,
+        input.resultText,
+      );
+      if (!this.authorityGuardCurrent(authorityGuard)) {
+        return this.rejectResult('authority_revoked');
+      }
+      const interruptedAfterSource = this.interruptionSince(startingRejectionGeneration);
+      if (interruptedAfterSource) return interruptedAfterSource;
+      if (!observedResourceIdHashes) return this.rejectResult('invalid_outcome');
       accepted = Object.freeze({
         evidence,
-        writableCalendarIdHashes,
+        observedResourceIdHashes,
       });
     } else {
       if (
@@ -420,17 +541,21 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
       ) {
         return this.rejectResult('invalid_outcome');
       }
-      const selectedCalendarIdHash = await parseCreateLinkage({
+      const selectedResourceIdHash = await parseTargetResourceHash({
+        stepKey: step.stepKey,
         argumentsText: input.argumentsText,
         resultText: input.resultText,
         receipt,
       });
-      const interruptedAfterCreate = this.interruptionSince(startingRejectionGeneration);
-      if (interruptedAfterCreate) return interruptedAfterCreate;
-      if (!selectedCalendarIdHash) return this.rejectResult('invalid_linkage');
+      if (!this.authorityGuardCurrent(authorityGuard)) {
+        return this.rejectResult('authority_revoked');
+      }
+      const interruptedAfterTarget = this.interruptionSince(startingRejectionGeneration);
+      if (interruptedAfterTarget) return interruptedAfterTarget;
+      if (!selectedResourceIdHash) return this.rejectResult('invalid_linkage');
       accepted = Object.freeze({
         evidence,
-        selectedCalendarIdHash,
+        selectedResourceIdHash,
       });
     }
 
@@ -448,11 +573,31 @@ class CodeOwnedVerifiedProcedureRunLedger implements VerifiedProcedureRunLedger 
     if (this.acceptedByStep.has(step.stepKey)) return this.rejectResult('retry_detected');
     const interruptedBeforeAcceptance = this.interruptionSince(startingRejectionGeneration);
     if (interruptedBeforeAcceptance) return interruptedBeforeAcceptance;
+    if (!this.authorityGuardCurrent(authorityGuard)) {
+      return this.rejectResult('authority_revoked');
+    }
 
     this.acceptedByCoordinate.set(coordinate, accepted);
     this.acceptedByStep.set(step.stepKey, accepted);
     this.seenIterations.add(input.iteration);
     return { status: 'accepted', stepKey: step.stepKey };
+  }
+
+  private authorityGuardCurrent(authorityGuard: VerifiedProcedureAuthorityGuard): boolean {
+    try {
+      return authorityGuard() === true;
+    } catch {
+      return false;
+    }
+  }
+
+  private finalizationAuthorityCurrent(authority: VerifiedProcedureFinalizationAuthority): boolean {
+    return (
+      Array.isArray(authority.modelEffectAuthorities) &&
+      authority.modelEffectAuthorities.length > 0 &&
+      authority.modelEffectAuthorities.every((candidate) => candidate.kind === 'memory_epoch') &&
+      this.authorityGuardCurrent(authority.isCurrent)
+    );
   }
 
   private reject(reason: VerifiedProcedureLedgerRejectionReason): void {

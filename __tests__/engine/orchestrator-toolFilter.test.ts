@@ -3,157 +3,21 @@
 // ---------------------------------------------------------------------------
 
 import {
-  runOrchestrator,
-  OrchestratorCallbacks,
-  OrchestratorOptions,
-} from '../../src/engine/orchestrator';
-import type { Message } from '../../src/types/message';
-import type { LlmProviderConfig } from '../../src/types/provider';
-import type { ToolMessageOutcome } from '../../src/engine/toolExecution/toolMessageOutcome';
+  makeCallbacks,
+  makeMsg,
+  makeStream,
+  mockExecuteTool,
+  mockStreamMessage,
+  provider,
+  resetOrchestratorToolFilterHarness,
+  setMockDisableLongTermMemory,
+  type OrchestratorOptions,
+} from './helpers/orchestratorToolFilterHarness';
+import { runOrchestrator } from '../../src/engine/orchestrator';
 import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
 
-// ── Mocks ────────────────────────────────────────────────────────────────
-
-const mockStreamMessage = jest.fn();
-let mockWorkspaceTargets: any[] = [];
-let mockDisableLongTermMemory = false;
-
-jest.mock('../../src/services/llm/LlmService', () => ({
-  LlmService: jest.fn().mockImplementation(() => ({
-    streamMessage: mockStreamMessage,
-  })),
-}));
-
-const mockExecuteTool = jest
-  .fn()
-  .mockResolvedValue({ status: 'completed', content: 'tool result' });
-jest.mock('../../src/engine/tools/index', () => ({
-  executeTool: (...args: any[]) => mockExecuteTool(...args),
-  normalizeToolName: jest.fn((name: string) => name.trim()),
-}));
-
-jest.mock('../../src/services/events/bus', () => ({
-  emitSessionEvent: jest.fn().mockResolvedValue(undefined),
-  emitAgentEvent: jest.fn().mockResolvedValue(undefined),
-}));
-
-jest.mock('../../src/services/usage/tracker', () => ({
-  recordUsage: jest.fn(),
-  normalizeUsage: jest.fn().mockReturnValue({
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    totalTokens: 0,
-  }),
-}));
-
-jest.mock('../../src/services/mcp/manager', () => ({
-  mcpManager: {
-    getAllToolDefinitions: jest.fn().mockReturnValue([]),
-    getAllStatuses: jest.fn().mockReturnValue([]),
-    getClients: jest.fn().mockReturnValue(new Map()),
-  },
-}));
-
-jest.mock('../../src/services/skills/manager', () => ({
-  getAllLoadedSkills: jest.fn().mockReturnValue([]),
-  getSkillToolDefinitions: jest.fn().mockReturnValue([]),
-  getSkillSystemPrompts: jest.fn().mockReturnValue([]),
-  filterToolsByInvocationPolicy: jest.fn().mockImplementation((tools: any[]) => tools),
-}));
-
-jest.mock('../../src/services/commands/parser', () => ({
-  isSlashCommand: jest.fn().mockReturnValue(false),
-  parseCommand: jest.fn().mockReturnValue(null),
-}));
-
-jest.mock('../../src/services/commands/builtins', () => ({
-  getCommand: jest.fn().mockReturnValue(null),
-}));
-
-jest.mock('../../src/services/agents/personas', () => ({
-  getPersona: jest.fn().mockReturnValue(undefined),
-  resolvePersonaSystemPrompt: jest.fn((_p: any, prompt: string) => prompt),
-  resolvePersonaModel: jest.fn((_p: any, pId: string, m: string) => ({
-    providerId: pId,
-    model: m,
-  })),
-}));
-
-jest.mock('../../src/services/agents/registry', () => ({
-  getPersona: jest.fn().mockReturnValue(undefined),
-}));
-
-jest.mock('../../src/services/storage/SecureStorage', () => ({
-  getProviderApiKey: jest.fn().mockResolvedValue('sk-test'),
-}));
-
-jest.mock('../../src/store/useSettingsStore', () => ({
-  useSettingsStore: {
-    getState: () => ({
-      workspaceTargets: mockWorkspaceTargets,
-      disableLongTermMemory: mockDisableLongTermMemory,
-    }),
-  },
-}));
-
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-function* makeStream(events: any[]) {
-  for (const event of events) {
-    yield event;
-  }
-}
-
-const provider: LlmProviderConfig = {
-  id: 'test',
-  name: 'Test',
-  type: 'openai',
-  apiKey: 'sk-test',
-  baseUrl: 'https://api.test.com',
-  model: 'gpt-test',
-  models: ['gpt-test'],
-  enabled: true,
-};
-
-function makeCallbacks(): OrchestratorCallbacks & { calls: Record<string, any[]> } {
-  const calls: Record<string, any[]> = {
-    onToolCallStart: [],
-    onToolCallComplete: [],
-    onToolMessage: [],
-    onError: [],
-    onDone: [],
-  };
-  return {
-    calls,
-    onStateChange: jest.fn(),
-    onToken: jest.fn(),
-    onReasoning: jest.fn(),
-    onToolCallStart: jest.fn((tc) => calls.onToolCallStart.push(tc)),
-    onToolCallComplete: jest.fn((tc) => calls.onToolCallComplete.push(tc)),
-    onAssistantMessage: jest.fn(),
-    onToolMessage: jest.fn((outcome: ToolMessageOutcome) => calls.onToolMessage.push(outcome)),
-    onError: jest.fn((err) => calls.onError.push(err)),
-    onUsage: jest.fn(),
-    onDone: jest.fn(() => calls.onDone.push(true)),
-  };
-}
-
-const makeMsg = (role: 'user' | 'assistant', content: string): Message => ({
-  id: `msg-${Math.random()}`,
-  role,
-  content,
-  timestamp: Date.now(),
-});
-
 beforeEach(() => {
-  jest.clearAllMocks();
-  mockStreamMessage.mockReset();
-  mockExecuteTool.mockReset();
-  mockExecuteTool.mockResolvedValue({ status: 'completed', content: 'tool result' });
-  mockWorkspaceTargets = [];
-  mockDisableLongTermMemory = false;
+  resetOrchestratorToolFilterHarness();
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -161,10 +25,13 @@ beforeEach(() => {
 describe('Orchestrator — toolFilter', () => {
   it('treats toolFilter as subtractive authorization without grounding every allowed tool', async () => {
     mockStreamMessage.mockReturnValueOnce(
-      makeStream([
-        { type: 'token', content: 'Done' },
-        { type: 'done', content: 'Done' },
-      ]),
+      makeStream(
+        [
+          { type: 'token', content: 'Done' },
+          { type: 'done', content: 'Done' },
+        ],
+        'text',
+      ),
     );
 
     const callbacks = makeCallbacks();
@@ -185,10 +52,13 @@ describe('Orchestrator — toolFilter', () => {
 
   it('advertises deliberately pinned tools within the authorization boundary', async () => {
     mockStreamMessage.mockReturnValueOnce(
-      makeStream([
-        { type: 'token', content: 'Done' },
-        { type: 'done', content: 'Done' },
-      ]),
+      makeStream(
+        [
+          { type: 'token', content: 'Done' },
+          { type: 'done', content: 'Done' },
+        ],
+        'text',
+      ),
     );
 
     const callbacks = makeCallbacks();
@@ -212,12 +82,15 @@ describe('Orchestrator — toolFilter', () => {
   });
 
   it('cannot re-advertise disabled memory capabilities through caller tool selection', async () => {
-    mockDisableLongTermMemory = true;
+    setMockDisableLongTermMemory(true);
     mockStreamMessage.mockReturnValueOnce(
-      makeStream([
-        { type: 'token', content: 'Memory is disabled.' },
-        { type: 'done', content: 'Memory is disabled.' },
-      ]),
+      makeStream(
+        [
+          { type: 'token', content: 'Memory is disabled.' },
+          { type: 'done', content: 'Memory is disabled.' },
+        ],
+        'text',
+      ),
     );
 
     const callbacks = makeCallbacks();
@@ -245,10 +118,13 @@ describe('Orchestrator — toolFilter', () => {
 
   it('advertises memory capabilities normally while the policy is enabled', async () => {
     mockStreamMessage.mockReturnValueOnce(
-      makeStream([
-        { type: 'token', content: 'Done' },
-        { type: 'done', content: 'Done' },
-      ]),
+      makeStream(
+        [
+          { type: 'token', content: 'Done' },
+          { type: 'done', content: 'Done' },
+        ],
+        'text',
+      ),
     );
 
     const callbacks = makeCallbacks();
@@ -276,28 +152,34 @@ describe('Orchestrator — toolFilter', () => {
 
   it('revokes memory capabilities and updates policy truth within an active run', async () => {
     mockExecuteTool.mockImplementationOnce(async () => {
-      mockDisableLongTermMemory = true;
+      setMockDisableLongTermMemory(true);
       return { status: 'completed', content: 'search complete' };
     });
     mockStreamMessage
       .mockReturnValueOnce(
-        makeStream([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc-policy-transition',
-              name: 'web_search',
-              arguments: '{"queries":["release status"]}',
+        makeStream(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc-policy-transition',
+                name: 'web_search',
+                arguments: '{"queries":["release status"]}',
+              },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       )
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: 'Memory is disabled.' },
-          { type: 'done', content: 'Memory is disabled.' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: 'Memory is disabled.' },
+            { type: 'done', content: 'Memory is disabled.' },
+          ],
+          'text',
+        ),
       );
 
     const callbacks = makeCallbacks();
@@ -333,20 +215,26 @@ describe('Orchestrator — toolFilter', () => {
   it('passes the filtered callable tool inventory into executeTool context', async () => {
     mockStreamMessage
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: '' },
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc-catalog', name: 'tool_catalog', arguments: '{"category":"mcp"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: '' },
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc-catalog', name: 'tool_catalog', arguments: '{"category":"mcp"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       )
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
     const callbacks = makeCallbacks();
@@ -375,24 +263,30 @@ describe('Orchestrator — toolFilter', () => {
     // First stream returns a tool call, second returns final text
     mockStreamMessage
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: '' },
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc1',
-              name: 'write_file',
-              arguments: '{"path":"artifacts/blocked.txt","content":"x"}',
+        makeStream(
+          [
+            { type: 'token', content: '' },
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc1',
+                name: 'write_file',
+                arguments: '{"path":"artifacts/blocked.txt","content":"x"}',
+              },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       )
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
     const callbacks = makeCallbacks();
@@ -421,24 +315,30 @@ describe('Orchestrator — toolFilter', () => {
   it('allows a tool call when toolFilter returns true', async () => {
     mockStreamMessage
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: '' },
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc2',
-              name: 'read_file',
-              arguments: '{"path":"notes.txt"}',
+        makeStream(
+          [
+            { type: 'token', content: '' },
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc2',
+                name: 'read_file',
+                arguments: '{"path":"notes.txt"}',
+              },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       )
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: 'Result' },
-          { type: 'done', content: 'Result' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: 'Result' },
+            { type: 'done', content: 'Result' },
+          ],
+          'text',
+        ),
       );
 
     const callbacks = makeCallbacks();
@@ -465,20 +365,26 @@ describe('Orchestrator — toolFilter', () => {
   it('treats toolFilter names as exact tool contract identifiers', async () => {
     mockStreamMessage
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: '' },
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc-alias', name: 'ReadFile', arguments: '{"path":"notes.txt"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: '' },
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc-alias', name: 'ReadFile', arguments: '{"path":"notes.txt"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       )
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
     const callbacks = makeCallbacks();
@@ -504,20 +410,26 @@ describe('Orchestrator — toolFilter', () => {
   it('uses a deliberately pinned tool surface when toolFilter is undefined', async () => {
     mockStreamMessage
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: '' },
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc3', name: 'read_file', arguments: '{"path":"notes.txt"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: '' },
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc3', name: 'read_file', arguments: '{"path":"notes.txt"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       )
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: 'OK' },
-          { type: 'done', content: 'OK' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: 'OK' },
+            { type: 'done', content: 'OK' },
+          ],
+          'text',
+        ),
       );
 
     const callbacks = makeCallbacks();
@@ -562,23 +474,29 @@ describe('Orchestrator — toolFilter', () => {
     async ({ toolName, argumentsJson }) => {
       mockStreamMessage
         .mockReturnValueOnce(
-          makeStream([
-            {
-              type: 'tool_call',
-              toolCall: {
-                id: `tc-hidden-${toolName}`,
-                name: toolName,
-                arguments: argumentsJson,
+          makeStream(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: `tc-hidden-${toolName}`,
+                  name: toolName,
+                  arguments: argumentsJson,
+                },
               },
-            },
-            { type: 'done', content: '' },
-          ]),
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         )
         .mockReturnValueOnce(
-          makeStream([
-            { type: 'token', content: 'Conversational answer' },
-            { type: 'done', content: 'Conversational answer' },
-          ]),
+          makeStream(
+            [
+              { type: 'token', content: 'Conversational answer' },
+              { type: 'done', content: 'Conversational answer' },
+            ],
+            'text',
+          ),
         );
 
       const callbacks = makeCallbacks();
@@ -623,20 +541,26 @@ describe('Orchestrator — toolFilter', () => {
   it('blocks tool but continues orchestration with next text response', async () => {
     mockStreamMessage
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: '' },
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc4', name: 'list_files', arguments: '{"path":"artifacts"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: '' },
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc4', name: 'list_files', arguments: '{"path":"artifacts"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       )
       .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: 'Fallback answer' },
-          { type: 'done', content: 'Fallback answer' },
-        ]),
+        makeStream(
+          [
+            { type: 'token', content: 'Fallback answer' },
+            { type: 'done', content: 'Fallback answer' },
+          ],
+          'text',
+        ),
       );
 
     const callbacks = makeCallbacks();
@@ -663,11 +587,14 @@ describe('Orchestrator — cancel before tool execution', () => {
     const abortController = new AbortController();
 
     mockStreamMessage.mockReturnValueOnce(
-      makeStream([
-        { type: 'token', content: '' },
-        { type: 'tool_call', toolCall: { id: 'tc-cancel', name: 'some_tool', arguments: '{}' } },
-        { type: 'done', content: '' },
-      ]),
+      makeStream(
+        [
+          { type: 'token', content: '' },
+          { type: 'tool_call', toolCall: { id: 'tc-cancel', name: 'some_tool', arguments: '{}' } },
+          { type: 'done', content: '' },
+        ],
+        'tool',
+      ),
     );
 
     // Abort before tool execution starts (simulate via onToolCallStart)

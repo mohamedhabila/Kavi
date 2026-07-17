@@ -141,6 +141,7 @@ function seed(params: { delivered?: boolean; status?: 'completed' | 'failed' } =
       assistantMetadata: {
         kind: 'final',
         completionStatus: params.delivered ? 'complete' : 'incomplete',
+        finishReason: params.delivered ? 'stop' : 'response_failed',
       },
     },
   ];

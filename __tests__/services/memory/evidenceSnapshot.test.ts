@@ -11,7 +11,10 @@ import {
 import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { resetE2EMemorySandbox } from '../../../src/acceptance/e2eAgent/sandboxMemory';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
-import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
+import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+  recordContributionBackedFact,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const SCOPE = {
   memoryConversationId: 'memory-evidence-conversation',
@@ -104,6 +107,7 @@ describe('scoped memory evidence', () => {
         memoryConversationId: SCOPE.memoryConversationId,
         sourceThreadId: SCOPE.sourceThreadId,
         producerEventId: 'retired-evidence-event',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
       },
     );
 

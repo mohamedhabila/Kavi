@@ -115,7 +115,7 @@ describe('extractStructuralMemory — episode summary', () => {
         role: 'assistant',
         content: 'Reviewed.',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
     ];
     const snapshot = decodeIngestionSourceSnapshot(

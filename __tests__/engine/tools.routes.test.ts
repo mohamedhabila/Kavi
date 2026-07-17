@@ -311,25 +311,28 @@ describe('executeToolInner raw additional routes', () => {
     it('delete requires id', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'delete' }), CONV_ID);
       expect(result.status).toBe('failed');
-      expect(result.content).toContain('id is required');
+      expect(JSON.parse(result.content)).toMatchObject({
+        status: 'rejected',
+        code: 'scheduled_job_target_required',
+      });
     });
 
     it('enable requires id', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'enable' }), CONV_ID);
       expect(result.status).toBe('failed');
-      expect(result.content).toContain('id is required');
+      expect(JSON.parse(result.content).code).toBe('scheduled_job_target_required');
     });
 
     it('disable requires id', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'disable' }), CONV_ID);
       expect(result.status).toBe('failed');
-      expect(result.content).toContain('id is required');
+      expect(JSON.parse(result.content).code).toBe('scheduled_job_target_required');
     });
 
     it('run requires id', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'run' }), CONV_ID);
       expect(result.status).toBe('failed');
-      expect(result.content).toContain('id is required');
+      expect(JSON.parse(result.content).code).toBe('scheduled_job_target_required');
     });
 
     it('run returns error for non-existent job', async () => {
@@ -345,7 +348,7 @@ describe('executeToolInner raw additional routes', () => {
     it('rejects unknown action', async () => {
       const result = await executeTool('cron', JSON.stringify({ action: 'explode' }), CONV_ID);
       expect(result.status).toBe('failed');
-      expect(result.content).toContain('unknown cron action');
+      expect(JSON.parse(result.content).code).toBe('scheduled_job_action_unknown');
     });
   });
 

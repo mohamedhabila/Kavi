@@ -49,9 +49,11 @@ export function createAgentControlGraphRuntime(params: {
   const applyEvents = (
     events: ReadonlyArray<AgentControlGraphEvent>,
   ): AgentControlGraphSnapshot => {
-    const hadGoalsUpdated = events.some((event) => event.type === 'GOALS_UPDATED');
+    const shouldProjectGoalsToMemory = events.some(
+      (event) => event.type === 'GOALS_UPDATED' && event.projectToMemoryTasks !== false,
+    );
     snapshot = reduceAgentControlGraph(snapshot, events);
-    if (hadGoalsUpdated) {
+    if (shouldProjectGoalsToMemory) {
       try {
         syncActiveGoalFocusFromGraphTransition({
           threadId: params.conversationId,

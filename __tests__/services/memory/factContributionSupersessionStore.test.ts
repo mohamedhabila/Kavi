@@ -13,12 +13,13 @@ import {
   type FactContributionSupersessionParentMetadata,
   type FactContributionSupersessionSemantics,
 } from '../../../src/services/memory/factContributionSupersessionStore';
-import { replaceCurrentFactWithContribution } from '../../../src/services/memory/facts/exactReplacement';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import {
-  recordFactWithApplicability,
-  recordFactWithContribution,
-} from '../../../src/services/memory/facts/mutations';
+  recordCodeOwnedTestFactWithContribution as recordFactWithContribution,
+  replaceCodeOwnedTestFactWithContribution as replaceCurrentFactWithContribution,
+} from '../../helpers/factContributionWriteFixtures';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
+import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../../../src/services/memory/memorySensitivityPolicy';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -177,7 +178,7 @@ describe('fact contribution supersession store', () => {
       successor_pinned_baseline: 1,
       successor_review_state_baseline: 'verified',
       successor_sensitivity_floor: created.fact.sensitivity,
-      successor_sensitivity_policy_version: 2,
+      successor_sensitivity_policy_version: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
     });
     expect(
       getMemoryDb().getAllSync(
@@ -254,7 +255,8 @@ describe('fact contribution supersession store', () => {
     );
     getMemoryDb().runSync(
       `UPDATE memory_fact_contribution_supersession_snapshots
-          SET successor_sensitivity_policy_version = 3`,
+          SET successor_sensitivity_policy_version = ?`,
+      MEMORY_FACT_SENSITIVITY_POLICY_VERSION + 1,
     );
 
     expect(() =>
@@ -299,8 +301,9 @@ describe('fact contribution supersession store', () => {
       }),
       grounded,
       context(200),
+      'sensitive',
     );
-    expect(created.fact.sensitivity).toBe('restricted');
+    expect(created.fact.sensitivity).toBe('sensitive');
     getMemoryDb().runSync(
       `UPDATE memory_facts
           SET sensitivity = 'normal'

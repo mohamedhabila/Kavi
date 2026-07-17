@@ -60,13 +60,51 @@ describe('verified procedure descriptor registry', () => {
     expect(Object.isFrozen(descriptor.steps)).toBe(true);
   });
 
+  it('exposes a distinct receipt-verified calendar update procedure', async () => {
+    const descriptor = await getCurrentVerifiedProcedureDescriptor(
+      'calendar-events-to-update-event',
+    );
+
+    expect(descriptor.procedureId).toMatch(
+      /^verified-procedure\.calendar-events-to-update-event\.v1\.[a-f0-9]{64}$/u,
+    );
+    expect(descriptor.preconditionResolverId).toBe(
+      'calendar-update-mobile-permission-and-tool-policy.v1',
+    );
+    expect(descriptor.sourceObservationPreconditionId).toBe('calendar.events.returned-event-id.v1');
+    expect(descriptor.steps.map((step) => [step.stepKey, step.toolName])).toEqual([
+      ['calendar-events', 'calendar_events'],
+      ['calendar-update-event', 'calendar_update_event'],
+    ]);
+    expect(descriptor.linkage).toEqual({
+      sourceStepKey: 'calendar-events',
+      sourceResultSelector: 'literal-calendar-event-id',
+      targetStepKey: 'calendar-update-event',
+      targetArgumentKey: 'id',
+      cardinality: 'exactly-one-explicit-link',
+    });
+    expect(descriptor.verifier).toEqual({
+      stepKey: 'calendar-update-event',
+      resultStatus: 'updated_verified',
+      receiptEffectKind: 'calendar.update',
+      receiptEffectState: 'applied',
+      receiptVerificationState: 'verified',
+    });
+    await expect(
+      matchesCurrentCodeOwnedToolContractIdentity(descriptor.steps[0].contractIdentity),
+    ).resolves.toBe(true);
+    await expect(
+      matchesCurrentCodeOwnedToolContractIdentity(descriptor.steps[1].contractIdentity),
+    ).resolves.toBe(true);
+  });
+
   it('is deterministic and has no runtime registration surface', async () => {
     const first = await getCurrentVerifiedProcedureDescriptor('calendar-list-to-create-event');
     const second = await getCurrentVerifiedProcedureDescriptor('calendar-list-to-create-event');
     const listed = await listCurrentVerifiedProcedureDescriptors();
 
     expect(verifiedProcedureDescriptorMatches(first, second)).toBe(true);
-    expect(listed).toHaveLength(1);
+    expect(listed).toHaveLength(2);
     expect(verifiedProcedureDescriptorMatches(listed[0], first)).toBe(true);
     expect(Object.isFrozen(listed)).toBe(true);
     await expect(

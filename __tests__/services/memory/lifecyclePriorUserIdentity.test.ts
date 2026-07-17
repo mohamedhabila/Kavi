@@ -53,7 +53,7 @@ it('seals the immediately prior user identity when the turn is enqueued', async 
       role: 'assistant',
       content: 'Understood.',
       timestamp: 2,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     },
     { id: 'u-current', role: 'user', content: 'Change it to 45 minutes.', timestamp: 3 },
     {
@@ -61,7 +61,7 @@ it('seals the immediately prior user identity when the turn is enqueued', async 
       role: 'assistant',
       content: 'Done.',
       timestamp: 4,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     },
   ];
 

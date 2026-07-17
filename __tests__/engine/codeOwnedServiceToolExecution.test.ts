@@ -3,6 +3,7 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
 }));
 
 import { buildCodeOwnedToolContractIdentity } from '../../src/engine/toolExecution/toolContractIdentity';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { executeTool } from '../../src/engine/tools';
 import { registerBuiltInServiceSkills } from '../../src/services/integrations/registry';
 import { getSkillToolDefinitions, unregisterSkill } from '../../src/services/skills/manager';
@@ -31,6 +32,7 @@ async function executeCodeOwnedServiceTool(
     toolCallId: `call-${name}`,
     agentRunId: 'run-service',
     executionRunId: 'execution-run-service',
+    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     runtimeToolDeclaration: declaration,
     captureEffectReceipt: (captured) => {
       receipt = captured;

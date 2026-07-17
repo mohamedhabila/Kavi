@@ -33,4 +33,12 @@ describe('setup catalog', () => {
       'audio_transcribe',
     ]);
   });
+
+  it('exposes both calendar creation and in-place updates in device permissions', () => {
+    const deviceGroup = TOOL_PERMISSION_GROUPS.find((group) => group.id === 'device');
+
+    expect(deviceGroup?.tools).toEqual(
+      expect.arrayContaining(['calendar_create_event', 'calendar_update_event']),
+    );
+  });
 });

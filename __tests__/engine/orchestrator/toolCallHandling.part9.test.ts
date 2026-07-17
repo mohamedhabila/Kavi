@@ -25,10 +25,13 @@ describe('Orchestrator', () => {
       }));
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Parsing with Python' },
-          { type: 'done', content: 'Parsing with Python' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Parsing with Python' },
+            { type: 'done', content: 'Parsing with Python' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -86,32 +89,39 @@ describe('Orchestrator', () => {
         sendMessage: mockSendMessage,
       }));
 
-      (executeTool as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify({
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
           status: 'completed',
           output: 'KAVIASYNCOK',
         }),
-      );
+      });
 
       mockStreamMessage
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: {
-                id: 'tc-python',
-                name: 'python',
-                arguments: '{"code":"print(\\"KAVIASYNCOK\\")"}',
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: 'tc-python',
+                  name: 'python',
+                  arguments: '{"code":"print(\\"KAVIASYNCOK\\")"}',
+                },
               },
-            },
-            { type: 'done', content: '' },
-          ]),
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         )
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            { type: 'token', content: 'Verified KAVIASYNCOK.' },
-            { type: 'done', content: 'Verified KAVIASYNCOK.' },
-          ]),
+          createStreamGenerator(
+            [
+              { type: 'token', content: 'Verified KAVIASYNCOK.' },
+              { type: 'done', content: 'Verified KAVIASYNCOK.' },
+            ],
+            'text',
+          ),
         );
 
       const callbacks = makeCallbacks();
@@ -146,20 +156,26 @@ describe('Orchestrator', () => {
 
     it('adds timing metadata to running tool calls', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"test.txt"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"test.txt"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

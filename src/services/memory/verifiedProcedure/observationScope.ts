@@ -1,6 +1,9 @@
 import type { ToolEffectDigest } from '../../../types/toolEffectReceipt';
 import { isExactDurableScopeId } from '../../../utils/durableScopeIdentity';
-import { calendarVerifiedProcedureApplicablePreconditionIds } from './calendarPreconditionContract';
+import {
+  calendarUpdateVerifiedProcedureApplicablePreconditionIds,
+  calendarVerifiedProcedureApplicablePreconditionIds,
+} from './calendarPreconditionContract';
 import { listCurrentVerifiedProcedureDescriptors } from './descriptorRegistry';
 
 const SCOPE_KEYS = [
@@ -72,8 +75,14 @@ export async function matchesCurrentVerifiedProcedureScope(
       candidate.procedureId === scope.procedureId &&
       candidate.contractDigest === scope.procedureContractDigest,
   );
-  if (!descriptor || descriptor.registryKey !== 'calendar-list-to-create-event') return false;
-  const expected = calendarVerifiedProcedureApplicablePreconditionIds(scope.platform);
+  if (!descriptor) return false;
+  const expected =
+    descriptor.registryKey === 'calendar-list-to-create-event'
+      ? calendarVerifiedProcedureApplicablePreconditionIds(scope.platform)
+      : descriptor.registryKey === 'calendar-events-to-update-event'
+        ? calendarUpdateVerifiedProcedureApplicablePreconditionIds(scope.platform)
+        : null;
+  if (!expected) return false;
   return (
     scope.preconditionIds.length === expected.length &&
     scope.preconditionIds.every((value, index) => value === expected[index])

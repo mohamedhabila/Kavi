@@ -67,16 +67,11 @@ function policyRow(row: CurrentPromptCandidateRow): EpisodeAccessPolicyRow {
   };
 }
 
-function authorizedOrigin(
-  scope: RequiredMemoryAccessScopeIdentity,
-): AuthorizedEpisodeOrigin {
+function authorizedOrigin(scope: RequiredMemoryAccessScopeIdentity): AuthorizedEpisodeOrigin {
   return { ...scope, policyVersion: 1 };
 }
 
-function sameOrigin(
-  left: AuthorizedEpisodeOrigin,
-  right: AuthorizedEpisodeOrigin,
-): boolean {
+function sameOrigin(left: AuthorizedEpisodeOrigin, right: AuthorizedEpisodeOrigin): boolean {
   return (
     left.memoryOwnerId === right.memoryOwnerId &&
     left.memoryConversationId === right.memoryConversationId &&
@@ -90,12 +85,14 @@ function sameOrigin(
 function selectedCurrentEpisode(
   row: CurrentPromptCandidateRow,
   origin: AuthorizedEpisodeOrigin,
+  policyExpiresAt: number | null,
   relevanceScore: number,
 ): AuthorizedCurrentThreadEpisodeSelection {
   return {
     episode: rowToEpisode(row),
     lane: 'current_thread',
     authorizedOrigin: origin,
+    policyExpiresAt,
     accessDecision: { authorized: true, reason: 'eligible' },
     relevanceScore,
   };
@@ -260,7 +257,14 @@ export function loadAuthorizedCurrentThreadEpisodes(input: {
       withdrawn: row.withdrawn !== 0,
     });
     if (!decision.authorized || decision.lane !== 'current_thread') continue;
-    authorized.push(selectedCurrentEpisode(row, authorizedOrigin(decision.policy.scope), 0));
+    authorized.push(
+      selectedCurrentEpisode(
+        row,
+        authorizedOrigin(decision.policy.scope),
+        decision.policy.expiresAt,
+        0,
+      ),
+    );
   }
   const policyMs = Date.now() - policyStarted;
   const scoreStarted = Date.now();
@@ -337,6 +341,7 @@ export function revalidateAutomaticPromptEpisodeOrigin(input: {
   episodeId: string;
   lane: EpisodeRecallSelection['lane'];
   authorizedOrigin: AuthorizedEpisodeOrigin;
+  policyExpiresAt: number | null;
   relevanceScore: number;
   asOf: number;
 }): EpisodeRecallSelection | null {
@@ -368,13 +373,18 @@ export function revalidateAutomaticPromptEpisodeOrigin(input: {
   });
   if (!decision.authorized || decision.lane !== input.lane) return null;
   const origin = authorizedOrigin(decision.policy.scope);
-  if (!sameOrigin(origin, input.authorizedOrigin) || !Number.isFinite(input.relevanceScore)) {
+  if (
+    !sameOrigin(origin, input.authorizedOrigin) ||
+    decision.policy.expiresAt !== input.policyExpiresAt ||
+    !Number.isFinite(input.relevanceScore)
+  ) {
     return null;
   }
   return {
     episode: rowToEpisode(episode),
     lane: decision.lane,
     authorizedOrigin: origin,
+    policyExpiresAt: decision.policy.expiresAt,
     accessDecision: { authorized: true, reason: 'eligible' },
     relevanceScore: input.relevanceScore,
   } as EpisodeRecallSelection;
@@ -398,6 +408,7 @@ export function revalidateAutomaticPromptEpisodeSelection(input: {
     episodeId: input.selection.episode.id,
     lane: input.selection.lane,
     authorizedOrigin: input.selection.authorizedOrigin,
+    policyExpiresAt: input.selection.policyExpiresAt,
     relevanceScore: input.selection.relevanceScore,
     asOf: input.asOf,
   });

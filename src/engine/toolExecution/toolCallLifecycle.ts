@@ -8,6 +8,7 @@ import { applyTrackedAsyncToolResult } from '../pendingAsyncOperations';
 import {
   buildToolResultMessage,
   completeRunningToolCall,
+  createFailedToolCall,
   createRunningToolCall,
   failRunningToolCall,
 } from './toolExecutionMessages';
@@ -30,8 +31,15 @@ import {
   buildUntrackedExternalToolResult,
   observeExternalToolResultDurability,
 } from '../../services/executionJournal/externalToolDurabilityLifecycle';
-import { isCodeOwnedEffectFreeInvocation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
-import { failedToolOutcome } from '../../types/toolRuntimeOutcome';
+import {
+  isCodeOwnedEffectFreeInvocation,
+  type ToolEffectDispatchObservation,
+} from '../../services/executionJournal/toolEffectDispatchLifecycle';
+import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
+import {
+  buildModelTurnMemoryPolicyExpiredToolResult,
+  isModelTurnMemoryPolicyBindingDurablyCurrent,
+} from '../authority/modelTurnMemoryPolicyBinding';
 
 function runtimeToolDeclaration(lifecycle: ToolExecutionLifecycleParams, toolName: string) {
   return lifecycle.groundedRequestScopedTools?.find(
@@ -105,6 +113,45 @@ async function observeVerifiedProcedureRawOutcome(params: {
   }
 }
 
+async function completeUnstartedMemoryPolicyRevocation(params: {
+  lifecycle: ToolExecutionLifecycleParams;
+  effectiveToolCall: ToolExecutionLifecycleParams['tc'];
+}): Promise<ToolExecutionLifecycleResult> {
+  const result = buildModelTurnMemoryPolicyExpiredToolResult();
+  const toolCall = createFailedToolCall(
+    params.effectiveToolCall,
+    result,
+    Date.now(),
+    'authority_revoked',
+  );
+  await observeVerifiedProcedureRawOutcome({
+    lifecycle: params.lifecycle,
+    toolCall,
+    resultText: result,
+  });
+  recordLifecycleToolCall(
+    params.lifecycle.toolCallHistory,
+    params.effectiveToolCall.id,
+    params.effectiveToolCall.name,
+    params.effectiveToolCall.arguments,
+    result,
+    'failed',
+    'authority_revoked',
+  );
+  return {
+    toolCallId: params.effectiveToolCall.id,
+    effectiveToolName: params.effectiveToolCall.name,
+    toolMessage: buildToolResultMessage({
+      idPrefix: params.lifecycle.idPrefixes.filtered,
+      toolCallId: params.effectiveToolCall.id,
+      content: result,
+      toolCall,
+      isError: true,
+    }),
+    result,
+  };
+}
+
 export type {
   ToolExecutionLifecycleCallbacks,
   ToolExecutionLifecycleIdPrefixes,
@@ -120,13 +167,90 @@ export async function executeToolCallLifecycle(
     ...params.tc,
     name: resolveRegisteredToolName(params.tc.name),
   };
+  const effectFreeInvocation = isCodeOwnedEffectFreeInvocation(
+    effectiveToolCall.name,
+    effectiveToolCall.arguments,
+  );
+  if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
+    return completeUnstartedMemoryPolicyRevocation({
+      lifecycle: params,
+      effectiveToolCall,
+    });
+  }
   const preflightResult = resolveToolCallPreflight(params, effectiveToolCall);
   if (preflightResult) {
+    if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
+      return completeUnstartedMemoryPolicyRevocation({
+        lifecycle: params,
+        effectiveToolCall,
+      });
+    }
     return preflightResult;
   }
 
   const toolCall = createRunningToolCall(effectiveToolCall);
+  let toolStartEventEmitted = false;
+  const emitBalancedToolEnd = async (): Promise<void> => {
+    if (!toolStartEventEmitted) return;
+    toolStartEventEmitted = false;
+    try {
+      await emitAgentEvent('tool_end', {
+        conversationId: params.conversationId,
+        toolName: effectiveToolCall.name,
+        iteration: params.iteration,
+        agentRunId: params.agentRunId,
+        executionSignal: params.signal,
+      });
+    } catch {
+      // Telemetry is ancillary to the already-settled tool outcome.
+    }
+  };
+
+  const completeMemoryPolicyRevocation = async (): Promise<ToolExecutionLifecycleResult> => {
+    const result = buildModelTurnMemoryPolicyExpiredToolResult();
+    const completedAt = Date.now();
+    failRunningToolCall(toolCall, result, completedAt, 'authority_revoked');
+    params.callbacks.onToolCallComplete(toolCall);
+    await observeVerifiedProcedureRawOutcome({
+      lifecycle: params,
+      toolCall,
+      resultText: result,
+    });
+    recordLifecycleToolCall(
+      params.toolCallHistory,
+      effectiveToolCall.id,
+      effectiveToolCall.name,
+      effectiveToolCall.arguments,
+      result,
+      'failed',
+      'authority_revoked',
+    );
+    await emitBalancedToolEnd();
+    return {
+      toolCallId: effectiveToolCall.id,
+      effectiveToolName: effectiveToolCall.name,
+      toolMessage: buildToolResultMessage({
+        idPrefix: params.idPrefixes.filtered,
+        toolCallId: effectiveToolCall.id,
+        content: result,
+        toolCall,
+        isError: true,
+      }),
+      result,
+    };
+  };
+
+  if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
+    return completeUnstartedMemoryPolicyRevocation({
+      lifecycle: params,
+      effectiveToolCall,
+    });
+  }
+
   params.callbacks.onToolCallStart(toolCall);
+  if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
+    return completeMemoryPolicyRevocation();
+  }
   await yieldToUiFrame();
 
   const completeCancellation = async (): Promise<ToolExecutionLifecycleResult> => {
@@ -168,12 +292,12 @@ export async function executeToolCallLifecycle(
     return completeCancellation();
   }
 
-  if (
-    params.beforeEffectDispatch &&
-    !isCodeOwnedEffectFreeInvocation(effectiveToolCall.name, effectiveToolCall.arguments)
-  ) {
+  if (params.beforeEffectDispatch && !effectFreeInvocation) {
     await params.beforeEffectDispatch(effectiveToolCall.name);
     if (params.signal?.signal.aborted) return completeCancellation();
+    if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
+      return completeMemoryPolicyRevocation();
+    }
   }
 
   await emitAgentEvent('tool_start', {
@@ -183,13 +307,18 @@ export async function executeToolCallLifecycle(
     agentRunId: params.agentRunId,
     executionSignal: params.signal,
   });
+  toolStartEventEmitted = true;
+  if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
+    return completeMemoryPolicyRevocation();
+  }
   const toolExecutionStartedAt = Date.now();
   let authoritativeEffectReceipt: ToolEffectReceipt | undefined;
   let authoritativeReceiptFinalized = false;
   let effectReconciliationRequired = false;
+  let effectDispatchObservation: ToolEffectDispatchObservation | undefined;
 
   try {
-    let outcome = await executeTool(
+    const execution = await executeTool(
       effectiveToolCall.name,
       effectiveToolCall.arguments,
       params.conversationId,
@@ -207,6 +336,7 @@ export async function executeToolCallLifecycle(
         controlGraphGoals: params.controlGraphGoals,
         agentRunId: params.agentRunId,
         executionRunId: params.executionRunId,
+        modelTurnMemoryPolicyBinding: params.modelTurnMemoryPolicyBinding,
         toolCallId: effectiveToolCall.id,
         executionSignal: params.signal?.signal,
         runtimeToolDeclaration: runtimeToolDeclaration(params, effectiveToolCall.name),
@@ -220,8 +350,18 @@ export async function executeToolCallLifecycle(
           effectReconciliationRequired = true;
         },
         currentUserMessage: params.currentUserMessage,
+        toolObservedMemoryEvidence: params.toolObservedMemoryEvidence,
       },
     );
+    let outcome: ToolRuntimeOutcome = execution;
+    effectDispatchObservation = execution.effectDispatchObservation;
+    if (
+      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding) &&
+      (effectFreeInvocation ||
+        (outcome.status === 'failed' && outcome.failureKind === 'authority_revoked'))
+    ) {
+      return completeMemoryPolicyRevocation();
+    }
     let result = outcome.content;
     if (authoritativeEffectReceipt) {
       attachExecutionReceipt({
@@ -238,6 +378,12 @@ export async function executeToolCallLifecycle(
         resultIsError: outcome.status === 'failed',
         recordedAt: Date.now(),
       });
+      if (
+        effectFreeInvocation &&
+        !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
+      ) {
+        return completeMemoryPolicyRevocation();
+      }
     }
     await observeVerifiedProcedureRawOutcome({
       lifecycle: params,
@@ -246,6 +392,12 @@ export async function executeToolCallLifecycle(
       receipt: authoritativeEffectReceipt,
       reconciliationRequired: effectReconciliationRequired,
     });
+    if (
+      effectFreeInvocation &&
+      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
+    ) {
+      return completeMemoryPolicyRevocation();
+    }
     if (outcome.status === 'completed') {
       const durability = await observeExternalToolResultDurability({
         toolName: effectiveToolCall.name,
@@ -256,6 +408,12 @@ export async function executeToolCallLifecycle(
         parentAgentRunId: params.agentRunId,
         observedAt: Date.now(),
       });
+      if (
+        effectFreeInvocation &&
+        !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
+      ) {
+        return completeMemoryPolicyRevocation();
+      }
       if (durability.kind === 'untracked_external' || durability.kind === 'persistence_failed') {
         outcome = failedToolOutcome(buildUntrackedExternalToolResult(durability));
         result = outcome.content;
@@ -274,6 +432,12 @@ export async function executeToolCallLifecycle(
       conversationId: spillConversationId,
       toolName: effectiveToolCall.name,
     });
+    if (
+      effectFreeInvocation &&
+      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
+    ) {
+      return completeMemoryPolicyRevocation();
+    }
     result = spilled.payload;
     result = enrichToolResultWithSchemaRepair({
       result,
@@ -283,13 +447,18 @@ export async function executeToolCallLifecycle(
     const effectiveBudgetWindow =
       params.toolResultContextWindow ?? getWorkingContextWindow(params.model);
     result = enforceToolResultBudget(result, effectiveBudgetWindow);
+    if (
+      effectFreeInvocation &&
+      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
+    ) {
+      return completeMemoryPolicyRevocation();
+    }
     applyTrackedAsyncToolResult(
       params.trackedAsyncOperations,
       effectiveToolCall.name,
       effectiveToolCall.arguments,
       result,
     );
-    params.onPendingAsyncOperationsChange?.();
 
     const toolResultIsError = outcome.status === 'failed';
     const completedAt = Date.now();
@@ -300,14 +469,6 @@ export async function executeToolCallLifecycle(
       completedAt,
       toolResultIsError ? 'tool_error' : undefined,
     );
-    params.callbacks.onToolCallComplete(toolCall);
-    await emitAgentEvent('tool_end', {
-      conversationId: params.conversationId,
-      toolName: effectiveToolCall.name,
-      iteration: params.iteration,
-      agentRunId: params.agentRunId,
-      executionSignal: params.signal,
-    });
     recordLifecyclePerformanceMetrics({
       enabled: params.usePerformanceMetrics,
       recorder: params.onRecordPerformanceMetrics,
@@ -323,6 +484,9 @@ export async function executeToolCallLifecycle(
       result,
       toolResultIsError ? 'failed' : 'completed',
     );
+    params.onPendingAsyncOperationsChange?.();
+    params.callbacks.onToolCallComplete(toolCall);
+    await emitBalancedToolEnd();
 
     return {
       toolCallId: effectiveToolCall.id,
@@ -337,11 +501,17 @@ export async function executeToolCallLifecycle(
       result,
       ...(authoritativeEffectReceipt ? { effectReceipt: authoritativeEffectReceipt } : {}),
       ...(effectReconciliationRequired ? { effectReconciliationRequired: true } : {}),
+      ...(effectDispatchObservation ? { effectDispatchObservation } : {}),
     };
   } catch (err: unknown) {
+    if (
+      effectFreeInvocation &&
+      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
+    ) {
+      return completeMemoryPolicyRevocation();
+    }
     const errMsg = err instanceof Error ? err.message : String(err);
     const completedAt = Date.now();
-    failRunningToolCall(toolCall, errMsg, completedAt, 'runtime_error');
     const errorResult = `Error: ${errMsg}`;
     if (!authoritativeEffectReceipt && !authoritativeReceiptFinalized) {
       authoritativeEffectReceipt = await appendExecutionReceipt({
@@ -352,6 +522,12 @@ export async function executeToolCallLifecycle(
         resultIsError: true,
         recordedAt: completedAt,
       });
+      if (
+        effectFreeInvocation &&
+        !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
+      ) {
+        return completeMemoryPolicyRevocation();
+      }
     }
     await observeVerifiedProcedureRawOutcome({
       lifecycle: params,
@@ -360,21 +536,25 @@ export async function executeToolCallLifecycle(
       receipt: authoritativeEffectReceipt,
       reconciliationRequired: effectReconciliationRequired,
     });
-    params.callbacks.onToolCallComplete(toolCall);
-    recordLifecyclePerformanceMetrics({
-      enabled: params.usePerformanceMetrics,
-      recorder: params.onRecordPerformanceMetrics,
-      startedAt: toolExecutionStartedAt,
-      reason: 'tool_execution_failed',
-    });
-
+    if (
+      effectFreeInvocation &&
+      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
+    ) {
+      return completeMemoryPolicyRevocation();
+    }
+    failRunningToolCall(toolCall, errMsg, completedAt, 'runtime_error');
     applyTrackedAsyncToolResult(
       params.trackedAsyncOperations,
       effectiveToolCall.name,
       effectiveToolCall.arguments,
       errorResult,
     );
-    params.onPendingAsyncOperationsChange?.();
+    recordLifecyclePerformanceMetrics({
+      enabled: params.usePerformanceMetrics,
+      recorder: params.onRecordPerformanceMetrics,
+      startedAt: toolExecutionStartedAt,
+      reason: 'tool_execution_failed',
+    });
     recordLifecycleToolCall(
       params.toolCallHistory,
       effectiveToolCall.id,
@@ -383,6 +563,9 @@ export async function executeToolCallLifecycle(
       errorResult,
       'failed',
     );
+    params.onPendingAsyncOperationsChange?.();
+    params.callbacks.onToolCallComplete(toolCall);
+    await emitBalancedToolEnd();
 
     return {
       toolCallId: effectiveToolCall.id,
@@ -397,6 +580,7 @@ export async function executeToolCallLifecycle(
       result: errorResult,
       ...(authoritativeEffectReceipt ? { effectReceipt: authoritativeEffectReceipt } : {}),
       ...(effectReconciliationRequired ? { effectReconciliationRequired: true } : {}),
+      ...(effectDispatchObservation ? { effectDispatchObservation } : {}),
     };
   }
 }

@@ -141,18 +141,33 @@ describe('agent-run effect receipt memory', () => {
     );
   });
 
-  it('fails closed when code-owned receipt or terminal proof belongs to another run', () => {
-    expect(() =>
-      recordAgentRunEvidenceMemory({
-        evidence: [buildToolEffectReceiptEvidence(receipt(1, 10))],
-        conversationId: 'conversation-1',
-        threadId: 'thread-1',
-        taskId: 'task-1',
-        sourceRunId: 'another-run',
-        sourceTurnId: 'assistant-1',
-        now: 30,
+  it('preserves distinct agent-run and effect-execution provenance', () => {
+    recordAgentRunEvidenceMemory({
+      evidence: [buildToolEffectReceiptEvidence(receipt(1, 10, 'effect-execution-run'))],
+      conversationId: 'conversation-1',
+      threadId: 'thread-1',
+      taskId: 'task-1',
+      sourceRunId: 'sealed-agent-run',
+      sourceTurnId: 'assistant-1',
+      now: 30,
+    });
+
+    expect(listFacts({ memoryKind: 'agent_run' })[0]).toEqual(
+      expect.objectContaining({
+        sourceRunId: 'sealed-agent-run',
+        attributes: expect.objectContaining({
+          effectReceipts: [
+            expect.objectContaining({
+              executionRunId: 'effect-execution-run',
+              toolCallId: 'call-1',
+            }),
+          ],
+        }),
       }),
-    ).toThrow('memory_agent_run_receipt_run_mismatch');
+    );
+  });
+
+  it('fails closed when terminal proof belongs to another agent run', () => {
     expect(() =>
       recordAgentRunEvidenceMemory({
         evidence: [terminal()],

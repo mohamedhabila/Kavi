@@ -1,4 +1,3 @@
-import * as Crypto from 'expo-crypto';
 import { resolveToolEffectPolicy } from '../durability/toolEffectPolicy';
 import { TOOL_DEFINITIONS } from '../tools/definitions';
 import { inferToolCapabilityDescriptor } from '../tools/capabilityRegistry';
@@ -13,6 +12,7 @@ import type {
   ToolEffectDigest,
 } from '../../types/toolEffectReceipt';
 import { getCodeOwnedToolEffectContract } from './toolEffectReceiptContracts';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 
 const IDENTITY_VERSION = 1 as const;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
@@ -68,7 +68,7 @@ async function digestContractComponent(domain: string, value: unknown): Promise<
     identityVersion: IDENTITY_VERSION,
     value: canonicalize(value),
   });
-  const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, canonical);
+  const digest = await sha256HexUtf8Async(canonical);
   return `sha256:${digest.toLowerCase()}`;
 }
 

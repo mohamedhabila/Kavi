@@ -30,6 +30,11 @@ import { recordContributionBackedFact } from '../../helpers/memoryRetirementTest
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+const CODE_OWNED_NORMAL_SENSITIVITY = {
+  version: 1,
+  source: 'code_owned',
+  sensitivity: 'normal',
+} as const;
 
 const SCOPE = {
   memoryConversationId: 'conversation-1',
@@ -92,6 +97,7 @@ describe('withdrawal ingestion replay fence', () => {
         sourceThreadId: SCOPE.threadId,
         taskId: SCOPE.taskId,
         producerEventId: 'withdrawal-replay-processing',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
       },
     ).fact;
     const processingJob = enqueue();
@@ -138,6 +144,7 @@ describe('withdrawal ingestion replay fence', () => {
         sourceThreadId: SCOPE.threadId,
         taskId: SCOPE.taskId,
         producerEventId: 'withdrawal-replay-scope',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
       },
     ).fact;
     expect(withdrawMemoryFact(fact.id, 300).status).toBe('withdrawn');
@@ -196,11 +203,13 @@ describe('withdrawal ingestion replay fence', () => {
         sourceThreadId: SCOPE.threadId,
         taskId: SCOPE.taskId,
         producerEventId: 'withdrawal-replay-persistence',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
       },
     ).fact;
     expect(withdrawMemoryFact(fact.id, 300).status).toBe('withdrawn');
     const replayResult = {
       episodeSummary: 'must not return',
+      episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
       newFacts: [
         {
           subject: 'user',
@@ -208,6 +217,7 @@ describe('withdrawal ingestion replay fence', () => {
           value: 'must not return',
           confidence: 0.9,
           evidenceMessageIds: ['message-old'],
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
         },
       ],
       activeFocus: null,
@@ -222,6 +232,10 @@ describe('withdrawal ingestion replay fence', () => {
         taskId: SCOPE.taskId,
         sourceUserMessageId: 'message-old',
         sourceAssistantMessageId: 'turn-old',
+        messages: [
+          { id: 'message-old', role: 'user', content: 'withdraw me', timestamp: 100 },
+          { id: 'turn-old', role: 'assistant', content: 'acknowledged', timestamp: 200 },
+        ],
         factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
         sourceRunId: 'run-old',
         now: 400,
@@ -245,6 +259,10 @@ describe('withdrawal ingestion replay fence', () => {
           taskId: SCOPE.taskId,
           sourceUserMessageId: 'message-new',
           sourceAssistantMessageId: 'turn-new',
+          messages: [
+            { id: 'message-new', role: 'user', content: 'new assertion', timestamp: 400 },
+            { id: 'turn-new', role: 'assistant', content: 'acknowledged', timestamp: 500 },
+          ],
           factContributionProducerId: CONSOLIDATION_FACT_PRODUCER_IDS.threadLocalImport,
           sourceRunId: 'run-new',
           now: 500,
@@ -278,6 +296,7 @@ describe('withdrawal ingestion replay fence', () => {
         memoryConversationId: conversationId,
         sourceThreadId: conversationId,
         producerEventId: 'withdrawal-replay-migration',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
       },
     ).fact;
     expect(withdrawMemoryFact(fact.id, 300).status).toBe('withdrawn');
@@ -312,6 +331,7 @@ describe('withdrawal ingestion replay fence', () => {
               sensitivity: 'sensitive',
             },
           ],
+          episode_sensitivity: 'normal',
           episode_summary: 'must not return',
           active_focus: null,
           open_threads: [],

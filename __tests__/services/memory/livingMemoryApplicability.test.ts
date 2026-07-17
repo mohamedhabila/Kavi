@@ -7,7 +7,10 @@ import { upsertEntity } from '../../../src/services/memory/entities';
 import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
 import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExplicitOverrides';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
-import type { SealedFactApplicabilityProvenance } from '../../../src/services/memory/facts/applicabilityProvenance';
+import type {
+  MemoryFactSensitivity,
+  SealedFactApplicabilityProvenance,
+} from '../../../src/services/memory/facts/applicabilityProvenance';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
 import {
@@ -51,6 +54,7 @@ function seedFact(input: {
   reviewState?: 'auto' | 'verified' | 'pending_review' | 'stale' | 'conflicted' | 'rejected';
   sealedApplicability?: SealedFactApplicabilityProvenance;
   evidence?: string;
+  sensitivityFloor?: MemoryFactSensitivity;
 }): string {
   const subject = upsertEntity({ name: `subject-${input.predicate}`, type: 'concept', now: 500 });
   const factInput = {
@@ -62,6 +66,7 @@ function seedFact(input: {
     originThreadId: SOURCE_THREAD_ID,
     sourceMessageId: `source-${input.predicate}`,
     reviewState: input.reviewState,
+    sensitivityFloor: input.sensitivityFloor,
     importance: 1,
     confidence: 0.95,
     now: 1_000,
@@ -109,6 +114,7 @@ describe('living memory applicability integration', () => {
       predicate: 'user_medical_status',
       value: 'sensitive-memory-value',
       evidence: 'sensitive-local-evidence',
+      sensitivityFloor: 'sensitive',
     });
     const objectiveId = seedFact({
       predicate: 'objective_state',

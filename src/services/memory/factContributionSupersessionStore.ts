@@ -9,7 +9,7 @@ import {
 } from './factContributionChildCommitments';
 import {
   encodeMemoryFactContributionPayload,
-  type MemoryFactContributionPayloadV1,
+  type MemoryFactContributionPayloadV2,
 } from './factContributionCodec';
 import { isFactContributionSupersessionAuthorized } from './factContributionOperation';
 import {
@@ -53,7 +53,7 @@ export interface FactContributionSupersessionParentMetadata {
   factId: string;
   memoryOwnerId: string;
   contributedAt: number;
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
 }
 
 export interface FactContributionSupersessionSemantics {
@@ -139,14 +139,10 @@ function requireCurrentPolicyVersion(value: unknown): number {
 }
 
 function requireCommittedPolicyVersion(value: unknown): number {
-  if (
-    !Number.isSafeInteger(value) ||
-    (value as number) < 1 ||
-    (value as number) > MEMORY_FACT_SENSITIVITY_POLICY_VERSION
-  ) {
+  if (value !== MEMORY_FACT_SENSITIVITY_POLICY_VERSION) {
     fail('memory_fact_contribution_supersession_snapshot_invalid');
   }
-  return value as number;
+  return MEMORY_FACT_SENSITIVITY_POLICY_VERSION;
 }
 
 function normalizeParent(
@@ -284,7 +280,7 @@ function requireActiveSuccessor(parentInput: FactContributionSupersessionParentM
 }
 
 function assertProjectionIntent(input: {
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
   projection: Pick<StoredSuccessorProjection, 'pinned' | 'reviewState'>;
   pinnedInputExplicit: 0 | 1;
   reviewStateInputExplicit: 0 | 1;

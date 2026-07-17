@@ -37,6 +37,7 @@ describe('consolidateTurn', () => {
 
   it('extracts a valid result without writing memory state', async () => {
     const extractor = buildExtractor({
+      episode_sensitivity: 'personal',
       episode_summary: null,
       new_facts: [
         {

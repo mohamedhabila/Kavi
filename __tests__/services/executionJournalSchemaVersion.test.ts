@@ -34,6 +34,11 @@ const V8_CONTRACT_IDENTITY_COLUMN_SQL = `    tool_contract_identity_digest TEXT 
     ),
 `;
 
+const V9_MODEL_AUTHORITY_VALID_UNTIL_COLUMN_SQL = `    model_authority_valid_until INTEGER CHECK (
+      model_authority_valid_until IS NULL OR model_authority_valid_until >= 0
+    ),
+`;
+
 const EFFECT_INDEX_NAMES = [
   'idx_execution_effects_run_status',
   'idx_execution_effects_status_run',
@@ -128,11 +133,15 @@ function downgradePopulatedFixtureToV7(database: SQLite.SQLiteDatabase): void {
     `SELECT sql FROM sqlite_master
      WHERE type = 'table' AND name = 'execution_effects'`,
   )?.sql;
-  if (!currentTableSql?.includes(V8_CONTRACT_IDENTITY_COLUMN_SQL)) {
-    throw new Error('test_fixture_missing_v8_contract_identity_column');
+  if (
+    !currentTableSql?.includes(V8_CONTRACT_IDENTITY_COLUMN_SQL) ||
+    !currentTableSql.includes(V9_MODEL_AUTHORITY_VALID_UNTIL_COLUMN_SQL)
+  ) {
+    throw new Error('test_fixture_missing_current_effect_authority_columns');
   }
   const v7TableSql = currentTableSql
     .replace('CREATE TABLE execution_effects', 'CREATE TABLE execution_effects_v7')
+    .replace(V9_MODEL_AUTHORITY_VALID_UNTIL_COLUMN_SQL, '')
     .replace(V8_CONTRACT_IDENTITY_COLUMN_SQL, '');
   const effectIndexes = database.getAllSync<{ name: string; sql: string }>(
     `SELECT name, sql FROM sqlite_master
@@ -153,6 +162,8 @@ function downgradePopulatedFixtureToV7(database: SQLite.SQLiteDatabase): void {
   database.execSync('PRAGMA legacy_alter_table = ON');
   try {
     database.execSync('BEGIN IMMEDIATE');
+    database.execSync('DROP TRIGGER trg_execution_effect_receipts_immutable');
+    database.execSync('DROP TABLE execution_effect_receipts');
     database.execSync(v7TableSql);
     database.execSync(
       `INSERT INTO execution_effects_v7 (
@@ -293,6 +304,7 @@ describe('execution journal schema migration policy', () => {
         checkpoint_id: 'checkpoint-effect',
         status: 'ambiguous',
         tool_contract_identity_digest: null,
+        model_authority_valid_until: null,
       }),
     );
     expect(

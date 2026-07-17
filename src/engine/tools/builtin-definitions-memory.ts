@@ -137,6 +137,7 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
     'semanticEvidence is untrusted model output: declare the typed fact and copy value as the smallest atomic exact substring that remains current. Include only the semantic object; exclude the subject, relation wording, assertion/correction wording, and every superseded alternative. Never paraphrase, normalize, or change grammatical person. Keep any named subject label verbatim. Use subject.kind=self with no other subject fields when the current user is the subject. A named subject requires its exact label and semantic entity type in the same subject object. The runtime owns the current user message and derives the shortest bounded exact span containing those strings; never copy or paraphrase an evidence quote. Predicate is a semantic relation rather than a verbatim quote. ' +
     'For a present direct assertion in the current user message, use assertion_class=current_direct. current_direct describes the source timing and authority, not the subject identity: it is valid for either subject.kind=self or an exactly named subject directly asserted by the user. Do not reinterpret an exact named subject as the current user or request identity confirmation merely because the subject is named. A successful code-owned read or verification tool result from this same execution run may also authorize one exact named-subject fact: keep the named subject and value verbatim, use assertion_class=quoted, operation=record, and prefer scope project, conversation, or session. The runtime accepts only an unambiguous exact source span from a reviewed effect-free tool; it derives the actual source authority itself and narrows any over-broad tool-observed scope to project. Dynamic tools, failed/compacted outputs, self facts, and tool-observed replacements remain unauthorized. Historical, hypothetical, third-party, and uncertain content has no write authority. ' +
     'Use operation=record only when no current fact exists for the exact subject, predicate, and scope; use replace_current only to replace exactly one current fact. ' +
+    'The returned fact.scope is authoritative. Verify that it provides the visibility the user requested before claiming success; a narrower successful write does not satisfy a broader durability request. ' +
     'Code binds the evidence to the current message, owner scope, execution claim, and replay identity before any write.',
   input_schema: {
     type: 'object',
@@ -181,7 +182,7 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
             type: 'string',
             enum: ['global', 'project', 'conversation', 'session', 'persona'],
             description:
-              'Choose scope from intended durability and code-owned active context, never from ordinal or section labels in the message. When the user explicitly asks to remember a fact without limiting its context, prefer global. Use persona only when the fact intentionally applies to the active persona alone. Use project or conversation only for correspondingly bounded context. Use session only for an active user task; it is invalid when no task identity exists.',
+              'Choose scope from intended durability and code-owned active context, never from ordinal or section labels in the message. Global is visible in later conversations for the memory owner and is preferred when the user requests durable memory without a narrower boundary. Persona is visible in later conversations only for the active persona. Project is limited to the active project. Conversation is limited to the current conversation and is not visible in a newly created conversation. Session is limited to the active user task and is invalid when no task identity exists.',
           },
           importance: { type: 'number', minimum: 0, maximum: 1 },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
@@ -262,12 +263,16 @@ export const MEMORY_FORGET_TOOL: ToolDefinition = {
   name: 'memory_forget',
   description:
     'Permanently withdraw a fact when the user explicitly asks for it to be forgotten or removed. ' +
-    'Withdrawal removes the fact and its authoritative derived memory while retaining only a content-free audit receipt. ' +
+    'Withdrawal removes the fact, its superseded predecessor values, and authoritative derived memory so an older value cannot reappear; only a content-free audit receipt remains. ' +
     'For a correction, record the replacement with memory_remember or use memory_manage action=invalidate; do not withdraw it.',
   input_schema: {
     type: 'object',
     properties: {
-      factId: { type: 'string' },
+      factId: {
+        type: 'string',
+        description:
+          'Exact factId shown in Retrieved Memory or returned by memory_recall or memory_remember. Do not use a source provenance id.',
+      },
     },
     required: ['factId'],
     additionalProperties: false,

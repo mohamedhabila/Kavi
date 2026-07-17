@@ -30,6 +30,10 @@ import {
   GRAPH_EVIDENCE_FACT_PRODUCER_ID,
 } from './evidenceBridgeContributionIdentity';
 import { requireExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import {
+  classifyMemoryFactSensitivity,
+  codeOwnedMemorySensitivityDeclaration,
+} from './memorySensitivityPolicy';
 
 export interface EvidenceBridgeOptions {
   /**
@@ -142,6 +146,7 @@ export function bridgeEvidenceToFacts(
     confidence: number;
     objectText: string;
   }> = [];
+  const sensitivityDeclaration = codeOwnedMemorySensitivityDeclaration();
   for (const [inputIndex, entry] of entries.entries()) {
     if (!DEFAULT_BRIDGED_KINDS.has(entry.kind)) {
       skipped.push({ id: entry.id, reason: `kind=${entry.kind} not bridged` });
@@ -155,6 +160,17 @@ export function bridgeEvidenceToFacts(
     const objectText = buildObjectText(entry);
     if (!objectText) {
       skipped.push({ id: entry.id, reason: 'no title or content' });
+      continue;
+    }
+    if (
+      classifyMemoryFactSensitivity({
+        declaredSensitivity: sensitivityDeclaration.sensitivity,
+        subject: subjectName,
+        predicate: buildPredicate(entry),
+        objectText,
+      }) === 'restricted'
+    ) {
+      skipped.push({ id: entry.id, reason: 'restricted_content' });
       continue;
     }
     requireExactMemoryProvenanceId(entry.id, 'memory_graph_evidence_entry_id_invalid');
@@ -209,6 +225,7 @@ export function bridgeEvidenceToFacts(
           },
           sourceAliases,
         },
+        sensitivityDeclaration,
       );
       addFactEvidence({
         factId: recorded.fact.id,

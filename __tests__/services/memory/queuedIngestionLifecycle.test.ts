@@ -46,7 +46,7 @@ it('consolidates each queued turn from its recorded source window', async () => 
       role: 'assistant',
       content: 'First response.',
       timestamp: 2,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     },
     { id: 'u-window-2', role: 'user', content: 'Second queued turn.', timestamp: 3 },
     {
@@ -54,7 +54,7 @@ it('consolidates each queued turn from its recorded source window', async () => 
       role: 'assistant',
       content: 'Second response.',
       timestamp: 4,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     },
   ];
 

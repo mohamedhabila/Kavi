@@ -1,4 +1,4 @@
-import { safeParseArray } from '../schema';
+import { safeParseArray } from '../schemaValues';
 import type { MemorySensitivityInput } from '../memorySensitivityPolicy';
 import { closedEpisodeSensitivity } from './accessPolicyTypes';
 import type { EpisodeSensitivity, EpisodeShareability } from './accessPolicyTypes';
@@ -51,6 +51,7 @@ export interface EpisodeRow {
   deleted_at: number | null;
   source_start_message_id: string | null;
   source_end_message_id: string | null;
+  source_identity_manifest_json: string;
 }
 
 export interface EvidenceRow {
@@ -140,6 +141,8 @@ export interface EpisodeSensitivitySourceMessage {
 }
 
 export interface EpisodeSensitivityEvidence {
+  /** Required producer-owned semantic floor. Missing or invalid values forbid persistence. */
+  declaredSensitivity: unknown;
   sourceMessages: ReadonlyArray<EpisodeSensitivitySourceMessage>;
   facts: ReadonlyArray<MemorySensitivityInput>;
 }

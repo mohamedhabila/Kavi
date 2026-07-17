@@ -72,6 +72,7 @@ export const ChatScreen: React.FC = () => {
     conversations,
     activeConversation,
     activeConversationId,
+    createConversation,
     getOrCreateCanonicalThread,
     addMessage,
     updateMessage,
@@ -392,6 +393,7 @@ export const ChatScreen: React.FC = () => {
       addToolCall,
       appendAgentRunCheckpoint,
       completeAgentRun,
+      createConversation,
       setAgentRunPhase,
       startAgentRun,
       transitionMessageMemoryPublication:

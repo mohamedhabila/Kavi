@@ -8,7 +8,8 @@ import {
   type AgentTurnPromptBundleParams,
 } from './agentTurnPromptBundle';
 import { isSessionCoordinationToolName } from '../tools/sessionToolKinds';
-import type { VerifiedProcedureObservationRevision } from '../../services/memory/verifiedProcedure/observationRevision';
+import type { VerifiedProcedureAuthoritySnapshot } from '../../services/memory/verifiedProcedure/observationAuthority';
+import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
 
 type PromptBundleContext = Omit<
   AgentTurnPromptBundleParams,
@@ -40,14 +41,9 @@ export interface PreparedAgentTurnCore {
 export interface PreparedAgentTurn extends PreparedAgentTurnCore {
   memoryReadFence?: {
     readEpoch: number;
-    verifiedProcedureObservationRevision?: VerifiedProcedureObservationRevision;
-    memoryFreePrompt: {
-      enrichedSystemPrompt: string;
-      enrichedSystemPromptSections: ReturnType<
-        typeof buildAgentTurnPromptBundle
-      >['enrichedSystemPromptSections'];
-    };
-    memoryDisabledTurn: PreparedAgentTurnCore;
+    memoryAuthoritySnapshot: MemoryAuthoritySnapshot;
+    validUntil?: number;
+    verifiedProcedureAuthoritySnapshot?: VerifiedProcedureAuthoritySnapshot;
   };
 }
 

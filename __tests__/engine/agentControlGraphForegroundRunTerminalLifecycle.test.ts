@@ -100,6 +100,50 @@ describe('foregroundRun terminal lifecycle controller', () => {
     expect(clearForegroundRequestIfCurrent).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps duplicate done callbacks bound to the original completion promise', async () => {
+    let releaseCompletion: (() => void) | undefined;
+    const handleSuccessfulCompletion = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseCompletion = resolve;
+        }),
+    );
+    const controller = createForegroundRunTerminalLifecycleController({
+      clearForegroundRequestIfCurrent: jest.fn(),
+      clearStreamingDraft: jest.fn(),
+      commitAssistantBuffers: jest.fn(),
+      completeOnce: async (task) => {
+        await task();
+      },
+      ensureAssistantTurn: jest.fn(),
+      finalizeCaughtAbort: jest.fn(),
+      finalizeCaughtFailure: jest.fn(),
+      flushPendingSurfacedOutputs: jest.fn(),
+      getCurrentAssistantMessageId: () => 'assistant-duplicate-done',
+      getVisibleAssistantContent: () => 'Final answer',
+      markCurrentAssistantPendingReview: jest.fn(),
+      handleInterruptedError: jest.fn(),
+      handleSuccessfulCompletion,
+      isAbortErrorLike: () => false,
+      isAborted: () => false,
+      requestPersistenceCheckpoint: jest.fn(),
+    });
+
+    controller.handleDone();
+    controller.handleDone();
+    let settled = false;
+    const completion = controller.awaitCompletion().then((status) => {
+      settled = true;
+      return status;
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+    expect(handleSuccessfulCompletion).toHaveBeenCalledTimes(1);
+    releaseCompletion?.();
+    await expect(completion).resolves.toBe('succeeded');
+  });
+
   it('returns failed for a blocked graph after preserving its visible terminal response', async () => {
     const markCurrentAssistantPendingReview = jest.fn();
     const handleSuccessfulCompletion = jest.fn().mockResolvedValue(undefined);
@@ -131,6 +175,41 @@ describe('foregroundRun terminal lifecycle controller', () => {
     controller.handleDone();
 
     await expect(controller.awaitCompletion()).resolves.toBe('failed');
+    expect(handleSuccessfulCompletion).toHaveBeenCalledWith({ forceTerminalReview: true });
+    expect(markCurrentAssistantPendingReview).not.toHaveBeenCalled();
+  });
+
+  it('returns cancelled for a settled user approval rejection and still runs terminal review', async () => {
+    const markCurrentAssistantPendingReview = jest.fn();
+    const handleSuccessfulCompletion = jest.fn().mockResolvedValue(undefined);
+    const controller = createForegroundRunTerminalLifecycleController({
+      clearForegroundRequestIfCurrent: jest.fn(),
+      clearStreamingDraft: jest.fn(),
+      commitAssistantBuffers: jest.fn(),
+      completeOnce: async (task) => {
+        await task();
+      },
+      ensureAssistantTurn: jest.fn(),
+      finalizeCaughtAbort: jest.fn(),
+      finalizeCaughtFailure: jest.fn(),
+      flushPendingSurfacedOutputs: jest.fn(),
+      getCurrentAssistantMessageId: () => 'assistant-approval-rejected',
+      getVisibleAssistantContent: () => 'No effect was dispatched.',
+      markCurrentAssistantPendingReview,
+      handleInterruptedError: jest.fn(),
+      handleSuccessfulCompletion,
+      isAbortErrorLike: () => false,
+      isAborted: () => false,
+      requestPersistenceCheckpoint: jest.fn(),
+    });
+    controller.handleControlGraphState({
+      status: 'cancelled',
+      terminalReason: 'user_approval_denied',
+    } as any);
+
+    controller.handleDone();
+
+    await expect(controller.awaitCompletion()).resolves.toBe('cancelled');
     expect(handleSuccessfulCompletion).toHaveBeenCalledWith({ forceTerminalReview: true });
     expect(markCurrentAssistantPendingReview).not.toHaveBeenCalled();
   });

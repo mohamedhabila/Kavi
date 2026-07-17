@@ -27,6 +27,8 @@ import {
   type SemanticFactAssertionClass,
   type SemanticFactProposalV1,
 } from './semanticFactProposal';
+import type { MemoryFactSensitivity } from './facts/applicabilityProvenance';
+import type { MemorySensitivityDeclarationV1 } from './memorySensitivityPolicy';
 export {
   applyConsolidatorResult,
   applyThreadLocalConsolidatorResult,
@@ -65,7 +67,7 @@ export type ConsolidatorFactOperation = 'insert' | 'replace_current';
 export type ConsolidatorAssertionClass = SemanticFactAssertionClass;
 
 interface AdmittedFactWriteBase {
-  authority: 'grounded_user_statement';
+  authority: 'grounded_user_statement' | 'verified_tool_observation';
   evidenceMessageId: string;
 }
 
@@ -94,12 +96,13 @@ export interface ConsolidatorFact {
   sealedApplicability?: SealedFactApplicabilityProvenance;
   /** Provider confidence score in the canonical 0..1 range. */
   confidence?: number;
-  /** Untrusted provider classification; persistence policy must not consume it directly. */
-  proposedSensitivity?: import('./facts/applicabilityProvenance').MemoryFactSensitivity;
+  /** Typed producer floor. It can only restrict persistence and recall. */
+  sensitivityDeclaration: MemorySensitivityDeclarationV1;
 }
 
 export interface ConsolidatorResult {
   episodeSummary: string | null;
+  episodeSensitivityDeclaration: MemorySensitivityDeclarationV1;
   newFacts: ConsolidatorFact[];
   activeFocus: string | null;
   openThreads: string[];
@@ -107,8 +110,12 @@ export interface ConsolidatorResult {
 }
 
 /** Parsed provider output. Proposals remain distinct from persistable facts. */
-export interface ProviderConsolidatorResult extends Omit<ConsolidatorResult, 'newFacts'> {
+export interface ProviderConsolidatorResult extends Omit<
+  ConsolidatorResult,
+  'newFacts' | 'episodeSensitivityDeclaration'
+> {
   newFacts: SemanticFactProposalV1[];
+  episodeSensitivity: MemoryFactSensitivity;
 }
 
 export type ConsolidatorMalformedCode = 'empty_response' | 'invalid_json' | 'non_object';
@@ -153,11 +160,16 @@ export class UnsupportedConsolidatorResponseError extends Error {
   }
 }
 
-export type ConsolidatorExtractor = (prompt: string, signal?: AbortSignal) => Promise<string>;
+export type ConsolidatorExtractor = (
+  prompt: string,
+  signal?: AbortSignal,
+  requestDispatchGuard?: () => void,
+) => Promise<string>;
 
 export interface ConsolidatorOptions {
   extractor: ConsolidatorExtractor;
   signal?: AbortSignal;
+  requestDispatchGuard?: () => void;
 }
 
 const PROMPT_HEADER = `You are the memory consolidator for an assistant chat app.
@@ -188,6 +200,7 @@ Return STRICT JSON only — no prose, no markdown fences. Schema:
     }
   ],
   "episode_summary": "short summary of this consolidated message window, or null",
+  "episode_sensitivity": "normal" | "personal" | "sensitive" | "restricted",
   "active_focus": "1-3 sentence rolling summary of what the user is working on, or null",
   "open_threads": ["short label of an unresolved follow-up", ...],
   "notable": ["a line worth surfacing in the next turn's focus header", ...]
@@ -210,8 +223,16 @@ Rules:
   the current user directly states a new current value for an existing fact.
 - Classify history, hypotheticals, quotations, third-party claims, and
   uncertainty accurately; product code will not admit them as current facts.
-- sensitivity is descriptive provider output only and never grants persistence
-  or recall authority.
+- sensitivity and episode_sensitivity are provider-declared lower bounds only;
+  they never grant write authority, applicability, scope, retrieval, or recall permission.
+- Classify episode_sensitivity from the complete current turn and use the most
+  restrictive level warranted by any content represented in episode_summary or
+  new_facts. When uncertain between two levels, choose the more restrictive one.
+- Sensitivity meanings are semantic and language-independent: normal is ordinary
+  non-personal content; personal is benign identity, profile, or preference data;
+  sensitive is private contact, location, financial, health, legal, or government
+  identity data; restricted is an authentication secret, credential, private key,
+  or other value that the memory system must not persist.
 - Extract explicit user memory-write intents in any language. Preserve supplied
   subject, predicate, and value labels when they are given, including opaque IDs,
   checksums, codes, and tokens. The assistant does not need to restate the fact.
@@ -222,6 +243,9 @@ Rules:
 - value strings <= 200 chars. labels <= 80 chars. active_focus <= 600 chars.
 - If nothing is worth recording, return empty arrays and null active_focus.
 `;
+
+const DIRECT_USER_PROMPT_CHARACTER_LIMIT = 4200;
+const DIRECT_ASSISTANT_PROMPT_CHARACTER_LIMIT = 2200;
 
 export function buildConsolidatorPrompt(input: ConsolidatorPromptInput): string {
   const lines: string[] = [PROMPT_HEADER];
@@ -241,8 +265,15 @@ export function buildConsolidatorPrompt(input: ConsolidatorPromptInput): string 
         `<current_user_message_id>${truncateForPrompt(input.sourceUserMessageId, 120)}</current_user_message_id>`,
       );
     }
-    lines.push(`<user>\n${truncateForPrompt(input.userMessage, 4000)}\n</user>`);
-    lines.push(`<assistant>\n${truncateForPrompt(input.assistantMessage, 4000)}\n</assistant>`);
+    lines.push(
+      `<user>\n${truncateForPrompt(input.userMessage, DIRECT_USER_PROMPT_CHARACTER_LIMIT)}\n</user>`,
+    );
+    lines.push(
+      `<assistant>\n${truncateForPrompt(
+        input.assistantMessage,
+        DIRECT_ASSISTANT_PROMPT_CHARACTER_LIMIT,
+      )}\n</assistant>`,
+    );
   }
   return lines.join('\n\n');
 }
@@ -295,11 +326,18 @@ function getPromptVisibleMessageContent(message: Message): string {
 function truncateForPrompt(value: string, max: number): string {
   const trimmed = value.trim();
   if (trimmed.length <= max) return trimmed;
-  return `${trimmed.slice(0, max - 1).trimEnd()}\u2026`;
+  const marker = '\n\u2026\n';
+  const retainedCharacters = max - marker.length;
+  const leadingCharacters = Math.ceil(retainedCharacters / 2);
+  const trailingCharacters = retainedCharacters - leadingCharacters;
+  return `${trimmed.slice(0, leadingCharacters).trimEnd()}${marker}${trimmed
+    .slice(-trailingCharacters)
+    .trimStart()}`;
 }
 
 const TOP_LEVEL_FIELDS = new Set([
   'episode_summary',
+  'episode_sensitivity',
   'new_facts',
   'active_focus',
   'open_threads',
@@ -345,6 +383,8 @@ function validatePayload(
 
   const episodeSummary = validateNullableString(payload.episode_summary, 1200);
   if (!episodeSummary.valid) return episodeSummary;
+  const episodeSensitivity = validateSensitivity(payload.episode_sensitivity);
+  if (!episodeSensitivity.valid) return episodeSensitivity;
   const activeFocus = validateNullableString(payload.active_focus, 600);
   if (!activeFocus.valid) return activeFocus;
   const openThreads = validateStringArray(payload.open_threads, 80, 5);
@@ -358,12 +398,19 @@ function validatePayload(
     valid: true,
     value: {
       episodeSummary: episodeSummary.value,
+      episodeSensitivity: episodeSensitivity.value,
       newFacts: newFacts.value,
       activeFocus: activeFocus.value,
       openThreads: openThreads.value,
       notable: notable.value,
     },
   };
+}
+
+function validateSensitivity(raw: unknown): SchemaValidation<MemoryFactSensitivity> {
+  return raw === 'normal' || raw === 'personal' || raw === 'sensitive' || raw === 'restricted'
+    ? { valid: true, value: raw }
+    : schemaInvalid(typeof raw === 'string' ? 'invalid_field_value' : 'invalid_field_type');
 }
 
 function validateFacts(raw: unknown): SchemaValidation<SemanticFactProposalV1[]> {
@@ -435,7 +482,7 @@ export async function consolidateTurn(
   const prompt = buildConsolidatorPrompt(input);
   let raw: string;
   try {
-    raw = await options.extractor(prompt, options.signal);
+    raw = await options.extractor(prompt, options.signal, options.requestDispatchGuard);
   } catch (error) {
     return {
       status: 'provider_error',

@@ -1,4 +1,4 @@
-import * as Crypto from 'expo-crypto';
+import type { DurableModelEffectAuthority } from '../../../engine/authority/modelTurnMemoryPolicyBinding';
 import { digestToolEffectText } from '../../../engine/toolExecution/toolEffectReceipt';
 import type { ToolEffectDigest } from '../../../types/toolEffectReceipt';
 import { runMemoryTransaction } from '../access/transaction';
@@ -9,7 +9,9 @@ import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { canWriteLongTermMemory, isMemoryPolicyEpochCurrent } from '../policy';
 import { ensureFactSchema } from '../schema';
 import { isMemoryIngestionSourceWithdrawn } from '../withdrawalFence';
+import { sha256HexUtf8Async } from '../../../utils/sha256Async';
 import { buildVerifiedProcedureEvidenceManifest } from './evidenceManifest';
+import { hasVerifiedProcedureRunInvalidationFence } from './invalidation';
 import {
   VERIFIED_PROCEDURE_MAX_EVIDENCE_MANIFEST_LENGTH,
   VERIFIED_PROCEDURE_MAX_OBSERVATIONS_PER_OWNER,
@@ -32,7 +34,11 @@ import {
   type VerifiedProcedureMemoryLineage,
   type VerifiedProcedureMemoryLineageHashes,
 } from './provenanceHash';
-import { advanceVerifiedProcedureObservationRevision } from './observationRevision';
+import {
+  advanceRestrictiveVerifiedProcedureAuthorityInTransaction,
+  advanceVerifiedProcedureProjectionInTransaction,
+} from './observationAuthority';
+import { areVerifiedProcedureOriginAuthoritiesDurablyCurrent } from './originatingModelAuthority';
 
 const COMMIT_CONTEXT_KEYS = [
   'candidate',
@@ -72,7 +78,10 @@ export type VerifiedProcedureTerminalCommitContext = Readonly<{
 
 export type IssueVerifiedProcedureTerminalCommitAuthorityResult =
   | { status: 'issued'; authority: VerifiedProcedureTerminalCommitAuthority }
-  | { status: 'rejected'; code: 'invalid_candidate' | 'invalid_input' | 'memory_disabled' }
+  | {
+      status: 'rejected';
+      code: 'invalid_candidate' | 'invalid_input' | 'memory_authority_changed' | 'memory_disabled';
+    }
   | { status: 'failed'; code: 'hashing_error' };
 
 export type { VerifiedProcedureObservationScope } from './observationScope';
@@ -86,6 +95,7 @@ export type RecordVerifiedProcedureObservationResult =
         | 'invalid_authority'
         | 'execution_run_invalidated'
         | 'memory_disabled'
+        | 'memory_authority_changed'
         | 'outside_retained_window'
         | 'source_withdrawn';
     }
@@ -93,6 +103,7 @@ export type RecordVerifiedProcedureObservationResult =
 
 type PendingObservation = Readonly<{
   policyEpoch: number;
+  modelEffectAuthorities: readonly DurableModelEffectAuthority[];
   memoryConversationId: string;
   sourceThreadId: string;
   sourceRunId: string;
@@ -218,12 +229,7 @@ function isVerifiedProcedureMemoryLineageWithdrawn(params: {
 }
 
 async function sha256(domain: string, value: string): Promise<string> {
-  const digest = (
-    await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      `kavi.verified-procedure.${domain}.v1\u0000${value}`,
-    )
-  ).toLowerCase();
+  const digest = await sha256HexUtf8Async(`kavi.verified-procedure.${domain}.v1\u0000${value}`);
   if (!RAW_SHA256_PATTERN.test(digest)) throw new Error('verified_procedure_hash_invalid');
   return digest;
 }
@@ -232,12 +238,7 @@ async function hashProvenance(
   domain: VerifiedProcedureProvenanceHashDomain,
   value: string,
 ): Promise<string> {
-  const digest = (
-    await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      verifiedProcedureProvenanceHashInput(domain, value),
-    )
-  ).toLowerCase();
+  const digest = await sha256HexUtf8Async(verifiedProcedureProvenanceHashInput(domain, value));
   if (!RAW_SHA256_PATTERN.test(digest)) throw new Error('verified_procedure_hash_invalid');
   return digest;
 }
@@ -266,12 +267,21 @@ export async function issueVerifiedProcedureTerminalCommitAuthority(
     if (isVerifiedProcedureMemoryLineageWithdrawn(context)) {
       return { status: 'rejected', code: 'invalid_input' };
     }
-    if (!(await matchesCurrentVerifiedProcedureScope(scope))) {
-      return { status: 'rejected', code: 'invalid_input' };
-    }
-    const sourceRunIdDigest = await digestVerifiedProcedureRunId(context.sourceRunId);
     const claimed = claimVerifiedProcedureLedgerCandidate(context.candidate);
     if (!claimed) return { status: 'rejected', code: 'invalid_candidate' };
+    if (!areVerifiedProcedureOriginAuthoritiesDurablyCurrent(claimed.modelEffectAuthorities)) {
+      return { status: 'rejected', code: 'memory_authority_changed' };
+    }
+    const [scopeMatches, sourceRunIdDigest] = await Promise.all([
+      matchesCurrentVerifiedProcedureScope(scope),
+      digestVerifiedProcedureRunId(context.sourceRunId),
+    ]);
+    if (!areVerifiedProcedureOriginAuthoritiesDurablyCurrent(claimed.modelEffectAuthorities)) {
+      return { status: 'rejected', code: 'memory_authority_changed' };
+    }
+    if (!scopeMatches) {
+      return { status: 'rejected', code: 'invalid_input' };
+    }
     if (
       claimed.runIdDigest !== sourceRunIdDigest ||
       claimed.candidate !== context.candidate ||
@@ -299,6 +309,9 @@ export async function issueVerifiedProcedureTerminalCommitAuthority(
       ),
       hashMemoryLineage(context.memoryLineage),
     ]);
+    if (!areVerifiedProcedureOriginAuthoritiesDurablyCurrent(claimed.modelEffectAuthorities)) {
+      return { status: 'rejected', code: 'memory_authority_changed' };
+    }
     const manifest = buildVerifiedProcedureEvidenceManifest(
       context.candidate,
       terminalProofDigest,
@@ -309,6 +322,9 @@ export async function issueVerifiedProcedureTerminalCommitAuthority(
       return { status: 'rejected', code: 'invalid_candidate' };
     }
     const evidenceManifestDigest = await sha256('evidence-manifest', evidenceManifestJson);
+    if (!areVerifiedProcedureOriginAuthoritiesDurablyCurrent(claimed.modelEffectAuthorities)) {
+      return { status: 'rejected', code: 'memory_authority_changed' };
+    }
     if (!isMemoryPolicyEpochCurrent(claimed.memoryPolicyEpoch)) {
       return { status: 'rejected', code: 'memory_disabled' };
     }
@@ -318,6 +334,7 @@ export async function issueVerifiedProcedureTerminalCommitAuthority(
       authority,
       Object.freeze({
         policyEpoch: claimed.memoryPolicyEpoch,
+        modelEffectAuthorities: Object.freeze([...claimed.modelEffectAuthorities]),
         memoryLineage: Object.freeze({ ...context.memoryLineage }),
         memoryConversationId: context.memoryConversationId,
         sourceThreadId: context.sourceThreadId,
@@ -448,9 +465,9 @@ function pruneObservations(params: {
   let prunedCount =
     db.runSync(
       `DELETE FROM memory_verified_procedure_observations
-        WHERE memory_owner_id = ? AND observed_at < ?`,
+        WHERE memory_owner_id = ? AND observed_at <= ?`,
       params.memoryOwnerId,
-      Math.max(0, params.recordedAt - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS),
+      params.recordedAt - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS,
     ).changes ?? 0;
   prunedCount +=
     db.runSync(
@@ -491,29 +508,6 @@ function pruneObservations(params: {
   return prunedCount;
 }
 
-function hasRunInvalidationFence(memoryOwnerId: string, sourceRunIdHash: string): boolean {
-  const row = getMemoryDb().getFirstSync<{
-    invalidated_at: unknown;
-    observation_revision: unknown;
-  }>(
-    `SELECT invalidated_at, observation_revision
-       FROM memory_verified_procedure_run_invalidations
-      WHERE memory_owner_id = ? AND source_run_id_hash = ?`,
-    memoryOwnerId,
-    sourceRunIdHash,
-  );
-  if (!row) return false;
-  if (
-    !Number.isSafeInteger(row.invalidated_at) ||
-    (row.invalidated_at as number) < 0 ||
-    !Number.isSafeInteger(row.observation_revision) ||
-    (row.observation_revision as number) < 1
-  ) {
-    throw new Error('verified_procedure_run_invalidation_invalid');
-  }
-  return true;
-}
-
 export async function recordVerifiedProcedureObservation(
   authority: VerifiedProcedureTerminalCommitAuthority,
   recordedAt = Date.now(),
@@ -528,10 +522,13 @@ export async function recordVerifiedProcedureObservation(
   if (!isMemoryPolicyEpochCurrent(pending.policyEpoch) || !canWriteLongTermMemory()) {
     return { status: 'rejected', code: 'memory_disabled' };
   }
+  if (!areVerifiedProcedureOriginAuthoritiesDurablyCurrent(pending.modelEffectAuthorities)) {
+    return { status: 'rejected', code: 'memory_authority_changed' };
+  }
   if (
     !Number.isSafeInteger(recordedAt) ||
     recordedAt < pending.observedAt ||
-    pending.observedAt < Math.max(0, recordedAt - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS)
+    pending.observedAt <= recordedAt - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS
   ) {
     return { status: 'rejected', code: 'outside_retained_window' };
   }
@@ -550,6 +547,9 @@ export async function recordVerifiedProcedureObservation(
   } catch {
     return { status: 'failed', code: 'hashing_error' };
   }
+  if (!areVerifiedProcedureOriginAuthoritiesDurablyCurrent(pending.modelEffectAuthorities)) {
+    return { status: 'rejected', code: 'memory_authority_changed' };
+  }
   if (!isMemoryPolicyEpochCurrent(pending.policyEpoch)) {
     return { status: 'rejected', code: 'memory_disabled' };
   }
@@ -559,6 +559,9 @@ export async function recordVerifiedProcedureObservation(
     scopeHashes = await hashScope(scope);
   } catch {
     return { status: 'failed', code: 'hashing_error' };
+  }
+  if (!areVerifiedProcedureOriginAuthoritiesDurablyCurrent(pending.modelEffectAuthorities)) {
+    return { status: 'rejected', code: 'memory_authority_changed' };
   }
   if (!isMemoryPolicyEpochCurrent(pending.policyEpoch)) {
     return { status: 'rejected', code: 'memory_disabled' };
@@ -571,12 +574,30 @@ export async function recordVerifiedProcedureObservation(
     if (!isMemoryPolicyEpochCurrent(pending.policyEpoch)) {
       return { status: 'rejected', code: 'memory_disabled' };
     }
+    if (!areVerifiedProcedureOriginAuthoritiesDurablyCurrent(pending.modelEffectAuthorities)) {
+      return { status: 'rejected', code: 'memory_authority_changed' };
+    }
 
     return runMemoryTransaction(() => {
+      const authorityObservedAt = Math.max(Date.now(), recordedAt);
+      if (
+        !areVerifiedProcedureOriginAuthoritiesDurablyCurrent(
+          pending.modelEffectAuthorities,
+          authorityObservedAt,
+        )
+      ) {
+        return { status: 'rejected', code: 'memory_authority_changed' } as const;
+      }
       if (isVerifiedProcedureMemoryLineageWithdrawn(pending)) {
         return { status: 'rejected', code: 'source_withdrawn' } as const;
       }
-      if (hasRunInvalidationFence(memoryOwnerId, hashed.sourceRunIdHash)) {
+      if (
+        hasVerifiedProcedureRunInvalidationFence({
+          db: getMemoryDb(),
+          memoryOwnerId,
+          sourceRunIdHash: hashed.sourceRunIdHash,
+        })
+      ) {
         return { status: 'rejected', code: 'execution_run_invalidated' } as const;
       }
       const existing = readExisting(pending, hashed, memoryOwnerId);
@@ -586,7 +607,7 @@ export async function recordVerifiedProcedureObservation(
         }
         const prunedCount = pruneObservations({ pending, hashed, memoryOwnerId, recordedAt });
         if (prunedCount > 0) {
-          advanceVerifiedProcedureObservationRevision(getMemoryDb(), memoryOwnerId);
+          advanceRestrictiveVerifiedProcedureAuthorityInTransaction(getMemoryDb(), memoryOwnerId);
         }
         return {
           status: 'unchanged',
@@ -595,8 +616,22 @@ export async function recordVerifiedProcedureObservation(
         } as const;
       }
 
-      if (hasRunInvalidationFence(memoryOwnerId, hashed.sourceRunIdHash)) {
+      if (
+        hasVerifiedProcedureRunInvalidationFence({
+          db: getMemoryDb(),
+          memoryOwnerId,
+          sourceRunIdHash: hashed.sourceRunIdHash,
+        })
+      ) {
         return { status: 'rejected', code: 'execution_run_invalidated' } as const;
+      }
+      if (
+        !areVerifiedProcedureOriginAuthoritiesDurablyCurrent(
+          pending.modelEffectAuthorities,
+          authorityObservedAt,
+        )
+      ) {
+        return { status: 'rejected', code: 'memory_authority_changed' } as const;
       }
       getMemoryDb().runSync(
         `INSERT INTO memory_verified_procedure_observations(
@@ -625,7 +660,11 @@ export async function recordVerifiedProcedureObservation(
         recordedAt,
       );
       const prunedCount = pruneObservations({ pending, hashed, memoryOwnerId, recordedAt });
-      advanceVerifiedProcedureObservationRevision(getMemoryDb(), memoryOwnerId);
+      if (prunedCount > 0) {
+        advanceRestrictiveVerifiedProcedureAuthorityInTransaction(getMemoryDb(), memoryOwnerId);
+      } else {
+        advanceVerifiedProcedureProjectionInTransaction(getMemoryDb(), memoryOwnerId);
+      }
       const retained = getMemoryDb().getFirstSync<{ id: string }>(
         'SELECT id FROM memory_verified_procedure_observations WHERE id = ?',
         hashed.id,

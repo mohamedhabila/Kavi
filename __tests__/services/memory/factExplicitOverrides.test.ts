@@ -19,7 +19,7 @@ import {
   loadFactExplicitOverrideInTransaction,
   overlayFactExplicitProjectionInTransaction,
 } from '../../../src/services/memory/factExplicitOverrideState';
-import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
+import { recordCodeOwnedTestFactWithContribution as recordFactWithContribution } from '../../helpers/factContributionWriteFixtures';
 import type { MemoryFact, MemoryFactScope } from '../../../src/services/memory/facts/types';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import {

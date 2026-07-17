@@ -1,4 +1,5 @@
-import type { MemoryDatabase } from '../access/schemaGuard';
+import { getSchemaReadyMemoryDb, type MemoryDatabase } from '../access/schemaGuard';
+import { assertMemoryTransactionActive, runMemoryTransaction } from '../access/transaction';
 import {
   isExactMemoryScopeId,
   requireMemoryAccessScopeIdentity,
@@ -11,6 +12,10 @@ import {
 } from './accessPolicy';
 import { ensureEpisodeAccessPolicySchema } from './accessPolicySchema';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
+import {
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from '../memoryAuthority';
 import {
   closedEpisodeSensitivity,
   EPISODE_SHAREABILITY,
@@ -89,6 +94,17 @@ export function bindEpisodeAccessPolicy(
   input: EpisodeAccessPolicyInput,
   now = Date.now(),
 ): EpisodeAccessPolicy {
+  return runMemoryTransaction(() => bindEpisodeAccessPolicyInTransaction(db, input, now));
+}
+
+/** Bind a policy atomically; the primitive owns authority changes for persisted transitions. */
+export function bindEpisodeAccessPolicyInTransaction(
+  db: MemoryDatabase,
+  input: EpisodeAccessPolicyInput,
+  now = Date.now(),
+): EpisodeAccessPolicy {
+  assertMemoryTransactionActive('episode_access_policy_transaction_required');
+  if (db !== getSchemaReadyMemoryDb()) throw new Error('episode_access_policy_database_mismatch');
   const observedAt = safeTimestamp(now, 'episode_access_observed_at_invalid');
   const policyIdentity = normalizePolicyInput(input, observedAt);
   ensureEpisodeAccessPolicySchema(db, observedAt);
@@ -99,7 +115,7 @@ export function bindEpisodeAccessPolicy(
     throw new Error('episode_access_task_shareability_invalid');
   }
   const episode = db.getFirstSync<EpisodeRow>(
-    'SELECT * FROM memory_episodes WHERE id = ? LIMIT 1',
+    'SELECT * FROM memory_episodes WHERE id = ? AND deleted_at IS NULL LIMIT 1',
     policyIdentity.episodeId,
   );
   if (!episode) throw new Error('episode_access_episode_not_found');
@@ -137,6 +153,7 @@ export function bindEpisodeAccessPolicy(
         sensitivity,
         existing.episodeId,
       );
+      advanceRestrictiveMemoryAuthorityInTransaction(db, policy.scope.memoryOwnerId);
     }
     return sensitivity === existing.sensitivity ? existing : { ...existing, sensitivity };
   }
@@ -157,6 +174,7 @@ export function bindEpisodeAccessPolicy(
     policy.expiresAt,
     policy.boundAt,
   );
+  advanceMemoryProjectionInTransaction(db, policy.scope.memoryOwnerId);
   return policy;
 }
 

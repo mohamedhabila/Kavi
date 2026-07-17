@@ -1,4 +1,5 @@
 import type { Conversation, SemanticMemoryHandoff } from '../../types/conversation';
+import { hasTerminalAssistantCompletionMetadata } from '../../utils/assistantMessageMetadata';
 import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
 import { findLastClosedTurn } from './closedTurn';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
@@ -64,9 +65,7 @@ export function captureSemanticMemoryHandoff(
     ? (conversation.messages ?? []).find((message) => message.id === ownedAssistantMessageId)
     : undefined;
   const ownerMessageIsExplicitlyClosed =
-    ownedAssistant?.role === 'assistant' &&
-    ownedAssistant.assistantMetadata?.kind === 'final' &&
-    ownedAssistant.assistantMetadata.completionStatus === 'complete';
+    ownedAssistant !== undefined && hasTerminalAssistantCompletionMetadata(ownedAssistant);
   const closedTurnMessages =
     ownedAssistantMessageId && !ownerMessageIsExplicitlyClosed
       ? (conversation.messages ?? []).filter((message) => message.id !== ownedAssistantMessageId)

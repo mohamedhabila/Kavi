@@ -1,4 +1,7 @@
-import type { OrchestratorRunResult } from '../../src/engine/orchestrator/types';
+import type {
+  OrchestratorCallbacks,
+  OrchestratorRunResult,
+} from '../../src/engine/orchestrator/types';
 import type {
   ToolMessageOutcome,
   ToolMessageOutcomeStatus,
@@ -15,6 +18,7 @@ export const completedOrchestratorRun: OrchestratorRunResult = {
 export const completeFinalMetadata: AssistantMessageMetadata = {
   kind: 'final',
   completionStatus: 'complete',
+  finishReason: 'stop',
 };
 
 export function toolMessageOutcome(
@@ -23,6 +27,39 @@ export function toolMessageOutcome(
   content: string,
 ): ToolMessageOutcome {
   return { version: 1, toolCallId, status, content };
+}
+
+export function emitWorkerSurfaceFollowupSequence(callbacks: OrchestratorCallbacks): void {
+  callbacks.onToolCallStart({
+    id: 'tc-surface',
+    name: 'sessions_surface_output',
+    arguments: '{"sessionId":"worker-1"}',
+    status: 'running',
+  });
+  callbacks.onToolCallComplete({
+    id: 'tc-surface',
+    name: 'sessions_surface_output',
+    arguments: '{"sessionId":"worker-1"}',
+    status: 'completed',
+    result: JSON.stringify({
+      status: 'surfaced',
+      sessionId: 'worker-1',
+      output: 'Worker-authored final answer',
+    }),
+  });
+  callbacks.onToolMessage(toolMessageOutcome('tc-surface', 'completed', 'tool result'));
+  callbacks.onAssistantMessage(
+    'Continuing with another action.',
+    [{ id: 'tc-follow-up', name: 'web_fetch', arguments: '{}', status: 'running' }],
+    undefined,
+    {
+      kind: 'intermediate',
+      completionStatus: 'complete',
+      finishReason: 'tool_calls',
+    },
+  );
+  callbacks.onAssistantMessage('Final action completed.', [], undefined, completeFinalMetadata);
+  callbacks.onDone();
 }
 
 export const startupTestProvider: LlmProviderConfig = {

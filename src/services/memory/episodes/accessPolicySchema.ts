@@ -1,4 +1,5 @@
-import type { MemoryDatabase } from '../access/schemaGuard';
+import { getSchemaReadyMemoryDb, type MemoryDatabase } from '../access/schemaGuard';
+import { assertMemoryTransactionActive } from '../access/transaction';
 import { ensureMemoryVaultIdentitySchema } from '../memoryVaultIdentity';
 
 const POLICY_DELETE_BATCH_SIZE = 200;
@@ -47,6 +48,10 @@ export function deleteEpisodeAccessPolicies(
   db: MemoryDatabase,
   episodeIds: ReadonlyArray<string>,
 ): number {
+  assertMemoryTransactionActive('episode_access_policy_delete_transaction_required');
+  if (db !== getSchemaReadyMemoryDb()) {
+    throw new Error('episode_access_policy_delete_database_mismatch');
+  }
   let deleted = 0;
   for (let offset = 0; offset < episodeIds.length; offset += POLICY_DELETE_BATCH_SIZE) {
     const batch = episodeIds.slice(offset, offset + POLICY_DELETE_BATCH_SIZE);
@@ -61,5 +66,9 @@ export function deleteEpisodeAccessPolicies(
 }
 
 export function clearEpisodeAccessPolicies(db: MemoryDatabase): void {
+  assertMemoryTransactionActive('episode_access_policy_clear_transaction_required');
+  if (db !== getSchemaReadyMemoryDb()) {
+    throw new Error('episode_access_policy_clear_database_mismatch');
+  }
   db.runSync('DELETE FROM memory_episode_access_policies');
 }

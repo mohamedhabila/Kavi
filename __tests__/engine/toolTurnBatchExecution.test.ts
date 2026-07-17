@@ -6,6 +6,7 @@ import { buildToolResultMessage } from '../../src/engine/toolExecution/toolExecu
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import type { Message } from '../../src/types/message';
 import type { ToolDefinition } from '../../src/types/tool';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
   executeToolCallLifecycle: jest.fn(),
@@ -63,6 +64,7 @@ function createParams(overrides: Record<string, unknown> = {}) {
         arguments: '{"queries":["OpenAI structured outputs developer guide"]}',
       },
     ],
+    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     iteration: 2,
     conversationId: 'conv-1',
     activeProvider: {
@@ -95,6 +97,7 @@ function createParams(overrides: Record<string, unknown> = {}) {
     completedWorkflowToolNames: new Set<string>(),
     emitPendingAsyncOperationsChange: jest.fn(),
     recordPerformanceMetrics: jest.fn(),
+    onBatchCommitted: jest.fn(),
     publishWorkflowToolResultProgress: jest.fn(({ toolMessage }: { toolMessage: Message }) => ({
       observedToolName: toolMessage.toolCalls?.[0]?.name,
       nextCompletedToolNames: [],
@@ -184,6 +187,7 @@ describe('toolTurnBatchExecution', () => {
     expect(verifiedProcedureSession.observePlannedBatch).toHaveBeenCalledWith({
       iteration: 2,
       executeInParallel: false,
+      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       toolCalls: [{ batchIndex: 0, toolCallId: 'tc-search', toolName: 'web_search' }],
     });
   });
@@ -211,6 +215,41 @@ describe('toolTurnBatchExecution', () => {
     const outcomes = await executeAgentControlGraphToolBatch(createParams());
 
     expect(outcomes[0]).toEqual(expect.objectContaining({ effectReconciliationRequired: true }));
+  });
+
+  it('propagates a typed pre-dispatch effect failure to graph outcome handling', async () => {
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => ({
+      toolCallId: params.tc.id,
+      effectiveToolName: params.tc.name,
+      result: 'Error: durable journal unavailable',
+      effectDispatchObservation: {
+        kind: 'not_claimed',
+        reason: 'journal_unavailable',
+      },
+      toolMessage: buildToolResultMessage({
+        idPrefix: 'tool_error',
+        toolCallId: params.tc.id,
+        content: 'Error: durable journal unavailable',
+        toolCall: {
+          id: params.tc.id,
+          name: params.tc.name,
+          arguments: params.tc.arguments,
+          status: 'failed',
+        },
+        isError: true,
+      }),
+    }));
+
+    const outcomes = await executeAgentControlGraphToolBatch(createParams());
+
+    expect(outcomes[0]).toEqual(
+      expect.objectContaining({
+        effectDispatchObservation: {
+          kind: 'not_claimed',
+          reason: 'journal_unavailable',
+        },
+      }),
+    );
   });
 
   it('passes a grounded-surface execution filter into tool lifecycle preflight', async () => {
@@ -569,9 +608,7 @@ describe('toolTurnBatchExecution', () => {
       const status =
         params.tc.name === GOAL_BOOTSTRAP_TOOL_NAME ? ('failed' as const) : ('completed' as const);
       const result =
-        status === 'failed'
-          ? '{"status":"error","error":"validation failed"}'
-          : '{"ok":true}';
+        status === 'failed' ? '{"status":"error","error":"validation failed"}' : '{"ok":true}';
       params.toolCallHistory.push({
         name: params.tc.name,
         arguments: params.tc.arguments,

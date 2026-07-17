@@ -72,6 +72,7 @@ describe('LlmService local streamMessage', () => {
       type: 'done',
       completion: {
         completionStatus: 'complete',
+        finishReason: 'local_runtime_done',
       },
     });
   });

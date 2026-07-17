@@ -42,6 +42,8 @@ describe('memory scope identity', () => {
     );
     expect(resolveCodeOwnedMemoryTaskId(undefined)).toBeNull();
     expect(resolveCodeOwnedMemoryPersonaId(undefined)).toBe('default');
+    expect(resolveCodeOwnedMemoryPersonaId('super-agent')).toBe('default');
+    expect(resolveCodeOwnedMemoryPersonaId('coder')).toBe('coder');
 
     expect(() => resolveCodeOwnedMemoryConversationId('', 'conversation-1')).toThrow(
       'memory_scope_conversation_id_invalid',

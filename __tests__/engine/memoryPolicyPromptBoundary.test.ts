@@ -1,8 +1,14 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import { buildPreparedModelTurnPrompt } from '../../src/engine/graph/modelTurn/buildPreparedPromptTurn';
-import { removeLivingMemoryFromPreparedTurn } from '../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
 import { resolveModelTurnGroundedToolSurface } from '../../src/engine/graph/modelTurn/resolveGroundedToolSurface';
 import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
+import { closeMemoryDb } from '../../src/services/memory/database';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { ToolDefinition } from '../../src/types/tool';
 
@@ -57,12 +63,18 @@ function buildTurn(tools: ToolDefinition[]) {
 
 describe('memory policy prompt boundary', () => {
   beforeEach(() => {
+    closeMemoryDb();
+    const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+    expoSqlite.__resetExpoSqliteForTests();
+    resetFactSchemaCacheForTests();
+    ensureFactSchema();
     useSettingsStore.setState({ disableLongTermMemory: false });
     initializeMemoryPolicyObservation();
   });
 
   afterEach(() => {
     useSettingsStore.setState({ disableLongTermMemory: false });
+    closeMemoryDb();
   });
 
   it('rebuilds a memory-only turn as a truthful text-only turn after opt-out', () => {
@@ -70,7 +82,7 @@ describe('memory policy prompt boundary', () => {
     expect(prepared.memoryReadFence).toBeDefined();
 
     useSettingsStore.setState({ disableLongTermMemory: true });
-    const disabled = removeLivingMemoryFromPreparedTurn(prepared);
+    const disabled = buildTurn([memoryWriteTool]);
 
     expect(disabled.selectedTools).toEqual([]);
     expect(disabled.toolsForIteration).toEqual([]);
@@ -85,10 +97,10 @@ describe('memory policy prompt boundary', () => {
   });
 
   it('keeps unrelated capabilities and a tool-capable prompt after memory opt-out', () => {
-    const prepared = buildTurn([memoryWriteTool, deviceWriteTool]);
+    buildTurn([memoryWriteTool, deviceWriteTool]);
 
     useSettingsStore.setState({ disableLongTermMemory: true });
-    const disabled = removeLivingMemoryFromPreparedTurn(prepared);
+    const disabled = buildTurn([memoryWriteTool, deviceWriteTool]);
 
     expect(disabled.selectedTools.map((entry) => entry.name)).toEqual([deviceWriteTool.name]);
     expect(disabled.toolsForIteration?.map((entry) => entry.name)).toEqual([deviceWriteTool.name]);

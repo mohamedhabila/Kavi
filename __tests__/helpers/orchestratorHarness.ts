@@ -19,6 +19,21 @@ import { AssistantMessageMetadata, Message } from '../../src/types/message';
 import { LlmProviderConfig } from '../../src/types/provider';
 import { makeOrchestratorProviderConfig } from '../fixtures/providers';
 
+const mockMemoryAuthoritySnapshot = Object.freeze({
+  processEpochs: Object.freeze({ restrictive: 0, projection: 0 }),
+  restrictiveRevision: Object.freeze({
+    kind: 'restrictive' as const,
+    memoryOwnerId: 'test-memory-owner',
+    value: 0,
+  }),
+  projectionRevision: Object.freeze({
+    kind: 'projection' as const,
+    memoryOwnerId: 'test-memory-owner',
+    value: 0,
+  }),
+  policy: Object.freeze({ enabled: true as const, revision: 0 }),
+});
+
 // Mock the LlmService
 jest.mock('../../src/services/llm/LlmService', () => {
   return {
@@ -72,16 +87,35 @@ jest.mock('../../src/services/skills/manager', () => ({
 }));
 jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
   buildLivingMemorySections: jest.fn().mockResolvedValue({
+    memoryReadEpoch: 0,
+    memoryAuthoritySnapshot: mockMemoryAuthoritySnapshot,
     sections: [],
     cacheableSignature: '00000000',
     focusBlockText: '',
     openThreadLabels: [],
     recalledFactCount: 0,
+    recalledEpisodeCount: 0,
   }),
 }));
+jest.mock('../../src/services/memory/memoryAuthority', () => {
+  const actual = jest.requireActual('../../src/services/memory/memoryAuthority');
+  return {
+    ...actual,
+    captureMemoryAuthoritySnapshot: jest.fn(() => mockMemoryAuthoritySnapshot),
+    isMemoryProjectionSnapshotCurrent: jest.fn().mockReturnValue(true),
+    isMemoryProjectionSnapshotDurablyCurrent: jest.fn().mockReturnValue(true),
+    isRestrictiveMemoryAuthoritySnapshotCurrent: jest.fn().mockReturnValue(true),
+    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent: jest.fn().mockReturnValue(true),
+  };
+});
 jest.mock('../../src/services/memory/policy', () => ({
   canReadLongTermMemory: jest.fn().mockReturnValue(true),
+  canUseNetworkMemoryProvider: jest.fn().mockReturnValue(true),
+  canWriteLongTermMemory: jest.fn().mockReturnValue(true),
   captureMemoryReadEpoch: jest.fn().mockReturnValue(0),
+  getMemoryPolicyEpoch: jest.fn().mockReturnValue(0),
+  isLongTermMemoryEnabled: jest.fn().mockReturnValue(true),
+  isMemoryPolicyEpochCurrent: jest.fn().mockReturnValue(true),
   isMemoryReadEpochCurrent: jest.fn().mockReturnValue(true),
 }));
 jest.mock('../../src/services/commands/parser', () => ({
@@ -227,7 +261,13 @@ const makeCallbacks = (): OrchestratorCallbacks & {
         kind: assistantMetadata?.kind,
       });
     }),
-    onToolMessage: jest.fn((id, result) => calls.onToolMessage.push({ id, result })),
+    onToolMessage: jest.fn((outcome) =>
+      calls.onToolMessage.push({
+        ...outcome,
+        id: outcome.toolCallId,
+        result: outcome.content,
+      }),
+    ),
     onError: jest.fn((err) => {
       calls.onError.push(err);
       calls.sequence.push({ type: 'error', message: err?.message });
@@ -253,20 +293,25 @@ function expectTerminalGraphBeforeDone(
   status: 'blocked' | 'finalized' | 'yielded' | 'cancelled' | 'failed',
   finishReason?: string,
 ) {
-  const graphIndex = callbacks.calls.sequence.findIndex(
-    (entry) => entry.type === 'graph' && entry.status === status,
-  );
   const assistantIndex = callbacks.calls.sequence.findIndex(
     (entry) =>
       entry.type === 'assistant' &&
       entry.kind === 'final' &&
       (finishReason === undefined || entry.finishReason === finishReason),
   );
+  const candidateGraphIndex = callbacks.calls.sequence.findIndex(
+    (entry, index) =>
+      index < assistantIndex && entry.type === 'graph' && entry.status === 'awaiting_review',
+  );
+  const terminalGraphIndex = callbacks.calls.sequence.findIndex(
+    (entry, index) => index > assistantIndex && entry.type === 'graph' && entry.status === status,
+  );
   const doneIndex = callbacks.calls.sequence.findIndex((entry) => entry.type === 'done');
 
-  expect(graphIndex).toBeGreaterThanOrEqual(0);
-  expect(assistantIndex).toBeGreaterThan(graphIndex);
-  expect(doneIndex).toBeGreaterThan(assistantIndex);
+  expect(candidateGraphIndex).toBeGreaterThanOrEqual(0);
+  expect(assistantIndex).toBeGreaterThan(candidateGraphIndex);
+  expect(terminalGraphIndex).toBeGreaterThan(assistantIndex);
+  expect(doneIndex).toBeGreaterThan(terminalGraphIndex);
 }
 
 function expectFinalCandidateGraphBeforeDone(
@@ -309,9 +354,22 @@ function expectTerminalGraphBeforeSequenceEntry(
   expect(doneIndex).toBeGreaterThanOrEqual(entryIndex);
 }
 
-async function* createStreamGenerator(events: any[]) {
+async function* createStreamGenerator(events: any[], terminalDisposition?: 'text' | 'tool') {
   for (const event of events) {
-    yield event;
+    if (event?.type !== 'done' || event.completion) {
+      yield event;
+      continue;
+    }
+    if (!terminalDisposition) {
+      throw new Error('test_stream_completion_required');
+    }
+    yield {
+      ...event,
+      completion: {
+        completionStatus: 'complete',
+        finishReason: terminalDisposition === 'tool' ? 'tool_calls' : 'stop',
+      },
+    };
   }
 }
 
@@ -351,11 +409,14 @@ beforeEach(() => {
   }));
   (buildLivingMemorySections as jest.Mock).mockReset();
   (buildLivingMemorySections as jest.Mock).mockResolvedValue({
+    memoryReadEpoch: 0,
+    memoryAuthoritySnapshot: mockMemoryAuthoritySnapshot,
     sections: [],
     cacheableSignature: '00000000',
     focusBlockText: '',
     openThreadLabels: [],
     recalledFactCount: 0,
+    recalledEpisodeCount: 0,
   });
   (getSkillSystemPrompts as jest.Mock).mockReset();
   (getSkillSystemPrompts as jest.Mock).mockResolvedValue('');

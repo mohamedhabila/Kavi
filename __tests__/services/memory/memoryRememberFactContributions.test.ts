@@ -70,6 +70,7 @@ function remember(input: {
   confidence?: number;
   pinned?: boolean;
   importance?: number;
+  sensitivity?: 'normal' | 'personal' | 'sensitive' | 'restricted';
   operation?: 'record' | 'replace_current';
 }) {
   const value = input.value ?? 'Mo';
@@ -96,6 +97,7 @@ function remember(input: {
         confidence: input.confidence,
         ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
         importance: input.importance,
+        sensitivity: input.sensitivity,
       }),
       context,
     ),
@@ -186,6 +188,25 @@ describe('memory_remember fact contributions', () => {
         importance: 0.9,
       }),
     ]);
+  });
+
+  it('persists the provider sensitivity floor in both the fact and contribution', () => {
+    const { result } = remember({
+      value: '任意値',
+      userMessageText: '主体🧑 display_name 任意値',
+      sensitivity: 'personal',
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(listFacts()).toEqual([
+      expect.objectContaining({
+        objectText: '任意値',
+        sensitivity: 'personal',
+      }),
+    ]);
+    expect(JSON.parse(contributions()[0]!.payload_json).input).toMatchObject({
+      sensitivityFloor: 'personal',
+    });
   });
 
   it('replays one exact effect without duplicating facts, evidence, or contributions', () => {
@@ -383,15 +404,16 @@ describe('memory_remember fact contributions', () => {
 
     const restrictedContext = memoryRememberExecution({
       userMessageId: 'user-secret',
-      userMessageText: 'My API key is sk-private-secret.',
+      userMessageText: '任意属性 Ω-opaque',
     });
     expect(
       executeMemoryRemember(
         memoryRememberArgs({
-          userMessageText: 'My API key is sk-private-secret.',
+          userMessageId: 'user-secret',
+          userMessageText: '任意属性 Ω-opaque',
           subjectRef: { kind: 'self' },
-          predicate: 'API key',
-          value: 'sk-private-secret',
+          predicate: '任意属性',
+          value: 'Ω-opaque',
           scope: 'global',
           sensitivity: 'restricted',
         }),

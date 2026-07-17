@@ -36,6 +36,7 @@ export type ScopedLocalEvidenceSource =
       LocalEvidenceExpansionScope & {
         lane: 'current_thread' | 'cross_thread';
         authorizedOrigin: AuthorizedEpisodeOrigin;
+        policyExpiresAt: number | null;
         accessDecision: Readonly<{ authorized: true; reason: 'eligible' }>;
         relevanceScore: number;
       });

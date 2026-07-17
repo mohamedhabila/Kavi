@@ -10,6 +10,7 @@ import {
   removeRetiredMemoryDatabaseArtifactsAtStartup,
 } from '../../../src/services/memory/database';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
+import { buildCurrentDurableModelEffectAuthority } from '../../helpers/modelTurnMemoryAuthority';
 import * as memoryPolicy from '../../../src/services/memory/policy';
 import { calendarVerifiedProcedureApplicablePreconditionIds } from '../../../src/services/memory/verifiedProcedure/calendarPreconditionContract';
 import { getCurrentVerifiedProcedureDescriptor } from '../../../src/services/memory/verifiedProcedure/descriptorRegistry';
@@ -21,6 +22,7 @@ import {
   type VerifiedProcedureObservationScope,
 } from '../../../src/services/memory/verifiedProcedure/observationStore';
 import { readVerifiedProcedurePromotionState } from '../../../src/services/memory/verifiedProcedure/observationPromotion';
+import { captureVerifiedProcedureAuthoritySnapshot } from '../../../src/services/memory/verifiedProcedure/observationAuthority';
 import {
   VERIFIED_PROCEDURE_MAX_EVIDENCE_MANIFEST_LENGTH,
   VERIFIED_PROCEDURE_MAX_OBSERVATIONS_PER_OWNER,
@@ -81,6 +83,13 @@ function scope(
   };
 }
 
+function currentLedgerAuthority() {
+  return {
+    isCurrent: () => true,
+    modelEffectAuthorities: [buildCurrentDurableModelEffectAuthority()],
+  } as const;
+}
+
 async function candidate(sourceRunId: string, terminalObservedAt = NOW - 10) {
   const ledger = await createVerifiedProcedureRunLedger({
     registryKey: 'calendar-list-to-create-event',
@@ -96,23 +105,26 @@ async function candidate(sourceRunId: string, terminalObservedAt = NOW - 10) {
     },
   ]);
   const listToolCallId = `list-${sourceRunId}`;
-  await ledger.observe({
-    iteration: 1,
-    batchIndex: 0,
-    toolCallId: listToolCallId,
-    toolName: 'calendar_list',
-    argumentsText: listArgumentsText,
-    resultText: listResultText,
-    receipt: await buildToolEffectReceipt({
+  await ledger.observe(
+    {
+      iteration: 1,
+      batchIndex: 0,
       toolCallId: listToolCallId,
       toolName: 'calendar_list',
       argumentsText: listArgumentsText,
       resultText: listResultText,
-      transportState: 'returned',
-      executionRunId: sourceRunId,
-      recordedAt: terminalObservedAt - 2,
-    }),
-  });
+      receipt: await buildToolEffectReceipt({
+        toolCallId: listToolCallId,
+        toolName: 'calendar_list',
+        argumentsText: listArgumentsText,
+        resultText: listResultText,
+        transportState: 'returned',
+        executionRunId: sourceRunId,
+        recordedAt: terminalObservedAt - 2,
+      }),
+    },
+    currentLedgerAuthority().isCurrent,
+  );
 
   const createArgumentsText = JSON.stringify({
     title: `Private appointment ${sourceRunId}`,
@@ -127,24 +139,27 @@ async function candidate(sourceRunId: string, terminalObservedAt = NOW - 10) {
     calendarId,
   });
   const createToolCallId = `create-${sourceRunId}`;
-  await ledger.observe({
-    iteration: 2,
-    batchIndex: 0,
-    toolCallId: createToolCallId,
-    toolName: 'calendar_create_event',
-    argumentsText: createArgumentsText,
-    resultText: createResultText,
-    receipt: await buildToolEffectReceipt({
+  await ledger.observe(
+    {
+      iteration: 2,
+      batchIndex: 0,
       toolCallId: createToolCallId,
       toolName: 'calendar_create_event',
       argumentsText: createArgumentsText,
       resultText: createResultText,
-      transportState: 'returned',
-      executionRunId: sourceRunId,
-      recordedAt: terminalObservedAt - 1,
-    }),
-  });
-  const finalized = await ledger.finalize();
+      receipt: await buildToolEffectReceipt({
+        toolCallId: createToolCallId,
+        toolName: 'calendar_create_event',
+        argumentsText: createArgumentsText,
+        resultText: createResultText,
+        transportState: 'returned',
+        executionRunId: sourceRunId,
+        recordedAt: terminalObservedAt - 1,
+      }),
+    },
+    currentLedgerAuthority().isCurrent,
+  );
+  const finalized = await ledger.finalize(currentLedgerAuthority());
   if (finalized.status !== 'verified') throw new Error(`candidate_${finalized.reason}`);
   return finalized.candidate;
 }
@@ -452,7 +467,35 @@ describe('verified procedure observation store', () => {
     ).resolves.toEqual({ status: 'rejected', code: 'conflicting_run_evidence' });
   });
 
+  it('classifies an addition as projection-only authority movement', async () => {
+    const db = getMemoryDb();
+    const ownerId = getLocalMemoryVaultOwnerId(db);
+    const before = captureVerifiedProcedureAuthoritySnapshot(db, ownerId);
+    if (!before) throw new Error('procedure_authority_unavailable');
+
+    await expect(recordRun('projection-only-addition')).resolves.toMatchObject({
+      status: 'recorded',
+      prunedCount: 0,
+    });
+
+    const after = captureVerifiedProcedureAuthoritySnapshot(db, ownerId);
+    expect(after?.restrictiveRevision.value).toBe(before.restrictiveRevision.value);
+    expect(after?.projectionRevision.value).toBe(before.projectionRevision.value + 1);
+  });
+
   it('enforces the retained window and exact-scope row cap', async () => {
+    await expect(
+      recordVerifiedProcedureObservation(await issueAuthority('early-epoch-run', {}, 2), 100),
+    ).resolves.toMatchObject({ status: 'recorded' });
+
+    const boundaryObservedAt = NOW - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS;
+    await expect(
+      recordVerifiedProcedureObservation(
+        await issueAuthority('boundary-expired-run', {}, boundaryObservedAt),
+        NOW,
+      ),
+    ).resolves.toEqual({ status: 'rejected', code: 'outside_retained_window' });
+
     const expiredObservedAt = NOW - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS - 1;
     await expect(
       recordVerifiedProcedureObservation(
@@ -503,15 +546,22 @@ describe('verified procedure observation store', () => {
         fixedHash('2'),
         fixedHash('3'),
         fixedHash('4'),
-        index === 0 ? NOW - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS - 1 : NOW - 2,
-        index === 0 ? NOW - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS - 1 : NOW - 2,
+        index === 0 ? NOW - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS : NOW - 2,
+        index === 0 ? NOW - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS : NOW - 2,
       );
     }
+    const beforePruning = captureVerifiedProcedureAuthoritySnapshot(db, ownerId);
+    if (!beforePruning) throw new Error('procedure_authority_unavailable');
 
     await expect(recordRun('owner-cap-trigger', {}, NOW)).resolves.toMatchObject({
       status: 'recorded',
       prunedCount: 2,
     });
+    const afterPruning = captureVerifiedProcedureAuthoritySnapshot(db, ownerId);
+    expect(afterPruning?.restrictiveRevision.value).toBe(
+      beforePruning.restrictiveRevision.value + 1,
+    );
+    expect(afterPruning?.projectionRevision.value).toBe(beforePruning.projectionRevision.value + 1);
     expect(
       db.getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM memory_verified_procedure_observations',

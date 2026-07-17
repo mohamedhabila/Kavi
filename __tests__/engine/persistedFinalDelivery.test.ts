@@ -19,7 +19,11 @@ const messages: Message[] = [
     role: 'assistant',
     content: 'The verified result is ready.',
     timestamp: 2,
-    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    assistantMetadata: {
+      kind: 'final',
+      completionStatus: 'complete',
+      finishReason: 'stop',
+    },
   },
 ];
 

@@ -30,6 +30,7 @@ import {
   scheduleIngestionDrain,
 } from '../../../src/services/memory/ingestionQueue';
 import { claimIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
+import * as ingestionQueueStore from '../../../src/services/memory/ingestionQueueStore';
 import {
   __resetOnDeviceGuardsForTests,
   acquireMainInferenceLease,
@@ -71,7 +72,7 @@ function closedTurn(suffix: string): Message[] {
       role: 'assistant',
       content: 'Done.',
       timestamp: 2,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     },
   ];
 }
@@ -254,6 +255,41 @@ describe('ingestion queue scheduling and job context', () => {
     expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(2);
     expect(mockedProcessIngestionTurn.mock.calls.map(([input]) => input.now)).toEqual([7, 7]);
     expect(getIngestionJob(job.id)?.status).toBe('completed_enriched');
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('self-heals a scheduled drain after a transient durable read failure', async () => {
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'conv-drain-read-recovery',
+      threadTitle: null,
+      memoryConversationId: 'conv-drain-read-recovery',
+      taskId: null,
+      sourceStartMessageId: 'user-drain-read-recovery',
+      sourceEndMessageId: 'assistant-drain-read-recovery',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: false,
+      now: 100,
+    })!;
+    scheduleIngestionDrain({});
+    jest.spyOn(ingestionQueueStore, 'listPendingIngestionJobs').mockImplementationOnce(() => {
+      throw new Error('database temporarily locked');
+    });
+    await flushScheduledIngestion();
+
+    expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
+    expect(getIngestionJob(job.id)?.status).toBe('pending');
+    expect(jest.getTimerCount()).toBe(1);
+
+    await jest.advanceTimersByTimeAsync(INGESTION_RETRY_BASE_DELAY_MS);
+    await flushScheduledIngestion();
+
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(1);
+    expect(getIngestionJob(job.id)?.status).toBe('completed_structural');
     expect(jest.getTimerCount()).toBe(0);
   });
 

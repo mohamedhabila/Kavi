@@ -97,10 +97,12 @@ export function createMessageStoreActions(
           };
           const shouldAutoTitle =
             message.role === 'user' && !!message.content?.trim() && isPlaceholderTitle(c.title);
+          const nextMessages = capMessages([...c.messages, newMessage]);
+          assertMemoryPublicationLockedSourcesUnchanged(c.messages, nextMessages);
           return {
             ...c,
             title: shouldAutoTitle ? generateConversationTitle(message.content) : c.title,
-            messages: capMessages([...c.messages, newMessage]),
+            messages: nextMessages,
             updatedAt: timestamp,
           };
         }),

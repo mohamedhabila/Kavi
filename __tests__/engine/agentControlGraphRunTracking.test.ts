@@ -47,16 +47,24 @@ describe('agent control graph run tracking', () => {
     ).toBe(true);
   });
 
-  it('does not track structurally empty or punctuation-only input', () => {
-    for (const content of ['', ' ... ']) {
-      expect(
-        shouldTrackForegroundAgentRun({
-          conversationMode: 'agentic',
-          latestUserMessage: userMessage(content),
-          messageCount: 1,
-        }),
-      ).toBe(false);
-    }
+  it('does not track structurally empty input', () => {
+    expect(
+      shouldTrackForegroundAgentRun({
+        conversationMode: 'agentic',
+        latestUserMessage: userMessage(''),
+        messageCount: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps punctuation-only input on the language-neutral agentic path', () => {
+    expect(
+      shouldTrackForegroundAgentRun({
+        conversationMode: 'agentic',
+        latestUserMessage: userMessage(' ... '),
+        messageCount: 1,
+      }),
+    ).toBe(true);
   });
 
   it('does not create workflow runs for registered slash commands', () => {

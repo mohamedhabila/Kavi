@@ -3,7 +3,8 @@
 
 import { INGESTION_BATCH_LIMIT } from './onDeviceGuards';
 import { runMemoryTransaction } from './access/transaction';
-import { ensureFactSchema, newId } from './schema';
+import { ensureFactSchema } from './schema';
+import { newId } from './schemaValues';
 import { hasAnyRetiredExactMemorySource } from './exactMemorySourceIdentity';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';

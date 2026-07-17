@@ -17,13 +17,14 @@ import {
   persistFactContributionInTransaction,
   type MemoryFactContributionWriteContext,
 } from '../../../src/services/memory/factContributionStore';
-import { replaceCurrentFactWithContribution } from '../../../src/services/memory/facts/exactReplacement';
 import { normalizeRecordFactMutation } from '../../../src/services/memory/facts/mutationNormalization';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import {
-  recordFactWithApplicability,
-  recordFactWithContribution,
-} from '../../../src/services/memory/facts/mutations';
+  recordCodeOwnedTestFactWithContribution as recordFactWithContribution,
+  replaceCodeOwnedTestFactWithContribution as replaceCurrentFactWithContribution,
+} from '../../helpers/factContributionWriteFixtures';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
+import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../../../src/services/memory/memorySensitivityPolicy';
 import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 import {
   clearStructuredMemory,
@@ -381,13 +382,8 @@ describe('atomic contributed fact mutations', () => {
       }),
       grounded,
       context('event-old'),
+      'sensitive',
     ).fact;
-    getMemoryDb().runSync(
-      `UPDATE memory_facts
-          SET sensitivity = 'normal', sensitivity_policy_version = 1
-        WHERE id = ?`,
-      previous.id,
-    );
     const replacement = replaceCurrentFactWithContribution(
       {
         ...globalFact(subject, 'green', {
@@ -407,7 +403,7 @@ describe('atomic contributed fact mutations', () => {
     if (replacement.status === 'conflict') throw new Error('unexpected conflict');
     expect(replacement.fact.pinned).toBe(true);
     expect(replacement.fact.reviewState).toBe('verified');
-    expect(replacement.fact.sensitivity).toBe('restricted');
+    expect(replacement.fact.sensitivity).toBe('sensitive');
     expect(replacement.fact.memoryKind).toBe('decision');
     expect(replacement.superseded.map((fact) => fact.id)).toEqual([previous.id]);
     expect(
@@ -441,8 +437,8 @@ describe('atomic contributed fact mutations', () => {
         review_state_input_explicit: 0,
         successor_pinned_baseline: 1,
         successor_review_state_baseline: 'verified',
-        successor_sensitivity_floor: 'restricted',
-        successor_sensitivity_policy_version: 2,
+        successor_sensitivity_floor: 'sensitive',
+        successor_sensitivity_policy_version: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
       },
     ]);
     const replacementPayload = contributionPayloads()[1]!;

@@ -78,6 +78,7 @@ describe('execution journal schema bootstrap', () => {
         .map((row) => row.name),
     ).toEqual([
       'execution_checkpoints',
+      'execution_effect_receipts',
       'execution_effects',
       'execution_external_handles',
       'execution_monitors',
@@ -89,7 +90,7 @@ describe('execution journal schema bootstrap', () => {
     const strictTables = db
       .getAllSync<{ name: string; strict: number }>('PRAGMA table_list')
       .filter((row) => row.name.startsWith('execution_'));
-    expect(strictTables).toHaveLength(8);
+    expect(strictTables).toHaveLength(9);
     expect(strictTables.every((row) => row.strict === 1)).toBe(true);
   });
 
@@ -111,6 +112,7 @@ describe('execution journal schema bootstrap', () => {
     const columnNames = [
       'execution_runs',
       'execution_checkpoints',
+      'execution_effect_receipts',
       'execution_effects',
       'execution_external_handles',
       'execution_recovery_attention',
@@ -532,6 +534,16 @@ describe('strict row decoders', () => {
     expect(() => decodeExecutionRunRow({ ...run, retry_count: 1.5 })).toThrow();
     expect(() => decodeExecutionRunRow({ ...run, updated_at: 1 })).toThrow();
     expect(() => decodeExecutionCheckpointRow({ ...checkpoint, sequence: -1 })).toThrow();
+    const {
+      model_authority_valid_until: _discardedModelAuthorityDeadline,
+      ...legacyEffectWithoutDeadline
+    } = effect;
+    expect(() => decodeExecutionEffectRow(legacyEffectWithoutDeadline)).toThrow(
+      'execution_journal_malformed_row:effect:columns',
+    );
+    expect(() =>
+      decodeExecutionEffectRow({ ...effect, model_authority_valid_until: 10.5 }),
+    ).toThrow('execution_journal_malformed_row:effect.model_authority_valid_until');
     expect(() =>
       decodeExecutionEffectRow({
         ...effect,

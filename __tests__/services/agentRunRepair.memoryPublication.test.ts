@@ -38,6 +38,10 @@ jest.mock('../../src/store/useSettingsStore', () => ({
   },
 }));
 
+jest.mock('../../src/services/memory/policy', () => ({
+  canWriteLongTermMemory: jest.fn(() => !mockDisableLongTermMemory),
+}));
+
 jest.mock('../../src/store/chatStorePersistence', () => ({
   flushChatStorePersistenceNow: (...args: unknown[]) => mockFlushChatStorePersistenceNow(...args),
 }));
@@ -84,7 +88,7 @@ function seedConversation(
         role: 'assistant',
         content: 'Already delivered.',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }
     : params.existingDraft
       ? {

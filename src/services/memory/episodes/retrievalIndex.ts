@@ -1,4 +1,10 @@
-import type { MemoryDatabase } from '../access/schemaGuard';
+import { getSchemaReadyMemoryDb, type MemoryDatabase } from '../access/schemaGuard';
+import { assertMemoryTransactionActive } from '../access/transaction';
+import {
+  advanceMemoryProjectionRevision,
+  invalidateMemoryProjectionProcessEpoch,
+} from '../memoryAuthorityState';
+import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { episodeIndexUnits } from './queryScoring';
 import type { MemoryEpisode } from './types';
 
@@ -22,7 +28,7 @@ function stringArray(raw: string): string[] {
   }
 }
 
-export function replaceEpisodeRetrievalTerms(
+function replaceEpisodeRetrievalTermsUnchecked(
   db: MemoryDatabase,
   episode: Pick<MemoryEpisode, 'id' | 'summary' | 'entities' | 'toolNames'>,
 ): void {
@@ -34,6 +40,18 @@ export function replaceEpisodeRetrievalTerms(
       unit,
     );
   }
+}
+
+/** Caller owns the surrounding transaction and its matching authority revision. */
+export function replaceEpisodeRetrievalTermsInTransaction(
+  db: MemoryDatabase,
+  episode: Pick<MemoryEpisode, 'id' | 'summary' | 'entities' | 'toolNames'>,
+): void {
+  assertMemoryTransactionActive('episode_retrieval_index_transaction_required');
+  if (db !== getSchemaReadyMemoryDb()) {
+    throw new Error('episode_retrieval_index_database_mismatch');
+  }
+  replaceEpisodeRetrievalTermsUnchecked(db, episode);
 }
 
 export function ensureEpisodeRetrievalIndexSchema(db: MemoryDatabase): void {
@@ -60,16 +78,19 @@ export function ensureEpisodeRetrievalIndexSchema(db: MemoryDatabase): void {
   )?.version;
   if (version === EPISODE_RETRIEVAL_INDEX_VERSION) return;
 
+  let promptProjectionChanged = false;
   db.execSync('BEGIN IMMEDIATE TRANSACTION');
   try {
     db.runSync('DELETE FROM memory_episode_terms');
     const episodes = db.getAllSync<EpisodeIndexSourceRow>(
       `SELECT id, summary, entities_json, tool_names_json
          FROM memory_episodes
+        WHERE deleted_at IS NULL
         ORDER BY id`,
     );
+    promptProjectionChanged = episodes.length > 0;
     for (const episode of episodes) {
-      replaceEpisodeRetrievalTerms(db, {
+      replaceEpisodeRetrievalTermsUnchecked(db, {
         id: episode.id,
         summary: episode.summary,
         entities: stringArray(episode.entities_json),
@@ -81,9 +102,13 @@ export function ensureEpisodeRetrievalIndexSchema(db: MemoryDatabase): void {
        VALUES (1, ?)`,
       EPISODE_RETRIEVAL_INDEX_VERSION,
     );
+    if (promptProjectionChanged) {
+      advanceMemoryProjectionRevision(db, getLocalMemoryVaultOwnerId(db));
+    }
     db.execSync('COMMIT');
   } catch (error) {
     db.execSync('ROLLBACK');
     throw error;
   }
+  if (promptProjectionChanged) invalidateMemoryProjectionProcessEpoch();
 }

@@ -1,8 +1,8 @@
-import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
+import { sha256HexUtf8Async } from '../utils/sha256Async';
 
 const STORAGE_FORMAT = 'kavi.persisted-file-generation';
-const STORAGE_FORMAT_VERSION = 1;
+const STORAGE_FORMAT_VERSION = 2;
 
 export type PersistedGenerationSlot = 'primary' | 'backup' | 'temp';
 
@@ -115,10 +115,7 @@ async function generationChecksum(
   kind: GenerationEnvelope['kind'],
   payload: string | null,
 ): Promise<string> {
-  return Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    `${generation}\u0000${kind}\u0000${payload ?? ''}`,
-  );
+  return sha256HexUtf8Async(`${generation}\u0000${kind}\u0000${payload ?? ''}`);
 }
 
 async function buildStoredGeneration(

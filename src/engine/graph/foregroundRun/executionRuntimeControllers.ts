@@ -272,7 +272,15 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
     },
     actions: {
       appendConversationLog,
-      ensureCanonicalConversation: shared.helpers.ensureCanonicalConversation,
+      startNewConversation: (options) => {
+        const currentConversation = getCurrentConversation();
+        return shared.store.createConversation(
+          provider.id,
+          currentConversation?.systemPrompt ?? shared.state.systemPrompt,
+          currentConversation?.modelOverride ?? provider.model,
+          { ...options, activate: true, replaceCanonical: true },
+        );
+      },
       updateAssistantMessage: (messageId, content) =>
         shared.store.updateMessage(conversationId, messageId, content),
     },

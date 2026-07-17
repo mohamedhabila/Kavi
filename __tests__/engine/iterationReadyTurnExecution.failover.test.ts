@@ -2,10 +2,12 @@ import { createFailoverState } from '../../src/engine/failover';
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
 import { executePreparedAgentControlGraphTurn } from '../../src/engine/graph/iterationReadyTurnExecution';
 import { resolveModelTurnIterationRequest } from '../../src/engine/graph/modelTurn/resolveIterationRequest';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import type { AgentControlTurnDirectives } from '../../src/engine/graph/agentControlGraph';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import type { ToolDefinition } from '../../src/types/tool';
+import { createAgentRunAbortError } from '../../src/services/runtimeError';
 
 const mockExecuteAgentControlGraphModelTurn = jest.fn();
 const mockResolvePreparedAgentControlGraphModelTurnResult = jest.fn();
@@ -78,6 +80,7 @@ function buildParams() {
   const runtime = {
     activeModel: primaryProvider.model,
     activeProvider: primaryProvider,
+    admittedMemoryContext: { livingMemory: null },
     consecutivePendingAsyncNoToolTurns: 0,
     lastPendingAsyncSignature: '',
     llm: {} as never,
@@ -218,9 +221,7 @@ describe('prepared graph turn directive consumption', () => {
     });
 
     expect(alternateRequest.effectiveForceTextThisTurn).toBe(true);
-    expect(alternateRequest.effectiveForceTextReasonThisTurn).toBe(
-      'empty_delivery_recovery',
-    );
+    expect(alternateRequest.effectiveForceTextReasonThisTurn).toBe('empty_delivery_recovery');
     expect(alternateRequest.requestMaxTokens).toBe(8192);
     expect(alternatePreparedTurn.selectedTools).toEqual([]);
     expect(alternatePreparedTurn.toolsForIteration).toBeUndefined();
@@ -231,6 +232,7 @@ describe('prepared graph turn directive consumption', () => {
       completion: { completionStatus: 'complete', finishReason: 'stop' },
       contextWindow: 8192,
       fullContent: 'Recovered answer.',
+      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       pendingToolCalls: [],
       providerReplay: undefined,
       reasoning: '',
@@ -242,9 +244,32 @@ describe('prepared graph turn directive consumption', () => {
     await executePreparedAgentControlGraphTurn(fixture.params);
 
     expect(fixture.consumeOneShotTurnDirectives).toHaveBeenCalledTimes(1);
-    expect(fixture.consumeOneShotTurnDirectives).toHaveBeenCalledWith(
-      'model_turn_completed',
-    );
+    expect(fixture.consumeOneShotTurnDirectives).toHaveBeenCalledWith('model_turn_completed');
     expect(mockResolvePreparedAgentControlGraphModelTurnResult).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fail over a code-owned cancellation whose text resembles a transport failure', async () => {
+    const cancellation = createAgentRunAbortError('Network request failed');
+    mockExecuteAgentControlGraphModelTurn.mockRejectedValueOnce(cancellation);
+    const fixture = buildParams();
+
+    await expect(executePreparedAgentControlGraphTurn(fixture.params)).rejects.toBe(cancellation);
+
+    expect(fixture.params.runtime.activeProvider.id).toBe(primaryProvider.id);
+    expect(fixture.consumeOneShotTurnDirectives).not.toHaveBeenCalled();
+  });
+
+  it('does not fail over after the exact admitted execution signal is aborted', async () => {
+    const providerError = new Error('Failed to fetch');
+    mockExecuteAgentControlGraphModelTurn.mockRejectedValueOnce(providerError);
+    const fixture = buildParams();
+    const signal = new AbortController();
+    signal.abort(new Error('Stopped by the user.'));
+    fixture.params.iterationParams.signal = signal;
+
+    await expect(executePreparedAgentControlGraphTurn(fixture.params)).rejects.toBe(providerError);
+
+    expect(fixture.params.runtime.activeProvider.id).toBe(primaryProvider.id);
+    expect(fixture.consumeOneShotTurnDirectives).not.toHaveBeenCalled();
   });
 });

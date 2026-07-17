@@ -3,8 +3,10 @@ import { restoreRequestIdleCallback } from '../helpers/idleCallbackFixture';
 import {
   completeFinalMetadata,
   completedOrchestratorRun,
+  emitWorkerSurfaceFollowupSequence,
   mockStartupScheduledExecutionCheckpoint,
   startupTestProvider as mockProvider,
+  toolMessageOutcome,
 } from '../helpers/startupSchedulerRuntimeFixtures';
 
 jest.mock('../../src/services/memory/retiredMemoryCleanup', () => ({
@@ -344,29 +346,7 @@ describe('initializeServices', () => {
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('disk unavailable'));
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
-      callbacks.onToolCallStart?.({
-        id: 'tc-surface',
-        name: 'sessions_surface_output',
-        arguments: '{"sessionId":"worker-1"}',
-        status: 'running',
-      });
-      callbacks.onToolCallComplete?.({
-        id: 'tc-surface',
-        name: 'sessions_surface_output',
-        arguments: '{"sessionId":"worker-1"}',
-        status: 'completed',
-        result: JSON.stringify({
-          status: 'surfaced',
-          sessionId: 'worker-1',
-          output: 'Worker-authored final answer',
-        }),
-      });
-      callbacks.onToolMessage?.('tc-surface', 'tool result');
-      callbacks.onAssistantMessage?.('Continuing with another action.', [
-        { id: 'tc-follow-up', name: 'web_fetch', arguments: '{}', status: 'running' },
-      ]);
-      callbacks.onAssistantMessage?.('Final action completed.');
-      callbacks.onDone?.();
+      emitWorkerSurfaceFollowupSequence(callbacks);
       return completedOrchestratorRun;
     });
     const { initializeServices } = require('../../src/services/startup');
@@ -434,8 +414,19 @@ describe('initializeServices', () => {
         status: 'blocked',
         terminalReason: 'missing_required_side_effect',
       });
-      callbacks.onAssistantMessage?.('The required downstream action was not completed.');
-      callbacks.onToolMessage?.('tc-surface-blocked', 'tool result');
+      callbacks.onAssistantMessage?.(
+        'The required downstream action was not completed.',
+        [],
+        undefined,
+        {
+          kind: 'final',
+          completionStatus: 'incomplete',
+          finishReason: 'response_failed',
+        },
+      );
+      callbacks.onToolMessage?.(
+        toolMessageOutcome('tc-surface-blocked', 'completed', 'tool result'),
+      );
       callbacks.onDone?.();
       return { terminalDisposition: 'blocked' as const };
     });
@@ -515,7 +506,7 @@ describe('initializeServices', () => {
           output: 'Worker output before disconnect.',
         }),
       });
-      callbacks.onToolMessage?.('tc-effect', 'tool result');
+      callbacks.onToolMessage?.(toolMessageOutcome('tc-effect', 'completed', 'tool result'));
       throw new Error('provider disconnected after tool dispatch');
     });
     const { initializeServices } = require('../../src/services/startup');

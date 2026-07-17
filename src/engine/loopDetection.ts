@@ -16,7 +16,11 @@ export interface ToolCallRecord {
 }
 
 export type LoopSeverity = 'warning' | 'critical';
-export type PreflightBlockedKind = 'schema_validation' | 'tool_filter' | 'unknown_tool';
+export type PreflightBlockedKind =
+  | 'authority_revoked'
+  | 'schema_validation'
+  | 'tool_filter'
+  | 'unknown_tool';
 
 export type LoopDetectorKind =
   | 'generic_repeat'

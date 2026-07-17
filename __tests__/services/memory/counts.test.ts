@@ -20,7 +20,11 @@ import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/
 import { countEpisodes } from '../../../src/services/memory/episodes/queries';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
-import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
+import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+  codeOwnedClosedTurnEpisodeFields,
+  recordContributionBackedFact,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -56,6 +60,7 @@ describe('countFacts', () => {
         memoryConversationId: 'count-withdraw-conversation',
         sourceThreadId: 'count-withdraw-thread',
         producerEventId: 'count-withdraw-event',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
       },
     );
     expect(withdrawMemoryFact(result.fact.id).status).toBe('withdrawn');
@@ -117,6 +122,10 @@ describe('countEpisodes', () => {
     recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 'c1',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'count-all-first-user',
+        sourceAssistantMessageId: 'count-all-first-assistant',
+      }),
       summary: 'First',
       startedAt: 1000,
       endedAt: 2000,
@@ -124,6 +133,10 @@ describe('countEpisodes', () => {
     recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 'c1',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'count-all-second-user',
+        sourceAssistantMessageId: 'count-all-second-assistant',
+      }),
       summary: 'Second',
       startedAt: 3000,
       endedAt: 4000,
@@ -135,6 +148,10 @@ describe('countEpisodes', () => {
     recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 'c1',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'count-conversation-one-user',
+        sourceAssistantMessageId: 'count-conversation-one-assistant',
+      }),
       summary: 'A',
       startedAt: 1000,
       endedAt: 2000,
@@ -142,6 +159,10 @@ describe('countEpisodes', () => {
     recordThreadLocalEpisode({
       conversationId: 'c2',
       threadId: 'c2',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'count-conversation-two-user',
+        sourceAssistantMessageId: 'count-conversation-two-assistant',
+      }),
       summary: 'B',
       startedAt: 1000,
       endedAt: 2000,
@@ -154,6 +175,10 @@ describe('countEpisodes', () => {
     recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 't1',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'count-thread-one-user',
+        sourceAssistantMessageId: 'count-thread-one-assistant',
+      }),
       summary: 'A',
       startedAt: 1000,
       endedAt: 2000,
@@ -161,6 +186,10 @@ describe('countEpisodes', () => {
     recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 't2',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'count-thread-two-user',
+        sourceAssistantMessageId: 'count-thread-two-assistant',
+      }),
       summary: 'B',
       startedAt: 1000,
       endedAt: 2000,
@@ -173,6 +202,10 @@ describe('countEpisodes', () => {
       conversationId: 'c1',
       threadId: 'c1',
       taskId: 'task-a',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'count-task-one-user',
+        sourceAssistantMessageId: 'count-task-one-assistant',
+      }),
       summary: 'A',
       startedAt: 1000,
       endedAt: 2000,
@@ -181,6 +214,10 @@ describe('countEpisodes', () => {
       conversationId: 'c1',
       threadId: 'c1',
       taskId: 'task-b',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'count-task-two-user',
+        sourceAssistantMessageId: 'count-task-two-assistant',
+      }),
       summary: 'B',
       startedAt: 1000,
       endedAt: 2000,

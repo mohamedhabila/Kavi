@@ -15,11 +15,27 @@ jest.mock('../../../src/services/memory/verifiedProcedure/calendarPreconditions'
       'platform.ios',
     ],
   }),
+  resolveCalendarUpdateVerifiedProcedurePreconditions: jest.fn().mockResolvedValue({
+    satisfied: true,
+    reason: 'satisfied',
+    platform: 'ios',
+    preconditionIds: [
+      'app.tool.calendar_events.allowed',
+      'app.tool.calendar_update_event.allowed',
+      'os.calendar.permission.granted',
+      'platform.ios',
+    ],
+  }),
 }));
 
 import { createInitialAgentControlGraphSnapshot } from '../../../src/engine/graph/agentControlGraph';
 import { buildToolEffectReceipt } from '../../../src/engine/toolExecution/toolEffectReceipt';
-import { CALENDAR_CREATE_TOOL } from '../../../src/engine/tools/native/calendar/definitions';
+import {
+  CALENDAR_CREATE_TOOL,
+  CALENDAR_EVENTS_TOOL,
+  CALENDAR_LIST_TOOL,
+  CALENDAR_UPDATE_TOOL,
+} from '../../../src/engine/tools/native/calendar/definitions';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { getMemoryDb } from '../../../src/services/memory/database';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
@@ -36,11 +52,13 @@ import {
 } from '../../../src/services/memory/schema';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { buildAssistantMessageMetadata } from '../../../src/utils/assistantMessageMetadata';
+import { codeOwnedMemorySensitivityDeclaration } from '../../../src/services/memory/memorySensitivityPolicy';
 import {
   hashVerifiedProcedureProvenanceSync,
   type VerifiedProcedureMemoryLineage,
 } from '../../../src/services/memory/verifiedProcedure/provenanceHash';
 import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
+import { buildCurrentModelTurnMemoryPolicyBinding } from '../../helpers/modelTurnMemoryAuthority';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const OBSERVED_AT = Date.now() - 1_000;
@@ -56,6 +74,7 @@ async function observeList(session: VerifiedProcedureExecutionSession, runId: st
   await session.observePlannedBatch({
     iteration: 1,
     executeInParallel: false,
+    memoryPolicyBinding: buildCurrentModelTurnMemoryPolicyBinding(),
     toolCalls: [{ batchIndex: 0, toolCallId: `${runId}-list`, toolName: 'calendar_list' }],
   });
   await session.observeRawOutcome({
@@ -92,6 +111,7 @@ async function observeCreate(session: VerifiedProcedureExecutionSession, runId: 
   await session.observePlannedBatch({
     iteration: 2,
     executeInParallel: false,
+    memoryPolicyBinding: buildCurrentModelTurnMemoryPolicyBinding(),
     toolCalls: [
       {
         batchIndex: 0,
@@ -110,6 +130,85 @@ async function observeCreate(session: VerifiedProcedureExecutionSession, runId: 
     receipt: await buildToolEffectReceipt({
       toolCallId: `${runId}-create`,
       toolName: 'calendar_create_event',
+      argumentsText,
+      resultText,
+      transportState: 'returned',
+      executionRunId: runId,
+      recordedAt: OBSERVED_AT + 100,
+    }),
+  });
+}
+
+async function observeEvents(session: VerifiedProcedureExecutionSession, runId: string) {
+  const argumentsText = JSON.stringify({
+    startDate: '2026-08-01T00:00:00.000Z',
+    endDate: '2026-08-02T00:00:00.000Z',
+  });
+  const resultText = JSON.stringify([
+    {
+      id: 'private-event-id',
+      title: 'Private appointment',
+      startDate: '2026-08-01T10:00:00.000Z',
+      endDate: '2026-08-01T11:00:00.000Z',
+    },
+  ]);
+  await session.observePlannedBatch({
+    iteration: 1,
+    executeInParallel: false,
+    memoryPolicyBinding: buildCurrentModelTurnMemoryPolicyBinding(),
+    toolCalls: [{ batchIndex: 0, toolCallId: `${runId}-events`, toolName: 'calendar_events' }],
+  });
+  await session.observeRawOutcome({
+    iteration: 1,
+    batchIndex: 0,
+    toolCallId: `${runId}-events`,
+    toolName: 'calendar_events',
+    argumentsText,
+    resultText,
+    receipt: await buildToolEffectReceipt({
+      toolCallId: `${runId}-events`,
+      toolName: 'calendar_events',
+      argumentsText,
+      resultText,
+      transportState: 'returned',
+      executionRunId: runId,
+      recordedAt: OBSERVED_AT,
+    }),
+  });
+}
+
+async function observeUpdate(session: VerifiedProcedureExecutionSession, runId: string) {
+  const argumentsText = JSON.stringify({
+    id: 'private-event-id',
+    startDate: '2026-08-01T12:00:00.000Z',
+    endDate: '2026-08-01T13:00:00.000Z',
+  });
+  const resultText = JSON.stringify({
+    status: 'updated_verified',
+    eventId: 'private-event-id',
+  });
+  await session.observePlannedBatch({
+    iteration: 2,
+    executeInParallel: false,
+    memoryPolicyBinding: buildCurrentModelTurnMemoryPolicyBinding(),
+    toolCalls: [
+      {
+        batchIndex: 0,
+        toolCallId: `${runId}-update`,
+        toolName: 'calendar_update_event',
+      },
+    ],
+  });
+  await session.observeRawOutcome({
+    iteration: 2,
+    batchIndex: 0,
+    toolCallId: `${runId}-update`,
+    toolName: 'calendar_update_event',
+    argumentsText,
+    resultText,
+    receipt: await buildToolEffectReceipt({
+      toolCallId: `${runId}-update`,
+      toolName: 'calendar_update_event',
       argumentsText,
       resultText,
       transportState: 'returned',
@@ -219,6 +318,23 @@ describe('verified procedure execution session', () => {
 
     const reuseRun = 'verified-execution-reuse';
     const reuseSession = await createSession(reuseRun);
+    await expect(reuseSession.buildApplicableAdvisory([CALENDAR_CREATE_TOOL])).resolves.toBeNull();
+    const planningAdvisory = await reuseSession.buildApplicableAdvisory([
+      CALENDAR_LIST_TOOL,
+      CALENDAR_CREATE_TOOL,
+    ]);
+    expect(planningAdvisory).toEqual(
+      expect.objectContaining({
+        readEpoch: expect.any(Number),
+        section: expect.stringContaining('call calendar_list first'),
+      }),
+    );
+    expect(planningAdvisory?.section).toContain('Never reuse a calendar ID from memory');
+    expect(planningAdvisory?.section).not.toContain('private-calendar-id');
+    await expect(
+      reuseSession.buildApplicableAdvisory([CALENDAR_EVENTS_TOOL, CALENDAR_UPDATE_TOOL]),
+    ).resolves.toBeNull();
+
     await observeList(reuseSession, reuseRun);
     const advisory = await reuseSession.buildApplicableAdvisory([CALENDAR_CREATE_TOOL]);
     expect(advisory).toEqual(
@@ -231,11 +347,62 @@ describe('verified procedure execution session', () => {
     expect(advisory?.section).not.toContain('private-calendar-id');
   });
 
+  it('promotes and reuses an independent verified calendar-update procedure', async () => {
+    for (let index = 0; index < 3; index += 1) {
+      const runId = `verified-update-execution-${index}`;
+      const session = await createSession(runId);
+      await observeEvents(session, runId);
+      await expect(session.buildApplicableAdvisory([CALENDAR_UPDATE_TOOL])).resolves.toBeNull();
+      await observeUpdate(session, runId);
+      const pending = await seal(session);
+      expect(JSON.stringify(pending)).not.toContain('private-');
+      await expect(
+        commitPendingVerifiedProcedureObservation({
+          memoryLineage: memoryLineage(runId),
+          pending: pending!,
+          surface: (['foreground', 'scheduler', 'subagent'] as const)[index]!,
+          terminalObservedAt: OBSERVED_AT + 200 + index,
+        }),
+      ).resolves.toMatchObject({ status: 'recorded' });
+    }
+
+    const reuseRun = 'verified-update-execution-reuse';
+    const reuseSession = await createSession(reuseRun);
+    await expect(reuseSession.buildApplicableAdvisory([CALENDAR_UPDATE_TOOL])).resolves.toBeNull();
+    const planningAdvisory = await reuseSession.buildApplicableAdvisory([
+      CALENDAR_EVENTS_TOOL,
+      CALENDAR_UPDATE_TOOL,
+    ]);
+    expect(planningAdvisory).toEqual(
+      expect.objectContaining({
+        readEpoch: expect.any(Number),
+        section: expect.stringContaining('call calendar_events first'),
+      }),
+    );
+    expect(planningAdvisory?.section).toContain('Never reuse an event ID from memory');
+    expect(planningAdvisory?.section).not.toContain('private-event-id');
+    await expect(
+      reuseSession.buildApplicableAdvisory([CALENDAR_LIST_TOOL, CALENDAR_CREATE_TOOL]),
+    ).resolves.toBeNull();
+
+    await observeEvents(reuseSession, reuseRun);
+    const advisory = await reuseSession.buildApplicableAdvisory([CALENDAR_UPDATE_TOOL]);
+    expect(advisory).toEqual(
+      expect.objectContaining({
+        readEpoch: expect.any(Number),
+        section: expect.stringContaining('never authorization'),
+      }),
+    );
+    expect(advisory?.section).toContain('current calendar_events result');
+    expect(advisory?.section).not.toContain('private-event-id');
+  });
+
   it('rejects parallel, extra-tool, skipped, and reconciliation-tainted procedures', async () => {
     const extra = await createSession('extra-tool-run');
     await extra.observePlannedBatch({
       iteration: 1,
       executeInParallel: true,
+      memoryPolicyBinding: buildCurrentModelTurnMemoryPolicyBinding(),
       toolCalls: [
         { batchIndex: 0, toolCallId: 'list', toolName: 'calendar_list' },
         { batchIndex: 1, toolCallId: 'other', toolName: 'calendar_events' },
@@ -247,6 +414,7 @@ describe('verified procedure execution session', () => {
     await skipped.observePlannedBatch({
       iteration: 1,
       executeInParallel: false,
+      memoryPolicyBinding: buildCurrentModelTurnMemoryPolicyBinding(),
       toolCalls: [{ batchIndex: 0, toolCallId: 'list', toolName: 'calendar_list' }],
     });
     await expect(seal(skipped)).resolves.toBeNull();
@@ -346,20 +514,23 @@ describe('verified procedure execution session', () => {
         sourceThreadId,
         taskId: targetLineage.taskId,
         producerEventId: 'verified-procedure-foreground-target',
+        sensitivityDeclaration: codeOwnedMemorySensitivityDeclaration('normal'),
       },
     ).fact;
     const revisionBeforeWithdrawal = getMemoryDb().getFirstSync<{
-      observation_revision: number;
-    }>('SELECT observation_revision FROM memory_verified_procedure_state')?.observation_revision;
+      restrictive_authority_revision: number;
+    }>(
+      'SELECT restrictive_authority_revision FROM memory_verified_procedure_state',
+    )?.restrictive_authority_revision;
     const withdrawal = withdrawMemoryFact(fact.id, OBSERVED_AT + 400);
     expect(withdrawal).toMatchObject({
       status: 'withdrawn',
       receipt: { counts: { verifiedProcedureObservations: 1 } },
     });
     expect(
-      getMemoryDb().getFirstSync<{ observation_revision: number }>(
-        'SELECT observation_revision FROM memory_verified_procedure_state',
-      )?.observation_revision,
+      getMemoryDb().getFirstSync<{ restrictive_authority_revision: number }>(
+        'SELECT restrictive_authority_revision FROM memory_verified_procedure_state',
+      )?.restrictive_authority_revision,
     ).toBeGreaterThan(revisionBeforeWithdrawal ?? -1);
     expect(
       getMemoryDb()
@@ -414,6 +585,7 @@ describe('verified procedure execution session', () => {
         memoryConversationId,
         sourceThreadId,
         producerEventId: 'verified-procedure-chitchat-target',
+        sensitivityDeclaration: codeOwnedMemorySensitivityDeclaration('normal'),
       },
     ).fact;
 
@@ -458,6 +630,7 @@ describe('verified procedure execution session', () => {
         memoryConversationId,
         sourceThreadId,
         producerEventId: 'verified-procedure-pending-target',
+        sensitivityDeclaration: codeOwnedMemorySensitivityDeclaration('normal'),
       },
     ).fact;
     expect(withdrawMemoryFact(fact.id, OBSERVED_AT + 420)).toMatchObject({

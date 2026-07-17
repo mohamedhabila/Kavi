@@ -8,13 +8,18 @@
 
 import type { AgentGoal, AgentGoalMutation } from '../../engine/goals/types';
 import { getActiveGoal, getGoalById } from '../../engine/goals/types';
-import { getMany, getOne, runMemoryStatement } from './access/crud';
+import { getMany, getOne } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { canWriteLongTermMemory } from './policy';
 import { upsertGoalTaskEntry } from './taskStack';
 import { editPromptEligibleWorkingBlock } from './workingBlocks';
-import { runAfterMemoryTransactionCommit } from './access/transaction';
+import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/transaction';
+import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import {
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from './memoryAuthority';
 
 export type MemoryTaskState = 'active' | 'paused' | 'completed';
 
@@ -104,6 +109,10 @@ export interface UpsertMemoryTaskInput {
 }
 
 export function upsertMemoryTask(input: UpsertMemoryTaskInput): MemoryTask {
+  return runMemoryTransaction(() => upsertMemoryTaskInTransaction(input));
+}
+
+function upsertMemoryTaskInTransaction(input: UpsertMemoryTaskInput): MemoryTask {
   if (!canWriteLongTermMemory()) throw new Error('memory_disabled');
   const db = getSchemaReadyMemoryDb();
   const now = input.now ?? Date.now();
@@ -123,6 +132,25 @@ export function upsertMemoryTask(input: UpsertMemoryTaskInput): MemoryTask {
   const endedAt = state === 'completed' ? (existing?.ended_at ?? now) : null;
 
   if (existing) {
+    if (existing.thread_id !== threadId) {
+      throw new Error('memory_task_thread_identity_conflict');
+    }
+    const nextParentTaskId = input.parentTaskId ?? existing.parent_task_id;
+    const nextSummary = input.summary ?? existing.summary;
+    const nextEmbedding = input.embedding ? JSON.stringify(input.embedding) : existing.embedding;
+    const nextConfidence = clamp01(input.confidence ?? existing.confidence);
+    const embeddingChanged = nextEmbedding !== existing.embedding;
+    const confidenceChanged = nextConfidence !== existing.confidence;
+    const restrictiveProjectionChanged =
+      existing.title !== title ||
+      existing.state !== state ||
+      existing.parent_task_id !== nextParentTaskId ||
+      existing.summary !== nextSummary ||
+      (embeddingChanged && existing.embedding !== null) ||
+      nextConfidence < existing.confidence;
+    const additiveProjectionChanged =
+      (embeddingChanged && existing.embedding === null) ||
+      (confidenceChanged && nextConfidence > existing.confidence);
     db.runSync(
       `UPDATE memory_tasks
          SET title = ?,
@@ -142,10 +170,15 @@ export function upsertMemoryTask(input: UpsertMemoryTaskInput): MemoryTask {
       input.parentTaskId ?? null,
       input.summary ?? null,
       input.embedding ? JSON.stringify(input.embedding) : null,
-      clamp01(input.confidence ?? existing.confidence),
+      nextConfidence,
       now,
       id,
     );
+    if (restrictiveProjectionChanged) {
+      advanceRestrictiveMemoryAuthorityInTransaction(db, getLocalMemoryVaultOwnerId(db));
+    } else if (additiveProjectionChanged) {
+      advanceMemoryProjectionInTransaction(db, getLocalMemoryVaultOwnerId(db));
+    }
     runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(threadId));
     return rowToTask({
       ...existing,
@@ -153,9 +186,10 @@ export function upsertMemoryTask(input: UpsertMemoryTaskInput): MemoryTask {
       state,
       last_active_at: now,
       ended_at: endedAt,
-      summary: input.summary ?? existing.summary,
-      embedding: input.embedding ? JSON.stringify(input.embedding) : existing.embedding,
-      confidence: clamp01(input.confidence ?? existing.confidence),
+      parent_task_id: nextParentTaskId,
+      summary: nextSummary,
+      embedding: nextEmbedding,
+      confidence: nextConfidence,
       updated_at: now,
     });
   }
@@ -179,6 +213,7 @@ export function upsertMemoryTask(input: UpsertMemoryTaskInput): MemoryTask {
     now,
     now,
   );
+  advanceMemoryProjectionInTransaction(db, getLocalMemoryVaultOwnerId(db));
   runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(threadId));
   return {
     id,
@@ -346,42 +381,53 @@ export function syncActiveTaskFromGoal(params: {
   now?: number;
 }): MemoryTask | null {
   if (!canWriteLongTermMemory()) return null;
-  const pausedTasks = listMemoryTasks(params.threadId, { includeCompleted: false });
-  const now = params.now ?? Date.now();
+  return runMemoryTransaction(() => {
+    const pausedTasks = listMemoryTasks(params.threadId, { includeCompleted: false });
+    const now = params.now ?? Date.now();
+    const db = getSchemaReadyMemoryDb();
+    let pausedCount = 0;
 
-  for (const task of pausedTasks) {
-    if (task.id === params.goalId || task.state !== 'active') continue;
-    runMemoryStatement(
-      `UPDATE memory_tasks SET state = 'paused', last_active_at = ?, updated_at = ? WHERE id = ?`,
-      now,
-      now,
-      task.id,
-    );
-  }
+    for (const task of pausedTasks) {
+      if (task.id === params.goalId || task.state !== 'active') continue;
+      pausedCount +=
+        db.runSync(
+          `UPDATE memory_tasks
+              SET state = 'paused', last_active_at = ?, updated_at = ?
+            WHERE id = ? AND state = 'active' AND deleted_at IS NULL`,
+          now,
+          now,
+          task.id,
+        ).changes ?? 0;
+    }
+    if (pausedCount > 0) {
+      advanceRestrictiveMemoryAuthorityInTransaction(db, getLocalMemoryVaultOwnerId(db));
+      runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(params.threadId));
+    }
 
-  const task = upsertMemoryTask({
-    id: params.goalId,
-    threadId: params.threadId,
-    title: params.goalTitle,
-    state: 'active',
-    now,
+    const task = upsertMemoryTask({
+      id: params.goalId,
+      threadId: params.threadId,
+      title: params.goalTitle,
+      state: 'active',
+      now,
+    });
+
+    const focusContent = buildActiveGoalFocusContent(params.goalTitle, params.threadTitle);
+    if (focusContent) {
+      editPromptEligibleWorkingBlock(
+        'active_focus',
+        focusContent,
+        {
+          conversationId: params.threadId,
+          threadId: params.threadId,
+          taskId: params.goalId,
+        },
+        { now },
+      );
+    }
+
+    return task;
   });
-
-  const focusContent = buildActiveGoalFocusContent(params.goalTitle, params.threadTitle);
-  if (focusContent) {
-    editPromptEligibleWorkingBlock(
-      'active_focus',
-      focusContent,
-      {
-        conversationId: params.threadId,
-        threadId: params.threadId,
-        taskId: params.goalId,
-      },
-      { now },
-    );
-  }
-
-  return task;
 }
 
 function buildActiveGoalFocusContent(goalTitle: string, threadTitle?: string): string {

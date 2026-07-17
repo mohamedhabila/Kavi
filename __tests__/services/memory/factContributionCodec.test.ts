@@ -6,12 +6,12 @@ import {
   normalizeMemoryFactContributionSourceAliases,
   normalizeMemoryFactContributionSourceScope,
   requireMemoryFactContributionProducerIdentity,
-  type MemoryFactContributionPayloadV1,
+  type MemoryFactContributionPayloadV2,
 } from '../../../src/services/memory/factContributionCodec';
 
-function payload(attributes: Record<string, unknown> = {}): MemoryFactContributionPayloadV1 {
+function payload(attributes: Record<string, unknown> = {}): MemoryFactContributionPayloadV2 {
   return {
-    version: 1,
+    version: 2,
     operation: { kind: 'record' },
     applicability: {
       factClass: 'subjective_user',
@@ -43,6 +43,7 @@ function payload(attributes: Record<string, unknown> = {}): MemoryFactContributi
       stability: 0.7,
       decayRate: 0.02,
       reviewState: 'auto',
+      sensitivityFloor: 'normal',
       memoryKind: 'semantic_fact',
       supersedePrior: false,
       now: 100,
@@ -51,7 +52,7 @@ function payload(attributes: Record<string, unknown> = {}): MemoryFactContributi
 }
 
 describe('fact contribution codec', () => {
-  it('round-trips strict V1 metadata with canonical JSON and SHA-256', () => {
+  it('round-trips strict V2 metadata with canonical JSON and SHA-256', () => {
     const encoded = encodeMemoryFactContributionPayload(
       payload({ z: 3, nested: { second: true, first: 'value' }, a: 1 }),
     );
@@ -76,13 +77,13 @@ describe('fact contribution codec', () => {
     const parsed = JSON.parse(encoded.payloadJson) as Record<string, unknown>;
     const nonCanonicalJson = JSON.stringify({
       input: parsed.input,
-      version: 1,
+      version: 2,
       operation: parsed.operation,
       applicability: parsed.applicability,
     });
     expect(() =>
       decodeMemoryFactContributionPayload({
-        payloadVersion: 1,
+        payloadVersion: 2,
         payloadJson: nonCanonicalJson,
         payloadSha256: sha256HexUtf8(nonCanonicalJson),
         payloadByteLength: new TextEncoder().encode(nonCanonicalJson).byteLength,
@@ -90,7 +91,23 @@ describe('fact contribution codec', () => {
     ).toThrow('memory_fact_contribution_payload_invalid');
 
     expect(() =>
+      decodeMemoryFactContributionPayload({ ...encoded, payloadVersion: 1 as never }),
+    ).toThrow('memory_fact_contribution_integrity_invalid');
+
+    expect(() =>
       encodeMemoryFactContributionPayload({ ...payload(), unexpected: true } as never),
+    ).toThrow('memory_fact_contribution_payload_invalid');
+    const withoutSensitivityFloor = payload();
+    delete (withoutSensitivityFloor.input as Partial<typeof withoutSensitivityFloor.input>)
+      .sensitivityFloor;
+    expect(() => encodeMemoryFactContributionPayload(withoutSensitivityFloor as never)).toThrow(
+      'memory_fact_contribution_payload_invalid',
+    );
+    expect(() =>
+      encodeMemoryFactContributionPayload({
+        ...payload(),
+        input: { ...payload().input, sensitivityFloor: 'private' as never },
+      }),
     ).toThrow('memory_fact_contribution_payload_invalid');
     expect(() =>
       encodeMemoryFactContributionPayload({
@@ -101,7 +118,7 @@ describe('fact contribution codec', () => {
   });
 
   it('seals an exact replacement target without accepting legacy or broad supersession shapes', () => {
-    const exactReplacement: MemoryFactContributionPayloadV1 = {
+    const exactReplacement: MemoryFactContributionPayloadV2 = {
       ...payload(),
       operation: { kind: 'exact_replacement', expectedCurrentFactId: 'fact-predecessor' },
     };
@@ -200,6 +217,6 @@ describe('fact contribution codec', () => {
   });
 });
 
-function equivalentPayload(): MemoryFactContributionPayloadV1 {
+function equivalentPayload(): MemoryFactContributionPayloadV2 {
   return payload({ a: 1, nested: { first: 'value', second: true }, z: 3 });
 }

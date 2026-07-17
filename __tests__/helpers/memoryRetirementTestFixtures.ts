@@ -4,7 +4,18 @@ import type { MemoryFactContributionSourceAlias } from '../../src/services/memor
 import type { MemoryFactContributionWriteContext } from '../../src/services/memory/factContributionStore';
 import { recordFactWithContribution } from '../../src/services/memory/facts/mutations';
 import type { RecordFactInput, RecordFactResult } from '../../src/services/memory/facts/types';
-import type { SealedFactApplicabilityProvenance } from '../../src/services/memory/facts/applicabilityProvenance';
+import type {
+  EpisodeSensitivitySourceMessage,
+  RecordEpisodeInput,
+} from '../../src/services/memory/episodes/types';
+import type {
+  MemoryFactSensitivity,
+  SealedFactApplicabilityProvenance,
+} from '../../src/services/memory/facts/applicabilityProvenance';
+import type {
+  MemorySensitivityDeclarationV1,
+  MemorySensitivityInput,
+} from '../../src/services/memory/memorySensitivityPolicy';
 import type { VerifiedSourceRetirementOperation } from '../../src/services/memory/sourceRetirementOperationCodec';
 import { loadVerifiedSourceRetirementOperationInTransaction } from '../../src/services/memory/sourceRetirementStore';
 
@@ -12,6 +23,50 @@ const GROUNDED_USER_APPLICABILITY = {
   factClass: 'subjective_user',
   sourceAuthority: 'grounded_user',
 } as const;
+
+export const CODE_OWNED_NORMAL_TEST_SENSITIVITY: MemorySensitivityDeclarationV1 = Object.freeze({
+  version: 1,
+  source: 'code_owned',
+  sensitivity: 'normal',
+});
+
+export function codeOwnedClosedTurnEpisodeFields(params: {
+  sourceUserMessageId: string;
+  sourceAssistantMessageId: string;
+  userContent?: string;
+  assistantContent?: string;
+  intermediateMessages?: ReadonlyArray<EpisodeSensitivitySourceMessage>;
+  facts?: ReadonlyArray<MemorySensitivityInput>;
+  declaredSensitivity?: MemoryFactSensitivity;
+}): Pick<
+  RecordEpisodeInput,
+  'messageIds' | 'sourceStartMessageId' | 'sourceEndMessageId' | 'sensitivityEvidence'
+> {
+  const sourceMessages: EpisodeSensitivitySourceMessage[] = [
+    {
+      id: params.sourceUserMessageId,
+      role: 'user',
+      content: params.userContent ?? 'test user source',
+    },
+    ...(params.intermediateMessages ?? []),
+    {
+      id: params.sourceAssistantMessageId,
+      role: 'assistant',
+      content: params.assistantContent ?? 'test assistant source',
+    },
+  ];
+  return {
+    messageIds: sourceMessages.map((message) => message.id),
+    sourceStartMessageId: params.sourceUserMessageId,
+    sourceEndMessageId: params.sourceAssistantMessageId,
+    sensitivityEvidence: {
+      declaredSensitivity:
+        params.declaredSensitivity ?? CODE_OWNED_NORMAL_TEST_SENSITIVITY.sensitivity,
+      sourceMessages,
+      facts: params.facts ?? [],
+    },
+  };
+}
 
 export interface ContributionBackedFactContext {
   memoryConversationId: string;
@@ -21,6 +76,7 @@ export interface ContributionBackedFactContext {
   producerId?: string;
   sourceAliases?: ReadonlyArray<MemoryFactContributionSourceAlias>;
   applicability?: SealedFactApplicabilityProvenance;
+  sensitivityDeclaration: MemorySensitivityDeclarationV1;
 }
 
 export interface RetirementLedgerCounts {
@@ -67,6 +123,7 @@ export function recordContributionBackedFact(
     input,
     context.applicability ?? GROUNDED_USER_APPLICABILITY,
     writeContext,
+    context.sensitivityDeclaration,
   );
 }
 

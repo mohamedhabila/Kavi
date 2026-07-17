@@ -11,10 +11,14 @@ jest.mock('expo-calendar', () => ({
 
 import { Platform } from 'react-native';
 import {
+  calendarUpdateVerifiedProcedureApplicablePreconditionIds,
   calendarVerifiedProcedureApplicablePreconditionIds,
   CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS,
 } from '../../../src/services/memory/verifiedProcedure/calendarPreconditionContract';
-import { resolveCalendarVerifiedProcedurePreconditions } from '../../../src/services/memory/verifiedProcedure/calendarPreconditions';
+import {
+  resolveCalendarUpdateVerifiedProcedurePreconditions,
+  resolveCalendarVerifiedProcedurePreconditions,
+} from '../../../src/services/memory/verifiedProcedure/calendarPreconditions';
 import { useToolPermissionsStore } from '../../../src/services/security/permissions';
 
 const Calendar = jest.requireMock('expo-calendar') as {
@@ -53,6 +57,15 @@ describe('calendar verified procedure preconditions', () => {
         CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.iosPlatform,
       ].sort(),
     );
+    expect(calendarUpdateVerifiedProcedureApplicablePreconditionIds('ios')).toEqual(
+      [
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.calendarEventObserved,
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.calendarEventsAllowed,
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.calendarPermissionGranted,
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.calendarUpdateAllowed,
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.iosPlatform,
+      ].sort(),
+    );
   });
 
   it.each([
@@ -77,6 +90,23 @@ describe('calendar verified procedure preconditions', () => {
     expect(Calendar.getCalendarsAsync).not.toHaveBeenCalled();
   });
 
+  it('resolves the exact non-prompting event-update applicability', async () => {
+    await expect(resolveCalendarUpdateVerifiedProcedurePreconditions()).resolves.toEqual({
+      satisfied: true,
+      reason: 'satisfied',
+      platform: 'ios',
+      preconditionIds: [
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.calendarEventsAllowed,
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.calendarPermissionGranted,
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.calendarUpdateAllowed,
+        CALENDAR_VERIFIED_PROCEDURE_PRECONDITION_IDS.iosPlatform,
+      ].sort(),
+    });
+    expect(Calendar.getCalendarPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(Calendar.requestCalendarPermissionsAsync).not.toHaveBeenCalled();
+    expect(Calendar.getCalendarsAsync).not.toHaveBeenCalled();
+  });
+
   it('fails closed before touching OS permissions when either app tool is disabled', async () => {
     useToolPermissionsStore.getState().setPermission('calendar_create_event', false);
 
@@ -89,6 +119,16 @@ describe('calendar verified procedure preconditions', () => {
     expect(Calendar.getCalendarPermissionsAsync).not.toHaveBeenCalled();
     expect(Calendar.requestCalendarPermissionsAsync).not.toHaveBeenCalled();
     expect(Calendar.getCalendarsAsync).not.toHaveBeenCalled();
+
+    useToolPermissionsStore.setState({ permissions: [] });
+    useToolPermissionsStore.getState().setPermission('calendar_update_event', false);
+    await expect(resolveCalendarUpdateVerifiedProcedurePreconditions()).resolves.toEqual({
+      satisfied: false,
+      reason: 'tool_not_allowed',
+      platform: 'ios',
+      preconditionIds: [],
+    });
+    expect(Calendar.getCalendarPermissionsAsync).not.toHaveBeenCalled();
   });
 
   it('does not trust default tool state before persisted permissions hydrate', async () => {

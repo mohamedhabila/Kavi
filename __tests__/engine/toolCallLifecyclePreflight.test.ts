@@ -1,4 +1,5 @@
 import { resolveToolCallPreflight } from '../../src/engine/toolExecution/toolCallLifecyclePreflight';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import type { ToolCallRecord } from '../../src/engine/loopDetection';
 import type { ToolDefinition } from '../../src/types/tool';
@@ -67,6 +68,7 @@ function buildLifecycle(
     conversationId: 'conv-1',
     provider: { id: 'p1', name: 'Test', apiKey: 'k', baseUrl: 'https://example.com', models: [] },
     model: 'test-model',
+    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     availableToolNames: new Set(['update_goals']),
     runtimeToolAvailability: {
       hasWorkspaceTargets: false,
@@ -265,6 +267,39 @@ describe('resolveToolCallPreflight', () => {
         failureKind: 'tool_error',
       }),
     );
+    expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('schema_validation');
+  });
+
+  it.each([
+    ['invalid JSON', '{"prompt":'],
+    ['a non-object payload', '[]'],
+  ])('rejects %s as an argument object before execution', (_label, argumentsText) => {
+    const lifecycle = buildLifecycle({
+      availableToolNames: new Set(['sessions_spawn']),
+      groundedRequestScopedTools: [sessionSpawnTool],
+    });
+    const result = resolveToolCallPreflight(lifecycle, {
+      id: 'tc-spawn-invalid-json',
+      name: 'sessions_spawn',
+      arguments: argumentsText,
+    });
+
+    const parsed = JSON.parse(result?.toolMessage.content ?? '{}');
+    expect(parsed).toMatchObject({
+      status: 'error',
+      code: 'invalid_argument_shape',
+      invalidArguments: [
+        {
+          field: '$',
+          expected: 'object',
+          actual: 'invalid JSON or non-object',
+        },
+      ],
+      repair: {
+        retryable: true,
+        invalidFields: ['$'],
+      },
+    });
     expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('schema_validation');
   });
 

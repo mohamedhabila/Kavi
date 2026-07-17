@@ -43,7 +43,7 @@ it('does not persist turns from an ephemeral side thread', async () => {
       role: 'assistant',
       content: 'Scratch work complete.',
       timestamp: 2,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     },
   ];
   for (const message of messages) useChatStore.getState().addMessage(sideThreadId, message);

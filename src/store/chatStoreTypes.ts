@@ -71,7 +71,12 @@ export interface ChatState {
     providerId: string,
     systemPrompt: string,
     modelOverride?: string,
-    options?: { activate?: boolean; personaId?: string; mode?: ConversationMode },
+    options?: {
+      activate?: boolean;
+      personaId?: string;
+      mode?: ConversationMode;
+      replaceCanonical?: boolean;
+    },
   ) => string;
   getOrCreateCanonicalThread: (
     providerId: string,

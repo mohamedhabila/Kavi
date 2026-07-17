@@ -186,6 +186,25 @@ export type E2EMemoryFactExpectation = Readonly<{
   scope: MemoryFactScope;
 }>;
 
+export type E2EMemoryWriteReference = Readonly<{
+  turnIndex: number;
+  subject: string;
+  value: string;
+  status: 'created' | 'duplicate';
+}>;
+
+export type E2EMemorySelectionExpectation =
+  | Readonly<{
+      requiredFacts: ReadonlyArray<E2EMemoryFactExpectation>;
+      forbiddenFacts?: ReadonlyArray<E2EMemoryFactExpectation>;
+      maxSelectedFacts?: number;
+    }>
+  | Readonly<{
+      requiredWrites: ReadonlyArray<E2EMemoryWriteReference>;
+      supersededWrites?: ReadonlyArray<E2EMemoryWriteReference>;
+      maxSelectedFacts?: number;
+    }>;
+
 export type E2EMemoryProbeAnswerExpectation =
   | Readonly<{
       kind: 'fact_values';
@@ -279,13 +298,7 @@ export type E2ERubric =
       turnIndex: number;
       answer: E2EMemoryProbeAnswerExpectation;
     }
-  | {
-      kind: 'turn_memory_selection';
-      turnIndex: number;
-      requiredFacts: ReadonlyArray<E2EMemoryFactExpectation>;
-      forbiddenFacts?: ReadonlyArray<E2EMemoryFactExpectation>;
-      maxSelectedFacts?: number;
-    }
+  | ({ kind: 'turn_memory_selection'; turnIndex: number } & E2EMemorySelectionExpectation)
   | { kind: 'goal_status'; goalId: string; status: AgentGoalStatus }
   | { kind: 'ingestion_job_checkpointed'; minCount?: number }
   | { kind: 'ingestion_job_completed'; minCount?: number }

@@ -17,10 +17,8 @@ import {
   type MemoryFactContributionWriteContext,
 } from '../../../src/services/memory/factContributionStore';
 import { normalizeRecordFactMutation } from '../../../src/services/memory/facts/mutationNormalization';
-import {
-  recordFactWithApplicability,
-  recordFactWithContribution,
-} from '../../../src/services/memory/facts/mutations';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
+import { recordCodeOwnedTestFactWithContribution as recordFactWithContribution } from '../../helpers/factContributionWriteFixtures';
 import { runMemoryTransaction } from '../../../src/services/memory/access/transaction';
 import {
   clearStructuredMemory,

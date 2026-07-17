@@ -1,5 +1,5 @@
-import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import { getExecutionJournalDb } from './database';
 import {
   decodeExecutionCheckpointRow,
@@ -265,10 +265,7 @@ async function snapshotGeneration(
   snapshot: ExecutionJournalSnapshot,
 ): Promise<ExecutionRecoveryGeneration> {
   const canonicalSnapshot = JSON.stringify([SNAPSHOT_GENERATION_FORMAT, snapshot]);
-  const snapshotDigest = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    canonicalSnapshot,
-  );
+  const snapshotDigest = await sha256HexUtf8Async(canonicalSnapshot);
   if (!/^[a-f0-9]{64}$/u.test(snapshotDigest)) {
     throw new Error('execution_recovery_invalid_snapshot_digest');
   }

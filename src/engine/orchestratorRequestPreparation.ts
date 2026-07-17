@@ -24,6 +24,7 @@ import {
 import { repairModelVisibleToolResultTranscript } from './orchestratorToolTranscript';
 import type { CodeOwnedCurrentUserMessage } from './tools/toolExecutionContext';
 import { isMemoryReadEpochCurrent } from '../services/memory/policy';
+import { captureSessionInternalUserMessages } from './orchestrator/sessionMemoryRefreshMessages';
 
 type LoggerLike = {
   devLog: (message: string, payload?: unknown) => void;
@@ -40,6 +41,23 @@ type PreMemoryEnrichmentResult = {
   enrichedContent?: string;
   shouldPersistEnrichment?: boolean;
 };
+
+export type OrchestratorMemoryAccessInput = Readonly<{
+  activeModel: string;
+  activeProvider: LlmProviderConfig;
+  asyncWork?: AgentRunControlGraphState['asyncWork'];
+  goals?: AgentRunControlGraphState['goals'];
+  internalUserMessageCount: number;
+  isSuperAgent: boolean;
+  logger: LoggerLike;
+  memoryContextStrategy?: MemoryContextStrategy;
+  memoryConversationId: string;
+  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
+  messages: Message[];
+  personaId: string;
+  sourceThreadId: string;
+  taskId: string | null;
+}>;
 
 function resolveRequestContinuation(
   graphSnapshot: AgentRunControlGraphState | undefined,
@@ -124,6 +142,59 @@ async function enrichLatestUserMessageForRequest(params: {
   };
 }
 
+export async function loadOrchestratorMemoryAccessContext(
+  params: OrchestratorMemoryAccessInput,
+): Promise<Awaited<ReturnType<typeof buildUnifiedMemoryAccessContext>>> {
+  const memoryRetrievalStrategy = resolveMemoryRetrievalStrategy(params.memoryRetrievalStrategy);
+  const memoryContextStrategy = resolveMemoryContextStrategy(params.memoryContextStrategy);
+  try {
+    return await buildUnifiedMemoryAccessContext({
+      messages: params.messages,
+      memoryConversationId: params.memoryConversationId,
+      sourceThreadId: params.sourceThreadId,
+      personaId: params.personaId,
+      taskId: params.taskId,
+      mode: params.isSuperAgent ? 'agentic' : 'chat',
+      internalUserMessageCount: params.internalUserMessageCount,
+      ...(params.taskId ? { activeTaskId: params.taskId } : {}),
+      ...(params.goals?.length ? { goals: params.goals } : {}),
+      ...(params.asyncWork ? { asyncWork: params.asyncWork } : {}),
+      retrievalLlm: {
+        provider: params.activeProvider,
+        model: params.activeModel,
+      },
+      retrievalStrategy: memoryRetrievalStrategy,
+      contextStrategy: memoryContextStrategy,
+    });
+  } catch (memoryAccessError: unknown) {
+    if (memoryRetrievalStrategy !== 'production' || memoryContextStrategy !== 'production') {
+      throw memoryAccessError;
+    }
+    params.logger.devWarn(
+      'Unified memory access unavailable for this request:',
+      memoryAccessError instanceof Error ? memoryAccessError.message : String(memoryAccessError),
+    );
+    return {
+      ...buildScopedFallbackMemoryAccessContext({
+        messages: params.messages,
+        personaId: params.personaId,
+        mode: params.isSuperAgent ? 'agentic' : 'chat',
+        internalUserMessageCount: params.internalUserMessageCount,
+      }),
+      consistencyBarrier: {
+        outcome: 'degraded',
+        durationMs: 0,
+        waitedMs: 0,
+        queryCount: 0,
+        matchedJobCount: 0,
+        queueAgeMs: null,
+        initialJobStatus: null,
+        finalJobStatus: null,
+      },
+    };
+  }
+}
+
 export async function prepareOrchestratorRequestBundle(params: {
   activeModel: string;
   activeProvider: LlmProviderConfig;
@@ -151,11 +222,11 @@ export async function prepareOrchestratorRequestBundle(params: {
   memoryConsistencyBarrier: Awaited<
     ReturnType<typeof buildUnifiedMemoryAccessContext>
   >['consistencyBarrier'];
+  memoryRefreshInternalUserMessages: ReadonlyArray<Message>;
   requestFrame: RequestFrame;
   skillPrompts: Awaited<ReturnType<typeof getSkillSystemPrompts>>;
   workingMessages: Message[];
 }> {
-  const memoryAccessMode = params.isSuperAgent ? 'agentic' : 'chat';
   const graphGoals = params.graphSnapshot?.goals;
   const graphActiveTaskId =
     params.graphSnapshot?.activeTaskId ?? getActiveGoal(graphGoals ?? [])?.id ?? params.taskId;
@@ -168,55 +239,26 @@ export async function prepareOrchestratorRequestBundle(params: {
     mediaUnderstandingEnabled: params.mediaUnderstandingEnabled,
     messages: params.messages,
   });
-  const memoryRetrievalStrategy = resolveMemoryRetrievalStrategy(params.memoryRetrievalStrategy);
-  const memoryContextStrategy = resolveMemoryContextStrategy(params.memoryContextStrategy);
-  let memoryAccessContext: Awaited<ReturnType<typeof buildUnifiedMemoryAccessContext>>;
-  try {
-    memoryAccessContext = await buildUnifiedMemoryAccessContext({
-      messages: enrichedRequest.messages,
-      memoryConversationId: params.memoryConversationId,
-      sourceThreadId: params.conversationId,
-      personaId: params.personaId,
-      taskId: graphActiveTaskId ?? null,
-      mode: memoryAccessMode,
-      internalUserMessageCount: params.internalUserMessageCount,
-      ...(graphActiveTaskId ? { activeTaskId: graphActiveTaskId } : {}),
-      ...(graphGoals?.length ? { goals: graphGoals } : {}),
-      ...(params.graphSnapshot?.asyncWork ? { asyncWork: params.graphSnapshot.asyncWork } : {}),
-      retrievalLlm: {
-        provider: params.activeProvider,
-        model: params.activeModel,
-      },
-      retrievalStrategy: memoryRetrievalStrategy,
-      contextStrategy: memoryContextStrategy,
-    });
-  } catch (memoryAccessError: unknown) {
-    if (memoryRetrievalStrategy !== 'production' || memoryContextStrategy !== 'production') {
-      throw memoryAccessError;
-    }
-    params.logger.devWarn(
-      'Unified memory access unavailable for this request:',
-      memoryAccessError instanceof Error ? memoryAccessError.message : String(memoryAccessError),
-    );
-    memoryAccessContext = {
-      ...buildScopedFallbackMemoryAccessContext({
-        messages: enrichedRequest.messages,
-        personaId: params.personaId,
-        mode: memoryAccessMode,
-        internalUserMessageCount: params.internalUserMessageCount,
-      }),
-      consistencyBarrier: {
-        outcome: 'degraded',
-        durationMs: 0,
-        waitedMs: 0,
-        queryCount: 0,
-        matchedJobCount: 0,
-        queueAgeMs: null,
-        initialJobStatus: null,
-        finalJobStatus: null,
-      },
-    };
-  }
+  const memoryRefreshInternalUserMessages = captureSessionInternalUserMessages(
+    enrichedRequest.messages,
+    params.internalUserMessageCount,
+  );
+  const memoryAccessContext = await loadOrchestratorMemoryAccessContext({
+    activeModel: params.activeModel,
+    activeProvider: params.activeProvider,
+    ...(params.graphSnapshot?.asyncWork ? { asyncWork: params.graphSnapshot.asyncWork } : {}),
+    ...(graphGoals?.length ? { goals: graphGoals } : {}),
+    internalUserMessageCount: params.internalUserMessageCount,
+    isSuperAgent: params.isSuperAgent,
+    logger: params.logger,
+    memoryContextStrategy: params.memoryContextStrategy,
+    memoryConversationId: params.memoryConversationId,
+    memoryRetrievalStrategy: params.memoryRetrievalStrategy,
+    messages: enrichedRequest.messages,
+    personaId: params.personaId,
+    sourceThreadId: params.conversationId,
+    taskId: graphActiveTaskId ?? null,
+  });
 
   if (memoryAccessContext.boundary.startIndex > 0) {
     params.logger.devLog(
@@ -298,6 +340,7 @@ export async function prepareOrchestratorRequestBundle(params: {
     latestUserMessageText: requestContext.lastUserMessageText,
     livingMemory,
     memoryConsistencyBarrier,
+    memoryRefreshInternalUserMessages,
     requestFrame: requestContext.requestFrame,
     skillPrompts,
     workingMessages,

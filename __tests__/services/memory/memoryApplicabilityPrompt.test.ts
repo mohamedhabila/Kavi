@@ -19,7 +19,7 @@ function promptFact(
 }
 
 describe('memory applicability prompt annotations', () => {
-  it('renders use facts without an uncertainty policy label', () => {
+  it('renders directly usable facts with an explicit binding policy label', () => {
     const prompt = flattenPromptSections(
       assemblePrompt({
         basePrompt: '',
@@ -29,7 +29,7 @@ describe('memory applicability prompt annotations', () => {
 
     expect(prompt).toContain('bounded-memory-value');
     expect(prompt).not.toContain('Memory Resolution Required');
-    expect(prompt).not.toContain('policy=');
+    expect(prompt).toContain('policy=use reason=eligible');
   });
 
   it.each([

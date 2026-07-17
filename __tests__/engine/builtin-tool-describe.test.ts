@@ -1,3 +1,8 @@
+jest.mock('../../src/services/memory/policy', () => ({
+  ...jest.requireActual('../../src/services/memory/policy'),
+  isLongTermMemoryEnabled: jest.fn(() => true),
+}));
+
 import { executeToolDescribe } from '../../src/engine/tools/builtin-tool-describe';
 import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 

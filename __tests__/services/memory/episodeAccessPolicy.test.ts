@@ -34,6 +34,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -56,6 +57,8 @@ function rawEpisode(overrides: Partial<EpisodeRow> = {}): EpisodeRow {
     deleted_at: null,
     source_start_message_id: 'message-start',
     source_end_message_id: 'message-end',
+    source_identity_manifest_json:
+      '{"version":1,"sources":[{"sourceKind":"message","sourceId":"message-start"},{"sourceKind":"turn","sourceId":"message-end"}]}',
     ...overrides,
   };
 }
@@ -93,16 +96,12 @@ function recordCompleteEpisode(suffix: string, taskId: string | null = null) {
     threadId: `thread-${suffix}`,
     taskId,
     summary: `Completed episode ${suffix}`,
-    messageIds: [sourceStartMessageId, sourceEndMessageId],
-    sourceStartMessageId,
-    sourceEndMessageId,
-    sensitivityEvidence: {
-      sourceMessages: [
-        { id: sourceStartMessageId, role: 'user', content: `Review episode ${suffix}.` },
-        { id: sourceEndMessageId, role: 'assistant', content: 'Review completed.' },
-      ],
-      facts: [],
-    },
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: sourceStartMessageId,
+      sourceAssistantMessageId: sourceEndMessageId,
+      userContent: `Review episode ${suffix}.`,
+      assistantContent: 'Review completed.',
+    }),
     startedAt: 20,
     endedAt: 30,
     now: 40,
@@ -203,7 +202,7 @@ describe('episode access policy persistence', () => {
     const owner = getLocalMemoryVaultOwnerId(getMemoryDb());
     expect(owner).toMatch(/^vault_owner_[0-9a-f]{32}$/);
 
-    clearEpisodeAccessPolicies(getMemoryDb());
+    runMemoryTransaction(() => clearEpisodeAccessPolicies(getMemoryDb()));
     ensureEpisodeAccessPolicySchema(getMemoryDb(), 20);
 
     expect(getLocalMemoryVaultOwnerId(getMemoryDb())).toBe(owner);
@@ -282,22 +281,14 @@ describe('episode access policy persistence', () => {
       conversationId: 'session-root',
       threadId: 'thread-atomic-mutation',
       summary: 'Atomic policy episode',
-      messageIds: ['message-atomic-start', 'message-atomic-end'],
-      sourceStartMessageId: 'message-atomic-start',
-      sourceEndMessageId: 'message-atomic-end',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'message-atomic-start',
+        sourceAssistantMessageId: 'message-atomic-end',
+        userContent: 'Review atomicity.',
+        assistantContent: 'Atomicity reviewed.',
+      }),
       startedAt: 30,
       endedAt: 40,
-      sensitivityEvidence: {
-        sourceMessages: [
-          { id: 'message-atomic-start', role: 'user' as const, content: 'Review atomicity.' },
-          {
-            id: 'message-atomic-end',
-            role: 'assistant' as const,
-            content: 'Atomicity reviewed.',
-          },
-        ],
-        facts: [],
-      },
       now: 50,
       accessPolicy: {
         memoryConversationId: 'session-root',
@@ -346,9 +337,10 @@ describe('episode access policy persistence', () => {
       recordEpisode({
         ...input,
         threadId: 'thread-invalid-task-share',
-        sourceStartMessageId: 'message-invalid-start',
-        sourceEndMessageId: 'message-invalid-end',
-        messageIds: ['message-invalid-start', 'message-invalid-end'],
+        ...codeOwnedClosedTurnEpisodeFields({
+          sourceUserMessageId: 'message-invalid-start',
+          sourceAssistantMessageId: 'message-invalid-end',
+        }),
         taskId: 'task-private',
         accessPolicy: {
           ...input.accessPolicy,
@@ -400,13 +392,13 @@ describe('episode access policy persistence', () => {
       ),
     ).toThrow('episode_access_task_shareability_invalid');
 
-    const incomplete = recordThreadLocalEpisode({
-      conversationId: 'session-root',
-      threadId: 'thread-incomplete',
-      summary: 'Incomplete source episode',
-      now: 40,
-    });
-    if (!incomplete) throw new Error('expected incomplete episode');
+    const incomplete = recordCompleteEpisode('incomplete');
+    getMemoryDb().runSync(
+      `UPDATE memory_episodes
+          SET source_start_message_id = NULL
+        WHERE id = ?`,
+      incomplete.id,
+    );
     expect(() =>
       bindEpisodeAccessPolicy(
         getMemoryDb(),
@@ -533,7 +525,9 @@ describe('episode access policy persistence', () => {
         40,
       );
     }
-    expect(deleteEpisodeAccessPolicies(getMemoryDb(), [first.id])).toBe(1);
+    expect(runMemoryTransaction(() => deleteEpisodeAccessPolicies(getMemoryDb(), [first.id]))).toBe(
+      1,
+    );
     expect(getEpisodeAccessPolicy(getMemoryDb(), first.id)).toBeNull();
     expect(getEpisodeAccessPolicy(getMemoryDb(), second.id)).not.toBeNull();
     expect(

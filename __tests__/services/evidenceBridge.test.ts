@@ -213,6 +213,7 @@ describe('bridgeEvidenceToFacts', () => {
         sourceMessageId: string;
         sourceRunId: string;
         sourceTurnId: string;
+        sensitivityFloor: string;
         now: number;
       };
     };
@@ -220,6 +221,7 @@ describe('bridgeEvidenceToFacts', () => {
       sourceMessageId: options.sourceTurnId,
       sourceRunId: options.sourceRunId,
       sourceTurnId: options.sourceTurnId,
+      sensitivityFloor: 'normal',
       now: options.now,
     });
     expect(
@@ -255,6 +257,22 @@ describe('bridgeEvidenceToFacts', () => {
         'SELECT COUNT(*) AS count FROM memory_fact_evidence',
       )?.count,
     ).toBe(1);
+  });
+
+  it('skips structurally restricted evidence before creating any entity or contribution', () => {
+    const syntheticStructuredSecret = `gh${'p_'}${'abcdefghijklmnopqrstuvwxyz'}${'ABCDEFGHIJ'}`;
+    const result = bridgeEvidenceToFacts(
+      [makeEntry({ title: '', content: syntheticStructuredSecret })],
+      bridgeOptions({ subjectName: 'restricted-bridge' }),
+    );
+
+    expect(result).toEqual({
+      bridged: [],
+      skipped: [{ id: 'e1', reason: 'restricted_content' }],
+    });
+    expect(findEntityByName('restricted-bridge')).toBeNull();
+    expect(tableCount('memory_facts')).toBe(0);
+    expect(tableCount('memory_fact_contributions')).toBe(0);
   });
 
   it('rolls back the fact and contribution when evidence persistence fails', () => {

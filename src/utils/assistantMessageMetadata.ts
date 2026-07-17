@@ -76,6 +76,7 @@ const CODE_COMPLETE_DELIVERABLE_FINISH_REASONS = new Set([
   'scheduler_completion_recovered',
   'synthesized_from_evidence',
   'tool_batch_incomplete',
+  'user_approval_denied',
 ]);
 
 /** Code-owned terminal outcomes that must not be treated as a delivered response. */

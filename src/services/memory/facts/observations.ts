@@ -10,8 +10,12 @@ import type {
   MemoryEvidenceSourceKind,
   MemoryExternalEvidenceSignal,
 } from '../memoryApplicabilityTypes';
-import { newId } from '../schema';
+import { newId } from '../schemaValues';
 import { notifyStructuredMemoryChanged } from '../changeNotifications';
+import {
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from '../memoryAuthority';
 import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
 import {
   closedMemoryFactClass,
@@ -379,6 +383,11 @@ export function recordMemoryFactObservation(
       createdAt,
     );
     updateFactObservationState(db, identity, createdAt);
+    if (identity.relation === 'conflicts') {
+      advanceRestrictiveMemoryAuthorityInTransaction(db, identity.memoryOwnerId);
+    } else {
+      advanceMemoryProjectionInTransaction(db, identity.memoryOwnerId);
+    }
     notificationConversationId = fact.origin_conversation_id;
     return {
       observation: { id, ...identity, createdAt },

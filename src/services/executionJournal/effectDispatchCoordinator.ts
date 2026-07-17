@@ -11,6 +11,7 @@ import {
 } from './effectDispatchPolicy';
 import type { ExecutionEffectClass, ExecutionEffectStatus } from './types';
 import { EXECUTION_EFFECT_CLASSES, EXECUTION_EFFECT_STATUSES } from './types';
+import { prepareEffectReceiptRecord } from './effectReceiptStore';
 
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 
@@ -24,6 +25,9 @@ export const EFFECT_DISPATCH_CLAIM_REJECTION_REASONS = [
   'run_not_executing',
   'effect_not_planned',
   'identity_conflict',
+  'model_authority_changed',
+  'model_authority_expired',
+  'model_authority_unavailable',
   'journal_unavailable',
 ] as const;
 
@@ -76,6 +80,8 @@ export type EffectDispatchReceiptDisposition =
 export interface EffectDispatchSettlementCandidate {
   claim: EffectDispatchClaimEvidence;
   receipt: ToolEffectReceipt;
+  receiptDigest: string;
+  receiptJson: string;
   nextEffectStatus: Extract<
     ExecutionEffectStatus,
     'applied' | 'verified' | 'failed' | 'cancelled' | 'ambiguous'
@@ -362,11 +368,25 @@ export async function settleEffectDispatchCallback(
     return { kind: 'reconciliation_required', reason: 'receipt_invalid' };
   }
 
+  let preparedReceipt: Awaited<ReturnType<typeof prepareEffectReceiptRecord>>;
+  try {
+    preparedReceipt = await prepareEffectReceiptRecord(receipt);
+  } catch {
+    await markAmbiguousSafely(ports, {
+      claim: input.claim,
+      reason: 'receipt_invalid',
+      observedAt: input.observedAt,
+    });
+    return { kind: 'reconciliation_required', reason: 'receipt_invalid' };
+  }
+
   let settlement: AtomicEffectDispatchSettlementResult;
   try {
     settlement = await ports.settle({
       claim: input.claim,
       receipt,
+      receiptDigest: preparedReceipt.receiptDigest,
+      receiptJson: preparedReceipt.receiptJson,
       nextEffectStatus: classification.nextEffectStatus,
       outcomeDigest: receipt.resultDigest.slice('sha256:'.length),
       observedAt: input.observedAt,

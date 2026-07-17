@@ -23,6 +23,7 @@ function makeMessage(id: string, eventId?: string): Message {
           assistantMetadata: {
             kind: 'final' as const,
             completionStatus: 'complete' as const,
+            finishReason: 'stop',
             memoryRetrievalEventId: eventId,
           },
         }

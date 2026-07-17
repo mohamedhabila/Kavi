@@ -13,7 +13,10 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
-import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
+import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+  recordContributionBackedFact,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -46,6 +49,7 @@ it('never returns an immutable retired fact through the direct-id recall path', 
       memoryConversationId: 'direct-recall-conversation',
       sourceThreadId: 'direct-recall-thread',
       producerEventId: 'direct-recall-event',
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   );
 

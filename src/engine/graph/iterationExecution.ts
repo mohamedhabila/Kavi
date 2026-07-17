@@ -21,6 +21,7 @@ export async function executeAgentControlGraphIteration(
     ...params.runtime,
     workingMessages: [...params.runtime.workingMessages],
   };
+  const livingMemory = runtime.admittedMemoryContext.livingMemory;
 
   if (!params.graph.getCurrentTurnDirectives().forceFinalText) {
     params.graph.recordPostToolFinalTextDirective({
@@ -71,6 +72,10 @@ export async function executeAgentControlGraphIteration(
     promptContextSupport: {
       ...params.promptContextSupport,
       graphGoals: currentGoals,
+      livingMemorySections: livingMemory?.sections,
+      livingMemoryReadEpoch: livingMemory?.memoryReadEpoch,
+      livingMemoryAuthoritySnapshot: livingMemory?.memoryAuthoritySnapshot,
+      livingMemoryValidUntil: livingMemory?.validUntil,
       runtimeContext: appendRequestUnderstandingToRuntimeContext(
         params.promptContextSupport.runtimeContext,
         requestUnderstandingPrompt,

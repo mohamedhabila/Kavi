@@ -15,11 +15,14 @@ describe('Orchestrator', () => {
   describe('Reasoning tokens', () => {
     it('should pass through reasoning tokens', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'reasoning', content: 'Let me think...' },
-          { type: 'token', content: 'Answer' },
-          { type: 'done', content: 'Answer' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'reasoning', content: 'Let me think...' },
+            { type: 'token', content: 'Answer' },
+            { type: 'done', content: 'Answer' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

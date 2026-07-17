@@ -17,6 +17,11 @@ import {
 import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
 import { getMemoryDb } from '../../../src/services/memory/database';
 import { buildFactContentHash } from '../../../src/services/memory/facts/contentIdentity';
+import {
+  captureMemoryAuthoritySnapshot,
+  isRestrictiveMemoryAuthoritySnapshotCurrent,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../src/services/memory/memoryAuthority';
 import { retireExactMemorySources } from '../../../src/services/memory/sourceRetirementCoordinator';
 
 beforeEach(resetRetirementFixture);
@@ -32,6 +37,12 @@ function retire(
     retiredAt: 500,
     ...overrides,
   });
+}
+
+function requireContentAuthority() {
+  const authority = captureMemoryAuthoritySnapshot();
+  if (!authority) throw new Error('expected enabled memory authority');
+  return authority;
 }
 
 describe('exact source retirement coordinator', () => {
@@ -260,7 +271,11 @@ describe('exact source retirement coordinator', () => {
   it('returns a no-write idempotent result and supports mixed prior and new requests', () => {
     const prior = seedContribution('mixed-prior');
     const fresh = seedContribution('mixed-fresh', { predicate: '別の状態' });
+    const beforeFirstRetirement = requireContentAuthority();
     retire([prior.messageSource], { retirementGroupId: 'retirement-mixed-prior' });
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeFirstRetirement)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeFirstRetirement)).toBe(false);
+    const beforeReplay = requireContentAuthority();
     let notifications = 0;
     const unsubscribe = subscribeToMemoryChanges(() => {
       notifications += 1;
@@ -277,6 +292,8 @@ describe('exact source retirement coordinator', () => {
       rematerializedFactCount: 0,
     });
     expect(notifications).toBe(0);
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeReplay)).toBe(true);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeReplay)).toBe(true);
 
     const mixed = retire([prior.turnSource, fresh.messageSource], {
       retirementGroupId: 'retirement-mixed-new',

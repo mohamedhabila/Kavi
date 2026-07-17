@@ -3,7 +3,12 @@ import { runMemoryTransaction } from '../access/transaction';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryProvenanceId } from '../memoryProvenanceIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
-import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../memorySensitivityPolicy';
+import {
+  MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
+  requireMemorySensitivityDeclaration,
+  type MemorySensitivityDeclarationV1,
+} from '../memorySensitivityPolicy';
+import { advanceRestrictiveMemoryAuthorityInTransaction } from '../memoryAuthority';
 import {
   loadFactContributionReplay,
   type MemoryFactContributionWriteContext,
@@ -20,6 +25,7 @@ import {
   recordExactReplacementFactWithContributionInTransaction,
   recordFactWithApplicability,
 } from './mutations';
+import { RestrictedMemoryFactPersistenceError } from './errors';
 import {
   FactContributionMaterializationConflict,
   setFactSensitivityFloorInTransaction,
@@ -134,8 +140,14 @@ export function replaceCurrentFactWithContribution(
   input: ReplaceCurrentFactInput,
   applicability: SealedFactApplicabilityProvenance,
   context: MemoryFactContributionWriteContext,
+  sensitivityDeclaration: MemorySensitivityDeclarationV1,
 ): ReplaceCurrentFactResult {
-  return replaceCurrentFactInternal(input, applicability, context);
+  const declared = requireMemorySensitivityDeclaration(sensitivityDeclaration);
+  return replaceCurrentFactInternal(
+    { ...input, sensitivityFloor: declared.sensitivity },
+    applicability,
+    context,
+  );
 }
 
 function replaceCurrentFactInternal(
@@ -312,6 +324,9 @@ function replaceCurrentFactInternal(
         current.sensitivity_policy_version === MEMORY_FACT_SENSITIVITY_POLICY_VERSION
           ? (closedMemoryFactSensitivity(current.sensitivity) ?? 'restricted')
           : 'restricted';
+      if (inheritedSensitivity === 'restricted') {
+        throw new RestrictedMemoryFactPersistenceError();
+      }
       const inheritedFactClass = closedMemoryFactClass(current.fact_class);
       const inheritedSourceAuthority = closedMemorySourceAuthority(current.source_authority);
       if (!sealedApplicability && (!inheritedFactClass || !inheritedSourceAuthority)) {
@@ -372,6 +387,7 @@ function replaceCurrentFactInternal(
       const protectedCreated = contributionContext
         ? created.fact
         : setFactSensitivityFloorInTransaction(created.fact.id, inheritedSensitivity);
+      advanceRestrictiveMemoryAuthorityInTransaction(db, current.memory_owner_id!);
       return { fact: protectedCreated, status: 'created' as const, superseded: [superseded] };
     });
   } catch (error) {

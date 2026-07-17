@@ -13,8 +13,14 @@ export const VERIFIED_PROCEDURE_DESCRIPTOR_VERSION = 1 as const;
 export const VERIFIED_PROCEDURE_LINKAGE_VERSION = 1 as const;
 export const VERIFIED_PROCEDURE_VERIFIER_VERSION = 1 as const;
 
-export type VerifiedProcedureDescriptorKey = 'calendar-list-to-create-event';
-export type VerifiedProcedureStepKey = 'calendar-list' | 'calendar-create-event';
+export type VerifiedProcedureDescriptorKey =
+  | 'calendar-list-to-create-event'
+  | 'calendar-events-to-update-event';
+export type VerifiedProcedureStepKey =
+  | 'calendar-list'
+  | 'calendar-create-event'
+  | 'calendar-events'
+  | 'calendar-update-event';
 
 export type VerifiedProcedureStepDescriptor = Readonly<{
   stepKey: VerifiedProcedureStepKey;
@@ -29,21 +35,25 @@ export type VerifiedProcedureDescriptor = Readonly<{
   verifierVersion: typeof VERIFIED_PROCEDURE_VERIFIER_VERSION;
   procedureId: string;
   contractDigest: ToolEffectDigest;
-  preconditionResolverId: 'calendar-mobile-permission-and-tool-policy.v1';
-  sourceObservationPreconditionId: 'calendar.list.returned-writable-id.v1';
+  preconditionResolverId:
+    | 'calendar-create-mobile-permission-and-tool-policy.v1'
+    | 'calendar-update-mobile-permission-and-tool-policy.v1';
+  sourceObservationPreconditionId:
+    | 'calendar.list.returned-writable-id.v1'
+    | 'calendar.events.returned-event-id.v1';
   learningPolicy: typeof VERIFIED_PROCEDURE_POLICY_CONTRACT;
   steps: readonly [VerifiedProcedureStepDescriptor, VerifiedProcedureStepDescriptor];
   linkage: Readonly<{
-    sourceStepKey: 'calendar-list';
-    sourceResultSelector: 'literal-writable-calendar-id';
-    targetStepKey: 'calendar-create-event';
-    targetArgumentKey: 'calendarId';
+    sourceStepKey: VerifiedProcedureStepKey;
+    sourceResultSelector: 'literal-writable-calendar-id' | 'literal-calendar-event-id';
+    targetStepKey: VerifiedProcedureStepKey;
+    targetArgumentKey: 'calendarId' | 'id';
     cardinality: 'exactly-one-explicit-link';
   }>;
   verifier: Readonly<{
-    stepKey: 'calendar-create-event';
-    resultStatus: 'created_verified';
-    receiptEffectKind: 'calendar.create';
+    stepKey: VerifiedProcedureStepKey;
+    resultStatus: 'created_verified' | 'updated_verified';
+    receiptEffectKind: 'calendar.create' | 'calendar.update';
     receiptEffectState: 'applied';
     receiptVerificationState: 'verified';
   }>;
@@ -78,7 +88,24 @@ const CALENDAR_VERIFIER = Object.freeze({
   receiptVerificationState: 'verified' as const,
 });
 
-const PROCEDURE_ID_PREFIX = 'verified-procedure.calendar-list-to-create-event.v1.';
+const CALENDAR_UPDATE_LINKAGE = Object.freeze({
+  sourceStepKey: 'calendar-events' as const,
+  sourceResultSelector: 'literal-calendar-event-id' as const,
+  targetStepKey: 'calendar-update-event' as const,
+  targetArgumentKey: 'id' as const,
+  cardinality: 'exactly-one-explicit-link' as const,
+});
+
+const CALENDAR_UPDATE_VERIFIER = Object.freeze({
+  stepKey: 'calendar-update-event' as const,
+  resultStatus: 'updated_verified' as const,
+  receiptEffectKind: 'calendar.update' as const,
+  receiptEffectState: 'applied' as const,
+  receiptVerificationState: 'verified' as const,
+});
+
+const CREATE_PROCEDURE_ID_PREFIX = 'verified-procedure.calendar-list-to-create-event.v1.';
+const UPDATE_PROCEDURE_ID_PREFIX = 'verified-procedure.calendar-events-to-update-event.v1.';
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -123,7 +150,7 @@ async function buildCalendarDescriptor(): Promise<VerifiedProcedureDescriptor> {
     throw new Error('verified_procedure_calendar_contract_unavailable');
   }
 
-  const preconditionResolverId = 'calendar-mobile-permission-and-tool-policy.v1' as const;
+  const preconditionResolverId = 'calendar-create-mobile-permission-and-tool-policy.v1' as const;
   const sourceObservationPreconditionId = 'calendar.list.returned-writable-id.v1' as const;
   const contractDigest = await digestVerifiedProcedureIdentity({
     registryKey: 'calendar-list-to-create-event',
@@ -137,7 +164,7 @@ async function buildCalendarDescriptor(): Promise<VerifiedProcedureDescriptor> {
     linkage: CALENDAR_LINKAGE,
     verifier: CALENDAR_VERIFIER,
   });
-  const procedureId = `${PROCEDURE_ID_PREFIX}${contractDigest.slice('sha256:'.length)}`;
+  const procedureId = `${CREATE_PROCEDURE_ID_PREFIX}${contractDigest.slice('sha256:'.length)}`;
 
   return Object.freeze({
     registryKey: 'calendar-list-to-create-event',
@@ -166,6 +193,63 @@ async function buildCalendarDescriptor(): Promise<VerifiedProcedureDescriptor> {
   });
 }
 
+async function buildCalendarUpdateDescriptor(): Promise<VerifiedProcedureDescriptor> {
+  const [eventsIdentity, updateIdentity] = await Promise.all([
+    buildCodeOwnedToolContractIdentity('calendar_events'),
+    buildCodeOwnedToolContractIdentity('calendar_update_event'),
+  ]);
+  if (
+    !eventsIdentity ||
+    !updateIdentity ||
+    eventsIdentity.toolName !== 'calendar_events' ||
+    updateIdentity.toolName !== 'calendar_update_event'
+  ) {
+    throw new Error('verified_procedure_calendar_update_contract_unavailable');
+  }
+
+  const preconditionResolverId = 'calendar-update-mobile-permission-and-tool-policy.v1' as const;
+  const sourceObservationPreconditionId = 'calendar.events.returned-event-id.v1' as const;
+  const contractDigest = await digestVerifiedProcedureIdentity({
+    registryKey: 'calendar-events-to-update-event',
+    descriptorVersion: VERIFIED_PROCEDURE_DESCRIPTOR_VERSION,
+    linkageVersion: VERIFIED_PROCEDURE_LINKAGE_VERSION,
+    verifierVersion: VERIFIED_PROCEDURE_VERIFIER_VERSION,
+    preconditionResolverId,
+    sourceObservationPreconditionId,
+    learningPolicy: VERIFIED_PROCEDURE_POLICY_CONTRACT,
+    orderedContractIdentities: [eventsIdentity, updateIdentity],
+    linkage: CALENDAR_UPDATE_LINKAGE,
+    verifier: CALENDAR_UPDATE_VERIFIER,
+  });
+  const procedureId = `${UPDATE_PROCEDURE_ID_PREFIX}${contractDigest.slice('sha256:'.length)}`;
+
+  return Object.freeze({
+    registryKey: 'calendar-events-to-update-event',
+    descriptorVersion: VERIFIED_PROCEDURE_DESCRIPTOR_VERSION,
+    linkageVersion: VERIFIED_PROCEDURE_LINKAGE_VERSION,
+    verifierVersion: VERIFIED_PROCEDURE_VERIFIER_VERSION,
+    procedureId,
+    contractDigest,
+    preconditionResolverId,
+    sourceObservationPreconditionId,
+    learningPolicy: VERIFIED_PROCEDURE_POLICY_CONTRACT,
+    steps: Object.freeze([
+      Object.freeze({
+        stepKey: 'calendar-events' as const,
+        toolName: 'calendar_events',
+        contractIdentity: eventsIdentity,
+      }),
+      Object.freeze({
+        stepKey: 'calendar-update-event' as const,
+        toolName: 'calendar_update_event',
+        contractIdentity: updateIdentity,
+      }),
+    ]) as unknown as VerifiedProcedureDescriptor['steps'],
+    linkage: CALENDAR_UPDATE_LINKAGE,
+    verifier: CALENDAR_UPDATE_VERIFIER,
+  });
+}
+
 /** Resolves only descriptors owned by this source registry. */
 export async function getCurrentVerifiedProcedureDescriptor(
   registryKey: VerifiedProcedureDescriptorKey,
@@ -173,6 +257,8 @@ export async function getCurrentVerifiedProcedureDescriptor(
   switch (registryKey) {
     case 'calendar-list-to-create-event':
       return buildCalendarDescriptor();
+    case 'calendar-events-to-update-event':
+      return buildCalendarUpdateDescriptor();
     default:
       throw new Error('verified_procedure_registry_key_unknown');
   }
@@ -181,9 +267,12 @@ export async function getCurrentVerifiedProcedureDescriptor(
 export async function listCurrentVerifiedProcedureDescriptors(): Promise<
   readonly VerifiedProcedureDescriptor[]
 > {
-  return Object.freeze([
-    await getCurrentVerifiedProcedureDescriptor('calendar-list-to-create-event'),
-  ]);
+  return Object.freeze(
+    await Promise.all([
+      getCurrentVerifiedProcedureDescriptor('calendar-list-to-create-event'),
+      getCurrentVerifiedProcedureDescriptor('calendar-events-to-update-event'),
+    ]),
+  );
 }
 
 export function verifiedProcedureDescriptorMatches(

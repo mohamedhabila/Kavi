@@ -50,6 +50,7 @@ it('never persists migration provider proposals that bypass exact source admissi
           source_message_id: 'attacker-selected-source',
         }),
       ],
+      episode_sensitivity: 'normal',
       episode_summary: null,
       active_focus: null,
       open_threads: [],

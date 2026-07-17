@@ -1,3 +1,8 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import * as Crypto from 'expo-crypto';
 import { buildToolEffectReceipt } from '../../../src/engine/toolExecution/toolEffectReceipt';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
@@ -6,8 +11,29 @@ import {
   createVerifiedProcedureRunLedger,
   type VerifiedProcedureRawOutcome,
 } from '../../../src/services/memory/verifiedProcedure/runLedger';
+import { buildCurrentDurableModelEffectAuthority } from '../../helpers/modelTurnMemoryAuthority';
+import { closeMemoryDb } from '../../../src/services/memory/database';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
 const RUN_ID = 'verified-procedure-test-run';
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+beforeEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
+});
+
+afterEach(() => {
+  closeMemoryDb();
+  jest.restoreAllMocks();
+});
 
 async function receipt(params: {
   toolCallId: string;
@@ -118,15 +144,111 @@ async function createOutcome(
   };
 }
 
-async function ledger() {
-  return createVerifiedProcedureRunLedger({
-    registryKey: 'calendar-list-to-create-event',
+async function eventsOutcome(
+  params: {
+    iteration?: number;
+    batchIndex?: number;
+    toolCallId?: string;
+    eventId?: string;
+    resultText?: string;
+    recordedAt?: number;
+  } = {},
+): Promise<VerifiedProcedureRawOutcome> {
+  const argumentsText = JSON.stringify({
+    startDate: '2026-08-01T00:00:00.000Z',
+    endDate: '2026-08-02T00:00:00.000Z',
+  });
+  const resultText =
+    params.resultText ??
+    JSON.stringify([
+      {
+        id: params.eventId ?? 'private-event-id',
+        title: 'Private event title',
+        startDate: '2026-08-01T10:00:00.000Z',
+        endDate: '2026-08-01T11:00:00.000Z',
+      },
+    ]);
+  const toolCallId = params.toolCallId ?? 'events-call';
+  return {
+    iteration: params.iteration ?? 1,
+    batchIndex: params.batchIndex ?? 0,
+    toolCallId,
+    toolName: 'calendar_events',
+    argumentsText,
+    resultText,
+    receipt: await receipt({
+      toolCallId,
+      toolName: 'calendar_events',
+      argumentsText,
+      resultText,
+      recordedAt: params.recordedAt,
+    }),
+  };
+}
+
+async function updateOutcome(
+  params: {
+    iteration?: number;
+    batchIndex?: number;
+    toolCallId?: string;
+    eventId?: string;
+    resultEventId?: string;
+    recordedAt?: number;
+  } = {},
+): Promise<VerifiedProcedureRawOutcome> {
+  const eventId = params.eventId ?? 'private-event-id';
+  const argumentsText = JSON.stringify({
+    id: eventId,
+    startDate: '2026-08-01T12:00:00.000Z',
+    endDate: '2026-08-01T13:00:00.000Z',
+  });
+  const resultText = JSON.stringify({
+    status: 'updated_verified',
+    eventId: params.resultEventId ?? eventId,
+  });
+  const toolCallId = params.toolCallId ?? 'update-call';
+  return {
+    iteration: params.iteration ?? 2,
+    batchIndex: params.batchIndex ?? 0,
+    toolCallId,
+    toolName: 'calendar_update_event',
+    argumentsText,
+    resultText,
+    receipt: await receipt({
+      toolCallId,
+      toolName: 'calendar_update_event',
+      argumentsText,
+      resultText,
+      recordedAt: params.recordedAt ?? 200,
+    }),
+  };
+}
+
+async function ledger(
+  registryKey:
+    | 'calendar-list-to-create-event'
+    | 'calendar-events-to-update-event' = 'calendar-list-to-create-event',
+) {
+  const runLedger = await createVerifiedProcedureRunLedger({
+    registryKey,
     runId: RUN_ID,
   });
+  const authorityGuard = () => true;
+  return {
+    descriptor: runLedger.descriptor,
+    observe: (input: VerifiedProcedureRawOutcome) => runLedger.observe(input, authorityGuard),
+    markCancelled: () => runLedger.markCancelled(),
+    markAmbiguous: () => runLedger.markAmbiguous(),
+    finalize: () =>
+      runLedger.finalize({
+        isCurrent: authorityGuard,
+        modelEffectAuthorities: [buildCurrentDurableModelEffectAuthority()],
+      }),
+  };
 }
 
 function deferNextCryptoDigest() {
-  const digest = jest.mocked(Crypto.digestStringAsync);
+  const digest = jest.mocked(Crypto.digest);
   const original = digest.getMockImplementation();
   if (!original) throw new Error('crypto_digest_mock_unavailable');
   let releaseGate: () => void = () => undefined;
@@ -238,6 +360,48 @@ describe('verified procedure run ledger', () => {
       expect(serialized).not.toContain(privateValue);
     }
     expect(serialized).not.toMatch(/argumentsText|resultText|resource/u);
+  });
+
+  it('accepts one serial exact event lookup and verified update without retaining event data', async () => {
+    const runLedger = await ledger('calendar-events-to-update-event');
+
+    await expect(runLedger.observe(await eventsOutcome())).resolves.toEqual({
+      status: 'accepted',
+      stepKey: 'calendar-events',
+    });
+    await expect(runLedger.observe(await updateOutcome())).resolves.toEqual({
+      status: 'accepted',
+      stepKey: 'calendar-update-event',
+    });
+    const finalized = await runLedger.finalize();
+
+    expect(finalized).toMatchObject({
+      status: 'verified',
+      candidate: {
+        procedureId: expect.stringMatching(
+          /^verified-procedure\.calendar-events-to-update-event\.v1\./u,
+        ),
+        observedAt: 200,
+        steps: [
+          expect.objectContaining({ stepKey: 'calendar-events', iteration: 1 }),
+          expect.objectContaining({ stepKey: 'calendar-update-event', iteration: 2 }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(finalized);
+    expect(serialized).not.toContain('private-event-id');
+    expect(serialized).not.toContain('Private event title');
+  });
+
+  it('rejects an update whose event id was not observed in the current source result', async () => {
+    const runLedger = await ledger('calendar-events-to-update-event');
+    await runLedger.observe(await eventsOutcome({ eventId: 'observed-event' }));
+    await runLedger.observe(await updateOutcome({ eventId: 'different-event' }));
+
+    await expect(runLedger.finalize()).resolves.toEqual({
+      status: 'rejected',
+      reason: 'invalid_linkage',
+    });
   });
 
   it('recomputes request and result digests and rejects receipt or run substitution', async () => {

@@ -269,7 +269,11 @@ describe('applyConversationRunCompletionEffect', () => {
           role: 'assistant',
           content: 'Het resultaat is geverifieerd.',
           timestamp: 3,
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'stop',
+          },
         },
       ]);
       const updateAgentRunControlGraph = jest.fn();
@@ -307,14 +311,22 @@ describe('applyConversationRunCompletionEffect', () => {
             role: 'assistant',
             content: 'Oud antwoord.',
             timestamp: 2,
-            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
           },
           {
             id: 'new-incomplete',
             role: 'assistant',
             content: 'Nieuw antwoord is nog niet af',
             timestamp: 3,
-            assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'incomplete',
+              finishReason: 'response_failed',
+            },
           },
         ],
       ],
@@ -328,7 +340,11 @@ describe('applyConversationRunCompletionEffect', () => {
             role: 'assistant',
             content: 'Other answer.',
             timestamp: 3,
-            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
           },
         ],
       ],
@@ -377,7 +393,11 @@ describe('applyConversationRunCompletionEffect', () => {
           role: 'assistant',
           content: 'Het resultaat is geverifieerd.',
           timestamp: 3,
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'stop',
+          },
         },
       ]);
       delete conversation.agentRuns?.[0]?.controlGraph;

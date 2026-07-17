@@ -6,7 +6,7 @@
 
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
-  return makeExpoSqliteMock();
+  return makeExpoSqliteMock({ fileBacked: true });
 });
 
 import { getThinkingParams } from '../../src/engine/thinking';

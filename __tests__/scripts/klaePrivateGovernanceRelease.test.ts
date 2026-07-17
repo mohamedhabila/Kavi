@@ -37,7 +37,7 @@ describe('private KLAE release governance', () => {
 
   function validate() {
     return validatePrivateKlaeRelease({
-      projectRoot,
+      projectRoot: fixture.projectRoot,
       registryPath: fixture.registryPath,
       expected: fixture.expected,
     });

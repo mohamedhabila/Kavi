@@ -3,7 +3,7 @@ import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { clearEmbeddingCache } from './embeddings';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
-import { newId } from './schema';
+import { newId } from './schemaValues';
 import {
   assertNoActiveContributionForClosedSourcesInTransaction,
   loadCompleteActiveRetirementGraphInTransaction,
@@ -25,6 +25,7 @@ import {
 } from './sourceRetirementStore';
 import type { PersistedExactMemorySourceIdentity } from './exactMemorySourceIdentity';
 import type { MemoryDatabase } from './access/schemaGuard';
+import { advanceRestrictiveMemoryAuthorityInTransaction } from './memoryAuthority';
 
 const SOURCE_FENCE_PAGE_SIZE = 256;
 const LEDGER_PROBE_PAGE_SIZE = 128;
@@ -238,6 +239,7 @@ export function retireExactMemorySources(input: unknown): ExactSourceRetirementR
       retirementGroupId,
     });
     assertNoActiveContributionForClosedSourcesInTransaction(db, plan.closedSources);
+    advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
 
     const notificationConversation = oneNotificationConversation(plan.closedSources);
     runAfterMemoryTransactionCommit(() => {

@@ -17,6 +17,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -36,23 +37,18 @@ function makeCompleteEpisode(
   suffix: string,
   overrides: Partial<Parameters<typeof recordThreadLocalEpisode>[0]> = {},
 ) {
-  const messageIds = [`message-${suffix}-start`, `message-${suffix}-end`];
   const episode = recordThreadLocalEpisode({
     conversationId: 'root-conversation',
     threadId: `thread-${suffix}`,
     summary: `release continuity ${suffix}`,
-    messageIds,
-    sourceStartMessageId: `message-${suffix}-start`,
-    sourceEndMessageId: `message-${suffix}-end`,
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: `message-${suffix}-start`,
+      sourceAssistantMessageId: `message-${suffix}-end`,
+      userContent: 'Please continue the release work.',
+      assistantContent: 'The release work continued.',
+    }),
     startedAt: 90,
     endedAt: 100,
-    sensitivityEvidence: {
-      sourceMessages: [
-        { id: messageIds[0]!, role: 'user', content: 'Please continue the release work.' },
-        { id: messageIds[1]!, role: 'assistant', content: 'The release work continued.' },
-      ],
-      facts: [],
-    },
     now: 100,
     ...overrides,
   });
@@ -60,8 +56,13 @@ function makeCompleteEpisode(
   return episode;
 }
 
-function closedTurnEvidence(suffix: string, userContent: string) {
+function closedTurnEvidence(
+  suffix: string,
+  userContent: string,
+  declaredSensitivity: 'normal' | 'personal' | 'sensitive' = 'normal',
+) {
   return {
+    declaredSensitivity,
     sourceMessages: [
       { id: `message-${suffix}-start`, role: 'user' as const, content: userContent },
       {
@@ -126,6 +127,7 @@ describe('recallScopedEpisodesForQuery', () => {
         personaId: DEFAULT_MEMORY_PERSONA_ID,
         taskId: null,
         shareability: 'thread_only',
+        expiresAt: 800,
         boundAt: 100,
       },
       100,
@@ -140,6 +142,7 @@ describe('recallScopedEpisodesForQuery', () => {
         personaId: DEFAULT_MEMORY_PERSONA_ID,
         taskId: null,
         shareability: 'session_threads',
+        expiresAt: 650,
         boundAt: 100,
       },
       100,
@@ -165,6 +168,7 @@ describe('recallScopedEpisodesForQuery', () => {
     expect(result.selections[0]).toMatchObject({
       lane: 'current_thread',
       episode: { id: current.id },
+      policyExpiresAt: 800,
       authorizedOrigin: {
         memoryOwnerId: ownerId,
         memoryConversationId: 'root-conversation',
@@ -176,6 +180,7 @@ describe('recallScopedEpisodesForQuery', () => {
     expect(result.selections[1]).toMatchObject({
       lane: 'cross_thread',
       episode: { id: cross.id },
+      policyExpiresAt: 650,
       authorizedOrigin: {
         memoryOwnerId: ownerId,
         memoryConversationId: 'root-conversation',
@@ -259,7 +264,7 @@ describe('recallScopedEpisodesForQuery', () => {
     const privateEpisode = makeCompleteEpisode('private-current', {
       threadId: 'thread-current',
       summary: 'release current private episode',
-      sensitivityEvidence: closedTurnEvidence('private-current', 'My city is Delft.'),
+      sensitivityEvidence: closedTurnEvidence('private-current', 'My city is Delft.', 'personal'),
     });
     const sensitiveEpisode = makeCompleteEpisode('sensitive-current', {
       threadId: 'thread-current',
@@ -267,6 +272,7 @@ describe('recallScopedEpisodesForQuery', () => {
       sensitivityEvidence: closedTurnEvidence(
         'sensitive-current',
         'My passport number is P1234567.',
+        'sensitive',
       ),
     });
     bindCurrentEpisode(privateEpisode, ownerId);
@@ -311,7 +317,11 @@ describe('recallScopedEpisodesForQuery', () => {
         summary: `release continuity hidden ${index}`,
         endedAt: 120 + index,
         now: 120 + index,
-        sensitivityEvidence: closedTurnEvidence(suffix, 'My passport number is P1234567.'),
+        sensitivityEvidence: closedTurnEvidence(
+          suffix,
+          'My passport number is P1234567.',
+          'sensitive',
+        ),
       });
       bindCurrentEpisode(episode, ownerId);
     }

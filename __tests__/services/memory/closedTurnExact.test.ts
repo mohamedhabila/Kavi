@@ -8,7 +8,7 @@ function finalAssistant(id: string, timestamp: number): Message {
   return {
     id,
     role: 'assistant',
-    content: '',
+    content: 'Completed response.',
     timestamp,
     assistantMetadata: {
       kind: 'final',
@@ -33,7 +33,11 @@ describe('resolveClosedTurnEndingAt', () => {
         role: 'assistant',
         content: '',
         timestamp: 4,
-        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
       },
       { id: 'tool-result', role: 'tool', content: 'ok', timestamp: 5 },
       finalAssistant('current-assistant', 6),
@@ -72,8 +76,22 @@ describe('resolveClosedTurnEndingAt', () => {
 
   it.each([
     [undefined, 'source_end_not_closed'],
-    [{ kind: 'intermediate', completionStatus: 'complete' }, 'source_end_not_closed'],
-    [{ kind: 'final', completionStatus: 'incomplete' }, 'source_end_not_closed'],
+    [
+      { kind: 'intermediate', completionStatus: 'complete', finishReason: 'tool_calls' },
+      'source_end_not_closed',
+    ],
+    [
+      { kind: 'final', completionStatus: 'incomplete', finishReason: 'response_failed' },
+      'source_end_not_closed',
+    ],
+    [
+      {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'plausible_but_unowned_success',
+      },
+      'source_end_not_closed',
+    ],
     [
       { kind: 'final', completionStatus: 'complete', finishReason: 'yielded' },
       'source_end_not_closed',
@@ -89,6 +107,19 @@ describe('resolveClosedTurnEndingAt', () => {
     expectInvalid([assistant], assistant.id, reason);
   });
 
+  it('rejects empty and tool-carrying assistants as closed turn boundaries', () => {
+    const empty = { ...finalAssistant('empty', 1), content: '' };
+    const toolCarrying = {
+      ...finalAssistant('tool-carrying', 2),
+      toolCalls: [
+        { id: 'call-1', name: 'calendar_list', arguments: '{}', status: 'pending' as const },
+      ],
+    };
+
+    expectInvalid([empty], empty.id, 'source_end_not_closed');
+    expectInvalid([toolCarrying], toolCarrying.id, 'source_end_not_closed');
+  });
+
   it('never falls back to a previous final when the requested current turn is incomplete', () => {
     const messages: Message[] = [
       { id: 'prior-user', role: 'user', content: 'Prior.', timestamp: 1 },
@@ -99,7 +130,11 @@ describe('resolveClosedTurnEndingAt', () => {
         role: 'assistant',
         content: 'Partial.',
         timestamp: 4,
-        assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'incomplete',
+          finishReason: 'response_failed',
+        },
       },
     ];
     expectInvalid(messages, 'current-incomplete', 'source_end_not_closed');

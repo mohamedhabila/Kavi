@@ -4,6 +4,7 @@ import { recordFactWithContribution } from '../services/memory/facts/mutations';
 import type { SealedFactApplicabilityProvenance } from '../services/memory/facts/applicabilityProvenance';
 import type { RecordFactInput, RecordFactResult } from '../services/memory/facts/types';
 import { requireExactMemoryProvenanceId } from '../services/memory/memoryProvenanceIdentity';
+import { codeOwnedMemorySensitivityDeclaration } from '../services/memory/memorySensitivityPolicy';
 
 export const ACCEPTANCE_FACT_PRODUCER_IDS = {
   goalTaskUnification: 'acceptance_goal_task_v1',
@@ -70,14 +71,19 @@ export function recordAcceptanceFixtureFact(
   applicability: SealedFactApplicabilityProvenance,
   identity: AcceptanceFactContributionIdentity,
 ): RecordFactResult {
-  return recordFactWithContribution({ ...input, ...sourceField(identity) }, applicability, {
-    memoryConversationId: identity.memoryConversationId,
-    sourceThreadId: identity.sourceThreadId,
-    taskId: identity.taskId,
-    producer: {
-      producerId: identity.producerId,
-      producerEventId: buildProducerEventId(identity),
+  return recordFactWithContribution(
+    { ...input, ...sourceField(identity) },
+    applicability,
+    {
+      memoryConversationId: identity.memoryConversationId,
+      sourceThreadId: identity.sourceThreadId,
+      taskId: identity.taskId,
+      producer: {
+        producerId: identity.producerId,
+        producerEventId: buildProducerEventId(identity),
+      },
+      sourceAliases: [{ sourceKind: identity.sourceKind, sourceId: identity.sourceId }],
     },
-    sourceAliases: [{ sourceKind: identity.sourceKind, sourceId: identity.sourceId }],
-  });
+    codeOwnedMemorySensitivityDeclaration(),
+  );
 }

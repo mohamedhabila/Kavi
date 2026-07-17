@@ -65,14 +65,17 @@ describe('resolveConsolidationPath', () => {
         {
           message: {
             content:
-              '{"new_facts":[],"episode_summary":null,"active_focus":null,"open_threads":[],"notable":[]}',
+              '{"new_facts":[],"episode_summary":null,"episode_sensitivity":"normal","active_focus":null,"open_threads":[],"notable":[]}',
           },
         },
       ],
     });
     const path = await resolveConsolidationPath(makeProvider());
+    const requestDispatchGuard = jest.fn();
 
-    await expect(path.extractor?.('consolidate this turn')).resolves.toContain('new_facts');
+    await expect(
+      path.extractor?.('consolidate this turn', undefined, requestDispatchGuard),
+    ).resolves.toContain('new_facts');
     expect(mockSendMessage).toHaveBeenCalledWith(
       [{ role: 'user', content: 'consolidate this turn' }],
       expect.objectContaining({
@@ -89,6 +92,7 @@ describe('resolveConsolidationPath', () => {
             required: [
               'new_facts',
               'episode_summary',
+              'episode_sensitivity',
               'active_focus',
               'open_threads',
               'notable',
@@ -96,6 +100,7 @@ describe('resolveConsolidationPath', () => {
           }),
         }),
         signal: expect.any(AbortSignal),
+        requestDispatchGuard,
       }),
     );
   });

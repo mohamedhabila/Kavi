@@ -89,6 +89,8 @@ export interface AuthorizedCurrentThreadEpisodeSelection {
   episode: MemoryEpisode;
   lane: 'current_thread';
   authorizedOrigin: AuthorizedEpisodeOrigin;
+  /** Exact expiry of the access policy that authorized this prompt projection. */
+  policyExpiresAt: number | null;
   accessDecision: Readonly<{ authorized: true; reason: 'eligible' }>;
   relevanceScore: number;
 }
@@ -97,6 +99,8 @@ export interface AuthorizedCrossThreadEpisodeSelection {
   episode: MemoryEpisode;
   lane: 'cross_thread';
   authorizedOrigin: AuthorizedEpisodeOrigin & { taskId: null };
+  /** Exact expiry of the access policy that authorized this prompt projection. */
+  policyExpiresAt: number | null;
   accessDecision: Readonly<{ authorized: true; reason: 'eligible' }>;
   relevanceScore: number;
 }

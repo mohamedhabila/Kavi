@@ -22,6 +22,7 @@ import type {
   ExecutionRunRecord,
   ExecutionSurface,
 } from './types';
+import type { DurableModelEffectAuthority } from '../../engine/authority/modelTurnMemoryPolicyBinding';
 
 type GrantedAuthorityState = Extract<ExecutionApprovalState, 'granted' | 'not_required'>;
 
@@ -41,6 +42,17 @@ export interface ToolEffectDispatchJournalPlan {
   initialStateDigest: string;
   planningStateDigest: string;
   authorityStateDigest: string;
+  modelEffectAuthority: DurableModelEffectAuthority;
+}
+
+type IdentityInvariant = readonly [field: string, matches: boolean];
+
+function assertIdentityInvariants(invariants: readonly IdentityInvariant[]): void {
+  for (const [field, matches] of invariants) {
+    if (!matches) {
+      throw new Error(`effect_dispatch_identity_conflict:${field}`);
+    }
+  }
 }
 
 function latestCheckpoint(
@@ -71,27 +83,28 @@ export function readToolEffectDispatchSnapshot(
     identity.authorityCheckpointId,
   );
   const latest = latestCheckpoint(database, identity.runId);
-  if (
-    run.inputDigest !== identity.requestDigest ||
-    run.taskId !== identity.executionRunId ||
-    run.modelConfigDigest !== identity.dispatchTargetDigest ||
-    effect.toolCallId !== identity.toolCallId ||
-    effect.toolNameDigest !== identity.toolNameDigest ||
-    effect.toolContractIdentityDigest !== identity.toolContractIdentityDigest ||
-    effect.requestDigest !== identity.requestDigest ||
-    effect.idempotencyKeyDigest !== identity.idempotencyKeyDigest ||
-    effect.attempt !== identity.attempt ||
-    authorityCheckpoint.id !== identity.authorityCheckpointId
-  ) {
-    throw new Error('effect_dispatch_identity_conflict');
-  }
+  assertIdentityInvariants([
+    ['run_input_digest', run.inputDigest === identity.requestDigest],
+    ['run_task_id', run.taskId === identity.executionRunId],
+    ['run_model_config_digest', run.modelConfigDigest === identity.dispatchTargetDigest],
+    ['effect_tool_call_id', effect.toolCallId === identity.toolCallId],
+    ['effect_tool_name_digest', effect.toolNameDigest === identity.toolNameDigest],
+    [
+      'effect_tool_contract_identity_digest',
+      effect.toolContractIdentityDigest === identity.toolContractIdentityDigest,
+    ],
+    ['effect_request_digest', effect.requestDigest === identity.requestDigest],
+    ['effect_idempotency_key_digest', effect.idempotencyKeyDigest === identity.idempotencyKeyDigest],
+    ['effect_attempt', effect.attempt === identity.attempt],
+    ['authority_checkpoint_id', authorityCheckpoint.id === identity.authorityCheckpointId],
+  ]);
   return {
     run,
     effect,
     planningCheckpoint,
     authorityCheckpoint,
     latestCheckpointId: latest.id,
-    authorizationExpiresAt: null,
+    authorizationExpiresAt: effect.modelAuthorityValidUntil,
   };
 }
 
@@ -110,38 +123,43 @@ function assertPlanMatchesExisting(
     throw new Error('effect_dispatch_initial_checkpoint_missing');
   }
   const initialCheckpoint = decodeExecutionCheckpointRow(initialCheckpointRow);
-  if (
-    run.conversationId !== plan.conversationId ||
-    run.threadId !== plan.conversationId ||
-    run.taskId !== plan.identity.executionRunId ||
-    run.requestMessageId !== plan.identity.toolCallId ||
-    run.durabilityClass !== 'external_durable_operation' ||
-    run.requestedCapability !== plan.requestedCapability ||
-    run.executionSurface !== plan.executionSurface ||
-    run.resumeStrategy !== 'reconcile_first' ||
-    run.approvalState !== plan.approvalState ||
-    run.permissionState !== plan.permissionState ||
-    run.nextRetryPolicy !== plan.retryPolicy ||
-    effect.effectClass !== plan.effectClass ||
-    effect.idempotencyClass !== plan.idempotencyClass ||
-    effect.retryPolicy !== plan.retryPolicy ||
-    initialCheckpoint.id !== `effect-created-${plan.identity.effectId.slice('effect-'.length)}` ||
-    initialCheckpoint.sequence !== 0 ||
-    initialCheckpoint.boundary !== 'run_created' ||
-    initialCheckpoint.stateDigest !== plan.initialStateDigest ||
-    planningCheckpoint.id !== `effect-plan-${plan.identity.effectId.slice('effect-'.length)}` ||
-    planningCheckpoint.sequence !== 1 ||
-    planningCheckpoint.boundary !== 'before_effect' ||
-    planningCheckpoint.stateRefId !== planningCheckpoint.id ||
-    planningCheckpoint.stateDigest !== plan.planningStateDigest ||
-    authorityCheckpoint.id !== plan.identity.authorityCheckpointId ||
-    authorityCheckpoint.sequence !== 2 ||
-    authorityCheckpoint.boundary !== 'before_effect' ||
-    authorityCheckpoint.stateRefId !== authorityCheckpoint.id ||
-    authorityCheckpoint.stateDigest !== plan.authorityStateDigest
-  ) {
-    throw new Error('effect_dispatch_identity_conflict');
-  }
+  const expectedModelAuthorityValidUntil =
+    plan.modelEffectAuthority.kind === 'memory_epoch' ? plan.modelEffectAuthority.validUntil : null;
+  const effectSuffix = plan.identity.effectId.slice('effect-'.length);
+  assertIdentityInvariants([
+    ['plan_conversation_id', run.conversationId === plan.conversationId],
+    ['plan_thread_id', run.threadId === plan.conversationId],
+    ['plan_task_id', run.taskId === plan.identity.executionRunId],
+    ['plan_request_message_id', run.requestMessageId === plan.identity.toolCallId],
+    ['plan_durability_class', run.durabilityClass === 'external_durable_operation'],
+    ['plan_requested_capability', run.requestedCapability === plan.requestedCapability],
+    ['plan_execution_surface', run.executionSurface === plan.executionSurface],
+    ['plan_resume_strategy', run.resumeStrategy === 'reconcile_first'],
+    ['plan_approval_state', run.approvalState === plan.approvalState],
+    ['plan_permission_state', run.permissionState === plan.permissionState],
+    ['plan_retry_policy', run.nextRetryPolicy === plan.retryPolicy],
+    ['plan_effect_class', effect.effectClass === plan.effectClass],
+    ['plan_idempotency_class', effect.idempotencyClass === plan.idempotencyClass],
+    ['plan_effect_retry_policy', effect.retryPolicy === plan.retryPolicy],
+    [
+      'plan_model_authority_valid_until',
+      effect.modelAuthorityValidUntil === expectedModelAuthorityValidUntil,
+    ],
+    ['plan_initial_checkpoint_id', initialCheckpoint.id === `effect-created-${effectSuffix}`],
+    ['plan_initial_checkpoint_sequence', initialCheckpoint.sequence === 0],
+    ['plan_initial_checkpoint_boundary', initialCheckpoint.boundary === 'run_created'],
+    ['plan_initial_state_digest', initialCheckpoint.stateDigest === plan.initialStateDigest],
+    ['plan_planning_checkpoint_id', planningCheckpoint.id === `effect-plan-${effectSuffix}`],
+    ['plan_planning_checkpoint_sequence', planningCheckpoint.sequence === 1],
+    ['plan_planning_checkpoint_boundary', planningCheckpoint.boundary === 'before_effect'],
+    ['plan_planning_checkpoint_state_ref', planningCheckpoint.stateRefId === planningCheckpoint.id],
+    ['plan_planning_state_digest', planningCheckpoint.stateDigest === plan.planningStateDigest],
+    ['plan_authority_checkpoint_id', authorityCheckpoint.id === plan.identity.authorityCheckpointId],
+    ['plan_authority_checkpoint_sequence', authorityCheckpoint.sequence === 2],
+    ['plan_authority_checkpoint_boundary', authorityCheckpoint.boundary === 'before_effect'],
+    ['plan_authority_checkpoint_state_ref', authorityCheckpoint.stateRefId === authorityCheckpoint.id],
+    ['plan_authority_state_digest', authorityCheckpoint.stateDigest === plan.authorityStateDigest],
+  ]);
 }
 
 function insertPlannedJournal(
@@ -217,6 +235,10 @@ function insertPlannedJournal(
     idempotencyClass: plan.idempotencyClass,
     idempotencyKeyDigest: identity.idempotencyKeyDigest,
     requestDigest: identity.requestDigest,
+    modelAuthorityValidUntil:
+      plan.modelEffectAuthority.kind === 'memory_epoch'
+        ? plan.modelEffectAuthority.validUntil
+        : null,
     outcomeDigest: null,
     status: 'planned',
     retryPolicy: plan.retryPolicy,
@@ -240,9 +262,10 @@ function insertPlannedJournal(
     `INSERT INTO execution_effects (
        id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
        tool_contract_identity_digest, effect_class,
-       idempotency_class, idempotency_key_digest, request_digest, outcome_digest,
+       idempotency_class, idempotency_key_digest, request_digest,
+       model_authority_valid_until, outcome_digest,
        status, retry_policy, attempt, created_at, started_at, completed_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(effectRow(effect)),
   );
   insertCheckpoint(database, authorityCheckpoint);

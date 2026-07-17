@@ -61,6 +61,7 @@ export type ForegroundConversationRunStoreActions = Pick<
   | 'appendAgentRunCheckpoint'
   | 'applyConversationCompaction'
   | 'completeAgentRun'
+  | 'createConversation'
   | 'setAgentRunPhase'
   | 'startAgentRun'
   | 'transitionMessageMemoryPublication'

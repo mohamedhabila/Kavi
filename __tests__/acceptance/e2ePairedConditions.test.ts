@@ -282,7 +282,7 @@ describe('paired E2E condition contract', () => {
       conditionConfigHash: 'sha256:stale',
     } as E2EPairedConditionPlan;
     const plan = {
-      schemaVersion: 'e2e-paired-plan-v3',
+      schemaVersion: 'e2e-paired-plan-v4',
       pairId: 'tampered',
       comparison: {
         referenceCondition: 'production_auto',
@@ -302,15 +302,23 @@ describe('paired E2E condition contract', () => {
       makeCondition('production_auto', invariant, {
         interface: 'memory_remember',
         allowSeeding: true,
-        facts: [{ subject: 'user', predicate: 'preference', value: 'tea' }],
+        facts: [{ subject: 'user', predicate: 'preference', value: 'tea', sensitivity: 'normal' }],
       }),
     ).toThrow('only be supplied');
+    expect(() =>
+      makeCondition('oracle_evidence', invariant, {
+        interface: 'memory_remember',
+        allowSeeding: true,
+        facts: [{ subject: 'user', predicate: 'preference', value: 'tea' } as never],
+      }),
+    ).toThrow('sensitivity is unsupported');
 
     const duplicateFact = {
       subject: 'user',
       subjectType: 'self' as const,
       predicate: 'preference',
       value: 'tea',
+      sensitivity: 'normal' as const,
       confidence: 0.9,
       pinned: true,
       scope: 'global' as const,
@@ -334,6 +342,7 @@ describe('paired E2E condition contract', () => {
             subject: 'user',
             predicate: 'preference',
             value: 'tea',
+            sensitivity: 'normal',
             originConversationId: 'provider-controlled-origin',
             sourceRunId: 'provider-controlled-run',
           } as never,
@@ -349,6 +358,7 @@ describe('paired E2E condition contract', () => {
           subject: 'user',
           predicate: `fact-${index}`,
           value: 'value',
+          sensitivity: 'normal' as const,
         })),
       }),
     ).toThrow('at most 32');
@@ -361,6 +371,7 @@ describe('paired E2E condition contract', () => {
             subject: 'user',
             predicate: 'preference',
             value: 'tea',
+            sensitivity: 'normal',
             confidence: 2,
           },
         ],
@@ -375,6 +386,7 @@ describe('paired E2E condition contract', () => {
             subject: 'user',
             predicate: 'preference',
             value: 'tea',
+            sensitivity: 'normal',
             promptInjection: 'PRIVATE-ORACLE-PROMPT',
           } as never,
         ],

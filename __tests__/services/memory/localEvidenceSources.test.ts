@@ -23,6 +23,7 @@ function currentEpisode(id: string) {
     episode: episode(id),
     lane: 'current_thread' as const,
     authorizedOrigin: { ...currentScope, policyVersion: 1 as const },
+    policyExpiresAt: null,
     accessDecision: { authorized: true as const, reason: 'eligible' as const },
     relevanceScore: 1,
   };
@@ -52,6 +53,7 @@ describe('local evidence source derivation', () => {
         sourceThreadId: 'thread-1',
         lane: 'current_thread',
         authorizedOrigin: { ...currentScope, policyVersion: 1 },
+        policyExpiresAt: null,
         accessDecision: { authorized: true, reason: 'eligible' },
         relevanceScore: 1,
       },
@@ -78,6 +80,7 @@ describe('local evidence source derivation', () => {
         sourceThreadId: 'thread-1',
         lane: 'current_thread',
         authorizedOrigin: { ...currentScope, policyVersion: 1 },
+        policyExpiresAt: null,
         accessDecision: { authorized: true, reason: 'eligible' },
         relevanceScore: 1,
       },

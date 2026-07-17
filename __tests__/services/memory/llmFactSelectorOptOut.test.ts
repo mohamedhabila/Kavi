@@ -1,11 +1,21 @@
 const mockSendLlmMessage = jest.fn();
 
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 jest.mock('../../../src/services/llm/messageService', () => ({
   sendLlmMessage: (...args: unknown[]) => mockSendLlmMessage(...args),
 }));
 
 import { createLlmMemoryFactSelector } from '../../../src/services/memory/llmFactSelector';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
+import { closeMemoryDb } from '../../../src/services/memory/database';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
 import type { LlmProviderConfig } from '../../../src/types/provider';
@@ -22,6 +32,8 @@ const provider: LlmProviderConfig = {
   enabled: true,
   capabilityHints: { supportsStructuredOutput: true },
 };
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 function memoryFact(): MemoryFact {
   return {
@@ -75,12 +87,17 @@ function memoryFact(): MemoryFact {
 
 beforeEach(() => {
   mockSendLlmMessage.mockReset();
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
   initializeMemoryPolicyObservation();
 });
 
 afterEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
+  closeMemoryDb();
 });
 
 it('discards provider output when opt-out occurs while the provider is deferred', async () => {

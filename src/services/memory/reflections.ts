@@ -12,8 +12,14 @@ import { getFactByIdForRecallCandidate, listFactsForRecallPeriod } from './facts
 import { isMainInferenceActive, shouldAbortIngestionDueToMemoryPressure } from './onDeviceGuards';
 import { getOne } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
-import { newId, safeParseArray } from './schema';
+import { newId, safeParseArray } from './schemaValues';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
+import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/transaction';
+import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import {
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from './memoryAuthority';
 import {
   canFactEnterRecallCandidates,
   requireFactRecallAccessContext,
@@ -188,82 +194,95 @@ export function upsertReflection(input: UpsertReflectionInput): MemoryReflection
   const content = input.content.trim();
   if (!content) return null;
 
-  const db = getSchemaReadyMemoryDb();
-  const existing = db.getFirstSync<ReflectionRow>(
-    `SELECT * FROM memory_reflections
-       WHERE thread_id = ?
-         AND kind = ?
-         AND period_start = ?
-         AND deleted_at IS NULL
-       LIMIT 1`,
-    input.threadId,
-    input.kind,
-    input.periodStart,
-  );
-
-  if (existing) {
-    db.runSync(
-      `UPDATE memory_reflections
-         SET content = ?,
-             source_episode_ids_json = ?,
-             source_fact_ids_json = ?,
-             task_id = ?,
-             updated_at = ?
-       WHERE id = ?`,
-      content,
-      JSON.stringify(sourceEpisodeIds),
-      JSON.stringify(sourceFactIds),
-      input.taskId ?? null,
-      now,
-      existing.id,
+  return runMemoryTransaction(() => {
+    const db = getSchemaReadyMemoryDb();
+    const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+    const existing = db.getFirstSync<ReflectionRow>(
+      `SELECT * FROM memory_reflections
+         WHERE thread_id = ?
+           AND kind = ?
+           AND period_start = ?
+           AND deleted_at IS NULL
+         LIMIT 1`,
+      input.threadId,
+      input.kind,
+      input.periodStart,
     );
-    notifyStructuredMemoryChanged(input.threadId);
-    return rowToReflection({
-      ...existing,
+    const sourceEpisodeIdsJson = JSON.stringify(sourceEpisodeIds);
+    const sourceFactIdsJson = JSON.stringify(sourceFactIds);
+
+    if (existing) {
+      const changed =
+        existing.content !== content ||
+        existing.source_episode_ids_json !== sourceEpisodeIdsJson ||
+        existing.source_fact_ids_json !== sourceFactIdsJson ||
+        existing.task_id !== (input.taskId ?? null);
+      if (!changed) return rowToReflection(existing);
+      db.runSync(
+        `UPDATE memory_reflections
+           SET content = ?,
+               source_episode_ids_json = ?,
+               source_fact_ids_json = ?,
+               task_id = ?,
+               updated_at = ?
+         WHERE id = ?`,
+        content,
+        sourceEpisodeIdsJson,
+        sourceFactIdsJson,
+        input.taskId ?? null,
+        now,
+        existing.id,
+      );
+      advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
+      runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(input.threadId));
+      return rowToReflection({
+        ...existing,
+        content,
+        source_episode_ids_json: sourceEpisodeIdsJson,
+        source_fact_ids_json: sourceFactIdsJson,
+        task_id: input.taskId ?? null,
+        updated_at: now,
+      });
+    }
+
+    const reflection: MemoryReflection = {
+      id: newId('reflection'),
+      scope: input.scope,
+      threadId: input.threadId,
+      taskId: input.taskId ?? null,
+      periodStart,
+      periodEnd,
+      kind: input.kind,
       content,
-      source_episode_ids_json: JSON.stringify(sourceEpisodeIds),
-      source_fact_ids_json: JSON.stringify(sourceFactIds),
-      task_id: input.taskId ?? null,
-      updated_at: now,
-    });
-  }
+      sourceEpisodeIds,
+      sourceFactIds,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
 
-  const reflection: MemoryReflection = {
-    id: newId('reflection'),
-    scope: input.scope,
-    threadId: input.threadId,
-    taskId: input.taskId ?? null,
-    periodStart,
-    periodEnd,
-    kind: input.kind,
-    content,
-    sourceEpisodeIds,
-    sourceFactIds,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
-  };
-
-  db.runSync(
-    `INSERT INTO memory_reflections
-       (id, scope, thread_id, task_id, period_start, period_end, kind, content,
-        source_episode_ids_json, source_fact_ids_json, created_at, updated_at, deleted_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-    reflection.id,
-    reflection.scope,
-    reflection.threadId,
-    reflection.taskId,
-    reflection.periodStart,
-    reflection.periodEnd,
-    reflection.kind,
-    reflection.content,
-    JSON.stringify(reflection.sourceEpisodeIds),
-    JSON.stringify(reflection.sourceFactIds),
-    reflection.createdAt,
-    reflection.updatedAt,
-  );
-  notifyStructuredMemoryChanged(input.threadId);
-  return reflection;
+    db.runSync(
+      `INSERT INTO memory_reflections
+         (id, scope, thread_id, task_id, period_start, period_end, kind, content,
+          source_episode_ids_json, source_fact_ids_json, created_at, updated_at, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      reflection.id,
+      reflection.scope,
+      reflection.threadId,
+      reflection.taskId,
+      reflection.periodStart,
+      reflection.periodEnd,
+      reflection.kind,
+      reflection.content,
+      sourceEpisodeIdsJson,
+      sourceFactIdsJson,
+      reflection.createdAt,
+      reflection.updatedAt,
+    );
+    advanceMemoryProjectionInTransaction(db, memoryOwnerId);
+    runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(input.threadId));
+    return reflection;
+  });
 }
 
 export function getLatestReflection(params: {

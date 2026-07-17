@@ -9,6 +9,7 @@ import type { AgentControlTurnDirectives } from './agentControlGraph';
 import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
+import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
 
 export type LivingMemorySection = {
   text: string;
@@ -20,6 +21,8 @@ export type PromptContextSupport = {
   goalsPromptSection?: string | null;
   livingMemorySections?: ReadonlyArray<LivingMemorySection>;
   livingMemoryReadEpoch?: number;
+  livingMemoryAuthoritySnapshot?: MemoryAuthoritySnapshot;
+  livingMemoryValidUntil?: number;
   maxToolIterations: number;
   resolvedPrompt: string;
   runtimeContext?: string | null;

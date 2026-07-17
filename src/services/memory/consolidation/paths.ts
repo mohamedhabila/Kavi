@@ -69,7 +69,11 @@ function buildProviderExtractor(
   model: string,
 ): ConsolidatorExtractor {
   const llm = new LlmService(apiKey ? { ...provider, apiKey } : provider);
-  return async (prompt: string, externalSignal?: AbortSignal) => {
+  return async (
+    prompt: string,
+    externalSignal?: AbortSignal,
+    requestDispatchGuard?: () => void,
+  ) => {
     const timeoutSignal = createTimeoutSignal(MEMORY_EXTRACTOR_TIMEOUT_MS);
     const controller = new AbortController();
     const forwardAbort = () => controller.abort();
@@ -87,6 +91,7 @@ function buildProviderExtractor(
         reasoning_effort: 'none',
         structuredOutput: MEMORY_CONSOLIDATION_OUTPUT_SCHEMA,
         signal: controller.signal,
+        requestDispatchGuard,
       });
       return extractConsolidationAssistantText(response);
     } finally {

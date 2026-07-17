@@ -27,6 +27,8 @@ import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { EMPTY_MEMORY_WITHDRAWAL_COUNTS } from '../../../src/services/memory/withdrawalTypes';
 import { probeMemoryWithdrawalResiduals } from '../../../src/services/memory/withdrawalResidualProbe';
 import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+  codeOwnedClosedTurnEpisodeFields,
   loadVerifiedFactRetirement,
   recordContributionBackedFact,
   retirementLedgerCounts,
@@ -56,6 +58,7 @@ function recordScopedFact(value: string, sourceMessageId = 'message-old') {
       sourceThreadId: 'thread-1',
       taskId: 'task-1',
       producerEventId: `withdrawal-guard-${sourceMessageId}`,
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact;
 }
@@ -138,9 +141,12 @@ describe('memory withdrawal guards', () => {
       threadId: 'thread-1',
       taskId: 'task-1',
       summary: privateValue,
-      messageIds: ['message-old'],
-      sourceStartMessageId: 'message-old',
-      sourceEndMessageId: 'turn-old',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'message-old',
+        sourceAssistantMessageId: 'turn-old',
+        userContent: privateValue,
+        assistantContent: privateValue,
+      }),
       now: 300,
     });
     if (!episode) throw new Error('expected episode');
@@ -164,6 +170,7 @@ describe('memory withdrawal guards', () => {
     const result = forgetMemoryFactForManagement({ factId: fact.id });
 
     expect(result).toEqual({
+      status: 'failed_unknown',
       ok: false,
       code: 'internal',
       error: 'Memory withdrawal failed.',
@@ -217,6 +224,7 @@ describe('memory withdrawal guards', () => {
     const result = forgetMemoryFactForManagement({ factId: fact.id });
 
     expect(result).toEqual({
+      status: 'failed_unknown',
       ok: false,
       code: 'internal',
       error: 'Memory withdrawal failed.',
@@ -267,13 +275,17 @@ describe('memory withdrawal guards', () => {
         memoryConversationId: 'global-conversation',
         sourceThreadId: 'global-thread',
         producerEventId: 'withdrawal-guard-global',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
       },
     ).fact;
     const episode = recordThreadLocalEpisode({
       summary: 'private global episode',
-      messageIds: ['global-message'],
-      sourceStartMessageId: 'global-message',
-      sourceEndMessageId: 'global-turn',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'global-message',
+        sourceAssistantMessageId: 'global-turn',
+        userContent: 'private global episode',
+        assistantContent: 'private global episode',
+      }),
       now: 301,
     });
     if (!episode) throw new Error('expected global episode');
@@ -336,6 +348,7 @@ describe('memory withdrawal guards', () => {
         sourceThreadId: 'thread-1',
         taskId: 'task-1',
         producerEventId: 'withdrawal-guard-new-assertion',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
       },
     );
 
@@ -348,6 +361,83 @@ describe('memory withdrawal guards', () => {
           WHERE source_kind = 'message' AND source_id = 'message-new'`,
       )?.count,
     ).toBe(0);
+  });
+
+  it('withdraws the superseded predecessor lineage instead of reactivating an older value', () => {
+    const entity = upsertEntity({ name: 'airport-user', type: 'self', now: 100 });
+    const recordPreference = (value: string, suffix: string, now: number) =>
+      recordContributionBackedFact(
+        {
+          subjectId: entity.id,
+          predicate: 'airport_pickup_meeting_point',
+          objectText: value,
+          scope: 'global',
+          sourceMessageId: `message-${suffix}`,
+          sourceTurnId: `turn-${suffix}`,
+          sourceRunId: `run-${suffix}`,
+          supersedePrior: suffix !== 'north',
+          now,
+        },
+        {
+          memoryConversationId: `conversation-${suffix}`,
+          sourceThreadId: `thread-${suffix}`,
+          producerEventId: `withdrawal-guard-${suffix}`,
+          sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+        },
+      ).fact;
+    const north = recordPreference('North Gate', 'north', 200);
+    const south = recordPreference('South Gate', 'south', 300);
+    const central = recordPreference('Central Gate', 'central', 400);
+    const unrelated = recordContributionBackedFact(
+      {
+        subjectId: entity.id,
+        predicate: 'preferred_airline',
+        objectText: 'Example Air',
+        scope: 'global',
+        sourceMessageId: 'message-airline',
+        sourceTurnId: 'turn-airline',
+        sourceRunId: 'run-airline',
+        supersedePrior: false,
+        now: 450,
+      },
+      {
+        memoryConversationId: 'conversation-airline',
+        sourceThreadId: 'thread-airline',
+        producerEventId: 'withdrawal-guard-airline',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+      },
+    ).fact;
+
+    expect(
+      getMemoryDb()
+        .getAllSync<{ id: string }>(
+          `SELECT id FROM memory_facts
+            WHERE predicate = 'airport_pickup_meeting_point'
+              AND invalid_at IS NULL AND deleted_at IS NULL`,
+        )
+        .map((row) => row.id),
+    ).toEqual([central.id]);
+
+    const result = withdrawMemoryFact(central.id, 500);
+
+    expect(result.status).toBe('withdrawn');
+    if (result.status !== 'withdrawn') throw new Error('expected withdrawal');
+    expect(result.receipt.counts.facts).toBe(3);
+    expect(
+      getMemoryDb().getAllSync<{ id: string }>(
+        `SELECT id FROM memory_facts
+          WHERE id IN (?, ?, ?) OR predicate = 'airport_pickup_meeting_point'`,
+        north.id,
+        south.id,
+        central.id,
+      ),
+    ).toEqual([]);
+    expect(
+      getMemoryDb().getFirstSync('SELECT id FROM memory_facts WHERE id = ?', unrelated.id),
+    ).toEqual({ id: unrelated.id });
+    expect(loadVerifiedFactRetirement(central.id)?.retiredFactIds).toEqual(
+      [north.id, south.id, central.id].sort(),
+    );
   });
 
   it('audits exported evidence from the affected scope independently of source filters', () => {
@@ -371,6 +461,7 @@ describe('memory withdrawal guards', () => {
         sourceThreadId: 'thread-scoped-export',
         taskId: 'task-scoped-export',
         producerEventId: 'withdrawal-guard-scoped-export',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
       },
     ).fact;
     const probe = probeMemoryWithdrawalResiduals(getMemoryDb(), {

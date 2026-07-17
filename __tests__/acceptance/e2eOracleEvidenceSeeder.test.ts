@@ -81,6 +81,7 @@ describe('paired oracle evidence seeding', () => {
           subjectType: 'self',
           predicate: 'preference',
           value: 'tea',
+          sensitivity: 'personal',
           confidence: 0.9,
           importance: 0.8,
           pinned: true,
@@ -95,7 +96,7 @@ describe('paired oracle evidence seeding', () => {
         conversationId: 'isolated-thread',
         workspaceConversationId: 'isolated-workspace',
         executeTool,
-        readPersistedFact: () => persistedFact({ sourceMessageId }),
+        readPersistedFact: () => persistedFact({ sourceMessageId, sensitivity: 'personal' }),
         claimedAt: 1_700_000_000_000,
         seedRunId: 'e2e-oracle-seed-run-unit',
       }),
@@ -107,9 +108,8 @@ describe('paired oracle evidence seeding', () => {
       workspaceConversationId: 'isolated-workspace',
       args: {
         semanticEvidence: {
-          version: 3,
-          subject_ref: { kind: 'self' },
-          subject_type: 'self',
+          version: 4,
+          subject: { kind: 'self' },
           predicate: 'preference',
           value: 'tea',
           scope: 'conversation',
@@ -117,7 +117,7 @@ describe('paired oracle evidence seeding', () => {
           confidence: 0.9,
           operation: 'record',
           assertion_class: 'current_direct',
-          sensitivity: 'normal',
+          sensitivity: 'personal',
         },
         pinned: true,
       },
@@ -162,6 +162,7 @@ describe('paired oracle evidence seeding', () => {
             subjectType: 'self',
             predicate: 'preferred_channel',
             value: 'Signal',
+            sensitivity: 'normal',
             scope: 'global',
           },
         ],
@@ -186,7 +187,15 @@ describe('paired oracle evidence seeding', () => {
     const declaration: E2EOracleEvidenceDeclaration = {
       interface: 'memory_remember',
       allowSeeding: true,
-      facts: [{ subject: 'user', predicate: 'preference', value: 'tea', scope: 'global' }],
+      facts: [
+        {
+          subject: 'user',
+          predicate: 'preference',
+          value: 'tea',
+          sensitivity: 'normal',
+          scope: 'global',
+        },
+      ],
     };
     await expect(
       seedE2EOracleEvidence({
@@ -249,6 +258,7 @@ describe('paired oracle evidence seeding', () => {
           subject: 'user',
           predicate: 'preference',
           value: 'tea',
+          sensitivity: 'normal',
           scope: 'global',
           originConversationId: 'provider-controlled-origin',
         },
@@ -267,8 +277,8 @@ describe('paired oracle evidence seeding', () => {
       interface: 'memory_remember',
       allowSeeding: true,
       facts: [
-        { subject: 'user', predicate: 'preference', value: 'tea' },
-        { subject: 'user', predicate: 'preference', value: 'tea' },
+        { subject: 'user', predicate: 'preference', value: 'tea', sensitivity: 'normal' },
+        { subject: 'user', predicate: 'preference', value: 'tea', sensitivity: 'normal' },
       ],
     };
     await expect(
@@ -287,6 +297,7 @@ describe('paired oracle evidence seeding', () => {
         subject: 'user',
         predicate: `fact-${index}`,
         value: 'value',
+        sensitivity: 'normal' as const,
       })),
     };
     await expect(

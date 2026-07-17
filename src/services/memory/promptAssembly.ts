@@ -508,12 +508,12 @@ function renderFact(
       ? ` (confidence ${fact.confidence.toFixed(2)})`
       : '';
   const subject = fact.subjectLabel?.trim() || fact.subjectId;
+  const factId = ` factId=${fact.id}`;
   const source = fact.sourceRunId ? ` source=${fact.sourceRunId}` : '';
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   const kind = memoryKind === 'semantic_fact' ? '' : ` kind=${memoryKind}`;
   const applicability = renderMemoryApplicabilityMetadata(fact.applicability);
-  const meta =
-    kind || source || applicability ? ` [${`${kind}${source}${applicability}`.trim()}]` : '';
+  const meta = ` [${`${kind}${factId}${source}${applicability}`.trim()}]`;
   const maxChars =
     memoryKind === 'agent_run'
       ? MAX_RENDERED_AGENT_RUN_FACT_CHARS

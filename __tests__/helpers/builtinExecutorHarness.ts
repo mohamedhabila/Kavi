@@ -80,6 +80,14 @@ jest.mock('../../src/store/useSettingsStore', () => ({
   },
 }));
 
+jest.mock('../../src/services/memory/policy', () => ({
+  ...jest.requireActual('../../src/services/memory/policy'),
+  canReadLongTermMemory: jest.fn(() => true),
+  captureMemoryReadEpoch: jest.fn(() => 0),
+  isMemoryReadEpochCurrent: jest.fn(() => true),
+  isLongTermMemoryEnabled: jest.fn(() => true),
+}));
+
 // Mock voice
 jest.mock('../../src/services/voice/voice', () => ({
   startRecording: jest.fn().mockResolvedValue(undefined),

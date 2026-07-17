@@ -9,8 +9,8 @@ import {
 
 export const applyMockMessageMemoryPublicationTransition: ChatState['transitionMessageMemoryPublication'] =
   (conversationId, messageId, disposition) => {
-    const conversationIndexes = mockChatScreenState.conversations.flatMap(
-      (conversation, index) => (conversation.id === conversationId ? [index] : []),
+    const conversationIndexes = mockChatScreenState.conversations.flatMap((conversation, index) =>
+      conversation.id === conversationId ? [index] : [],
     );
     if (conversationIndexes.length === 0) {
       return { status: 'rejected', reason: 'source_unavailable' };
@@ -71,7 +71,7 @@ export const mockGetOrCreateCanonicalThread = jest.fn().mockReturnValue('new-con
 export const mockAddMessage = jest.fn();
 export const mockUpdateMessage = jest.fn();
 export const mockSetLoading = jest.fn();
-export const mockEditMessage = jest.fn();
+export const mockRewindUserMessageForResend = jest.fn();
 export const mockUpdateModelInConversation = jest.fn();
 export const mockSetActiveProviderAndModel = jest.fn();
 export const mockSetLastUsedModel = jest.fn();
@@ -113,7 +113,7 @@ jest.mock('../../src/store/useChatStore', () => {
     updateMessageAssistantMetadata: mockUpdateMessageAssistantMetadata,
     transitionMessageMemoryPublication: mockTransitionMessageMemoryPublication,
     updateMessageEffect: mockUpdateMessageEffect,
-    editMessage: mockEditMessage,
+    rewindUserMessageForResend: mockRewindUserMessageForResend,
     setLoading: mockSetLoading,
     addToolCall: mockAddToolCall,
     updateToolCallStatus: mockUpdateToolCallStatus,

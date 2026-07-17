@@ -933,7 +933,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       'Armazene com segurança os segredos necessários no dispositivo para que esta habilidade possa ser executada.',
     secretSaveFailed: 'Não foi possível salvar os segredos da habilidade. Tente novamente.',
     installBlocked: 'Instalação bloqueada',
-    installFailed: 'Failed to install skill.',
   },
   voice: {
     title: 'Voz',

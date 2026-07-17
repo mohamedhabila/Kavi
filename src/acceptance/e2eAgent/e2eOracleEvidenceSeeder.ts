@@ -3,7 +3,7 @@ import { createConversationFileContext } from '../../engine/tools/toolWorkspaceF
 import { getFactById } from '../../services/memory/facts/queries';
 import type { MemoryFact } from '../../services/memory/facts/types';
 import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
-import type { MemoryRememberSemanticEvidenceV3Input } from '../../services/memory/memoryRememberSemanticEvidence';
+import type { MemoryRememberSemanticEvidenceV4Input } from '../../services/memory/memoryRememberSemanticEvidence';
 import { isCanonicalSelfMemorySubject } from '../../services/memory/memorySubjectIdentity';
 import {
   validateE2EOracleEvidenceDeclaration,
@@ -13,6 +13,7 @@ import {
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
 import { requireExactMemoryProvenanceId } from '../../services/memory/memoryProvenanceIdentity';
+import { maxMemoryFactSensitivity } from '../../services/memory/memorySensitivityPolicy';
 import { generateId } from '../../utils/id';
 import type { ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
@@ -34,10 +35,15 @@ type OraclePersistedFactReader = (factId: string) => MemoryFact | null | undefin
 
 function buildIsolatedOracleFact(fact: Readonly<E2EOracleFactDeclaration>): MemoryRememberArgs {
   const selfSubject = isCanonicalSelfMemorySubject(fact.subject);
-  const semanticEvidence: MemoryRememberSemanticEvidenceV3Input = {
-    version: 3,
-    subject_ref: selfSubject ? { kind: 'self' } : { kind: 'named', label: fact.subject },
-    subject_type: selfSubject ? 'self' : (fact.subjectType ?? 'concept'),
+  const semanticEvidence: MemoryRememberSemanticEvidenceV4Input = {
+    version: 4,
+    subject: selfSubject
+      ? { kind: 'self' }
+      : {
+          kind: 'named',
+          label: fact.subject,
+          type: fact.subjectType && fact.subjectType !== 'self' ? fact.subjectType : 'concept',
+        },
     predicate: fact.predicate,
     value: fact.value,
     scope: 'conversation',
@@ -45,7 +51,7 @@ function buildIsolatedOracleFact(fact: Readonly<E2EOracleFactDeclaration>): Memo
     confidence: fact.confidence ?? 0.9,
     operation: 'record',
     assertion_class: 'current_direct',
-    sensitivity: 'normal',
+    sensitivity: fact.sensitivity,
   };
   return {
     semanticEvidence,
@@ -165,6 +171,8 @@ function validatePersistedSeed(
     fact.sourceSummary !== null ||
     fact.predicate !== expected.predicate ||
     fact.objectText !== expected.value ||
+    fact.sensitivity === 'restricted' ||
+    maxMemoryFactSensitivity(fact.sensitivity, expected.sensitivity) !== fact.sensitivity ||
     fact.factClass !==
       (isCanonicalSelfMemorySubject(expected.subject) ? 'subjective_user' : 'objective') ||
     fact.sourceAuthority !== 'grounded_user'

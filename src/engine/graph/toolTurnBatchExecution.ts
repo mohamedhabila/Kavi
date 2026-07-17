@@ -1,6 +1,6 @@
 import type { AgentGoal } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
-import type { ToolCall } from '../../types/message';
+import type { Message, ToolCall } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
 
 import { detectLoops, type ToolCallRecord } from '../loopDetection';
@@ -26,9 +26,18 @@ import { shouldExecuteToolBatchInParallel } from './toolBatchExecutionPolicy';
 import type { ToolExecutionOutcome } from './toolExecutionOutcomeResolution';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
+import {
+  assertModelTurnMemoryPolicyBindingDurablyCurrent,
+  type ModelTurnMemoryPolicyBinding,
+} from '../authority/modelTurnMemoryPolicyBinding';
+import {
+  bindCurrentTurnToolObservedMemoryEvidence,
+  collectCurrentRunCompletedToolResults,
+} from '../../services/memory/toolObservedMemoryEvidence';
 
 export async function executeAgentControlGraphToolBatch(params: {
   executableToolCalls: ReadonlyArray<PendingAgentToolCall>;
+  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   iteration: number;
   conversationId: string;
   activeProvider: LlmProviderConfig;
@@ -51,6 +60,8 @@ export async function executeAgentControlGraphToolBatch(params: {
   toolFilter?: (toolName: string) => boolean;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   groundedRequestScopedTools: ToolDefinition[];
+  memoryEvidenceToolDefinitions?: ReadonlyArray<ToolDefinition>;
+  workingMessages?: ReadonlyArray<Message>;
   completedWorkflowToolNames: Set<string>;
   emitPendingAsyncOperationsChange?: () => void;
   recordPerformanceMetrics: (metrics: Partial<AgentControlPerformance>, bucket: string) => void;
@@ -59,7 +70,9 @@ export async function executeAgentControlGraphToolBatch(params: {
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
+  onBatchCommitted: () => void;
 }): Promise<ToolExecutionOutcome[]> {
+  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
   const groundedToolNames = new Set(
     params.groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
   );
@@ -71,6 +84,7 @@ export async function executeAgentControlGraphToolBatch(params: {
   const hasGoalMutation = params.executableToolCalls.some(
     (toolCall) => normalizeToolName(toolCall.name) === GOAL_BOOTSTRAP_TOOL_NAME,
   );
+  const toolEvidenceWorkingMessages = [...(params.workingMessages ?? [])];
   const completionRequirements = await Promise.all(
     params.executableToolCalls.map((toolCall) =>
       resolveToolEffectCompletionRequirement({
@@ -112,6 +126,20 @@ export async function executeAgentControlGraphToolBatch(params: {
     _index: number,
     _context: { previewCompletedToolNames: ReadonlySet<string> },
   ): Promise<ToolExecutionOutcome> => {
+    const toolObservedMemoryEvidence = params.currentUserMessage
+      ? bindCurrentTurnToolObservedMemoryEvidence({
+          executionRunId: params.executionRunId,
+          currentUserMessageId: params.currentUserMessage.id,
+          workingMessages: toolEvidenceWorkingMessages,
+          executedToolDefinitions:
+            params.memoryEvidenceToolDefinitions ?? params.groundedRequestScopedTools,
+          currentRunCompletedToolResults: collectCurrentRunCompletedToolResults({
+            executionRunId: params.executionRunId,
+            workingMessages: toolEvidenceWorkingMessages,
+            toolCallHistory: params.toolCallHistory,
+          }),
+        })
+      : [];
     const outcome = await executeToolCallLifecycle({
       tc: toolCall,
       iteration: params.iteration,
@@ -121,6 +149,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       allProviders: params.allProviders,
       model: params.activeModel,
       currentUserMessage: params.currentUserMessage,
+      toolObservedMemoryEvidence,
       memoryConversationId: params.memoryConversationId,
       workspaceConversationId: params.workspaceConversationId,
       workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,
@@ -145,6 +174,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       controlGraphGoals: params.controlGraphGoals,
       agentRunId: params.agentRunId,
       executionRunId: params.executionRunId,
+      modelTurnMemoryPolicyBinding: params.memoryPolicyBinding,
       beforeEffectDispatch: params.beforeEffectDispatch,
       verifiedProcedureSession: params.verifiedProcedureSession,
       idPrefixes: {
@@ -159,18 +189,23 @@ export async function executeAgentControlGraphToolBatch(params: {
     const yieldResult = outcome.result
       ? parseAgentControlGraphSessionsYieldResult(outcome.effectiveToolName, outcome.result)
       : { yielded: false };
-    return {
+    const resolvedOutcome: ToolExecutionOutcome = {
       index: _index,
       toolCallId: toolCall.id,
       toolMessage: outcome.toolMessage,
       effectReceipt: outcome.effectReceipt,
       effectReconciliationRequired: outcome.effectReconciliationRequired,
+      effectDispatchObservation: outcome.effectDispatchObservation,
       yieldedMessage: yieldResult.yielded
         ? yieldResult.message || 'Waiting for background agent results.'
         : undefined,
       forceFinalText: yieldResult.forceFinalText,
       yieldCompletionNoteMessage: yieldResult.message,
     };
+    if (!executeBatchInParallel) {
+      toolEvidenceWorkingMessages.push(outcome.toolMessage);
+    }
+    return resolvedOutcome;
   };
 
   const executeBatchInParallel = shouldExecuteToolBatchInParallel(
@@ -178,15 +213,20 @@ export async function executeAgentControlGraphToolBatch(params: {
     params.controlGraphGoals,
     params.groundedRequestScopedTools,
   );
+  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
   await params.verifiedProcedureSession?.observePlannedBatch({
     iteration: params.iteration,
     executeInParallel: executeBatchInParallel,
+    memoryPolicyBinding: params.memoryPolicyBinding,
     toolCalls: params.executableToolCalls.map((toolCall, batchIndex) => ({
       batchIndex,
       toolCallId: toolCall.id,
       toolName: resolveRegisteredToolName(toolCall.name),
     })),
   });
+  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+  params.onBatchCommitted();
+  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
 
   return executeToolExecutionBatch({
     executableToolCalls: params.executableToolCalls,

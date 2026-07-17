@@ -93,6 +93,7 @@ const PASSING_EXTRACTOR = jest.fn(async (prompt: string) => {
   const source = currentUserSourceFromConsolidatorPrompt(prompt);
   return JSON.stringify({
     new_facts: [semanticFactProposalJson(source, { predicate: 'migration_memory' })],
+    episode_sensitivity: 'normal',
     episode_summary: null,
     active_focus: null,
     open_threads: [],
@@ -185,6 +186,7 @@ describe('seedConversation', () => {
             { predicate: 'migration_memory' },
           ),
         ],
+        episode_sensitivity: 'normal',
         episode_summary: null,
         active_focus: null,
         open_threads: [],
@@ -237,6 +239,7 @@ describe('seedConversation', () => {
     const extractor = jest.fn(async () =>
       JSON.stringify({
         new_facts: [],
+        episode_sensitivity: 'normal',
         episode_summary: 'Historical release context',
         active_focus: null,
         open_threads: [],
@@ -361,6 +364,7 @@ describe('seedConversation', () => {
     const extractor = async () =>
       JSON.stringify({
         new_facts: [],
+        episode_sensitivity: 'normal',
         episode_summary: null,
         active_focus: null,
         open_threads: ['Scoped follow-up'],
@@ -398,6 +402,7 @@ describe('seedConversation', () => {
       await firstGate;
       return JSON.stringify({
         new_facts: [],
+        episode_sensitivity: 'normal',
         episode_summary: null,
         active_focus: null,
         open_threads: ['stale owner write'],
@@ -407,6 +412,7 @@ describe('seedConversation', () => {
     const recoveredExtractor = jest.fn(async () =>
       JSON.stringify({
         new_facts: [],
+        episode_sensitivity: 'normal',
         episode_summary: null,
         active_focus: null,
         open_threads: ['recovered owner write'],
@@ -476,6 +482,7 @@ describe('runMigrationSeedPass', () => {
       await extractorGate;
       return JSON.stringify({
         new_facts: [],
+        episode_sensitivity: 'normal',
         episode_summary: null,
         active_focus: null,
         open_threads: [],
@@ -614,6 +621,7 @@ describe('runMigrationSeedPass', () => {
       if (flaky.mock.calls.length === 1) throw new Error('extractor down');
       return JSON.stringify({
         new_facts: [],
+        episode_sensitivity: 'normal',
         episode_summary: null,
         active_focus: null,
         open_threads: [],

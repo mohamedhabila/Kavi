@@ -22,6 +22,26 @@ jest.mock('../../src/services/context/tokenOptimization', () => {
 const mockedPrepareAgentTurn = jest.mocked(prepareAgentTurn);
 const mockedPlanIterationModel = jest.mocked(planIterationModel);
 
+const mockAdmittedMemoryAuthoritySnapshot = {
+  processEpochs: { restrictive: 0, projection: 0 },
+  restrictiveRevision: { kind: 'restrictive', memoryOwnerId: 'owner', value: 0 },
+  projectionRevision: { kind: 'projection', memoryOwnerId: 'owner', value: 0 },
+  policy: { enabled: true, revision: 0 },
+} as const;
+
+jest.mock('../../src/services/memory/memoryAuthority', () => ({
+  ...jest.requireActual('../../src/services/memory/memoryAuthority'),
+  captureMemoryAuthoritySnapshot: jest.fn(() => mockAdmittedMemoryAuthoritySnapshot),
+  isRestrictiveMemoryAuthoritySnapshotCurrent: jest.fn(() => true),
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent: jest.fn(() => true),
+}));
+
+jest.mock('../../src/services/memory/policy', () => ({
+  ...jest.requireActual('../../src/services/memory/policy'),
+  captureMemoryReadEpoch: jest.fn(() => 0),
+  isMemoryReadEpochCurrent: jest.fn((epoch: number) => epoch === 0),
+}));
+
 const writeTool = {
   name: 'write_file',
   description: 'Write a file.',
@@ -278,6 +298,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
         ...createBaseParams().promptContextSupport,
         livingMemorySections: [{ text: 'Living memory section' }],
         livingMemoryReadEpoch: 0,
+        livingMemoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
       },
       turnDirectives: {
         forceFinalText: true,
@@ -300,11 +321,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       }),
     );
     expect(result.preparedTurn.memoryReadFence).toMatchObject({ readEpoch: 0 });
-    expect(mockedPrepareAgentTurn.mock.calls[1]?.[0]).toEqual(
-      expect.objectContaining({
-        promptBundleContext: expect.objectContaining({ livingMemorySections: undefined }),
-      }),
-    );
+    expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
 
   it('keeps graph mutation available as the core empty-goal affordance', async () => {
@@ -365,6 +382,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
         ...createBaseParams().promptContextSupport,
         livingMemorySections: [{ text: 'Living memory section' }],
         livingMemoryReadEpoch: 0,
+        livingMemoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
       },
     });
 
@@ -377,7 +395,8 @@ describe('prepareAgentControlGraphModelTurn', () => {
     );
   });
 
-  it('carries an independently prepared memory-free prompt to the dispatch boundary', async () => {
+  it('carries the exact admitted memory authority to the dispatch boundary', async () => {
+    const validUntil = Date.now() + 60_000;
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,
@@ -404,22 +423,18 @@ describe('prepareAgentControlGraphModelTurn', () => {
         ...createBaseParams().promptContextSupport,
         livingMemorySections: [{ text: 'Private memory' }],
         livingMemoryReadEpoch: 0,
+        livingMemoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
+        livingMemoryValidUntil: validUntil,
       },
     });
 
     expect(result.preparedTurn.enrichedSystemPrompt).toBe('System with private memory');
     expect(result.preparedTurn.memoryReadFence).toMatchObject({
       readEpoch: 0,
-      memoryFreePrompt: {
-        enrichedSystemPrompt: 'Memory-free system',
-        enrichedSystemPromptSections: [{ text: 'Memory-free system' }],
-      },
-      memoryDisabledTurn: {
-        enrichedSystemPrompt: 'Memory-free system',
-        selectedTools: [writeTool],
-        toolsForIteration: [writeTool],
-      },
+      memoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
+      validUntil,
     });
+    expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
 
   it('drops living-memory sections from the model prompt when their read epoch is stale', async () => {
@@ -437,6 +452,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
         ...createBaseParams().promptContextSupport,
         livingMemorySections: [{ text: 'Private stale memory section' }],
         livingMemoryReadEpoch: -1,
+        livingMemoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
       },
     });
 

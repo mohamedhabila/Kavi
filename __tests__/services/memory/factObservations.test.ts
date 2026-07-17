@@ -22,6 +22,7 @@ import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNot
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
   recordContributionBackedFact,
   retirementLedgerCounts,
 } from '../../helpers/memoryRetirementTestFixtures';
@@ -74,6 +75,7 @@ function createObservationSource(sourceId: string, now: number): string {
       sourceThreadId: 'thread-1',
       taskId: 'task-1',
       producerEventId: `observation-source-${sourceId}`,
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact.id;
 }

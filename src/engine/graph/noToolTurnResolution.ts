@@ -9,18 +9,12 @@ import {
   normalizeCompletionFinishReason,
 } from '../../services/llm/support/completionRecovery';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
-import type { ToolDefinition } from '../../types/tool';
 import {
   getPendingTrackedAsyncOperations,
   type TrackedAsyncOperation,
 } from '../pendingAsyncOperations';
 import type { ToolCallRecord } from '../loopDetection';
 import { normalizeToolName } from '../tools/toolNameNormalization';
-import {
-  normalizeToolWorkflowContract,
-  type ToolWorkflowProduction,
-  workflowProductionSatisfiesConsumption,
-} from '../tools/toolWorkflowContracts';
 import type {
   AgentControlGraphEvent,
   AgentControlGraphSnapshot,
@@ -44,6 +38,17 @@ type NoToolTurnResolutionResult =
   | {
       status: 'finalized';
     };
+
+function requiresAgenticProgressValidation(
+  controlGraph: AgentControlGraphSnapshot,
+): boolean {
+  const routing = controlGraph.requestUnderstanding?.routing;
+  return (
+    routing?.status === 'known' &&
+    routing.mode === 'agentic' &&
+    routing.decisionAction === 'act'
+  );
+}
 
 function appendTrailingSystemMessage(
   workingMessages: Message[],
@@ -197,75 +202,6 @@ const EMPTY_FINAL_TEXT_FAILURE_REASON = 'empty_final_text_after_recovery';
 const EMPTY_FINAL_TEXT_FAILURE_MESSAGE =
   "I couldn't complete this request because the model returned no usable response after one recovery attempt. Please retry or choose another model.";
 
-function resolvePendingWorkflowContinuationToolNames(params: {
-  allTools: ReadonlyArray<ToolDefinition>;
-  selectedTools: ReadonlyArray<ToolDefinition>;
-  toolCallHistory?: ReadonlyArray<ToolCallRecord>;
-}): string[] {
-  if (params.selectedTools.length === 0) {
-    return [];
-  }
-
-  const registeredToolByName = new Map(
-    params.allTools
-      .map((tool): [string, ToolDefinition] => [normalizeToolName(tool.name), tool])
-      .filter(([toolName]) => Boolean(toolName)),
-  );
-  const unconsumedProductions: Array<{
-    producerName: string;
-    production: ToolWorkflowProduction;
-  }> = [];
-
-  for (const entry of params.toolCallHistory ?? []) {
-    const toolName = normalizeToolName(entry.name);
-    const tool = registeredToolByName.get(toolName);
-    if (!tool || entry.status === 'failed') {
-      continue;
-    }
-
-    const contract = normalizeToolWorkflowContract(tool.contract);
-    for (let index = unconsumedProductions.length - 1; index >= 0; index -= 1) {
-      const observedProduction = unconsumedProductions[index];
-      if (
-        observedProduction &&
-        contract.consumes.some((consumption) =>
-          workflowProductionSatisfiesConsumption(observedProduction.production, consumption),
-        )
-      ) {
-        unconsumedProductions.splice(index, 1);
-      }
-    }
-
-    for (const production of contract.produces) {
-      unconsumedProductions.push({ producerName: toolName, production });
-    }
-  }
-  if (unconsumedProductions.length === 0) {
-    return [];
-  }
-
-  const pendingToolNames: string[] = [];
-  for (const tool of params.selectedTools) {
-    const toolName = normalizeToolName(tool.name);
-    if (!toolName) {
-      continue;
-    }
-    const consumesObservedResource = normalizeToolWorkflowContract(tool.contract).consumes.some(
-      (consumption) =>
-        unconsumedProductions.some(
-          ({ producerName, production }) =>
-            producerName !== toolName &&
-            workflowProductionSatisfiesConsumption(production, consumption),
-        ),
-    );
-    if (consumesObservedResource) {
-      pendingToolNames.push(toolName);
-    }
-  }
-
-  return Array.from(new Set(pendingToolNames));
-}
-
 async function continueNoToolTurn(params: {
   commandReason: CompletionGateHoldReason;
   commit?: () => void;
@@ -293,8 +229,6 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
   toolingEnabledForProvider: boolean;
   selectedToolCount: number;
   selectedToolNames: ReadonlySet<string>;
-  selectedTools: ReadonlyArray<ToolDefinition>;
-  allTools: ReadonlyArray<ToolDefinition>;
   effectiveForceTextThisTurn: boolean;
   recoveryDirectives: AgentControlTurnDirectives;
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;
@@ -443,13 +377,11 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
       fullContent: params.turnAssistantContent,
       recoveryDirectives: params.recoveryDirectives,
       toolCallHistory: params.toolCallHistory,
-      pendingWorkflowContinuationToolNames: resolvePendingWorkflowContinuationToolNames({
-        allTools: params.allTools,
-        selectedTools: params.selectedTools,
-        toolCallHistory: params.toolCallHistory,
-      }),
       completion: params.completion,
       nextFinalizationMaxTokens: params.nextFinalizationMaxTokens,
+      requiresAgenticProgressValidation: requiresAgenticProgressValidation(
+        params.controlGraph,
+      ),
     });
 
   let gateDecision = evaluateGate(params.controlGraph.goals);

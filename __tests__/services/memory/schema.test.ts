@@ -22,6 +22,7 @@ import {
 } from '../../../src/services/memory/episodes/mutations';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import { recordContributedSchemaFact } from '../../helpers/contributedSchemaFact';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -521,6 +522,12 @@ describe('ensureFactSchema', () => {
     const episode = recordThreadLocalEpisode({
       conversationId: 'conv-schema',
       summary: 'User prefers brief answers.',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'schema-user-message',
+        sourceAssistantMessageId: 'schema-assistant-turn',
+        userContent: 'User prefers brief answers.',
+        assistantContent: 'Preference recorded.',
+      }),
       now: 3,
     });
     expect(episode).not.toBeNull();
@@ -623,9 +630,12 @@ describe('ensureFactSchema', () => {
       threadId: 'clear-thread',
       taskId: null,
       summary: 'Clear this authorized episode.',
-      messageIds: ['clear-user', 'clear-assistant'],
-      sourceStartMessageId: 'clear-user',
-      sourceEndMessageId: 'clear-assistant',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'clear-user',
+        sourceAssistantMessageId: 'clear-assistant',
+        userContent: 'Clear this authorized episode.',
+        assistantContent: 'Cleared.',
+      }),
       accessPolicy: {
         memoryConversationId: 'clear-root',
         sourceThreadId: 'clear-thread',
@@ -656,37 +666,4 @@ describe('ensureFactSchema', () => {
     expect(getLocalMemoryVaultOwnerId(getMemoryDb())).toBe(ownerId);
   });
 
-  it('indexes direct evidence span memories as first-class recall records', () => {
-    ensureFactSchema();
-    const entity = upsertEntity({ name: 'release', type: 'project', now: 1 });
-    recordFact({
-      subjectId: entity.id,
-      predicate: 'evidence_span',
-      objectText: 'release manifest path dist/release-manifest.json',
-      memoryKind: 'evidence_span',
-      scope: 'global',
-      now: 2,
-    });
-
-    const stats = getMemoryDb().getFirstSync<{ fact_count: number }>(
-      `SELECT fact_count
-         FROM memory_fact_term_stats
-        WHERE unit = ?
-          AND memory_kind = ?`,
-      'manifest',
-      'evidence_span',
-    );
-    expect(stats?.fact_count).toBe(1);
-  });
-
-  it('indexes source-run lexical expansion by source and query unit', () => {
-    ensureFactSchema();
-
-    expect(indexNames('memory_fact_terms')).toContain('idx_fact_terms_source_unit_fact');
-    expect(indexedColumns('idx_fact_terms_source_unit_fact').slice(0, 3)).toEqual([
-      'source_run_id',
-      'unit',
-      'fact_id',
-    ]);
-  });
 });

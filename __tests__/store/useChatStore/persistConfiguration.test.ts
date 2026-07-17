@@ -130,7 +130,7 @@ describe('useChatStore', () => {
       expect(byId['side'].archivedFromMigration).not.toBe(true);
     });
 
-    it('migrates legacy assistant messages to explicit assistant metadata', async () => {
+    it('does not invent completion metadata for legacy assistant messages', async () => {
       const persistOptions = (useChatStore as any).persist.getOptions();
       const migrated = await persistOptions.migrate(
         {
@@ -167,20 +167,8 @@ describe('useChatStore', () => {
         3,
       );
 
-      expect(migrated.conversations[0].messages[1].assistantMetadata).toEqual(
-        expect.objectContaining({
-          kind: 'intermediate',
-          completionStatus: 'complete',
-          finishReason: 'legacy_migration',
-        }),
-      );
-      expect(migrated.conversations[0].messages[2].assistantMetadata).toEqual(
-        expect.objectContaining({
-          kind: 'final',
-          completionStatus: 'complete',
-          finishReason: 'legacy_migration',
-        }),
-      );
+      expect(migrated.conversations[0].messages[1].assistantMetadata).toBeUndefined();
+      expect(migrated.conversations[0].messages[2].assistantMetadata).toBeUndefined();
     });
 
     it('normalizes same-version persisted replay metadata during merge', () => {

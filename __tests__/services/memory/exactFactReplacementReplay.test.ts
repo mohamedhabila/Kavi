@@ -16,8 +16,10 @@ import {
 import { loadFactExplicitOverrideInTransaction } from '../../../src/services/memory/factExplicitOverrideState';
 import { decodeMemoryFactContributionPayload } from '../../../src/services/memory/factContributionCodec';
 import type { MemoryFactContributionWriteContext } from '../../../src/services/memory/factContributionStore';
-import { replaceCurrentFactWithContribution } from '../../../src/services/memory/facts/exactReplacement';
-import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
+import {
+  recordCodeOwnedTestFactWithContribution as recordFactWithContribution,
+  replaceCodeOwnedTestFactWithContribution as replaceCurrentFactWithContribution,
+} from '../../helpers/factContributionWriteFixtures';
 import type {
   MemoryFact,
   RecordFactInput,
@@ -301,6 +303,7 @@ describe('contributed exact replacement replay', () => {
       }),
       grounded,
       contributionContext('later-duplicate-event', 3),
+      'sensitive',
     );
     getMemoryDb().runSync(
       `UPDATE memory_facts

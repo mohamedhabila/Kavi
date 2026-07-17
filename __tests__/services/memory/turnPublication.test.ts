@@ -31,7 +31,7 @@ const messages: Message[] = [
     role: 'assistant',
     content: 'I will remember alpha.',
     timestamp: 2,
-    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
   },
   { id: 'user-new', role: 'user', content: 'Remember beta.', timestamp: 3 },
   {
@@ -39,7 +39,7 @@ const messages: Message[] = [
     role: 'assistant',
     content: 'I will remember beta.',
     timestamp: 4,
-    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
   },
 ];
 
@@ -147,7 +147,7 @@ describe('publishConversationTurnMemory', () => {
           role: 'assistant',
           content: 'Gamma is captured.',
           timestamp: 2,
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
         },
         {
           id: 'assistant-later',
@@ -180,7 +180,11 @@ describe('publishConversationTurnMemory', () => {
           role: 'assistant',
           content: '',
           timestamp: 2,
-          assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'incomplete',
+            finishReason: 'response_failed',
+          },
         },
       ],
     });

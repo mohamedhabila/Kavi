@@ -123,6 +123,7 @@ function providerPayload(value: string): string {
         sensitivity: 'normal',
       },
     ],
+    episode_sensitivity: 'normal',
     episode_summary: `Provider confirmed ${value}.`,
     active_focus: null,
     open_threads: [],

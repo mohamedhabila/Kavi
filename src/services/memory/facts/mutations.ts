@@ -1,5 +1,6 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
-import { newId, safeParseObject } from '../schema';
+import { newId, safeParseObject } from '../schemaValues';
+import { RestrictedMemoryFactPersistenceError } from './errors';
 import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
 import { MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES } from '../factContributionChildCommitments';
@@ -15,8 +16,10 @@ import { overlayFactExplicitProjectionInTransaction } from '../factExplicitOverr
 import {
   classifyMemoryFactSensitivity,
   MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
+  requireMemorySensitivityDeclaration,
+  type MemorySensitivityDeclarationV1,
 } from '../memorySensitivityPolicy';
-import { replaceFactRetrievalTerms } from './retrievalIndex';
+import { replaceFactRetrievalTermsInTransaction } from './retrievalIndex';
 import { buildFactContentHash, hasExactFactContentIdentity } from './contentIdentity';
 import {
   mergeDuplicateProvenance,
@@ -53,7 +56,11 @@ import {
   type RecordFactInput,
   type RecordFactResult,
 } from './types';
-import type { MemoryFactContributionPayloadV1 } from '../factContributionCodec';
+import type { MemoryFactContributionPayloadV2 } from '../factContributionCodec';
+import {
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from '../memoryAuthority';
 
 function hasExactSupersessionScopeIdentity(
   fact: FactRow,
@@ -120,9 +127,16 @@ export function recordFactWithContribution(
   input: RecordFactInput,
   applicability: SealedFactApplicabilityProvenance,
   context: MemoryFactContributionWriteContext,
+  sensitivityDeclaration: MemorySensitivityDeclarationV1,
 ): RecordFactResult {
+  const declared = requireMemorySensitivityDeclaration(sensitivityDeclaration);
   return runMemoryTransaction(
-    () => recordFactWithContributionInTransaction(input, applicability, context).result,
+    () =>
+      recordFactWithContributionInTransaction(
+        { ...input, sensitivityFloor: declared.sensitivity },
+        applicability,
+        context,
+      ).result,
   );
 }
 
@@ -177,7 +191,7 @@ function recordNormalizedFactWithContributionInTransaction(
   input: RecordFactInput,
   applicability: SealedFactApplicabilityProvenance,
   context: MemoryFactContributionWriteContext,
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   options: RecordFactWithContributionOptions,
 ): {
   result: RecordFactResult;
@@ -237,7 +251,7 @@ function recordFactInTransaction(
 }
 
 function recordNormalizedFactInTransaction(
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   incomingIsSealed: boolean,
   expectedReplayFactId?: string,
 ): RecordFactResult {
@@ -260,19 +274,19 @@ function recordNormalizedFactInTransaction(
     stability,
     validAt,
   } = input;
-  const subject = db.getFirstSync<{ canonical_name: string; type: string }>(
-    'SELECT canonical_name, type FROM memory_entities WHERE id = ? LIMIT 1',
+  const subject = db.getFirstSync<{ canonical_name: string }>(
+    'SELECT canonical_name FROM memory_entities WHERE id = ? LIMIT 1',
     input.subjectId,
   );
   const sensitivity = classifyMemoryFactSensitivity({
+    declaredSensitivity: input.sensitivityFloor,
     subject: subject?.canonical_name,
-    subjectType: subject?.type,
     predicate,
     objectText,
     attributes: input.attributes,
     sourceSummary: input.sourceSummary,
-    memoryKind,
   });
+  if (sensitivity === 'restricted') throw new RestrictedMemoryFactPersistenceError();
   const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
   const normalizedInput = {
     ...input,
@@ -337,17 +351,17 @@ function recordNormalizedFactInTransaction(
     const nextReviewState = mergeDuplicateReviewState(existingReviewState, reviewState);
     const merged = { ...safeParseObject(existing.attributes), ...(input.attributes ?? {}) };
     const duplicateSensitivity = classifyMemoryFactSensitivity({
+      declaredSensitivity: input.sensitivityFloor,
       subject: subject?.canonical_name,
-      subjectType: subject?.type,
       predicate: existing.predicate,
       objectText: existing.object_text,
       attributes: merged,
       sourceSummary: [existing.source_summary, input.sourceSummary]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .join('\n'),
-      memoryKind,
     });
     const nextSensitivity = mergeDuplicateSensitivity(existingSensitivity, duplicateSensitivity);
+    if (nextSensitivity === 'restricted') throw new RestrictedMemoryFactPersistenceError();
     const nextProvenance = mergeDuplicateProvenance({
       existingFactClass,
       existingSourceAuthority,
@@ -389,6 +403,16 @@ function recordNormalizedFactInTransaction(
       if ((repaired.changes ?? 0) !== 1) {
         throw new Error('memory_fact_duplicate_projection_update_failed');
       }
+      const restrictiveProjectionChanged =
+        effectiveProjection.reviewState !== existing.review_state ||
+        effectiveProjection.sensitivity !== existing.sensitivity ||
+        nextProvenance.factClass !== existing.fact_class ||
+        nextProvenance.sourceAuthority !== existing.source_authority;
+      if (restrictiveProjectionChanged) {
+        advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
+      } else {
+        advanceMemoryProjectionInTransaction(db, memoryOwnerId);
+      }
       const fact = rowToFact({
         ...existing,
         pinned: effectiveProjection.pinned ? 1 : 0,
@@ -413,6 +437,28 @@ function recordNormalizedFactInTransaction(
       }),
     );
     const serializedLocalSimilarity = serializeCurrentLocalSimilarityVector(localSimilarity);
+    const existingAttributes = safeParseObject(existing.attributes);
+    const attributesChanged = JSON.stringify(merged) !== existing.attributes;
+    const attributesReplaceExistingProjection = Object.keys(existingAttributes).some(
+      (key) => JSON.stringify(existingAttributes[key]) !== JSON.stringify(merged[key]),
+    );
+    const restrictiveProjectionChanged =
+      attributesReplaceExistingProjection ||
+      effectiveProjection.reviewState !== existing.review_state ||
+      effectiveProjection.sensitivity !== existing.sensitivity ||
+      nextProvenance.factClass !== existing.fact_class ||
+      nextProvenance.sourceAuthority !== existing.source_authority ||
+      memoryKind !== existing.memory_kind;
+    const retrievalProjectionChanged =
+      attributesChanged ||
+      Math.max(existing.confidence, confidence) !== existing.confidence ||
+      Math.max(existing.importance ?? 0.5, importance) !== (existing.importance ?? 0.5) ||
+      Math.max(existing.retrievability ?? 1, retrievability) !== (existing.retrievability ?? 1) ||
+      Math.max(existing.stability ?? 0.5, stability) !== (existing.stability ?? 0.5) ||
+      Math.min(existing.decay_rate ?? 0.03, decayRate) !== (existing.decay_rate ?? 0.03) ||
+      metadataChanged ||
+      memoryKind !== existing.memory_kind ||
+      reinforcementIncrement > 0;
     db.runSync(
       `UPDATE memory_facts
          SET attributes = ?,
@@ -481,7 +527,12 @@ function recordNormalizedFactInTransaction(
       last_reinforced_at: lastReinforcedAt,
       last_accessed_at: lastAccessedAt,
     });
-    replaceFactRetrievalTerms(fact);
+    replaceFactRetrievalTermsInTransaction(db, fact);
+    if (restrictiveProjectionChanged) {
+      advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
+    } else if (retrievalProjectionChanged) {
+      advanceMemoryProjectionInTransaction(db, memoryOwnerId);
+    }
     runAfterMemoryTransactionCommit(() =>
       notifyStructuredMemoryChanged(existing.origin_conversation_id),
     );
@@ -638,7 +689,12 @@ function recordNormalizedFactInTransaction(
     MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
     fact.memoryKind,
   );
-  replaceFactRetrievalTerms(fact);
+  replaceFactRetrievalTermsInTransaction(db, fact);
+  if (superseded.length > 0) {
+    advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
+  } else {
+    advanceMemoryProjectionInTransaction(db, memoryOwnerId);
+  }
   runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(fact.originConversationId));
   return { fact, status: 'created', superseded };
 }

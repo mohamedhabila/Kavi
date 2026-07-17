@@ -1,19 +1,30 @@
 import { estimateTokens } from '../../../services/context/tokenCounter';
 import { isMemoryReadEpochCurrent } from '../../../services/memory/policy';
 import type { VerifiedProcedureExecutionSession } from '../../../services/memory/verifiedProcedure/executionSession';
-import { isVerifiedProcedureObservationRevisionCurrent } from '../../../services/memory/verifiedProcedure/observationRevision';
+import { isVerifiedProcedureProjectionSnapshotDurablyCurrent } from '../../../services/memory/verifiedProcedure/observationAuthority';
+import {
+  captureMemoryAuthoritySnapshot,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../services/memory/memoryAuthority';
+import {
+  earliestFutureMemoryValidityDeadline,
+  isMemoryValidityDeadlineCurrent,
+} from '../../../services/memory/memoryValidityDeadline';
 import {
   joinSystemPromptSections,
   orderSystemPromptSectionsForCaching,
 } from '../../prompts/orchestratorPromptSections';
 import type { PreparedAgentTurn } from '../agentTurnPreparation';
-import {
-  buildMemoryDisabledPolicyIndependentTurn,
-  isPreparedMemoryReadCurrent,
-  removeLivingMemoryFromPreparedTurn,
-} from './memoryPromptDispatchFence';
+import { isPreparedMemoryReadCurrent } from './memoryPromptDispatchFence';
+import { MemoryPromptEpochExpiredError } from '../../authority/modelTurnMemoryPolicyBinding';
 
 export const VERIFIED_PROCEDURE_ADVISORY_MAX_TOKENS = 320;
+
+function assertPreparedMemoryReadCurrent(preparedTurn: PreparedAgentTurn): void {
+  if (!isPreparedMemoryReadCurrent(preparedTurn)) {
+    throw new MemoryPromptEpochExpiredError();
+  }
+}
 
 /**
  * Appends only code-owned, same-run applicable procedure evidence. The section
@@ -23,38 +34,44 @@ export async function appendVerifiedProcedureAdvisoryPrompt(
   preparedTurn: PreparedAgentTurn,
   session: VerifiedProcedureExecutionSession | undefined,
 ): Promise<PreparedAgentTurn> {
+  assertPreparedMemoryReadCurrent(preparedTurn);
   if (!session || !preparedTurn.toolsForIteration?.length) {
-    return isPreparedMemoryReadCurrent(preparedTurn)
-      ? preparedTurn
-      : removeLivingMemoryFromPreparedTurn(preparedTurn);
+    return preparedTurn;
   }
 
   const advisory = await session.buildApplicableAdvisory(preparedTurn.toolsForIteration);
+  assertPreparedMemoryReadCurrent(preparedTurn);
   if (!advisory) {
-    return isPreparedMemoryReadCurrent(preparedTurn)
-      ? preparedTurn
-      : removeLivingMemoryFromPreparedTurn(preparedTurn);
+    return preparedTurn;
+  }
+  if (estimateTokens(advisory.section) > VERIFIED_PROCEDURE_ADVISORY_MAX_TOKENS) {
+    return preparedTurn;
   }
   if (
-    estimateTokens(advisory.section) > VERIFIED_PROCEDURE_ADVISORY_MAX_TOKENS ||
     !isMemoryReadEpochCurrent(advisory.readEpoch) ||
-    !isVerifiedProcedureObservationRevisionCurrent(advisory.observationRevision) ||
+    !isVerifiedProcedureProjectionSnapshotDurablyCurrent(advisory.authoritySnapshot) ||
+    !isMemoryValidityDeadlineCurrent(advisory.validUntil) ||
     (preparedTurn.memoryReadFence !== undefined &&
       preparedTurn.memoryReadFence.readEpoch !== advisory.readEpoch)
   ) {
-    return removeLivingMemoryFromPreparedTurn(preparedTurn);
+    throw new MemoryPromptEpochExpiredError();
   }
 
-  const memoryFreePrompt = preparedTurn.memoryReadFence?.memoryFreePrompt ?? {
-    enrichedSystemPrompt: preparedTurn.enrichedSystemPrompt,
-    enrichedSystemPromptSections: preparedTurn.enrichedSystemPromptSections,
-  };
-  const memoryDisabledTurn =
-    preparedTurn.memoryReadFence?.memoryDisabledTurn ??
-    buildMemoryDisabledPolicyIndependentTurn(preparedTurn);
+  const memoryAuthoritySnapshot =
+    preparedTurn.memoryReadFence?.memoryAuthoritySnapshot ?? captureMemoryAuthoritySnapshot();
+  if (
+    !memoryAuthoritySnapshot ||
+    !isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(memoryAuthoritySnapshot)
+  ) {
+    throw new MemoryPromptEpochExpiredError();
+  }
+  const validUntil = earliestFutureMemoryValidityDeadline(
+    [preparedTurn.memoryReadFence?.validUntil, advisory.validUntil],
+    Date.now(),
+  );
   const enrichedSystemPromptSections = orderSystemPromptSectionsForCaching([
     ...preparedTurn.enrichedSystemPromptSections,
-    { text: advisory.section, cacheable: false },
+    { text: advisory.section, cacheable: false, purpose: 'verified_procedure' },
   ]);
   const augmented: PreparedAgentTurn = {
     ...preparedTurn,
@@ -62,13 +79,18 @@ export async function appendVerifiedProcedureAdvisoryPrompt(
     enrichedSystemPromptSections,
     memoryReadFence: {
       readEpoch: advisory.readEpoch,
-      verifiedProcedureObservationRevision: advisory.observationRevision,
-      memoryFreePrompt,
-      memoryDisabledTurn,
+      memoryAuthoritySnapshot,
+      ...(validUntil === undefined ? {} : { validUntil }),
+      verifiedProcedureAuthoritySnapshot: advisory.authoritySnapshot,
     },
   };
-  return isMemoryReadEpochCurrent(advisory.readEpoch) &&
-    isVerifiedProcedureObservationRevisionCurrent(advisory.observationRevision)
-    ? augmented
-    : removeLivingMemoryFromPreparedTurn(augmented);
+  if (
+    !isMemoryReadEpochCurrent(advisory.readEpoch) ||
+    !isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(memoryAuthoritySnapshot) ||
+    !isVerifiedProcedureProjectionSnapshotDurablyCurrent(advisory.authoritySnapshot) ||
+    !isMemoryValidityDeadlineCurrent(validUntil)
+  ) {
+    throw new MemoryPromptEpochExpiredError();
+  }
+  return augmented;
 }

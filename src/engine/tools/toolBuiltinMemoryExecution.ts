@@ -153,6 +153,9 @@ function withExecutionMemoryContext(
       userMessageId: currentUserMessage.id,
       userMessageText: currentUserMessage.text,
     },
+    ...(context?.toolObservedMemoryEvidence?.length
+      ? { toolObservedEvidence: context.toolObservedMemoryEvidence }
+      : {}),
   };
   return { args: source as MemoryRememberArgs, context: rememberContext };
 }

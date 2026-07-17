@@ -231,7 +231,7 @@ describe('memory ingestion receipt integration', () => {
         role: 'assistant',
         content: 'I will remember that.',
         timestamp: 300,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
     ];
     const job = enqueueIngestionJob({
@@ -278,6 +278,7 @@ describe('memory ingestion receipt integration', () => {
               sensitivity: 'personal',
             },
           ],
+          episode_sensitivity: 'normal',
           episode_summary: null,
           active_focus: null,
           open_threads: [],

@@ -34,10 +34,7 @@ import { processIngestionTurn } from '../../../src/services/memory/turnProcessor
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 import { createTestIngestionJobEnqueuer } from '../../helpers/ingestionSourceSnapshotFixture';
-import {
-  commitMockedProviderFinalReceipt,
-  commitMockedStructuralReceipt,
-} from '../../helpers/ingestionQueueProcessFixture';
+import { commitMockedStructuralReceipt } from '../../helpers/ingestionQueueProcessFixture';
 
 const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestionJob);
 
@@ -137,45 +134,41 @@ afterEach(async () => {
 });
 
 describe('ingestion queue resource-aware preemption', () => {
-  it('lets checkpointed remote enrichment finish across foreground inference', async () => {
+  it('preempts checkpointed remote enrichment for foreground inference', async () => {
     setResolvedProvider(REMOTE_PROVIDER);
     let markAttemptStarted: (() => void) | undefined;
     const attemptStarted = new Promise<void>((resolve) => {
       markAttemptStarted = resolve;
     });
-    let finishProvider: ((result: ReturnType<typeof processResult>) => void) | undefined;
-    const providerResult = new Promise<ReturnType<typeof processResult>>((resolve) => {
-      finishProvider = resolve;
-    });
     let providerSignal: AbortSignal | undefined;
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
-      const structural = commitMockedStructuralReceipt(
-        input,
-        processResult({ status: 'not_requested' }),
-      );
+      commitMockedStructuralReceipt(input, processResult({ status: 'not_requested' }));
       providerSignal = input.providerSignal;
       markAttemptStarted?.();
-      const result = await providerResult;
-      commitMockedProviderFinalReceipt(input, result, structural);
-      return result;
+      await new Promise<void>((resolve) => {
+        input.providerSignal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      return {
+        ...processResult({ status: 'not_requested' }),
+        processed: false,
+        skipped: 'provider_preempted',
+      };
     });
-    const job = enqueueJob('remote-survives');
+    const job = enqueueJob('remote-preempted');
 
     scheduleIngestionDrain({});
     jest.runAllTicks();
     await attemptStarted;
-    const inferenceLease = acquireMainInferenceLease('foreground:remote-survives');
-
-    expect(providerSignal?.aborted).toBe(false);
-    expect(getIngestionJob(job.id)).toEqual(
-      expect.objectContaining({ status: 'processing', structuralCompletedAt: 100 }),
-    );
-
-    finishProvider?.(processResult({ status: 'valid' }));
+    const inferenceLease = acquireMainInferenceLease('foreground:remote-preempted');
     await flushScheduledIngestion();
 
+    expect(providerSignal?.aborted).toBe(true);
     expect(getIngestionJob(job.id)).toEqual(
-      expect.objectContaining({ status: 'completed_enriched', providerOutcome: 'valid' }),
+      expect.objectContaining({
+        status: 'retrying',
+        outcomeCode: 'processing_incomplete',
+        structuralCompletedAt: 100,
+      }),
     );
     inferenceLease.release();
   });

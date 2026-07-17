@@ -23,7 +23,7 @@ const priorTurn: Message[] = [
     role: 'assistant',
     content: 'Understood.',
     timestamp: 2,
-    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
   },
 ];
 const currentTurn: Message[] = [
@@ -33,7 +33,7 @@ const currentTurn: Message[] = [
     role: 'assistant',
     content: 'Done.',
     timestamp: 4,
-    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
   },
 ];
 

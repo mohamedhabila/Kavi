@@ -67,6 +67,10 @@ const mockedGetIngestionJob = jest.mocked(getIngestionJob);
 const mockedDrainIngestionQueueWithWakeup = jest.mocked(drainIngestionQueueWithWakeup);
 const mockedCancelScheduledIngestionDrain = jest.mocked(cancelScheduledIngestionDrain);
 const mockedListIngestionDurabilityReceipts = jest.mocked(listIngestionDurabilityReceipts);
+const completeFinalMetadata = buildAssistantMessageMetadata('final', {
+  completionStatus: 'complete',
+  finishReason: 'stop',
+});
 
 describe('runForegroundScenario', () => {
   beforeEach(async () => {
@@ -119,7 +123,7 @@ describe('runForegroundScenario', () => {
         `Response ${responseSequence}`,
         undefined,
         undefined,
-        buildAssistantMessageMetadata('final'),
+        completeFinalMetadata,
       );
       callbacks.onAgentControlGraphStateChange(
         createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
@@ -186,7 +190,7 @@ describe('runForegroundScenario', () => {
       finalAssistant: {
         text: 'Response 1',
         completionStatus: 'complete',
-        finishReason: null,
+        finishReason: 'stop',
         terminalReason: null,
       },
       finalAssistantCandidateCount: 1,
@@ -371,6 +375,38 @@ describe('runForegroundScenario', () => {
     });
   });
 
+  it('reports passive memory settlement separately from foreground completion', async () => {
+    mockedGetIngestionJob.mockReturnValue({
+      ...makeCompletedJob('job-1'),
+      status: 'processing',
+      structuralCompletedAt: null,
+      completedAt: null,
+    });
+
+    const result = await runForegroundScenario({
+      provider: makeProvider('scenario-provider'),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
+      memoryTimeoutMs: 5,
+      turns: [{ content: 'How are you?', route: 'production_auto' }],
+    });
+
+    expect(result.turns[0]).toMatchObject({
+      error: null,
+      completion: {
+        executionCompleted: true,
+        finalResponseCompleted: true,
+      },
+      memory: [],
+      memoryEvidence: {
+        settlementError: 'Timed out waiting for memory ingestion job job-1.',
+      },
+    });
+  });
+
   it('applies the product memory opt-out, exact tool surface, and pre-turn identity hook', async () => {
     const beforeTurns = jest.fn(async () => {
       expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
@@ -489,7 +525,7 @@ describe('runForegroundScenario', () => {
         role: 'assistant',
         content: 'First final.',
         timestamp: 1,
-        assistantMetadata: buildAssistantMessageMetadata('final'),
+        assistantMetadata: completeFinalMetadata,
       },
       {
         id: 'assistant-second',

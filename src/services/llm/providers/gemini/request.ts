@@ -303,14 +303,7 @@ export function buildGeminiRequestBody(args: {
 
 export function shouldRetryGeminiStructuredOutputWithLegacySyntax(
   status: number,
-  errorText: string,
   body: Record<string, any>,
 ): boolean {
-  if (status !== 400 || !body.generationConfig?.responseFormat) {
-    return false;
-  }
-
-  return /unknown name\s+["']?responseFormat["']?|cannot find field/i.test(
-    errorText,
-  );
+  return status === 400 && Boolean(body.generationConfig?.responseFormat);
 }

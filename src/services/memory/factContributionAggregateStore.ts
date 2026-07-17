@@ -15,7 +15,7 @@ import {
   MEMORY_FACT_CONTRIBUTION_LIMITS,
   normalizeMemoryFactContributionSourceScope,
   requireMemoryFactContributionProducerIdentity,
-  type MemoryFactContributionPayloadV1,
+  type MemoryFactContributionPayloadV2,
   type MemoryFactContributionSourceAlias,
   type MemoryFactContributionSourceScope,
 } from './factContributionCodec';
@@ -154,7 +154,7 @@ function requireCommitment(input: {
 }
 
 function assertPayloadScope(
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   scope: MemoryFactContributionSourceScope,
 ): void {
   const fact = payload.input;
@@ -269,10 +269,7 @@ function requireFactEvidence(
   const reviewState = closedMemoryFactReviewState(row.review_state) ?? fail();
   const sensitivity = closedMemoryFactSensitivity(row.sensitivity) ?? fail();
   const sensitivityPolicyVersion = requireTimestamp(row.sensitivity_policy_version);
-  if (
-    sensitivityPolicyVersion < 1 ||
-    sensitivityPolicyVersion > MEMORY_FACT_SENSITIVITY_POLICY_VERSION
-  ) {
+  if (sensitivityPolicyVersion !== MEMORY_FACT_SENSITIVITY_POLICY_VERSION) {
     return fail();
   }
   const subjectName = row.subject_name === null ? null : requireString(row.subject_name);
@@ -301,7 +298,7 @@ function requireFactEvidence(
   });
   return {
     evidence,
-    classifierContext: Object.freeze({ subject: subjectName, subjectType }),
+    classifierContext: Object.freeze({ subject: subjectName }),
     explicitProjection: allowRepairableProjectionDrift
       ? requireFactContributionExplicitProjectionForReplay(row, evidence)
       : requireFactContributionExplicitProjection(row, evidence),
@@ -331,7 +328,7 @@ function exactAliasKey(alias: MemoryFactContributionSourceAlias): string {
 }
 
 function assertPayloadAliases(
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   aliases: ReadonlyArray<MemoryFactContributionSourceAlias>,
 ): void {
   const keys = new Set(aliases.map(exactAliasKey));

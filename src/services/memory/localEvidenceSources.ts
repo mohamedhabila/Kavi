@@ -21,9 +21,7 @@ export function deriveLocalEvidenceSources(
 ): ScopedLocalEvidenceSource[] {
   const sources: ScopedLocalEvidenceSource[] = [];
   const seen = new Set<string>();
-  const appendCurrent = (
-    source: Exclude<LocalEvidenceSource, { kind: 'episode' }>,
-  ): void => {
+  const appendCurrent = (source: Exclude<LocalEvidenceSource, { kind: 'episode' }>): void => {
     const scope = currentScope;
     const key = `${scope.memoryConversationId}:${scope.sourceThreadId}:${sourceKey(source)}`;
     if (seen.has(key)) return;
@@ -53,6 +51,7 @@ export function deriveLocalEvidenceSources(
           sourceThreadId: selection.authorizedOrigin.sourceThreadId,
           lane: selection.lane,
           authorizedOrigin: selection.authorizedOrigin,
+          policyExpiresAt: selection.policyExpiresAt,
           accessDecision: selection.accessDecision,
           relevanceScore: selection.relevanceScore,
         });

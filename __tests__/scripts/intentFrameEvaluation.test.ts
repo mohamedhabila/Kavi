@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { createPrivateEvaluationCliProject } from '../helpers/privateEvaluationCliProject';
 
 const {
   aggregateIntentFrameEvaluation,
@@ -19,15 +20,6 @@ const fixturePath = path.join(__dirname, '../fixtures/intent-frame-synthetic.jso
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function removeEmptyDirectory(directory: string): void {
-  try {
-    fs.rmdirSync(directory);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT' && code !== 'ENOTEMPTY') throw error;
-  }
 }
 
 function loadFixture(): any {
@@ -132,9 +124,7 @@ describe('evaluator-only intent frame', () => {
     expect(digestIntentFrameProjection(input.cases, 'candidate')).toBe(
       input.source.candidateArtifactSha256,
     );
-    expect(digestIntentFrameProjection(input.cases, 'gold')).toBe(
-      input.source.goldLabelsSha256,
-    );
+    expect(digestIntentFrameProjection(input.cases, 'gold')).toBe(input.source.goldLabelsSha256);
   });
 
   it('binds both frozen projections to case identity and request identity', () => {
@@ -228,7 +218,9 @@ describe('evaluator-only intent frame', () => {
     expect(serialized).not.toContain('candidate"');
     expect(serialized).not.toContain('gold"');
     expect(serialized).not.toContain('multiple_valid_interpretations');
-    expect(serialized).not.toContain('1111111111111111111111111111111111111111111111111111111111111111');
+    expect(serialized).not.toContain(
+      '1111111111111111111111111111111111111111111111111111111111111111',
+    );
   });
 
   it('keeps perfect F1 on a selected subset ineligible when field coverage is too low', () => {
@@ -297,24 +289,23 @@ describe('evaluator-only intent frame', () => {
   });
 
   it('runs the private keyless CLI and writes only the public aggregate', () => {
-    const privateRoot = path.join(projectRoot, '.private', 'evals');
-    fs.mkdirSync(privateRoot, { recursive: true, mode: 0o700 });
-    const directory = fs.mkdtempSync(path.join(privateRoot, 'intent-frame-test-'));
+    const cliProject = createPrivateEvaluationCliProject(projectRoot);
+    const directory = fs.mkdtempSync(path.join(cliProject.privateRoot, 'intent-frame-test-'));
     const inputPath = path.join(directory, 'frames.json');
     const outputRelativePath = path.join('.artifacts', `intent-frame-test-${process.pid}.json`);
-    const outputPath = path.join(projectRoot, outputRelativePath);
+    const outputPath = path.join(cliProject.projectRoot, outputRelativePath);
     try {
       fs.writeFileSync(inputPath, `${JSON.stringify(loadFixture())}\n`, { mode: 0o600 });
       const result = spawnSync(
         process.execPath,
         [
-          './scripts/intent-frame-evaluation.js',
+          cliProject.scriptPath('intent-frame-evaluation.js'),
           '--input',
           inputPath,
           '--output',
           outputRelativePath,
         ],
-        { cwd: projectRoot, encoding: 'utf8' },
+        { cwd: cliProject.projectRoot, env: cliProject.spawnEnv, encoding: 'utf8' },
       );
 
       expect(result.status).toBe(0);
@@ -326,9 +317,7 @@ describe('evaluator-only intent frame', () => {
       expect(JSON.stringify(report)).not.toContain(inputPath);
       expect(JSON.stringify(report)).not.toContain('calendar-en-001');
     } finally {
-      fs.rmSync(directory, { recursive: true, force: true });
-      fs.rmSync(outputPath, { force: true });
-      removeEmptyDirectory(path.dirname(outputPath));
+      cliProject.cleanup();
     }
   });
 });

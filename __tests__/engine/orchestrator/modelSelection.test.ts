@@ -63,16 +63,22 @@ describe('Orchestrator', () => {
       mockStreamMessage.mockImplementation(() => {
         callCount += 1;
         if (callCount === 1) {
-          return createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"test.txt"}' },
-            },
-            { type: 'done' },
-          ]);
+          return createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"test.txt"}' },
+              },
+              { type: 'done' },
+            ],
+            'tool',
+          );
         }
 
-        return createStreamGenerator([{ type: 'token', content: 'done' }, { type: 'done' }]);
+        return createStreamGenerator(
+          [{ type: 'token', content: 'done' }, { type: 'done' }],
+          'text',
+        );
       });
 
       const callbacks = makeCallbacks();
@@ -100,7 +106,7 @@ describe('Orchestrator', () => {
 
     it('repairs missing persisted tool-result messages before a resumed model request', async () => {
       mockStreamMessage.mockReturnValue(
-        createStreamGenerator([{ type: 'token', content: 'done' }, { type: 'done' }]),
+        createStreamGenerator([{ type: 'token', content: 'done' }, { type: 'done' }], 'text'),
       );
 
       const callbacks = makeCallbacks();
@@ -193,13 +199,16 @@ describe('Orchestrator', () => {
       mockStreamMessage.mockImplementation(() => {
         callCount += 1;
         if (callCount === 1) {
-          return createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: { id: 'call-read', name: 'read_file', arguments: '{"path":"test.txt"}' },
-            },
-            { type: 'done' },
-          ]);
+          return createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: { id: 'call-read', name: 'read_file', arguments: '{"path":"test.txt"}' },
+              },
+              { type: 'done' },
+            ],
+            'tool',
+          );
         }
 
         return createStreamGenerator([

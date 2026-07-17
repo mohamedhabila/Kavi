@@ -3,8 +3,14 @@ import {
   cancelAgentRunOperations,
   clearAgentRunCancellation,
   createAgentRunOperationController,
+  isAbortErrorLike,
   throwIfAbortSignalTriggered,
 } from '../../src/services/agents/agentRunCancellation';
+import {
+  AGENT_RUNTIME_ERROR_CODES,
+  createAgentRunAbortError,
+  isAgentRuntimeErrorCode,
+} from '../../src/services/runtimeError';
 
 describe('agentRunCancellation', () => {
   beforeEach(() => {
@@ -28,8 +34,12 @@ describe('agentRunCancellation', () => {
 
     expect(abortReason).toMatchObject({
       name: 'AbortError',
+      code: AGENT_RUNTIME_ERROR_CODES.AGENT_RUN_ABORTED,
       message: 'Stopped by the user.',
     });
+    expect(isAgentRuntimeErrorCode(abortReason, AGENT_RUNTIME_ERROR_CODES.AGENT_RUN_ABORTED)).toBe(
+      true,
+    );
     expect(operation.signal.aborted).toBe(true);
     expect(() => throwIfAbortSignalTriggered(operation.signal)).toThrow('Stopped by the user.');
 
@@ -80,10 +90,32 @@ describe('agentRunCancellation', () => {
     parentController.abort(parentAbortError);
 
     expect(operation.signal.aborted).toBe(true);
+    expect(
+      isAgentRuntimeErrorCode(operation.signal.reason, AGENT_RUNTIME_ERROR_CODES.AGENT_RUN_ABORTED),
+    ).toBe(true);
+    expect((operation.signal.reason as Error & { cause?: unknown }).cause).toBe(parentAbortError);
     expect(() => throwIfAbortSignalTriggered(operation.signal)).toThrow(
       'Foreground request cancelled.',
     );
 
     operation.dispose();
+  });
+
+  it('classifies cancellation only from owned error codes or an aborted signal', () => {
+    const messageOnlyError = new Error('Request cancelled');
+    const nameOnlyError = Object.assign(new Error('Transport stopped.'), {
+      name: 'AbortError',
+    });
+    const typedAbort = createAgentRunAbortError('Network request failed');
+
+    expect(isAbortErrorLike(messageOnlyError)).toBe(false);
+    expect(isAbortErrorLike(nameOnlyError)).toBe(false);
+    expect(isAbortErrorLike(typedAbort)).toBe(true);
+
+    const controller = new AbortController();
+    controller.abort(new Error('User stopped the run.'));
+    expect(isAbortErrorLike(new Error('Unrelated provider failure.'), controller.signal)).toBe(
+      true,
+    );
   });
 });

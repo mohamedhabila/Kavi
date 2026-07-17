@@ -293,7 +293,7 @@ export function buildE2EPairedExecutionIdentityHash(input: {
 }): string {
   return stableHash(
     stableStringify({
-      namespace: 'e2e-paired-condition-v3',
+      namespace: 'e2e-paired-condition-v4',
       pairIdHash: input.pairIdHash,
       seed: input.seed,
       condition: input.condition,

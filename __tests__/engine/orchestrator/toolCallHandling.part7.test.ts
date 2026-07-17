@@ -43,24 +43,30 @@ describe('Orchestrator', () => {
         );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc1',
-              name: 'sessions_spawn',
-              arguments: '{"prompt":"Research this"}',
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc1',
+                name: 'sessions_spawn',
+                arguments: '{"prompt":"Research this"}',
+              },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Worker completed successfully.' },
-          { type: 'done', content: 'Worker completed successfully.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Worker completed successfully.' },
+            { type: 'done', content: 'Worker completed successfully.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -149,63 +155,93 @@ describe('Orchestrator', () => {
 
       mockStreamMessage
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: {
-                id: 'tc1',
-                name: 'sessions_spawn',
-                arguments: '{"prompt":"Research this"}',
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: 'tc1',
+                  name: 'sessions_spawn',
+                  arguments: '{"prompt":"Research this"}',
+                },
               },
-            },
-            { type: 'done', content: '' },
-          ]),
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         )
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: { id: 'tc2', name: 'sessions_status', arguments: '{"sessionId":"sub-1"}' },
-            },
-            { type: 'done', content: '' },
-          ]),
-        )
-        .mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: {
-                id: 'tc3',
-                name: 'sessions_wait',
-                arguments: '{"sessionId":"sub-1","waitTimeoutMs":5000}',
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: 'tc2',
+                  name: 'sessions_status',
+                  arguments: '{"sessionId":"sub-1"}',
+                },
               },
-            },
-            { type: 'done', content: '' },
-          ]),
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         )
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: { id: 'tc4', name: 'sessions_status', arguments: '{"sessionId":"sub-1"}' },
-            },
-            { type: 'done', content: '' },
-          ]),
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: 'tc3',
+                  name: 'sessions_wait',
+                  arguments: '{"sessionId":"sub-1","waitTimeoutMs":5000}',
+                },
+              },
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         )
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: { id: 'tc5', name: 'sessions_status', arguments: '{"sessionId":"sub-1"}' },
-            },
-            { type: 'done', content: '' },
-          ]),
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: 'tc4',
+                  name: 'sessions_status',
+                  arguments: '{"sessionId":"sub-1"}',
+                },
+              },
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         )
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            { type: 'token', content: 'Worker completed successfully.' },
-            { type: 'done', content: 'Worker completed successfully.' },
-          ]),
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: 'tc5',
+                  name: 'sessions_status',
+                  arguments: '{"sessionId":"sub-1"}',
+                },
+              },
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator(
+            [
+              { type: 'token', content: 'Worker completed successfully.' },
+              { type: 'done', content: 'Worker completed successfully.' },
+            ],
+            'text',
+          ),
         );
 
       const callbacks = makeCallbacks();
@@ -269,23 +305,29 @@ describe('Orchestrator', () => {
 
       mockStreamMessage
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: {
-                id: 'tc1',
-                name: 'sessions_spawn',
-                arguments: '{"prompt":"Research this"}',
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: 'tc1',
+                  name: 'sessions_spawn',
+                  arguments: '{"prompt":"Research this"}',
+                },
               },
-            },
-            { type: 'done', content: '' },
-          ]),
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         )
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            { type: 'token', content: 'Worker completed successfully.' },
-            { type: 'done', content: 'Worker completed successfully.' },
-          ]),
+          createStreamGenerator(
+            [
+              { type: 'token', content: 'Worker completed successfully.' },
+              { type: 'done', content: 'Worker completed successfully.' },
+            ],
+            'text',
+          ),
         );
 
       const callbacks = makeCallbacks();

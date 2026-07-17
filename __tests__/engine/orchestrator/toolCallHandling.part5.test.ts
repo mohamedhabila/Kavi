@@ -19,43 +19,53 @@ describe('Orchestrator', () => {
   describe('Tool call handling part 5', () => {
     it('does not force a special closeout after an explicit non-blocking sessions_spawn launch', async () => {
       useSuperAgentPersona();
-      (executeTool as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify({
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
           status: 'running',
           sessionId: 'sub-1',
           guidance: 'Poll sessions_status until the session reaches a terminal state.',
         }),
-      );
+      });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc1',
-              name: 'sessions_spawn',
-              arguments: '{"prompt":"Research this","waitForCompletion":false}',
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc1',
+                name: 'sessions_spawn',
+                arguments: '{"prompt":"Research this","waitForCompletion":false}',
+              },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc2', name: 'sessions_status', arguments: '{"sessionId":"sub-1"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc2', name: 'sessions_status', arguments: '{"sessionId":"sub-1"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Worker completed successfully.' },
-          { type: 'done', content: 'Worker completed successfully.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Worker completed successfully.' },
+            { type: 'done', content: 'Worker completed successfully.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -116,10 +126,13 @@ describe('Orchestrator', () => {
       });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Validated.' },
-          { type: 'done', content: 'Validated.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Validated.' },
+            { type: 'done', content: 'Validated.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -181,31 +194,40 @@ describe('Orchestrator', () => {
         },
       ]);
 
-      (executeTool as jest.Mock).mockResolvedValueOnce('Cairo weather: 14 C and clear.');
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: 'Cairo weather: 14 C and clear.',
+      });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'weather_current', arguments: '{"location":"Cairo"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'weather_current', arguments: '{"location":"Cairo"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'token',
-            content:
-              'It is about 14 C and clear in Cairo, so it is cool outside but not especially cold.',
-          },
-          {
-            type: 'done',
-            content:
-              'It is about 14 C and clear in Cairo, so it is cool outside but not especially cold.',
-          },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'token',
+              content:
+                'It is about 14 C and clear in Cairo, so it is cool outside but not especially cold.',
+            },
+            {
+              type: 'done',
+              content:
+                'It is about 14 C and clear in Cairo, so it is cool outside but not especially cold.',
+            },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -274,31 +296,40 @@ describe('Orchestrator', () => {
         },
       ]);
 
-      (executeTool as jest.Mock).mockResolvedValueOnce('Cairo weather: 14 C and clear.');
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: 'Cairo weather: 14 C and clear.',
+      });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'weather_current', arguments: '{"location":"Cairo"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'weather_current', arguments: '{"location":"Cairo"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'token',
-            content:
-              'It is about 14 C and clear in Cairo, so it is cool outside but not especially cold.',
-          },
-          {
-            type: 'done',
-            content:
-              'It is about 14 C and clear in Cairo, so it is cool outside but not especially cold.',
-          },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'token',
+              content:
+                'It is about 14 C and clear in Cairo, so it is cool outside but not especially cold.',
+            },
+            {
+              type: 'done',
+              content:
+                'It is about 14 C and clear in Cairo, so it is cool outside but not especially cold.',
+            },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

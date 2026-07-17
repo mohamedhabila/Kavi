@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import { getExecutionJournalDb } from './database';
 import { decodeExecutionCheckpointRow } from './decoders';
 import { readRun, withImmediateTransaction } from './mutationStore';
@@ -275,10 +276,7 @@ export function createExecutionRecoveryControlStore(
   const getDatabase = options.getDatabase ?? getExecutionJournalDb;
   const clock = options.clock ?? Date.now;
   const createId = options.createId ?? ((kind) => `${kind}-${Crypto.randomUUID()}`);
-  const digest =
-    options.digest ??
-    ((value: string) =>
-      Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
+  const digest = options.digest ?? sha256HexUtf8Async;
   const fenceLeaseMs = options.fenceLeaseMs ?? DEFAULT_FENCE_LEASE_MS;
   if (
     !Number.isSafeInteger(fenceLeaseMs) ||

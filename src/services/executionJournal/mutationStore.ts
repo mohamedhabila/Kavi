@@ -77,6 +77,7 @@ export function effectRow(record: ExecutionEffectRecord): Record<string, SQLite.
     idempotency_class: record.idempotencyClass,
     idempotency_key_digest: record.idempotencyKeyDigest,
     request_digest: record.requestDigest,
+    model_authority_valid_until: record.modelAuthorityValidUntil,
     outcome_digest: record.outcomeDigest,
     status: record.status,
     retry_policy: record.retryPolicy,

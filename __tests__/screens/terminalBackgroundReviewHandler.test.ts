@@ -1,5 +1,16 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import { handleTerminalBackgroundReview } from '../../src/screens/terminalBackgroundReviewHandler';
 import { completeTerminalBackgroundReviewRun } from '../../src/screens/terminalBackgroundCompletion';
+import { closeMemoryDb } from '../../src/services/memory/database';
+import { setDurableMemoryPolicyEnabled } from '../../src/services/memory/memoryAuthority';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../src/services/memory/schema';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { AgentRun } from '../../src/types/agentRun';
@@ -8,6 +19,8 @@ import type { Conversation } from '../../src/types/conversation';
 jest.mock('../../src/screens/terminalBackgroundCompletion', () => ({
   completeTerminalBackgroundReviewRun: jest.fn(),
 }));
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 const run: AgentRun = {
   id: 'run-1',
@@ -86,6 +99,14 @@ function mutatePersistedFinalContent(content: string): void {
   }));
 }
 
+async function waitForMockCall(mock: jest.Mock): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (mock.mock.calls.length > 0) return;
+    await Promise.resolve();
+  }
+  throw new Error('expected mock call did not occur');
+}
+
 function invoke(
   recordConversationTurnMemory: jest.Mock,
   options?: {
@@ -105,7 +126,11 @@ function invoke(
         role: 'assistant',
         content: 'Final answer',
         timestamp: 9,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
       });
       return 'Final answer';
     });
@@ -145,12 +170,21 @@ function invoke(
 describe('terminal background review memory closeout', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    closeMemoryDb();
+    expoSqlite.__resetExpoSqliteForTests();
+    resetFactSchemaCacheForTests();
+    ensureFactSchema();
+    setDurableMemoryPolicyEnabled(true);
     useChatStore.setState({
       conversations: [conversation],
       activeConversationId: conversation.id,
       isLoading: false,
     });
     useSettingsStore.setState({ disableLongTermMemory: false });
+  });
+
+  afterEach(() => {
+    closeMemoryDb();
   });
 
   it('durably publishes memory before the terminal compare-and-set', async () => {
@@ -203,7 +237,7 @@ describe('terminal background review memory closeout', () => {
     const flushChatState = jest.fn().mockResolvedValue(undefined);
 
     const review = invoke(recordConversationTurnMemory, { flushChatState });
-    while (recordConversationTurnMemory.mock.calls.length === 0) await Promise.resolve();
+    await waitForMockCall(recordConversationTurnMemory);
 
     expect(completeTerminalBackgroundReviewRun).not.toHaveBeenCalled();
     expect(flushChatState).toHaveBeenCalledTimes(1);
@@ -256,7 +290,7 @@ describe('terminal background review memory closeout', () => {
         }),
     );
     const review = invoke(recordConversationTurnMemory);
-    while (recordConversationTurnMemory.mock.calls.length === 0) await Promise.resolve();
+    await waitForMockCall(recordConversationTurnMemory);
 
     mutatePersistedFinalContent('Mutated answer');
     resolvePublication({ disposition: 'enqueued', jobId: 'job-1' });

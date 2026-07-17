@@ -15,7 +15,7 @@ import {
 
 describe('Orchestrator', () => {
   describe('Direct response routing', () => {
-    it('uses a lightweight direct-response prompt for standalone literal-token super-agent turns', async () => {
+    it('revalidates a standalone super-agent response without inflating its first-pass prompt', async () => {
       const mockSendMessage = jest.fn();
 
       (LlmService as any).mockImplementation(() => ({
@@ -27,15 +27,25 @@ describe('Orchestrator', () => {
         name: 'SuperAgent',
       });
 
-      mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator(
-          [
-            { type: 'token', content: 'CHECKNO42' },
-            { type: 'done', content: 'CHECKNO42' },
-          ],
-          'text',
-        ),
-      );
+      mockStreamMessage
+        .mockImplementationOnce(() =>
+          createStreamGenerator(
+            [
+              { type: 'token', content: 'CHECKNO42' },
+              { type: 'done', content: 'CHECKNO42' },
+            ],
+            'text',
+          ),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator(
+            [
+              { type: 'token', content: 'CHECKNO42' },
+              { type: 'done', content: 'CHECKNO42' },
+            ],
+            'text',
+          ),
+        );
 
       const callbacks = makeCallbacks();
       const options: OrchestratorOptions = {
@@ -61,7 +71,7 @@ describe('Orchestrator', () => {
       await runOrchestrator(options, callbacks);
 
       expect(mockSendMessage).not.toHaveBeenCalled();
-      expect(mockStreamMessage).toHaveBeenCalledTimes(1);
+      expect(mockStreamMessage).toHaveBeenCalledTimes(2);
       const requestMessages = mockStreamMessage.mock.calls[0][0] as Array<{
         role: string;
         content: string;
@@ -77,7 +87,15 @@ describe('Orchestrator', () => {
       expect(requestMessages[0].content).toContain(
         "Safety: no independent goals beyond the user's request.",
       );
-      expect(requestMessages[0].content.length).toBeLessThan(4000);
+      expect(requestMessages[0].content.length).toBeLessThan(5000);
+      const recoveryMessages = mockStreamMessage.mock.calls[1][0] as Array<{
+        role: string;
+        content: string;
+      }>;
+      expect(recoveryMessages.at(-1)?.content).toContain('no code-owned progress was recorded');
+      expect(recoveryMessages.at(-1)?.content).toContain(
+        'preserve its substance and return it directly',
+      );
       expect(callbacks.calls.onAssistantMessage.at(-1)).toEqual(
         expect.objectContaining({
           content: 'CHECKNO42',

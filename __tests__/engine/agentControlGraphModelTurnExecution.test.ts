@@ -1,14 +1,23 @@
-import type { PreparedAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import { executeAgentControlGraphModelTurn } from '../../src/engine/graph/modelTurnExecution';
 import { prepareAgentTurnRequestBudget } from '../../src/engine/graph/agentTurnRequestBudget';
-import type { Message } from '../../src/types/message';
-import type { ToolDefinition } from '../../src/types/tool';
-import {
-  captureMemoryReadEpoch,
-  initializeMemoryPolicyObservation,
-} from '../../src/services/memory/policy';
+import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
+import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
+import {
+  coordinateToolDefinition,
+  createBudgetResult,
+  createCallbacks,
+  createPreparedTurn,
+  createStream,
+  createWorkingMessages,
+  memoryRememberToolDefinition,
+  toolDefinition,
+} from './helpers/modelTurnExecution';
 
 jest.mock('../../src/engine/graph/agentTurnRequestBudget', () => {
   const actual = jest.requireActual('../../src/engine/graph/agentTurnRequestBudget');
@@ -19,105 +28,6 @@ jest.mock('../../src/engine/graph/agentTurnRequestBudget', () => {
 });
 
 const mockedPrepareAgentTurnRequestBudget = jest.mocked(prepareAgentTurnRequestBudget);
-
-async function* createStream(events: any[]) {
-  for (const event of events) {
-    yield event;
-  }
-}
-
-const toolDefinition: ToolDefinition = {
-  name: 'write_file',
-  description: 'Write a file to the workspace.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      path: { type: 'string' },
-    },
-  },
-} as ToolDefinition;
-
-const memoryRememberToolDefinition: ToolDefinition = {
-  name: 'memory_remember',
-  description: 'Record a durable memory.',
-  input_schema: { type: 'object', properties: {} },
-  contract: {
-    category: 'memory',
-    capabilities: ['write'],
-    resourceKinds: ['memory'],
-    sideEffects: ['local_artifact'],
-  },
-};
-
-const coordinateToolDefinition: ToolDefinition = {
-  name: 'update_goals',
-  description: 'Mutate graph goals.',
-  inputSchema: {
-    type: 'object',
-    properties: {},
-  },
-  contract: {
-    category: 'tools',
-    capabilities: ['coordinate'],
-    resourceKinds: ['conversation_workspace'],
-    sideEffects: ['none'],
-    riskHints: ['read_only'],
-    providesEvidence: ['verification'],
-    workflowStages: [],
-  },
-} as ToolDefinition;
-
-function createPreparedTurn(overrides: Partial<PreparedAgentTurn> = {}): PreparedAgentTurn {
-  return {
-    enrichedSystemPrompt: 'Enriched prompt',
-    enrichedSystemPromptSections: [],
-    pinnedToolNames: [],
-    selectedToolTokenEstimate: 0,
-    selectedTools: [toolDefinition],
-    toolsForIteration: [toolDefinition],
-    ...overrides,
-  };
-}
-
-function createWorkingMessages(): Message[] {
-  return [
-    {
-      id: 'msg-1',
-      role: 'user',
-      content: 'Create a file',
-      timestamp: 1,
-    },
-  ];
-}
-
-function createBudgetResult(workingMessages: Message[], tool: ToolDefinition = toolDefinition) {
-  return {
-    budgetResult: {
-      systemPrompt: 'Enriched prompt',
-      messages: workingMessages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
-      tools: [tool],
-      result: {
-        totalTokens: 128,
-        adjustments: [],
-      },
-    },
-    contextWindow: 200000,
-    workingMessages,
-  };
-}
-
-function createCallbacks() {
-  return {
-    onAssistantStreamReset: jest.fn(),
-    onReasoning: jest.fn(),
-    onStateChange: jest.fn(),
-    onToken: jest.fn(),
-    onToolCallQueued: jest.fn(),
-  };
-}
 
 describe('agent control graph model turn execution', () => {
   beforeEach(() => {
@@ -130,7 +40,7 @@ describe('agent control graph model turn execution', () => {
     useSettingsStore.setState({ disableLongTermMemory: false });
   });
 
-  it('reprepares a memory-free request when opt-out lands during async request budgeting', async () => {
+  it('escalates opt-out during async budgeting to session-level repreparation', async () => {
     const safeWorkingMessages = createWorkingMessages();
     const workingMessages: Message[] = [
       {
@@ -141,21 +51,13 @@ describe('agent control graph model turn execution', () => {
       },
       ...safeWorkingMessages,
     ];
-    const readEpoch = captureMemoryReadEpoch();
-    if (readEpoch === null) throw new Error('expected enabled memory epoch');
+    const memoryFence = captureCurrentModelTurnMemoryFence();
+    const { readEpoch } = memoryFence;
     let resolveFirstBudget!: (value: ReturnType<typeof createBudgetResult>) => void;
     const firstBudget = new Promise<ReturnType<typeof createBudgetResult>>((resolve) => {
       resolveFirstBudget = resolve;
     });
-    mockedPrepareAgentTurnRequestBudget
-      .mockImplementationOnce(() => firstBudget as never)
-      .mockImplementationOnce(async (params) => ({
-        ...createBudgetResult(params.workingMessages),
-        budgetResult: {
-          ...createBudgetResult(params.workingMessages).budgetResult,
-          systemPrompt: params.enrichedSystemPrompt,
-        },
-      }));
+    mockedPrepareAgentTurnRequestBudget.mockImplementationOnce(() => firstBudget as never);
     const llm = {
       streamMessage: jest.fn((_messages: unknown, _options?: unknown) =>
         createStream([
@@ -191,20 +93,7 @@ describe('agent control graph model turn execution', () => {
           { text: 'PRIVATE LIVING MEMORY', cacheable: true },
         ],
         memoryReadFence: {
-          readEpoch,
-          memoryFreePrompt: {
-            enrichedSystemPrompt: 'Memory-free system',
-            enrichedSystemPromptSections: [{ text: 'Memory-free system', cacheable: true }],
-          },
-          memoryDisabledTurn: createPreparedTurn({
-            enrichedSystemPrompt: `Memory-free system\n\n${MEMORY_DISABLED_RUNTIME_CAPABILITY}`,
-            enrichedSystemPromptSections: [
-              { text: 'Memory-free system', cacheable: true },
-              { text: MEMORY_DISABLED_RUNTIME_CAPABILITY },
-            ],
-            selectedTools: [toolDefinition],
-            toolsForIteration: [toolDefinition],
-          }),
+          ...memoryFence,
         },
         selectedTools: [toolDefinition, memoryRememberToolDefinition],
         toolsForIteration: [toolDefinition, memoryRememberToolDefinition],
@@ -237,36 +126,118 @@ describe('agent control graph model turn execution', () => {
       },
     });
 
-    await expect(execution).resolves.toMatchObject({ fullContent: 'Safe response.' });
-    expect(mockedPrepareAgentTurnRequestBudget).toHaveBeenCalledTimes(2);
-    expect(mockedPrepareAgentTurnRequestBudget.mock.calls[1]?.[0]).toMatchObject({
-      enrichedSystemPrompt: expect.stringContaining('Memory-free system'),
-      livingMemory: null,
-      workingMessages: safeWorkingMessages,
-    });
-    expect(mockedPrepareAgentTurnRequestBudget.mock.calls[1]?.[0].enrichedSystemPrompt).toContain(
-      MEMORY_DISABLED_RUNTIME_CAPABILITY,
-    );
-    expect(
-      mockedPrepareAgentTurnRequestBudget.mock.calls[1]?.[0].toolsForIteration?.map(
-        (tool) => tool.name,
-      ),
-    ).toEqual(['write_file']);
-    expect(llm.streamMessage).toHaveBeenCalledTimes(1);
-    const dispatchedOptions = llm.streamMessage.mock.calls[0]?.[1] as {
-      tools: ToolDefinition[];
-    };
-    expect(dispatchedOptions.tools.map((tool) => tool.name)).toEqual(['write_file']);
-    expect(JSON.stringify(llm.streamMessage.mock.calls[0]?.[0])).not.toContain(
-      'PRIVATE LIVING MEMORY',
-    );
-    expect(callbacks.onAssistantStreamReset).toHaveBeenCalledTimes(1);
+    await expect(execution).rejects.toThrow('memory_prompt_epoch_expired');
+    expect(mockedPrepareAgentTurnRequestBudget).toHaveBeenCalledTimes(1);
+    expect(llm.streamMessage).not.toHaveBeenCalled();
+    expect(callbacks.onAssistantStreamReset).not.toHaveBeenCalled();
   });
 
-  it('fences replay dispatches after opt-out and resumes with a memory-free turn', async () => {
+  it('discards streamed output and un-emitted tool calls when opt-out lands mid-stream', async () => {
+    const memoryFence = captureCurrentModelTurnMemoryFence();
+    let releaseFirstAttempt!: () => void;
+    let markFirstToken!: () => void;
+    const firstToken = new Promise<void>((resolve) => {
+      markFirstToken = resolve;
+    });
+    const firstAttemptGate = new Promise<void>((resolve) => {
+      releaseFirstAttempt = resolve;
+    });
+    async function* staleAttempt() {
+      yield { type: 'token', content: 'STALE_ATTEMPT' };
+      await firstAttemptGate;
+      yield {
+        type: 'tool_call',
+        toolCall: {
+          id: 'stale-memory-call',
+          name: memoryRememberToolDefinition.name,
+          arguments: '{}',
+        },
+      };
+      yield { type: 'done', completion: { completionStatus: 'complete', finishReason: 'stop' } };
+    }
+    mockedPrepareAgentTurnRequestBudget.mockImplementation(async (params) => {
+      const result = createBudgetResult(params.workingMessages);
+      return {
+        ...result,
+        budgetResult: {
+          ...result.budgetResult,
+          systemPrompt: params.enrichedSystemPrompt,
+          tools: params.toolsForIteration ?? [],
+        },
+      };
+    });
+    const llm = {
+      streamMessage: jest
+        .fn()
+        .mockImplementationOnce(() => staleAttempt())
+        .mockImplementationOnce(() =>
+          createStream([
+            { type: 'token', content: 'SAFE_ATTEMPT' },
+            {
+              type: 'done',
+              completion: { completionStatus: 'complete', finishReason: 'stop' },
+            },
+          ]),
+        ),
+    };
+    const visibleEvents: string[] = [];
+    const callbacks = {
+      ...createCallbacks(),
+      onAssistantStreamReset: jest.fn(() => visibleEvents.push('reset')),
+      onToken: jest.fn((token: string) => {
+        visibleEvents.push(`token:${token}`);
+        markFirstToken();
+      }),
+    };
+    const execution = executeAgentControlGraphModelTurn({
+      activeProvider: {
+        id: 'provider-1',
+        name: 'OpenAI',
+        apiKey: 'test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        enabled: true,
+      } as any,
+      applyGraphEvents: jest.fn(),
+      callbacks,
+      compactionEngine: null,
+      conversationId: 'conv-memory-stream-race',
+      hasPendingAsyncOperations: false,
+      iteration: 1,
+      livingMemory: null,
+      llm,
+      preparedTurn: createPreparedTurn({
+        enrichedSystemPrompt: 'Memory-enabled system',
+        enrichedSystemPromptSections: [{ text: 'Memory-enabled system' }],
+        memoryReadFence: {
+          ...memoryFence,
+        },
+        selectedTools: [toolDefinition, memoryRememberToolDefinition],
+        toolsForIteration: [toolDefinition, memoryRememberToolDefinition],
+      }),
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMaxTokens: 512,
+      requestModel: 'gpt-5-mini',
+      thinkingLevel: 'off',
+      warn: jest.fn(),
+      workingMessages: createWorkingMessages(),
+      yieldToUiFrame: jest.fn().mockResolvedValue(undefined),
+    });
+
+    await firstToken;
+    useSettingsStore.setState({ disableLongTermMemory: true });
+    releaseFirstAttempt();
+
+    await expect(execution).rejects.toThrow('memory_prompt_epoch_expired');
+    expect(visibleEvents).toEqual(['token:STALE_ATTEMPT', 'reset']);
+    expect(callbacks.onToolCallQueued).not.toHaveBeenCalled();
+    expect(llm.streamMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('fences replay dispatches after opt-out and escalates to the session', async () => {
     const workingMessages = createWorkingMessages();
-    const readEpoch = captureMemoryReadEpoch();
-    if (readEpoch === null) throw new Error('expected enabled memory epoch');
+    const memoryFence = captureCurrentModelTurnMemoryFence();
+    const { readEpoch } = memoryFence;
     mockedPrepareAgentTurnRequestBudget.mockImplementation(async (params) => ({
       ...createBudgetResult(params.workingMessages),
       budgetResult: {
@@ -274,28 +245,33 @@ describe('agent control graph model turn execution', () => {
         systemPrompt: params.enrichedSystemPrompt,
       },
     }));
+    let transportStarts = 0;
     const llm = {
-      streamMessage: jest
-        .fn()
-        .mockImplementationOnce(() =>
-          createStream([
-            {
-              type: 'tool_call',
-              toolCall: { id: 'tc-private', name: 'write_file', arguments: '{}' },
-            },
-            { type: 'done', completion: { completionStatus: 'complete' } },
-          ]),
-        )
-        .mockImplementationOnce(() =>
-          createStream([
-            { type: 'token', content: 'Memory-free response.' },
-            { type: 'done', completion: { completionStatus: 'complete', finishReason: 'stop' } },
-          ]),
-        ),
+      streamMessage: jest.fn(
+        (_messages: unknown, options: { requestDispatchGuard?: () => void }) => {
+          options.requestDispatchGuard?.();
+          transportStarts += 1;
+          return transportStarts === 1
+            ? createStream([
+                {
+                  type: 'tool_call',
+                  toolCall: { id: 'tc-private', name: 'write_file', arguments: '{}' },
+                },
+                { type: 'done', completion: { completionStatus: 'complete' } },
+              ])
+            : createStream([
+                { type: 'token', content: 'Memory-free response.' },
+                {
+                  type: 'done',
+                  completion: { completionStatus: 'complete', finishReason: 'stop' },
+                },
+              ]);
+        },
+      ),
     };
     let yieldCount = 0;
 
-    const result = await executeAgentControlGraphModelTurn({
+    const execution = executeAgentControlGraphModelTurn({
       activeProvider: {
         id: 'provider-1',
         name: 'OpenAI',
@@ -314,11 +290,7 @@ describe('agent control graph model turn execution', () => {
       preparedTurn: createPreparedTurn({
         enrichedSystemPrompt: 'System\n\nPRIVATE REPLAY MEMORY',
         memoryReadFence: {
-          readEpoch,
-          memoryFreePrompt: {
-            enrichedSystemPrompt: 'Memory-free replay system',
-            enrichedSystemPromptSections: [{ text: 'Memory-free replay system' }],
-          },
+          ...memoryFence,
         },
       }),
       recordPerformanceMetrics: jest.fn(),
@@ -334,12 +306,10 @@ describe('agent control graph model turn execution', () => {
       }),
     });
 
-    expect(result.fullContent).toBe('Memory-free response.');
+    await expect(execution).rejects.toThrow('memory_prompt_epoch_expired');
     expect(llm.streamMessage).toHaveBeenCalledTimes(2);
+    expect(transportStarts).toBe(1);
     expect(JSON.stringify(llm.streamMessage.mock.calls[0]?.[0])).toContain('PRIVATE REPLAY MEMORY');
-    expect(JSON.stringify(llm.streamMessage.mock.calls[1]?.[0])).not.toContain(
-      'PRIVATE REPLAY MEMORY',
-    );
   });
 
   it('retries incomplete tool-call emission after MAX_TOKENS and preserves the final call', async () => {

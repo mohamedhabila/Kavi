@@ -23,8 +23,13 @@ import {
 import { createCurrentLocalSimilarityVector } from './localSimilarity';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { maintainCurrentFactLocalSimilarity } from './localSimilarityBackfill';
-import { maintainFactSensitivityPolicy } from './factSensitivityBackfill';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
+import {
+  captureMemoryAuthoritySnapshot,
+  isMemoryProjectionSnapshotCurrent,
+  isMemoryProjectionSnapshotDurablyCurrent,
+  type MemoryAuthoritySnapshot,
+} from './memoryAuthority';
 
 type MemoryAccessMode = 'chat' | 'agentic' | 'pilot';
 
@@ -54,6 +59,23 @@ export interface UnifiedMemoryAccessResult {
   scopedMessages: Message[];
   livingMemory: LivingMemoryBridgeOutput | null;
   consistencyBarrier: NextTurnMemoryConsistencyResult;
+}
+
+function isAuthorizedMemoryAuthorityContinuation(
+  initial: MemoryAuthoritySnapshot,
+  continuation: MemoryAuthoritySnapshot,
+): boolean {
+  return (
+    continuation.restrictiveRevision.memoryOwnerId ===
+      initial.restrictiveRevision.memoryOwnerId &&
+    continuation.restrictiveRevision.value === initial.restrictiveRevision.value &&
+    continuation.policy.enabled === true &&
+    continuation.policy.revision === initial.policy.revision &&
+    continuation.processEpochs.restrictive === initial.processEpochs.restrictive &&
+    continuation.projectionRevision.memoryOwnerId ===
+      initial.projectionRevision.memoryOwnerId &&
+    continuation.projectionRevision.value >= initial.projectionRevision.value
+  );
 }
 
 export async function buildUnifiedMemoryAccessContext(
@@ -93,6 +115,12 @@ export async function buildUnifiedMemoryAccessContext(
     livingMemory: null,
     consistencyBarrier: { ...consistencyBarrier, outcome: 'opt_out' },
   });
+  const unavailableResult = (): UnifiedMemoryAccessResult => ({
+    boundary,
+    scopedMessages,
+    livingMemory: null,
+    consistencyBarrier,
+  });
   if (
     memoryReadEpoch === null ||
     consistencyBarrier.outcome === 'opt_out' ||
@@ -102,11 +130,13 @@ export async function buildUnifiedMemoryAccessContext(
   }
 
   if (retrievalStrategy === 'production') {
-    maintainFactSensitivityPolicy();
     maintainCurrentFactLocalSimilarity({
       ...(typeof request.now === 'number' ? { now: request.now } : {}),
     });
   }
+
+  const memoryAuthoritySnapshot = captureMemoryAuthoritySnapshot();
+  if (!memoryAuthoritySnapshot) return unavailableResult();
 
   const localSimilarityQuery = buildRecentUserRetrievalQuery(scopedMessages);
   const localSimilarity =
@@ -132,11 +162,25 @@ export async function buildUnifiedMemoryAccessContext(
       ? { retrievalLlm: request.retrievalLlm }
       : {}),
     memoryReadEpoch,
+    memoryAuthoritySnapshot,
   });
   if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
+  const continuedMemoryAuthoritySnapshot = livingMemoryResult.memoryAuthoritySnapshot;
+  if (
+    !continuedMemoryAuthoritySnapshot ||
+    !isAuthorizedMemoryAuthorityContinuation(
+      memoryAuthoritySnapshot,
+      continuedMemoryAuthoritySnapshot,
+    ) ||
+    !isMemoryProjectionSnapshotCurrent(continuedMemoryAuthoritySnapshot) ||
+    !isMemoryProjectionSnapshotDurablyCurrent(continuedMemoryAuthoritySnapshot)
+  ) {
+    return unavailableResult();
+  }
   const livingMemory: LivingMemoryBridgeOutput = {
     ...livingMemoryResult,
     memoryReadEpoch,
+    memoryAuthoritySnapshot: continuedMemoryAuthoritySnapshot,
     consistencyBarrier,
   };
 

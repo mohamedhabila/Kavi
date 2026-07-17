@@ -1,6 +1,6 @@
 import {
   encodeMemoryFactContributionPayload,
-  type MemoryFactContributionPayloadV1,
+  type MemoryFactContributionPayloadV2,
 } from './factContributionCodec';
 import {
   loadFactContributionReplay,
@@ -9,8 +9,8 @@ import {
 } from './factContributionStore';
 
 function payloadsMatch(
-  left: MemoryFactContributionPayloadV1,
-  right: MemoryFactContributionPayloadV1,
+  left: MemoryFactContributionPayloadV2,
+  right: MemoryFactContributionPayloadV2,
 ): boolean {
   const encodedLeft = encodeMemoryFactContributionPayload(left);
   const encodedRight = encodeMemoryFactContributionPayload(right);
@@ -25,7 +25,7 @@ function payloadsMatch(
 /** Prove that a previously committed producer event is the exact requested mutation. */
 export function assertMemoryFactContributionReplayPayload(
   replay: MemoryFactContributionReplay,
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
 ): void {
   if (!payloadsMatch(replay.payload, payload)) {
     throw new Error('memory_fact_contribution_replay_mismatch');
@@ -35,7 +35,7 @@ export function assertMemoryFactContributionReplayPayload(
 /** Verify an exact producer replay before any aggregate fact materialization occurs. */
 export function loadVerifiedFactContributionReplay(input: {
   context: MemoryFactContributionWriteContext;
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
 }): MemoryFactContributionReplay | null {
   const replay = loadFactContributionReplay(input.context);
   if (replay) assertMemoryFactContributionReplayPayload(replay, input.payload);

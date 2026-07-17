@@ -257,6 +257,103 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selectedToolNames.has('sms_compose')).toBe(false);
   });
 
+  it('carries a prior-turn resource into the immediately following workflow continuation', async () => {
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: resourceFlowTools,
+      observedToolNames: new Set<string>(),
+      workingMessages: [
+        userMessage('Create an event.', 1),
+        {
+          id: 'assistant-calendar-create',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [
+            {
+              id: 'tc-calendar-create',
+              name: 'calendar_create_event',
+              arguments: '{}',
+              status: 'completed',
+            },
+          ],
+        },
+        {
+          id: 'tool-calendar-create',
+          role: 'tool',
+          content: '{"status":"created_verified","eventId":"event-1"}',
+          toolCallId: 'tc-calendar-create',
+          timestamp: 3,
+        },
+        userMessage('Change it.', 4),
+      ],
+    });
+
+    const selectedToolNames = new Set(selected.map((tool) => tool.name));
+    expect(selectedToolNames.has('calendar_update_event')).toBe(true);
+    expect(selectedToolNames.has('calendar_create_event')).toBe(false);
+  });
+
+  it('does not carry workflow resources past the immediately preceding user turn', async () => {
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: resourceFlowTools,
+      observedToolNames: new Set<string>(),
+      workingMessages: [
+        userMessage('Create an event.', 1),
+        {
+          id: 'assistant-calendar-create',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [
+            {
+              id: 'tc-calendar-create',
+              name: 'calendar_create_event',
+              arguments: '{}',
+              status: 'completed',
+            },
+          ],
+        },
+        userMessage('Thanks.', 3),
+        {
+          id: 'assistant-thanks',
+          role: 'assistant',
+          content: 'You are welcome.',
+          timestamp: 4,
+        },
+        userMessage('Start something else.', 5),
+      ],
+    });
+
+    expect(selected.map((tool) => tool.name)).not.toContain('calendar_update_event');
+  });
+
+  it('does not treat a failed prior-turn producer as a resource', async () => {
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: resourceFlowTools,
+      observedToolNames: new Set<string>(),
+      workingMessages: [
+        userMessage('Create an event.', 1),
+        {
+          id: 'assistant-calendar-create-failed',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [
+            {
+              id: 'tc-calendar-create-failed',
+              name: 'calendar_create_event',
+              arguments: '{}',
+              status: 'failed',
+            },
+          ],
+        },
+        userMessage('Continue.', 3),
+      ],
+    });
+
+    expect(selected.map((tool) => tool.name)).not.toContain('calendar_update_event');
+  });
+
   it('keeps notification cancel eligible after notification schedule produces an id', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: resourceFlowTools,

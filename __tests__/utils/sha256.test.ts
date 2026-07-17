@@ -1,6 +1,6 @@
-import * as Crypto from 'expo-crypto';
 import { hashVerifiedProcedureProvenanceSync } from '../../src/services/memory/verifiedProcedure/provenanceHash';
 import { sha256HexUtf8 } from '../../src/utils/sha256';
+import { sha256HexUtf8Async } from '../../src/utils/sha256Async';
 
 describe('synchronous SHA-256', () => {
   it.each([
@@ -11,10 +11,9 @@ describe('synchronous SHA-256', () => {
     expect(sha256HexUtf8(value)).toBe(expected);
   });
 
-  it('matches Expo Crypto for verified-procedure provenance input', async () => {
+  it('matches the byte-oriented async digest for verified-procedure provenance input', async () => {
     const sourceRunId = 'execution-run-withdrawal-1';
-    const expected = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
+    const expected = await sha256HexUtf8Async(
       `kavi.verified-procedure.source-run.v1\u0000${sourceRunId}`,
     );
 
@@ -23,8 +22,15 @@ describe('synchronous SHA-256', () => {
     );
 
     const unicode = 'Kavi remembers across conversations 🧠';
-    await expect(
-      Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, unicode),
-    ).resolves.toBe(sha256HexUtf8(unicode));
+    await expect(sha256HexUtf8Async(unicode)).resolves.toBe(sha256HexUtf8(unicode));
+  });
+
+  it('hashes bytes after embedded NUL code points', async () => {
+    const left = 'tool-effect-dispatch-identity-v1\u0000left';
+    const right = 'tool-effect-dispatch-identity-v1\u0000right';
+
+    await expect(sha256HexUtf8Async(left)).resolves.toBe(sha256HexUtf8(left));
+    await expect(sha256HexUtf8Async(right)).resolves.toBe(sha256HexUtf8(right));
+    await expect(sha256HexUtf8Async(left)).resolves.not.toBe(sha256HexUtf8(right));
   });
 });

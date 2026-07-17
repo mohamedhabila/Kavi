@@ -2,9 +2,24 @@ import type { OrchestratorCallbacks, OrchestratorOptions } from '../../../src/en
 import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 
-export function* makeStream(events: any[]) {
+type TerminalDisposition = 'text' | 'tool';
+
+export async function* makeStream(events: any[], terminalDisposition?: TerminalDisposition) {
   for (const event of events) {
-    yield event;
+    if (event?.type !== 'done' || event.completion !== undefined) {
+      yield event;
+      continue;
+    }
+    if (terminalDisposition === undefined) {
+      throw new Error('test_stream_completion_required');
+    }
+    yield {
+      ...event,
+      completion: {
+        completionStatus: 'complete',
+        finishReason: terminalDisposition === 'tool' ? 'tool_calls' : 'stop',
+      },
+    };
   }
 }
 

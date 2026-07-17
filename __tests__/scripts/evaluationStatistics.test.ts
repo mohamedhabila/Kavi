@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { createPrivateEvaluationCliProject } from '../helpers/privateEvaluationCliProject';
 
 const { aggregateEvaluationStatistics } = require('../../scripts/lib/evaluationStatistics');
 const {
@@ -17,15 +18,6 @@ const projectRoot = path.resolve(__dirname, '../..');
 const evaluationSchema = loadEvaluationSchema(projectRoot);
 const statisticsSchema = loadEvaluationStatisticsSchema(projectRoot);
 const contract = loadEvaluationContract(projectRoot);
-
-function removeEmptyDirectory(directory: string): void {
-  try {
-    fs.rmdirSync(directory);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT' && code !== 'ENOTEMPTY') throw error;
-  }
-}
 
 function buildInput() {
   const aggregation = {
@@ -533,24 +525,23 @@ describe('deterministic evaluation statistics', () => {
   });
 
   it('runs one private-input CLI and writes a content-free aggregate', () => {
-    const privateRoot = path.join(projectRoot, '.private', 'evals');
-    fs.mkdirSync(privateRoot, { recursive: true, mode: 0o700 });
-    const directory = fs.mkdtempSync(path.join(privateRoot, 'statistics-test-'));
+    const cliProject = createPrivateEvaluationCliProject(projectRoot);
+    const directory = fs.mkdtempSync(path.join(cliProject.privateRoot, 'statistics-test-'));
     const inputPath = path.join(directory, 'trials.json');
     const outputRelativePath = path.join('.artifacts', `statistics-test-${process.pid}.json`);
-    const outputPath = path.join(projectRoot, outputRelativePath);
+    const outputPath = path.join(cliProject.projectRoot, outputRelativePath);
     try {
       fs.writeFileSync(inputPath, `${JSON.stringify(buildInput())}\n`, { mode: 0o600 });
       const result = spawnSync(
         process.execPath,
         [
-          './scripts/evaluation-statistics.js',
+          cliProject.scriptPath('evaluation-statistics.js'),
           '--input',
           inputPath,
           '--output',
           outputRelativePath,
         ],
-        { cwd: projectRoot, encoding: 'utf8' },
+        { cwd: cliProject.projectRoot, env: cliProject.spawnEnv, encoding: 'utf8' },
       );
 
       expect(result.status).toBe(0);
@@ -561,9 +552,7 @@ describe('deterministic evaluation statistics', () => {
       expect(report.claimEligible).toBe(true);
       expect(JSON.stringify(report)).not.toContain(inputPath);
     } finally {
-      fs.rmSync(directory, { recursive: true, force: true });
-      fs.rmSync(outputPath, { force: true });
-      removeEmptyDirectory(path.dirname(outputPath));
+      cliProject.cleanup();
     }
   });
 });

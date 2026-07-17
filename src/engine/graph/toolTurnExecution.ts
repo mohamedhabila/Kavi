@@ -42,10 +42,14 @@ import type { AgentControlGraphWorkflowToolResultProgress } from './workflowTool
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
+import {
+  assertModelTurnMemoryPolicyBindingDurablyCurrent,
+  type ModelTurnMemoryPolicyBinding,
+} from '../authority/modelTurnMemoryPolicyBinding';
 
 type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
-  { type: 'BLOCKED' } | { type: 'FINALIZED' } | { type: 'YIELDED' }
+  { type: 'BLOCKED' } | { type: 'FINALIZED' } | { type: 'YIELDED' } | { type: 'CANCELLED' }
 >;
 
 type ToolTurnCallbacks = {
@@ -97,6 +101,7 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   toolFilter?: (toolName: string) => boolean;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   groundedRequestScopedTools: ToolDefinition[];
+  memoryEvidenceToolDefinitions: ReadonlyArray<ToolDefinition>;
   getGraphSnapshot: () => AgentRunControlGraphState;
   completedWorkflowToolNames: Set<string>;
   lastPendingAsyncSignature: string;
@@ -145,13 +150,15 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   providerReplay?: MessageProviderReplay;
   completion?: AssistantCompletionMetadata;
   pendingToolCalls: ReadonlyArray<PendingAgentToolCall>;
+  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   workingMessages: Message[];
 }
 
 export async function executeAgentControlGraphToolTurn(
   params: ExecuteAgentControlGraphToolTurnParams,
 ): Promise<ToolTurnExecutionResult> {
-  const toolTurnPreparation = await prepareAgentControlGraphToolTurn({
+  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+  const toolTurnPreparation = prepareAgentControlGraphToolTurn({
     iteration: params.iteration,
     maxToolIterations: params.maxToolIterations,
     toolCallHistory: params.toolCallHistory,
@@ -164,13 +171,10 @@ export async function executeAgentControlGraphToolTurn(
     pendingToolCalls: params.pendingToolCalls,
     goals: params.getGraphSnapshot().goals,
     workingMessages: params.workingMessages,
-    callbacks: {
-      onAssistantMessage: params.callbacks.onAssistantMessage,
-    },
-    yieldToUiFrame: params.yieldToUiFrame,
   });
 
   if (toolTurnPreparation.status === 'finalized') {
+    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     return {
       status: 'finalized',
       lastPendingAsyncSignature: params.lastPendingAsyncSignature,
@@ -190,6 +194,7 @@ export async function executeAgentControlGraphToolTurn(
   }
 
   if (toolTurnPreparation.status === 'blocked') {
+    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     params.applyGraphEvents([
       {
         type: 'BLOCKED',
@@ -202,7 +207,10 @@ export async function executeAgentControlGraphToolTurn(
         reason: 'loop_detected',
       },
       content: toolTurnPreparation.blockDetails,
-      assistantMetadata: buildAssistantMessageMetadata('final', params.completion),
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'complete',
+        finishReason: 'loop_detected',
+      }),
       sessionEndReason: 'loop_detected',
     });
     return {
@@ -219,20 +227,17 @@ export async function executeAgentControlGraphToolTurn(
   const effectGoalMaterialization = await materializeToolEffectCompletionGoals({
     toolCalls: executableToolCalls,
     goals: params.getGraphSnapshot().goals,
+    tools: params.groundedRequestScopedTools,
   });
-  if (effectGoalMaterialization.status === 'materialized') {
-    params.applyGraphEvents([
-      {
-        type: 'GOALS_UPDATED',
-        goals: effectGoalMaterialization.goals,
-        reason: effectGoalMaterialization.reason,
-        timestamp: effectGoalMaterialization.timestamp,
-      },
-    ]);
-  }
+  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+  const projectedControlGraphGoals =
+    effectGoalMaterialization.status === 'materialized'
+      ? effectGoalMaterialization.goals
+      : params.getGraphSnapshot().goals;
 
   const toolExecutionOutcomes = await executeAgentControlGraphToolBatch({
     executableToolCalls,
+    memoryPolicyBinding: params.memoryPolicyBinding,
     iteration: params.iteration,
     conversationId: params.conversationId,
     activeProvider: params.activeProvider,
@@ -255,14 +260,43 @@ export async function executeAgentControlGraphToolTurn(
     toolFilter: params.toolFilter,
     pendingAsyncMonitorToolNames: params.pendingAsyncMonitorToolNames,
     groundedRequestScopedTools: params.groundedRequestScopedTools,
+    memoryEvidenceToolDefinitions: params.memoryEvidenceToolDefinitions,
+    workingMessages,
     completedWorkflowToolNames: params.completedWorkflowToolNames,
     emitPendingAsyncOperationsChange: params.emitPendingAsyncOperationsChange,
     recordPerformanceMetrics: params.recordPerformanceMetrics,
-    controlGraphGoals: params.getGraphSnapshot?.().goals,
+    controlGraphGoals: projectedControlGraphGoals,
     agentRunId: params.agentRunId,
     executionRunId: params.executionRunId,
     beforeEffectDispatch: params.beforeEffectDispatch,
     verifiedProcedureSession: params.verifiedProcedureSession,
+    onBatchCommitted: () => {
+      params.callbacks.onAssistantMessage(
+        toolTurnPreparation.assistantToolTurnContent,
+        toolTurnPreparation.toolCallObjects,
+        params.providerReplay,
+        toolTurnPreparation.assistantMetadata,
+      );
+      const graphEvents: AgentControlGraphEvent[] = [];
+      if (effectGoalMaterialization.status === 'materialized') {
+        graphEvents.push({
+          type: 'GOALS_UPDATED',
+          goals: effectGoalMaterialization.goals,
+          reason: effectGoalMaterialization.reason,
+          projectToMemoryTasks: false,
+          timestamp: effectGoalMaterialization.timestamp,
+        });
+      }
+      graphEvents.push({
+        type: 'MODEL_TURN_COMPLETED',
+        iteration: params.iteration,
+        toolCalls: executableToolCalls.map((toolCall) => ({
+          id: toolCall.id,
+          name: toolCall.name,
+        })),
+      });
+      params.applyGraphEvents(graphEvents);
+    },
   });
 
   const batchYieldedEarly = toolExecutionOutcomes.some((outcome) =>
@@ -297,7 +331,10 @@ export async function executeAgentControlGraphToolTurn(
       content:
         `Tool batch incomplete: settled ${toolExecutionOutcomes.length} of ` +
         `${executableToolCalls.length} executable tool call(s).`,
-      assistantMetadata: buildAssistantMessageMetadata('final', params.completion),
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'complete',
+        finishReason: 'tool_batch_incomplete',
+      }),
       sessionEndReason: 'tool_batch_incomplete',
     });
     return {

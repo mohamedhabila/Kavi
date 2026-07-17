@@ -13,6 +13,7 @@ import {
   MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
 } from './memorySensitivityPolicy';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
+import { advanceMemoryProjectionInTransaction } from './memoryAuthority';
 
 const logger = createLogger('memory.factSensitivityBackfill');
 const DEFAULT_BACKFILL_LIMIT = 16;
@@ -83,8 +84,6 @@ function classifyBackfillRow(row: FactSensitivityBackfillRow): MemoryFactSensiti
     !row.object_text.trim() ||
     typeof row.subject_name !== 'string' ||
     !row.subject_name.trim() ||
-    typeof row.subject_type !== 'string' ||
-    !row.subject_type.trim() ||
     (row.source_summary !== null && typeof row.source_summary !== 'string') ||
     !attributes ||
     !memoryKind
@@ -92,13 +91,15 @@ function classifyBackfillRow(row: FactSensitivityBackfillRow): MemoryFactSensiti
     return 'restricted';
   }
   return classifyMemoryFactSensitivity({
+    // A pre-current-policy row has no sealed semantic declaration. Migration
+    // therefore uses the most restrictive floor instead of guessing from
+    // legacy prose or treating an old label as current authority.
+    declaredSensitivity: 'restricted',
     subject: row.subject_name,
-    subjectType: row.subject_type,
     predicate: row.predicate,
     objectText: row.object_text,
     attributes,
     sourceSummary: row.source_summary,
-    memoryKind,
   });
 }
 
@@ -201,6 +202,7 @@ export function backfillFactSensitivityPolicy(
         ).changes ?? 0;
     }
     if (processedCount > 0) {
+      advanceMemoryProjectionInTransaction(db, memoryOwnerId);
       runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
     }
     const pendingCount = pendingCountForOwner(db, memoryOwnerId);

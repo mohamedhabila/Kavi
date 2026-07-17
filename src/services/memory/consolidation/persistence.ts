@@ -14,6 +14,7 @@ import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
 import { resolveCodeOwnedMemoryTaskId } from '../memoryScopeIdentity';
 import { classifyMemoryFactSensitivity } from '../memorySensitivityPolicy';
 import type { MemorySensitivityInput } from '../memorySensitivityPolicy';
+import { requireMemorySensitivityDeclaration } from '../memorySensitivityPolicy';
 import type { MemoryFactContributionSourceAlias } from '../factContributionCodec';
 import type { MemoryFactContributionWriteContext } from '../factContributionStore';
 import {
@@ -141,6 +142,10 @@ function applyConsolidatorResultInTransaction(
     .map((message) => message.timestamp)
     .filter((timestamp): timestamp is number => typeof timestamp === 'number');
   const episodeSummary = result.episodeSummary ?? null;
+  const episodeSensitivityDeclaration = requireMemorySensitivityDeclaration(
+    result.episodeSensitivityDeclaration,
+    'memory_episode_sensitivity_declaration_invalid',
+  );
   const factSensitivityInputs = result.newFacts.map((fact) =>
     buildFactSensitivityInput(fact, episodeSummary),
   );
@@ -159,6 +164,7 @@ function applyConsolidatorResultInTransaction(
         toolNames,
         importance: Math.max(0.5, ...result.newFacts.map((fact) => fact.importance ?? 0.5)),
         sensitivityEvidence: {
+          declaredSensitivity: episodeSensitivityDeclaration.sensitivity,
           sourceMessages: closedTurnMessages.map((message) => ({
             id: message.id,
             role: message.role,
@@ -243,11 +249,13 @@ function applyConsolidatorResultInTransaction(
             },
             sealedApplicability,
             contributionContext,
+            fact.sensitivityDeclaration,
           )
         : recordFactWithContribution(
             { ...factInput, supersedePrior: false },
             sealedApplicability,
             contributionContext,
+            fact.sensitivityDeclaration,
           );
     if (recorded.status === 'conflict') {
       logger.devWarn(`Grounded replacement rejected at persistence: ${recorded.conflict}`);
@@ -388,6 +396,10 @@ function buildFactSensitivityInput(
   fact: ConsolidatorFact,
   episodeSummary: string | null,
 ): MemorySensitivityInput {
+  const sensitivityDeclaration = requireMemorySensitivityDeclaration(
+    fact.sensitivityDeclaration,
+    'memory_fact_sensitivity_declaration_invalid',
+  );
   const memoryWrite = fact.admittedWrite
     ? {
         operation: fact.admittedWrite.operation,
@@ -401,8 +413,8 @@ function buildFactSensitivityInput(
       }
     : undefined;
   return {
+    declaredSensitivity: sensitivityDeclaration.sensitivity,
     subject: fact.subject,
-    subjectType: fact.subject === 'user' ? 'self' : 'concept',
     predicate: fact.predicate,
     objectText: fact.value,
     attributes: {
@@ -410,7 +422,6 @@ function buildFactSensitivityInput(
       ...(memoryWrite ? { memoryWrite } : {}),
     },
     sourceSummary: fact.reason ?? episodeSummary ?? null,
-    memoryKind: 'semantic_fact',
   };
 }
 

@@ -24,10 +24,12 @@ import { finalizeProviderTurn, persistStructuralTurn } from './turnPersistence';
 import type { EpisodeShareability } from './episodes/accessPolicyTypes';
 import { resolveCodeOwnedMemoryConversationId } from './memoryScopeIdentity';
 import { mergeProviderIntoStructural } from './providerFactReconciliation';
+import { codeOwnedMemorySensitivityDeclaration } from './memorySensitivityPolicy';
 import {
   resolveSealedPriorUserMessageIdentity,
   type MemoryMessageIdentity,
 } from './priorUserMessageIdentity';
+import { hasSameSourceExplicitMemoryAuthority } from './sameSourceFactAuthority';
 import {
   skippedMemoryTurnPublicationValidation,
   type MemoryTurnPublicationValidation,
@@ -254,6 +256,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   }
   const structuralResult: ConsolidatorResult = {
     episodeSummary: structural.episodeSummary || null,
+    episodeSensitivityDeclaration: codeOwnedMemorySensitivityDeclaration(),
     newFacts: structural.facts,
     activeFocus: null,
     openThreads: [],
@@ -292,9 +295,22 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     return skippedProcessTurnResult('provider_preempted');
   }
 
+  const assertProviderEnrichmentAuthorized = (): void => {
+    if (input.providerSignal?.aborted) {
+      throw new Error('memory_provider_enrichment_preempted');
+    }
+    if (!canWriteLongTermMemory()) {
+      throw new Error('memory_provider_enrichment_policy_revoked');
+    }
+    if (!ownsPersistenceFence(input.canPersist)) {
+      throw new Error('memory_provider_enrichment_claim_lost');
+    }
+  };
+
   const outcome = await extractProviderEnrichment(turnInput, {
     extractor: input.extractor,
     signal: input.providerSignal,
+    requestDispatchGuard: assertProviderEnrichmentAuthorized,
   });
   if (input.providerSignal?.aborted) {
     return skippedProcessTurnResult('provider_preempted');
@@ -317,7 +333,12 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       memoryConversationId,
       threadId: input.threadId,
       taskId: input.taskId,
-    });
+      sameSourceExplicitMemoryAuthority: user
+        ? hasSameSourceExplicitMemoryAuthority({
+            sourceMessageId: user.id,
+          })
+        : false,
+      });
     providerResult = {
       ...mergedResult,
       newFacts: mergedResult.newFacts.slice(structural.facts.length),

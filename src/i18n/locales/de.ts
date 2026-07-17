@@ -938,7 +938,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     secretSaveFailed:
       'Die Geheimnisse der Fähigkeit konnten nicht gespeichert werden. Bitte versuchen Sie es erneut.',
     installBlocked: 'Installation blockiert',
-    installFailed: 'Failed to install skill.',
   },
   voice: {
     title: 'Stimme',

@@ -6,7 +6,7 @@ import type { PersistedExactMemorySourceIdentity } from './exactMemorySourceIden
 import type { FactRow } from './facts/types';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { purgeRetiredCausalPayloadsInTransaction } from './retiredCausalPayloadPurge';
-import { newId } from './schema';
+import { newId } from './schemaValues';
 import { loadCompleteActiveRetirementGraphInTransaction } from './sourceRetirementActiveGraph';
 import { retireExactMemorySources } from './sourceRetirementCoordinator';
 import {
@@ -57,13 +57,37 @@ function contributionSources(
   }));
 }
 
-function activeSourcesForFact(
+function activeSourcesForFactLineage(
   activeGraph: ReadonlyArray<Readonly<VerifiedFactContributionAggregate>>,
   factId: string,
 ): ReadonlyArray<Readonly<PersistedExactMemorySourceIdentity>> {
+  const aggregatesByFactId = new Map<string, Readonly<VerifiedFactContributionAggregate>[]>();
+  for (const aggregate of activeGraph) {
+    const aggregates = aggregatesByFactId.get(aggregate.factId);
+    if (aggregates) aggregates.push(aggregate);
+    else aggregatesByFactId.set(aggregate.factId, [aggregate]);
+  }
+
+  const lineageFactIds = new Set<string>();
+  const pendingFactIds = [factId];
+  while (pendingFactIds.length > 0) {
+    const currentFactId = pendingFactIds.pop()!;
+    if (lineageFactIds.has(currentFactId)) continue;
+    const aggregates = aggregatesByFactId.get(currentFactId);
+    if (!aggregates || aggregates.length === 0) {
+      fail('memory_fact_withdrawal_provenance_missing');
+    }
+    lineageFactIds.add(currentFactId);
+    for (const aggregate of aggregates) {
+      for (const edge of aggregate.supersessionPlan.edges) {
+        pendingFactIds.push(edge.predecessor_fact_id);
+      }
+    }
+  }
+
   const sources = new Map<string, PersistedExactMemorySourceIdentity>();
   for (const aggregate of activeGraph) {
-    if (aggregate.factId !== factId) continue;
+    if (!lineageFactIds.has(aggregate.factId)) continue;
     for (const source of contributionSources(aggregate)) {
       sources.set(sourceRetirementIdentityKey(source), source);
     }
@@ -100,8 +124,10 @@ function verifiedPriorWithdrawal(factId: string): Readonly<MemoryWithdrawalRecei
 }
 
 /**
- * Forget one fact by retiring every active, integrity-verified causal source that supports it.
- * The immutable ledger and all derived-artifact cleanup commit through the same transaction.
+ * Forget one fact by retiring every active, integrity-verified causal source that supports it
+ * or a superseded predecessor. Closing the predecessor lineage prevents an older value from
+ * becoming current again after the requested fact is removed. The immutable ledger and all
+ * derived-artifact cleanup commit through the same transaction.
  */
 export function withdrawMemoryFact(factId: string, now = Date.now()): WithdrawMemoryFactResult {
   if (!Number.isSafeInteger(now) || now < 0) {
@@ -125,10 +151,8 @@ export function withdrawMemoryFact(factId: string, now = Date.now()): WithdrawMe
     );
     if (!target) return { status: 'not_found' as const };
 
-    const requestedSources = activeSourcesForFact(
-      loadCompleteActiveRetirementGraphInTransaction(db, memoryOwnerId),
-      normalizedFactId,
-    );
+    const activeGraph = loadCompleteActiveRetirementGraphInTransaction(db, memoryOwnerId);
+    const requestedSources = activeSourcesForFactLineage(activeGraph, normalizedFactId);
     const retirementGroupId = newId('retirement');
     const retirement = retireExactMemorySources({
       reason: 'fact_withdrawal',

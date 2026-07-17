@@ -2,6 +2,7 @@ import { sha256HexUtf8 } from '../../utils/sha256';
 import {
   closedMemoryFactClass,
   closedMemoryFactReviewState,
+  closedMemoryFactSensitivity,
   closedMemorySourceAuthority,
   type MemoryFactClass,
   type MemoryFactReviewState,
@@ -17,7 +18,7 @@ import {
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { isExactMemoryScopeId, requireExactMemoryScopeId } from './memoryScopeIdentity';
 
-export const MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION = 1 as const;
+export const MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION = 2 as const;
 export const MEMORY_FACT_CONTRIBUTION_LIMITS = Object.freeze({
   payloadBytes: 64 * 1024,
   producerIdBytes: 160,
@@ -53,6 +54,7 @@ const INPUT_KEYS = [
   'retrievability',
   'reviewState',
   'scope',
+  'sensitivityFloor',
   'sourceActorId',
   'sourceMessageId',
   'sourceRunId',
@@ -119,7 +121,7 @@ export interface NormalizedFactApplicabilityProvenance {
   personaId: string | null;
 }
 
-export interface NormalizedRecordFactContributionInput {
+export interface NormalizedRecordFactContributionInputV2 {
   subjectId: string;
   predicate: string;
   objectText: string;
@@ -144,19 +146,20 @@ export interface NormalizedRecordFactContributionInput {
   stability: number;
   decayRate: number;
   reviewState: MemoryFactReviewState;
+  sensitivityFloor: import('./facts/applicabilityProvenance').MemoryFactSensitivity;
   memoryKind: MemoryFactKind;
   supersedePrior: boolean;
   now: number;
 }
 
-export type MemoryFactContributionOperationV1 =
+export type MemoryFactContributionOperationV2 =
   | { kind: 'record' }
   | { kind: 'exact_replacement'; expectedCurrentFactId: string };
 
-export interface MemoryFactContributionPayloadV1 {
+export interface MemoryFactContributionPayloadV2 {
   version: typeof MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION;
-  operation: MemoryFactContributionOperationV1;
-  input: NormalizedRecordFactContributionInput;
+  operation: MemoryFactContributionOperationV2;
+  input: NormalizedRecordFactContributionInputV2;
   applicability: NormalizedFactApplicabilityProvenance;
 }
 
@@ -256,7 +259,7 @@ function validBoundedJson(value: unknown, state: { nodes: number }, depth = 0): 
 function validApplicability(
   value: unknown,
   scope: MemoryFactScope,
-): value is MemoryFactContributionPayloadV1['applicability'] {
+): value is MemoryFactContributionPayloadV2['applicability'] {
   if (!isPlainRecord(value) || !hasExactKeys(value, APPLICABILITY_KEYS)) return false;
   if (
     !closedMemoryFactClass(value.factClass) ||
@@ -268,7 +271,7 @@ function validApplicability(
   return value.personaId === null;
 }
 
-function validNormalizedInput(value: unknown): value is NormalizedRecordFactContributionInput {
+function validNormalizedInput(value: unknown): value is NormalizedRecordFactContributionInputV2 {
   if (!isPlainRecord(value) || !hasExactKeys(value, INPUT_KEYS)) return false;
   if (
     !isExactMemoryProvenanceId(value.subjectId) ||
@@ -307,6 +310,7 @@ function validNormalizedInput(value: unknown): value is NormalizedRecordFactCont
     !Number.isFinite(value.decayRate) ||
     value.decayRate < 0 ||
     !closedMemoryFactReviewState(value.reviewState) ||
+    !closedMemoryFactSensitivity(value.sensitivityFloor) ||
     !MEMORY_KINDS.includes(value.memoryKind as MemoryFactKind) ||
     typeof value.supersedePrior !== 'boolean' ||
     !validTimestamp(value.now)
@@ -321,7 +325,7 @@ function validNormalizedInput(value: unknown): value is NormalizedRecordFactCont
   return true;
 }
 
-function validOperation(value: unknown): value is MemoryFactContributionOperationV1 {
+function validOperation(value: unknown): value is MemoryFactContributionOperationV2 {
   if (!isPlainRecord(value) || typeof value.kind !== 'string') return false;
   if (value.kind === 'record') return hasExactKeys(value, RECORD_OPERATION_KEYS);
   return (
@@ -331,7 +335,7 @@ function validOperation(value: unknown): value is MemoryFactContributionOperatio
   );
 }
 
-function validPayload(value: unknown): value is MemoryFactContributionPayloadV1 {
+function validPayload(value: unknown): value is MemoryFactContributionPayloadV2 {
   if (!isPlainRecord(value) || !hasExactKeys(value, CONTRIBUTION_KEYS)) return false;
   if (
     value.version !== MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION ||
@@ -345,7 +349,7 @@ function validPayload(value: unknown): value is MemoryFactContributionPayloadV1 
 }
 
 export function encodeMemoryFactContributionPayload(
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
 ): EncodedMemoryFactContributionPayload {
   if (!validPayload(payload)) return fail('memory_fact_contribution_payload_invalid');
   const payloadJson = canonicalStringify(payload);
@@ -363,7 +367,7 @@ export function encodeMemoryFactContributionPayload(
 
 export function decodeMemoryFactContributionPayload(
   encoded: unknown,
-): MemoryFactContributionPayloadV1 {
+): MemoryFactContributionPayloadV2 {
   if (!isPlainRecord(encoded) || !hasExactKeys(encoded, ENVELOPE_KEYS)) {
     return fail('memory_fact_contribution_integrity_invalid');
   }

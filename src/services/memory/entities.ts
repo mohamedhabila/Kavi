@@ -6,14 +6,21 @@
 // ---------------------------------------------------------------------------
 
 import { getMemoryDb } from './database';
+import { getSchemaReadyMemoryDb } from './access/schemaGuard';
+import { runMemoryTransaction } from './access/transaction';
 import {
-  ensureFactSchema,
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from './memoryAuthority';
+import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import { ensureFactSchema } from './schema';
+import {
   jsonLikeEscape,
   newId,
   normalizeName,
   safeParseArray,
   safeParseObject,
-} from './schema';
+} from './schemaValues';
 
 export type EntityType =
   | 'person'
@@ -86,70 +93,72 @@ export interface UpsertEntityInput {
  * the alias and bumping `last_seen_at`) or creates a new one.
  */
 export function upsertEntity(input: UpsertEntityInput): MemoryEntity {
-  ensureFactSchema();
-  const db = getMemoryDb();
-  const now = input.now ?? Date.now();
-  const canonical = normalizeName(input.name);
-  if (!canonical) {
-    throw new Error('upsertEntity: name is required');
-  }
-
-  const exact = db.getFirstSync<EntityRow>(
-    `SELECT * FROM memory_entities
-       WHERE canonical_name = ? AND deleted_at IS NULL
-       LIMIT 1`,
-    canonical,
-  );
-  if (exact) return mergeAndPersist(exact, input, now);
-
-  const candidates = db.getAllSync<EntityRow>(
-    `SELECT * FROM memory_entities
-       WHERE deleted_at IS NULL
-         AND type = ?
-         AND aliases LIKE ?
-       LIMIT 32`,
-    input.type,
-    `%${jsonLikeEscape(canonical)}%`,
-  );
-  for (const row of candidates) {
-    const aliases = safeParseArray<string>(row.aliases).map(normalizeName);
-    if (aliases.includes(canonical)) {
-      return mergeAndPersist(row, input, now);
+  return runMemoryTransaction(() => {
+    const db = getSchemaReadyMemoryDb();
+    const now = input.now ?? Date.now();
+    const canonical = normalizeName(input.name);
+    if (!canonical) {
+      throw new Error('upsertEntity: name is required');
     }
-  }
 
-  const id = newId('ent');
-  const aliasesArr = uniqueAliases(input.aliases, canonical);
-  db.runSync(
-    `INSERT INTO memory_entities
-       (id, canonical_name, type, aliases, attributes, first_seen_at, last_seen_at, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-    id,
-    canonical,
-    input.type,
-    JSON.stringify(aliasesArr),
-    JSON.stringify(input.attributes ?? {}),
-    now,
-    now,
-  );
-  return {
-    id,
-    canonicalName: canonical,
-    type: input.type,
-    aliases: aliasesArr,
-    attributes: input.attributes ?? {},
-    firstSeenAt: now,
-    lastSeenAt: now,
-    deletedAt: null,
-  };
+    const exact = db.getFirstSync<EntityRow>(
+      `SELECT * FROM memory_entities
+         WHERE canonical_name = ? AND deleted_at IS NULL
+         LIMIT 1`,
+      canonical,
+    );
+    if (exact) return mergeAndPersist(db, exact, input, now);
+
+    const candidates = db.getAllSync<EntityRow>(
+      `SELECT * FROM memory_entities
+         WHERE deleted_at IS NULL
+           AND type = ?
+           AND aliases LIKE ?
+         LIMIT 32`,
+      input.type,
+      `%${jsonLikeEscape(canonical)}%`,
+    );
+    for (const row of candidates) {
+      const aliases = safeParseArray<string>(row.aliases).map(normalizeName);
+      if (aliases.includes(canonical)) {
+        return mergeAndPersist(db, row, input, now);
+      }
+    }
+
+    const id = newId('ent');
+    const aliasesArr = uniqueAliases(input.aliases, canonical);
+    db.runSync(
+      `INSERT INTO memory_entities
+         (id, canonical_name, type, aliases, attributes, first_seen_at, last_seen_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      id,
+      canonical,
+      input.type,
+      JSON.stringify(aliasesArr),
+      JSON.stringify(input.attributes ?? {}),
+      now,
+      now,
+    );
+    advanceMemoryProjectionInTransaction(db, getLocalMemoryVaultOwnerId(db));
+    return {
+      id,
+      canonicalName: canonical,
+      type: input.type,
+      aliases: aliasesArr,
+      attributes: input.attributes ?? {},
+      firstSeenAt: now,
+      lastSeenAt: now,
+      deletedAt: null,
+    };
+  });
 }
 
 function mergeAndPersist(
+  db: ReturnType<typeof getSchemaReadyMemoryDb>,
   existing: EntityRow,
   input: UpsertEntityInput,
   now: number,
 ): MemoryEntity {
-  const db = getMemoryDb();
   const prevAliases = safeParseArray<string>(existing.aliases);
   const prevAttrs = safeParseObject(existing.attributes);
   const mergedAliases = uniqueAliases(
@@ -167,6 +176,9 @@ function mergeAndPersist(
     lastSeenAt,
     existing.id,
   );
+  if (JSON.stringify(mergedAliases) !== existing.aliases) {
+    advanceMemoryProjectionInTransaction(db, getLocalMemoryVaultOwnerId(db));
+  }
   return {
     id: existing.id,
     canonicalName: existing.canonical_name,
@@ -182,7 +194,7 @@ function mergeAndPersist(
 export function getEntityById(id: string): MemoryEntity | null {
   ensureFactSchema();
   const row = getMemoryDb().getFirstSync<EntityRow>(
-    `SELECT * FROM memory_entities WHERE id = ? LIMIT 1`,
+    `SELECT * FROM memory_entities WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
     id,
   );
   return row ? rowToEntity(row) : null;
@@ -237,11 +249,15 @@ export function findEntityByName(name: string, type?: EntityType): MemoryEntity 
 }
 
 export function softDeleteEntity(id: string, now = Date.now()): boolean {
-  ensureFactSchema();
-  const result = getMemoryDb().runSync(
-    `UPDATE memory_entities SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`,
-    now,
-    id,
-  );
-  return (result.changes ?? 0) > 0;
+  return runMemoryTransaction(() => {
+    const db = getSchemaReadyMemoryDb();
+    const result = db.runSync(
+      `UPDATE memory_entities SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`,
+      now,
+      id,
+    );
+    if ((result.changes ?? 0) === 0) return false;
+    advanceRestrictiveMemoryAuthorityInTransaction(db, getLocalMemoryVaultOwnerId(db));
+    return true;
+  });
 }

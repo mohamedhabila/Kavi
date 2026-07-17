@@ -931,7 +931,6 @@ export const es: TranslationMap = mergeTranslations(en, {
       'Guarda los secretos requeridos de forma segura en el dispositivo para que esta habilidad pueda ejecutarse.',
     secretSaveFailed: 'No se pudieron guardar los secretos de la habilidad. Inténtalo de nuevo.',
     installBlocked: 'Instalación bloqueada',
-    installFailed: 'Failed to install skill.',
   },
   voice: {
     title: 'Voz',

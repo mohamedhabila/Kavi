@@ -22,11 +22,14 @@ describe('Orchestrator', () => {
   describe('Simple text response part 1', () => {
     it('should handle a simple text response without tool calls', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Hello' },
-          { type: 'token', content: ' world' },
-          { type: 'done', content: 'Hello world' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Hello' },
+            { type: 'token', content: ' world' },
+            { type: 'done', content: 'Hello world' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -44,7 +47,7 @@ describe('Orchestrator', () => {
       expect(callbacks.onStateChange).toHaveBeenCalledWith('thinking');
       expect(callbacks.onStateChange).toHaveBeenCalledWith('responding');
       expect(callbacks.onStateChange).toHaveBeenCalledWith('idle');
-      expect(callbacks.calls.onToken).toEqual(['Hello', ' world']);
+      expect(callbacks.calls.onToken).toEqual(['Hello world']);
       expect(callbacks.calls.onAssistantMessage).toEqual([
         {
           content: 'Hello world',
@@ -53,6 +56,7 @@ describe('Orchestrator', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
+            finishReason: 'stop',
           },
         },
       ]);
@@ -61,9 +65,10 @@ describe('Orchestrator', () => {
     });
 
     it('records terminal graph state before max-iteration closeout', async () => {
-      (executeTool as jest.Mock).mockImplementation(
-        async (_toolName: string, args: string) => `tool result for ${args}`,
-      );
+      (executeTool as jest.Mock).mockImplementation(async (_toolName: string, args: string) => ({
+        status: 'completed',
+        content: `tool result for ${args}`,
+      }));
       for (let index = 0; index < MAX_TOOL_ITERATIONS; index += 1) {
         const toolName = index % 2 === 0 ? 'read_file' : 'list_files';
         const toolArguments =
@@ -71,17 +76,20 @@ describe('Orchestrator', () => {
             ? `{"path":"max-${index}.txt"}`
             : `{"path":"artifacts/max-${index}"}`;
         mockStreamMessage.mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: {
-                id: `tc-max-${index}`,
-                name: toolName,
-                arguments: toolArguments,
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: `tc-max-${index}`,
+                  name: toolName,
+                  arguments: toolArguments,
+                },
               },
-            },
-            { type: 'done', content: '' },
-          ]),
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         );
       }
 
@@ -209,10 +217,13 @@ describe('Orchestrator', () => {
 
     it('uses persisted enriched user content when formatting API messages', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -247,10 +258,13 @@ describe('Orchestrator', () => {
 
     it('preserves prior topic history before budget pressure in the one-conversation chat path', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -305,10 +319,13 @@ describe('Orchestrator', () => {
 
     it('includes non-image attachment metadata in API messages', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Done' },
+            { type: 'done', content: 'Done' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

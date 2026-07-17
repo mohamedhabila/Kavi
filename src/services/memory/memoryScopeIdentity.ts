@@ -1,3 +1,5 @@
+import { SUPER_AGENT_PERSONA_ID } from '../agents/personas';
+
 const MEMORY_SCOPE_ID_PATTERN = /^[^\p{Z}\p{C}]{1,160}$/u;
 
 export const DEFAULT_MEMORY_PERSONA_ID = 'default';
@@ -53,7 +55,10 @@ export function resolveCodeOwnedMemoryPersonaId(value: string | null | undefined
     return DEFAULT_MEMORY_PERSONA_ID;
   }
   if (!isExactMemoryScopeId(value)) throw new Error('memory_scope_persona_id_invalid');
-  return value;
+  // Chitchat and agentic are execution modes of the same primary assistant,
+  // not separate people. Keep their persona-scoped memory in one continuity
+  // domain while preserving isolation for genuinely distinct custom personas.
+  return value === SUPER_AGENT_PERSONA_ID ? DEFAULT_MEMORY_PERSONA_ID : value;
 }
 
 function requireScopeId(value: unknown, field: string): string {

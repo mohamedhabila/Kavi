@@ -292,6 +292,26 @@ describe('ToolEffectReceipt', () => {
       },
     ],
     [
+      'definitive memory withdrawal precondition rejection',
+      'memory_forget',
+      { status: 'rejected', ok: false, code: 'not_found' },
+      {
+        effectKind: 'memory.delete',
+        effectState: 'failed',
+        verificationState: 'unverified',
+      },
+    ],
+    [
+      'unknown memory withdrawal failure',
+      'memory_forget',
+      { status: 'failed_unknown', ok: false, code: 'internal' },
+      {
+        effectKind: 'memory.delete',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      },
+    ],
+    [
       'scheduled notification',
       'notification_schedule',
       { status: 'notification_scheduled', id: 'notification-7' },
@@ -301,6 +321,36 @@ describe('ToolEffectReceipt', () => {
         verificationState: 'verified',
         resource: { kind: 'notification', id: 'notification-7' },
         operationHandle: { kind: 'notification_schedule', id: 'notification-7' },
+      },
+    ],
+    [
+      'durably created scheduled task',
+      'cron',
+      { status: 'task_created', id: 'job-7' },
+      {
+        effectKind: 'workflow.mutate',
+        effectState: 'applied',
+        verificationState: 'verified',
+      },
+    ],
+    [
+      'definitive scheduled task precondition rejection',
+      'cron',
+      { status: 'rejected', ok: false, code: 'scheduled_job_target_required' },
+      {
+        effectKind: 'workflow.mutate',
+        effectState: 'failed',
+        verificationState: 'unverified',
+      },
+    ],
+    [
+      'effect-free scheduled task listing',
+      'cron',
+      { status: 'listed', jobs: [] },
+      {
+        effectKind: 'observation.read',
+        effectState: 'none',
+        verificationState: 'not_applicable',
       },
     ],
     [

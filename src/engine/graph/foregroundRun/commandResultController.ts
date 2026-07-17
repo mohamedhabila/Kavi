@@ -17,11 +17,10 @@ type ForegroundCommandResultControllerAccessors = {
 
 type ForegroundCommandResultControllerActions = {
   appendConversationLog: (entry: ConversationLogEntry) => void;
-  ensureCanonicalConversation: (options: {
+  startNewConversation: (options: {
     mode?: ConversationMode;
     personaId?: string;
-    reportMissingProvider?: boolean;
-  }) => void;
+  }) => string;
   updateAssistantMessage: (messageId: string, content: string) => void;
 };
 
@@ -60,10 +59,9 @@ export function createForegroundCommandResultController(params: {
       params.actions.appendConversationLog(buildCommandResultLogEntry(result));
 
       if (result.action === 'new_conversation') {
-        params.actions.ensureCanonicalConversation({
+        params.actions.startNewConversation({
           personaId: params.personaId,
           mode: params.mode,
-          reportMissingProvider: true,
         });
         return;
       }

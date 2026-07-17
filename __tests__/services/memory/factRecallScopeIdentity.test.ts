@@ -181,7 +181,7 @@ describe('fact recall SQL scope identity', () => {
       originTaskId?: string;
       expiresAt?: number;
       reviewState?: RecordFactInput['reviewState'];
-      sensitivity?: RecordFactInput['sensitivity'];
+      sensitivityFloor?: RecordFactInput['sensitivityFloor'];
     }) =>
       recordFact({
         subjectId: subject.id,
@@ -292,6 +292,7 @@ describe('fact recall SQL scope identity', () => {
     const sensitive = add({
       predicate: 'blocked_medical_status',
       scope: 'global',
+      sensitivityFloor: 'sensitive',
     });
     const unsafeExpiry = add({ predicate: 'blocked_unsafe_expiry', scope: 'global' });
     invalidateProjectedFactForTest(invalidated.fact.id, 500);
@@ -527,6 +528,7 @@ describe('fact recall SQL scope identity', () => {
         predicate: 'access_medical_status',
         objectText: 'sensitive control value',
         scope: 'global',
+        sensitivityFloor: 'sensitive',
         now: 100,
       },
       { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
@@ -610,6 +612,7 @@ describe('fact recall SQL scope identity', () => {
         predicate: 'invariant15_medical_status',
         objectText: query,
         scope: 'global',
+        sensitivityFloor: 'sensitive',
         now: 400,
       },
       { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },

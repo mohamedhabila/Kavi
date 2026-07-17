@@ -31,6 +31,25 @@ function getMessagesSinceLatestUserMessage(
   return workingMessages;
 }
 
+function getMessagesFromPreviousUserTurn(
+  workingMessages: ReadonlyArray<Message>,
+): ReadonlyArray<Message> {
+  let latestUserIndex = -1;
+
+  for (let index = workingMessages.length - 1; index >= 0; index -= 1) {
+    if (workingMessages[index]?.role !== 'user') {
+      continue;
+    }
+    if (latestUserIndex < 0) {
+      latestUserIndex = index;
+      continue;
+    }
+    return workingMessages.slice(index + 1, latestUserIndex);
+  }
+
+  return [];
+}
+
 function normalizeToolCallNames(toolCalls: ReadonlyArray<{ name?: string }> | undefined): string[] {
   return (toolCalls ?? [])
     .map((toolCall) => (typeof toolCall.name === 'string' ? normalizeToolName(toolCall.name) : ''))
@@ -56,6 +75,29 @@ function extractRecentContinuationToolNames(
   }
 
   return recentToolNames;
+}
+
+function extractCompletedContinuationToolNames(messages: ReadonlyArray<Message>): Set<string> {
+  const completedToolNames = new Set<string>();
+
+  for (const message of messages) {
+    for (const toolCall of message.toolCalls ?? []) {
+      if (toolCall.status !== 'completed') {
+        continue;
+      }
+      const toolName = normalizeToolName(toolCall.name);
+      if (
+        !toolName ||
+        DEFAULT_CORE_TOOL_NAMES.has(toolName) ||
+        DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)
+      ) {
+        continue;
+      }
+      completedToolNames.add(toolName);
+    }
+  }
+
+  return completedToolNames;
 }
 
 function resolveWorkflowContinuationToolNames(
@@ -156,16 +198,20 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   const recentContinuationToolNames = extractRecentContinuationToolNames(
     messagesSinceLatestUserMessage,
   );
+  const previousTurnToolNames = extractCompletedContinuationToolNames(
+    getMessagesFromPreviousUserTurn(params.workingMessages),
+  );
   const observedToolNames = Array.from(params.observedToolNames)
     .map((toolName) => normalizeToolName(toolName))
     .filter(Boolean);
   const workflowContinuationToolNames = resolveWorkflowContinuationToolNames(params.allTools, [
     ...recentContinuationToolNames,
+    ...previousTurnToolNames,
     ...observedToolNames,
   ]);
-  const sameTurnWorkflowContinuationToolNames = resolveWorkflowContinuationToolNames(
+  const conversationalWorkflowContinuationToolNames = resolveWorkflowContinuationToolNames(
     params.allTools,
-    recentContinuationToolNames,
+    [...recentContinuationToolNames, ...previousTurnToolNames],
   );
   const turnContinuationToolNames = new Set([
     ...recentContinuationToolNames,
@@ -196,7 +242,7 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
     explicitToolSurfaceToolNames,
     observedToolNames,
     recentContinuationToolNames: turnContinuationToolNames,
-    workflowContinuationToolNames: sameTurnWorkflowContinuationToolNames,
+    workflowContinuationToolNames: conversationalWorkflowContinuationToolNames,
     ...turnToolSurfaceParams,
     includeToolCatalog:
       !hasSurfaceContinuationSignals ||

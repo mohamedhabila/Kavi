@@ -13,6 +13,11 @@ import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/databas
 import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+const CODE_OWNED_NORMAL_SENSITIVITY = {
+  version: 1,
+  source: 'code_owned',
+  sensitivity: 'normal',
+} as const;
 
 beforeEach(() => {
   closeMemoryDb();
@@ -30,12 +35,14 @@ describe('memory consolidator source-run provenance', () => {
     const result = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
+        episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
         newFacts: [
           {
             subject: 'Lumen Orchard',
             predicate: 'codename',
             value: 'Lumen Orchard',
             scope: 'project',
+            sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
           },
         ],
         activeFocus: null,
@@ -73,12 +80,14 @@ describe('memory consolidator source-run provenance', () => {
       applyThreadLocalConsolidatorResult(
         {
           episodeSummary: 'Prepared the release artifact.',
+          episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
           newFacts: [
             {
               subject: 'release',
               predicate: 'artifact_path',
               value: '/workspace/release.aab',
               evidenceMessageIds: ['user-atomic'],
+              sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
             },
           ],
           activeFocus: null,

@@ -8,12 +8,17 @@ import type {
 import type { PendingAgentToolCall } from './modelTurnExecution';
 import type { PreparedAgentControlGraphModelTurnReady } from './prepareAgentControlGraphModelTurn';
 import { executeAgentControlGraphToolTurn } from './toolTurnExecution';
+import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
+import { assertModelTurnMemoryPolicyBindingDurablyCurrent } from '../authority/modelTurnMemoryPolicyBinding';
+import { attachModelTurnMemoryAttribution } from './modelTurnMemoryAttribution';
 
 export async function executePreparedAgentControlGraphPendingToolTurn(params: {
   iterationParams: ExecuteAgentControlGraphIterationParams;
   modelTurnPreparation: PreparedAgentControlGraphModelTurnReady;
   runtime: AgentControlGraphIterationRuntimeState;
   contextWindow: number;
+  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
+  memoryRetrievalEventId?: string;
   turnAssistantContent: string;
   reasoning: string;
   providerReplay?: MessageProviderReplay;
@@ -51,12 +56,13 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     toolFilter: params.iterationParams.toolRuntime.toolFilter,
     pendingAsyncMonitorToolNames: params.modelTurnPreparation.pendingAsyncMonitorToolNames,
     groundedRequestScopedTools: params.modelTurnPreparation.preparedTurn.selectedTools,
+    memoryEvidenceToolDefinitions: params.iterationParams.allTools,
     getGraphSnapshot: params.iterationParams.graph.getGraphSnapshot,
     completedWorkflowToolNames: params.iterationParams.graph.completedWorkflowToolNames,
     lastPendingAsyncSignature: params.runtime.lastPendingAsyncSignature,
     contextWindow: params.contextWindow,
     compactionEngine: params.iterationParams.compactionEngine,
-    livingMemory: params.iterationParams.livingMemory,
+    livingMemory: params.runtime.admittedMemoryContext.livingMemory,
     onCompaction: params.iterationParams.onCompaction,
     warn: params.iterationParams.warn,
     yieldToUiFrame: params.iterationParams.yieldToUiFrame,
@@ -69,7 +75,18 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     recordPostToolFinalTextDirective: params.iterationParams.graph.recordPostToolFinalTextDirective,
     getModelTurnBlocker: () =>
       getAgentControlGraphModelTurnBlocker(params.iterationParams.graph.getGraphSnapshot()),
-    finishWithGraphTerminalEvent: params.iterationParams.graph.finishWithGraphTerminalEvent,
+    finishWithGraphTerminalEvent: async (terminalParams) => {
+      assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+      return params.iterationParams.graph.finishWithGraphTerminalEvent({
+        ...terminalParams,
+        assistantMetadata: attachModelTurnMemoryAttribution(
+          terminalParams.assistantMetadata,
+          params.memoryRetrievalEventId,
+        ),
+        beforeAssistantDelivery: () =>
+          assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
+      });
+    },
     recordPerformanceMetrics: params.iterationParams.graph.recordPerformanceMetrics,
     emitPendingAsyncOperationsChange: params.iterationParams.emitPendingAsyncOperationsChange,
     agentRunId: params.iterationParams.agentRunId,
@@ -82,6 +99,7 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     providerReplay: params.providerReplay,
     completion: params.completion,
     pendingToolCalls: params.pendingToolCalls,
+    memoryPolicyBinding: params.memoryPolicyBinding,
     workingMessages: params.runtime.workingMessages,
   });
   params.runtime.workingMessages = toolTurnExecution.workingMessages;

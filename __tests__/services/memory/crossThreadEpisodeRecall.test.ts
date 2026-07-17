@@ -28,6 +28,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -74,31 +75,27 @@ function seedEpisode(input: {
   const threadId = input.threadId ?? `thread-${input.suffix}`;
   const conversationId = input.conversationId ?? SESSION_ID;
   const endedAt = input.endedAt ?? 1_000;
-  const messageIds = [`message-${input.suffix}-start`, `message-${input.suffix}-end`];
-  const userContent =
-    input.sensitivity === 'sensitive'
-      ? 'My passport number is P1234567.'
-      : input.sensitivity === 'private'
-        ? 'My city is Delft.'
-        : `We discussed ${input.summary}.`;
+  const declaredSensitivity =
+    input.sensitivity === 'private'
+      ? 'personal'
+      : input.sensitivity === 'sensitive'
+        ? 'sensitive'
+        : 'normal';
   const episode = recordThreadLocalEpisode({
     conversationId,
     threadId,
     taskId: input.taskId ?? null,
     summary: input.summary,
-    messageIds,
     toolNames: input.toolNames ?? [],
-    sourceStartMessageId: `message-${input.suffix}-start`,
-    sourceEndMessageId: `message-${input.suffix}-end`,
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: `message-${input.suffix}-start`,
+      sourceAssistantMessageId: `message-${input.suffix}-end`,
+      userContent: `We discussed ${input.summary}.`,
+      assistantContent: 'I understood the request.',
+      declaredSensitivity,
+    }),
     startedAt: endedAt - 10,
     endedAt,
-    sensitivityEvidence: {
-      sourceMessages: [
-        { id: messageIds[0]!, role: 'user', content: userContent },
-        { id: messageIds[1]!, role: 'assistant', content: 'I understood the request.' },
-      ],
-      facts: [],
-    },
     now: endedAt,
   });
   if (!episode) throw new Error('expected episode');

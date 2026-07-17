@@ -22,6 +22,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 import { insertRetiredMemorySourceForTest } from '../../helpers/memoryWithdrawalFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -50,6 +51,7 @@ function expandCurrentThreadEvidence(
           ...SCOPE,
           lane: 'current_thread' as const,
           authorizedOrigin: { ...currentScope, policyVersion: 1 as const },
+          policyExpiresAt: null,
           accessDecision: { authorized: true as const, reason: 'eligible' as const },
           relevanceScore: 1,
         }
@@ -96,23 +98,18 @@ function makeFact(
 
 function makeEpisode(summary: string, threadId = SCOPE.sourceThreadId) {
   const sourceKey = summary.replace(/[^A-Za-z0-9]+/gu, '-').replace(/^-|-$/gu, '');
-  const messageIds = [`${threadId}-${sourceKey}-user`, `${threadId}-${sourceKey}-assistant`];
   const episode = recordEpisode({
     conversationId: SCOPE.memoryConversationId,
     threadId,
     summary,
-    messageIds,
-    sourceStartMessageId: messageIds[0],
-    sourceEndMessageId: messageIds[1],
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: `${threadId}-${sourceKey}-user`,
+      sourceAssistantMessageId: `${threadId}-${sourceKey}-assistant`,
+      userContent: 'Please continue this work.',
+      assistantContent: 'The work continued.',
+    }),
     startedAt: 10,
     endedAt: 20,
-    sensitivityEvidence: {
-      sourceMessages: [
-        { id: messageIds[0]!, role: 'user', content: 'Please continue this work.' },
-        { id: messageIds[1]!, role: 'assistant', content: 'The work continued.' },
-      ],
-      facts: [],
-    },
     accessPolicy: {
       memoryConversationId: SCOPE.memoryConversationId,
       sourceThreadId: threadId,
@@ -159,7 +156,12 @@ describe('expandLocalEvidence', () => {
       conversationId: SCOPE.memoryConversationId,
       threadId: SCOPE.sourceThreadId,
       summary: 'Future local episode.',
-      sourceEndMessageId: 'future-message',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'future-user-message',
+        sourceAssistantMessageId: 'future-message',
+      }),
+      startedAt: 120,
+      endedAt: 120,
       now: 120,
     });
     if (!futureEpisode) throw new Error('recordThreadLocalEpisode returned null');

@@ -1,21 +1,19 @@
 import type { MemoryDatabase } from './access/schemaGuard';
 import { assertMemoryTransactionActive } from './access/transaction';
 import type { PersistedExactMemorySourceIdentity } from './exactMemorySourceIdentity';
+import { decodeEpisodeSourceIdentityManifest } from './episodes/sourceIdentity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { purgeRetiredCausalPayloadsInTransaction } from './retiredCausalPayloadPurge';
 import { cleanupSourceLifecycleDerivedArtifactsInTransaction } from './sourceLifecycleDerivedArtifactCleanup';
 
 const BATCH_SIZE = 128;
-const MAX_IDS_PER_DERIVED_ROW = 4_096;
 
 interface EpisodeCandidateRow {
   id: string;
   conversation_id: string | null;
   thread_id: string | null;
   task_id: string | null;
-  source_start_message_id: string | null;
-  source_end_message_id: string | null;
-  message_ids_json: string;
+  source_identity_manifest_json: string;
 }
 
 export interface SourceLifecycleArtifactCleanupInput {
@@ -55,23 +53,6 @@ function requireUniqueIds(values: ReadonlyArray<string>, code: string): string[]
     return fail(code);
   }
   return sorted;
-}
-
-function parseIds(raw: string): string[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return fail('memory_source_lifecycle_derived_lineage_invalid');
-  }
-  if (
-    !Array.isArray(parsed) ||
-    parsed.length > MAX_IDS_PER_DERIVED_ROW ||
-    parsed.some((value) => typeof value !== 'string')
-  ) {
-    return fail('memory_source_lifecycle_derived_lineage_invalid');
-  }
-  return parsed as string[];
 }
 
 function deleteIds(
@@ -227,8 +208,7 @@ function collectEpisodeIds(
     for (;;) {
       const candidates = db.getAllSync<EpisodeCandidateRow>(
         `SELECT episode.id, episode.conversation_id, episode.thread_id, episode.task_id,
-                episode.source_start_message_id, episode.source_end_message_id,
-                episode.message_ids_json
+                episode.source_identity_manifest_json
            FROM memory_episodes AS episode
            JOIN memory_episode_access_policies AS policy ON policy.episode_id = episode.id
           WHERE policy.memory_owner_id = ? AND policy.memory_conversation_id = ?
@@ -243,15 +223,18 @@ function collectEpisodeIds(
       );
       if (candidates.length === 0) break;
       for (const episode of candidates) {
-        const messageIds = new Set(parseIds(episode.message_ids_json));
+        const sourceIdentityManifest = decodeEpisodeSourceIdentityManifest(
+          episode.source_identity_manifest_json,
+        );
+        if (!sourceIdentityManifest) {
+          fail('memory_source_lifecycle_derived_lineage_invalid');
+        }
         if (
           sources.some((source) =>
-            source.sourceKind === 'turn'
-              ? episode.source_end_message_id === source.sourceId
-              : source.sourceKind === 'message'
-                ? episode.source_start_message_id === source.sourceId ||
-                  messageIds.has(source.sourceId)
-                : false,
+            sourceIdentityManifest.sources.some(
+              (identity) =>
+                identity.sourceKind === source.sourceKind && identity.sourceId === source.sourceId,
+            ),
           )
         ) {
           ids.add(episode.id);

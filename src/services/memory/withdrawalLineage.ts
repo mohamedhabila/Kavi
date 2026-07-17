@@ -1,5 +1,9 @@
 import type { MemoryDatabase } from './access/schemaGuard';
 import type { EpisodeRow, EvidenceRow } from './episodes/types';
+import {
+  decodeEpisodeSourceIdentityManifest,
+  type EpisodeSourceIdentityManifest,
+} from './episodes/sourceIdentity';
 import { hasExactFactContentIdentity } from './facts/contentIdentity';
 import type { FactRow } from './facts/types';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
@@ -226,12 +230,10 @@ function lineageFieldReferences(raw: string, expected: ReadonlySet<string>): boo
   }
 }
 
-function parseOwnedLineageIds(raw: string): string[] {
-  try {
-    return parseLineageIds(raw);
-  } catch {
-    return [];
-  }
+function requireEpisodeSourceIdentityManifest(episode: EpisodeRow): EpisodeSourceIdentityManifest {
+  const manifest = decodeEpisodeSourceIdentityManifest(episode.source_identity_manifest_json);
+  if (!manifest) throw new Error('withdrawal_lineage_invalid');
+  return manifest;
 }
 
 export function factWithdrawalScope(target: FactRow): MemoryWithdrawalScope {
@@ -355,12 +357,8 @@ function selectEpisodes(
     if (linkedEpisodeIds.has(row.id)) return true;
     const index = sourceIndexes.get(scopeKey(episodeScope(row)));
     if (!index) return false;
-    const messageIds = index.sources.get('message')!;
-    const turnIds = index.sources.get('turn')!;
-    return (
-      Boolean(row.source_start_message_id && messageIds.has(row.source_start_message_id)) ||
-      Boolean(row.source_end_message_id && turnIds.has(row.source_end_message_id)) ||
-      lineageFieldReferences(row.message_ids_json, messageIds)
+    return requireEpisodeSourceIdentityManifest(row).sources.some((source) =>
+      index.sources.get(source.sourceKind)!.has(source.sourceId),
     );
   });
 }
@@ -578,13 +576,9 @@ export function collectMemoryWithdrawalLineage(
       const currentScope = episodeScope(episode);
       const sourceIndex = getScopedSourceIndex(sourceIndexes, currentScope);
       affectedScopes.set(scopeKey(currentScope), currentScope);
-      addSource(sourceIndex.sources, 'message', episode.source_start_message_id);
-      addSource(sourceIndex.sources, 'turn', episode.source_end_message_id);
-      addScopedSource(scopedSources, currentScope, 'message', episode.source_start_message_id);
-      addScopedSource(scopedSources, currentScope, 'turn', episode.source_end_message_id);
-      for (const messageId of parseOwnedLineageIds(episode.message_ids_json)) {
-        addSource(sourceIndex.sources, 'message', messageId);
-        addScopedSource(scopedSources, currentScope, 'message', messageId);
+      for (const source of requireEpisodeSourceIdentityManifest(episode).sources) {
+        addSource(sourceIndex.sources, source.sourceKind, source.sourceId);
+        addScopedSource(scopedSources, currentScope, source.sourceKind, source.sourceId);
       }
     }
     const episodeIds = new Set(episodesById.keys());

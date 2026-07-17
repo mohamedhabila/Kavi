@@ -99,7 +99,7 @@ describe('durable memory enrichment retries', () => {
       role: 'assistant',
       content: 'Done. Next: validate the Android release build.',
       timestamp: 2,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     },
   ];
 
@@ -203,7 +203,7 @@ describe('durable memory enrichment retries', () => {
         role: 'assistant',
         content: 'Created the release artifact.',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
     ];
     mockSendMessage.mockRejectedValueOnce(new Error('temporary timeout'));
@@ -258,6 +258,7 @@ describe('durable memory enrichment retries', () => {
                   sensitivity: 'normal',
                 },
               ],
+              episode_sensitivity: 'normal',
               episode_summary: 'Created the production mobile release artifact.',
               active_focus: null,
               open_threads: [],
@@ -335,7 +336,7 @@ describe('durable memory enrichment retries', () => {
         role: 'assistant',
         content: 'I will remember it.',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
       {
         id: 'u-causal-successor',
@@ -348,7 +349,7 @@ describe('durable memory enrichment retries', () => {
         role: 'assistant',
         content: 'I will remember that too.',
         timestamp: 4,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
     ];
     const prior = enqueueIngestionJob({
@@ -425,6 +426,7 @@ describe('durable memory enrichment retries', () => {
                     sensitivity: 'personal',
                   },
                 ],
+                episode_sensitivity: 'normal',
                 episode_summary: null,
                 active_focus: null,
                 open_threads: [],
@@ -455,6 +457,7 @@ describe('durable memory enrichment retries', () => {
                     sensitivity: 'personal',
                   },
                 ],
+                episode_sensitivity: 'normal',
                 episode_summary: null,
                 active_focus: null,
                 open_threads: [],

@@ -21,6 +21,16 @@ import {
 } from '../../../src/services/memory/withdrawalFence';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+const CODE_OWNED_NORMAL_SENSITIVITY = {
+  version: 1,
+  source: 'code_owned',
+  sensitivity: 'normal',
+} as const;
+const PROVIDER_NORMAL_SENSITIVITY = {
+  version: 1,
+  source: 'provider',
+  sensitivity: 'normal',
+} as const;
 
 interface ContributionRow {
   id: string;
@@ -70,18 +80,21 @@ describe('consolidation fact contributions', () => {
   it('uses stable per-fact events and exact per-fact aliases across replay', () => {
     const result = {
       episodeSummary: null,
+      episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
       newFacts: [
         {
           subject: 'user',
           predicate: 'favorite_drink',
           value: 'tea',
           evidenceMessageIds: ['evidence-drink'],
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
         },
         {
           subject: 'user',
           predicate: 'favorite_food',
           value: 'ramen',
           evidenceMessageIds: ['evidence-food'],
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
         },
       ],
       activeFocus: null,
@@ -156,6 +169,7 @@ describe('consolidation fact contributions', () => {
     const first = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
+        episodeSensitivityDeclaration: PROVIDER_NORMAL_SENSITIVITY,
         newFacts: [
           {
             subject: 'user',
@@ -167,6 +181,7 @@ describe('consolidation fact contributions', () => {
               authority: 'grounded_user_statement',
               evidenceMessageId: 'user-city-old',
             },
+            sensitivityDeclaration: PROVIDER_NORMAL_SENSITIVITY,
           },
         ],
         activeFocus: null,
@@ -188,6 +203,7 @@ describe('consolidation fact contributions', () => {
     const replacement = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
+        episodeSensitivityDeclaration: PROVIDER_NORMAL_SENSITIVITY,
         newFacts: [
           {
             subject: 'user',
@@ -200,6 +216,7 @@ describe('consolidation fact contributions', () => {
               evidenceMessageId: 'user-city-new',
               expectedCurrentFactId: predecessorFactId,
             },
+            sensitivityDeclaration: PROVIDER_NORMAL_SENSITIVITY,
           },
         ],
         activeFocus: null,
@@ -259,11 +276,13 @@ describe('consolidation fact contributions', () => {
       applyThreadLocalConsolidatorResult(
         {
           episodeSummary: 'The user selected English for future conversations.',
+          episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
           newFacts: [
             {
               subject: 'user',
               predicate: 'preferred_language',
               value: 'English',
+              sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
             },
           ],
           activeFocus: 'Use English in future conversations.',

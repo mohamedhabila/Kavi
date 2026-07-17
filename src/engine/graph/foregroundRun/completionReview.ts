@@ -92,6 +92,7 @@ export async function reviewForegroundRunCompletion(params: {
 
   const terminalCompletion = buildAgentControlGraphTerminalReviewCompletion(
     reviewContext.reviewRun.controlGraph,
+    reviewContext.targetMessage,
   );
   if (terminalCompletion) {
     const terminalized = params.finalizeTrackedRun(

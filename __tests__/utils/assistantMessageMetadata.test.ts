@@ -1,6 +1,7 @@
 import {
   buildAssistantMessageMetadata,
   hasCompleteFinalAssistantMetadata,
+  hasSettledFinalAssistantMetadata,
   hasTerminalAssistantCompletionMetadata,
   isValidAssistantMessageMetadata,
   MISSING_ASSISTANT_COMPLETION_FINISH_REASON,
@@ -96,6 +97,25 @@ describe('assistantMessageMetadata', () => {
     });
     expect(hasCompleteFinalAssistantMetadata(message)).toBe(true);
     expect(hasTerminalAssistantCompletionMetadata(message)).toBe(true);
+  });
+
+  it('treats an explicit user approval rejection as a complete cancellation notice', () => {
+    const metadata = buildAssistantMessageMetadata('final', {
+      completionStatus: 'complete',
+      finishReason: 'user_approval_denied',
+    });
+    const message = makeMessage({
+      content: 'No effect was dispatched.',
+      assistantMetadata: metadata,
+    });
+
+    expect(metadata).toEqual({
+      kind: 'final',
+      completionStatus: 'complete',
+      finishReason: 'user_approval_denied',
+    });
+    expect(hasSettledFinalAssistantMetadata(message)).toBe(true);
+    expect(hasCompleteFinalAssistantMetadata(message)).toBe(true);
   });
 
   it('requires a nonempty plain final before terminal closure', () => {

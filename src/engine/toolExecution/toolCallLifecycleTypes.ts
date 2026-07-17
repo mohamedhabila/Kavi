@@ -9,6 +9,9 @@ import type { RuntimeToolCallInput } from './toolExecutionMessages';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
+import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
+import type { ToolEffectDispatchObservation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
+import type { ToolObservedMemoryEvidenceCapability } from '../../services/memory/toolObservedMemoryEvidence';
 
 export type ToolExecutionLifecycleIdPrefixes = {
   blocked: string;
@@ -38,6 +41,7 @@ export type ToolExecutionLifecycleParams = {
   allProviders?: LlmProviderConfig[];
   model: string;
   currentUserMessage?: CodeOwnedCurrentUserMessage;
+  toolObservedMemoryEvidence?: ReadonlyArray<ToolObservedMemoryEvidenceCapability>;
   memoryConversationId: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
@@ -61,6 +65,7 @@ export type ToolExecutionLifecycleParams = {
   controlGraphGoals?: ReadonlyArray<AgentGoal>;
   agentRunId?: string;
   executionRunId: string;
+  modelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
 };
@@ -72,4 +77,5 @@ export type ToolExecutionLifecycleResult = {
   result?: string;
   effectReceipt?: ToolEffectReceipt;
   effectReconciliationRequired?: boolean;
+  effectDispatchObservation?: ToolEffectDispatchObservation;
 };

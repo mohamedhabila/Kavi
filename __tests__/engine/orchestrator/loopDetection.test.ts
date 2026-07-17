@@ -23,11 +23,10 @@ describe('Orchestrator', () => {
 
       for (let i = 0; i < 20; i++) {
         mockStreamMessage.mockImplementationOnce(() =>
-          createStreamGenerator([
-            { type: 'token', content: '' },
-            toolCallEvent,
-            { type: 'done', content: '' },
-          ]),
+          createStreamGenerator(
+            [{ type: 'token', content: '' }, toolCallEvent, { type: 'done', content: '' }],
+            'text',
+          ),
         );
       }
 
@@ -60,11 +59,10 @@ describe('Orchestrator', () => {
 
       for (let i = 0; i < 6; i++) {
         mockStreamMessage.mockImplementationOnce(() =>
-          createStreamGenerator([
-            { type: 'token', content: '' },
-            toolCallEvent,
-            { type: 'done', content: '' },
-          ]),
+          createStreamGenerator(
+            [{ type: 'token', content: '' }, toolCallEvent, { type: 'done', content: '' }],
+            'text',
+          ),
         );
       }
 
@@ -108,11 +106,10 @@ describe('Orchestrator', () => {
 
       for (let i = 0; i < 6; i++) {
         mockStreamMessage.mockImplementationOnce(() =>
-          createStreamGenerator([
-            { type: 'token', content: '' },
-            toolCallEvent,
-            { type: 'done', content: '' },
-          ]),
+          createStreamGenerator(
+            [{ type: 'token', content: '' }, toolCallEvent, { type: 'done', content: '' }],
+            'text',
+          ),
         );
       }
 

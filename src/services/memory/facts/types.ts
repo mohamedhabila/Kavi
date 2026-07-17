@@ -1,4 +1,4 @@
-import { safeParseObject } from '../schema';
+import { safeParseObject } from '../schemaValues';
 import {
   closedMemoryFactSensitivity,
   type MemoryFactReviewState,
@@ -249,6 +249,8 @@ export interface RecordFactInput {
   stability?: number;
   decayRate?: number;
   reviewState?: MemoryFactReviewState;
+  /** Explicit producer-owned lower bound; normalized contribution payloads always contain it. */
+  sensitivityFloor?: MemoryFactSensitivity;
   memoryKind?: MemoryFactKind;
   /** When true, any existing currently-valid fact for (subject, predicate) is invalidated. */
   supersedePrior?: boolean;

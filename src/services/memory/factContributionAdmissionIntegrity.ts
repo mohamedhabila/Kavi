@@ -3,9 +3,10 @@ import {
   buildMemoryFactContributionId,
   decodeMemoryFactContributionPayload,
   encodeMemoryFactContributionPayload,
+  MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION,
   normalizeMemoryFactContributionSourceScope,
   requireMemoryFactContributionProducerIdentity,
-  type MemoryFactContributionPayloadV1,
+  type MemoryFactContributionPayloadV2,
   type MemoryFactContributionSourceAlias,
 } from './factContributionCodec';
 import {
@@ -199,13 +200,13 @@ function decodeSupersessionSnapshot(
 }
 
 /** Reconstruct the exact persisted fact mutation without normalizing malformed legacy data. */
-export function buildLegacyFactSnapshotPayload(row: FactRow): MemoryFactContributionPayloadV1 {
+export function buildLegacyFactSnapshotPayload(row: FactRow): MemoryFactContributionPayloadV2 {
   const scope = isMemoryFactScope(row.scope) ? row.scope : fail();
   const factClass = closedMemoryFactClass(row.fact_class) ?? fail();
   const sourceAuthority = closedMemorySourceAuthority(row.source_authority) ?? fail();
   const reviewState = closedMemoryFactReviewState(row.review_state) ?? fail();
-  const payload: MemoryFactContributionPayloadV1 = {
-    version: 1,
+  const payload: MemoryFactContributionPayloadV2 = {
+    version: MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION,
     operation: { kind: 'record' },
     applicability: {
       factClass,
@@ -237,6 +238,10 @@ export function buildLegacyFactSnapshotPayload(row: FactRow): MemoryFactContribu
       stability: row.stability ?? Number.NaN,
       decayRate: row.decay_rate ?? Number.NaN,
       reviewState,
+      sensitivityFloor:
+        row.sensitivity_policy_version === MEMORY_FACT_SENSITIVITY_POLICY_VERSION
+          ? (closedMemoryFactSensitivity(row.sensitivity) ?? 'restricted')
+          : 'restricted',
       memoryKind: strictMemoryKind(row.memory_kind),
       supersedePrior: false,
       now: row.updated_at,
@@ -247,7 +252,7 @@ export function buildLegacyFactSnapshotPayload(row: FactRow): MemoryFactContribu
 }
 
 function assertPayloadScope(
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   contribution: ContributionRow,
 ): void {
   const input = payload.input;
@@ -262,7 +267,7 @@ function assertPayloadScope(
 }
 
 function assertPayloadAliases(
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   aliases: ReadonlyArray<MemoryFactContributionSourceAlias>,
 ): void {
   const keys = new Set(aliases.map((alias) => `${alias.sourceKind}\u0000${alias.sourceId}`));
@@ -283,7 +288,7 @@ function assertContributionIntegrity(
   memoryOwnerId: string,
   aliases: ReadonlyArray<MemoryFactContributionSourceAlias>,
   retiredSourceKeys: ReadonlySet<string>,
-): MemoryFactContributionPayloadV1 {
+): MemoryFactContributionPayloadV2 {
   if (
     fact.memory_owner_id !== memoryOwnerId ||
     contribution.fact_id !== fact.id ||
@@ -410,7 +415,7 @@ function assertSupersessionSnapshotIntegrity(
   snapshot: ContributionSupersessionSnapshot,
   facts: ReadonlyMap<string, FactRow>,
   contributions: ReadonlyMap<string, ContributionRow>,
-  payloads: ReadonlyMap<string, MemoryFactContributionPayloadV1>,
+  payloads: ReadonlyMap<string, MemoryFactContributionPayloadV2>,
 ): void {
   const contribution = contributions.get(snapshot.contributionId) ?? fail();
   const payload = payloads.get(snapshot.contributionId) ?? fail();
@@ -425,7 +430,7 @@ function assertSupersessionSnapshotIntegrity(
     contribution.contributed_at !== snapshot.supersededAt ||
     payload.input.now !== snapshot.supersededAt ||
     successor.created_at !== snapshot.supersededAt ||
-    snapshot.successorSensitivityPolicyVersion > MEMORY_FACT_SENSITIVITY_POLICY_VERSION ||
+    snapshot.successorSensitivityPolicyVersion !== MEMORY_FACT_SENSITIVITY_POLICY_VERSION ||
     maxMemoryFactSensitivity(successorSensitivity, snapshot.successorSensitivityFloor) !==
       successorSensitivity ||
     (!snapshot.pinnedInputExplicit && payload.input.pinned !== false) ||
@@ -442,7 +447,7 @@ function assertSupersessionIntegrity(
   row: ContributionSupersessionRow,
   facts: ReadonlyMap<string, FactRow>,
   contributions: ReadonlyMap<string, ContributionRow>,
-  payloads: ReadonlyMap<string, MemoryFactContributionPayloadV1>,
+  payloads: ReadonlyMap<string, MemoryFactContributionPayloadV2>,
   snapshots: ReadonlyMap<string, ContributionSupersessionSnapshot>,
 ): void {
   const contribution = contributions.get(row.contribution_id) ?? fail();
@@ -528,7 +533,7 @@ export function assertFactContributionAdmissionIntegrity(db: MemoryDb): void {
       .map(exactSourceKey),
   );
   const contributionCounts = new Map<string, number>();
-  const payloads = new Map<string, MemoryFactContributionPayloadV1>();
+  const payloads = new Map<string, MemoryFactContributionPayloadV2>();
   for (const contribution of contributions.values()) {
     const fact = facts.get(contribution.fact_id) ?? fail();
     const aliases = assertFactContributionSourceChildCommitment(

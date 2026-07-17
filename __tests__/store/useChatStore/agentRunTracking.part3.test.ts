@@ -305,7 +305,7 @@ describe('useChatStore', () => {
         id: 'assistant-final-8b',
         role: 'assistant',
         content: 'The background result was verified and delivered.',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       });
 
       useChatStore.getState().updateAgentRunAsyncWork(
@@ -401,7 +401,7 @@ describe('useChatStore', () => {
         id: 'assistant-final-constrained-restart',
         role: 'assistant',
         content: 'Het resultaat is geverifieerd.',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       });
 
       useChatStore.getState().recoverInterruptedAgentRuns([], {

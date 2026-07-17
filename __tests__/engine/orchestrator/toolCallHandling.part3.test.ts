@@ -69,33 +69,39 @@ describe('Orchestrator', () => {
     });
 
     it('runs eligible read-only tool batches in parallel', async () => {
-      const resolvers: Array<(value: string) => void> = [];
+      const resolvers: Array<(value: { status: 'completed'; content: string }) => void> = [];
       (executeTool as jest.Mock).mockImplementation(
         () =>
-          new Promise<string>((resolve) => {
+          new Promise<{ status: 'completed'; content: string }>((resolve) => {
             resolvers.push(resolve);
           }),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"a.txt"}' },
-          },
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc2', name: 'glob_search', arguments: '{"pattern":"src/**/*.ts"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"a.txt"}' },
+            },
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc2', name: 'glob_search', arguments: '{"pattern":"src/**/*.ts"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Finished' },
-          { type: 'done', content: 'Finished' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Finished' },
+            { type: 'done', content: 'Finished' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -125,8 +131,8 @@ describe('Orchestrator', () => {
 
       expect(executeTool).toHaveBeenCalledTimes(2);
 
-      resolvers[0]('file contents');
-      resolvers[1]('search results');
+      resolvers[0]({ status: 'completed', content: 'file contents' });
+      resolvers[1]({ status: 'completed', content: 'search results' });
 
       await runPromise;
 
@@ -147,33 +153,39 @@ describe('Orchestrator', () => {
         },
       ]);
 
-      const resolvers: Array<(value: string) => void> = [];
+      const resolvers: Array<(value: { status: 'completed'; content: string }) => void> = [];
       (executeTool as jest.Mock).mockImplementation(
         () =>
-          new Promise<string>((resolve) => {
+          new Promise<{ status: 'completed'; content: string }>((resolve) => {
             resolvers.push(resolve);
           }),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'mcp__docs__fetch', arguments: '{"path":"/a"}' },
-          },
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc2', name: 'mcp__docs__fetch', arguments: '{"path":"/b"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'mcp__docs__fetch', arguments: '{"path":"/a"}' },
+            },
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc2', name: 'mcp__docs__fetch', arguments: '{"path":"/b"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Finished' },
-          { type: 'done', content: 'Finished' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Finished' },
+            { type: 'done', content: 'Finished' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -200,7 +212,7 @@ describe('Orchestrator', () => {
 
       expect(executeTool).toHaveBeenCalledTimes(1);
 
-      resolvers[0]('first result');
+      resolvers[0]({ status: 'completed', content: 'first result' });
 
       for (
         let attempt = 0;
@@ -212,7 +224,7 @@ describe('Orchestrator', () => {
 
       expect(executeTool).toHaveBeenCalledTimes(2);
 
-      resolvers[1]('second result');
+      resolvers[1]({ status: 'completed', content: 'second result' });
 
       await runPromise;
 
@@ -225,41 +237,50 @@ describe('Orchestrator', () => {
       useSuperAgentPersona();
       (executeTool as jest.Mock).mockImplementationOnce(async (toolName: string) => {
         expect(toolName).toBe('sessions_yield');
-        return JSON.stringify({
+        return {
           status: 'completed',
-          message: 'All workers are done.',
-          finalizeSupervisor: true,
-          pendingSessions: [],
-        });
+          content: JSON.stringify({
+            status: 'completed',
+            message: 'All workers are done.',
+            finalizeSupervisor: true,
+            pendingSessions: [],
+          }),
+        };
       });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc-yield',
-              name: 'sessions_yield',
-              arguments: '{"message":"checkpoint"}',
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc-yield',
+                name: 'sessions_yield',
+                arguments: '{"message":"checkpoint"}',
+              },
             },
-          },
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc-extra',
-              name: 'read_file',
-              arguments: '{"path":"after-yield.txt"}',
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc-extra',
+                name: 'read_file',
+                arguments: '{"path":"after-yield.txt"}',
+              },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Finalized after yield.' },
-          { type: 'done', content: 'Finalized after yield.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Finalized after yield.' },
+            { type: 'done', content: 'Finalized after yield.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -301,10 +322,13 @@ describe('Orchestrator', () => {
 
     it('should require tool use for actionable workspace requests on the first turn', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Inspecting' },
-          { type: 'done', content: 'Inspecting' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Inspecting' },
+            { type: 'done', content: 'Inspecting' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -333,10 +357,13 @@ describe('Orchestrator', () => {
 
     it('keeps Anthropic thinking enabled on coder-style turns by leaving tool use optional', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Inspecting' },
-          { type: 'done', content: 'Inspecting' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Inspecting' },
+            { type: 'done', content: 'Inspecting' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

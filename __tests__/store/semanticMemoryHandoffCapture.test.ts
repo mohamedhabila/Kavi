@@ -1,7 +1,20 @@
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 
+let mockMemoryEnabled = true;
+
+jest.mock('../../src/services/memory/policy', () => ({
+  canWriteLongTermMemory: () => mockMemoryEnabled,
+}));
+
+const completeFinalMetadata = Object.freeze({
+  kind: 'final',
+  completionStatus: 'complete',
+  finishReason: 'stop',
+} as const);
+
 beforeEach(() => {
+  mockMemoryEnabled = true;
   useChatStore.setState({
     conversations: [],
     activeConversationId: null,
@@ -58,6 +71,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Done.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
 
     const inactiveId = useChatStore
@@ -93,6 +107,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Understood.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
 
     const targetId = useChatStore
@@ -124,6 +139,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Understood.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
 
     const firstFreshId = useChatStore.getState().createConversation('openai', 'system');
@@ -161,10 +177,13 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Understood.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
     useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    mockMemoryEnabled = false;
 
     const freshId = useChatStore.getState().createConversation('openai', 'system');
+    mockMemoryEnabled = true;
     useSettingsStore.setState({ disableLongTermMemory: false } as never);
 
     expect(
@@ -186,6 +205,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Closed.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
     useChatStore.getState().addMessage(sourceId, {
       id: 'running-user',
@@ -242,6 +262,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Closed.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
     const waitingId = useChatStore.getState().createConversation('openai', 'system');
     const pending = useChatStore
@@ -352,6 +373,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'First done.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
     const secondId = useChatStore.getState().createConversation('openai', 'system');
     useChatStore.setState((state) => ({
@@ -372,6 +394,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Second done.',
       timestamp: 13,
+      assistantMetadata: completeFinalMetadata,
     });
 
     useChatStore.getState().setActiveConversation(firstId);
@@ -406,6 +429,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Default done.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
     const researcherId = useChatStore
       .getState()
@@ -428,6 +452,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Research done.',
       timestamp: 13,
+      assistantMetadata: completeFinalMetadata,
     });
 
     const activatedDefaultId = useChatStore
@@ -459,6 +484,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Understood.',
       timestamp: 11,
+      assistantMetadata: completeFinalMetadata,
     });
 
     const firstSideId = useChatStore.getState().createSideThread(parentId)!;
@@ -490,6 +516,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Understood.',
       timestamp: 13,
+      assistantMetadata: completeFinalMetadata,
     });
 
     const secondSideId = useChatStore.getState().createSideThread(parentId)!;
@@ -539,6 +566,7 @@ describe('semantic memory handoff capture and activation', () => {
       role: 'assistant',
       content: 'Side done.',
       timestamp: 13,
+      assistantMetadata: completeFinalMetadata,
     });
     const afterSide = useChatStore.getState().createConversation('openai', 'system');
     expect(

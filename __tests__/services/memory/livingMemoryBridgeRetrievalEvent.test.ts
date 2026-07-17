@@ -7,7 +7,11 @@ import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import { getFactById } from '../../../src/services/memory/facts/queries';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
+import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
+import { bindEpisodeAccessPolicy } from '../../../src/services/memory/episodes/accessPolicyStore';
+import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import * as llmFactSelector from '../../../src/services/memory/llmFactSelector';
+import * as promptAssemblyRetrievalEvent from '../../../src/services/memory/promptAssemblyRetrievalEvent';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
 import {
   ensureFactSchema,
@@ -18,6 +22,7 @@ import * as memoryDatabase from '../../../src/services/memory/database';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -50,6 +55,7 @@ describe('living memory structured retrieval evidence', () => {
         objectText: 'selector resilience keeps deterministic retrieval evidence',
         scope: 'global',
         importance: 0.9,
+        expiresAt: 2_500,
         now: 500,
       },
       { factClass: 'workflow', sourceAuthority: 'tool_observed' },
@@ -79,6 +85,7 @@ describe('living memory structured retrieval evidence', () => {
     });
 
     expect(out.recalledFactCount).toBeGreaterThan(0);
+    expect(out.validUntil).toBe(2_500);
     expect(out.retrievalEvent).toMatchObject({ status: 'recorded', code: 'recorded' });
     expect(readRecentMemoryRetrievalEvents()[0]).toMatchObject({
       outcome: 'completed',
@@ -86,6 +93,52 @@ describe('living memory structured retrieval evidence', () => {
       selector: { mode: 'semantic', outcome: 'deterministic_fallback' },
       barrier: { outcome: 'completed', waitMs: 4, queueAgeMs: 20 },
     });
+  });
+
+  it('binds an authorized episode policy expiry into the returned prompt projection', async () => {
+    const episode = recordThreadLocalEpisode({
+      conversationId: 'memory-episode-expiry',
+      threadId: 'thread-episode-expiry',
+      summary: 'release checkpoint continuity',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'episode-start',
+        sourceAssistantMessageId: 'episode-end',
+        userContent: 'Continue the release checkpoint.',
+        assistantContent: 'Checkpoint recorded.',
+      }),
+      startedAt: 80,
+      endedAt: 100,
+      now: 100,
+    });
+    if (!episode) throw new Error('episode fixture unavailable');
+    const db = getMemoryDb();
+    bindEpisodeAccessPolicy(
+      db,
+      {
+        episodeId: episode.id,
+        memoryOwnerId: getLocalMemoryVaultOwnerId(db),
+        memoryConversationId: 'memory-episode-expiry',
+        sourceThreadId: 'thread-episode-expiry',
+        personaId: 'default',
+        taskId: null,
+        shareability: 'thread_only',
+        expiresAt: 2_500,
+        boundAt: 100,
+      },
+      100,
+    );
+
+    const out = await buildLivingMemorySections({
+      messages: [userMessage('release checkpoint continuity', 1_000)],
+      conversationId: 'memory-episode-expiry',
+      sourceThreadId: 'thread-episode-expiry',
+      personaId: 'default',
+      taskId: null,
+      now: 2_000,
+    });
+
+    expect(out.recalledEpisodeCount).toBe(1);
+    expect(out.validUntil).toBe(2_500);
   });
 
   it('keeps prompt assembly available when structured event storage fails', async () => {
@@ -222,5 +275,126 @@ describe('living memory structured retrieval evidence', () => {
     );
     expect(getFactById(fact.id)?.accessCount).toBe(0);
     expect(readRecentMemoryRetrievalEvents()).toEqual([]);
+  });
+
+  it('discards a selector result when the captured projection changes before it settles', async () => {
+    const project = upsertEntity({ name: '選択中の更新', type: 'project' });
+    const fact = recordFactWithApplicability(
+      {
+        subjectId: project.id,
+        predicate: '状態',
+        objectText: '古い候補',
+        scope: 'global',
+        importance: 0.9,
+        now: 500,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    ).fact;
+    let releaseSelector!: (result: { factIds: string[] }) => void;
+    const selectorResult = new Promise<{ factIds: string[] }>((resolve) => {
+      releaseSelector = resolve;
+    });
+    let selectorStarted!: () => void;
+    const selectorEntered = new Promise<void>((resolve) => {
+      selectorStarted = resolve;
+    });
+    jest.spyOn(llmFactSelector, 'createLlmMemoryFactSelector').mockReturnValue(async () => {
+      selectorStarted();
+      return selectorResult;
+    });
+
+    const pending = buildLivingMemorySections({
+      messages: [userMessage('選択中の更新', 1_000)],
+      conversationId: 'memory-selector-projection',
+      sourceThreadId: 'thread-selector-projection',
+      personaId: 'default',
+      taskId: null,
+      now: 2_000,
+      retrievalLlm: { provider: {} as never },
+    });
+    await selectorEntered;
+    recordFactWithApplicability(
+      {
+        subjectId: project.id,
+        predicate: '追加情報',
+        objectText: '新しい候補',
+        scope: 'global',
+        now: 600,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    );
+    releaseSelector({ factIds: [fact.id] });
+
+    await expect(pending).resolves.toEqual(
+      expect.objectContaining({
+        sections: [],
+        recalledFactCount: 0,
+        recalledEpisodeCount: 0,
+      }),
+    );
+    expect(getFactById(fact.id)?.accessCount).toBe(0);
+    expect(readRecentMemoryRetrievalEvents()).toEqual([]);
+  });
+
+  it('discards assembled evidence when projection changes during telemetry', async () => {
+    const project = upsertEntity({ name: 'مرحلة القياس', type: 'project' });
+    recordFactWithApplicability(
+      {
+        subjectId: project.id,
+        predicate: 'الحالة',
+        objectText: 'جاهز',
+        scope: 'global',
+        importance: 0.9,
+        now: 500,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    );
+    let releaseTelemetry!: () => void;
+    const telemetryResult = new Promise<{
+      status: 'recorded';
+      code: 'recorded';
+      eventId: string;
+    }>((resolve) => {
+      releaseTelemetry = () => resolve({ status: 'recorded', code: 'recorded', eventId: 'evt-1' });
+    });
+    let telemetryStarted!: () => void;
+    const telemetryEntered = new Promise<void>((resolve) => {
+      telemetryStarted = resolve;
+    });
+    jest
+      .spyOn(promptAssemblyRetrievalEvent, 'recordPromptAssemblyRetrievalEvent')
+      .mockImplementation(async () => {
+        telemetryStarted();
+        return telemetryResult;
+      });
+
+    const pending = buildLivingMemorySections({
+      messages: [userMessage('تابع الحالة', 1_000)],
+      conversationId: 'memory-telemetry-projection',
+      sourceThreadId: 'thread-telemetry-projection',
+      personaId: 'default',
+      taskId: null,
+      now: 2_000,
+    });
+    await telemetryEntered;
+    recordFactWithApplicability(
+      {
+        subjectId: project.id,
+        predicate: 'تحديث',
+        objectText: 'معلومة جديدة',
+        scope: 'global',
+        now: 600,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    );
+    releaseTelemetry();
+
+    await expect(pending).resolves.toEqual(
+      expect.objectContaining({
+        sections: [],
+        recalledFactCount: 0,
+        recalledEpisodeCount: 0,
+      }),
+    );
   });
 });

@@ -20,6 +20,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -280,9 +281,10 @@ describe('orchestrateMemoryRetrieval', () => {
       conversationId: 'conv-retrieval',
       threadId: 'conv-retrieval',
       summary: 'future release episode',
-      messageIds: ['future-start', 'future-end'],
-      sourceStartMessageId: 'future-start',
-      sourceEndMessageId: 'future-end',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'future-start',
+        sourceAssistantMessageId: 'future-end',
+      }),
       startedAt: 290,
       endedAt: 300,
       now: 300,

@@ -10,7 +10,11 @@ import type {
   ExecuteAgentControlGraphModelTurnResult,
   PendingAgentToolCall,
 } from './modelTurnExecutionTypes';
-import { removeLivingMemoryFromPreparedTurn } from './modelTurn/memoryPromptDispatchFence';
+import {
+  assertModelTurnMemoryPolicyBindingCurrent,
+  type ModelTurnMemoryPolicyBinding,
+} from '../authority/modelTurnMemoryPolicyBinding';
+import { resolveModelTurnMemoryRetrievalEventId } from './modelTurnMemoryAttribution';
 export type { PendingAgentToolCall } from './modelTurnExecutionTypes';
 
 const MAX_INCOMPLETE_TOOL_CALL_EMISSION_RETRIES = 2;
@@ -26,29 +30,18 @@ export async function executeAgentControlGraphModelTurn(
   let pendingToolCalls: PendingAgentToolCall[] = [];
   let requestMaxTokens = params.requestMaxTokens;
   let workingMessages = params.workingMessages;
-  let preparedTurn = params.preparedTurn;
-  let livingMemory = params.livingMemory;
   let contextWindow = 0;
+  let memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
+  const memoryRetrievalEventId = resolveModelTurnMemoryRetrievalEventId(params.livingMemory);
   let providerOverflowRetryCount = 0;
   let toolCallEmissionRetryCount = 0;
   attemptLoop: for (;;) {
     const attempt = await executeAgentControlGraphModelTurnAttempt({
       ...params,
       allowOverflowRetry: providerOverflowRetryCount < MAX_PROVIDER_OVERFLOW_RETRIES,
-      livingMemory,
-      preparedTurn,
       requestMaxTokens,
       workingMessages,
     });
-    if (attempt.kind === 'memory_opt_out_retry') {
-      livingMemory = null;
-      preparedTurn = removeLivingMemoryFromPreparedTurn(preparedTurn);
-      workingMessages = attempt.workingMessages;
-      params.callbacks.onAssistantStreamReset?.();
-      params.callbacks.onStateChange('thinking');
-      await params.yieldToUiFrame();
-      continue attemptLoop;
-    }
     if (attempt.kind === 'overflow_retry') {
       providerOverflowRetryCount += 1;
       workingMessages = attempt.workingMessages;
@@ -61,6 +54,7 @@ export async function executeAgentControlGraphModelTurn(
     completion = attempt.completion;
     contextWindow = attempt.contextWindow;
     fullContent = attempt.fullContent;
+    memoryPolicyBinding = attempt.memoryPolicyBinding;
     pendingToolCalls = attempt.pendingToolCalls;
     providerReplay = attempt.providerReplay;
     reasoning = attempt.reasoning;
@@ -113,10 +107,13 @@ export async function executeAgentControlGraphModelTurn(
       );
     }
 
+    assertModelTurnMemoryPolicyBindingCurrent(memoryPolicyBinding);
     return {
       completion,
       contextWindow,
       fullContent,
+      memoryPolicyBinding,
+      ...(memoryRetrievalEventId ? { memoryRetrievalEventId } : {}),
       pendingToolCalls,
       providerReplay,
       reasoning,

@@ -6,7 +6,6 @@ export type CompletionGateHoldReason =
   | 'goal_evidence_incomplete'
   | 'graph_mutation_error'
   | 'tool_error_repair'
-  | 'workflow_continuation'
   | 'empty_response_retry'
   | 'empty_tool_call_retry'
   | 'incomplete_delivery_continuation'

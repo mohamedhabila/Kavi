@@ -18,22 +18,28 @@ describe('Orchestrator', () => {
     it('should execute tool calls and continue the loop', async () => {
       // First iteration: tool call
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: '' },
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"test.txt"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: '' },
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"test.txt"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       // Second iteration: final text response
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'The file says: tool result' },
-          { type: 'done', content: 'The file says: tool result' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'The file says: tool result' },
+            { type: 'done', content: 'The file says: tool result' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -65,57 +71,63 @@ describe('Orchestrator', () => {
 
     it('deduplicates one logical tool call when streaming metadata upgrades its id mid-turn', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'fc_1',
-              name: 'read_file',
-              arguments: '{"path":"test.txt"}',
-              raw: {
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
                 id: 'fc_1',
-                type: 'function',
-                function: {
-                  name: 'read_file',
-                  arguments: '{"path":"test.txt"}',
-                },
-                _openai: {
-                  itemId: 'fc_1',
-                  outputIndex: 0,
+                name: 'read_file',
+                arguments: '{"path":"test.txt"}',
+                raw: {
+                  id: 'fc_1',
+                  type: 'function',
+                  function: {
+                    name: 'read_file',
+                    arguments: '{"path":"test.txt"}',
+                  },
+                  _openai: {
+                    itemId: 'fc_1',
+                    outputIndex: 0,
+                  },
                 },
               },
             },
-          },
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'call_1',
-              name: 'read_file',
-              arguments: '{"path":"test.txt"}',
-              raw: {
+            {
+              type: 'tool_call',
+              toolCall: {
                 id: 'call_1',
-                type: 'function',
-                function: {
-                  name: 'read_file',
-                  arguments: '{"path":"test.txt"}',
-                },
-                _openai: {
-                  itemId: 'fc_1',
-                  callId: 'call_1',
-                  outputIndex: 0,
+                name: 'read_file',
+                arguments: '{"path":"test.txt"}',
+                raw: {
+                  id: 'call_1',
+                  type: 'function',
+                  function: {
+                    name: 'read_file',
+                    arguments: '{"path":"test.txt"}',
+                  },
+                  _openai: {
+                    itemId: 'fc_1',
+                    callId: 'call_1',
+                    outputIndex: 0,
+                  },
                 },
               },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'The file says: tool result' },
-          { type: 'done', content: 'The file says: tool result' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'The file says: tool result' },
+            { type: 'done', content: 'The file says: tool result' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -153,23 +165,29 @@ describe('Orchestrator', () => {
 
     it('waits for tool-result persistence before the next model request', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'call_1',
-              name: 'read_file',
-              arguments: '{"path":"test.txt"}',
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'call_1',
+                name: 'read_file',
+                arguments: '{"path":"test.txt"}',
+              },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'The file says: tool result' },
-          { type: 'done', content: 'The file says: tool result' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'The file says: tool result' },
+            { type: 'done', content: 'The file says: tool result' },
+          ],
+          'text',
+        ),
       );
 
       let releaseToolPersistence: (() => void) | undefined;
@@ -218,7 +236,11 @@ describe('Orchestrator', () => {
           await new Promise<void>((resolve) => {
             releaseCompletion = resolve;
           });
-          yield { type: 'done', content: 'Hello' };
+          yield {
+            type: 'done',
+            content: 'Hello',
+            completion: { completionStatus: 'complete', finishReason: 'stop' },
+          };
         })(),
       );
 
@@ -259,6 +281,7 @@ describe('Orchestrator', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       });
     });

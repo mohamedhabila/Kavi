@@ -902,7 +902,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     setupSkillHint: '请将所需密钥安全地保存在设备上，以便该技能可以运行。',
     secretSaveFailed: '保存技能密钥失败。请重试。',
     installBlocked: '安装已阻止',
-    installFailed: 'Failed to install skill.',
   },
   voice: {
     title: '语音',

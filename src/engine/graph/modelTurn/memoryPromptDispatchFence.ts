@@ -1,93 +1,51 @@
-import { isLongTermMemoryEnabled, isMemoryReadEpochCurrent } from '../../../services/memory/policy';
-import { isVerifiedProcedureObservationRevisionCurrent } from '../../../services/memory/verifiedProcedure/observationRevision';
+import { isMemoryReadEpochCurrent } from '../../../services/memory/policy';
+import { isVerifiedProcedureProjectionSnapshotDurablyCurrent } from '../../../services/memory/verifiedProcedure/observationAuthority';
+import { isRestrictiveMemoryAuthoritySnapshotDurablyCurrent } from '../../../services/memory/memoryAuthority';
+import { isMemoryValidityDeadlineCurrent } from '../../../services/memory/memoryValidityDeadline';
 import type { Message } from '../../../types/message';
-import type { PreparedAgentTurn, PreparedAgentTurnCore } from '../agentTurnPreparation';
-import { buildMemoryPolicyPromptSection } from '../../prompts/memoryPolicyPrompt';
+import type { PreparedAgentTurn } from '../agentTurnPreparation';
 import {
-  appendSystemPromptSection,
-  joinSystemPromptSections,
-  orderSystemPromptSectionsForCaching,
-} from '../../prompts/orchestratorPromptSections';
-import { isToolAllowedForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
+  assertModelTurnMemoryPolicyBindingDurablyCurrent,
+  buildModelTurnMemoryPolicyBinding,
+  type ModelTurnMemoryPolicyBinding,
+} from '../../authority/modelTurnMemoryPolicyBinding';
 
-const MEMORY_PROMPT_EPOCH_EXPIRED = 'memory_prompt_epoch_expired';
+export {
+  isMemoryPromptEpochExpiredError,
+  MemoryPromptEpochExpiredError,
+} from '../../authority/modelTurnMemoryPolicyBinding';
 
-export class MemoryPromptEpochExpiredError extends Error {
-  constructor() {
-    super(MEMORY_PROMPT_EPOCH_EXPIRED);
-    this.name = 'MemoryPromptEpochExpiredError';
-  }
-}
-
-export function isMemoryPromptEpochExpiredError(error: unknown): boolean {
-  return (
-    error instanceof MemoryPromptEpochExpiredError ||
-    (error instanceof Error && error.message === MEMORY_PROMPT_EPOCH_EXPIRED)
-  );
-}
-
-export function isPreparedMemoryReadCurrent(preparedTurn: PreparedAgentTurn): boolean {
+export function isPreparedMemoryReadCurrent(
+  preparedTurn: PreparedAgentTurn,
+  now = Date.now(),
+): boolean {
   const fence = preparedTurn.memoryReadFence;
   return (
     !fence ||
     (isMemoryReadEpochCurrent(fence.readEpoch) &&
-      (!fence.verifiedProcedureObservationRevision ||
-        isVerifiedProcedureObservationRevisionCurrent(fence.verifiedProcedureObservationRevision)))
+      isMemoryValidityDeadlineCurrent(fence.validUntil, now) &&
+      isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(fence.memoryAuthoritySnapshot) &&
+      (!fence.verifiedProcedureAuthoritySnapshot ||
+        isVerifiedProcedureProjectionSnapshotDurablyCurrent(
+          fence.verifiedProcedureAuthoritySnapshot,
+        )))
   );
 }
 
 export function buildMemoryPromptDispatchGuard(
   preparedTurn: PreparedAgentTurn,
+  now: () => number = Date.now,
 ): (() => void) | undefined {
   const fence = preparedTurn.memoryReadFence;
   if (!fence) return undefined;
-  return () => {
-    if (
-      !isMemoryReadEpochCurrent(fence.readEpoch) ||
-      (fence.verifiedProcedureObservationRevision !== undefined &&
-        !isVerifiedProcedureObservationRevisionCurrent(fence.verifiedProcedureObservationRevision))
-    ) {
-      throw new MemoryPromptEpochExpiredError();
-    }
-  };
+  return buildModelTurnMemoryPolicyDispatchGuard(buildModelTurnMemoryPolicyBinding(fence), now);
 }
 
-export function removeLivingMemoryFromPreparedTurn(
-  preparedTurn: PreparedAgentTurn,
-): PreparedAgentTurn {
-  const fence = preparedTurn.memoryReadFence;
-  if (!fence) return preparedTurn;
-  if (!isLongTermMemoryEnabled()) return { ...fence.memoryDisabledTurn };
-  const { memoryReadFence: _discarded, ...memoryFreeTurn } = preparedTurn;
-  return {
-    ...memoryFreeTurn,
-    enrichedSystemPrompt: fence.memoryFreePrompt.enrichedSystemPrompt,
-    enrichedSystemPromptSections: fence.memoryFreePrompt.enrichedSystemPromptSections,
-  };
-}
-
-/**
- * Verified-procedure evidence can make an otherwise memory-independent turn
- * memory-sensitive. Its existing tool surface is already policy-safe; build a
- * disabled prompt snapshot without rewriting rendered prompt text.
- */
-export function buildMemoryDisabledPolicyIndependentTurn(
-  preparedTurn: PreparedAgentTurn,
-): PreparedAgentTurnCore {
-  if (preparedTurn.selectedTools.some((tool) => !isToolAllowedForMemoryPolicy(tool, false))) {
-    throw new Error('memory_sensitive_turn_missing_policy_fallback');
-  }
-  const { memoryReadFence: _discarded, ...core } = preparedTurn;
-  const enrichedSystemPromptSections = core.enrichedSystemPromptSections.map((section) => ({
-    ...section,
-  }));
-  appendSystemPromptSection(enrichedSystemPromptSections, buildMemoryPolicyPromptSection(false));
-  const orderedSections = orderSystemPromptSectionsForCaching(enrichedSystemPromptSections);
-  return {
-    ...core,
-    enrichedSystemPrompt: joinSystemPromptSections(orderedSections),
-    enrichedSystemPromptSections: orderedSections,
-  };
+export function buildModelTurnMemoryPolicyDispatchGuard(
+  binding: ModelTurnMemoryPolicyBinding,
+  now: () => number = Date.now,
+): () => void {
+  return () => assertModelTurnMemoryPolicyBindingDurablyCurrent(binding, now());
 }
 
 /**

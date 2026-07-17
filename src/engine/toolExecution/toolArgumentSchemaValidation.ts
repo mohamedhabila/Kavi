@@ -220,7 +220,16 @@ export function validateToolArgumentsAgainstSchema(params: {
 
   const args = parseArgumentsRecord(params.argumentsText);
   if (!args) {
-    return undefined;
+    return buildInvalidArgumentShapeResult({
+      tool,
+      invalidArguments: [
+        {
+          field: '$',
+          expected: 'object',
+          actual: 'invalid JSON or non-object',
+        },
+      ],
+    });
   }
 
   const requiredFields = readRequiredFields(tool.input_schema);

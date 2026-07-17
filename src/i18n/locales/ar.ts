@@ -913,7 +913,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     setupSkillHint: 'احفظ الأسرار المطلوبة بأمان على الجهاز حتى تعمل هذه المهارة.',
     secretSaveFailed: 'تعذر حفظ أسرار المهارة. حاول مرة أخرى.',
     installBlocked: 'تم حظر التثبيت',
-    installFailed: 'فشل تثبيت المهارة.',
   },
   voice: {
     title: 'الصوت',

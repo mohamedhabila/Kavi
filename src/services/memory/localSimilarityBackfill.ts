@@ -12,6 +12,7 @@ import {
 } from './localSimilarity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
+import { advanceMemoryProjectionInTransaction } from './memoryAuthority';
 
 const logger = createLogger('memory.localSimilarityBackfill');
 const DEFAULT_BACKFILL_LIMIT = 16;
@@ -163,6 +164,7 @@ export function backfillCurrentFactLocalSimilarity(
       processedCount += result.changes ?? 0;
     }
     if (processedCount > 0) {
+      advanceMemoryProjectionInTransaction(db, memoryOwnerId);
       runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
     }
     const result: LocalSimilarityBackfillResult = {

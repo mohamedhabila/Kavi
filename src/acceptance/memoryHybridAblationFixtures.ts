@@ -1,8 +1,8 @@
 import type { EntityType } from '../services/memory/entities';
 
-export const MEMORY_HYBRID_ABLATION_FIXTURE_VERSION = 'memory-hybrid-ablation-v2' as const;
+export const MEMORY_HYBRID_ABLATION_FIXTURE_VERSION = 'memory-hybrid-ablation-v3' as const;
 export const MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE =
-  'sha256:c22882d8a54fe19e8919f649fb52256b3d6c195337fc830410c11f0c5d18d146' as const;
+  'sha256:77dd69019333c464f70a2163c2e6821dab149746b8042aa34cbe91ef9b6cff0c' as const;
 
 export type MemoryHybridAblationFamily =
   | 'lexical_control'
@@ -28,6 +28,7 @@ export type MemoryHybridAblationFactSeed = Readonly<{
   expiresAt?: number;
   origin: 'active' | 'other';
   deleted?: boolean;
+  expectRestrictedRejection?: true;
 }>;
 
 export type MemoryHybridAblationCase = Readonly<{
@@ -56,6 +57,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 const IN_2021 = Date.UTC(2021, 0, 15);
+const SYNTHETIC_STRUCTURED_SECRET = `gh${'p_'}${'abcdefghijklmnopqrstuvwxyz'}${'ABCDEFGHIJ'}`;
 
 export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCase> = deepFreeze([
   {
@@ -209,7 +211,7 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
   {
     id: 'restricted-sensitivity-negative',
     family: 'eligibility_negative',
-    query: 'RESTRICTED-SENTINEL',
+    query: SYNTHETIC_STRUCTURED_SECRET,
     now: 600,
     expectedFactKey: null,
     entities: [{ key: 'restricted', name: 'Restricted Subject', type: 'concept' }],
@@ -217,10 +219,11 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
       {
         key: 'restricted',
         entityKey: 'restricted',
-        predicate: 'password',
-        objectText: 'RESTRICTED-SENTINEL',
+        predicate: 'opaque_signal',
+        objectText: SYNTHETIC_STRUCTURED_SECRET,
         now: 100,
         origin: 'active',
+        expectRestrictedRejection: true,
       },
     ],
   },

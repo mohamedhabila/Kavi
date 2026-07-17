@@ -2,6 +2,7 @@ import { executeAgentControlGraphIteration } from '../../src/engine/graph/iterat
 import { prepareAgentControlGraphModelTurn } from '../../src/engine/graph/prepareAgentControlGraphModelTurn';
 import { executePreparedAgentControlGraphTurn } from '../../src/engine/graph/iterationReadyTurnExecution';
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { createGoal } from '../../src/engine/goals/types';
 import {
   projectRequestUnderstanding,
@@ -35,8 +36,10 @@ function params(
   const runtime = {
     activeModel: 'test-model',
     activeProvider: { id: 'provider', name: 'Provider', enabled: true },
+    admittedMemoryContext: { livingMemory: null },
     consecutivePendingAsyncNoToolTurns: 0,
     lastPendingAsyncSignature: '',
+    lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     llm: {},
     warningInjectedThisRound: false,
     workingMessages: [],
@@ -93,6 +96,7 @@ function params(
     thinkingLevel: 'off',
     toolRuntime: {
       availableToolNames: new Set<string>(),
+      catalogVisibleToolNames: new Set<string>(),
       memoryConversationId: 'conversation',
       runtimeToolAvailability: {},
       toolCallHistory: [],

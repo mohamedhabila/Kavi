@@ -5,8 +5,50 @@ import {
   buildBaseParams,
   createPendingOperation,
 } from './helpers/noToolTurnResolution';
+import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
+import {
+  projectRequestUnderstanding,
+  summarizeRequestUnderstanding,
+} from '../../src/services/agents/requestUnderstandingProjection';
 
 describe('agent control graph no-tool turn resolution', () => {
+  it('gives an actionable agentic request one language-neutral recovery pass', async () => {
+    const params = buildBaseParams();
+    const requestFrame = buildGraphEntryRequestFrame({
+      text: 'Disable the named scheduled task.',
+      attachmentCount: 0,
+      mode: 'agentic',
+      continuation: 'new',
+    });
+    params.controlGraph = buildGraphScenarioSnapshot({
+      requestUnderstanding: summarizeRequestUnderstanding(
+        projectRequestUnderstanding({ requestFrame, goals: [] }),
+      ),
+    });
+    params.selectedToolNames = new Set(['request_clarification', 'cron']);
+    params.selectedToolCount = params.selectedToolNames.size;
+    params.turnAssistantContent = 'I need the internal task identifier.';
+    params.modelTurnAssistantContent = params.turnAssistantContent;
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 1,
+    });
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+    expect(params.onContinueThinking).toHaveBeenCalledWith('no_tool_progress_retry');
+    expect(params.workingMessages.at(-1)?.content).toContain(
+      'do not ask the user for an internal identifier',
+    );
+    expect(params.workingMessages.at(-1)?.content).toContain(
+      'Do not manufacture an external action, consent need, or required user detail',
+    );
+    expect(params.workingMessages.at(-1)?.content).toContain(
+      'preserve its substance and return it directly',
+    );
+  });
+
   it('holds when pending async work still needs monitoring', async () => {
     const pendingOperation = createPendingOperation({ displayName: 'Build session' });
     const params = buildBaseParams();

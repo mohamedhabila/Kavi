@@ -22,23 +22,44 @@ import {
   type RecallEpisodesTiming,
 } from '../../../src/services/memory/episodeRecall';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+let episodeSequence = 0;
 
 beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
+  episodeSequence = 0;
 });
 
 function makeEpisode(overrides: Partial<Parameters<typeof recordThreadLocalEpisode>[0]> = {}) {
+  episodeSequence += 1;
+  const providedMessageIds = overrides.messageIds;
+  const sourceStartMessageId =
+    overrides.sourceStartMessageId ??
+    providedMessageIds?.[0] ??
+    `episode-${episodeSequence}-user`;
+  const sourceEndMessageId =
+    overrides.sourceEndMessageId ??
+    providedMessageIds?.[providedMessageIds.length - 1] ??
+    `episode-${episodeSequence}-assistant`;
+  const intermediateMessages = (providedMessageIds ?? [])
+    .slice(1, -1)
+    .map((id) => ({ id, role: 'tool' as const, content: 'test intermediate source' }));
   const episode = recordThreadLocalEpisode({
     conversationId: 'conv-1',
     threadId: 'conv-1',
     summary: 'Test episode',
     startedAt: Date.now(),
     endedAt: Date.now(),
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: sourceStartMessageId,
+      sourceAssistantMessageId: sourceEndMessageId,
+      intermediateMessages,
+    }),
     ...overrides,
   });
   if (!episode) throw new Error('recordThreadLocalEpisode returned null');

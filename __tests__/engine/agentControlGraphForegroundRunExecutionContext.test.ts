@@ -15,6 +15,8 @@ import {
   isMainInferenceActive,
 } from '../../src/services/memory/onDeviceGuards';
 
+const mockCanWriteLongTermMemory = jest.fn();
+
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(),
 }));
@@ -25,6 +27,11 @@ jest.mock('../../src/engine/graph/foregroundRun/preflight', () => ({
 
 jest.mock('../../src/engine/graph/foregroundRun/foregroundInterruptedResponse', () => ({
   resolveForegroundInterruptedResponseOutcome: jest.fn(),
+}));
+
+jest.mock('../../src/services/memory/policy', () => ({
+  ...jest.requireActual('../../src/services/memory/policy'),
+  canWriteLongTermMemory: (...args: unknown[]) => mockCanWriteLongTermMemory(...args),
 }));
 
 const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runOrchestrator>;
@@ -53,6 +60,7 @@ function deliverFinalAssistantMessage(
 describe('foreground run target-conversation execution context', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockCanWriteLongTermMemory.mockReturnValue(true);
     __resetOnDeviceGuardsForTests();
     mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
       status: 'failed',
@@ -66,10 +74,12 @@ describe('foreground run target-conversation execution context', () => {
     const staleProvider = createProvider('stale-provider', 'stale-model');
     const targetProvider = createProvider('target-provider', 'target-model');
     const finalizationProvider = { ...targetProvider, apiKey: 'hydrated-key' };
+    const startConversation = jest.fn(() => 'new-conversation');
     const ensureCanonicalConversation = jest.fn(() => 'new-conversation');
     const recordConversationTurnMemory = jest.fn();
     const context = createExecutionContext({
       conversation,
+      createConversation: startConversation,
       providers: [staleProvider, targetProvider],
       ensureCanonicalConversation,
       recordConversationTurnMemory,
@@ -102,11 +112,13 @@ describe('foreground run target-conversation execution context', () => {
       }),
       expect.any(Object),
     );
-    expect(ensureCanonicalConversation).toHaveBeenCalledWith({
-      mode: 'chitchat',
-      personaId: 'reviewer',
-      reportMissingProvider: true,
-    });
+    expect(ensureCanonicalConversation).not.toHaveBeenCalled();
+    expect(startConversation).toHaveBeenCalledWith(
+      'target-provider',
+      conversation.systemPrompt,
+      'target-model',
+      { mode: 'chitchat', personaId: 'reviewer', activate: true, replaceCanonical: true },
+    );
     expect(recordConversationTurnMemory).toHaveBeenCalledWith(
       conversation.id,
       expect.objectContaining({

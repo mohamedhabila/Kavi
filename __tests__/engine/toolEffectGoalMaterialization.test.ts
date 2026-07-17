@@ -1,6 +1,10 @@
 import { createGoal } from '../../src/engine/goals/types';
+import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER } from '../../src/engine/goals/types';
+import { buildToolEffectReceiptEvidence } from '../../src/engine/goals/effectCompletionEvidence';
 import { materializeToolEffectCompletionGoals } from '../../src/engine/graph/toolEffectGoalMaterialization';
 import { resolveToolEffectCompletionRequirement } from '../../src/engine/toolExecution/toolEffectCompletionContract';
+import { buildToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';
+import { MEMORY_REMEMBER_TOOL } from '../../src/engine/tools/builtin-definitions-memory';
 
 async function effectCriterion(toolName: string, argumentsText: string): Promise<string> {
   const requirement = await resolveToolEffectCompletionRequirement({ toolName, argumentsText });
@@ -8,6 +12,28 @@ async function effectCriterion(toolName: string, argumentsText: string): Promise
     throw new Error(`${toolName} must have an effect completion contract`);
   }
   return requirement.serializedCriterion;
+}
+
+async function failedReceiptEvidence(params: {
+  argumentsText: string;
+  toolCallId: string;
+}): Promise<string> {
+  return buildToolEffectReceiptEvidence(
+    await buildToolEffectReceipt({
+      toolCallId: params.toolCallId,
+      toolName: 'memory_remember',
+      argumentsText: params.argumentsText,
+      resultText: JSON.stringify({
+        status: 'rejected',
+        ok: false,
+        code: 'invalid_args',
+      }),
+      transportState: 'returned',
+      resultIsError: true,
+      executionRunId: 'execution-memory-retry',
+      recordedAt: 100,
+    }),
+  );
 }
 
 describe('code-owned effect completion goal materialization', () => {
@@ -33,12 +59,13 @@ describe('code-owned effect completion goal materialization', () => {
         title: 'Verify memory_remember effect',
         status: 'active',
         completionPolicy: 'blocking',
+        owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
         successCriteria: [expect.stringMatching(/^evidence\.effect:/u)],
       }),
     );
-    expect(JSON.stringify({ id: result.goals[0]?.id, title: result.goals[0]?.title })).not.toContain(
-      'private',
-    );
+    expect(
+      JSON.stringify({ id: result.goals[0]?.id, title: result.goals[0]?.title }),
+    ).not.toContain('private');
   });
 
   it('adds the exact receipt criterion to the active blocking deliverable', async () => {
@@ -94,6 +121,22 @@ describe('code-owned effect completion goal materialization', () => {
     ).resolves.toEqual({ status: 'unchanged', goals: [existing] });
   });
 
+  it('does not materialize an effect goal for structurally invalid tool arguments', async () => {
+    await expect(
+      materializeToolEffectCompletionGoals({
+        toolCalls: [
+          {
+            name: 'memory_remember',
+            arguments: JSON.stringify({ semanticEvidence: 'not-an-object' }),
+          },
+        ],
+        goals: [],
+        tools: [MEMORY_REMEMBER_TOOL],
+        now: 100,
+      }),
+    ).resolves.toEqual({ status: 'unchanged', goals: [] });
+  });
+
   it('leaves mixed model-authored goal mutations on the existing iteration boundary', async () => {
     await expect(
       materializeToolEffectCompletionGoals({
@@ -137,5 +180,98 @@ describe('code-owned effect completion goal materialization', () => {
       goals: [blocked],
       errors: ['effect_completion_verification_blocked'],
     });
+  });
+
+  it('replaces one exact failed attempt when the model corrects the same effect', async () => {
+    const rejectedArguments = JSON.stringify({
+      semanticEvidence: {
+        version: 4,
+        subject: { kind: 'self', type: 'person' },
+        predicate: 'meeting_duration',
+        value: '30 minutes',
+      },
+    });
+    const correctedArguments = JSON.stringify({
+      semanticEvidence: {
+        version: 4,
+        subject: { kind: 'self' },
+        predicate: 'meeting_duration',
+        value: '30 minutes',
+      },
+    });
+    const initial = await materializeToolEffectCompletionGoals({
+      toolCalls: [{ name: 'memory_remember', arguments: rejectedArguments }],
+      goals: [],
+      now: 10,
+    });
+    expect(initial.status).toBe('materialized');
+    const rejectedCriterion = await effectCriterion('memory_remember', rejectedArguments);
+    const correctedCriterion = await effectCriterion('memory_remember', correctedArguments);
+    const failedGoal = {
+      ...initial.goals[0]!,
+      evidence: [
+        await failedReceiptEvidence({
+          argumentsText: rejectedArguments,
+          toolCallId: 'memory-rejected',
+        }),
+      ],
+    };
+
+    const retried = await materializeToolEffectCompletionGoals({
+      toolCalls: [{ name: 'memory_remember', arguments: correctedArguments }],
+      goals: [failedGoal],
+      now: 20,
+    });
+
+    expect(retried).toEqual(
+      expect.objectContaining({
+        status: 'materialized',
+        reason: 'effect_completion_contract:retry_replaced',
+        timestamp: 20,
+      }),
+    );
+    expect(retried.goals[0]?.successCriteria).toEqual([correctedCriterion]);
+    expect(retried.goals[0]?.successCriteria).not.toContain(rejectedCriterion);
+    expect(retried.goals[0]?.evidence).toEqual(failedGoal.evidence);
+  });
+
+  it('does not weaken an ambiguous batch of failed effects', async () => {
+    const firstArguments = JSON.stringify({ semanticEvidence: { value: 'first' } });
+    const secondArguments = JSON.stringify({ semanticEvidence: { value: 'second' } });
+    const retryArguments = JSON.stringify({ semanticEvidence: { value: 'corrected' } });
+    const initial = await materializeToolEffectCompletionGoals({
+      toolCalls: [
+        { name: 'memory_remember', arguments: firstArguments },
+        { name: 'memory_remember', arguments: secondArguments },
+      ],
+      goals: [],
+      now: 10,
+    });
+    expect(initial.status).toBe('materialized');
+    const failedGoal = {
+      ...initial.goals[0]!,
+      evidence: [
+        await failedReceiptEvidence({
+          argumentsText: firstArguments,
+          toolCallId: 'memory-first-rejected',
+        }),
+        await failedReceiptEvidence({
+          argumentsText: secondArguments,
+          toolCallId: 'memory-second-rejected',
+        }),
+      ],
+    };
+
+    const retried = await materializeToolEffectCompletionGoals({
+      toolCalls: [{ name: 'memory_remember', arguments: retryArguments }],
+      goals: [failedGoal],
+      now: 20,
+    });
+
+    expect(retried.status).toBe('materialized');
+    expect(retried.goals[0]?.successCriteria).toEqual([
+      ...(failedGoal.successCriteria ?? []),
+      await effectCriterion('memory_remember', retryArguments),
+    ]);
   });
 });

@@ -1,12 +1,22 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
-import { runMemoryTransaction } from '../access/transaction';
-import { newId } from '../schema';
+import { assertMemoryTransactionActive, runMemoryTransaction } from '../access/transaction';
+import { newId } from '../schemaValues';
 import { ensureEpisodeAccessPolicySchema } from './accessPolicySchema';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { bindEpisodeAccessPolicy } from './accessPolicyStore';
-import { replaceEpisodeRetrievalTerms } from './retrievalIndex';
+import { replaceEpisodeRetrievalTermsInTransaction } from './retrievalIndex';
 import { deriveEpisodeSensitivity, maxEpisodeSensitivity } from './sensitivityPolicy';
 import { closedEpisodeSensitivity, type EpisodeSensitivity } from './accessPolicyTypes';
+import {
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from '../memoryAuthority';
+import {
+  buildEpisodeSourceIdentityManifest,
+  decodeEpisodeSourceIdentityManifest,
+  encodeEpisodeSourceIdentityManifest,
+  episodeSourceIdentityManifestsEqual,
+} from './sourceIdentity';
 import {
   clamp01,
   type AddFactEvidenceInput,
@@ -85,9 +95,21 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
         sourceEndMessageId,
       )
     : null;
+  const current = existing ? rowToEpisode(existing) : null;
+  const replayTaskId = input.taskId ?? null;
+  if (
+    current &&
+    (current.taskId !== replayTaskId ||
+      current.startedAt !== startedAt ||
+      current.endedAt !== endedAt ||
+      current.sourceStartMessageId !== sourceStartMessageId ||
+      JSON.stringify(current.messageIds) !== JSON.stringify(messageIds))
+  ) {
+    throw new Error('episode_source_identity_conflict');
+  }
   const priorSensitivity = existing
     ? maxEpisodeSensitivity(
-        rowToEpisode(existing).sensitivity,
+        current!.sensitivity,
         readPersistedPolicySensitivity(db, existing.id),
       )
     : undefined;
@@ -99,35 +121,48 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     evidence: input.sensitivityEvidence,
     priorSensitivity,
   });
+  if (sensitivity === 'restricted') return null;
+  let sourceIdentityManifest: ReturnType<typeof buildEpisodeSourceIdentityManifest>;
+  try {
+    sourceIdentityManifest = buildEpisodeSourceIdentityManifest(
+      input.sensitivityEvidence!.sourceMessages,
+    );
+  } catch {
+    return null;
+  }
 
   if (existing) {
-    const current = rowToEpisode(existing);
-    const replayTaskId = input.taskId ?? null;
+    const persistedEpisode = current!;
+    const existingSourceIdentityManifest = decodeEpisodeSourceIdentityManifest(
+      existing.source_identity_manifest_json,
+    );
     if (
-      current.taskId !== replayTaskId ||
-      current.startedAt !== startedAt ||
-      current.endedAt !== endedAt ||
-      current.sourceStartMessageId !== sourceStartMessageId ||
-      JSON.stringify(current.messageIds) !== JSON.stringify(messageIds)
+      !existingSourceIdentityManifest ||
+      !episodeSourceIdentityManifestsEqual(
+        existingSourceIdentityManifest,
+        sourceIdentityManifest,
+      )
     ) {
       throw new Error('episode_source_identity_conflict');
     }
     const episode = {
-      ...current,
+      ...persistedEpisode,
       summary: normalizedSummary,
       sensitivity,
       entities:
         input.entities === undefined
-          ? current.entities
+          ? persistedEpisode.entities
           : Array.from(new Set(input.entities)).slice(0, 24),
       toolNames:
         input.toolNames === undefined
-          ? current.toolNames
+          ? persistedEpisode.toolNames
           : Array.from(new Set(input.toolNames)).slice(0, 64),
-      importance: input.importance === undefined ? current.importance : clamp01(input.importance),
-      embedding: input.embedding === undefined ? current.embedding : input.embedding,
+      importance:
+        input.importance === undefined ? persistedEpisode.importance : clamp01(input.importance),
+      embedding: input.embedding === undefined ? persistedEpisode.embedding : input.embedding,
     } satisfies MemoryEpisode;
-    if (JSON.stringify(episode) !== JSON.stringify(current)) {
+    const episodeChanged = JSON.stringify(episode) !== JSON.stringify(persistedEpisode);
+    if (episodeChanged) {
       db.runSync(
         `UPDATE memory_episodes
             SET summary = ?,
@@ -146,11 +181,26 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
         episode.id,
       );
       if (
-        episode.summary !== current.summary ||
-        JSON.stringify(episode.entities) !== JSON.stringify(current.entities) ||
-        JSON.stringify(episode.toolNames) !== JSON.stringify(current.toolNames)
+        episode.summary !== persistedEpisode.summary ||
+        JSON.stringify(episode.entities) !== JSON.stringify(persistedEpisode.entities) ||
+        JSON.stringify(episode.toolNames) !== JSON.stringify(persistedEpisode.toolNames)
       ) {
-        replaceEpisodeRetrievalTerms(db, episode);
+        replaceEpisodeRetrievalTermsInTransaction(db, episode);
+      }
+      const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+      const embeddingChanged =
+        JSON.stringify(episode.embedding) !== JSON.stringify(persistedEpisode.embedding);
+      const restrictiveProjectionChanged =
+        episode.summary !== persistedEpisode.summary ||
+        JSON.stringify(episode.entities) !== JSON.stringify(persistedEpisode.entities) ||
+        JSON.stringify(episode.toolNames) !== JSON.stringify(persistedEpisode.toolNames) ||
+        episode.sensitivity !== persistedEpisode.sensitivity ||
+        episode.importance < persistedEpisode.importance ||
+        (embeddingChanged && persistedEpisode.embedding !== null);
+      if (restrictiveProjectionChanged) {
+        advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
+      } else {
+        advanceMemoryProjectionInTransaction(db, memoryOwnerId);
       }
     }
     return episode;
@@ -179,8 +229,8 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     `INSERT INTO memory_episodes
        (id, conversation_id, thread_id, task_id, started_at, ended_at, summary, sensitivity,
         entities_json, message_ids_json, tool_names_json, importance, embedding, created_at,
-        deleted_at, source_start_message_id, source_end_message_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+        deleted_at, source_start_message_id, source_end_message_id, source_identity_manifest_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
     episode.id,
     episode.conversationId,
     episode.threadId,
@@ -197,8 +247,10 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     episode.createdAt,
     episode.sourceStartMessageId,
     episode.sourceEndMessageId,
+    encodeEpisodeSourceIdentityManifest(sourceIdentityManifest),
   );
-  replaceEpisodeRetrievalTerms(db, episode);
+  replaceEpisodeRetrievalTermsInTransaction(db, episode);
+  advanceMemoryProjectionInTransaction(db, getLocalMemoryVaultOwnerId(db));
   return episode;
 }
 
@@ -215,8 +267,26 @@ function readPersistedPolicySensitivity(
 }
 
 export function addFactEvidence(input: AddFactEvidenceInput): MemoryFactEvidence | null {
+  return runMemoryTransaction(() => addFactEvidenceInTransaction(input));
+}
+
+/** Add evidence atomically; the primitive owns projection freshness for real changes. */
+export function addFactEvidenceInTransaction(
+  input: AddFactEvidenceInput,
+): MemoryFactEvidence | null {
+  assertMemoryTransactionActive('fact_evidence_transaction_required');
   const db = getSchemaReadyMemoryDb();
   if (!input.factId.trim()) return null;
+  const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+  const fact = db.getFirstSync<{ invalid_at: number | null }>(
+    `SELECT invalid_at
+       FROM memory_facts
+      WHERE id = ? AND memory_owner_id = ? AND deleted_at IS NULL`,
+    input.factId,
+    memoryOwnerId,
+  );
+  if (!fact) return null;
+  const promptVisible = fact.invalid_at === null;
   const now = input.now ?? Date.now();
   const messageId = input.messageId ?? null;
   if (messageId) {
@@ -232,7 +302,7 @@ export function addFactEvidence(input: AddFactEvidenceInput): MemoryFactEvidence
       const role = existing.role ?? input.role ?? null;
       const quote = existing.quote ?? (input.quote ? input.quote.trim().slice(0, 400) : null);
       if (episodeId !== existing.episode_id || role !== existing.role || quote !== existing.quote) {
-        db.runSync(
+        const updated = db.runSync(
           `UPDATE memory_fact_evidence
               SET episode_id = ?, role = ?, quote = ?
             WHERE id = ?`,
@@ -241,6 +311,9 @@ export function addFactEvidence(input: AddFactEvidenceInput): MemoryFactEvidence
           quote,
           existing.id,
         );
+        if ((updated.changes ?? 0) > 0 && promptVisible) {
+          advanceMemoryProjectionInTransaction(db, memoryOwnerId);
+        }
       }
       return rowToEvidence({
         ...existing,
@@ -280,6 +353,9 @@ export function addFactEvidence(input: AddFactEvidenceInput): MemoryFactEvidence
       messageId,
     );
     if (existing) return rowToEvidence(existing);
+  }
+  if ((inserted.changes ?? 0) > 0 && promptVisible) {
+    advanceMemoryProjectionInTransaction(db, memoryOwnerId);
   }
   return evidence;
 }

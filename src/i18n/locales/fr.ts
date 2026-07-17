@@ -932,7 +932,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
       'Stockez les secrets requis de manière sécurisée sur l’appareil pour que cette compétence puisse s’exécuter.',
     secretSaveFailed: 'Impossible d’enregistrer les secrets de la compétence. Veuillez réessayer.',
     installBlocked: 'Installation bloquée',
-    installFailed: 'Failed to install skill.',
   },
   voice: {
     title: 'Voix',

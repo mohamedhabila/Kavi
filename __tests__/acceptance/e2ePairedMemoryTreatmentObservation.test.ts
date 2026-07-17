@@ -137,6 +137,48 @@ describe('paired memory treatment observations', () => {
     });
   });
 
+  it('accepts complete intra-turn retrieval refreshes after memory changes', () => {
+    const firstEvent = buildPairedRetrievalEvent();
+    const report = buildE2EPairedPublicReport(
+      runtime([
+        completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
+        completedCondition({
+          condition: 'production_auto',
+          rubricPassed: 1,
+          rubricTotal: 1,
+          turnTraces: [
+            buildPairedTurnTrace({
+              sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
+              instrumentationStatus: 'recorded',
+              events: [
+                firstEvent,
+                {
+                  ...firstEvent,
+                  id: 'retrieval-private-event-refresh',
+                },
+              ],
+            }),
+          ],
+        }),
+      ]),
+    );
+
+    expect(report.validForDeltaClaims).toBe(true);
+    expect(report.memoryPairedObservation).toMatchObject({
+      status: 'positive_delta',
+      pairedScoreDelta: 1,
+    });
+    expect(report.conditions[1]).toMatchObject({
+      metrics: {
+        userTurnCount: 1,
+        retrieval: {
+          turnStatusCounts: { recorded: 1 },
+          eventCount: 2,
+        },
+      },
+    });
+  });
+
   it('invalidates memory observations when selected-ID coverage is truncated', () => {
     const event = buildPairedRetrievalEvent();
     const report = buildE2EPairedPublicReport(

@@ -131,10 +131,10 @@ attempt. A valid paired delta is local product evidence, not an official benchma
 For the causal gate, reuse the base environment with `E2E_PAIRED_SCENARIO_ID=paired-causal-global-preference E2E_PAIRED_RUN_ID=release-candidate-01-causal-global-preference E2E_PAIRED_REFERENCE_CONDITION=memory_off E2E_PAIRED_CANDIDATE_CONDITION=production_auto npm run eval:e2e:paired`.
 `production_auto` is the production-memory treatment; the frozen pair uses real
 `createConversation`, zero raw messages, and no seeding/deletion. Both sides must
-pass neutral guards, including zero model-requested tool calls and independently
-zero native invocations on both passive learning turns. Calls are attributed to
-the exact immutable-trajectory turn, so a successful non-native effect cannot pass
-as neutral. Only the product may pass every causal rubric; the result remains local `kavi-core` evidence, not an official benchmark.
+pass neutral guards, including zero native invocations on both learning turns.
+Grounded, scoped, trajectory-visible local memory writes remain allowed, while
+any external side effect fails neutrality. Only the product may pass every
+causal rubric; the result is local `kavi-core`, not an official benchmark.
 
 ## Evaluation lanes
 

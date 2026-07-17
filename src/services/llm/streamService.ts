@@ -26,7 +26,10 @@ import {
   extractOpenAiCompatibleTextValue,
   trimGeminiCumulativeText,
 } from './providers/openaiChat/streamText';
-import { buildLocalLlmRequestOptions, resolveLocalProviderForRequest } from './localProviderRequest';
+import {
+  buildLocalLlmRequestOptions,
+  resolveLocalProviderForRequest,
+} from './localProviderRequest';
 import { sendLlmMessage } from './messageService';
 import type {
   ChatCompletionMessage,
@@ -41,13 +44,14 @@ export async function* streamLlmMessage(params: {
   performFetch: LlmPerformFetch;
 }): AsyncGenerator<StreamEvent> {
   const requestedOptions = params.options || {};
+  const requestDispatchGuard = requestedOptions.requestDispatchGuard;
   const options: Omit<MessageRequestOptions, 'stream'> = { ...requestedOptions };
   delete options.requestDispatchGuard;
-  requestedOptions.requestDispatchGuard?.();
   const model = options.model || params.provider.model;
   const providerTransport = resolveProviderTransport(params.provider);
 
   if (providerTransport === 'local') {
+    requestDispatchGuard?.();
     const localConfig = resolveLocalProviderForRequest(params.provider, options);
     for await (const event of streamLocalLlmMessage(
       localConfig,
@@ -81,7 +85,11 @@ export async function* streamLlmMessage(params: {
   const response = await sendLlmMessage({
     provider: params.provider,
     messages: params.messages,
-    options: { ...options, stream: true },
+    options: {
+      ...options,
+      stream: true,
+      ...(requestDispatchGuard ? { requestDispatchGuard } : {}),
+    },
     performFetch: params.performFetch,
   });
   const shouldSurfaceReasoning = shouldSurfaceProviderReasoning(model);

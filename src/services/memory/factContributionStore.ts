@@ -10,7 +10,7 @@ import {
   normalizeMemoryFactContributionSourceAliases,
   normalizeMemoryFactContributionSourceScope,
   requireMemoryFactContributionProducerIdentity,
-  type MemoryFactContributionPayloadV1,
+  type MemoryFactContributionPayloadV2,
   type MemoryFactContributionProducerIdentity,
   type MemoryFactContributionSourceAlias,
   type MemoryFactContributionSourceScope,
@@ -44,7 +44,7 @@ export interface MemoryFactContributionWriteReceipt {
 export interface MemoryFactContributionReplay {
   id: string;
   factId: string;
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
   sourceAliases: ReadonlyArray<MemoryFactContributionSourceAlias>;
   supersessionPlan: FactContributionSupersessionPlan;
 }
@@ -56,7 +56,7 @@ function fail(code: string): never {
 function assertFactMatchesPayload(
   row: FactRow | null | undefined,
   fact: MemoryFact,
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   memoryOwnerId: string,
 ): void {
   if (
@@ -90,7 +90,7 @@ function assertFactMatchesPayload(
 }
 
 function assertSourceScopeMatchesPayload(
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   scope: ReturnType<typeof normalizeMemoryFactContributionSourceScope>,
 ): void {
   const input = payload.input;
@@ -107,7 +107,7 @@ function assertSourceScopeMatchesPayload(
 }
 
 function assertPayloadSourcesHaveAliases(
-  payload: MemoryFactContributionPayloadV1,
+  payload: MemoryFactContributionPayloadV2,
   aliases: ReadonlyArray<MemoryFactContributionSourceAlias>,
 ): void {
   const aliasKeys = new Set(aliases.map((alias) => `${alias.sourceKind}\u0000${alias.sourceId}`));
@@ -289,7 +289,7 @@ export function loadFactContributionReplay(
 /** Persist one complete immutable contribution aggregate while its fact transaction is active. */
 export function persistFactContributionInTransaction(input: {
   fact: MemoryFact;
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
   context: MemoryFactContributionWriteContext;
   supersession: FactContributionSupersessionSemantics;
 }): MemoryFactContributionWriteReceipt {

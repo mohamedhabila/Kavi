@@ -192,7 +192,7 @@ describe('foreground semantic memory handoff barrier', () => {
     },
   );
 
-  it('consumes a terminally unavailable handoff and surfaces restatement guidance', async () => {
+  it('consumes a terminally unavailable handoff and continues the same turn', async () => {
     const { context, conversation } = createSubject();
     mockedWaitForSemanticMemoryHandoff.mockResolvedValue(
       consistencyResult({
@@ -202,16 +202,22 @@ describe('foreground semantic memory handoff barrier', () => {
         unavailableReason: 'terminal_job',
       }),
     );
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      callbacks.onDone();
+      return { terminalDisposition: 'command' };
+    });
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
 
     expect(context.getCurrentConversation().semanticMemoryHandoff).toBeUndefined();
-    expect(context.durability.createModelExecution).not.toHaveBeenCalled();
-    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
-    expect(context.helpers.setChatError).toHaveBeenCalledWith(expect.stringContaining('restate'));
+    expect(context.durability.createModelExecution).toHaveBeenCalledTimes(1);
+    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(1);
+    expect(context.helpers.setChatError).not.toHaveBeenCalledWith(
+      'Memory from the previous conversation is not ready yet. Please retry, or restate the detail you need.',
+    );
   });
 
-  it('consumes a missing-job handoff so the fresh conversation cannot remain bricked', async () => {
+  it('consumes a missing-job handoff and continues without a user-visible retry', async () => {
     const { context, conversation } = createSubject();
     mockedWaitForSemanticMemoryHandoff.mockResolvedValue(
       consistencyResult({
@@ -231,14 +237,12 @@ describe('foreground semantic memory handoff barrier', () => {
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
 
     expect(context.getCurrentConversation().semanticMemoryHandoff).toBeUndefined();
-    expect(context.durability.createModelExecution).not.toHaveBeenCalled();
-    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
-
-    await executeForegroundConversationRun({ context, conversationId: conversation.id });
-
     expect(mockedWaitForSemanticMemoryHandoff).toHaveBeenCalledTimes(1);
     expect(context.durability.createModelExecution).toHaveBeenCalledTimes(1);
     expect(mockedRunOrchestrator).toHaveBeenCalledTimes(1);
+    expect(context.helpers.setChatError).not.toHaveBeenCalledWith(
+      'Memory from the previous conversation is not ready yet. Please retry, or restate the detail you need.',
+    );
   });
 
   it('fails closed and retains the handoff when synchronization throws', async () => {

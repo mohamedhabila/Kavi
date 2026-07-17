@@ -43,7 +43,6 @@ export async function sendGeminiNative(args: {
   ) => string;
   shouldRetryGeminiStructuredOutputWithLegacySyntax: (
     status: number,
-    errorText: string,
     body: Record<string, any>,
   ) => boolean;
   normalizeGeminiResponse: (
@@ -108,7 +107,6 @@ export async function sendGeminiNative(args: {
       !args.options.stream &&
       args.shouldRetryGeminiStructuredOutputWithLegacySyntax(
         response.status,
-        errorText,
         body,
       )
     ) {

@@ -4,9 +4,6 @@ import type { ToolCallRecord } from '../loopDetection';
 import type { CompletionGateDecision } from './completionGateTypes';
 import { extractRecentToolRepairHints } from './toolRepairHints';
 
-const MIN_NO_TOOL_PROGRESS_RETRY_CHARS = 160;
-const DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
-
 function hasUnrepairedGraphMutationError(
   history: ReadonlyArray<ToolCallRecord> | undefined,
 ): boolean {
@@ -59,32 +56,23 @@ function buildToolErrorRepairHoldPrompt(repairHints: ReadonlyArray<string>): str
   return lines.join('\n');
 }
 
-function buildWorkflowContinuationHoldPrompt(
-  pendingToolNames: ReadonlyArray<string>,
-): string {
-  const toolNames = pendingToolNames.filter(Boolean).sort();
-  const lines: string[] = ['[SYSTEM HOLD]'];
-  lines.push(
-    'Recent tool results produced resources consumed by available downstream workflow tools.',
-  );
-  if (toolNames.length > 0) {
-    lines.push(`Available downstream tools: ${toolNames.join(', ')}.`);
-  }
-  lines.push(
-    'Do not finalize yet. If the user request requires a downstream side effect or verification step, use the appropriate downstream tool now. If no downstream step is required, answer directly on the next pass.',
-  );
-  return lines.join('\n');
-}
-
 function buildNoToolProgressRetryPrompt(selectedToolNames: ReadonlySet<string> | undefined): string {
   const toolNames = Array.from(selectedToolNames ?? []).filter(Boolean).sort();
+  const canRequestClarification = toolNames.includes('request_clarification');
   const lines: string[] = ['[SYSTEM HOLD]'];
-  lines.push('The previous response made no tool progress while discovery tools were available.');
+  lines.push(
+    'The previous response was a first-pass candidate, but no code-owned progress was recorded. Code-owned progress is required only when the original request actually requires app, device, file, memory, or external-state work.',
+  );
   if (toolNames.length > 0) {
     lines.push(`Available tools: ${toolNames.join(', ')}.`);
   }
+  if (canRequestClarification) {
+    lines.push(
+      'If user-owned information is required before execution can continue, call request_clarification now; a prose-only question does not register the blocked request.',
+    );
+  }
   lines.push(
-    'If the request depends on app state, device state, files, memory, or another external side effect, use the appropriate discovery or action tool now. If no tool is needed, answer directly on the next pass.',
+    'Re-evaluate the original request and available paths. Do not manufacture an external action, consent need, or required user detail merely because a compatible tool exists. Advice or information grounded entirely in visible context can be complete. If the prior candidate already provides that useful, proportionate response, preserve its substance and return it directly instead of replacing it with optional-action clarification. If the request does depend on app state, device state, files, memory, or another external effect, use the appropriate discovery or action tool now; do not ask the user for an internal identifier that a read-only tool can resolve. Otherwise report a concrete blocker only after the available paths have been exhausted.',
   );
   return lines.join('\n');
 }
@@ -150,58 +138,23 @@ export function evaluateToolErrorRepairHold(params: {
   };
 }
 
-export function evaluateWorkflowContinuationHold(params: {
-  consecutiveNoToolTurns: number;
-  pendingWorkflowContinuationToolNames?: ReadonlyArray<string>;
-  toolingEnabledForProvider: boolean;
-  selectedToolCount: number;
-  forceTextThisTurn: boolean;
-}): CompletionGateDecision | null {
-  const pendingToolNames = Array.from(
-    new Set((params.pendingWorkflowContinuationToolNames ?? []).filter(Boolean)),
-  );
-  if (
-    !params.toolingEnabledForProvider ||
-    params.selectedToolCount <= 0 ||
-    params.forceTextThisTurn ||
-    params.consecutiveNoToolTurns > 0 ||
-    pendingToolNames.length === 0
-  ) {
-    return null;
-  }
-
-  return {
-    type: 'hold',
-    reason: 'workflow_continuation',
-    graphEvent: {
-      type: 'FINALIZATION_HELD',
-      reason: 'workflow_continuation',
-    },
-    systemPrompts: [buildWorkflowContinuationHoldPrompt(pendingToolNames)],
-    missingRequiredEvidenceLabels: [],
-    nextConsecutivePendingAsyncNoToolTurns: params.consecutiveNoToolTurns + 1,
-  };
-}
-
 export function evaluateNoToolProgressRetry(params: {
   consecutiveNoToolTurns: number;
-  fullContent: string;
   goals: ReadonlyArray<AgentGoal>;
   toolingEnabledForProvider: boolean;
   selectedToolCount: number;
   selectedToolNames?: ReadonlySet<string>;
   forceTextThisTurn: boolean;
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;
+  requiresAgenticProgressValidation?: boolean;
+  candidateCompletionIsComplete?: boolean;
 }): CompletionGateDecision | null {
-  const hasDiscoveryTool = Array.from(params.selectedToolNames ?? []).some((toolName) =>
-    DISCOVERY_TOOL_NAMES.has(toolName),
-  );
   if (
+    params.requiresAgenticProgressValidation !== true ||
+    params.candidateCompletionIsComplete !== true ||
     !params.toolingEnabledForProvider ||
     params.selectedToolCount <= 0 ||
-    !hasDiscoveryTool ||
     params.forceTextThisTurn ||
-    params.fullContent.trim().length < MIN_NO_TOOL_PROGRESS_RETRY_CHARS ||
     params.consecutiveNoToolTurns > 0 ||
     params.goals.length > 0 ||
     (params.toolCallHistory?.length ?? 0) > 0

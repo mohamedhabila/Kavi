@@ -901,7 +901,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     setupSkillHint: '請將所需密鑰安全地儲存在裝置上，讓此技能可以執行。',
     secretSaveFailed: '無法儲存技能密鑰。請再試一次。',
     installBlocked: '安裝已遭封鎖',
-    installFailed: 'Failed to install skill.',
   },
   voice: {
     title: '語音',

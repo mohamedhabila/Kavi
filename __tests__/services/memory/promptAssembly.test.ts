@@ -239,4 +239,15 @@ describe('assemblePrompt', () => {
     );
     expect(text).toContain('deployment artifact path reports/release.json was written');
   });
+
+  it('renders manageable fact identity separately from source provenance', () => {
+    const assembled = assemblePrompt({
+      basePrompt: 'Base prompt.',
+      retrievedFacts: [memoryFact('preference-1', 'Central Gate', 'semantic_fact')],
+    });
+
+    const text = assembled.sections.map((section) => section.text).join('\n\n');
+    expect(text).toContain('factId=preference-1');
+    expect(text).toContain('source=run-preference-1');
+  });
 });

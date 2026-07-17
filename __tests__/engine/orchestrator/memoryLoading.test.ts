@@ -16,10 +16,13 @@ describe('Orchestrator', () => {
   describe('Memory loading', () => {
     it('delegates memory retrieval to the canonical memory bridge', async () => {
       mockStreamMessage.mockImplementationOnce(() => {
-        return createStreamGenerator([
-          { type: 'token', content: 'Hi John!' },
-          { type: 'done', content: 'Hi John!' },
-        ]);
+        return createStreamGenerator(
+          [
+            { type: 'token', content: 'Hi John!' },
+            { type: 'done', content: 'Hi John!' },
+          ],
+          'text',
+        );
       });
 
       const callbacks = makeCallbacks();
@@ -48,17 +51,20 @@ describe('Orchestrator', () => {
       const apiMessages = mockStreamMessage.mock.calls[0]?.[0] as Array<{
         role: string;
         content: string;
-      }>; 
+      }>;
       expect(apiMessages[0]?.content).not.toContain('Conversation memory:');
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
     it('uses the explicit memory boundary independently from the file workspace', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Shared memory works' },
-          { type: 'done', content: 'Shared memory works' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Shared memory works' },
+            { type: 'done', content: 'Shared memory works' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -83,20 +89,26 @@ describe('Orchestrator', () => {
 
     it('keeps the primary model on tool-follow-up iterations', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"test.txt"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"test.txt"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Finished' },
-          { type: 'done', content: 'Finished' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Finished' },
+            { type: 'done', content: 'Finished' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

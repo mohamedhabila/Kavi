@@ -1,3 +1,8 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 jest.mock('../../src/services/memory/memoryOptOutRetirement', () => ({
   retireActiveMemoryPublicationsBeforeOptOut: jest.fn(() => ({
     status: 'not_required',
@@ -10,9 +15,22 @@ import { makeMcpServer, makeProvider, resetSettingsStore } from '../helpers/sett
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { getLocalLlmCatalogEntry } from '../../src/services/localLlm/catalog';
+import { closeMemoryDb } from '../../src/services/memory/database';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 beforeEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
   resetSettingsStore();
+});
+
+afterEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
 });
 
 describe('useSettingsStore provider settings', () => {

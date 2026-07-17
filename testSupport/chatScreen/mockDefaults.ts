@@ -22,7 +22,7 @@ import {
   mockAppendAgentRunCheckpoint,
   mockCompleteAgentRun,
   mockCreateConversation,
-  mockEditMessage,
+  mockRewindUserMessageForResend,
   mockGetOrCreateCanonicalThread,
   mockRecordAgentRunEvidence,
   mockRecordConversationUsage,
@@ -93,7 +93,7 @@ export function resetChatScreenTestEnvironment() {
     mockCreateConversation,
     mockGetOrCreateCanonicalThread,
     mockSetLoading,
-    mockEditMessage,
+    mockRewindUserMessageForResend,
     mockUpdateModelInConversation,
     mockSetActiveProviderAndModel,
     mockSetLastUsedModel,
@@ -275,6 +275,37 @@ export function resetChatScreenTestEnvironment() {
       };
     });
   });
+  mockRewindUserMessageForResend.mockImplementation(
+    (conversationId: string, messageId: string, content: string) => {
+      const replacementMessageId = `${messageId}-rewound`;
+      updateMockConversation(conversationId, (conversation) => {
+        const messageIndex = conversation.messages.findIndex(
+          (message: any) => message.id === messageId,
+        );
+        if (messageIndex < 0) return conversation;
+        const source = conversation.messages[messageIndex];
+        return {
+          ...conversation,
+          messages: [
+            ...conversation.messages.slice(0, messageIndex),
+            {
+              ...source,
+              id: replacementMessageId,
+              content,
+              timestamp: nextMockTimestamp(),
+            },
+          ],
+          activeAgentRunId: undefined,
+          agentRuns: [],
+        };
+      });
+      return {
+        status: 'applied',
+        replacedMessageId: messageId,
+        replacementMessageId,
+      };
+    },
+  );
   mockUpdateMessage.mockImplementation(
     (conversationId: string, messageId: string, content: string) => {
       updateMockConversation(conversationId, (conversation) => ({

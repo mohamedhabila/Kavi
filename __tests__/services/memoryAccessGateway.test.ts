@@ -18,23 +18,36 @@ jest.mock('../../src/services/memory/localSimilarityBackfill', () => ({
   }),
 }));
 
-jest.mock('../../src/services/memory/factSensitivityBackfill', () => ({
-  maintainFactSensitivityPolicy: jest.fn().mockReturnValue({
-    processedCount: 0,
-    pendingCount: 0,
-    hasMore: false,
-    policyVersion: 1,
-  }),
-}));
-
 jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
-  buildLivingMemorySections: jest.fn().mockResolvedValue({
+  buildLivingMemorySections: jest.fn().mockImplementation(async (options) => ({
+    memoryAuthoritySnapshot: options.memoryAuthoritySnapshot,
     sections: [{ text: 'focus section', cacheable: false }],
     cacheableSignature: 'abc',
     focusBlockText: 'Fix migration failure',
     openThreadLabels: ['migration mismatch'],
     recalledFactCount: 2,
-  }),
+  })),
+}));
+
+jest.mock('../../src/services/memory/memoryAuthority', () => ({
+  captureMemoryAuthoritySnapshot: jest.fn().mockReturnValue(
+    Object.freeze({
+      processEpochs: Object.freeze({ restrictive: 3, projection: 5 }),
+      restrictiveRevision: Object.freeze({
+        kind: 'restrictive',
+        memoryOwnerId: 'gateway-owner',
+        value: 7,
+      }),
+      projectionRevision: Object.freeze({
+        kind: 'projection',
+        memoryOwnerId: 'gateway-owner',
+        value: 11,
+      }),
+      policy: Object.freeze({ enabled: true, revision: 2 }),
+    }),
+  ),
+  isMemoryProjectionSnapshotCurrent: jest.fn().mockReturnValue(true),
+  isMemoryProjectionSnapshotDurablyCurrent: jest.fn().mockReturnValue(true),
 }));
 
 jest.mock('../../src/services/memory/policy', () => ({
@@ -54,7 +67,10 @@ import type { IngestionJob } from '../../src/services/memory/ingestionQueueStore
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { createCurrentLocalSimilarityVector } from '../../src/services/memory/localSimilarity';
 import { maintainCurrentFactLocalSimilarity } from '../../src/services/memory/localSimilarityBackfill';
-import { maintainFactSensitivityPolicy } from '../../src/services/memory/factSensitivityBackfill';
+import {
+  isMemoryProjectionSnapshotCurrent,
+  isMemoryProjectionSnapshotDurablyCurrent,
+} from '../../src/services/memory/memoryAuthority';
 
 const RETRIEVAL_PROVIDER: LlmProviderConfig = {
   id: 'retrieval-provider',
@@ -101,11 +117,21 @@ function buildIngestionJob(overrides: Partial<IngestionJob> = {}): IngestionJob 
 }
 
 function makeMessage(overrides: Partial<Message>): Message {
+  const role = overrides.role || 'user';
   return {
     id: overrides.id || `msg-${Math.random()}`,
-    role: overrides.role || 'user',
+    role,
     content: overrides.content || '',
     timestamp: overrides.timestamp ?? Date.now(),
+    ...(role === 'assistant'
+      ? {
+          assistantMetadata: {
+            kind: 'final' as const,
+            completionStatus: 'complete' as const,
+            finishReason: 'stop',
+          },
+        }
+      : {}),
     ...overrides,
   };
 }
@@ -116,6 +142,8 @@ describe('memoryAccessGateway', () => {
     jest.clearAllMocks();
     (canReadLongTermMemory as jest.Mock).mockReturnValue(true);
     (isMemoryReadEpochCurrent as jest.Mock).mockReturnValue(true);
+    jest.mocked(isMemoryProjectionSnapshotCurrent).mockReturnValue(true);
+    jest.mocked(isMemoryProjectionSnapshotDurablyCurrent).mockReturnValue(true);
     mockedGetIngestionJobForSourceTurn.mockReturnValue(null);
   });
 
@@ -174,6 +202,10 @@ describe('memoryAccessGateway', () => {
       queryCount: 1,
     });
     expect(result.livingMemory?.consistencyBarrier).toEqual(result.consistencyBarrier);
+    const exactSnapshot =
+      jest.mocked(buildLivingMemorySections).mock.calls[0][0].memoryAuthoritySnapshot;
+    expect(exactSnapshot).toBeDefined();
+    expect(result.livingMemory?.memoryAuthoritySnapshot).toBe(exactSnapshot);
     expect(createCurrentLocalSimilarityVector).toHaveBeenCalledTimes(1);
     expect(createCurrentLocalSimilarityVector).toHaveBeenCalledWith(
       'Discuss travel itinerary options\nFix migration mismatch in release workflow',
@@ -182,7 +214,6 @@ describe('memoryAccessGateway', () => {
       queryVector: { model: 'unicode-char-ngram-v1', dimensions: 384 },
     });
     expect(maintainCurrentFactLocalSimilarity).toHaveBeenCalledTimes(1);
-    expect(maintainFactSensitivityPolicy).toHaveBeenCalledTimes(1);
   });
 
   it('applies boundary selection in pilot mode before loading living memory', async () => {
@@ -244,7 +275,6 @@ describe('memoryAccessGateway', () => {
     expect(livingMemoryInput).not.toHaveProperty('retrievalLlm');
     expect(livingMemoryInput).not.toHaveProperty('localSimilarity');
     expect(maintainCurrentFactLocalSimilarity).not.toHaveBeenCalled();
-    expect(maintainFactSensitivityPolicy).not.toHaveBeenCalled();
     expect(livingMemoryInput.candidateStrategy).toBe('lexical');
 
     await buildUnifiedMemoryAccessContext({
@@ -264,7 +294,6 @@ describe('memoryAccessGateway', () => {
     });
     expect(createCurrentLocalSimilarityVector).toHaveBeenCalledTimes(1);
     expect(maintainCurrentFactLocalSimilarity).toHaveBeenCalledTimes(1);
-    expect(maintainFactSensitivityPolicy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unknown memory access policies instead of silently changing behavior', async () => {
@@ -300,7 +329,6 @@ describe('memoryAccessGateway', () => {
     expect(buildLivingMemorySections).not.toHaveBeenCalled();
     expect(createCurrentLocalSimilarityVector).not.toHaveBeenCalled();
     expect(maintainCurrentFactLocalSimilarity).not.toHaveBeenCalled();
-    expect(maintainFactSensitivityPolicy).not.toHaveBeenCalled();
   });
 
   it('excludes trailing internal control user prompts before boundary and recall', async () => {
@@ -392,5 +420,126 @@ describe('memoryAccessGateway', () => {
       finalJobStatus: 'pending',
     });
     expect(buildLivingMemorySections).toHaveBeenCalledTimes(1);
+  });
+
+  it('discards mixed evidence when projection authority changes during bridge work', async () => {
+    jest.mocked(buildLivingMemorySections).mockImplementationOnce(async (options) => {
+      jest.mocked(isMemoryProjectionSnapshotDurablyCurrent).mockReturnValue(false);
+      return {
+        memoryAuthoritySnapshot: options.memoryAuthoritySnapshot,
+        sections: [{ text: 'stale evidence', cacheable: false }],
+        cacheableSignature: 'stale',
+        focusBlockText: '',
+        openThreadLabels: [],
+        recalledFactCount: 1,
+        recalledEpisodeCount: 0,
+        applicabilityPolicy: {
+          useIntent: 'automatic_prompt',
+          consideredFactCount: 1,
+          promptVisibleFactCount: 1,
+          promptBudgetDroppedFactCount: 0,
+          actionCounts: { use: 1, corroborate: 0, verify: 0, silent: 0 },
+          reasonCounts: {},
+        },
+      };
+    });
+
+    const result = await buildUnifiedMemoryAccessContext({
+      messages: [makeMessage({ id: 'u-race', role: 'user', content: '続けて' })],
+      memoryConversationId: 'memory-race',
+      sourceThreadId: 'thread-race',
+      personaId: 'default',
+      taskId: null,
+      mode: 'chat',
+    });
+
+    expect(result.livingMemory).toBeNull();
+  });
+
+  it('accepts a bridge-issued additive authority continuation', async () => {
+    let continuation: NonNullable<
+      Awaited<ReturnType<typeof buildLivingMemorySections>>['memoryAuthoritySnapshot']
+    > | null = null;
+    jest.mocked(buildLivingMemorySections).mockImplementationOnce(async (options) => {
+      continuation = Object.freeze({
+        ...options.memoryAuthoritySnapshot!,
+        processEpochs: Object.freeze({
+          ...options.memoryAuthoritySnapshot!.processEpochs,
+          projection: options.memoryAuthoritySnapshot!.processEpochs.projection + 1,
+        }),
+        projectionRevision: Object.freeze({
+          ...options.memoryAuthoritySnapshot!.projectionRevision,
+          value: options.memoryAuthoritySnapshot!.projectionRevision.value + 1,
+        }),
+      });
+      return {
+        memoryAuthoritySnapshot: continuation,
+        sections: [{ text: 'continued generation', cacheable: false }],
+        cacheableSignature: 'continued',
+        focusBlockText: '',
+        openThreadLabels: [],
+        recalledFactCount: 1,
+        recalledEpisodeCount: 0,
+        applicabilityPolicy: {
+          useIntent: 'automatic_prompt',
+          consideredFactCount: 1,
+          promptVisibleFactCount: 1,
+          promptBudgetDroppedFactCount: 0,
+          actionCounts: { use: 1, corroborate: 0, verify: 0, silent: 0 },
+          reasonCounts: {},
+        },
+      };
+    });
+
+    const result = await buildUnifiedMemoryAccessContext({
+      messages: [makeMessage({ id: 'u-continued', role: 'user', content: 'تابع' })],
+      memoryConversationId: 'memory-continued',
+      sourceThreadId: 'thread-continued',
+      personaId: 'default',
+      taskId: null,
+      mode: 'chat',
+    });
+
+    expect(result.livingMemory?.memoryAuthoritySnapshot).toBe(continuation);
+    expect(result.livingMemory?.sections).toEqual([
+      { text: 'continued generation', cacheable: false },
+    ]);
+  });
+
+  it('rejects a bridge result carrying incompatible restrictive authority', async () => {
+    jest.mocked(buildLivingMemorySections).mockImplementationOnce(async (options) => ({
+      memoryAuthoritySnapshot: Object.freeze({
+        ...options.memoryAuthoritySnapshot!,
+        restrictiveRevision: Object.freeze({
+          ...options.memoryAuthoritySnapshot!.restrictiveRevision,
+          value: options.memoryAuthoritySnapshot!.restrictiveRevision.value + 1,
+        }),
+      }),
+      sections: [{ text: 'mixed generation', cacheable: false }],
+      cacheableSignature: 'mixed',
+      focusBlockText: '',
+      openThreadLabels: [],
+      recalledFactCount: 0,
+      recalledEpisodeCount: 0,
+      applicabilityPolicy: {
+        useIntent: 'automatic_prompt',
+        consideredFactCount: 0,
+        promptVisibleFactCount: 0,
+        promptBudgetDroppedFactCount: 0,
+        actionCounts: { use: 0, corroborate: 0, verify: 0, silent: 0 },
+        reasonCounts: {},
+      },
+    }));
+
+    const result = await buildUnifiedMemoryAccessContext({
+      messages: [makeMessage({ id: 'u-mixed', role: 'user', content: 'تابع' })],
+      memoryConversationId: 'memory-mixed',
+      sourceThreadId: 'thread-mixed',
+      personaId: 'default',
+      taskId: null,
+      mode: 'chat',
+    });
+
+    expect(result.livingMemory).toBeNull();
   });
 });

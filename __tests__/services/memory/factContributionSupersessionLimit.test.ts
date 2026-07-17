@@ -6,10 +6,8 @@ jest.mock('expo-sqlite', () => {
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES } from '../../../src/services/memory/factContributionChildCommitments';
-import {
-  recordFactWithApplicability,
-  recordFactWithContribution,
-} from '../../../src/services/memory/facts/mutations';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
+import { recordCodeOwnedTestFactWithContribution as recordFactWithContribution } from '../../helpers/factContributionWriteFixtures';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,

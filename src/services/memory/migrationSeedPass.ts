@@ -22,7 +22,8 @@
 // ---------------------------------------------------------------------------
 
 import { runMemoryStatement } from './access/crud';
-import { ensureFactSchema, newId } from './schema';
+import { ensureFactSchema } from './schema';
+import { newId } from './schemaValues';
 import {
   applyConsolidatorResult,
   consolidateTurn,
@@ -466,6 +467,7 @@ async function seedClaimedConversation(
           currentUserMessage: turn.userMessage.content?.toString() ?? '',
           memoryConversationId: conv.id,
           threadId: conv.id,
+          sameSourceExplicitMemoryAuthority: false,
         },
       );
       if (!input.dryRun) {

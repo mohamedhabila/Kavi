@@ -1,6 +1,6 @@
 import type { MemoryFactContributionChildCommitment } from './factContributionChildCommitments';
 import type {
-  MemoryFactContributionPayloadV1,
+  MemoryFactContributionPayloadV2,
   MemoryFactContributionProducerIdentity,
   MemoryFactContributionSourceAlias,
   MemoryFactContributionSourceScope,
@@ -21,7 +21,7 @@ export interface NormalizedContributionParent {
   producer: MemoryFactContributionProducerIdentity;
   sourceCommitment: MemoryFactContributionChildCommitment;
   supersessionCommitment: MemoryFactContributionChildCommitment;
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
   payloadByteLength: number;
   contributedAt: number;
 }
@@ -69,7 +69,7 @@ export interface VerifiedFactContributionAggregate {
   sourceScope: Readonly<MemoryFactContributionSourceScope>;
   producer: Readonly<MemoryFactContributionProducerIdentity>;
   contributedAt: number;
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
   sourceAliases: ReadonlyArray<Readonly<MemoryFactContributionSourceAlias>>;
   supersessionPlan: FactContributionSupersessionPlan;
   factEvidence: Readonly<FactContributionFactEvidence>;

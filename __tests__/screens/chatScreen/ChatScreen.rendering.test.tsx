@@ -92,9 +92,23 @@ describe('ChatScreen rendering and layout', () => {
   it('mounts the inline workflow widget for persisted agent runs', () => {
     jest.useFakeTimers();
 
+    const conversation = createDefaultConversations()[0];
     mockChatScreenState.conversations = [
       {
-        ...createDefaultConversations()[0],
+        ...conversation,
+        messages: conversation.messages.map((message: any) =>
+          message.id === 'msg2'
+            ? {
+                ...message,
+                content: 'Still verifying the worker output.',
+                assistantMetadata: {
+                  kind: 'intermediate',
+                  completionStatus: 'complete',
+                  finishReason: 'tool_calls',
+                },
+              }
+            : message,
+        ),
         activeAgentRunId: 'run-1',
         agentRuns: [
           {

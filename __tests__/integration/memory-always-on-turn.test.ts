@@ -165,6 +165,7 @@ describe('memory always-on turn integration', () => {
                   sensitivity: 'personal',
                 },
               ],
+              episode_sensitivity: 'normal',
               episode_summary: null,
               active_focus: null,
               open_threads: [],

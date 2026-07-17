@@ -7,13 +7,17 @@
 // returns a preview that the resolver uses.
 // ---------------------------------------------------------------------------
 
-import type { AgentGoalMutation } from '../goals/types';
+import {
+  CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+  normalizeGoalCompletionPolicy,
+  type AgentGoalMutation,
+  type AgentGoalStatus,
+} from '../goals/types';
 import {
   completedToolOutcome,
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
-import { normalizeGoalCompletionPolicy, type AgentGoalStatus } from '../goals/types';
 
 const ALLOWED_UPDATE_GOALS_ROOT_FIELDS = new Set([
   'action',
@@ -158,6 +162,15 @@ function validateUpdateGoalsRootShape(args: Record<string, unknown>): UpdateGoal
         ),
       ];
     }
+  }
+  if (args.owner === CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER) {
+    return [
+      argumentError(
+        'provider_owned_field',
+        'This goal owner is reserved for code-owned effect completion bookkeeping.',
+        'owner',
+      ),
+    ];
   }
   for (const field of OPTIONAL_STRING_LIST_FIELDS) {
     if (

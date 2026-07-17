@@ -7,13 +7,13 @@ import {
 } from '../../../src/services/memory/facts/factContributionProjection';
 import {
   MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION,
-  type MemoryFactContributionPayloadV1,
-  type NormalizedRecordFactContributionInput,
+  type MemoryFactContributionPayloadV2,
+  type NormalizedRecordFactContributionInputV2,
 } from '../../../src/services/memory/factContributionCodec';
 import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../../../src/services/memory/memorySensitivityPolicy';
 
 const FACT_ID = 'fact_projection_target';
-const CLASSIFIER_CONTEXT = { subject: '主体', subjectType: 'ישות' } as const;
+const CLASSIFIER_CONTEXT = { subject: '主体' } as const;
 
 function contributionId(hexDigit: string): string {
   return `mfc_${hexDigit.repeat(64)}`;
@@ -22,10 +22,10 @@ function contributionId(hexDigit: string): string {
 function contribution(
   hexDigit: string,
   contributedAt: number,
-  overrides: Partial<NormalizedRecordFactContributionInput> = {},
-  applicability: Partial<MemoryFactContributionPayloadV1['applicability']> = {},
+  overrides: Partial<NormalizedRecordFactContributionInputV2> = {},
+  applicability: Partial<MemoryFactContributionPayloadV2['applicability']> = {},
 ): VerifiedFactContributionProjectionInput {
-  const input: NormalizedRecordFactContributionInput = {
+  const input: NormalizedRecordFactContributionInputV2 = {
     subjectId: 'entity_projection_subject',
     predicate: '共通_مشترك',
     objectText: '青_أزرق',
@@ -50,6 +50,7 @@ function contribution(
     stability: 0.5,
     decayRate: 0.03,
     reviewState: 'auto',
+    sensitivityFloor: 'normal',
     memoryKind: 'semantic_fact',
     supersedePrior: false,
     now: contributedAt,
@@ -186,6 +187,21 @@ describe('fact contribution projection', () => {
       reviewState: 'verified',
       sensitivity: 'sensitive',
       sensitivityPolicyVersion: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
+    });
+  });
+
+  it('preserves the highest declared floor across contribution replay', () => {
+    const personal = contribution('1', 100, { sensitivityFloor: 'personal' });
+    const normal = contribution('2', 200, { sensitivityFloor: 'normal' });
+    const sensitive = contribution('3', 300, { sensitivityFloor: 'sensitive' });
+
+    expect(project([normal, personal])).toMatchObject({
+      sensitivityFloor: 'personal',
+      sensitivity: 'personal',
+    });
+    expect(project([sensitive, normal, personal])).toMatchObject({
+      sensitivityFloor: 'sensitive',
+      sensitivity: 'sensitive',
     });
   });
 

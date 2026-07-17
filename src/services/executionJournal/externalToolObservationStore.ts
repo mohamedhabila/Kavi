@@ -1,9 +1,9 @@
-import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
 import {
   qualifyExternalDurableHandle,
   type ExternalDurableHandle,
 } from '../../engine/durability/taskDurability';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import { getExecutionJournalDb } from './database';
 import {
   decodeExecutionCheckpointRow,
@@ -258,6 +258,7 @@ function buildInitialRecords(
       idempotencyClass: 'declared_idempotent',
       idempotencyKeyDigest: identity.locatorDigest,
       requestDigest: identity.requestDigest,
+      modelAuthorityValidUntil: null,
       outcomeDigest: terminalStatus ? identity.resultDigest : null,
       status: terminalStatus ? 'verified' : 'started',
       retryPolicy: 'reconcile_before_retry',
@@ -290,9 +291,10 @@ function insertEffect(database: SQLite.SQLiteDatabase, effect: ExecutionEffectRe
     `INSERT INTO execution_effects (
        id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
        tool_contract_identity_digest, effect_class,
-       idempotency_class, idempotency_key_digest, request_digest, outcome_digest,
+       idempotency_class, idempotency_key_digest, request_digest,
+       model_authority_valid_until, outcome_digest,
        status, retry_policy, attempt, created_at, started_at, completed_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(effectRow(effect)),
   );
 }
@@ -556,10 +558,7 @@ export async function persistExternalToolObservation(
   ) {
     throw new Error('execution_journal_external_observation_invalid');
   }
-  const digest =
-    options.digest ??
-    ((value: string) =>
-      Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
+  const digest = options.digest ?? sha256HexUtf8Async;
   const identity = await buildIdentity(input, digest);
   const database = (options.getDatabase ?? getExecutionJournalDb)();
   return withImmediateTransaction(database, () => {

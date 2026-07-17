@@ -1,11 +1,3 @@
-// ---------------------------------------------------------------------------
-// Tests — Turn Processor (Always-On Ingestion)
-// ---------------------------------------------------------------------------
-// The single entry point for memory creation after every completed turn.
-// Tests verify: turn detection, structural extraction, optional provider
-// enrichment, persistence, and cursor update — all without English heuristics.
-// ---------------------------------------------------------------------------
-
 const mockExtractStructuralMemory = jest.fn();
 const mockExtractProviderEnrichment = jest.fn();
 const mockApplyConsolidatorResult = jest.fn();
@@ -14,6 +6,7 @@ const mockUpsertState = jest.fn();
 const mockEnsureFactSchema = jest.fn();
 const mockFindEntityByName = jest.fn();
 const mockListFacts = jest.fn();
+const mockHasSameSourceExplicitMemoryAuthority = jest.fn();
 
 jest.mock('../../../src/services/memory/deterministicExtractor', () => ({
   extractStructuralMemory: (...args: any[]) => mockExtractStructuralMemory(...args),
@@ -40,6 +33,10 @@ jest.mock('../../../src/services/memory/schema', () => ({
   ensureFactSchema: (...args: any[]) => mockEnsureFactSchema(...args),
 }));
 
+jest.mock('../../../src/services/memory/policy', () => ({
+  canWriteLongTermMemory: jest.fn(() => true),
+}));
+
 jest.mock('../../../src/services/memory/entities', () => ({
   findEntityByName: (...args: any[]) => mockFindEntityByName(...args),
 }));
@@ -52,12 +49,23 @@ jest.mock('../../../src/services/memory/facts/exactReplacementQueries', () => ({
   listCurrentFactsForReplacement: (...args: any[]) => mockListFacts(...args),
 }));
 
+jest.mock('../../../src/services/memory/sameSourceFactAuthority', () => ({
+  hasSameSourceExplicitMemoryAuthority: (...args: any[]) =>
+    mockHasSameSourceExplicitMemoryAuthority(...args),
+}));
+
 import {
   processIngestionTurn,
   validateMemoryTurnPublication,
 } from '../../../src/services/memory/turnProcessor';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
+
+const CODE_OWNED_NORMAL_SENSITIVITY = {
+  version: 1,
+  source: 'code_owned',
+  sensitivity: 'normal',
+} as const;
 
 function makeMsg(overrides: Partial<Message> = {}): Message {
   return {
@@ -98,7 +106,7 @@ describe('validateMemoryTurnPublication', () => {
     });
   });
 
-  it('returns processed=true for tool-only closed turns', () => {
+  it('rejects a tool handoff until a final assistant response closes the turn', () => {
     const result = validateMemoryTurnPublication({
       threadId: 'conv-tool-only',
       messages: [
@@ -115,8 +123,8 @@ describe('validateMemoryTurnPublication', () => {
       threadTitle: 'weekend-planning-thread',
     });
 
-    expect(result.processed).toBe(true);
-    expect(result.skipped).toBeUndefined();
+    expect(result.processed).toBe(false);
+    expect(result.skipped).toBe('no_closed_turn');
     expect(mockExtractStructuralMemory).not.toHaveBeenCalled();
   });
 });
@@ -128,6 +136,7 @@ describe('processIngestionTurn', () => {
     mockEnsureFactSchema.mockImplementation(() => undefined);
     mockFindEntityByName.mockReturnValue(null);
     mockListFacts.mockReturnValue([]);
+    mockHasSameSourceExplicitMemoryAuthority.mockReturnValue(false);
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'User asked about API',
       facts: [],
@@ -239,7 +248,14 @@ describe('processIngestionTurn', () => {
   it('persists the structural result when no provider is given', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'Deploy turn',
-      facts: [{ subject: 'system', predicate: 'deployed', value: 'yes' }],
+      facts: [
+        {
+          subject: 'system',
+          predicate: 'deployed',
+          value: 'yes',
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
+        },
+      ],
     });
     mockApplyConsolidatorResult.mockReturnValue({
       recordedFacts: [{ inputIndex: 0, factId: 'f1' }],
@@ -275,7 +291,15 @@ describe('processIngestionTurn', () => {
     expect(mockApplyConsolidatorResult).toHaveBeenCalledWith(
       expect.objectContaining({
         episodeSummary: 'Deploy turn',
-        newFacts: [{ subject: 'system', predicate: 'deployed', value: 'yes' }],
+        episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
+        newFacts: [
+          {
+            subject: 'system',
+            predicate: 'deployed',
+            value: 'yes',
+            sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
+          },
+        ],
         activeFocus: null,
         openThreads: [],
       }),
@@ -290,7 +314,14 @@ describe('processIngestionTurn', () => {
   it('persists structural memory but leaves the cursor retryable on provider failure', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'Structural',
-      facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
+      facts: [
+        {
+          subject: 'user',
+          predicate: 'name',
+          value: 'Mo',
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
+        },
+      ],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
       status: 'provider_error',
@@ -331,7 +362,14 @@ describe('processIngestionTurn', () => {
   it('keeps structural memory and skips provider finalization when enrichment is preempted', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'Structural before preemption',
-      facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
+      facts: [
+        {
+          subject: 'user',
+          predicate: 'name',
+          value: 'Mo',
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
+        },
+      ],
     });
     const controller = new AbortController();
     mockExtractProviderEnrichment.mockImplementationOnce(async () => {
@@ -373,12 +411,20 @@ describe('processIngestionTurn', () => {
   it('rejects provider facts that are absent from the exact user evidence', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'S',
-      facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
+      facts: [
+        {
+          subject: 'user',
+          predicate: 'name',
+          value: 'Mo',
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
+        },
+      ],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
       status: 'valid',
       result: {
         episodeSummary: 'P',
+        episodeSensitivity: 'normal',
         newFacts: [
           providerProposal({ predicate: 'name', value: 'Mo', evidenceQuote: 'Mo' }),
           providerProposal({ predicate: 'age', value: '30', evidenceQuote: '30' }),
@@ -412,12 +458,20 @@ describe('processIngestionTurn', () => {
   it('preserves structural subject/predicate facts over provider variants in the same turn', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'S',
-      facts: [{ subject: 'knowu-user', predicate: 'preferred_message_contact', value: 'Avery' }],
+      facts: [
+        {
+          subject: 'knowu-user',
+          predicate: 'preferred_message_contact',
+          value: 'Avery',
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
+        },
+      ],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
       status: 'valid',
       result: {
         episodeSummary: 'P',
+        episodeSensitivity: 'normal',
         newFacts: [
           {
             ...providerProposal(),
@@ -455,7 +509,12 @@ describe('processIngestionTurn', () => {
 
     const persisted = mockApplyConsolidatorResult.mock.calls[0][0];
     expect(persisted.newFacts).toEqual([
-      { subject: 'knowu-user', predicate: 'preferred_message_contact', value: 'Avery' },
+      {
+        subject: 'knowu-user',
+        predicate: 'preferred_message_contact',
+        value: 'Avery',
+        sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
+      },
     ]);
   });
 
@@ -485,6 +544,7 @@ describe('processIngestionTurn', () => {
       status: 'valid',
       result: {
         episodeSummary: 'P',
+        episodeSensitivity: 'normal',
         newFacts: [
           {
             ...providerProposal(),

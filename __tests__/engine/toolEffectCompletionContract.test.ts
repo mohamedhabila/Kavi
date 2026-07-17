@@ -29,6 +29,41 @@ describe('tool effect completion contracts', () => {
     ).resolves.toEqual({ kind: 'operational', toolName: 'sessions_spawn' });
   });
 
+  it('derives verified scheduler mutation evidence while keeping scheduler reads effect-free', async () => {
+    const createArguments = JSON.stringify({
+      action: 'create',
+      name: 'Morning briefing',
+      schedule: '0 9 * * *',
+      prompt: 'Prepare the briefing.',
+    });
+    const createRequirement = await resolveToolEffectCompletionRequirement({
+      toolName: 'cron',
+      argumentsText: createArguments,
+    });
+
+    expect(createRequirement).toEqual(
+      expect.objectContaining({
+        kind: 'effectful',
+        toolName: 'cron',
+        criterion: {
+          effectKind: 'workflow.mutate',
+          requestDigest: await digestToolEffectRequest(createArguments),
+          resource: {
+            kind: 'effect_request',
+            id: await digestToolEffectRequest(createArguments),
+          },
+          verificationState: 'verified',
+        },
+      }),
+    );
+    await expect(
+      resolveToolEffectCompletionRequirement({
+        toolName: 'cron',
+        argumentsText: JSON.stringify({ action: 'list' }),
+      }),
+    ).resolves.toEqual({ kind: 'effect_free', toolName: 'cron' });
+  });
+
   it('permits an untrusted dynamic tool only as non-completing operational work', async () => {
     await expect(
       resolveToolEffectCompletionRequirement({

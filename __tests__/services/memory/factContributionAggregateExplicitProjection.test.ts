@@ -8,7 +8,7 @@ import { upsertEntity } from '../../../src/services/memory/entities';
 import type { RawFactEvidenceRow } from '../../../src/services/memory/factContributionAggregateQueries';
 import { loadVerifiedFactContributionAggregatesInTransaction } from '../../../src/services/memory/factContributionAggregateStore';
 import { requireFactContributionExplicitProjection } from '../../../src/services/memory/factContributionExplicitProjection';
-import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
+import { recordCodeOwnedTestFactWithContribution as recordFactWithContribution } from '../../helpers/factContributionWriteFixtures';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import {
   ensureFactSchema,

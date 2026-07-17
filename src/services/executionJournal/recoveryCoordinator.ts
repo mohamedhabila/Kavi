@@ -1,9 +1,9 @@
-import * as Crypto from 'expo-crypto';
 import {
   EXECUTION_RECOVERY_BLOCK_REASONS,
   type ExecutionRecoveryBlockReason,
   type ExecutionRecoveryCommand,
 } from './recoveryPlanner';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import type {
   ExecutionRecoveryGeneration,
   ExecutionRecoveryQueryBlockReason,
@@ -345,8 +345,7 @@ function canonicalCommand(command: ExecutionRecoveryCommand): string {
 export async function digestExecutionRecoveryCommand(
   command: DispatchableExecutionRecoveryCommand,
 ): Promise<string> {
-  const digest = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
+  const digest = await sha256HexUtf8Async(
     `${COMMAND_DIGEST_FORMAT}\u0000${canonicalCommand(command)}`,
   );
   if (!validDigest(digest)) {

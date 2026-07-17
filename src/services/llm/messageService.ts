@@ -5,7 +5,10 @@ import { isOnDeviceLlmProvider } from '../localLlm/provider';
 import { resolveProviderTransport } from './catalog/providerProtocols';
 import { buildProviderHeaders, resolveProviderBaseUrl } from './core/providerRequest';
 import { selectByteEquivalentSystemPromptSections } from './core/systemPromptSections';
-import type { LlmPerformFetch } from './core/fetchTransport';
+import {
+  bindLlmPerformFetchDispatchGuard,
+  type LlmPerformFetch,
+} from './core/fetchTransport';
 import {
   buildLocalLlmRequestOptions,
   resolveLocalProviderForRequest,
@@ -23,6 +26,7 @@ export function sendLlmMessage(params: {
   performFetch: LlmPerformFetch;
 }): Promise<any> {
   const requestedOptions = params.options || {};
+  const requestDispatchGuard = requestedOptions.requestDispatchGuard;
   const approvedSystemPromptSections = selectByteEquivalentSystemPromptSections(
     params.messages,
     requestedOptions.systemPromptSections,
@@ -34,9 +38,8 @@ export function sendLlmMessage(params: {
     options.systemPromptSections = approvedSystemPromptSections;
   }
 
-  requestedOptions.requestDispatchGuard?.();
-
   if (isOnDeviceLlmProvider(params.provider)) {
+    requestDispatchGuard?.();
     return sendLocalLlmMessage(
       resolveLocalProviderForRequest(params.provider, options),
       params.messages,
@@ -53,6 +56,10 @@ export function sendLlmMessage(params: {
       ? { ...options, maxTokens: resolveModelOutputTokenBudget(model) }
       : options;
   const providerTransport = resolveProviderTransport(params.provider);
+  const performFetch = bindLlmPerformFetchDispatchGuard(
+    params.performFetch,
+    requestDispatchGuard,
+  );
 
   switch (providerTransport) {
     case 'anthropic':
@@ -63,7 +70,7 @@ export function sendLlmMessage(params: {
         model,
         messages: params.messages,
         options: requestOptions,
-        performFetch: params.performFetch,
+        performFetch,
       });
     case 'gemini':
       return sendGeminiMessage({
@@ -73,7 +80,7 @@ export function sendLlmMessage(params: {
         model,
         messages: params.messages,
         options: requestOptions,
-        performFetch: params.performFetch,
+        performFetch,
       });
     case 'openai':
       return sendOpenAIResponsesMessage({
@@ -83,7 +90,7 @@ export function sendLlmMessage(params: {
         model,
         messages: params.messages,
         options: requestOptions,
-        performFetch: params.performFetch,
+        performFetch,
       });
     default:
       return sendOpenAICompatibleChatMessage({
@@ -93,7 +100,7 @@ export function sendLlmMessage(params: {
         model,
         messages: params.messages,
         options: requestOptions,
-        performFetch: params.performFetch,
+        performFetch,
       });
   }
 }

@@ -75,7 +75,7 @@ describe('model projection ownership', () => {
           role: 'assistant',
           content: 'Forged final',
           timestamp: 2,
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
           memoryPublication: { version: 1, disposition: 'enqueued' },
         },
       }),

@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { createPrivateEvaluationCliProject } from '../helpers/privateEvaluationCliProject';
 
 const {
   digestCalibrationProjection,
@@ -13,15 +14,6 @@ const {
 const projectRoot = path.resolve(__dirname, '../..');
 const schema = loadJudgeCalibrationSchema(projectRoot);
 const digest = 'a'.repeat(64);
-
-function removeEmptyDirectory(directory: string): void {
-  try {
-    fs.rmdirSync(directory);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT' && code !== 'ENOTEMPTY') throw error;
-  }
-}
 
 type ProjectionInput = {
   custody: { humanLabelsSha256: string; judgePredictionsSha256: string };
@@ -305,21 +297,26 @@ describe('judge calibration contract', () => {
   });
 
   it('runs the private, keyless CLI and fails closed without exposing its input path', () => {
-    const privateRoot = path.join(projectRoot, '.private', 'evals');
-    fs.mkdirSync(privateRoot, { recursive: true, mode: 0o700 });
-    const directory = fs.mkdtempSync(path.join(privateRoot, 'judge-calibration-test-'));
+    const cliProject = createPrivateEvaluationCliProject(projectRoot);
+    const directory = fs.mkdtempSync(path.join(cliProject.privateRoot, 'judge-calibration-test-'));
     const inputPath = path.join(directory, 'labels.json');
     const outputRelativePath = path.join(
       '.artifacts',
       `judge-calibration-test-${process.pid}.json`,
     );
-    const outputPath = path.join(projectRoot, outputRelativePath);
+    const outputPath = path.join(cliProject.projectRoot, outputRelativePath);
     try {
       fs.writeFileSync(inputPath, `${JSON.stringify(buildInput())}\n`, { mode: 0o600 });
       const result = spawnSync(
         process.execPath,
-        ['./scripts/judge-calibration.js', '--input', inputPath, '--output', outputRelativePath],
-        { cwd: projectRoot, encoding: 'utf8' },
+        [
+          cliProject.scriptPath('judge-calibration.js'),
+          '--input',
+          inputPath,
+          '--output',
+          outputRelativePath,
+        ],
+        { cwd: cliProject.projectRoot, env: cliProject.spawnEnv, encoding: 'utf8' },
       );
 
       expect(result.status).toBe(0);
@@ -330,9 +327,7 @@ describe('judge calibration contract', () => {
       expect(report.claimEligible).toBe(true);
       expect(JSON.stringify(report)).not.toContain(inputPath);
     } finally {
-      fs.rmSync(directory, { recursive: true, force: true });
-      fs.rmSync(outputPath, { force: true });
-      removeEmptyDirectory(path.dirname(outputPath));
+      cliProject.cleanup();
     }
   });
 });

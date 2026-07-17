@@ -19,7 +19,10 @@ import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/servic
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { recordContributionBackedFact } from '../helpers/memoryRetirementTestFixtures';
+import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+  recordContributionBackedFact,
+} from '../helpers/memoryRetirementTestFixtures';
 import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -65,6 +68,7 @@ function seedFact(input: {
       taskId: input.taskId ?? null,
       producerId: 'memory_fact_action_authorization_test',
       producerEventId: `${sourceId}-event`,
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
       applicability: {
         factClass: 'objective',
         sourceAuthority: 'tool_observed',

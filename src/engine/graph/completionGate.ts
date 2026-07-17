@@ -12,7 +12,6 @@ import {
   evaluateGraphMutationErrorHold,
   evaluateNoToolProgressRetry,
   evaluateToolErrorRepairHold,
-  evaluateWorkflowContinuationHold,
 } from './completionGateRecoveryHolds';
 import type { CompletionGateDecision } from './completionGateTypes';
 import type { ToolCallRecord } from '../loopDetection';
@@ -32,9 +31,9 @@ export function evaluateCompletionGate(params: {
   fullContent: string;
   recoveryDirectives: AgentControlTurnDirectives;
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;
-  pendingWorkflowContinuationToolNames?: ReadonlyArray<string>;
   completion?: AssistantCompletionMetadata;
   nextFinalizationMaxTokens: number;
+  requiresAgenticProgressValidation?: boolean;
 }): CompletionGateDecision {
   const asyncCommand = buildAgentControlGraphPendingAsyncFinalizationCommand({
     trackedOperations: params.trackedOperations,
@@ -85,26 +84,16 @@ export function evaluateCompletionGate(params: {
     return toolErrorRepairHold;
   }
 
-  const workflowContinuationHold = evaluateWorkflowContinuationHold({
-    consecutiveNoToolTurns: params.consecutivePendingAsyncNoToolTurns,
-    pendingWorkflowContinuationToolNames: params.pendingWorkflowContinuationToolNames,
-    toolingEnabledForProvider: params.toolingEnabledForProvider,
-    selectedToolCount: params.selectedToolCount,
-    forceTextThisTurn: params.forceTextThisTurn,
-  });
-  if (workflowContinuationHold) {
-    return workflowContinuationHold;
-  }
-
   const noToolProgressRetry = evaluateNoToolProgressRetry({
     consecutiveNoToolTurns: params.consecutivePendingAsyncNoToolTurns,
-    fullContent: params.fullContent,
     goals: params.goals,
     toolingEnabledForProvider: params.toolingEnabledForProvider,
     selectedToolCount: params.selectedToolCount,
     selectedToolNames: params.selectedToolNames,
     forceTextThisTurn: params.forceTextThisTurn,
     toolCallHistory: params.toolCallHistory,
+    requiresAgenticProgressValidation: params.requiresAgenticProgressValidation,
+    candidateCompletionIsComplete: params.completion?.completionStatus === 'complete',
   });
   if (noToolProgressRetry) {
     return noToolProgressRetry;

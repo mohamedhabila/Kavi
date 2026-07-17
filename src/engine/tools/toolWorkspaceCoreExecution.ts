@@ -1,5 +1,5 @@
-import * as Crypto from 'expo-crypto';
 import { getOptionalToolStringArg, requireToolStringArg } from './fileArgumentUtils';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import { resolveConversationWorkspaceSource } from '../../services/workspaces/source';
 import {
   listWorkspaceSourceDirectory,
@@ -53,7 +53,7 @@ export async function executeWriteFile(
   let sha256: string;
   let result: Awaited<ReturnType<typeof writeWorkspaceSourceTextFile>>;
   try {
-    sha256 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, contentArg.value!);
+    sha256 = await sha256HexUtf8Async(contentArg.value!);
     result = await writeWorkspaceSourceTextFile(source, pathArg.value!, contentArg.value!);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

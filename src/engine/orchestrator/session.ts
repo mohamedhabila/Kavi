@@ -6,7 +6,10 @@ import { isJestRuntime } from '../../utils/runtime';
 import { createOrchestratorGraphBindings } from '../graph/orchestratorGraphBindings';
 import { resolveGraphEntryRequestDecision } from '../graph/requestDecisionSignals';
 import { executeAgentControlGraphSession } from '../graph/sessionExecution';
-import { prepareOrchestratorRequestBundle } from '../orchestratorRequestPreparation';
+import {
+  loadOrchestratorMemoryAccessContext,
+  prepareOrchestratorRequestBundle,
+} from '../orchestratorRequestPreparation';
 import { buildRuntimeContextNote } from '../prompts/orchestratorPromptSections';
 import { yieldToUiFrame } from '../toolExecution/toolCallLifecycleRecording';
 import { prepareOrchestratorSessionBootstrap } from './bootstrap';
@@ -16,7 +19,6 @@ import {
   resolveCodeOwnedMemoryPersonaId,
 } from '../../services/memory/memoryScopeIdentity';
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
-import { createMemoryAttributedOrchestratorCallbacks } from './memoryRetrievalAttribution';
 import {
   createVerifiedProcedureExecutionSession,
   type PendingVerifiedProcedureObservation,
@@ -24,6 +26,10 @@ import {
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
 import type { AssistantMessageMetadata } from '../../types/message';
 import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
+import { getActiveGoal } from '../goals/types';
+import { admitSessionMemoryContext } from '../graph/sessionMemoryContext';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../authority/modelTurnMemoryPolicyBinding';
+import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
 
 const logger = createLogger('Orchestrator');
 
@@ -109,6 +115,8 @@ export async function runOrchestratorGraphSession(params: {
     currentUserMessage,
     latestUserMessageText,
     livingMemory,
+    memoryConsistencyBarrier,
+    memoryRefreshInternalUserMessages,
     requestFrame: structuralRequestFrame,
     skillPrompts,
     workingMessages,
@@ -141,30 +149,25 @@ export async function runOrchestratorGraphSession(params: {
       personaId,
     }),
   });
-  const memoryAttributedCallbacks = createMemoryAttributedOrchestratorCallbacks({
-    callbacks,
+  const admittedMemoryContext = admitSessionMemoryContext({
+    consistencyBarrier: memoryConsistencyBarrier,
     livingMemory,
   });
   let finalAssistant:
     | Readonly<{ content: string; metadata?: AssistantMessageMetadata }>
     | undefined;
   const graphCallbacks = {
-    ...memoryAttributedCallbacks,
+    ...callbacks,
     onAssistantMessage: (
       content: string,
-      toolCalls?: Parameters<typeof memoryAttributedCallbacks.onAssistantMessage>[1],
-      providerReplay?: Parameters<typeof memoryAttributedCallbacks.onAssistantMessage>[2],
+      toolCalls?: Parameters<typeof callbacks.onAssistantMessage>[1],
+      providerReplay?: Parameters<typeof callbacks.onAssistantMessage>[2],
       assistantMetadata?: AssistantMessageMetadata,
     ) => {
       if (assistantMetadata?.kind === 'final' && content.trim()) {
         finalAssistant = { content, metadata: assistantMetadata };
       }
-      memoryAttributedCallbacks.onAssistantMessage(
-        content,
-        toolCalls,
-        providerReplay,
-        assistantMetadata,
-      );
+      callbacks.onAssistantMessage(content, toolCalls, providerReplay, assistantMetadata);
     },
   };
 
@@ -211,22 +214,21 @@ export async function runOrchestratorGraphSession(params: {
       initialRuntime: {
         activeModel,
         activeProvider,
+        admittedMemoryContext,
         consecutivePendingAsyncNoToolTurns,
         lastPendingAsyncSignature,
+        lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         llm,
         warningInjectedThisRound,
         workingMessages,
       },
       isSuperAgent,
-      livingMemory,
       maxToolIterations,
       maxTokens,
       onCompaction: callbacks.onCompaction,
       personaThinkingLevel: persona?.thinkingLevel,
       promptContextSupport: {
         graphGoals: graph.getGraphSnapshot().goals ?? [],
-        livingMemorySections: livingMemory?.sections,
-        livingMemoryReadEpoch: livingMemory?.memoryReadEpoch,
         maxToolIterations,
         resolvedPrompt,
         runtimeContext: runtimeContextNote,
@@ -238,6 +240,34 @@ export async function runOrchestratorGraphSession(params: {
         recordUsage(usageConversationId, usage);
       },
       requestFrame,
+      refreshSessionMemoryContext: async (refreshInput) => {
+        const graphSnapshot = refreshInput.graphSnapshot;
+        const activeTaskId =
+          graphSnapshot.activeTaskId ?? getActiveGoal(graphSnapshot.goals ?? [])?.id ?? taskId;
+        const refreshedMemory = await loadOrchestratorMemoryAccessContext({
+          activeModel: refreshInput.activeModel,
+          activeProvider: refreshInput.activeProvider,
+          asyncWork: graphSnapshot.asyncWork,
+          goals: graphSnapshot.goals,
+          internalUserMessageCount: memoryRefreshInternalUserMessages.length,
+          isSuperAgent,
+          logger,
+          memoryContextStrategy: options.memoryContextStrategy,
+          memoryConversationId: sharedConversationId,
+          memoryRetrievalStrategy: options.memoryRetrievalStrategy,
+          messages: rebuildSessionMemoryRefreshMessages({
+            internalUserMessages: memoryRefreshInternalUserMessages,
+            workingMessages: refreshInput.workingMessages,
+          }),
+          personaId,
+          sourceThreadId: conversationId,
+          taskId: activeTaskId ?? null,
+        });
+        return {
+          consistencyBarrier: refreshedMemory.consistencyBarrier,
+          livingMemory: refreshedMemory.livingMemory,
+        };
+      },
       signal,
       temperature: persona?.temperature ?? temperature,
       thinkingLevel,

@@ -60,7 +60,7 @@ describe('scheduled occurrence transcript recovery', () => {
         id: assistantId,
         role: 'assistant',
         content: '',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }),
     ]);
 
@@ -74,7 +74,11 @@ describe('scheduled occurrence transcript recovery', () => {
         id: assistantId,
         role: 'assistant',
         content: 'I am still planning.',
-        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
       }),
     ]);
 
@@ -88,7 +92,11 @@ describe('scheduled occurrence transcript recovery', () => {
         id: assistantId,
         role: 'assistant',
         content: 'I will call the calendar tool.',
-        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
         toolCalls: [
           { id: 'tool-1', name: 'calendar_create_event', arguments: '{}', status: 'pending' },
         ],
@@ -105,14 +113,18 @@ describe('scheduled occurrence transcript recovery', () => {
         id: assistantId,
         role: 'assistant',
         content: 'Planning',
-        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
       }),
       message({ id: 'tool-result', role: 'tool', content: 'Created', toolCallId: 'tool-1' }),
       message({
         id: 'generated-final',
         role: 'assistant',
         content: 'The event was created.',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }),
     ]);
 
@@ -131,7 +143,7 @@ describe('scheduled occurrence transcript recovery', () => {
         id: 'later-final',
         role: 'assistant',
         content: 'Different answer',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }),
     ]);
 
@@ -145,14 +157,18 @@ describe('scheduled occurrence transcript recovery', () => {
         id: assistantId,
         role: 'assistant',
         content: 'Initial answer',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }),
       message({
         id: 'terminal-failure',
         role: 'assistant',
         content: 'Required evidence was missing.',
         isError: true,
-        assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'incomplete',
+          finishReason: 'response_failed',
+        },
       }),
     ]);
 
@@ -166,7 +182,7 @@ describe('scheduled occurrence transcript recovery', () => {
         id: assistantId,
         role: 'assistant',
         content: 'Earlier answer',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }),
       message({ id: 'later-empty', role: 'assistant', content: '' }),
     ]);
@@ -181,14 +197,18 @@ describe('scheduled occurrence transcript recovery', () => {
         id: assistantId,
         role: 'assistant',
         content: 'Earlier answer',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }),
       message({
         id: 'later-plan',
         role: 'assistant',
         content: 'I will perform another action.',
         toolCalls: [{ id: 'tool-2', name: 'write_file', arguments: '{}', status: 'pending' }],
-        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
       }),
     ]);
 
@@ -202,7 +222,7 @@ describe('scheduled occurrence transcript recovery', () => {
         id: assistantId,
         role: 'assistant',
         content: 'Earlier answer',
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       }),
       message({ id: 'later-tool', role: 'tool', content: 'Late evidence', toolCallId: 'tool-3' }),
     ]);

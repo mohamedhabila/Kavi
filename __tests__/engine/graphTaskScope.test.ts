@@ -2,7 +2,10 @@ import {
   resolveGraphTaskId,
   resolveGraphWorkingBlockScope,
 } from '../../src/engine/goals/graphTaskScope';
-import type { AgentGoal } from '../../src/engine/goals/types';
+import {
+  CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+  type AgentGoal,
+} from '../../src/engine/goals/types';
 
 describe('graphTaskScope', () => {
   const goals: AgentGoal[] = [
@@ -58,6 +61,52 @@ describe('graphTaskScope', () => {
 
   it('falls back to active goal id when activeTaskId is absent', () => {
     expect(resolveGraphTaskId({ goals })).toBe('meal-plan');
+  });
+
+  it('never turns internal effect-completion bookkeeping into memory task scope', () => {
+    const internalGoal: AgentGoal = {
+      id: 'effect-memory-remember-request',
+      title: 'Verify memory_remember effect',
+      status: 'active',
+      dependencies: [],
+      evidence: [],
+      createdAt: 1,
+      updatedAt: 1,
+      owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+      completionPolicy: 'blocking',
+    };
+
+    expect(
+      resolveGraphTaskId({
+        goals: [internalGoal],
+        activeTaskId: internalGoal.id,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGraphWorkingBlockScope({
+        conversationId: 'conv-internal-effect',
+        graphState: { goals: [internalGoal], activeTaskId: internalGoal.id },
+      }),
+    ).toEqual({
+      conversationId: 'conv-internal-effect',
+      threadId: 'conv-internal-effect',
+    });
+  });
+
+  it('falls through an internal effect goal to the active user task', () => {
+    const internalGoal: AgentGoal = {
+      id: 'effect-memory-remember-request',
+      title: 'Verify memory_remember effect',
+      status: 'active',
+      dependencies: [],
+      evidence: [],
+      createdAt: 1,
+      updatedAt: 1,
+      owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+      completionPolicy: 'blocking',
+    };
+
+    expect(resolveGraphTaskId({ goals: [internalGoal, ...goals] })).toBe('meal-plan');
   });
 
   it('builds working-block scope from graph state', () => {

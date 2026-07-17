@@ -4,14 +4,14 @@ import { TOOL_CATALOG_AVAILABLE_CATEGORIES } from './builtin-tool-catalogConfig'
 export const TOOL_CATALOG_TOOL: ToolDefinition = {
   name: 'tool_catalog',
   description:
-    'Discover tools from the mobile catalog. Use query and/or capabilities for structural search across names, categories, and contracts. Use category for domain browse when the domain is already known. Use the empty overview call only to inspect categories first.',
+    'Discover tools from the mobile catalog. Prefer query and/or capabilities for a natural-language intent or when multiple resource domains could apply. Use category only when the target resource domain is explicit. Use the empty overview call only to inspect categories first.',
   input_schema: {
     type: 'object',
     properties: {
       category: {
         type: 'string',
         description:
-          'Optional category filter from the declared enum, including calendar, contacts, notifications, native device actions, and installed extension domains.',
+          'Optional exact resource-domain filter from the declared enum. Automation is for recurring or deferred assistant tasks and cron jobs; calendar is only for device calendar events; notifications is only for user alerts. Prefer query when the domain is uncertain.',
         enum: TOOL_CATALOG_AVAILABLE_CATEGORIES,
       },
       query: {

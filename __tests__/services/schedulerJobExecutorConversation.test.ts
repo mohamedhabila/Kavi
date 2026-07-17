@@ -5,6 +5,9 @@ import {
   abortAllScheduledJobExecutions,
   beginModelProjectionIntent,
   cleanupSchedulerJobExecutorConversationHarness,
+  emitSchedulerFailure,
+  emitSchedulerFinal,
+  emitSchedulerToolTurn,
   executeJob,
   executeScheduledJob,
   findMockConversation,
@@ -15,6 +18,7 @@ import {
   mockFlushChatStorePersistenceNow,
   mockRunOrchestrator,
   resetSchedulerJobExecutorConversationHarness,
+  schedulerToolMessageOutcome,
   scheduledJob,
 } from '../helpers/schedulerJobExecutorConversationHarness';
 
@@ -34,11 +38,11 @@ describe('scheduled job conversation transcript', () => {
     };
     mockRunOrchestrator.mockImplementationOnce(
       async (_options: unknown, callbacks: OrchestratorCallbacks) => {
-        callbacks.onAssistantMessage?.(
+        emitSchedulerToolTurn(
+          callbacks,
           'I will check the current forecast.',
           [{ ...runningToolCall, status: 'pending' }],
           toolReplay,
-          { kind: 'intermediate', completionStatus: 'complete' },
         );
         callbacks.onToolCallStart?.(runningToolCall);
         callbacks.onToolCallComplete?.({
@@ -46,11 +50,8 @@ describe('scheduled job conversation transcript', () => {
           status: 'completed',
           result: 'Sunny, 24 C',
         });
-        callbacks.onToolMessage?.('tool-call-1', 'Sunny, 24 C');
-        callbacks.onAssistantMessage?.('It is sunny and 24 C.', [], finalReplay, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        callbacks.onToolMessage?.(schedulerToolMessageOutcome('tool-call-1', 'Sunny, 24 C'));
+        emitSchedulerFinal(callbacks, 'It is sunny and 24 C.', finalReplay);
         callbacks.onDone?.();
       },
     );
@@ -86,21 +87,20 @@ describe('scheduled job conversation transcript', () => {
     };
     mockRunOrchestrator.mockImplementationOnce(
       async (_options: unknown, callbacks: OrchestratorCallbacks) => {
-        callbacks.onAssistantMessage?.('Checking the writable calendar.', [toolCall], undefined, {
-          kind: 'intermediate',
-          completionStatus: 'complete',
-        });
+        emitSchedulerToolTurn(callbacks, 'Checking the writable calendar.', [toolCall]);
         callbacks.onToolCallStart?.(toolCall);
         callbacks.onToolCallComplete?.({
           ...toolCall,
           status: 'completed',
           result: '[{"id":"calendar-1","allowsModifications":true}]',
         });
-        callbacks.onToolMessage?.(toolCall.id, '[{"id":"calendar-1","allowsModifications":true}]');
-        callbacks.onAssistantMessage?.('The scheduled event was created.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        callbacks.onToolMessage?.(
+          schedulerToolMessageOutcome(
+            toolCall.id,
+            '[{"id":"calendar-1","allowsModifications":true}]',
+          ),
+        );
+        emitSchedulerFinal(callbacks, 'The scheduled event was created.');
         callbacks.onDone?.();
         return {
           terminalDisposition: 'final_candidate',
@@ -136,12 +136,11 @@ describe('scheduled job conversation transcript', () => {
     const rejectedResult = 'Tool "unregistered_weather_tool" is not registered.';
     mockRunOrchestrator.mockImplementationOnce(
       async (_options: unknown, callbacks: OrchestratorCallbacks) => {
-        callbacks.onAssistantMessage?.('I will try the requested weather tool.', [unknownTool]);
-        callbacks.onToolMessage?.(unknownTool.id, rejectedResult);
-        callbacks.onAssistantMessage?.('That weather tool is unavailable.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        emitSchedulerToolTurn(callbacks, 'I will try the requested weather tool.', [unknownTool]);
+        callbacks.onToolMessage?.(
+          schedulerToolMessageOutcome(unknownTool.id, rejectedResult, 'failed'),
+        );
+        emitSchedulerFinal(callbacks, 'That weather tool is unavailable.');
         callbacks.onDone?.();
       },
     );
@@ -192,7 +191,7 @@ describe('scheduled job conversation transcript', () => {
     });
     mockRunOrchestrator.mockImplementationOnce(
       async (_options: unknown, callbacks: OrchestratorCallbacks) => {
-        callbacks.onAssistantMessage?.('I will gather both results.', [surfaceTool, siblingTool]);
+        emitSchedulerToolTurn(callbacks, 'I will gather both results.', [surfaceTool, siblingTool]);
         callbacks.onToolCallComplete?.({
           ...surfaceTool,
           status: 'completed',
@@ -203,13 +202,13 @@ describe('scheduled job conversation transcript', () => {
           status: 'completed',
           result: 'Sibling evidence',
         });
-        callbacks.onToolMessage?.(surfaceTool.id, surfaceResult);
+        callbacks.onToolMessage?.(schedulerToolMessageOutcome(surfaceTool.id, surfaceResult));
         expect(
           findMockConversation('scheduled-conversation').messages.some(
             (message) => message.content === 'Worker-authored final answer.',
           ),
         ).toBe(false);
-        callbacks.onToolMessage?.(siblingTool.id, 'Sibling evidence');
+        callbacks.onToolMessage?.(schedulerToolMessageOutcome(siblingTool.id, 'Sibling evidence'));
         callbacks.onDone?.();
       },
     );
@@ -262,18 +261,15 @@ describe('scheduled job conversation transcript', () => {
     const secondReplay = { openaiResponseId: 'response-tool-2' };
     mockRunOrchestrator.mockImplementationOnce(
       async (_options: unknown, callbacks: OrchestratorCallbacks) => {
-        callbacks.onAssistantMessage?.('Fetch the forecast.', [firstTool], firstReplay);
+        emitSchedulerToolTurn(callbacks, 'Fetch the forecast.', [firstTool], firstReplay);
         callbacks.onToolCallStart?.(firstTool);
         callbacks.onToolCallComplete?.({ ...firstTool, status: 'completed', result: 'forecast' });
-        callbacks.onToolMessage?.(firstTool.id, 'forecast');
-        callbacks.onAssistantMessage?.('', [secondTool], secondReplay);
+        callbacks.onToolMessage?.(schedulerToolMessageOutcome(firstTool.id, 'forecast'));
+        emitSchedulerToolTurn(callbacks, '', [secondTool], secondReplay);
         callbacks.onToolCallStart?.(secondTool);
         callbacks.onToolCallComplete?.({ ...secondTool, status: 'completed', result: 'details' });
-        callbacks.onToolMessage?.(secondTool.id, 'details');
-        callbacks.onAssistantMessage?.('Forecast ready.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        callbacks.onToolMessage?.(schedulerToolMessageOutcome(secondTool.id, 'details'));
+        emitSchedulerFinal(callbacks, 'Forecast ready.');
         callbacks.onDone?.();
       },
     );
@@ -305,15 +301,15 @@ describe('scheduled job conversation transcript', () => {
     };
     mockRunOrchestrator.mockImplementationOnce(
       async (_options: unknown, callbacks: OrchestratorCallbacks) => {
-        callbacks.onAssistantMessage?.('Checking first.', [tool]);
+        emitSchedulerToolTurn(callbacks, 'Checking first.', [tool]);
         callbacks.onToolCallStart?.(tool);
         callbacks.onToolCallComplete?.({ ...tool, status: 'completed', result: 'partial' });
-        callbacks.onToolMessage?.(tool.id, 'partial');
+        callbacks.onToolMessage?.(schedulerToolMessageOutcome(tool.id, 'partial'));
         callbacks.onAgentControlGraphStateChange?.({
           status: 'blocked',
           terminalReason: 'missing_required_side_effect',
         });
-        callbacks.onAssistantMessage?.('The required action was not completed.');
+        emitSchedulerFailure(callbacks, 'The required action was not completed.');
         callbacks.onDone?.();
       },
     );
@@ -351,16 +347,13 @@ describe('scheduled job conversation transcript', () => {
       async (_options: unknown, callbacks: OrchestratorCallbacks) => {
         callbacks.onReasoning?.('first-turn reasoning');
         callbacks.onToken?.('first-turn text');
-        callbacks.onAssistantMessage?.('First turn.', [tool]);
+        emitSchedulerToolTurn(callbacks, 'First turn.', [tool]);
         callbacks.onToolCallStart?.(tool);
         callbacks.onToolCallComplete?.({ ...tool, status: 'completed', result: 'evidence' });
-        callbacks.onToolMessage?.(tool.id, 'evidence');
+        callbacks.onToolMessage?.(schedulerToolMessageOutcome(tool.id, 'evidence'));
         callbacks.onReasoning?.('second-turn reasoning');
         callbacks.onToken?.('second-turn text');
-        callbacks.onAssistantMessage?.('Second turn final.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        emitSchedulerFinal(callbacks, 'Second turn final.');
         callbacks.onDone?.();
       },
     );
@@ -388,10 +381,7 @@ describe('scheduled job conversation transcript', () => {
     mockRunOrchestrator.mockImplementationOnce(
       async (options: { personaId?: string }, callbacks: OrchestratorCallbacks) => {
         expect(options.personaId).toBe('default');
-        callbacks.onAssistantMessage?.('Chitchat response.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        emitSchedulerFinal(callbacks, 'Chitchat response.');
         callbacks.onDone?.();
       },
     );
@@ -460,10 +450,7 @@ describe('scheduled job conversation transcript', () => {
     mockRunOrchestrator.mockImplementationOnce(
       async (options: { conversationId: string }, callbacks: OrchestratorCallbacks) => {
         expect(options.conversationId).toBe(projected.id);
-        callbacks.onAssistantMessage?.('Recovered in the durable transcript.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        emitSchedulerFinal(callbacks, 'Recovered in the durable transcript.');
         callbacks.onDone?.();
       },
     );
@@ -534,10 +521,7 @@ describe('scheduled job conversation transcript', () => {
         expect(abortAllScheduledJobExecutions()).toBe(1);
         expect(options.signal?.signal.aborted).toBe(true);
         callbacks.onToken?.('late streamed token');
-        callbacks.onAssistantMessage?.('Late answer after background abort.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        emitSchedulerFinal(callbacks, 'Late answer after background abort.');
         callbacks.onAgentControlGraphStateChange?.({
           status: 'cancelled',
           terminalReason: 'user_cancelled',
@@ -562,10 +546,7 @@ describe('scheduled job conversation transcript', () => {
     mockRunOrchestrator.mockImplementationOnce(
       async (options: { conversationId: string }, callbacks: OrchestratorCallbacks) => {
         expect(options.conversationId).toBe('scheduled-conversation');
-        callbacks.onAssistantMessage?.('Recovered on retry.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        emitSchedulerFinal(callbacks, 'Recovered on retry.');
         callbacks.onDone?.();
       },
     );
@@ -620,10 +601,7 @@ describe('scheduled job conversation transcript', () => {
   it('preserves completed output when the final owner-release flush fails', async () => {
     mockRunOrchestrator.mockImplementationOnce(
       async (_options: unknown, callbacks: OrchestratorCallbacks) => {
-        callbacks.onAssistantMessage?.('Durable completed output.', [], undefined, {
-          kind: 'final',
-          completionStatus: 'complete',
-        });
+        emitSchedulerFinal(callbacks, 'Durable completed output.');
         callbacks.onDone?.();
       },
     );

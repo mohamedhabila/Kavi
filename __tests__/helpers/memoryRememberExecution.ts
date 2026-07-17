@@ -2,7 +2,7 @@ import type {
   MemoryRememberArgs,
   MemoryRememberExecutionContext,
 } from '../../src/services/memory/memoryTools';
-import type { MemoryRememberSemanticEvidenceV3Input } from '../../src/services/memory/memoryRememberSemanticEvidence';
+import type { MemoryRememberSemanticEvidenceV4Input } from '../../src/services/memory/memoryRememberSemanticEvidence';
 import type {
   SemanticFactAssertionClass,
   SemanticFactProposalOperation,
@@ -10,6 +10,7 @@ import type {
   SemanticFactSubjectRef,
 } from '../../src/services/memory/semanticFactProposal';
 import { sha256HexUtf8 } from '../../src/utils/sha256';
+import type { ToolObservedMemoryEvidenceCapability } from '../../src/services/memory/toolObservedMemoryEvidence';
 
 // Fixed, past test clock: deterministic authority without creating future-dated
 // facts that production retrieval correctly treats as not yet valid.
@@ -26,6 +27,7 @@ export function memoryRememberExecution(input: {
   claimedAt?: number;
   personaId?: string;
   sourceRunId?: string | null;
+  toolObservedEvidence?: ReadonlyArray<ToolObservedMemoryEvidenceCapability>;
 }): MemoryRememberExecutionContext {
   const digest = sha256HexUtf8(
     JSON.stringify([
@@ -50,6 +52,9 @@ export function memoryRememberExecution(input: {
       userMessageId: input.userMessageId,
       userMessageText: input.userMessageText,
     },
+    ...(input.toolObservedEvidence?.length
+      ? { toolObservedEvidence: input.toolObservedEvidence }
+      : {}),
   };
 }
 
@@ -67,13 +72,16 @@ export function memoryRememberArgs(input: {
   sensitivity?: 'normal' | 'personal' | 'sensitive' | 'restricted';
   pinned?: boolean;
 }): MemoryRememberArgs {
-  const semanticEvidence: MemoryRememberSemanticEvidenceV3Input = {
-    version: 3,
-    subject_ref:
+  const semanticEvidence: MemoryRememberSemanticEvidenceV4Input = {
+    version: 4,
+    subject:
       input.subjectRef.kind === 'self'
         ? { kind: 'self' }
-        : { kind: 'named', label: input.subjectRef.label },
-    subject_type: input.subjectType ?? (input.subjectRef.kind === 'self' ? 'self' : 'concept'),
+        : {
+            kind: 'named',
+            label: input.subjectRef.label,
+            type: input.subjectType && input.subjectType !== 'self' ? input.subjectType : 'concept',
+          },
     predicate: input.predicate,
     value: input.value,
     scope: input.scope ?? 'global',

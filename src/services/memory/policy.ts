@@ -8,6 +8,7 @@
 
 import { useSettingsStore } from '../../store/useSettingsStore';
 import type { MemoryFactScope } from './facts/types';
+import { isDurableMemoryPolicyEnabled, setDurableMemoryPolicyEnabled } from './memoryAuthority';
 
 type MemoryOptOutHandler = () => void;
 
@@ -16,8 +17,9 @@ let memoryPolicyEpoch = 0;
 let settingsObservationState: 'uninitialized' | 'active' | 'failed' = 'uninitialized';
 let unsubscribeSettings: (() => void) | null = null;
 
-function invalidateMemoryPolicy(): void {
+function advanceMemoryPolicyEpoch(notifyOptOutHandlers: boolean): void {
   memoryPolicyEpoch += 1;
+  if (!notifyOptOutHandlers) return;
   for (const handler of optOutHandlers) {
     try {
       handler();
@@ -31,10 +33,14 @@ function observeMemoryPolicyChange(
   state: ReturnType<typeof useSettingsStore.getState>,
   previousState: ReturnType<typeof useSettingsStore.getState>,
 ): void {
-  if (state.disableLongTermMemory !== true || previousState.disableLongTermMemory === true) {
-    return;
+  if (state.disableLongTermMemory === previousState.disableLongTermMemory) return;
+  const disabled = state.disableLongTermMemory === true;
+  try {
+    setDurableMemoryPolicyEnabled(!disabled);
+  } catch {
+    settingsObservationState = 'failed';
   }
-  invalidateMemoryPolicy();
+  advanceMemoryPolicyEpoch(disabled);
 }
 
 /**
@@ -53,15 +59,17 @@ export function initializeMemoryPolicyObservation(): boolean {
     }
     unsubscribeSettings = unsubscribe;
     settingsObservationState = 'active';
-    if (useSettingsStore.getState().disableLongTermMemory === true) {
-      invalidateMemoryPolicy();
+    const disabled = useSettingsStore.getState().disableLongTermMemory === true;
+    if (disabled) {
+      setDurableMemoryPolicyEnabled(false);
+      advanceMemoryPolicyEpoch(true);
     }
     return true;
   } catch {
     unsubscribeSettings?.();
     unsubscribeSettings = null;
     settingsObservationState = 'failed';
-    invalidateMemoryPolicy();
+    advanceMemoryPolicyEpoch(true);
     return false;
   }
 }
@@ -71,7 +79,7 @@ export interface MemoryPolicyContext {
   scope?: MemoryFactScope | 'all' | 'daily';
 }
 
-export function isLongTermMemoryEnabled(context: MemoryPolicyContext = {}): boolean {
+function isLocalLongTermMemoryEnabled(context: MemoryPolicyContext = {}): boolean {
   if (context.disableLongTermMemory === true) return false;
   if (settingsObservationState === 'failed') return false;
   try {
@@ -79,6 +87,10 @@ export function isLongTermMemoryEnabled(context: MemoryPolicyContext = {}): bool
   } catch {
     return false;
   }
+}
+
+export function isLongTermMemoryEnabled(context: MemoryPolicyContext = {}): boolean {
+  return isLocalLongTermMemoryEnabled(context) && isDurableMemoryPolicyEnabled();
 }
 
 export function canReadLongTermMemory(context: MemoryPolicyContext = {}): boolean {
@@ -106,11 +118,18 @@ export function captureMemoryReadEpoch(): number | null {
 
 /** A read remains admissible only while its original enabled generation is current. */
 export function isMemoryReadEpochCurrent(epoch: number): boolean {
-  return Number.isSafeInteger(epoch) && epoch >= 0 && epoch === memoryPolicyEpoch && canReadLongTermMemory();
+  return (
+    Number.isSafeInteger(epoch) &&
+    epoch >= 0 &&
+    epoch === memoryPolicyEpoch &&
+    isLocalLongTermMemoryEnabled()
+  );
 }
 
 export function isMemoryPolicyEpochCurrent(epoch: number): boolean {
-  return epoch === memoryPolicyEpoch && canWriteLongTermMemory();
+  return (
+    epoch === memoryPolicyEpoch && isLocalLongTermMemoryEnabled() && isDurableMemoryPolicyEnabled()
+  );
 }
 
 export function registerMemoryOptOutHandler(handler: MemoryOptOutHandler): () => void {

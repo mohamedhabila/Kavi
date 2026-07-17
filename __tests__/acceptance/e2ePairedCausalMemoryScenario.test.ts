@@ -127,8 +127,8 @@ describe('paired causal-memory scenario and contract', () => {
     expect(prompt).not.toContain('subject `');
     expect(validateE2EPairedCausalMemoryContract(scenario)).toEqual(scenario.pairedEvaluation);
     expect(scenario.pairedEvaluation).toMatchObject({
-      neutralRubricIndexes: Array.from({ length: 27 }, (_value, index) => index),
-      causalRubricIndexes: Array.from({ length: 11 }, (_value, index) => index + 27),
+      neutralRubricIndexes: Array.from({ length: 23 }, (_value, index) => index),
+      causalRubricIndexes: Array.from({ length: 10 }, (_value, index) => index + 23),
     });
     const neutralRubrics = scenario.pairedEvaluation!.neutralRubricIndexes.map(
       (index) => scenario.rubrics[index],
@@ -145,18 +145,32 @@ describe('paired causal-memory scenario and contract', () => {
           turnIndex: 1,
           expectedCount: 0,
         },
-        {
-          kind: 'turn_tool_call_count',
-          turnIndex: 0,
-          scope: 'all',
-          expectedCount: 0,
-        },
-        {
-          kind: 'turn_tool_call_count',
-          turnIndex: 1,
-          scope: 'all',
-          expectedCount: 0,
-        },
+      ]),
+    );
+    expect(
+      neutralRubrics.some((rubric) => rubric.kind === 'turn_tool_call_count'),
+    ).toBe(false);
+    expect(
+      neutralRubrics.some(
+        (rubric) =>
+          rubric.kind === 'turn_native_invocation_count' && rubric.turnIndex === 3,
+      ),
+    ).toBe(false);
+    const causalRubrics = scenario.pairedEvaluation!.causalRubricIndexes.map(
+      (index) => scenario.rubrics[index],
+    );
+    expect(causalRubrics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'turn_memory_selection',
+          turnIndex: 2,
+          requiredWrites: [
+            { turnIndex: 1, subject: 'user', value: '45 minutes', status: 'created' },
+          ],
+          supersededWrites: [
+            { turnIndex: 0, subject: 'user', value: '30 minutes', status: 'created' },
+          ],
+        }),
       ]),
     );
     expect(scenario.initialMessages).toBeUndefined();

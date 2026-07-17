@@ -3,13 +3,13 @@
 // ---------------------------------------------------------------------------
 // File edit, glob search, cron management tools.
 
-import * as Crypto from 'expo-crypto';
 import {
   getOptionalToolBooleanArg,
   getOptionalToolStringArg,
   requireToolStringArg,
   sanitizeWorkspaceRelativePath,
 } from './fileArgumentUtils';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import {
   normalizeGlobSearchResult,
   normalizeTextSearchResult,
@@ -81,7 +81,7 @@ export async function executeFileEdit(
   let sha256: string;
   let result: Awaited<ReturnType<typeof writeWorkspaceSourceTextFile>>;
   try {
-    sha256 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, newContent);
+    sha256 = await sha256HexUtf8Async(newContent);
     result = await writeWorkspaceSourceTextFile(source, safePath, newContent);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -11,6 +11,7 @@ export const REQUEST_CLARIFICATION_TOOL: ToolDefinition = {
   description:
     'Register user-owned information that is genuinely required before safe or complete execution, then end the turn with one focused question. ' +
     'Use this instead of a prose-only clarification when the missing information cannot be obtained from current context, memory, or a read-only tool. ' +
+    'A retrieved memory fact labeled policy=use already resolves the parameter it supplies, so do not request that information again. ' +
     'Do not combine this call with another tool call. Use stable semantic field keys independent of the user-facing language.',
   input_schema: {
     type: 'object',

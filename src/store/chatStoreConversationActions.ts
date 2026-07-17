@@ -99,6 +99,7 @@ export function createConversationStoreActions(
     createConversation: (providerId, systemPrompt, modelOverride, options) => {
       const now = Date.now();
       const id = generateId();
+      const replaceCanonical = options?.replaceCanonical === true;
       const workspaceTargetId = resolveConversationWorkspaceTargetId();
       const semanticMemoryHandoff =
         options?.activate === false ? undefined : captureActiveMemoryHandoff(get);
@@ -113,16 +114,40 @@ export function createConversationStoreActions(
         updatedAt: now,
         personaId: options?.personaId,
         mode: options?.mode,
+        ...(replaceCanonical ? { isCanonical: true } : {}),
         usage: buildEmptyConversationUsage(),
         logs: [],
         agentRuns: [],
         ...(workspaceTargetId ? { workspaceTargetId } : {}),
         ...(semanticMemoryHandoff ? { semanticMemoryHandoff } : {}),
       };
-      set((state) => ({
-        conversations: [newConversation, ...state.conversations],
-        activeConversationId: options?.activate === false ? state.activeConversationId : id,
-      }));
+      set((state) => {
+        const personaKey = options?.personaId?.length ? options.personaId : '__default__';
+        const existingConversations = replaceCanonical
+          ? state.conversations.map((conversation) => {
+              const conversationPersonaKey = conversation.personaId?.length
+                ? conversation.personaId
+                : '__default__';
+              if (
+                conversation.isSideThread ||
+                conversation.archivedFromMigration ||
+                !conversation.isCanonical ||
+                conversationPersonaKey !== personaKey
+              ) {
+                return conversation;
+              }
+              return {
+                ...conversation,
+                isCanonical: false,
+                archivedFromMigration: true,
+              };
+            })
+          : state.conversations;
+        return {
+          conversations: [newConversation, ...existingConversations],
+          activeConversationId: options?.activate === false ? state.activeConversationId : id,
+        };
+      });
       requestChatStorePersistenceCheckpoint();
       return id;
     },

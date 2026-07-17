@@ -86,6 +86,7 @@ function transitionFailedIngestionClaim(input: {
   outcomeCode: IngestionOutcomeCode;
   now: number;
   retryImmediately: boolean;
+  restoreInterruptedAttempt: boolean;
 }): IngestionTransitionResult {
   reconcileStructuralCompletion(input.claim);
   const current = getMemoryDb().getFirstSync<{
@@ -109,7 +110,10 @@ function transitionFailedIngestionClaim(input: {
     return { status: currentIngestionStatus(input.claim.jobId), applied: false };
   }
 
-  const terminal = current.attempt_count >= MAX_INGESTION_ATTEMPTS;
+  const attemptCount = input.restoreInterruptedAttempt
+    ? Math.max(0, current.attempt_count - 1)
+    : current.attempt_count;
+  const terminal = attemptCount >= MAX_INGESTION_ATTEMPTS;
   const status: IngestionJobStatus = terminal
     ? current.structural_completed_at !== null
       ? 'degraded'
@@ -124,6 +128,7 @@ function transitionFailedIngestionClaim(input: {
   const updated = getMemoryDb().runSync(
     `UPDATE memory_ingestion_jobs
        SET status = ?,
+           attempt_count = ?,
            provider_outcome = ?,
            outcome_code = ?,
            next_attempt_at = ?,
@@ -138,6 +143,7 @@ function transitionFailedIngestionClaim(input: {
        AND claim_process_epoch = ?
        AND lease_expires_at = ?`,
     status,
+    attemptCount,
     input.providerOutcome,
     input.outcomeCode,
     nextAttemptAt,
@@ -187,6 +193,7 @@ export function retryOrCompleteIngestionJob(input: {
     outcomeCode: input.outcomeCode,
     now: input.now,
     retryImmediately: false,
+    restoreInterruptedAttempt: false,
   });
 }
 
@@ -203,5 +210,6 @@ export function recoverIngestionJobClaim(input: PersistedIngestionClaim & {
     outcomeCode: 'stale_processing_lease',
     now: input.now,
     retryImmediately: foreignProcess,
+    restoreInterruptedAttempt: foreignProcess,
   });
 }

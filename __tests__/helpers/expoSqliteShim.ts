@@ -9,10 +9,14 @@
 //   jest.mock('expo-sqlite', () => require('../helpers/expoSqliteShim').makeExpoSqliteMock());
 
 import Database from 'better-sqlite3';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 type Param = string | number | null | Buffer;
 
 interface ShimDb {
+  databasePath: string;
   runSync: (sql: string, ...params: Param[]) => { changes: number; lastInsertRowId: number };
   getFirstSync: <T>(sql: string, ...params: Param[]) => T | null;
   getAllSync: <T>(sql: string, ...params: Param[]) => T[];
@@ -26,12 +30,13 @@ interface ControlledShimDb {
   reopen: () => void;
 }
 
-function adapt(db: Database.Database): ControlledShimDb {
+function adapt(db: Database.Database, databasePath: string): ControlledShimDb {
   let open = true;
   const requireOpen = (): void => {
     if (!open) throw new TypeError('The database connection is not open');
   };
   const api: ShimDb = {
+    databasePath,
     runSync: (sql: string, ...params: Param[]) => {
       requireOpen();
       const result = db.prepare(sql).run(...params);
@@ -53,6 +58,25 @@ function adapt(db: Database.Database): ControlledShimDb {
       db.exec(sql);
     },
     closeSync: () => {
+      if (open) {
+        if (db.inTransaction) {
+          try {
+            db.exec('ROLLBACK');
+          } catch {
+            // Best-effort native-close parity for fault-injection tests.
+          }
+        }
+        const attached = db.pragma('database_list') as Array<{ name: string }>;
+        for (const entry of attached) {
+          if (entry.name === 'main' || entry.name === 'temp') continue;
+          const quotedName = `"${entry.name.replace(/"/g, '""')}"`;
+          try {
+            db.exec(`DETACH DATABASE ${quotedName}`);
+          } catch {
+            // The wrapper is still closed even when native cleanup is imperfect.
+          }
+        }
+      }
       open = false;
     },
   };
@@ -74,16 +98,23 @@ function adapt(db: Database.Database): ControlledShimDb {
  * `openDatabaseSync(name)` returns the same shim per name within the mock,
  * mimicking expo-sqlite's per-name singleton behavior.
  */
-export function makeExpoSqliteMock(): {
+export function makeExpoSqliteMock(options: { fileBacked?: boolean } = {}): {
   openDatabaseSync: (name: string) => ShimDb;
   __resetExpoSqliteForTests: () => void;
 } {
   const handles = new Map<string, ControlledShimDb>();
+  let directory: string | null = null;
+  const databasePathFor = (name: string): string => {
+    if (!options.fileBacked || name === ':memory:') return ':memory:';
+    directory ??= mkdtempSync(join(tmpdir(), 'kavi-expo-sqlite-'));
+    return join(directory, name);
+  };
   return {
     openDatabaseSync: (name: string) => {
       let h = handles.get(name);
       if (!h) {
-        h = adapt(new Database(':memory:'));
+        const databasePath = databasePathFor(name);
+        h = adapt(new Database(databasePath), databasePath);
         handles.set(name, h);
       }
       h.reopen();
@@ -98,6 +129,10 @@ export function makeExpoSqliteMock(): {
         }
       }
       handles.clear();
+      if (directory) {
+        rmSync(directory, { recursive: true, force: true });
+        directory = null;
+      }
     },
   };
 }

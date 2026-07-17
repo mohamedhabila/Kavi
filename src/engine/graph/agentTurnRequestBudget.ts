@@ -16,6 +16,7 @@ import {
 } from '../orchestratorCompaction';
 import { repairModelVisibleToolResultTranscript } from '../orchestratorToolTranscript';
 import { sanitizeModelVisibleWorkingMessages } from './modelVisibleWorkingMessages';
+import type { SystemPromptSection } from '../prompts/orchestratorPromptSections';
 
 type BudgetCompactionEngine = Pick<ContextEngine, 'compact'> | null;
 export type AgentTurnCompactionEngine = BudgetCompactionEngine;
@@ -24,7 +25,7 @@ export interface PrepareAgentTurnRequestBudgetParams {
   compactionEngine: BudgetCompactionEngine;
   conversationId: string;
   enrichedSystemPrompt: string;
-  enrichedSystemPromptSections?: ReadonlyArray<{ text: string; cacheable?: boolean }>;
+  enrichedSystemPromptSections?: ReadonlyArray<SystemPromptSection>;
   iteration?: number;
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
@@ -50,7 +51,6 @@ export interface CompactAgentTurnWorkingMessagesParams {
   compactionEngine: BudgetCompactionEngine;
   conversationId: string;
   currentMessages: Message[];
-  livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   currentTokenCount?: number;
   tokenBudget?: number;
@@ -60,43 +60,24 @@ export interface CompactAgentTurnWorkingMessagesParams {
 }
 
 function extractGoalsPromptSection(
-  sections: ReadonlyArray<{ text: string }> | undefined,
+  sections: ReadonlyArray<SystemPromptSection> | undefined,
 ): string | null {
   if (!sections?.length) {
     return null;
   }
-  const goalsSection = sections.find((section) => section.text.includes('## Current Goals'));
+  const goalsSection = sections.find((section) => section.purpose === 'goals');
   return goalsSection?.text ?? null;
 }
 
 function extractWorkflowTaskAnchorPromptSection(
-  sections: ReadonlyArray<{ text: string }> | undefined,
+  sections: ReadonlyArray<SystemPromptSection> | undefined,
 ): string | undefined {
-  return sections?.find((section) => section.text.startsWith('## Workflow Task Anchor\n'))?.text;
-}
-
-function buildLivingMemoryCompactionHints(
-  livingMemory: LivingMemoryBridgeOutput | null | undefined,
-): {
-  focusBlock?: string;
-  idleSinceLastTurnMs?: number;
-  openThreads?: string[];
-} {
-  return {
-    ...(livingMemory && typeof livingMemory.idleSinceLastTurnMs === 'number'
-      ? { idleSinceLastTurnMs: livingMemory.idleSinceLastTurnMs }
-      : {}),
-    ...(livingMemory?.focusBlockText ? { focusBlock: livingMemory.focusBlockText } : {}),
-    ...(livingMemory && livingMemory.openThreadLabels.length > 0
-      ? { openThreads: livingMemory.openThreadLabels }
-      : {}),
-  };
+  return sections?.find((section) => section.purpose === 'workflow_task_anchor')?.text;
 }
 
 export async function compactAgentTurnWorkingMessages(
   params: CompactAgentTurnWorkingMessagesParams,
 ): Promise<{ messages: Message[]; compacted: boolean }> {
-  const compactionHints = buildLivingMemoryCompactionHints(params.livingMemory);
   if (!params.compactionEngine) {
     return { messages: params.currentMessages, compacted: false };
   }
@@ -108,7 +89,6 @@ export async function compactAgentTurnWorkingMessages(
       ...(params.currentTokenCount != null ? { currentTokenCount: params.currentTokenCount } : {}),
       ...(params.tokenBudget != null ? { tokenBudget: params.tokenBudget } : {}),
       ...(params.forceTier ? { forceTier: params.forceTier } : {}),
-      ...compactionHints,
     });
     if (!compactResult.compacted || !compactResult.result) {
       return { messages: params.currentMessages, compacted: false };
@@ -254,7 +234,6 @@ export async function prepareAgentTurnRequestBudget(
         compactionEngine: params.compactionEngine,
         conversationId: params.conversationId,
         currentMessages: workingMessages,
-        livingMemory: params.livingMemory,
         onCompaction: params.onCompaction,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages),
         forceTier,

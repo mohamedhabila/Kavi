@@ -1,9 +1,8 @@
-import {
-  failUnsealedActiveJobs,
-  quarantineConflictingSourceDuplicates,
-} from './ingestionQueueConflictQuarantine';
+import { failUnsealedActiveJobs } from './ingestionQueueConflictQuarantine';
 import { getMemoryDb } from './database';
 import { ensureIngestionJobSourceSchema } from './ingestionJobSourceSchema';
+import { ensureIngestionQueueIndexes } from './ingestionQueueIndexes';
+import { ensureIngestionQueueSourceIdentity } from './ingestionQueueSourceIdentitySchema';
 import { failActiveJobsWithInvalidSourceSnapshots } from './ingestionSourceSnapshotStore';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
@@ -672,81 +671,16 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
   }
 }
 
-function ensureIndexes(db: MemoryDb): void {
-  db.execSync(`
-    DROP INDEX IF EXISTS idx_ingestion_jobs_status;
-    DROP INDEX IF EXISTS idx_ingestion_jobs_thread;
-    CREATE INDEX idx_ingestion_jobs_status
-      ON memory_ingestion_jobs(status, next_attempt_at, created_at);
-    CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_lease
-      ON memory_ingestion_jobs(status, lease_expires_at);
-    CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_evidence_scope
-      ON memory_ingestion_jobs(memory_conversation_id, thread_id, created_at, id);
-    DROP INDEX IF EXISTS idx_ingestion_jobs_prior_dependency;
-    CREATE INDEX idx_ingestion_jobs_prior_dependency
-      ON memory_ingestion_jobs(
-        thread_id,
-        memory_conversation_id,
-        source_start_message_id,
-        status
-      );
-  `);
-}
-
-function ensureSourceIdentity(db: MemoryDb): void {
-  db.execSync('BEGIN IMMEDIATE TRANSACTION');
-  try {
-    quarantineConflictingSourceDuplicates(db);
-    db.execSync(`
-      DELETE FROM memory_ingestion_jobs
-        WHERE rowid IN (
-          SELECT rowid
-            FROM (
-              SELECT rowid,
-                     ROW_NUMBER() OVER (
-                       PARTITION BY thread_id, source_end_message_id
-                       ORDER BY
-                         CASE status
-                           WHEN 'completed_enriched' THEN 7
-                           WHEN 'completed_structural' THEN 6
-                           WHEN 'degraded' THEN 5
-                           WHEN 'retrying' THEN 4
-                           WHEN 'processing' THEN 3
-                           WHEN 'pending' THEN 2
-                           ELSE 1
-                         END DESC,
-                         attempt_count DESC,
-                         updated_at DESC,
-                         rowid DESC
-                     ) AS source_rank
-                FROM memory_ingestion_jobs
-            )
-           WHERE source_rank > 1
-        );
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_ingestion_jobs_source_turn
-        ON memory_ingestion_jobs(thread_id, source_end_message_id);
-      DELETE FROM memory_ingestion_receipts
-        WHERE job_id NOT IN (SELECT id FROM memory_ingestion_jobs);
-      DELETE FROM memory_ingestion_structural_receipts
-        WHERE job_id NOT IN (SELECT id FROM memory_ingestion_jobs);
-    `);
-    db.execSync('COMMIT');
-  } catch (error) {
-    db.execSync('ROLLBACK');
-    throw error;
-  }
-}
-
 export function ensureIngestionQueueSchema(db: MemoryDb): void {
   createDurableIngestionJobsTable(db, INGESTION_JOBS_TABLE, true);
   ensureIngestionSourceSnapshotsTable(db);
   migrateLegacyIngestionQueue(db);
   ensureIngestionReceiptsTable(db);
   ensureIngestionStructuralReceiptsTable(db);
-  ensureIndexes(db);
+  ensureIngestionQueueIndexes(db);
   ensureIngestionSourceSnapshotGuards(db);
   failUnsealedActiveJobs(db);
   failActiveJobsWithInvalidSourceSnapshots(db, Date.now());
   ensureIngestionJobSourceSchema(db);
-  ensureSourceIdentity(db);
+  ensureIngestionQueueSourceIdentity(db);
 }

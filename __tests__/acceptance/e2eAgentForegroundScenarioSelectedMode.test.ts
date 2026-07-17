@@ -41,6 +41,10 @@ const mockedRunOrchestrator = jest.mocked(runOrchestrator);
 const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMemory);
 const mockedGetIngestionJob = jest.mocked(getIngestionJob);
 const mockedFlushChatStorePersistenceNow = jest.mocked(flushChatStorePersistenceNow);
+const completeFinalMetadata = buildAssistantMessageMetadata('final', {
+  completionStatus: 'complete',
+  finishReason: 'stop',
+});
 
 function completedMemoryJob(id: string): IngestionJob {
   return {
@@ -116,12 +120,7 @@ describe('foreground scenario selected mode and outer deadline', () => {
     });
     mockedGetIngestionJob.mockImplementation((jobId) => jobs.get(jobId) ?? null);
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
-      callbacks.onAssistantMessage(
-        'Completed.',
-        undefined,
-        undefined,
-        buildAssistantMessageMetadata('final'),
-      );
+      callbacks.onAssistantMessage('Completed.', undefined, undefined, completeFinalMetadata);
       callbacks.onAgentControlGraphStateChange(
         createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
       );
@@ -189,12 +188,7 @@ describe('foreground scenario selected mode and outer deadline', () => {
     const userMessageCounts: number[] = [];
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
       userMessageCounts.push(options.messages.filter((message) => message.role === 'user').length);
-      callbacks.onAssistantMessage(
-        'Completed.',
-        undefined,
-        undefined,
-        buildAssistantMessageMetadata('final'),
-      );
+      callbacks.onAssistantMessage('Completed.', undefined, undefined, completeFinalMetadata);
       callbacks.onDone();
       return { terminalDisposition: 'final_candidate' };
     });

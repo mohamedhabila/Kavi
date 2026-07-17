@@ -21,6 +21,7 @@ import {
 
 export type AgentGoalStatus = 'pending' | 'active' | 'completed' | 'blocked';
 export type AgentGoalCompletionPolicy = 'blocking' | 'persistent';
+export const CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER = 'system:effect-completion' as const;
 
 export type { AgentGoalUserConstraint, AgentGoalUserConstraintIntegrity } from './userConstraints';
 
@@ -183,6 +184,12 @@ export function isBlockingGoal(
   goal: Pick<AgentGoal, 'completionPolicy' | 'successCriteria'>,
 ): boolean {
   return resolveGoalCompletionPolicy(goal) === 'blocking';
+}
+
+export function isCodeOwnedEffectCompletionGoal(
+  goal: Pick<AgentGoal, 'owner'>,
+): boolean {
+  return goal.owner === CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER;
 }
 
 export function hasResumableBlockingGoals(goals: ReadonlyArray<AgentGoal>): boolean {

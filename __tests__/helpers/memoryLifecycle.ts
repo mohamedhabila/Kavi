@@ -17,7 +17,7 @@ export const messages: Message[] = [
     role: 'assistant',
     content: 'Done. Next: validate the Android release build.',
     timestamp: 2,
-    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
   },
 ];
 

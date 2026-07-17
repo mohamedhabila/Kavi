@@ -15,11 +15,14 @@ describe('Orchestrator', () => {
   describe('Usage tracking', () => {
     it('should report token usage', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Response' },
-          { type: 'usage', usage: { inputTokens: 100, outputTokens: 50 } },
-          { type: 'done', content: 'Response' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Response' },
+            { type: 'usage', usage: { inputTokens: 100, outputTokens: 50 } },
+            { type: 'done', content: 'Response' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -44,10 +47,13 @@ describe('Orchestrator', () => {
 
     it('should synthesize usage when the provider omits usage metadata', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Fallback response' },
-          { type: 'done', content: 'Fallback response' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Fallback response' },
+            { type: 'done', content: 'Fallback response' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -77,12 +83,15 @@ describe('Orchestrator', () => {
 
     it('should collapse multiple usage snapshots into one final report', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'usage', usage: { inputTokens: 100, outputTokens: 0 } },
-          { type: 'token', content: 'Response' },
-          { type: 'usage', usage: { inputTokens: 100, outputTokens: 50 } },
-          { type: 'done', content: 'Response' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'usage', usage: { inputTokens: 100, outputTokens: 0 } },
+            { type: 'token', content: 'Response' },
+            { type: 'usage', usage: { inputTokens: 100, outputTokens: 50 } },
+            { type: 'done', content: 'Response' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -108,15 +117,18 @@ describe('Orchestrator', () => {
 
     it('should preserve cached Gemini input usage across cumulative snapshots', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'usage', usage: { inputTokens: 180, outputTokens: 0, cacheReadTokens: 90 } },
-          { type: 'token', content: 'Response' },
-          {
-            type: 'usage',
-            usage: { inputTokens: 180, outputTokens: 36, cacheReadTokens: 120, totalTokens: 216 },
-          },
-          { type: 'done', content: 'Response' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'usage', usage: { inputTokens: 180, outputTokens: 0, cacheReadTokens: 90 } },
+            { type: 'token', content: 'Response' },
+            {
+              type: 'usage',
+              usage: { inputTokens: 180, outputTokens: 36, cacheReadTokens: 120, totalTokens: 216 },
+            },
+            { type: 'done', content: 'Response' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

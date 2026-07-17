@@ -7,18 +7,64 @@ import { capMessages } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
 import { isValidModelProjectionOwner } from '../utils/modelProjectionOwner';
 import { hydrateSubAgentTerminationCause } from '../utils/subAgentTermination';
+import { normalizeMessageMemoryPublication } from '../utils/messageMemoryPublication';
+
+function isEmptyAssistantDraft(message: Message): boolean {
+  return (
+    message.role === 'assistant' &&
+    !message.content.trim() &&
+    !message.enrichedContent?.trim() &&
+    !message.reasoning?.trim() &&
+    !message.toolCalls?.length &&
+    !message.attachments?.length &&
+    !message.toolCallId &&
+    !message.isError &&
+    !message.providerReplay &&
+    !message.assistantMetadata &&
+    !message.memoryPublication &&
+    !message.compactionProvenance &&
+    !message.effectId &&
+    !message.subAgentEvent
+  );
+}
+
+function removeEmptyDraftsAfterLockedPublication(messages: Message[]): Message[] {
+  const normalized: Message[] = [];
+  let hasLockedPublicationInCurrentTurn = false;
+
+  for (const message of messages) {
+    if (message.role === 'user') {
+      hasLockedPublicationInCurrentTurn = false;
+    } else if (hasLockedPublicationInCurrentTurn && isEmptyAssistantDraft(message)) {
+      continue;
+    }
+
+    normalized.push(message);
+    const publication = normalizeMessageMemoryPublication(message.memoryPublication);
+    if (
+      message.role === 'assistant' &&
+      (publication?.disposition === null || publication?.disposition === 'enqueued')
+    ) {
+      hasLockedPublicationInCurrentTurn = true;
+    }
+  }
+
+  return normalized.length === messages.length ? messages : normalized;
+}
 
 function normalizePersistedMessages(messages: Message[] | undefined): Message[] {
-  return (messages ?? []).map((message) =>
-    message.subAgentEvent
-      ? {
-          ...message,
-          subAgentEvent: {
-            ...message.subAgentEvent,
-            snapshot: hydrateSubAgentTerminationCause(message.subAgentEvent.snapshot),
-          },
-        }
-      : message,
+  return removeEmptyDraftsAfterLockedPublication(
+    (messages ?? []).map((message) =>
+      message.subAgentEvent
+        ? {
+            ...message,
+            subAgentEvent: {
+              ...message.subAgentEvent,
+              snapshot: hydrateSubAgentTerminationCause(message.subAgentEvent.snapshot),
+            },
+          }
+        : message,
+    ),
   );
 }
 

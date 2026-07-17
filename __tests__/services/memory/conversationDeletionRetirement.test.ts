@@ -10,6 +10,11 @@ import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFactWithContributionInTransaction } from '../../../src/services/memory/facts/mutations';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import {
+  captureMemoryAuthoritySnapshot,
+  isRestrictiveMemoryAuthoritySnapshotCurrent,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../src/services/memory/memoryAuthority';
+import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
@@ -115,6 +120,12 @@ function countRows(table: string): number {
     getMemoryDb().getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
       ?.count ?? 0
   );
+}
+
+function requireContentAuthority() {
+  const authority = captureMemoryAuthoritySnapshot();
+  if (!authority) throw new Error('expected enabled memory authority');
+  return authority;
 }
 
 describe('conversation deletion source retirement', () => {
@@ -245,9 +256,12 @@ describe('conversation deletion source retirement', () => {
     );
     expect(countRows('memory_ingestion_job_sources')).toBe(0);
     expect(countRows('memory_fact_contribution_sources')).toBe(0);
+    const beforeDerivedDeletion = requireContentAuthority();
 
     useChatStore.getState().deleteConversation(conversationId);
 
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeDerivedDeletion)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeDerivedDeletion)).toBe(false);
     expect(countRows('memory_verified_procedure_observations')).toBe(0);
     expect(
       db.getFirstSync<{ count: number }>(

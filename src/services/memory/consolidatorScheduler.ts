@@ -49,6 +49,7 @@ import {
   resolveCodeOwnedMemoryPersonaId,
 } from './memoryScopeIdentity';
 import type { TurnProviderOutcome } from './turnProcessor';
+import { resolveTurnEpisodeShareability } from './episodes/shareability';
 
 const logger = createLogger('memory.consolidatorScheduler');
 
@@ -121,6 +122,7 @@ export function markThreadDirtyForMemory(input: MarkThreadDirtyInput): MarkThrea
 export interface RunConsolidationInput {
   threadId: string;
   memoryConversationId?: string;
+  taskId?: string | null;
   messages: Message[];
   /**
    * When null/undefined, the scheduler is disabled. The scheduler will still ADVANCE the state cursor on
@@ -250,7 +252,7 @@ export async function maybeRunConsolidation(
       personaSummary: input.personaSummary,
       episodeAccess: {
         personaId: resolveCodeOwnedMemoryPersonaId(input.personaId),
-        shareability: 'thread_only',
+        shareability: resolveTurnEpisodeShareability(input.taskId),
       },
       now: input.now,
       extractor: extractor ?? null,

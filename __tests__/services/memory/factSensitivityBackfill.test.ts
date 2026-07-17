@@ -15,6 +15,11 @@ import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/databas
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../../../src/services/memory/memorySensitivityPolicy';
 import {
+  captureMemoryAuthoritySnapshot,
+  isMemoryProjectionSnapshotDurablyCurrent,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../src/services/memory/memoryAuthority';
+import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
@@ -96,10 +101,10 @@ describe('fact sensitivity policy migration', () => {
     expect(getFactById(fact.id)?.sensitivity).toBe('restricted');
   });
 
-  it('quarantines a v1 normal row until v2 reclassifies it', () => {
+  it('seals an unproven pre-v3 row with a restricted migration floor', () => {
     const fact = createFact({
-      predicate: 'medical_history',
-      objectText: 'follow-up required',
+      predicate: 'حقل',
+      objectText: 'قيمة',
       now: 10,
     });
     getMemoryDb().runSync(
@@ -110,29 +115,33 @@ describe('fact sensitivity policy migration', () => {
     );
 
     expect(getFactById(fact.id)?.sensitivity).toBe('restricted');
+    const beforeBackfill = captureMemoryAuthoritySnapshot();
+    if (!beforeBackfill) throw new Error('expected memory authority');
     expect(backfillFactSensitivityPolicy()).toMatchObject({
       processedCount: 1,
       pendingCount: 0,
-      policyVersion: 2,
+      policyVersion: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
     });
     expect(rawPolicy(fact.id)).toEqual({
-      sensitivity: 'sensitive',
-      sensitivity_policy_version: 2,
+      sensitivity: 'restricted',
+      sensitivity_policy_version: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
       updated_at: 10,
     });
+    expect(isMemoryProjectionSnapshotDurablyCurrent(beforeBackfill)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeBackfill)).toBe(true);
   });
 
-  it('classifies all persisted inputs without changing semantic updated_at', () => {
+  it('does not infer migration authority from prose or attribute field names', () => {
     const fromSummary = createFact({
-      predicate: 'care_context',
-      objectText: 'follow the plan',
-      sourceSummary: 'The user discussed their medical history.',
+      predicate: '状態',
+      objectText: '値',
+      sourceSummary: 'ملخص',
       now: 10,
     });
     const fromAttributes = createFact({
-      predicate: 'integration_detail',
-      objectText: 'stored elsewhere',
-      attributes: { label: 'API key' },
+      predicate: '属性',
+      objectText: '別の値',
+      attributes: { 任意: 'قيمة' },
       now: 20,
     });
     makeLegacy(fromSummary.id);
@@ -145,7 +154,7 @@ describe('fact sensitivity policy migration', () => {
       policyVersion: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
     });
     expect(rawPolicy(fromSummary.id)).toEqual({
-      sensitivity: 'sensitive',
+      sensitivity: 'restricted',
       sensitivity_policy_version: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
       updated_at: 10,
     });
@@ -233,10 +242,14 @@ describe('fact sensitivity policy migration', () => {
         SELECT RAISE(ABORT, 'forced sensitivity migration failure');
       END;
     `);
+    const beforeBackfill = captureMemoryAuthoritySnapshot();
+    if (!beforeBackfill) throw new Error('expected memory authority');
 
     expect(() => backfillFactSensitivityPolicy()).toThrow('forced sensitivity migration failure');
     expect(rawPolicy(first.id).sensitivity_policy_version).toBe(0);
     expect(rawPolicy(second.id).sensitivity_policy_version).toBe(0);
+    expect(isMemoryProjectionSnapshotDurablyCurrent(beforeBackfill)).toBe(true);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeBackfill)).toBe(true);
   });
 
   it('processes uncertain local data as restricted but never adopts unowned or foreign rows', () => {

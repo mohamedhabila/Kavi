@@ -110,6 +110,7 @@ describe('completionGate', () => {
           name: 'sms_compose',
           arguments: '{"recipients":["Avery"],"message":"Hello"}',
           timestamp: 1,
+          status: 'failed',
           result: JSON.stringify({
             status: 'error',
             code: 'invalid_phone_number',
@@ -151,6 +152,7 @@ describe('completionGate', () => {
           name: 'sms_compose',
           arguments: '{"recipients":["Avery"],"message":"Hello"}',
           timestamp: 1,
+          status: 'failed',
           result: JSON.stringify({
             status: 'error',
             code: 'invalid_phone_number',
@@ -192,6 +194,7 @@ describe('completionGate', () => {
           name: 'memory_remember',
           arguments: argumentsText,
           timestamp: 1,
+          status: 'failed',
           result: buildEffectCompletionContractBlock(requirement),
         },
       ],
@@ -209,55 +212,13 @@ describe('completionGate', () => {
     expect(prompt).toContain('commit that graph mutation first');
     expect(prompt).toContain('retry the original effect on the following iteration');
   });
-  it('holds for bounded workflow continuation when downstream tools remain', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      goals: [],
-      selectedToolNames: new Set(['calendar_create_event', 'calendar_update_event']),
-      pendingWorkflowContinuationToolNames: ['calendar_update_event'],
-      toolCallHistory: [
-        {
-          id: 'tc-calendar-create',
-          name: 'calendar_create_event',
-          arguments: '{"title":"Review"}',
-          timestamp: 1,
-          result: JSON.stringify({ status: 'created', eventId: 'evt-1' }),
-        },
-      ],
-    });
-
-    expect(decision).toEqual(
-      expect.objectContaining({
-        type: 'hold',
-        reason: 'workflow_continuation',
-        graphEvent: {
-          type: 'FINALIZATION_HELD',
-          reason: 'workflow_continuation',
-        },
-        nextConsecutivePendingAsyncNoToolTurns: 1,
-      }),
-    );
-    const prompt = decision.type === 'hold' ? decision.systemPrompts.join('\n') : '';
-    expect(prompt).toContain('downstream workflow tools');
-    expect(prompt).toContain('calendar_update_event');
-  });
-  it('bounds workflow continuation to one no-tool recovery pass', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      consecutivePendingAsyncNoToolTurns: 1,
-      goals: [],
-      selectedToolNames: new Set(['calendar_create_event', 'calendar_update_event']),
-      pendingWorkflowContinuationToolNames: ['calendar_update_event'],
-    });
-
-    expect(decision).toEqual({ type: 'ready' });
-  });
-  it('holds once for substantial no-tool prose when discovery tools are available', () => {
+  it('holds the first tool-free candidate for an actionable agentic request', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
       goals: [],
       selectedToolNames: new Set(['tool_catalog', 'memory_recall']),
       toolCallHistory: [],
+      requiresAgenticProgressValidation: true,
       fullContent:
         'I can verify this by checking the available device state and then recording the result. ' +
         'The answer depends on state outside the visible transcript, so I should not treat this as complete prose.',
@@ -274,14 +235,73 @@ describe('completionGate', () => {
         nextConsecutivePendingAsyncNoToolTurns: 1,
       }),
     );
+    const prompt = decision.type === 'hold' ? decision.systemPrompts.join('\n') : '';
+    expect(prompt).toContain(
+      'Advice or information grounded entirely in visible context can be complete',
+    );
+    expect(prompt).toContain('Do not manufacture an external action');
   });
-  it('does not hold short direct no-tool answers for discovery retry', () => {
+
+  it('requires structured clarification on a no-tool retry when that tool is available', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      goals: [],
+      selectedToolNames: new Set([
+        'request_clarification',
+        'tool_catalog',
+        'calendar_events',
+      ]),
+      toolCallHistory: [],
+      requiresAgenticProgressValidation: true,
+      fullContent:
+        'I cannot continue the requested calendar change until the user supplies the missing execution detail. ' +
+        'I should ask for that required information before making any external change.',
+    });
+
+    expect(decision).toMatchObject({
+      type: 'hold',
+      reason: 'no_tool_progress_retry',
+    });
+    const prompt = decision.type === 'hold' ? decision.systemPrompts.join('\n') : '';
+    expect(prompt).toContain('call request_clarification now');
+    expect(prompt).toContain('a prose-only question does not register the blocked request');
+  });
+  it('does not hold a tool-free answer outside agentic progress validation', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
       goals: [],
       selectedToolNames: new Set(['tool_catalog', 'memory_recall']),
       toolCallHistory: [],
       fullContent: 'No problem.',
+    });
+
+    expect(decision).toEqual({ type: 'ready' });
+  });
+  it('validates a short first-pass agentic candidate without language heuristics', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      goals: [],
+      selectedToolNames: new Set(['request_clarification', 'cron']),
+      toolCallHistory: [],
+      fullContent: 'Need the task ID.',
+      requiresAgenticProgressValidation: true,
+    });
+
+    expect(decision).toMatchObject({
+      type: 'hold',
+      reason: 'no_tool_progress_retry',
+      nextConsecutivePendingAsyncNoToolTurns: 1,
+    });
+  });
+  it('allows the bounded agentic validation pass to finalize a direct answer', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      consecutivePendingAsyncNoToolTurns: 1,
+      goals: [],
+      selectedToolNames: new Set(['request_clarification', 'cron']),
+      toolCallHistory: [],
+      fullContent: 'The visible context is sufficient.',
+      requiresAgenticProgressValidation: true,
     });
 
     expect(decision).toEqual({ type: 'ready' });

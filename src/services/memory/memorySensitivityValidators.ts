@@ -21,7 +21,7 @@ const PAYMENT_CARD_PATTERN = /(?:^|[^\d])((?:\d[ -]?){12,18}\d)(?!\d)/gu;
 const PRECISE_COORDINATE_PATTERN =
   /(?:^|[^\d])(-?\d{1,2}\.\d{4,})\s*[,;]\s*(-?\d{1,3}\.\d{4,})(?!\d)/gu;
 const SSN_PATTERN = /\b(?!000|666|9\d\d)\d{3}[- ](?!00)\d{2}[- ](?!0000)\d{4}\b/u;
-const BSN_PATTERN = /\b(?:bsn|burgerservicenummer)\s*[:#]?\s*(\d{9})\b/giu;
+const BSN_PATTERN = /(?:^|[^\d])(\d{9})(?!\d)/gu;
 const JWT_CANDIDATE_PATTERN = /\b([A-Za-z0-9_-]{8,})\.([A-Za-z0-9_-]{8,})\.([A-Za-z0-9_-]{8,})\b/gu;
 const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 

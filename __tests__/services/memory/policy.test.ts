@@ -1,3 +1,8 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 type SettingsState = { disableLongTermMemory: boolean };
 
 function loadPolicy(initialState: SettingsState, subscribeAvailable = true) {
@@ -18,12 +23,15 @@ function loadPolicy(initialState: SettingsState, subscribeAvailable = true) {
     useSettingsStore: store,
   }));
   let policy!: typeof import('../../../src/services/memory/policy');
+  let authority!: typeof import('../../../src/services/memory/memoryAuthority');
   jest.isolateModules(() => {
     policy = require('../../../src/services/memory/policy');
+    authority = require('../../../src/services/memory/memoryAuthority');
   });
 
   return {
     policy,
+    authority,
     subscribe,
     setDisabled(disabled: boolean) {
       const previous = state;
@@ -75,6 +83,15 @@ describe('memory policy observation', () => {
     expect(harness.policy.initializeMemoryPolicyObservation()).toBe(true);
     expect(handler).toHaveBeenCalledTimes(1);
     expect(harness.policy.canWriteLongTermMemory()).toBe(false);
+  });
+
+  it('never re-enables a durable fail-closed policy from startup defaults', () => {
+    const harness = loadPolicy({ disableLongTermMemory: false });
+    harness.authority.setDurableMemoryPolicyEnabled(false);
+
+    expect(harness.policy.initializeMemoryPolicyObservation()).toBe(true);
+    expect(harness.authority.isDurableMemoryPolicyEnabled()).toBe(false);
+    expect(harness.policy.canReadLongTermMemory()).toBe(false);
   });
 
   it('fails closed when settings reads or observation are unavailable', () => {

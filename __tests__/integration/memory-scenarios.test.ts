@@ -133,6 +133,7 @@ function makeExtractor(): jest.Mock {
             sensitivity: 'normal',
           },
         ],
+        episode_sensitivity: 'normal',
         episode_summary: 'The user prefers acme-prod-cluster as a server.',
         active_focus: 'User is shipping the dashboard service to acme-prod-cluster.',
         open_threads: ['monitor acme-prod-cluster after deploy'],
@@ -141,6 +142,7 @@ function makeExtractor(): jest.Mock {
     }
     return JSON.stringify({
       new_facts: [],
+      episode_sensitivity: 'normal',
       episode_summary: null,
       active_focus: 'Walking through consolidator tuning questions.',
       open_threads: [],

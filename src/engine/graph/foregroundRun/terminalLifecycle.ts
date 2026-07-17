@@ -64,12 +64,19 @@ export function createForegroundRunTerminalLifecycleController(params: {
   requestPersistenceCheckpoint: () => void;
 }) {
   let didEncounterTerminalError = false;
+  let terminalCleanupScheduled = false;
   let completionPromise: Promise<void> | null = null;
   let terminalStatus: ForegroundRunTerminalStatus | null = null;
   let latestControlGraphState: AgentRunControlGraphState | undefined;
 
   const resolveCompletedStatus = (): ForegroundRunTerminalStatus => {
     if (params.isAborted()) {
+      return 'cancelled';
+    }
+    if (
+      latestControlGraphState?.status === 'cancelled' &&
+      latestControlGraphState.terminalReason === 'user_approval_denied'
+    ) {
       return 'cancelled';
     }
     // A yielded foreground turn is a successful model checkpoint because the
@@ -102,11 +109,18 @@ export function createForegroundRunTerminalLifecycleController(params: {
 
   const handleDone = () => {
     if (didEncounterTerminalError) {
+      if (terminalCleanupScheduled) {
+        return;
+      }
+      terminalCleanupScheduled = true;
       const terminalRecovery = completionPromise ?? Promise.resolve();
       completionPromise = terminalRecovery.finally(() => {
         params.clearForegroundRequestIfCurrent();
         params.requestPersistenceCheckpoint();
       });
+      return;
+    }
+    if (completionPromise) {
       return;
     }
 
@@ -122,8 +136,9 @@ export function createForegroundRunTerminalLifecycleController(params: {
       }
       params.commitAssistantBuffers();
       if (!params.isAborted()) {
+        const completedStatus = resolveCompletedStatus();
         await params.handleSuccessfulCompletion({
-          forceTerminalReview: resolveCompletedStatus() === 'failed',
+          forceTerminalReview: completedStatus !== 'succeeded',
         });
       }
       terminalStatus = resolveCompletedStatus();

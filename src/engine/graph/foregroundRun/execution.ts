@@ -3,6 +3,7 @@ import { runOrchestrator } from '../../orchestrator';
 import type { OrchestratorTerminalDisposition } from '../../orchestrator/types';
 import { resolveConversationWorkspaceTarget } from '../../../services/conversationWorkspace/ownership';
 import { isAbortErrorLike } from '../../../services/agents/agentRunCancellation';
+import { createAgentRunAbortError } from '../../../services/runtimeError';
 import { supersedeForegroundConversationRun } from '../foregroundConversationCancellation';
 import { prepareAgentRunResumeForOrchestrator } from '../runResumePreparation';
 import { deduplicateToolResults, ensureToolResultPairing } from '../../toolResultPairingGuard';
@@ -527,7 +528,9 @@ async function executeReservedForegroundConversationRun(
       },
     });
     if (!isCurrentRunInvocation()) {
-      const terminalStatus = runtime.terminalLifecycle.handleCatch(new Error('Request cancelled'));
+      const terminalStatus = runtime.terminalLifecycle.handleCatch(
+        createAgentRunAbortError('Request cancelled'),
+      );
       closingSupersededGeneration = true;
       await closeModelGeneration(terminalStatus);
       return;
@@ -541,7 +544,9 @@ async function executeReservedForegroundConversationRun(
       throw new Error('model_projection_journal_owner_mismatch');
     }
     if (!isCurrentRunInvocation()) {
-      const terminalStatus = runtime.terminalLifecycle.handleCatch(new Error('Request cancelled'));
+      const terminalStatus = runtime.terminalLifecycle.handleCatch(
+        createAgentRunAbortError('Request cancelled'),
+      );
       closingSupersededGeneration = true;
       await closeModelGeneration(terminalStatus);
       return;
@@ -576,7 +581,9 @@ async function executeReservedForegroundConversationRun(
   }
   let terminalStatus: 'succeeded' | 'failed' | 'cancelled';
   if (!isCurrentRunInvocation()) {
-    terminalStatus = runtime.terminalLifecycle.handleCatch(new Error('Request cancelled'));
+    terminalStatus = runtime.terminalLifecycle.handleCatch(
+      createAgentRunAbortError('Request cancelled'),
+    );
   } else {
     const inferenceLease = acquireMainInferenceLease(
       `foreground:${conversationId}:${foregroundRequestId}`,
@@ -628,7 +635,7 @@ async function executeReservedForegroundConversationRun(
         completedHandoffStatus &&
         journalTerminal &&
         projectionReleased &&
-        isAbortErrorLike(error)
+        isAbortErrorLike(error, abortController.signal)
       ) {
         // A controlled recovery closes and releases this generation before the
         // nested resume replaces its foreground request. The resulting abort

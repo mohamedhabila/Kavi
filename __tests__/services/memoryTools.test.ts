@@ -23,7 +23,8 @@ import {
   setMemoryFactPinnedForManagement,
   forgetMemoryFactForManagement,
 } from '../../src/services/memory/memoryTools';
-import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
+import { memoryRememberExecution } from '../helpers/memoryRememberExecution';
+import { rememberOk, testRememberArgs } from '../helpers/memoryToolsRememberFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -51,45 +52,6 @@ afterEach(() => {
 
 function groundedRequest(userMessageId: string, userMessageText: string) {
   return memoryRememberExecution({ userMessageId, userMessageText });
-}
-
-interface TestRememberInput {
-  subject: string;
-  subjectType?: 'self' | 'person' | 'place' | 'org' | 'project' | 'thing' | 'concept' | 'event';
-  predicate: string;
-  value: string;
-  scope: 'global' | 'project' | 'conversation' | 'session' | 'persona';
-  operation?: 'record' | 'replace_current';
-  confidence?: number;
-  importance?: number;
-  pinned?: boolean;
-}
-
-function testRememberArgs(
-  input: TestRememberInput,
-  context: Parameters<typeof executeMemoryRemember>[1],
-) {
-  return memoryRememberArgs({
-    userMessageText: context.requestEvidence.userMessageText,
-    subjectRef:
-      input.subject === 'user' || input.subjectType === 'self'
-        ? { kind: 'self' }
-        : { kind: 'named', label: input.subject },
-    subjectType: input.subjectType,
-    predicate: input.predicate,
-    value: input.value,
-    scope: input.scope,
-    operation: input.operation,
-    confidence: input.confidence,
-    importance: input.importance,
-    pinned: input.pinned,
-  });
-}
-
-function rememberOk(args: TestRememberInput, context: Parameters<typeof executeMemoryRemember>[1]) {
-  const result = executeMemoryRemember(testRememberArgs(args, context), context);
-  if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result)}`);
-  return result;
 }
 
 function explicitOverride(factId: string) {

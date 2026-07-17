@@ -1,6 +1,7 @@
 import type { AssistantCompletionMetadata } from '../types/message';
 import type { LlmProviderConfig } from '../types/provider';
 import { getProviderApiKey } from '../services/storage/SecureStorage';
+import { isCompleteProviderAssistantCompletionMetadata } from '../utils/assistantMessageMetadata';
 import {
   resolveFinalizationMaxTokens,
   resolveSubAgentMaxTokens,
@@ -33,7 +34,7 @@ export function shouldFailoverOnError(error: unknown): boolean {
 }
 
 export function isIncompleteAssistantCompletion(completion?: AssistantCompletionMetadata): boolean {
-  return completion?.completionStatus === 'incomplete';
+  return !isCompleteProviderAssistantCompletionMetadata(completion);
 }
 
 export function getEscalatedToolCallEmissionMaxTokens(

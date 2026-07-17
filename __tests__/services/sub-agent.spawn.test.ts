@@ -338,7 +338,23 @@ describe('Sub-Agent Service', () => {
       });
 
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
-        callbacks.onAssistantMessage?.('Generating the requested image.');
+        callbacks.onAssistantMessage?.(
+          'Generating the requested image.',
+          [
+            {
+              id: 'tool-image',
+              name: 'image_generate',
+              arguments: '{"prompt":"logo"}',
+              status: 'running',
+            },
+          ],
+          undefined,
+          {
+            kind: 'intermediate',
+            completionStatus: 'complete',
+            finishReason: 'tool_calls',
+          },
+        );
         callbacks.onToolCallStart?.({
           id: 'tool-image',
           name: 'image_generate',
@@ -352,8 +368,17 @@ describe('Sub-Agent Service', () => {
           status: 'completed',
           result: generatedImageResult,
         });
-        callbacks.onToolMessage?.('tool-image', generatedImageResult);
-        callbacks.onAssistantMessage?.('The image has been generated.');
+        callbacks.onToolMessage?.({
+          version: 1,
+          toolCallId: 'tool-image',
+          status: 'completed',
+          content: generatedImageResult,
+        });
+        callbacks.onAssistantMessage?.('The image has been generated.', [], undefined, {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        });
         callbacks.onDone?.();
         return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });

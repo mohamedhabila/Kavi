@@ -1,6 +1,13 @@
 import type { CronJob } from '../../src/services/cron/types';
+import type { OrchestratorCallbacks } from '../../src/engine/orchestrator';
+import type { ToolMessageOutcome } from '../../src/engine/toolExecution/toolMessageOutcome';
 import type { Conversation } from '../../src/types/conversation';
-import type { Message, ToolCall } from '../../src/types/message';
+import type {
+  AssistantMessageMetadata,
+  Message,
+  MessageProviderReplay,
+  ToolCall,
+} from '../../src/types/message';
 
 export const mockRunOrchestrator = jest.fn();
 export const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
@@ -8,6 +15,58 @@ export const mockCheckpointScheduledAttemptConversation = jest.fn().mockResolved
 export const mockCheckpointScheduledAttemptCompletion = jest.fn().mockResolvedValue(undefined);
 let mockRunningCompletion: { output: string } | undefined;
 let mockNextId = 0;
+
+export const completeSchedulerFinalMetadata: AssistantMessageMetadata = Object.freeze({
+  kind: 'final',
+  completionStatus: 'complete',
+  finishReason: 'stop',
+});
+
+export const completeSchedulerToolTurnMetadata: AssistantMessageMetadata = Object.freeze({
+  kind: 'intermediate',
+  completionStatus: 'complete',
+  finishReason: 'tool_calls',
+});
+
+export const failedSchedulerFinalMetadata: AssistantMessageMetadata = Object.freeze({
+  kind: 'final',
+  completionStatus: 'incomplete',
+  finishReason: 'response_failed',
+});
+
+export function schedulerToolMessageOutcome(
+  toolCallId: string,
+  content: string,
+  status: ToolMessageOutcome['status'] = 'completed',
+): ToolMessageOutcome {
+  return { version: 1, toolCallId, status, content };
+}
+
+export function emitSchedulerToolTurn(
+  callbacks: OrchestratorCallbacks,
+  content: string,
+  toolCalls: ToolCall[],
+  providerReplay?: MessageProviderReplay,
+): void {
+  callbacks.onAssistantMessage(
+    content,
+    toolCalls,
+    providerReplay,
+    completeSchedulerToolTurnMetadata,
+  );
+}
+
+export function emitSchedulerFinal(
+  callbacks: OrchestratorCallbacks,
+  content: string,
+  providerReplay?: MessageProviderReplay,
+): void {
+  callbacks.onAssistantMessage(content, [], providerReplay, completeSchedulerFinalMetadata);
+}
+
+export function emitSchedulerFailure(callbacks: OrchestratorCallbacks, content: string): void {
+  callbacks.onAssistantMessage(content, [], undefined, failedSchedulerFinalMetadata);
+}
 
 const mockProvider = {
   id: 'openai',

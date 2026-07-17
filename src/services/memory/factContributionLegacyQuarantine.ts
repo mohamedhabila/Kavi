@@ -117,7 +117,8 @@ function persistQuarantinedFacts(
   db: MemoryDb,
   entries: ReadonlyArray<LegacyFactQuarantineEntry>,
   quarantinedAt: number,
-): void {
+): boolean {
+  let promptProjectionChanged = entries.some(({ row }) => row.invalid_at === null);
   stageRows(
     db,
     REJECTION_STAGE,
@@ -130,12 +131,18 @@ function persistQuarantinedFacts(
     quarantinedAt,
   );
   for (const table of ['memory_fact_terms', 'memory_fact_evidence', 'memory_fact_observations']) {
-    db.runSync(`DELETE FROM ${table} WHERE fact_id IN (SELECT fact_id FROM ${REJECTION_STAGE})`);
+    const deleted = db.runSync(
+      `DELETE FROM ${table} WHERE fact_id IN (SELECT fact_id FROM ${REJECTION_STAGE})`,
+    )?.changes;
+    if (table === 'memory_fact_terms' && (deleted ?? 0) > 0) {
+      promptProjectionChanged = true;
+    }
   }
   db.runSync(
     `DELETE FROM memory_facts
       WHERE id IN (SELECT fact_id FROM ${REJECTION_STAGE})`,
   );
+  return promptProjectionChanged;
 }
 
 function scrubRetrievalEvents(db: MemoryDb, factIds: ReadonlySet<string>): void {
@@ -171,7 +178,11 @@ function scrubRetrievalEvents(db: MemoryDb, factIds: ReadonlySet<string>): void 
   );
 }
 
-function scrubReflections(db: MemoryDb, factIds: ReadonlySet<string>, quarantinedAt: number): void {
+function scrubReflections(
+  db: MemoryDb,
+  factIds: ReadonlySet<string>,
+  quarantinedAt: number,
+): boolean {
   const reflectionIds = db
     .getAllSync<ReflectionRow>(
       'SELECT id, source_fact_ids_json FROM memory_reflections WHERE deleted_at IS NULL',
@@ -179,13 +190,14 @@ function scrubReflections(db: MemoryDb, factIds: ReadonlySet<string>, quarantine
     .filter((row) => withoutFactIds(row.source_fact_ids_json, factIds).references)
     .map((row) => [row.id]);
   stageRows(db, REFLECTION_STAGE, ['reflection_id'], reflectionIds);
-  db.runSync(
+  const changed = db.runSync(
     `UPDATE memory_reflections
         SET deleted_at = ?, updated_at = MAX(updated_at, ?)
       WHERE id IN (SELECT reflection_id FROM ${REFLECTION_STAGE}) AND deleted_at IS NULL`,
     quarantinedAt,
     quarantinedAt,
-  );
+  )?.changes;
+  return (changed ?? 0) > 0;
 }
 
 function scrubReceipts(db: MemoryDb, factIds: ReadonlySet<string>): void {
@@ -231,17 +243,24 @@ export function quarantineLegacyFacts(input: {
   db: MemoryDb;
   entries: ReadonlyArray<LegacyFactQuarantineEntry>;
   quarantinedAt: number;
-}): void {
-  if (input.entries.length === 0) return;
+}): boolean {
+  if (input.entries.length === 0) return false;
   ensureEmptyWorkingStages(input.db);
   const factIds = new Set(input.entries.map(({ row }) => row.id));
-  persistQuarantinedFacts(input.db, input.entries, input.quarantinedAt);
+  let promptProjectionChanged = persistQuarantinedFacts(
+    input.db,
+    input.entries,
+    input.quarantinedAt,
+  );
   scrubRetrievalEvents(input.db, factIds);
-  scrubReflections(input.db, factIds, input.quarantinedAt);
+  promptProjectionChanged =
+    scrubReflections(input.db, factIds, input.quarantinedAt) || promptProjectionChanged;
   scrubReceipts(input.db, factIds);
-  input.db.runSync(
+  const clearedWorkingBlocks = input.db.runSync(
     `DELETE FROM memory_working_blocks
       WHERE label IN ('active_focus', 'open_threads', 'compaction_summary')`,
-  );
+  )?.changes;
+  if ((clearedWorkingBlocks ?? 0) > 0) promptProjectionChanged = true;
   clearWorkingStages(input.db);
+  return promptProjectionChanged;
 }

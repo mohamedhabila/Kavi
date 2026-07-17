@@ -31,6 +31,7 @@ describe('extractProviderEnrichment', () => {
       status: 'empty_valid',
       result: {
         episodeSummary: null,
+        episodeSensitivity: 'normal',
         newFacts: [],
         activeFocus: null,
         openThreads: [],
@@ -54,6 +55,7 @@ describe('extractProviderEnrichment', () => {
       status: 'valid',
       result: {
         episodeSummary: 'User likes tea',
+        episodeSensitivity: 'personal',
         newFacts: [
           {
             version: 1,

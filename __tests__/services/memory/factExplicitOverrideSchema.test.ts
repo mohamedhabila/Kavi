@@ -9,10 +9,8 @@ import {
   ensureFactExplicitOverrideSchema,
 } from '../../../src/services/memory/factExplicitOverrideSchema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import {
-  recordFactWithApplicability,
-  recordFactWithContribution,
-} from '../../../src/services/memory/facts/mutations';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
+import { recordCodeOwnedTestFactWithContribution as recordFactWithContribution } from '../../helpers/factContributionWriteFixtures';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
 import {
   clearStructuredMemory,

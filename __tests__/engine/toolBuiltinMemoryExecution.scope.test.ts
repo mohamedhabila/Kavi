@@ -76,9 +76,8 @@ describe('builtin memory execution scope', () => {
     });
     const providerArgs = {
       semanticEvidence: {
-        version: 3,
-        subject_ref: { kind: 'self' },
-        subject_type: 'self',
+        version: 4,
+        subject: { kind: 'self' },
         predicate: 'timezone',
         value: 'UTC+1',
         scope: 'global',

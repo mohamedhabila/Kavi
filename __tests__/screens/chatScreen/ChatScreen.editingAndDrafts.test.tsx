@@ -15,7 +15,10 @@ import {
   createRunningAgentRun,
   createAgentRunAsyncWorkControlGraph,
 } from '../../../testSupport/chatScreen/fixtures';
-import { mockAddMessage, mockEditMessage } from '../../../testSupport/chatScreen/storeMocks';
+import {
+  mockAddMessage,
+  mockRewindUserMessageForResend,
+} from '../../../testSupport/chatScreen/storeMocks';
 import {
   mockEvaluateAgentRunWithPilot,
   mockCancelSubAgent,
@@ -52,7 +55,7 @@ describe('ChatScreen editing and drafts', () => {
     fireEvent.press(retryIcons[0].parent || retryIcons[0]);
 
     await waitFor(() => {
-      expect(mockEditMessage).toHaveBeenCalledWith('conv1', 'msg1', 'Hello');
+      expect(mockRewindUserMessageForResend).toHaveBeenCalledWith('conv1', 'msg1', 'Hello');
       expect(mockRunOrchestrator).toHaveBeenCalledWith(
         expect.objectContaining({ conversationId: 'conv1' }),
         expect.any(Object),
@@ -88,7 +91,7 @@ describe('ChatScreen editing and drafts', () => {
           status: 'running',
         },
       ];
-      mockEditMessage.mockImplementation(
+      mockRewindUserMessageForResend.mockImplementation(
         (conversationId: string, messageId: string, content: string) => {
           updateMockConversation(conversationId, (conversation) => {
             const messageIndex = conversation.messages.findIndex(
@@ -105,6 +108,11 @@ describe('ChatScreen editing and drafts', () => {
               activeAgentRunId: undefined,
             };
           });
+          return {
+            status: 'applied',
+            replacedMessageId: messageId,
+            replacementMessageId: messageId,
+          };
         },
       );
 
@@ -143,7 +151,7 @@ describe('ChatScreen editing and drafts', () => {
     fireEvent.press(sendIcon.parent || sendIcon);
 
     await waitFor(() => {
-      expect(mockEditMessage).toHaveBeenCalledWith('conv1', 'msg1', 'Edited hello');
+      expect(mockRewindUserMessageForResend).toHaveBeenCalledWith('conv1', 'msg1', 'Edited hello');
     });
   });
 

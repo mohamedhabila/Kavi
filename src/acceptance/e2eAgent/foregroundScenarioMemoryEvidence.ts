@@ -7,6 +7,7 @@ import { getIngestionJob } from '../../services/memory/ingestionQueue';
 import { listIngestionDurabilityReceipts } from '../../services/memory/ingestionStructuralReceiptStore';
 import {
   cloneAndFreeze,
+  resolveForegroundScenarioProviderOutcomes,
   type ForegroundScenarioProviderOutcomeEvidenceRequirement,
   type ForegroundScenarioTurnSnapshot,
 } from './foregroundScenarioDriverTypes';
@@ -25,15 +26,16 @@ function sleep(delayMs: number): Promise<void> {
 
 function providerOutcomeRequirementSatisfied(
   turn: ForegroundScenarioTurnSnapshot | undefined,
-  providerOutcome: ForegroundScenarioProviderOutcomeEvidenceRequirement['providerOutcome'],
+  requirement: ForegroundScenarioProviderOutcomeEvidenceRequirement,
 ): boolean {
   if (!turn) return false;
+  const providerOutcomes = new Set(resolveForegroundScenarioProviderOutcomes(requirement));
   return turn.memory.some((snapshot) => {
     const jobId = snapshot.publication.jobId;
     if (!jobId) return false;
     return listIngestionDurabilityReceipts(jobId).some(
       (receipt) =>
-        receipt.phase === 'provider_final' && receipt.providerOutcome === providerOutcome,
+        receipt.phase === 'provider_final' && providerOutcomes.has(receipt.providerOutcome),
     );
   });
 }
@@ -43,7 +45,7 @@ function allProviderOutcomeRequirementsSatisfied(
   requirements: ReadonlyArray<ForegroundScenarioProviderOutcomeEvidenceRequirement>,
 ): boolean {
   return requirements.every((requirement) =>
-    providerOutcomeRequirementSatisfied(turns[requirement.turnIndex], requirement.providerOutcome),
+    providerOutcomeRequirementSatisfied(turns[requirement.turnIndex], requirement),
   );
 }
 

@@ -10,19 +10,47 @@ type ReviewCandidateMessage = Pick<
 >;
 
 export type AgentControlGraphTerminalReviewCompletion = {
-  status: 'failed';
+  status: 'failed' | 'cancelled';
   latestSummary: string;
-  checkpointTitle: 'Run blocked' | 'Run failed';
+  checkpointTitle: 'Run blocked' | 'Run failed' | 'Run cancelled';
   checkpointDetail: string;
   terminalReason: AgentRunTerminalReason;
-  logLevel: Extract<ConversationLogEntry['level'], 'error'>;
-  logTitle: 'Run blocked' | 'Run failed';
+  logLevel: Extract<ConversationLogEntry['level'], 'error' | 'warning'>;
+  logTitle: 'Run blocked' | 'Run failed' | 'Run cancelled';
   logDetail: string;
 };
 
 export function buildAgentControlGraphTerminalReviewCompletion(
   controlGraph: AgentRun['controlGraph'],
+  candidateMessage?: ReviewCandidateMessage,
 ): AgentControlGraphTerminalReviewCompletion | undefined {
+  const reason =
+    controlGraph?.terminalReason?.trim() ||
+    controlGraph?.finalizationHoldReason?.trim() ||
+    'blocked';
+  const cancelledPreview =
+    controlGraph?.status === 'cancelled' &&
+    reason === 'user_approval_denied' &&
+    candidateMessage?.role === 'assistant' &&
+    !candidateMessage.subAgentEvent &&
+    (candidateMessage.toolCalls?.length ?? 0) === 0 &&
+    candidateMessage.assistantMetadata?.finishReason === 'user_approval_denied' &&
+    isDeliverableAssistantCompletionMetadata(candidateMessage.assistantMetadata)
+      ? candidateMessage.content.trim()
+      : '';
+  if (cancelledPreview) {
+    return {
+      status: 'cancelled',
+      latestSummary: cancelledPreview,
+      checkpointTitle: 'Run cancelled',
+      checkpointDetail: cancelledPreview,
+      terminalReason: 'user_cancelled',
+      logLevel: 'warning',
+      logTitle: 'Run cancelled',
+      logDetail: cancelledPreview,
+    };
+  }
+
   if (
     !controlGraph ||
     !(
@@ -35,8 +63,6 @@ export function buildAgentControlGraphTerminalReviewCompletion(
     return undefined;
   }
 
-  const reason =
-    controlGraph.terminalReason?.trim() || controlGraph.finalizationHoldReason?.trim() || 'blocked';
   const blocked =
     controlGraph.status === 'blocked' || controlGraph.terminalReason === 'max_iterations';
   const title = blocked ? 'Run blocked' : 'Run failed';

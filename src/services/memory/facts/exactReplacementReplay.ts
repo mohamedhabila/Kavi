@@ -1,12 +1,14 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runAfterMemoryTransactionCommit } from '../access/transaction';
+import { advanceRestrictiveMemoryAuthorityInTransaction } from '../memoryAuthority';
 import { notifyStructuredMemoryChanged } from '../changeNotifications';
-import type { MemoryFactContributionPayloadV1 } from '../factContributionCodec';
+import type { MemoryFactContributionPayloadV2 } from '../factContributionCodec';
 import {
   persistFactContributionInTransaction,
   type MemoryFactContributionReplay,
   type MemoryFactContributionWriteContext,
 } from '../factContributionStore';
+import { loadVerifiedFactContributionAggregatesForReplayInTransaction } from '../factContributionAggregateStore';
 import { loadFactExplicitOverrideInTransaction } from '../factExplicitOverrideState';
 import {
   classifyMemoryFactSensitivity,
@@ -21,13 +23,8 @@ import {
   type MemoryFactSensitivity,
 } from './applicabilityProvenance';
 import { mergeDuplicateReviewState } from './duplicateMetadata';
-import {
-  normalizeFactKind,
-  rowToFact,
-  type FactRow,
-  type MemoryFact,
-  type ReplaceCurrentFactResult,
-} from './types';
+import { projectFactFromSurvivingContributions } from './factContributionProjection';
+import { rowToFact, type FactRow, type MemoryFact, type ReplaceCurrentFactResult } from './types';
 
 const SNAPSHOT_VERSION = 1;
 const CONTRIBUTION_ID_PATTERN = /^mfc_[0-9a-f]{64}$/u;
@@ -85,11 +82,10 @@ function requireSensitivity(value: unknown): MemoryFactSensitivity {
 
 function classifiedSensitivity(row: FactRow): MemoryFactSensitivity {
   const db = getSchemaReadyMemoryDb();
-  const subject = db.getFirstSync<{ canonical_name: string; type: string }>(
-    'SELECT canonical_name, type FROM memory_entities WHERE id = ? LIMIT 1',
+  const subject = db.getFirstSync<{ canonical_name: string }>(
+    'SELECT canonical_name FROM memory_entities WHERE id = ? LIMIT 1',
     row.subject_id,
   );
-  if (!subject) return 'restricted';
   let attributes: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(row.attributes) as unknown;
@@ -99,13 +95,15 @@ function classifiedSensitivity(row: FactRow): MemoryFactSensitivity {
     return 'restricted';
   }
   return classifyMemoryFactSensitivity({
+    declaredSensitivity:
+      row.sensitivity_policy_version === MEMORY_FACT_SENSITIVITY_POLICY_VERSION
+        ? row.sensitivity
+        : 'restricted',
     subject: subject?.canonical_name,
-    subjectType: subject?.type,
     predicate: row.predicate,
     objectText: row.object_text,
     attributes,
     sourceSummary: row.source_summary ?? undefined,
-    memoryKind: normalizeFactKind(row.memory_kind),
   });
 }
 
@@ -114,7 +112,46 @@ function currentProtectedSensitivity(row: FactRow): MemoryFactSensitivity {
     row.sensitivity_policy_version === MEMORY_FACT_SENSITIVITY_POLICY_VERSION
       ? (closedMemoryFactSensitivity(row.sensitivity) ?? 'restricted')
       : 'restricted';
-  return maxMemoryFactSensitivity(stored, classifiedSensitivity(row));
+  const db = getSchemaReadyMemoryDb();
+  const contributionIds = db
+    .getAllSync<{ id: string }>(
+      `SELECT contribution.id
+         FROM memory_fact_contributions AS contribution
+         LEFT JOIN memory_retired_fact_contributions AS retired
+           ON retired.contribution_id = contribution.id
+        WHERE contribution.fact_id = ?
+          AND retired.contribution_id IS NULL
+        ORDER BY contribution.contributed_at ASC, contribution.id ASC`,
+      row.id,
+    )
+    .map((candidate) => candidate.id);
+  if (contributionIds.length === 0) {
+    return maxMemoryFactSensitivity(stored, classifiedSensitivity(row));
+  }
+  const loaded = loadVerifiedFactContributionAggregatesForReplayInTransaction(
+    db,
+    contributionIds,
+  );
+  if (
+    loaded.missingContributionIds.length > 0 ||
+    loaded.aggregates.length !== contributionIds.length ||
+    loaded.aggregates.some((aggregate) => aggregate.factId !== row.id)
+  ) {
+    fail('memory_fact_contribution_replay_aggregate_invalid');
+  }
+  const first = loaded.aggregates[0]!;
+  const projection = projectFactFromSurvivingContributions({
+    factId: row.id,
+    contributions: loaded.aggregates.map((aggregate) => ({
+      contributionId: aggregate.contributionId,
+      contributedAt: aggregate.contributedAt,
+      payload: aggregate.payload,
+      supersessionSnapshot: aggregate.supersessionPlan.snapshot,
+    })),
+    classifierContext: first.classifierContext,
+    explicitProjection: first.explicitProjection,
+  });
+  return maxMemoryFactSensitivity(stored, classifiedSensitivity(row), projection.sensitivity);
 }
 
 function applyExplicitProjection(input: {
@@ -174,6 +211,7 @@ function writeProjection(input: {
     memoryOwnerId,
   );
   if ((result.changes ?? 0) !== 1) throw new ExactReplacementReplayTargetChanged();
+  advanceRestrictiveMemoryAuthorityInTransaction(getSchemaReadyMemoryDb(), memoryOwnerId);
   if (input.notify) {
     runAfterMemoryTransactionCommit(() =>
       notifyStructuredMemoryChanged(input.row.origin_conversation_id),
@@ -224,9 +262,7 @@ export function loadExactReplacementReplayInTransaction(
     snapshot.contribution_id !== replay.id ||
     snapshot.successor_fact_id !== replay.factId ||
     snapshot.snapshot_version !== SNAPSHOT_VERSION ||
-    !Number.isSafeInteger(snapshot.successor_sensitivity_policy_version) ||
-    snapshot.successor_sensitivity_policy_version < 1 ||
-    snapshot.successor_sensitivity_policy_version > MEMORY_FACT_SENSITIVITY_POLICY_VERSION ||
+    snapshot.successor_sensitivity_policy_version !== MEMORY_FACT_SENSITIVITY_POLICY_VERSION ||
     edge.successor_fact_id !== snapshot.successor_fact_id ||
     edge.superseded_at !== supersededAt ||
     edge.predecessor_fact_id === edge.successor_fact_id
@@ -294,7 +330,7 @@ function repairReplaySuccessorProjection(state: ExactReplacementReplayState): Me
 export function finalizeExactReplacementReplayInTransaction(input: {
   replay: MemoryFactContributionReplay;
   state: ExactReplacementReplayState;
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
   context: MemoryFactContributionWriteContext;
 }): ReplaceCurrentFactResult {
   if (

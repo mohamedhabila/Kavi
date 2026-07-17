@@ -1,7 +1,10 @@
 import { runMemoryDatabaseSavepoint } from './access/databaseSavepoint';
 import type { getMemoryDb } from './database';
 import { MEMORY_FACT_CONTRIBUTION_MAX_SUPERSESSION_EDGES } from './factContributionChildCommitments';
-import { MEMORY_FACT_CONTRIBUTION_LIMITS } from './factContributionCodec';
+import {
+  MEMORY_FACT_CONTRIBUTION_LIMITS,
+  MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION,
+} from './factContributionCodec';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
 
@@ -20,19 +23,23 @@ export function isFactContributionSchemaResetRequired(error: unknown): boolean {
 }
 
 function assertFreshFactContributionParentSchema(db: MemoryDb): void {
-  const parentExists = db.getFirstSync<{ name: string }>(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_fact_contributions'",
+  const parent = db.getFirstSync<{ name: string; sql: string | null }>(
+    "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_fact_contributions'",
   );
-  if (!parentExists) return;
+  if (!parent) return;
   const columns = db
     .getAllSync<{ name: string }>('PRAGMA table_info(memory_fact_contributions)')
     .map((column) => column.name);
   const commitmentColumns = columns.filter(
     (column) => column.startsWith('source_set_') || column.startsWith('supersession_set_'),
   );
+  const normalizedParentSql = parent.sql?.replace(/\s+/gu, ' ') ?? '';
   if (
     commitmentColumns.length !== REQUIRED_CHILD_SET_COMMITMENT_COLUMNS.length ||
-    REQUIRED_CHILD_SET_COMMITMENT_COLUMNS.some((column) => !commitmentColumns.includes(column))
+    REQUIRED_CHILD_SET_COMMITMENT_COLUMNS.some((column) => !commitmentColumns.includes(column)) ||
+    !normalizedParentSql.includes(
+      `payload_version INTEGER NOT NULL CHECK( payload_version = ${MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION} )`,
+    )
   ) {
     throw new Error(SCHEMA_RESET_REQUIRED);
   }
@@ -98,7 +105,9 @@ export function ensureFactContributionSchema(db: MemoryDb): void {
           AND LENGTH(supersession_set_sha256) = 64
           AND supersession_set_sha256 NOT GLOB '*[^0-9a-f]*'
         ),
-        payload_version INTEGER NOT NULL CHECK(payload_version = 1),
+        payload_version INTEGER NOT NULL CHECK(
+          payload_version = ${MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION}
+        ),
         payload_json TEXT NOT NULL CHECK(LENGTH(payload_json) > 0),
         payload_sha256 TEXT NOT NULL
           CHECK(

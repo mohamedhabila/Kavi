@@ -12,12 +12,20 @@ import type {
 } from './iterationExecutionTypes';
 import type { PendingAgentToolCall } from './modelTurnExecution';
 import type { PreparedAgentControlGraphModelTurnReady } from './prepareAgentControlGraphModelTurn';
+import {
+  assertModelTurnMemoryPolicyBindingCurrent,
+  assertModelTurnMemoryPolicyBindingDurablyCurrent,
+  type ModelTurnMemoryPolicyBinding,
+} from '../authority/modelTurnMemoryPolicyBinding';
+import { attachModelTurnMemoryAttribution } from './modelTurnMemoryAttribution';
 
 export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
   iterationParams: ExecuteAgentControlGraphIterationParams;
   modelTurnPreparation: PreparedAgentControlGraphModelTurnReady;
   runtime: AgentControlGraphIterationRuntimeState;
   fullContent: string;
+  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
+  memoryRetrievalEventId?: string;
   reasoning: string;
   providerReplay?: MessageProviderReplay;
   completion?: AssistantCompletionMetadata;
@@ -31,8 +39,11 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
     providerReplay?: MessageProviderReplay;
     completion?: AssistantCompletionMetadata;
     pendingToolCalls: ReadonlyArray<PendingAgentToolCall>;
+    memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   }) => Promise<ExecuteAgentControlGraphIterationResult['status']>;
 }): Promise<ExecuteAgentControlGraphIterationResult['status']> {
+  assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
+  let modelTurnCommitted = false;
   const continuationPrefix =
     params.iterationParams.graph.getCurrentTurnDirectives().incompleteFinalTextContinuationPrefix;
   const turnAssistantContent = continuationPrefix
@@ -41,17 +52,6 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
   const executableToolCalls = selectOneShotDiscoveryToolCalls(
     trimAgentControlGraphPendingToolCallsAfterYield(params.pendingToolCalls),
   );
-  params.iterationParams.graph.applyAgentControlGraphEvents([
-    {
-      type: 'MODEL_TURN_COMPLETED',
-      iteration: params.iterationParams.iteration,
-      toolCalls: executableToolCalls.map((toolCall) => ({
-        id: toolCall.id,
-        name: toolCall.name,
-      })),
-    },
-  ]);
-
   if (executableToolCalls.length === 0) {
     const noToolTurnResolution = await resolveAgentControlGraphNoToolTurn({
       iteration: params.iterationParams.iteration,
@@ -70,8 +70,6 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
           .map((tool) => normalizeToolName(tool.name))
           .filter(Boolean),
       ),
-      selectedTools: params.modelTurnPreparation.preparedTurn.selectedTools,
-      allTools: params.iterationParams.allTools,
       effectiveForceTextThisTurn: params.modelTurnPreparation.effectiveForceTextThisTurn,
       recoveryDirectives: params.iterationParams.graph.getCurrentTurnDirectives(),
       toolCallHistory: params.iterationParams.toolRuntime.toolCallHistory,
@@ -80,21 +78,58 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
         params.modelTurnPreparation.requestModel,
       ),
       workingMessages: params.runtime.workingMessages,
+      commitModelTurn: () => {
+        assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+        params.iterationParams.graph.applyAgentControlGraphEvents([
+          {
+            type: 'MODEL_TURN_COMPLETED',
+            iteration: params.iterationParams.iteration,
+            toolCalls: [],
+          },
+        ]);
+        modelTurnCommitted = true;
+      },
       applyGraphEvents: params.iterationParams.graph.applyAgentControlGraphEvents,
       resetIncompleteFinalTextRecovery:
         params.iterationParams.graph.resetIncompleteFinalTextRecovery,
       recordTurnDirectives: params.iterationParams.graph.recordTurnDirectives,
-      finishWithGraphFinalCandidateEvent:
-        params.iterationParams.graph.finishWithGraphFinalCandidateEvent,
-      finishWithGraphTerminalEvent: params.iterationParams.graph.finishWithGraphTerminalEvent,
+      finishWithGraphFinalCandidateEvent: async (finalParams) => {
+        assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+        return params.iterationParams.graph.finishWithGraphFinalCandidateEvent({
+          ...finalParams,
+          assistantMetadata: attachModelTurnMemoryAttribution(
+            finalParams.assistantMetadata,
+            params.memoryRetrievalEventId,
+          ),
+          beforeAssistantDelivery: () =>
+            assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
+        });
+      },
+      finishWithGraphTerminalEvent: async (terminalParams) => {
+        assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+        return params.iterationParams.graph.finishWithGraphTerminalEvent({
+          ...terminalParams,
+          assistantMetadata: attachModelTurnMemoryAttribution(
+            terminalParams.assistantMetadata,
+            params.memoryRetrievalEventId,
+          ),
+          beforeAssistantDelivery: () =>
+            assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
+        });
+      },
       onContinueThinking: async () => {
+        assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
         params.iterationParams.callbacks.onStateChange('thinking');
         await params.iterationParams.yieldToUiFrame();
+        assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
       },
       onFinalizationHeld: params.iterationParams.onFinalizationHeld,
     });
     if (noToolTurnResolution.status === 'finalized') {
       return 'finalized';
+    }
+    if (!modelTurnCommitted) {
+      assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
     }
     params.runtime.consecutivePendingAsyncNoToolTurns =
       noToolTurnResolution.nextConsecutivePendingAsyncNoToolTurns;
@@ -107,6 +142,7 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
     reasoning: params.reasoning,
     providerReplay: params.providerReplay,
     completion: params.completion,
+    memoryPolicyBinding: params.memoryPolicyBinding,
     pendingToolCalls: executableToolCalls,
   });
 }

@@ -23,7 +23,7 @@ const messages: Message[] = [
     role: 'assistant',
     content: 'Okay.',
     timestamp: 2,
-    assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
   },
 ];
 
@@ -45,6 +45,7 @@ function validPayload(): string {
         sensitivity: 'normal',
       },
     ],
+    episode_sensitivity: 'normal',
     episode_summary: 'Must not persist.',
     active_focus: null,
     open_threads: [],
@@ -79,34 +80,53 @@ function expectNoFencedWrites(threadId: string): void {
 }
 
 it('keeps the pre-provider structural checkpoint but rejects enrichment after opt-out', async () => {
+  const providerTransport = jest.fn(async () => validPayload());
   const result = await processIngestionTurn({
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: 'conv-opt-out-fence',
     messages,
     sourceEndMessageId: 'assistant-fenced',
-    extractor: async () => {
+    extractor: async (_prompt, _signal, requestDispatchGuard) => {
       useSettingsStore.setState({ disableLongTermMemory: true } as never);
-      return validPayload();
+      requestDispatchGuard?.();
+      return providerTransport();
     },
   });
 
   expect(result).toEqual(expect.objectContaining({ processed: false, skipped: 'opt_out' }));
   expect(listEpisodes({ threadId: 'conv-opt-out-fence' })).toHaveLength(1);
   expect(listFacts({ originConversationId: 'conv-opt-out-fence' })).toEqual([]);
+  expect(providerTransport).not.toHaveBeenCalled();
 });
 
-it('does not persist when the durable queue claim is no longer owned', async () => {
+it('keeps the structural checkpoint but blocks provider transport after the queue claim is lost', async () => {
+  let ownsClaim = true;
+  const providerTransport = jest.fn(async () => validPayload());
   const result = await processIngestionTurn({
     episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: 'conv-claim-fence',
     messages,
     sourceEndMessageId: 'assistant-fenced',
-    extractor: async () => validPayload(),
-    canPersist: () => false,
+    extractor: async (_prompt, _signal, requestDispatchGuard) => {
+      ownsClaim = false;
+      requestDispatchGuard?.();
+      return providerTransport();
+    },
+    canPersist: () => ownsClaim,
   });
 
   expect(result).toEqual(expect.objectContaining({ processed: false, skipped: 'claim_lost' }));
-  expectNoFencedWrites('conv-claim-fence');
+  expect(listEpisodes({ threadId: 'conv-claim-fence' })).toHaveLength(1);
+  expect(listFacts({ originConversationId: 'conv-claim-fence' })).toEqual([]);
+  expect(
+    getMemoryDb().getFirstSync<{ count: number }>(
+      `SELECT COUNT(*) AS count
+         FROM memory_fact_contributions
+        WHERE memory_conversation_id = ?`,
+      'conv-claim-fence',
+    )?.count,
+  ).toBe(0);
+  expect(providerTransport).not.toHaveBeenCalled();
 });
 
 it('rolls back every structural lane when the atomic checkpoint is rejected', async () => {

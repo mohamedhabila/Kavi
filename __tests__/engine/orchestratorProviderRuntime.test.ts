@@ -1,4 +1,7 @@
-import { isDirectAnthropicProvider } from '../../src/engine/orchestratorProviderRuntime';
+import {
+  isDirectAnthropicProvider,
+  isIncompleteAssistantCompletion,
+} from '../../src/engine/orchestratorProviderRuntime';
 import type { LlmProviderConfig } from '../../src/types/provider';
 
 function makeProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProviderConfig {
@@ -14,6 +17,34 @@ function makeProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProviderCo
 }
 
 describe('orchestratorProviderRuntime', () => {
+  it('authorizes continuation past completion checks only for known provider dispositions', () => {
+    expect(isIncompleteAssistantCompletion()).toBe(true);
+    expect(
+      isIncompleteAssistantCompletion({
+        completionStatus: 'complete',
+        finishReason: 'plausible_but_unowned_success',
+      }),
+    ).toBe(true);
+    expect(
+      isIncompleteAssistantCompletion({
+        completionStatus: 'complete',
+        finishReason: 'tool_calls',
+      }),
+    ).toBe(false);
+    expect(
+      isIncompleteAssistantCompletion({
+        completionStatus: 'complete',
+        finishReason: 'STOP',
+      }),
+    ).toBe(false);
+    expect(
+      isIncompleteAssistantCompletion({
+        completionStatus: 'incomplete',
+        finishReason: 'length',
+      }),
+    ).toBe(true);
+  });
+
   it('honors explicit anthropic provider family metadata without rediscovering it from the URL', () => {
     expect(
       isDirectAnthropicProvider(

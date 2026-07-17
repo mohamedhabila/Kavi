@@ -43,6 +43,116 @@ describe('tool execution outcome resolution', () => {
     expect(params.recordPostToolFinalTextDirective).not.toHaveBeenCalled();
   });
 
+  it('terminally blocks after a non-recoverable effect was not claimed', async () => {
+    const params = buildBaseParams();
+    params.executableToolCalls = [
+      { name: 'write_file', arguments: '{"path":"reports/final.md","content":"done"}' },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-journal-unavailable',
+        toolMessage: createToolMessage({
+          id: 'tc-journal-unavailable',
+          name: 'write_file',
+          content: 'Error: durable journal unavailable',
+          isError: true,
+        }),
+        effectDispatchObservation: {
+          kind: 'not_claimed',
+          reason: 'journal_unavailable',
+        },
+      },
+    ];
+
+    const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(result.status).toBe('finalized');
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graphEvent: {
+          type: 'BLOCKED',
+          reason: 'tool_effect_not_claimed',
+        },
+        sessionEndReason: 'tool_effect_not_claimed',
+        content: expect.stringContaining('That action was not executed or claimed as successful'),
+      }),
+    );
+    expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
+    expect(params.recordPostToolFinalTextDirective).not.toHaveBeenCalled();
+  });
+
+  it('honors rejected user approval as a truthful cancellation without replanning', async () => {
+    const params = buildBaseParams();
+    params.executableToolCalls = [
+      {
+        name: 'sms_compose',
+        arguments: '{"recipients":["+12025550147"],"message":"I will arrive at six."}',
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-user-rejected',
+        toolMessage: createToolMessage({
+          id: 'tc-user-rejected',
+          name: 'sms_compose',
+          content: 'Error: tool "sms_compose" was rejected by user approval',
+          isError: true,
+        }),
+        effectDispatchObservation: {
+          kind: 'not_claimed',
+          reason: 'user_approval_denied',
+        },
+      },
+    ];
+
+    const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(result.status).toBe('finalized');
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith({
+      graphEvent: {
+        type: 'CANCELLED',
+        reason: 'user_approval_denied',
+      },
+      content: expect.stringContaining('No effect was dispatched'),
+      assistantMetadata: expect.objectContaining({
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'user_approval_denied',
+      }),
+      sessionEndReason: 'user_approval_denied',
+    });
+    expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
+    expect(params.recordPostToolFinalTextDirective).not.toHaveBeenCalled();
+  });
+
+  it('allows the model to repair a discoverable pre-dispatch tool failure', async () => {
+    const params = buildBaseParams();
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-tool-unknown',
+        toolMessage: createToolMessage({
+          id: 'tc-tool-unknown',
+          name: 'unknown_tool',
+          content: 'Error: unknown tool',
+          isError: true,
+        }),
+        effectDispatchObservation: {
+          kind: 'not_claimed',
+          reason: 'tool_unknown',
+        },
+      },
+    ];
+
+    const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(result.status).toBe('continued');
+    expect(params.onStateChange).toHaveBeenCalledWith('thinking');
+    expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
+  });
+
   it('records tool results and continues thinking', async () => {
     const params = buildBaseParams();
     params.toolExecutionOutcomes = [

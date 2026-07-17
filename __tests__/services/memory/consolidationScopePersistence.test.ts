@@ -13,6 +13,11 @@ import { closeMemoryDb } from '../../../src/services/memory/database';
 import { CONSOLIDATION_FACT_PRODUCER_IDS } from '../../../src/services/memory/consolidation/factContributionIdentity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+const CODE_OWNED_NORMAL_SENSITIVITY = {
+  version: 1,
+  source: 'code_owned',
+  sensitivity: 'normal',
+} as const;
 
 beforeEach(() => {
   closeMemoryDb();
@@ -27,6 +32,7 @@ it('persists grounded and passive global facts without attaching conversation id
   applyConsolidatorResult(
     {
       episodeSummary: null,
+      episodeSensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
       newFacts: [
         {
           subject: 'user',
@@ -38,6 +44,7 @@ it('persists grounded and passive global facts without attaching conversation id
             authority: 'grounded_user_statement',
             evidenceMessageId: 'user-1',
           },
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
         },
         {
           subject: 'user',
@@ -45,6 +52,7 @@ it('persists grounded and passive global facts without attaching conversation id
           value: 'jazz',
           scope: 'global',
           evidenceMessageIds: ['user-1'],
+          sensitivityDeclaration: CODE_OWNED_NORMAL_SENSITIVITY,
         },
       ],
       activeFocus: null,

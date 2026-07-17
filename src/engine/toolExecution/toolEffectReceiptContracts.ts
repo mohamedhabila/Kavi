@@ -286,7 +286,23 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     skill__github__commit_files: operational('remote.mutate'),
     skill__github__create_issue: operational('remote.mutate'),
     skill__github__create_pull_request: operational('remote.mutate'),
-    cron: operational('workflow.mutate'),
+    // Scheduler mutations return only after the code-owned store has durably
+    // persisted the new state. Treat that acknowledged durable state as the
+    // mutation verifier; list remains explicitly effect-free.
+    cron: effectful(
+      'workflow.mutate',
+      {
+        task_created: VERIFIED,
+        updated: VERIFIED,
+        deleted: VERIFIED,
+        enabled: VERIFIED,
+        disabled: VERIFIED,
+        succeeded: VERIFIED,
+        rejected: FAILED,
+        listed: outcome('none', 'not_applicable', 'observation.read'),
+      },
+      { completion: { effectFreeWhen: { argumentPath: ['action'], values: ['list'] } } },
+    ),
     canvas_eval: operational('compute.execute'),
     ssh_exec: operational('remote.mutate'),
     ssh_fs: operational('remote.mutate'),

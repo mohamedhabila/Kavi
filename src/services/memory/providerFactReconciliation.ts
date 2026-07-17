@@ -8,6 +8,7 @@ import { resolveCurrentFactsForReplacement } from './facts/currentReplacementRes
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
 import { CANONICAL_SELF_MEMORY_SUBJECT } from './memorySubjectIdentity';
 import type { SemanticFactProposalV1 } from './semanticFactProposal';
+import { providerMemorySensitivityDeclaration } from './memorySensitivityPolicy';
 
 export interface ProviderMergeContext {
   currentUserMessageId?: string;
@@ -15,6 +16,7 @@ export interface ProviderMergeContext {
   memoryConversationId: string;
   threadId: string;
   taskId?: string;
+  sameSourceExplicitMemoryAuthority: boolean;
 }
 
 interface ResolvedProviderFact {
@@ -50,7 +52,7 @@ function bindExactProposalEvidence(
     scope: proposal.scope,
     importance: proposal.importance,
     confidence: proposal.confidence,
-    proposedSensitivity: proposal.sensitivity,
+    sensitivityDeclaration: providerMemorySensitivityDeclaration(proposal.sensitivity),
     operation: 'replace_current',
     assertionClass: 'current_direct',
     evidenceMessageIds: [context.currentUserMessageId],
@@ -124,10 +126,12 @@ export function mergeProviderIntoStructural(
   const episodeSummary = provider.episodeSummary ?? structural.episodeSummary;
   const seen = new Set(structural.facts.map(factKey));
   const structuralSubjectsAndPredicates = new Set(structural.facts.map(subjectPredicateKey));
-  const resolvedProviderFacts = provider.newFacts.flatMap((proposal) => {
-    const resolved = resolveProviderFact(proposal, context);
-    return resolved ? [resolved] : [];
-  });
+  const resolvedProviderFacts = context.sameSourceExplicitMemoryAuthority
+    ? []
+    : provider.newFacts.flatMap((proposal) => {
+        const resolved = resolveProviderFact(proposal, context);
+        return resolved ? [resolved] : [];
+      });
   const ambiguous = ambiguousReplacementKeys(resolvedProviderFacts);
   const mergedFacts = [...structural.facts];
 
@@ -142,6 +146,9 @@ export function mergeProviderIntoStructural(
 
   return {
     episodeSummary: episodeSummary || null,
+    episodeSensitivityDeclaration: providerMemorySensitivityDeclaration(
+      provider.episodeSensitivity,
+    ),
     newFacts: mergedFacts,
     activeFocus: provider.activeFocus,
     openThreads: provider.openThreads.slice(0, 5),

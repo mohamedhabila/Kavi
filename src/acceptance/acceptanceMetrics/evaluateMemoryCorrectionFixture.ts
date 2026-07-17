@@ -74,6 +74,7 @@ export async function evaluateMemoryCorrectionFixture(
             sensitivity: 'personal',
           },
         ],
+        episode_sensitivity: 'personal',
         episode_summary: null,
         active_focus: null,
         open_threads: [],

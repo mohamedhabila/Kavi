@@ -9,6 +9,8 @@ import { needsApprovalWithContext, requestToolApproval } from '../../services/re
 import {
   dispatchAuthorizedToolEffect,
   isCodeOwnedEffectFreeInvocation,
+  type ToolEffectDispatchNotClaimedReason,
+  type ToolEffectDispatchObservation,
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import {
   isRegisteredToolName,
@@ -25,6 +27,10 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import {
+  buildModelTurnMemoryPolicyExpiredToolResult,
+  isModelTurnMemoryPolicyBindingDurablyCurrent,
+} from '../authority/modelTurnMemoryPolicyBinding';
 
 // ── Central dispatcher ───────────────────────────────────────────────────
 
@@ -39,6 +45,7 @@ function isolateExecutorContext(
   delete isolated.captureEffectReceipt;
   delete isolated.finalizeEffectReceiptCapture;
   delete isolated.captureEffectReconciliationRequired;
+  delete isolated.modelTurnMemoryPolicyBinding;
   return isolated;
 }
 
@@ -69,20 +76,87 @@ function markEffectReconciliationRequired(context: ToolExecutionContext | undefi
   }
 }
 
+function isModelTurnAuthorityCurrent(context: ToolExecutionContext | undefined): boolean {
+  const binding = context?.modelTurnMemoryPolicyBinding;
+  if (!binding) return context?.toolCallId === undefined;
+  return isModelTurnMemoryPolicyBindingDurablyCurrent(binding);
+}
+
+export type ToolExecutionOutcome = ToolRuntimeOutcome &
+  Readonly<{ effectDispatchObservation: ToolEffectDispatchObservation }>;
+
+function withEffectDispatchObservation(
+  outcome: ToolRuntimeOutcome,
+  observation: ToolEffectDispatchObservation,
+): ToolExecutionOutcome {
+  return Object.freeze({
+    ...outcome,
+    effectDispatchObservation: Object.freeze(observation),
+  });
+}
+
+function withPreDispatchObservation(
+  outcome: ToolRuntimeOutcome,
+  effectFreeInvocation: boolean,
+  reason: ToolEffectDispatchNotClaimedReason,
+): ToolExecutionOutcome {
+  return withEffectDispatchObservation(
+    outcome,
+    effectFreeInvocation ? { kind: 'not_applicable' } : { kind: 'not_claimed', reason },
+  );
+}
+
+function rejectExpiredModelTurnAuthority(params: {
+  context: ToolExecutionContext | undefined;
+  normalizedName: string;
+  argsString: string;
+  conversationId: string;
+  effectFreeInvocation: boolean;
+}): ToolExecutionOutcome {
+  const result = buildModelTurnMemoryPolicyExpiredToolResult();
+  finalizeEffectReceiptCapture(params.context);
+  logToolCall(
+    params.normalizedName,
+    params.argsString,
+    'denied',
+    0,
+    params.conversationId,
+    'model_turn_memory_epoch_expired',
+  );
+  return withPreDispatchObservation(
+    failedToolOutcome(result, 'authority_revoked'),
+    params.effectFreeInvocation,
+    'model_authority_changed',
+  );
+}
+
 export async function executeTool(
   name: string,
   argsString: string,
   conversationId: string,
   context?: ToolExecutionContext,
-): Promise<ToolRuntimeOutcome> {
+): Promise<ToolExecutionOutcome> {
   const normalizedName = resolveRegisteredToolName(name);
+  const effectFreeInvocation = isCodeOwnedEffectFreeInvocation(normalizedName, argsString);
+
+  if (!isModelTurnAuthorityCurrent(context)) {
+    return rejectExpiredModelTurnAuthority({
+      context,
+      normalizedName,
+      argsString,
+      conversationId,
+      effectFreeInvocation,
+    });
+  }
 
   // Permission check
   const permissions = useToolPermissionsStore.getState();
   if (!permissions.isAllowed(normalizedName)) {
     logToolCall(normalizedName, argsString, 'denied', 0, conversationId);
-    return failedToolOutcome(
-      `Error: tool "${normalizedName}" is not allowed by your permission settings`,
+    return withPreDispatchObservation(
+      failedToolOutcome(`Error: tool "${normalizedName}" is not allowed by your permission settings`),
+      effectFreeInvocation,
+      'tool_permission_denied',
     );
   }
 
@@ -92,7 +166,11 @@ export async function executeTool(
     const result = `Error: unknown tool "${normalizedName}".`;
     finalizeEffectReceiptCapture(context);
     logToolCall(normalizedName, argsString, 'error', 0, conversationId, 'unknown_tool');
-    return failedToolOutcome(result);
+    return withPreDispatchObservation(
+      failedToolOutcome(result),
+      effectFreeInvocation,
+      'tool_unknown',
+    );
   }
 
   let parsedArgs: any;
@@ -102,7 +180,6 @@ export async function executeTool(
     parsedArgs = {};
   }
 
-  const effectFreeInvocation = isCodeOwnedEffectFreeInvocation(normalizedName, argsString);
   const executionRunId = context?.executionRunId;
   if (!effectFreeInvocation && !isCodeOwnedExecutionRunId(executionRunId)) {
     const result =
@@ -116,7 +193,11 @@ export async function executeTool(
       conversationId,
       'execution_run_identity_required',
     );
-    return failedToolOutcome(result);
+    return withPreDispatchObservation(
+      failedToolOutcome(result),
+      effectFreeInvocation,
+      'execution_run_identity_required',
+    );
   }
   if (context?.toolCallId && !isCodeOwnedExecutionRunId(executionRunId)) {
     const result =
@@ -130,7 +211,11 @@ export async function executeTool(
       conversationId,
       'execution_run_identity_required',
     );
-    return failedToolOutcome(result);
+    return withPreDispatchObservation(
+      failedToolOutcome(result),
+      effectFreeInvocation,
+      'execution_run_identity_required',
+    );
   }
   if (!effectFreeInvocation && !context?.toolCallId) {
     const result =
@@ -144,13 +229,26 @@ export async function executeTool(
       conversationId,
       'tool_call_identity_required',
     );
-    return failedToolOutcome(result);
+    return withPreDispatchObservation(
+      failedToolOutcome(result),
+      effectFreeInvocation,
+      'tool_call_identity_required',
+    );
   }
 
   // Approval gate — blocks destructive/sensitive tools until human approves.
   // Durable effect preparation happens only after this decision.
   const approvalRequired = needsApprovalWithContext(normalizedName, parsedArgs);
   if (approvalRequired) {
+    if (!isModelTurnAuthorityCurrent(context)) {
+      return rejectExpiredModelTurnAuthority({
+        context,
+        normalizedName,
+        argsString,
+        conversationId,
+        effectFreeInvocation,
+      });
+    }
     const truncatedArgs = argsString.length > 200 ? argsString.slice(0, 200) + '…' : argsString;
     const decision = await requestToolApproval({
       toolName: normalizedName,
@@ -160,7 +258,20 @@ export async function executeTool(
     });
     if (decision !== 'approved') {
       logToolCall(normalizedName, argsString, 'denied', 0, conversationId);
-      return failedToolOutcome(`Error: tool "${normalizedName}" was ${decision} by user approval`);
+      return withPreDispatchObservation(
+        failedToolOutcome(`Error: tool "${normalizedName}" was ${decision} by user approval`),
+        effectFreeInvocation,
+        'user_approval_denied',
+      );
+    }
+    if (!isModelTurnAuthorityCurrent(context)) {
+      return rejectExpiredModelTurnAuthority({
+        context,
+        normalizedName,
+        argsString,
+        conversationId,
+        effectFreeInvocation,
+      });
     }
   }
 
@@ -192,7 +303,11 @@ export async function executeTool(
       conversationId,
       result,
     );
-    return failedToolOutcome(result);
+    return withPreDispatchObservation(
+      failedToolOutcome(result),
+      effectFreeInvocation,
+      'runtime_binding_unavailable',
+    );
   }
 
   if (runtimeExternalBinding && !context?.toolCallId) {
@@ -207,12 +322,20 @@ export async function executeTool(
       conversationId,
       'runtime_external_tool_call_identity_required',
     );
-    return failedToolOutcome(result);
+    return withPreDispatchObservation(
+      failedToolOutcome(result),
+      effectFreeInvocation,
+      'tool_call_identity_required',
+    );
   }
 
   if (context?.toolCallId && !effectFreeInvocation) {
     if (!isCodeOwnedExecutionRunId(executionRunId)) {
       throw new Error('execution_run_identity_invariant_violated');
+    }
+    const modelTurnMemoryPolicyBinding = context.modelTurnMemoryPolicyBinding;
+    if (!modelTurnMemoryPolicyBinding) {
+      throw new Error('model_turn_memory_policy_binding_invariant_violated');
     }
     const dispatched = await dispatchAuthorizedToolEffect({
       conversationId,
@@ -221,6 +344,7 @@ export async function executeTool(
       argumentsText: argsString,
       context: { ...context, executionRunId },
       approvalState: approvalRequired ? 'granted' : 'not_required',
+      modelTurnMemoryPolicyBinding,
       authority: {
         approvalGranted: () => true,
         permissionGranted: () =>
@@ -255,10 +379,31 @@ export async function executeTool(
             ? dispatched.result
             : undefined,
       );
-      return dispatched.requiresReconciliation || dispatched.status === 'failed'
-        ? failedToolOutcome(visibleResult)
-        : completedToolOutcome(visibleResult);
+      return withEffectDispatchObservation(
+        dispatched.requiresReconciliation || dispatched.status === 'failed'
+          ? failedToolOutcome(visibleResult)
+          : completedToolOutcome(visibleResult),
+        {
+          kind: 'settled',
+          disposition: dispatched.disposition,
+          receipt: dispatched.receipt,
+          retryPolicy: dispatched.retryPolicy,
+          requiresReconciliation: dispatched.requiresReconciliation,
+        },
+      );
     } else {
+      if (
+        dispatched.kind === 'blocked' &&
+        (dispatched.reason === 'model_authority_changed' || !isModelTurnAuthorityCurrent(context))
+      ) {
+        return rejectExpiredModelTurnAuthority({
+          context,
+          normalizedName,
+          argsString,
+          conversationId,
+          effectFreeInvocation,
+        });
+      }
       if (dispatched.kind === 'reconciliation_required') {
         markEffectReconciliationRequired(context);
       }
@@ -271,14 +416,37 @@ export async function executeTool(
         dispatched.result,
       );
     }
-    return failedToolOutcome(dispatched.result);
+    return withEffectDispatchObservation(
+      failedToolOutcome(dispatched.result),
+      dispatched.kind === 'blocked'
+        ? { kind: 'not_claimed', reason: dispatched.reason }
+        : { kind: 'durable_outcome_unknown', reason: dispatched.reason },
+    );
   }
 
   let outcome: ToolRuntimeOutcome;
   try {
+    if (!isModelTurnAuthorityCurrent(context)) {
+      return rejectExpiredModelTurnAuthority({
+        context,
+        normalizedName,
+        argsString,
+        conversationId,
+        effectFreeInvocation,
+      });
+    }
     outcome = runtimeExternalBinding
       ? await runtimeExternalBinding.execute(argsString, conversationId, executorContext)
       : await executeToolInner(normalizedName, argsString, conversationId, executorContext);
+    if (!isModelTurnAuthorityCurrent(context)) {
+      return rejectExpiredModelTurnAuthority({
+        context,
+        normalizedName,
+        argsString,
+        conversationId,
+        effectFreeInvocation,
+      });
+    }
     logToolCall(
       normalizedName,
       argsString,
@@ -297,15 +465,18 @@ export async function executeTool(
       conversationId,
       message,
     );
-    return failedToolOutcome(`Error: ${message}`);
+    return withPreDispatchObservation(
+      failedToolOutcome(`Error: ${message}`),
+      effectFreeInvocation,
+      'runtime_binding_unavailable',
+    );
   }
   if (context?.toolCallId) {
     if (!isCodeOwnedExecutionRunId(context.executionRunId)) {
       throw new Error('execution_run_identity_invariant_violated');
     }
     try {
-      publishReceipt(
-        await buildToolEffectReceipt({
+      const receipt = await buildToolEffectReceipt({
           toolCallId: context.toolCallId,
           toolName: normalizedName,
           argumentsText: argsString,
@@ -315,14 +486,23 @@ export async function executeTool(
           executionRunId: context.executionRunId,
           recordedAt: Date.now(),
           runtimeExternalEvidence,
-        }),
-      );
+        });
+      if (!isModelTurnAuthorityCurrent(context)) {
+        return rejectExpiredModelTurnAuthority({
+          context,
+          normalizedName,
+          argsString,
+          conversationId,
+          effectFreeInvocation,
+        });
+      }
+      publishReceipt(receipt);
     } catch {
       // Effect-free tools do not need a durable claim; receipt absence stays fail-closed.
     }
     finalizeEffectReceiptCapture(context);
   }
-  return outcome;
+  return withEffectDispatchObservation(outcome, { kind: 'not_applicable' });
 }
 
 // ── Tool name normalization ───────────────────────────────────────────────

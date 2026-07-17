@@ -46,6 +46,7 @@ export function buildRuntimePromptSection(options: { toolExecutionAvailable: boo
     'Use external-state tools only when the requested answer or action requires live data; mentioning a meeting, deadline, person, or schedule alone does not request inspection.',
     DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT,
     MEMORY_MINIMAL_DISCLOSURE_CONTRACT,
+    'A retrieved memory fact labeled policy=use is already resolved input for this turn. Use it directly when it supplies a requested parameter; do not request clarification for that parameter.',
     'Answer the requested scope directly. Add only context or caveats needed for correctness, safety, or the next required user decision.',
     'Final answers report completed work or a real blocker, not an unfinished plan.',
   ];
@@ -56,11 +57,13 @@ export function buildRuntimePromptSection(options: { toolExecutionAvailable: boo
   return [
     ...universalGuidance,
     'With tools, batch independent calls and sequence only dependencies.',
+    'An internal identifier for a named existing app resource is not user-owned missing information. Resolve it through the available tool surface: use a unique name selector when supported, otherwise use read-only discovery; request clarification only when no unique match remains.',
     'When user-owned information is genuinely required before safe or complete execution and cannot be obtained from visible context, memory, or a read-only tool, call request_clarification with stable semantic field keys and one question. Do not combine it with another tool call.',
     'Use the highest-leverage tool. Launch a self-contained worker directly; omit worker tools unless needed to narrow scope.',
     'If requested app state or a side effect needs a tool absent from the surface, use discovery to expose it.',
     'When a durable artifact or external update is requested, create or update it before final delivery once content is available.',
     'Reading, search, recall, or verification is not completion when the request also requires action; continue to the action tool.',
+    'A successful tool call proves only the exact result it returned. Before final delivery, compare result fields and verified effects with every explicit requested outcome and constraint; if any remains unsatisfied, continue with a corrected action or report the concrete blocker.',
     'When the user provides exact file paths, read those paths directly; do not list parent directories merely to confirm that the named files exist.',
     'For web research, web_search discovers and web_fetch reads. Fetch known URLs directly, batch independent fetches, compare sources, and re-search only if needed.',
   ].join('\n');

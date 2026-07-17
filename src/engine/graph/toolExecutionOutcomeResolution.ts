@@ -16,17 +16,8 @@ import type { AgentControlGraphWorkflowToolResultProgress } from './workflowTool
 import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
 import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
-import {
-  buildToolEffectReceiptEvidence,
-  effectReceiptEvidenceTargetsCriterion,
-  parseEffectCompletionCriterion,
-  parseToolEffectReceiptEvidence,
-} from '../goals/effectCompletionEvidence';
-import {
-  isBlockingGoal,
-  isCodeOwnedEffectCompletionGoal,
-  type AgentGoal,
-} from '../goals/types';
+import { buildToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
+import { isBlockingGoal } from '../goals/types';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
 import {
   buildDelegationEvidenceAutoCompleteEvent,
@@ -49,14 +40,18 @@ import {
   type RequestClarificationToolResult,
 } from '../../services/agents/requestClarification';
 import {
-  REQUEST_FRAME_VERSION,
-  type RequestFrame,
-} from '../../services/agents/requestFrame';
-import { resolveRequestDecision } from '../../services/agents/requestDecisionPolicy';
+  buildAppliedUnverifiedEffectGoalBlockEvent,
+  buildClarificationRequestUnderstanding,
+  buildDeferredAfterGraphMutationOutcome,
+  buildTerminalFailedEffectGuardRemovalEvent,
+  collectCompletedBlockingGoalIds,
+  hasNewlyCompletedBlockingGoal,
+  updateToolCallHistoryResult,
+} from './toolExecutionOutcomeResolutionSupport';
 import {
-  projectRequestUnderstanding,
-  summarizeRequestUnderstanding,
-} from '../../services/agents/requestUnderstandingProjection';
+  isTerminalToolEffectDispatchObservation,
+  type ToolEffectDispatchObservation,
+} from '../../services/executionJournal/toolEffectDispatchLifecycle';
 
 export interface ToolExecutionOutcome {
   index: number;
@@ -68,215 +63,7 @@ export interface ToolExecutionOutcome {
   skipWorkflowProgress?: boolean;
   effectReceipt?: ToolEffectReceipt;
   effectReconciliationRequired?: boolean;
-}
-
-function updateToolCallHistoryResult(params: {
-  history: ToolCallRecord[] | undefined;
-  toolCallId: string;
-  toolName: string;
-  argumentsText: string | undefined;
-  result: string;
-  status: ToolMessageOutcome['status'];
-}): void {
-  if (!params.history) {
-    return;
-  }
-
-  for (let index = params.history.length - 1; index >= 0; index -= 1) {
-    const entry = params.history[index];
-    const idMatches = entry?.id && entry.id === params.toolCallId;
-    const callMatches =
-      !entry?.id &&
-      entry?.name === params.toolName &&
-      entry.arguments === (params.argumentsText ?? '{}');
-    if (!entry || (!idMatches && !callMatches)) {
-      continue;
-    }
-
-    params.history[index] = {
-      ...entry,
-      result: params.result,
-      status: params.status,
-    };
-    return;
-  }
-}
-
-function buildDeferredAfterGraphMutationOutcome(
-  outcome: CanonicalToolExecutionOutcome,
-): CanonicalToolExecutionOutcome {
-  const toolName = outcome.toolMessage.toolCalls?.[0]?.name || outcome.toolCallId;
-  const content = JSON.stringify(
-    {
-      status: 'deferred',
-      reason: 'graph_mutation_boundary',
-      tool: toolName,
-    },
-    null,
-    2,
-  );
-
-  return {
-    ...outcome,
-    skipWorkflowProgress: true,
-    toolMessage: {
-      ...outcome.toolMessage,
-      content,
-      isError: false,
-      toolCalls: outcome.toolMessage.toolCalls?.map((toolCall) =>
-        toolCall.id === outcome.toolCallId
-          ? { ...toolCall, result: content, status: 'completed' as const, error: undefined }
-          : { ...toolCall },
-      ),
-    },
-  };
-}
-
-function collectCompletedBlockingGoalIds(goals: ReadonlyArray<AgentGoal> | undefined): Set<string> {
-  return new Set(
-    (goals ?? [])
-      .filter((goal) => isBlockingGoal(goal) && goal.status === 'completed')
-      .map((goal) => goal.id),
-  );
-}
-
-function hasNewlyCompletedBlockingGoal(params: {
-  before: ReadonlySet<string>;
-  after: ReadonlyArray<AgentGoal> | undefined;
-}): boolean {
-  return (params.after ?? []).some(
-    (goal) =>
-      isBlockingGoal(goal) &&
-      !isCodeOwnedEffectCompletionGoal(goal) &&
-      goal.status === 'completed' &&
-      !params.before.has(goal.id),
-  );
-}
-
-function buildTerminalFailedEffectGuardRemovalEvent(params: {
-  goals: ReadonlyArray<AgentGoal>;
-  receiptEvidence: string | undefined;
-}): AgentControlGraphEvent | null {
-  const receipt = params.receiptEvidence
-    ? parseToolEffectReceiptEvidence(params.receiptEvidence)
-    : null;
-  if (
-    !receipt ||
-    (receipt.effectState !== 'failed' && receipt.effectState !== 'cancelled')
-  ) {
-    return null;
-  }
-
-  const removableGoalIds = new Set(
-    params.goals
-      .filter(
-        (goal) =>
-          isCodeOwnedEffectCompletionGoal(goal) &&
-          (goal.status === 'active' || goal.status === 'blocked') &&
-          (goal.successCriteria ?? []).some((criterion) => {
-            const effectCriterion = parseEffectCompletionCriterion(criterion);
-            return effectCriterion
-              ? effectReceiptEvidenceTargetsCriterion(receipt, effectCriterion)
-              : false;
-          }),
-      )
-      .map((goal) => goal.id),
-  );
-  if (removableGoalIds.size === 0) {
-    return null;
-  }
-
-  return {
-    type: 'GOALS_UPDATED',
-    goals: params.goals.filter((goal) => !removableGoalIds.has(goal.id)),
-    reason: 'effect_completion_contract:terminal_failed_retired',
-    projectToMemoryTasks: false,
-    timestamp: Date.now(),
-  };
-}
-
-function buildAppliedUnverifiedEffectGoalBlockEvent(params: {
-  goals: ReadonlyArray<AgentGoal>;
-  receiptEvidence: string | undefined;
-}): AgentControlGraphEvent | null {
-  const receipt = params.receiptEvidence
-    ? parseToolEffectReceiptEvidence(params.receiptEvidence)
-    : null;
-  if (!receipt || receipt.effectState !== 'applied' || receipt.verificationState === 'verified') {
-    return null;
-  }
-
-  const timestamp = Date.now();
-  const targetGoalIds = new Set(
-    params.goals
-      .filter(
-        (goal) =>
-          goal.status === 'active' &&
-          (goal.successCriteria ?? []).some((criterion) => {
-            const effectCriterion = parseEffectCompletionCriterion(criterion);
-            return effectCriterion
-              ? effectReceiptEvidenceTargetsCriterion(receipt, effectCriterion)
-              : false;
-          }),
-      )
-      .map((goal) => goal.id),
-  );
-  if (targetGoalIds.size === 0) {
-    return null;
-  }
-
-  return {
-    type: 'GOALS_UPDATED',
-    goals: params.goals.map((goal) =>
-      targetGoalIds.has(goal.id)
-        ? {
-            ...goal,
-            status: 'blocked' as const,
-            blockedReason: `Effect applied but verification was incomplete (${receipt.receiptId}). Do not repeat the mutation.`,
-            updatedAt: timestamp,
-          }
-        : goal,
-    ),
-    reason: 'effect_verification_incomplete',
-    timestamp,
-  };
-}
-
-function buildClarificationRequestUnderstanding(params: {
-  graphSnapshot: AgentRunControlGraphState;
-  request: RequestClarificationToolResult;
-}) {
-  const routing = params.graphSnapshot.requestUnderstanding?.routing;
-  if (!routing || routing.status !== 'known') {
-    return undefined;
-  }
-  const baseFrame: RequestFrame = {
-    version: REQUEST_FRAME_VERSION,
-    mode: routing.mode,
-    input: {
-      kind: routing.inputKind,
-      attachmentCount: routing.attachmentCount,
-    },
-    continuation: routing.continuation,
-    requiredInformation: [],
-    decision: {
-      action: 'act',
-      reason: 'actionable_input',
-    },
-  };
-  const clarificationFrame = resolveRequestDecision({
-    frame: baseFrame,
-    requiredInformation: params.request.requiredInformation,
-    policyDisposition: 'allowed',
-    permissionState: 'not_required',
-    awaitingExternalOperation: false,
-  });
-  return summarizeRequestUnderstanding(
-    projectRequestUnderstanding({
-      requestFrame: clarificationFrame,
-      goals: params.graphSnapshot.goals,
-    }),
-  );
+  effectDispatchObservation?: ToolEffectDispatchObservation;
 }
 
 export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
@@ -322,7 +109,10 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   finishWithGraphTerminalEvent: (params: {
     graphEvent: Extract<
       AgentControlGraphEvent,
-      { type: 'BLOCKED' } | { type: 'FINALIZED' } | { type: 'YIELDED' }
+      | { type: 'BLOCKED' }
+      | { type: 'FINALIZED' }
+      | { type: 'YIELDED' }
+      | { type: 'CANCELLED' }
     >;
     content: string;
     assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
@@ -612,6 +402,60 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         finishReason: 'tool_effect_reconciliation_required',
       }),
       sessionEndReason: 'tool_effect_reconciliation_required',
+    });
+    return {
+      status: 'finalized',
+      lastPendingAsyncSignature: params.lastPendingAsyncSignature,
+      workingMessages,
+    };
+  }
+
+  if (
+    canonicalToolExecutionOutcomes.some(
+      (outcome) =>
+        outcome.effectDispatchObservation?.kind === 'not_claimed' &&
+        outcome.effectDispatchObservation.reason === 'user_approval_denied',
+    )
+  ) {
+    await params.finishWithGraphTerminalEvent({
+      graphEvent: {
+        type: 'CANCELLED',
+        reason: 'user_approval_denied',
+      },
+      content:
+        'Okay — I did not perform that action because you rejected the approval request. No effect was dispatched.',
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'complete',
+        finishReason: 'user_approval_denied',
+      }),
+      sessionEndReason: 'user_approval_denied',
+    });
+    return {
+      status: 'finalized',
+      lastPendingAsyncSignature: params.lastPendingAsyncSignature,
+      workingMessages,
+    };
+  }
+
+  if (
+    canonicalToolExecutionOutcomes.some((outcome) =>
+      isTerminalToolEffectDispatchObservation(outcome.effectDispatchObservation),
+    )
+  ) {
+    await params.finishWithGraphTerminalEvent({
+      graphEvent: {
+        type: 'BLOCKED',
+        reason: 'tool_effect_not_claimed',
+      },
+      content:
+        'The request is incomplete because a required action could not be safely authorized, durably recorded, and verified. ' +
+        'That action was not executed or claimed as successful. Any separately verified actions remain reflected in their tool results. ' +
+        'Review the relevant permission, or retry after the durable execution service is available.',
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'incomplete',
+        finishReason: 'tool_effect_not_claimed',
+      }),
+      sessionEndReason: 'tool_effect_not_claimed',
     });
     return {
       status: 'finalized',

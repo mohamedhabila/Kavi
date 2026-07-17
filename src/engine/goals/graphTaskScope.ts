@@ -5,7 +5,11 @@
 
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { WorkingBlockScope } from '../../services/memory/workingBlocks';
-import { getActiveGoal, type AgentGoal } from './types';
+import {
+  CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+  getActiveGoal,
+  type AgentGoal,
+} from './types';
 
 export type GraphTaskScopeInput = {
   goals?: ReadonlyArray<AgentGoal>;
@@ -13,12 +17,15 @@ export type GraphTaskScopeInput = {
 };
 
 export function resolveGraphTaskId(input: GraphTaskScopeInput): string | undefined {
+  const scopeEligibleGoals = (input.goals ?? []).filter(
+    (goal) => goal.owner !== CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+  );
   const trimmedTaskId = typeof input.activeTaskId === 'string' ? input.activeTaskId.trim() : '';
   if (trimmedTaskId) {
     if (!input.goals) {
       return trimmedTaskId;
     }
-    const matchingGoal = input.goals.find(
+    const matchingGoal = scopeEligibleGoals.find(
       (goal) =>
         goal.id === trimmedTaskId &&
         (goal.status === 'active' || goal.status === 'pending'),
@@ -27,7 +34,7 @@ export function resolveGraphTaskId(input: GraphTaskScopeInput): string | undefin
       return trimmedTaskId;
     }
   }
-  return getActiveGoal(input.goals ?? [])?.id;
+  return getActiveGoal(scopeEligibleGoals)?.id;
 }
 
 export function resolveGraphWorkingBlockScope(params: {

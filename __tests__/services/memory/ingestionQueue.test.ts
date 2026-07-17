@@ -39,8 +39,19 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
+import {
+  isMemoryProjectionSnapshotCurrent,
+  isMemoryProjectionSnapshotDurablyCurrent,
+  isRestrictiveMemoryAuthoritySnapshotCurrent,
+  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
+} from '../../../src/services/memory/memoryAuthority';
 import { withIngestionSourceSnapshot } from '../../helpers/ingestionSourceSnapshotFixture';
 import { resolveMockedIngestionTurn } from '../../helpers/ingestionQueueProcessFixture';
+import {
+  columnNamesForQueue,
+  requireAuthoritySnapshot,
+} from '../../helpers/ingestionQueueCoreFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
@@ -87,12 +98,6 @@ function processResult(
     bridgedEvidenceFactIds: [],
     agentRunMemoryFactIds: [],
   };
-}
-
-function columnNamesForQueue(): string[] {
-  return getMemoryDb()
-    .getAllSync<{ name: string }>('PRAGMA table_info(memory_ingestion_jobs)')
-    .map((column) => column.name);
 }
 
 beforeEach(() => {
@@ -142,9 +147,12 @@ describe('ingestionQueue', () => {
       threadId: 'conflicting-source-thread',
       taskId: null,
       summary: 'Ambiguous source-derived episode.',
-      messageIds: ['conflicting-source-user', 'conflicting-source-assistant'],
-      sourceStartMessageId: 'conflicting-source-user',
-      sourceEndMessageId: 'conflicting-source-assistant',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'conflicting-source-user',
+        sourceAssistantMessageId: 'conflicting-source-assistant',
+        userContent: 'Ambiguous source-derived episode.',
+        assistantContent: 'Ambiguous source-derived episode.',
+      }),
       accessPolicy: {
         memoryConversationId: 'conflicting-root-a',
         sourceThreadId: 'conflicting-source-thread',
@@ -159,9 +167,12 @@ describe('ingestionQueue', () => {
       threadId: 'unrelated-thread',
       taskId: null,
       summary: 'Unrelated episode remains available.',
-      messageIds: ['unrelated-user', 'unrelated-assistant'],
-      sourceStartMessageId: 'unrelated-user',
-      sourceEndMessageId: 'unrelated-assistant',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'unrelated-user',
+        sourceAssistantMessageId: 'unrelated-assistant',
+        userContent: 'Unrelated episode remains available.',
+        assistantContent: 'Unrelated episode remains available.',
+      }),
       accessPolicy: {
         memoryConversationId: 'unrelated-root',
         sourceThreadId: 'unrelated-thread',
@@ -204,8 +215,13 @@ describe('ingestionQueue', () => {
       job.id,
     );
 
+    const beforeQuarantine = requireAuthoritySnapshot();
     ensureIngestionQueueSchema(db);
 
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeQuarantine)).toBe(false);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeQuarantine)).toBe(false);
+    expect(isMemoryProjectionSnapshotCurrent(beforeQuarantine)).toBe(false);
+    expect(isMemoryProjectionSnapshotDurablyCurrent(beforeQuarantine)).toBe(false);
     expect(
       db.getAllSync<{ status: string; outcome_code: string }>(
         `SELECT status, outcome_code
@@ -250,6 +266,97 @@ describe('ingestionQueue', () => {
       ),
     ).toEqual({ episode_id: unrelatedEpisode.id });
 
+    const afterQuarantine = requireAuthoritySnapshot();
+    ensureIngestionQueueSchema(db);
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(afterQuarantine)).toBe(true);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(afterQuarantine)).toBe(true);
+    expect(isMemoryProjectionSnapshotCurrent(afterQuarantine)).toBe(true);
+    expect(isMemoryProjectionSnapshotDurablyCurrent(afterQuarantine)).toBe(true);
+  });
+
+  it('rolls conflicting-source quarantine and restrictive authority back together', () => {
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'rollback-source-thread',
+      memoryConversationId: 'rollback-root-a',
+      sourceStartMessageId: 'rollback-source-user',
+      sourceEndMessageId: 'rollback-source-assistant',
+      sourceRunId: 'rollback-source-run',
+      sourceAt: 10,
+      now: 10,
+    })!;
+    const subject = upsertEntity({ name: 'مصدر', type: 'project', now: 10 });
+    const fact = recordFact({
+      subjectId: subject.id,
+      predicate: '状態',
+      objectText: 'неоднозначно',
+      scope: 'conversation',
+      originConversationId: 'rollback-root-a',
+      originThreadId: 'rollback-source-thread',
+      sourceMessageId: 'rollback-source-user',
+      sourceRunId: 'rollback-source-run',
+      sourceTurnId: 'rollback-source-assistant',
+      now: 10,
+    }).fact;
+    const db = getMemoryDb();
+    db.execSync('DROP INDEX idx_ingestion_jobs_source_turn');
+    db.runSync(
+      `INSERT INTO memory_ingestion_jobs(
+         id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
+         source_run_id, chat_provider_id, chat_model, prior_user_message_id,
+         source_start_message_id, source_end_message_id, source_snapshot_version,
+         source_snapshot_sha256, source_snapshot_byte_length, source_at, reason,
+         status, attempt_count, provider_enrichment, provider_outcome, outcome_code,
+         next_attempt_at, lease_expires_at, claim_token, claim_process_epoch,
+         structural_completed_at, created_at, updated_at, completed_at
+       )
+       SELECT ?, thread_id, thread_title, ?, persona_id, task_id, source_run_id,
+              chat_provider_id, chat_model, prior_user_message_id,
+              source_start_message_id, source_end_message_id, source_snapshot_version,
+              source_snapshot_sha256, source_snapshot_byte_length, source_at, reason,
+              status, attempt_count, provider_enrichment, provider_outcome, outcome_code,
+              next_attempt_at, lease_expires_at, claim_token, claim_process_epoch,
+              structural_completed_at, created_at, updated_at, completed_at
+         FROM memory_ingestion_jobs
+        WHERE id = ?`,
+      'rollback-source-job-b',
+      'rollback-root-b',
+      job.id,
+    );
+    const beforeQuarantine = requireAuthoritySnapshot();
+    const execSync = db.execSync.bind(db);
+    jest.spyOn(db, 'execSync').mockImplementation((source: string) => {
+      if (source.trim() === 'COMMIT') {
+        const projectionRevision = db.getFirstSync<{ projection_revision: number }>(
+          'SELECT projection_revision FROM memory_vault_identity WHERE singleton = 1',
+        )?.projection_revision;
+        if (projectionRevision === beforeQuarantine.projectionRevision.value + 1) {
+          throw new Error('forced_conflict_quarantine_commit_failure');
+        }
+      }
+      execSync(source);
+    });
+
+    expect(() => ensureIngestionQueueSchema(db)).toThrow(
+      'forced_conflict_quarantine_commit_failure',
+    );
+
+    expect(isRestrictiveMemoryAuthoritySnapshotCurrent(beforeQuarantine)).toBe(true);
+    expect(isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(beforeQuarantine)).toBe(true);
+    expect(isMemoryProjectionSnapshotCurrent(beforeQuarantine)).toBe(true);
+    expect(isMemoryProjectionSnapshotDurablyCurrent(beforeQuarantine)).toBe(true);
+    expect(
+      db.getFirstSync<{ deleted_at: number | null }>(
+        'SELECT deleted_at FROM memory_facts WHERE id = ?',
+        fact.id,
+      )?.deleted_at,
+    ).toBeNull();
+    expect(
+      db.getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM memory_ingestion_jobs
+          WHERE thread_id = 'rollback-source-thread'`,
+      )?.count,
+    ).toBe(2);
   });
 
   it('enqueues and deduplicates pending jobs for the same turn', () => {
@@ -319,7 +426,7 @@ describe('ingestionQueue', () => {
       expect.objectContaining({
         threadId: 'child-conv-1',
         memoryConversationId: 'parent-conv-1',
-        episodeAccess: { personaId: 'default', shareability: 'thread_only' },
+        episodeAccess: { personaId: 'default', shareability: 'session_threads' },
       }),
     );
     expect(
@@ -344,7 +451,7 @@ describe('ingestionQueue', () => {
     expect(result.completed).toBe(1);
     expect(mockedProcessIngestionTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        episodeAccess: { personaId: 'default', shareability: 'thread_only' },
+        episodeAccess: { personaId: 'default', shareability: 'session_threads' },
       }),
     );
     expect(getIngestionJob(job!.id)).toEqual(
@@ -451,9 +558,7 @@ describe('ingestionQueue', () => {
 
   it('retries malformed provider output with a deterministic due time', async () => {
     mockedProcessIngestionTurn.mockImplementationOnce(
-      resolveMockedIngestionTurn(
-        processResult({ status: 'malformed', code: 'invalid_json' }),
-      ),
+      resolveMockedIngestionTurn(processResult({ status: 'malformed', code: 'invalid_json' })),
     );
     const job = enqueueIngestionJob({
       personaId: 'default',
@@ -564,9 +669,7 @@ describe('ingestionQueue', () => {
   });
 
   it('fails closed when a processed turn omits its durability callbacks', async () => {
-    mockedProcessIngestionTurn.mockResolvedValueOnce(
-      processResult({ status: 'not_requested' }),
-    );
+    mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: 'not_requested' }));
     const job = enqueueIngestionJob({
       personaId: 'default',
       threadId: 'conv-missing-durability-receipts',

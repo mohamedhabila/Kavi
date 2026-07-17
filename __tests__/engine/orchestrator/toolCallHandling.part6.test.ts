@@ -31,10 +31,13 @@ describe('Orchestrator', () => {
       builtinsModule.getCommand.mockReturnValue({ handler: slashHandler });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'normal assistant response' },
-          { type: 'done', content: 'normal assistant response' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'normal assistant response' },
+            { type: 'done', content: 'normal assistant response' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -110,23 +113,32 @@ describe('Orchestrator', () => {
         .spyOn(memoryAccessGateway, 'buildUnifiedMemoryAccessContext')
         .mockRejectedValueOnce(new Error('memory gateway unavailable'));
 
-      (executeTool as jest.Mock).mockResolvedValueOnce('Cairo weather: 14 C and clear.');
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: 'Cairo weather: 14 C and clear.',
+      });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'weather_current', arguments: '{"location":"Cairo"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'weather_current', arguments: '{"location":"Cairo"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'It is about 14 C and clear in Cairo.' },
-          { type: 'done', content: 'It is about 14 C and clear in Cairo.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'It is about 14 C and clear in Cairo.' },
+            { type: 'done', content: 'It is about 14 C and clear in Cairo.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -194,23 +206,32 @@ describe('Orchestrator', () => {
         systemPrompt: 'You are the SuperAgent.',
       });
 
-      (executeTool as jest.Mock).mockResolvedValueOnce('file contents');
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: 'file contents',
+      });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"src/App.tsx"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"src/App.tsx"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'I already have enough to answer directly.' },
-          { type: 'done', content: 'I already have enough to answer directly.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'I already have enough to answer directly.' },
+            { type: 'done', content: 'I already have enough to answer directly.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -242,6 +263,7 @@ describe('Orchestrator', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       });
     });
@@ -272,24 +294,30 @@ describe('Orchestrator', () => {
         );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: {
-              id: 'tc1',
-              name: 'sessions_spawn',
-              arguments: '{"prompt":"Verify the fix"}',
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc1',
+                name: 'sessions_spawn',
+                arguments: '{"prompt":"Verify the fix"}',
+              },
             },
-          },
-          { type: 'done', content: '' },
-        ]),
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'I can answer anyway.' },
-          { type: 'done', content: 'I can answer anyway.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'I can answer anyway.' },
+            { type: 'done', content: 'I can answer anyway.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -321,6 +349,7 @@ describe('Orchestrator', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       });
     });

@@ -39,6 +39,7 @@ import {
 import { sealForegroundScenarioMemoryEvidenceAfterProviderWait } from './foregroundScenarioMemoryEvidence';
 import {
   cloneAndFreeze,
+  resolveForegroundScenarioProviderOutcomes,
   type ForegroundScenarioDriverInput,
   type ForegroundScenarioDriverResult,
   type ForegroundScenarioLifecycleSnapshot,
@@ -150,15 +151,21 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
   if (input.providerOutcomeEvidenceRequirements !== undefined) {
     const requirementKeys = new Set<string>();
     for (const requirement of input.providerOutcomeEvidenceRequirements) {
+      const providerOutcomes = resolveForegroundScenarioProviderOutcomes(requirement);
+      const hasSingleOutcome = requirement.providerOutcome !== undefined;
+      const hasOutcomeSet = requirement.providerOutcomes !== undefined;
       if (
         !Number.isSafeInteger(requirement.turnIndex) ||
         requirement.turnIndex < 0 ||
         requirement.turnIndex >= input.turns.length ||
-        !PROVIDER_OUTCOME_EVIDENCE_VALUES.has(requirement.providerOutcome)
+        hasSingleOutcome === hasOutcomeSet ||
+        providerOutcomes.length === 0 ||
+        new Set(providerOutcomes).size !== providerOutcomes.length ||
+        providerOutcomes.some((outcome) => !PROVIDER_OUTCOME_EVIDENCE_VALUES.has(outcome))
       ) {
         throw new Error('providerOutcomeEvidenceRequirements contains an invalid requirement.');
       }
-      const key = `${requirement.turnIndex}:${requirement.providerOutcome}`;
+      const key = `${requirement.turnIndex}:${[...providerOutcomes].sort().join('|')}`;
       if (requirementKeys.has(key)) {
         throw new Error('providerOutcomeEvidenceRequirements must not contain duplicates.');
       }
@@ -254,14 +261,15 @@ async function runScenarioIsolated(
       }
       let lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null = null;
       if (turn.lifecycleBefore === 'app_relaunch') {
-        lifecycleBefore = await awaitBeforeScenarioDeadline(
+        const transition = await awaitBeforeScenarioDeadline(
           relaunchForegroundScenarioApp({
             conversationId: currentConversationId,
             memoryScope,
-            memoryStateBefore: previousMemoryState,
           }),
           scenarioDeadline,
         );
+        previousMemoryState = transition.memoryState;
+        lifecycleBefore = transition.lifecycle;
       } else if (turn.lifecycleBefore === 'new_conversation') {
         const transition = startNewForegroundScenarioConversation({
           currentConversationId,
@@ -435,6 +443,7 @@ async function runScenarioIsolated(
       const chatError = runtime.getChatError();
       const expectedMemoryCloseouts =
         input.disableLongTermMemory !== true &&
+        !conversation.isSideThread &&
         finalAssistant?.completionStatus === 'complete' &&
         !timedOut
           ? 1
@@ -450,7 +459,7 @@ async function runScenarioIsolated(
         ? SCENARIO_WALL_CLOCK_TIMEOUT_ERROR
         : timedOut
           ? `Foreground scenario turn timed out after ${timeoutMs}ms.`
-          : (chatError ?? memorySettlementError ?? memoryInvariantError);
+          : (chatError ?? memoryInvariantError);
       const completion = buildForegroundScenarioCompletionSnapshot({
         error: turnError,
         finalAssistant,
@@ -469,6 +478,7 @@ async function runScenarioIsolated(
           memory,
           memoryEvidence: {
             delta: buildScopedMemoryEvidenceDelta(previousMemoryState, memoryStateAfter),
+            ...(memorySettlementError ? { settlementError: memorySettlementError } : {}),
           },
           messages: turnMessages,
           native: {

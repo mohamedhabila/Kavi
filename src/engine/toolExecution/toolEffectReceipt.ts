@@ -1,4 +1,3 @@
-import * as Crypto from 'expo-crypto';
 import {
   TOOL_EFFECT_KINDS,
   TOOL_EFFECT_STATES,
@@ -18,6 +17,7 @@ import {
   type ToolEffectVerificationState,
   type ToolExecutionState,
 } from '../../types/toolEffectReceipt';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import {
   decodeToolEffectReceipt,
   isToolEffectStateCombinationValid,
@@ -381,8 +381,7 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
 }
 
 export async function digestToolEffectText(value: string): Promise<`sha256:${string}`> {
-  const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value);
-  return `sha256:${digest.toLowerCase()}`;
+  return `sha256:${await sha256HexUtf8Async(value)}`;
 }
 
 function canonicalizeJsonValue(value: unknown): unknown {

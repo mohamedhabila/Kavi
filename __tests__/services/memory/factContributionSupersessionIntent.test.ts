@@ -5,7 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFactWithContribution } from '../../../src/services/memory/facts/mutations';
+import { recordCodeOwnedTestFactWithContribution as recordFactWithContribution } from '../../helpers/factContributionWriteFixtures';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,

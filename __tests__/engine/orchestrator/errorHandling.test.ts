@@ -116,20 +116,26 @@ describe('Orchestrator', () => {
       (executeTool as jest.Mock).mockRejectedValueOnce('tool string error');
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"missing.txt"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'read_file', arguments: '{"path":"missing.txt"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Recovered' },
-          { type: 'done', content: 'Recovered' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Recovered' },
+            { type: 'done', content: 'Recovered' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

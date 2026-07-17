@@ -4,10 +4,16 @@ import { sha256HexUtf8 } from '../utils/sha256';
  * Terminal status is owned by the executor. Result content is opaque and must
  * never be inspected to infer whether execution succeeded.
  */
-export type ToolRuntimeOutcome = Readonly<{
-  status: 'completed' | 'failed';
-  content: string;
-}>;
+export type ToolRuntimeOutcome =
+  | Readonly<{
+      status: 'completed';
+      content: string;
+    }>
+  | Readonly<{
+      status: 'failed';
+      content: string;
+      failureKind?: 'authority_revoked';
+    }>;
 
 export type ExactToolResultEvidence = Readonly<{
   resultSha256: string;
@@ -63,6 +69,13 @@ export function resolveExactToolResultEvidence(
   });
 }
 
-export function failedToolOutcome(content: string): ToolRuntimeOutcome {
-  return Object.freeze({ status: 'failed', content });
+export function failedToolOutcome(
+  content: string,
+  failureKind?: 'authority_revoked',
+): ToolRuntimeOutcome {
+  return Object.freeze({
+    status: 'failed',
+    content,
+    ...(failureKind ? { failureKind } : {}),
+  });
 }

@@ -31,6 +31,8 @@ import {
   requireMemoryIngestionJob,
 } from '../../helpers/memoryWithdrawalFixtures';
 import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+  codeOwnedClosedTurnEpisodeFields,
   loadVerifiedFactRetirement,
   recordContributionBackedFact,
 } from '../../helpers/memoryRetirementTestFixtures';
@@ -135,6 +137,7 @@ function seedAuthoritativeLineage(): SeededLineage {
       sourceThreadId: THREAD_ID,
       taskId: TASK_ID,
       producerEventId: 'withdrawal-transaction-target',
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact;
   const sharedSupport = recordContributionBackedFact(
@@ -160,6 +163,7 @@ function seedAuthoritativeLineage(): SeededLineage {
       sourceThreadId: THREAD_ID,
       taskId: TASK_ID,
       producerEventId: 'withdrawal-transaction-history',
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact;
   if (sharedSupport.id !== target.id) {
@@ -193,9 +197,12 @@ function seedAuthoritativeLineage(): SeededLineage {
     threadId: THREAD_ID,
     taskId: TASK_ID,
     summary: `episode ${PRIVATE_VALUE}`,
-    messageIds: [MESSAGE_ID],
-    sourceStartMessageId: MESSAGE_ID,
-    sourceEndMessageId: TURN_ID,
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: MESSAGE_ID,
+      sourceAssistantMessageId: TURN_ID,
+      userContent: PRIVATE_VALUE,
+      assistantContent: PRIVATE_VALUE,
+    }),
     accessPolicy: {
       memoryConversationId: CONVERSATION_ID,
       sourceThreadId: THREAD_ID,
@@ -210,9 +217,12 @@ function seedAuthoritativeLineage(): SeededLineage {
     threadId: 'thread-other',
     taskId: TASK_ID,
     summary: 'other thread retained',
-    messageIds: [MESSAGE_ID],
-    sourceStartMessageId: MESSAGE_ID,
-    sourceEndMessageId: TURN_ID,
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: MESSAGE_ID,
+      sourceAssistantMessageId: TURN_ID,
+      userContent: 'other thread retained',
+      assistantContent: 'other thread retained',
+    }),
     accessPolicy: {
       memoryConversationId: CONVERSATION_ID,
       sourceThreadId: 'thread-other',
@@ -227,9 +237,12 @@ function seedAuthoritativeLineage(): SeededLineage {
     threadId: THREAD_ID,
     taskId: TASK_ID,
     summary: 'same id in turn-kind retained',
-    messageIds: ['message-kind-negative'],
-    sourceStartMessageId: 'message-kind-negative',
-    sourceEndMessageId: MESSAGE_ID,
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: 'message-kind-negative',
+      sourceAssistantMessageId: MESSAGE_ID,
+      userContent: 'same id in turn-kind retained',
+      assistantContent: 'same id in turn-kind retained',
+    }),
     now: 1_220,
   });
   if (!targetEpisode || !otherThreadEpisode || !otherKindEpisode) {

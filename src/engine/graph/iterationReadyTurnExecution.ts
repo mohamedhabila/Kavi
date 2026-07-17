@@ -4,6 +4,7 @@ import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../t
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
 import { getNextAvailableModel, recordFailure, recordSuccess } from '../failover';
 import { hydrateProviderApiKey, shouldFailoverOnError } from '../orchestratorProviderRuntime';
+import { isAbortErrorLike } from '../../services/agents/agentRunCancellation';
 import { executePreparedAgentControlGraphPendingToolTurn } from './iterationPendingToolExecution';
 import { resolvePreparedAgentControlGraphModelTurnResult } from './iterationModelTurnResolution';
 import { hasAgentControlGraphOneShotTurnDirectives } from './turnDirectives';
@@ -19,6 +20,12 @@ import type {
   ExecuteAgentControlGraphIterationParams,
   ExecuteAgentControlGraphIterationResult,
 } from './iterationExecutionTypes';
+import {
+  assertModelTurnMemoryPolicyBindingCurrent,
+  isMemoryPromptEpochExpiredError,
+  POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+  type ModelTurnMemoryPolicyBinding,
+} from '../authority/modelTurnMemoryPolicyBinding';
 
 function buildResult(
   runtime: AgentControlGraphIterationRuntimeState,
@@ -39,6 +46,20 @@ export async function executePreparedAgentControlGraphTurn(params: {
   const consumeOneShotTurnDirectives =
     hasAgentControlGraphOneShotTurnDirectives(currentTurnDirectives);
   const { selectedToolTokenEstimate, selectedTools } = preparedTurn;
+  const retryAfterMemoryAuthorityChange =
+    async (): Promise<ExecuteAgentControlGraphIterationResult> => {
+      iterationParams.graph.applyAgentControlGraphEvents([
+        {
+          type: 'MODEL_TURN_INVALIDATED',
+          iteration: iterationParams.iteration,
+          reason: 'memory_authority_changed',
+        },
+      ]);
+      iterationParams.callbacks.onAssistantStreamReset?.();
+      iterationParams.callbacks.onStateChange('thinking');
+      await iterationParams.yieldToUiFrame();
+      return buildResult(runtime, 'retry_current_iteration');
+    };
 
   if (toolingEnabledForProvider) {
     iterationParams.graph.recordPerformanceMetrics(
@@ -62,7 +83,7 @@ export async function executePreparedAgentControlGraphTurn(params: {
     });
   }
 
-  const livingMemory = iterationParams.livingMemory;
+  const livingMemory = runtime.admittedMemoryContext.livingMemory;
   if (livingMemory) {
     iterationParams.graph.recordObservability({
       observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.MEMORY_RETRIEVAL,
@@ -81,6 +102,9 @@ export async function executePreparedAgentControlGraphTurn(params: {
   let completion: AssistantCompletionMetadata | undefined;
   let pendingToolCalls: PendingAgentToolCall[] = [];
   let contextWindow = 0;
+  let memoryPolicyBinding: ModelTurnMemoryPolicyBinding =
+    POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING;
+  let memoryRetrievalEventId: string | undefined;
   let requestMaxTokens = params.modelTurnPreparation.requestMaxTokens;
 
   try {
@@ -101,7 +125,7 @@ export async function executePreparedAgentControlGraphTurn(params: {
       hasPendingAsyncOperations:
         getPendingTrackedAsyncOperations(iterationParams.trackedAsyncOperations).length > 0,
       iteration: iterationParams.iteration,
-      livingMemory: iterationParams.livingMemory,
+      livingMemory,
       llm: runtime.llm,
       onCompaction: iterationParams.onCompaction,
       preparedTurn,
@@ -117,10 +141,15 @@ export async function executePreparedAgentControlGraphTurn(params: {
       workingMessages: runtime.workingMessages,
       yieldToUiFrame: iterationParams.yieldToUiFrame,
     });
+    assertModelTurnMemoryPolicyBindingCurrent(modelTurnResult.memoryPolicyBinding);
     runtime.workingMessages = modelTurnResult.workingMessages;
     requestMaxTokens = modelTurnResult.requestMaxTokens;
     contextWindow = modelTurnResult.contextWindow;
     fullContent = modelTurnResult.fullContent;
+    memoryPolicyBinding = modelTurnResult.memoryPolicyBinding;
+    runtime.lastModelTurnMemoryPolicyBinding = modelTurnResult.memoryPolicyBinding;
+    memoryRetrievalEventId = modelTurnResult.memoryRetrievalEventId;
+    runtime.lastModelTurnMemoryRetrievalEventId = memoryRetrievalEventId;
     reasoning = modelTurnResult.reasoning;
     providerReplay = modelTurnResult.providerReplay;
     completion = modelTurnResult.completion;
@@ -133,11 +162,12 @@ export async function executePreparedAgentControlGraphTurn(params: {
       );
     }
   } catch (streamError: unknown) {
-    const streamErrorMsg = streamError instanceof Error ? streamError.message : String(streamError);
+    if (isMemoryPromptEpochExpiredError(streamError)) {
+      return retryAfterMemoryAuthorityChange();
+    }
     if (
       iterationParams.failoverState &&
-      streamErrorMsg !== 'Request cancelled' &&
-      !iterationParams.signal?.signal.aborted &&
+      !isAbortErrorLike(streamError, iterationParams.signal?.signal) &&
       shouldFailoverOnError(streamError)
     ) {
       recordFailure(
@@ -164,17 +194,14 @@ export async function executePreparedAgentControlGraphTurn(params: {
     throw streamError instanceof Error ? streamError : new Error(String(streamError));
   }
 
-  if (consumeOneShotTurnDirectives) {
-    iterationParams.graph.consumeOneShotTurnDirectives('model_turn_completed');
-  }
-
-  return buildResult(
-    runtime,
-    await resolvePreparedAgentControlGraphModelTurnResult({
+  try {
+    const status = await resolvePreparedAgentControlGraphModelTurnResult({
       iterationParams,
       modelTurnPreparation: params.modelTurnPreparation,
       runtime,
       fullContent,
+      memoryPolicyBinding,
+      memoryRetrievalEventId,
       reasoning,
       providerReplay,
       completion,
@@ -186,8 +213,18 @@ export async function executePreparedAgentControlGraphTurn(params: {
           iterationParams,
           modelTurnPreparation: params.modelTurnPreparation,
           runtime,
+          memoryRetrievalEventId,
           ...args,
         }),
-    }),
-  );
+    });
+    if (consumeOneShotTurnDirectives) {
+      iterationParams.graph.consumeOneShotTurnDirectives('model_turn_completed');
+    }
+    return buildResult(runtime, status);
+  } catch (resolutionError: unknown) {
+    if (isMemoryPromptEpochExpiredError(resolutionError)) {
+      return retryAfterMemoryAuthorityChange();
+    }
+    throw resolutionError instanceof Error ? resolutionError : new Error(String(resolutionError));
+  }
 }

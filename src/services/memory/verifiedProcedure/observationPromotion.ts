@@ -1,7 +1,8 @@
-import * as Crypto from 'expo-crypto';
 import type { ToolEffectDigest } from '../../../types/toolEffectReceipt';
+import { sha256HexUtf8Async } from '../../../utils/sha256Async';
 import { getMemoryDb } from '../database';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
+import { earliestFutureMemoryValidityDeadline } from '../memoryValidityDeadline';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from '../policy';
 import { ensureFactSchema } from '../schema';
 import { decodeVerifiedProcedureEvidenceManifest } from './evidenceManifest';
@@ -16,9 +17,10 @@ import {
   VERIFIED_PROCEDURE_PROMOTION_RUN_THRESHOLD,
 } from './policyContract';
 import {
-  readVerifiedProcedureObservationRevision,
-  type VerifiedProcedureObservationRevision,
-} from './observationRevision';
+  captureVerifiedProcedureAuthoritySnapshot,
+  isVerifiedProcedureProjectionSnapshotDurablyCurrent,
+  type VerifiedProcedureAuthoritySnapshot,
+} from './observationAuthority';
 
 const RAW_SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 
@@ -52,16 +54,22 @@ export type VerifiedProcedurePromotionState = Readonly<{
   status: 'promoted' | 'insufficient' | 'unavailable';
   successfulRunCount: number;
   readEpoch?: number;
-  observationRevision?: VerifiedProcedureObservationRevision;
+  authoritySnapshot?: VerifiedProcedureAuthoritySnapshot;
+  validUntil?: number;
 }>;
 
+function projectionReadCurrent(
+  readEpoch: number,
+  snapshot: VerifiedProcedureAuthoritySnapshot,
+): boolean {
+  return (
+    isMemoryReadEpochCurrent(readEpoch) &&
+    isVerifiedProcedureProjectionSnapshotDurablyCurrent(snapshot)
+  );
+}
+
 async function sha256(domain: string, value: string): Promise<string> {
-  const digest = (
-    await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      `kavi.verified-procedure.${domain}.v1\u0000${value}`,
-    )
-  ).toLowerCase();
+  const digest = await sha256HexUtf8Async(`kavi.verified-procedure.${domain}.v1\u0000${value}`);
   if (!RAW_SHA256_PATTERN.test(digest)) throw new Error('verified_procedure_hash_invalid');
   return digest;
 }
@@ -121,7 +129,9 @@ export async function readVerifiedProcedurePromotionState(
     ensureFactSchema();
     const db = getMemoryDb();
     const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
-    const observationRevision = readVerifiedProcedureObservationRevision(db, memoryOwnerId);
+    const authoritySnapshot = captureVerifiedProcedureAuthoritySnapshot(db, memoryOwnerId);
+    if (!authoritySnapshot) return { status: 'unavailable', successfulRunCount: 0 };
+    const expiredAtOrBefore = now - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS;
     const rows = db.getAllSync<ObservationRow>(
       `SELECT id, memory_owner_id, memory_conversation_id_hash, source_thread_id_hash,
               source_run_id_hash, procedure_id, procedure_contract_digest, platform,
@@ -135,7 +145,7 @@ export async function readVerifiedProcedurePromotionState(
           AND platform = ?
           AND precondition_ids_json = ?
           AND precondition_ids_hash = ?
-          AND observed_at >= ?
+          AND observed_at > ?
           AND observed_at <= ?
         ORDER BY observed_at DESC, id DESC
         LIMIT ?`,
@@ -145,11 +155,11 @@ export async function readVerifiedProcedurePromotionState(
       scope.platform,
       hashes.preconditionIdsJson,
       hashes.preconditionIdsHash,
-      Math.max(0, now - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS),
+      expiredAtOrBefore,
       now,
       VERIFIED_PROCEDURE_MAX_OBSERVATIONS_PER_SCOPE + 1,
     );
-    if (!isMemoryReadEpochCurrent(readEpoch)) {
+    if (!projectionReadCurrent(readEpoch, authoritySnapshot)) {
       return { status: 'unavailable', successfulRunCount: 0 };
     }
     if (rows.length > VERIFIED_PROCEDURE_MAX_OBSERVATIONS_PER_SCOPE) {
@@ -159,7 +169,7 @@ export async function readVerifiedProcedurePromotionState(
     const recomputedManifestDigests = await Promise.all(
       rows.map((row) => sha256('evidence-manifest', row.evidence_manifest_json)),
     );
-    if (!isMemoryReadEpochCurrent(readEpoch)) {
+    if (!projectionReadCurrent(readEpoch, authoritySnapshot)) {
       return { status: 'unavailable', successfulRunCount: 0 };
     }
     const successfulRuns = new Set<string>();
@@ -180,7 +190,7 @@ export async function readVerifiedProcedurePromotionState(
         !RAW_SHA256_PATTERN.test(row.terminal_proof_digest) ||
         row.contract_version !== 1 ||
         !Number.isSafeInteger(row.observed_at) ||
-        row.observed_at < Math.max(0, now - VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS) ||
+        row.observed_at <= expiredAtOrBefore ||
         row.observed_at > now ||
         !Number.isSafeInteger(row.created_at) ||
         row.created_at < row.observed_at ||
@@ -191,15 +201,16 @@ export async function readVerifiedProcedurePromotionState(
       }
       successfulRuns.add(row.source_run_id_hash);
     }
-    if (!isMemoryReadEpochCurrent(readEpoch)) {
+    if (!projectionReadCurrent(readEpoch, authoritySnapshot)) {
       return { status: 'unavailable', successfulRunCount: 0 };
     }
-    if (
-      readVerifiedProcedureObservationRevision(db, memoryOwnerId).value !==
-      observationRevision.value
-    ) {
+    if (!isVerifiedProcedureProjectionSnapshotDurablyCurrent(authoritySnapshot)) {
       return { status: 'unavailable', successfulRunCount: 0 };
     }
+    const validUntil = earliestFutureMemoryValidityDeadline(
+      rows.map((row) => row.observed_at + VERIFIED_PROCEDURE_OBSERVATION_RETENTION_MS),
+      now,
+    );
     const successfulRunCount = successfulRuns.size;
     return {
       status:
@@ -208,7 +219,8 @@ export async function readVerifiedProcedurePromotionState(
           : 'insufficient',
       successfulRunCount,
       readEpoch,
-      observationRevision,
+      authoritySnapshot,
+      ...(validUntil === undefined ? {} : { validUntil }),
     };
   } catch {
     return { status: 'unavailable', successfulRunCount: 0 };

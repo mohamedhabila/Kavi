@@ -204,6 +204,7 @@ describe('agent control graph interrupted run recovery', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
+          finishReason: 'stop',
         },
       }),
     ];
@@ -242,7 +243,11 @@ describe('agent control graph interrupted run recovery', () => {
             role: 'assistant',
             content: 'Finished result.',
             timestamp: 2,
-            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
           }),
         ],
         run: createRun({
@@ -271,14 +276,22 @@ describe('agent control graph interrupted run recovery', () => {
             role: 'assistant',
             content: 'Older finished result.',
             timestamp: 2,
-            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
           }),
           createMessage({
             id: 'assistant-retry',
             role: 'assistant',
             content: 'Newer partial result',
             timestamp: 3,
-            assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'incomplete',
+              finishReason: 'response_failed',
+            },
           }),
         ],
         run: createRun(),

@@ -1,4 +1,3 @@
-import * as Crypto from 'expo-crypto';
 import { runMemoryTransaction } from './access/transaction';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
@@ -6,6 +5,7 @@ import { buildMemoryRetrievalScopeHash } from './retrievalLog';
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './database';
 import { isMemoryRetrievalEventId } from '../../utils/assistantMessageMetadata';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 
 export const MEMORY_RETRIEVAL_FEEDBACK_CHOICES = ['helpful', 'wrong', 'irrelevant'] as const;
 export type MemoryRetrievalFeedbackChoice = (typeof MEMORY_RETRIEVAL_FEEDBACK_CHOICES)[number];
@@ -79,12 +79,7 @@ function isValidTarget(target: MemoryRetrievalFeedbackTarget): boolean {
 }
 
 async function hashAssistantMessageId(messageId: string): Promise<string> {
-  return (
-    await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      `assistant_message\u0000${messageId}`,
-    )
-  ).toLowerCase();
+  return sha256HexUtf8Async(`assistant_message\u0000${messageId}`);
 }
 
 async function hashFeedbackTarget(

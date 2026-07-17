@@ -19,13 +19,22 @@ import {
   buildMemoryDisabledToolResult,
   isToolAllowedForMemoryPolicy,
 } from '../tools/memoryPolicyToolAuthority';
+import {
+  buildModelTurnMemoryPolicyExpiredToolResult,
+  isModelTurnMemoryPolicyBindingCurrent,
+} from '../authority/modelTurnMemoryPolicyBinding';
 
 function completePreflightFailure(params: {
   lifecycle: ToolExecutionLifecycleParams;
   effectiveToolCall: RuntimeToolCallInput;
   idPrefix: string;
   content: string;
-  failureKind: 'workflow_guard' | 'tool_filter' | 'unknown_tool' | 'tool_error';
+  failureKind:
+    | 'authority_revoked'
+    | 'workflow_guard'
+    | 'tool_filter'
+    | 'unknown_tool'
+    | 'tool_error';
   preflightBlockedKind?: PreflightBlockedKind;
   notifyBlocked?: boolean;
   notifyStart?: boolean;
@@ -104,6 +113,20 @@ export function resolveToolCallPreflight(
     ...effectiveToolCall,
     name: resolveRegisteredToolName(effectiveToolCall.name),
   };
+
+  if (!isModelTurnMemoryPolicyBindingCurrent(params.modelTurnMemoryPolicyBinding)) {
+    return completePreflightFailure({
+      lifecycle: params,
+      effectiveToolCall: canonicalToolCall,
+      idPrefix: params.idPrefixes.filtered,
+      content: buildModelTurnMemoryPolicyExpiredToolResult(),
+      failureKind: 'authority_revoked',
+      preflightBlockedKind: 'authority_revoked',
+      notifyBlocked: true,
+      notifyStart: true,
+      notifyComplete: true,
+    });
+  }
 
   if (isUnknownToolForPreflight(canonicalToolCall.name, params.availableToolNames)) {
     return completePreflightFailure({

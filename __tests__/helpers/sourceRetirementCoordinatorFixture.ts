@@ -7,6 +7,7 @@ import { recordFactWithContributionInTransaction } from '../../src/services/memo
 import { replaceCurrentFactWithContribution } from '../../src/services/memory/facts/exactReplacement';
 import type { MemoryFact, RecordFactInput } from '../../src/services/memory/facts/types';
 import { getLocalMemoryVaultOwnerId } from '../../src/services/memory/memoryVaultIdentity';
+import { codeOwnedMemorySensitivityDeclaration } from '../../src/services/memory/memorySensitivityPolicy';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -139,6 +140,7 @@ export function seedReplacement(
     { ...input, expectedCurrentFactId: predecessor.fact.id },
     GROUNDED,
     context,
+    codeOwnedMemorySensitivityDeclaration(),
   );
   if (recorded.status === 'conflict' || !recorded.fact) {
     throw new Error('source_retirement_replacement_fixture_conflict');

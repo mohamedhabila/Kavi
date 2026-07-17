@@ -941,7 +941,6 @@ export const en: TranslationMap = {
     setupSkillHint: 'Store the required secrets securely on-device so this skill can run.',
     secretSaveFailed: 'Failed to save the skill secrets. Please try again.',
     installBlocked: 'Install blocked',
-    installFailed: 'Failed to install skill.',
   },
 
   // ── Voice Screen ───────────────────────────────────────────────────────

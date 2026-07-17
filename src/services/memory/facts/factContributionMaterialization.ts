@@ -1,4 +1,5 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
+import { assertMemoryTransactionActive } from '../access/transaction';
 import { maxMemoryFactSensitivity } from '../memorySensitivityPolicy';
 import { closedMemoryFactSensitivity, type MemoryFactSensitivity } from './applicabilityProvenance';
 import {
@@ -27,6 +28,7 @@ export function setFactSensitivityFloorInTransaction(
   factId: string,
   minimum: MemoryFactSensitivity,
 ): MemoryFact {
+  assertMemoryTransactionActive('fact_sensitivity_floor_transaction_required');
   const db = getSchemaReadyMemoryDb();
   const row = db.getFirstSync<FactRow>('SELECT * FROM memory_facts WHERE id = ? LIMIT 1', factId);
   if (!row) throw new Error('memory_fact_sensitivity_target_missing');

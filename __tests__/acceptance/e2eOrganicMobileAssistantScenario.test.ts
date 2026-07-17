@@ -73,20 +73,6 @@ describe('organic mobile-assistant continuity scenario', () => {
   it('scores corrected memory, one safe calendar mutation, and exact partial-work recovery', () => {
     expect(scenario.rubrics).toEqual(
       expect.arrayContaining([
-        {
-          kind: 'memory_fact',
-          subject: 'user',
-          predicate: 'default_meeting_duration_minutes',
-          value: '45',
-          scope: 'global',
-        },
-        {
-          kind: 'memory_fact_absent',
-          subject: 'user',
-          predicate: 'default_meeting_duration_minutes',
-          value: '30',
-          scope: 'global',
-        },
         { kind: 'native_fixture_state', path: 'calendar.createdEventCount', expectedValue: '1' },
         { kind: 'native_fixture_state', path: 'calendar.updatedEventCount', expectedValue: '0' },
         {
@@ -133,20 +119,20 @@ describe('organic mobile-assistant continuity scenario', () => {
       expect(scenario.rubrics).toContainEqual({
         kind: 'turn_memory_selection',
         turnIndex,
-        requiredFacts: [
+        requiredWrites: [
           {
+            turnIndex: 2,
             subject: 'user',
-            predicate: 'default_meeting_duration_minutes',
-            value: '45',
-            scope: 'global',
+            value: '45 minutes',
+            status: 'created',
           },
         ],
-        forbiddenFacts: [
+        supersededWrites: [
           {
+            turnIndex: 0,
             subject: 'user',
-            predicate: 'default_meeting_duration_minutes',
-            value: '30',
-            scope: 'global',
+            value: '30 minutes',
+            status: 'created',
           },
         ],
       });
@@ -155,7 +141,7 @@ describe('organic mobile-assistant continuity scenario', () => {
       expect(scenario.rubrics).toContainEqual({
         kind: 'turn_memory_answer',
         turnIndex,
-        answer: { kind: 'fact_values', requiredValues: ['45'], forbiddenValues: ['30'] },
+        answer: { kind: 'fact_values', requiredValues: ['45'] },
       });
     }
     expect(scenario.rubrics).toContainEqual({
@@ -169,6 +155,8 @@ describe('organic mobile-assistant continuity scenario', () => {
       toolName: 'calendar_update_event',
       expectedCount: 0,
     });
+    expect(scenario.userTurns?.[6]?.content).toContain('Move "Organic design review"');
+    expect(scenario.userTurns?.[6]?.content).toContain('ask me for it');
   });
 
   it('uses end-state and stage evidence without prescribing a tool trajectory', () => {

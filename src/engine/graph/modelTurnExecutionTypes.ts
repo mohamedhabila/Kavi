@@ -14,6 +14,7 @@ import type { AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphForcedTextReason } from './forcedTextTurn';
 import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
 import type { ThinkingLevel } from '../thinking';
+import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 
 export interface PendingAgentToolCall {
   id: string;
@@ -72,6 +73,8 @@ export interface ExecuteAgentControlGraphModelTurnResult {
   completion?: AssistantCompletionMetadata;
   contextWindow: number;
   fullContent: string;
+  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
+  memoryRetrievalEventId?: string;
   pendingToolCalls: PendingAgentToolCall[];
   providerReplay?: MessageProviderReplay;
   reasoning: string;

@@ -1,6 +1,5 @@
 import type { RequestFrame } from '../../services/agents/requestFrame';
 import type { GraphObservabilityAuditType } from './graphObservability';
-import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type {
   AssistantMessageMetadata,
@@ -31,6 +30,8 @@ import type { ThinkingLevel } from '../thinking';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
+import type { AdmittedSessionMemoryContext } from './sessionMemoryContext';
+import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 
 export type IterationCallbacks = {
   onAssistantMessage: (
@@ -52,16 +53,19 @@ export type IterationCallbacks = {
 export interface AgentControlGraphIterationRuntimeState {
   activeModel: string;
   activeProvider: LlmProviderConfig;
+  admittedMemoryContext: AdmittedSessionMemoryContext;
   consecutivePendingAsyncNoToolTurns: number;
   lastPendingAsyncSignature: string;
   llm: LlmService;
+  lastModelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
+  lastModelTurnMemoryRetrievalEventId?: string;
   warningInjectedThisRound: boolean;
   workingMessages: Message[];
 }
 
 export type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
-  { type: 'BLOCKED' } | { type: 'FINALIZED' } | { type: 'YIELDED' }
+  { type: 'BLOCKED' } | { type: 'FINALIZED' } | { type: 'YIELDED' } | { type: 'CANCELLED' }
 >;
 
 export type FinalCandidateGraphEvent = Extract<
@@ -70,6 +74,13 @@ export type FinalCandidateGraphEvent = Extract<
 >;
 
 export type PromptContextSupport = PrepareAgentControlGraphModelTurnParams['promptContextSupport'];
+export type SessionPromptContextSupport = Omit<
+  PromptContextSupport,
+  | 'livingMemorySections'
+  | 'livingMemoryReadEpoch'
+  | 'livingMemoryAuthoritySnapshot'
+  | 'livingMemoryValidUntil'
+>;
 
 export type GraphIterationBindings = {
   applyAgentControlGraphEvents: (
@@ -82,6 +93,7 @@ export type GraphIterationBindings = {
   finishFailure: (error: Error) => Promise<void>;
   finishWithGraphFinalCandidateEvent: (params: {
     assistantMetadata: AssistantMessageMetadata;
+    beforeAssistantDelivery?: () => void;
     content: string;
     graphEvent: FinalCandidateGraphEvent;
     providerReplay?: MessageProviderReplay;
@@ -89,6 +101,7 @@ export type GraphIterationBindings = {
   }) => Promise<void>;
   finishWithGraphTerminalEvent: (params: {
     assistantMetadata: AssistantMessageMetadata;
+    beforeAssistantDelivery?: () => void;
     content: string;
     graphEvent: TerminalGraphEvent;
     providerReplay?: MessageProviderReplay;
@@ -156,7 +169,6 @@ export interface ExecuteAgentControlGraphIterationParams {
   graph: GraphIterationBindings;
   isSuperAgent: boolean;
   iteration: number;
-  livingMemory?: LivingMemoryBridgeOutput | null;
   maxToolIterations: number;
   maxTokens: number;
   latestUserMessageText: string;
@@ -167,7 +179,7 @@ export interface ExecuteAgentControlGraphIterationParams {
     missingRequiredEvidenceLabels: string[];
   }) => void;
   personaThinkingLevel?: ThinkingLevel;
-  promptContextSupport: PromptContextSupport;
+  promptContextSupport: SessionPromptContextSupport;
   reportUsage: (usage: TokenUsage) => void;
   requestFrame: RequestFrame;
   runtime: AgentControlGraphIterationRuntimeState;
@@ -182,5 +194,5 @@ export interface ExecuteAgentControlGraphIterationParams {
 
 export interface ExecuteAgentControlGraphIterationResult {
   runtime: AgentControlGraphIterationRuntimeState;
-  status: 'continued' | 'finalized';
+  status: 'continued' | 'finalized' | 'retry_current_iteration';
 }

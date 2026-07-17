@@ -75,7 +75,7 @@ describe('agent control graph request context', () => {
     });
 
     expect(context.requestFrame).toMatchObject({
-      version: 1,
+      version: 2,
       mode: 'agentic',
       input: { kind: 'text', attachmentCount: 0 },
       continuation: 'new',

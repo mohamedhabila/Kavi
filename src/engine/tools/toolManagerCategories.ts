@@ -72,7 +72,12 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
   },
   {
     name: 'calendar',
-    toolNames: ['calendar_list', 'calendar_events', 'calendar_create_event'],
+    toolNames: [
+      'calendar_list',
+      'calendar_events',
+      'calendar_create_event',
+      'calendar_update_event',
+    ],
   },
   {
     name: 'contacts',

@@ -4,6 +4,7 @@ import {
 } from '../../utils/messageMemoryPublication';
 import { advanceConsolidationCursorPastExcludedPublications } from './consolidation/publicationExclusion';
 import { retireActiveMemoryPublicationsBeforeOptOut } from './memoryOptOutRetirement';
+import { setDurableMemoryPolicyEnabled } from './memoryAuthority';
 
 function publicationKey(sourceThreadId: string, sourceEndMessageId: string): string {
   return JSON.stringify([sourceThreadId, sourceEndMessageId]);
@@ -15,8 +16,9 @@ function getChatStore(): typeof import('../../store/useChatStore').useChatStore 
   return module.useChatStore;
 }
 
-/** Fence unfinished durable work and settle every open receipt before policy becomes disabled. */
+/** Disable memory first, then settle unfinished durable work and open publication receipts. */
 export function prepareLongTermMemoryOptOut(): void {
+  setDurableMemoryPolicyEnabled(false);
   const chatStore = getChatStore();
   const snapshot = chatStore.getState();
   if (new Set(snapshot.conversations.map(({ id }) => id)).size !== snapshot.conversations.length) {
@@ -90,4 +92,10 @@ export function prepareLongTermMemoryOptOut(): void {
       throw new Error(`memory_opt_out_publication_commit_${result.reason}`);
     }
   }
+}
+
+/** Revalidate opt-out settlement before admitting any new memory-bearing turn. */
+export function prepareLongTermMemoryOptIn(): void {
+  prepareLongTermMemoryOptOut();
+  setDurableMemoryPolicyEnabled(true);
 }

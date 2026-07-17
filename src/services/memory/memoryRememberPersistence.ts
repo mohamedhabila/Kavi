@@ -18,7 +18,10 @@ import {
   type GroundedReplacementRejection,
 } from './groundedFactReplacement';
 import { CANONICAL_SELF_MEMORY_SUBJECT } from './memorySubjectIdentity';
-import { classifyMemoryFactSensitivity } from './memorySensitivityPolicy';
+import {
+  classifyMemoryFactSensitivity,
+  providerMemorySensitivityDeclaration,
+} from './memorySensitivityPolicy';
 import type { AuthorizedToolEffectExecutionClaim } from '../executionJournal/authorizedToolEffectExecutionClaim';
 import type { MemoryFactContributionSourceAlias } from './factContributionCodec';
 import { loadFactContributionReplayFromAliasCandidates } from './factContributionStore';
@@ -37,6 +40,7 @@ import {
 import {
   resolveBoundMemoryRememberSemanticEvidence,
   type BoundMemoryRememberSemanticEvidence,
+  type MemoryRememberSemanticEvidenceBinding,
 } from './memoryRememberSemanticEvidence';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { sha256HexUtf8 } from '../../utils/sha256';
@@ -116,6 +120,7 @@ class MemoryRememberConflict extends Error {
 function memoryWriteAttributes(
   fact: ConsolidatorFact,
   evidenceSourceSha256: string,
+  source: MemoryRememberSemanticEvidenceBinding['source'],
 ): Record<string, unknown> {
   const admittedWrite = fact.admittedWrite!;
   return {
@@ -129,6 +134,15 @@ function memoryWriteAttributes(
       assertionClass: fact.assertionClass,
       evidenceQuote: fact.evidenceQuote,
       evidenceSourceSha256,
+      evidenceSourceKind: source.kind,
+      ...(source.kind === 'tool_observed'
+        ? {
+            sourceToolCallId: source.sourceToolCallId,
+            sourceToolName: source.sourceToolName,
+            sourceArgumentsSha256: source.sourceArgumentsSha256,
+            sourceContractDigest: source.canonicalStaticContractDigest,
+          }
+        : {}),
     },
   };
 }
@@ -136,9 +150,10 @@ function memoryWriteAttributes(
 function replayStableMemoryWriteAttributes(
   fact: ConsolidatorFact,
   evidenceSourceSha256: string,
+  source: MemoryRememberSemanticEvidenceBinding['source'],
   priorAttributes: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  const incoming = memoryWriteAttributes(fact, evidenceSourceSha256);
+  const incoming = memoryWriteAttributes(fact, evidenceSourceSha256, source);
   if (!priorAttributes) return incoming;
   const priorMemoryWrite = priorAttributes.memoryWrite;
   if (
@@ -188,12 +203,15 @@ export function persistMemoryRemember(
   ) {
     throw new Error('memory_remember_execution_authority_invalid');
   }
-  const evidence = context.requestEvidence;
+  const requestEvidence = context.requestEvidence;
   const semanticProposal = semantic.proposal;
-  const evidenceSourceSha256 = sha256HexUtf8(evidence.userMessageText);
+  const source = semantic.source;
+  const evidenceSourceSha256 = source.sourceContentSha256;
   if (
-    semanticProposal.sourceMessageId !== evidence.userMessageId ||
-    semantic.sourceMessageSha256 !== evidenceSourceSha256
+    semanticProposal.sourceMessageId !== source.sourceMessageId ||
+    (source.kind === 'current_user' &&
+      (source.sourceMessageId !== requestEvidence.userMessageId ||
+        evidenceSourceSha256 !== sha256HexUtf8(requestEvidence.userMessageText)))
   ) {
     throw new Error('memory_remember_bound_evidence_changed');
   }
@@ -209,9 +227,9 @@ export function persistMemoryRemember(
           originTaskId: null,
         }
       : {
-          originConversationId: evidence.memoryConversationId,
-          originThreadId: evidence.sourceThreadId,
-          originTaskId: semanticProposal.scope === 'session' ? evidence.taskId : null,
+          originConversationId: requestEvidence.memoryConversationId,
+          originThreadId: requestEvidence.sourceThreadId,
+          originTaskId: semanticProposal.scope === 'session' ? requestEvidence.taskId : null,
         };
   const writeInput: CanonicalMemoryRememberInput = {
     subject,
@@ -225,34 +243,34 @@ export function persistMemoryRemember(
     sourceRunId: context.sourceRunId,
     importance: semanticProposal.importance,
   };
+  const sensitivityDeclaration = providerMemorySensitivityDeclaration(semanticProposal.sensitivity);
   if (
     classifyMemoryFactSensitivity({
+      declaredSensitivity: sensitivityDeclaration.sensitivity,
       subject: writeInput.subject,
-      subjectType: writeInput.subjectType,
       predicate: writeInput.predicate,
       objectText: writeInput.value,
-      memoryKind: 'semantic_fact',
     }) === 'restricted'
   ) {
     return { status: 'restricted_content' };
   }
   const now = context.executionClaim.claimedAt;
   const resolutionContext = {
-    memoryConversationId: evidence.memoryConversationId,
-    sourceThreadId: evidence.sourceThreadId,
-    taskId: evidence.taskId,
+    memoryConversationId: requestEvidence.memoryConversationId,
+    sourceThreadId: requestEvidence.sourceThreadId,
+    taskId: requestEvidence.taskId,
     personaId: context.personaId,
   };
   const baseSourceAliases: MemoryFactContributionSourceAlias[] = [
-    { sourceKind: 'message', sourceId: evidence.userMessageId },
+    { sourceKind: 'message', sourceId: source.sourceMessageId },
   ];
   if (context.sourceRunId !== null) {
     baseSourceAliases.push({ sourceKind: 'run', sourceId: context.sourceRunId });
   }
   const replayContext = {
-    memoryConversationId: evidence.memoryConversationId,
-    sourceThreadId: evidence.sourceThreadId,
-    taskId: evidence.taskId,
+    memoryConversationId: requestEvidence.memoryConversationId,
+    sourceThreadId: requestEvidence.sourceThreadId,
+    taskId: requestEvidence.taskId,
     producer: {
       producerId: MEMORY_REMEMBER_FACT_PRODUCER_ID,
       producerEventId: buildMemoryRememberProducerEventId(context.executionClaim),
@@ -280,67 +298,118 @@ export function persistMemoryRemember(
         { subject: writeInput.subject, predicate: effectivePredicate, scope: writeInput.scope },
         resolutionContext,
       );
-  const proposal: ConsolidatorFact = {
-    subject: writeInput.subject,
-    predicate: effectivePredicate,
-    value: writeInput.value,
-    scope: writeInput.scope,
-    importance: writeInput.importance,
-    confidence: writeInput.confidence,
-    proposedSensitivity: semanticProposal.sensitivity,
-    operation: 'replace_current',
-    assertionClass: 'current_direct',
-    evidenceMessageIds: [evidence.userMessageId],
-    evidenceQuote: semantic.evidenceSpan,
-  };
-  const decision = evaluateGroundedReplacement(proposal, {
-    currentUserMessageId: evidence.userMessageId,
-    currentUserMessage: evidence.userMessageText,
-    memoryConversationId: resolutionContext.memoryConversationId,
-    threadId: resolutionContext.sourceThreadId,
-    taskId: resolutionContext.taskId,
-    personaId: resolutionContext.personaId,
-    currentFacts: proposedResolution.currentFacts,
-    hasAnyCurrentFact: proposedResolution.hasAnyCurrentFact,
-  });
+  let admittedFact: ConsolidatorFact;
+  let replacementTargetId: string | null = null;
+  if (source.kind === 'current_user') {
+    const proposal: ConsolidatorFact = {
+      subject: writeInput.subject,
+      predicate: effectivePredicate,
+      value: writeInput.value,
+      scope: writeInput.scope,
+      importance: writeInput.importance,
+      confidence: writeInput.confidence,
+      sensitivityDeclaration,
+      operation: 'replace_current',
+      assertionClass: 'current_direct',
+      evidenceMessageIds: [source.sourceMessageId],
+      evidenceQuote: semantic.evidenceSpan,
+    };
+    const decision = evaluateGroundedReplacement(proposal, {
+      currentUserMessageId: requestEvidence.userMessageId,
+      currentUserMessage: requestEvidence.userMessageText,
+      memoryConversationId: resolutionContext.memoryConversationId,
+      threadId: resolutionContext.sourceThreadId,
+      taskId: resolutionContext.taskId,
+      personaId: resolutionContext.personaId,
+      currentFacts: proposedResolution.currentFacts,
+      hasAnyCurrentFact: proposedResolution.hasAnyCurrentFact,
+    });
 
-  if (!decision.accepted) {
-    return { status: 'grounding_required', reason: decision.reason };
-  }
-  const sameValueRecord =
-    semanticProposal.operation === 'record' &&
-    decision.operation === 'replace_current' &&
-    decision.target.objectText === writeInput.value;
-  if (
-    !replay &&
-    ((semanticProposal.operation === 'record' &&
-      decision.operation !== 'insert' &&
-      !sameValueRecord) ||
-      (semanticProposal.operation === 'replace_current' &&
-        decision.operation !== 'replace_current'))
-  ) {
-    return { status: 'grounding_required', reason: 'operation_mismatch' };
-  }
-  const admittedFact: ConsolidatorFact = sameValueRecord
-    ? {
-        ...decision.fact,
-        operation: 'insert',
-        admittedWrite: {
+    if (!decision.accepted) {
+      return { status: 'grounding_required', reason: decision.reason };
+    }
+    const sameValueRecord =
+      semanticProposal.operation === 'record' &&
+      decision.operation === 'replace_current' &&
+      decision.target.objectText === writeInput.value;
+    if (
+      !replay &&
+      ((semanticProposal.operation === 'record' &&
+        decision.operation !== 'insert' &&
+        !sameValueRecord) ||
+        (semanticProposal.operation === 'replace_current' &&
+          decision.operation !== 'replace_current'))
+    ) {
+      return { status: 'grounding_required', reason: 'operation_mismatch' };
+    }
+    admittedFact = sameValueRecord
+      ? {
+          ...decision.fact,
           operation: 'insert',
-          authority: 'grounded_user_statement',
-          evidenceMessageId: evidence.userMessageId,
-        },
-      }
-    : decision.fact;
+          admittedWrite: {
+            operation: 'insert',
+            authority: 'grounded_user_statement',
+            evidenceMessageId: source.sourceMessageId,
+          },
+        }
+      : decision.fact;
+    replacementTargetId =
+      replay?.payload.operation.kind === 'exact_replacement'
+        ? replay.payload.operation.expectedCurrentFactId
+        : replay
+          ? null
+          : decision.operation === 'replace_current' && !sameValueRecord
+            ? decision.target.id
+            : null;
+  } else {
+    if (
+      semanticProposal.operation !== 'record' ||
+      replacementReplay ||
+      replay?.payload.operation.kind === 'exact_replacement' ||
+      (writeInput.scope === 'session' && requestEvidence.taskId === null) ||
+      proposedResolution.currentFacts.some(
+        (fact) => fact.objectText !== writeInput.value,
+      )
+    ) {
+      return {
+        status: 'grounding_required',
+        reason:
+          writeInput.scope === 'session' && requestEvidence.taskId === null
+            ? 'session_identity_unavailable'
+            : 'operation_mismatch',
+      };
+    }
+    admittedFact = {
+      subject: writeInput.subject,
+      predicate: effectivePredicate,
+      value: writeInput.value,
+      scope: writeInput.scope,
+      importance: writeInput.importance,
+      confidence: writeInput.confidence,
+      sensitivityDeclaration,
+      operation: 'insert',
+      assertionClass: 'quoted',
+      evidenceMessageIds: [source.sourceMessageId],
+      evidenceQuote: semantic.evidenceSpan,
+      admittedWrite: {
+        operation: 'insert',
+        authority: 'verified_tool_observation',
+        evidenceMessageId: source.sourceMessageId,
+      },
+    };
+  }
   const sourceAliases: MemoryFactContributionSourceAlias[] = replay
     ? [...replay.sourceAliases]
     : [...baseSourceAliases];
   const applicability = {
     factClass:
-      semanticProposal.subjectRef.kind === 'self'
+      source.kind === 'current_user' && semanticProposal.subjectRef.kind === 'self'
         ? ('subjective_user' as const)
         : ('objective' as const),
-    sourceAuthority: 'grounded_user' as const,
+    sourceAuthority:
+      source.kind === 'current_user'
+        ? ('grounded_user' as const)
+        : ('tool_observed' as const),
     ...(writeInput.scope === 'persona' ? { personaId: context.personaId } : {}),
   };
   const contributionContext = {
@@ -357,39 +426,34 @@ export function persistMemoryRemember(
       });
       const recordInput = {
         ...buildRecordInput(writeInput, subject.id, now),
-        sourceMessageId: evidence.userMessageId,
+        sourceMessageId: source.sourceMessageId,
         attributes: replayStableMemoryWriteAttributes(
           admittedFact,
           evidenceSourceSha256,
+          source,
           replay?.payload.input.attributes,
         ),
       };
-      const replacementTargetId =
-        replay?.payload.operation.kind === 'exact_replacement'
-          ? replay.payload.operation.expectedCurrentFactId
-          : replay
-            ? null
-            : decision.operation === 'replace_current' && !sameValueRecord
-              ? decision.target.id
-              : null;
       const result = replacementTargetId
         ? replaceCurrentFactWithContribution(
             { ...recordInput, expectedCurrentFactId: replacementTargetId },
             applicability,
             contributionContext,
+            sensitivityDeclaration,
           )
         : recordFactWithContribution(
             { ...recordInput, supersedePrior: false },
             applicability,
             contributionContext,
+            sensitivityDeclaration,
           );
       if (result.status === 'conflict') {
         throw new MemoryRememberConflict(result.conflict);
       }
       addFactEvidence({
         factId: result.fact.id,
-        messageId: evidence.userMessageId,
-        role: 'user',
+        messageId: source.sourceMessageId,
+        role: source.kind === 'current_user' ? 'user' : 'tool',
         quote: admittedFact.evidenceQuote,
         now,
       });

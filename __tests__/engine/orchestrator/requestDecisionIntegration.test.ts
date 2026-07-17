@@ -23,10 +23,10 @@ describe('orchestrator request decision integration', () => {
       updatedAt: 1,
     });
     mockStreamMessage.mockReturnValue(
-      createStreamGenerator([
-        { type: 'token', content: 'The worker result is still pending.' },
-        { type: 'done' },
-      ]),
+      createStreamGenerator(
+        [{ type: 'token', content: 'The worker result is still pending.' }, { type: 'done' }],
+        'text',
+      ),
     );
 
     const callbacks = makeCallbacks();

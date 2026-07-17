@@ -1,4 +1,4 @@
-import { recordFactWithContribution } from '../../src/services/memory/facts/mutations';
+import { recordCodeOwnedTestFactWithContribution as recordFactWithContribution } from './factContributionWriteFixtures';
 
 export function recordContributedSchemaFact(subjectId: string) {
   return recordFactWithContribution(

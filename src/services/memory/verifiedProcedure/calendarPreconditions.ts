@@ -2,7 +2,10 @@ import * as Calendar from 'expo-calendar';
 import { Platform } from 'react-native';
 import { isStoreHydrated, type PersistHydratableStore } from '../../../store/persistHydration';
 import { useToolPermissionsStore } from '../../security/permissions';
-import { calendarVerifiedProcedureEnvironmentPreconditionIds } from './calendarPreconditionContract';
+import {
+  calendarUpdateVerifiedProcedureEnvironmentPreconditionIds,
+  calendarVerifiedProcedureEnvironmentPreconditionIds,
+} from './calendarPreconditionContract';
 
 export type CalendarVerifiedProcedurePreconditionReason =
   | 'satisfied'
@@ -41,23 +44,26 @@ function result(
  * Permission requests and calendar discovery belong to an explicitly approved
  * execution, never to procedure retrieval or learning.
  */
-export async function resolveCalendarVerifiedProcedurePreconditions(): Promise<CalendarVerifiedProcedurePreconditions> {
+async function resolveCalendarToolPreconditions(params: {
+  toolNames: readonly [string, string];
+  preconditionIds: (platform: 'android' | 'ios') => readonly string[];
+}): Promise<CalendarVerifiedProcedurePreconditions> {
   const platform = mobilePlatform();
   if (!platform) return result(null, 'unsupported_platform');
   if (!isStoreHydrated(useToolPermissionsStore as PersistHydratableStore)) {
     return result(platform, 'tool_policy_unavailable');
   }
 
-  let listAllowed = false;
-  let createAllowed = false;
+  let sourceAllowed = false;
+  let targetAllowed = false;
   try {
     const permissions = useToolPermissionsStore.getState();
-    listAllowed = permissions.isAllowed('calendar_list');
-    createAllowed = permissions.isAllowed('calendar_create_event');
+    sourceAllowed = permissions.isAllowed(params.toolNames[0]);
+    targetAllowed = permissions.isAllowed(params.toolNames[1]);
   } catch {
     return result(platform, 'tool_policy_unavailable');
   }
-  if (!listAllowed || !createAllowed) {
+  if (!sourceAllowed || !targetAllowed) {
     return result(platform, 'tool_not_allowed');
   }
 
@@ -70,9 +76,19 @@ export async function resolveCalendarVerifiedProcedurePreconditions(): Promise<C
     return result(platform, 'permission_unavailable');
   }
 
-  return result(
-    platform,
-    'satisfied',
-    calendarVerifiedProcedureEnvironmentPreconditionIds(platform),
-  );
+  return result(platform, 'satisfied', params.preconditionIds(platform));
+}
+
+export async function resolveCalendarVerifiedProcedurePreconditions(): Promise<CalendarVerifiedProcedurePreconditions> {
+  return resolveCalendarToolPreconditions({
+    toolNames: ['calendar_list', 'calendar_create_event'],
+    preconditionIds: calendarVerifiedProcedureEnvironmentPreconditionIds,
+  });
+}
+
+export async function resolveCalendarUpdateVerifiedProcedurePreconditions(): Promise<CalendarVerifiedProcedurePreconditions> {
+  return resolveCalendarToolPreconditions({
+    toolNames: ['calendar_events', 'calendar_update_event'],
+    preconditionIds: calendarUpdateVerifiedProcedureEnvironmentPreconditionIds,
+  });
 }

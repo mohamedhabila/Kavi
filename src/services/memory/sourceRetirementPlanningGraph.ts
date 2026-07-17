@@ -232,11 +232,7 @@ function assertFactEvidence(aggregate: Readonly<VerifiedFactContributionAggregat
     fail('memory_source_retirement_plan_aggregate_invalid');
   }
   const context = aggregate.classifierContext;
-  if (
-    !context ||
-    (context.subject !== null && typeof context.subject !== 'string') ||
-    (context.subjectType !== null && typeof context.subjectType !== 'string')
-  ) {
+  if (!context || (context.subject !== null && typeof context.subject !== 'string')) {
     fail('memory_source_retirement_plan_aggregate_invalid');
   }
   const explicit = aggregate.explicitProjection;
@@ -426,7 +422,6 @@ export function buildSourceRetirementPlanningGraph(
       if (
         !exactFactEvidenceMatches(factNode.evidence, aggregate.factEvidence) ||
         factNode.classifierContext.subject !== aggregate.classifierContext.subject ||
-        factNode.classifierContext.subjectType !== aggregate.classifierContext.subjectType ||
         !exactExplicitProjectionMatches(factNode.explicitProjection, aggregate.explicitProjection)
       ) {
         fail('memory_source_retirement_plan_aggregate_invalid');

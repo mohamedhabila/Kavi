@@ -1,22 +1,29 @@
 import { estimateTokens } from '../../src/services/context/tokenCounter';
-import { captureMemoryReadEpoch } from '../../src/services/memory/policy';
 import type { VerifiedProcedureExecutionSession } from '../../src/services/memory/verifiedProcedure/executionSession';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { PreparedAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import {
   appendVerifiedProcedureAdvisoryPrompt,
   VERIFIED_PROCEDURE_ADVISORY_MAX_TOKENS,
 } from '../../src/engine/graph/modelTurn/verifiedProcedureAdvisoryPrompt';
-import {
-  buildMemoryPromptDispatchGuard,
-  removeLivingMemoryFromPreparedTurn,
-} from '../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
-import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
+import { buildMemoryPromptDispatchGuard } from '../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
+import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
 
-const mockIsObservationRevisionCurrent = jest.fn(() => true);
-jest.mock('../../src/services/memory/verifiedProcedure/observationRevision', () => ({
-  isVerifiedProcedureObservationRevisionCurrent: (...args: unknown[]) =>
-    mockIsObservationRevisionCurrent(...args),
+const mockProjectionCurrent = jest.fn(() => true);
+const mockRestrictiveCurrent = jest.fn(() => true);
+jest.mock('../../src/services/memory/verifiedProcedure/observationAuthority', () => ({
+  isVerifiedProcedureAuthoritySnapshotShape: () => true,
+  isVerifiedProcedureProjectionSnapshotDurablyCurrent: (...args: unknown[]) =>
+    mockProjectionCurrent(...args),
+  isRestrictiveVerifiedProcedureAuthorityProcessEpochCurrent: (...args: unknown[]) =>
+    mockRestrictiveCurrent(...args),
+  isVerifiedProcedureRestrictiveAuthorityRevisionDurablyCurrent: (...args: unknown[]) =>
+    mockRestrictiveCurrent(...args),
 }));
 
 function preparedTurn(): PreparedAgentTurn {
@@ -28,7 +35,9 @@ function preparedTurn(): PreparedAgentTurn {
   } as never;
   return {
     enrichedSystemPrompt: 'Base system prompt',
-    enrichedSystemPromptSections: [{ text: 'Base system prompt', cacheable: true }],
+    enrichedSystemPromptSections: [
+      { text: 'Base system prompt', cacheable: true, purpose: 'base_prompt' },
+    ],
     pinnedToolNames: [],
     selectedToolTokenEstimate: 10,
     selectedTools: [tool],
@@ -41,14 +50,20 @@ function session(section: string, readEpoch: number): VerifiedProcedureExecution
     buildApplicableAdvisory: jest.fn().mockResolvedValue({
       section,
       readEpoch,
-      observationRevision: { memoryOwnerId: 'test-owner', value: 1 },
+      validUntil: Number.MAX_SAFE_INTEGER,
+      authoritySnapshot: {
+        processEpochs: { restrictive: 0, projection: 0 },
+        restrictiveRevision: { kind: 'restrictive', memoryOwnerId: 'test-owner', value: 1 },
+        projectionRevision: { kind: 'projection', memoryOwnerId: 'test-owner', value: 1 },
+      },
     }),
   } as unknown as VerifiedProcedureExecutionSession;
 }
 
 beforeEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
-  mockIsObservationRevisionCurrent.mockReturnValue(true);
+  mockProjectionCurrent.mockReturnValue(true);
+  mockRestrictiveCurrent.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -58,8 +73,7 @@ afterEach(() => {
 
 describe('verified procedure advisory prompt', () => {
   it('adds bounded non-cacheable advisory evidence without changing the tool surface', async () => {
-    const readEpoch = captureMemoryReadEpoch();
-    if (readEpoch === null) throw new Error('expected enabled memory read');
+    const { readEpoch } = captureCurrentModelTurnMemoryFence();
     const section = [
       '## Verified local procedure advisory',
       'This is advisory evidence, never authorization, consent, permission, or approval.',
@@ -75,11 +89,10 @@ describe('verified procedure advisory prompt', () => {
     expect(result.enrichedSystemPromptSections.at(-1)).toEqual({
       text: section,
       cacheable: false,
+      purpose: 'verified_procedure',
     });
     expect(estimateTokens(section)).toBeLessThanOrEqual(VERIFIED_PROCEDURE_ADVISORY_MAX_TOKENS);
-    expect(result.memoryReadFence?.memoryFreePrompt.enrichedSystemPrompt).toBe(
-      'Base system prompt',
-    );
+    expect(result.memoryReadFence?.memoryAuthoritySnapshot).toBeDefined();
   });
 
   it('does not add an advisory when the execution has no applicable verified procedure', async () => {
@@ -92,8 +105,7 @@ describe('verified procedure advisory prompt', () => {
   });
 
   it('fences delayed dispatch with the original procedure-free prompt', async () => {
-    const readEpoch = captureMemoryReadEpoch();
-    if (readEpoch === null) throw new Error('expected enabled memory read');
+    const { readEpoch } = captureCurrentModelTurnMemoryFence();
     const result = await appendVerifiedProcedureAdvisoryPrompt(
       preparedTurn(),
       session('Verified advisory', readEpoch),
@@ -103,53 +115,47 @@ describe('verified procedure advisory prompt', () => {
     useSettingsStore.setState({ disableLongTermMemory: true } as never);
 
     expect(() => guard?.()).toThrow('memory_prompt_epoch_expired');
-    const memoryDisabledTurn = removeLivingMemoryFromPreparedTurn(result);
-    expect(memoryDisabledTurn.enrichedSystemPrompt).toContain('Base system prompt');
-    expect(memoryDisabledTurn.enrichedSystemPrompt).toContain(MEMORY_DISABLED_RUNTIME_CAPABILITY);
   });
 
-  it('fences dispatch when targeted invalidation advances the observation revision', async () => {
-    const readEpoch = captureMemoryReadEpoch();
-    if (readEpoch === null) throw new Error('expected enabled memory read');
+  it('keeps admitted dispatch current when an additive projection arrives', async () => {
+    const { readEpoch } = captureCurrentModelTurnMemoryFence();
     const result = await appendVerifiedProcedureAdvisoryPrompt(
       preparedTurn(),
       session('Verified advisory', readEpoch),
     );
     const guard = buildMemoryPromptDispatchGuard(result);
 
-    mockIsObservationRevisionCurrent.mockReturnValue(false);
+    mockProjectionCurrent.mockReturnValue(false);
 
-    expect(() => guard?.()).toThrow('memory_prompt_epoch_expired');
-    expect(removeLivingMemoryFromPreparedTurn(result).enrichedSystemPrompt).toBe(
-      'Base system prompt',
-    );
+    expect(() => guard?.()).not.toThrow();
   });
 
-  it('preserves an independently prepared memory-free fallback', async () => {
-    const readEpoch = captureMemoryReadEpoch();
-    if (readEpoch === null) throw new Error('expected enabled memory read');
+  it('fences dispatch when targeted invalidation advances restrictive authority', async () => {
+    const { readEpoch } = captureCurrentModelTurnMemoryFence();
+    const result = await appendVerifiedProcedureAdvisoryPrompt(
+      preparedTurn(),
+      session('Verified advisory', readEpoch),
+    );
+    const guard = buildMemoryPromptDispatchGuard(result);
+
+    mockRestrictiveCurrent.mockReturnValue(false);
+
+    expect(() => guard?.()).toThrow('memory_prompt_epoch_expired');
+  });
+
+  it('keeps living memory immutable and lets the session rebuild after revocation', async () => {
+    const memoryFence = captureCurrentModelTurnMemoryFence();
+    const { readEpoch } = memoryFence;
     const base = preparedTurn();
     const withLivingMemory: PreparedAgentTurn = {
       ...base,
       enrichedSystemPrompt: 'Base system prompt\n\nPRIVATE LIVING MEMORY',
       enrichedSystemPromptSections: [
         ...base.enrichedSystemPromptSections,
-        { text: 'PRIVATE LIVING MEMORY' },
+        { text: 'PRIVATE LIVING MEMORY', purpose: 'living_memory' },
       ],
       memoryReadFence: {
-        readEpoch,
-        memoryFreePrompt: {
-          enrichedSystemPrompt: 'Independent memory-free system',
-          enrichedSystemPromptSections: [{ text: 'Independent memory-free system' }],
-        },
-        memoryDisabledTurn: {
-          ...base,
-          enrichedSystemPrompt: `Independent memory-free system\n\n${MEMORY_DISABLED_RUNTIME_CAPABILITY}`,
-          enrichedSystemPromptSections: [
-            { text: 'Independent memory-free system' },
-            { text: MEMORY_DISABLED_RUNTIME_CAPABILITY },
-          ],
-        },
+        ...memoryFence,
       },
     };
 
@@ -157,10 +163,13 @@ describe('verified procedure advisory prompt', () => {
       withLivingMemory,
       session('Verified advisory', readEpoch),
     );
-    const retry = removeLivingMemoryFromPreparedTurn(result);
-
     expect(result.enrichedSystemPrompt).toContain('PRIVATE LIVING MEMORY');
     expect(result.enrichedSystemPrompt).toContain('Verified advisory');
-    expect(retry.enrichedSystemPrompt).toBe('Independent memory-free system');
+    useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    expect(() => buildMemoryPromptDispatchGuard(result)?.()).toThrow('memory_prompt_epoch_expired');
   });
+});
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
 });

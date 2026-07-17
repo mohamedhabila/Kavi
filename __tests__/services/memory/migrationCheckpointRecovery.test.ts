@@ -57,6 +57,7 @@ function payload(predicate: string, sourceMessageId: string, value: string): str
         sensitivity: 'normal',
       },
     ],
+    episode_sensitivity: 'normal',
     episode_summary: null,
     active_focus: null,
     open_threads: [],

@@ -40,11 +40,16 @@ import type {
 } from './modelTurnExecutionTypes';
 import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
 import {
-  buildMemoryPromptDispatchGuard,
+  buildModelTurnMemoryPolicyDispatchGuard,
   isMemoryPromptEpochExpiredError,
   isPreparedMemoryReadCurrent,
-  removeLivingMemoryCompactionMessages,
 } from './modelTurn/memoryPromptDispatchFence';
+import {
+  assertModelTurnMemoryPolicyBindingDurablyCurrent,
+  buildModelTurnMemoryPolicyBinding,
+  MemoryPromptEpochExpiredError,
+  type ModelTurnMemoryPolicyBinding,
+} from '../authority/modelTurnMemoryPolicyBinding';
 
 export type ExecuteAgentControlGraphModelTurnAttemptResult =
   | {
@@ -52,6 +57,7 @@ export type ExecuteAgentControlGraphModelTurnAttemptResult =
       completion?: AssistantCompletionMetadata;
       contextWindow: number;
       fullContent: string;
+      memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
       pendingToolCalls: PendingAgentToolCall[];
       providerReplay?: MessageProviderReplay;
       reasoning: string;
@@ -62,19 +68,10 @@ export type ExecuteAgentControlGraphModelTurnAttemptResult =
       kind: 'overflow_retry';
       nextRequestMaxTokens: number;
       workingMessages: Message[];
-    }
-  | {
-      kind: 'memory_opt_out_retry';
-      workingMessages: Message[];
     };
 
-function memoryOptOutRetry(
-  params: ExecuteAgentControlGraphModelTurnParams,
-): ExecuteAgentControlGraphModelTurnAttemptResult {
-  return {
-    kind: 'memory_opt_out_retry',
-    workingMessages: removeLivingMemoryCompactionMessages(params.workingMessages),
-  };
+function memoryAuthorityRetry(): never {
+  throw new MemoryPromptEpochExpiredError();
 }
 
 export async function executeAgentControlGraphModelTurnAttempt(
@@ -83,6 +80,9 @@ export async function executeAgentControlGraphModelTurnAttempt(
   },
 ): Promise<ExecuteAgentControlGraphModelTurnAttemptResult> {
   const anthropicTarget = isDirectAnthropicProvider(params.activeProvider);
+  const memoryPolicyBinding = buildModelTurnMemoryPolicyBinding(
+    params.preparedTurn.memoryReadFence,
+  );
   const isGemini3 =
     resolveModelHostedFamily(params.requestModel) === 'gemini' &&
     /gemini[- ]?3/i.test(params.requestModel);
@@ -114,7 +114,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     workingMessages: params.workingMessages,
   });
   if (!isPreparedMemoryReadCurrent(params.preparedTurn)) {
-    return memoryOptOutRetry(params);
+    return memoryAuthorityRetry();
   }
   if (preparedRequestBudget.toolSurfaceTokenAudit) {
     params.applyGraphEvents([
@@ -181,7 +181,9 @@ export async function executeAgentControlGraphModelTurnAttempt(
     : isGemini3
       ? 1.0
       : params.temperature;
-  const requestDispatchGuard = buildMemoryPromptDispatchGuard(params.preparedTurn);
+  const requestDispatchGuard = params.preparedTurn.memoryReadFence
+    ? buildModelTurnMemoryPolicyDispatchGuard(memoryPolicyBinding)
+    : undefined;
   const streamOptions: Record<string, any> = {
     model: params.requestModel,
     conversationId: params.conversationId,
@@ -239,6 +241,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
           geminiNative: true,
           iteration: params.iteration,
           llm: params.llm,
+          memoryPolicyBinding,
           recordPerformanceMetrics: params.recordPerformanceMetrics,
           reportUsage: params.reportUsage,
           requestMessages,
@@ -265,6 +268,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
           callbacks: params.callbacks,
           iteration: params.iteration,
           llm: params.llm,
+          memoryPolicyBinding,
           recordPerformanceMetrics: params.recordPerformanceMetrics,
           reportUsage: params.reportUsage,
           requestMessages,
@@ -325,27 +329,26 @@ export async function executeAgentControlGraphModelTurnAttempt(
       throw new Error('Model tool turn is missing required provider replay coverage after retries');
     }
 
-    const memoryReadCurrent = isPreparedMemoryReadCurrent(params.preparedTurn);
-    if (memoryReadCurrent) releaseStagedCompactions();
+    assertModelTurnMemoryPolicyBindingDurablyCurrent(memoryPolicyBinding);
+    releaseStagedCompactions();
     return {
       kind: 'success',
       completion: streamResult.completion,
       contextWindow,
       fullContent: streamResult.fullContent,
+      memoryPolicyBinding,
       pendingToolCalls: streamResult.pendingToolCalls,
       providerReplay: streamResult.providerReplay,
       reasoning: streamResult.reasoning,
       requestMaxTokens: params.requestMaxTokens,
-      workingMessages: memoryReadCurrent
-        ? workingMessages
-        : removeLivingMemoryCompactionMessages(workingMessages),
+      workingMessages,
     };
   } catch (streamError: unknown) {
     if (
       isMemoryPromptEpochExpiredError(streamError) ||
       !isPreparedMemoryReadCurrent(params.preparedTurn)
     ) {
-      return memoryOptOutRetry(params);
+      return memoryAuthorityRetry();
     }
     if (
       !params.signal?.signal.aborted &&
@@ -358,7 +361,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
         compactionEngine: params.compactionEngine,
         conversationId: params.conversationId,
         currentMessages: workingMessages,
-        livingMemory: params.livingMemory,
         onCompaction: params.preparedTurn.memoryReadFence
           ? (event) => overflowCompactionEvents.push(event)
           : params.onCompaction,
@@ -368,7 +370,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
         warn: params.warn,
       });
       if (!isPreparedMemoryReadCurrent(params.preparedTurn)) {
-        return memoryOptOutRetry(params);
+        return memoryAuthorityRetry();
       }
       const nextMaxTokens = getProviderOverflowRetryMaxTokens(
         params.requestMaxTokens,

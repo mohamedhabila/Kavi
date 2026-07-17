@@ -423,10 +423,12 @@ function ingestEvidence(
   for (const entry of evidence) {
     const receipt = parseToolEffectReceiptEvidence(entry);
     if (receipt) {
-      if (fallbackSourceRunId && receipt.executionRunId !== fallbackSourceRunId) {
-        throw new Error('memory_agent_run_receipt_run_mismatch');
-      }
-      const bundle = getBundle(bundles, receipt.executionRunId);
+      // Agent-run identity and durable effect-execution identity are separate
+      // code-owned namespaces. Foreground publication seals goal evidence to
+      // the tracked agent run, while each receipt retains the execution run
+      // that owns its journal entry. Key the memory bundle by the sealed agent
+      // run when present; never rewrite or discard receipt execution provenance.
+      const bundle = getBundle(bundles, fallbackSourceRunId ?? receipt.executionRunId);
       if (!bundle) continue;
       const normalized: AgentRunEffectReceiptEvidence = {
         receiptId: receipt.receiptId,

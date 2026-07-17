@@ -13,6 +13,7 @@ import {
   type AuthorizedToolEffectDispatchInput,
 } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
 import { completedToolOutcome, type ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -48,6 +49,7 @@ function effectInput(params: {
       model: 'model-1',
     },
     approvalState: 'granted',
+    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     authority: {
       approvalGranted: () => true,
       permissionGranted: params.permissionGranted ?? (() => true),

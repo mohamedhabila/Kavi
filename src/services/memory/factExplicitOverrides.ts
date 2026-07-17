@@ -26,6 +26,10 @@ import {
   type RequiredMemoryAccessScopeIdentity,
 } from './memoryScopeIdentity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
+import {
+  advanceMemoryProjectionInTransaction,
+  advanceRestrictiveMemoryAuthorityInTransaction,
+} from './memoryAuthority';
 
 interface AuthorizedFact {
   db: MemoryDatabase;
@@ -268,6 +272,18 @@ function notifyAfterCommit(target: AuthorizedFact): void {
   );
 }
 
+function advancePreparedMemoryAfterProjectionChange(
+  target: AuthorizedFact,
+  impact: 'projection' | 'restrictive',
+): void {
+  if (impact === 'restrictive') {
+    advanceRestrictiveMemoryAuthorityInTransaction(target.db, target.memoryOwnerId);
+  } else {
+    advanceMemoryProjectionInTransaction(target.db, target.memoryOwnerId);
+  }
+  notifyAfterCommit(target);
+}
+
 function setPinnedProjection(target: AuthorizedFact, pinned: boolean): boolean {
   if (target.row.pinned === (pinned ? 1 : 0)) return false;
   const result = target.db.runSync(
@@ -331,7 +347,9 @@ function setPinned(
   const previous = loadFactExplicitOverrideInTransaction(target.fact.id);
   if (previous?.pinnedOverride === pinned) {
     const repaired = setPinnedProjection(target, pinned);
-    if (repaired) notifyAfterCommit(target);
+    if (repaired) {
+      advancePreparedMemoryAfterProjectionChange(target, pinned ? 'projection' : 'restrictive');
+    }
     return {
       status: 'unchanged',
       fact: repaired ? rereadFact(target) : target.fact,
@@ -352,7 +370,7 @@ function setPinned(
   }));
   setPinnedProjection(target, pinned);
   const fact = rereadFact(target);
-  notifyAfterCommit(target);
+  advancePreparedMemoryAfterProjectionChange(target, pinned ? 'projection' : 'restrictive');
   return { status: 'updated', fact, override: next };
 }
 
@@ -370,7 +388,7 @@ function setReviewState(
   requireActiveAt(target.row, clock.semanticAt);
   if (previous?.reviewStateOverride === reviewState) {
     const repaired = setReviewStateProjection(target, reviewState);
-    if (repaired) notifyAfterCommit(target);
+    if (repaired) advancePreparedMemoryAfterProjectionChange(target, 'restrictive');
     return {
       status: 'unchanged',
       fact: repaired ? rereadFact(target) : target.fact,
@@ -393,7 +411,7 @@ function setReviewState(
   }));
   setReviewStateProjection(target, reviewState);
   const fact = rereadFact(target);
-  notifyAfterCommit(target);
+  advancePreparedMemoryAfterProjectionChange(target, 'restrictive');
   return { status: 'updated', fact, override: next };
 }
 
@@ -418,7 +436,7 @@ function raiseSensitivityFloor(
     sensitivityRank(previous.sensitivityFloor) >= sensitivityRank(requestedFloor)
   ) {
     const repaired = setSensitivityProjection(target, previous.sensitivityFloor);
-    if (repaired) notifyAfterCommit(target);
+    if (repaired) advancePreparedMemoryAfterProjectionChange(target, 'restrictive');
     return {
       status: 'unchanged',
       fact: repaired ? rereadFact(target) : target.fact,
@@ -441,7 +459,7 @@ function raiseSensitivityFloor(
   }));
   setSensitivityProjection(target, requestedFloor);
   const fact = rereadFact(target);
-  notifyAfterCommit(target);
+  advancePreparedMemoryAfterProjectionChange(target, 'restrictive');
   return { status: 'updated', fact, override: next };
 }
 
@@ -467,6 +485,7 @@ function invalidate(
         target.memoryOwnerId,
       );
       if ((result.changes ?? 0) !== 1) fail('projection_update_failed');
+      advanceRestrictiveMemoryAuthorityInTransaction(target.db, target.memoryOwnerId);
       notifyAfterCommit(target);
     }
     return {
@@ -495,6 +514,7 @@ function invalidate(
     target.memoryOwnerId,
   );
   if ((result.changes ?? 0) !== 1) fail('projection_update_failed');
+  advanceRestrictiveMemoryAuthorityInTransaction(target.db, target.memoryOwnerId);
   const fact = rereadFact(target);
   notifyAfterCommit(target);
   return { status: 'updated', fact, override: next, invalidatedAt: clock.semanticAt };

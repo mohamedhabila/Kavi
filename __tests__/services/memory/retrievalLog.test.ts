@@ -109,7 +109,7 @@ describe('structured memory retrieval event store', () => {
       unitCount: 1,
     });
 
-    const digest = jest.mocked(Crypto.digestStringAsync);
+    const digest = jest.mocked(Crypto.digest);
     const callsBeforeOversizedInput = digest.mock.calls.length;
     await expect(buildMemoryRetrievalQueryFingerprint('x'.repeat(20_001))).rejects.toThrow(
       'fingerprint input bound',

@@ -130,6 +130,7 @@ export function recoveryEffect(
     idempotencyClass: 'declared_idempotent',
     idempotencyKeyDigest: RECOVERY_DIGEST_D,
     requestDigest: RECOVERY_DIGEST_B,
+    modelAuthorityValidUntil: null,
     outcomeDigest: completed ? RECOVERY_DIGEST_C : null,
     status,
     retryPolicy: 'reconcile_before_retry',

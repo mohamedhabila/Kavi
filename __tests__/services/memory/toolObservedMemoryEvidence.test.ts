@@ -1,6 +1,7 @@
 import { TOOL_DEFINITIONS } from '../../../src/engine/tools/definitions';
 import {
   bindCurrentTurnToolObservedMemoryEvidence,
+  collectCurrentRunCompletedToolResults,
   type CurrentRunCompletedToolResult,
   deriveExactToolObservedMemoryEvidenceSpan,
   resolveToolObservedMemoryEvidenceBinding,
@@ -130,6 +131,65 @@ function bind(
 }
 
 describe('current-turn tool-observed memory evidence binding', () => {
+  it('collects exact completion membership from lifecycle history and working messages', () => {
+    const messages = buildTurnFixture();
+    const completed = collectCurrentRunCompletedToolResults({
+      executionRunId: EXECUTION_RUN_ID,
+      workingMessages: messages,
+      toolCallHistory: [
+        {
+          id: 'tool-call-current',
+          name: 'read_file',
+          arguments: '{"path":"profile.json"}',
+          status: 'completed',
+          result: '{"displayName":"نور","timezone":"Asia/Amman"}',
+        },
+      ],
+    });
+
+    expect(completed).toEqual([
+      {
+        executionRunId: EXECUTION_RUN_ID,
+        sourceMessageId: 'message-tool-result',
+        sourceToolCallId: 'tool-call-current',
+        sourceToolName: 'read_file',
+        argumentsSha256: sha256HexUtf8('{"path":"profile.json"}'),
+        visibleResultSha256: sha256HexUtf8(
+          '{"displayName":"نور","timezone":"Asia/Amman"}',
+        ),
+        visibleResultFidelity: 'complete',
+      },
+    ]);
+    expect(Object.isFrozen(completed)).toBe(true);
+    expect(Object.isFrozen(completed[0])).toBe(true);
+  });
+
+  it('does not reconstruct completion authority from mismatched or duplicate history', () => {
+    const messages = buildTurnFixture();
+    const exact = {
+      id: 'tool-call-current',
+      name: 'read_file',
+      arguments: '{"path":"profile.json"}',
+      status: 'completed',
+      result: '{"displayName":"نور","timezone":"Asia/Amman"}',
+    };
+
+    expect(
+      collectCurrentRunCompletedToolResults({
+        executionRunId: EXECUTION_RUN_ID,
+        workingMessages: messages,
+        toolCallHistory: [{ ...exact, result: 'different' }],
+      }),
+    ).toEqual([]);
+    expect(
+      collectCurrentRunCompletedToolResults({
+        executionRunId: EXECUTION_RUN_ID,
+        workingMessages: messages,
+        toolCallHistory: [exact, exact],
+      }),
+    ).toEqual([]);
+  });
+
   it('mints an opaque frozen capability bound to exact execution evidence', () => {
     const messages = buildTurnFixture();
     const capabilities = bind(messages);
@@ -459,4 +519,3 @@ describe('exact tool-observed evidence span derivation', () => {
     ).toEqual({ ok: false, reason: 'span_too_large' });
   });
 });
-

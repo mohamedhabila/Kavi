@@ -30,7 +30,7 @@ const sensitiveStructures = [
   '4111 1111 1111 1111',
   '52.3676, 4.9041',
   '123-45-6789',
-  'BSN: 123456782',
+  'identifier 123456782',
 ] as const;
 
 it.each(sensitiveStructures)('detects validated sensitive structure: %s', (text) => {
@@ -54,7 +54,7 @@ it.each([
   '4111 1111 1111 1112',
   '52, 4',
   '000-12-3456',
-  'BSN: 123456789',
+  'identifier 123456789',
   'sk-short',
 ])('rejects structural near-miss: %s', (text) => {
   expect(classifyMemoryTextSensitivity(text)).toBe('normal');

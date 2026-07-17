@@ -4,9 +4,16 @@ import {
   parseRequestClarificationArgs,
   parseRequestClarificationToolResult,
 } from '../../src/services/agents/requestClarification';
+import { REQUEST_CLARIFICATION_TOOL } from '../../src/engine/tools/requestClarificationDefinition';
 import { executeRequestClarification } from '../../src/engine/tools/toolRequestClarificationExecution';
 
 describe('request clarification contract', () => {
+  it('treats directly usable memory as resolved input', () => {
+    expect(REQUEST_CLARIFICATION_TOOL.description).toContain(
+      'A retrieved memory fact labeled policy=use already resolves the parameter',
+    );
+  });
+
   it('accepts language-neutral semantic fields with a multilingual user-facing question', () => {
     const parsed = parseRequestClarificationArgs({
       missing_information: [

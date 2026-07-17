@@ -8,7 +8,10 @@ import {
   normalizeMemoryConsolidationMode,
   resolveConsolidationProviderIdForMode,
 } from '../services/memory/memoryConsolidationMode';
-import { prepareLongTermMemoryOptOut } from '../services/memory/memoryOptOutTransition';
+import {
+  prepareLongTermMemoryOptIn,
+  prepareLongTermMemoryOptOut,
+} from '../services/memory/memoryOptOutTransition';
 import { createDefaultSettingsDataState, type SettingsState } from './settingsStoreTypes';
 import {
   clampMaxLinks,
@@ -335,19 +338,42 @@ export const useSettingsStore = create<SettingsState>()(
 
       setDisableLongTermMemory: (disabled) => {
         const nextDisabled = Boolean(disabled);
-        if (nextDisabled && get().disableLongTermMemory !== true) {
-          prepareLongTermMemoryOptOut();
+        const currentlyDisabled = get().disableLongTermMemory === true;
+        if (nextDisabled !== currentlyDisabled) {
+          if (nextDisabled) {
+            try {
+              prepareLongTermMemoryOptOut();
+            } catch (error) {
+              // The durable fence is written before retirement begins. Keep the
+              // user-visible policy fail-closed if later cleanup cannot settle.
+              set({ disableLongTermMemory: true });
+              throw error;
+            }
+          } else {
+            prepareLongTermMemoryOptIn();
+          }
         }
         set({ disableLongTermMemory: nextDisabled });
       },
 
       replaceAllSettings: (settings) => {
-        if (
-          hasOwnSetting(settings, 'disableLongTermMemory') &&
-          Boolean(settings.disableLongTermMemory) &&
-          get().disableLongTermMemory !== true
-        ) {
-          prepareLongTermMemoryOptOut();
+        if (hasOwnSetting(settings, 'disableLongTermMemory')) {
+          const nextDisabled = Boolean(settings.disableLongTermMemory);
+          const currentlyDisabled = get().disableLongTermMemory === true;
+          if (nextDisabled !== currentlyDisabled) {
+            if (nextDisabled) {
+              try {
+                prepareLongTermMemoryOptOut();
+              } catch (error) {
+                // A failed import must not roll the visible setting behind the
+                // already-committed durable privacy fence.
+                set({ disableLongTermMemory: true });
+                throw error;
+              }
+            } else {
+              prepareLongTermMemoryOptIn();
+            }
+          }
         }
         set((state) => {
           const sshTargets = settings.sshTargets ?? state.sshTargets;

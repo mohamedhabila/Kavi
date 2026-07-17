@@ -5,6 +5,7 @@ import {
   type ForegroundModelRecoveryDependencies,
 } from '../../src/services/executionJournal/foregroundModelExecutionRecovery';
 import type { ForegroundModelExecutionLease } from '../../src/services/executionJournal/foregroundModelExecutionTypes';
+import { createForegroundModelGenerationChangedError } from '../../src/services/runtimeError';
 import type { Conversation } from '../../src/types/conversation';
 
 const DIGEST = 'a'.repeat(64);
@@ -270,7 +271,7 @@ describe('foreground model restart recovery planning', () => {
           role: 'assistant',
           content: 'Done.',
           timestamp: 2,
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
         },
       ],
     });
@@ -289,7 +290,11 @@ describe('foreground model restart recovery planning', () => {
         role: 'assistant',
         content: '',
         timestamp: 2,
-        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
         toolCalls: [
           {
             id: 'tool-1',
@@ -304,7 +309,7 @@ describe('foreground model restart recovery planning', () => {
         role: 'assistant',
         content: 'Done.',
         timestamp: 3,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
     ];
     expect(planForegroundModelRestartRecovery(lease(), completeConversation)).toEqual(
@@ -338,7 +343,7 @@ describe('foreground model restart recovery planning', () => {
           role: 'assistant',
           content: 'Done.',
           timestamp: 2,
-          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
           toolCalls: [{ id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' }],
         },
       ],
@@ -368,14 +373,22 @@ describe('foreground model restart recovery planning', () => {
             role: 'assistant',
             content: 'Earlier answer.',
             timestamp: 2,
-            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
           },
           {
             id: 'assistant-2',
             role: 'assistant',
             content: 'Newer partial answer',
             timestamp: 3,
-            assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'incomplete',
+              finishReason: 'response_failed',
+            },
           },
         ],
       }),
@@ -575,7 +588,11 @@ describe('foreground model restart recovery execution', () => {
             role: 'assistant',
             content: 'Done.',
             timestamp: 2,
-            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
           },
         ],
       }),
@@ -603,12 +620,22 @@ describe('foreground model restart recovery execution', () => {
 
   it('reports a stale generation without retrying model or tool execution', async () => {
     const test = harness(conversation());
-    test.complete.mockRejectedValueOnce(new Error('foreground_model_journal_generation_changed'));
+    test.complete.mockRejectedValueOnce(createForegroundModelGenerationChangedError());
 
     await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
       { kind: 'blocked', runId: 'run-1', reason: 'generation_changed' },
     ]);
     expect(test.complete).toHaveBeenCalledTimes(1);
+    expect(test.releaseProjection).not.toHaveBeenCalled();
+  });
+
+  it('does not infer a stale generation from untyped error text', async () => {
+    const test = harness(conversation());
+    test.complete.mockRejectedValueOnce(new Error('foreground_model_journal_generation_changed'));
+
+    await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
+      { kind: 'blocked', runId: 'run-1', reason: 'journal_unavailable' },
+    ]);
     expect(test.releaseProjection).not.toHaveBeenCalled();
   });
 

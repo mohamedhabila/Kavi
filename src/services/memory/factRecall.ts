@@ -96,6 +96,13 @@ function factDedupeKey(fact: MemoryFact): string {
   return `${fact.memoryKind}\u0000${fact.contentHash || fact.objectText.trim()}`;
 }
 
+function isAnswerSemanticFact(fact: MemoryFact): boolean {
+  return (
+    fact.memoryKind === 'semantic_fact' &&
+    (fact.factClass === 'subjective_user' || fact.factClass === 'objective')
+  );
+}
+
 function selectTopFacts(
   scored: ReadonlyArray<ScoredFact>,
   options: RecallFactsOptions,
@@ -178,6 +185,7 @@ async function selectFactsWithSemanticSelector(params: {
 
   let semanticSelectedCount = 0;
   let semanticAdmittedCount = 0;
+  let answerSemanticAnchorAdmitted = false;
   const semanticSelectedEntries: ScoredFact[] = [];
   const selectorStarted = Date.now();
   try {
@@ -193,6 +201,27 @@ async function selectFactsWithSemanticSelector(params: {
       if (!entry) continue;
       semanticSelectedCount += 1;
       semanticSelectedEntries.push(entry);
+    }
+    const selectorSemanticIds = new Set(
+      semanticSelectedEntries
+        .filter((entry) => isAnswerSemanticFact(entry.fact))
+        .map((entry) => entry.fact.id),
+    );
+    const selectorAnswerSemanticAnchor = params.scored.find((entry) =>
+      selectorSemanticIds.has(entry.fact.id),
+    );
+    const answerSemanticAnchor =
+      selectorAnswerSemanticAnchor ??
+      selectTopFacts(
+        params.scored.filter((entry) => isAnswerSemanticFact(entry.fact)),
+        params.options,
+        1,
+      )[0];
+    if (answerSemanticAnchor) {
+      answerSemanticAnchorAdmitted = appendSelected(answerSemanticAnchor);
+      if (answerSemanticAnchorAdmitted && selectorAnswerSemanticAnchor) {
+        semanticAdmittedCount += 1;
+      }
     }
     for (const entry of semanticSelectedEntries) {
       if (appendSelected(entry, true)) semanticAdmittedCount += 1;
@@ -212,7 +241,7 @@ async function selectFactsWithSemanticSelector(params: {
   if (semanticAdmittedCount === 0) {
     params.timing.selectorSelectedCount = semanticSelectedCount;
     params.timing.selectorApplied = false;
-    return [...params.deterministicSelected];
+    return answerSemanticAnchorAdmitted ? selected : [...params.deterministicSelected];
   }
 
   params.timing.selectorSelectedCount = semanticSelectedCount;

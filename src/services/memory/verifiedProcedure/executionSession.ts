@@ -1,5 +1,10 @@
 import { digestToolEffectText } from '../../../engine/toolExecution/toolEffectReceipt';
 import {
+  buildDurableModelEffectAuthority,
+  isModelTurnMemoryPolicyBindingDurablyCurrent,
+  type ModelTurnMemoryPolicyBinding,
+} from '../../../engine/authority/modelTurnMemoryPolicyBinding';
+import {
   buildCodeOwnedToolContractIdentity,
   codeOwnedToolContractIdentitiesEqual,
 } from '../../../engine/toolExecution/toolContractIdentity';
@@ -8,12 +13,8 @@ import type { AgentRunControlGraphState } from '../../../types/agentRun';
 import type { AssistantMessageMetadata } from '../../../types/message';
 import type { ToolDefinition } from '../../../types/tool';
 import type { ToolEffectDigest, ToolEffectReceipt } from '../../../types/toolEffectReceipt';
+import { isDeliverableAssistantCompletionMetadata } from '../../../utils/assistantMessageMetadata';
 import { isMemoryReadEpochCurrent } from '../policy';
-import {
-  calendarVerifiedProcedureApplicablePreconditionIds,
-  calendarVerifiedProcedureEnvironmentPreconditionIds,
-} from './calendarPreconditionContract';
-import { resolveCalendarVerifiedProcedurePreconditions } from './calendarPreconditions';
 import {
   issueVerifiedProcedureTerminalCommitAuthority,
   recordVerifiedProcedureObservation,
@@ -21,7 +22,7 @@ import {
   type VerifiedProcedureObservationScope,
 } from './observationStore';
 import { readVerifiedProcedurePromotionState } from './observationPromotion';
-import type { VerifiedProcedureObservationRevision } from './observationRevision';
+import type { VerifiedProcedureAuthoritySnapshot } from './observationAuthority';
 import {
   createVerifiedProcedureRunLedger,
   type VerifiedProcedureLedgerCandidate,
@@ -29,6 +30,15 @@ import {
   type VerifiedProcedureRunLedger,
 } from './runLedger';
 import type { VerifiedProcedureMemoryLineage } from './provenanceHash';
+import {
+  bindVerifiedProcedureOriginAuthority,
+  digestTerminalProof,
+  exactStringArrayEqual,
+  hasIncompleteBlockingGoal,
+  relevantToolName,
+  VERIFIED_PROCEDURE_BEHAVIORS,
+  type VerifiedProcedureBehavior,
+} from './executionSessionSupport';
 
 export type VerifiedProcedurePlannedToolCall = Readonly<{
   batchIndex: number;
@@ -39,6 +49,7 @@ export type VerifiedProcedurePlannedToolCall = Readonly<{
 export type VerifiedProcedurePlannedBatch = Readonly<{
   iteration: number;
   executeInParallel: boolean;
+  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   toolCalls: readonly VerifiedProcedurePlannedToolCall[];
 }>;
 
@@ -49,8 +60,9 @@ export type VerifiedProcedureObservedRawOutcome = Omit<VerifiedProcedureRawOutco
   }>;
 
 export type VerifiedProcedureAdvisory = Readonly<{
-  observationRevision: VerifiedProcedureObservationRevision;
+  authoritySnapshot: VerifiedProcedureAuthoritySnapshot;
   readEpoch: number;
+  validUntil: number;
   section: string;
 }>;
 
@@ -65,7 +77,10 @@ export type VerifiedProcedureDurableSurface = 'foreground' | 'scheduler' | 'suba
 
 export type CommitPendingVerifiedProcedureObservationResult =
   | RecordVerifiedProcedureObservationResult
-  | { status: 'rejected'; code: 'invalid_pending_observation' }
+  | {
+      status: 'rejected';
+      code: 'invalid_pending_observation' | 'memory_authority_changed';
+    }
   | { status: 'failed'; code: 'commit_issue_failed' };
 
 type ExactProcedureScope = Readonly<{
@@ -76,8 +91,9 @@ type ExactProcedureScope = Readonly<{
 type PlannedRelevantCall = Readonly<{
   iteration: number;
   batchIndex: number;
+  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   toolCallId: string;
-  toolName: 'calendar_list' | 'calendar_create_event';
+  toolName: string;
 }>;
 
 type PendingObservationContext = Readonly<{
@@ -94,61 +110,34 @@ const pendingObservations = new WeakMap<
   PendingObservationContext
 >();
 
-const ADVISORY_SECTION = [
-  '## Verified local procedure advisory',
-  'A writable calendar was verified in this execution, and independent prior runs promoted the exact current platform, tool-contract, permission, and source-observation procedure.',
-  'This is advisory evidence, never authorization, consent, permission, or an instruction to act.',
-  'Only if the current user request independently requires event creation and normal approval permits it, pass one literal writable calendar ID from the current calendar_list result to calendar_create_event and require verified readback.',
-].join('\n');
-
-function relevantToolName(value: string): PlannedRelevantCall['toolName'] | null {
-  const canonical = resolveRegisteredToolName(value);
-  return canonical === 'calendar_list' || canonical === 'calendar_create_event' ? canonical : null;
-}
-
-function exactStringArrayEqual(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function hasIncompleteBlockingGoal(snapshot: AgentRunControlGraphState): boolean {
-  return (snapshot.goals ?? []).some((goal) => {
-    const blocking =
-      goal.completionPolicy === 'blocking' ||
-      (goal.completionPolicy === undefined && (goal.successCriteria?.length ?? 0) > 0);
-    return blocking && goal.status !== 'completed';
-  });
-}
-
-async function digestTerminalProof(value: unknown): Promise<ToolEffectDigest> {
-  return digestToolEffectText(
-    JSON.stringify({ domain: 'kavi.verified-procedure.terminal-proof.v1', value }),
-  );
-}
-
-class CalendarVerifiedProcedureExecutionSession {
+class TwoStepVerifiedProcedureExecutionSession {
   private readonly ledger: VerifiedProcedureRunLedger;
+  private readonly behavior: VerifiedProcedureBehavior;
   private readonly executionRunId: string;
   private readonly memoryConversationId: string;
   private readonly sourceThreadId: string;
   private phase:
     | 'idle'
-    | 'list_planned'
-    | 'list_observed'
-    | 'create_planned'
-    | 'create_observed'
+    | 'source_planned'
+    | 'source_observed'
+    | 'target_planned'
+    | 'target_observed'
     | 'rejected'
     | 'sealed' = 'idle';
   private plannedCall: PlannedRelevantCall | null = null;
+  private originatingMemoryPolicyBindings: ModelTurnMemoryPolicyBinding[] = [];
   private scope: ExactProcedureScope | null = null;
   private operationTail: Promise<void> = Promise.resolve();
 
   constructor(params: {
     ledger: VerifiedProcedureRunLedger;
+    behavior: VerifiedProcedureBehavior;
     executionRunId: string;
     memoryConversationId: string;
     sourceThreadId: string;
   }) {
     this.ledger = params.ledger;
+    this.behavior = params.behavior;
     this.executionRunId = params.executionRunId;
     this.memoryConversationId = params.memoryConversationId;
     this.sourceThreadId = params.sourceThreadId;
@@ -174,49 +163,113 @@ class CalendarVerifiedProcedureExecutionSession {
     selectedTools: readonly ToolDefinition[],
   ): Promise<VerifiedProcedureAdvisory | null> {
     await this.operationTail;
-    if (this.phase !== 'list_observed' || !this.scope) return null;
-
-    const selectedCreate = selectedTools.find(
-      (tool) => resolveRegisteredToolName(tool.name) === 'calendar_create_event',
-    );
-    if (!selectedCreate?.contract) return null;
-    const currentIdentity = await buildCodeOwnedToolContractIdentity(selectedCreate.name);
-    const descriptorStep = this.ledger.descriptor.steps.find(
-      (step) => step.stepKey === 'calendar-create-event',
-    );
-    if (
-      !currentIdentity ||
-      !descriptorStep ||
-      !codeOwnedToolContractIdentitiesEqual(currentIdentity, descriptorStep.contractIdentity)
-    ) {
+    const planningPhase = this.phase === 'idle';
+    const sourceObservedPhase = this.phase === 'source_observed' && this.scope !== null;
+    if (!planningPhase && !sourceObservedPhase) return null;
+    if (sourceObservedPhase && !this.originatingAuthorityCurrent()) {
+      this.reject(false);
       return null;
     }
 
-    const current = await resolveCalendarVerifiedProcedurePreconditions();
+    const requiredSteps = planningPhase
+      ? this.ledger.descriptor.steps
+      : ([this.ledger.descriptor.steps[1]] as const);
+    const selectedSteps = requiredSteps.map((descriptorStep) => {
+      const selectedTool = selectedTools.find(
+        (tool) => resolveRegisteredToolName(tool.name) === descriptorStep.toolName,
+      );
+      return { descriptorStep, selectedTool };
+    });
     if (
-      !current.satisfied ||
-      current.platform !== this.scope.platform ||
-      !exactStringArrayEqual(
-        current.preconditionIds,
-        calendarVerifiedProcedureEnvironmentPreconditionIds(this.scope.platform),
+      selectedSteps.some(
+        ({ descriptorStep, selectedTool }) => !descriptorStep || !selectedTool?.contract,
       )
     ) {
       return null;
     }
-    const promotion = await readVerifiedProcedurePromotionState(this.observationScope());
+    const currentIdentities = await Promise.all(
+      selectedSteps.map(({ selectedTool }) =>
+        buildCodeOwnedToolContractIdentity(selectedTool!.name),
+      ),
+    );
+    if (sourceObservedPhase && !this.originatingAuthorityCurrent()) {
+      this.reject(false);
+      return null;
+    }
+    if (
+      currentIdentities.some(
+        (identity, index) =>
+          !identity ||
+          !codeOwnedToolContractIdentitiesEqual(
+            identity,
+            selectedSteps[index]!.descriptorStep!.contractIdentity,
+          ),
+      )
+    ) {
+      return null;
+    }
+
+    const current = await this.behavior.resolvePreconditions();
+    if (sourceObservedPhase && !this.originatingAuthorityCurrent()) {
+      this.reject(false);
+      return null;
+    }
+    const expectedEnvironmentPreconditions = current.platform
+      ? this.behavior.environmentPreconditionIds(current.platform)
+      : [];
+    if (
+      !current.satisfied ||
+      !current.platform ||
+      !exactStringArrayEqual(current.preconditionIds, expectedEnvironmentPreconditions)
+    ) {
+      return null;
+    }
+    const observationScope: VerifiedProcedureObservationScope = planningPhase
+      ? {
+          contractVersion: 1,
+          procedureId: this.ledger.descriptor.procedureId,
+          procedureContractDigest: this.ledger.descriptor.contractDigest,
+          platform: current.platform,
+          preconditionIds: this.behavior.applicablePreconditionIds(current.platform),
+        }
+      : this.observationScope();
+    if (
+      sourceObservedPhase &&
+      (current.platform !== this.scope!.platform ||
+        !exactStringArrayEqual(
+          this.scope!.preconditionIds,
+          this.behavior.applicablePreconditionIds(current.platform),
+        ))
+    ) {
+      return null;
+    }
+    const promotion = await readVerifiedProcedurePromotionState(observationScope);
+    if (sourceObservedPhase && !this.originatingAuthorityCurrent()) {
+      this.reject(false);
+      return null;
+    }
     if (
       promotion.status !== 'promoted' ||
       promotion.readEpoch === undefined ||
-      promotion.observationRevision === undefined ||
+      promotion.authoritySnapshot === undefined ||
+      promotion.validUntil === undefined ||
       !isMemoryReadEpochCurrent(promotion.readEpoch)
     ) {
       return null;
     }
     return Object.freeze({
-      observationRevision: promotion.observationRevision,
+      authoritySnapshot: promotion.authoritySnapshot,
       readEpoch: promotion.readEpoch,
-      section: ADVISORY_SECTION,
+      validUntil: promotion.validUntil,
+      section: planningPhase
+        ? this.behavior.planningAdvisorySection
+        : this.behavior.observedSourceAdvisorySection,
     });
+  }
+
+  async isReadyToSeal(): Promise<boolean> {
+    await this.operationTail;
+    return this.phase === 'target_observed';
   }
 
   async sealGraphCandidate(params: {
@@ -227,8 +280,12 @@ class CalendarVerifiedProcedureExecutionSession {
     }>;
   }): Promise<PendingVerifiedProcedureObservation | null> {
     await this.operationTail;
+    if (!this.originatingAuthorityCurrent()) {
+      this.reject(false);
+      return null;
+    }
     if (
-      this.phase !== 'create_observed' ||
+      this.phase !== 'target_observed' ||
       !this.scope ||
       this.plannedCall ||
       params.graphSnapshot.status !== 'awaiting_review' ||
@@ -236,16 +293,34 @@ class CalendarVerifiedProcedureExecutionSession {
       params.graphSnapshot.asyncWork.awaitingBackgroundWorkers ||
       hasIncompleteBlockingGoal(params.graphSnapshot) ||
       !params.finalAssistant?.content.trim() ||
-      params.finalAssistant.metadata?.kind !== 'final' ||
-      params.finalAssistant.metadata.completionStatus !== 'complete' ||
-      params.finalAssistant.metadata.finishReason === 'max_iterations' ||
-      params.finalAssistant.metadata.finishReason === 'yielded'
+      !isDeliverableAssistantCompletionMetadata(params.finalAssistant.metadata)
     ) {
       this.reject(false);
       return null;
     }
-    const finalized = await this.ledger.finalize();
+    const originatingMemoryPolicyBindings = Object.freeze([
+      ...this.originatingMemoryPolicyBindings,
+    ]);
+    const authorityGuard = () =>
+      originatingMemoryPolicyBindings.every((binding) =>
+        isModelTurnMemoryPolicyBindingDurablyCurrent(binding),
+      );
+    const finalized = await this.ledger.finalize({
+      isCurrent: authorityGuard,
+      modelEffectAuthorities: Object.freeze(
+        originatingMemoryPolicyBindings.map(buildDurableModelEffectAuthority),
+      ),
+    });
+    if (!authorityGuard()) {
+      this.reject(false);
+      return null;
+    }
     if (finalized.status !== 'verified') {
+      this.reject(false);
+      return null;
+    }
+    const finalContentDigest = await digestToolEffectText(params.finalAssistant.content);
+    if (!authorityGuard()) {
       this.reject(false);
       return null;
     }
@@ -255,10 +330,14 @@ class CalendarVerifiedProcedureExecutionSession {
       graphIteration: params.graphSnapshot.iteration,
       terminalReason: params.graphSnapshot.terminalReason ?? null,
       finalAssistant: {
-        contentDigest: await digestToolEffectText(params.finalAssistant.content),
+        contentDigest: finalContentDigest,
         finishReason: params.finalAssistant.metadata.finishReason ?? null,
       },
     });
+    if (!authorityGuard()) {
+      this.reject(false);
+      return null;
+    }
     const pending = Object.freeze({}) as PendingVerifiedProcedureObservation;
     pendingObservations.set(
       pending,
@@ -286,7 +365,10 @@ class CalendarVerifiedProcedureExecutionSession {
   private observePlannedBatchLocked(batch: VerifiedProcedurePlannedBatch): void {
     if (this.phase === 'rejected' || this.phase === 'sealed') return;
     const relevant = batch.toolCalls
-      .map((call) => ({ call, toolName: relevantToolName(call.toolName) }))
+      .map((call) => ({
+        call,
+        toolName: relevantToolName(this.ledger.descriptor, call.toolName),
+      }))
       .filter(
         (
           entry,
@@ -297,11 +379,20 @@ class CalendarVerifiedProcedureExecutionSession {
       );
 
     if (this.phase === 'idle' && relevant.length === 0) return;
+    const originatingBinding = bindVerifiedProcedureOriginAuthority(batch.memoryPolicyBinding);
+    if (
+      !originatingBinding ||
+      !isModelTurnMemoryPolicyBindingDurablyCurrent(originatingBinding) ||
+      !this.originatingAuthorityCurrent(originatingBinding)
+    ) {
+      this.reject(false);
+      return;
+    }
     const expectedToolName =
       this.phase === 'idle'
-        ? 'calendar_list'
-        : this.phase === 'list_observed'
-          ? 'calendar_create_event'
+        ? this.ledger.descriptor.steps[0].toolName
+        : this.phase === 'source_observed'
+          ? this.ledger.descriptor.steps[1].toolName
           : null;
     if (
       !expectedToolName ||
@@ -318,10 +409,14 @@ class CalendarVerifiedProcedureExecutionSession {
     this.plannedCall = Object.freeze({
       iteration: batch.iteration,
       batchIndex: call.call.batchIndex,
+      memoryPolicyBinding: originatingBinding,
       toolCallId: call.call.toolCallId,
       toolName: call.toolName,
     });
-    this.phase = expectedToolName === 'calendar_list' ? 'list_planned' : 'create_planned';
+    this.phase =
+      expectedToolName === this.ledger.descriptor.steps[0].toolName
+        ? 'source_planned'
+        : 'target_planned';
   }
 
   private async observeRawOutcomeLocked(
@@ -329,7 +424,12 @@ class CalendarVerifiedProcedureExecutionSession {
   ): Promise<void> {
     if (this.phase === 'rejected' || this.phase === 'sealed') return;
     const planned = this.plannedCall;
-    const canonicalToolName = relevantToolName(outcome.toolName);
+    const authorityGuard = () => this.originatingAuthorityCurrent(planned?.memoryPolicyBinding);
+    if (!authorityGuard()) {
+      this.reject(false);
+      return;
+    }
+    const canonicalToolName = relevantToolName(this.ledger.descriptor, outcome.toolName);
     if (
       !planned ||
       !canonicalToolName ||
@@ -343,34 +443,59 @@ class CalendarVerifiedProcedureExecutionSession {
       this.reject(Boolean(outcome.receipt?.executionState === 'cancelled'));
       return;
     }
-    const observed = await this.ledger.observe({
-      iteration: outcome.iteration,
-      batchIndex: outcome.batchIndex,
-      toolCallId: outcome.toolCallId,
-      toolName: canonicalToolName,
-      argumentsText: outcome.argumentsText,
-      resultText: outcome.resultText,
-      receipt: outcome.receipt,
-    });
+    const observed = await this.ledger.observe(
+      {
+        iteration: outcome.iteration,
+        batchIndex: outcome.batchIndex,
+        toolCallId: outcome.toolCallId,
+        toolName: canonicalToolName,
+        argumentsText: outcome.argumentsText,
+        resultText: outcome.resultText,
+        receipt: outcome.receipt,
+      },
+      authorityGuard,
+    );
+    if (!authorityGuard()) {
+      this.reject(false);
+      return;
+    }
     if (observed.status === 'rejected') {
       this.reject(observed.reason === 'cancelled');
       return;
     }
     this.plannedCall = null;
-    if (canonicalToolName === 'calendar_list') {
-      const preconditions = await resolveCalendarVerifiedProcedurePreconditions();
+    if (canonicalToolName === this.ledger.descriptor.steps[0].toolName) {
+      const preconditions = await this.behavior.resolvePreconditions();
+      if (!authorityGuard()) {
+        this.reject(false);
+        return;
+      }
       if (!preconditions.satisfied || !preconditions.platform) {
         this.reject(false);
         return;
       }
       this.scope = Object.freeze({
         platform: preconditions.platform,
-        preconditionIds: calendarVerifiedProcedureApplicablePreconditionIds(preconditions.platform),
+        preconditionIds: this.behavior.applicablePreconditionIds(preconditions.platform),
       });
-      this.phase = 'list_observed';
+      this.originatingMemoryPolicyBindings.push(planned.memoryPolicyBinding);
+      this.phase = 'source_observed';
     } else {
-      this.phase = 'create_observed';
+      this.originatingMemoryPolicyBindings.push(planned.memoryPolicyBinding);
+      this.phase = 'target_observed';
     }
+  }
+
+  private originatingAuthorityCurrent(additionalBinding?: ModelTurnMemoryPolicyBinding): boolean {
+    const bindings = additionalBinding
+      ? [...this.originatingMemoryPolicyBindings, additionalBinding]
+      : this.plannedCall
+        ? [...this.originatingMemoryPolicyBindings, this.plannedCall.memoryPolicyBinding]
+        : this.originatingMemoryPolicyBindings;
+    return (
+      bindings.length > 0 &&
+      bindings.every((binding) => isModelTurnMemoryPolicyBindingDurablyCurrent(binding))
+    );
   }
 
   private observationScope(): VerifiedProcedureObservationScope {
@@ -388,6 +513,7 @@ class CalendarVerifiedProcedureExecutionSession {
     if (this.phase === 'sealed' || this.phase === 'rejected') return;
     this.phase = 'rejected';
     this.plannedCall = null;
+    this.originatingMemoryPolicyBindings = [];
     this.scope = null;
     if (cancelled) this.ledger.markCancelled();
     else this.ledger.markAmbiguous();
@@ -411,17 +537,80 @@ export interface VerifiedProcedureExecutionSession {
   }): Promise<PendingVerifiedProcedureObservation | null>;
 }
 
+class CompositeVerifiedProcedureExecutionSession implements VerifiedProcedureExecutionSession {
+  private readonly sessions: readonly TwoStepVerifiedProcedureExecutionSession[];
+
+  constructor(sessions: readonly TwoStepVerifiedProcedureExecutionSession[]) {
+    this.sessions = Object.freeze([...sessions]);
+  }
+
+  async observePlannedBatch(batch: VerifiedProcedurePlannedBatch): Promise<void> {
+    await Promise.all(this.sessions.map((session) => session.observePlannedBatch(batch)));
+  }
+
+  async observeRawOutcome(outcome: VerifiedProcedureObservedRawOutcome): Promise<void> {
+    await Promise.all(this.sessions.map((session) => session.observeRawOutcome(outcome)));
+  }
+
+  async buildApplicableAdvisory(
+    selectedTools: readonly ToolDefinition[],
+  ): Promise<VerifiedProcedureAdvisory | null> {
+    const advisories = (
+      await Promise.all(
+        this.sessions.map((session) => session.buildApplicableAdvisory(selectedTools)),
+      )
+    ).filter((advisory): advisory is VerifiedProcedureAdvisory => advisory !== null);
+
+    // Multiple exact procedures on one model turn would be ambiguous guidance.
+    // Let the normal planner proceed without learned advice instead.
+    return advisories.length === 1 ? advisories[0]! : null;
+  }
+
+  markCancelled(): void {
+    for (const session of this.sessions) session.markCancelled();
+  }
+
+  markReconciliationRequired(): void {
+    for (const session of this.sessions) session.markReconciliationRequired();
+  }
+
+  async sealGraphCandidate(params: {
+    graphSnapshot: AgentRunControlGraphState;
+    finalAssistant?: Readonly<{
+      content: string;
+      metadata?: AssistantMessageMetadata;
+    }>;
+  }): Promise<PendingVerifiedProcedureObservation | null> {
+    const readiness = await Promise.all(this.sessions.map((session) => session.isReadyToSeal()));
+    const readySessions = this.sessions.filter((_, index) => readiness[index] === true);
+    if (readySessions.length !== 1) {
+      if (readySessions.length > 1) this.markReconciliationRequired();
+      return null;
+    }
+    return readySessions[0]!.sealGraphCandidate(params);
+  }
+}
+
 export async function createVerifiedProcedureExecutionSession(params: {
   executionRunId: string;
   memoryConversationId: string;
   sourceThreadId: string;
 }): Promise<VerifiedProcedureExecutionSession | null> {
   try {
-    const ledger = await createVerifiedProcedureRunLedger({
-      registryKey: 'calendar-list-to-create-event',
-      runId: params.executionRunId,
-    });
-    return new CalendarVerifiedProcedureExecutionSession({ ...params, ledger });
+    const sessions = await Promise.all(
+      VERIFIED_PROCEDURE_BEHAVIORS.map(async (behavior) => {
+        const ledger = await createVerifiedProcedureRunLedger({
+          registryKey: behavior.registryKey,
+          runId: params.executionRunId,
+        });
+        return new TwoStepVerifiedProcedureExecutionSession({
+          ...params,
+          behavior,
+          ledger,
+        });
+      }),
+    );
+    return new CompositeVerifiedProcedureExecutionSession(sessions);
   } catch {
     return null;
   }
@@ -452,7 +641,9 @@ export async function commitPendingVerifiedProcedureObservation(params: {
   if (issued.status !== 'issued') {
     return issued.status === 'failed'
       ? { status: 'failed', code: 'commit_issue_failed' }
-      : { status: 'rejected', code: 'invalid_pending_observation' };
+      : issued.code === 'memory_authority_changed'
+        ? { status: 'rejected', code: 'memory_authority_changed' }
+        : { status: 'rejected', code: 'invalid_pending_observation' };
   }
   return recordVerifiedProcedureObservation(issued.authority, terminalObservedAt);
 }

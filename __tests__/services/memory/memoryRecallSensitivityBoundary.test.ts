@@ -19,6 +19,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../../../src/services/memory/memorySensitivityPolicy';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const BASE_EXECUTION = {
@@ -107,8 +108,9 @@ function recordFact(
     { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
   );
   getMemoryDb().runSync(
-    `UPDATE memory_facts SET sensitivity = ?, sensitivity_policy_version = 2 WHERE id = ?`,
+    `UPDATE memory_facts SET sensitivity = ?, sensitivity_policy_version = ? WHERE id = ?`,
     sensitivity,
+    MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
     fact.fact.id,
   );
 }

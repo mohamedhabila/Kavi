@@ -28,10 +28,28 @@ export type ForegroundScenarioRouteDirective =
 
 export type ForegroundScenarioLifecycleBoundary = 'app_relaunch' | 'new_conversation';
 
-export type ForegroundScenarioProviderOutcomeEvidenceRequirement = Readonly<{
-  turnIndex: number;
-  providerOutcome: IngestionProviderOutcome;
-}>;
+export type ForegroundScenarioProviderOutcomeEvidenceRequirement = Readonly<
+  { turnIndex: number } &
+    (
+      | {
+          providerOutcome: IngestionProviderOutcome;
+          providerOutcomes?: never;
+        }
+      | {
+          providerOutcome?: never;
+          providerOutcomes: ReadonlyArray<IngestionProviderOutcome>;
+        }
+    )
+>;
+
+export function resolveForegroundScenarioProviderOutcomes(
+  requirement: ForegroundScenarioProviderOutcomeEvidenceRequirement,
+): ReadonlyArray<IngestionProviderOutcome> {
+  return (
+    requirement.providerOutcomes ??
+    (requirement.providerOutcome === undefined ? [] : [requirement.providerOutcome])
+  );
+}
 
 export type ForegroundScenarioLifecycleSnapshot =
   | Readonly<{
@@ -102,6 +120,8 @@ export type ForegroundScenarioMemorySnapshot = Readonly<{
 
 export type ForegroundScenarioMemoryTurnEvidence = Readonly<{
   delta: DeepReadonly<ScopedMemoryEvidenceDelta>;
+  /** Evaluator diagnostic; never changes the foreground chat completion result. */
+  settlementError?: string;
 }>;
 
 export type ForegroundScenarioMemoryFinalState = DeepReadonly<ScopedMemoryEvidenceSnapshot>;

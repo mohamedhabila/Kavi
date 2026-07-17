@@ -69,6 +69,14 @@ export type CurrentRunCompletedToolResult = Readonly<{
   visibleResultFidelity: 'complete' | 'spilled' | 'transformed' | 'compacted';
 }>;
 
+export type CurrentRunToolCallHistoryEntry = Readonly<{
+  id?: string;
+  name: string;
+  arguments: string;
+  status: string;
+  result?: string;
+}>;
+
 export type BindCurrentTurnToolObservedMemoryEvidenceInput = Readonly<{
   executionRunId: string;
   currentUserMessageId: string;
@@ -317,6 +325,68 @@ function indexCurrentRunCompletions(
     toolCallIds.add(completion.sourceToolCallId);
   }
   return completionByMessageId;
+}
+
+/**
+ * Reconstructs exact current-run completion membership from the code-owned
+ * lifecycle ledger and its corresponding working-message projection.
+ */
+export function collectCurrentRunCompletedToolResults(params: {
+  executionRunId: string;
+  workingMessages: ReadonlyArray<Message>;
+  toolCallHistory: ReadonlyArray<CurrentRunToolCallHistoryEntry>;
+}): ReadonlyArray<CurrentRunCompletedToolResult> {
+  if (!isExactMemoryProvenanceId(params.executionRunId)) {
+    return Object.freeze([]);
+  }
+
+  const historyById = new Map<string, CurrentRunToolCallHistoryEntry | null>();
+  for (const entry of params.toolCallHistory) {
+    if (!entry.id || !isExactMemoryProvenanceId(entry.id)) continue;
+    historyById.set(entry.id, historyById.has(entry.id) ? null : entry);
+  }
+
+  const completed: CurrentRunCompletedToolResult[] = [];
+  for (const message of params.workingMessages) {
+    const toolCall = message.role === 'tool' && message.toolCalls?.length === 1
+      ? message.toolCalls[0]
+      : undefined;
+    if (
+      !toolCall ||
+      !isExactMemoryProvenanceId(message.id) ||
+      !isExactMemoryProvenanceId(toolCall.id) ||
+      message.toolCallId !== toolCall.id ||
+      message.isError === true
+    ) {
+      continue;
+    }
+    const history = historyById.get(toolCall.id);
+    const toolName = normalizeToolName(toolCall.name);
+    if (
+      !history ||
+      history.status !== 'completed' ||
+      normalizeToolName(history.name) !== toolName ||
+      toolName !== toolCall.name ||
+      history.arguments !== toolCall.arguments ||
+      history.result !== message.content ||
+      toolCall.status !== 'completed' ||
+      toolCall.result !== message.content
+    ) {
+      continue;
+    }
+    completed.push(
+      Object.freeze({
+        executionRunId: params.executionRunId,
+        sourceMessageId: message.id,
+        sourceToolCallId: toolCall.id,
+        sourceToolName: toolName,
+        argumentsSha256: sha256HexUtf8(toolCall.arguments),
+        visibleResultSha256: sha256HexUtf8(message.content),
+        visibleResultFidelity: 'complete' as const,
+      }),
+    );
+  }
+  return Object.freeze(completed);
 }
 
 function matchesCompleteCurrentRunResult(
@@ -590,4 +660,3 @@ export function deriveExactToolObservedMemoryEvidenceSpan(
   }
   return Object.freeze({ ok: true, evidenceSpan, ...best });
 }
-

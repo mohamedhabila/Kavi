@@ -324,10 +324,13 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
 
     if ((job.status === 'pending' || job.status === 'retrying') && !requestedDrain) {
       requestedDrain = true;
-      await drainIngestionQueueWithWakeup({
+      // Product chat only waits for the durable structural checkpoint; provider
+      // enrichment continues in the background. Keep the live evaluator on the
+      // same boundary instead of blocking on the full drain/provider request.
+      void drainIngestionQueueWithWakeup({
         loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
         maxJobs: 1,
-      });
+      }).catch(() => undefined);
       continue;
     }
 
@@ -588,6 +591,7 @@ export function createForegroundScenarioRuntime(
       appendAgentRunCheckpoint: store.appendAgentRunCheckpoint,
       applyConversationCompaction: store.applyConversationCompaction,
       completeAgentRun: store.completeAgentRun,
+      createConversation: store.createConversation,
       setAgentRunPhase: store.setAgentRunPhase,
       startAgentRun: store.startAgentRun,
       transitionMessageMemoryPublication: store.transitionMessageMemoryPublication,

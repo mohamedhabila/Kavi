@@ -16,7 +16,9 @@ describe('verify-strict-e2e harness', () => {
     const result = runVerifyStrictE2e({
       ...process.env,
       RUN_E2E_AGENT_EVAL: '',
+      E2E_PROVIDER: 'gemini',
       GEMINI_API_KEY: '',
+      GOOGLE_API_KEY: '',
     });
 
     expect(result.status).not.toBe(0);
@@ -27,7 +29,9 @@ describe('verify-strict-e2e harness', () => {
     const result = runVerifyStrictE2e({
       ...process.env,
       RUN_E2E_AGENT_EVAL: '1',
+      E2E_PROVIDER: 'gemini',
       GEMINI_API_KEY: '',
+      GOOGLE_API_KEY: '',
     });
 
     expect(result.status).not.toBe(0);

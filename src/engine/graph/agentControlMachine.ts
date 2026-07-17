@@ -105,6 +105,9 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
             target: 'model_turn',
             actions: 'recordModelTurnStarted',
           },
+          MODEL_TURN_INVALIDATED: {
+            actions: 'recordModelTurnInvalidated',
+          },
           ASYNC_WAITING: [
             {
               guard: 'hasPendingAsyncWork',
@@ -143,6 +146,10 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
             target: 'ready',
             actions: 'recordModelTurnFailed',
           },
+          MODEL_TURN_INVALIDATED: {
+            target: 'ready',
+            actions: 'recordModelTurnInvalidated',
+          },
           FINAL_CANDIDATE_READY: {
             target: 'awaiting_review',
             actions: 'recordFinalCandidateReady',
@@ -152,6 +159,10 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
       },
       awaiting_tool_results: {
         on: {
+          MODEL_TURN_INVALIDATED: {
+            target: 'ready',
+            actions: 'recordModelTurnInvalidated',
+          },
           TOOL_RESULT_RECORDED: [
             {
               guard: 'willCompleteToolBoundary',
@@ -177,6 +188,10 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
       },
       recovering: {
         on: {
+          MODEL_TURN_INVALIDATED: {
+            target: 'ready',
+            actions: 'recordModelTurnInvalidated',
+          },
           MODEL_TURN_STARTED: {
             target: 'model_turn',
             actions: 'recordModelTurnStarted',
@@ -189,6 +204,10 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
       },
       waiting_async: {
         on: {
+          MODEL_TURN_INVALIDATED: {
+            target: 'ready',
+            actions: 'recordModelTurnInvalidated',
+          },
           MODEL_TURN_STARTED: {
             target: 'model_turn',
             actions: 'recordModelTurnStarted',

@@ -1,7 +1,7 @@
-import type { MemoryFactContributionOperationV1 } from './factContributionCodec';
+import type { MemoryFactContributionOperationV2 } from './factContributionCodec';
 
 export interface FactContributionSupersessionAuthorization {
-  operation: MemoryFactContributionOperationV1;
+  operation: MemoryFactContributionOperationV2;
   supersedePrior: boolean;
   contributedFactId: string;
   predecessorFactIds: ReadonlyArray<string>;

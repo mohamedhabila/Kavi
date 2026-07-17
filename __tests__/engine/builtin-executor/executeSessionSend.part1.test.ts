@@ -9,7 +9,6 @@ import {
   mockChatStoreState,
 } from '../../helpers/builtinExecutorHarness';
 import {
-  failedToolContent,
   parseCompletedToolOutcome,
   parseFailedToolOutcome,
 } from '../../helpers/toolRuntimeOutcome';
@@ -24,7 +23,11 @@ describe('Builtin Tool Executor', () => {
         },
         MOCK_PROVIDER,
       );
-      expect(failedToolContent(result)).toContain('Error');
+      expect(parseFailedToolOutcome(result)).toMatchObject({
+        status: 'failed',
+        code: 'session_not_found',
+        sessionId: 'sub-123',
+      });
     });
 
     it('returns running status for active session', async () => {

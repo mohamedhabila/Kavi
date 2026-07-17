@@ -198,6 +198,7 @@ export const TOOL_PERMISSION_GROUPS: ToolPermissionGroup[] = [
       'calendar_list',
       'calendar_events',
       'calendar_create_event',
+      'calendar_update_event',
       'email_compose',
       'sms_compose',
       'phone_call',

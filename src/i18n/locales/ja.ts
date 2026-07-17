@@ -923,7 +923,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     setupSkillHint: 'このスキルを実行できるように、必要なシークレットを端末に安全に保存します。',
     secretSaveFailed: 'スキルのシークレットを保存できませんでした。もう一度お試しください。',
     installBlocked: 'インストールがブロックされました',
-    installFailed: 'Failed to install skill.',
   },
   voice: {
     title: '音声',

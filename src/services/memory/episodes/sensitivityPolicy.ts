@@ -1,4 +1,5 @@
 import type { MemoryFactSensitivity } from '../facts/applicabilityProvenance';
+import { closedMemoryFactSensitivity } from '../facts/applicabilityProvenance';
 import {
   classifyMemoryFactSensitivity,
   classifyMemoryTextSensitivity,
@@ -71,8 +72,8 @@ function hasCompleteClosedTurn(input: {
 
 /**
  * Derive an episode's immutable lower-bound sensitivity from raw evidence.
- * Missing or malformed closed-turn evidence is sensitive by default. Provider
- * summaries and fact candidates can only raise this classification.
+ * Missing or malformed closed-turn evidence forbids persistence. Provider
+ * summaries and fact candidates can only raise the declared floor.
  */
 export function deriveEpisodeSensitivity(input: {
   summary: string;
@@ -81,7 +82,7 @@ export function deriveEpisodeSensitivity(input: {
   sourceEndMessageId: string | null;
   evidence?: EpisodeSensitivityEvidence;
   priorSensitivity?: unknown;
-}): EpisodeSensitivity {
+}): EpisodeSensitivity | 'restricted' {
   const prior =
     input.priorSensitivity === undefined
       ? 'normal'
@@ -89,17 +90,18 @@ export function deriveEpisodeSensitivity(input: {
   const evidence = input.evidence;
   if (
     !evidence ||
+    !closedMemoryFactSensitivity(evidence.declaredSensitivity) ||
     !Array.isArray(evidence.sourceMessages) ||
     !Array.isArray(evidence.facts) ||
     !hasCompleteClosedTurn({ ...input, evidence })
   ) {
-    return maxEpisodeSensitivity(prior, 'sensitive');
+    return 'restricted';
   }
   if (evidence.sourceMessages.some((message) => message.truncated === true)) {
-    return maxEpisodeSensitivity(prior, 'sensitive');
+    return 'restricted';
   }
 
-  let factSensitivity: MemoryFactSensitivity = 'normal';
+  let factSensitivity = closedMemoryFactSensitivity(evidence.declaredSensitivity)!;
   try {
     for (const fact of evidence.facts) {
       factSensitivity = maxMemoryFactSensitivity(
@@ -108,12 +110,15 @@ export function deriveEpisodeSensitivity(input: {
       );
     }
   } catch {
-    return maxEpisodeSensitivity(prior, 'sensitive');
+    return 'restricted';
   }
   const textSensitivity = maxMemoryFactSensitivity(
     classifyMemoryTextSensitivity(input.summary),
     ...evidence.sourceMessages.map((message) => classifyMemoryTextSensitivity(message.content)),
   );
+  if (factSensitivity === 'restricted' || textSensitivity === 'restricted') {
+    return 'restricted';
+  }
   return maxEpisodeSensitivity(
     prior,
     episodeSensitivityForFact(factSensitivity),

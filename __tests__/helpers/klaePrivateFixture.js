@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const GOVERNANCE_SCHEMA_URL =
@@ -221,7 +222,11 @@ function buildPack(splitKind) {
 }
 
 function createPrivateReleaseFixture(projectRoot) {
-  const privateRoot = path.join(projectRoot, '.private', 'evals');
+  const isolatedProjectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'klae-private-project-'));
+  fs.cpSync(path.join(projectRoot, 'evaluation'), path.join(isolatedProjectRoot, 'evaluation'), {
+    recursive: true,
+  });
+  const privateRoot = path.join(isolatedProjectRoot, '.private', 'evals');
   fs.mkdirSync(privateRoot, { recursive: true, mode: 0o700 });
   const directory = fs.mkdtempSync(path.join(privateRoot, 'klae-governance-test-'));
   const packs = Object.fromEntries(
@@ -273,7 +278,7 @@ function createPrivateReleaseFixture(projectRoot) {
       registrySha256: '',
     },
     packs,
-    projectRoot,
+    projectRoot: isolatedProjectRoot,
     registry,
     registryPath: path.join(directory, 'registry.json'),
   };
@@ -292,7 +297,7 @@ function savePrivateReleaseFixture(fixture, options = {}) {
 }
 
 function removePrivateReleaseFixture(fixture) {
-  fs.rmSync(fixture.directory, { recursive: true, force: true });
+  fs.rmSync(fixture.projectRoot, { recursive: true, force: true });
 }
 
 module.exports = {

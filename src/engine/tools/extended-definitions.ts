@@ -114,6 +114,7 @@ export const CRON_TOOL: ToolDefinition = {
   name: 'cron',
   description:
     'Manage scheduled tasks (cron jobs). Create, list, update, delete, or run tasks. ' +
+    'Existing tasks can be selected by ID or exact name; a name is accepted only when it uniquely identifies one task. Request clarification when no unique match remains. ' +
     'When the app is not active, tasks use a tap-to-wake notification and run after foreground activation.',
   input_schema: {
     type: 'object',
@@ -122,8 +123,17 @@ export const CRON_TOOL: ToolDefinition = {
         type: 'string',
         description: 'Action: create, list, update, delete, run, enable, disable',
       },
-      id: { type: 'string', description: 'Task ID (for update/delete/run/enable/disable)' },
-      name: { type: 'string', description: 'Task name (for create)' },
+      id: {
+        type: 'string',
+        description:
+          'Precise task ID for update/delete/run/enable/disable. An exact unique name can be used instead.',
+      },
+      name: {
+        type: 'string',
+        description:
+          'Task name for create, or exact existing task name selector for update/delete/run/enable/disable.',
+      },
+      newName: { type: 'string', description: 'Replacement task name for update.' },
       schedule: { type: 'string', description: 'Cron expression (for create/update)' },
       prompt: { type: 'string', description: 'Task prompt/instruction (for create/update)' },
       mode: {

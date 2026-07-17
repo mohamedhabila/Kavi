@@ -30,6 +30,7 @@ type SelectedSource = {
   sourceThreadId: string;
   lane: 'current_thread' | 'cross_thread';
   authorizedOrigin: AuthorizedEpisodeOrigin | null;
+  policyExpiresAt: number | null;
   sourceIndex: number;
 };
 
@@ -59,6 +60,7 @@ function episodeSourceIsCurrentlyAuthorized(
       episodeId: source.id,
       lane: source.lane,
       authorizedOrigin: source.authorizedOrigin,
+      policyExpiresAt: source.policyExpiresAt,
       relevanceScore: source.relevanceScore,
       currentScope,
       asOf,
@@ -91,6 +93,7 @@ function normalizedSource(
           sourceThreadId,
           lane: 'current_thread',
           authorizedOrigin: null,
+          policyExpiresAt: null,
         }
       : null;
   }
@@ -117,6 +120,13 @@ function normalizedSource(
     ) {
       return null;
     }
+    const policyExpiresAt =
+      source.policyExpiresAt === null || Number.isSafeInteger(source.policyExpiresAt)
+        ? (source.policyExpiresAt as number | null)
+        : undefined;
+    if (policyExpiresAt === undefined || (policyExpiresAt !== null && policyExpiresAt <= asOf)) {
+      return null;
+    }
     const rawOrigin = source.authorizedOrigin as Record<string, unknown>;
     let authorizedOrigin: AuthorizedEpisodeOrigin;
     try {
@@ -139,6 +149,7 @@ function normalizedSource(
       sourceThreadId,
       lane,
       authorizedOrigin,
+      policyExpiresAt,
     };
     return memoryConversationId === authorizedOrigin.memoryConversationId &&
       sourceThreadId === authorizedOrigin.sourceThreadId &&
@@ -160,6 +171,7 @@ function normalizedSource(
           sourceThreadId,
           lane: 'current_thread',
           authorizedOrigin: null,
+          policyExpiresAt: null,
         }
       : null;
   }
@@ -434,7 +446,7 @@ export function expandLocalEvidence(input: ExpandLocalEvidenceInput): LocalEvide
   for (const source of selectedSources) {
     diagnostics.queryCount += 1;
     const rows =
-          source.kind === 'fact'
+      source.kind === 'fact'
         ? listLocalFactNeighborhood({
             factId: source.id,
             memoryOwnerId: currentScope.memoryOwnerId,

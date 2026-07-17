@@ -4,6 +4,7 @@ const mockExtractProviderEnrichment = jest.fn();
 const mockEnsureFactSchema = jest.fn();
 const mockFindEntityByName = jest.fn();
 const mockListFacts = jest.fn();
+const mockHasSameSourceExplicitMemoryAuthority = jest.fn();
 const mockUpsertState = jest.fn();
 const mockRecordAgentRunEvidenceMemory = jest.fn();
 const mockBridgeGraphGoalEvidence = jest.fn();
@@ -28,12 +29,21 @@ jest.mock('../../../src/services/memory/schema', () => ({
   ensureFactSchema: (...args: any[]) => mockEnsureFactSchema(...args),
 }));
 
+jest.mock('../../../src/services/memory/policy', () => ({
+  canWriteLongTermMemory: jest.fn(() => true),
+}));
+
 jest.mock('../../../src/services/memory/entities', () => ({
   findEntityByName: (...args: any[]) => mockFindEntityByName(...args),
 }));
 
 jest.mock('../../../src/services/memory/facts/queries', () => ({
   listFacts: (...args: any[]) => mockListFacts(...args),
+}));
+
+jest.mock('../../../src/services/memory/sameSourceFactAuthority', () => ({
+  hasSameSourceExplicitMemoryAuthority: (...args: any[]) =>
+    mockHasSameSourceExplicitMemoryAuthority(...args),
 }));
 
 jest.mock('../../../src/services/memory/consolidation/schedulerState', () => ({
@@ -67,6 +77,7 @@ describe('turnProcessor memory namespace contract', () => {
     mockEnsureFactSchema.mockImplementation(() => undefined);
     mockFindEntityByName.mockReturnValue(null);
     mockListFacts.mockReturnValue([]);
+    mockHasSameSourceExplicitMemoryAuthority.mockReturnValue(false);
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'shared namespace turn',
       facts: [],

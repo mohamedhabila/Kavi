@@ -1,5 +1,6 @@
 import {
   resolveFactApplicabilityProvenance,
+  requireMemoryFactSensitivity,
   requireMemoryFactReviewState,
   type SealedFactApplicabilityProvenance,
 } from './applicabilityProvenance';
@@ -8,16 +9,16 @@ import { requireFactScopeIdentity } from './scopeIdentity';
 import { clamp01, normalizeDecayPolicy, normalizeFactKind, type RecordFactInput } from './types';
 import {
   MEMORY_FACT_CONTRIBUTION_PAYLOAD_VERSION,
-  type MemoryFactContributionOperationV1,
-  type MemoryFactContributionPayloadV1,
+  type MemoryFactContributionOperationV2,
+  type MemoryFactContributionPayloadV2,
 } from '../factContributionCodec';
 import { requireExactMemoryProvenanceId } from '../memoryProvenanceIdentity';
 
 function normalizeFactMutation(
   input: RecordFactInput,
-  operation: MemoryFactContributionOperationV1,
+  operation: MemoryFactContributionOperationV2,
   sealedApplicability?: SealedFactApplicabilityProvenance,
-): MemoryFactContributionPayloadV1 {
+): MemoryFactContributionPayloadV2 {
   const now = requireFactMutationTimestamp(
     input.now ?? Date.now(),
     'memory_fact_mutation_clock_invalid',
@@ -77,6 +78,7 @@ function normalizeFactMutation(
       stability: clamp01(input.stability ?? 0.5),
       decayRate: Math.max(0, input.decayRate ?? 0.03),
       reviewState: requireMemoryFactReviewState(input.reviewState ?? 'auto'),
+      sensitivityFloor: requireMemoryFactSensitivity(input.sensitivityFloor ?? 'normal'),
       memoryKind,
       supersedePrior: input.supersedePrior === true,
       now,
@@ -88,7 +90,7 @@ function normalizeFactMutation(
 export function normalizeRecordFactMutation(
   input: RecordFactInput,
   sealedApplicability?: SealedFactApplicabilityProvenance,
-): MemoryFactContributionPayloadV1 {
+): MemoryFactContributionPayloadV2 {
   return normalizeFactMutation(input, { kind: 'record' }, sealedApplicability);
 }
 
@@ -97,7 +99,7 @@ export function normalizeExactReplacementFactMutation(
   input: RecordFactInput,
   expectedCurrentFactId: string,
   sealedApplicability?: SealedFactApplicabilityProvenance,
-): MemoryFactContributionPayloadV1 {
+): MemoryFactContributionPayloadV2 {
   return normalizeFactMutation(
     input,
     {

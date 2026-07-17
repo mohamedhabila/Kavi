@@ -33,6 +33,12 @@ const SOURCE_LINEAGE_KEYS = [
 const CODE_OWNED_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const RECEIPT_ID_PATTERN = /^ter_[a-f0-9]{32}$/u;
+const VALID_STEP_KEYS = new Set([
+  'calendar-list',
+  'calendar-create-event',
+  'calendar-events',
+  'calendar-update-event',
+]);
 
 export type VerifiedProcedureEvidenceManifestStep = Readonly<{
   stepKey: VerifiedProcedureStepEvidence['stepKey'];
@@ -123,7 +129,8 @@ function validSourceLineage(value: unknown): value is VerifiedProcedureMemoryLin
 function validManifestStep(value: unknown): value is VerifiedProcedureEvidenceManifestStep {
   if (!isPlainRecord(value) || !hasExactKeys(value, MANIFEST_STEP_KEYS)) return false;
   return (
-    (value.stepKey === 'calendar-list' || value.stepKey === 'calendar-create-event') &&
+    typeof value.stepKey === 'string' &&
+    VALID_STEP_KEYS.has(value.stepKey) &&
     typeof value.receiptId === 'string' &&
     RECEIPT_ID_PATTERN.test(value.receiptId) &&
     typeof value.contractIdentityDigest === 'string' &&
@@ -132,6 +139,13 @@ function validManifestStep(value: unknown): value is VerifiedProcedureEvidenceMa
     SHA256_PATTERN.test(value.requestDigest) &&
     typeof value.resultDigest === 'string' &&
     SHA256_PATTERN.test(value.resultDigest)
+  );
+}
+
+function hasRegisteredStepOrder(steps: readonly VerifiedProcedureEvidenceManifestStep[]): boolean {
+  return (
+    (steps[0]?.stepKey === 'calendar-list' && steps[1]?.stepKey === 'calendar-create-event') ||
+    (steps[0]?.stepKey === 'calendar-events' && steps[1]?.stepKey === 'calendar-update-event')
   );
 }
 
@@ -157,8 +171,7 @@ export function decodeVerifiedProcedureEvidenceManifest(
     !Array.isArray(parsed.orderedSteps) ||
     parsed.orderedSteps.length !== 2 ||
     !parsed.orderedSteps.every(validManifestStep) ||
-    parsed.orderedSteps[0]?.stepKey !== 'calendar-list' ||
-    parsed.orderedSteps[1]?.stepKey !== 'calendar-create-event' ||
+    !hasRegisteredStepOrder(parsed.orderedSteps) ||
     typeof parsed.linkageDigest !== 'string' ||
     !SHA256_PATTERN.test(parsed.linkageDigest) ||
     !validSourceLineage(parsed.sourceLineage) ||

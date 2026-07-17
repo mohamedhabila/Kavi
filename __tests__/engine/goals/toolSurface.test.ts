@@ -35,6 +35,23 @@ const discoveryTools: ToolDefinition[] = [
     },
   },
   {
+    name: 'memory_forget',
+    description: 'Permanently withdraw a memory fact.',
+    input_schema: {
+      type: 'object',
+      properties: { factId: { type: 'string' } },
+      required: ['factId'],
+    },
+    contract: {
+      category: 'memory',
+      capabilities: ['delete'],
+      resourceKinds: ['memory'],
+      sideEffects: ['destructive'],
+      riskHints: ['destructive', 'requires_approval'],
+      riskLevel: 'high',
+    },
+  },
+  {
     name: 'update_goals',
     description: 'Update graph goals.',
     input_schema: { type: 'object', properties: {} },
@@ -89,6 +106,21 @@ const discoveryTools: ToolDefinition[] = [
       capabilities: ['read', 'write', 'verify'],
       resourceKinds: ['browser'],
       sideEffects: ['external_run'],
+    },
+  },
+  {
+    name: 'cron',
+    description: 'Manage scheduled assistant tasks.',
+    input_schema: {
+      type: 'object',
+      properties: { action: { type: 'string' }, id: { type: 'string' } },
+      required: ['action'],
+    },
+    contract: {
+      category: 'automation',
+      capabilities: ['coordinate', 'monitor'],
+      resourceKinds: ['device'],
+      sideEffects: ['local_artifact'],
     },
   },
 ];
@@ -287,8 +319,27 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('update_goals')).toBe(true);
     expect(names.has('memory_recall')).toBe(true);
     expect(names.has('memory_remember')).toBe(true);
+    expect(names.has('memory_forget')).toBe(true);
     expect(names.has('write_file')).toBe(true);
+    expect(names.has('cron')).toBe(true);
     expect(names.has('workspace_note_write')).toBe(false);
+  });
+
+  it('keeps scheduled assistant work off the chit-chat surface', () => {
+    const surface = resolveTurnToolSurface({
+      allTools: discoveryTools,
+      conversationMode: 'chitchat',
+      goals: [],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(),
+      includeToolCatalog: false,
+    });
+
+    const names = selectedNames(surface);
+    expect(names.has('memory_forget')).toBe(true);
+    expect(names.has('cron')).toBe(false);
   });
 
   it('exposes the discovery entrypoint when the graph has no narrower surface', () => {

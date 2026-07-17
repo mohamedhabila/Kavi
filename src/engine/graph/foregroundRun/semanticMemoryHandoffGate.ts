@@ -108,6 +108,14 @@ export async function enforceSemanticMemoryHandoffGate(params: {
       params.setChatError('Foreground response ownership changed.');
       return 'stopped';
     }
+
+    // A terminal or missing enrichment job cannot become ready on a repeated
+    // foreground turn. Once the stale handoff is durably consumed, continue
+    // through the normal retrieval path in this same turn instead of making
+    // the user resubmit an unrelated request for an identical outcome.
+    if (consumableUnavailable) {
+      return 'proceed';
+    }
   }
 
   if (consistency.outcome !== 'ready' && consistency.outcome !== 'opt_out') {

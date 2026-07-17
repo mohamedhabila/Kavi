@@ -11,7 +11,10 @@ import {
 } from '../../../src/services/memory/schema';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { probeMemoryWithdrawalResiduals } from '../../../src/services/memory/withdrawalResidualProbe';
-import { recordContributionBackedFact } from '../../helpers/memoryRetirementTestFixtures';
+import {
+  CODE_OWNED_NORMAL_TEST_SENSITIVITY,
+  recordContributionBackedFact,
+} from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -45,6 +48,7 @@ it('deletes and probes an exact structural receipt whose ingestion job is missin
       memoryConversationId: 'withdrawal-conversation',
       sourceThreadId: 'withdrawal-thread',
       producerEventId: 'withdrawal-orphan-structural-receipt',
+      sensitivityDeclaration: CODE_OWNED_NORMAL_TEST_SENSITIVITY,
     },
   ).fact;
   const orphanJobId = 'missing-ingestion-job';

@@ -5,6 +5,9 @@ jest.mock('expo-crypto', () => {
     digestStringAsync: jest.fn(async (_algorithm: string, value: string) =>
       createHash('sha256').update(value, 'utf8').digest('hex'),
     ),
+    digest: jest.fn(async (_algorithm: string, value: Uint8Array) =>
+      Uint8Array.from(createHash('sha256').update(Buffer.from(value)).digest()).buffer,
+    ),
   };
 });
 
@@ -227,7 +230,7 @@ describe('execution recovery coordinator routing', () => {
 
   it('defers without reading state when the closed command digest is unavailable', async () => {
     const harness = makeHarness();
-    jest.mocked(Crypto.digestStringAsync).mockRejectedValueOnce(new Error('private crypto error'));
+    jest.mocked(Crypto.digest).mockRejectedValueOnce(new Error('private crypto error'));
 
     const outcome = await coordinateExecutionRecovery(
       { queryResult: harness.initial },

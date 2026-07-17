@@ -1,7 +1,8 @@
-import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
 import type { ModelProjectionOwner } from '../../types/conversation';
 import { generateId } from '../../utils/id';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
+import { createForegroundModelGenerationChangedError } from '../runtimeError';
 import { getExecutionJournalDb } from './database';
 import { decodeExecutionCheckpointRow, decodeExecutionRunRow } from './decoders';
 import {
@@ -162,10 +163,7 @@ export async function createForegroundModelExecution(
     throw new Error('foreground_model_journal_invalid_clock');
   }
   const createId = options.generateId ?? generateId;
-  const digest =
-    options.digest ??
-    ((value: string) =>
-      Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
+  const digest = options.digest ?? sha256HexUtf8Async;
   const [inputDigest, modelConfigDigest, createdStateDigest] = await Promise.all([
     digestValue('request', input.requestState, digest),
     digestValue('model', input.modelState, digest),
@@ -249,10 +247,7 @@ export async function activateForegroundModelExecution(
   }
   const createId = options.generateId ?? generateId;
   const checkpointId = generatedId('foreground-before-model', createId);
-  const digest =
-    options.digest ??
-    ((value: string) =>
-      Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
+  const digest = options.digest ?? sha256HexUtf8Async;
   const stateDigest = await digestValue(
     'before_model',
     [
@@ -282,7 +277,7 @@ export async function activateForegroundModelExecution(
       latest.controlEpoch !== run.controlEpoch ||
       latest.boundary !== 'run_created'
     ) {
-      throw new Error('foreground_model_journal_generation_changed');
+      throw createForegroundModelGenerationChangedError();
     }
     assertEmptyEffectState(database, run.id);
     if (!canTransitionExecutionRun(run.status, 'running')) {
@@ -317,7 +312,7 @@ export async function activateForegroundModelExecution(
       run.updatedAt,
     );
     if (transition.changes !== 1) {
-      throw new Error('foreground_model_journal_generation_changed');
+      throw createForegroundModelGenerationChangedError();
     }
     return toLease(readRun(database, run.id), checkpoint);
   });
@@ -361,7 +356,7 @@ function assertLease(run: ExecutionRunRecord, lease: ForegroundModelExecutionLea
     run.controlEpoch !== lease.controlEpoch ||
     run.updatedAt !== lease.updatedAt
   ) {
-    throw new Error('foreground_model_journal_generation_changed');
+    throw createForegroundModelGenerationChangedError();
   }
 }
 
@@ -385,10 +380,7 @@ export async function completeForegroundModelExecution(
   }
   const createId = options.generateId ?? generateId;
   const terminalCheckpointId = generatedId('foreground-terminal', createId);
-  const digest =
-    options.digest ??
-    ((value: string) =>
-      Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
+  const digest = options.digest ?? sha256HexUtf8Async;
   const terminalStateDigest = await digestValue(
     'terminal_projection',
     input.projectionState,
@@ -419,7 +411,7 @@ export async function completeForegroundModelExecution(
       latest.resumeStrategy !== 'not_resumable' ||
       !['run_created', 'before_model'].includes(latest.boundary)
     ) {
-      throw new Error('foreground_model_journal_generation_changed');
+      throw createForegroundModelGenerationChangedError();
     }
     assertEmptyEffectState(database, run.id);
     const occurredAt = Math.max(requestedAt, run.updatedAt);
@@ -467,7 +459,7 @@ export async function completeForegroundModelExecution(
       run.updatedAt,
     );
     if (result.changes !== 1) {
-      throw new Error('foreground_model_journal_generation_changed');
+      throw createForegroundModelGenerationChangedError();
     }
     if (next.status === 'cancelled') {
       const controlResult = database.runSync(

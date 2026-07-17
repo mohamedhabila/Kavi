@@ -36,7 +36,7 @@ function createConversation(): Conversation {
 function createHarness(overrides: { conversation?: Conversation } = {}) {
   const actions = {
     appendConversationLog: jest.fn(),
-    ensureCanonicalConversation: jest.fn(),
+    startNewConversation: jest.fn(() => 'new-conversation'),
     updateAssistantMessage: jest.fn(),
   };
 
@@ -95,7 +95,7 @@ describe('foreground command result controller', () => {
     );
   });
 
-  it('requests a fresh canonical conversation for new-conversation command results', async () => {
+  it('starts a genuinely fresh conversation for new-conversation command results', async () => {
     const harness = createHarness();
 
     await harness.controller.handleCommandResult({
@@ -103,10 +103,9 @@ describe('foreground command result controller', () => {
       response: 'Starting new conversation...',
     });
 
-    expect(harness.actions.ensureCanonicalConversation).toHaveBeenCalledWith({
+    expect(harness.actions.startNewConversation).toHaveBeenCalledWith({
       personaId: 'super-agent',
       mode: 'agentic',
-      reportMissingProvider: true,
     });
     expect(mockShareTextExport).not.toHaveBeenCalled();
   });

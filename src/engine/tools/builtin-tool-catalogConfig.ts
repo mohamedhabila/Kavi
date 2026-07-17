@@ -173,7 +173,13 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
     purpose: 'Capture, generate, or edit media and speech.',
   },
   memory: {
-    tools: ['memory_search', 'memory_recall', 'memory_remember', 'memory_manage'],
+    tools: [
+      'memory_search',
+      'memory_recall',
+      'memory_remember',
+      'memory_forget',
+      'memory_manage',
+    ],
     purpose:
       'Read, write, search, and manage structured living-memory facts and workflow evidence.',
   },

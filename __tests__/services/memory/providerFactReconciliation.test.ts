@@ -11,6 +11,7 @@ import type { SemanticFactProposalV1 } from '../../../src/services/memory/semant
 
 const EMPTY_PROVIDER_RESULT: Omit<ProviderConsolidatorResult, 'newFacts'> = {
   episodeSummary: null,
+  episodeSensitivity: 'normal',
   activeFocus: null,
   openThreads: [],
   notable: [],
@@ -34,7 +35,11 @@ function proposal(overrides: Partial<SemanticFactProposalV1> = {}): SemanticFact
   };
 }
 
-function merge(currentUserMessage: string, proposals: SemanticFactProposalV1[]) {
+function merge(
+  currentUserMessage: string,
+  proposals: SemanticFactProposalV1[],
+  sameSourceExplicitMemoryAuthority = false,
+) {
   return mergeProviderIntoStructural(
     { episodeSummary: 'structural', facts: [] },
     { ...EMPTY_PROVIDER_RESULT, newFacts: proposals },
@@ -43,6 +48,7 @@ function merge(currentUserMessage: string, proposals: SemanticFactProposalV1[]) 
       currentUserMessage,
       memoryConversationId: 'conversation-current',
       threadId: 'thread-current',
+      sameSourceExplicitMemoryAuthority,
     },
   );
 }
@@ -96,7 +102,11 @@ describe('passive provider fact reconciliation', () => {
         predicate: 'preferred_city',
         value,
         operation: 'insert',
-        proposedSensitivity: 'personal',
+        sensitivityDeclaration: {
+          version: 1,
+          source: 'provider',
+          sensitivity: 'personal',
+        },
         evidenceMessageIds: ['user-current'],
         admittedWrite: {
           operation: 'insert',
@@ -250,6 +260,24 @@ describe('passive provider fact reconciliation', () => {
     expect(result.newFacts).toEqual([]);
   });
 
+  it('gives an explicit same-source memory write exclusive semantic authority', () => {
+    const message = 'أفضل مدة الاجتماعات ٤٥ دقيقة ووقت السفر ٣٠ دقيقة';
+    const candidates = [
+      proposal({
+        predicate: 'مدة الاجتماعات',
+        value: '٤٥ دقيقة',
+        evidenceQuote: message,
+      }),
+      proposal({
+        predicate: 'وقت السفر',
+        value: '٣٠ دقيقة',
+        evidenceQuote: message,
+      }),
+    ];
+
+    expect(merge(message, candidates, true).newFacts).toEqual([]);
+  });
+
   it('preserves structural tool-observed facts while rejecting provider semantics', () => {
     const structuralFact = {
       subject: 'device',
@@ -258,6 +286,11 @@ describe('passive provider fact reconciliation', () => {
       sealedApplicability: {
         factClass: 'workflow' as const,
         sourceAuthority: 'tool_observed' as const,
+      },
+      sensitivityDeclaration: {
+        version: 1 as const,
+        source: 'code_owned' as const,
+        sensitivity: 'normal' as const,
       },
     };
     const result = mergeProviderIntoStructural(
@@ -268,6 +301,7 @@ describe('passive provider fact reconciliation', () => {
         currentUserMessage: 'My city is Rotterdam',
         memoryConversationId: 'conversation-current',
         threadId: 'thread-current',
+        sameSourceExplicitMemoryAuthority: false,
       },
     );
 

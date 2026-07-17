@@ -13,7 +13,7 @@ import {
 } from './ingestionQueueDependencies';
 import type { IngestionJob, IngestionJobStatus } from './ingestionQueueStore';
 import { MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
-import { newId } from './schema';
+import { newId } from './schemaValues';
 import { getRuntimeProcessEpoch } from '../runtimeProcessEpoch';
 import { loadActiveIngestionSourceSnapshotForRow } from './ingestionSourceSnapshotStore';
 import type { IngestionSourceSnapshotV1 } from './ingestionSourceSnapshot';

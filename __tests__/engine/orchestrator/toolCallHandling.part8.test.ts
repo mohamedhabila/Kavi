@@ -18,8 +18,9 @@ describe('Orchestrator', () => {
   describe('Tool call handling part 8', () => {
     it('restricts pending expo workflows to workflow monitoring tools until the run is terminal', async () => {
       (executeTool as jest.Mock)
-        .mockResolvedValueOnce(
-          JSON.stringify({
+        .mockResolvedValueOnce({
+          status: 'completed',
+          content: JSON.stringify({
             projectId: 'proj-1',
             projectName: 'Kavi',
             mode: 'github-workflow',
@@ -29,9 +30,10 @@ describe('Orchestrator', () => {
               conclusion: null,
             },
           }),
-        )
-        .mockResolvedValueOnce(
-          JSON.stringify({
+        })
+        .mockResolvedValueOnce({
+          status: 'completed',
+          content: JSON.stringify({
             projectId: 'proj-1',
             projectName: 'Kavi',
             mode: 'github-workflow',
@@ -41,23 +43,29 @@ describe('Orchestrator', () => {
               conclusion: 'success',
             },
           }),
-        );
+        });
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'expo_eas_build', arguments: '{"projectId":"proj-1"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'expo_eas_build', arguments: '{"projectId":"proj-1"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'The build finished successfully.' },
-          { type: 'done', content: 'The build finished successfully.' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'The build finished successfully.' },
+            { type: 'done', content: 'The build finished successfully.' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -106,8 +114,9 @@ describe('Orchestrator', () => {
 
     it('keeps agentic catalog and browser tools available after catalog browse', async () => {
       useSuperAgentPersona();
-      (executeTool as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify({
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
           category: 'browser',
           tools: [
             { name: 'browser_navigate', description: 'Navigate browser pages.' },
@@ -115,23 +124,29 @@ describe('Orchestrator', () => {
             { name: 'browser_snapshot', description: 'Inspect browser state.' },
           ],
         }),
+      });
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator(
+          [
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc1', name: 'tool_catalog', arguments: '{"category":"browser"}' },
+            },
+            { type: 'done', content: '' },
+          ],
+          'tool',
+        ),
       );
 
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc1', name: 'tool_catalog', arguments: '{"category":"browser"}' },
-          },
-          { type: 'done', content: '' },
-        ]),
-      );
-
-      mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Using browser tools now' },
-          { type: 'done', content: 'Using browser tools now' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Using browser tools now' },
+            { type: 'done', content: 'Using browser tools now' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -181,10 +196,13 @@ describe('Orchestrator', () => {
 
     it('builds a Gemini-focused tool set and descriptive system prompt for investigation requests', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Investigating' },
-          { type: 'done', content: 'Investigating' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Investigating' },
+            { type: 'done', content: 'Investigating' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -253,10 +271,13 @@ describe('Orchestrator', () => {
 
     it('keeps old transcript tools out of vague follow-up turns without graph grounding', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'Retrying' },
-          { type: 'done', content: 'Retrying' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'Retrying' },
+            { type: 'done', content: 'Retrying' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();
@@ -312,8 +333,9 @@ describe('Orchestrator', () => {
     });
 
     it('keeps web_search and web_fetch available after a successful search returns candidate urls', async () => {
-      (executeTool as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify({
+      (executeTool as jest.Mock).mockResolvedValueOnce({
+        status: 'completed',
+        content: JSON.stringify({
           provider: 'gemini',
           searches: [
             {
@@ -327,27 +349,33 @@ describe('Orchestrator', () => {
             },
           ],
         }),
-      );
+      });
 
       mockStreamMessage
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            {
-              type: 'tool_call',
-              toolCall: {
-                id: 'tc-search',
-                name: 'web_search',
-                arguments: '{"queries":["OpenAI structured outputs developer guide"]}',
+          createStreamGenerator(
+            [
+              {
+                type: 'tool_call',
+                toolCall: {
+                  id: 'tc-search',
+                  name: 'web_search',
+                  arguments: '{"queries":["OpenAI structured outputs developer guide"]}',
+                },
               },
-            },
-            { type: 'done', content: '' },
-          ]),
+              { type: 'done', content: '' },
+            ],
+            'tool',
+          ),
         )
         .mockImplementationOnce(() =>
-          createStreamGenerator([
-            { type: 'token', content: 'Done.' },
-            { type: 'done', content: 'Done.' },
-          ]),
+          createStreamGenerator(
+            [
+              { type: 'token', content: 'Done.' },
+              { type: 'done', content: 'Done.' },
+            ],
+            'text',
+          ),
         );
 
       const callbacks = makeCallbacks();

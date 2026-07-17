@@ -1,5 +1,5 @@
 import type { FactContributionSupersessionSnapshotCommitmentRow } from '../factContributionChildCommitments';
-import type { MemoryFactContributionPayloadV1 } from '../factContributionCodec';
+import type { MemoryFactContributionPayloadV2 } from '../factContributionCodec';
 import {
   closedMemoryFactReviewState,
   closedMemoryFactSensitivity,
@@ -26,14 +26,13 @@ const CONTRIBUTION_ID_PATTERN = /^mfc_[0-9a-f]{64}$/u;
 
 export interface FactContributionClassifierContext {
   subject: string | null;
-  subjectType: string | null;
 }
 
 /** A parent and child set that the caller has already verified against its commitments. */
 export interface VerifiedFactContributionProjectionInput {
   contributionId: string;
   contributedAt: number;
-  payload: MemoryFactContributionPayloadV1;
+  payload: MemoryFactContributionPayloadV2;
   supersessionSnapshot: Readonly<FactContributionSupersessionSnapshotCommitmentRow> | null;
 }
 
@@ -89,6 +88,8 @@ export interface FactContributionProjection {
   stability: number;
   decayRate: number;
   reviewState: MemoryFactReviewState;
+  /** Monotonic producer-declared floor across every surviving contribution. */
+  sensitivityFloor: MemoryFactSensitivity;
   sensitivity: MemoryFactSensitivity;
   sensitivityPolicyVersion: number;
   memoryKind: MemoryFactKind;
@@ -190,9 +191,7 @@ function snapshotProjection(
     (snapshot.successor_pinned_baseline !== 0 && snapshot.successor_pinned_baseline !== 1) ||
     !reviewState ||
     !sensitivityFloor ||
-    !Number.isSafeInteger(snapshot.successor_sensitivity_policy_version) ||
-    snapshot.successor_sensitivity_policy_version < 1 ||
-    snapshot.successor_sensitivity_policy_version > MEMORY_FACT_SENSITIVITY_POLICY_VERSION
+    snapshot.successor_sensitivity_policy_version !== MEMORY_FACT_SENSITIVITY_POLICY_VERSION
   ) {
     fail('memory_fact_contribution_projection_snapshot_invalid');
   }
@@ -206,18 +205,17 @@ function snapshotProjection(
 function classifyProjectionSensitivity(
   projection: Pick<
     FactContributionProjection,
-    'predicate' | 'objectText' | 'attributes' | 'sourceSummary' | 'memoryKind'
+    'predicate' | 'objectText' | 'attributes' | 'sourceSummary' | 'sensitivityFloor'
   >,
   context: FactContributionClassifierContext,
 ): MemoryFactSensitivity {
   return classifyMemoryFactSensitivity({
+    declaredSensitivity: projection.sensitivityFloor,
     subject: context.subject,
-    subjectType: context.subjectType,
     predicate: projection.predicate,
     objectText: projection.objectText,
     attributes: projection.attributes,
     sourceSummary: projection.sourceSummary,
-    memoryKind: projection.memoryKind,
   });
 }
 
@@ -268,6 +266,7 @@ function baselineFactContributionProjection(
     stability: payload.input.stability,
     decayRate: payload.input.decayRate,
     reviewState: snapshot.reviewState,
+    sensitivityFloor: payload.input.sensitivityFloor,
     sensitivity: 'normal',
     sensitivityPolicyVersion: MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
     memoryKind: payload.input.memoryKind,
@@ -339,7 +338,7 @@ export function mergeFactContributionProjection(
       sourceSummary: [existing.sourceSummary, next.sourceSummary]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .join('\n'),
-      memoryKind: next.memoryKind,
+      sensitivityFloor: maxMemoryFactSensitivity(existing.sensitivityFloor, next.sensitivityFloor),
     },
     context,
   );
@@ -367,6 +366,7 @@ export function mergeFactContributionProjection(
     stability: Math.max(existing.stability, next.stability),
     decayRate: Math.min(existing.decayRate, next.decayRate),
     reviewState: mergeDuplicateReviewState(existing.reviewState, next.reviewState),
+    sensitivityFloor: maxMemoryFactSensitivity(existing.sensitivityFloor, next.sensitivityFloor),
     sensitivity: mergeDuplicateSensitivity(
       existing.sensitivity,
       maxMemoryFactSensitivity(incomingSensitivity, next.sensitivity),

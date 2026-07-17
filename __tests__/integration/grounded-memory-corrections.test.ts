@@ -10,8 +10,10 @@ import { recordFact, recordFactWithApplicability } from '../../src/services/memo
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb } from '../../src/services/memory/database';
+import { executeMemoryRemember } from '../../src/services/memory/memoryTools';
 import { processIngestionTurn } from '../../src/services/memory/turnProcessor';
 import type { Message } from '../../src/types/message';
+import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -127,6 +129,7 @@ async function ingest(input: {
             sensitivity: 'personal',
           },
         ],
+        episode_sensitivity: 'normal',
         episode_summary: null,
         active_focus: null,
         open_threads: [],
@@ -208,6 +211,54 @@ describe('grounded passive memory corrections', () => {
       expect.objectContaining({
         messageId: 'user-current',
         quote: fixture.message,
+      }),
+    ]);
+  });
+
+  it('does not let passive enrichment create a second semantic writer for an explicit source', async () => {
+    const userContent = 'I usually keep design-review meetings to 30 minutes.';
+    const explicitWrite = executeMemoryRemember(
+      memoryRememberArgs({
+        userMessageText: userContent,
+        subjectRef: { kind: 'self' },
+        predicate: 'design-review meeting duration',
+        value: '30 minutes',
+        scope: 'persona',
+      }),
+      memoryRememberExecution({
+        memoryConversationId: 'conversation-1',
+        sourceThreadId: 'thread-1',
+        taskId: 'explicit-memory-task',
+        userMessageId: 'user-current',
+        userMessageText: userContent,
+        executionRunId: 'explicit-memory-run',
+        toolCallId: 'explicit-memory-call',
+        claimedAt: 200,
+        personaId: 'default',
+      }),
+    );
+    expect(explicitWrite).toMatchObject({ ok: true, status: 'created' });
+
+    const result = await ingest({
+      userContent,
+      predicate: 'keeps',
+      value: 'design-review meetings to 30 minutes',
+      quote: userContent,
+      scope: 'global',
+      operation: 'record',
+    });
+
+    expect(result.providerFactIds).toEqual([]);
+    expect(
+      listFacts({ includeInvalidated: true }).filter(
+        (fact) => fact.memoryKind === 'semantic_fact',
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        predicate: 'design-review meeting duration',
+        objectText: '30 minutes',
+        scope: 'persona',
+        personaId: 'default',
       }),
     ]);
   });
@@ -309,6 +360,7 @@ describe('grounded passive memory corrections', () => {
             evidence_quote: 'I am considering Utrecht or Paris.',
             sensitivity: 'personal',
           })),
+          episode_sensitivity: 'normal',
           episode_summary: null,
           active_focus: null,
           open_threads: [],

@@ -4,12 +4,12 @@
 // Schedules local notifications that let users wake the app for due tasks
 // when the OS does not grant a background execution window.
 
-import * as Crypto from 'expo-crypto';
 import {
   cancelLocalNotification,
   listScheduledLocalNotifications,
   sendLocalNotification,
 } from '../notifications/service';
+import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import type { CronJob } from '../cron/types';
 import { flushSchedulerStorePersistenceNow } from './persistence';
 import { useSchedulerStore } from './store';
@@ -78,8 +78,7 @@ async function buildSchedulerWakeNotificationId(
   runAtMs: number,
   title: string,
 ): Promise<string> {
-  const digest = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
+  const digest = await sha256HexUtf8Async(
     JSON.stringify(['kavi.scheduler-wake.v1', job.id, job.definitionRevision, runAtMs, title]),
   );
   return `scheduler-wake-${digest.toLowerCase().slice(0, 32)}`;

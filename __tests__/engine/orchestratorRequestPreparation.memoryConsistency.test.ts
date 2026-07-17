@@ -146,4 +146,67 @@ describe('orchestrator request memory consistency identity', () => {
       text: 'Remember the value I wrote.',
     });
   });
+
+  it('retains exact internal user identities for safe session refresh exclusion', async () => {
+    const visibleArabic = {
+      id: 'visible-ar',
+      role: 'user' as const,
+      content: 'تابع المهمة',
+      timestamp: 4,
+    };
+    const internalJapanese = {
+      id: 'internal-ja',
+      role: 'user' as const,
+      content: '内部継続制御',
+      timestamp: 5,
+    };
+    mockedBuildUnifiedMemoryAccessContext.mockResolvedValueOnce({
+      boundary: {
+        startIndex: 0,
+        reason: 'full_history',
+        similarityScore: 1,
+        idleGapMs: 0,
+        droppedMessageCount: 0,
+      },
+      scopedMessages: [visibleArabic],
+      livingMemory: null,
+      consistencyBarrier: {
+        outcome: 'no_job',
+        durationMs: 0,
+        waitedMs: 0,
+        queryCount: 1,
+        matchedJobCount: 0,
+        queueAgeMs: null,
+        initialJobStatus: null,
+        finalJobStatus: null,
+      },
+    });
+
+    const result = await prepareOrchestratorRequestBundle({
+      activeModel: 'model-1',
+      activeProvider: provider,
+      callbacks: {},
+      conversationId: 'source-thread-1',
+      graphOwnedRun: true,
+      internalUserMessageCount: 1,
+      isSuperAgent: true,
+      linkUnderstandingEnabled: false,
+      logger: { devLog: jest.fn(), devWarn: jest.fn() },
+      maxLinks: 3,
+      mediaUnderstandingEnabled: false,
+      memoryConversationId: 'shared-memory-1',
+      messages: [visibleArabic, internalJapanese],
+      personaId: 'default',
+      taskId: null,
+    });
+
+    expect(result.memoryRefreshInternalUserMessages).toEqual([internalJapanese]);
+    expect(result.workingMessages).toEqual([visibleArabic]);
+    expect(mockedBuildUnifiedMemoryAccessContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        internalUserMessageCount: 1,
+        messages: [visibleArabic, internalJapanese],
+      }),
+    );
+  });
 });

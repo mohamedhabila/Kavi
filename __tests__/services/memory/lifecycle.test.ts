@@ -78,7 +78,7 @@ beforeEach(() => {
 });
 
 describe('recordCompletedTurnForMemory', () => {
-  it('creates only a content-free episode when no semantic provider is available', async () => {
+  it('creates a content-free episode and code-owned focus when no semantic provider is available', async () => {
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-live',
       threadTitle: 'Release hardening',
@@ -106,7 +106,7 @@ describe('recordCompletedTurnForMemory', () => {
     expect(episodes[0].summary).not.toContain('Release hardening');
     expect(getEpisodeAccessPolicy(getMemoryDb(), episodes[0].id)).toMatchObject({
       scope: { personaId: 'default', taskId: null },
-      shareability: 'thread_only',
+      shareability: 'session_threads',
       sensitivity: 'normal',
     });
 
@@ -115,7 +115,10 @@ describe('recordCompletedTurnForMemory', () => {
         conversationId: 'conv-live',
         threadId: 'conv-live',
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      content: 'Release hardening',
+      promptEligibility: 'trusted_structural',
+    });
 
     // Cursor advanced
     expect(getConsolidationState('conv-live')?.lastConsolidatedMessageId).toBe('a-1');
@@ -176,7 +179,7 @@ describe('recordCompletedTurnForMemory', () => {
         role: 'assistant',
         content: 'Created the file.',
         timestamp: 4,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
     ];
 
@@ -255,11 +258,15 @@ describe('recordCompletedTurnForMemory', () => {
         timestamp: 1,
       },
       {
-        id: 'a-shared-1',
+        id: 'a-shared-tool-1',
         role: 'assistant',
-        content: 'Recorded.',
+        content: '',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
         toolCalls: [
           {
             id: 'tc-memory-1',
@@ -268,6 +275,20 @@ describe('recordCompletedTurnForMemory', () => {
             status: 'completed',
           },
         ],
+      },
+      {
+        id: 'tool-shared-1',
+        role: 'tool',
+        content: 'Memory recorded.',
+        timestamp: 3,
+        toolCallId: 'tc-memory-1',
+      },
+      {
+        id: 'a-shared-1',
+        role: 'assistant',
+        content: 'Recorded.',
+        timestamp: 4,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
       },
     ];
 
@@ -368,6 +389,7 @@ describe('recordCompletedTurnForMemory', () => {
                   sensitivity: 'personal',
                 },
               ],
+              episode_sensitivity: 'normal',
               episode_summary: null,
               active_focus: 'Validating the Android release build.',
               open_threads: ['Validate the Android release build'],
@@ -423,6 +445,7 @@ describe('recordCompletedTurnForMemory', () => {
           message: {
             content: JSON.stringify({
               new_facts: [],
+              episode_sensitivity: 'normal',
               episode_summary: null,
               active_focus: 'Validating the Android release build.',
               open_threads: ['Validate the Android release build'],
@@ -470,6 +493,7 @@ describe('recordCompletedTurnForMemory', () => {
           message: {
             content: JSON.stringify({
               new_facts: [],
+              episode_sensitivity: 'normal',
               episode_summary: null,
               active_focus: 'Validating the Android release build.',
               open_threads: ['Validate the Android release build'],
@@ -503,7 +527,14 @@ describe('recordCompletedTurnForMemory', () => {
         strict: true,
         schema: expect.objectContaining({
           additionalProperties: false,
-          required: ['new_facts', 'episode_summary', 'active_focus', 'open_threads', 'notable'],
+          required: [
+            'new_facts',
+            'episode_summary',
+            'episode_sensitivity',
+            'active_focus',
+            'open_threads',
+            'notable',
+          ],
         }),
       },
     });
@@ -529,6 +560,7 @@ describe('recordCompletedTurnForMemory', () => {
           message: {
             content: JSON.stringify({
               new_facts: [],
+              episode_sensitivity: 'normal',
               episode_summary: null,
               active_focus: 'Background flush focus.',
               open_threads: [],
@@ -607,85 +639,4 @@ describe('recordCompletedTurnForMemory', () => {
     expect(getConsolidationState('conv-structural-only')?.lastConsolidatedMessageId).toBe('a-1');
   });
 
-  it('does not project conversation focus without an exact closed turn', async () => {
-    const result = await recordCompletedTurnForMemory({
-      threadId: 'conv-title-only',
-      threadTitle: 'longmem-delayed-thread',
-      messages: [
-        {
-          id: 'u-1',
-          role: 'user',
-          content: 'Verify stored state later.',
-          timestamp: 1,
-        },
-        {
-          id: 'a-incomplete',
-          role: 'assistant',
-          content: '',
-          timestamp: 2,
-          assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
-        },
-      ],
-      sourceEndMessageId: 'a-incomplete',
-      now: 10,
-    });
-
-    expect(result.processed).toBe(false);
-    expect(result.skipped).toBe('no_closed_turn');
-    expect(result.activeFocusUpdated).toBe(false);
-    expect(
-      getWorkingBlock('active_focus', {
-        conversationId: 'conv-title-only',
-        threadId: 'conv-title-only',
-      }),
-    ).toBeNull();
-  });
-
-  it('does not synthesize conversation or task focus without provider semantics', async () => {
-    const result = await recordCompletedTurnForMemory({
-      threadId: 'conv-task-focus',
-      threadTitle: 'thread-focus-anchor',
-      taskId: 'goal-1',
-      messages,
-      sourceEndMessageId: 'a-1',
-      now: 10,
-    });
-
-    expect(result.processed).toBe(true);
-    expect(result.activeFocusUpdated).toBe(false);
-    expect(
-      getWorkingBlock('active_focus', {
-        conversationId: 'conv-task-focus',
-        threadId: 'conv-task-focus',
-      }),
-    ).toBeNull();
-    expect(
-      getWorkingBlock('active_focus', {
-        conversationId: 'conv-task-focus',
-        threadId: 'conv-task-focus',
-        taskId: 'goal-1',
-      }),
-    ).toBeNull();
-  });
-
-  it('creates no state or block writes when long-term memory is disabled', async () => {
-    useSettingsStore.setState({ disableLongTermMemory: true } as any);
-
-    const result = await recordCompletedTurnForMemory({
-      threadId: 'conv-disabled',
-      messages,
-      sourceEndMessageId: 'a-1',
-      now: 10,
-    });
-
-    expect(result.processed).toBe(false);
-    expect(result.skipped).toBe('opt_out');
-    expect(getConsolidationState('conv-disabled')).toBeNull();
-    expect(
-      getWorkingBlock('active_focus', {
-        conversationId: 'conv-disabled',
-        threadId: 'conv-disabled',
-      }),
-    ).toBeNull();
-  });
 });

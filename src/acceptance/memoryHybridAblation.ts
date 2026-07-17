@@ -6,6 +6,7 @@ import {
   readRecentMemoryRetrievalEvents,
 } from '../services/memory/retrievalLog';
 import { getMemoryDb } from '../services/memory/database';
+import { RestrictedMemoryFactPersistenceError } from '../services/memory/facts/errors';
 import { stableHash, stableStringify } from './e2eAgent/e2eTraceRedaction';
 import {
   ACCEPTANCE_FACT_PRODUCER_IDS,
@@ -111,30 +112,41 @@ function seedFixture(
     if (!subjectId) throw new Error(`Unknown hybrid ablation entity key: ${seed.entityKey}`);
     const originConversationId =
       seed.origin === 'active' ? namespace : `${namespace}-other-conversation`;
-    const recorded = recordAcceptanceFixtureFact(
-      {
-        subjectId,
-        predicate: seed.predicate,
-        objectText: seed.objectText,
-        scope: 'conversation',
-        originConversationId,
-        supersedePrior: false,
-        now: seed.now,
-        ...(seed.validAt !== undefined ? { validAt: seed.validAt } : {}),
-        ...(seed.expiresAt !== undefined ? { expiresAt: seed.expiresAt } : {}),
-      },
-      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
-      {
-        producerId: ACCEPTANCE_FACT_PRODUCER_IDS.memoryHybridAblation,
-        fixtureId: fixture.id,
-        eventKey: `${strategy}:${seed.key}`,
-        memoryConversationId: originConversationId,
-        sourceThreadId: originConversationId,
-        taskId: null,
-        sourceKind: 'turn',
-        sourceId: `${namespace}-seed-${seed.key}`,
-      },
-    );
+    let recorded: ReturnType<typeof recordAcceptanceFixtureFact>;
+    try {
+      recorded = recordAcceptanceFixtureFact(
+        {
+          subjectId,
+          predicate: seed.predicate,
+          objectText: seed.objectText,
+          scope: 'conversation',
+          originConversationId,
+          supersedePrior: false,
+          now: seed.now,
+          ...(seed.validAt !== undefined ? { validAt: seed.validAt } : {}),
+          ...(seed.expiresAt !== undefined ? { expiresAt: seed.expiresAt } : {}),
+        },
+        { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+        {
+          producerId: ACCEPTANCE_FACT_PRODUCER_IDS.memoryHybridAblation,
+          fixtureId: fixture.id,
+          eventKey: `${strategy}:${seed.key}`,
+          memoryConversationId: originConversationId,
+          sourceThreadId: originConversationId,
+          taskId: null,
+          sourceKind: 'turn',
+          sourceId: `${namespace}-seed-${seed.key}`,
+        },
+      );
+    } catch (error) {
+      if (seed.expectRestrictedRejection && error instanceof RestrictedMemoryFactPersistenceError) {
+        return;
+      }
+      throw error;
+    }
+    if (seed.expectRestrictedRejection) {
+      throw new Error('Restricted hybrid ablation fixture unexpectedly persisted.');
+    }
     factKeysById.set(recorded.fact.id, seed.key);
     if (seed.deleted) {
       getMemoryDb().runSync(

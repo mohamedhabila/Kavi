@@ -78,7 +78,7 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
     },
     {
       selectedMode: 'agentic',
-      content: `I might move "${CALENDAR_EVENT_TITLE}" later, but I have not chosen a new time. Do not update the calendar yet; tell me what detail is missing.`,
+      content: `Move "${CALENDAR_EVENT_TITLE}" to a different time, but I have not supplied the new date or time yet. Do not update the calendar until you have that required detail; ask me for it.`,
     },
     {
       selectedMode: 'agentic',
@@ -117,92 +117,78 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 3,
-      requiredFacts: [
+      requiredWrites: [
         {
+          turnIndex: 2,
           subject: 'user',
-          predicate: 'default_meeting_duration_minutes',
-          value: '45',
-          scope: 'global',
+          value: '45 minutes',
+          status: 'created',
         },
       ],
-      forbiddenFacts: [
+      supersededWrites: [
         {
+          turnIndex: 0,
           subject: 'user',
-          predicate: 'default_meeting_duration_minutes',
-          value: '30',
-          scope: 'global',
+          value: '30 minutes',
+          status: 'created',
         },
       ],
     },
     {
       kind: 'turn_memory_selection',
       turnIndex: 5,
-      requiredFacts: [
+      requiredWrites: [
         {
+          turnIndex: 2,
           subject: 'user',
-          predicate: 'default_meeting_duration_minutes',
-          value: '45',
-          scope: 'global',
+          value: '45 minutes',
+          status: 'created',
         },
       ],
-      forbiddenFacts: [
+      supersededWrites: [
         {
+          turnIndex: 0,
           subject: 'user',
-          predicate: 'default_meeting_duration_minutes',
-          value: '30',
-          scope: 'global',
+          value: '30 minutes',
+          status: 'created',
         },
       ],
     },
     {
       kind: 'turn_memory_answer',
       turnIndex: 5,
-      answer: { kind: 'fact_values', requiredValues: ['45'], forbiddenValues: ['30'] },
+      answer: { kind: 'fact_values', requiredValues: ['45'] },
     },
     {
       kind: 'turn_memory_selection',
       turnIndex: 8,
-      requiredFacts: [
+      requiredWrites: [
         {
+          turnIndex: 2,
           subject: 'user',
-          predicate: 'default_meeting_duration_minutes',
-          value: '45',
-          scope: 'global',
+          value: '45 minutes',
+          status: 'created',
         },
       ],
-      forbiddenFacts: [
+      supersededWrites: [
         {
+          turnIndex: 0,
           subject: 'user',
-          predicate: 'default_meeting_duration_minutes',
-          value: '30',
-          scope: 'global',
+          value: '30 minutes',
+          status: 'created',
         },
       ],
     },
     {
       kind: 'turn_memory_answer',
       turnIndex: 8,
-      answer: { kind: 'fact_values', requiredValues: ['45'], forbiddenValues: ['30'] },
+      answer: { kind: 'fact_values', requiredValues: ['45'] },
     },
     {
       kind: 'turn_native_invocation_count',
       turnIndex: 6,
       toolName: 'calendar_update_event',
       expectedCount: 0,
-    },
-    {
-      kind: 'memory_fact',
-      subject: 'user',
-      predicate: 'default_meeting_duration_minutes',
-      value: '45',
-      scope: 'global',
-    },
-    {
-      kind: 'memory_fact_absent',
-      subject: 'user',
-      predicate: 'default_meeting_duration_minutes',
-      value: '30',
-      scope: 'global',
     },
     { kind: 'native_fixture_state', path: 'calendar.createdEventCount', expectedValue: '1' },
     { kind: 'native_fixture_state', path: 'calendar.updatedEventCount', expectedValue: '0' },

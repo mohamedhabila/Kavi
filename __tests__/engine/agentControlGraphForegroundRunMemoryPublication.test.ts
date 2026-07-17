@@ -9,9 +9,9 @@ import {
   createReadyPreflightResult,
 } from '../helpers/foregroundRunExecutionContextHarness';
 import type { PendingVerifiedProcedureObservation } from '../../src/services/memory/verifiedProcedure/executionSession';
-import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 const mockCommitPendingVerifiedProcedureObservation = jest.fn();
+const mockCanWriteLongTermMemory = jest.fn();
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(),
@@ -24,6 +24,11 @@ jest.mock('../../src/engine/graph/foregroundRun/preflight', () => ({
 jest.mock('../../src/services/memory/verifiedProcedure/executionSession', () => ({
   commitPendingVerifiedProcedureObservation: (...args: unknown[]) =>
     mockCommitPendingVerifiedProcedureObservation(...args),
+}));
+
+jest.mock('../../src/services/memory/policy', () => ({
+  ...jest.requireActual('../../src/services/memory/policy'),
+  canWriteLongTermMemory: (...args: unknown[]) => mockCanWriteLongTermMemory(...args),
 }));
 
 const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runOrchestrator>;
@@ -45,7 +50,7 @@ function deliverFinalAssistantMessage(callbacks: Parameters<typeof runOrchestrat
 describe('foreground terminal memory publication', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    useSettingsStore.setState({ disableLongTermMemory: false });
+    mockCanWriteLongTermMemory.mockReturnValue(true);
   });
 
   it.each([
@@ -174,7 +179,7 @@ describe('foreground terminal memory publication', () => {
   ] as const)(
     'persists an initial %s receipt without invoking durable memory publication',
     async (disposition, disabled, isSideThread) => {
-      useSettingsStore.setState({ disableLongTermMemory: disabled });
+      mockCanWriteLongTermMemory.mockReturnValue(!disabled);
       const conversation = createConversation({ mode: 'chitchat', isSideThread });
       const provider = createProvider('target-provider', 'target-model');
       const recordConversationTurnMemory = jest.fn();
@@ -276,7 +281,7 @@ describe('foreground terminal memory publication', () => {
     },
   );
 
-  it('publishes an exact untracked agentic turn without creating a synthetic run', async () => {
+  it('publishes an exact newly tracked agentic turn with canonical run lineage', async () => {
     const conversation = createConversation({
       mode: 'agentic',
       messages: [{ id: 'user-1', role: 'user', content: '...', timestamp: 1 }],
@@ -300,14 +305,14 @@ describe('foreground terminal memory publication', () => {
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
 
-    expect(context.store.startAgentRun).not.toHaveBeenCalled();
+    expect(context.store.startAgentRun).toHaveBeenCalledTimes(1);
     expect(recordConversationTurnMemory).toHaveBeenCalledWith(
       conversation.id,
       expect.any(Object),
       expect.objectContaining({
         sourceEndMessageId:
           context.durability.completeModelExecution.mock.calls[0][0].projectionMessageId,
-        sourceRunId: undefined,
+        sourceRunId: 'run-1',
       }),
     );
     expect(context.durability.releaseModelProjection).toHaveBeenCalledTimes(1);

@@ -15,10 +15,13 @@ describe('Orchestrator', () => {
   describe('external workflow guidance', () => {
     it('does not inject provider-specific workflow guidance for broad relevant categories', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator([
-          { type: 'token', content: 'OK' },
-          { type: 'done', content: 'OK' },
-        ]),
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'OK' },
+            { type: 'done', content: 'OK' },
+          ],
+          'text',
+        ),
       );
 
       const callbacks = makeCallbacks();

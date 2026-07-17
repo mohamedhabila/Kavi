@@ -19,6 +19,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import { codeOwnedClosedTurnEpisodeFields } from '../../helpers/memoryRetirementTestFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -88,14 +89,18 @@ function attachScopedEvidence(input: {
     threadId: input.threadId,
     taskId: input.taskId ?? null,
     summary: 'Exact legacy source evidence.',
-    messageIds: [input.messageId, assistantTurnId],
-    sourceStartMessageId: input.messageId,
-    sourceEndMessageId: assistantTurnId,
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: input.messageId,
+      sourceAssistantMessageId: assistantTurnId,
+      userContent: 'Exact evidence.',
+      assistantContent: 'Evidence recorded.',
+    }),
     now: input.now,
   });
+  if (!episode) throw new Error('legacy_fact_episode_fixture_unavailable');
   addFactEvidence({
     factId: input.factId,
-    episodeId: episode!.id,
+    episodeId: episode.id,
     messageId: input.messageId,
     role: 'user',
     quote: 'Exact evidence.',

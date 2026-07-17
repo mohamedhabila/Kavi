@@ -114,7 +114,7 @@ describe('executeToolInner — raw core tools routing', () => {
   it('validates cron create arguments and preserves name and timezone', async () => {
     const invalid = await executeTool('cron', '{"action":"create"}', CONV_ID);
     expect(JSON.parse(invalid.content)).toMatchObject({
-      status: 'error',
+      status: 'rejected',
       code: 'invalid_scheduled_job',
     });
     expect(invalid.status).toBe('failed');
@@ -152,7 +152,7 @@ describe('executeToolInner — raw core tools routing', () => {
       JSON.stringify({
         action: 'update',
         id: 'job-1',
-        name: 'Updated briefing',
+        newName: 'Updated briefing',
         schedule: '0 9 * * *',
         prompt: 'New prompt',
       }),
@@ -202,10 +202,12 @@ describe('executeToolInner — raw core tools routing', () => {
   it('refuses to delete a running scheduled job claim', async () => {
     mockDeleteScheduledJob.mockResolvedValueOnce('busy');
     const result = await executeTool('cron', '{"action":"delete","id":"job-1"}', CONV_ID);
-    expect(result).toEqual({
-      status: 'failed',
-      content: 'Error: scheduled job is currently running: job-1',
+    expect(JSON.parse(result.content)).toMatchObject({
+      status: 'rejected',
+      code: 'scheduled_job_busy',
+      id: 'job-1',
     });
+    expect(result.status).toBe('failed');
   });
 
   it('routes cron enable', async () => {
@@ -220,10 +222,64 @@ describe('executeToolInner — raw core tools routing', () => {
     expect(parsed.status).toBe('disabled');
   });
 
+  it('resolves an exact unique task name before disabling', async () => {
+    mockListScheduledJobs.mockResolvedValueOnce([
+      {
+        id: 'job-discovery',
+        name: 'discovery-proof',
+        enabled: true,
+        schedule: { kind: 'cron', expr: '0 * * * *' },
+        payload: { prompt: 'fixture', mode: 'agentic' },
+      } as any,
+    ]);
+
+    const result = await executeTool(
+      'cron',
+      '{"action":"disable","name":"discovery-proof"}',
+      CONV_ID,
+    );
+
+    expect(result.status).toBe('completed');
+    expect(JSON.parse(result.content)).toMatchObject({
+      status: 'disabled',
+      id: 'job-discovery',
+    });
+    expect(mockSetScheduledJobEnabled).toHaveBeenCalledWith('job-discovery', false);
+  });
+
+  it('rejects an ambiguous task name before mutation', async () => {
+    mockListScheduledJobs.mockResolvedValueOnce([
+      { id: 'job-1', name: 'duplicate', enabled: true } as any,
+      { id: 'job-2', name: 'duplicate', enabled: false } as any,
+    ]);
+
+    const result = await executeTool(
+      'cron',
+      '{"action":"disable","name":"duplicate"}',
+      CONV_ID,
+    );
+
+    expect(result.status).toBe('failed');
+    expect(JSON.parse(result.content)).toMatchObject({
+      status: 'rejected',
+      code: 'scheduled_job_target_ambiguous',
+      repair: {
+        retryable: true,
+        tool: 'request_clarification',
+      },
+    });
+    expect(mockSetScheduledJobEnabled).not.toHaveBeenCalled();
+  });
+
   it('does not report success for an unknown cron enable target', async () => {
     mockSetScheduledJobEnabled.mockResolvedValueOnce({ status: 'not_found' });
     const result = await executeTool('cron', '{"action":"enable","id":"missing"}', CONV_ID);
-    expect(result).toEqual({ status: 'failed', content: 'Error: job not found: missing' });
+    expect(result.status).toBe('failed');
+    expect(JSON.parse(result.content)).toMatchObject({
+      status: 'rejected',
+      code: 'scheduled_job_not_found',
+      id: 'missing',
+    });
   });
 
   it('routes cron run', async () => {
@@ -284,7 +340,7 @@ describe('executeToolInner — raw core tools routing', () => {
   it('handles cron unknown action', async () => {
     const result = await executeTool('cron', '{"action":"bogus"}', CONV_ID);
     expect(result.status).toBe('failed');
-    expect(result.content).toContain('unknown cron action');
+    expect(JSON.parse(result.content).code).toBe('scheduled_job_action_unknown');
   });
 
   it('routes notify', async () => {

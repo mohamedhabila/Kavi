@@ -187,6 +187,52 @@ describe('foreground scenario memory settlement', () => {
     }
   });
 
+  it('returns at structural durability while provider enrichment is still draining', async () => {
+    const pending = makeJob('pending');
+    const checkpointed = {
+      ...makeJob('processing'),
+      structuralCompletedAt: 2,
+    };
+    let finishDrain!: () => void;
+    const draining = new Promise<Awaited<ReturnType<typeof drainIngestionQueueWithWakeup>>>(
+      (resolve) => {
+        finishDrain = () =>
+          resolve({
+            attempted: 1,
+            completed: 1,
+            completedStructural: 0,
+            completedEnriched: 1,
+            retrying: 0,
+            degraded: 0,
+            deferred: 0,
+            resourceDeferred: 0,
+            failed: 0,
+          });
+      },
+    );
+    mockedGetIngestionJob
+      .mockImplementationOnce(() => pending)
+      .mockReturnValue(checkpointed);
+    mockedDrainIngestionQueueWithWakeup.mockReturnValueOnce(draining);
+
+    await expect(
+      settleForegroundScenarioMemory(
+        [
+          {
+            promise: Promise.resolve({
+              disposition: 'enqueued',
+              jobId: pending.id,
+            }),
+          },
+        ],
+        1_000,
+      ),
+    ).resolves.toEqual([expect.objectContaining({ job: checkpointed })]);
+    expect(mockedDrainIngestionQueueWithWakeup).toHaveBeenCalledTimes(1);
+    finishDrain();
+    await draining;
+  });
+
   it('uses bounded backoff and requests at most one drain while awaiting memory', async () => {
     jest.useFakeTimers();
     mockedGetIngestionJob

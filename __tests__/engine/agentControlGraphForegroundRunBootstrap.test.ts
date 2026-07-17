@@ -72,6 +72,7 @@ describe('foregroundRun bootstrap', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'incomplete',
+            finishReason: 'response_failed',
           },
         } as Message,
       ],
@@ -113,6 +114,7 @@ describe('foregroundRun bootstrap', () => {
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
+            finishReason: 'stop',
           },
         } as Message,
       ],

@@ -1,6 +1,6 @@
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
-  return makeExpoSqliteMock();
+  return makeExpoSqliteMock({ fileBacked: true });
 });
 
 import { STORAGE_KEYS } from '../../src/constants/storage';
@@ -26,6 +26,7 @@ import {
 } from '../../src/store/throttledStorage';
 import { useChatStore } from '../../src/store/useChatStore';
 import type { Conversation } from '../../src/types/conversation';
+import { codeOwnedClosedTurnEpisodeFields } from '../helpers/memoryRetirementTestFixtures';
 
 const expoFileSystemMock = jest.requireMock('expo-file-system') as {
   __getStore: () => Record<string, string | Uint8Array>;
@@ -41,7 +42,17 @@ function makeConversation(): Conversation {
     title: 'Relaunch continuity',
     messages: [
       { id: 'user-before-relaunch', role: 'user', content: 'Remember this.', timestamp: 10 },
-      { id: 'assistant-before-relaunch', role: 'assistant', content: 'Remembered.', timestamp: 11 },
+      {
+        id: 'assistant-before-relaunch',
+        role: 'assistant',
+        content: 'Remembered.',
+        timestamp: 11,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
+      },
     ],
     providerId: 'provider-relaunch',
     modelOverride: 'model-relaunch',
@@ -102,18 +113,26 @@ it('rehydrates the production chat store and reopens unchanged durable memory', 
     memoryConversationId: 'relaunch-conversation',
     sourceThreadId: 'relaunch-conversation',
   };
-  const memoryStateBefore = captureScopedMemoryEvidence(scope);
-
   await expect(
     relaunchForegroundScenarioApp({
       conversationId: 'relaunch-conversation',
       memoryScope: scope,
-      memoryStateBefore,
     }),
-  ).resolves.toEqual({
-    boundary: 'app_relaunch',
-    chatStore: 'rehydrated',
-    memoryStore: 'reopened',
+  ).resolves.toMatchObject({
+    lifecycle: {
+      boundary: 'app_relaunch',
+      chatStore: 'rehydrated',
+      memoryStore: 'reopened',
+    },
+    memoryState: {
+      scope,
+      facts: expect.arrayContaining([
+        expect.objectContaining({
+          predicate: 'profile_token',
+          objectText: 'RELAUNCH-PROFILE-73',
+        }),
+      ]),
+    },
   });
 
   expect(useChatStore.getState()).toMatchObject({
@@ -158,8 +177,12 @@ it('creates a fresh product conversation while preserving owner-global memory', 
     threadId: 'relaunch-conversation',
     summary: 'The first conversation contains scoped evidence.',
     messageIds: ['user-before-relaunch', 'assistant-before-relaunch'],
-    sourceStartMessageId: 'user-before-relaunch',
-    sourceEndMessageId: 'assistant-before-relaunch',
+    ...codeOwnedClosedTurnEpisodeFields({
+      sourceUserMessageId: 'user-before-relaunch',
+      sourceAssistantMessageId: 'assistant-before-relaunch',
+      userContent: 'Remember this.',
+      assistantContent: 'Remembered.',
+    }),
     now: 14,
   });
   const initialScope = {

@@ -18,7 +18,10 @@ import { setManagedMemoryFactPinned } from '../../../src/services/memory/factExp
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
 import { editPromptEligibleWorkingBlock } from '../../../src/services/memory/workingBlocks';
-import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
+import {
+  buildLivingMemorySections,
+  CURRENT_MEMORY_PRESENTATION_CONTRACT,
+} from '../../../src/services/memory/livingMemoryBridge';
 import { pushTask, completeTask } from '../../../src/services/memory/taskStack';
 import type { Message } from '../../../src/types/message';
 
@@ -205,6 +208,32 @@ describe('buildLivingMemorySections', () => {
     expect(out.retrievalEvent).toBeUndefined();
     expect(databaseSpy).not.toHaveBeenCalled();
     databaseSpy.mockRestore();
+  });
+
+  it('places the current-memory presentation contract beside recalled facts', async () => {
+    const me = upsertEntity({ name: 'user', type: 'self', now: 100 });
+    const fact = recordFact({
+      subjectId: me.id,
+      predicate: 'meeting_duration',
+      objectText: '45 minutes',
+      sourceMessageId: 'user-memory-source',
+      scope: 'global',
+      now: 200,
+    });
+    setManagedMemoryFactPinned({ factId: fact.fact.id, pinned: true, now: 300 });
+
+    const out = await buildLivingMemorySections({
+      ...memoryScope('conv-current-memory-contract'),
+      messages: [userMessage('meeting duration', 1_000)],
+      now: 2_000,
+    });
+    const dynamicText = out.sections.map((section) => section.text).join('\n');
+
+    expect(out.recalledFactCount).toBeGreaterThan(0);
+    expect(dynamicText).toContain(CURRENT_MEMORY_PRESENTATION_CONTRACT);
+    expect(dynamicText).toContain('Do not ask the user to repeat them');
+    expect(dynamicText).toContain('call a memory read tool merely to verify');
+    expect(dynamicText).toContain('policy=use reason=eligible');
   });
 
   it('renders the explicitly authorized task title from the task stack', async () => {

@@ -15,6 +15,7 @@ import {
 } from '../../src/services/executionJournal/database';
 import { appendExecutionCheckpoint } from '../../src/services/executionJournal/mutations';
 import { insertRun } from '../../src/services/executionJournal/mutationStore';
+import { AGENT_RUNTIME_ERROR_CODES } from '../../src/services/runtimeError';
 
 const DIGEST = 'a'.repeat(64);
 const sqliteMock = jest.requireMock('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -218,7 +219,10 @@ describe('foreground model execution journal', () => {
         },
         options(20),
       ),
-    ).rejects.toThrow('foreground_model_journal_generation_changed');
+    ).rejects.toMatchObject({
+      code: AGENT_RUNTIME_ERROR_CODES.FOREGROUND_MODEL_GENERATION_CHANGED,
+      message: 'foreground_model_journal_generation_changed',
+    });
     expect(
       getExecutionJournalDb().getFirstSync<{ status: string }>(
         'SELECT status FROM execution_runs WHERE id = ?',
@@ -300,7 +304,10 @@ describe('foreground model execution journal', () => {
         },
         options(21),
       ),
-    ).rejects.toThrow('foreground_model_journal_generation_changed');
+    ).rejects.toMatchObject({
+      code: AGENT_RUNTIME_ERROR_CODES.FOREGROUND_MODEL_GENERATION_CHANGED,
+      message: 'foreground_model_journal_generation_changed',
+    });
     expect(
       getExecutionJournalDb().getFirstSync<{ cancellation_state: string }>(
         'SELECT cancellation_state FROM execution_recovery_controls WHERE run_id = ?',

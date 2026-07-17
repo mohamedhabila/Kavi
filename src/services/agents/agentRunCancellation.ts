@@ -1,4 +1,10 @@
 import { createAgentRunIdentityKey } from './agentRunIdentity';
+import {
+  AGENT_RUNTIME_ERROR_CODES,
+  createAgentRunAbortError,
+  isAgentRuntimeErrorCode,
+  type AgentRuntimeError,
+} from '../runtimeError';
 
 const DEFAULT_ABORT_MESSAGE = 'Request cancelled';
 
@@ -15,7 +21,9 @@ export type AgentRunOperationControllerHandle = {
   dispose: () => void;
 };
 
-const cancelledRunReasons = new Map<string, Error>();
+type AgentRunAbortError = AgentRuntimeError<typeof AGENT_RUNTIME_ERROR_CODES.AGENT_RUN_ABORTED>;
+
+const cancelledRunReasons = new Map<string, AgentRunAbortError>();
 const runOperationControllers = new Map<string, Map<string, AbortController>>();
 
 function normalizeAbortMessage(reason: unknown): string {
@@ -30,19 +38,15 @@ function normalizeAbortMessage(reason: unknown): string {
   return DEFAULT_ABORT_MESSAGE;
 }
 
-function toAbortError(reason?: unknown): Error {
-  if (reason instanceof Error && reason.name === 'AbortError') {
+function toAbortError(reason?: unknown): AgentRunAbortError {
+  if (isAgentRuntimeErrorCode(reason, AGENT_RUNTIME_ERROR_CODES.AGENT_RUN_ABORTED)) {
     return reason;
   }
 
-  const abortError = new Error(normalizeAbortMessage(reason));
-  abortError.name = 'AbortError';
-
-  if (reason instanceof Error) {
-    (abortError as Error & { cause?: unknown }).cause = reason;
-  }
-
-  return abortError;
+  return createAgentRunAbortError(
+    normalizeAbortMessage(reason),
+    reason instanceof Error ? reason : undefined,
+  );
 }
 
 function abortController(controller: AbortController, reason?: unknown): void {
@@ -50,12 +54,7 @@ function abortController(controller: AbortController, reason?: unknown): void {
     return;
   }
 
-  const abortReason = toAbortError(reason);
-  try {
-    controller.abort(abortReason);
-  } catch {
-    controller.abort();
-  }
+  controller.abort(toAbortError(reason));
 }
 
 export function isAbortErrorLike(error: unknown, signal?: AbortSignal | null): boolean {
@@ -63,40 +62,12 @@ export function isAbortErrorLike(error: unknown, signal?: AbortSignal | null): b
     return true;
   }
 
-  if (signal?.reason && error === signal.reason) {
-    return true;
-  }
-
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  if (error.name === 'AbortError') {
-    return true;
-  }
-
-  const normalizedMessage = error.message.trim();
-  return (
-    normalizedMessage === DEFAULT_ABORT_MESSAGE ||
-    normalizedMessage === 'Aborted' ||
-    normalizedMessage === 'The operation was aborted.' ||
-    normalizedMessage === 'This operation was aborted'
-  );
+  return isAgentRuntimeErrorCode(error, AGENT_RUNTIME_ERROR_CODES.AGENT_RUN_ABORTED);
 }
 
 export function throwIfAbortSignalTriggered(signal?: AbortSignal | null): void {
   if (!signal?.aborted) {
     return;
-  }
-
-  const abortSignal = signal as AbortSignal & { throwIfAborted?: () => void };
-  if (typeof abortSignal.throwIfAborted === 'function') {
-    try {
-      abortSignal.throwIfAborted();
-      return;
-    } catch (error) {
-      throw toAbortError(error ?? signal.reason);
-    }
   }
 
   throw toAbortError(signal.reason);
@@ -121,7 +92,7 @@ export function cancelAgentRunOperations(
   conversationId: string,
   runId: string,
   reason?: unknown,
-): Error | undefined {
+): AgentRunAbortError | undefined {
   const normalizedConversationId = conversationId.trim();
   const normalizedRunId = runId.trim();
   if (!normalizedConversationId || !normalizedRunId) {

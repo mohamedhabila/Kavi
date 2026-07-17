@@ -4,9 +4,13 @@ import {
   type E2EPairedInvariantConfig,
 } from './e2ePairedInvariant';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
+import {
+  MEMORY_FACT_SENSITIVITY_LEVELS,
+  type MemoryFactSensitivity,
+} from '../../services/memory/facts/applicabilityProvenance';
 
-export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v3' as const;
-export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v3' as const;
+export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v4' as const;
+export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v4' as const;
 
 export const E2E_PAIRED_CONDITIONS = [
   ...E2E_PAIRED_ROUTE_CONDITIONS,
@@ -37,6 +41,7 @@ const MEMORY_REMEMBER_KEYS = new Set([
   'pinned',
   'scope',
   'importance',
+  'sensitivity',
 ]);
 
 export type E2EPairedCondition = (typeof E2E_PAIRED_CONDITIONS)[number];
@@ -50,6 +55,7 @@ export interface E2EOracleFactDeclaration {
   pinned?: boolean;
   scope?: (typeof MEMORY_FACT_SCOPES)[number];
   importance?: number;
+  sensitivity: MemoryFactSensitivity;
 }
 
 export type E2EOracleEvidenceDeclaration = Readonly<{
@@ -123,6 +129,13 @@ function requireUnitInterval(value: unknown, label: string): number {
   return value;
 }
 
+function requireMemoryFactSensitivity(value: unknown, label: string): MemoryFactSensitivity {
+  if (!MEMORY_FACT_SENSITIVITY_LEVELS.includes(value as MemoryFactSensitivity)) {
+    throw new Error(`${label} is unsupported.`);
+  }
+  return value as MemoryFactSensitivity;
+}
+
 export function validateE2EOracleEvidenceDeclaration(
   evidence: E2EOracleEvidenceDeclaration | undefined,
 ): E2EOracleEvidenceDeclaration {
@@ -149,6 +162,10 @@ export function validateE2EOracleEvidenceDeclaration(
       predicate: requireTrimmed(fact.predicate, `oracleEvidence.facts[${index}].predicate`, 80),
       value: requireTrimmed(fact.value, `oracleEvidence.facts[${index}].value`, 200),
       scope: 'global',
+      sensitivity: requireMemoryFactSensitivity(
+        fact.sensitivity,
+        `oracleEvidence.facts[${index}].sensitivity`,
+      ),
     };
     if (fact.subjectType !== undefined) {
       if (!MEMORY_ENTITY_TYPES.includes(fact.subjectType)) {

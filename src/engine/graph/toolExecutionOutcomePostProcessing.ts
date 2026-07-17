@@ -130,7 +130,6 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
         compactionEngine: params.compactionEngine,
         conversationId: params.conversationId,
         currentMessages: workingMessages,
-        livingMemory: params.livingMemory,
         onCompaction: params.onCompaction,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages),
         forceTier,

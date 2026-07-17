@@ -54,6 +54,7 @@ export function dispatchFixture(): {
     idempotencyClass: 'declared_idempotent',
     idempotencyKeyDigest: DIGEST_D,
     requestDigest: DIGEST_B,
+    modelAuthorityValidUntil: null,
     outcomeDigest: null,
     status: 'planned',
     retryPolicy: 'reconcile_before_retry',

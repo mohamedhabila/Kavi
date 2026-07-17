@@ -16,6 +16,7 @@ import {
   buildE2ERubricResult as buildResult,
   buildE2ERubricResultWithMemoryEvidence as buildResultWithMemoryEvidence,
 } from '../helpers/e2eRubricResult';
+import { codeOwnedClosedTurnEpisodeFields } from '../helpers/memoryRetirementTestFixtures';
 
 describe('evaluateE2ERubric', () => {
   beforeEach(() => {
@@ -264,6 +265,12 @@ describe('evaluateE2ERubric', () => {
       summary: 'episode-a',
       startedAt: 1,
       endedAt: 2,
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'episode-a-user',
+        sourceAssistantMessageId: 'episode-a-assistant',
+        userContent: 'Capture episode A.',
+        assistantContent: 'Episode A captured.',
+      }),
     });
 
     const result = buildResultWithMemoryEvidence(conversationId);

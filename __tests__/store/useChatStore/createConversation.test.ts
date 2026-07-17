@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { normalizePersistedChatState } from '../../../src/store/chatStoreNormalization';
 
 describe('useChatStore', () => {
   describe('createConversation', () => {
@@ -27,6 +28,39 @@ describe('useChatStore', () => {
         totalCalls: 0,
       });
       expect(state.conversations[0].logs).toEqual([]);
+    });
+
+    it('should atomically replace the persona canonical for a durable new chat', () => {
+      const oldId = useChatStore
+        .getState()
+        .getOrCreateCanonicalThread('p1', 'old system', undefined, { personaId: 'researcher' });
+      const newId = useChatStore.getState().createConversation('p1', 'new system', undefined, {
+        personaId: 'researcher',
+        replaceCanonical: true,
+      });
+      const state = useChatStore.getState();
+      const oldConversation = state.conversations.find((conversation) => conversation.id === oldId);
+      const newConversation = state.conversations.find((conversation) => conversation.id === newId);
+
+      expect(newConversation).toEqual(
+        expect.objectContaining({
+          isCanonical: true,
+        }),
+      );
+      expect(newConversation?.archivedFromMigration).toBeUndefined();
+      expect(oldConversation).toEqual(
+        expect.objectContaining({
+          isCanonical: false,
+          archivedFromMigration: true,
+        }),
+      );
+      expect(state.activeConversationId).toBe(newId);
+
+      const restarted = normalizePersistedChatState(state);
+      expect(restarted.activeConversationId).toBe(newId);
+      expect(
+        restarted.conversations.find((conversation) => conversation.id === newId)?.isCanonical,
+      ).toBe(true);
     });
 
     it('should support model override', () => {

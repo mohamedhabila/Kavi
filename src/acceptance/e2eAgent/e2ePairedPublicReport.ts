@@ -322,7 +322,7 @@ function hasCompleteEnabledRetrieval(condition: CompletedPublicCondition): boole
     hasCompleteRetrievalTurnCoverage(condition) &&
     retrieval.turnStatusCounts.recorded === userTurnCount &&
     retrieval.turnStatusCounts.optOut === 0 &&
-    retrieval.eventCount === userTurnCount &&
+    retrieval.eventCount >= userTurnCount &&
     retrieval.modeCounts.disabled === 0 &&
     retrieval.outcomeCounts.disabled === 0
   );

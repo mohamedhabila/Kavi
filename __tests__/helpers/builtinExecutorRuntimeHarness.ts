@@ -63,6 +63,14 @@ jest.mock('../../src/services/voice/voice', () => ({
   }),
 }));
 
+jest.mock('../../src/services/memory/policy', () => ({
+  ...jest.requireActual('../../src/services/memory/policy'),
+  canReadLongTermMemory: jest.fn(() => true),
+  captureMemoryReadEpoch: jest.fn(() => 0),
+  isMemoryReadEpochCurrent: jest.fn(() => true),
+  isLongTermMemoryEnabled: jest.fn(() => true),
+}));
+
 jest.mock('../../src/services/agents/personas', () => ({
   BUILT_IN_PERSONAS: [
     { id: 'default', name: 'Assistant', description: 'General AI', icon: 'assistant' },
