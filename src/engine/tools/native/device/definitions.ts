@@ -4,7 +4,7 @@ import { nativeContract, NO_PERMISSION_PREREQUISITES } from '../shared';
 export const DEVICE_STATUS_TOOL: ToolDefinition = {
   name: 'device_status',
   description:
-    'Get current device status: battery level, network connectivity, screen brightness, and volume.',
+    'Get current device status: battery availability, level and charging state; network connectivity; and screen dimensions.',
   input_schema: { type: 'object', properties: {} },
   contract: nativeContract({
     category: 'device',
@@ -86,8 +86,8 @@ export const DEVICE_HEALTH_TOOL: ToolDefinition = {
 export const DEVICE_QUERY_TOOL: ToolDefinition = {
   name: 'device_query',
   description:
-    'Query device state. Use kind to choose what to read: ' +
-    'status (battery, network, brightness, volume), ' +
+    'Query device state. kind defaults to status. Use kind to choose what to read: ' +
+    'status (battery availability, level and charging state; network connectivity; screen dimensions), ' +
     'info (hardware/software model, OS, memory, storage, screen), ' +
     'permissions (app permission grants), or ' +
     'health (bounded memory/storage capacity, battery level, and uptime evidence).',
@@ -97,10 +97,9 @@ export const DEVICE_QUERY_TOOL: ToolDefinition = {
       kind: {
         type: 'string',
         enum: ['status', 'info', 'permissions', 'health'],
-        description: 'Which device facet to query.',
+        description: 'Which device facet to query. Defaults to status.',
       },
     },
-    required: ['kind'],
   },
   contract: nativeContract({
     category: 'device',

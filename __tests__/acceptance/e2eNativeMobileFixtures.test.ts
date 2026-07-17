@@ -110,6 +110,12 @@ describe('E2E native mobile fixtures', () => {
     },
   );
 
+  it('uses status evidence when the canonical device query omits kind', async () => {
+    const outcome = await executeToolInner('device_query', '{}', 'conv-mobile-device-default-e2e');
+
+    expect(outcome).toEqual({ status: 'completed', content: E2E_FIXTURE_DEVICE_STATUS_JSON });
+  });
+
   it('routes mobile-native fixtures through executeToolInner with state evidence', async () => {
     const writeRaw = await executeToolInner(
       'clipboard_write',

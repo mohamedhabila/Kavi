@@ -473,7 +473,7 @@ async function executeE2ENativeMobileTool(
     case 'device_health':
       return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_HEALTH_JSON);
     case 'device_query': {
-      const kind = typeof args.kind === 'string' ? args.kind.toLowerCase() : '';
+      const kind = typeof args.kind === 'string' ? args.kind.toLowerCase() : 'status';
       if (kind === 'status') return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_STATUS_JSON);
       if (kind === 'info') return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_INFO_JSON);
       if (kind === 'health') return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_HEALTH_JSON);

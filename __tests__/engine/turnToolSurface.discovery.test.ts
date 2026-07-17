@@ -4,6 +4,7 @@ import {
   CALENDAR_EVENTS_TOOL,
   CALENDAR_LIST_TOOL,
 } from '../../src/engine/tools/native/calendar/definitions';
+import { DEVICE_QUERY_TOOL } from '../../src/engine/tools/native/device/definitions';
 import { resourceFlowTools, tools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
 describe('resolveDefaultGroundedRequestScopedTools', () => {
@@ -103,6 +104,20 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(names.has('contacts_search')).toBe(true);
     expect(names.has('sms_compose')).toBe(false);
     expect(names.has('contacts_get')).toBe(false);
+  });
+
+  it('exposes the canonical read-only device query with its safe status default', () => {
+    const selected = resolveTurnToolSurface({
+      allTools: [DEVICE_QUERY_TOOL],
+      goals: [],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(),
+      includeToolCatalog: false,
+    });
+
+    expect(selected.map((tool) => tool.name)).toEqual(['device_query']);
   });
 
   it('keeps stable mobile discovery tools ahead of dynamically activated consumers', () => {

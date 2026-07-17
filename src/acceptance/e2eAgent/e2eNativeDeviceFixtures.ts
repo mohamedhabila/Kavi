@@ -36,7 +36,7 @@ export const E2E_FIXTURE_DEVICE_PERMISSIONS_JSON = JSON.stringify({
 
 export const E2E_FIXTURE_DEVICE_STATUS_JSON = JSON.stringify({
   fixtureVersion: E2E_NATIVE_TOOL_FIXTURE_VERSION,
-  battery: { level: 72, state: 'unplugged' },
+  battery: { available: true, level: 72, state: 'unplugged' },
   network: { isConnected: true, type: 'WIFI', isInternetReachable: true },
   screen: { width: 390, height: 844 },
 });

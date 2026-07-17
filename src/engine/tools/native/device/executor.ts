@@ -1,3 +1,5 @@
+import { Dimensions, Platform } from 'react-native';
+
 import { collectDeviceResourceHealth } from '../../../../services/deviceResourceHealth';
 import {
   completedToolOutcome,
@@ -5,12 +7,34 @@ import {
   type ToolRuntimeOutcome,
 } from '../../../../types/toolRuntimeOutcome';
 
+export function normalizeDeviceBatteryEvidence(
+  batteryLevel: unknown,
+  batteryState: unknown,
+): { available: boolean; level: number | null; state: string } {
+  const batteryStateNames: Record<number, string> = {
+    0: 'unknown',
+    1: 'unplugged',
+    2: 'charging',
+    3: 'full',
+  };
+  const available =
+    typeof batteryLevel === 'number' &&
+    Number.isFinite(batteryLevel) &&
+    batteryLevel >= 0 &&
+    batteryLevel <= 1;
+
+  return {
+    available,
+    level: available ? Math.round(batteryLevel * 100) : null,
+    state:
+      typeof batteryState === 'number' ? (batteryStateNames[batteryState] ?? 'unknown') : 'unknown',
+  };
+}
+
 export async function executeDeviceStatus(): Promise<ToolRuntimeOutcome> {
   try {
     const Battery = await import('expo-battery');
     const Network = await import('expo-network');
-    const { Dimensions } = await import('react-native');
-
     const [batteryLevel, batteryState, networkState] = await Promise.all([
       Battery.getBatteryLevelAsync().catch(() => -1),
       Battery.getBatteryStateAsync().catch(() => 0),
@@ -18,19 +42,9 @@ export async function executeDeviceStatus(): Promise<ToolRuntimeOutcome> {
     ]);
 
     const screen = Dimensions.get('window');
-    const batteryStateNames: Record<number, string> = {
-      0: 'unknown',
-      1: 'unplugged',
-      2: 'charging',
-      3: 'full',
-    };
-
     return completedToolOutcome(
       JSON.stringify({
-        battery: {
-          level: Math.round((batteryLevel as number) * 100),
-          state: batteryStateNames[batteryState as number] || 'unknown',
-        },
+        battery: normalizeDeviceBatteryEvidence(batteryLevel, batteryState),
         network: {
           isConnected: (networkState as any).isConnected,
           type: (networkState as any).type,
@@ -53,8 +67,6 @@ export async function executeDeviceStatus(): Promise<ToolRuntimeOutcome> {
 export async function executeDeviceInfo(): Promise<ToolRuntimeOutcome> {
   try {
     const Device = await import('expo-device');
-    const { Platform } = await import('react-native');
-
     return completedToolOutcome(
       JSON.stringify({
         brand: Device.brand,

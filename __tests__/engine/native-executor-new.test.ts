@@ -78,6 +78,7 @@ import {
   executeDeviceInfo,
   executeDevicePermissions,
   executeDeviceStatus,
+  normalizeDeviceBatteryEvidence,
 } from '../../src/engine/tools/native/device/executor';
 import { executeNativeTool } from '../../src/engine/tools/native/executor';
 import { executeHapticFeedback } from '../../src/engine/tools/native/haptics/executor';
@@ -113,10 +114,18 @@ beforeEach(() => {
 });
 
 describe('Device Status Tool', () => {
-  it('returns battery and network info or error', async () => {
+  it('returns explicit available battery and network evidence', async () => {
     const result = await executeDeviceStatus();
     expectNativeCompletionOrFailure(result, (parsed) => {
-      expect(parsed.battery).toBeDefined();
+      expect(parsed.battery).toEqual({ available: true, level: 50, state: 'charging' });
+    });
+  });
+
+  it('represents an unavailable battery without a false negative percentage', () => {
+    expect(normalizeDeviceBatteryEvidence(-1, 0)).toEqual({
+      available: false,
+      level: null,
+      state: 'unknown',
     });
   });
 });
@@ -257,6 +266,14 @@ describe('Native Tool Dispatcher — New Tools', () => {
   it('routes device_health correctly', async () => {
     const result = await executeNativeTool('device_health', '{}');
     expect(typeof completedToolContent(result)).toBe('string');
+  });
+
+  it('defaults the canonical device query to status', async () => {
+    const result = await executeNativeTool('device_query', '{}');
+    expectNativeCompletionOrFailure(result, (parsed) => {
+      expect(parsed.battery).toBeDefined();
+      expect(parsed.network).toBeDefined();
+    });
   });
 
   it('routes haptic_feedback correctly', async () => {

@@ -150,13 +150,13 @@ export async function executeNativeTool(
     case 'device_health':
       return executeDeviceHealth();
     case 'device_query': {
-      const kind = typeof args?.kind === 'string' ? args.kind.toLowerCase() : '';
+      const kind = typeof args?.kind === 'string' ? args.kind.toLowerCase() : 'status';
       if (kind === 'status') return executeDeviceStatus();
       if (kind === 'info') return executeDeviceInfo();
       if (kind === 'permissions') return executeDevicePermissions();
       if (kind === 'health') return executeDeviceHealth();
       return failedToolOutcome(
-        'Error: device_query requires kind ∈ {status, info, permissions, health}',
+        'Error: device_query kind must be one of {status, info, permissions, health}',
       );
     }
     case 'photos_latest':
