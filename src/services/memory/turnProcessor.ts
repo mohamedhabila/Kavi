@@ -9,7 +9,6 @@
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
-import { createLogger } from '../../utils/logger';
 import type {
   ConsolidatorExtractor,
   ConsolidatorOutcome,
@@ -40,9 +39,6 @@ import {
   type ExactClosedTurnFailureReason,
   type ExactClosedTurnResolution,
 } from './closedTurn';
-import { loadConsolidationCurrentFactContext } from './consolidation/currentFactContext';
-
-const logger = createLogger('memory.turnProcessor');
 
 export type { MemoryTurnPublicationValidation } from './turnPublicationValidation';
 
@@ -311,25 +307,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     }
   };
 
-  let providerTurnInput = turnInput;
-  try {
-    providerTurnInput = {
-      ...turnInput,
-      currentFacts: loadConsolidationCurrentFactContext({
-        memoryConversationId,
-        sourceThreadId: input.threadId,
-        personaId: input.episodeAccess.personaId,
-        taskId: input.taskId ?? null,
-        now,
-      }),
-    };
-  } catch (error) {
-    logger.devWarn('Current fact context unavailable; consolidating the closed turn without it.', {
-      errorName: error instanceof Error ? error.name : 'unknown',
-    });
-  }
-
-  const outcome = await extractProviderEnrichment(providerTurnInput, {
+  const outcome = await extractProviderEnrichment(turnInput, {
     extractor: input.extractor,
     signal: input.providerSignal,
     requestDispatchGuard: assertProviderEnrichmentAuthorized,
@@ -355,13 +333,12 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       memoryConversationId,
       threadId: input.threadId,
       taskId: input.taskId,
-      personaId: input.episodeAccess.personaId,
       sameSourceExplicitMemoryAuthority: user
         ? hasSameSourceExplicitMemoryAuthority({
             sourceMessageId: user.id,
           })
         : false,
-    });
+      });
     providerResult = {
       ...mergedResult,
       newFacts: mergedResult.newFacts.slice(structural.facts.length),

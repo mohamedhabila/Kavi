@@ -130,37 +130,6 @@ describe('passive provider fact reconciliation', () => {
     expect(result.newFacts.map((fact) => fact.value)).toEqual([composed, decomposed, 'Token-É']);
   });
 
-  it('binds persona-scoped proposals to the code-owned active persona', () => {
-    const message = 'My concise-mode city is Rotterdam';
-    const result = mergeProviderIntoStructural(
-      { episodeSummary: 'structural', facts: [] },
-      {
-        ...EMPTY_PROVIDER_RESULT,
-        newFacts: [
-          proposal({
-            scope: 'persona',
-            value: 'Rotterdam',
-            evidenceQuote: message,
-          }),
-        ],
-      },
-      {
-        currentUserMessageId: 'user-current',
-        currentUserMessage: message,
-        memoryConversationId: 'conversation-current',
-        threadId: 'thread-current',
-        personaId: 'persona-concise',
-        sameSourceExplicitMemoryAuthority: false,
-      },
-    );
-
-    expect(mockResolveCurrentFactsForReplacement).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: 'persona' }),
-      expect.objectContaining({ personaId: 'persona-concise' }),
-    );
-    expect(result.newFacts).toHaveLength(1);
-  });
-
   it('admits a named subject only when the exact label is in the quote', () => {
     const result = merge('小林の常住都市は京都です', [
       proposal({
