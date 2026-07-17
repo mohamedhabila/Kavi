@@ -175,11 +175,11 @@ export interface ConsolidatorOptions {
 const PROMPT_HEADER = `You are the memory consolidator for an assistant chat app.
 Read the latest user message, assistant reply, and message window, then extract ONLY
 information that should remain available to the assistant after the turn. Memory is
-scoped: user profile, preferences, and useful current circumstances can be global,
-while active-task facts, workspace/project identifiers, decisions, constraints, and
-verification tokens can be conversation, project, or session memory. Be conservative:
-prefer to extract nothing over guessing, but do not drop facts the user explicitly
-asked the assistant to retain.
+scoped: stable user profile and preferences are global, while active-task facts,
+workspace/project identifiers, decisions, constraints, and verification tokens can
+be conversation, project, or session memory. Be conservative: prefer to extract
+nothing over guessing, but do not drop facts the user explicitly asked the assistant
+to retain.
 
 Return STRICT JSON only — no prose, no markdown fences. Schema:
 {
@@ -210,11 +210,6 @@ Rules:
 - Every top-level field shown above is required and must use its exact
   snake_case name. Do not add fields outside the schema.
 - Skip ephemeral chit-chat. Do not extract greetings, jokes, or filler.
-- Record an explicit current user detail when it would materially change a useful
-  answer in a later conversation. This includes current preferences, habits,
-  recurring activities, relationships, plans, constraints, and circumstances.
-- Current does not mean permanent. Do not omit a directly stated current detail only
-  because it may change later; a later direct statement can supersede it.
 - Every field in every new_facts item is required. Do not add compatibility
   fields, aliases, inferred defaults, or provider-selected target identifiers.
 - new_facts may describe only durable semantics asserted by the current user.
