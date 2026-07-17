@@ -54,11 +54,11 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | Apache-2.0 | 28 |
 | BlueOak-1.0.0 | 6 |
 | BSD-2-Clause | 22 |
-| BSD-3-Clause | 26 |
+| BSD-3-Clause | 27 |
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 47 |
-| MIT | 887 |
+| MIT | 892 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -223,32 +223,32 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @eslint/js | 10.0.1 | development | MIT |
 | @eslint/object-schema | 3.0.5 | transitive | Apache-2.0 |
 | @eslint/plugin-kit | 0.7.1 | transitive | Apache-2.0 |
-| @expo/cli | 55.0.33 | transitive | MIT |
+| @expo/cli | 55.0.34 | transitive | MIT |
 | @expo/code-signing-certificates | 0.0.6 | transitive | MIT |
-| @expo/config | 55.0.18 | transitive | MIT |
-| @expo/config-plugins | 55.0.10 | transitive | MIT |
-| @expo/config-types | 55.0.5 | transitive | MIT |
+| @expo/config | 55.0.19 | transitive | MIT |
+| @expo/config-plugins | 55.0.11 | transitive | MIT |
+| @expo/config-types | 55.0.6 | transitive | MIT |
 | @expo/devcert | 1.2.1 | transitive | MIT |
 | @expo/devtools | 55.0.3 | transitive | MIT |
 | @expo/dom-webview | 55.0.6 | transitive | MIT |
-| @expo/env | 2.1.2 | transitive | MIT |
-| @expo/env | 2.4.1 | transitive | MIT |
-| @expo/fingerprint | 0.16.7 | transitive | MIT |
-| @expo/image-utils | 0.8.14 | transitive | MIT |
+| @expo/env | 2.1.3 | transitive | MIT |
+| @expo/env | 2.4.2 | transitive | MIT |
+| @expo/fingerprint | 0.16.8 | transitive | MIT |
+| @expo/image-utils | 0.8.15 | transitive | MIT |
 | @expo/json-file | 10.0.16 | transitive | MIT |
 | @expo/json-file | 10.2.0 | transitive | MIT |
-| @expo/json-file | 11.0.0 | transitive | MIT |
-| @expo/local-build-cache-provider | 55.0.14 | transitive | MIT |
-| @expo/log-box | 55.0.12 | transitive | MIT |
+| @expo/json-file | 11.0.1 | transitive | MIT |
+| @expo/local-build-cache-provider | 55.0.15 | transitive | MIT |
+| @expo/log-box | 55.0.13 | transitive | MIT |
 | @expo/metro | 55.1.1 | transitive | MIT |
-| @expo/metro-config | 55.0.24 | transitive | MIT |
-| @expo/osascript | 2.7.0 | transitive | MIT |
-| @expo/package-manager | 1.13.0 | transitive | MIT |
+| @expo/metro-config | 55.0.25 | transitive | MIT |
+| @expo/osascript | 2.7.1 | transitive | MIT |
+| @expo/package-manager | 1.13.1 | transitive | MIT |
 | @expo/plist | 0.5.4 | transitive | MIT |
-| @expo/prebuild-config | 55.0.19 | transitive | MIT |
-| @expo/require-utils | 55.0.5 | transitive | MIT |
+| @expo/prebuild-config | 55.0.20 | transitive | MIT |
+| @expo/require-utils | 55.0.6 | transitive | MIT |
 | @expo/router-server | 55.0.18 | transitive | MIT |
-| @expo/schema-utils | 55.0.4 | transitive | MIT |
+| @expo/schema-utils | 55.0.5 | transitive | MIT |
 | @expo/sdk-runtime-versions | 1.0.0 | transitive | MIT |
 | @expo/spawn-async | 1.8.0 | transitive | MIT |
 | @expo/sudo-prompt | 9.3.2 | transitive | MIT |
@@ -303,15 +303,20 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @modelcontextprotocol/sdk | 1.29.0 | runtime | MIT |
 | @react-native-async-storage/async-storage | 2.2.0 | runtime | MIT |
 | @react-native/assets-registry | 0.83.6 | transitive | MIT |
-| @react-native/babel-plugin-codegen | 0.83.6 | transitive | MIT |
-| @react-native/babel-preset | 0.83.6 | transitive | MIT |
+| @react-native/babel-plugin-codegen | 0.83.10 | transitive | MIT |
+| @react-native/babel-preset | 0.83.10 | transitive | MIT |
+| @react-native/codegen | 0.83.10 | transitive | MIT |
 | @react-native/codegen | 0.83.6 | transitive | MIT |
 | @react-native/community-cli-plugin | 0.83.6 | transitive | MIT |
+| @react-native/debugger-frontend | 0.83.10 | transitive | BSD-3-Clause |
 | @react-native/debugger-frontend | 0.83.6 | transitive | BSD-3-Clause |
+| @react-native/debugger-shell | 0.83.10 | transitive | MIT |
 | @react-native/debugger-shell | 0.83.6 | transitive | MIT |
+| @react-native/dev-middleware | 0.83.10 | transitive | MIT |
 | @react-native/dev-middleware | 0.83.6 | transitive | MIT |
 | @react-native/gradle-plugin | 0.83.6 | transitive | MIT |
 | @react-native/js-polyfills | 0.83.6 | transitive | MIT |
+| @react-native/normalize-colors | 0.83.10 | transitive | MIT |
 | @react-native/normalize-colors | 0.83.6 | transitive | MIT |
 | @react-native/virtualized-lists | 0.83.6 | transitive | MIT |
 | @react-navigation/core | 7.16.1 | transitive | MIT |
@@ -404,7 +409,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | babel-plugin-syntax-hermes-parser | 0.32.1 | transitive | MIT |
 | babel-plugin-transform-flow-enums | 0.0.2 | transitive | MIT |
 | babel-preset-current-node-syntax | 1.2.0 | transitive | MIT |
-| babel-preset-expo | 55.0.23 | transitive | MIT |
+| babel-preset-expo | 55.0.24 | transitive | MIT |
 | babel-preset-jest | 29.6.3 | transitive | MIT |
 | badgin | 1.2.3 | transitive | MIT |
 | balanced-match | 1.0.2 | transitive | MIT |
@@ -558,44 +563,44 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | exit | 0.1.2 | transitive | MIT |
 | expand-template | 2.0.3 | transitive | (MIT OR WTFPL) |
 | expect | 29.7.0 | transitive | MIT |
-| expo | 55.0.27 | runtime | MIT |
-| expo-application | 55.0.16 | transitive | MIT |
-| expo-asset | 55.0.17 | runtime | MIT |
-| expo-audio | 55.0.15 | runtime | MIT |
+| expo | 55.0.28 | runtime | MIT |
+| expo-application | 55.0.17 | transitive | MIT |
+| expo-asset | 55.0.18 | runtime | MIT |
+| expo-audio | 55.0.16 | runtime | MIT |
 | expo-auth-session | 55.0.17 | runtime | MIT |
-| expo-background-task | 55.0.19 | runtime | MIT |
-| expo-battery | 55.0.14 | runtime | MIT |
-| expo-build-properties | 55.0.15 | runtime | MIT |
-| expo-calendar | 55.0.16 | runtime | MIT |
-| expo-clipboard | 55.0.14 | runtime | MIT |
-| expo-constants | 55.0.16 | transitive | MIT |
-| expo-contacts | 55.0.15 | runtime | MIT |
-| expo-crypto | 55.0.16 | runtime | MIT |
-| expo-device | 55.0.18 | runtime | MIT |
-| expo-document-picker | 55.0.14 | runtime | MIT |
-| expo-file-system | 55.0.23 | runtime | MIT |
+| expo-background-task | 55.0.20 | runtime | MIT |
+| expo-battery | 55.0.15 | runtime | MIT |
+| expo-build-properties | 55.0.16 | runtime | MIT |
+| expo-calendar | 55.0.17 | runtime | MIT |
+| expo-clipboard | 55.0.15 | runtime | MIT |
+| expo-constants | 55.0.17 | transitive | MIT |
+| expo-contacts | 55.0.16 | runtime | MIT |
+| expo-crypto | 55.0.17 | runtime | MIT |
+| expo-device | 55.0.19 | runtime | MIT |
+| expo-document-picker | 55.0.15 | runtime | MIT |
+| expo-file-system | 55.0.24 | runtime | MIT |
 | expo-font | 55.0.8 | runtime | MIT |
-| expo-haptics | 55.0.15 | runtime | MIT |
+| expo-haptics | 55.0.16 | runtime | MIT |
 | expo-image-loader | 55.0.1 | transitive | MIT |
-| expo-image-picker | 55.0.21 | runtime | MIT |
+| expo-image-picker | 55.0.22 | runtime | MIT |
 | expo-keep-awake | 55.0.8 | transitive | MIT |
 | expo-linking | 55.0.16 | transitive | MIT |
-| expo-location | 55.1.11 | runtime | MIT |
-| expo-mail-composer | 55.0.15 | runtime | MIT |
-| expo-media-library | 55.0.18 | runtime | MIT |
-| expo-modules-autolinking | 55.0.24 | transitive | MIT |
+| expo-location | 55.1.12 | runtime | MIT |
+| expo-mail-composer | 55.0.16 | runtime | MIT |
+| expo-media-library | 55.0.19 | runtime | MIT |
+| expo-modules-autolinking | 55.0.25 | transitive | MIT |
 | expo-modules-core | 55.0.25 | transitive | MIT |
-| expo-network | 55.0.15 | runtime | MIT |
-| expo-notifications | 55.0.24 | runtime | MIT |
-| expo-secure-store | 55.0.15 | runtime | MIT |
+| expo-network | 55.0.16 | runtime | MIT |
+| expo-notifications | 55.0.25 | runtime | MIT |
+| expo-secure-store | 55.0.16 | runtime | MIT |
 | expo-server | 55.0.11 | transitive | MIT |
-| expo-sharing | 55.0.21 | runtime | MIT |
-| expo-sms | 55.0.15 | runtime | MIT |
-| expo-speech | 55.0.15 | runtime | MIT |
-| expo-sqlite | 55.0.17 | runtime | MIT |
+| expo-sharing | 55.0.22 | runtime | MIT |
+| expo-sms | 55.0.16 | runtime | MIT |
+| expo-speech | 55.0.16 | runtime | MIT |
+| expo-sqlite | 55.0.18 | runtime | MIT |
 | expo-status-bar | 55.0.6 | runtime | MIT |
-| expo-task-manager | 55.0.17 | runtime | MIT |
-| expo-web-browser | 55.0.17 | runtime | MIT |
+| expo-task-manager | 55.0.18 | runtime | MIT |
+| expo-web-browser | 55.0.18 | runtime | MIT |
 | exponential-backoff | 3.1.3 | transitive | Apache-2.0 |
 | express | 5.2.1 | transitive | MIT |
 | express-rate-limit | 8.5.2 | transitive | MIT |
@@ -720,7 +725,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | jest-each | 29.7.0 | transitive | MIT |
 | jest-environment-jsdom | 29.7.0 | transitive | MIT |
 | jest-environment-node | 29.7.0 | transitive | MIT |
-| jest-expo | 55.0.19 | development | MIT |
+| jest-expo | 55.0.20 | development | MIT |
 | jest-get-type | 29.6.3 | transitive | MIT |
 | jest-haste-map | 29.7.0 | transitive | MIT |
 | jest-leak-detector | 29.7.0 | transitive | MIT |
@@ -888,7 +893,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | pkg-dir | 4.2.0 | transitive | MIT |
 | plist | 3.1.0 | transitive | MIT |
 | pngjs | 3.4.0 | transitive | MIT |
-| postcss | 8.5.17 | transitive | MIT |
+| postcss | 8.5.19 | transitive | MIT |
 | prebuild-install | 7.1.3 | transitive | MIT |
 | prelude-ls | 1.2.1 | transitive | MIT |
 | prettier | 3.8.3 | development | MIT |
@@ -1091,6 +1096,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | wrappy | 1.0.2 | transitive | ISC |
 | write-file-atomic | 4.0.2 | transitive | ISC |
 | ws | 7.5.11 | transitive | MIT |
+| ws | 7.5.12 | transitive | MIT |
 | ws | 8.21.0 | transitive | MIT |
 | xcode | 3.0.1 | transitive | Apache-2.0 |
 | xml-name-validator | 4.0.0 | transitive | Apache-2.0 |

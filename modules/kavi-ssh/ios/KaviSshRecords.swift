@@ -1,14 +1,14 @@
 import ExpoModulesCore
 
 internal struct SshEndpointRecord: Record {
-  @Field var host: String
-  @Field var port: Int
+  @Field(.required) var host: String
+  @Field(.required) var port: Int
 }
 
 internal struct SshHostKeyRecord: Record {
-  @Field var algorithm: String
-  @Field var publicKeyBase64: String
-  @Field var fingerprintSha256: String
+  @Field(.required) var algorithm: String
+  @Field(.required) var publicKeyBase64: String
+  @Field(.required) var fingerprintSha256: String
 }
 
 internal enum SshAuthenticationKind: String, Enumerable {
@@ -17,33 +17,33 @@ internal enum SshAuthenticationKind: String, Enumerable {
 }
 
 internal struct SshAuthenticationRecord: Record {
-  @Field var kind: SshAuthenticationKind
+  @Field(.required) var kind: SshAuthenticationKind = .password
   @Field var password: String?
   @Field var privateKey: String?
   @Field var passphrase: String?
 }
 
 internal struct DiscoverHostKeyRequestRecord: Record {
-  @Field var endpoint: SshEndpointRecord
-  @Field var timeoutMs: Int
+  @Field(.required) var endpoint: SshEndpointRecord
+  @Field(.required) var timeoutMs: Int
 }
 
 internal struct ConnectVerifiedRequestRecord: Record {
-  @Field var endpoint: SshEndpointRecord
-  @Field var username: String
-  @Field var authentication: SshAuthenticationRecord
-  @Field var expectedHostKey: SshHostKeyRecord
-  @Field var timeoutMs: Int
+  @Field(.required) var endpoint: SshEndpointRecord
+  @Field(.required) var username: String
+  @Field(.required) var authentication: SshAuthenticationRecord
+  @Field(.required) var expectedHostKey: SshHostKeyRecord
+  @Field(.required) var timeoutMs: Int
 }
 
 internal struct ExecRequestRecord: Record {
-  @Field var connectionId: String
-  @Field var command: String
-  @Field var timeoutMs: Int
-  @Field var outputLimitBytes: Int
+  @Field(.required) var connectionId: String
+  @Field(.required) var command: String
+  @Field(.required) var timeoutMs: Int
+  @Field(.required) var outputLimitBytes: Int
 }
 
 internal struct DisconnectRequestRecord: Record {
-  @Field var connectionId: String
-  @Field var timeoutMs: Int
+  @Field(.required) var connectionId: String
+  @Field(.required) var timeoutMs: Int
 }
