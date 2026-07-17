@@ -11,6 +11,7 @@ export type CalendarMutationRuntime = Pick<
   | 'EntityTypes'
   | 'requestCalendarPermissionsAsync'
   | 'getCalendarsAsync'
+  | 'getEventsAsync'
   | 'createEventAsync'
   | 'updateEventAsync'
   | 'getEventAsync'
@@ -19,6 +20,24 @@ export type CalendarMutationRuntime = Pick<
 function calendarDateMatches(actual: unknown, expected: Date): boolean {
   const actualDate = actual instanceof Date ? actual : new Date(String(actual));
   return !isNaN(actualDate.getTime()) && actualDate.getTime() === expected.getTime();
+}
+
+function calendarValueMatches(actual: unknown, expected: unknown): boolean {
+  if (expected instanceof Date) return calendarDateMatches(actual, expected);
+  if (Array.isArray(expected)) {
+    return (
+      Array.isArray(actual) &&
+      actual.length === expected.length &&
+      expected.every((value, index) => calendarValueMatches(actual[index], value))
+    );
+  }
+  if (expected && typeof expected === 'object') {
+    if (!actual || typeof actual !== 'object') return false;
+    return Object.entries(expected).every(([field, value]) =>
+      calendarValueMatches((actual as Record<string, unknown>)[field], value),
+    );
+  }
+  return actual === expected;
 }
 
 function calendarEventMatches(
@@ -30,8 +49,14 @@ function calendarEventMatches(
   }
   return Object.entries(expected).every(([field, value]) => {
     if (field === 'id') return true;
-    if (value instanceof Date) return calendarDateMatches(event[field], value);
-    return event[field] === value;
+    if (
+      (field === 'location' || field === 'notes') &&
+      value === '' &&
+      (event[field] === undefined || event[field] === null || event[field] === '')
+    ) {
+      return true;
+    }
+    return calendarValueMatches(event[field], value);
   });
 }
 
@@ -58,8 +83,8 @@ export async function executeCalendarEvents(args: {
   startDate: string;
   endDate: string;
   calendarId?: string;
-}): Promise<ToolRuntimeOutcome> {
-  const Calendar = await loadCalendarModule();
+}, runtime?: CalendarMutationRuntime): Promise<ToolRuntimeOutcome> {
+  const Calendar = runtime ?? (await loadCalendarModule());
   if (!Calendar) return failedCalendarOutcome({ error: 'Calendar module not available' });
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -71,8 +96,18 @@ export async function executeCalendarEvents(args: {
     return failedCalendarOutcome({ error: 'Invalid date format. Use ISO 8601.' });
   }
 
-  const calendarIds = args.calendarId ? [args.calendarId] : undefined;
-  const events = await Calendar.getEventsAsync(calendarIds as any, start, end);
+  let calendarIds = args.calendarId ? [args.calendarId] : [];
+  if (calendarIds.length === 0) {
+    const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+    calendarIds = calendars
+      .map((calendar: { id?: unknown }) => calendar.id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  }
+  if (calendarIds.length === 0) {
+    return failedCalendarOutcome({ error: 'No event calendars found on this device.' });
+  }
+
+  const events = await Calendar.getEventsAsync(calendarIds, start, end);
 
   return completedCalendarOutcome(
     events.slice(0, 50).map((e: any) => ({
@@ -250,13 +285,75 @@ export async function executeCalendarUpdate(
   }
 
   try {
-    await Calendar.updateEventAsync(args.id, eventDetails);
+    let existing: Record<string, unknown>;
+    try {
+      existing = (await Calendar.getEventAsync(args.id)) as unknown as Record<string, unknown>;
+    } catch {
+      return failedCalendarOutcome({
+        error: 'Calendar event could not be read before update.',
+        eventId: args.id,
+      });
+    }
+    if (!existing || existing.id !== args.id) {
+      return failedCalendarOutcome({
+        error: 'Calendar event read before update did not match the requested event.',
+        eventId: args.id,
+      });
+    }
+
+    const existingStart = new Date(String(existing.startDate));
+    const existingEnd = new Date(String(existing.endDate));
+    const finalStart =
+      eventDetails.startDate instanceof Date
+        ? eventDetails.startDate
+        : !isNaN(existingStart.getTime())
+          ? existingStart
+          : undefined;
+    const finalEnd =
+      eventDetails.endDate instanceof Date
+        ? eventDetails.endDate
+        : !isNaN(existingEnd.getTime())
+          ? existingEnd
+          : undefined;
+    if (finalStart && finalEnd && finalEnd.getTime() <= finalStart.getTime()) {
+      return failedCalendarOutcome({ error: 'Calendar update requires endDate after startDate.' });
+    }
+
+    // Expo's legacy iOS adapter supplies defaults for these fields during a partial update.
+    // Carry the persisted values through so changing one field cannot erase unrelated event data.
+    const completeEventDetails: Record<string, any> = {
+      title: typeof existing.title === 'string' ? existing.title : '',
+      location: typeof existing.location === 'string' ? existing.location : '',
+      notes: typeof existing.notes === 'string' ? existing.notes : '',
+      allDay: typeof existing.allDay === 'boolean' ? existing.allDay : false,
+      availability:
+        typeof existing.availability === 'string' ? existing.availability : 'notSupported',
+      alarms: Array.isArray(existing.alarms) ? existing.alarms : [],
+      ...(finalStart ? { startDate: finalStart } : {}),
+      ...(finalEnd ? { endDate: finalEnd } : {}),
+      ...eventDetails,
+    };
+
+    await Calendar.updateEventAsync(args.id, completeEventDetails);
     try {
       const persisted = (await Calendar.getEventAsync(args.id)) as unknown as Record<
         string,
         unknown
       >;
-      const verified = calendarEventMatches(persisted, { id: args.id, ...eventDetails });
+      const preservedFields = [
+        'calendarId',
+        'timeZone',
+        'url',
+        'recurrenceRule',
+      ].reduce<Record<string, unknown>>((fields, field) => {
+        if (existing[field] !== undefined) fields[field] = existing[field];
+        return fields;
+      }, {});
+      const verified = calendarEventMatches(persisted, {
+        id: args.id,
+        ...preservedFields,
+        ...completeEventDetails,
+      });
       const content = JSON.stringify({
         status: verified ? 'updated_verified' : 'updated_unverified',
         eventId: args.id,

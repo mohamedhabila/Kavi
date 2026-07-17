@@ -1,5 +1,6 @@
 import {
   executeCalendarCreate,
+  executeCalendarEvents,
   executeCalendarUpdate,
   type CalendarMutationRuntime,
 } from '../../src/engine/tools/native/calendar/executor';
@@ -9,6 +10,7 @@ import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRun
 
 const mockRequestCalendarPermissionsAsync = jest.fn();
 const mockGetCalendarsAsync = jest.fn();
+const mockGetEventsAsync = jest.fn();
 const mockCreateEventAsync = jest.fn();
 const mockUpdateEventAsync = jest.fn();
 const mockGetEventAsync = jest.fn();
@@ -17,6 +19,7 @@ const calendarRuntime = {
   EntityTypes: { EVENT: 'event' },
   requestCalendarPermissionsAsync: mockRequestCalendarPermissionsAsync,
   getCalendarsAsync: mockGetCalendarsAsync,
+  getEventsAsync: mockGetEventsAsync,
   createEventAsync: mockCreateEventAsync,
   updateEventAsync: mockUpdateEventAsync,
   getEventAsync: mockGetEventAsync,
@@ -102,13 +105,173 @@ describe('calendar effect verification', () => {
 
   it('reads an updated event back before returning verified completion', async () => {
     mockUpdateEventAsync.mockResolvedValue(undefined);
-    mockGetEventAsync.mockResolvedValue({ id: 'event-1', title: 'Updated planning' });
+    mockGetEventAsync
+      .mockResolvedValueOnce({
+        id: 'event-1',
+        calendarId: 'calendar-1',
+        title: 'Planning',
+        location: 'Room 1',
+        notes: 'Bring notes',
+        startDate: new Date('2026-07-11T09:00:00.000Z'),
+        endDate: new Date('2026-07-11T10:00:00.000Z'),
+        allDay: false,
+        availability: 'busy',
+        alarms: [],
+      })
+      .mockResolvedValueOnce({
+        id: 'event-1',
+        calendarId: 'calendar-1',
+        title: 'Updated planning',
+        location: 'Room 1',
+        notes: 'Bring notes',
+        startDate: new Date('2026-07-11T09:00:00.000Z'),
+        endDate: new Date('2026-07-11T10:00:00.000Z'),
+        allDay: false,
+        availability: 'busy',
+        alarms: [],
+      });
 
     const result = parseCompletedToolOutcome(
       await executeCalendarUpdate({ id: 'event-1', title: 'Updated planning' }, calendarRuntime),
     );
 
     expect(result).toMatchObject({ status: 'updated_verified', eventId: 'event-1' });
-    expect(mockGetEventAsync).toHaveBeenCalledWith('event-1');
+    expect(mockGetEventAsync).toHaveBeenCalledTimes(2);
+    expect(mockUpdateEventAsync).toHaveBeenCalledWith(
+      'event-1',
+      expect.objectContaining({
+        title: 'Updated planning',
+        location: 'Room 1',
+        notes: 'Bring notes',
+        allDay: false,
+        availability: 'busy',
+        alarms: [],
+      }),
+    );
+  });
+
+  it('preserves unrelated fields for a date-only update and verifies them after saving', async () => {
+    const newStart = '2026-07-11T11:15:00.000Z';
+    const newEnd = '2026-07-11T11:45:00.000Z';
+    const existing = {
+      id: 'event-1',
+      calendarId: 'calendar-1',
+      title: 'Planning',
+      location: 'Room 1',
+      notes: 'Bring notes',
+      timeZone: 'Europe/Amsterdam',
+      startDate: new Date('2026-07-11T09:00:00.000Z'),
+      endDate: new Date('2026-07-11T10:00:00.000Z'),
+      allDay: false,
+      availability: 'busy',
+      alarms: [],
+    };
+    mockUpdateEventAsync.mockResolvedValue(undefined);
+    mockGetEventAsync
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce({
+        ...existing,
+        startDate: new Date(newStart),
+        endDate: new Date(newEnd),
+      });
+
+    const result = parseCompletedToolOutcome(
+      await executeCalendarUpdate(
+        { id: 'event-1', startDate: newStart, endDate: newEnd },
+        calendarRuntime,
+      ),
+    );
+
+    expect(result).toMatchObject({ status: 'updated_verified', eventId: 'event-1' });
+    expect(mockUpdateEventAsync).toHaveBeenCalledWith(
+      'event-1',
+      expect.objectContaining({
+        title: 'Planning',
+        location: 'Room 1',
+        notes: 'Bring notes',
+        startDate: new Date(newStart),
+        endDate: new Date(newEnd),
+        allDay: false,
+        availability: 'busy',
+        alarms: [],
+      }),
+    );
+  });
+
+  it('does not report verified success when an unrelated field is lost', async () => {
+    const existing = {
+      id: 'event-1',
+      title: 'Planning',
+      location: '',
+      notes: '',
+      startDate: new Date('2026-07-11T09:00:00.000Z'),
+      endDate: new Date('2026-07-11T10:00:00.000Z'),
+      allDay: false,
+      availability: 'busy',
+      alarms: [],
+    };
+    mockUpdateEventAsync.mockResolvedValue(undefined);
+    mockGetEventAsync
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce({ ...existing, title: '' });
+
+    const outcome = await executeCalendarUpdate(
+      { id: 'event-1', startDate: '2026-07-11T09:30:00.000Z' },
+      calendarRuntime,
+    );
+
+    expect(JSON.parse(failedToolContent(outcome))).toMatchObject({
+      status: 'updated_unverified',
+      eventId: 'event-1',
+      verificationError: 'calendar_readback_mismatch',
+    });
+  });
+
+  it('treats absent and empty optional text as the same persisted calendar value', async () => {
+    const existing = {
+      id: 'event-1',
+      title: '',
+      startDate: new Date('2026-07-11T09:00:00.000Z'),
+      endDate: new Date('2026-07-11T10:00:00.000Z'),
+      allDay: false,
+      availability: 'busy',
+      alarms: [],
+    };
+    mockUpdateEventAsync.mockResolvedValue(undefined);
+    mockGetEventAsync
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce({ ...existing, title: 'Restored title' });
+
+    const result = parseCompletedToolOutcome(
+      await executeCalendarUpdate(
+        { id: 'event-1', title: 'Restored title' },
+        calendarRuntime,
+      ),
+    );
+
+    expect(result).toMatchObject({ status: 'updated_verified', eventId: 'event-1' });
+  });
+
+  it('resolves all event calendar ids when a calendar filter is omitted', async () => {
+    mockGetCalendarsAsync.mockResolvedValue([
+      { id: 'calendar-1' },
+      { id: 'calendar-2' },
+      { id: '' },
+    ]);
+    mockGetEventsAsync.mockResolvedValue([]);
+
+    const result = parseCompletedToolOutcome(
+      await executeCalendarEvents(
+        { startDate: '2026-07-11T00:00:00.000Z', endDate: '2026-07-12T00:00:00.000Z' },
+        calendarRuntime,
+      ),
+    );
+
+    expect(result).toEqual([]);
+    expect(mockGetEventsAsync).toHaveBeenCalledWith(
+      ['calendar-1', 'calendar-2'],
+      new Date('2026-07-11T00:00:00.000Z'),
+      new Date('2026-07-12T00:00:00.000Z'),
+    );
   });
 });
