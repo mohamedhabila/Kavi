@@ -16,6 +16,7 @@ export interface ProviderMergeContext {
   memoryConversationId: string;
   threadId: string;
   taskId?: string;
+  personaId?: string;
   sameSourceExplicitMemoryAuthority: boolean;
 }
 
@@ -73,6 +74,7 @@ function resolveProviderFact(
       memoryConversationId: context.memoryConversationId,
       sourceThreadId: context.threadId,
       taskId: context.taskId,
+      personaId: context.personaId,
     },
   );
   const decision = evaluateGroundedReplacement(fact, {
