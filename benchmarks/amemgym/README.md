@@ -26,6 +26,12 @@ The default satisfying bar is valid JSON on every answer and at least 2/3 exact 
 
 For a quick diagnostic of one checkpoint, set `AMEMGYM_PILOT_PERIOD_INDICES=0` and `AMEMGYM_PILOT_MIN_ACCURACY=0`. Such a run is diagnostic only and must not be reported as the default pilot.
 
+For broader private calibration, `AMEMGYM_PILOT_ITEM_INDEX` and
+`AMEMGYM_PILOT_QA_INDEX` select another dataset item and question. These
+default to `0`; the selected values are recorded in `pilot-summary.json`.
+Changing them produces a diagnostic subset, not the default pilot or a full
+benchmark claim.
+
 ## Private setup
 
 From the repository root:

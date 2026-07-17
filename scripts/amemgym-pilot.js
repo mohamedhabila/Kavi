@@ -62,6 +62,8 @@ process.env.AMEMGYM_PYTHON = python;
 process.env.AMEMGYM_OUTPUT_DIR = outputDir;
 process.env.AMEMGYM_PILOT_MIN_ACCURACY =
   process.env.AMEMGYM_PILOT_MIN_ACCURACY?.trim() || String(2 / 3);
+process.env.AMEMGYM_PILOT_ITEM_INDEX = process.env.AMEMGYM_PILOT_ITEM_INDEX?.trim() || '0';
+process.env.AMEMGYM_PILOT_QA_INDEX = process.env.AMEMGYM_PILOT_QA_INDEX?.trim() || '0';
 process.env.AMEMGYM_PILOT_PERIOD_INDICES =
   process.env.AMEMGYM_PILOT_PERIOD_INDICES?.trim() || '0,1,3';
 process.env.AMEMGYM_SIMULATOR_BASE_URL =

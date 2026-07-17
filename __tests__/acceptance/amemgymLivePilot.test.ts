@@ -153,6 +153,8 @@ async function runPilotProcess(params: {
   const outputDir = requirePayloadText(process.env as JsonObject, 'AMEMGYM_OUTPUT_DIR');
   const minimumAccuracy = process.env.AMEMGYM_PILOT_MIN_ACCURACY || String(2 / 3);
   const periodIndices = process.env.AMEMGYM_PILOT_PERIOD_INDICES || '0,1,3';
+  const itemIndex = process.env.AMEMGYM_PILOT_ITEM_INDEX || '0';
+  const qaIndex = process.env.AMEMGYM_PILOT_QA_INDEX || '0';
   const child = spawn(
     python,
     [
@@ -165,6 +167,10 @@ async function runPilotProcess(params: {
       outputDir,
       '--min-accuracy',
       minimumAccuracy,
+      '--item-index',
+      itemIndex,
+      '--qa-index',
+      qaIndex,
       '--period-indices',
       periodIndices,
     ],
