@@ -46,6 +46,8 @@ describe('SemanticFactProposalV1 provider contract', () => {
     expect(prompt).toContain('"source_message_id"');
     expect(prompt).toContain('"operation": "record" | "replace_current"');
     expect(prompt).toContain('Every field in every new_facts item is required');
+    expect(prompt).toContain('materially change a useful');
+    expect(prompt).toContain('Current does not mean permanent');
     expect(prompt).toContain('any language');
     expect(prompt).not.toContain('"evidence_message_ids"');
     expect(prompt).not.toContain('"invalidated_facts"');
