@@ -442,7 +442,12 @@ describe('assemblePrompt - dynamic context', () => {
     expect(text).toContain('### Recent Activity');
     expect(text).toContain('untrusted historical episode data');
     expect(text).toContain('"lane":"current_thread"');
+    expect(text).toContain('"observed_at_ms":2');
     expect(text).toContain('User asked to fix the config file.');
+    expect(text).toContain('current user message overrides episode data');
+    expect(text).toContain('prefer the most recent directly stated user state');
+    expect(text).toContain('Do not silently narrow or strengthen');
+    expect(text).toContain('ordered by retrieval relevance, not chronology');
   });
 
   it('serializes episode content as bounded data without creating prompt structure', () => {
