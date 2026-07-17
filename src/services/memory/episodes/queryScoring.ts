@@ -74,6 +74,62 @@ export function sortScoredEpisodes(
   return sorted;
 }
 
+function sameEpisodeTrajectory(left: MemoryEpisode, right: MemoryEpisode): boolean {
+  return (
+    left.conversationId === right.conversationId &&
+    left.threadId === right.threadId &&
+    left.taskId === right.taskId
+  );
+}
+
+function newerEpisode(left: MemoryEpisode, right: MemoryEpisode): boolean {
+  if (left.endedAt !== right.endedAt) return left.endedAt > right.endedAt;
+  if (left.createdAt !== right.createdAt) return left.createdAt > right.createdAt;
+  return left.id.localeCompare(right.id) < 0;
+}
+
+/**
+ * Keep the strongest semantic match, but use a repeated slot from that same
+ * trajectory for its newest relevant state instead of another older match.
+ * A distinct second trajectory keeps its diversity slot.
+ */
+export function selectSemanticAndRecentEpisodes(
+  ranked: ReadonlyArray<ScoredMemoryEpisode>,
+  limit: number,
+): ScoredMemoryEpisode[] {
+  if (limit <= 0 || ranked.length === 0) return [];
+  if (limit === 1 || ranked.length === 1) return ranked.slice(0, limit);
+
+  const semanticAnchor = ranked[0]!;
+  const second = ranked[1]!;
+  if (!sameEpisodeTrajectory(semanticAnchor.episode, second.episode)) {
+    return ranked.slice(0, limit);
+  }
+
+  let newestRelevant = semanticAnchor;
+  for (const candidate of ranked) {
+    if (
+      sameEpisodeTrajectory(semanticAnchor.episode, candidate.episode) &&
+      newerEpisode(candidate.episode, newestRelevant.episode)
+    ) {
+      newestRelevant = candidate;
+    }
+  }
+  if (newestRelevant.episode.id === semanticAnchor.episode.id) {
+    return ranked.slice(0, limit);
+  }
+
+  return [
+    semanticAnchor,
+    newestRelevant,
+    ...ranked.filter(
+      (candidate) =>
+        candidate.episode.id !== semanticAnchor.episode.id &&
+        candidate.episode.id !== newestRelevant.episode.id,
+    ),
+  ].slice(0, limit);
+}
+
 export function rankEpisodesForQuery(
   episodes: ReadonlyArray<MemoryEpisode>,
   queryUnits: ReadonlySet<string>,

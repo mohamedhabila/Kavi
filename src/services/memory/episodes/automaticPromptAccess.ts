@@ -14,7 +14,12 @@ import type {
   EpisodeAccessPolicyRow,
   EpisodeRecallSelection,
 } from './accessPolicyTypes';
-import { episodeQueryUnits, scoreEpisodesForQuery, sortScoredEpisodes } from './queryScoring';
+import {
+  episodeQueryUnits,
+  scoreEpisodesForQuery,
+  selectSemanticAndRecentEpisodes,
+  sortScoredEpisodes,
+} from './queryScoring';
 import { rowToEpisode, type EpisodeRow } from './types';
 
 export const AUTOMATIC_CURRENT_EPISODE_CANDIDATE_LIMIT = 80;
@@ -280,7 +285,7 @@ export function loadAuthorizedCurrentThreadEpisodes(input: {
   const ranked = queryUnits.size > 0 ? sortScoredEpisodes(scored) : scored;
   const sortMs = Date.now() - sortStarted;
   const byId = new Map(authorized.map((selection) => [selection.episode.id, selection]));
-  const selections = ranked.slice(0, input.resultLimit).map((entry) => ({
+  const selections = selectSemanticAndRecentEpisodes(ranked, input.resultLimit).map((entry) => ({
     ...byId.get(entry.episode.id)!,
     relevanceScore: entry.score,
   }));

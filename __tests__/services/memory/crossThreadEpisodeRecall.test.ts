@@ -459,6 +459,62 @@ describe('bounded authorized cross-thread episode recall', () => {
     ).toBeLessThanOrEqual(CROSS_THREAD_EPISODE_PROMPT_BUDGET_CHARS);
   });
 
+  it('uses a repeated trajectory slot for its newest relevant state', () => {
+    const threadId = 'thread-evolving-state';
+    const semanticAnchor = seedEpisode({
+      suffix: 'state-semantic-anchor',
+      threadId,
+      summary: 'release checklist target complete',
+      endedAt: 500,
+    });
+    seedEpisode({
+      suffix: 'state-second-old',
+      threadId,
+      summary: 'release checklist followup',
+      endedAt: 700,
+    });
+    const newestRelevant = seedEpisode({
+      suffix: 'state-newest',
+      threadId,
+      summary: 'release state changed',
+      endedAt: 900,
+    });
+
+    const loaded = load('release checklist target');
+    expect(loaded.candidates[0]?.episode.id).toBe(semanticAnchor.id);
+    expect(loaded.candidates[1]?.episode.id).toBe(newestRelevant.id);
+    expect(
+      selectBoundedCrossThreadEpisodes(loaded).candidates.map(({ episode }) => episode.id),
+    ).toEqual([semanticAnchor.id, newestRelevant.id]);
+  });
+
+  it('preserves a distinct trajectory in the second relevance slot', () => {
+    const semanticAnchor = seedEpisode({
+      suffix: 'diverse-semantic-anchor',
+      threadId: 'thread-diverse-a',
+      summary: 'release checklist target complete',
+      endedAt: 500,
+    });
+    const distinctSecond = seedEpisode({
+      suffix: 'diverse-second',
+      threadId: 'thread-diverse-b',
+      summary: 'release checklist followup',
+      endedAt: 700,
+    });
+    seedEpisode({
+      suffix: 'diverse-newest',
+      threadId: 'thread-diverse-a',
+      summary: 'release state changed',
+      endedAt: 900,
+    });
+
+    const selected = selectBoundedCrossThreadEpisodes(load('release checklist target')).candidates;
+    expect(selected.map(({ episode }) => episode.id)).toEqual([
+      semanticAnchor.id,
+      distinctSecond.id,
+    ]);
+  });
+
   it('keeps current-thread candidates first and only fills unused capacity cross-thread', () => {
     const current = seedEpisode({
       suffix: 'priority-current',

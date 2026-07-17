@@ -16,7 +16,12 @@ import {
   type EpisodeRecallSelection,
 } from './accessPolicyTypes';
 import { episodePromptLineCost } from './promptRendering';
-import { episodeQueryUnits, scoreEpisodesForQuery, sortScoredEpisodes } from './queryScoring';
+import {
+  episodeQueryUnits,
+  scoreEpisodesForQuery,
+  selectSemanticAndRecentEpisodes,
+  sortScoredEpisodes,
+} from './queryScoring';
 import { rowToEpisode, type EpisodeRow } from './types';
 
 export const CROSS_THREAD_EPISODE_INDEXED_CANDIDATE_LIMIT = 80;
@@ -282,7 +287,10 @@ export function loadAuthorizedCrossThreadEpisodeCandidates(input: {
   );
   const scoreMs = Date.now() - scoreStarted;
   const sortStarted = Date.now();
-  const ranked = sortScoredEpisodes(scored);
+  const ranked = selectSemanticAndRecentEpisodes(
+    sortScoredEpisodes(scored),
+    CROSS_THREAD_EPISODE_INDEXED_CANDIDATE_LIMIT,
+  );
   const sortMs = Date.now() - sortStarted;
   const selectionStarted = Date.now();
   const candidates: AuthorizedCrossThreadEpisodeSelection[] = [];

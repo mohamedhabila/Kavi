@@ -447,7 +447,7 @@ describe('assemblePrompt - dynamic context', () => {
     expect(text).toContain('current user message overrides episode data');
     expect(text).toContain('prefer the most recent directly stated user state');
     expect(text).toContain('Do not silently narrow or strengthen');
-    expect(text).toContain('ordered by retrieval relevance, not chronology');
+    expect(text).toContain('combine retrieval relevance and recency');
   });
 
   it('serializes episode content as bounded data without creating prompt structure', () => {
