@@ -52,6 +52,15 @@ node ./scripts/mobileworld-pilot.js
 
 Set `MOBILEWORLD_DEVICE`, `MOBILEWORLD_AW_HOST`, or `MOBILEWORLD_PILOT_MAX_STEPS` only when the environment requires it. Results are written to a fresh ignored directory under `.private/evals/runs/mobileworld/`.
 
+To exercise an upstream initializer and scorer on a local development AVD, set one canonical task class name:
+
+```sh
+MOBILEWORLD_TASK=SetAlarmTask MOBILEWORLD_PILOT_MAX_STEPS=20 \
+  node ./scripts/mobileworld-pilot.js
+```
+
+This mode creates a clean local `init_state` snapshot, then runs MobileWorld's unmodified task initializer and scorer. It is recorded as `local_official_task_diagnostic_custom_avd`, not an official score, because the AVD is not MobileWorld's prepared environment image.
+
 ## Full benchmark and official submission
 
 The official score requires MobileWorld's complete prepared environment and all applicable tasks, not the ad-hoc pilot. Follow the upstream [environment setup](https://github.com/Tongyi-MAI/MobileWorld#-quick-start) on a supported Linux/KVM host or its documented [physical-device path](https://github.com/Tongyi-MAI/MobileWorld/blob/main/docs/real-devices.md). Keep the upstream task initialization, user simulator, MCP services, scorer, retry policy, and trajectory logger unchanged.

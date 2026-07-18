@@ -240,6 +240,19 @@ async function prepareAlarmState(device: string, database: string): Promise<void
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
 
+async function prepareLocalTaskSnapshot(device: string): Promise<void> {
+  spawnSync('adb', ['root'], { encoding: 'utf8' });
+  spawnSync('adb', ['wait-for-device'], { encoding: 'utf8' });
+  runAdb(device, ['shell', 'am', 'force-stop', 'com.google.android.deskclock']);
+  runAdb(device, ['shell', 'pm', 'clear', 'com.google.android.deskclock']);
+  runAdb(device, ['shell', 'input', 'keyevent', 'KEYCODE_HOME']);
+  spawnSync('adb', ['-s', device, 'emu', 'avd', 'snapshot', 'delete', 'init_state'], {
+    encoding: 'utf8',
+  });
+  runAdb(device, ['emu', 'avd', 'snapshot', 'save', 'init_state']);
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+}
+
 function verifyAlarmState(
   device: string,
   database: string,
@@ -275,17 +288,20 @@ async function runPilotProcess(params: {
   device: string;
   goal: string;
   outputDir: string;
+  taskName: string | null;
   upstreamDir: string;
 }): Promise<ProcessResult> {
   const projectRoot = path.resolve(__dirname, '../..');
   const uv = process.env.MOBILEWORLD_UV?.trim() || 'uv';
+  const benchmarkArgs = params.taskName
+    ? ['eval', '--task', params.taskName, '--auto-retry', '0']
+    : ['test', params.goal];
   const child = spawn(
     uv,
     [
       'run',
       'mobile-world',
-      'test',
-      params.goal,
+      ...benchmarkArgs,
       '--agent-type',
       path.join(projectRoot, 'benchmarks/mobileworld/kavi_agent.py'),
       '--model-name',
@@ -374,12 +390,17 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
     const hour = 8;
     const minute = 17;
     const goal = 'Create and enable an alarm for 8:17 AM.';
+    const taskName = process.env.MOBILEWORLD_TASK?.trim() || null;
     const alarmDatabase = '/data/user_de/0/com.google.android.deskclock/databases/alarms.db';
     const bridgeToken = randomBytes(32).toString('hex');
     const sessions = new Map<string, BridgeSession>();
 
     await ensureAdbKeyboard(upstreamDir, device);
-    await prepareAlarmState(device, alarmDatabase);
+    if (taskName) {
+      await prepareLocalTaskSnapshot(device);
+    } else {
+      await prepareAlarmState(device, alarmDatabase);
+    }
 
     const server = createServer((request, response) => {
       void (async () => {
@@ -493,13 +514,20 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
         device,
         goal,
         outputDir,
+        taskName,
         upstreamDir,
       });
     } finally {
       await closeServer(server);
     }
 
-    const verifiedRows = verifyAlarmState(device, alarmDatabase, hour, minute);
+    const resultPath = taskName ? path.join(outputDir, taskName, 'result.txt') : null;
+    const officialResult =
+      resultPath && fs.existsSync(resultPath) ? fs.readFileSync(resultPath, 'utf8') : '';
+    const scoreMatch = officialResult.match(/^score:\s*([0-9.]+)$/mu);
+    const officialScore = scoreMatch ? Number(scoreMatch[1]) : null;
+    const verifiedRows = taskName ? [] : verifyAlarmState(device, alarmDatabase, hour, minute);
+    const stateVerified = taskName ? officialScore === 1 : verifiedRows.length > 0;
     const session = [...sessions.values()][0];
     const appStatus = gitValue(['-C', projectRoot, 'status', '--porcelain']);
     const upstreamStatus = gitValue(['-C', upstreamDir, 'status', '--porcelain']);
@@ -507,8 +535,10 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
       kind: 'kavi_mobileworld_device_pilot_result',
       schema_version: 1,
       created_at: new Date().toISOString(),
-      claim_status: 'non_official_ad_hoc_device_pilot',
-      claim_eligible: processResult.code === 0 && verifiedRows.length > 0 && !appStatus,
+      claim_status: taskName
+        ? 'local_official_task_diagnostic_custom_avd'
+        : 'non_official_ad_hoc_device_pilot',
+      claim_eligible: processResult.code === 0 && stateVerified && !appStatus,
       app: {
         commit: gitValue(['-C', projectRoot, 'rev-parse', 'HEAD']),
         worktree_clean: !appStatus,
@@ -527,21 +557,27 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
         exact_foreground_chat: true,
         upstream_action_parser: true,
         upstream_device_controller: true,
-        official_task_initialization: false,
-        official_task_scorer: false,
+        official_task_initialization: Boolean(taskName),
+        official_task_scorer: Boolean(taskName),
+        official_environment_image: false,
       },
       device: {
         id: device,
         model: runAdb(device, ['shell', 'getprop', 'ro.product.model']),
         sdk: runAdb(device, ['shell', 'getprop', 'ro.build.version.sdk']),
       },
-      task: { goal, max_steps: Number(process.env.MOBILEWORLD_PILOT_MAX_STEPS || 12) },
+      task: {
+        name: taskName,
+        goal: session?.instruction ?? goal,
+        max_steps: Number(process.env.MOBILEWORLD_PILOT_MAX_STEPS || 12),
+      },
       result: {
         process_exit_code: processResult.code,
         duration_ms: processResult.durationMs,
         bridge_turns: session?.turns ?? 0,
         repair_turns: session?.repairs ?? 0,
-        state_verified: verifiedRows.length > 0,
+        official_score: officialScore,
+        state_verified: stateVerified,
         verified_rows: verifiedRows,
       },
     };
@@ -553,7 +589,11 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
     );
 
     expect(processResult.code).toBe(0);
-    expect(verifiedRows).toContain(`${hour}|${minute}|1|`);
+    if (taskName) {
+      expect(officialScore).toBe(1);
+    } else {
+      expect(verifiedRows).toContain(`${hour}|${minute}|1|`);
+    }
     expect(session?.turns).toBeGreaterThan(0);
   });
 });

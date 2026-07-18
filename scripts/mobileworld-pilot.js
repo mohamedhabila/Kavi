@@ -30,6 +30,10 @@ const upstreamDir = path.resolve(
 );
 const device = process.env.MOBILEWORLD_DEVICE?.trim() || 'emulator-5554';
 const uv = process.env.MOBILEWORLD_UV?.trim() || 'uv';
+const taskName = process.env.MOBILEWORLD_TASK?.trim() || '';
+if (taskName && !/^[A-Za-z][A-Za-z0-9_]{0,99}$/.test(taskName)) {
+  exitWithStatus(fail(label, 'MOBILEWORLD_TASK must be one canonical task class name.'));
+}
 
 for (const [description, candidate] of [
   ['pinned MobileWorld checkout', path.join(upstreamDir, 'src/mobile_world/core/runner.py')],
@@ -103,7 +107,11 @@ if (health.status !== 0) {
 const timestamp = new Date().toISOString().replaceAll(':', '').replaceAll('.', '-');
 const outputDir = path.resolve(
   process.env.MOBILEWORLD_OUTPUT_DIR ||
-    path.join(projectRoot, '.private/evals/runs/mobileworld', `device-pilot-${timestamp}`),
+    path.join(
+      projectRoot,
+      '.private/evals/runs/mobileworld',
+      `${taskName ? `task-${taskName}` : 'device-pilot'}-${timestamp}`,
+    ),
 );
 if (fs.existsSync(outputDir) && fs.readdirSync(outputDir).length > 0) {
   exitWithStatus(fail(label, `Output directory must be fresh: ${outputDir}`));
@@ -116,7 +124,9 @@ process.env.MOBILEWORLD_OUTPUT_DIR = outputDir;
 process.env.MOBILEWORLD_UPSTREAM_DIR = upstreamDir;
 process.env.MOBILEWORLD_UV = uv;
 
-console.log(`[mobileworld-pilot] device=${device} output=${outputDir}`);
+console.log(
+  `[mobileworld-pilot] device=${device} mode=${taskName || 'ad-hoc'} output=${outputDir}`,
+);
 status = runJest({
   projectRoot,
   env: process.env,
