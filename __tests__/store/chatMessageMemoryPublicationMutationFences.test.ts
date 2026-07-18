@@ -276,6 +276,7 @@ describe('chat memory publication mutation fences', () => {
           role: 'system',
           content: 'The older durable turn was summarized.',
           timestamp: 7,
+          compactionProvenance: { version: 1, dependency: 'transcript_only' },
         },
         ...newerTail,
       ]),
@@ -296,7 +297,7 @@ describe('chat memory publication mutation fences', () => {
     ).toThrow(SOURCE_LOCKED_ERROR);
   });
 
-  it('strips forged receipts when compaction introduces a new message identity', () => {
+  it('rejects unmarked new message identities from model-only compaction context', () => {
     const conversationId = useChatStore.getState().createConversation('provider', 'system');
     useChatStore.getState().applyConversationCompaction(conversationId, [
       {
@@ -309,7 +310,7 @@ describe('chat memory publication mutation fences', () => {
       },
     ]);
 
-    expect(conversation(conversationId).messages[0]?.memoryPublication).toBeUndefined();
+    expect(conversation(conversationId).messages).toEqual([]);
   });
 
   it('does not lock turns whose publication is already terminal', () => {
@@ -328,7 +329,13 @@ describe('chat memory publication mutation fences', () => {
 
     expect(() =>
       store.applyConversationCompaction(conversationId, [
-        { id: 'summary', role: 'system', content: 'Replacement summary', timestamp: 2 },
+        {
+          id: 'summary',
+          role: 'system',
+          content: 'Replacement summary',
+          timestamp: 2,
+          compactionProvenance: { version: 1, dependency: 'transcript_only' },
+        },
       ]),
     ).not.toThrow();
     expect(conversation(conversationId).messages.map((message) => message.id)).toEqual(['summary']);

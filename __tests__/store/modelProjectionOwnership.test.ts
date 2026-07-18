@@ -225,6 +225,7 @@ describe('model projection ownership', () => {
         role: 'system',
         content: '[Conversation Summary]\n\nThe active task is still running.',
         timestamp: 3,
+        compactionProvenance: { version: 1, dependency: 'transcript_only' },
       },
     ]);
 
@@ -263,6 +264,7 @@ describe('model projection ownership', () => {
         role: 'system',
         content: '[Conversation Summary]\n\nContinue the in-flight model turn.',
         timestamp: 3,
+        compactionProvenance: { version: 1, dependency: 'transcript_only' },
       },
     ]);
     useChatStore.getState().addToolCall(conversationId, firstOwner.assistantMessageId, {

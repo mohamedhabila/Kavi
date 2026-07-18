@@ -188,7 +188,7 @@ describe('useChatStore persistence checkpoints', () => {
     expect(evidence[evidence.length - 1]).toEqual(expect.objectContaining({ title: 'Entry 69' }));
   });
 
-  it('reloads the exact task anchor after compaction removes its source message', async () => {
+  it('reloads the exact active task request and its immutable anchor after compaction', async () => {
     const id = useChatStore.getState().createConversation('provider1', 'System prompt');
     await advancePastCheckpoint();
     const workflowTaskAnchor = {
@@ -222,12 +222,13 @@ describe('useChatStore persistence checkpoints', () => {
         role: 'system',
         content: 'Compacted task history.',
         timestamp: 1_700_000_200_100,
+        compactionProvenance: { version: 1, dependency: 'transcript_only' },
       },
     ]);
     await advancePastCheckpoint();
 
     const persistedConversation = readPersistedChatState().state.conversations[0];
-    expect(persistedConversation.messages).not.toEqual(
+    expect(persistedConversation.messages).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: workflowTaskAnchor.sourceMessageId })]),
     );
     const reloadedRun = normalizePersistedAgentRun(persistedConversation.agentRuns[0]);

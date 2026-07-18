@@ -34,6 +34,7 @@ import {
   getProtectedExecutionMessageIds,
   preserveProtectedExecutionMessages,
 } from './chatExecutionMessageProtection';
+import { selectDurableCompactionMessages } from './chatConversationCompaction';
 import { resolveRewindUserMessageEligibility } from './chatStoreUserMessageRewind';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
@@ -127,7 +128,10 @@ export function createMessageStoreActions(
             const nextMessages = capMessages(
               preserveProtectedExecutionMessages(
                 conversation,
-                preserveCodeOwnedMessageMemoryPublications(conversation.messages, messages),
+                preserveCodeOwnedMessageMemoryPublications(
+                  conversation.messages,
+                  selectDurableCompactionMessages(conversation, messages),
+                ),
               ),
               protectedMessageIds,
             );

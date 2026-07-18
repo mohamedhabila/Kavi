@@ -66,6 +66,10 @@ export function applyCompactionResultToWorkingMessages(
         role: 'system' as const,
         content: systemContent,
         timestamp: Date.now(),
+        compactionProvenance: {
+          version: 1 as const,
+          dependency: 'transcript_only' as const,
+        },
       },
       ...kept,
     ],
