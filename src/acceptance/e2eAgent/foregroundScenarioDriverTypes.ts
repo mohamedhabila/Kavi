@@ -96,6 +96,7 @@ export type ForegroundScenarioDriverInput = {
    */
   providerOutcomeEvidenceRequirements?: ReadonlyArray<ForegroundScenarioProviderOutcomeEvidenceRequirement>;
   disableLongTermMemory?: boolean;
+  disableTools?: boolean;
   allowedToolNames?: ReadonlyArray<string>;
   beforeTurns?: (identity: {
     conversationId: string;

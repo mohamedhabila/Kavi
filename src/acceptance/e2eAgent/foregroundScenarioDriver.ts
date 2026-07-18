@@ -186,6 +186,9 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
   ) {
     throw new Error('allowedToolNames must contain unique canonical tool names.');
   }
+  if (input.disableTools && input.allowedToolNames !== undefined) {
+    throw new Error('disableTools and allowedToolNames cannot be configured together.');
+  }
   for (const [index, turn] of input.turns.entries()) {
     if (!turn.content.trim() && !turn.attachments?.length) {
       throw new Error(`turns[${index}] must contain text or an attachment.`);
@@ -340,6 +343,7 @@ async function runScenarioIsolated(
         context: runtime.context,
         options: {
           maxTokens: turn.maxTokens ?? input.maxTokens,
+          disableTools: input.disableTools,
           ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
           memoryRetrievalStrategy: input.memoryRetrievalStrategy,
           memoryContextStrategy: input.memoryContextStrategy,

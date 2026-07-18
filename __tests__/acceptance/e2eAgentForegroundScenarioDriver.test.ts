@@ -503,6 +503,23 @@ describe('runForegroundScenario', () => {
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
   });
 
+  it('can run the agentic foreground graph with its tool surface disabled', async () => {
+    await runForegroundScenario({
+      provider: makeProvider('scenario-provider'),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'agentic',
+      scenarioTimeoutMs: 60_000,
+      disableTools: true,
+      turns: [{ content: 'Inspect this request without acting.', route: 'forced_agentic' }],
+    });
+
+    const toolFilter = mockedRunOrchestrator.mock.calls[0][0].toolFilter;
+    expect(toolFilter?.('memory_recall')).toBe(false);
+    expect(toolFilter?.('device_info')).toBe(false);
+  });
+
   it('rejects unknown or duplicate tool allowlists before running a turn', async () => {
     const base = {
       provider: makeProvider('scenario-provider'),
@@ -519,6 +536,9 @@ describe('runForegroundScenario', () => {
     await expect(
       runForegroundScenario({ ...base, allowedToolNames: ['memory_recall', 'memory_recall'] }),
     ).rejects.toThrow('unique canonical tool names');
+    await expect(
+      runForegroundScenario({ ...base, disableTools: true, allowedToolNames: ['memory_recall'] }),
+    ).rejects.toThrow('cannot be configured together');
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
