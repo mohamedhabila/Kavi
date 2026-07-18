@@ -109,42 +109,44 @@ async function recoverPersistedAgentStateForSource(
   if (initializeSubAgents) {
     await initSubAgentRegistry(useChatStore.getState().conversations);
   }
-  const activeSubAgents = listActiveSubAgents();
   await reconcileDurableRecoveryLifecycle(source);
-  const executionRunIdByConversationAndAgentRun = collectForegroundExecutionOwners(
-    useChatStore.getState().conversations,
-  );
-  // Reconcile journal-owned projections and exact effect receipts before the
-  // AgentRun owner projects task tools or terminalizes final responses.
-  await recoverForegroundJournalState();
-  const recoveredChatState = useChatStore.getState();
-  const resolveToolEffect = await buildToolEffectRestartDispositionResolver(
-    recoveredChatState.conversations.flatMap((conversation) =>
-      (conversation.agentRuns ?? [])
-        .filter((run) => run.status === 'running')
-        .flatMap((run) => {
-          const executionRunId = executionRunIdByConversationAndAgentRun
-            .get(conversation.id)
-            ?.get(run.id);
-          return executionRunId
-            ? listActiveToolEffectRestartInputs({
-                conversationId: conversation.id,
-                executionRunId,
-                messages: conversation.messages,
-                run,
-              })
-            : [];
-        }),
-    ),
-  );
-  recoveredChatState.recoverInterruptedAgentRuns(activeSubAgents, {
-    timestamp: Date.now(),
-    resolveToolEffect,
-    executionRunIdByConversationAndAgentRun,
-  });
-  await repairTerminalAgentRunsMissingFinalResponses({
-    activeSubAgents,
-  });
+  if (source === 'startup') {
+    const activeSubAgents = listActiveSubAgents();
+    const executionRunIdByConversationAndAgentRun = collectForegroundExecutionOwners(
+      useChatStore.getState().conversations,
+    );
+    // Only a fresh process startup revokes in-process foreground ownership.
+    // A same-process foreground transition must not race a live model or tool.
+    await recoverForegroundJournalState();
+    const recoveredChatState = useChatStore.getState();
+    const resolveToolEffect = await buildToolEffectRestartDispositionResolver(
+      recoveredChatState.conversations.flatMap((conversation) =>
+        (conversation.agentRuns ?? [])
+          .filter((run) => run.status === 'running')
+          .flatMap((run) => {
+            const executionRunId = executionRunIdByConversationAndAgentRun
+              .get(conversation.id)
+              ?.get(run.id);
+            return executionRunId
+              ? listActiveToolEffectRestartInputs({
+                  conversationId: conversation.id,
+                  executionRunId,
+                  messages: conversation.messages,
+                  run,
+                })
+              : [];
+          }),
+      ),
+    );
+    recoveredChatState.recoverInterruptedAgentRuns(activeSubAgents, {
+      timestamp: Date.now(),
+      resolveToolEffect,
+      executionRunIdByConversationAndAgentRun,
+    });
+    await repairTerminalAgentRunsMissingFinalResponses({
+      activeSubAgents,
+    });
+  }
   await settleOpenMessageMemoryPublications();
   await flushChatStorePersistenceNow();
   maintainExternalExecutionRetention();

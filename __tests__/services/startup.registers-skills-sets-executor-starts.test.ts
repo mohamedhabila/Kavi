@@ -406,7 +406,7 @@ describe('initializeServices', () => {
     initializeServices();
     expect(mockInitializeDurableRecoveryLifecycle).toHaveBeenCalledTimes(1);
   });
-  it('repairs durable recovery candidates on foreground', async () => {
+  it('reconciles durable foreground state without repairing live runs as interrupted', async () => {
     const { handleAppForeground, initializeServices } = require('../../src/services/startup');
     initializeServices();
     await waitFor(() =>
@@ -423,10 +423,8 @@ describe('initializeServices', () => {
     await waitFor(() =>
       expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('foreground'),
     );
-    await waitFor(() =>
-      expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1),
-    );
-    expect(mockChatStoreState.recoverInterruptedAgentRuns).toHaveBeenCalledTimes(1);
+    expect(mockRecoverInterruptedForegroundModelExecutions).not.toHaveBeenCalled();
+    expect(mockChatStoreState.recoverInterruptedAgentRuns).not.toHaveBeenCalled();
   });
   it('flushes durable memory work before waiting for migration', async () => {
     mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));

@@ -199,7 +199,7 @@ describe('startup recovery transaction', () => {
     expect(mockChatState.recoverInterruptedAgentRuns).not.toHaveBeenCalled();
   });
 
-  it('repeats the complete transaction on foreground without reinitializing subagents', async () => {
+  it('reconciles durable foreground state without interrupting live in-process work', async () => {
     const {
       triggerForegroundPersistedAgentRecovery,
       triggerPersistedAgentRecovery,
@@ -211,11 +211,15 @@ describe('startup recovery transaction', () => {
 
     expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('foreground');
     expect(mockReleaseStaleScheduledProjectionOwners).toHaveBeenCalledTimes(1);
-    expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1);
-    expect(mockChatState.recoverInterruptedAgentRuns).toHaveBeenCalledTimes(1);
+    expect(mockRecoverInterruptedForegroundModelExecutions).not.toHaveBeenCalled();
+    expect(mockReleaseStaleModelProjectionOwners).not.toHaveBeenCalled();
+    expect(mockBuildToolEffectRestartDispositionResolver).not.toHaveBeenCalled();
+    expect(mockChatState.recoverInterruptedAgentRuns).not.toHaveBeenCalled();
+    expect(mockRepairTerminalAgentRunsMissingFinalResponses).not.toHaveBeenCalled();
     expect(mockSettleOpenMessageMemoryPublications).toHaveBeenCalledTimes(1);
     expect(mockFlushChatStorePersistenceNow).toHaveBeenCalledTimes(1);
     expect(mockMaintainTerminalExecutionRetention).toHaveBeenCalledTimes(1);
     expect(mockInitSubAgentRegistry).not.toHaveBeenCalled();
+    expect(mockListActiveSubAgents).not.toHaveBeenCalled();
   });
 });
