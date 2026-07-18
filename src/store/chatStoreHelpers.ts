@@ -20,7 +20,10 @@ export function resolveConversationWorkspaceTargetId(
   );
 }
 
-export function capMessages(messages: Message[]): Message[] {
+export function capMessages(
+  messages: Message[],
+  protectedMessageIds: ReadonlySet<string> = new Set(),
+): Message[] {
   if (messages.length <= MAX_MESSAGES_PER_CONVERSATION) {
     return messages;
   }
@@ -28,6 +31,7 @@ export function capMessages(messages: Message[]): Message[] {
   return selectMessagesForPersistenceWithOpenMemoryPublicationTurns(
     messages,
     MAX_MESSAGES_PER_CONVERSATION,
+    protectedMessageIds,
   );
 }
 

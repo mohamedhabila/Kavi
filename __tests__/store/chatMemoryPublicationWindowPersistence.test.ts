@@ -1,7 +1,7 @@
 import { sanitizeConversationForPersistence } from '../../src/store/chatPersistence';
 import { capMessages, MAX_MESSAGES_PER_CONVERSATION } from '../../src/store/chatStoreHelpers';
 import type { Message } from '../../src/types/message';
-import { makeTestConversation } from '../helpers/factories';
+import { makeTestAgentRun, makeTestConversation } from '../helpers/factories';
 
 function message(index: number, overrides: Partial<Message> = {}): Message {
   return {
@@ -87,5 +87,31 @@ describe('open memory publication window persistence', () => {
       openaiResponseId: 'replay-message-642',
     });
     expect(persisted.messages.at(-9)?.providerReplay).toBeUndefined();
+  });
+
+  test('retains an active agent run request outside the newest transcript window', () => {
+    const messages = Array.from({ length: 650 }, (_, index) => message(index));
+    const source = messages[50]!;
+    const persisted = sanitizeConversationForPersistence(
+      makeTestConversation({
+        messages,
+        activeAgentRunId: 'run-long-task',
+        agentRuns: [
+          makeTestAgentRun({
+            id: 'run-long-task',
+            userMessageId: source.id,
+            workflowTaskAnchor: {
+              sourceMessageId: source.id,
+              content: source.content,
+              attachments: [],
+            },
+            status: 'running',
+          }),
+        ],
+      }),
+    );
+
+    expect(persisted.messages).toHaveLength(MAX_MESSAGES_PER_CONVERSATION);
+    expect(persisted.messages.some((entry) => entry.id === source.id)).toBe(true);
   });
 });

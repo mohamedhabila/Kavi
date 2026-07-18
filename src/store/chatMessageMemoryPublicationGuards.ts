@@ -161,12 +161,14 @@ export function areMemoryIngestionSnapshotRelevantFieldsEqual(
 }
 
 /**
- * Keep the first message, every unresolved publication source window, and the
- * newest unprotected messages that fit. Selection is stable and duplicate-free.
+ * Keep the first message, explicit execution-ownership messages, every
+ * unresolved publication source window, and the newest unprotected messages
+ * that fit. Selection is stable and duplicate-free.
  */
 export function selectMessagesForPersistenceWithOpenMemoryPublicationTurns(
   messages: readonly Message[],
   maxMessages: number,
+  protectedMessageIds: ReadonlySet<string> = new Set(),
 ): Message[] {
   if (!Number.isSafeInteger(maxMessages) || maxMessages < 1) {
     return fail('chat_message_persistence_limit_invalid');
@@ -175,6 +177,11 @@ export function selectMessagesForPersistenceWithOpenMemoryPublicationTurns(
 
   const openTurnIds = getOpenMemoryPublicationTurnMessageIds(messages);
   const selectedIndices = new Set<number>([0]);
+  if (protectedMessageIds.size > 0) {
+    for (let index = 0; index < messages.length; index += 1) {
+      if (protectedMessageIds.has(messages[index]!.id)) selectedIndices.add(index);
+    }
+  }
   if (openTurnIds.size > 0) {
     for (let index = 0; index < messages.length; index += 1) {
       if (openTurnIds.has(messages[index]!.id)) selectedIndices.add(index);

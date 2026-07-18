@@ -6,6 +6,7 @@ import { sanitizeConversationForPersistence } from './chatPersistence';
 import { capMessages } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
 import { isValidModelProjectionOwner } from '../utils/modelProjectionOwner';
+import { getProtectedRequestMessageIds } from './chatMessageProtection';
 import { hydrateSubAgentTerminationCause } from '../utils/subAgentTermination';
 import { normalizeMessageMemoryPublication } from '../utils/messageMemoryPublication';
 
@@ -84,14 +85,21 @@ function normalizePersistedConversation(conversation: Conversation): Conversatio
     ? conversation.modelProjectionOwner
     : undefined;
 
-  return sanitizeConversationForPersistence({
+  const normalizedConversation = {
     ...conversation,
-    messages: capMessages(normalizePersistedMessages(conversation.messages)),
+    messages: normalizePersistedMessages(conversation.messages),
     logs: conversation.logs ?? [],
     agentRuns: normalizedRuns,
     activeAgentRunId,
     modelProjectionOwner,
     ...(normalizedMode !== undefined ? { mode: normalizedMode as ConversationMode } : {}),
+  };
+  return sanitizeConversationForPersistence({
+    ...normalizedConversation,
+    messages: capMessages(
+      normalizedConversation.messages,
+      getProtectedRequestMessageIds(normalizedConversation),
+    ),
   });
 }
 

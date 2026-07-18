@@ -30,6 +30,10 @@ import {
   assertMemoryPublicationLockedSourcesUnchanged,
   preserveCodeOwnedMessageMemoryPublications,
 } from './chatMessageMemoryPublicationMutationFence';
+import {
+  getProtectedRequestMessageIds,
+  preserveProtectedRequestMessages,
+} from './chatMessageProtection';
 import { resolveRewindUserMessageEligibility } from './chatStoreUserMessageRewind';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
@@ -97,7 +101,10 @@ export function createMessageStoreActions(
           };
           const shouldAutoTitle =
             message.role === 'user' && !!message.content?.trim() && isPlaceholderTitle(c.title);
-          const nextMessages = capMessages([...c.messages, newMessage]);
+          const nextMessages = capMessages(
+            [...c.messages, newMessage],
+            getProtectedRequestMessageIds(c),
+          );
           assertMemoryPublicationLockedSourcesUnchanged(c.messages, nextMessages);
           return {
             ...c,
@@ -116,8 +123,13 @@ export function createMessageStoreActions(
           state.conversations,
           conversationId,
           (conversation) => {
+            const protectedMessageIds = getProtectedRequestMessageIds(conversation);
             const nextMessages = capMessages(
-              preserveCodeOwnedMessageMemoryPublications(conversation.messages, messages),
+              preserveProtectedRequestMessages(
+                conversation,
+                preserveCodeOwnedMessageMemoryPublications(conversation.messages, messages),
+              ),
+              protectedMessageIds,
             );
             if (nextMessages.length === 0) {
               return conversation;

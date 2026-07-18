@@ -207,6 +207,41 @@ describe('model projection ownership', () => {
     expect(staleMutation).not.toHaveBeenCalled();
   });
 
+  it('claims a resumed active run after its older transcript is compacted', () => {
+    const conversationId = createConversation();
+    useChatStore.getState().startAgentRun(conversationId, {
+      userMessageId: firstOwner.requestMessageId,
+      goal: 'Do the work.',
+      workflowTaskAnchor: {
+        sourceMessageId: firstOwner.requestMessageId,
+        content: 'Do the work.',
+        attachments: [],
+      },
+      timestamp: 2,
+    });
+    useChatStore.getState().applyConversationCompaction(conversationId, [
+      {
+        id: 'compact-running-task',
+        role: 'system',
+        content: '[Conversation Summary]\n\nThe active task is still running.',
+        timestamp: 3,
+      },
+    ]);
+
+    expect(
+      claimModelProjection({
+        conversationId,
+        owner: firstOwner,
+        assistantMessage: {
+          id: firstOwner.assistantMessageId,
+          role: 'assistant',
+          content: '',
+          timestamp: 4,
+        },
+      }),
+    ).toBe('claimed');
+  });
+
   it('waits until the exact current owner releases the projection', async () => {
     const conversationId = createConversation();
     claimModelProjection({
