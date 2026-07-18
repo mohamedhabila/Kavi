@@ -242,6 +242,52 @@ describe('model projection ownership', () => {
     ).toBe('claimed');
   });
 
+  it('keeps the owned assistant anchor mutable when compaction runs mid-generation', () => {
+    const conversationId = createConversation();
+    expect(
+      claimModelProjection({
+        conversationId,
+        owner: firstOwner,
+        assistantMessage: {
+          id: firstOwner.assistantMessageId,
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+        },
+      }),
+    ).toBe('claimed');
+
+    useChatStore.getState().applyConversationCompaction(conversationId, [
+      {
+        id: 'compact-mid-generation',
+        role: 'system',
+        content: '[Conversation Summary]\n\nContinue the in-flight model turn.',
+        timestamp: 3,
+      },
+    ]);
+    useChatStore.getState().addToolCall(conversationId, firstOwner.assistantMessageId, {
+      id: 'mobile-action-after-compaction',
+      name: 'mobile_ui_action',
+      arguments: '{}',
+      status: 'running',
+    });
+
+    const conversation = useChatStore
+      .getState()
+      .conversations.find((candidate) => candidate.id === conversationId)!;
+    expect(conversation.messages.map((message) => message.id)).toEqual([
+      'compact-mid-generation',
+      firstOwner.requestMessageId,
+      firstOwner.assistantMessageId,
+    ]);
+    expect(
+      conversation.messages.find((message) => message.id === firstOwner.assistantMessageId)
+        ?.toolCalls,
+    ).toEqual([
+      expect.objectContaining({ id: 'mobile-action-after-compaction', status: 'running' }),
+    ]);
+  });
+
   it('waits until the exact current owner releases the projection', async () => {
     const conversationId = createConversation();
     claimModelProjection({

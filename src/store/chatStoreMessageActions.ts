@@ -31,9 +31,9 @@ import {
   preserveCodeOwnedMessageMemoryPublications,
 } from './chatMessageMemoryPublicationMutationFence';
 import {
-  getProtectedRequestMessageIds,
-  preserveProtectedRequestMessages,
-} from './chatMessageProtection';
+  getProtectedExecutionMessageIds,
+  preserveProtectedExecutionMessages,
+} from './chatExecutionMessageProtection';
 import { resolveRewindUserMessageEligibility } from './chatStoreUserMessageRewind';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
@@ -103,7 +103,7 @@ export function createMessageStoreActions(
             message.role === 'user' && !!message.content?.trim() && isPlaceholderTitle(c.title);
           const nextMessages = capMessages(
             [...c.messages, newMessage],
-            getProtectedRequestMessageIds(c),
+            getProtectedExecutionMessageIds(c),
           );
           assertMemoryPublicationLockedSourcesUnchanged(c.messages, nextMessages);
           return {
@@ -123,9 +123,9 @@ export function createMessageStoreActions(
           state.conversations,
           conversationId,
           (conversation) => {
-            const protectedMessageIds = getProtectedRequestMessageIds(conversation);
+            const protectedMessageIds = getProtectedExecutionMessageIds(conversation);
             const nextMessages = capMessages(
-              preserveProtectedRequestMessages(
+              preserveProtectedExecutionMessages(
                 conversation,
                 preserveCodeOwnedMessageMemoryPublications(conversation.messages, messages),
               ),

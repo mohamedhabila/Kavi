@@ -17,7 +17,7 @@ import { truncateText } from './chatPersistencePrimitives';
 import { sanitizeUsage } from './chatPersistenceUsage';
 import { normalizeSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
 import { isEligibleMessageMemoryPublicationSource } from '../utils/messageMemoryPublication';
-import { getProtectedRequestMessageIds } from './chatMessageProtection';
+import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
 
 function projectValidPublicationSources(conversation: Conversation): Conversation['messages'] {
   return (conversation.messages ?? []).map((message) => {
@@ -45,7 +45,7 @@ export function sanitizeConversationForPersistence(conversation: Conversation): 
   const messages = selectMessagesForPersistenceWithOpenMemoryPublicationTurns(
     projectValidPublicationSources(conversation),
     MAX_PERSISTED_MESSAGES,
-    getProtectedRequestMessageIds(conversation),
+    getProtectedExecutionMessageIds(conversation),
   );
   const replayStart = Math.max(0, messages.length - MAX_PERSISTED_EXACT_REPLAY_MESSAGES);
   const reasoningStart = Math.max(0, messages.length - MAX_PERSISTED_REASONING_MESSAGES);

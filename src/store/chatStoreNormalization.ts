@@ -6,7 +6,7 @@ import { sanitizeConversationForPersistence } from './chatPersistence';
 import { capMessages } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
 import { isValidModelProjectionOwner } from '../utils/modelProjectionOwner';
-import { getProtectedRequestMessageIds } from './chatMessageProtection';
+import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
 import { hydrateSubAgentTerminationCause } from '../utils/subAgentTermination';
 import { normalizeMessageMemoryPublication } from '../utils/messageMemoryPublication';
 
@@ -98,7 +98,7 @@ function normalizePersistedConversation(conversation: Conversation): Conversatio
     ...normalizedConversation,
     messages: capMessages(
       normalizedConversation.messages,
-      getProtectedRequestMessageIds(normalizedConversation),
+      getProtectedExecutionMessageIds(normalizedConversation),
     ),
   });
 }

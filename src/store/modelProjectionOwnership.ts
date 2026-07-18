@@ -12,7 +12,7 @@ import {
   assertMemoryPublicationLockedSourcesUnchanged,
   preserveCodeOwnedMessageMemoryPublications,
 } from './chatMessageMemoryPublicationMutationFence';
-import { getProtectedRequestMessageIds } from './chatMessageProtection';
+import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
 
 const MODEL_PROJECTION_RELEASE_TIMEOUT_MS = 30_000;
 
@@ -158,8 +158,9 @@ export function claimModelProjection(input: {
     }
     result = 'claimed';
     if (currentOwner && assistant && messagesBeforeAssistant.length === 0) return state;
-    const protectedMessageIds = getProtectedRequestMessageIds(conversation);
+    const protectedMessageIds = getProtectedExecutionMessageIds(conversation);
     protectedMessageIds.add(input.owner.requestMessageId);
+    protectedMessageIds.add(input.owner.assistantMessageId);
     const messages = capMessages(
       [
         ...conversation.messages,
