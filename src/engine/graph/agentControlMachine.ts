@@ -224,6 +224,26 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
       },
       waiting_async: {
         on: {
+          TOOL_RESULT_RECORDED: [
+            {
+              guard: 'willCompleteToolBoundary',
+              target: 'ready',
+              actions: ['recordToolResult', 'clearCompletedToolBoundary'],
+            },
+            {
+              actions: 'recordToolResult',
+            },
+          ],
+          TOOL_RESULTS_RECORDED: [
+            {
+              guard: 'willCompleteToolBoundary',
+              target: 'ready',
+              actions: ['recordToolResults', 'clearCompletedToolBoundary'],
+            },
+            {
+              actions: 'recordToolResults',
+            },
+          ],
           MODEL_TURN_INVALIDATED: {
             target: 'ready',
             actions: 'recordModelTurnInvalidated',
