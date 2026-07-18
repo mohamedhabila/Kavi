@@ -10,6 +10,7 @@ import { createDefaultLocalLlmProvider } from '../../src/services/localLlm/provi
 import { getLocalLlmModelDisplayName } from '../../src/services/localLlm/catalog';
 
 const mockGetProviderApiKey = jest.fn().mockResolvedValue('sk-test');
+const mockUpdateProvider = jest.fn();
 
 const mockProviders = [
   {
@@ -44,7 +45,7 @@ const createCustomProvider = () => ({
 
 jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: (selector: (s: any) => any) => {
-    const state = { providers: mockProviders };
+    const state = { providers: mockProviders, updateProvider: mockUpdateProvider };
     return selector(state);
   },
 }));
@@ -149,6 +150,35 @@ describe('ModelSelector', () => {
       expect(getByText('o4-mini')).toBeTruthy();
     });
     expect(getByText('gpt-5-mini')).toBeTruthy();
+  });
+
+  it('persists provider-declared capabilities with the discovered model catalog', async () => {
+    const { LlmService } = require('../../src/services/llm/LlmService');
+    LlmService.mockImplementation(() => ({
+      fetchModels: jest.fn().mockResolvedValue({
+        models: ['qwen/qwen3.5-9b'],
+        capabilities: {
+          'qwen/qwen3.5-9b': { vision: true, tools: true, fileInput: false },
+        },
+      }),
+    }));
+
+    const { getByText } = render(<ModelSelector {...defaultProps} />);
+    await act(async () => {
+      fireEvent.press(getByText('gpt-5.4'));
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'openai',
+          availableModels: ['qwen/qwen3.5-9b'],
+          modelCapabilities: expect.objectContaining({
+            'qwen/qwen3.5-9b': { vision: true, tools: true, fileInput: false },
+          }),
+        }),
+      );
+    });
   });
 
   it('fetches models under StrictMode effect replay', async () => {

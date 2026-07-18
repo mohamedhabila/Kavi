@@ -6,6 +6,35 @@ import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import type { ModelsWithCapabilities } from '../support/contracts';
 import type { ProviderTransport } from './providerProtocols';
 
+type DiscoveredModel = Readonly<{ model: string; capabilities: ModelCapabilities }>;
+
+function declaredStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+    return null;
+  }
+  return value.map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+}
+
+function resolveDiscoveredModelCapabilities(entry: unknown, model: string): ModelCapabilities {
+  const inferred = inferModelCapabilities(model);
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return inferred;
+  const candidate = entry as Record<string, unknown>;
+  const architecture =
+    candidate.architecture &&
+    typeof candidate.architecture === 'object' &&
+    !Array.isArray(candidate.architecture)
+      ? (candidate.architecture as Record<string, unknown>)
+      : null;
+  const inputModalities = declaredStringArray(architecture?.input_modalities);
+  const supportedParameters = declaredStringArray(candidate.supported_parameters);
+
+  return {
+    vision: inputModalities ? inputModalities.includes('image') : inferred.vision,
+    tools: supportedParameters ? supportedParameters.includes('tools') : inferred.tools,
+    fileInput: inputModalities ? inputModalities.includes('file') : inferred.fileInput,
+  };
+}
+
 export async function fetchProviderModels(args: {
   provider: {
     id: string;
@@ -60,12 +89,14 @@ export async function fetchProviderModels(args: {
       if (!response.ok) continue;
 
       const json = (await response.json()) as any;
-      const data = Array.isArray(json) ? json : (json?.data ?? json?.models ?? []);
+      const candidateData = Array.isArray(json) ? json : (json?.data ?? json?.models ?? []);
+      const data: unknown[] = Array.isArray(candidateData) ? candidateData : [];
 
-      const models = data
-        .map((entry: any) => {
+      const discoveredModels = data
+        .map((entry: any): DiscoveredModel | undefined => {
           if (typeof entry === 'string') {
-            return entry.replace(/^models\//, '');
+            const model = entry.replace(/^models\//, '');
+            return { model, capabilities: inferModelCapabilities(model) };
           }
 
           const id =
@@ -74,16 +105,22 @@ export async function fetchProviderModels(args: {
               : typeof entry?.name === 'string'
                 ? entry.name
                 : undefined;
-          return typeof id === 'string' ? id.replace(/^models\//, '') : undefined;
+          if (typeof id !== 'string') return undefined;
+          const model = id.replace(/^models\//, '');
+          return { model, capabilities: resolveDiscoveredModelCapabilities(entry, model) };
         })
-        .filter((id: any): id is string => typeof id === 'string' && id.length > 0)
-        .sort((left: string, right: string) => left.localeCompare(right));
+        .filter(
+          (
+            entry: DiscoveredModel | undefined,
+          ): entry is DiscoveredModel => Boolean(entry?.model),
+        )
+        .sort((left, right) => left.model.localeCompare(right.model));
 
-      for (const model of models) {
-        capabilities[model] = inferModelCapabilities(model);
+      for (const entry of discoveredModels) {
+        capabilities[entry.model] = entry.capabilities;
       }
 
-      return { models, capabilities };
+      return { models: discoveredModels.map((entry) => entry.model), capabilities };
     } catch {
       continue;
     }

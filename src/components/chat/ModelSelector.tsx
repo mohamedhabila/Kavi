@@ -34,6 +34,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
     const { t } = useTranslation();
     const styles = createStyles(colors);
     const providers = useSettingsStore((s) => s.providers);
+    const updateProvider = useSettingsStore((s) => s.updateProvider);
     const [visible, setVisible] = useState(false);
     const [models, setModels] = useState<Record<string, string[]>>({});
     const [loading, setLoading] = useState(false);
@@ -90,6 +91,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
           if (result.models.length > 0) {
             commit(() => {
               setModels((prev) => ({ ...prev, [provider.id]: result.models }));
+              updateProvider({
+                ...provider,
+                availableModels: result.models,
+                modelCapabilities: {
+                  ...(provider.modelCapabilities ?? {}),
+                  ...result.capabilities,
+                },
+              });
             });
           } else {
             const fallbackModels = getKnownProviderFallbackModels(provider);
@@ -120,7 +129,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
           });
         }
       },
-      [t],
+      [t, updateProvider],
     );
 
     useEffect(() => {

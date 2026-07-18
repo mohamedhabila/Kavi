@@ -59,6 +59,41 @@ describe('LlmService', () => {
       expect(result.capabilities['whisper-1'].tools).toBe(false);
     });
 
+    it('uses provider-declared modalities and parameters instead of model-name inference', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: 'qwen/qwen3.5-9b',
+                architecture: { input_modalities: ['text', 'image', 'video'] },
+                supported_parameters: ['tools', 'tool_choice'],
+              },
+              {
+                id: 'gpt-name-but-text-only',
+                architecture: { input_modalities: ['text'] },
+                supported_parameters: ['temperature'],
+              },
+            ],
+          }),
+      });
+
+      const service = new LlmService(makeConfig());
+      const result = await service.fetchModels();
+
+      expect(result.capabilities['qwen/qwen3.5-9b']).toEqual({
+        vision: true,
+        tools: true,
+        fileInput: false,
+      });
+      expect(result.capabilities['gpt-name-but-text-only']).toEqual({
+        vision: false,
+        tools: false,
+        fileInput: false,
+      });
+    });
+
     it('should handle array response format', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
