@@ -10,7 +10,6 @@ import {
 import { isSessionCoordinationToolName } from '../tools/sessionToolKinds';
 import type { VerifiedProcedureAuthoritySnapshot } from '../../services/memory/verifiedProcedure/observationAuthority';
 import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
-import type { StructuredOutputOptions } from '../../services/llm/support/contracts';
 
 type PromptBundleContext = Omit<
   AgentTurnPromptBundleParams,
@@ -37,7 +36,6 @@ export interface PreparedAgentTurnCore {
   selectedToolTokenEstimate: number;
   selectedTools: ToolDefinition[];
   toolsForIteration: ToolDefinition[] | undefined;
-  externalActionContract?: StructuredOutputOptions;
 }
 
 export interface PreparedAgentTurn extends PreparedAgentTurnCore {
@@ -89,6 +87,5 @@ export function prepareAgentTurn(params: PrepareAgentTurnParams): PreparedAgentT
     }),
     selectedTools,
     toolsForIteration: promptBundle.toolsForIteration,
-    externalActionContract: params.promptBundleContext.externalActionContract,
   };
 }

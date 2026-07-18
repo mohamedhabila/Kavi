@@ -128,25 +128,4 @@ describe('buildAgentTurnPromptBundle', () => {
     ).toContain('Execution mode for this turn: no registered executable tools');
   });
 
-  it('keeps an external controller action channel authoritative on a no-tool turn', () => {
-    const bundle = buildAgentTurnPromptBundle({
-      ...baseParams,
-      externalActionContract: {
-        name: 'next_action',
-        schema: {
-          type: 'object',
-          properties: { action: { type: 'string' } },
-          required: ['action'],
-          additionalProperties: false,
-        },
-      },
-    });
-
-    expect(bundle.enrichedSystemPrompt).toContain(
-      'a code-owned external action response contract is available',
-    );
-    expect(bundle.enrichedSystemPrompt).not.toContain(
-      'If tool-driven work is requested, state that this mode cannot execute tools',
-    );
-  });
 });

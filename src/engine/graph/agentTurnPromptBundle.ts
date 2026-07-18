@@ -8,7 +8,6 @@ import {
 } from '../prompts/orchestratorPromptSections';
 import type { AgentControlGraphForcedTextReason } from './forcedTextTurn';
 import { buildAgentControlGraphForcedTextOnlyTurnPrompt } from './forcedTextTurn';
-import type { StructuredOutputOptions } from '../../services/llm/support/contracts';
 import {
   renderWorkflowTaskAnchorPromptSection,
   type WorkflowTaskAnchor,
@@ -35,7 +34,6 @@ export interface AgentTurnPromptBundleParams {
   toolingEnabledForProvider: boolean;
   workflowRuntimePrompt?: string | null;
   workflowTaskAnchor?: WorkflowTaskAnchor;
-  externalActionContract?: StructuredOutputOptions;
 }
 
 export interface AgentTurnPromptBundle {
@@ -61,7 +59,6 @@ export function buildAgentTurnPromptBundle(
     params.workflowRuntimePrompt ?? '',
     params.toolingEnabledForProvider,
     textOnlyPrompt,
-    params.externalActionContract !== undefined,
   );
   appendSystemPromptSection(baseSystemPromptSections, params.runtimePolicyPrompt, {
     purpose: 'memory_policy',

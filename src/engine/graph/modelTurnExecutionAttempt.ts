@@ -198,9 +198,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
       tokenBuckets: preparedRequestBudget.usageTokenBuckets,
       promptCache: promptCachingPlan.telemetry,
     },
-    ...(params.preparedTurn.externalActionContract
-      ? { structuredOutput: params.preparedTurn.externalActionContract }
-      : {}),
     ...(requestDispatchGuard ? { requestDispatchGuard } : {}),
     ...thinkingParams,
   };

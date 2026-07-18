@@ -112,18 +112,6 @@ describe('orchestratorPromptSections', () => {
     expect(prompt).toContain("Safety: no independent goals beyond the user's request.");
   });
 
-  it('represents external action handoff authority without claiming an outcome', () => {
-    const sections = buildSystemPromptSections('Base prompt.', null, '', '', false, true, true);
-    const prompt = joinSystemPromptSections(sections);
-
-    expect(prompt).toContain('a code-owned external action response contract is available');
-    expect(prompt).toContain('hands the proposed action to the host controller');
-    expect(prompt).toContain('it does not prove that the action succeeded');
-    expect(prompt).toContain('supplies a later observation');
-    expect(prompt).toContain('Do not deny the external action capability');
-    expect(prompt).not.toContain('state that this mode cannot execute tools');
-  });
-
   it('uses a smaller cacheable baseline when the turn cannot execute tools', () => {
     const runtimeContext = buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z'));
     const toolCapable = buildSystemPromptSections(

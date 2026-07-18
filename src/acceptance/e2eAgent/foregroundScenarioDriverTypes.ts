@@ -21,7 +21,6 @@ import type {
   MemoryContextStrategy,
   MemoryRetrievalStrategy,
 } from '../../services/memory/memoryAccessPolicy';
-import type { StructuredOutputOptions } from '../../services/llm/support/contracts';
 
 export type ForegroundScenarioRouteDirective =
   | 'production_auto'
@@ -97,7 +96,6 @@ export type ForegroundScenarioDriverInput = {
   providerOutcomeEvidenceRequirements?: ReadonlyArray<ForegroundScenarioProviderOutcomeEvidenceRequirement>;
   disableLongTermMemory?: boolean;
   disableTools?: boolean;
-  externalActionContract?: StructuredOutputOptions;
   allowedToolNames?: ReadonlyArray<string>;
   beforeTurns?: (identity: {
     conversationId: string;

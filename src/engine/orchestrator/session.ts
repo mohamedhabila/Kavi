@@ -259,7 +259,6 @@ export async function runOrchestratorGraphSession(params: {
         runtimeContext: runtimeContextNote,
         skillPrompts,
         workflowTaskAnchor,
-        externalActionContract: options.externalActionContract,
       },
       reportUsage: (usage) => {
         callbacks.onUsage?.(usage);

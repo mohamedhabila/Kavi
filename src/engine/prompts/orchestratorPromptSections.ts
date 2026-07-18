@@ -70,22 +70,11 @@ export function buildRuntimePromptSection(options: { toolExecutionAvailable: boo
 }
 
 function buildExecutionModePromptSection(options: {
-  externalActionContractAvailable: boolean;
   toolingEnabled: boolean;
   textOnlyTurn: boolean;
 }): string {
   if (options.toolingEnabled && !options.textOnlyTurn) {
     return '';
-  }
-
-  if (options.externalActionContractAvailable) {
-    return [
-      'Execution mode for this turn: Kavi product tools are disabled, and a code-owned external action response contract is available.',
-      'Return exactly one schema-valid action response. Returning it hands the proposed action to the host controller after this model turn; it does not prove that the action succeeded.',
-      'The host controller executes the action and supplies a later observation containing the resulting state or outcome. Judge progress and completion only from those observations.',
-      'Do not emit product tool calls, function-call blocks, or provider-specific raw tool-call markup.',
-      'Do not deny the external action capability or replace an executable action with manual instructions merely because Kavi product tools are disabled.',
-    ].join('\n');
   }
 
   return [
@@ -200,7 +189,6 @@ export function buildSystemPromptSections(
   workflowRuntimePrompt?: string,
   toolingEnabled = true,
   textOnlyTurn = false,
-  externalActionContractAvailable = false,
 ): SystemPromptSection[] {
   const prompt =
     systemPrompt ||
@@ -225,7 +213,6 @@ export function buildSystemPromptSections(
   appendSystemPromptSection(
     sections,
     buildExecutionModePromptSection({
-      externalActionContractAvailable,
       toolingEnabled,
       textOnlyTurn,
     }),
