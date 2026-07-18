@@ -19,6 +19,10 @@ import {
   updateAgentRunPlanInConversation,
 } from './graph';
 import { recoverInterruptedAgentRunsInConversation } from './recovery';
+import {
+  applyMobileControllerOutcomeInConversation,
+  type ApplyMobileControllerOutcomeResult,
+} from './mobileControllerOutcome';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 
@@ -32,6 +36,7 @@ export function createAgentRunStoreActions(
   | 'updateAgentRunSummary'
   | 'updateAgentRunAsyncWork'
   | 'updateAgentRunControlGraph'
+  | 'applyMobileControllerOutcome'
   | 'updateAgentRunPlan'
   | 'recordAgentRunEvidence'
   | 'completeAgentRun'
@@ -114,6 +119,32 @@ export function createAgentRunStoreActions(
         return conversations ? { conversations } : state;
       });
       requestChatStorePersistenceCheckpoint();
+    },
+
+    applyMobileControllerOutcome: (conversationId, input) => {
+      const outcomeRef: { current: ApplyMobileControllerOutcomeResult } = {
+        current: { status: 'rejected', reason: 'run_unavailable' },
+      };
+      set((state) => {
+        const conversations = updateConversationById(
+          state.conversations,
+          conversationId,
+          (conversation) => {
+            outcomeRef.current = applyMobileControllerOutcomeInConversation(conversation, input);
+            return outcomeRef.current.status === 'applied'
+              ? outcomeRef.current.conversation
+              : conversation;
+          },
+        );
+        return outcomeRef.current.status === 'applied' && conversations
+          ? { conversations }
+          : state;
+      });
+      const outcome = outcomeRef.current;
+      if (outcome.status === 'applied') {
+        requestChatStorePersistenceCheckpoint();
+      }
+      return outcome;
     },
 
     updateAgentRunPlan: (conversationId, patch, runId) => {

@@ -30,6 +30,10 @@ import type { SubAgentSnapshot } from '../types/subAgent';
 import type { ToolEffectReceipt } from '../types/toolEffectReceipt';
 import type { AgentRunEvidenceDraft } from '../services/agents/lifecycle/evidenceTypes';
 import type { ResolveToolEffectRestartDisposition } from '../services/executionJournal/toolEffectRestartDisposition';
+import type {
+  ApplyMobileControllerOutcomeInput,
+  ApplyMobileControllerOutcomeResult,
+} from './agentRuns/mobileControllerOutcome';
 
 export type TransitionMessageMemoryPublicationResult =
   | Readonly<{
@@ -239,6 +243,10 @@ export interface ChatState {
     controlGraph: AgentRunControlGraphState | undefined,
     runId?: string,
   ) => void;
+  applyMobileControllerOutcome: (
+    conversationId: string,
+    input: ApplyMobileControllerOutcomeInput,
+  ) => ApplyMobileControllerOutcomeResult;
   updateAgentRunPlan: (
     conversationId: string,
     patch: Partial<AgentRunPlan> & { timestamp?: number },
