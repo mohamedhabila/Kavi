@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import os
 import subprocess
@@ -21,11 +20,14 @@ from mobile_world.agents.implementations.general_e2e_agent import (
 )
 from mobile_world.runtime.controller import APP_LOWER_DICT
 from mobile_world.runtime.utils.models import JSONAction
+from PIL import Image, ImageChops, ImageStat
 
 JsonObject = dict[str, Any]
 RequestFunction = Callable[[JsonObject], JsonObject]
 MAX_RESPONSE_BYTES = 1_000_000
 MAX_SCREENSHOT_BYTES = 8_000_000
+VISUAL_DELTA_MAX_EDGE = 128
+VISUAL_STABILITY_MEAN_ABSOLUTE_DELTA = 0.5
 
 
 class KaviBridgeError(RuntimeError):
@@ -99,6 +101,28 @@ def _read_bridge_event(response: JsonObject) -> tuple[str, JsonObject]:
     raise KaviBridgeError(f"Unsupported Kavi host event: {kind!r}.")
 
 
+def _normalize_visual_observation(image: Any) -> Image.Image:
+    width, height = image.size
+    scale = min(1.0, VISUAL_DELTA_MAX_EDGE / max(width, height))
+    normalized_size = (
+        max(1, round(width * scale)),
+        max(1, round(height * scale)),
+    )
+    return image.convert("L").resize(normalized_size, Image.Resampling.BILINEAR)
+
+
+def _classify_visual_delta(previous: Image.Image, current: Image.Image) -> str:
+    if previous.size != current.size:
+        return "changed"
+    difference = ImageChops.difference(previous, current)
+    mean_absolute_delta = ImageStat.Stat(difference).mean[0]
+    return (
+        "unchanged"
+        if mean_absolute_delta <= VISUAL_STABILITY_MEAN_ABSOLUTE_DELTA
+        else "changed"
+    )
+
+
 class KaviMobileWorldAgent(BaseAgent):
     """Delegates one serialized MobileWorld session to Kavi's foreground graph."""
 
@@ -130,7 +154,7 @@ class KaviMobileWorldAgent(BaseAgent):
         self.step_index = 0
         self.repair_count = 0
         self._previous_event_kind: str | None = None
-        self._previous_screenshot_digest: str | None = None
+        self._previous_visual_observation: Image.Image | None = None
 
     def _request_over_http(self, payload: JsonObject) -> JsonObject:
         request = Request(
@@ -207,14 +231,21 @@ class KaviMobileWorldAgent(BaseAgent):
         if screenshot is None or not hasattr(screenshot, "save") or not hasattr(screenshot, "size"):
             raise KaviBridgeError("MobileWorld observation does not contain a screenshot.")
         encoded, width, height = self._encode_screenshot(screenshot)
-        screenshot_digest = hashlib.sha256(base64.b64decode(encoded)).hexdigest()
+        visual_observation = _normalize_visual_observation(screenshot)
         prior_event_observation = None
-        if self._previous_event_kind is not None:
+        if self._previous_event_kind == "controller_action":
+            if self._previous_visual_observation is None:
+                raise KaviBridgeError("Previous visual observation is unavailable.")
             prior_event_observation = {
                 "event_kind": self._previous_event_kind,
-                "exact_screen_match": screenshot_digest == self._previous_screenshot_digest,
+                "observable_delta": _classify_visual_delta(
+                    self._previous_visual_observation, visual_observation
+                ),
+            }
+        elif self._previous_event_kind == "ask_user":
+            prior_event_observation = {
+                "event_kind": self._previous_event_kind,
                 "ask_user_response": observation.get("ask_user_response"),
-                "external_tool_result": observation.get("tool_call"),
             }
         self.step_index += 1
         response = self._request(
@@ -237,7 +268,7 @@ class KaviMobileWorldAgent(BaseAgent):
         except (TypeError, ValueError) as error:
             raise KaviBridgeError("Graph-owned host event was rejected by MobileWorld.") from error
         self._previous_event_kind = event_kind
-        self._previous_screenshot_digest = screenshot_digest
+        self._previous_visual_observation = visual_observation
         transcript = (
             f"Kavi graph event: {event_kind}\n"
             f"Action: {json.dumps(action_payload, ensure_ascii=False)}"
@@ -248,4 +279,4 @@ class KaviMobileWorldAgent(BaseAgent):
         self.step_index = 0
         self.repair_count = 0
         self._previous_event_kind = None
-        self._previous_screenshot_digest = None
+        self._previous_visual_observation = None

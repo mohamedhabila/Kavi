@@ -67,7 +67,7 @@ type BridgeSession = {
 };
 
 type PriorEventObservation =
-  | Readonly<{ eventKind: 'controller_action'; exactScreenMatch: boolean }>
+  | Readonly<{ eventKind: 'controller_action'; observableDelta: 'changed' | 'unchanged' }>
   | Readonly<{ eventKind: 'ask_user'; userResponse: string }>;
 
 const describeLivePilot = process.env.RUN_MOBILEWORLD_PILOT === '1' ? describe : describe.skip;
@@ -135,12 +135,13 @@ function readPriorEventObservation(payload: JsonObject): PriorEventObservation |
   const observation = candidate as JsonObject;
   const eventKind = requirePayloadText(observation, 'event_kind');
   if (eventKind === 'controller_action') {
-    if (typeof observation.exact_screen_match !== 'boolean') {
-      throw new Error('bridge_exact_screen_match_invalid');
+    const observableDelta = observation.observable_delta;
+    if (observableDelta !== 'changed' && observableDelta !== 'unchanged') {
+      throw new Error('bridge_observable_delta_invalid');
     }
     return {
       eventKind,
-      exactScreenMatch: observation.exact_screen_match,
+      observableDelta,
     };
   }
   if (eventKind === 'ask_user') {
@@ -417,9 +418,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
                     outcomeId: `mco_${randomUUID().replaceAll('-', '')}`,
                     publication: pendingPublication,
                     afterObservation: observation,
-                    observableDelta: priorObservation.exactScreenMatch
-                      ? 'unchanged'
-                      : 'changed',
+                    observableDelta: priorObservation.observableDelta,
                     observedAt: Date.now(),
                   }),
                 },
@@ -573,6 +572,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
         legacy_free_form_action_parser: false,
         typed_post_action_outcome_ledger: false,
         bridge_claims_semantic_effect: false,
+        stabilized_visual_delta: true,
         advisory_recovery_signal: false,
         user_response_observation: true,
         external_tool_result_observation: false,

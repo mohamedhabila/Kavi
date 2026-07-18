@@ -117,13 +117,39 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
             bridge.requests[2]["prior_event_observation"],
             {
                 "event_kind": "controller_action",
-                "exact_screen_match": True,
-                "ask_user_response": "Use the afternoon time.",
-                "external_tool_result": {"status": "completed", "value": 3},
+                "observable_delta": "unchanged",
             },
         )
         self.assertNotIn("recent_action_outcomes", bridge.requests[2])
         self.assertEqual(agent.repair_count, 0)
+
+    def test_ignores_transient_pixels_but_reports_material_visual_change(self) -> None:
+        bridge = FakeBridge(
+            [
+                {"kind": "controller_action", "action": {"action_type": "wait"}},
+                {"kind": "controller_action", "action": {"action_type": "wait"}},
+                {"kind": "controller_action", "action": {"action_type": "wait"}},
+            ]
+        )
+        agent = self.make_agent(bridge)
+        agent.initialize("Complete the task")
+        baseline = Image.new("RGB", (100, 200), color="white")
+        transient = baseline.copy()
+        transient.putpixel((50, 50), (0, 0, 0))
+        material = Image.new("RGB", (100, 200), color="black")
+
+        agent.predict({"screenshot": baseline})
+        agent.predict({"screenshot": transient})
+        agent.predict({"screenshot": material})
+
+        self.assertEqual(
+            bridge.requests[2]["prior_event_observation"]["observable_delta"],
+            "unchanged",
+        )
+        self.assertEqual(
+            bridge.requests[3]["prior_event_observation"]["observable_delta"],
+            "changed",
+        )
 
     def test_maps_graph_clarification_and_terminal_events(self) -> None:
         bridge = FakeBridge(
