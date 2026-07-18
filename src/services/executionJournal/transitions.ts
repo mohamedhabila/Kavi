@@ -37,8 +37,8 @@ const EFFECT_TRANSITIONS = {
 
 const EXTERNAL_HANDLE_TRANSITIONS = {
   unknown: ['pending', 'running', 'succeeded', 'failed', 'cancelled'],
-  pending: ['running', 'succeeded', 'failed', 'cancelled'],
-  running: ['succeeded', 'failed', 'cancelled'],
+  pending: ['unknown', 'running', 'succeeded', 'failed', 'cancelled'],
+  running: ['unknown', 'succeeded', 'failed', 'cancelled'],
   succeeded: [],
   failed: [],
   cancelled: [],

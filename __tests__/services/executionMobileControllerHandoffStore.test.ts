@@ -4,6 +4,10 @@ jest.mock('expo-sqlite', () => {
 });
 
 import type { MobileControllerCapability } from '../../src/engine/mobileController/contracts';
+import {
+  buildToolContractIdentity,
+  digestToolContractIdentity,
+} from '../../src/engine/toolExecution/toolContractIdentity';
 import type { EffectDispatchIdentity } from '../../src/services/executionJournal/effectDispatchPolicy';
 import { planEffectDispatch } from '../../src/services/executionJournal/effectDispatchPolicy';
 import {
@@ -11,7 +15,9 @@ import {
   getExecutionJournalDb,
 } from '../../src/services/executionJournal/database';
 import { persistClaimedMobileControllerHandoff } from '../../src/services/executionJournal/mobileControllerHandoffStore';
+import { settleMobileControllerOutcome } from '../../src/services/executionJournal/mobileControllerOutcomeStore';
 import { prepareToolEffectDispatchJournal } from '../../src/services/executionJournal/toolEffectDispatchStore';
+import type { AgentRunMobileControllerHandoffRef } from '../../src/types/agentRun';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -41,7 +47,7 @@ const capability: MobileControllerCapability = {
   timeoutMs: 10_000,
 };
 
-function identity(): EffectDispatchIdentity {
+function identity(toolContractIdentityDigest = RAW_C): EffectDispatchIdentity {
   return {
     runId: `effect-run-${'1'.repeat(48)}`,
     effectId: `effect-${'1'.repeat(48)}`,
@@ -49,7 +55,7 @@ function identity(): EffectDispatchIdentity {
     toolCallId: 'tool-call-1',
     toolName: 'mobile_ui_action',
     toolNameDigest: RAW_B,
-    toolContractIdentityDigest: RAW_C,
+    toolContractIdentityDigest,
     requestDigest: RAW_A,
     idempotencyKeyDigest: null,
     dispatchTargetDigest: RAW_D,
@@ -62,7 +68,10 @@ function identity(): EffectDispatchIdentity {
 }
 
 async function prepareClaimedHandoff() {
-  const dispatchIdentity = identity();
+  const contractIdentity = await buildToolContractIdentity('mobile_ui_action');
+  if (!contractIdentity) throw new Error('expected mobile controller contract identity');
+  const contractIdentityDigest = await digestToolContractIdentity(contractIdentity);
+  const dispatchIdentity = identity(contractIdentityDigest.slice('sha256:'.length));
   const prepared = prepareToolEffectDispatchJournal(
     {
       identity: dispatchIdentity,
@@ -133,6 +142,40 @@ function count(table: string): number {
       `SELECT COUNT(*) AS count FROM ${table}`,
     )?.count ?? -1
   );
+}
+
+function outcomeFor(
+  handoff: AgentRunMobileControllerHandoffRef,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    version: 1,
+    outcomeId: `mco_${'2'.repeat(32)}`,
+    handoffId: handoff.handoffId,
+    controllerId: handoff.controllerId,
+    capabilityDigest: handoff.capabilityDigest,
+    correlation: {
+      runId: handoff.effectRunId,
+      effectId: handoff.effectId,
+      executionRunId: handoff.executionRunId,
+      toolCallId: handoff.toolCallId,
+    },
+    executionState: 'completed',
+    effectState: 'applied',
+    verificationState: 'verified',
+    observableDelta: 'changed',
+    reasonCode: 'completed',
+    beforeObservationId: handoff.beforeObservationId,
+    afterObservation: {
+      observationId: 'observation-after-1',
+      digest: `sha256:${'e'.repeat(64)}`,
+      appId: 'app-1',
+      windowId: 'window-2',
+    },
+    stabilization: { durationMs: 250, sampleCount: 2 },
+    observedAt: 130,
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
@@ -266,5 +309,194 @@ describe('mobile controller handoff journal parking', () => {
     );
     expect(count('execution_external_handles')).toBe(1);
     expect(count('execution_monitors')).toBe(1);
+  });
+});
+
+describe('mobile controller outcome settlement', () => {
+  it('atomically records a verified outcome against the original claim', async () => {
+    const parked = persistClaimedMobileControllerHandoff(await prepareClaimedHandoff());
+
+    const settlement = await settleMobileControllerOutcome({
+      handoff: parked.handoffRef,
+      outcome: outcomeFor(parked.handoffRef),
+      receivedAt: 140,
+    });
+
+    expect(settlement).toMatchObject({
+      kind: 'settled',
+      requiresReconciliation: false,
+      receipt: {
+        toolCallId: 'tool-call-1',
+        toolName: 'mobile_ui_action',
+        executionState: 'completed',
+        effectState: 'applied',
+        verificationState: 'verified',
+      },
+      toolMessage: {
+        toolCallId: 'tool-call-1',
+        status: 'completed',
+      },
+    });
+    expect(
+      getExecutionJournalDb().getFirstSync<{
+        run_status: string;
+        effect_status: string;
+        handle_status: string;
+        monitor_state: string;
+      }>(
+        `SELECT r.status AS run_status, e.status AS effect_status,
+                h.status AS handle_status, m.state AS monitor_state
+           FROM execution_runs r
+           JOIN execution_effects e ON e.run_id = r.id
+           JOIN execution_external_handles h ON h.run_id = r.id
+           JOIN execution_monitors m ON m.run_id = r.id`,
+      ),
+    ).toEqual({
+      run_status: 'succeeded',
+      effect_status: 'verified',
+      handle_status: 'succeeded',
+      monitor_state: 'acted',
+    });
+    expect(count('execution_effect_receipts')).toBe(1);
+    expect(
+      getExecutionJournalDb().getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM execution_checkpoints WHERE boundary = 'terminal'`,
+      )?.count,
+    ).toBe(1);
+    expect(JSON.stringify(settlement)).not.toContain(PRIVATE_TEXT);
+  });
+
+  it('replays the same outcome without duplicating a receipt or terminal checkpoint', async () => {
+    const parked = persistClaimedMobileControllerHandoff(await prepareClaimedHandoff());
+    const outcome = outcomeFor(parked.handoffRef);
+    const first = await settleMobileControllerOutcome({
+      handoff: parked.handoffRef,
+      outcome,
+      receivedAt: 140,
+    });
+
+    const replay = await settleMobileControllerOutcome({
+      handoff: parked.handoffRef,
+      outcome,
+      receivedAt: 2_000,
+    });
+
+    expect(first.kind).toBe('settled');
+    expect(replay.kind).toBe('replayed');
+    expect(replay.receipt).toEqual(first.receipt);
+    expect(count('execution_effect_receipts')).toBe(1);
+    expect(
+      getExecutionJournalDb().getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM execution_checkpoints WHERE boundary = 'terminal'`,
+      )?.count,
+    ).toBe(1);
+  });
+
+  it('preserves an unknown effect as ambiguous and blocks automatic monitoring', async () => {
+    const parked = persistClaimedMobileControllerHandoff(await prepareClaimedHandoff());
+
+    const settlement = await settleMobileControllerOutcome({
+      handoff: parked.handoffRef,
+      outcome: outcomeFor(parked.handoffRef, {
+        executionState: 'unknown',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+        observableDelta: 'unknown',
+        reasonCode: 'effect_unknown',
+        afterObservation: undefined,
+        stabilization: undefined,
+      }),
+      receivedAt: 140,
+    });
+
+    expect(settlement).toMatchObject({
+      kind: 'settled',
+      requiresReconciliation: true,
+      toolMessage: { status: 'failed' },
+    });
+    expect(
+      getExecutionJournalDb().getFirstSync<{
+        run_status: string;
+        effect_status: string;
+        handle_status: string;
+        monitor_state: string;
+      }>(
+        `SELECT r.status AS run_status, e.status AS effect_status,
+                h.status AS handle_status, m.state AS monitor_state
+           FROM execution_runs r
+           JOIN execution_effects e ON e.run_id = r.id
+           JOIN execution_external_handles h ON h.run_id = r.id
+           JOIN execution_monitors m ON m.run_id = r.id`,
+      ),
+    ).toEqual({
+      run_status: 'ambiguous',
+      effect_status: 'ambiguous',
+      handle_status: 'unknown',
+      monitor_state: 'blocked',
+    });
+    expect(
+      getExecutionJournalDb().getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM execution_checkpoints WHERE boundary = 'terminal'`,
+      )?.count,
+    ).toBe(0);
+  });
+
+  it('rejects stale or mismatched outcomes without mutating the parked claim', async () => {
+    const parked = persistClaimedMobileControllerHandoff(await prepareClaimedHandoff());
+
+    await expect(
+      settleMobileControllerOutcome({
+        handoff: parked.handoffRef,
+        outcome: outcomeFor(parked.handoffRef, {
+          correlation: {
+            ...outcomeFor(parked.handoffRef).correlation,
+            toolCallId: 'different-tool-call',
+          },
+        }),
+        receivedAt: 140,
+      }),
+    ).rejects.toThrow('mobile_controller_outcome_invalid');
+    await expect(
+      settleMobileControllerOutcome({
+        handoff: parked.handoffRef,
+        outcome: outcomeFor(parked.handoffRef),
+        receivedAt: parked.handoffRef.expiresAt,
+      }),
+    ).rejects.toThrow('mobile_controller_outcome_state_conflict');
+
+    expect(count('execution_effect_receipts')).toBe(0);
+    expect(
+      getExecutionJournalDb().getFirstSync<{ run_status: string; effect_status: string }>(
+        `SELECT r.status AS run_status, e.status AS effect_status
+           FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
+      ),
+    ).toEqual({ run_status: 'waiting', effect_status: 'started' });
+  });
+
+  it('rolls back the receipt when a later settlement mutation fails', async () => {
+    const parked = persistClaimedMobileControllerHandoff(await prepareClaimedHandoff());
+    getExecutionJournalDb().execSync(
+      `CREATE TRIGGER fail_mobile_outcome_handle
+       BEFORE UPDATE ON execution_external_handles
+       BEGIN
+         SELECT RAISE(ABORT, 'test_mobile_outcome_handle_failure');
+       END`,
+    );
+
+    await expect(
+      settleMobileControllerOutcome({
+        handoff: parked.handoffRef,
+        outcome: outcomeFor(parked.handoffRef),
+        receivedAt: 140,
+      }),
+    ).rejects.toThrow('test_mobile_outcome_handle_failure');
+
+    expect(count('execution_effect_receipts')).toBe(0);
+    expect(
+      getExecutionJournalDb().getFirstSync<{ run_status: string; effect_status: string }>(
+        `SELECT r.status AS run_status, e.status AS effect_status
+           FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
+      ),
+    ).toEqual({ run_status: 'waiting', effect_status: 'started' });
   });
 });
