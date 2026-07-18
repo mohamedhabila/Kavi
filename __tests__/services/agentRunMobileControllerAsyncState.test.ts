@@ -27,6 +27,7 @@ function handoffRef(
 ): AgentRunMobileControllerHandoffRef {
   return {
     version: 1,
+    effectRunId: 'effect-run-1',
     executionRunId: 'execution-run-1',
     effectId: 'effect-1',
     externalHandleId: 'handle-1',

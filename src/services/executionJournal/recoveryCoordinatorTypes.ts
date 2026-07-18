@@ -9,7 +9,7 @@ import type {
 type RecoveryCommandKind = ExecutionRecoveryCommand['kind'];
 export type DispatchableExecutionRecoveryCommand = Exclude<
   ExecutionRecoveryCommand,
-  { kind: 'block' }
+  { kind: 'block' | 'await_mobile_controller_handoff' }
 >;
 export type DispatchableExecutionRecoveryCommandKind = DispatchableExecutionRecoveryCommand['kind'];
 

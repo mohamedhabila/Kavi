@@ -10,6 +10,7 @@ import type {
   ExecutionRunRecord,
 } from '../../src/services/executionJournal/types';
 import type { ExecutionJournalSnapshot } from '../../src/services/executionJournal/recoveryPlanner';
+import type { ExecutionRecoveryForegroundOwner } from '../../src/services/executionJournal/recoveryPlanner';
 
 export const RECOVERY_DIGEST_A = 'a'.repeat(64);
 export const RECOVERY_DIGEST_B = 'b'.repeat(64);
@@ -196,6 +197,7 @@ export function recoveryMonitor(
 export function recoverySnapshot(
   input: {
     run?: ExecutionRunRecord;
+    foregroundOwner?: ExecutionRecoveryForegroundOwner;
     checkpoints?: ExecutionCheckpointRecord[];
     effects?: ExecutionEffectRecord[];
     handles?: ExecutionExternalHandleRecord[];
@@ -215,6 +217,7 @@ export function recoverySnapshot(
           permissionState: latest.permissionState,
         }
       : baseRun,
+    ...(input.foregroundOwner ? { foregroundOwner: input.foregroundOwner } : {}),
     checkpoints,
     effects: input.effects ?? [],
     externalHandles: handles,

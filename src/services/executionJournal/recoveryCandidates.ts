@@ -245,13 +245,15 @@ export async function listPersistedExternalRecoveryCandidates(
       ? database.getAllSync<unknown>(
           `WITH candidate_runs(run_id) AS (
              SELECT run_id FROM execution_external_handles
-             WHERE status IN ('unknown', 'pending', 'running')
+             WHERE handle_kind IN ('expo_workflow_run', 'github_workflow_run')
+               AND status IN ('unknown', 'pending', 'running')
              UNION
              SELECT e.run_id
              FROM execution_effects e
              JOIN execution_external_handles h
                ON h.run_id = e.run_id AND h.effect_id = e.id
-             WHERE e.status IN ('started', 'ambiguous')
+             WHERE h.handle_kind IN ('expo_workflow_run', 'github_workflow_run')
+               AND e.status IN ('started', 'ambiguous')
            )
            SELECT r.id, r.updated_at
            FROM execution_runs r
@@ -267,13 +269,15 @@ export async function listPersistedExternalRecoveryCandidates(
       : database.getAllSync<unknown>(
           `WITH candidate_runs(run_id) AS (
              SELECT run_id FROM execution_external_handles
-             WHERE status IN ('unknown', 'pending', 'running')
+             WHERE handle_kind IN ('expo_workflow_run', 'github_workflow_run')
+               AND status IN ('unknown', 'pending', 'running')
              UNION
              SELECT e.run_id
              FROM execution_effects e
              JOIN execution_external_handles h
                ON h.run_id = e.run_id AND h.effect_id = e.id
-             WHERE e.status IN ('started', 'ambiguous')
+             WHERE h.handle_kind IN ('expo_workflow_run', 'github_workflow_run')
+               AND e.status IN ('started', 'ambiguous')
            )
            SELECT r.id, r.updated_at
            FROM execution_runs r

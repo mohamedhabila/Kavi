@@ -38,6 +38,10 @@ import {
   routeExecutionRecoveryCommand,
   validExecutionRecoveryHandlerResult,
 } from './recoveryCoordinatorDispatch';
+import {
+  canonicalMobileControllerRecoveryCommand,
+  qualifyMobileControllerRecoveryCommand,
+} from './mobileControllerRecoveryCommand';
 
 type RecoveryCommandKind = ExecutionRecoveryCommand['kind'];
 type ClosedSourceReason =
@@ -65,6 +69,7 @@ const COMMAND_AUTHORITY_POLICY = {
   resume_persisted_tool_batch: 'active_execution',
   continue_after_tool_result: 'active_execution',
   reconcile_external_handles: 'settle_existing',
+  await_mobile_controller_handoff: 'settle_existing',
   resume_review: 'active_execution',
   finalize_existing_terminal_projection: 'settle_existing',
   block: 'blocked',
@@ -208,6 +213,8 @@ function validRecoveryCommand(value: unknown): value is ExecutionRecoveryCommand
         validSortedIds(value.effectIds, false) &&
         validSortedIds(value.handleIds, false)
       );
+    case 'await_mobile_controller_handoff':
+      return qualifyMobileControllerRecoveryCommand(value) !== null;
     case 'finalize_existing_terminal_projection':
       return (
         hasExactKeys(value, [
@@ -318,6 +325,8 @@ function canonicalCommand(command: ExecutionRecoveryCommand): string {
         command.effectIds,
         command.handleIds,
       ]);
+    case 'await_mobile_controller_handoff':
+      return canonicalMobileControllerRecoveryCommand(command);
     case 'finalize_existing_terminal_projection':
       return JSON.stringify([
         command.kind,
@@ -483,6 +492,9 @@ export async function coordinateExecutionRecovery(
   if (initial.command.kind === 'block') {
     return blocked(planPointer(initial, null), 'planner_blocked', initial.command.reason);
   }
+  if (initial.command.kind === 'await_mobile_controller_handoff') {
+    return blocked(planPointer(initial, null), 'handler_unavailable');
+  }
 
   let commandDigest: string;
   try {
@@ -513,6 +525,7 @@ export async function coordinateExecutionRecovery(
   if (
     !validPlanResult(current) ||
     current.command.kind === 'block' ||
+    current.command.kind === 'await_mobile_controller_handoff' ||
     current.runId !== initial.runId ||
     current.generation.controlEpoch !== initial.generation.controlEpoch ||
     current.generation.updatedAt !== initial.generation.updatedAt ||

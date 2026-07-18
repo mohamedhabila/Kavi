@@ -138,6 +138,7 @@ export type AgentRunAsyncOperationStatus =
 
 export interface AgentRunMobileControllerHandoffRef {
   readonly version: 1;
+  readonly effectRunId: string;
   readonly executionRunId: string;
   readonly effectId: string;
   readonly externalHandleId: string;

@@ -10,6 +10,7 @@ import {
 } from './decoders';
 import {
   planExecutionRecovery,
+  type ExecutionRecoveryForegroundOwner,
   type ExecutionJournalSnapshot,
   type ExecutionRecoveryCommand,
 } from './recoveryPlanner';
@@ -129,6 +130,44 @@ function readReferencedHandle(
   return row ? decodeExecutionExternalHandleRow(row) : null;
 }
 
+function readForegroundRecoveryOwner(
+  database: SQLite.SQLiteDatabase,
+  effectRun: ReturnType<typeof decodeExecutionRunRow>,
+): ExecutionRecoveryForegroundOwner {
+  if (!effectRun.taskId) {
+    throw new ClosedRecoveryQueryError('missing_history');
+  }
+  const rawOwner = database.getFirstSync<unknown>(
+    'SELECT * FROM execution_runs WHERE id = ?',
+    effectRun.taskId,
+  );
+  if (!rawOwner) {
+    throw new ClosedRecoveryQueryError('missing_history');
+  }
+  const owner = decodeExecutionRunRow(rawOwner);
+  if (
+    owner.id !== effectRun.taskId ||
+    owner.conversationId !== effectRun.conversationId ||
+    owner.durabilityClass !== 'foreground_interactive' ||
+    owner.executionSurface !== 'model' ||
+    owner.resumeStrategy !== 'not_resumable'
+  ) {
+    throw new ClosedRecoveryQueryError('mixed_ownership');
+  }
+  if (!owner.taskId) {
+    throw new ClosedRecoveryQueryError('missing_history');
+  }
+  return {
+    executionRunId: owner.id,
+    conversationId: owner.conversationId,
+    agentRunId: owner.taskId,
+    requestMessageId: owner.requestMessageId,
+    status: owner.status,
+    controlEpoch: owner.controlEpoch,
+    updatedAt: owner.updatedAt,
+  };
+}
+
 function assertClosedSnapshotOwnershipAndHistory(
   database: SQLite.SQLiteDatabase,
   snapshot: ExecutionJournalSnapshot,
@@ -201,6 +240,19 @@ function assertClosedSnapshotOwnershipAndHistory(
   ) {
     throw new ClosedRecoveryQueryError('missing_history');
   }
+  const hasMobileControllerHandle = externalHandles.some(
+    (handle) => handle.locator.kind === 'mobile_controller_handoff',
+  );
+  if (hasMobileControllerHandle !== Boolean(snapshot.foregroundOwner)) {
+    throw new ClosedRecoveryQueryError('missing_history');
+  }
+  if (
+    snapshot.foregroundOwner &&
+    (snapshot.foregroundOwner.executionRunId !== run.taskId ||
+      snapshot.foregroundOwner.conversationId !== run.conversationId)
+  ) {
+    throw new ClosedRecoveryQueryError('mixed_ownership');
+  }
 }
 
 function readRecoverySnapshot(
@@ -217,8 +269,22 @@ function readRecoverySnapshot(
       database.execSync('COMMIT');
       return null;
     }
+    const run = decodeExecutionRunRow(rawRun);
+    const externalHandles = database
+      .getAllSync<unknown>(
+        `SELECT * FROM execution_external_handles
+         WHERE run_id = ? ORDER BY created_at ASC, id ASC`,
+        runId,
+      )
+      .map(decodeExecutionExternalHandleRow);
+    const hasMobileControllerHandle = externalHandles.some(
+      (handle) => handle.locator.kind === 'mobile_controller_handoff',
+    );
     const snapshot: ExecutionJournalSnapshot = {
-      run: decodeExecutionRunRow(rawRun),
+      run,
+      ...(hasMobileControllerHandle
+        ? { foregroundOwner: readForegroundRecoveryOwner(database, run) }
+        : {}),
       checkpoints: database
         .getAllSync<unknown>(
           `SELECT * FROM execution_checkpoints
@@ -233,13 +299,7 @@ function readRecoverySnapshot(
           runId,
         )
         .map(decodeExecutionEffectRow),
-      externalHandles: database
-        .getAllSync<unknown>(
-          `SELECT * FROM execution_external_handles
-           WHERE run_id = ? ORDER BY created_at ASC, id ASC`,
-          runId,
-        )
-        .map(decodeExecutionExternalHandleRow),
+      externalHandles,
       monitors: database
         .getAllSync<unknown>(
           `SELECT * FROM execution_monitors

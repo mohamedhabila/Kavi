@@ -10,6 +10,7 @@ import type {
   ExecutionRunRecord,
   ExecutionRunStatus,
 } from './types';
+import type { AgentRunMobileControllerHandoffRef } from '../../types/agentRun';
 
 export const EXECUTION_RECOVERY_BLOCK_REASONS = [
   'snapshot_invalid',
@@ -38,10 +39,21 @@ export type ExecutionRecoveryBlockReason = (typeof EXECUTION_RECOVERY_BLOCK_REAS
 
 export interface ExecutionJournalSnapshot {
   run: ExecutionRunRecord;
+  foregroundOwner?: ExecutionRecoveryForegroundOwner;
   checkpoints: readonly ExecutionCheckpointRecord[];
   effects: readonly ExecutionEffectRecord[];
   externalHandles: readonly ExecutionExternalHandleRecord[];
   monitors: readonly ExecutionMonitorRecord[];
+}
+
+export interface ExecutionRecoveryForegroundOwner {
+  executionRunId: string;
+  conversationId: string;
+  agentRunId: string;
+  requestMessageId: string;
+  status: ExecutionRunStatus;
+  controlEpoch: number;
+  updatedAt: number;
 }
 
 interface CheckpointRecoveryPointer {
@@ -73,6 +85,18 @@ export type ExecutionRecoveryCommand =
       effectIds: string[];
       handleIds: string[];
     }
+  | ({
+      kind: 'await_mobile_controller_handoff';
+      conversationId: string;
+      foregroundExecutionRunId: string;
+      foregroundControlEpoch: number;
+      foregroundUpdatedAt: number;
+      agentRunId: string;
+      requestMessageId: string;
+      externalStatus: Extract<ExecutionExternalHandleStatus, 'unknown' | 'pending' | 'running'>;
+      updatedAt: number;
+      handoff: AgentRunMobileControllerHandoffRef;
+    } & CheckpointRecoveryPointer)
   | ({
       kind: 'resume_review';
     } & CheckpointRecoveryPointer)
@@ -124,6 +148,23 @@ const HANDLE_RECOVERY_CLASS = {
   failed: 'terminal',
   cancelled: 'terminal',
 } as const satisfies Record<ExecutionExternalHandleStatus, 'unresolved' | 'terminal'>;
+
+type UnresolvedMobileControllerHandle = ExecutionExternalHandleRecord & {
+  locator: Extract<
+    ExecutionExternalHandleRecord['locator'],
+    { kind: 'mobile_controller_handoff' }
+  >;
+  status: Extract<ExecutionExternalHandleStatus, 'unknown' | 'pending' | 'running'>;
+};
+
+function isUnresolvedMobileControllerHandle(
+  handle: ExecutionExternalHandleRecord,
+): handle is UnresolvedMobileControllerHandle {
+  return (
+    handle.locator.kind === 'mobile_controller_handoff' &&
+    HANDLE_RECOVERY_CLASS[handle.status] === 'unresolved'
+  );
+}
 
 const APPROVAL_BLOCK_REASON = {
   not_required: null,
@@ -198,7 +239,7 @@ function pointer(
 }
 
 function isSnapshotStructurallyValid(snapshot: ExecutionJournalSnapshot): boolean {
-  const { run, checkpoints, effects, externalHandles, monitors } = snapshot;
+  const { run, foregroundOwner, checkpoints, effects, externalHandles, monitors } = snapshot;
   const checkpointIds = new Set<string>();
   const effectIds = new Set<string>();
   const handleIds = new Set<string>();
@@ -281,6 +322,22 @@ function isSnapshotStructurallyValid(snapshot: ExecutionJournalSnapshot): boolea
       return false;
     }
     handleIds.add(handle.id);
+  }
+  const hasMobileControllerHandle = externalHandles.some(
+    (handle) => handle.locator.kind === 'mobile_controller_handoff',
+  );
+  if (
+    hasMobileControllerHandle !== Boolean(foregroundOwner) ||
+    (foregroundOwner &&
+      (run.taskId === null ||
+        foregroundOwner.executionRunId !== run.taskId ||
+        foregroundOwner.conversationId !== run.conversationId ||
+        foregroundOwner.agentRunId.length === 0 ||
+        foregroundOwner.requestMessageId.length === 0 ||
+        foregroundOwner.controlEpoch < 0 ||
+        foregroundOwner.updatedAt < 0))
+  ) {
+    return false;
   }
   const handleById = new Map(externalHandles.map((handle) => [handle.id, handle]));
   for (const monitor of monitors) {
@@ -411,6 +468,76 @@ export function planExecutionRecovery(
     handlesByEffect.set(handle.effectId, handles);
   }
 
+  const unresolvedMobileHandles = snapshot.externalHandles.filter(
+    isUnresolvedMobileControllerHandle,
+  );
+  if (unresolvedMobileHandles.length > 0) {
+    const handle = unresolvedMobileHandles[0];
+    const effect = snapshot.effects.find((candidate) => candidate.id === handle.effectId);
+    const foregroundOwner = snapshot.foregroundOwner;
+    const otherUnresolvedHandles = snapshot.externalHandles.filter(
+      (candidate) =>
+        candidate.id !== handle.id && HANDLE_RECOVERY_CLASS[candidate.status] === 'unresolved',
+    );
+    const otherUnresolvedEffects = snapshot.effects.filter(
+      (candidate) =>
+        candidate.id !== handle.effectId &&
+        ['planned', 'uncertain', 'applied'].includes(EFFECT_RECOVERY_CLASS[candidate.status]),
+    );
+    if (
+      unresolvedMobileHandles.length !== 1 ||
+      !effect ||
+      effect.status !== 'started' ||
+      !isEffectActive(effect) ||
+      otherUnresolvedHandles.length > 0 ||
+      otherUnresolvedEffects.length > 0 ||
+      snapshot.run.status !== 'waiting' ||
+      !foregroundOwner ||
+      !['running', 'waiting', 'interrupted'].includes(foregroundOwner.status) ||
+      latest.boundary !== 'waiting_external' ||
+      latest.controlEpoch !== snapshot.run.controlEpoch ||
+      latest.resumeStrategy !== 'reconcile_first'
+    ) {
+      return block(
+        snapshot,
+        'snapshot_invalid',
+        latest,
+        [effect?.id ?? handle.effectId, ...otherUnresolvedEffects.map((candidate) => candidate.id)],
+        [handle.id, ...otherUnresolvedHandles.map((candidate) => candidate.id)],
+      );
+    }
+    const locator = handle.locator;
+    return {
+      kind: 'await_mobile_controller_handoff',
+      ...pointer(snapshot.run, latest),
+      conversationId: foregroundOwner.conversationId,
+      foregroundExecutionRunId: foregroundOwner.executionRunId,
+      foregroundControlEpoch: foregroundOwner.controlEpoch,
+      foregroundUpdatedAt: foregroundOwner.updatedAt,
+      agentRunId: foregroundOwner.agentRunId,
+      requestMessageId: foregroundOwner.requestMessageId,
+      externalStatus: handle.status,
+      updatedAt: handle.updatedAt,
+      handoff: {
+        version: 1,
+        effectRunId: snapshot.run.id,
+        executionRunId: foregroundOwner.executionRunId,
+        effectId: effect.id,
+        externalHandleId: handle.id,
+        toolCallId: effect.toolCallId,
+        controlEpoch: snapshot.run.controlEpoch,
+        handoffId: locator.handoffId,
+        controllerId: locator.controllerId,
+        controllerContractVersion: locator.controllerContractVersion,
+        capabilityDigest: locator.capabilityDigest,
+        actionDigest: locator.actionDigest,
+        beforeObservationId: locator.beforeObservationId,
+        beforeObservationDigest: locator.beforeObservationDigest,
+        expiresAt: locator.expiresAt,
+      },
+    };
+  }
+
   const replayEffectIds: string[] = [];
   const reconcileEffectIds = new Set<string>();
   const reconcileHandleIds = new Set<string>();
@@ -434,6 +561,9 @@ export function planExecutionRecovery(
 
     const handles = handlesByEffect.get(effect.id) ?? [];
     if (handles.length > 0) {
+      if (handles.some((handle) => handle.locator.kind === 'mobile_controller_handoff')) {
+        return block(snapshot, 'snapshot_invalid', latest, [effect.id], handles.map(({ id }) => id));
+      }
       reconcileEffectIds.add(effect.id);
       for (const handle of handles) reconcileHandleIds.add(handle.id);
       continue;
@@ -458,6 +588,9 @@ export function planExecutionRecovery(
 
   for (const handle of snapshot.externalHandles) {
     if (HANDLE_RECOVERY_CLASS[handle.status] === 'unresolved') {
+      if (handle.locator.kind === 'mobile_controller_handoff') {
+        return block(snapshot, 'snapshot_invalid', latest, [handle.effectId], [handle.id]);
+      }
       reconcileEffectIds.add(handle.effectId);
       reconcileHandleIds.add(handle.id);
     }

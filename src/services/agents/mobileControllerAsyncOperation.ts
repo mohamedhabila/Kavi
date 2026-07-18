@@ -13,6 +13,7 @@ const HANDOFF_REF_KEYS = [
   'controllerContractVersion',
   'controllerId',
   'effectId',
+  'effectRunId',
   'executionRunId',
   'expiresAt',
   'externalHandleId',
@@ -76,6 +77,7 @@ export function qualifyAgentRunMobileControllerHandoffRef(
   ) {
     return null;
   }
+  const effectRunId = exactId(candidate.effectRunId);
   const executionRunId = exactId(candidate.executionRunId);
   const effectId = exactId(candidate.effectId);
   const externalHandleId = exactId(candidate.externalHandleId);
@@ -93,6 +95,7 @@ export function qualifyAgentRunMobileControllerHandoffRef(
   const beforeObservationDigest = toolEffectDigest(candidate.beforeObservationDigest);
   const expiresAt = safeInteger(candidate.expiresAt);
   if (
+    !effectRunId ||
     !executionRunId ||
     !effectId ||
     !externalHandleId ||
@@ -111,6 +114,7 @@ export function qualifyAgentRunMobileControllerHandoffRef(
   }
   return Object.freeze({
     version: 1,
+    effectRunId,
     executionRunId,
     effectId,
     externalHandleId,
