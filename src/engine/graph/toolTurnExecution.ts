@@ -46,6 +46,8 @@ import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
   type ModelTurnMemoryPolicyBinding,
 } from '../authority/modelTurnMemoryPolicyBinding';
+import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
+import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 
 type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
@@ -149,6 +151,10 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   agentRunId?: string;
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  mobileController?: MobileControllerExecutionBinding;
+  publishMobileControllerHandoff?: (
+    handoff: PersistedMobileControllerHandoff,
+  ) => Promise<void>;
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   warningInjectedThisRound: boolean;
   turnAssistantContent: string;
@@ -275,6 +281,7 @@ export async function executeAgentControlGraphToolTurn(
     agentRunId: params.agentRunId,
     executionRunId: params.executionRunId,
     beforeEffectDispatch: params.beforeEffectDispatch,
+    ...(params.mobileController ? { mobileController: params.mobileController } : {}),
     verifiedProcedureSession: params.verifiedProcedureSession,
     onBatchCommitted: () => {
       params.callbacks.onAssistantMessage(
@@ -380,6 +387,9 @@ export async function executeAgentControlGraphToolTurn(
     recordPostToolFinalTextDirective: params.recordPostToolFinalTextDirective,
     getModelTurnBlocker: params.getModelTurnBlocker,
     finishWithGraphTerminalEvent: params.finishWithGraphTerminalEvent,
+    ...(params.publishMobileControllerHandoff
+      ? { publishMobileControllerHandoff: params.publishMobileControllerHandoff }
+      : {}),
     workingMessages,
   });
 

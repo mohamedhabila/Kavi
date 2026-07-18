@@ -30,6 +30,7 @@ import { getActiveGoal } from '../goals/types';
 import { admitSessionMemoryContext } from '../graph/sessionMemoryContext';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../authority/modelTurnMemoryPolicyBinding';
 import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
+import { buildMobileControllerPublishedHandoff } from '../mobileController/publication';
 
 const logger = createLogger('Orchestrator');
 
@@ -51,6 +52,7 @@ export async function runOrchestratorGraphSession(params: {
     lastPendingAsyncSignature,
     llm,
     maxToolIterations,
+    mobileControllerRuntime,
     persona,
     resolvedPrompt,
     runtimeToolAvailability,
@@ -203,6 +205,18 @@ export async function runOrchestratorGraphSession(params: {
       agentRunId: options.agentRunId,
       executionRunId: options.executionRunId,
       beforeEffectDispatch: options.beforeEffectDispatch,
+      ...(mobileControllerRuntime
+        ? {
+            publishMobileControllerHandoff: async (persistedHandoff) => {
+              const publication = buildMobileControllerPublishedHandoff(persistedHandoff);
+              if (!publication) {
+                throw new Error('mobile_controller_handoff_publication_invalid');
+              }
+              await mobileControllerRuntime.persistGraphState();
+              await mobileControllerRuntime.publishHandoff(publication);
+            },
+          }
+        : {}),
       verifiedProcedureSession: verifiedProcedureSession ?? undefined,
       callbacks: graphCallbacks,
       compactionEngine,
@@ -284,6 +298,9 @@ export async function runOrchestratorGraphSession(params: {
         toolFilter: options.toolFilter,
         workspaceConversationId: options.workspaceConversationId,
         workspaceReadFallbackConversationId: options.workspaceReadFallbackConversationId,
+        ...(mobileControllerRuntime
+          ? { mobileController: mobileControllerRuntime.execution }
+          : {}),
       },
       trackedAsyncOperations,
       latestUserMessageText,
@@ -324,7 +341,9 @@ export async function runOrchestratorGraphSession(params: {
           ? 'blocked'
           : graphSnapshot.status === 'cancelled'
             ? 'cancelled'
-            : 'failed';
+            : graphSnapshot.status === 'waiting_async'
+              ? 'waiting'
+              : 'failed';
   return {
     terminalDisposition,
     graphSnapshot,

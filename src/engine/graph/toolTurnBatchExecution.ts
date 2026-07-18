@@ -36,6 +36,7 @@ import {
   collectCurrentRunCompletedToolResults,
 } from '../../services/memory/toolObservedMemoryEvidence';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
+import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 
 const MOBILE_CONTROLLER_ISOLATED_TURN_BLOCK =
   'Blocked: mobile_ui_action must be the only tool call in its model turn because the external action suspends execution and changes the current observation.';
@@ -74,6 +75,7 @@ export async function executeAgentControlGraphToolBatch(params: {
   agentRunId?: string;
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  mobileController?: MobileControllerExecutionBinding;
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   onBatchCommitted: () => void;
 }): Promise<ToolExecutionOutcome[]> {
@@ -190,6 +192,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       executionRunId: params.executionRunId,
       modelTurnMemoryPolicyBinding: params.memoryPolicyBinding,
       beforeEffectDispatch: params.beforeEffectDispatch,
+      ...(params.mobileController ? { mobileController: params.mobileController } : {}),
       verifiedProcedureSession: params.verifiedProcedureSession,
       idPrefixes: {
         blocked: 'tool_blocked',

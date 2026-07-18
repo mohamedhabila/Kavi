@@ -92,6 +92,15 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     agentRunId: params.iterationParams.agentRunId,
     executionRunId: params.iterationParams.executionRunId,
     beforeEffectDispatch: params.iterationParams.beforeEffectDispatch,
+    ...(params.iterationParams.toolRuntime.mobileController
+      ? { mobileController: params.iterationParams.toolRuntime.mobileController }
+      : {}),
+    ...(params.iterationParams.publishMobileControllerHandoff
+      ? {
+          publishMobileControllerHandoff:
+            params.iterationParams.publishMobileControllerHandoff,
+        }
+      : {}),
     verifiedProcedureSession: params.iterationParams.verifiedProcedureSession,
     warningInjectedThisRound: params.runtime.warningInjectedThisRound,
     turnAssistantContent: params.turnAssistantContent,

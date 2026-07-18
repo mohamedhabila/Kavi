@@ -48,6 +48,12 @@ describe('tool execution outcome resolution', () => {
     params.applyGraphEvents = jest.fn((events) => {
       graph = reduceAgentControlGraph(graph, events);
     });
+    params.publishMobileControllerHandoff = jest.fn(async (handoff) => {
+      expect(graph.status).toBe('waiting_async');
+      expect(graph.asyncWork.pendingOperations[0]?.mobileControllerHandoff).toBe(
+        handoff.handoffRef,
+      );
+    });
 
     const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
 
@@ -71,6 +77,7 @@ describe('tool execution outcome resolution', () => {
       },
     });
     expect(params.onToolMessage).not.toHaveBeenCalled();
+    expect(params.publishMobileControllerHandoff).toHaveBeenCalledWith(deferredHandoff);
     expect(params.publishWorkflowToolResultProgress).not.toHaveBeenCalled();
     expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
     expect(params.onStateChange).not.toHaveBeenCalled();

@@ -13,6 +13,7 @@ import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryP
 import type { ToolEffectDispatchObservation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import type { ToolObservedMemoryEvidenceCapability } from '../../services/memory/toolObservedMemoryEvidence';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
+import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 
 export type ToolExecutionLifecycleIdPrefixes = {
   blocked: string;
@@ -68,6 +69,7 @@ export type ToolExecutionLifecycleParams = {
   executionRunId: string;
   modelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  mobileController?: MobileControllerExecutionBinding;
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
 };
 

@@ -600,6 +600,7 @@ async function executeReservedForegroundConversationRun(
     const inferenceLease = acquireMainInferenceLease(
       `foreground:${conversationId}:${foregroundRequestId}`,
     );
+    const mobileController = options?.mobileController;
     try {
       const orchestratorResult = await runOrchestrator(
         {
@@ -638,6 +639,16 @@ async function executeReservedForegroundConversationRun(
           agentRunId: bootstrapResult.trackedAgentRunId,
           memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
           memoryContextStrategy: options?.memoryContextStrategy,
+          ...(mobileController
+            ? {
+                mobileController: {
+                  capability: mobileController.capability,
+                  currentObservation: mobileController.currentObservation,
+                  persistGraphState: () => context.durability.flushChatState(),
+                  publishHandoff: (handoff) => mobileController.publishHandoff(handoff),
+                },
+              }
+            : {}),
         },
         runtime.callbacks,
       );

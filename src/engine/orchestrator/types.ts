@@ -20,6 +20,7 @@ import type { PendingVerifiedProcedureObservation } from '../../services/memory/
 import type { WorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import type { StructuredOutputOptions } from '../../services/llm/support/contracts';
+import type { MobileControllerRuntimePort } from '../mobileController/runtimeBinding';
 
 export type OrchestratorTerminalDisposition =
   | 'final_candidate'
@@ -27,6 +28,7 @@ export type OrchestratorTerminalDisposition =
   | 'blocked'
   | 'failed'
   | 'cancelled'
+  | 'waiting'
   | 'command';
 
 export type OrchestratorRunResult = Readonly<{
@@ -99,6 +101,8 @@ export interface OrchestratorOptions {
   executionRunId: string;
   agentRunId?: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  /** Code-owned controller capability; omitted for ordinary chat sessions. */
+  mobileController?: MobileControllerRuntimePort;
   memoryRetrievalStrategy?: MemoryRetrievalStrategy;
   memoryContextStrategy?: MemoryContextStrategy;
 }

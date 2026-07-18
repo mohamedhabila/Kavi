@@ -102,6 +102,9 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   warn: (message: string, error: unknown) => void;
+  publishMobileControllerHandoff?: (
+    handoff: PersistedMobileControllerHandoff,
+  ) => Promise<void>;
   onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
   onStateChange: (state: 'thinking') => void;
   yieldToUiFrame: () => Promise<void>;
@@ -206,6 +209,14 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         throw new Error('mobile_controller_handoff_graph_projection_failed');
       }
       deferredHandoff = outcome.deferredHandoff;
+      try {
+        if (!params.publishMobileControllerHandoff) {
+          throw new Error('mobile_controller_handoff_publisher_missing');
+        }
+        await params.publishMobileControllerHandoff(deferredHandoff);
+      } catch (error: unknown) {
+        params.warn('Mobile controller handoff publication failed', error);
+      }
       continue;
     }
     const rawGraphToolCall = outcome.toolMessage.toolCalls?.[0];

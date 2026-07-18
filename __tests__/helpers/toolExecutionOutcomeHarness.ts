@@ -126,6 +126,7 @@ export function buildBaseParams() {
     livingMemory: null,
     onCompaction: undefined,
     warn: jest.fn(),
+    publishMobileControllerHandoff: jest.fn().mockResolvedValue(undefined),
     onToolMessage: jest.fn().mockResolvedValue(undefined),
     onStateChange: jest.fn(),
     yieldToUiFrame: jest.fn().mockResolvedValue(undefined),

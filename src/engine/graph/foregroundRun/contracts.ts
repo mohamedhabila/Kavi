@@ -5,6 +5,7 @@ import type {
   MemoryRetrievalStrategy,
 } from '../../../services/memory/memoryAccessPolicy';
 import type { StructuredOutputOptions } from '../../../services/llm/support/contracts';
+import type { MobileControllerHostPort } from '../../mobileController/runtimeBinding';
 
 export type ResolvedFinalizationProviderContext = {
   provider: LlmProviderConfig;
@@ -34,6 +35,8 @@ export type RunChatOptions = {
   memoryContextStrategy?: MemoryContextStrategy;
   enableCompaction?: boolean;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
+  /** Optional permitted host controller for this exact foreground execution. */
+  mobileController?: MobileControllerHostPort;
 };
 
 export type EnsureAgentRunFinalResponse = (params: {

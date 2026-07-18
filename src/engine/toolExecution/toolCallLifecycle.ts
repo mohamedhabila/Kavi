@@ -352,6 +352,7 @@ export async function executeToolCallLifecycle(
         },
         currentUserMessage: params.currentUserMessage,
         toolObservedMemoryEvidence: params.toolObservedMemoryEvidence,
+        ...(params.mobileController ? { mobileController: params.mobileController } : {}),
       },
     );
     effectDispatchObservation = execution.effectDispatchObservation;

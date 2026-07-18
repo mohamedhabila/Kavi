@@ -32,6 +32,8 @@ import type { VerifiedProcedureExecutionSession } from '../../services/memory/ve
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import type { AdmittedSessionMemoryContext } from './sessionMemoryContext';
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
+import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
+import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 
 export type IterationCallbacks = {
   onAssistantMessage: (
@@ -151,6 +153,7 @@ export type ToolRuntimeBindings = {
   toolFilter?: (toolName: string) => boolean;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
+  mobileController?: MobileControllerExecutionBinding;
 };
 
 export interface ExecuteAgentControlGraphIterationParams {
@@ -159,6 +162,9 @@ export interface ExecuteAgentControlGraphIterationParams {
   agentRunId?: string;
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  publishMobileControllerHandoff?: (
+    handoff: PersistedMobileControllerHandoff,
+  ) => Promise<void>;
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   callbacks: IterationCallbacks;
   compactionEngine: AgentTurnCompactionEngine;

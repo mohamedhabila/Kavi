@@ -76,6 +76,9 @@ export async function runOrchestrator(
     provider,
     systemPrompt,
     toolFilter: normalizedOptions.toolFilter,
+    ...(normalizedOptions.mobileController
+      ? { mobileController: normalizedOptions.mobileController }
+      : {}),
   });
 
   return runOrchestratorGraphSession({

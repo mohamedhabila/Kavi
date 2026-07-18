@@ -41,6 +41,11 @@ import {
 } from '../tools/runtimeAvailability';
 import { MAX_TOOL_ITERATIONS, MAX_TOOL_ITERATIONS_SUPERAGENT } from './constants';
 import type { OrchestratorCallbacks } from './types';
+import {
+  admitMobileControllerRuntime,
+  type AdmittedMobileControllerRuntime,
+} from '../mobileController/runtimeBinding';
+import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 
 type BootstrapCallbacks = Pick<
   OrchestratorCallbacks,
@@ -161,6 +166,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   systemPrompt: string;
   toolFilter?: (toolName: string) => boolean;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
+  mobileController?: unknown;
 }): Promise<{
   activeModel: string;
   activeProvider: LlmProviderConfig;
@@ -173,6 +179,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   lastPendingAsyncSignature: string;
   llm: LlmService;
   maxToolIterations: number;
+  mobileControllerRuntime?: AdmittedMobileControllerRuntime;
   persona: AgentPersona | undefined;
   resolvedPrompt: string;
   runtimeToolAvailability: RuntimeToolAvailabilityContext;
@@ -235,6 +242,21 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   }
   activeProvider = bindProviderToModel(await hydrateProviderApiKey(activeProvider), activeModel);
 
+  const mobileControllerAdmission = params.mobileController
+    ? admitMobileControllerRuntime({
+        port: params.mobileController,
+        provider: activeProvider,
+        model: activeModel,
+      })
+    : null;
+  if (mobileControllerAdmission?.kind === 'rejected') {
+    params.logger.devWarn(
+      `Mobile controller unavailable for the selected runtime: ${mobileControllerAdmission.reason}`,
+    );
+  }
+  const mobileControllerRuntime =
+    mobileControllerAdmission?.kind === 'admitted' ? mobileControllerAdmission.runtime : undefined;
+
   const mcpTools = mcpManager.getAllToolDefinitions();
   const skillTools = getSkillToolDefinitions();
   const modeAuthorizedTools = filterToolsForConversationMode(
@@ -245,8 +267,19 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   const catalogVisibleTools = params.toolFilter
     ? policyAuthorizedTools.filter((tool) => params.toolFilter?.(tool.name) !== false)
     : policyAuthorizedTools;
-  const runtimeToolAvailability = getRuntimeToolAvailabilityContext();
-  const allTools = filterToolsByRuntimeAvailability(catalogVisibleTools, runtimeToolAvailability);
+  const runtimeToolAvailability = {
+    ...getRuntimeToolAvailabilityContext(),
+    hasMobileController: mobileControllerRuntime !== undefined,
+  };
+  const runtimeCatalogVisibleTools = mobileControllerRuntime
+    ? catalogVisibleTools.map((tool) =>
+        tool.name === MOBILE_UI_ACTION_TOOL_NAME ? mobileControllerRuntime.toolDefinition : tool,
+      )
+    : catalogVisibleTools;
+  const allTools = filterToolsByRuntimeAvailability(
+    runtimeCatalogVisibleTools,
+    runtimeToolAvailability,
+  );
   const catalogVisibleToolNames = new Set(allTools.map((tool) => tool.name));
 
   const llm = new LlmService(activeProvider);
@@ -288,6 +321,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     lastPendingAsyncSignature,
     llm,
     maxToolIterations,
+    ...(mobileControllerRuntime ? { mobileControllerRuntime } : {}),
     persona,
     resolvedPrompt,
     runtimeToolAvailability,
