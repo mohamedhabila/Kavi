@@ -173,7 +173,19 @@ describe('mobile controller contracts', () => {
       qualifyMobileControllerAction(
         {
           kind: 'activate',
-          target: { kind: 'coordinate', observationId: 'observation-before-1', x: 1_001, y: 2 },
+          target: { kind: 'coordinate', observationId: 'observation-before-1', x: 999, y: 2 },
+        },
+        capability(),
+      ),
+    ).toEqual({
+      kind: 'activate',
+      target: { kind: 'coordinate', observationId: 'observation-before-1', x: 999, y: 2 },
+    });
+    expect(
+      qualifyMobileControllerAction(
+        {
+          kind: 'activate',
+          target: { kind: 'coordinate', observationId: 'observation-before-1', x: 1_000, y: 2 },
         },
         capability(),
       ),

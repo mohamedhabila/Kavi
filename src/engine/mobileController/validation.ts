@@ -261,8 +261,9 @@ function qualifyTarget(
   if (candidate.kind === 'coordinate') {
     if (!hasExactKeys(candidate, ['kind', 'observationId', 'x', 'y'])) return null;
     const observationId = exactString(candidate.observationId, 200);
-    const x = safeInteger(candidate.x, 0, capability.normalizedCoordinateScale);
-    const y = safeInteger(candidate.y, 0, capability.normalizedCoordinateScale);
+    const maximumCoordinate = capability.normalizedCoordinateScale - 1;
+    const x = safeInteger(candidate.x, 0, maximumCoordinate);
+    const y = safeInteger(candidate.y, 0, maximumCoordinate);
     return observationId && x !== null && y !== null
       ? Object.freeze({
           kind: 'coordinate',
