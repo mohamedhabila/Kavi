@@ -138,6 +138,8 @@ Environment step: ${params.stepIndex}; policy attempt: ${params.attempt}.
 Screenshot dimensions: ${params.width} x ${params.height} pixels.
 ${params.isRepair ? 'The previous response failed the typed action contract. Recover by returning one valid action for the unchanged current screen.' : ''}
 
+The JSON Action is your device-control interface: MobileWorld will execute it after this response even though Kavi's ordinary product tools are disabled. Operate the device yourself. Do not ask the user to perform the steps. For a state-changing objective, an instructional answer is not completion; continue with a device action. Use answer only when the original objective requests information that you have obtained from the device.
+
 Choose the next single action that makes progress. Reassess the screenshot after every action. If an action was mistaken or ineffective, try a materially different route; do not stop merely because one attempt failed. Mark completion only when the visible device state supports it.
 
 Coordinates are normalized integers in [0, ${params.scaleFactor}] from the screenshot's top-left corner. Return exactly these two fields and no Markdown fence:
