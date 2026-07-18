@@ -1,4 +1,3 @@
-import type { Message } from '../../../types/message';
 import { runOrchestrator } from '../../orchestrator';
 import type { OrchestratorTerminalDisposition } from '../../orchestrator/types';
 import { resolveConversationWorkspaceTarget } from '../../../services/conversationWorkspace/ownership';
@@ -6,7 +5,6 @@ import { isAbortErrorLike } from '../../../services/agents/agentRunCancellation'
 import { createAgentRunAbortError } from '../../../services/runtimeError';
 import { supersedeForegroundConversationRun } from '../foregroundConversationCancellation';
 import { prepareAgentRunResumeForOrchestrator } from '../runResumePreparation';
-import { deduplicateToolResults, ensureToolResultPairing } from '../../toolResultPairingGuard';
 import { startOrReuseForegroundTrackedRun } from './bootstrap';
 import { createForegroundConversationRunRuntime } from './executionRuntime';
 import type { ExecuteForegroundConversationRunParams } from './executionTypes';
@@ -39,10 +37,8 @@ import { resolveGraphTaskId } from '../../goals/graphTaskScope';
 import { enforceSemanticMemoryHandoffGate } from './semanticMemoryHandoffGate';
 import { publishForegroundTerminalMemory } from './terminalMemoryPublication';
 import { resolveExternalActionContract } from '../../externalActionContract';
-
-function buildModelReadyMessages(messages: Message[]): Message[] {
-  return deduplicateToolResults(ensureToolResultPairing(messages));
-}
+import { resolveForegroundMobileControllerOutcomeGate } from './mobileControllerOutcome';
+import { buildModelReadyMessages } from './modelReadyMessages';
 
 export async function executeForegroundConversationRun(
   params: ExecuteForegroundConversationRunParams,
@@ -123,7 +119,20 @@ async function executeReservedForegroundConversationRun(
     clearForegroundRequestIfCurrent();
     return;
   }
-  const runConversation = context.helpers.getConversation(conversationId);
+  let runConversation = context.helpers.getConversation(conversationId);
+  const mobileOutcomeGate = await resolveForegroundMobileControllerOutcomeGate({
+    context,
+    conversation: runConversation,
+    conversationId,
+    options,
+    clearForegroundRequestIfCurrent,
+  });
+  if (mobileOutcomeGate.kind === 'stop') return;
+  runConversation = mobileOutcomeGate.conversation;
+  if (!isCurrentRunInvocation()) {
+    clearForegroundRequestIfCurrent();
+    return;
+  }
   const preparedBootstrap = prepareForegroundRunRequestBootstrap({
     claim: requestClaim,
     conversation: runConversation,

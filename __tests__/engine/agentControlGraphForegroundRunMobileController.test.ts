@@ -3,6 +3,9 @@ import { executeForegroundConversationRun } from '../../src/engine/graph/foregro
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
 import { resolveForegroundInterruptedResponseOutcome } from '../../src/engine/graph/foregroundRun/foregroundInterruptedResponse';
 import { buildMobileControllerPublishedHandoff } from '../../src/engine/mobileController/publication';
+import { reduceAgentControlGraph } from '../../src/engine/graph/agentControlGraph';
+import { buildAgentRunMobileControllerAsyncOperation } from '../../src/services/agents/mobileControllerAsyncOperation';
+import { settleMobileControllerOutcome } from '../../src/services/executionJournal/mobileControllerOutcomeStore';
 import { __resetOnDeviceGuardsForTests } from '../../src/services/memory/onDeviceGuards';
 import {
   createConversation,
@@ -10,7 +13,13 @@ import {
   createProvider,
   createReadyPreflightResult,
 } from '../helpers/foregroundRunExecutionContextHarness';
-import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
+import {
+  createMobileControllerCapabilityFixture,
+  createMobileControllerOutcomeFixture,
+  createMobileControllerSettlementFixture,
+  createPersistedMobileControllerHandoffFixture,
+} from '../helpers/mobileControllerHandoffFixture';
+import { makeTestAgentRun } from '../helpers/factories';
 
 const mockCanWriteLongTermMemory = jest.fn();
 
@@ -26,6 +35,10 @@ jest.mock('../../src/engine/graph/foregroundRun/foregroundInterruptedResponse', 
   resolveForegroundInterruptedResponseOutcome: jest.fn(),
 }));
 
+jest.mock('../../src/services/executionJournal/mobileControllerOutcomeStore', () => ({
+  settleMobileControllerOutcome: jest.fn(),
+}));
+
 jest.mock('../../src/services/memory/policy', () => ({
   ...jest.requireActual('../../src/services/memory/policy'),
   canWriteLongTermMemory: (...args: unknown[]) => mockCanWriteLongTermMemory(...args),
@@ -39,10 +52,17 @@ const mockedResolveForegroundInterruptedResponseOutcome =
   resolveForegroundInterruptedResponseOutcome as jest.MockedFunction<
     typeof resolveForegroundInterruptedResponseOutcome
   >;
+const mockedSettleMobileControllerOutcome = settleMobileControllerOutcome as jest.MockedFunction<
+  typeof settleMobileControllerOutcome
+>;
 
 describe('foreground mobile controller binding', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
+    mockedRunOrchestrator.mockReset();
+    mockedResolveForegroundRunPreflight.mockReset();
+    mockedResolveForegroundInterruptedResponseOutcome.mockReset();
+    mockedSettleMobileControllerOutcome.mockReset();
     mockCanWriteLongTermMemory.mockReturnValue(true);
     __resetOnDeviceGuardsForTests();
     mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
@@ -122,5 +142,149 @@ describe('foreground mobile controller binding', () => {
       ],
     ).toBeLessThan(publishHandoff.mock.invocationCallOrder[0]);
     expect(publishHandoff).toHaveBeenCalledWith(publication);
+  });
+
+  it('settles one host outcome and resumes the exact run with one correlated tool result', async () => {
+    const persisted = createPersistedMobileControllerHandoffFixture();
+    const handoff = persisted.handoffRef;
+    const operation = buildAgentRunMobileControllerAsyncOperation({
+      handoff,
+      status: 'running',
+      updatedAt: 40,
+    });
+    if (!operation) throw new Error('expected mobile controller async operation');
+    const controlGraph = reduceAgentControlGraph(undefined, [
+      { type: 'MODEL_TURN_STARTED', iteration: 1, timestamp: 20 },
+      {
+        type: 'MODEL_TURN_COMPLETED',
+        iteration: 1,
+        toolCalls: [{ id: handoff.toolCallId, name: 'mobile_ui_action' }],
+        timestamp: 30,
+      },
+      {
+        type: 'ASYNC_WAITING',
+        pendingAsyncCount: 1,
+        pendingOperations: [operation],
+        timestamp: 40,
+      },
+    ]);
+    const conversation = createConversation({
+      mode: 'agentic',
+      activeAgentRunId: 'agent-run-mobile-1',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: 'Enter the draft in the open editor and continue until it is saved.',
+          timestamp: 1,
+        },
+        {
+          id: 'assistant-mobile-1',
+          role: 'assistant',
+          content: '',
+          timestamp: 30,
+          toolCalls: [
+            {
+              id: handoff.toolCallId,
+              name: 'mobile_ui_action',
+              arguments: '{}',
+              status: 'running',
+              startedAt: 30,
+              updatedAt: 40,
+            },
+          ],
+        },
+      ],
+      agentRuns: [
+        makeTestAgentRun({
+          id: 'agent-run-mobile-1',
+          userMessageId: 'user-1',
+          workflowTaskAnchor: {
+            sourceMessageId: 'user-1',
+            content: 'Enter the draft in the open editor and continue until it is saved.',
+            attachments: [],
+          },
+          status: 'running',
+          updatedAt: 40,
+          controlGraph,
+        }),
+      ],
+    });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    mockedResolveForegroundRunPreflight.mockResolvedValue(
+      createReadyPreflightResult({ conversation, provider }),
+    );
+    const outcome = createMobileControllerOutcomeFixture();
+    const settlement = await createMobileControllerSettlementFixture();
+    mockedSettleMobileControllerOutcome.mockResolvedValue(settlement);
+    mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
+      expect(options.agentRunId).toBe('agent-run-mobile-1');
+      expect(options.initialAgentControlGraphState).toEqual(
+        expect.objectContaining({ status: 'ready', pendingAsyncCount: 0 }),
+      );
+      expect(options.messages.filter((message) => message.role === 'tool')).toEqual([
+        expect.objectContaining({
+          toolCallId: handoff.toolCallId,
+          content: settlement.toolMessage.content,
+        }),
+      ]);
+      callbacks.onDone();
+      return { terminalDisposition: 'command' };
+    });
+
+    if (!outcome.afterObservation) throw new Error('expected after-observation fixture');
+    const runOptions = {
+      reuseAgentRunId: 'agent-run-mobile-1',
+      mobileController: {
+        capability: createMobileControllerCapabilityFixture(),
+        currentObservation: outcome.afterObservation,
+        publishHandoff: jest.fn(),
+      },
+      mobileControllerOutcome: { handoff, outcome },
+    };
+    await executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+      options: runOptions,
+    });
+
+    expect(mockedSettleMobileControllerOutcome).toHaveBeenCalledWith({
+      handoff,
+      outcome,
+      receivedAt: expect.any(Number),
+    });
+    expect(context.store.startAgentRun).not.toHaveBeenCalled();
+    expect(context.store.applyMobileControllerOutcome).toHaveBeenCalledTimes(1);
+    expect(context.durability.flushChatState).toHaveBeenCalled();
+    const storedResults = context
+      .getCurrentConversation()
+      .messages.filter((message) => message.role === 'tool' && message.toolCallId === handoff.toolCallId);
+    expect(storedResults).toHaveLength(1);
+
+    mockedSettleMobileControllerOutcome.mockResolvedValueOnce({
+      ...settlement,
+      kind: 'replayed',
+    });
+    await executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+      options: runOptions,
+    });
+
+    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(1);
+    expect(context.store.applyMobileControllerOutcome).toHaveBeenCalledTimes(2);
+    expect(
+      context
+        .getCurrentConversation()
+        .messages.filter(
+          (message) => message.role === 'tool' && message.toolCallId === handoff.toolCallId,
+        ),
+    ).toHaveLength(1);
   });
 });

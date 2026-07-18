@@ -391,6 +391,7 @@ export const ChatScreen: React.FC = () => {
     store: {
       addMessage,
       addToolCall,
+      applyMobileControllerOutcome: useChatStore.getState().applyMobileControllerOutcome,
       appendAgentRunCheckpoint,
       completeAgentRun,
       createConversation,

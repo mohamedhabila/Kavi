@@ -20,6 +20,7 @@ import {
   normalizeMessageMemoryPublication,
   resolveMessageMemoryPublicationTransition,
 } from '../../src/utils/messageMemoryPublication';
+import { applyMobileControllerOutcomeInConversation } from '../../src/store/agentRuns/mobileControllerOutcome';
 
 export function createConversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
@@ -230,6 +231,14 @@ export function createExecutionContext(params: {
       return content;
     },
   );
+  const applyMobileControllerOutcome = jest.fn((conversationId, input) => {
+    if (conversationId !== currentConversation.id) {
+      return { status: 'rejected' as const, reason: 'run_unavailable' as const };
+    }
+    const outcome = applyMobileControllerOutcomeInConversation(currentConversation, input);
+    if (outcome.status === 'applied') commitConversation(outcome.conversation);
+    return outcome;
+  });
   const flushChatState = jest.fn().mockResolvedValue(undefined);
   const createModelExecution = jest.fn(async (input) => ({
     runId: input.runId,
@@ -373,6 +382,7 @@ export function createExecutionContext(params: {
     },
     store: {
       addMessage: noOp,
+      applyMobileControllerOutcome,
       addToolCall: noOp,
       appendAgentRunCheckpoint,
       applyConversationCompaction: noOp,

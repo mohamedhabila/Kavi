@@ -67,7 +67,6 @@ function receiptReplayMatches(toolCall: ToolCall, receipt: ToolEffectReceipt): b
 }
 
 function isExactReplay(params: {
-  run: NonNullable<Conversation['agentRuns']>[number];
   owned: OwnedToolCall;
   receipt: ToolEffectReceipt;
   toolMessage: ToolMessageOutcome;
@@ -82,10 +81,7 @@ function isExactReplay(params: {
     result.isError === (expectedStatus === 'failed') &&
     params.owned.toolCall.status === expectedStatus &&
     params.owned.toolCall.result === params.toolMessage.content &&
-    receiptReplayMatches(params.owned.toolCall, params.receipt) &&
-    params.run.controlGraph?.status === 'ready' &&
-    params.run.controlGraph.pendingAsyncCount === 0 &&
-    params.run.controlGraph.asyncWork.pendingOperations.length === 0
+    receiptReplayMatches(params.owned.toolCall, params.receipt)
   );
 }
 
@@ -113,7 +109,7 @@ export function applyMobileControllerOutcomeInConversation(
     return { status: 'rejected', reason: 'tool_call_identity_conflict' };
   }
   const toolResults = existingToolResults(conversation.messages, input.handoff.toolCallId);
-  if (isExactReplay({ run, owned, receipt, toolMessage: input.toolMessage, toolResults })) {
+  if (isExactReplay({ owned, receipt, toolMessage: input.toolMessage, toolResults })) {
     return { status: 'replayed', conversation };
   }
   if (toolResults.length > 0 || !['pending', 'running'].includes(owned.toolCall.status)) {

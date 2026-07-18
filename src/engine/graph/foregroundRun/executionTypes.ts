@@ -57,6 +57,7 @@ export type ForegroundStreamingDraft = {
 export type ForegroundConversationRunStoreActions = Pick<
   ChatState,
   | 'addMessage'
+  | 'applyMobileControllerOutcome'
   | 'addToolCall'
   | 'appendAgentRunCheckpoint'
   | 'applyConversationCompaction'

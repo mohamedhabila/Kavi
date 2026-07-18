@@ -587,6 +587,7 @@ export function createForegroundScenarioRuntime(
     },
     store: {
       addMessage: store.addMessage,
+      applyMobileControllerOutcome: store.applyMobileControllerOutcome,
       addToolCall: store.addToolCall,
       appendAgentRunCheckpoint: store.appendAgentRunCheckpoint,
       applyConversationCompaction: store.applyConversationCompaction,

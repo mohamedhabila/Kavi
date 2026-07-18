@@ -1,4 +1,10 @@
 import type { PersistedMobileControllerHandoff } from '../../src/services/executionJournal/mobileControllerHandoffStore';
+import type {
+  MobileControllerCapability,
+  MobileControllerOutcome,
+} from '../../src/engine/mobileController/contracts';
+import { buildStructuredToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';
+import type { MobileControllerOutcomeSettlementResult } from '../../src/services/executionJournal/mobileControllerOutcomeStore';
 
 const RUN_SUFFIX = '1'.repeat(48);
 const HANDOFF_SUFFIX = RUN_SUFFIX.slice(0, 32);
@@ -139,4 +145,95 @@ export function createPersistedMobileControllerHandoffFixture(): PersistedMobile
       terminalAt: null,
     }),
   });
+}
+
+export function createMobileControllerCapabilityFixture(
+  overrides: Partial<MobileControllerCapability> = {},
+): MobileControllerCapability {
+  return {
+    version: 1,
+    controllerId: 'android-controller-1',
+    controllerContractVersion: 1,
+    capabilityDigest: CAPABILITY_DIGEST,
+    policyAdmissionDigest: `sha256:${'f'.repeat(64)}`,
+    environmentClass: 'sandbox',
+    supportedActionKinds: ['activate', 'set_text', 'back'],
+    allowedAppIds: [],
+    observationEvidence: ['screenshot', 'window_identity', 'result_code'],
+    outcomeDeliveryModes: ['deferred'],
+    normalizedCoordinateScale: 1_000,
+    maxPendingActions: 1,
+    maxPayloadBytes: 16_384,
+    timeoutMs: 10_000,
+    ...overrides,
+  };
+}
+
+export function createMobileControllerOutcomeFixture(
+  overrides: Partial<MobileControllerOutcome> = {},
+): MobileControllerOutcome {
+  const handoff = createPersistedMobileControllerHandoffFixture().handoffRef;
+  return {
+    version: 1,
+    outcomeId: `mco_${'2'.repeat(32)}`,
+    handoffId: handoff.handoffId,
+    controllerId: handoff.controllerId,
+    capabilityDigest: handoff.capabilityDigest,
+    correlation: {
+      runId: handoff.effectRunId,
+      effectId: handoff.effectId,
+      executionRunId: handoff.executionRunId,
+      toolCallId: handoff.toolCallId,
+    },
+    executionState: 'completed',
+    effectState: 'applied',
+    verificationState: 'verified',
+    observableDelta: 'changed',
+    reasonCode: 'completed',
+    beforeObservationId: handoff.beforeObservationId,
+    afterObservation: {
+      observationId: 'observation-after-1',
+      digest: `sha256:${'9'.repeat(64)}`,
+      appId: 'notes',
+      windowId: 'editor',
+    },
+    stabilization: { durationMs: 250, sampleCount: 2 },
+    observedAt: 200,
+    ...overrides,
+  };
+}
+
+export async function createMobileControllerSettlementFixture(
+  kind: MobileControllerOutcomeSettlementResult['kind'] = 'settled',
+): Promise<MobileControllerOutcomeSettlementResult> {
+  const handoff = createPersistedMobileControllerHandoffFixture().handoffRef;
+  const outcome = createMobileControllerOutcomeFixture();
+  const content = JSON.stringify({ outcomeId: outcome.outcomeId, effectState: 'applied' });
+  const receipt = await buildStructuredToolEffectReceipt({
+    toolCallId: handoff.toolCallId,
+    toolName: 'mobile_ui_action',
+    executionRunId: handoff.executionRunId,
+    dispatchRunId: handoff.effectRunId,
+    executionState: 'completed',
+    effectKind: 'unknown',
+    effectState: 'applied',
+    verificationState: 'verified',
+    requestDigest: handoff.actionDigest,
+    resultText: content,
+    recordedAt: outcome.observedAt,
+  });
+  return {
+    kind,
+    handoff,
+    outcome,
+    receipt,
+    toolMessage: {
+      version: 1,
+      toolCallId: handoff.toolCallId,
+      status: 'completed',
+      content,
+    },
+    requiresReconciliation: false,
+    settledAt: outcome.observedAt,
+  };
 }

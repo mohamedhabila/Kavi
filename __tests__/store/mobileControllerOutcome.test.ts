@@ -146,17 +146,27 @@ describe('mobile controller outcome chat projection', () => {
       settledAt: 50,
     });
     if (first.status !== 'applied') throw new Error(first.reason);
+    const advancedConversation = {
+      ...first.conversation,
+      agentRuns: first.conversation.agentRuns?.map((run) => ({
+        ...run,
+        status: 'completed' as const,
+        controlGraph: run.controlGraph
+          ? { ...run.controlGraph, status: 'finalized' as const }
+          : undefined,
+      })),
+    };
 
-    const replay = applyMobileControllerOutcomeInConversation(first.conversation, {
+    const replay = applyMobileControllerOutcomeInConversation(advancedConversation, {
       runId: 'agent-run-mobile-1',
       handoff,
       ...settlement,
       settledAt: 50,
     });
 
-    expect(replay).toEqual({ status: 'replayed', conversation: first.conversation });
+    expect(replay).toEqual({ status: 'replayed', conversation: advancedConversation });
     expect(replay.status === 'replayed' ? replay.conversation : undefined).toBe(
-      first.conversation,
+      advancedConversation,
     );
   });
 

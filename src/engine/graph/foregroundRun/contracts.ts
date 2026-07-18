@@ -6,6 +6,8 @@ import type {
 } from '../../../services/memory/memoryAccessPolicy';
 import type { StructuredOutputOptions } from '../../../services/llm/support/contracts';
 import type { MobileControllerHostPort } from '../../mobileController/runtimeBinding';
+import type { MobileControllerOutcome } from '../../mobileController/contracts';
+import type { AgentRunMobileControllerHandoffRef } from '../../../types/agentRun';
 
 export type ResolvedFinalizationProviderContext = {
   provider: LlmProviderConfig;
@@ -17,6 +19,11 @@ export type ResolvedFinalizationProviderContext = {
 };
 
 export type AssistantDraftMode = 'continue' | 'new' | 'replace';
+
+export type MobileControllerOutcomeSubmission = Readonly<{
+  handoff: AgentRunMobileControllerHandoffRef;
+  outcome: MobileControllerOutcome;
+}>;
 
 export type RunChatOptions = {
   maxTokens?: number;
@@ -37,6 +44,8 @@ export type RunChatOptions = {
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
   /** Optional permitted host controller for this exact foreground execution. */
   mobileController?: MobileControllerHostPort;
+  /** The published handoff identity paired with correlated host-observed facts. */
+  mobileControllerOutcome?: MobileControllerOutcomeSubmission;
 };
 
 export type EnsureAgentRunFinalResponse = (params: {
