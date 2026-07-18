@@ -475,21 +475,26 @@ describe('mobile controller outcome settlement', () => {
 
   it('rolls back the receipt when a later settlement mutation fails', async () => {
     const parked = persistClaimedMobileControllerHandoff(await prepareClaimedHandoff());
-    getExecutionJournalDb().execSync(
-      `CREATE TRIGGER fail_mobile_outcome_handle
-       BEFORE UPDATE ON execution_external_handles
-       BEGIN
-         SELECT RAISE(ABORT, 'test_mobile_outcome_handle_failure');
-       END`,
-    );
+    const database = getExecutionJournalDb();
+    const runSync = database.runSync.bind(database);
+    const handleUpdateFault = jest.spyOn(database, 'runSync').mockImplementation((sql, ...params) => {
+      if (sql.includes('UPDATE execution_external_handles')) {
+        throw new Error('test_mobile_outcome_handle_failure');
+      }
+      return runSync(sql, ...params);
+    });
 
-    await expect(
-      settleMobileControllerOutcome({
-        handoff: parked.handoffRef,
-        outcome: outcomeFor(parked.handoffRef),
-        receivedAt: 140,
-      }),
-    ).rejects.toThrow('test_mobile_outcome_handle_failure');
+    try {
+      await expect(
+        settleMobileControllerOutcome({
+          handoff: parked.handoffRef,
+          outcome: outcomeFor(parked.handoffRef),
+          receivedAt: 140,
+        }),
+      ).rejects.toThrow('test_mobile_outcome_handle_failure');
+    } finally {
+      handleUpdateFault.mockRestore();
+    }
 
     expect(count('execution_effect_receipts')).toBe(0);
     expect(
