@@ -414,6 +414,7 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             usage: usagePayload(turn),
             diagnostics: {
               ...retrievalDiagnostics(turn),
+              private_response_text: turn.finalAssistant!.text,
               private_selected_episode_summaries: selectedEpisodeSummaries(
                 turn,
                 session.rootConversationId,
