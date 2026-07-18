@@ -29,8 +29,13 @@ git -C .private/evals/upstream/mobileworld checkout 8ae506487bf87785292d6cad101c
 git -C .private/evals/upstream/mobileworld submodule update --init --recursive
 cd .private/evals/upstream/mobileworld
 uv sync --all-extras
+export USER_AGENT_API_KEY='replace-with-openai-compatible-secret'
+export USER_AGENT_BASE_URL='https://api.openai.com/v1'
+export USER_AGENT_MODEL='gpt-4o-mini'
 uv run mobile-world server --host 127.0.0.1 --port 6800
 ```
+
+The three `USER_AGENT_*` values are required only for tasks that call `ask_user`, but they must be present in the MobileWorld **server process before it starts**. They configure upstream's simulated user, not Kavi's policy model. If they are absent or invalid, classify the attempt as infrastructure-invalid rather than a task failure.
 
 Keep the server running. Configure a real provider in ignored `.env.local` or the shell:
 
