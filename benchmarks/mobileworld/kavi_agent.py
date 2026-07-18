@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import os
+import subprocess
 from collections.abc import Callable
 from copy import deepcopy
 from io import BytesIO
@@ -19,6 +20,7 @@ from mobile_world.agents.base import BaseAgent
 from mobile_world.agents.implementations.general_e2e_agent import (
     parse_response_to_action,
 )
+from mobile_world.runtime.controller import APP_LOWER_DICT
 from mobile_world.runtime.utils.models import UNKNOWN, JSONAction
 
 JsonObject = dict[str, Any]
@@ -63,6 +65,41 @@ def _parse_external_action_response(value: Any) -> tuple[str, JsonObject]:
     return thought, action
 
 
+def _discover_controller_app_identifiers(env: Any) -> list[str]:
+    device = _require_text(getattr(env, "device", None), "env.device")
+    try:
+        result = subprocess.run(
+            ["adb", "-s", device, "shell", "pm", "list", "packages"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise KaviBridgeError(
+            "Unable to discover installed Android packages."
+        ) from error
+    if result.returncode != 0:
+        raise KaviBridgeError(
+            f"Unable to discover installed Android packages: {result.stderr.strip()}"
+        )
+    installed_packages = {
+        line.removeprefix("package:").strip()
+        for line in result.stdout.splitlines()
+        if line.startswith("package:")
+    }
+    identifiers = sorted(
+        app_name
+        for app_name, package_name in APP_LOWER_DICT.items()
+        if package_name in installed_packages
+    )
+    if not identifiers:
+        raise KaviBridgeError(
+            "MobileWorld found no launchable app identifiers on the device."
+        )
+    return identifiers
+
+
 class KaviMobileWorldAgent(BaseAgent):
     """Delegates MobileWorld policy steps to Kavi's exact foreground chat path."""
 
@@ -76,6 +113,7 @@ class KaviMobileWorldAgent(BaseAgent):
         request_function: RequestFunction | None = None,
         **kwargs: Any,
     ) -> None:
+        env = kwargs.get("env")
         del model_name, llm_base_url, api_key, kwargs
         super().__init__()
         bridge_url = os.environ.get("KAVI_MOBILEWORLD_BRIDGE_URL", "")
@@ -85,6 +123,7 @@ class KaviMobileWorldAgent(BaseAgent):
         if not isinstance(scale_factor, int) or scale_factor <= 0:
             raise ValueError("scale_factor must be a positive integer.")
         self.scale_factor = scale_factor
+        self.controller_app_identifiers = _discover_controller_app_identifiers(env)
         self.session_id = f"mobileworld-{uuid4()}"
         self._request_function = request_function or self._request_over_http
         self.step_index = 0
@@ -138,7 +177,12 @@ class KaviMobileWorldAgent(BaseAgent):
 
     def initialize_hook(self, instruction: str) -> None:
         self.reset()
-        self._request("reset", instruction=instruction, scale_factor=self.scale_factor)
+        self._request(
+            "reset",
+            instruction=instruction,
+            scale_factor=self.scale_factor,
+            controller_app_identifiers=self.controller_app_identifiers,
+        )
 
     @staticmethod
     def _encode_screenshot(image: Any) -> tuple[str, int, int]:

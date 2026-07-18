@@ -14,7 +14,7 @@ import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundS
 import {
   buildControllerObservation,
   buildExternalControllerSystemPrompt,
-  MOBILEWORLD_EXTERNAL_ACTION_CONTRACT,
+  buildMobileWorldExternalActionContract,
 } from '../../benchmarks/mobileworld/bridgeProtocol';
 import {
   resetE2EMemorySandbox,
@@ -26,6 +26,7 @@ import type { Message } from '../../src/types/message';
 type JsonObject = Record<string, unknown>;
 
 type BridgeSession = {
+  controllerAppIdentifiers: string[];
   instruction: string;
   messages: Message[];
   rootConversationId: string;
@@ -81,6 +82,20 @@ function requirePayloadInteger(payload: JsonObject, field: string): number {
     throw new Error(`bridge_${field}_invalid`);
   }
   return Number(value);
+}
+
+function requireControllerAppIdentifiers(payload: JsonObject): string[] {
+  const value = payload.controller_app_identifiers;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 256) {
+    throw new Error('bridge_controller_app_identifiers_invalid');
+  }
+  const identifiers = value.map((entry) =>
+    typeof entry === 'string' && entry.trim().length <= 100 ? entry.trim() : '',
+  );
+  if (identifiers.some((entry) => !entry) || new Set(identifiers).size !== identifiers.length) {
+    throw new Error('bridge_controller_app_identifiers_invalid');
+  }
+  return identifiers;
 }
 
 function readRecentActionOutcomes(payload: JsonObject): JsonObject[] {
@@ -400,6 +415,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
           }
           if (action === 'reset') {
             sessions.set(sessionId, {
+              controllerAppIdentifiers: requireControllerAppIdentifiers(payload),
               instruction: requirePayloadText(payload, 'instruction'),
               messages: [],
               rootConversationId: `mobileworld-${randomUUID()}`,
@@ -427,7 +443,10 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
             provider,
             conversationId: session.rootConversationId,
             conversationTitle: 'MobileWorld device pilot',
-            systemPrompt: [systemPrompt, buildExternalControllerSystemPrompt()].join('\n\n'),
+            systemPrompt: [
+              systemPrompt,
+              buildExternalControllerSystemPrompt(session.controllerAppIdentifiers),
+            ].join('\n\n'),
             initialMessages: session.messages,
             defaultMode: 'chitchat',
             scenarioTimeoutMs: 300_000,
@@ -435,7 +454,9 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
             maxTokens: 1_024,
             disableLongTermMemory: true,
             disableTools: true,
-            externalActionContract: MOBILEWORLD_EXTERNAL_ACTION_CONTRACT,
+            externalActionContract: buildMobileWorldExternalActionContract(
+              session.controllerAppIdentifiers,
+            ),
             enableCompaction: false,
             turns: [
               {

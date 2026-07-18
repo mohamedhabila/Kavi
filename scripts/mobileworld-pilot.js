@@ -93,6 +93,25 @@ if (
 ) {
   exitWithStatus(fail(label, `Android device ${device} is not healthy in adb devices.`));
 }
+const launcherProbe = run('adb', [
+  '-s',
+  device,
+  'shell',
+  'monkey',
+  '-p',
+  'com.android.settings',
+  '-c',
+  'android.intent.category.LAUNCHER',
+  '1',
+]);
+if (launcherProbe.status !== 0) {
+  exitWithStatus(
+    fail(
+      label,
+      'MobileWorld open_app is unavailable through Android monkey. Emulator users should set hw.keyboard=yes and cold boot before running the pilot.',
+    ),
+  );
+}
 const awHost = process.env.MOBILEWORLD_AW_HOST?.trim() || 'http://127.0.0.1:6800';
 const health = run('curl', ['--fail', '--silent', '--show-error', `${awHost}/health`]);
 if (health.status !== 0) {

@@ -30,59 +30,70 @@ function actionVariant(
   };
 }
 
-export const MOBILEWORLD_EXTERNAL_ACTION_CONTRACT: StructuredOutputOptions = {
-  name: 'mobileworld_external_action',
-  strict: true,
-  schema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      thought: {
-        type: 'string',
-        minLength: 1,
-        description: 'Concise rationale for the next action and the unmet objective it advances.',
+export function buildMobileWorldExternalActionContract(
+  controllerAppIdentifiers: ReadonlyArray<string>,
+): StructuredOutputOptions {
+  return {
+    name: 'mobileworld_external_action',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        thought: {
+          type: 'string',
+          minLength: 1,
+          description: 'Concise rationale for the next action and the unmet objective it advances.',
+        },
+        action: {
+          anyOf: [
+            actionVariant('click', { coordinate: coordinateSchema }, ['coordinate']),
+            actionVariant('double_tap', { coordinate: coordinateSchema }, ['coordinate']),
+            actionVariant('long_press', { coordinate: coordinateSchema }, ['coordinate']),
+            actionVariant(
+              'drag',
+              { start_coordinate: coordinateSchema, end_coordinate: coordinateSchema },
+              ['start_coordinate', 'end_coordinate'],
+            ),
+            actionVariant('input_text', { text: { type: 'string' } }, ['text']),
+            actionVariant('keyboard_enter'),
+            actionVariant('navigate_home'),
+            actionVariant('navigate_back'),
+            actionVariant(
+              'open_app',
+              { app_name: { type: 'string', enum: [...controllerAppIdentifiers] } },
+              ['app_name'],
+            ),
+            actionVariant(
+              'scroll',
+              { direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] } },
+              ['direction'],
+            ),
+            actionVariant('wait'),
+            actionVariant('ask_user', { text: { type: 'string', minLength: 1 } }, ['text']),
+            actionVariant('answer', { text: { type: 'string', minLength: 1 } }, ['text']),
+            actionVariant(
+              'status',
+              { goal_status: { type: 'string', enum: ['complete', 'infeasible'] } },
+              ['goal_status'],
+            ),
+          ],
+        },
       },
-      action: {
-        anyOf: [
-          actionVariant('click', { coordinate: coordinateSchema }, ['coordinate']),
-          actionVariant('double_tap', { coordinate: coordinateSchema }, ['coordinate']),
-          actionVariant('long_press', { coordinate: coordinateSchema }, ['coordinate']),
-          actionVariant(
-            'drag',
-            { start_coordinate: coordinateSchema, end_coordinate: coordinateSchema },
-            ['start_coordinate', 'end_coordinate'],
-          ),
-          actionVariant('input_text', { text: { type: 'string' } }, ['text']),
-          actionVariant('keyboard_enter'),
-          actionVariant('navigate_home'),
-          actionVariant('navigate_back'),
-          actionVariant('open_app', { app_name: { type: 'string', minLength: 1 } }, ['app_name']),
-          actionVariant(
-            'scroll',
-            { direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] } },
-            ['direction'],
-          ),
-          actionVariant('wait'),
-          actionVariant('ask_user', { text: { type: 'string', minLength: 1 } }, ['text']),
-          actionVariant('answer', { text: { type: 'string', minLength: 1 } }, ['text']),
-          actionVariant(
-            'status',
-            { goal_status: { type: 'string', enum: ['complete', 'infeasible'] } },
-            ['goal_status'],
-          ),
-        ],
-      },
+      required: ['thought', 'action'],
     },
-    required: ['thought', 'action'],
-  },
-};
+  };
+}
 
-export function buildExternalControllerSystemPrompt(): string {
+export function buildExternalControllerSystemPrompt(
+  controllerAppIdentifiers: ReadonlyArray<string>,
+): string {
   return `External Android controller protocol:
 - You are selecting actions for the Android device shown in the latest screenshot.
 - The provider-enforced response contract is an authorized external action handoff. The host controller executes the returned action only after this chat turn and reports the resulting screen or outcome in the next observation.
 - A returned action is not evidence of success. Reassess each later observation before claiming progress or completion.
 - Operate the device through the action contract; do not delegate executable device steps to the user. Use ask_user only for genuinely missing user-owned information that cannot be established from the visible state or prior observations.
+- For open_app, app_name is a controller identifier rather than an inferred product label. Use exactly one identifier advertised by the current device: ${JSON.stringify(controllerAppIdentifiers)}.
 - For state-changing objectives, answer is not completion. Use answer only when the objective requests information already obtained from the device. Use status complete only when the observed state supports every requirement.
 - Choose one action that advances an unmet requirement. If the preceding action produced no visible progress, choose a materially different route unless repetition is deliberately required. A failed attempt is a reason to reassess and recover, not to deny controller capability.
 - Track attempted interaction strategies, not just coordinates. After repeated attempts with one strategy do not make another small coordinate variation unless the observed target state advanced; switch action kind or route.

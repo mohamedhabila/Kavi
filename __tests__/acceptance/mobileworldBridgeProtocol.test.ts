@@ -1,13 +1,14 @@
 import {
   buildControllerObservation,
   buildExternalControllerSystemPrompt,
+  buildMobileWorldExternalActionContract,
   deriveExternalControllerRecoverySignal,
-  MOBILEWORLD_EXTERNAL_ACTION_CONTRACT,
 } from '../../benchmarks/mobileworld/bridgeProtocol';
 
 describe('MobileWorld external controller protocol', () => {
   it('defines one strict provider-enforced action response', () => {
-    expect(MOBILEWORLD_EXTERNAL_ACTION_CONTRACT).toMatchObject({
+    const contract = buildMobileWorldExternalActionContract(['clock', 'files']);
+    expect(contract).toMatchObject({
       name: 'mobileworld_external_action',
       strict: true,
       schema: {
@@ -16,7 +17,7 @@ describe('MobileWorld external controller protocol', () => {
         required: ['thought', 'action'],
       },
     });
-    const actionSchema = MOBILEWORLD_EXTERNAL_ACTION_CONTRACT.schema.properties.action;
+    const actionSchema = contract.schema.properties.action;
     const clickSchema = actionSchema.anyOf.find(
       (variant: { properties?: { action_type?: { enum?: string[] } } }) =>
         variant.properties?.action_type?.enum?.[0] === 'click',
@@ -34,6 +35,13 @@ describe('MobileWorld external controller protocol', () => {
         }),
       ]),
     );
+    const openAppSchema = actionSchema.anyOf.find(
+      (variant: { properties?: { action_type?: { enum?: string[] } } }) =>
+        variant.properties?.action_type?.enum?.[0] === 'open_app',
+    );
+    expect(openAppSchema).toMatchObject({
+      properties: { app_name: { type: 'string', enum: ['clock', 'files'] } },
+    });
   });
 
   it('carries controller outcomes as data without treating pixel changes as success', () => {
@@ -62,12 +70,13 @@ describe('MobileWorld external controller protocol', () => {
         { observation: { exact_screen_match: false, semantic_effect: 'unverified' } },
       ],
     });
-    expect(buildExternalControllerSystemPrompt()).toContain(
+    expect(buildExternalControllerSystemPrompt(['clock', 'files'])).toContain(
       'A returned action is not evidence of success',
     );
-    expect(buildExternalControllerSystemPrompt()).toContain(
+    expect(buildExternalControllerSystemPrompt(['clock', 'files'])).toContain(
       'Track attempted interaction strategies',
     );
+    expect(buildExternalControllerSystemPrompt(['clock', 'files'])).toContain('["clock","files"]');
   });
 
   it('raises a typed recovery signal for a repeated nearby action strategy', () => {

@@ -22,6 +22,8 @@ The model returns one strict JSON object containing its rationale and proposed a
 
 Install `uv`, Android platform tools, and an Android emulator or connect a debuggable physical device. Then, from the repository root:
 
+MobileWorld's unchanged `open_app` controller launches packages through Android `monkey`. Emulator configurations must expose a hardware keyboard (`hw.keyboard=yes`) and be cold-booted after changing that setting; otherwise newer Android images can exit before injecting the launch event. The public pilot preflights this exact controller path and fails before provider spend when it is unavailable.
+
 ```sh
 mkdir -p .private/evals/upstream
 git clone https://github.com/Tongyi-MAI/MobileWorld .private/evals/upstream/mobileworld
@@ -48,6 +50,8 @@ OPENROUTER_API_KEY=<secret>
 The selected model must accept image inputs. The adapter never sends provider credentials to MobileWorld or writes them into results.
 
 The adapter uses Kavi's exact foreground **chitchat** route as a one-step visual policy. MobileWorld owns the multi-step action loop and executes each parsed action after the chat turn. This is the faithful mapping for MobileWorld's custom-agent protocol: Kavi's code-owned external-action contract authorizes a proposal to the host controller, while only a later observation can provide outcome evidence. It is distinct from Kavi's product-tool authority. Report these results as screen understanding, external action selection, recovery, and end-task completion evidence—not as a direct test of Kavi's internal product-tool control graph.
+
+At session initialization, the adapter intersects MobileWorld's canonical controller identifiers with packages installed on the selected device. That device-specific catalog is carried as system-level capability metadata and constrains `open_app` in the provider-enforced schema. The model therefore selects controller identifiers such as `files` or `sms` instead of guessing product labels the controller cannot accept.
 
 The bridge carries a bounded chronological ledger into the next foreground turn. Each entry distinguishes the model's proposed action, MobileWorld's parser-normalized controller action, and the post-action observation. Exact pixel equality, simulated-user responses, and external-tool results are evidence fields; the bridge never promotes pixel change into a semantic-effect claim and records semantic effect as `unverified`. The assistant must judge the visible state, and the unchanged upstream scorer remains the final task authority. Three consecutive structurally similar actions with no verified semantic effect produce an advisory recovery signal. The detector does not inspect task names, apps, prompt text, expected answers, or scorer state.
 

@@ -5,9 +5,14 @@ import json
 import os
 import unittest
 from io import BytesIO
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
-from kavi_agent import KaviBridgeError, KaviMobileWorldAgent
+from kavi_agent import (
+    KaviBridgeError,
+    KaviMobileWorldAgent,
+    _discover_controller_app_identifiers,
+)
 from PIL import Image
 
 
@@ -40,6 +45,9 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
                 "KAVI_MOBILEWORLD_BRIDGE_TOKEN": "secret",
             },
             clear=False,
+        ), patch(
+            "kavi_agent._discover_controller_app_identifiers",
+            return_value=["clock", "files"],
         ):
             return KaviMobileWorldAgent(
                 model_name="foreground-chat",
@@ -61,6 +69,45 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
         screenshot = base64.b64decode(act_request["screenshot_base64"])
         self.assertEqual(Image.open(BytesIO(screenshot)).size, (100, 200))
         self.assertEqual(agent.get_total_token_usage()["total_tokens"], 15)
+        self.assertEqual(
+            bridge.requests[0]["controller_app_identifiers"], ["clock", "files"]
+        )
+
+    @patch("kavi_agent.subprocess.run")
+    def test_discovers_only_controller_identifiers_installed_on_device(
+        self, run: Mock
+    ) -> None:
+        run.return_value = SimpleNamespace(
+            returncode=0,
+            stdout=(
+                "package:com.google.android.deskclock\n"
+                "package:com.google.android.documentsui\n"
+            ),
+            stderr="",
+        )
+
+        identifiers = _discover_controller_app_identifiers(
+            SimpleNamespace(device="emulator-5554")
+        )
+
+        self.assertIn("clock", identifiers)
+        self.assertIn("files", identifiers)
+        self.assertNotIn("mail", identifiers)
+        run.assert_called_once_with(
+            [
+                "adb",
+                "-s",
+                "emulator-5554",
+                "shell",
+                "pm",
+                "list",
+                "packages",
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=15,
+        )
 
     def test_retries_only_after_typed_action_validation_fails(self) -> None:
         bridge = FakeBridge(
