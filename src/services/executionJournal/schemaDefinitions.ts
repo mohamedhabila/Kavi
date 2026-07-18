@@ -98,12 +98,14 @@ const CREATE_EXECUTION_CHECKPOINTS = `
   ) STRICT
 `;
 
-const CREATE_EXECUTION_EXTERNAL_HANDLES = `
+const V10_EXECUTION_EXTERNAL_HANDLE_KINDS = ['expo_workflow_run', 'github_workflow_run'] as const;
+
+export const CREATE_EXECUTION_EXTERNAL_HANDLES_V10 = `
   CREATE TABLE execution_external_handles (
     id TEXT PRIMARY KEY CHECK (${ID_CHECK('id')}),
     run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
     effect_id TEXT NOT NULL CHECK (${ID_CHECK('effect_id')}),
-    handle_kind TEXT NOT NULL CHECK (handle_kind IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_KINDS)})),
+    handle_kind TEXT NOT NULL CHECK (handle_kind IN (${sqlEnum(V10_EXECUTION_EXTERNAL_HANDLE_KINDS)})),
     locator_version INTEGER NOT NULL CHECK (locator_version = 1),
     expo_project_id TEXT CHECK (expo_project_id IS NULL OR (${ID_CHECK('expo_project_id')})),
     github_repository TEXT CHECK (github_repository IS NULL OR (${ID_CHECK('github_repository')})),
@@ -129,6 +131,31 @@ const CREATE_EXECUTION_EXTERNAL_HANDLES = `
         AND expo_project_id IS NULL
         AND github_repository IS NOT NULL
         AND github_repository = lower(github_repository))
+    ),
+    UNIQUE (run_id, id),
+    FOREIGN KEY (run_id, effect_id)
+      REFERENCES execution_effects(run_id, id) ON DELETE CASCADE
+  ) STRICT
+`;
+
+export const CREATE_EXECUTION_EXTERNAL_HANDLES = `
+  CREATE TABLE execution_external_handles (
+    id TEXT PRIMARY KEY CHECK (${ID_CHECK('id')}),
+    run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
+    effect_id TEXT NOT NULL CHECK (${ID_CHECK('effect_id')}),
+    handle_kind TEXT NOT NULL CHECK (handle_kind IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_KINDS)})),
+    locator_version INTEGER NOT NULL CHECK (locator_version = 1),
+    locator_json TEXT NOT NULL CHECK (length(locator_json) BETWEEN 2 AND 8192),
+    source_tool_name_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('source_tool_name_digest')}),
+    status TEXT NOT NULL CHECK (status IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_STATUSES)})),
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
+    last_attempted_at INTEGER NOT NULL CHECK (
+      last_attempted_at >= created_at AND last_attempted_at <= updated_at
+    ),
+    last_verified_at INTEGER CHECK (
+      last_verified_at IS NULL
+      OR (last_verified_at >= created_at AND last_verified_at <= updated_at)
     ),
     UNIQUE (run_id, id),
     FOREIGN KEY (run_id, effect_id)
@@ -342,16 +369,16 @@ export const SCHEMA_OBJECT_SQL = new Map<string, string>([
        WHERE idempotency_key_digest IS NOT NULL`,
   ],
   [
-    'ux_execution_external_handles_expo_locator',
-    `CREATE UNIQUE INDEX ux_execution_external_handles_expo_locator
-       ON execution_external_handles(run_id, expo_project_id, workflow_run_id)
-       WHERE handle_kind = 'expo_workflow_run'`,
+    'ux_execution_external_handles_locator',
+    `CREATE UNIQUE INDEX ux_execution_external_handles_locator
+       ON execution_external_handles(run_id, handle_kind, locator_json)`,
   ],
   [
-    'ux_execution_external_handles_github_locator',
-    `CREATE UNIQUE INDEX ux_execution_external_handles_github_locator
-       ON execution_external_handles(run_id, github_repository, workflow_run_id)
-       WHERE handle_kind = 'github_workflow_run'`,
+    'ux_execution_external_handles_unresolved_mobile_run',
+    `CREATE UNIQUE INDEX ux_execution_external_handles_unresolved_mobile_run
+       ON execution_external_handles(run_id)
+       WHERE handle_kind = 'mobile_controller_handoff'
+         AND status IN ('unknown', 'pending', 'running')`,
   ],
   [
     'idx_execution_external_handles_status_run',
@@ -375,7 +402,24 @@ export const SCHEMA_OBJECT_SQL = new Map<string, string>([
   ],
 ]);
 
-export const V9_SCHEMA_OBJECT_SQL = new Map(SCHEMA_OBJECT_SQL);
+export const V10_SCHEMA_OBJECT_SQL = new Map(SCHEMA_OBJECT_SQL);
+V10_SCHEMA_OBJECT_SQL.set('execution_external_handles', CREATE_EXECUTION_EXTERNAL_HANDLES_V10);
+V10_SCHEMA_OBJECT_SQL.delete('ux_execution_external_handles_locator');
+V10_SCHEMA_OBJECT_SQL.delete('ux_execution_external_handles_unresolved_mobile_run');
+V10_SCHEMA_OBJECT_SQL.set(
+  'ux_execution_external_handles_expo_locator',
+  `CREATE UNIQUE INDEX ux_execution_external_handles_expo_locator
+     ON execution_external_handles(run_id, expo_project_id, workflow_run_id)
+     WHERE handle_kind = 'expo_workflow_run'`,
+);
+V10_SCHEMA_OBJECT_SQL.set(
+  'ux_execution_external_handles_github_locator',
+  `CREATE UNIQUE INDEX ux_execution_external_handles_github_locator
+     ON execution_external_handles(run_id, github_repository, workflow_run_id)
+     WHERE handle_kind = 'github_workflow_run'`,
+);
+
+export const V9_SCHEMA_OBJECT_SQL = new Map(V10_SCHEMA_OBJECT_SQL);
 V9_SCHEMA_OBJECT_SQL.delete('execution_effect_receipts');
 V9_SCHEMA_OBJECT_SQL.delete('trg_execution_effect_receipts_immutable');
 

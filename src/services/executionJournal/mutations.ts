@@ -507,11 +507,10 @@ export function registerExecutionExternalHandle(
     );
     database.runSync(
       `INSERT INTO execution_external_handles (
-         id, run_id, effect_id, handle_kind, locator_version, expo_project_id,
-         github_repository, workflow_run_id, credential_ref,
+         id, run_id, effect_id, handle_kind, locator_version, locator_json,
          source_tool_name_digest, status, created_at, updated_at,
          last_attempted_at, last_verified_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ...Object.values(handleRow(handle)),
     );
     insertExternalHandleMonitor(database, { id: input.monitorId, handle });

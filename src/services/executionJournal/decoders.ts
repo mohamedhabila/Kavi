@@ -322,10 +322,7 @@ const HANDLE_COLUMNS = [
   'effect_id',
   'handle_kind',
   'locator_version',
-  'expo_project_id',
-  'github_repository',
-  'workflow_run_id',
-  'credential_ref',
+  'locator_json',
   'source_tool_name_digest',
   'status',
   'created_at',
@@ -357,26 +354,25 @@ export function decodeExecutionExternalHandleRow(value: unknown): ExecutionExter
     EXECUTION_EXTERNAL_HANDLE_KINDS,
     'external_handle.handle_kind',
   );
-  const locatorCandidate: unknown =
-    handleKind === 'expo_workflow_run'
-      ? {
-          version: row.locator_version,
-          kind: handleKind,
-          projectId: row.expo_project_id,
-          workflowRunId: row.workflow_run_id,
-          credentialRef: row.credential_ref,
-        }
-      : {
-          version: row.locator_version,
-          kind: handleKind,
-          repository: row.github_repository,
-          workflowRunId: row.workflow_run_id,
-          credentialRef: row.credential_ref,
-        };
+  if (
+    typeof row.locator_json !== 'string' ||
+    row.locator_json.length < 2 ||
+    row.locator_json.length > 8_192
+  ) {
+    throw new Error('execution_journal_malformed_row:external_handle:locator');
+  }
+  let locatorCandidate: unknown;
+  try {
+    locatorCandidate = JSON.parse(row.locator_json);
+  } catch {
+    throw new Error('execution_journal_malformed_row:external_handle:locator');
+  }
   const locator = qualifyExecutionExternalHandleLocator(locatorCandidate);
   if (
     !locator ||
-    (locator.kind === 'github_workflow_run' && locator.repository !== row.github_repository)
+    locator.kind !== handleKind ||
+    locator.version !== row.locator_version ||
+    JSON.stringify(locator) !== row.locator_json
   ) {
     throw new Error('execution_journal_malformed_row:external_handle:locator');
   }

@@ -10,8 +10,9 @@ jest.mock('expo-crypto', () => {
     digestStringAsync: jest.fn(async (_algorithm: string, value: string) =>
       createHash('sha256').update(value, 'utf8').digest('hex'),
     ),
-    digest: jest.fn(async (_algorithm: string, value: Uint8Array) =>
-      Uint8Array.from(createHash('sha256').update(Buffer.from(value)).digest()).buffer,
+    digest: jest.fn(
+      async (_algorithm: string, value: Uint8Array) =>
+        Uint8Array.from(createHash('sha256').update(Buffer.from(value)).digest()).buffer,
     ),
   };
 });
@@ -79,11 +80,20 @@ describe('external tool observation journal', () => {
       ),
     ).toEqual({ status: 'waiting', durability_class: 'external_durable_operation' });
     expect(
-      database.getFirstSync<{ status: string; credential_ref: string }>(
-        'SELECT status, credential_ref FROM execution_external_handles WHERE run_id = ?',
+      database.getFirstSync<{ status: string; locator_json: string }>(
+        'SELECT status, locator_json FROM execution_external_handles WHERE run_id = ?',
         persisted.runId,
       ),
-    ).toEqual({ status: 'pending', credential_ref: 'PROJECT_EXPO_TOKEN' });
+    ).toEqual({
+      status: 'pending',
+      locator_json: JSON.stringify({
+        version: 1,
+        kind: 'expo_workflow_run',
+        projectId: 'project-1',
+        workflowRunId: 'workflow-run-1',
+        credentialRef: 'PROJECT_EXPO_TOKEN',
+      }),
+    });
     expect(
       database.getFirstSync(
         `SELECT baseline_status, condition_kind, action_kind, state,
@@ -282,7 +292,14 @@ describe('external tool observation journal', () => {
   it('rolls back the whole projection when an exact identity conflicts', async () => {
     const first = await persistExternalToolObservation(pendingInput);
     getExecutionJournalDb().runSync(
-      `UPDATE execution_external_handles SET workflow_run_id = 'corrupted-run' WHERE run_id = ?`,
+      `UPDATE execution_external_handles SET locator_json = ? WHERE run_id = ?`,
+      JSON.stringify({
+        version: 1,
+        kind: 'expo_workflow_run',
+        projectId: 'project-1',
+        workflowRunId: 'corrupted-run',
+        credentialRef: 'PROJECT_EXPO_TOKEN',
+      }),
       first.runId,
     );
     await expect(

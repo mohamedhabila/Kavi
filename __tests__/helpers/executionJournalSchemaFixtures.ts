@@ -127,10 +127,13 @@ export function insertSchemaHandle(
     effect_id: 'effect-1',
     handle_kind: 'expo_workflow_run',
     locator_version: 1,
-    expo_project_id: 'project-1',
-    github_repository: null,
-    workflow_run_id: 'workflow-run-1',
-    credential_ref: 'EXPO_TOKEN',
+    locator_json: JSON.stringify({
+      version: 1,
+      kind: 'expo_workflow_run',
+      projectId: 'project-1',
+      workflowRunId: 'workflow-run-1',
+      credentialRef: 'EXPO_TOKEN',
+    }),
     source_tool_name_digest: DIGEST_D,
     status: 'pending',
     created_at: 10,
@@ -141,11 +144,10 @@ export function insertSchemaHandle(
   };
   database.runSync(
     `INSERT INTO execution_external_handles (
-       id, run_id, effect_id, handle_kind, locator_version, expo_project_id,
-       github_repository, workflow_run_id, credential_ref,
+       id, run_id, effect_id, handle_kind, locator_version, locator_json,
        source_tool_name_digest, status, created_at, updated_at,
        last_attempted_at, last_verified_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(row),
   );
   return row;

@@ -233,7 +233,7 @@ describe('execution recovery query corruption boundaries', () => {
     ['effect', "UPDATE execution_effects SET request_digest = 'invalid' WHERE id = 'effect-a'"],
     [
       'external handle',
-      "UPDATE execution_external_handles SET workflow_run_id = 'latest' WHERE id = 'handle-a'",
+      "UPDATE execution_external_handles SET locator_json = 'not-json' WHERE id = 'handle-a'",
     ],
   ])('fails closed on a malformed %s row', async (_label, corruptionSql) => {
     const database = getExecutionJournalDb();

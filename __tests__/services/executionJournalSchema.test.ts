@@ -122,13 +122,11 @@ describe('execution journal schema bootstrap', () => {
     ].flatMap((table) =>
       db.getAllSync<{ name: string }>(`PRAGMA table_info(${table})`).map((row) => row.name),
     );
-    expect(columnNames).toContain('credential_ref');
+    expect(columnNames).toContain('locator_json');
     expect(
-      columnNames
-        .filter((name) => name !== 'credential_ref')
-        .some((name) =>
-          /(prompt|credential|argument|result|api_key|secret|token|raw_)/u.test(name),
-        ),
+      columnNames.some((name) =>
+        /(prompt|credential|argument|result|api_key|secret|token|raw_)/u.test(name),
+      ),
     ).toBe(false);
   });
 });
@@ -254,10 +252,8 @@ describe('closed SQL constraints', () => {
     ['handle_kind', 'unsupported'],
     ['status', 'unsupported'],
     ['locator_version', 2],
-    ['expo_project_id', null],
-    ['credential_ref', ''],
+    ['locator_json', ''],
     ['source_tool_name_digest', 'bad'],
-    ['workflow_run_id', ''],
     ['updated_at', 9],
     ['last_attempted_at', 11],
   ])('rejects invalid execution_external_handles.%s', (column, value) => {
@@ -280,28 +276,6 @@ describe('closed SQL constraints', () => {
       tool_call_id: 'tool-call-2',
     });
     expect(() => insertHandle(db, { id: 'handle-3', effect_id: 'effect-2' })).toThrow();
-  });
-
-  it('stores GitHub repository locators only in canonical lowercase form', () => {
-    const db = getExecutionJournalDb();
-    seedCompleteRun(db);
-    db.runSync('DELETE FROM execution_external_handles');
-    expect(() =>
-      insertHandle(db, {
-        handle_kind: 'github_workflow_run',
-        expo_project_id: null,
-        github_repository: 'OpenAI/Kavi-Mobile',
-        workflow_run_id: '12345',
-      }),
-    ).toThrow();
-    expect(() =>
-      insertHandle(db, {
-        handle_kind: 'github_workflow_run',
-        expo_project_id: null,
-        github_repository: 'openai/kavi-mobile',
-        workflow_run_id: '12345',
-      }),
-    ).not.toThrow();
   });
 
   it('rejects external-handle verification timestamps later than the row update', () => {

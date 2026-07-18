@@ -124,6 +124,7 @@ export const EXECUTION_EFFECT_STATUSES = [
 export const EXECUTION_EXTERNAL_HANDLE_KINDS = [
   'expo_workflow_run',
   'github_workflow_run',
+  'mobile_controller_handoff',
 ] as const;
 
 export const EXECUTION_EXTERNAL_HANDLE_STATUSES = [

@@ -220,6 +220,9 @@ export function createExecutionExternalHandleReconciliationHandler(
     const inspect = async (
       handle: ExecutionExternalHandleRecord,
     ): Promise<ClosedProviderInspection> => {
+      if (handle.locator.kind === 'mobile_controller_handoff') {
+        return { kind: 'blocked', reason: 'provider_contract_invalid' };
+      }
       let token: string;
       try {
         token = await readSecret(handle.locator.credentialRef);

@@ -1,4 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
+import { qualifyExecutionExternalHandleLocator } from './externalLocators';
 import {
   decodeExecutionCheckpointRow,
   decodeExecutionEffectRow,
@@ -92,20 +93,17 @@ export function effectRow(record: ExecutionEffectRecord): Record<string, SQLite.
 export function handleRow(
   record: ExecutionExternalHandleRecord,
 ): Record<string, SQLite.SQLiteBindValue> {
-  const expoProjectId =
-    record.locator.kind === 'expo_workflow_run' ? record.locator.projectId : null;
-  const githubRepository =
-    record.locator.kind === 'github_workflow_run' ? record.locator.repository : null;
+  const locator = qualifyExecutionExternalHandleLocator(record.locator);
+  if (!locator) {
+    throw new Error('execution_journal_invalid_external_handle_locator');
+  }
   return {
     id: record.id,
     run_id: record.runId,
     effect_id: record.effectId,
-    handle_kind: record.locator.kind,
-    locator_version: record.locator.version,
-    expo_project_id: expoProjectId,
-    github_repository: githubRepository,
-    workflow_run_id: record.locator.workflowRunId,
-    credential_ref: record.locator.credentialRef,
+    handle_kind: locator.kind,
+    locator_version: locator.version,
+    locator_json: JSON.stringify(locator),
     source_tool_name_digest: record.sourceToolNameDigest,
     status: record.status,
     created_at: record.createdAt,

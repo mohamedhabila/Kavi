@@ -15,6 +15,10 @@ import {
   EXECUTION_JOURNAL_SCHEMA_VERSION,
 } from '../../src/services/executionJournal/schema';
 import {
+  CREATE_EXECUTION_EXTERNAL_HANDLES_V10,
+  V10_SCHEMA_OBJECT_SQL,
+} from '../../src/services/executionJournal/schemaDefinitions';
+import {
   DIGEST_C,
   DIGEST_D,
   insertSchemaCheckpoint,
@@ -128,7 +132,86 @@ function seedPopulatedV8Database(database: SQLite.SQLiteDatabase): void {
   });
 }
 
+function downgradeExternalHandlesToV10(database: SQLite.SQLiteDatabase): void {
+  const handles = database.getAllSync<Record<string, unknown>>(
+    'SELECT * FROM execution_external_handles ORDER BY id',
+  );
+  const legacyRows = handles.map((row) => {
+    if (typeof row.locator_json !== 'string') throw new Error('test_fixture_locator_missing');
+    const locator = JSON.parse(row.locator_json) as Record<string, unknown>;
+    if (locator.kind !== 'expo_workflow_run' && locator.kind !== 'github_workflow_run') {
+      throw new Error('test_fixture_v10_locator_unsupported');
+    }
+    return {
+      ...row,
+      expo_project_id: locator.kind === 'expo_workflow_run' ? locator.projectId : null,
+      github_repository: locator.kind === 'github_workflow_run' ? locator.repository : null,
+      workflow_run_id: locator.workflowRunId,
+      credential_ref: locator.credentialRef,
+    };
+  });
+  const temporaryTable = 'execution_external_handles_v10';
+  const createTable = CREATE_EXECUTION_EXTERNAL_HANDLES_V10.replace(
+    'CREATE TABLE execution_external_handles',
+    `CREATE TABLE ${temporaryTable}`,
+  );
+  database.execSync('PRAGMA foreign_keys = OFF');
+  database.execSync('PRAGMA legacy_alter_table = ON');
+  try {
+    database.execSync('BEGIN IMMEDIATE');
+    database.execSync(createTable);
+    for (const row of legacyRows) {
+      database.runSync(
+        `INSERT INTO ${temporaryTable} (
+           id, run_id, effect_id, handle_kind, locator_version,
+           expo_project_id, github_repository, workflow_run_id, credential_ref,
+           source_tool_name_digest, status, created_at, updated_at,
+           last_attempted_at, last_verified_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        row.id as SQLite.SQLiteBindValue,
+        row.run_id as SQLite.SQLiteBindValue,
+        row.effect_id as SQLite.SQLiteBindValue,
+        row.handle_kind as SQLite.SQLiteBindValue,
+        row.locator_version as SQLite.SQLiteBindValue,
+        row.expo_project_id as SQLite.SQLiteBindValue,
+        row.github_repository as SQLite.SQLiteBindValue,
+        row.workflow_run_id as SQLite.SQLiteBindValue,
+        row.credential_ref as SQLite.SQLiteBindValue,
+        row.source_tool_name_digest as SQLite.SQLiteBindValue,
+        row.status as SQLite.SQLiteBindValue,
+        row.created_at as SQLite.SQLiteBindValue,
+        row.updated_at as SQLite.SQLiteBindValue,
+        row.last_attempted_at as SQLite.SQLiteBindValue,
+        row.last_verified_at as SQLite.SQLiteBindValue,
+      );
+    }
+    database.execSync('DROP TABLE execution_external_handles');
+    database.execSync(`ALTER TABLE ${temporaryTable} RENAME TO execution_external_handles`);
+    for (const name of [
+      'ux_execution_external_handles_expo_locator',
+      'ux_execution_external_handles_github_locator',
+      'idx_execution_external_handles_status_run',
+      'idx_execution_external_handles_run_status',
+    ]) {
+      const sql = V10_SCHEMA_OBJECT_SQL.get(name);
+      if (!sql) throw new Error(`test_fixture_v10_index_missing:${name}`);
+      database.execSync(sql);
+    }
+    database.execSync('PRAGMA user_version = 10');
+    database.execSync('COMMIT');
+  } catch (error) {
+    try {
+      database.execSync('ROLLBACK');
+    } catch {}
+    throw error;
+  } finally {
+    database.execSync('PRAGMA legacy_alter_table = OFF');
+    database.execSync('PRAGMA foreign_keys = ON');
+  }
+}
+
 function downgradePopulatedFixtureToV7(database: SQLite.SQLiteDatabase): void {
+  downgradeExternalHandlesToV10(database);
   const currentTableSql = database.getFirstSync<{ sql: string }>(
     `SELECT sql FROM sqlite_master
      WHERE type = 'table' AND name = 'execution_effects'`,
@@ -254,6 +337,59 @@ describe('execution journal schema migration policy', () => {
     expect(() => getExecutionJournalDb()).toThrow(
       'execution_journal_schema_object_mismatch:idx_execution_runs_status_updated',
     );
+  });
+
+  it('migrates a populated exact v10 locator without changing its identity', () => {
+    const v11 = getExecutionJournalDb();
+    seedPopulatedV8Database(v11);
+    downgradeExternalHandlesToV10(v11);
+    expect(
+      v11
+        .getAllSync<{ name: string }>('PRAGMA table_info(execution_external_handles)')
+        .map((column) => column.name),
+    ).not.toContain('locator_json');
+    closeExecutionJournalDb();
+
+    const migrated = getExecutionJournalDb();
+    expect(
+      migrated.getFirstSync<{ user_version: number }>('PRAGMA user_version')?.user_version,
+    ).toBe(EXECUTION_JOURNAL_SCHEMA_VERSION);
+    expect(migrated.getAllSync('PRAGMA foreign_key_check')).toEqual([]);
+    expect(
+      migrated.getFirstSync<{ locator_json: string }>(
+        'SELECT locator_json FROM execution_external_handles WHERE id = ?',
+        'handle-1',
+      )?.locator_json,
+    ).toBe(
+      JSON.stringify({
+        version: 1,
+        kind: 'expo_workflow_run',
+        projectId: 'project-1',
+        workflowRunId: 'workflow-run-1',
+        credentialRef: 'EXPO_TOKEN',
+      }),
+    );
+    expect(
+      migrated.getFirstSync('SELECT * FROM execution_monitors WHERE id = ?', 'monitor-1'),
+    ).toEqual(expect.objectContaining({ external_handle_id: 'handle-1', state: 'armed' }));
+  });
+
+  it('leaves an exact v10 journal unchanged when its locator is not safely recoverable', () => {
+    const v11 = getExecutionJournalDb();
+    seedPopulatedV8Database(v11);
+    downgradeExternalHandlesToV10(v11);
+    v11.runSync(
+      `UPDATE execution_external_handles
+       SET workflow_run_id = 'latest'
+       WHERE id = 'handle-1'`,
+    );
+    const before = readDurableDatabaseSnapshot(v11);
+    closeExecutionJournalDb();
+
+    expect(() => getExecutionJournalDb()).toThrow(
+      'execution_journal_v10_external_handle_locator_invalid',
+    );
+    expect(readDurableDatabaseSnapshot(rawDatabase())).toEqual(before);
   });
 
   it('migrates a populated exact v7 journal without losing unresolved recovery state', () => {

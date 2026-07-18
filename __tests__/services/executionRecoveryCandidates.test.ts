@@ -10,8 +10,9 @@ jest.mock('expo-crypto', () => {
     digestStringAsync: jest.fn(async (_algorithm: string, value: string) =>
       createHash('sha256').update(value, 'utf8').digest('hex'),
     ),
-    digest: jest.fn(async (_algorithm: string, value: Uint8Array) =>
-      Uint8Array.from(createHash('sha256').update(Buffer.from(value)).digest()).buffer,
+    digest: jest.fn(
+      async (_algorithm: string, value: Uint8Array) =>
+        Uint8Array.from(createHash('sha256').update(Buffer.from(value)).digest()).buffer,
     ),
   };
 });
@@ -277,7 +278,7 @@ describe('persisted external recovery candidate scan', () => {
     const database = getExecutionJournalDb();
     database.execSync('PRAGMA ignore_check_constraints = ON');
     database.runSync(
-      `UPDATE execution_external_handles SET workflow_run_id = 'latest' WHERE id = 'handle-a'`,
+      `UPDATE execution_external_handles SET locator_json = 'not-json' WHERE id = 'handle-a'`,
     );
     database.execSync('PRAGMA ignore_check_constraints = OFF');
 

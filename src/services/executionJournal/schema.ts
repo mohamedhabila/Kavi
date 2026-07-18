@@ -1,27 +1,27 @@
 import type * as SQLite from 'expo-sqlite';
-import {
-  CREATE_EXECUTION_EFFECTS,
-  CREATE_EXECUTION_EFFECTS_V8,
-} from './executionEffectSchema';
+import { CREATE_EXECUTION_EFFECTS, CREATE_EXECUTION_EFFECTS_V8 } from './executionEffectSchema';
 import {
   CREATE_EXECUTION_EFFECT_RECEIPTS,
   CREATE_EXECUTION_EFFECT_RECEIPT_UPDATE_GUARD,
 } from './effectReceiptSchema';
 import {
+  CREATE_EXECUTION_EXTERNAL_HANDLES,
   SCHEMA_OBJECT_SQL,
   TABLE_NAMES,
   TRIGGER_NAMES,
+  V10_SCHEMA_OBJECT_SQL,
   V7_SCHEMA_OBJECT_SQL,
   V8_SCHEMA_OBJECT_SQL,
   V9_SCHEMA_OBJECT_SQL,
   V9_TABLE_NAMES,
   V9_TRIGGER_NAMES,
 } from './schemaDefinitions';
+import { qualifyExecutionExternalHandleLocator } from './externalLocators';
 
 /** Keep synchronous native lock contention bounded on the mobile JS thread. */
 export const EXECUTION_JOURNAL_BUSY_TIMEOUT_MS = 100;
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 10;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 11;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function pragmaNumber(database: SQLite.SQLiteDatabase, name: string): number {
@@ -293,8 +293,8 @@ function migrateV9ToV10(database: SQLite.SQLiteDatabase): void {
   try {
     database.execSync(CREATE_EXECUTION_EFFECT_RECEIPTS);
     database.execSync(CREATE_EXECUTION_EFFECT_RECEIPT_UPDATE_GUARD);
-    database.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
-    assertExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 'execution_journal_schema');
+    database.execSync('PRAGMA user_version = 10');
+    assertExactSchemaObjects(database, V10_SCHEMA_OBJECT_SQL, 'execution_journal_v10_schema');
     assertNoForeignKeyViolations(database, 'execution_journal_v10_foreign_key_mismatch');
     database.execSync('COMMIT');
   } catch (error) {
@@ -304,6 +304,96 @@ function migrateV9ToV10(database: SQLite.SQLiteDatabase): void {
       // Preserve the original migration error.
     }
     throw error;
+  }
+}
+
+function migrateV10ExternalHandleLocator(row: Record<string, unknown>): string {
+  const shared = {
+    version: row.locator_version,
+    kind: row.handle_kind,
+    workflowRunId: row.workflow_run_id,
+    credentialRef: row.credential_ref,
+  };
+  const candidate =
+    row.handle_kind === 'expo_workflow_run'
+      ? { ...shared, projectId: row.expo_project_id }
+      : row.handle_kind === 'github_workflow_run'
+        ? { ...shared, repository: row.github_repository }
+        : null;
+  const locator = qualifyExecutionExternalHandleLocator(candidate);
+  if (!locator) {
+    throw new Error('execution_journal_v10_external_handle_locator_invalid');
+  }
+  return JSON.stringify(locator);
+}
+
+function migrateV10ToV11(database: SQLite.SQLiteDatabase): void {
+  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
+    throw new Error('execution_journal_application_id_mismatch');
+  }
+  assertExactSchemaObjects(database, V10_SCHEMA_OBJECT_SQL, 'execution_journal_v10_schema');
+  assertNoForeignKeyViolations(database, 'execution_journal_v10_foreign_key_mismatch');
+
+  const rows = database.getAllSync<Record<string, unknown>>(
+    'SELECT * FROM execution_external_handles ORDER BY id',
+  );
+  const temporaryTable = 'execution_external_handles_v11';
+  const createTemporaryTable = CREATE_EXECUTION_EXTERNAL_HANDLES.replace(
+    'CREATE TABLE execution_external_handles',
+    `CREATE TABLE ${temporaryTable}`,
+  );
+  database.execSync('PRAGMA foreign_keys = OFF');
+  database.execSync('PRAGMA legacy_alter_table = ON');
+  try {
+    database.execSync('BEGIN IMMEDIATE');
+    database.execSync(createTemporaryTable);
+    for (const row of rows) {
+      database.runSync(
+        `INSERT INTO ${temporaryTable} (
+           id, run_id, effect_id, handle_kind, locator_version, locator_json,
+           source_tool_name_digest, status, created_at, updated_at,
+           last_attempted_at, last_verified_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        row.id as SQLite.SQLiteBindValue,
+        row.run_id as SQLite.SQLiteBindValue,
+        row.effect_id as SQLite.SQLiteBindValue,
+        row.handle_kind as SQLite.SQLiteBindValue,
+        row.locator_version as SQLite.SQLiteBindValue,
+        migrateV10ExternalHandleLocator(row),
+        row.source_tool_name_digest as SQLite.SQLiteBindValue,
+        row.status as SQLite.SQLiteBindValue,
+        row.created_at as SQLite.SQLiteBindValue,
+        row.updated_at as SQLite.SQLiteBindValue,
+        row.last_attempted_at as SQLite.SQLiteBindValue,
+        row.last_verified_at as SQLite.SQLiteBindValue,
+      );
+    }
+    database.execSync('DROP TABLE execution_external_handles');
+    database.execSync(`ALTER TABLE ${temporaryTable} RENAME TO execution_external_handles`);
+    for (const name of [
+      'ux_execution_external_handles_locator',
+      'ux_execution_external_handles_unresolved_mobile_run',
+      'idx_execution_external_handles_status_run',
+      'idx_execution_external_handles_run_status',
+    ]) {
+      const sql = SCHEMA_OBJECT_SQL.get(name);
+      if (!sql) throw new Error(`execution_journal_v11_index_missing:${name}`);
+      database.execSync(sql);
+    }
+    database.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
+    assertExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 'execution_journal_schema');
+    assertNoForeignKeyViolations(database, 'execution_journal_v11_foreign_key_mismatch');
+    database.execSync('COMMIT');
+  } catch (error) {
+    try {
+      database.execSync('ROLLBACK');
+    } catch {
+      // Preserve the migration error.
+    }
+    throw error;
+  } finally {
+    database.execSync('PRAGMA legacy_alter_table = OFF');
+    database.execSync('PRAGMA foreign_keys = ON');
   }
 }
 
@@ -329,6 +419,10 @@ export function ensureExecutionJournalSchema(database: SQLite.SQLiteDatabase): v
   }
   if (version === 9) {
     migrateV9ToV10(database);
+    version = 10;
+  }
+  if (version === 10) {
+    migrateV10ToV11(database);
     version = EXECUTION_JOURNAL_SCHEMA_VERSION;
   }
   if (version !== EXECUTION_JOURNAL_SCHEMA_VERSION) {

@@ -65,7 +65,8 @@ export function qualifyExternalDurableHandle(candidate: unknown): ExternalDurabl
   }
 
   const sourceToolName = normalizeExactString(candidate.sourceToolName, 120) ?? '';
-  const locator = qualifyExecutionExternalHandleLocator(candidate);
+  const { sourceToolName: _sourceToolName, ...locatorCandidate } = candidate;
+  const locator = qualifyExecutionExternalHandleLocator(locatorCandidate);
   if (!locator) {
     return null;
   }

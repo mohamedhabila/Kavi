@@ -154,7 +154,6 @@ describe('execution journal run creation and checkpoints', () => {
       )?.count,
     ).toBe(1);
   });
-
 });
 
 describe('closed run transitions', () => {
