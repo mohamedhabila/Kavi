@@ -3,6 +3,7 @@ import type { IngestionProviderOutcome } from '../../services/memory/ingestionQu
 import type { IngestionDurabilityReceipt } from '../../services/memory/ingestionStructuralReceiptStore';
 import type { MemoryTurnPublicationResult } from '../../services/memory/turnPublication';
 import type { AgentRun, AgentRunControlGraphStatus, AgentRunStatus } from '../../types/agentRun';
+import type { Attachment } from '../../types/attachment';
 import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { AssistantCompletionStatus, Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
@@ -67,6 +68,7 @@ export type ForegroundScenarioLifecycleSnapshot =
 
 export type ForegroundScenarioTurnInput = {
   content: string;
+  attachments?: ReadonlyArray<Attachment>;
   lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
   route: ForegroundScenarioRouteDirective;
   selectedMode?: ConversationMode;

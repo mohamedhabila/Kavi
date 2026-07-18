@@ -375,6 +375,54 @@ describe('runForegroundScenario', () => {
     });
   });
 
+  it('passes image attachments through the exact foreground chat entry point', async () => {
+    const attachment = {
+      id: 'current-screen',
+      type: 'image' as const,
+      uri: 'inline://current-screen.png',
+      name: 'current-screen.png',
+      mimeType: 'image/png',
+      size: 4,
+      base64: 'AQIDBA==',
+    };
+
+    const result = await runForegroundScenario({
+      provider: makeProvider('scenario-provider'),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
+      turns: [{ content: '', attachments: [attachment], route: 'production_auto' }],
+    });
+
+    const providerUserMessage = mockedRunOrchestrator.mock.calls[0][0].messages.find(
+      (message) => message.role === 'user',
+    );
+    expect(providerUserMessage?.attachments).toEqual([attachment]);
+    expect(providerUserMessage?.attachments?.[0]).not.toBe(attachment);
+    expect(result.turns[0].messages.find((message) => message.role === 'user')?.attachments).toEqual([
+      attachment,
+    ]);
+    expect(Object.isFrozen(result.turns[0].messages[0]?.attachments)).toBe(true);
+    expect(attachment).toEqual(expect.objectContaining({ base64: 'AQIDBA==' }));
+  });
+
+  it('rejects a foreground turn with neither text nor attachments', async () => {
+    await expect(
+      runForegroundScenario({
+        provider: makeProvider('scenario-provider'),
+        conversationId: 'scenario-conversation',
+        conversationTitle: 'Scenario title',
+        systemPrompt: 'Scenario prompt',
+        defaultMode: 'chitchat',
+        scenarioTimeoutMs: 60_000,
+        turns: [{ content: '  ', route: 'production_auto' }],
+      }),
+    ).rejects.toThrow('must contain text or an attachment');
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+  });
+
   it('reports passive memory settlement separately from foreground completion', async () => {
     mockedGetIngestionJob.mockReturnValue({
       ...makeCompletedJob('job-1'),

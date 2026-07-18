@@ -187,7 +187,9 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
     throw new Error('allowedToolNames must contain unique canonical tool names.');
   }
   for (const [index, turn] of input.turns.entries()) {
-    requireTrimmed(turn.content, `turns[${index}].content`);
+    if (!turn.content.trim() && !turn.attachments?.length) {
+      throw new Error(`turns[${index}] must contain text or an attachment.`);
+    }
     if (
       turn.lifecycleBefore !== undefined &&
       !['app_relaunch', 'new_conversation'].includes(turn.lifecycleBefore)
@@ -313,6 +315,9 @@ async function runScenarioIsolated(
         id: userMessageId,
         role: 'user',
         content: turn.content.trim(),
+        ...(turn.attachments?.length
+          ? { attachments: turn.attachments.map((attachment) => ({ ...attachment })) }
+          : {}),
         timestamp: turn.timestamp,
       });
 
