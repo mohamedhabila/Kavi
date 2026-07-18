@@ -96,6 +96,25 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
         self.assertEqual(second_request["unchanged_observation_count"], 1)
         self.assertEqual(second_request["previous_action"], {"action_type": "navigate_back"})
 
+    def test_forwards_user_and_external_tool_observations(self) -> None:
+        bridge = FakeBridge(
+            ['Thought: Continue.\nAction: {"action_type":"navigate_home"}']
+        )
+        agent = self.make_agent(bridge)
+        agent.initialize("Complete the task")
+
+        agent.predict(
+            {
+                "screenshot": Image.new("RGB", (100, 200)),
+                "ask_user_response": "Use the afternoon time.",
+                "tool_call": {"status": "completed", "value": 3},
+            }
+        )
+
+        request = bridge.requests[1]
+        self.assertEqual(request["ask_user_response"], "Use the afternoon time.")
+        self.assertEqual(request["tool_call"], {"status": "completed", "value": 3})
+
     def test_returns_unknown_after_the_bounded_recovery_budget(self) -> None:
         bridge = FakeBridge(["invalid", "still invalid", "invalid again"])
         agent = self.make_agent(bridge)
