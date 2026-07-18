@@ -444,10 +444,7 @@ describe('assemblePrompt - dynamic context', () => {
     expect(text).toContain('"lane":"current_thread"');
     expect(text).toContain('"observed_at_ms":2');
     expect(text).toContain('User asked to fix the config file.');
-    expect(text).toContain('directly stated current detail overrides conflicting episode data');
-    expect(text).toContain(
-      'Vague or underspecified current wording does not discard more precise compatible episode state',
-    );
+    expect(text).toContain('current user message overrides episode data');
     expect(text).toContain('prefer the most recent directly stated user state');
     expect(text).toContain('Do not silently narrow or strengthen');
     expect(text).toContain('combine retrieval relevance and recency');
