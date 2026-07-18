@@ -179,7 +179,10 @@ scoped: stable user profile and preferences are global, while active-task facts,
 workspace/project identifiers, decisions, constraints, and verification tokens can
 be conversation, project, or session memory. Be conservative: prefer to extract
 nothing over guessing, but do not drop facts the user explicitly asked the assistant
-to retain.
+to retain. A directly stated current detail is also worth retaining when a plausible
+later user message would otherwise need to repeat it. This includes evolving
+situation state such as participants, quantities, schedules, constraints, resources,
+decisions, and requested outcomes; it does not require an explicit memory command.
 
 Return STRICT JSON only — no prose, no markdown fences. Schema:
 {
@@ -214,6 +217,13 @@ Rules:
   fields, aliases, inferred defaults, or provider-selected target identifiers.
 - new_facts may describe only durable semantics asserted by the current user.
   Never propose facts sourced from assistant text or tool output.
+- Do not require an explicit memory command. Extract directly stated current
+  details that a plausible follow-up would need, while rejecting inferred values,
+  examples, hypotheticals, quotations, and third-party claims as current state.
+- episode_summary must lead with directly stated current user details that could
+  matter in a later turn. Preserve explicit quantities, ranges, negation, and
+  uncertainty without narrowing or strengthening them; then summarize the request
+  and assistant result.
 - Use subject_ref kind self only when the current user is the subject. For a
   named subject, copy label exactly from evidence_quote.
 - source_message_id must exactly equal the current user message id.
@@ -239,7 +249,8 @@ Rules:
 - Up to 5 new_facts, 5 open_threads, 2 notable.
 - Use global scope only for stable user profile/preferences. Use persona only
   for a stable fact explicitly limited to the active persona. Use conversation
-  or session for active-task details. Use project for repo/workspace facts.
+  for evolving situation state and conversation or session for active-task
+  details. Use project for repo/workspace facts.
 - value strings <= 200 chars. labels <= 80 chars. active_focus <= 600 chars.
 - If nothing is worth recording, return empty arrays and null active_focus.
 `;
