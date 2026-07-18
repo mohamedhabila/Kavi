@@ -24,6 +24,8 @@ Install `uv`, Android platform tools, and an Android emulator or connect a debug
 
 MobileWorld's unchanged `open_app` controller launches packages through Android `monkey`. Emulator configurations must expose a hardware keyboard (`hw.keyboard=yes`) and be cold-booted after changing that setting; otherwise newer Android images can exit before injecting the launch event. The public pilot preflights this exact controller path and fails before provider spend when it is unavailable.
 
+The pilot also installs, activates, and reads back MobileWorld's ADB Keyboard before task initialization. A successful broadcast alone is not accepted as text-input readiness because Android can finish package installation before the new input method is selectable.
+
 ```sh
 mkdir -p .private/evals/upstream
 git clone https://github.com/Tongyi-MAI/MobileWorld .private/evals/upstream/mobileworld

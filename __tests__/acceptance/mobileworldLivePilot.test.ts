@@ -272,6 +272,23 @@ async function ensureAdbKeyboard(upstreamDir: string, device: string): Promise<v
     encoding: 'utf8',
   });
   if (result.status !== 0) throw new Error(`adb_keyboard_setup_failed:${result.stderr.trim()}`);
+
+  const expectedInputMethod = 'com.android.adbkeyboard/.AdbIME';
+  let observedInputMethod = '';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    runAdb(device, ['shell', 'ime', 'enable', expectedInputMethod]);
+    runAdb(device, ['shell', 'ime', 'set', expectedInputMethod]);
+    observedInputMethod = runAdb(device, [
+      'shell',
+      'settings',
+      'get',
+      'secure',
+      'default_input_method',
+    ]);
+    if (observedInputMethod === expectedInputMethod) return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`adb_keyboard_activation_failed:${observedInputMethod || 'unavailable'}`);
 }
 
 async function runPilotProcess(params: {
