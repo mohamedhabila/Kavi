@@ -48,6 +48,7 @@ import {
 } from '../authority/modelTurnMemoryPolicyBinding';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
+import { resolveMobileControllerRecoveryPreflight } from './mobileControllerRecoveryPolicy';
 
 type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
@@ -236,6 +237,24 @@ export async function executeAgentControlGraphToolTurn(
   let workingMessages = toolTurnPreparation.workingMessages;
   const warningInjectedThisRound = toolTurnPreparation.warningInjectedThisRound;
 
+  const mobileControllerRecoveryDecision =
+    executableToolCalls.length === 1
+      ? resolveMobileControllerRecoveryPreflight({
+          toolCall: executableToolCalls[0]!,
+          binding: params.mobileController,
+          directives: params.getGraphSnapshot().turnDirectives,
+        })
+      : { kind: 'not_applicable' as const };
+  const toolCallBlockers = new Map<string, string>();
+  if (mobileControllerRecoveryDecision.kind !== 'not_applicable') {
+    if (mobileControllerRecoveryDecision.kind === 'block') {
+      toolCallBlockers.set(
+        executableToolCalls[0]!.id,
+        mobileControllerRecoveryDecision.blocker,
+      );
+    }
+  }
+
   const effectGoalMaterialization = await materializeToolEffectCompletionGoals({
     toolCalls: executableToolCalls,
     goals: params.getGraphSnapshot().goals,
@@ -278,12 +297,19 @@ export async function executeAgentControlGraphToolTurn(
     emitPendingAsyncOperationsChange: params.emitPendingAsyncOperationsChange,
     recordPerformanceMetrics: params.recordPerformanceMetrics,
     controlGraphGoals: projectedControlGraphGoals,
+    ...(toolCallBlockers.size > 0 ? { toolCallBlockers } : {}),
     agentRunId: params.agentRunId,
     executionRunId: params.executionRunId,
     beforeEffectDispatch: params.beforeEffectDispatch,
     ...(params.mobileController ? { mobileController: params.mobileController } : {}),
     verifiedProcedureSession: params.verifiedProcedureSession,
     onBatchCommitted: () => {
+      if (mobileControllerRecoveryDecision.kind !== 'not_applicable') {
+        params.recordTurnDirectives(
+          mobileControllerRecoveryDecision.directives,
+          mobileControllerRecoveryDecision.reason,
+        );
+      }
       params.callbacks.onAssistantMessage(
         toolTurnPreparation.assistantToolTurnContent,
         toolTurnPreparation.toolCallObjects,

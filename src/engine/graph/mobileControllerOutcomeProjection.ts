@@ -4,7 +4,8 @@ import type { AgentRun, AgentRunControlGraphState } from '../../types/agentRun';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import { decodeToolEffectReceipt } from '../../utils/toolEffectReceipt';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
-import { reduceAgentControlGraph } from './agentControlGraph';
+import { reduceAgentControlGraph, type AgentControlGraphEvent } from './agentControlGraph';
+import { projectMobileControllerRecoveryOutcome } from './mobileControllerRecoveryPolicy';
 
 export const MOBILE_CONTROLLER_OUTCOME_PROJECTION_REJECTION_REASONS = [
   'settlement_invalid',
@@ -94,7 +95,7 @@ export function projectMobileControllerOutcomeToAgentRun(input: {
   }
 
   const timestamp = Math.max(graph.updatedAt, input.settledAt);
-  const controlGraph = reduceAgentControlGraph(graph, [
+  const events: AgentControlGraphEvent[] = [
     {
       type: 'TOOL_RESULT_RECORDED',
       result: {
@@ -112,7 +113,27 @@ export function projectMobileControllerOutcomeToAgentRun(input: {
       pendingOperations: [],
       timestamp,
     },
-  ]);
+  ];
+  const recoveryProjection = projectMobileControllerRecoveryOutcome({
+    state: graph.turnDirectives.mobileControllerRecovery,
+    toolCallId: handoff.toolCallId,
+    content: input.toolMessage.content,
+  });
+  if (recoveryProjection.kind !== 'unchanged') {
+    events.push({
+      type: 'TURN_DIRECTIVES_RECORDED',
+      directives: {
+        mobileControllerRecovery:
+          recoveryProjection.kind === 'replace' ? recoveryProjection.state : undefined,
+      },
+      reason:
+        recoveryProjection.kind === 'replace'
+          ? `mobile_controller_outcome_${recoveryProjection.state.phase}`
+          : 'mobile_controller_progress_observed',
+      timestamp,
+    });
+  }
+  const controlGraph = reduceAgentControlGraph(graph, events);
   return controlGraph.status === 'ready' &&
     controlGraph.pendingAsyncCount === 0 &&
     controlGraph.asyncWork.pendingOperations.length === 0 &&

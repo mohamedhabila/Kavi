@@ -1,4 +1,5 @@
 import type { Message } from '../../../types/message';
+import type { AgentRunMobileControllerRecoveryState } from '../../../types/agentRun';
 import { deduplicateToolResults, ensureToolResultPairing } from '../../toolResultPairingGuard';
 import type { MobileControllerHostPort } from '../../mobileController/runtimeBinding';
 import { appendEphemeralMobileControllerObservation } from './mobileControllerObservation';
@@ -12,6 +13,7 @@ export function buildForegroundOrchestratorMessages(params: {
   excludedAssistantMessageId?: string;
   additionalInternalPrompt?: string;
   mobileController?: MobileControllerHostPort;
+  mobileControllerRecoveryState?: AgentRunMobileControllerRecoveryState;
   createId: () => string;
   timestamp: number;
 }): { durableMessages: Message[]; modelMessages: Message[] } {
@@ -38,6 +40,7 @@ export function buildForegroundOrchestratorMessages(params: {
     modelMessages: appendEphemeralMobileControllerObservation({
       messages: durableMessages,
       controller: params.mobileController,
+      recoveryState: params.mobileControllerRecoveryState,
       createId: params.createId,
       timestamp: params.timestamp,
     }),

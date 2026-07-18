@@ -22,6 +22,9 @@ import {
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
+import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileController/toolDefinition';
+import { createMobileControllerCapabilityFixture } from '../helpers/mobileControllerHandoffFixture';
+import { resolveMobileControllerRecoveryPreflight } from '../../src/engine/graph/mobileControllerRecoveryPolicy';
 
 jest.mock('../../src/engine/loopDetection', () => {
   const actual = jest.requireActual('../../src/engine/loopDetection');
@@ -418,6 +421,108 @@ describe('toolTurnExecution', () => {
     expect(applyGraphEvents.mock.invocationCallOrder[0]).toBeLessThan(
       mockedExecuteToolExecutionBatch.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it('projects the three-stall recovery guard into tool preflight before dispatch', async () => {
+    mockedDetectLoops.mockReturnValue({ loopDetected: false });
+    mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle: any) => {
+      const blocker = lifecycle.workflowToolCallBlocker(
+        lifecycle.tc.name,
+        lifecycle.tc.arguments,
+      );
+      expect(blocker).toContain('equivalent_strategy_stalled');
+      return {
+        toolCallId: lifecycle.tc.id,
+        effectiveToolName: lifecycle.tc.name,
+        result: blocker,
+        toolMessage: {
+          id: 'blocked-mobile-result',
+          role: 'tool',
+          content: blocker,
+          toolCallId: lifecycle.tc.id,
+          timestamp: 1001,
+          isError: true,
+        },
+      };
+    });
+    mockedExecuteToolExecutionBatch.mockImplementation(async (batch: any) => [
+      await batch.executePendingToolCall(batch.executableToolCalls[0], 0, {
+        previewCompletedToolNames: new Set(),
+      }),
+    ]);
+    const action = {
+      kind: 'activate',
+      target: {
+        kind: 'coordinate',
+        observationId: 'observation-1',
+        x: 120,
+        y: 220,
+      },
+    };
+    const capability = createMobileControllerCapabilityFixture();
+    const currentObservation = {
+      observationId: 'observation-1',
+      digest: `sha256:${'a'.repeat(64)}` as const,
+      appId: 'com.example.app',
+      windowId: 'main',
+    };
+    const initial = resolveMobileControllerRecoveryPreflight({
+      toolCall: { id: 'seed', name: 'mobile_ui_action', arguments: JSON.stringify(action) },
+      binding: { capability, currentObservation },
+      directives: {
+        forceFinalText: false,
+        requireWorkflowTool: false,
+        incompleteFinalTextRecoveryCount: 0,
+      },
+    });
+    if (initial.kind !== 'allow' || !initial.directives.mobileControllerRecovery) {
+      throw new Error('expected mobile strategy fingerprint');
+    }
+    const strategyFingerprint = initial.directives.mobileControllerRecovery.strategyFingerprint;
+    const snapshot = {
+      goals: [],
+      turnDirectives: {
+        forceFinalText: false,
+        requireWorkflowTool: false,
+        incompleteFinalTextRecoveryCount: 0,
+        mobileControllerRecovery: {
+          version: 1,
+          phase: 'tracking',
+          strategyFingerprint,
+          consecutiveStallCount: 3,
+        },
+      },
+    } as any;
+    const recordTurnDirectives = jest.fn();
+    const params = createParams({
+      availableToolNames: new Set(['mobile_ui_action']),
+      runtimeToolAvailability: {
+        hasWorkspaceTargets: false,
+        hasBrowserControllableWorkspaceTargets: false,
+        hasDelegableWorkspaceTargets: false,
+        hasMobileController: true,
+      },
+      groundedRequestScopedTools: [MOBILE_UI_ACTION_TOOL_DEFINITION],
+      pendingToolCalls: [
+        { id: 'mobile-call-4', name: 'mobile_ui_action', arguments: JSON.stringify(action) },
+      ],
+      getGraphSnapshot: () => snapshot,
+      recordTurnDirectives,
+      mobileController: { capability, currentObservation },
+    });
+
+    await executeAgentControlGraphToolTurn(params);
+
+    expect(recordTurnDirectives).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automaticRecoveryAttemptCount: 1,
+        mobileControllerRecovery: expect.objectContaining({
+          phase: 'strategy_change_required',
+        }),
+      }),
+      'mobile_controller_strategy_change_required',
+    );
+    expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
   });
 
   it('records stagnation signatures after successful tool execution', async () => {

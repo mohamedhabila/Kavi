@@ -72,6 +72,7 @@ export async function executeAgentControlGraphToolBatch(params: {
   emitPendingAsyncOperationsChange?: () => void;
   recordPerformanceMetrics: (metrics: Partial<AgentControlPerformance>, bucket: string) => void;
   controlGraphGoals?: ReadonlyArray<AgentGoal>;
+  toolCallBlockers?: ReadonlyMap<string, string>;
   agentRunId?: string;
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
@@ -107,6 +108,11 @@ export async function executeAgentControlGraphToolBatch(params: {
       (toolCall) => resolveRegisteredToolName(toolCall.name) === MOBILE_UI_ACTION_TOOL_NAME,
     );
   for (const [index, toolCall] of params.executableToolCalls.entries()) {
+    const policyBlocker = params.toolCallBlockers?.get(toolCall.id);
+    if (policyBlocker) {
+      workflowBlockerByCallId.set(toolCall.id, policyBlocker);
+      continue;
+    }
     if (hasMixedMobileControllerBoundary) {
       workflowBlockerByCallId.set(toolCall.id, MOBILE_CONTROLLER_ISOLATED_TURN_BLOCK);
       continue;

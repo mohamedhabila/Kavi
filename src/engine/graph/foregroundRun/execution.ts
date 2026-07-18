@@ -354,6 +354,9 @@ async function executeReservedForegroundConversationRun(
   const latestConversationForRequest = context.helpers.getConversation(conversationId);
   const persistedProjectionMessages =
     latestConversationForRequest?.messages ?? runConversation?.messages ?? [];
+  const mobileControllerRecoveryState = latestConversationForRequest?.agentRuns?.find(
+    (run) => run.id === bootstrapResult.trackedAgentRunId,
+  )?.controlGraph?.turnDirectives.mobileControllerRecovery;
   const { durableMessages: durableOrchestratorMessages, modelMessages: orchestratorMessages } =
     buildForegroundOrchestratorMessages({
       persistedMessages: persistedProjectionMessages,
@@ -362,6 +365,7 @@ async function executeReservedForegroundConversationRun(
         : {}),
       additionalInternalPrompt: options?.additionalUserPrompt,
       mobileController: options?.mobileController,
+      ...(mobileControllerRecoveryState ? { mobileControllerRecoveryState } : {}),
       createId: context.helpers.createId,
       timestamp: Date.now(),
     });

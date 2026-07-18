@@ -10,6 +10,7 @@ import type {
   AgentRunControlGraphToolCallRef,
   AgentRunControlGraphToolResultRef,
   AgentRunControlGraphTurnDirectives,
+  AgentRunMobileControllerRecoveryState,
 } from '../../types/agentRun';
 import {
   normalizeGoalCompletionPolicy,
@@ -65,6 +66,9 @@ const FORCED_TEXT_REASONS = new Set<AgentRunControlGraphForcedTextReason>([
   'yield_finalization',
 ]);
 
+const TOOL_EFFECT_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/u;
+const MAX_MOBILE_CONTROLLER_STALL_COUNT = 3;
+
 function normalizeTimestamp(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : Date.now();
 }
@@ -100,6 +104,64 @@ function normalizePositiveInteger(value: unknown): number | undefined {
 
   const normalized = Math.floor(value);
   return normalized > 0 ? normalized : undefined;
+}
+
+function normalizeMobileControllerRecoveryState(
+  value: AgentRunMobileControllerRecoveryState | undefined,
+): AgentRunMobileControllerRecoveryState | undefined {
+  if (!value || value.version !== 1 || !TOOL_EFFECT_DIGEST_PATTERN.test(value.strategyFingerprint)) {
+    return undefined;
+  }
+  const strategyFingerprint = value.strategyFingerprint;
+  const consecutiveStallCount = Math.min(
+    MAX_MOBILE_CONTROLLER_STALL_COUNT,
+    normalizeNonNegativeInteger(
+      'consecutiveStallCount' in value ? value.consecutiveStallCount : undefined,
+    ),
+  );
+  const toolCallId =
+    'toolCallId' in value ? normalizeOptionalText(value.toolCallId)?.slice(0, 512) : undefined;
+  const blockedStrategyFingerprint =
+    'blockedStrategyFingerprint' in value &&
+    TOOL_EFFECT_DIGEST_PATTERN.test(value.blockedStrategyFingerprint)
+      ? value.blockedStrategyFingerprint
+      : undefined;
+
+  if (value.phase === 'action_in_flight' && toolCallId) {
+    return { version: 1, phase: value.phase, strategyFingerprint, consecutiveStallCount, toolCallId };
+  }
+  if (value.phase === 'tracking' && consecutiveStallCount > 0) {
+    return { version: 1, phase: value.phase, strategyFingerprint, consecutiveStallCount };
+  }
+  if (
+    value.phase === 'strategy_change_required' &&
+    consecutiveStallCount === MAX_MOBILE_CONTROLLER_STALL_COUNT
+  ) {
+    return { version: 1, phase: value.phase, strategyFingerprint, consecutiveStallCount };
+  }
+  if (value.phase === 'recovery_in_flight' && blockedStrategyFingerprint && toolCallId) {
+    return {
+      version: 1,
+      phase: value.phase,
+      strategyFingerprint,
+      blockedStrategyFingerprint,
+      toolCallId,
+    };
+  }
+  if (
+    (value.phase === 'recovery_stalled' || value.phase === 'recovery_uncertain') &&
+    blockedStrategyFingerprint
+  ) {
+    return {
+      version: 1,
+      phase: value.phase,
+      strategyFingerprint,
+      blockedStrategyFingerprint,
+    };
+  }
+  return value.phase === 'outcome_uncertain'
+    ? { version: 1, phase: value.phase, strategyFingerprint }
+    : undefined;
 }
 
 export function normalizeAgentRunControlGraphPerformance(
@@ -408,6 +470,9 @@ export function normalizeAgentRunControlGraphTurnDirectives(
   const automaticRecoveryAttemptCount = normalizeNonNegativeInteger(
     directives?.automaticRecoveryAttemptCount,
   );
+  const mobileControllerRecovery = normalizeMobileControllerRecoveryState(
+    directives?.mobileControllerRecovery,
+  );
 
   return {
     forceFinalText,
@@ -419,6 +484,7 @@ export function normalizeAgentRunControlGraphTurnDirectives(
     ),
     ...(incompleteFinalTextContinuationPrefix ? { incompleteFinalTextContinuationPrefix } : {}),
     ...(automaticRecoveryAttemptCount > 0 ? { automaticRecoveryAttemptCount } : {}),
+    ...(mobileControllerRecovery ? { mobileControllerRecovery } : {}),
   };
 }
 

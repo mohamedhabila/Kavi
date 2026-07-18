@@ -230,6 +230,45 @@ export type AgentRunControlGraphForcedTextReason =
   | 'workflow_route_completed'
   | 'yield_finalization';
 
+export type AgentRunMobileControllerRecoveryState =
+  | Readonly<{
+      version: 1;
+      phase: 'action_in_flight';
+      strategyFingerprint: ToolEffectDigest;
+      consecutiveStallCount: number;
+      toolCallId: string;
+    }>
+  | Readonly<{
+      version: 1;
+      phase: 'tracking';
+      strategyFingerprint: ToolEffectDigest;
+      consecutiveStallCount: number;
+    }>
+  | Readonly<{
+      version: 1;
+      phase: 'strategy_change_required';
+      strategyFingerprint: ToolEffectDigest;
+      consecutiveStallCount: number;
+    }>
+  | Readonly<{
+      version: 1;
+      phase: 'recovery_in_flight';
+      strategyFingerprint: ToolEffectDigest;
+      blockedStrategyFingerprint: ToolEffectDigest;
+      toolCallId: string;
+    }>
+  | Readonly<{
+      version: 1;
+      phase: 'recovery_stalled' | 'recovery_uncertain';
+      strategyFingerprint: ToolEffectDigest;
+      blockedStrategyFingerprint: ToolEffectDigest;
+    }>
+  | Readonly<{
+      version: 1;
+      phase: 'outcome_uncertain';
+      strategyFingerprint: ToolEffectDigest;
+    }>;
+
 export interface AgentRunControlGraphTurnDirectives {
   forceFinalText: boolean;
   forcedTextReason?: AgentRunControlGraphForcedTextReason;
@@ -239,6 +278,8 @@ export interface AgentRunControlGraphTurnDirectives {
   incompleteFinalTextContinuationPrefix?: string;
   /** Persisted across automatic resumes so recovery cannot loop indefinitely. */
   automaticRecoveryAttemptCount?: number;
+  /** Content-free controller progress state; raw actions and observations remain ephemeral. */
+  mobileControllerRecovery?: AgentRunMobileControllerRecoveryState;
 }
 
 export interface AgentRunControlGraphAsyncWorkState {

@@ -587,6 +587,12 @@ describe('agent control graph', () => {
         requireWorkflowTool: false,
         maxTokensOverride: -10,
         incompleteFinalTextRecoveryCount: -1,
+        mobileControllerRecovery: {
+          version: 1,
+          phase: 'tracking',
+          strategyFingerprint: 'raw-action-data',
+          consecutiveStallCount: 99,
+        } as never,
       },
     });
 

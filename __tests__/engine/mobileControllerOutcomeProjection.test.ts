@@ -5,18 +5,19 @@ import { buildAgentRunMobileControllerAsyncOperation } from '../../src/services/
 import type { ToolMessageOutcome } from '../../src/engine/toolExecution/toolMessageOutcome';
 import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 import { makeTestAgentRun } from '../helpers/factories';
+import type { AgentRunMobileControllerRecoveryState } from '../../src/types/agentRun';
 
 const persisted = createPersistedMobileControllerHandoffFixture();
 const handoff = persisted.handoffRef;
 
-function waitingGraph() {
+function waitingGraph(recoveryState?: AgentRunMobileControllerRecoveryState) {
   const operation = buildAgentRunMobileControllerAsyncOperation({
     handoff,
     status: 'running',
     updatedAt: 40,
   });
   if (!operation) throw new Error('expected mobile controller async operation');
-  return reduceAgentControlGraph(undefined, [
+  const graph = reduceAgentControlGraph(undefined, [
     { type: 'MODEL_TURN_STARTED', iteration: 1, timestamp: 20 },
     {
       type: 'MODEL_TURN_COMPLETED',
@@ -31,6 +32,16 @@ function waitingGraph() {
       timestamp: 40,
     },
   ]);
+  return recoveryState
+    ? reduceAgentControlGraph(graph, [
+        {
+          type: 'TURN_DIRECTIVES_RECORDED',
+          directives: { mobileControllerRecovery: recoveryState },
+          reason: 'test recovery state',
+          timestamp: 40,
+        },
+      ])
+    : graph;
 }
 
 async function settlement(overrides: {
@@ -38,11 +49,19 @@ async function settlement(overrides: {
   executionState?: 'completed' | 'failed' | 'timed_out' | 'cancelled' | 'unknown';
   status?: ToolMessageOutcome['status'];
   verificationState?: 'unverified' | 'acknowledged' | 'verified';
+  observableDelta?: 'changed' | 'unchanged' | 'unknown';
 } = {}) {
   const executionState = overrides.executionState ?? 'completed';
   const effectState = overrides.effectState ?? 'applied';
   const verificationState = overrides.verificationState ?? 'verified';
-  const resultText = JSON.stringify({ executionState, effectState, verificationState });
+  const observableDelta = overrides.observableDelta ?? 'changed';
+  const resultText = JSON.stringify({
+    version: 1,
+    executionState,
+    effectState,
+    verificationState,
+    observableDelta,
+  });
   const receipt = await buildStructuredToolEffectReceipt({
     toolCallId: handoff.toolCallId,
     toolName: 'mobile_ui_action',
@@ -111,6 +130,55 @@ describe('mobile controller outcome graph projection', () => {
     });
 
     expect(result.kind).toBe('projected');
+  });
+
+  it('advances content-free recovery state from the exact correlated outcome', async () => {
+    const recoveryState: AgentRunMobileControllerRecoveryState = {
+      version: 1,
+      phase: 'action_in_flight',
+      strategyFingerprint: `sha256:${'b'.repeat(64)}`,
+      consecutiveStallCount: 1,
+      toolCallId: handoff.toolCallId,
+    };
+    const settled = await settlement({ observableDelta: 'unchanged' });
+
+    const result = projectMobileControllerOutcomeToAgentRun({
+      run: makeTestAgentRun({ status: 'running', controlGraph: waitingGraph(recoveryState) }),
+      handoff,
+      ...settled,
+      settledAt: 50,
+    });
+
+    expect(result.kind).toBe('projected');
+    if (result.kind !== 'projected') throw new Error(result.reason);
+    expect(result.controlGraph.turnDirectives.mobileControllerRecovery).toEqual({
+      version: 1,
+      phase: 'tracking',
+      strategyFingerprint: recoveryState.strategyFingerprint,
+      consecutiveStallCount: 2,
+    });
+  });
+
+  it('clears recovery pressure only after correlated observable progress', async () => {
+    const recoveryState: AgentRunMobileControllerRecoveryState = {
+      version: 1,
+      phase: 'recovery_in_flight',
+      strategyFingerprint: `sha256:${'b'.repeat(64)}`,
+      blockedStrategyFingerprint: `sha256:${'c'.repeat(64)}`,
+      toolCallId: handoff.toolCallId,
+    };
+    const settled = await settlement({ observableDelta: 'changed' });
+
+    const result = projectMobileControllerOutcomeToAgentRun({
+      run: makeTestAgentRun({ status: 'running', controlGraph: waitingGraph(recoveryState) }),
+      handoff,
+      ...settled,
+      settledAt: 50,
+    });
+
+    expect(result.kind).toBe('projected');
+    if (result.kind !== 'projected') throw new Error(result.reason);
+    expect(result.controlGraph.turnDirectives.mobileControllerRecovery).toBeUndefined();
   });
 
   it('rejects mismatched settlement identity without clearing pending work', async () => {
