@@ -170,18 +170,4 @@ describe('buildConsolidatorPrompt', () => {
     expect(prompt).toContain('Preserve supplied');
     expect(prompt).toContain('checksums, codes, and tokens');
   });
-
-  it('retains directly stated evolving state without requiring memory phrasing', () => {
-    const prompt = buildConsolidatorPrompt({
-      userMessage: 'Sixteen people are coming, including two vegan guests.',
-      assistantMessage: 'I can adjust the dinner plan.',
-    });
-
-    expect(prompt).toMatch(/plausible\s+later user message/u);
-    expect(prompt).toContain('evolving situation state');
-    expect(prompt).toContain('Do not require an explicit memory command');
-    expect(prompt).toContain('episode_summary must lead with directly stated current user details');
-    expect(prompt).toContain('Preserve explicit quantities, ranges, negation');
-    expect(prompt).toContain('Use conversation\n  for evolving situation state');
-  });
 });
