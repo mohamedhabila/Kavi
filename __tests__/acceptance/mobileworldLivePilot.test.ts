@@ -345,6 +345,8 @@ async function runPilotProcess(params: {
 }): Promise<ProcessResult> {
   const projectRoot = path.resolve(__dirname, '../..');
   const uv = process.env.MOBILEWORLD_UV?.trim() || 'uv';
+  const maxSteps = process.env.MOBILEWORLD_PILOT_MAX_STEPS?.trim() ||
+    (params.taskName ? '50' : '12');
   const benchmarkArgs = params.taskName
     ? ['eval', '--task', params.taskName, '--auto-retry', '0']
     : ['test', params.goal];
@@ -365,7 +367,7 @@ async function runPilotProcess(params: {
       '--log-file-root',
       params.outputDir,
       '--max-step',
-      process.env.MOBILEWORLD_PILOT_MAX_STEPS?.trim() || '12',
+      maxSteps,
       '--aw-host',
       process.env.MOBILEWORLD_AW_HOST?.trim() || 'http://127.0.0.1:6800',
       '--device',
@@ -639,7 +641,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
       task: {
         name: taskName,
         goal: session?.instruction ?? goal,
-        max_steps: Number(process.env.MOBILEWORLD_PILOT_MAX_STEPS || 12),
+        max_steps: Number(process.env.MOBILEWORLD_PILOT_MAX_STEPS || (taskName ? 50 : 12)),
       },
       result: {
         process_exit_code: processResult.code,

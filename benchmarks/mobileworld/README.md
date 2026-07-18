@@ -59,11 +59,11 @@ Set `MOBILEWORLD_DEVICE`, `MOBILEWORLD_AW_HOST`, or `MOBILEWORLD_PILOT_MAX_STEPS
 To exercise an upstream initializer and scorer on a local development AVD, set one canonical task class name:
 
 ```sh
-MOBILEWORLD_TASK=SetAlarmTask MOBILEWORLD_PILOT_MAX_STEPS=20 \
+MOBILEWORLD_TASK=SetAlarmTask MOBILEWORLD_PILOT_MAX_STEPS=50 \
   node ./scripts/mobileworld-pilot.js
 ```
 
-This mode creates a clean local `init_state` snapshot, then runs MobileWorld's unmodified task initializer and scorer. It is recorded as `local_official_task_diagnostic_custom_avd`, not an official score, because the AVD is not MobileWorld's prepared environment image.
+This mode creates a clean local `init_state` snapshot, then runs MobileWorld's unmodified task initializer and scorer. Task mode defaults to MobileWorld's documented 50-step submission budget; the environment variable is shown to keep the run manifest explicit. It is recorded as `local_official_task_diagnostic_custom_avd`, not an official score, because the AVD is not MobileWorld's prepared environment image.
 
 ## Full benchmark and official submission
 
