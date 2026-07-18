@@ -4,6 +4,7 @@ import {
   TOOL_EFFECT_VERIFICATION_STATES,
   TOOL_EXECUTION_STATES,
   type ToolEffectKind,
+  type ToolEffectDigest,
   type ToolEffectIdentitySelector,
   type ToolEffectResourceSelector,
   type ToolEffectOperationHandle,
@@ -408,6 +409,60 @@ export async function digestToolEffectRequest(argumentsText: string): Promise<`s
   return digestToolEffectText(canonical ?? argumentsText);
 }
 
+async function finalizeToolEffectReceipt(params: {
+  toolCallId: string;
+  toolName: string;
+  contractIdentity: ToolContractIdentity;
+  executionRunId: string;
+  dispatchRunId?: string;
+  transportState: ToolEffectTransportState;
+  effectOutcome: ResolvedEffectOutcome;
+  requestDigest: ToolEffectDigest;
+  resultDigest: ToolEffectDigest;
+  recordedAt: number;
+}): Promise<ToolEffectReceipt> {
+  const identityDigest = await digestToolEffectText(
+    JSON.stringify(
+      canonicalizeJsonValue({
+        domain: 'kavi.tool-effect-receipt.v2',
+        executionRunId: params.executionRunId,
+        dispatchRunId: params.dispatchRunId ?? null,
+        toolCallId: params.toolCallId,
+        toolName: params.toolName,
+        contractIdentity: params.contractIdentity,
+        transportState: params.transportState,
+        executionState: params.effectOutcome.executionState ?? null,
+        effectKind: params.effectOutcome.effectKind,
+        effectState: params.effectOutcome.effectState,
+        verificationState: params.effectOutcome.verificationState,
+        requestDigest: params.requestDigest,
+        resultDigest: params.resultDigest,
+        resource: params.effectOutcome.resource ?? null,
+        operationHandle: params.effectOutcome.operationHandle ?? null,
+        recordedAt: params.recordedAt,
+      }),
+    ),
+  );
+  const receipt = decodeToolEffectReceipt({
+    version: 2,
+    receiptId: `ter_${identityDigest.slice('sha256:'.length, 'sha256:'.length + 32)}`,
+    toolCallId: params.toolCallId,
+    toolName: params.toolName,
+    contractIdentity: params.contractIdentity,
+    executionRunId: params.executionRunId,
+    ...(params.dispatchRunId ? { dispatchRunId: params.dispatchRunId } : {}),
+    transportState: params.transportState,
+    ...params.effectOutcome,
+    requestDigest: params.requestDigest,
+    resultDigest: params.resultDigest,
+    recordedAt: params.recordedAt,
+  });
+  if (!receipt) {
+    throw new TypeError('Tool effect receipt inputs did not satisfy the durable receipt contract.');
+  }
+  return receipt;
+}
+
 export async function buildToolEffectReceipt(
   params: BuildToolEffectReceiptParams,
 ): Promise<ToolEffectReceipt> {
@@ -466,46 +521,71 @@ export async function buildToolEffectReceipt(
               effectState: 'unknown',
               verificationState: 'unverified',
             };
-  const identityDigest = await digestToolEffectText(
-    JSON.stringify(
-      canonicalizeJsonValue({
-        domain: 'kavi.tool-effect-receipt.v2',
-        executionRunId: params.executionRunId,
-        dispatchRunId: params.dispatchRunId ?? null,
-        toolCallId: params.toolCallId,
-        toolName,
-        contractIdentity,
-        transportState: params.transportState,
-        executionState: effectOutcome.executionState ?? null,
-        effectKind: effectOutcome.effectKind,
-        effectState: effectOutcome.effectState,
-        verificationState: effectOutcome.verificationState,
-        requestDigest,
-        resultDigest,
-        resource: effectOutcome.resource ?? null,
-        operationHandle: effectOutcome.operationHandle ?? null,
-        recordedAt,
-      }),
-    ),
-  );
-  const receipt = decodeToolEffectReceipt({
-    version: 2,
-    receiptId: `ter_${identityDigest.slice('sha256:'.length, 'sha256:'.length + 32)}`,
+  return finalizeToolEffectReceipt({
     toolCallId: params.toolCallId,
     toolName,
     contractIdentity,
     executionRunId: params.executionRunId,
     ...(params.dispatchRunId ? { dispatchRunId: params.dispatchRunId } : {}),
     transportState: params.transportState,
-    ...effectOutcome,
+    effectOutcome,
     requestDigest,
     resultDigest,
     recordedAt,
   });
-  if (!receipt) {
-    throw new TypeError('Tool effect receipt inputs did not satisfy the durable receipt contract.');
+}
+
+/** Build a receipt from a validated, code-owned structured runtime observation. */
+export async function buildStructuredToolEffectReceipt(params: {
+  toolCallId: string;
+  toolName: string;
+  executionRunId: string;
+  dispatchRunId?: string;
+  executionState?: ToolExecutionState;
+  effectKind: ToolEffectKind;
+  effectState: ToolEffectState;
+  verificationState: ToolEffectVerificationState;
+  requestDigest: ToolEffectDigest;
+  resultText: string;
+  recordedAt: number;
+}): Promise<ToolEffectReceipt> {
+  if (!Number.isSafeInteger(params.recordedAt) || params.recordedAt < 0) {
+    throw new TypeError('Tool effect receipt timestamp must be a non-negative safe integer.');
   }
-  return receipt;
+  if (
+    !isToolEffectStateCombinationValid({
+      transportState: 'returned',
+      effectState: params.effectState,
+      verificationState: params.verificationState,
+    })
+  ) {
+    throw new TypeError('Structured tool effect outcome is invalid.');
+  }
+  const contractIdentity = await buildToolContractIdentity(params.toolName);
+  if (!contractIdentity || contractIdentity.kind !== 'code_owned') {
+    throw new TypeError('Structured tool effect receipts require code-owned tool identity.');
+  }
+  const toolName = contractIdentity.toolName;
+  if (params.executionState && getCodeOwnedToolEffectContract(toolName)?.tracksExecution !== true) {
+    throw new TypeError('Structured tool effect execution state requires a tracked contract.');
+  }
+  return finalizeToolEffectReceipt({
+    toolCallId: params.toolCallId,
+    toolName,
+    contractIdentity,
+    executionRunId: params.executionRunId,
+    ...(params.dispatchRunId ? { dispatchRunId: params.dispatchRunId } : {}),
+    transportState: 'returned',
+    effectOutcome: {
+      ...(params.executionState ? { executionState: params.executionState } : {}),
+      effectKind: params.effectKind,
+      effectState: params.effectState,
+      verificationState: params.verificationState,
+    },
+    requestDigest: params.requestDigest,
+    resultDigest: await digestToolEffectText(params.resultText),
+    recordedAt: params.recordedAt,
+  });
 }
 
 async function rebuildToolEffectReceiptId(receipt: ToolEffectReceipt): Promise<string> {
@@ -542,6 +622,9 @@ export async function verifyToolEffectReceiptIntegrity(value: unknown): Promise<
   }
   if ((await rebuildToolEffectReceiptId(receipt)) !== receipt.receiptId) return false;
   if (receipt.contractIdentity.kind === 'runtime_external') return true;
+  if (receipt.executionState && getCodeOwnedToolEffectContract(receipt.toolName)?.tracksExecution !== true) {
+    return false;
+  }
   const currentIdentity = await buildCodeOwnedToolContractIdentity(receipt.toolName);
   return Boolean(
     currentIdentity &&

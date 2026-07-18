@@ -324,10 +324,6 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
   if (!isToolExecutionStateCombinationValid({ transportState, executionState })) {
     return undefined;
   }
-  if (executionState && effectKind !== 'compute.execute') {
-    return undefined;
-  }
-
   const resource =
     value.resource === undefined ? undefined : decodeResourceReference(value.resource);
   const operationHandle =

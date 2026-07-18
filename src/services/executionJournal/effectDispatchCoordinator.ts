@@ -302,7 +302,7 @@ function isDispatchCallbackResult<TDeferred extends object>(
   );
 }
 
-function classifyReceipt(
+export function classifyEffectDispatchReceipt(
   effectClass: ExecutionEffectClass,
   receipt: ToolEffectReceipt,
 ): {
@@ -383,7 +383,7 @@ export async function settleEffectDispatchCallback(
     });
     return { kind: 'reconciliation_required', reason: 'receipt_invalid' };
   }
-  const classification = classifyReceipt(input.effectClass, receipt);
+  const classification = classifyEffectDispatchReceipt(input.effectClass, receipt);
   if (!classification) {
     await markAmbiguousSafely(ports, {
       claim: input.claim,

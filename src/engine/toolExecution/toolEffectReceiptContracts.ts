@@ -140,6 +140,15 @@ function operational(effectKind: ToolEffectKind): CodeOwnedToolEffectContract {
   return Object.freeze({ effectMode: 'effectful', effectKind, completionMode: 'operational' });
 }
 
+function trackedOperational(effectKind: ToolEffectKind): CodeOwnedToolEffectContract {
+  return Object.freeze({
+    effectMode: 'effectful',
+    effectKind,
+    completionMode: 'operational',
+    tracksExecution: true,
+  });
+}
+
 function operationalExecution(
   effectKind: ToolEffectKind,
   outcomes: Readonly<Record<string, ToolEffectResultOutcome>>,
@@ -281,7 +290,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     sessions_spawn: operational('workflow.start'),
     sessions_send: operational('workflow.mutate'),
     sessions_cancel: operational('workflow.mutate'),
-    mobile_ui_action: operational('unknown'),
+    mobile_ui_action: trackedOperational('unknown'),
     workspace_delegate_task: operational('workflow.start'),
     skill__github__create_branch: operational('remote.mutate'),
     skill__github__commit_files: operational('remote.mutate'),

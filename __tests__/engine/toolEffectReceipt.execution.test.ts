@@ -1,4 +1,7 @@
-import { buildToolEffectReceipt as buildReceiptWithExecutionIdentity } from '../../src/engine/toolExecution/toolEffectReceipt';
+import {
+  buildToolEffectReceipt as buildReceiptWithExecutionIdentity,
+  verifyToolEffectReceiptIntegrity,
+} from '../../src/engine/toolExecution/toolEffectReceipt';
 import { getCodeOwnedToolEffectContract } from '../../src/engine/toolExecution/toolEffectReceiptContracts';
 import {
   appendToolEffectReceipt,
@@ -56,9 +59,12 @@ describe('ToolEffectReceipt code execution truth', () => {
     expect(
       decodeToolEffectReceipt({ ...completed, executionState: 'provider_claimed' }),
     ).toBeUndefined();
-    expect(
-      decodeToolEffectReceipt({ ...completed, effectKind: 'calendar.create' }),
-    ).toBeUndefined();
+    const structurallyValidButTampered = decodeToolEffectReceipt({
+      ...completed,
+      effectKind: 'calendar.create',
+    });
+    expect(structurallyValidButTampered).toBeDefined();
+    expect(await verifyToolEffectReceiptIntegrity(structurallyValidButTampered)).toBe(false);
     expect(
       decodeToolEffectReceipt({
         ...completed,
