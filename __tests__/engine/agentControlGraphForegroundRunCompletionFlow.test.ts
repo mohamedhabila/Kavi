@@ -11,12 +11,50 @@ function createTrackingState(
       outstandingSpawnedCount: 0,
     },
     pendingAsyncOperations: [],
+    awaitingUserInput: false,
     isRunning: true,
     ...overrides,
   };
 }
 
 describe('foregroundRun completion flow', () => {
+  it('keeps a clarification run open without completion review', async () => {
+    const appendConversationLog = jest.fn();
+    const enterAsyncMonitoringPhase = jest.fn();
+    const finalizeCompletion = jest.fn();
+    const reviewCompletion = jest.fn();
+
+    await handleForegroundRunCompletionFlow({
+      appendConversationLog,
+      currentAssistantMessage: {
+        role: 'assistant',
+        content: '何時に設定しますか？',
+        toolCalls: [],
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'request_clarification',
+        },
+      },
+      currentAssistantMessageId: 'assistant-question',
+      enterAsyncMonitoringPhase,
+      finalizeCompletion,
+      reviewCompletion,
+      trackedRunState: createTrackingState({ awaitingUserInput: true }),
+      turnSummary: 'Clarification delivered',
+    });
+
+    expect(enterAsyncMonitoringPhase).toHaveBeenCalledWith(
+      'Waiting for the user to answer the registered clarification.',
+      'Clarification requested',
+    );
+    expect(reviewCompletion).not.toHaveBeenCalled();
+    expect(finalizeCompletion).not.toHaveBeenCalled();
+    expect(appendConversationLog).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Clarification requested' }),
+    );
+  });
+
   it('finalizes normally when only detached background workers remain', async () => {
     const appendConversationLog = jest.fn();
     const enterAsyncMonitoringPhase = jest.fn();

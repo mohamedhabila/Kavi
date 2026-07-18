@@ -139,6 +139,12 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
     sessionEndReason?: string;
   }) => Promise<void>;
+  finishWaitingForUserInput: (params: {
+    graphEvent: Extract<AgentControlGraphEvent, { type: 'USER_INPUT_REQUIRED' }>;
+    content: string;
+    assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
+    sessionEndReason?: string;
+  }) => Promise<void>;
   workingMessages: Message[];
 }): Promise<{
   status: 'continued' | 'finalized' | 'waiting';
@@ -445,6 +451,10 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   }
 
   if (clarificationRequest) {
+    const requestedAfterUserMessageId = params.currentUserMessage?.id.trim();
+    if (!requestedAfterUserMessageId) {
+      throw new Error('request_clarification_current_user_message_missing');
+    }
     const requestUnderstanding = buildClarificationRequestUnderstanding({
       graphSnapshot: params.getGraphSnapshot(),
       request: clarificationRequest,
@@ -458,10 +468,13 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         },
       ]);
     }
-    await params.finishWithGraphTerminalEvent({
+    await params.finishWaitingForUserInput({
       graphEvent: {
-        type: 'FINALIZED',
-        reason: 'request_clarification',
+        type: 'USER_INPUT_REQUIRED',
+        requestedAfterUserMessageId,
+        requiredInformation: clarificationRequest.requiredInformation.map(
+          ({ key, requiredFor }) => ({ key, requiredFor }),
+        ),
       },
       content: clarificationRequest.question,
       assistantMetadata: buildAssistantMessageMetadata('final', {
@@ -471,7 +484,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       sessionEndReason: 'request_clarification',
     });
     return {
-      status: 'finalized',
+      status: 'waiting',
       lastPendingAsyncSignature: params.lastPendingAsyncSignature,
       workingMessages,
     };

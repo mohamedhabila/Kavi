@@ -147,6 +147,12 @@ export interface ExecuteAgentControlGraphToolTurnParams {
     assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
     sessionEndReason?: string;
   }) => Promise<void>;
+  finishWaitingForUserInput: (params: {
+    graphEvent: Extract<AgentControlGraphEvent, { type: 'USER_INPUT_REQUIRED' }>;
+    content: string;
+    assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
+    sessionEndReason?: string;
+  }) => Promise<void>;
   recordPerformanceMetrics: (metrics: Partial<AgentControlPerformance>, bucket: string) => void;
   emitPendingAsyncOperationsChange?: () => void;
   agentRunId?: string;
@@ -413,6 +419,7 @@ export async function executeAgentControlGraphToolTurn(
     recordPostToolFinalTextDirective: params.recordPostToolFinalTextDirective,
     getModelTurnBlocker: params.getModelTurnBlocker,
     finishWithGraphTerminalEvent: params.finishWithGraphTerminalEvent,
+    finishWaitingForUserInput: params.finishWaitingForUserInput,
     ...(params.publishMobileControllerHandoff
       ? { publishMobileControllerHandoff: params.publishMobileControllerHandoff }
       : {}),

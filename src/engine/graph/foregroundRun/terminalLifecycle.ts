@@ -81,7 +81,10 @@ export function createForegroundRunTerminalLifecycleController(params: {
     }
     // Parked and yielded turns are successful model checkpoints. Their open
     // work remains owned by the tracked run instead of being terminalized.
-    if (latestControlGraphState?.status === 'waiting_async') {
+    if (
+      latestControlGraphState?.status === 'waiting_async' ||
+      latestControlGraphState?.status === 'awaiting_user'
+    ) {
       return 'succeeded';
     }
     return resolveAgentControlGraphTerminalFailure({
@@ -131,7 +134,11 @@ export function createForegroundRunTerminalLifecycleController(params: {
     completionPromise = params.completeOnce(async () => {
       params.flushPendingSurfacedOutputs();
       params.ensureAssistantTurn();
-      if (resolveCompletedStatus() === 'succeeded') {
+      if (
+        resolveCompletedStatus() === 'succeeded' &&
+        latestControlGraphState?.status !== 'waiting_async' &&
+        latestControlGraphState?.status !== 'awaiting_user'
+      ) {
         params.markCurrentAssistantPendingReview({
           currentAssistantMessageId: params.getCurrentAssistantMessageId(),
           visibleContent: params.getVisibleAssistantContent(),

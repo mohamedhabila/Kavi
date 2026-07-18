@@ -42,6 +42,7 @@ function isTrackedRunContinuing(run: AgentRun | undefined): boolean {
     run?.status === 'running' &&
     (run.controlGraph?.status === 'yielded' ||
       run.controlGraph?.status === 'waiting_async' ||
+      run.controlGraph?.status === 'awaiting_user' ||
       run.controlGraph?.asyncWork.awaitingBackgroundWorkers === true ||
       (run.controlGraph?.asyncWork.pendingOperations.length ?? 0) > 0)
   );

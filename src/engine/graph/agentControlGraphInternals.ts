@@ -87,6 +87,7 @@ export function buildTerminalAssignment(
     expectedToolCalls: [],
     observedToolResults: [],
     pendingAsyncCount: 0,
+    pendingUserInput: undefined,
     asyncWork: normalizeAgentRunControlGraphAsyncWorkState({
       awaitingBackgroundWorkers: false,
       pendingOperations: [],

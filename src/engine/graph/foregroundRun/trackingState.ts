@@ -14,6 +14,7 @@ export type ForegroundRunTrackingState = {
     outstandingSpawnedCount: number;
   };
   pendingAsyncOperations: AgentRunAsyncOperation[];
+  awaitingUserInput: boolean;
   isRunning: boolean;
 };
 
@@ -31,6 +32,7 @@ export function buildForegroundRunTrackingState(params: {
         outstandingSpawnedCount: Math.max(0, params.recordedSpawnedSubAgents),
       },
       pendingAsyncOperations: params.fallbackPendingAsyncOperations,
+      awaitingUserInput: false,
       isRunning: false,
     };
   }
@@ -43,6 +45,7 @@ export function buildForegroundRunTrackingState(params: {
         outstandingSpawnedCount: Math.max(0, params.recordedSpawnedSubAgents),
       },
       pendingAsyncOperations: params.fallbackPendingAsyncOperations,
+      awaitingUserInput: false,
       isRunning: false,
     };
   }
@@ -62,6 +65,7 @@ export function buildForegroundRunTrackingState(params: {
         outstandingSpawnedCount: Math.max(0, params.recordedSpawnedSubAgents),
       },
       pendingAsyncOperations,
+      awaitingUserInput: false,
       isRunning: false,
     };
   }
@@ -87,6 +91,7 @@ export function buildForegroundRunTrackingState(params: {
       pendingAsyncOperations.length > 0
         ? pendingAsyncOperations
         : params.fallbackPendingAsyncOperations,
+    awaitingUserInput: targetRun.controlGraph?.status === 'awaiting_user',
     isRunning: targetRun.status === 'running',
   };
 }

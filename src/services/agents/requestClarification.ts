@@ -54,8 +54,13 @@ export type RequestClarificationToolResult = Readonly<{
   status: 'clarification_requested';
   question: string;
   requiredInformation: ReadonlyArray<
-    RequiredRequestInformation &
-      Readonly<{ semanticRole: RequestClarificationSemanticRole }>
+    Readonly<{
+      key: RequiredRequestInformation['key'];
+      authority: 'user';
+      requiredFor: Exclude<RequiredInformationPurpose, 'authorization'>;
+      resolution: 'unresolved';
+      semanticRole: RequestClarificationSemanticRole;
+    }>
   >;
 }>;
 

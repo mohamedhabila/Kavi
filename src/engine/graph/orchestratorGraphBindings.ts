@@ -59,6 +59,8 @@ export function createOrchestratorGraphBindings(
       graphRuntime.finishWithGraphFinalCandidateEvent(finalParams),
     finishWithGraphTerminalEvent: (terminalParams) =>
       graphRuntime.finishWithGraphTerminalEvent(terminalParams),
+    finishWaitingForUserInput: (waitingParams) =>
+      graphRuntime.finishWaitingForUserInput(waitingParams),
     getCurrentTurnDirectives: (): AgentControlTurnDirectives =>
       graphRuntime.getCurrentTurnDirectives(),
     getGraphSnapshot: () => graphRuntime.snapshot,

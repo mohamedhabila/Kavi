@@ -50,6 +50,7 @@ export const E2E_PUBLIC_GRAPH_STATUSES = completeEnum<AgentRunControlGraphStatus
   'awaiting_tool_results',
   'recovering',
   'waiting_async',
+  'awaiting_user',
   'awaiting_review',
   'blocked',
   'finalized',

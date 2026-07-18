@@ -176,6 +176,7 @@ export type AgentRunControlGraphStatus =
   | 'awaiting_tool_results'
   | 'recovering'
   | 'waiting_async'
+  | 'awaiting_user'
   | 'awaiting_review'
   | 'blocked'
   | 'finalized'
@@ -288,6 +289,17 @@ export interface AgentRunControlGraphAsyncWorkState {
   updatedAt: number;
 }
 
+export interface AgentRunControlGraphRequiredUserInformation {
+  key: string;
+  requiredFor: 'understanding' | 'execution';
+}
+
+export interface AgentRunControlGraphPendingUserInput {
+  requestedAfterUserMessageId: string;
+  requiredInformation: AgentRunControlGraphRequiredUserInformation[];
+  updatedAt: number;
+}
+
 export interface AgentRunControlGraphState {
   version: number;
   status: AgentRunControlGraphStatus;
@@ -302,6 +314,7 @@ export interface AgentRunControlGraphState {
   activeTaskId?: string;
   goals?: AgentGoal[];
   requestUnderstanding?: RequestUnderstandingSnapshot;
+  pendingUserInput?: AgentRunControlGraphPendingUserInput;
   asyncWork: AgentRunControlGraphAsyncWorkState;
   performance: AgentRunControlGraphPerformance;
   turnDirectives: AgentRunControlGraphTurnDirectives;

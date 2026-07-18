@@ -122,6 +122,7 @@ export function buildBaseParams() {
     lastPendingAsyncSignature: '',
     contextWindow: 20000,
     conversationId: 'conv-test',
+    currentUserMessage: { id: 'user-test', text: 'Test request' },
     compactionEngine: null,
     livingMemory: null,
     onCompaction: undefined,
@@ -141,6 +142,7 @@ export function buildBaseParams() {
     recordPostToolFinalTextDirective: jest.fn(() => false),
     getModelTurnBlocker: jest.fn(() => undefined),
     finishWithGraphTerminalEvent: jest.fn().mockResolvedValue(undefined),
+    finishWaitingForUserInput: jest.fn().mockResolvedValue(undefined),
     getGraphSnapshot: jest.fn().mockReturnValue({ goals: [] }),
     workingMessages,
   };

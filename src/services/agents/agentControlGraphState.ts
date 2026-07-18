@@ -5,6 +5,7 @@ import type {
   AgentRunControlGraphAsyncWorkState,
   AgentRunControlGraphForcedTextReason,
   AgentRunControlGraphPerformance,
+  AgentRunControlGraphPendingUserInput,
   AgentRunControlGraphState,
   AgentRunControlGraphStatus,
   AgentRunControlGraphToolCallRef,
@@ -26,6 +27,10 @@ import {
   normalizeAgentRunAsyncOperations,
 } from './agentRunAsyncState';
 import { normalizeRequestUnderstandingSnapshot } from './requestUnderstandingProjection';
+import {
+  isRequestInformationKey,
+  MAX_REQUEST_CLARIFICATION_FIELDS,
+} from './requestClarification';
 
 export const AGENT_RUN_CONTROL_GRAPH_VERSION = 1;
 export const MAX_AGENT_RUN_CONTROL_GRAPH_AUDIT_EVENTS = 128;
@@ -43,6 +48,7 @@ const CONTROL_GRAPH_STATUSES = new Set<AgentRunControlGraphStatus>([
   'awaiting_tool_results',
   'recovering',
   'waiting_async',
+  'awaiting_user',
   'awaiting_review',
   'blocked',
   'finalized',
@@ -83,6 +89,45 @@ function normalizeOptionalText(value: unknown): string | undefined {
 
 function normalizeOptionalNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function normalizePendingUserInput(
+  value: Partial<AgentRunControlGraphPendingUserInput> | undefined,
+): AgentRunControlGraphPendingUserInput | undefined {
+  const requestedAfterUserMessageId = normalizeOptionalText(
+    value?.requestedAfterUserMessageId,
+  );
+  if (!requestedAfterUserMessageId || !Array.isArray(value?.requiredInformation)) {
+    return undefined;
+  }
+  const requiredInformation = value.requiredInformation
+    .map((entry) => {
+      if (
+        !entry ||
+        !isRequestInformationKey(entry.key) ||
+        (entry.requiredFor !== 'understanding' && entry.requiredFor !== 'execution')
+      ) {
+        return undefined;
+      }
+      return { key: entry.key, requiredFor: entry.requiredFor };
+    })
+    .filter(
+      (entry): entry is AgentRunControlGraphPendingUserInput['requiredInformation'][number] =>
+        entry !== undefined,
+    );
+  if (
+    requiredInformation.length === 0 ||
+    requiredInformation.length > MAX_REQUEST_CLARIFICATION_FIELDS ||
+    requiredInformation.length !== value.requiredInformation.length ||
+    new Set(requiredInformation.map((entry) => entry.key)).size !== requiredInformation.length
+  ) {
+    return undefined;
+  }
+  return {
+    requestedAfterUserMessageId,
+    requiredInformation,
+    updatedAt: normalizeTimestamp(value.updatedAt),
+  };
 }
 
 function isDefinedText(value: string | undefined): value is string {
@@ -511,6 +556,7 @@ export function createInitialAgentRunControlGraphState(
     state.sessionActivatedToolNames,
   );
   const requestUnderstanding = normalizeRequestUnderstandingSnapshot(state.requestUnderstanding);
+  const pendingUserInput = normalizePendingUserInput(state.pendingUserInput);
 
   return {
     version: AGENT_RUN_CONTROL_GRAPH_VERSION,
@@ -528,6 +574,7 @@ export function createInitialAgentRunControlGraphState(
     ...(activeTaskId ? { activeTaskId } : {}),
     ...(goals.length > 0 ? { goals } : {}),
     ...(requestUnderstanding ? { requestUnderstanding } : {}),
+    ...(pendingUserInput ? { pendingUserInput } : {}),
     asyncWork,
     performance,
     turnDirectives,
@@ -570,7 +617,11 @@ export function prepareAgentRunControlGraphForResume(
     return undefined;
   }
 
-  if (!isAgentRunControlGraphTerminal(normalized) && normalized.status !== 'awaiting_review') {
+  if (
+    !isAgentRunControlGraphTerminal(normalized) &&
+    normalized.status !== 'awaiting_review' &&
+    normalized.status !== 'awaiting_user'
+  ) {
     return normalized;
   }
 

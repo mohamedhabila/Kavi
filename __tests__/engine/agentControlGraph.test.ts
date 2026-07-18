@@ -14,6 +14,44 @@ import {
 } from '../../src/services/agents/agentControlGraphState';
 
 describe('agent control graph', () => {
+  it('parks a clarification as nonterminal user input and clears it only on resume', () => {
+    const waiting = reduceAgentControlGraph(createInitialAgentControlGraphSnapshot(), [
+      {
+        type: 'USER_INPUT_REQUIRED',
+        requestedAfterUserMessageId: 'user-1',
+        requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+        timestamp: 100,
+      },
+    ]);
+
+    expect(waiting).toEqual(
+      expect.objectContaining({
+        status: 'awaiting_user',
+        pendingUserInput: {
+          requestedAfterUserMessageId: 'user-1',
+          requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+          updatedAt: 100,
+        },
+      }),
+    );
+    expect(isAgentRunControlGraphTerminal(waiting)).toBe(false);
+    expect(getAgentControlGraphModelTurnBlocker(waiting)).toContain('waiting for the user');
+    expect(selectAgentControlGraphRuntimeCommand(waiting).type).toBe('blocked');
+
+    const resumed = prepareAgentRunControlGraphForResume(waiting, { updatedAt: 101 });
+    expect(resumed).toEqual(
+      expect.objectContaining({
+        status: 'ready',
+        pendingUserInput: waiting.pendingUserInput,
+      }),
+    );
+    const started = reduceAgentControlGraph(resumed, [
+      { type: 'MODEL_TURN_STARTED', iteration: 2, timestamp: 102 },
+    ]);
+    expect(started.status).toBe('model_turn');
+    expect(started.pendingUserInput).toBeUndefined();
+  });
+
   it('blocks a new model turn until every expected tool result is observed', () => {
     let snapshot = createInitialAgentControlGraphSnapshot({ updatedAt: 1000 });
 

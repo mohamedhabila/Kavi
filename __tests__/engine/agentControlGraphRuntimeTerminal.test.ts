@@ -50,6 +50,95 @@ describe('agentControlGraphRuntimeTerminal', () => {
     mockedEmitSessionEvent.mockResolvedValue(undefined);
   });
 
+  it('delivers a clarification while leaving the graph nonterminal', async () => {
+    let snapshot = createInitialAgentControlGraphSnapshot();
+    const runtimeCallbacks = callbacks();
+    const applyEvents = jest.fn((events) => {
+      snapshot = reduceAgentControlGraph(snapshot, events);
+      return snapshot;
+    });
+    const terminal = createAgentControlGraphRuntimeTerminal({
+      callbacks: runtimeCallbacks,
+      conversationId: 'conv-1',
+      agentRunId: 'run-1',
+      applyEvents,
+    });
+
+    await terminal.finishWaitingForUserInput({
+      graphEvent: {
+        type: 'USER_INPUT_REQUIRED',
+        requestedAfterUserMessageId: 'user-1',
+        requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+      },
+      content: 'What time should I use?',
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'request_clarification',
+      },
+      sessionEndReason: 'request_clarification',
+    });
+
+    expect(snapshot.status).toBe('awaiting_user');
+    expect(runtimeCallbacks.onAssistantMessage).toHaveBeenCalledWith(
+      'What time should I use?',
+      [],
+      undefined,
+      expect.objectContaining({ finishReason: 'request_clarification' }),
+    );
+    expect(mockedEmitSessionEvent).toHaveBeenCalledWith('end', {
+      conversationId: 'conv-1',
+      reason: 'request_clarification',
+      agentRunId: 'run-1',
+    });
+    expect(runtimeCallbacks.onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('rolls back a clarification wait when assistant delivery fails', async () => {
+    let snapshot = createInitialAgentControlGraphSnapshot();
+    const deliveryError = new Error('assistant persistence failed');
+    const runtimeCallbacks = callbacks(
+      jest.fn(() => {
+        throw deliveryError;
+      }),
+    );
+    const applyEvents = jest.fn((events) => {
+      snapshot = reduceAgentControlGraph(snapshot, events);
+      return snapshot;
+    });
+    const terminal = createAgentControlGraphRuntimeTerminal({
+      callbacks: runtimeCallbacks,
+      conversationId: 'conv-1',
+      applyEvents,
+    });
+
+    await expect(
+      terminal.finishWaitingForUserInput({
+        graphEvent: {
+          type: 'USER_INPUT_REQUIRED',
+          requestedAfterUserMessageId: 'user-1',
+          requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+        },
+        content: 'What time should I use?',
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'request_clarification',
+        },
+      }),
+    ).rejects.toBe(deliveryError);
+
+    expect(snapshot.status).toBe('ready');
+    expect(snapshot.pendingUserInput).toBeUndefined();
+    expect(snapshot.audit.at(-1)).toEqual(
+      expect.objectContaining({
+        type: 'USER_INPUT_WAIT_CANCELLED',
+        detail: 'delivery_boundary_failed',
+      }),
+    );
+    expect(runtimeCallbacks.onDone).not.toHaveBeenCalled();
+  });
+
   it('warns and still completes failure callbacks when the terminal end event fails', async () => {
     const endEventError = new Error('event bus unavailable');
     const originalError = new Error('primary failure');
@@ -80,7 +169,7 @@ describe('agentControlGraphRuntimeTerminal', () => {
       reason: 'error',
     });
     expect(warn).toHaveBeenCalledWith(
-      'Agent control graph terminal session end event failed',
+      'Agent control graph session end event failed',
       endEventError,
     );
     expect(callbacks.onError).toHaveBeenCalledWith(originalError);

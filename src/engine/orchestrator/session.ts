@@ -353,6 +353,8 @@ export async function runOrchestratorGraphSession(params: {
             ? 'cancelled'
             : graphSnapshot.status === 'waiting_async'
               ? 'waiting'
+              : graphSnapshot.status === 'awaiting_user'
+                ? 'waiting'
               : 'failed';
   return {
     terminalDisposition,

@@ -87,6 +87,18 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
           assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
       });
     },
+    finishWaitingForUserInput: async (waitingParams) => {
+      assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+      return params.iterationParams.graph.finishWaitingForUserInput({
+        ...waitingParams,
+        assistantMetadata: attachModelTurnMemoryAttribution(
+          waitingParams.assistantMetadata,
+          params.memoryRetrievalEventId,
+        ),
+        beforeAssistantDelivery: () =>
+          assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
+      });
+    },
     recordPerformanceMetrics: params.iterationParams.graph.recordPerformanceMetrics,
     emitPendingAsyncOperationsChange: params.iterationParams.emitPendingAsyncOperationsChange,
     agentRunId: params.iterationParams.agentRunId,

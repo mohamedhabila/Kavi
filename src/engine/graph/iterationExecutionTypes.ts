@@ -109,6 +109,13 @@ export type GraphIterationBindings = {
     providerReplay?: MessageProviderReplay;
     sessionEndReason?: string;
   }) => Promise<void>;
+  finishWaitingForUserInput: (params: {
+    assistantMetadata: AssistantMessageMetadata;
+    beforeAssistantDelivery?: () => void;
+    content: string;
+    graphEvent: Extract<AgentControlGraphEvent, { type: 'USER_INPUT_REQUIRED' }>;
+    sessionEndReason?: string;
+  }) => Promise<void>;
   getCurrentTurnDirectives: () => AgentControlTurnDirectives;
   getGraphSnapshot: () => AgentControlGraphSnapshot;
   publishWorkflowToolResultProgressToAgentControlGraph: (params: {

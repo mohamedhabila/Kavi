@@ -31,6 +31,17 @@ export async function handleForegroundRunCompletionFlow(params: {
   turnSummary: string;
 }) {
   if (!params.forceTerminalReview) {
+    if (params.trackedRunState.awaitingUserInput) {
+      const detail = 'Waiting for the user to answer the registered clarification.';
+      params.enterAsyncMonitoringPhase(detail, 'Clarification requested');
+      params.appendConversationLog({
+        kind: 'state',
+        level: 'warning',
+        title: 'Clarification requested',
+        detail: `${params.turnSummary} · ${detail}`,
+      });
+      return;
+    }
     const openWorkCloseoutEffect = buildAgentControlGraphOpenWorkCloseoutEffect({
       currentAssistantMessage: params.currentAssistantMessage,
       decision: buildAgentControlGraphOpenWorkCloseoutDecision({

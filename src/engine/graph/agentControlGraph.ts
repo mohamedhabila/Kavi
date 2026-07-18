@@ -74,6 +74,9 @@ export function getAgentControlGraphModelTurnBlocker(
   if (snapshot.status === 'awaiting_review') {
     return 'Agent control graph is waiting for final review of the current candidate.';
   }
+  if (snapshot.status === 'awaiting_user') {
+    return 'Agent control graph is waiting for the user to answer a registered clarification.';
+  }
 
   const conflictedConstraintGoal = snapshot.goals?.find(
     (goal) =>

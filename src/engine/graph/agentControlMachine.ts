@@ -118,6 +118,10 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
               actions: 'recordAsyncWaiting',
             },
           ],
+          USER_INPUT_REQUIRED: {
+            target: 'awaiting_user',
+            actions: 'recordUserInputRequired',
+          },
           FINALIZATION_HELD: {
             target: 'recovering',
             actions: 'recordFinalizationHold',
@@ -262,6 +266,15 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
               actions: 'recordAsyncWaiting',
             },
           ],
+          ...TERMINAL_TRANSITIONS,
+        },
+      },
+      awaiting_user: {
+        on: {
+          USER_INPUT_WAIT_CANCELLED: {
+            target: 'ready',
+            actions: 'recordUserInputWaitCancelled',
+          },
           ...TERMINAL_TRANSITIONS,
         },
       },

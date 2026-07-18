@@ -3,6 +3,7 @@ import type {
   AgentRunAsyncOperation,
   AgentRunControlGraphAuditEvent,
   AgentRunControlGraphPerformance,
+  AgentRunControlGraphRequiredUserInformation,
   AgentRunControlGraphState,
   AgentRunControlGraphStatus,
   AgentRunControlGraphToolCallRef,
@@ -146,6 +147,17 @@ export type AgentControlGraphEvent =
       pendingAsyncCount: number;
       pendingOperations?: AgentRunAsyncOperation[];
       awaitingBackgroundWorkers?: boolean;
+      timestamp?: number;
+    }
+  | {
+      type: 'USER_INPUT_REQUIRED';
+      requestedAfterUserMessageId: string;
+      requiredInformation: AgentRunControlGraphRequiredUserInformation[];
+      timestamp?: number;
+    }
+  | {
+      type: 'USER_INPUT_WAIT_CANCELLED';
+      reason: string;
       timestamp?: number;
     }
   | {

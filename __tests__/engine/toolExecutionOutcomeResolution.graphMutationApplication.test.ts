@@ -667,7 +667,7 @@ describe('tool execution outcome resolution', () => {
     expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
   });
 
-  it('records structured missing information and finalizes directly with the registered question', async () => {
+  it('records structured missing information and waits for the user with the registered question', async () => {
     const params = buildBaseParams();
     const clarification: RequestClarification = {
       fields: [
@@ -722,14 +722,19 @@ describe('tool execution outcome resolution', () => {
 
     const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
 
-    expect(result.status).toBe('finalized');
+    expect(result.status).toBe('waiting');
     expect(params.publishWorkflowToolResultProgress).not.toHaveBeenCalled();
     expect(params.recordPostToolFinalTextDirective).not.toHaveBeenCalled();
-    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
+    expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
+    expect(params.finishWaitingForUserInput).toHaveBeenCalledWith(
       expect.objectContaining({
         graphEvent: {
-          type: 'FINALIZED',
-          reason: 'request_clarification',
+          type: 'USER_INPUT_REQUIRED',
+          requestedAfterUserMessageId: 'user-test',
+          requiredInformation: [
+            { key: 'recipient', requiredFor: 'execution' },
+            { key: 'message_body', requiredFor: 'execution' },
+          ],
         },
         content: clarification.question,
         sessionEndReason: 'request_clarification',

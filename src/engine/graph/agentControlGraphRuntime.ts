@@ -149,6 +149,7 @@ export function createAgentControlGraphRuntime(params: {
     },
     finishWithGraphTerminalEvent: terminalRuntime.finishWithGraphTerminalEvent,
     finishWithGraphFinalCandidateEvent: terminalRuntime.finishWithGraphFinalCandidateEvent,
+    finishWaitingForUserInput: terminalRuntime.finishWaitingForUserInput,
     finishExistingTerminalSession: terminalRuntime.finishExistingTerminalSession,
     finishFailure: terminalRuntime.finishFailure,
     finishCancelled: terminalRuntime.finishCancelled,

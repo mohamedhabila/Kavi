@@ -18,7 +18,7 @@ export function createAgentControlGraphRuntimeTerminal(params: {
   signal?: AbortController;
   warn?: (message: string, error: unknown) => void;
 }) {
-  const emitTerminalSessionEnd = async (reason?: string): Promise<void> => {
+  const emitSessionEnd = async (reason?: string): Promise<void> => {
     try {
       await emitSessionEvent('end', {
         conversationId: params.conversationId,
@@ -27,7 +27,7 @@ export function createAgentControlGraphRuntimeTerminal(params: {
         executionSignal: params.signal,
       });
     } catch (error: unknown) {
-      params.warn?.('Agent control graph terminal session end event failed', error);
+      params.warn?.('Agent control graph session end event failed', error);
     }
   };
 
@@ -116,7 +116,7 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       params.applyEvents([args.graphEvent]);
     }
     params.callbacks.onStateChange(args.state);
-    await emitTerminalSessionEnd(args.sessionEndReason);
+    await emitSessionEnd(args.sessionEndReason);
     if (args.error) {
       params.callbacks.onError(args.error);
     }
@@ -168,12 +168,48 @@ export function createAgentControlGraphRuntimeTerminal(params: {
         beforeAssistantDelivery: args.beforeAssistantDelivery,
       });
       params.callbacks.onStateChange('idle');
-      await emitTerminalSessionEnd(args.sessionEndReason);
+      await emitSessionEnd(args.sessionEndReason);
+      params.callbacks.onDone();
+    },
+    async finishWaitingForUserInput(args: {
+      graphEvent: Extract<AgentControlGraphEvent, { type: 'USER_INPUT_REQUIRED' }>;
+      content: string;
+      assistantMetadata: AssistantMessageMetadata;
+      sessionEndReason?: string;
+      beforeAssistantDelivery?: () => void;
+    }): Promise<void> {
+      let waitStaged = false;
+      try {
+        args.beforeAssistantDelivery?.();
+        const waitingState = params.applyEvents([args.graphEvent]);
+        if (waitingState.status !== 'awaiting_user') {
+          throw new Error('agent_control_graph_user_input_wait_transition_failed');
+        }
+        waitStaged = true;
+        args.beforeAssistantDelivery?.();
+        params.callbacks.onAssistantMessage(args.content, [], undefined, args.assistantMetadata);
+      } catch (error: unknown) {
+        if (waitStaged) {
+          try {
+            params.applyEvents([
+              {
+                type: 'USER_INPUT_WAIT_CANCELLED',
+                reason: 'delivery_boundary_failed',
+              },
+            ]);
+          } catch (rollbackError: unknown) {
+            params.warn?.('Agent control graph user-input wait rollback failed', rollbackError);
+          }
+        }
+        throw error;
+      }
+      params.callbacks.onStateChange('idle');
+      await emitSessionEnd(args.sessionEndReason);
       params.callbacks.onDone();
     },
     async finishExistingTerminalSession(sessionEndReason?: string): Promise<void> {
       params.callbacks.onStateChange('idle');
-      await emitTerminalSessionEnd(sessionEndReason);
+      await emitSessionEnd(sessionEndReason);
       params.callbacks.onDone();
     },
     async finishFailure(error: Error): Promise<void> {

@@ -33,6 +33,7 @@ export function createAgentControlGraphActions() {
       return {
         iteration: event.iteration,
         lastModelToolNames: Array.from(new Set(event.toolNames ?? [])),
+        pendingUserInput: undefined,
         finalizationHoldReason: undefined,
         updatedAt: getTimestamp(event),
         audit: appendAudit(context.audit, event),
@@ -202,6 +203,39 @@ export function createAgentControlGraphActions() {
             event,
             `integrity:${requestUnderstanding.integrity}`,
           ),
+        };
+      },
+    ),
+    recordUserInputRequired: assignAgentControlGraph(
+      ({ context, event }: AgentControlGraphAssignArgs) => {
+        if (event.type !== 'USER_INPUT_REQUIRED') return {};
+        const timestamp = getTimestamp(event);
+        return {
+          pendingUserInput: {
+            requestedAfterUserMessageId: event.requestedAfterUserMessageId,
+            requiredInformation: event.requiredInformation.map((entry) => ({ ...entry })),
+            updatedAt: timestamp,
+          },
+          expectedToolCalls: [],
+          observedToolResults: [],
+          finalizationHoldReason: undefined,
+          terminalReason: undefined,
+          updatedAt: timestamp,
+          audit: appendAudit(
+            context.audit,
+            event,
+            `${event.requiredInformation.length} user-owned field(s) required`,
+          ),
+        };
+      },
+    ),
+    recordUserInputWaitCancelled: assignAgentControlGraph(
+      ({ context, event }: AgentControlGraphAssignArgs) => {
+        if (event.type !== 'USER_INPUT_WAIT_CANCELLED') return {};
+        return {
+          pendingUserInput: undefined,
+          updatedAt: getTimestamp(event),
+          audit: appendAudit(context.audit, event, event.reason),
         };
       },
     ),
