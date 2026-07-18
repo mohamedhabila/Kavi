@@ -57,7 +57,6 @@ type JsonObject = Record<string, unknown>;
 type BridgeSession = {
   agentRunId?: string;
   capability: Awaited<ReturnType<typeof buildMobileWorldControllerCapability>>;
-  controllerAppIdentifiers: string[];
   instruction: string;
   lastEventKind?: MobileWorldBridgeEvent['kind'];
   lastRunDiagnostics?: JsonObject;
@@ -114,18 +113,18 @@ function requirePayloadInteger(payload: JsonObject, field: string): number {
   return Number(value);
 }
 
-function requireControllerAppIdentifiers(payload: JsonObject): string[] {
-  const value = payload.controller_app_identifiers;
+function requireControllerAppIds(payload: JsonObject): string[] {
+  const value = payload.controller_app_ids;
   if (!Array.isArray(value) || value.length === 0 || value.length > 256) {
-    throw new Error('bridge_controller_app_identifiers_invalid');
+    throw new Error('bridge_controller_app_ids_invalid');
   }
-  const identifiers = value.map((entry) =>
+  const appIds = value.map((entry) =>
     typeof entry === 'string' && entry.trim().length <= 100 ? entry.trim() : '',
   );
-  if (identifiers.some((entry) => !entry) || new Set(identifiers).size !== identifiers.length) {
-    throw new Error('bridge_controller_app_identifiers_invalid');
+  if (appIds.some((entry) => !entry) || new Set(appIds).size !== appIds.length) {
+    throw new Error('bridge_controller_app_ids_invalid');
   }
-  return identifiers;
+  return appIds;
 }
 
 function readPriorEventObservation(payload: JsonObject): PriorEventObservation | null {
@@ -274,7 +273,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
             throw new Error('bridge_session_id_invalid');
           }
           if (action === 'reset') {
-            const controllerAppIdentifiers = requireControllerAppIdentifiers(payload);
+            const controllerAppIds = requireControllerAppIds(payload);
             const instruction = requirePayloadText(payload, 'instruction');
             const scaleFactor = requirePayloadInteger(payload, 'scale_factor');
             if (scaleFactor !== 1_000) throw new Error('bridge_scale_factor_unsupported');
@@ -314,10 +313,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
             requestChatStorePersistenceCheckpoint(0);
             await flushChatStorePersistenceNow();
             sessions.set(sessionId, {
-              capability: await buildMobileWorldControllerCapability(
-                controllerAppIdentifiers,
-              ),
-              controllerAppIdentifiers,
+              capability: await buildMobileWorldControllerCapability(controllerAppIds),
               instruction,
               rootConversationId,
               runtime: createForegroundScenarioRuntime(

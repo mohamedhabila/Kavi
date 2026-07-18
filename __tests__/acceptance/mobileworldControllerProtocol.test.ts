@@ -12,13 +12,19 @@ import { makeTestAgentRun, makeTestConversation, makeTestMessage } from '../help
 
 describe('MobileWorld graph-owned controller protocol', () => {
   it('builds one screenshot-only sandbox capability with a stable app allowlist', async () => {
-    const capability = await buildMobileWorldControllerCapability(['files', 'clock']);
+    const capability = await buildMobileWorldControllerCapability([
+      'com.google.android.documentsui',
+      'com.google.android.deskclock',
+    ]);
 
     expect(qualifyMobileControllerCapability(capability)).toEqual(capability);
     expect(capability).toEqual(
       expect.objectContaining({
         environmentClass: 'sandbox',
-        allowedAppIds: ['clock', 'files'],
+        allowedAppIds: [
+          'com.google.android.deskclock',
+          'com.google.android.documentsui',
+        ],
         observationEvidence: ['screenshot', 'window_identity'],
         outcomeDeliveryModes: ['deferred'],
         normalizedCoordinateScale: 1_000,
@@ -36,7 +42,10 @@ describe('MobileWorld graph-owned controller protocol', () => {
     [{ kind: 'keyboard_enter' }, { action_type: 'keyboard_enter' }],
     [{ kind: 'back' }, { action_type: 'navigate_back' }],
     [{ kind: 'home' }, { action_type: 'navigate_home' }],
-    [{ kind: 'open_app', appId: 'files' }, { action_type: 'open_app', app_name: 'files' }],
+    [
+      { kind: 'open_app', appId: 'com.google.android.documentsui' },
+      { action_type: 'open_app', app_name: 'com.google.android.documentsui' },
+    ],
     [{ kind: 'scroll', direction: 'down' }, { action_type: 'scroll', direction: 'down' }],
     [{ kind: 'wait', durationMs: 500 }, { action_type: 'wait' }],
   ] as const)('maps a product action into the unchanged upstream parser shape', (action, expected) => {

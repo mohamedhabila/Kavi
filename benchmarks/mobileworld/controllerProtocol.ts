@@ -57,7 +57,7 @@ async function digest(value: string): Promise<ToolEffectDigest> {
   return `sha256:${await sha256HexUtf8Async(value)}`;
 }
 
-function controllerAppIdentifiers(values: ReadonlyArray<string>): string[] {
+function canonicalControllerAppIds(values: ReadonlyArray<string>): string[] {
   const normalized = values.map((value) => value.trim()).sort();
   if (
     normalized.length === 0 ||
@@ -65,15 +65,15 @@ function controllerAppIdentifiers(values: ReadonlyArray<string>): string[] {
     normalized.some((value) => !value || value.length > 100) ||
     new Set(normalized).size !== normalized.length
   ) {
-    throw new Error('mobileworld_controller_app_identifiers_invalid');
+    throw new Error('mobileworld_controller_app_ids_invalid');
   }
   return normalized;
 }
 
 export async function buildMobileWorldControllerCapability(
-  appIdentifiers: ReadonlyArray<string>,
+  appIds: ReadonlyArray<string>,
 ): Promise<MobileControllerCapability> {
-  const allowedAppIds = controllerAppIdentifiers(appIdentifiers);
+  const allowedAppIds = canonicalControllerAppIds(appIds);
   const policyAdmissionDigest = await digest('mobileworld:android:sandbox:policy:v1');
   const unsignedCapability = {
     version: 1 as const,

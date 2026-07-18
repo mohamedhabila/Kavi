@@ -47,7 +47,7 @@ def _require_loopback_url(value: str) -> str:
     return value.rstrip("/")
 
 
-def _discover_controller_app_identifiers(env: Any) -> list[str]:
+def _discover_controller_app_targets(env: Any) -> dict[str, str]:
     device = _require_text(getattr(env, "device", None), "env.device")
     try:
         result = subprocess.run(
@@ -68,14 +68,17 @@ def _discover_controller_app_identifiers(env: Any) -> list[str]:
         for line in result.stdout.splitlines()
         if line.startswith("package:")
     }
-    identifiers = sorted(
-        app_name
-        for app_name, package_name in APP_LOWER_DICT.items()
-        if package_name in installed_packages
-    )
-    if not identifiers:
-        raise KaviBridgeError("MobileWorld found no launchable app identifiers on the device.")
-    return identifiers
+    aliases_by_package: dict[str, list[str]] = {}
+    for app_name, package_name in APP_LOWER_DICT.items():
+        if package_name in installed_packages:
+            aliases_by_package.setdefault(package_name, []).append(app_name)
+    targets = {
+        package_name: min(aliases, key=lambda alias: (len(alias), alias.casefold()))
+        for package_name, aliases in aliases_by_package.items()
+    }
+    if not targets:
+        raise KaviBridgeError("MobileWorld found no launchable app targets on the device.")
+    return targets
 
 
 def _read_bridge_event(response: JsonObject) -> tuple[str, JsonObject]:
@@ -148,7 +151,8 @@ class KaviMobileWorldAgent(BaseAgent):
         if not isinstance(scale_factor, int) or scale_factor <= 0:
             raise ValueError("scale_factor must be a positive integer.")
         self.scale_factor = scale_factor
-        self.controller_app_identifiers = _discover_controller_app_identifiers(env)
+        self._controller_app_targets = _discover_controller_app_targets(env)
+        self.controller_app_ids = sorted(self._controller_app_targets)
         self.session_id = f"mobileworld-{uuid4()}"
         self._request_function = request_function or self._request_over_http
         self.step_index = 0
@@ -202,7 +206,7 @@ class KaviMobileWorldAgent(BaseAgent):
             "reset",
             instruction=instruction,
             scale_factor=self.scale_factor,
-            controller_app_identifiers=self.controller_app_identifiers,
+            controller_app_ids=self.controller_app_ids,
         )
 
     @staticmethod
@@ -258,6 +262,12 @@ class KaviMobileWorldAgent(BaseAgent):
         )
         self._record_usage(response)
         event_kind, action_payload = _read_bridge_event(response)
+        if event_kind == "controller_action" and action_payload.get("action_type") == "open_app":
+            app_id = _require_text(action_payload.get("app_name"), "event.action.app_name")
+            host_identifier = self._controller_app_targets.get(app_id)
+            if host_identifier is None:
+                raise KaviBridgeError("Controller selected an app outside its admitted targets.")
+            action_payload = {**action_payload, "app_name": host_identifier}
         try:
             parsed = parse_response_to_action(
                 json.dumps(action_payload, ensure_ascii=False),

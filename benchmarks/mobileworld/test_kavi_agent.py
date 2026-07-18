@@ -7,7 +7,7 @@ from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from kavi_agent import KaviBridgeError, KaviMobileWorldAgent, _discover_controller_app_identifiers
+from kavi_agent import KaviBridgeError, KaviMobileWorldAgent, _discover_controller_app_targets
 from PIL import Image
 
 
@@ -37,8 +37,11 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
             },
             clear=False,
         ), patch(
-            "kavi_agent._discover_controller_app_identifiers",
-            return_value=["clock", "files"],
+            "kavi_agent._discover_controller_app_targets",
+            return_value={
+                "com.google.android.deskclock": "clock",
+                "com.google.android.documentsui": "files",
+            },
         ):
             return KaviMobileWorldAgent(
                 model_name="foreground-chat",
@@ -67,7 +70,10 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
         self.assertEqual(Image.open(BytesIO(screenshot)).size, (100, 200))
         self.assertIsNone(advance_request["prior_event_observation"])
         self.assertEqual(agent.get_total_token_usage()["total_tokens"], 15)
-        self.assertEqual(bridge.requests[0]["controller_app_identifiers"], ["clock", "files"])
+        self.assertEqual(
+            bridge.requests[0]["controller_app_ids"],
+            ["com.google.android.deskclock", "com.google.android.documentsui"],
+        )
 
     @patch("kavi_agent.subprocess.run")
     def test_discovers_only_controller_identifiers_installed_on_device(self, run: Mock) -> None:
@@ -80,11 +86,11 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
             stderr="",
         )
 
-        identifiers = _discover_controller_app_identifiers(SimpleNamespace(device="emulator-5554"))
+        targets = _discover_controller_app_targets(SimpleNamespace(device="emulator-5554"))
 
-        self.assertIn("clock", identifiers)
-        self.assertIn("files", identifiers)
-        self.assertNotIn("mail", identifiers)
+        self.assertEqual(targets["com.google.android.deskclock"], "clock")
+        self.assertEqual(targets["com.google.android.documentsui"], "files")
+        self.assertNotIn("com.gmailclone", targets)
         run.assert_called_once_with(
             ["adb", "-s", "emulator-5554", "shell", "pm", "list", "packages"],
             capture_output=True,
@@ -92,6 +98,25 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
             text=True,
             timeout=15,
         )
+
+    def test_translates_canonical_app_identity_only_at_the_host_boundary(self) -> None:
+        bridge = FakeBridge(
+            [
+                {
+                    "kind": "controller_action",
+                    "action": {
+                        "action_type": "open_app",
+                        "app_name": "com.google.android.deskclock",
+                    },
+                }
+            ]
+        )
+        agent = self.make_agent(bridge)
+        agent.initialize("Complete the task")
+
+        _, action = agent.predict({"screenshot": Image.new("RGB", (100, 200))})
+
+        self.assertEqual((action.action_type, action.app_name), ("open_app", "clock"))
 
     def test_reports_the_next_observation_as_host_facts_without_an_advisory_ledger(self) -> None:
         bridge = FakeBridge(
