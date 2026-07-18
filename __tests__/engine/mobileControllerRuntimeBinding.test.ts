@@ -139,10 +139,12 @@ describe('mobile controller runtime binding', () => {
 
   it('publishes only the bounded host request and excludes the claim token', () => {
     const persisted = createPersistedMobileControllerHandoffFixture();
-    const publication = buildMobileControllerPublishedHandoff(persisted);
+    const owner = { conversationId: 'conversation-1', agentRunId: 'agent-run-1' };
+    const publication = buildMobileControllerPublishedHandoff(persisted, owner);
 
     expect(publication).toEqual({
       version: 1,
+      owner,
       handoff: persisted.handoffRef,
       action: persisted.handoff.action,
       beforeObservation: persisted.handoff.beforeObservation,
@@ -155,7 +157,7 @@ describe('mobile controller runtime binding', () => {
       buildMobileControllerPublishedHandoff({
         ...persisted,
         handle: { ...persisted.handle, status: 'running' },
-      }),
+      }, owner),
     ).toBeNull();
   });
 });

@@ -76,6 +76,7 @@ export async function runOrchestrator(
     provider,
     systemPrompt,
     toolFilter: normalizedOptions.toolFilter,
+    agentRunId: normalizedOptions.agentRunId,
     ...(normalizedOptions.mobileController
       ? { mobileController: normalizedOptions.mobileController }
       : {}),

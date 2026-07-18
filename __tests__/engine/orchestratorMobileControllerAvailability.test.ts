@@ -67,6 +67,7 @@ describe('orchestrator mobile controller availability', () => {
         },
         model: 'gpt-test',
         conversationId: 'conv-mobile-controller-admitted',
+        agentRunId: 'agent-run-1',
         systemPrompt: 'Test',
         messages: [makeMsg('user', 'Continue the task on the current mobile screen')],
         explicitToolSurfaceToolNames: ['mobile_ui_action'],
@@ -110,6 +111,7 @@ describe('orchestrator mobile controller availability', () => {
         },
         model: 'gpt-test',
         conversationId: 'conv-mobile-controller-rejected',
+        agentRunId: 'agent-run-1',
         systemPrompt: 'Test',
         messages: [makeMsg('user', 'Help me with this task')],
         explicitToolSurfaceToolNames: ['mobile_ui_action'],
@@ -127,5 +129,38 @@ describe('orchestrator mobile controller availability', () => {
       expect.objectContaining({ kind: 'final' }),
     );
     expect(callbacks.onError).not.toHaveBeenCalled();
+  });
+
+  it('does not expose mobile authority without a durable AgentRun owner', async () => {
+    mockStreamMessage.mockReturnValueOnce(
+      makeStream(
+        [
+          { type: 'token', content: 'Chat remains available.' },
+          { type: 'done', content: 'Chat remains available.' },
+        ],
+        'text',
+      ),
+    );
+
+    await runOrchestrator(
+      {
+        provider: {
+          ...provider,
+          modelCapabilities: {
+            'gpt-test': { vision: true, tools: true, fileInput: true },
+          },
+        },
+        model: 'gpt-test',
+        conversationId: 'conv-mobile-controller-unowned',
+        systemPrompt: 'Test',
+        messages: [makeMsg('user', 'Describe what is on the current screen')],
+        explicitToolSurfaceToolNames: ['mobile_ui_action'],
+        toolFilter: (name) => name === 'mobile_ui_action',
+        mobileController: mobileControllerPort(),
+      },
+      makeCallbacks(),
+    );
+
+    expect(mockStreamMessage.mock.calls[0][1].tools).toEqual([]);
   });
 });

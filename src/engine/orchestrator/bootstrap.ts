@@ -166,6 +166,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   systemPrompt: string;
   toolFilter?: (toolName: string) => boolean;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
+  agentRunId?: string;
   mobileController?: unknown;
 }): Promise<{
   activeModel: string;
@@ -242,13 +243,16 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   }
   activeProvider = bindProviderToModel(await hydrateProviderApiKey(activeProvider), activeModel);
 
-  const mobileControllerAdmission = params.mobileController
+  const mobileControllerAdmission = params.mobileController && params.agentRunId?.trim()
     ? admitMobileControllerRuntime({
         port: params.mobileController,
         provider: activeProvider,
         model: activeModel,
       })
     : null;
+  if (params.mobileController && !params.agentRunId?.trim()) {
+    params.logger.devWarn('Mobile controller unavailable without an active agent run.');
+  }
   if (mobileControllerAdmission?.kind === 'rejected') {
     params.logger.devWarn(
       `Mobile controller unavailable for the selected runtime: ${mobileControllerAdmission.reason}`,

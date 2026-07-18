@@ -4,6 +4,7 @@ import type { MobileControllerAction, MobileControllerObservationRef } from './c
 
 export type MobileControllerPublishedHandoff = Readonly<{
   version: 1;
+  owner: Readonly<{ conversationId: string; agentRunId: string }>;
   handoff: AgentRunMobileControllerHandoffRef;
   action: MobileControllerAction;
   beforeObservation: MobileControllerObservationRef;
@@ -26,10 +27,15 @@ function cloneAction(action: MobileControllerAction): MobileControllerAction {
 
 export function buildMobileControllerPublishedHandoff(
   persisted: PersistedMobileControllerHandoff,
+  owner: { conversationId: string; agentRunId: string },
 ): MobileControllerPublishedHandoff | null {
   const { handoff, handoffRef, handle, checkpoint, run } = persisted;
   const identity = handoff.dispatchIdentity;
+  const conversationId = owner.conversationId.trim();
+  const agentRunId = owner.agentRunId.trim();
   if (
+    !conversationId ||
+    !agentRunId ||
     handoffRef.effectRunId !== identity.runId ||
     handoffRef.executionRunId !== identity.executionRunId ||
     handoffRef.effectId !== identity.effectId ||
@@ -58,6 +64,7 @@ export function buildMobileControllerPublishedHandoff(
   }
   return Object.freeze({
     version: 1,
+    owner: Object.freeze({ conversationId, agentRunId }),
     handoff: handoffRef,
     action: cloneAction(handoff.action),
     beforeObservation: Object.freeze({ ...handoff.beforeObservation }),

@@ -66,6 +66,7 @@ describe('foreground mobile controller binding', () => {
     );
     const publication = buildMobileControllerPublishedHandoff(
       createPersistedMobileControllerHandoffFixture(),
+      { conversationId: conversation.id, agentRunId: 'agent-run-1' },
     );
     if (!publication) throw new Error('expected mobile controller publication fixture');
     const publishHandoff = jest.fn().mockResolvedValue(undefined);

@@ -208,7 +208,13 @@ export async function runOrchestratorGraphSession(params: {
       ...(mobileControllerRuntime
         ? {
             publishMobileControllerHandoff: async (persistedHandoff) => {
-              const publication = buildMobileControllerPublishedHandoff(persistedHandoff);
+              const agentRunId = options.agentRunId?.trim();
+              const publication = agentRunId
+                ? buildMobileControllerPublishedHandoff(persistedHandoff, {
+                    conversationId,
+                    agentRunId,
+                  })
+                : null;
               if (!publication) {
                 throw new Error('mobile_controller_handoff_publication_invalid');
               }
