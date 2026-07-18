@@ -28,7 +28,11 @@ const MOBILE_UI_ACTION_CONTRACT: NonNullable<ToolDefinition['contract']> = Objec
   workflowStages: ['mutate_remote_state', 'continue_external_execution'],
 });
 
-function targetSchema(coordinateScale: number): Record<string, unknown> {
+function targetSchema(
+  coordinateScale: number,
+  supportsElementTargets: boolean,
+): Record<string, unknown> {
+  if (!supportsElementTargets) return coordinateTargetSchema(coordinateScale);
   return {
     type: 'object',
     properties: {
@@ -60,6 +64,7 @@ function coordinateTargetSchema(coordinateScale: number): Record<string, unknown
 function actionProperties(params: {
   actionKinds: readonly MobileControllerActionKind[];
   coordinateScale: number;
+  supportsElementTargets: boolean;
   allowedAppIds?: readonly string[];
   timeoutMs: number;
 }): Record<string, unknown> {
@@ -68,7 +73,7 @@ function actionProperties(params: {
     kind: { type: 'string', enum: [...params.actionKinds] },
   };
   if (kinds.has('activate') || kinds.has('double_tap') || kinds.has('long_press')) {
-    properties.target = targetSchema(params.coordinateScale);
+    properties.target = targetSchema(params.coordinateScale, params.supportsElementTargets);
   }
   if (kinds.has('drag')) {
     properties.start = coordinateTargetSchema(params.coordinateScale);
@@ -98,6 +103,7 @@ function actionProperties(params: {
 function buildDefinition(params: {
   actionKinds: readonly MobileControllerActionKind[];
   coordinateScale: number;
+  supportsElementTargets: boolean;
   allowedAppIds?: readonly string[];
   timeoutMs: number;
 }): ToolDefinition {
@@ -122,6 +128,7 @@ function buildDefinition(params: {
 export const MOBILE_UI_ACTION_TOOL_DEFINITION: ToolDefinition = buildDefinition({
   actionKinds: MOBILE_CONTROLLER_ACTION_KINDS,
   coordinateScale: 10_000,
+  supportsElementTargets: true,
   timeoutMs: 15 * 60 * 1_000,
 });
 
@@ -134,6 +141,7 @@ export function buildMobileControllerToolDefinition(
   return buildDefinition({
     actionKinds: capability.supportedActionKinds,
     coordinateScale: capability.normalizedCoordinateScale,
+    supportsElementTargets: capability.observationEvidence.includes('accessibility_snapshot'),
     allowedAppIds: capability.allowedAppIds,
     timeoutMs: capability.timeoutMs,
   });
