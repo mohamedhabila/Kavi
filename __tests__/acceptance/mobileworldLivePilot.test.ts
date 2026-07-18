@@ -9,7 +9,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import path from 'path';
 
 import { buildE2EProvider } from '../../src/acceptance/e2eAgent/providerConfig';
+import { finalizeProviderConfig } from '../../src/constants/api';
 import { executeForegroundConversationRun } from '../../src/engine/graph/foregroundRun/execution';
+import { LlmService } from '../../src/services/llm/LlmService';
 import {
   createForegroundScenarioRuntime,
   createSeedConversation,
@@ -221,7 +223,19 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
     await ensureForegroundScenarioStoresHydrated();
     const chatSnapshot = useChatStore.getState();
     const settingsSnapshot = useSettingsStore.getState();
-    const provider = buildE2EProvider();
+    const configuredProvider = buildE2EProvider();
+    const discoveredModels = await new LlmService(configuredProvider).fetchModels();
+    const provider = finalizeProviderConfig({
+      ...configuredProvider,
+      availableModels:
+        discoveredModels.models.length > 0
+          ? discoveredModels.models
+          : configuredProvider.availableModels,
+      modelCapabilities: {
+        ...(configuredProvider.modelCapabilities ?? {}),
+        ...discoveredModels.capabilities,
+      },
+    });
     const systemPrompt = settingsSnapshot.systemPrompt;
     const projectRoot = path.resolve(__dirname, '../..');
     const upstreamDir = requirePayloadText(process.env as JsonObject, 'MOBILEWORLD_UPSTREAM_DIR');
