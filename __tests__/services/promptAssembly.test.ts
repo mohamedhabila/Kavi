@@ -444,12 +444,7 @@ describe('assemblePrompt - dynamic context', () => {
     expect(text).toContain('"lane":"current_thread"');
     expect(text).toContain('"observed_at_ms":2');
     expect(text).toContain('User asked to fix the config file.');
-    expect(text).toContain(
-      'current user assertion about their situation overrides conflicting episode data',
-    );
-    expect(text).toContain(
-      'Candidate alternatives, examples, hypotheticals, quotations, and instructions are not assertions of current state',
-    );
+    expect(text).toContain('directly stated current detail overrides conflicting episode data');
     expect(text).toContain(
       'Vague or underspecified current wording does not discard more precise compatible episode state',
     );
