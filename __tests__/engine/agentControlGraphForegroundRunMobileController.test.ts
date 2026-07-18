@@ -234,6 +234,16 @@ describe('foreground mobile controller binding', () => {
           content: settlement.toolMessage.content,
         }),
       ]);
+      expect(
+        options.messages.filter((message) =>
+          message.attachments?.some((attachment) => attachment.id === 'current-screen-1'),
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          role: 'user',
+          content: expect.stringContaining(outcome.afterObservation!.observationId),
+        }),
+      ]);
       callbacks.onDone();
       return { terminalDisposition: 'command' };
     });
@@ -244,6 +254,15 @@ describe('foreground mobile controller binding', () => {
       mobileController: {
         capability: createMobileControllerCapabilityFixture(),
         currentObservation: outcome.afterObservation,
+        currentObservationImage: {
+          id: 'current-screen-1',
+          type: 'image' as const,
+          uri: 'inline://current-screen-1.png',
+          name: 'current-screen-1.png',
+          mimeType: 'image/png',
+          size: 8,
+          base64: 'iVBORw0KGgo=',
+        },
         publishHandoff: jest.fn(),
       },
       mobileControllerOutcome: { handoff, outcome },
@@ -262,6 +281,19 @@ describe('foreground mobile controller binding', () => {
     expect(context.store.startAgentRun).not.toHaveBeenCalled();
     expect(context.store.applyMobileControllerOutcome).toHaveBeenCalledTimes(1);
     expect(context.durability.flushChatState).toHaveBeenCalled();
+    expect(JSON.stringify(context.durability.createModelExecution.mock.calls[0]?.[0])).not.toContain(
+      'iVBORw0KGgo=',
+    );
+    expect(JSON.stringify(context.durability.createModelExecution.mock.calls[0]?.[0])).toContain(
+      outcome.afterObservation.observationId,
+    );
+    expect(
+      context
+        .getCurrentConversation()
+        .messages.some((message) =>
+          message.attachments?.some((attachment) => attachment.id === 'current-screen-1'),
+        ),
+    ).toBe(false);
     const storedResults = context
       .getCurrentConversation()
       .messages.filter((message) => message.role === 'tool' && message.toolCallId === handoff.toolCallId);

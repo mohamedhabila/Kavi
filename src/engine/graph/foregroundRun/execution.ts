@@ -38,7 +38,10 @@ import { enforceSemanticMemoryHandoffGate } from './semanticMemoryHandoffGate';
 import { publishForegroundTerminalMemory } from './terminalMemoryPublication';
 import { resolveExternalActionContract } from '../../externalActionContract';
 import { resolveForegroundMobileControllerOutcomeGate } from './mobileControllerOutcome';
-import { buildModelReadyMessages } from './modelReadyMessages';
+import {
+  buildForegroundOrchestratorMessages,
+  buildModelReadyMessages,
+} from './modelReadyMessages';
 
 export async function executeForegroundConversationRun(
   params: ExecuteForegroundConversationRunParams,
@@ -362,26 +365,20 @@ async function executeReservedForegroundConversationRun(
   const latestConversationForRequest = context.helpers.getConversation(conversationId);
   const persistedProjectionMessages =
     latestConversationForRequest?.messages ?? runConversation?.messages ?? [];
-  const modelReadyMessages = buildModelReadyMessages(
-    bootstrap.shouldInsertPlaceholderAssistant
-      ? persistedProjectionMessages.filter((message) => message.id !== bootstrap.assistantMessageId)
-      : persistedProjectionMessages,
-  );
-  const additionalInternalPrompt = options?.additionalUserPrompt?.trim() || '';
+  const { durableMessages: durableOrchestratorMessages, modelMessages: orchestratorMessages } =
+    buildForegroundOrchestratorMessages({
+      persistedMessages: persistedProjectionMessages,
+      ...(bootstrap.shouldInsertPlaceholderAssistant
+        ? { excludedAssistantMessageId: bootstrap.assistantMessageId }
+        : {}),
+      additionalInternalPrompt: options?.additionalUserPrompt,
+      mobileController: options?.mobileController,
+      createId: context.helpers.createId,
+      timestamp: Date.now(),
+    });
   const allowedToolNames = options?.allowedToolNames
     ? new Set(options.allowedToolNames)
     : undefined;
-  const orchestratorMessages = additionalInternalPrompt
-    ? [
-        ...modelReadyMessages,
-        {
-          id: context.helpers.createId(),
-          role: 'system' as const,
-          content: additionalInternalPrompt,
-          timestamp: Date.now(),
-        },
-      ]
-    : modelReadyMessages;
   const resolvedSystemPrompt = options?.additionalSystemPrompt
     ? [runConversation?.systemPrompt || context.state.systemPrompt, options.additionalSystemPrompt]
         .filter(Boolean)
@@ -525,7 +522,8 @@ async function executeReservedForegroundConversationRun(
       assistantMessageId,
       ...(bootstrapResult.trackedAgentRunId ? { taskId: bootstrapResult.trackedAgentRunId } : {}),
       requestState: {
-        messages: orchestratorMessages,
+        messages: durableOrchestratorMessages,
+        mobileControllerObservation: options?.mobileController?.currentObservation,
         workflowScopeUserMessageId: requestMessageId,
         workflowTaskAnchor: resumePreparation.workflowTaskAnchor,
         initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,

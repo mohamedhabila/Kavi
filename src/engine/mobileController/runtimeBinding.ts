@@ -2,7 +2,9 @@ import type { LlmProviderConfig } from '../../types/provider';
 import type { ToolDefinition } from '../../types/tool';
 import type { MobileControllerCapability, MobileControllerObservationRef } from './contracts';
 import type { MobileControllerPublishedHandoff } from './publication';
+import type { Attachment } from '../../types/attachment';
 import { buildMobileControllerToolDefinition } from './toolDefinition';
+import { qualifyMobileControllerObservationImage } from './observationImage';
 import {
   qualifyMobileControllerCapability,
   qualifyMobileControllerObservationRef,
@@ -11,6 +13,8 @@ import {
 export interface MobileControllerHostPort {
   capability: MobileControllerCapability;
   currentObservation: MobileControllerObservationRef;
+  /** Ephemeral visual evidence for this turn; never journaled or stored in chat. */
+  currentObservationImage?: Attachment;
   publishHandoff(handoff: MobileControllerPublishedHandoff): void | Promise<void>;
 }
 
@@ -49,10 +53,15 @@ export function admitMobileControllerRuntime(input: {
   const port = input.port as Partial<MobileControllerRuntimePort> | null;
   const capability = qualifyMobileControllerCapability(port?.capability);
   const currentObservation = qualifyMobileControllerObservationRef(port?.currentObservation);
+  const observationImage =
+    port?.currentObservationImage === undefined
+      ? undefined
+      : qualifyMobileControllerObservationImage(port.currentObservationImage);
   if (
     !port ||
     !capability ||
     !currentObservation ||
+    (port.currentObservationImage !== undefined && !observationImage) ||
     typeof port.publishHandoff !== 'function' ||
     typeof port.persistGraphState !== 'function'
   ) {

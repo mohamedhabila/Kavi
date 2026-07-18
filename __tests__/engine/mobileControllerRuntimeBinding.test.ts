@@ -78,6 +78,20 @@ describe('mobile controller runtime binding', () => {
   it.each([
     ['invalid port', port({ publishHandoff: undefined }), 'port_invalid'],
     [
+      'invalid observation image',
+      port({
+        currentObservationImage: {
+          id: 'screen-1',
+          type: 'file',
+          uri: 'inline://screen.png',
+          name: 'screen.png',
+          mimeType: 'image/png',
+          size: 8,
+        },
+      }),
+      'port_invalid',
+    ],
+    [
       'synchronous-only controller',
       port({ capability: { ...CAPABILITY, outcomeDeliveryModes: ['synchronous'] } }),
       'deferred_outcome_unsupported',
