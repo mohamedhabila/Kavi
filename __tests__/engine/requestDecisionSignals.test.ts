@@ -59,6 +59,39 @@ function decide(
 }
 
 describe('graph entry request decision signals', () => {
+  it('projects registered user fields as supplied on a clarification resume', () => {
+    const requestFrame = frame({ continuation: 'resume_waiting_user' });
+    const graphSnapshot = createInitialAgentRunControlGraphState({
+      status: 'ready',
+      pendingUserInput: {
+        requestedAfterUserMessageId: 'user-1',
+        requiredInformation: [
+          { key: 'alarm.time', requiredFor: 'execution' },
+          { key: 'alarm.label', requiredFor: 'understanding' },
+        ],
+        updatedAt: 10,
+      },
+    });
+
+    expect(decide({ requestFrame, graphSnapshot })).toMatchObject({
+      requiredInformation: [
+        {
+          key: 'alarm.time',
+          authority: 'user',
+          requiredFor: 'execution',
+          resolution: 'user_provided',
+        },
+        {
+          key: 'alarm.label',
+          authority: 'user',
+          requiredFor: 'understanding',
+          resolution: 'user_provided',
+        },
+      ],
+      decision: { action: 'act', reason: 'requirements_resolved' },
+    });
+  });
+
   it('uses an available allowed monitor as a safe status lookup', () => {
     expect(decide()).toMatchObject({
       requiredInformation: [

@@ -5,6 +5,7 @@ import {
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
 import type { Message } from '../../src/types/message';
+import { createInitialAgentRunControlGraphState } from '../../src/services/agents/agentControlGraphState';
 
 function createConversation(params: {
   activeAgentRunId?: string;
@@ -53,6 +54,49 @@ function createRunningAgentRun(overrides: Partial<AgentRun> = {}): AgentRun {
 }
 
 describe('foregroundRun bootstrap', () => {
+  it('automatically resumes the active clarification run for the next user turn', () => {
+    const conversation = createConversation({
+      activeAgentRunId: 'run-1',
+      agentRuns: [
+        createRunningAgentRun({
+          controlGraph: createInitialAgentRunControlGraphState({
+            status: 'awaiting_user',
+            pendingUserInput: {
+              requestedAfterUserMessageId: 'user-1',
+              requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+              updatedAt: 2,
+            },
+          }),
+        }),
+      ],
+      messages: [
+        { id: 'user-1', role: 'user', content: 'Set an alarm.', timestamp: 1 } as Message,
+        {
+          id: 'assistant-question',
+          role: 'assistant',
+          content: 'What time?',
+          timestamp: 2,
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'request_clarification',
+          },
+        } as Message,
+        { id: 'user-2', role: 'user', content: '07:30', timestamp: 3 } as Message,
+      ],
+    });
+
+    const result = buildForegroundRunBootstrapSelection({
+      conversation,
+      createAssistantMessageId: () => 'assistant-new',
+    });
+
+    expect(result.existingRun?.id).toBe('run-1');
+    expect(result.supersededRun).toBeUndefined();
+    expect(result.shouldAbortPreviousForegroundRequest).toBe(false);
+    expect(result.latestUserMessage?.id).toBe('user-2');
+  });
+
   it('reuses a visible incomplete assistant draft when resuming an existing run', () => {
     const conversation = createConversation({
       activeAgentRunId: 'run-1',

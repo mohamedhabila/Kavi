@@ -41,7 +41,7 @@ export type RequestUnderstandingRouting = Readonly<{
   mode: 'chitchat' | 'agentic';
   inputKind: 'empty' | 'text' | 'attachments' | 'text_and_attachments';
   attachmentCount: number;
-  continuation: 'new' | 'resume' | 'resume_waiting_async';
+  continuation: 'new' | 'resume' | 'resume_waiting_async' | 'resume_waiting_user';
   decisionAction: 'act' | 'clarify' | 'wait' | 'decline' | 'consent';
   decisionReason:
     | 'actionable_input'

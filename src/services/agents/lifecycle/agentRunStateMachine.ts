@@ -71,10 +71,20 @@ export function getAgentRunMessageSlice(
   }
 
   let endIndex = messages.length;
+  let acceptsClarificationResponse = false;
   for (let index = startIndex + 1; index < messages.length; index += 1) {
-    if (messages[index].role === 'user') {
+    const message = messages[index];
+    if (message.role === 'user') {
+      if (acceptsClarificationResponse) {
+        acceptsClarificationResponse = false;
+        continue;
+      }
       endIndex = index;
       break;
+    }
+    if (message.role === 'assistant' && !message.subAgentEvent) {
+      acceptsClarificationResponse =
+        message.assistantMetadata?.finishReason === 'request_clarification';
     }
   }
 

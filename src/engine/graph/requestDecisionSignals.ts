@@ -97,6 +97,26 @@ export function resolveGraphEntryRequestDecision(params: {
   toolAuthority: RequestDecisionToolAuthority;
 }): RequestFrame {
   if (
+    params.frame.mode === 'agentic' &&
+    params.frame.continuation === 'resume_waiting_user' &&
+    params.graphSnapshot?.pendingUserInput
+  ) {
+    return resolveRequestDecision({
+      frame: params.frame,
+      requiredInformation: params.graphSnapshot.pendingUserInput.requiredInformation.map(
+        ({ key, requiredFor }) => ({
+          key,
+          authority: 'user' as const,
+          requiredFor,
+          resolution: 'user_provided' as const,
+        }),
+      ),
+      policyDisposition: 'allowed',
+      permissionState: 'not_required',
+      awaitingExternalOperation: false,
+    });
+  }
+  if (
     params.frame.mode !== 'agentic' ||
     params.frame.continuation !== 'resume_waiting_async' ||
     !params.graphSnapshot

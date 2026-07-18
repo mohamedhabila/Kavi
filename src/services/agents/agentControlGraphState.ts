@@ -655,7 +655,10 @@ export function prepareAgentRunControlGraphForResume(
         normalized.turnDirectives.automaticRecoveryAttemptCount,
     }),
     audit: appendControlGraphAuditEvent(normalized.audit, {
-      type: 'RUN_RESUMED_FROM_TERMINAL_GRAPH',
+      type:
+        previousStatus === 'awaiting_user'
+          ? 'RUN_RESUMED_FROM_USER_INPUT_WAIT'
+          : 'RUN_RESUMED_FROM_TERMINAL_GRAPH',
       timestamp,
       iteration: normalized.iteration,
       detail: params.reason || `resuming running agent run from ${previousStatus}`,

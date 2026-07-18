@@ -147,6 +147,8 @@ async function executeReservedForegroundConversationRun(
     context.helpers.setChatError(
       resumePreparation.reason === 'missing_existing_owner'
         ? 'The original request for this agent run is unavailable. Restore it before resuming.'
+        : resumePreparation.reason === 'missing_user_response'
+          ? 'Answer the pending clarification before resuming this agent run.'
         : 'Foreground request message is missing.',
     );
     return;

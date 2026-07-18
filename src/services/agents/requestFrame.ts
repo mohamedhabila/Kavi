@@ -2,7 +2,11 @@ export const REQUEST_FRAME_VERSION = 2 as const;
 
 export type RequestMode = 'chitchat' | 'agentic';
 export type RequestInputKind = 'empty' | 'text' | 'attachments' | 'text_and_attachments';
-export type RequestContinuation = 'new' | 'resume' | 'resume_waiting_async';
+export type RequestContinuation =
+  | 'new'
+  | 'resume'
+  | 'resume_waiting_async'
+  | 'resume_waiting_user';
 export type RequestDecisionAction = 'act' | 'clarify' | 'wait' | 'decline' | 'consent';
 export type RequestDecisionReason =
   | 'actionable_input'

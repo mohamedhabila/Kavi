@@ -66,8 +66,20 @@ export function buildForegroundRunBootstrapSelection(params: {
   reuseAgentRunId?: string;
   assistantDraftMode?: AssistantDraftMode;
 }): ForegroundRunBootstrapSelection {
-  const normalizedReuseAgentRunId = normalizeId(params.reuseAgentRunId);
+  const explicitlyReusedAgentRunId = normalizeId(params.reuseAgentRunId);
   const latestUserMessage = findLatestUserMessage(params.conversation);
+  const awaitingUserRun = !explicitlyReusedAgentRunId
+    ? params.conversation?.agentRuns?.find(
+        (run) =>
+          run.id === params.conversation?.activeAgentRunId &&
+          run.status === 'running' &&
+          run.controlGraph?.status === 'awaiting_user' &&
+          run.controlGraph.pendingUserInput !== undefined &&
+          latestUserMessage !== undefined &&
+          latestUserMessage?.id !== run.controlGraph.pendingUserInput.requestedAfterUserMessageId,
+      )
+    : undefined;
+  const normalizedReuseAgentRunId = explicitlyReusedAgentRunId ?? awaitingUserRun?.id;
   const shouldTrackAgentRun = shouldTrackForegroundAgentRun({
     conversationMode: params.conversation?.mode,
     defaultConversationMode: params.defaultConversationMode,

@@ -504,6 +504,7 @@ const CONTINUATIONS = new Set<RequestUnderstandingRouting['continuation']>([
   'new',
   'resume',
   'resume_waiting_async',
+  'resume_waiting_user',
 ]);
 const DECISION_ACTIONS = new Set<RequestUnderstandingRouting['decisionAction']>([
   'act',

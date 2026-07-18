@@ -19,7 +19,7 @@ export type AgentRunResumePreparation = {
   workflowTaskAnchor: WorkflowTaskAnchor;
 } | {
   kind: 'unavailable';
-  reason: 'missing_request' | 'missing_existing_owner';
+  reason: 'missing_request' | 'missing_existing_owner' | 'missing_user_response';
   requestedSourceMessageId?: string;
 };
 
@@ -78,6 +78,26 @@ export function prepareAgentRunResumeForOrchestrator(params: {
         reason: 'missing_existing_owner',
         ...(requestedSourceMessageId ? { requestedSourceMessageId } : {}),
       };
+    }
+
+    if (params.existingRun.controlGraph?.status === 'awaiting_user') {
+      const requestedAfterUserMessageId =
+        params.existingRun.controlGraph.pendingUserInput?.requestedAfterUserMessageId;
+      const sourceIndex = requestedAfterUserMessageId
+        ? params.messages.findIndex((message) => message.id === requestedAfterUserMessageId)
+        : -1;
+      const responseIndex = params.messages.findLastIndex(
+        (message, index) => message.role === 'user' && index > sourceIndex,
+      );
+      if (sourceIndex < 0 || responseIndex <= sourceIndex) {
+        return {
+          kind: 'unavailable',
+          reason: 'missing_user_response',
+          ...(requestedAfterUserMessageId
+            ? { requestedSourceMessageId: requestedAfterUserMessageId }
+            : {}),
+        };
+      }
     }
 
     const timestamp = params.updatedAt ?? Date.now();

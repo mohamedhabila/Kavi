@@ -33,6 +33,53 @@ function resumableRun(): Pick<AgentRun, 'controlGraph' | 'userMessageId'> {
 }
 
 describe('agent control graph run resume preparation', () => {
+  it('requires a newer user message before resuming a clarification run', () => {
+    const awaitingUserRun = {
+      ...resumableRun(),
+      controlGraph: createInitialAgentRunControlGraphState({
+        status: 'awaiting_user',
+        pendingUserInput: {
+          requestedAfterUserMessageId: 'user-original',
+          requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+          updatedAt: 10,
+        },
+      }),
+    };
+
+    expect(
+      prepareAgentRunResumeForOrchestrator({
+        existingRun: awaitingUserRun,
+        messages: [userMessage('user-original')],
+      }),
+    ).toEqual({
+      kind: 'unavailable',
+      reason: 'missing_user_response',
+      requestedSourceMessageId: 'user-original',
+    });
+
+    const resumed = prepareAgentRunResumeForOrchestrator({
+      existingRun: awaitingUserRun,
+      messages: [userMessage('user-original'), userMessage('user-response')],
+      updatedAt: 20,
+    });
+    expect(resumed).toMatchObject({
+      kind: 'ready',
+      workflowScopeUserMessageId: 'user-original',
+      initialAgentControlGraphState: {
+        status: 'ready',
+        pendingUserInput: {
+          requestedAfterUserMessageId: 'user-original',
+          requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+        },
+      },
+    });
+    expect(
+      resumed.initialAgentControlGraphState?.audit.some(
+        (event) => event.type === 'RUN_RESUMED_FROM_USER_INPUT_WAIT',
+      ),
+    ).toBe(true);
+  });
+
   it('resolves workflow scope without a resumable run', () => {
     const result = prepareAgentRunResumeForOrchestrator({
       fallbackUserMessageId: 'user-1',

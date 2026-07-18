@@ -63,6 +63,7 @@ function resolveRequestContinuation(
   graphSnapshot: AgentRunControlGraphState | undefined,
 ): RequestContinuation {
   if (!graphSnapshot) return 'new';
+  if (graphSnapshot.pendingUserInput) return 'resume_waiting_user';
   if (
     graphSnapshot.status === 'waiting_async' ||
     graphSnapshot.asyncWork.awaitingBackgroundWorkers ||
