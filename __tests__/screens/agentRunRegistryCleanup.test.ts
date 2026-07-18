@@ -2,6 +2,9 @@ import { act, renderHook } from '@testing-library/react-native';
 import { useRecoveredAsyncRunResume } from '../../src/screens/useRecoveredAsyncRunResume';
 import { useTerminalBackgroundReviewQueue } from '../../src/screens/useTerminalBackgroundReviewQueue';
 import { useChatStore } from '../../src/store/useChatStore';
+import { buildAgentRunMobileControllerAsyncOperation } from '../../src/services/agents/mobileControllerAsyncOperation';
+import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
+import { makeTestAgentRun, makeTestConversation } from '../helpers/factories';
 
 describe('agent run registry cleanup', () => {
   beforeEach(() => {
@@ -80,5 +83,46 @@ describe('agent run registry cleanup', () => {
       await review;
     });
     expect(pending.size).toBe(0);
+  });
+
+  it('leaves a recovered mobile handoff parked until the host submits its outcome', async () => {
+    const operation = buildAgentRunMobileControllerAsyncOperation({
+      handoff: createPersistedMobileControllerHandoffFixture().handoffRef,
+      status: 'running',
+      updatedAt: 40,
+    });
+    if (!operation) throw new Error('expected mobile controller async operation');
+    const conversation = makeTestConversation({
+      id: 'mobile-conversation',
+      agentRuns: [
+        makeTestAgentRun({
+          id: 'mobile-run',
+          status: 'running',
+          updatedAt: 40,
+          asyncWork: { awaitingBackgroundWorkers: false, pendingOperations: [operation] },
+        }),
+      ],
+    });
+    useChatStore.setState({ conversations: [conversation] });
+    const pending = new Map<string, Promise<void>>();
+    const resumeAgentRun = jest.fn().mockResolvedValue(undefined);
+
+    renderHook(() =>
+      useRecoveredAsyncRunResume({
+        activeForegroundConversationIds: new Set(),
+        appendConversationLog: jest.fn(),
+        conversations: [conversation],
+        pendingAgentRunAsyncResumesRef: { current: pending },
+        resumeAgentRunRef: { current: resumeAgentRun },
+        setAgentRunPhase: jest.fn(),
+        updateAgentRunSummary: jest.fn(),
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(pending.size).toBe(0);
+    expect(resumeAgentRun).not.toHaveBeenCalled();
   });
 });

@@ -79,7 +79,10 @@ export function useRecoveredAsyncRunResume({
             !targetRun ||
             targetRun.status !== 'running' ||
             isAgentRunAwaitingBackgroundWorkers(targetRun) ||
-            effectivePendingOperations.length === 0
+            effectivePendingOperations.length === 0 ||
+            effectivePendingOperations.some(
+              (operation) => operation.kind === 'mobile-controller-handoff',
+            )
           ) {
             return;
           }
@@ -170,7 +173,11 @@ export function useRecoveredAsyncRunResume({
         if (run.status !== 'running' || isAgentRunAwaitingBackgroundWorkers(run)) {
           return false;
         }
-        return getAgentRunPendingAsyncOperations(run).length > 0;
+        const pendingOperations = getAgentRunPendingAsyncOperations(run);
+        return (
+          pendingOperations.length > 0 &&
+          pendingOperations.every((operation) => operation.kind !== 'mobile-controller-handoff')
+        );
       });
 
       for (const run of resumableRuns) {
