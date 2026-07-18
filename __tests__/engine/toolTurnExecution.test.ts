@@ -35,9 +35,13 @@ jest.mock('../../src/engine/toolExecution/toolExecutionBatch', () => ({
   executeToolExecutionBatch: jest.fn(),
 }));
 
-jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
-  executeToolCallLifecycle: jest.fn(),
-}));
+jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => {
+  const actual = jest.requireActual('../../src/engine/toolExecution/toolCallLifecycle');
+  return {
+    ...actual,
+    executeToolCallLifecycle: jest.fn(),
+  };
+});
 
 jest.mock('../../src/engine/graph/toolExecutionOutcomeResolution', () => ({
   resolveAgentControlGraphToolExecutionOutcomes: jest.fn(),

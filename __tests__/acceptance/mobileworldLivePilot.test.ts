@@ -50,7 +50,7 @@ import {
   runPilotProcess,
   verifyAlarmState,
   type MobileWorldPilotProcessResult,
-} from './mobileworldLivePilotProcess';
+} from '../../testSupport/acceptance/mobileworldLivePilotProcess';
 
 type JsonObject = Record<string, unknown>;
 

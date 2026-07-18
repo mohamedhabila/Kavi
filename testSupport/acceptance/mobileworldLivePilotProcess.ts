@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from 'child_process';
 import path from 'path';
 
+const PILOT_PROCESS_TIMEOUT_MS = 20 * 60 * 1_000;
+
 export type MobileWorldPilotProcessResult = {
   code: number;
   durationMs: number;
@@ -172,7 +174,7 @@ export async function runPilotProcess(params: {
         child.kill('SIGTERM');
         reject(new Error('MobileWorld pilot exceeded its 20 minute deadline.'));
       },
-      20 * 60 * 1_000,
+      PILOT_PROCESS_TIMEOUT_MS,
     );
     child.once('error', (error) => {
       if (settled) return;

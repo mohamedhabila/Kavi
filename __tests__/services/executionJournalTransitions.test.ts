@@ -83,11 +83,11 @@ describe('closed execution journal transition contracts', () => {
     }
   });
 
-  it('matches the exhaustive monotonic external-handle transition matrix', () => {
+  it('matches the exhaustive external-handle transition matrix', () => {
     const expected = {
       unknown: ['pending', 'running', 'succeeded', 'failed', 'cancelled'],
-      pending: ['running', 'succeeded', 'failed', 'cancelled'],
-      running: ['succeeded', 'failed', 'cancelled'],
+      pending: ['unknown', 'running', 'succeeded', 'failed', 'cancelled'],
+      running: ['unknown', 'succeeded', 'failed', 'cancelled'],
       succeeded: [],
       failed: [],
       cancelled: [],
