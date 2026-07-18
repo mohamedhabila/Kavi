@@ -506,7 +506,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
           recordedAt: Math.max(claim.claimedAt, (options.now ?? Date.now)()),
           preparedContractIdentity: receiptContractIdentity,
         });
-        return exactReceipt;
+        return { kind: 'terminal_receipt', receipt: exactReceipt };
       },
       options,
     );

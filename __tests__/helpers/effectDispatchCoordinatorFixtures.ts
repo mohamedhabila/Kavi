@@ -144,6 +144,7 @@ export function effectDispatchHarness(
     state?: EffectDispatchReadState | null;
     claimResult?: AtomicEffectDispatchClaimResult;
     dispatchResult?: unknown;
+    deferredResult?: Record<string, unknown>;
     dispatchError?: Error;
     settlementResult?: AtomicEffectDispatchSettlementResult;
     settlementError?: Error;
@@ -152,7 +153,7 @@ export function effectDispatchHarness(
 ) {
   const fixture = dispatchFixture();
   const calls = {
-    claims: [] as Parameters<EffectDispatchPorts['claimAndStart']>,
+    claims: [] as Parameters<EffectDispatchPorts<Record<string, unknown>>['claimAndStart']>,
     dispatches: [] as EffectDispatchClaimEvidence[],
     settlements: [] as EffectDispatchSettlementCandidate[],
     ambiguities: [] as EffectDispatchAmbiguityCandidate[],
@@ -161,7 +162,7 @@ export function effectDispatchHarness(
     options.state?.existingClaim?.claim ?? null;
   let durableReceipt: unknown | null = options.state?.existingClaim?.receipt ?? null;
   const times = [...(options.now ?? [15, 16, 17, 18])];
-  const ports: EffectDispatchPorts = {
+  const ports: EffectDispatchPorts<Record<string, unknown>> = {
     now: () => times.shift() ?? 18,
     readState: async () =>
       options.state === null
@@ -182,7 +183,9 @@ export function effectDispatchHarness(
     dispatch: async (claim) => {
       calls.dispatches.push(claim);
       if (options.dispatchError) throw options.dispatchError;
-      return options.dispatchResult ?? effectReceipt();
+      return options.deferredResult === undefined
+        ? { kind: 'terminal_receipt', receipt: options.dispatchResult ?? effectReceipt() }
+        : { kind: 'deferred', deferred: options.deferredResult };
     },
     settle: async (candidate) => {
       calls.settlements.push(candidate);

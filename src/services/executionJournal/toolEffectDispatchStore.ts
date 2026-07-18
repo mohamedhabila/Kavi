@@ -4,6 +4,7 @@ import type {
   AtomicEffectDispatchClaimResult,
   AtomicEffectDispatchSettlementResult,
   EffectDispatchAmbiguityCandidate,
+  EffectDispatchCallbackResult,
   EffectDispatchClaimEvidence,
   EffectDispatchPorts,
   EffectDispatchReadState,
@@ -45,9 +46,9 @@ export interface ToolEffectDispatchStoreOptions {
   now?: () => number;
 }
 
-export interface PreparedToolEffectDispatchJournal {
+export interface PreparedToolEffectDispatchJournal<TDeferred extends object = never> {
   identity: EffectDispatchIdentity;
-  ports: EffectDispatchPorts;
+  ports: EffectDispatchPorts<TDeferred>;
 }
 
 const MEMORY_EFFECT_AUTHORITY_SCHEMA = 'memory_effect_authority';
@@ -364,16 +365,16 @@ function settleStartedEffect(
   complete('started', candidate.nextEffectStatus);
 }
 
-function makePorts(input: {
+function makePorts<TDeferred extends object>(input: {
   identity: EffectDispatchIdentity;
   modelEffectAuthority: DurableModelEffectAuthority;
   authority: ToolEffectDispatchAuthority;
-  dispatch(claim: EffectDispatchClaimEvidence): Promise<unknown>;
+  dispatch(claim: EffectDispatchClaimEvidence): Promise<EffectDispatchCallbackResult<TDeferred>>;
   getDatabase: () => SQLite.SQLiteDatabase;
   getMemoryDatabase: () => SQLite.SQLiteDatabase;
   quarantineDatabase: (database: SQLite.SQLiteDatabase) => void;
   now: () => number;
-}): EffectDispatchPorts {
+}): EffectDispatchPorts<TDeferred> {
   const claimToken = claimTokenFor(input.identity);
   const readState = async (): Promise<EffectDispatchReadState | null> => {
     const database = input.getDatabase();
@@ -662,12 +663,14 @@ function makePorts(input: {
   };
 }
 
-export function prepareToolEffectDispatchJournal(
+export function prepareToolEffectDispatchJournal<TDeferred extends object = never>(
   plan: ToolEffectDispatchJournalPlan,
   authority: ToolEffectDispatchAuthority,
-  dispatch: (claim: EffectDispatchClaimEvidence) => Promise<unknown>,
+  dispatch: (
+    claim: EffectDispatchClaimEvidence,
+  ) => Promise<EffectDispatchCallbackResult<TDeferred>>,
   options: ToolEffectDispatchStoreOptions = {},
-): PreparedToolEffectDispatchJournal {
+): PreparedToolEffectDispatchJournal<TDeferred> {
   const getDatabase = options.getDatabase ?? getExecutionJournalDb;
   const getMemoryDatabase = options.getMemoryDatabase ?? getSchemaReadyMemoryDb;
   const quarantineDatabase = options.quarantineDatabase ?? quarantineExecutionJournalDb;

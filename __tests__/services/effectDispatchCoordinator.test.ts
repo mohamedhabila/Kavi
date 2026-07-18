@@ -58,6 +58,30 @@ describe('exactly-once effect dispatch coordinator', () => {
     expect(test.calls.ambiguities).toHaveLength(0);
   });
 
+  it('returns a durably pending external operation without fabricating a receipt', async () => {
+    const deferred = Object.freeze({ operationId: 'pending-operation-1' });
+    const test = harness({ deferredResult: deferred, now: [15] });
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'deferred',
+      deferred,
+    });
+    expect(test.calls.dispatches).toEqual([claimFor(test.identity)]);
+    expect(test.calls.settlements).toHaveLength(0);
+    expect(test.calls.ambiguities).toHaveLength(0);
+  });
+
+  it('fails a malformed deferred callback closed without terminal settlement', async () => {
+    const test = harness();
+    test.ports.dispatch = async () => ({ kind: 'deferred', deferred: null }) as never;
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'receipt_invalid',
+    });
+    expect(test.calls.settlements).toHaveLength(0);
+  });
+
   it('suppresses a repeated coordinator callback without dispatching twice', async () => {
     const test = harness();
 

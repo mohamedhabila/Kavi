@@ -101,7 +101,11 @@ export interface EffectDispatchAmbiguityCandidate {
   observedAt: number;
 }
 
-export interface EffectDispatchPorts {
+export type EffectDispatchCallbackResult<TDeferred extends object = never> =
+  | Readonly<{ kind: 'terminal_receipt'; receipt: unknown }>
+  | Readonly<{ kind: 'deferred'; deferred: TDeferred }>;
+
+export interface EffectDispatchPorts<TDeferred extends object = never> {
   now(): number;
   readState(identity: EffectDispatchIdentity): Promise<EffectDispatchReadState | null>;
   /**
@@ -112,8 +116,12 @@ export interface EffectDispatchPorts {
   claimAndStart(
     candidate: AtomicEffectDispatchClaimCandidate,
   ): Promise<AtomicEffectDispatchClaimResult>;
-  /** Dispatches only the durable command whose exact digest and target are in the claim. */
-  dispatch(claim: EffectDispatchClaimEvidence): Promise<unknown>;
+  /**
+   * Dispatches only the durable command whose exact digest and target are in
+   * the claim. A deferred response is valid only after its external pending
+   * state has been durably committed by the callback implementation.
+   */
+  dispatch(claim: EffectDispatchClaimEvidence): Promise<EffectDispatchCallbackResult<TDeferred>>;
   /**
    * Atomically appends receipt evidence and advances the journal effect once.
    * `replayed` is valid only for the exact immutable receipt; conflicting evidence
@@ -126,7 +134,7 @@ export interface EffectDispatchPorts {
   markAmbiguous(candidate: EffectDispatchAmbiguityCandidate): Promise<void>;
 }
 
-export type EffectDispatchResult =
+export type EffectDispatchResult<TDeferred extends object = never> =
   | {
       kind: 'blocked';
       reason:
@@ -152,7 +160,8 @@ export type EffectDispatchResult =
         | 'receipt_invalid'
         | 'settlement_unavailable'
         | EffectDispatchSettlementRejectionReason;
-    };
+    }
+  | { kind: 'deferred'; deferred: TDeferred };
 
 function isExactId(value: unknown, maximumLength: number): value is string {
   return (
@@ -274,6 +283,22 @@ function isSettlementResult(value: unknown): value is AtomicEffectDispatchSettle
     result.kind === 'recorded' ||
     result.kind === 'replayed' ||
     (result.kind === 'rejected' && SETTLEMENT_REJECTION_REASON_SET.has(result.reason ?? ''))
+  );
+}
+
+function isDispatchCallbackResult<TDeferred extends object>(
+  value: unknown,
+): value is EffectDispatchCallbackResult<TDeferred> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const result = value as Partial<EffectDispatchCallbackResult<TDeferred>>;
+  const keys = Object.keys(value).sort().join(',');
+  if (result.kind === 'terminal_receipt') return keys === 'kind,receipt';
+  return (
+    result.kind === 'deferred' &&
+    keys === 'deferred,kind' &&
+    typeof result.deferred === 'object' &&
+    result.deferred !== null &&
+    !Array.isArray(result.deferred)
   );
 }
 
@@ -446,10 +471,10 @@ async function classifyExistingClaim(
   return result.kind === 'settled' ? { ...result, kind: 'duplicate_suppressed' } : result;
 }
 
-export async function dispatchEffectExactlyOnce(
+export async function dispatchEffectExactlyOnce<TDeferred extends object = never>(
   identity: EffectDispatchIdentity,
-  ports: EffectDispatchPorts,
-): Promise<EffectDispatchResult> {
+  ports: EffectDispatchPorts<TDeferred>,
+): Promise<EffectDispatchResult<TDeferred>> {
   if (!isEffectDispatchIdentity(identity)) {
     return { kind: 'blocked', reason: 'invalid_request' };
   }
@@ -538,10 +563,14 @@ export async function dispatchEffectExactlyOnce(
     return { kind: 'reconciliation_required', reason: 'claim_contract_violation' };
   }
 
-  let receipt: unknown;
+  let callbackResult: EffectDispatchCallbackResult<TDeferred>;
   let observedAt: number;
   try {
-    receipt = await ports.dispatch(claimResult.claim);
+    const rawCallbackResult = await ports.dispatch(claimResult.claim);
+    if (!isDispatchCallbackResult<TDeferred>(rawCallbackResult)) {
+      return { kind: 'reconciliation_required', reason: 'receipt_invalid' };
+    }
+    callbackResult = rawCallbackResult;
   } catch {
     observedAt = Math.max(
       claimResult.claim.claimedAt,
@@ -560,6 +589,9 @@ export async function dispatchEffectExactlyOnce(
     });
     return { kind: 'reconciliation_required', reason: 'dispatch_threw' };
   }
+  if (callbackResult.kind === 'deferred') {
+    return { kind: 'deferred', deferred: callbackResult.deferred };
+  }
   try {
     observedAt = ports.now();
   } catch {
@@ -575,7 +607,7 @@ export async function dispatchEffectExactlyOnce(
     {
       claim: claimResult.claim,
       effectClass: state.snapshot.effect.effectClass,
-      receipt,
+      receipt: callbackResult.receipt,
       observedAt,
     },
     ports,
