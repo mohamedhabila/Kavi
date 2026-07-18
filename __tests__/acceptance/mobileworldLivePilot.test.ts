@@ -173,6 +173,8 @@ The JSON Action is your device-control interface: MobileWorld will execute it af
 
 Choose the next single action that makes progress. Reassess the screenshot after every action. An exact unchanged observation is structural evidence that the preceding action made no visible progress; choose a materially different action unless repetition is deliberately required. If an action was mistaken or ineffective, try a materially different route; do not stop merely because one attempt failed. Mark completion only when the visible device state supports it.
 
+Maintain a compact semantic completion ledger for the full user objective. Before acting, identify which still-unmet requirement the action advances. Before answer or status complete, reread the objective and verify every requirement separately against the current screen and previously confirmed state. If any requirement is absent, only partially satisfied, ambiguous, or contradicted, continue instead of terminating.
+
 Coordinates are normalized integers in [0, ${params.scaleFactor}] from the screenshot's top-left corner. Return exactly these two fields and no Markdown fence:
 Thought: concise decision rationale
 Action: one JSON object
