@@ -121,3 +121,15 @@ export function filterRuntimeAvailableToolNames(
 
   return filtered.length > 0 ? filtered : undefined;
 }
+
+/** Pin callable host bindings that exist only for this exact model session. */
+export function resolveRuntimeExplicitToolSurfaceToolNames(
+  explicitToolNames: ReadonlyArray<string> | undefined,
+  context: RuntimeToolAvailabilityContext,
+): string[] | undefined {
+  const resolved = [
+    ...(explicitToolNames ?? []),
+    ...(context.hasMobileController ? ['mobile_ui_action'] : []),
+  ];
+  return resolved.length > 0 ? Array.from(new Set(resolved)) : undefined;
+}

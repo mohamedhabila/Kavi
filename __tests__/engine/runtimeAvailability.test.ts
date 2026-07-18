@@ -3,6 +3,7 @@ import {
   hasDelegableWorkspaceTargets,
   filterRuntimeAvailableToolNames,
   filterToolsByRuntimeAvailability,
+  resolveRuntimeExplicitToolSurfaceToolNames,
 } from '../../src/engine/tools/runtimeAvailability';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { ToolDefinition } from '../../src/types/tool';
@@ -174,5 +175,27 @@ describe('runtimeAvailability', () => {
     );
 
     expect(filtered).toEqual(['workspace_launch_browser', 'workspace_delegate_task']);
+  });
+
+  it('pins an admitted mobile controller into the exact session tool surface', () => {
+    const resolved = resolveRuntimeExplicitToolSurfaceToolNames(['request_clarification'], {
+      hasWorkspaceTargets: false,
+      hasBrowserControllableWorkspaceTargets: false,
+      hasDelegableWorkspaceTargets: false,
+      hasMobileController: true,
+    });
+
+    expect(resolved).toEqual(['request_clarification', 'mobile_ui_action']);
+  });
+
+  it('does not advertise mobile authority when no controller is admitted', () => {
+    const resolved = resolveRuntimeExplicitToolSurfaceToolNames(undefined, {
+      hasWorkspaceTargets: false,
+      hasBrowserControllableWorkspaceTargets: false,
+      hasDelegableWorkspaceTargets: false,
+      hasMobileController: false,
+    });
+
+    expect(resolved).toBeUndefined();
   });
 });

@@ -31,6 +31,7 @@ import { admitSessionMemoryContext } from '../graph/sessionMemoryContext';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../authority/modelTurnMemoryPolicyBinding';
 import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
 import { buildMobileControllerPublishedHandoff } from '../mobileController/publication';
+import { resolveRuntimeExplicitToolSurfaceToolNames } from '../tools/runtimeAvailability';
 
 const logger = createLogger('Orchestrator');
 
@@ -80,6 +81,10 @@ export async function runOrchestratorGraphSession(params: {
   const taskId = options.taskId ?? null;
 
   const availableToolNames = new Set(allTools.map((tool) => tool.name));
+  const explicitToolSurfaceToolNames = resolveRuntimeExplicitToolSurfaceToolNames(
+    options.explicitToolSurfaceToolNames,
+    runtimeToolAvailability,
+  );
   const compactionEngine = enableCompaction ? new DefaultContextEngine() : null;
   const sharedConversationId = resolveCodeOwnedMemoryConversationId(
     options.memoryConversationId,
@@ -300,7 +305,7 @@ export async function runOrchestratorGraphSession(params: {
         runtimeToolAvailability,
         toolCallHistory,
         stagnationSignatures,
-        explicitToolSurfaceToolNames: options.explicitToolSurfaceToolNames,
+        explicitToolSurfaceToolNames,
         toolFilter: options.toolFilter,
         workspaceConversationId: options.workspaceConversationId,
         workspaceReadFallbackConversationId: options.workspaceReadFallbackConversationId,
