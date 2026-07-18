@@ -37,6 +37,7 @@ import {
 } from '../../services/memory/toolObservedMemoryEvidence';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
+import { buildMobileControllerGoalAdmissionBlock } from '../mobileController/goalAdmission';
 
 const MOBILE_CONTROLLER_ISOLATED_TURN_BLOCK =
   'Blocked: mobile_ui_action must be the only tool call in its model turn because the external action suspends execution and changes the current observation.';
@@ -107,6 +108,9 @@ export async function executeAgentControlGraphToolBatch(params: {
     params.executableToolCalls.some(
       (toolCall) => resolveRegisteredToolName(toolCall.name) === MOBILE_UI_ACTION_TOOL_NAME,
     );
+  const mobileControllerGoalAdmissionBlock = buildMobileControllerGoalAdmissionBlock(
+    params.controlGraphGoals,
+  );
   for (const [index, toolCall] of params.executableToolCalls.entries()) {
     const policyBlocker = params.toolCallBlockers?.get(toolCall.id);
     if (policyBlocker) {
@@ -115,6 +119,13 @@ export async function executeAgentControlGraphToolBatch(params: {
     }
     if (hasMixedMobileControllerBoundary) {
       workflowBlockerByCallId.set(toolCall.id, MOBILE_CONTROLLER_ISOLATED_TURN_BLOCK);
+      continue;
+    }
+    if (
+      resolveRegisteredToolName(toolCall.name) === MOBILE_UI_ACTION_TOOL_NAME &&
+      mobileControllerGoalAdmissionBlock
+    ) {
+      workflowBlockerByCallId.set(toolCall.id, mobileControllerGoalAdmissionBlock);
       continue;
     }
     const requirement = completionRequirements[index];

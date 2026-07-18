@@ -4,6 +4,7 @@ import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileControl
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 import { buildToolResultMessage } from '../../src/engine/toolExecution/toolExecutionMessages';
+import { createGoal } from '../../src/engine/goals/types';
 
 jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
   executeToolCallLifecycle: jest.fn(),
@@ -54,7 +55,22 @@ function params(
     ],
     completedWorkflowToolNames: new Set<string>(),
     recordPerformanceMetrics: jest.fn(),
-    controlGraphGoals: [],
+    controlGraphGoals: [
+      createGoal({
+        id: 'mobile-goal',
+        title: 'Complete the requested device task',
+        status: 'active',
+        completionPolicy: 'blocking',
+        successCriteria: ['evidence.tool:mobile_ui_action'],
+        userConstraints: [
+          {
+            text: 'Update the device according to my request.',
+            sourceMessageId: 'user-message-1',
+          },
+        ],
+        now: 100,
+      }),
+    ],
     agentRunId: 'agent-run-mobile-1',
     executionRunId: 'execution-run-mobile-1',
     onBatchCommitted: jest.fn(),
@@ -135,5 +151,42 @@ describe('mobile controller tool batch execution', () => {
     expect(outcomes.every((outcome) => 'toolMessage' in outcome && outcome.toolMessage.isError)).toBe(
       true,
     );
+  });
+
+  it('blocks an unanchored raw action before the tool lifecycle can claim it', async () => {
+    mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle) => {
+      const blocker = lifecycle.workflowToolCallBlocker?.(
+        lifecycle.tc.name,
+        lifecycle.tc.arguments,
+      );
+      expect(JSON.parse(blocker ?? '{}')).toMatchObject({
+        status: 'error',
+        code: 'mobile_controller_goal_required',
+        repair: { tool: 'update_goals' },
+      });
+      return {
+        toolCallId: lifecycle.tc.id,
+        effectiveToolName: lifecycle.tc.name,
+        result: blocker,
+        toolMessage: buildToolResultMessage({
+          idPrefix: 'blocked',
+          toolCallId: lifecycle.tc.id,
+          content: blocker ?? 'blocked',
+          toolCall: { ...lifecycle.tc, status: 'failed', error: blocker },
+          isError: true,
+        }),
+      };
+    });
+
+    const input = params([
+      { id: 'tc-mobile', name: 'mobile_ui_action', arguments: '{"kind":"back"}' },
+    ]);
+    input.controlGraphGoals = [];
+
+    const outcomes = await executeAgentControlGraphToolBatch(input);
+
+    expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
+    expect(outcomes).toHaveLength(1);
+    expect('toolMessage' in outcomes[0] && outcomes[0].toolMessage.isError).toBe(true);
   });
 });
