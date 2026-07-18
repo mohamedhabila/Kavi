@@ -77,6 +77,7 @@ describe('mobile controller tool definition', () => {
       effectMode: 'effectful',
       effectKind: 'unknown',
       completionMode: 'operational',
+      tracksExecution: true,
     });
     await expect(buildCodeOwnedToolContractIdentity('mobile_ui_action')).resolves.toEqual(
       expect.objectContaining({ kind: 'code_owned', toolName: 'mobile_ui_action' }),
