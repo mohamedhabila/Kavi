@@ -1,6 +1,6 @@
 # MobileWorld
 
-This adapter connects MobileWorld's Android action loop to Kavi's exact foreground-chat execution. The benchmark owns screenshots, action parsing, device actions, task setup, and scoring. Kavi receives each current screenshot as a normal image attachment and runs its foreground graph with no benchmark-specific product tools or memory writes. A provider-enforced external-action contract gives the turn authority to propose exactly one controller action without pretending that Kavi's product tools executed it.
+This adapter connects MobileWorld's Android controller to Kavi's exact foreground agentic-chat execution. MobileWorld owns screenshots, device actions, task setup, and scoring; Kavi's persistent control graph owns action selection, recovery, and completion. Each current screenshot is ephemeral model evidence for the production `mobile_ui_action` tool. MobileWorld executes the published action and returns a correlated typed outcome before the same tracked run continues.
 
 ## Pinned source
 
@@ -16,7 +16,7 @@ The opt-in pilot uses an ADB-connected Android emulator or device and MobileWorl
 
 The pilot is deliberately labeled `non_official_ad_hoc_device_pilot`: it does not use an official MobileWorld task initializer or scorer and is not a leaderboard score. Its purpose is to validate the real screenshot-to-chat-to-action-to-device loop before spending provider budget on the full suite.
 
-The model returns one strict JSON object containing its rationale and proposed action. The local adapter validates that object, normalizes it with MobileWorld's unchanged action parser, and returns MobileWorld's canonical transcript for trajectory logging. There is no fallback to the legacy free-form `Thought:` / `Action:` parser. A malformed handoff is returned to the same foreground conversation as a typed validation failure; recovery is bounded at three attempts and does not inspect task text, language, expected actions, or gold state.
+The provider uses Kavi's capability-narrowed production tool schema. The adapter translates only a graph-published controller action into MobileWorld's unchanged action parser and returns its canonical transcript for trajectory logging. Invalid actions are rejected before external-effect authority is claimed, so the same graph can repair them safely. There is no benchmark-owned parser repair loop, second policy model, task-name branch, or gold-state feedback.
 
 ## Private setup
 
@@ -49,13 +49,13 @@ E2E_OPENROUTER_MODEL=<vision-capable-agent-model>
 OPENROUTER_API_KEY=<secret>
 ```
 
-The selected model must accept image inputs. The adapter never sends provider credentials to MobileWorld or writes them into results.
+The selected model must accept image inputs and tool calls. The adapter never sends provider credentials to MobileWorld or writes them into results.
 
-The adapter uses Kavi's exact foreground **chitchat** route as a one-step visual policy. MobileWorld owns the multi-step action loop and executes each parsed action after the chat turn. This is the faithful mapping for MobileWorld's custom-agent protocol: Kavi's code-owned external-action contract authorizes a proposal to the host controller, while only a later observation can provide outcome evidence. It is distinct from Kavi's product-tool authority. Report these results as screen understanding, external action selection, recovery, and end-task completion evidence—not as a direct test of Kavi's internal product-tool control graph.
+The adapter uses Kavi's exact foreground **agentic** route and one persistent tracked run. An admitted sandbox controller is code-pinned into that exact session's request-scoped tool surface. A controller call parks the foreground generation, MobileWorld executes it, and the next screenshot settles the exact handoff before the run resumes. This exercises the same graph, effect journal, chat projection, recovery, and tool authority boundaries used by the app; the benchmark remains only the external controller and scorer.
 
-At session initialization, the adapter intersects MobileWorld's canonical controller identifiers with packages installed on the selected device. That device-specific catalog is carried as system-level capability metadata and constrains `open_app` in the provider-enforced schema. The model therefore selects controller identifiers such as `files` or `sms` instead of guessing product labels the controller cannot accept.
+At session initialization, the adapter intersects MobileWorld's canonical controller identifiers with packages installed on the selected device. That device-specific catalog is carried in the admitted capability and constrains `open_app` in the runtime tool schema. The model therefore selects identifiers the host can execute instead of guessing product labels.
 
-The bridge carries a bounded chronological ledger into the next foreground turn. Each entry distinguishes the model's proposed action, MobileWorld's parser-normalized controller action, and the post-action observation. Exact pixel equality, simulated-user responses, and external-tool results are evidence fields; the bridge never promotes pixel change into a semantic-effect claim and records semantic effect as `unverified`. The assistant must judge the visible state, and the unchanged upstream scorer remains the final task authority. Three consecutive structurally similar actions with no verified semantic effect produce an advisory recovery signal. The detector does not inspect task names, apps, prompt text, expected answers, or scorer state.
+The host reports only facts it can observe: synchronous action acknowledgement, the next screenshot identity, and whether the screen pixels changed. Pixel change is never promoted into semantic completion; the model must inspect the new screen and the unchanged upstream scorer remains final authority. Kavi derives cross-resume recovery pressure from consecutive correlated `unchanged` outcomes, independent of language, task text, app name, expected action, or scorer state. That pressure asks the product agent to change strategy or report a concrete blocker instead of repeating an ineffective interaction indefinitely.
 
 The current public adapter covers MobileWorld's GUI action channel and user-interaction observations. It does not expose MobileWorld MCP tools to Kavi. Keep MCP-tagged tasks out of reported adapter aggregates until a separate typed MCP authority and outcome channel is implemented and validated end to end.
 
@@ -98,7 +98,7 @@ MobileWorld currently documents 201 tasks across 20 apps. A subset, ad-hoc task,
 ## Integrity guardrails
 
 - Production code must not branch on MobileWorld task names, prompts, apps, expected actions, or reward state.
-- The bridge sends only the user objective, chronological observations, typed action contract, and typed validation failures.
+- The bridge sends only the user objective, current observation, graph-published action, and correlated host outcome.
 - Gold task state and database verification remain outside the app process.
 - No provider key, raw private trace, local absolute path, or emulator snapshot is committed.
 - Keep pass@1 primary. Report retries, repairs, latency, token use, device state, and failures alongside success rate.

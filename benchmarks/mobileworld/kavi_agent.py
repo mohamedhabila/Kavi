@@ -1,4 +1,4 @@
-"""MobileWorld agent adapter for Kavi's exact foreground-chat bridge."""
+"""MobileWorld adapter for Kavi's graph-owned foreground controller session."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import json
 import os
 import subprocess
 from collections.abc import Callable
-from copy import deepcopy
 from io import BytesIO
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -21,18 +20,16 @@ from mobile_world.agents.implementations.general_e2e_agent import (
     parse_response_to_action,
 )
 from mobile_world.runtime.controller import APP_LOWER_DICT
-from mobile_world.runtime.utils.models import UNKNOWN, JSONAction
+from mobile_world.runtime.utils.models import JSONAction
 
 JsonObject = dict[str, Any]
 RequestFunction = Callable[[JsonObject], JsonObject]
 MAX_RESPONSE_BYTES = 1_000_000
 MAX_SCREENSHOT_BYTES = 8_000_000
-MAX_ACTION_ATTEMPTS = 3
-MAX_RECENT_ACTION_OUTCOMES = 6
 
 
 class KaviBridgeError(RuntimeError):
-    """Raised when the local Kavi bridge cannot produce a valid response."""
+    """Raised when the local Kavi bridge cannot produce a valid host event."""
 
 
 def _require_text(value: Any, field: str) -> str:
@@ -48,23 +45,6 @@ def _require_loopback_url(value: str) -> str:
     return value.rstrip("/")
 
 
-def _parse_external_action_response(value: Any) -> tuple[str, JsonObject]:
-    raw = _require_text(value, "response")
-    try:
-        decoded = json.loads(raw)
-    except json.JSONDecodeError as error:
-        raise KaviBridgeError("External action response must be one JSON object.") from error
-    if not isinstance(decoded, dict) or set(decoded) != {"thought", "action"}:
-        raise KaviBridgeError(
-            "External action response must contain exactly 'thought' and 'action'."
-        )
-    thought = _require_text(decoded.get("thought"), "response.thought")
-    action = decoded.get("action")
-    if not isinstance(action, dict) or not action:
-        raise KaviBridgeError("Bridge field 'response.action' must be a non-empty object.")
-    return thought, action
-
-
 def _discover_controller_app_identifiers(env: Any) -> list[str]:
     device = _require_text(getattr(env, "device", None), "env.device")
     try:
@@ -76,9 +56,7 @@ def _discover_controller_app_identifiers(env: Any) -> list[str]:
             timeout=15,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise KaviBridgeError(
-            "Unable to discover installed Android packages."
-        ) from error
+        raise KaviBridgeError("Unable to discover installed Android packages.") from error
     if result.returncode != 0:
         raise KaviBridgeError(
             f"Unable to discover installed Android packages: {result.stderr.strip()}"
@@ -94,14 +72,35 @@ def _discover_controller_app_identifiers(env: Any) -> list[str]:
         if package_name in installed_packages
     )
     if not identifiers:
-        raise KaviBridgeError(
-            "MobileWorld found no launchable app identifiers on the device."
-        )
+        raise KaviBridgeError("MobileWorld found no launchable app identifiers on the device.")
     return identifiers
 
 
+def _read_bridge_event(response: JsonObject) -> tuple[str, JsonObject]:
+    event = response.get("event")
+    if not isinstance(event, dict):
+        raise KaviBridgeError("Kavi bridge response must contain one host event.")
+    kind = _require_text(event.get("kind"), "event.kind")
+    if kind == "controller_action":
+        if set(event) != {"kind", "action"} or not isinstance(event.get("action"), dict):
+            raise KaviBridgeError("Controller event must contain exactly one action object.")
+        return kind, event["action"]
+    if kind in {"ask_user", "answer"}:
+        if set(event) != {"kind", "text"}:
+            raise KaviBridgeError(f"{kind} event must contain exactly one text field.")
+        return kind, {"action_type": kind, "text": _require_text(event.get("text"), "event.text")}
+    if kind == "status":
+        if set(event) != {"kind", "goal_status"} or event.get("goal_status") not in {
+            "complete",
+            "infeasible",
+        }:
+            raise KaviBridgeError("Status event must contain a valid goal_status.")
+        return kind, {"action_type": "status", "goal_status": event["goal_status"]}
+    raise KaviBridgeError(f"Unsupported Kavi host event: {kind!r}.")
+
+
 class KaviMobileWorldAgent(BaseAgent):
-    """Delegates MobileWorld policy steps to Kavi's exact foreground chat path."""
+    """Delegates one serialized MobileWorld session to Kavi's foreground graph."""
 
     def __init__(
         self,
@@ -116,10 +115,12 @@ class KaviMobileWorldAgent(BaseAgent):
         env = kwargs.get("env")
         del model_name, llm_base_url, api_key, kwargs
         super().__init__()
-        bridge_url = os.environ.get("KAVI_MOBILEWORLD_BRIDGE_URL", "")
-        bridge_token = os.environ.get("KAVI_MOBILEWORLD_BRIDGE_TOKEN", "")
-        self.bridge_url = _require_loopback_url(bridge_url)
-        self._bridge_token = _require_text(bridge_token, "bridge_token")
+        self.bridge_url = _require_loopback_url(
+            os.environ.get("KAVI_MOBILEWORLD_BRIDGE_URL", "")
+        )
+        self._bridge_token = _require_text(
+            os.environ.get("KAVI_MOBILEWORLD_BRIDGE_TOKEN", ""), "bridge_token"
+        )
         if not isinstance(scale_factor, int) or scale_factor <= 0:
             raise ValueError("scale_factor must be a positive integer.")
         self.scale_factor = scale_factor
@@ -128,10 +129,8 @@ class KaviMobileWorldAgent(BaseAgent):
         self._request_function = request_function or self._request_over_http
         self.step_index = 0
         self.repair_count = 0
-        self._previous_handoff: JsonObject | None = None
-        self._recent_action_outcomes: list[JsonObject] = []
+        self._previous_event_kind: str | None = None
         self._previous_screenshot_digest: str | None = None
-        self._unchanged_observation_count = 0
 
     def _request_over_http(self, payload: JsonObject) -> JsonObject:
         request = Request(
@@ -165,14 +164,12 @@ class KaviMobileWorldAgent(BaseAgent):
 
     def _request(self, action: str, **fields: Any) -> JsonObject:
         response = self._request_function(
-            {
-                "action": action,
-                "session_id": self.session_id,
-                **fields,
-            }
+            {"action": action, "session_id": self.session_id, **fields}
         )
         if response.get("ok") is not True:
-            raise KaviBridgeError(str(response.get("error") or f"Bridge rejected {action!r}."))
+            raise KaviBridgeError(
+                str(response.get("error") or f"Bridge rejected {action!r}.")
+            )
         return response
 
     def initialize_hook(self, instruction: str) -> None:
@@ -211,75 +208,44 @@ class KaviMobileWorldAgent(BaseAgent):
             raise KaviBridgeError("MobileWorld observation does not contain a screenshot.")
         encoded, width, height = self._encode_screenshot(screenshot)
         screenshot_digest = hashlib.sha256(base64.b64decode(encoded)).hexdigest()
-        visual_state_unchanged = screenshot_digest == self._previous_screenshot_digest
-        self._unchanged_observation_count = (
-            self._unchanged_observation_count + 1 if visual_state_unchanged else 0
-        )
-        if self._previous_handoff is not None:
-            self._recent_action_outcomes.append(
-                {
-                    **self._previous_handoff,
-                    "observation": {
-                        "post_action_observation_received": True,
-                        "exact_screen_match": visual_state_unchanged,
-                        "consecutive_exact_screen_matches": self._unchanged_observation_count,
-                        "semantic_effect": "unverified",
-                        "ask_user_response": observation.get("ask_user_response"),
-                        "external_tool_result": observation.get("tool_call"),
-                    },
-                }
-            )
-            self._recent_action_outcomes = self._recent_action_outcomes[
-                -MAX_RECENT_ACTION_OUTCOMES:
-            ]
+        prior_event_observation = None
+        if self._previous_event_kind is not None:
+            prior_event_observation = {
+                "event_kind": self._previous_event_kind,
+                "exact_screen_match": screenshot_digest == self._previous_screenshot_digest,
+                "ask_user_response": observation.get("ask_user_response"),
+                "external_tool_result": observation.get("tool_call"),
+            }
         self.step_index += 1
-        last_response = ""
-
-        for attempt in range(MAX_ACTION_ATTEMPTS):
-            action = "act" if attempt == 0 else "repair"
-            response = self._request(
-                action,
-                step_index=self.step_index,
-                attempt=attempt + 1,
-                screenshot_base64=encoded,
-                screenshot_width=width,
-                screenshot_height=height,
-                recent_action_outcomes=deepcopy(self._recent_action_outcomes),
-                **({"validation_error": "invalid_action_contract"} if attempt else {}),
-            )
-            self._record_usage(response)
-            last_response = _require_text(response.get("response"), "response")
-            try:
-                thought, action_payload = _parse_external_action_response(last_response)
-                parsed = parse_response_to_action(
-                    json.dumps(action_payload, ensure_ascii=False),
-                    width,
-                    height,
-                    self.scale_factor,
-                )
-                self._previous_handoff = {
-                    "proposed_action": action_payload,
-                    "parsed_controller_action": parsed,
-                }
-                self._previous_screenshot_digest = screenshot_digest
-                transcript = (
-                    f"Thought: {thought}\n"
-                    f"Action: {json.dumps(action_payload, ensure_ascii=False)}"
-                )
-                return transcript, JSONAction(**parsed)
-            except (KaviBridgeError, TypeError, ValueError):
-                if attempt + 1 < MAX_ACTION_ATTEMPTS:
-                    self.repair_count += 1
-
-        return last_response, JSONAction(
-            action_type=UNKNOWN,
-            text="Kavi did not produce an action accepted by MobileWorld's parser.",
+        response = self._request(
+            "advance",
+            step_index=self.step_index,
+            screenshot_base64=encoded,
+            screenshot_width=width,
+            screenshot_height=height,
+            prior_event_observation=prior_event_observation,
         )
+        self._record_usage(response)
+        event_kind, action_payload = _read_bridge_event(response)
+        try:
+            parsed = parse_response_to_action(
+                json.dumps(action_payload, ensure_ascii=False),
+                width,
+                height,
+                self.scale_factor,
+            )
+        except (TypeError, ValueError) as error:
+            raise KaviBridgeError("Graph-owned host event was rejected by MobileWorld.") from error
+        self._previous_event_kind = event_kind
+        self._previous_screenshot_digest = screenshot_digest
+        transcript = (
+            f"Kavi graph event: {event_kind}\n"
+            f"Action: {json.dumps(action_payload, ensure_ascii=False)}"
+        )
+        return transcript, JSONAction(**parsed)
 
     def reset(self) -> None:
         self.step_index = 0
         self.repair_count = 0
-        self._previous_handoff = None
-        self._recent_action_outcomes = []
+        self._previous_event_kind = None
         self._previous_screenshot_digest = None
-        self._unchanged_observation_count = 0
