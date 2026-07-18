@@ -78,6 +78,31 @@ function requirePayloadInteger(payload: JsonObject, field: string): number {
   return Number(value);
 }
 
+function requirePayloadNonnegativeInteger(payload: JsonObject, field: string): number {
+  const value = payload[field];
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error(`bridge_${field}_invalid`);
+  }
+  return Number(value);
+}
+
+function readPayloadBoolean(payload: JsonObject, field: string): boolean {
+  const value = payload[field];
+  if (typeof value !== 'boolean') throw new Error(`bridge_${field}_invalid`);
+  return value;
+}
+
+function readPreviousAction(payload: JsonObject): JsonObject | null {
+  const value = payload.previous_action;
+  if (value === null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('bridge_previous_action_invalid');
+  }
+  const serialized = JSON.stringify(value);
+  if (serialized.length > 4_000) throw new Error('bridge_previous_action_too_large');
+  return value as JsonObject;
+}
+
 function decodePng(payload: JsonObject): { base64: string; bytes: number } {
   const base64 = requirePayloadText(payload, 'screenshot_base64');
   const decoded = Buffer.from(base64, 'base64');
@@ -129,6 +154,9 @@ function buildPolicyPrompt(params: {
   isRepair: boolean;
   scaleFactor: number;
   stepIndex: number;
+  previousAction: JsonObject | null;
+  unchangedObservationCount: number;
+  visualStateUnchanged: boolean;
   width: number;
 }): string {
   return `You are operating the Android device shown in the attached current screenshot.
@@ -136,11 +164,14 @@ function buildPolicyPrompt(params: {
 User objective: ${params.instruction}
 Environment step: ${params.stepIndex}; policy attempt: ${params.attempt}.
 Screenshot dimensions: ${params.width} x ${params.height} pixels.
+Previous executed action: ${params.previousAction ? JSON.stringify(params.previousAction) : 'none'}.
+Exact visible-screen match with the preceding observation: ${params.visualStateUnchanged ? 'unchanged' : 'changed or first observation'}.
+Consecutive exact unchanged observations: ${params.unchangedObservationCount}.
 ${params.isRepair ? 'The previous response failed the typed action contract. Recover by returning one valid action for the unchanged current screen.' : ''}
 
 The JSON Action is your device-control interface: MobileWorld will execute it after this response even though Kavi's ordinary product tools are disabled. Operate the device yourself. Do not ask the user to perform the steps. For a state-changing objective, an instructional answer is not completion; continue with a device action. Use answer only when the original objective requests information that you have obtained from the device.
 
-Choose the next single action that makes progress. Reassess the screenshot after every action. If an action was mistaken or ineffective, try a materially different route; do not stop merely because one attempt failed. Mark completion only when the visible device state supports it.
+Choose the next single action that makes progress. Reassess the screenshot after every action. An exact unchanged observation is structural evidence that the preceding action made no visible progress; choose a materially different action unless repetition is deliberately required. If an action was mistaken or ineffective, try a materially different route; do not stop merely because one attempt failed. Mark completion only when the visible device state supports it.
 
 Coordinates are normalized integers in [0, ${params.scaleFactor}] from the screenshot's top-left corner. Return exactly these two fields and no Markdown fence:
 Thought: concise decision rationale
@@ -445,6 +476,12 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
           const attempt = requirePayloadInteger(payload, 'attempt');
           const width = requirePayloadInteger(payload, 'screenshot_width');
           const height = requirePayloadInteger(payload, 'screenshot_height');
+          const previousAction = readPreviousAction(payload);
+          const visualStateUnchanged = readPayloadBoolean(payload, 'visual_state_unchanged');
+          const unchangedObservationCount = requirePayloadNonnegativeInteger(
+            payload,
+            'unchanged_observation_count',
+          );
           const scaleFactor = 1000;
           const result = await runForegroundScenario({
             provider,
@@ -452,7 +489,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
             conversationTitle: 'MobileWorld device pilot',
             systemPrompt,
             initialMessages: session.messages,
-            defaultMode: 'agentic',
+            defaultMode: 'chitchat',
             scenarioTimeoutMs: 300_000,
             timeoutMs: 240_000,
             maxTokens: 1_024,
@@ -466,8 +503,11 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
                   height,
                   instruction: session.instruction,
                   isRepair: action === 'repair',
+                  previousAction,
                   scaleFactor,
                   stepIndex,
+                  unchangedObservationCount,
+                  visualStateUnchanged,
                   width,
                 }),
                 attachments: [
@@ -481,7 +521,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
                     base64: screenshot.base64,
                   },
                 ],
-                route: 'forced_agentic',
+                route: 'forced_chitchat',
               },
             ],
           });
@@ -557,6 +597,9 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
       },
       protocol: {
         exact_foreground_chat: true,
+        foreground_mode: 'chitchat',
+        internal_agentic_control_graph: false,
+        benchmark_owned_action_loop: true,
         upstream_action_parser: true,
         upstream_device_controller: true,
         official_task_initialization: Boolean(taskName),

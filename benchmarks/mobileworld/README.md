@@ -42,6 +42,8 @@ OPENROUTER_API_KEY=<secret>
 
 The selected model must accept image inputs. The adapter never sends provider credentials to MobileWorld or writes them into results.
 
+The adapter uses Kavi's exact foreground **chitchat** route as a one-step visual policy. MobileWorld owns the multi-step action loop and executes each parsed action. This is the faithful mapping for MobileWorld's custom-agent protocol: Kavi's internal agentic graph only treats executable product tools as action authority, while MobileWorld's action is returned to an external runner. Report these results as screen understanding, action selection, recovery, and end-task completion evidence—not as a direct test of Kavi's internal agentic control graph.
+
 Run adapter checks and the device pilot:
 
 ```sh

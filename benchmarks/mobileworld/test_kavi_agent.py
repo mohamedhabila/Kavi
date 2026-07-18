@@ -75,6 +75,27 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
         self.assertEqual(bridge.requests[-1]["validation_error"], "invalid_action_contract")
         self.assertEqual(agent.repair_count, 1)
 
+    def test_reports_structural_visual_stagnation_and_previous_action(self) -> None:
+        bridge = FakeBridge(
+            [
+                'Thought: Go back.\nAction: {"action_type":"navigate_back"}',
+                'Thought: Try another route.\nAction: {"action_type":"navigate_home"}',
+            ]
+        )
+        agent = self.make_agent(bridge)
+        agent.initialize("Complete the task")
+        screenshot = Image.new("RGB", (100, 200), color="white")
+
+        agent.predict({"screenshot": screenshot})
+        agent.predict({"screenshot": screenshot})
+
+        first_request, second_request = bridge.requests[1:3]
+        self.assertFalse(first_request["visual_state_unchanged"])
+        self.assertIsNone(first_request["previous_action"])
+        self.assertTrue(second_request["visual_state_unchanged"])
+        self.assertEqual(second_request["unchanged_observation_count"], 1)
+        self.assertEqual(second_request["previous_action"], {"action_type": "navigate_back"})
+
     def test_returns_unknown_after_the_bounded_recovery_budget(self) -> None:
         bridge = FakeBridge(["invalid", "still invalid", "invalid again"])
         agent = self.make_agent(bridge)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 from collections.abc import Callable
@@ -45,7 +46,7 @@ def _require_loopback_url(value: str) -> str:
 
 
 class KaviMobileWorldAgent(BaseAgent):
-    """Delegates MobileWorld policy steps to Kavi's foreground conversation graph."""
+    """Delegates MobileWorld policy steps to Kavi's exact foreground chat path."""
 
     def __init__(
         self,
@@ -70,6 +71,9 @@ class KaviMobileWorldAgent(BaseAgent):
         self._request_function = request_function or self._request_over_http
         self.step_index = 0
         self.repair_count = 0
+        self._previous_action: JsonObject | None = None
+        self._previous_screenshot_digest: str | None = None
+        self._unchanged_observation_count = 0
 
     def _request_over_http(self, payload: JsonObject) -> JsonObject:
         request = Request(
@@ -143,6 +147,11 @@ class KaviMobileWorldAgent(BaseAgent):
         if screenshot is None or not hasattr(screenshot, "save") or not hasattr(screenshot, "size"):
             raise KaviBridgeError("MobileWorld observation does not contain a screenshot.")
         encoded, width, height = self._encode_screenshot(screenshot)
+        screenshot_digest = hashlib.sha256(base64.b64decode(encoded)).hexdigest()
+        visual_state_unchanged = screenshot_digest == self._previous_screenshot_digest
+        self._unchanged_observation_count = (
+            self._unchanged_observation_count + 1 if visual_state_unchanged else 0
+        )
         self.step_index += 1
         last_response = ""
 
@@ -157,6 +166,9 @@ class KaviMobileWorldAgent(BaseAgent):
                 screenshot_height=height,
                 tool_call=observation.get("tool_call"),
                 ask_user_response=observation.get("ask_user_response"),
+                previous_action=self._previous_action,
+                visual_state_unchanged=visual_state_unchanged,
+                unchanged_observation_count=self._unchanged_observation_count,
                 **({"validation_error": "invalid_action_contract"} if attempt else {}),
             )
             self._record_usage(response)
@@ -169,6 +181,8 @@ class KaviMobileWorldAgent(BaseAgent):
                     height,
                     self.scale_factor,
                 )
+                self._previous_action = parsed
+                self._previous_screenshot_digest = screenshot_digest
                 return last_response, JSONAction(**parsed)
             except (TypeError, ValueError):
                 if attempt + 1 < MAX_ACTION_ATTEMPTS:
@@ -182,3 +196,6 @@ class KaviMobileWorldAgent(BaseAgent):
     def reset(self) -> None:
         self.step_index = 0
         self.repair_count = 0
+        self._previous_action = None
+        self._previous_screenshot_digest = None
+        self._unchanged_observation_count = 0
