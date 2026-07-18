@@ -363,6 +363,27 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
     return { status: 'finalized' };
   }
 
+  if (
+    params.effectiveForceTextThisTurn &&
+    params.recoveryDirectives.forcedTextReason === 'execution_loop_recovery'
+  ) {
+    params.commitModelTurn();
+    await params.finishWithGraphTerminalEvent({
+      graphEvent: {
+        type: 'BLOCKED',
+        reason: 'execution_loop_recovery',
+      },
+      content: params.turnAssistantContent,
+      providerReplay: params.providerReplay,
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'incomplete',
+        finishReason: 'execution_loop_recovery',
+      }),
+      sessionEndReason: 'execution_loop_recovery',
+    });
+    return { status: 'finalized' };
+  }
+
   const evaluateGate = (goals: typeof params.controlGraph.goals) =>
     evaluateCompletionGate({
       trackedOperations: params.trackedAsyncOperations,

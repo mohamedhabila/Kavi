@@ -5,6 +5,32 @@ import type { ToolDefinition } from '../../src/types/tool';
 import { buildBaseParams, createControlGraphWithGoals } from './helpers/noToolTurnResolution';
 
 describe('agent control graph no-tool finalization', () => {
+  it('delivers exhausted recovery text without marking the task successful', async () => {
+    const params = buildBaseParams();
+    params.effectiveForceTextThisTurn = true;
+    params.recoveryDirectives = {
+      ...params.recoveryDirectives,
+      forceFinalText: true,
+      forcedTextReason: 'execution_loop_recovery',
+      automaticRecoveryAttemptCount: 1,
+    };
+    params.turnAssistantContent = 'I could not verify the requested mobile changes.';
+    params.modelTurnAssistantContent = params.turnAssistantContent;
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({ status: 'finalized' });
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graphEvent: { type: 'BLOCKED', reason: 'execution_loop_recovery' },
+        content: params.turnAssistantContent,
+        assistantMetadata: expect.objectContaining({ completionStatus: 'incomplete' }),
+        sessionEndReason: 'execution_loop_recovery',
+      }),
+    );
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+  });
+
   it('finalizes passive no-goal turns even when goal mutation is available', async () => {
     const params = buildBaseParams();
     params.selectedToolNames = new Set(['write_file', GOAL_BOOTSTRAP_TOOL_NAME]);
