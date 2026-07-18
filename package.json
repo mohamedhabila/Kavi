@@ -74,6 +74,7 @@
     "eval:state-bench:validate-candidate": "python3 benchmarks/state_bench/validate_kavi_state_bench_candidate.py",
     "eval:state-bench:compare": "python3 benchmarks/state_bench/compare_kavi_state_bench_learning.py",
     "test:state-bench-adapter": "python3 -m unittest discover -s benchmarks/state_bench -p 'test_*.py'",
+    "eval:mobileworld:pilot": "node ./scripts/mobileworld-pilot.js",
     "eval:agent": "node ./scripts/agent-eval-harness.js",
     "eval:recovery": "jest --runInBand __tests__/acceptance/recoveryBenchmark.test.ts",
     "eval:e2e": "node ./scripts/e2e-agent-eval-harness.js",

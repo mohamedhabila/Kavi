@@ -184,6 +184,54 @@ describe('foreground scenario selected mode and outer deadline', () => {
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
+  it('passes image attachments through the exact foreground chat entry point', async () => {
+    const attachment = {
+      id: 'current-screen',
+      type: 'image' as const,
+      uri: 'inline://current-screen.png',
+      name: 'current-screen.png',
+      mimeType: 'image/png',
+      size: 4,
+      base64: 'AQIDBA==',
+    };
+
+    const result = await runForegroundScenario({
+      provider: makeProvider(),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
+      turns: [{ content: '', attachments: [attachment], route: 'production_auto' }],
+    });
+
+    const providerUserMessage = mockedRunOrchestrator.mock.calls[0][0].messages.find(
+      (message) => message.role === 'user',
+    );
+    expect(providerUserMessage?.attachments).toEqual([attachment]);
+    expect(providerUserMessage?.attachments?.[0]).not.toBe(attachment);
+    expect(
+      result.turns[0].messages.find((message) => message.role === 'user')?.attachments,
+    ).toEqual([attachment]);
+    expect(Object.isFrozen(result.turns[0].messages[0]?.attachments)).toBe(true);
+    expect(attachment).toEqual(expect.objectContaining({ base64: 'AQIDBA==' }));
+  });
+
+  it('rejects a foreground turn with neither text nor attachments', async () => {
+    await expect(
+      runForegroundScenario({
+        provider: makeProvider(),
+        conversationId: 'scenario-conversation',
+        conversationTitle: 'Scenario title',
+        systemPrompt: 'Scenario prompt',
+        defaultMode: 'chitchat',
+        scenarioTimeoutMs: 60_000,
+        turns: [{ content: '  ', route: 'production_auto' }],
+      }),
+    ).rejects.toThrow('must contain text or an attachment');
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+  });
+
   it('starts a product-created conversation with no prior raw chat and shared durable memory', async () => {
     const userMessageCounts: number[] = [];
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {

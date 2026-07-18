@@ -1,0 +1,78 @@
+# MobileWorld
+
+This adapter connects MobileWorld's Android action loop to Kavi's exact foreground-chat execution. The benchmark owns screenshots, action parsing, device actions, task setup, and scoring. Kavi receives each current screenshot as a normal image attachment and runs its agentic foreground graph with no benchmark-specific product tools or memory writes.
+
+## Pinned source
+
+- Repository: [Tongyi-MAI/MobileWorld](https://github.com/Tongyi-MAI/MobileWorld)
+- Revision: `8ae506487bf87785292d6cad101c49955d704d39`
+- License: Apache-2.0
+
+The upstream checkout, submodules, Python environment, emulator images, APKs, run traces, and credentials stay under `.private/` and are not redistributed.
+
+## What the first pilot proves
+
+The opt-in pilot uses an ADB-connected Android emulator or device and MobileWorld's unmodified server, controller, and general-E2E action parser. It asks Kavi to create an alarm, then verifies the exact hour, minute, and enabled state directly in the Clock database. A prose claim of completion cannot pass the test.
+
+The pilot is deliberately labeled `non_official_ad_hoc_device_pilot`: it does not use an official MobileWorld task initializer or scorer and is not a leaderboard score. Its purpose is to validate the real screenshot-to-chat-to-action-to-device loop before spending provider budget on the full suite.
+
+Malformed action output is returned to the same foreground conversation as a typed validation failure. Recovery is bounded at three attempts and does not inspect task text, language, expected actions, or gold state.
+
+## Private setup
+
+Install `uv`, Android platform tools, and an Android emulator or connect a debuggable physical device. Then, from the repository root:
+
+```sh
+mkdir -p .private/evals/upstream
+git clone https://github.com/Tongyi-MAI/MobileWorld .private/evals/upstream/mobileworld
+git -C .private/evals/upstream/mobileworld checkout 8ae506487bf87785292d6cad101c49955d704d39
+git -C .private/evals/upstream/mobileworld submodule update --init --recursive
+cd .private/evals/upstream/mobileworld
+uv sync --all-extras
+uv run mobile-world server --host 127.0.0.1 --port 6800
+```
+
+Keep the server running. Configure a real provider in ignored `.env.local` or the shell:
+
+```sh
+E2E_PROVIDER=openrouter
+E2E_OPENROUTER_MODEL=<vision-capable-agent-model>
+OPENROUTER_API_KEY=<secret>
+```
+
+The selected model must accept image inputs. The adapter never sends provider credentials to MobileWorld or writes them into results.
+
+Run adapter checks and the device pilot:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 .private/evals/upstream/mobileworld/.venv/bin/python \
+  -m unittest discover -s benchmarks/mobileworld -p 'test_*.py'
+node ./scripts/mobileworld-pilot.js
+```
+
+Set `MOBILEWORLD_DEVICE`, `MOBILEWORLD_AW_HOST`, or `MOBILEWORLD_PILOT_MAX_STEPS` only when the environment requires it. Results are written to a fresh ignored directory under `.private/evals/runs/mobileworld/`.
+
+## Full benchmark and official submission
+
+The official score requires MobileWorld's complete prepared environment and all applicable tasks, not the ad-hoc pilot. Follow the upstream [environment setup](https://github.com/Tongyi-MAI/MobileWorld#-quick-start) on a supported Linux/KVM host or its documented [physical-device path](https://github.com/Tongyi-MAI/MobileWorld/blob/main/docs/real-devices.md). Keep the upstream task initialization, user simulator, MCP services, scorer, retry policy, and trajectory logger unchanged.
+
+For a frozen run:
+
+1. Use a clean Kavi commit and the pinned clean MobileWorld revision.
+2. Record the provider family, exact model, base URL, device/OS, task track, max steps, concurrency, retries, and timestamps.
+3. Run pass@1 first and retain every task attempt, including infrastructure and parse failures.
+4. Keep GUI-only, user-interaction, and MCP results separate unless the upstream report explicitly aggregates them.
+5. Inspect `traj_logs/<run-name>/` for completeness and secrets without editing scored outputs.
+6. Run MobileWorld's `site/bundle_trajs.py` on the complete run directory.
+7. Prepare the leaderboard metadata object specified by the official [submission guide](https://github.com/Tongyi-MAI/MobileWorld/blob/main/docs/submit.md).
+8. Open an issue in the MobileWorld repository with the `.json.gz` bundle and optional trajectory video. Call the score official only after maintainer acceptance.
+
+MobileWorld currently documents 201 tasks across 20 apps. A subset, ad-hoc task, modified scorer, missing trajectory set, or unsupported host adaptation must be reported as a local diagnostic rather than a MobileWorld score.
+
+## Integrity guardrails
+
+- Production code must not branch on MobileWorld task names, prompts, apps, expected actions, or reward state.
+- The bridge sends only the user objective, chronological observations, typed action contract, and typed validation failures.
+- Gold task state and database verification remain outside the app process.
+- No provider key, raw private trace, local absolute path, or emulator snapshot is committed.
+- Keep pass@1 primary. Report retries, repairs, latency, token use, device state, and failures alongside success rate.
