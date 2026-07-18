@@ -661,6 +661,7 @@ async function executeReservedForegroundConversationRun(
       );
       orchestratorTerminalDisposition = orchestratorResult.terminalDisposition;
       pendingVerifiedProcedureObservation = orchestratorResult.pendingVerifiedProcedureObservation;
+      runtime.terminalLifecycle.handleDone();
       terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
     } catch (error: unknown) {
       if (

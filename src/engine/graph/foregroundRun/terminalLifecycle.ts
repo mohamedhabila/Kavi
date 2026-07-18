@@ -79,8 +79,11 @@ export function createForegroundRunTerminalLifecycleController(params: {
     ) {
       return 'cancelled';
     }
-    // A yielded foreground turn is a successful model checkpoint because the
-    // foreground closeout keeps its pending workers under async monitoring.
+    // Parked and yielded turns are successful model checkpoints. Their open
+    // work remains owned by the tracked run instead of being terminalized.
+    if (latestControlGraphState?.status === 'waiting_async') {
+      return 'succeeded';
+    }
     return resolveAgentControlGraphTerminalFailure({
       state: latestControlGraphState,
       allowYieldedCheckpoint: true,

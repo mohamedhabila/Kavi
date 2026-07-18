@@ -319,4 +319,58 @@ describe('foreground mobile controller binding', () => {
         ),
     ).toHaveLength(1);
   });
+
+  it('closes the foreground generation while a mobile handoff remains parked', async () => {
+    const persisted = createPersistedMobileControllerHandoffFixture();
+    const operation = buildAgentRunMobileControllerAsyncOperation({
+      handoff: persisted.handoffRef,
+      status: 'running',
+      updatedAt: 40,
+    });
+    if (!operation) throw new Error('expected mobile controller async operation');
+    const controlGraph = reduceAgentControlGraph(undefined, [
+      { type: 'MODEL_TURN_STARTED', iteration: 1, timestamp: 20 },
+      {
+        type: 'MODEL_TURN_COMPLETED',
+        iteration: 1,
+        toolCalls: [{ id: persisted.handoffRef.toolCallId, name: 'mobile_ui_action' }],
+        timestamp: 30,
+      },
+      {
+        type: 'ASYNC_WAITING',
+        pendingAsyncCount: 1,
+        pendingOperations: [operation],
+        timestamp: 40,
+      },
+    ]);
+    const conversation = createConversation({ mode: 'agentic' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    mockedResolveForegroundRunPreflight.mockResolvedValue(
+      createReadyPreflightResult({ conversation, provider }),
+    );
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      callbacks.onPendingAsyncOperationsChange?.([operation]);
+      callbacks.onAgentControlGraphStateChange?.(controlGraph);
+      return {
+        terminalDisposition: 'waiting',
+        graphSnapshot: controlGraph,
+      };
+    });
+
+    await executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+    });
+
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'succeeded' }),
+    );
+    expect(context.store.completeAgentRun).not.toHaveBeenCalled();
+  });
 });
