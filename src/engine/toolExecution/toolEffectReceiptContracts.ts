@@ -58,6 +58,7 @@ const NATIVE_NON_SUCCESS_OUTCOMES: Readonly<Record<string, ToolEffectResultOutco
     cancelled: CANCELLED,
     unknown: UNKNOWN,
     failed: UNKNOWN,
+    invalid_request: FAILED,
     unavailable: FAILED,
     permission_denied: FAILED,
     permission_blocked: FAILED,
@@ -344,12 +345,12 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ...READ_ONLY_CONTRACTS,
     calendar_create_event: effectful(
       'calendar.create',
-      { created_verified: VERIFIED, created_unverified: APPLIED },
+      nativeOutcomes({ created_verified: VERIFIED, created_unverified: APPLIED }),
       { resource: selector('calendar_event', 'result', ['eventId']) },
     ),
     calendar_update_event: effectful(
       'calendar.update',
-      { updated_verified: VERIFIED, updated_unverified: APPLIED },
+      nativeOutcomes({ updated_verified: VERIFIED, updated_unverified: APPLIED }),
       { resource: selector('calendar_event', 'result', ['eventId']) },
     ),
     clipboard_write: effectful('clipboard.write', {

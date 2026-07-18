@@ -62,10 +62,18 @@ function calendarEventMatches(
 
 export async function executeCalendarList(): Promise<ToolRuntimeOutcome> {
   const Calendar = await loadCalendarModule();
-  if (!Calendar) return failedCalendarOutcome({ error: 'Calendar module not available' });
+  if (!Calendar)
+    return failedCalendarOutcome({
+      status: 'unavailable',
+      error: 'Calendar module not available',
+    });
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
-  if (status !== 'granted') return failedCalendarOutcome({ error: 'Calendar permission denied' });
+  if (status !== 'granted')
+    return failedCalendarOutcome({
+      status: 'permission_denied',
+      error: 'Calendar permission denied',
+    });
 
   const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
   return completedCalendarOutcome(
@@ -85,15 +93,26 @@ export async function executeCalendarEvents(args: {
   calendarId?: string;
 }, runtime?: CalendarMutationRuntime): Promise<ToolRuntimeOutcome> {
   const Calendar = runtime ?? (await loadCalendarModule());
-  if (!Calendar) return failedCalendarOutcome({ error: 'Calendar module not available' });
+  if (!Calendar)
+    return failedCalendarOutcome({
+      status: 'unavailable',
+      error: 'Calendar module not available',
+    });
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
-  if (status !== 'granted') return failedCalendarOutcome({ error: 'Calendar permission denied' });
+  if (status !== 'granted')
+    return failedCalendarOutcome({
+      status: 'permission_denied',
+      error: 'Calendar permission denied',
+    });
 
   const start = new Date(args.startDate);
   const end = new Date(args.endDate);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    return failedCalendarOutcome({ error: 'Invalid date format. Use ISO 8601.' });
+    return failedCalendarOutcome({
+      status: 'invalid_request',
+      error: 'Invalid date format. Use ISO 8601.',
+    });
   }
 
   let calendarIds = args.calendarId ? [args.calendarId] : [];
@@ -104,7 +123,10 @@ export async function executeCalendarEvents(args: {
       .filter((id): id is string => typeof id === 'string' && id.length > 0);
   }
   if (calendarIds.length === 0) {
-    return failedCalendarOutcome({ error: 'No event calendars found on this device.' });
+    return failedCalendarOutcome({
+      status: 'not_found',
+      error: 'No event calendars found on this device.',
+    });
   }
 
   const events = await Calendar.getEventsAsync(calendarIds, start, end);
@@ -135,21 +157,31 @@ export async function executeCalendarCreate(
   runtime?: CalendarMutationRuntime,
 ): Promise<ToolRuntimeOutcome> {
   const Calendar = runtime ?? (await loadCalendarModule());
-  if (!Calendar) return failedCalendarOutcome({ error: 'Calendar module not available' });
+  if (!Calendar)
+    return failedCalendarOutcome({
+      status: 'unavailable',
+      error: 'Calendar module not available',
+    });
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
-  if (status !== 'granted') return failedCalendarOutcome({ error: 'Calendar permission denied' });
+  if (status !== 'granted')
+    return failedCalendarOutcome({
+      status: 'permission_denied',
+      error: 'Calendar permission denied',
+    });
 
   const start = new Date(args.startDate);
   const end = new Date(args.endDate);
 
   if (isNaN(start.getTime())) {
     return failedCalendarOutcome({
+      status: 'invalid_request',
       error: `Invalid start date: "${args.startDate}". Use ISO 8601 format (e.g. 2025-03-20T10:00:00).`,
     });
   }
   if (isNaN(end.getTime())) {
     return failedCalendarOutcome({
+      status: 'invalid_request',
       error: `Invalid end date: "${args.endDate}". Use ISO 8601 format (e.g. 2025-03-20T11:00:00).`,
     });
   }
@@ -167,6 +199,7 @@ export async function executeCalendarCreate(
     const writable = defaultCal || calendars.find((c: any) => c.allowsModifications);
     if (!writable)
       return failedCalendarOutcome({
+        status: 'not_found',
         error: 'No writable calendar found on this device. Please create a calendar first.',
       });
     calendarId = writable.id;
@@ -205,15 +238,14 @@ export async function executeCalendarCreate(
         ...(args.location !== undefined ? { location: args.location } : {}),
         ...(args.notes !== undefined ? { notes: args.notes } : {}),
       });
-      const content = JSON.stringify({
+      return completedCalendarOutcome({
         status: verified ? 'created_verified' : 'created_unverified',
         eventId,
         calendarId,
         ...(verified ? {} : { verificationError: 'calendar_readback_mismatch' }),
       });
-      return verified ? completedToolOutcome(content) : failedToolOutcome(content);
     } catch {
-      return failedCalendarOutcome({
+      return completedCalendarOutcome({
         status: 'created_unverified',
         eventId,
         calendarId,
@@ -222,7 +254,10 @@ export async function executeCalendarCreate(
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return failedCalendarOutcome({ error: `Failed to create event: ${msg}` });
+    return failedCalendarOutcome({
+      status: 'unknown',
+      error: `Failed to create event: ${msg}`,
+    });
   }
 }
 
@@ -239,13 +274,24 @@ export async function executeCalendarUpdate(
   runtime?: CalendarMutationRuntime,
 ): Promise<ToolRuntimeOutcome> {
   const Calendar = runtime ?? (await loadCalendarModule());
-  if (!Calendar) return failedCalendarOutcome({ error: 'Calendar module not available' });
+  if (!Calendar)
+    return failedCalendarOutcome({
+      status: 'unavailable',
+      error: 'Calendar module not available',
+    });
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
-  if (status !== 'granted') return failedCalendarOutcome({ error: 'Calendar permission denied' });
+  if (status !== 'granted')
+    return failedCalendarOutcome({
+      status: 'permission_denied',
+      error: 'Calendar permission denied',
+    });
 
   if (!args.id || typeof args.id !== 'string') {
-    return failedCalendarOutcome({ error: 'Calendar update requires an event id.' });
+    return failedCalendarOutcome({
+      status: 'invalid_request',
+      error: 'Calendar update requires an event id.',
+    });
   }
 
   const eventDetails: Record<string, any> = {};
@@ -257,7 +303,10 @@ export async function executeCalendarUpdate(
   if (typeof args.startDate === 'string') {
     const start = new Date(args.startDate);
     if (isNaN(start.getTime())) {
-      return failedCalendarOutcome({ error: 'Invalid start date format. Use ISO 8601.' });
+      return failedCalendarOutcome({
+        status: 'invalid_request',
+        error: 'Invalid start date format. Use ISO 8601.',
+      });
     }
     eventDetails.startDate = start;
   }
@@ -265,7 +314,10 @@ export async function executeCalendarUpdate(
   if (typeof args.endDate === 'string') {
     const end = new Date(args.endDate);
     if (isNaN(end.getTime())) {
-      return failedCalendarOutcome({ error: 'Invalid end date format. Use ISO 8601.' });
+      return failedCalendarOutcome({
+        status: 'invalid_request',
+        error: 'Invalid end date format. Use ISO 8601.',
+      });
     }
     eventDetails.endDate = end;
   }
@@ -275,11 +327,15 @@ export async function executeCalendarUpdate(
     eventDetails.endDate instanceof Date &&
     eventDetails.endDate.getTime() <= eventDetails.startDate.getTime()
   ) {
-    return failedCalendarOutcome({ error: 'Calendar update requires endDate after startDate.' });
+    return failedCalendarOutcome({
+      status: 'invalid_request',
+      error: 'Calendar update requires endDate after startDate.',
+    });
   }
 
   if (Object.keys(eventDetails).length === 0) {
     return failedCalendarOutcome({
+      status: 'invalid_request',
       error: 'Calendar update requires at least one field to change.',
     });
   }
@@ -290,12 +346,14 @@ export async function executeCalendarUpdate(
       existing = (await Calendar.getEventAsync(args.id)) as unknown as Record<string, unknown>;
     } catch {
       return failedCalendarOutcome({
+        status: 'not_found',
         error: 'Calendar event could not be read before update.',
         eventId: args.id,
       });
     }
     if (!existing || existing.id !== args.id) {
       return failedCalendarOutcome({
+        status: 'not_found',
         error: 'Calendar event read before update did not match the requested event.',
         eventId: args.id,
       });
@@ -316,7 +374,10 @@ export async function executeCalendarUpdate(
           ? existingEnd
           : undefined;
     if (finalStart && finalEnd && finalEnd.getTime() <= finalStart.getTime()) {
-      return failedCalendarOutcome({ error: 'Calendar update requires endDate after startDate.' });
+      return failedCalendarOutcome({
+        status: 'invalid_request',
+        error: 'Calendar update requires endDate after startDate.',
+      });
     }
 
     // Expo's legacy iOS adapter supplies defaults for these fields during a partial update.
@@ -354,14 +415,13 @@ export async function executeCalendarUpdate(
         ...preservedFields,
         ...completeEventDetails,
       });
-      const content = JSON.stringify({
+      return completedCalendarOutcome({
         status: verified ? 'updated_verified' : 'updated_unverified',
         eventId: args.id,
         ...(verified ? {} : { verificationError: 'calendar_readback_mismatch' }),
       });
-      return verified ? completedToolOutcome(content) : failedToolOutcome(content);
     } catch {
-      return failedCalendarOutcome({
+      return completedCalendarOutcome({
         status: 'updated_unverified',
         eventId: args.id,
         verificationError: 'calendar_readback_failed',
@@ -369,7 +429,10 @@ export async function executeCalendarUpdate(
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return failedCalendarOutcome({ error: `Failed to update event: ${msg}` });
+    return failedCalendarOutcome({
+      status: 'unknown',
+      error: `Failed to update event: ${msg}`,
+    });
   }
 }
 import {
@@ -382,6 +445,15 @@ function completedCalendarOutcome(value: unknown): ToolRuntimeOutcome {
   return completedToolOutcome(JSON.stringify(value));
 }
 
-function failedCalendarOutcome(value: unknown): ToolRuntimeOutcome {
+type CalendarFailureStatus =
+  | 'invalid_request'
+  | 'not_found'
+  | 'permission_denied'
+  | 'unavailable'
+  | 'unknown';
+
+function failedCalendarOutcome(
+  value: Record<string, unknown> & { status: CalendarFailureStatus },
+): ToolRuntimeOutcome {
   return failedToolOutcome(JSON.stringify(value));
 }

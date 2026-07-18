@@ -79,9 +79,10 @@ describe('calendar effect verification', () => {
       allDay: false,
     });
     const outcome = await executeCalendarCreate(JSON.parse(argumentsText), calendarRuntime);
-    const resultText = failedToolContent(outcome);
+    const result = parseCompletedToolOutcome(outcome);
+    const resultText = JSON.stringify(result);
 
-    expect(JSON.parse(resultText)).toMatchObject({
+    expect(result).toMatchObject({
       status: 'created_unverified',
       eventId: 'event-1',
       verificationError: 'calendar_readback_mismatch',
@@ -94,11 +95,76 @@ describe('calendar effect verification', () => {
         argumentsText,
         resultText,
         transportState: 'returned',
+        resultIsError: outcome.status === 'failed',
       }),
     ).resolves.toEqual(
       expect.objectContaining({
         effectState: 'applied',
         verificationState: 'acknowledged',
+      }),
+    );
+  });
+
+  it('records a missing writable calendar as a definitive no-effect failure', async () => {
+    const argumentsText = JSON.stringify({
+      title: 'Planning',
+      startDate: '2026-07-11T09:00:00.000Z',
+      endDate: '2026-07-11T10:00:00.000Z',
+    });
+    mockGetCalendarsAsync.mockResolvedValue([]);
+
+    const outcome = await executeCalendarCreate(JSON.parse(argumentsText), calendarRuntime);
+    const resultText = failedToolContent(outcome);
+
+    expect(JSON.parse(resultText)).toMatchObject({
+      status: 'not_found',
+      error: 'No writable calendar found on this device. Please create a calendar first.',
+    });
+    expect(mockCreateEventAsync).not.toHaveBeenCalled();
+    await expect(
+      buildToolEffectReceipt({
+        executionRunId: 'execution-run-1',
+        toolCallId: 'tc-calendar-missing',
+        toolName: 'calendar_create_event',
+        argumentsText,
+        resultText,
+        transportState: 'returned',
+        resultIsError: true,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        effectState: 'failed',
+        verificationState: 'unverified',
+      }),
+    );
+  });
+
+  it('keeps a mutation exception uncertain because dispatch may have occurred', async () => {
+    const argumentsText = JSON.stringify({
+      title: 'Planning',
+      startDate: '2026-07-11T09:00:00.000Z',
+      endDate: '2026-07-11T10:00:00.000Z',
+    });
+    mockCreateEventAsync.mockRejectedValue(new Error('Provider connection lost'));
+
+    const outcome = await executeCalendarCreate(JSON.parse(argumentsText), calendarRuntime);
+    const resultText = failedToolContent(outcome);
+
+    expect(JSON.parse(resultText)).toMatchObject({ status: 'unknown' });
+    await expect(
+      buildToolEffectReceipt({
+        executionRunId: 'execution-run-1',
+        toolCallId: 'tc-calendar-uncertain',
+        toolName: 'calendar_create_event',
+        argumentsText,
+        resultText,
+        transportState: 'returned',
+        resultIsError: true,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        effectState: 'unknown',
+        verificationState: 'unverified',
       }),
     );
   });
@@ -215,12 +281,14 @@ describe('calendar effect verification', () => {
       .mockResolvedValueOnce(existing)
       .mockResolvedValueOnce({ ...existing, title: '' });
 
-    const outcome = await executeCalendarUpdate(
-      { id: 'event-1', startDate: '2026-07-11T09:30:00.000Z' },
-      calendarRuntime,
+    const result = parseCompletedToolOutcome(
+      await executeCalendarUpdate(
+        { id: 'event-1', startDate: '2026-07-11T09:30:00.000Z' },
+        calendarRuntime,
+      ),
     );
 
-    expect(JSON.parse(failedToolContent(outcome))).toMatchObject({
+    expect(result).toMatchObject({
       status: 'updated_unverified',
       eventId: 'event-1',
       verificationError: 'calendar_readback_mismatch',
