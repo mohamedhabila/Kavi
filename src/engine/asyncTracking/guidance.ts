@@ -18,6 +18,10 @@ function formatPendingAsyncOperationLabel(
     return `Expo workflow ${operation.resourceId}`;
   }
 
+  if (operation.kind === 'mobile-controller-handoff') {
+    return 'mobile action';
+  }
+
   return `SSH background job ${operation.resourceId}`;
 }
 
@@ -49,6 +53,10 @@ function formatPendingAsyncOperationFact(operation: TrackedAsyncOperation): stri
     }
 
     return `- expo workflow ${operation.resourceId}: project=${projectId || operation.resourceId} status=unresolved monitor=expo_eas_workflow_runs|expo_eas_workflow_status wait=expo_eas_workflow_wait`;
+  }
+
+  if (operation.kind === 'mobile-controller-handoff') {
+    return `- mobile action ${operation.resourceId}: status=${humanizeAsyncOperationStatus(operation.status)} outcome=awaiting_controller_callback`;
   }
 
   return `- ssh background job ${operation.resourceId}: status=${humanizeAsyncOperationStatus(operation.status)} monitor=ssh_background_job_status wait=ssh_background_job_wait`;

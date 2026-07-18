@@ -1,6 +1,7 @@
 import type { RequestUnderstandingSnapshot } from './requestUnderstanding';
 import type { AgentGoal } from '../engine/goals/types';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
+import type { ToolEffectDigest } from './toolEffectReceipt';
 
 export type {
   AgentGoal,
@@ -121,7 +122,11 @@ export interface AgentRunEvidenceEntry {
   updatedAt: number;
 }
 
-export type AgentRunAsyncOperationKind = 'session' | 'expo-workflow' | 'ssh-background-job';
+export type AgentRunAsyncOperationKind =
+  | 'session'
+  | 'expo-workflow'
+  | 'ssh-background-job'
+  | 'mobile-controller-handoff';
 
 export type AgentRunAsyncOperationStatus =
   | 'running'
@@ -130,6 +135,23 @@ export type AgentRunAsyncOperationStatus =
   | 'cancelled'
   | 'timeout'
   | 'cancel_requested';
+
+export interface AgentRunMobileControllerHandoffRef {
+  readonly version: 1;
+  readonly executionRunId: string;
+  readonly effectId: string;
+  readonly externalHandleId: string;
+  readonly toolCallId: string;
+  readonly controlEpoch: number;
+  readonly handoffId: string;
+  readonly controllerId: string;
+  readonly controllerContractVersion: number;
+  readonly capabilityDigest: ToolEffectDigest;
+  readonly actionDigest: ToolEffectDigest;
+  readonly beforeObservationId: string;
+  readonly beforeObservationDigest: ToolEffectDigest;
+  readonly expiresAt: number;
+}
 
 export interface AgentRunAsyncOperation {
   key: string;
@@ -144,6 +166,7 @@ export interface AgentRunAsyncOperation {
   statusArgs?: Record<string, unknown>;
   waitToolName?: string;
   waitArgs?: Record<string, unknown>;
+  mobileControllerHandoff?: AgentRunMobileControllerHandoffRef;
 }
 
 export type AgentRunControlGraphStatus =

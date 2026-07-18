@@ -183,6 +183,16 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
               actions: 'recordToolResults',
             },
           ],
+          ASYNC_WAITING: [
+            {
+              guard: 'hasPendingAsyncWork',
+              target: 'waiting_async',
+              actions: 'recordAsyncWaiting',
+            },
+            {
+              actions: 'recordAsyncWaiting',
+            },
+          ],
           ...TERMINAL_TRANSITIONS,
         },
       },
@@ -199,6 +209,16 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
           FINALIZATION_HELD: {
             actions: 'recordFinalizationHold',
           },
+          ASYNC_WAITING: [
+            {
+              guard: 'hasPendingAsyncWork',
+              target: 'waiting_async',
+              actions: 'recordAsyncWaiting',
+            },
+            {
+              actions: 'recordAsyncWaiting',
+            },
+          ],
           ...TERMINAL_TRANSITIONS,
         },
       },

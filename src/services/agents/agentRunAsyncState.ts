@@ -3,6 +3,10 @@ import type {
   AgentRunAsyncOperation,
   AgentRunControlGraphAsyncWorkState,
 } from '../../types/agentRun';
+import {
+  buildAgentRunMobileControllerAsyncOperation,
+  qualifyAgentRunMobileControllerHandoffRef,
+} from './mobileControllerAsyncOperation';
 
 export const TERMINAL_AGENT_RUN_ASYNC_OPERATION_STATUSES = new Set<
   AgentRunAsyncOperation['status']
@@ -49,12 +53,46 @@ export function normalizeAgentRunAsyncOperations(
 ): AgentRunAsyncOperation[] | undefined {
   const normalizedOperations = (operations ?? [])
     .map<AgentRunAsyncOperation | null>((operation, index) => {
+      if (!operation || typeof operation !== 'object') return null;
       const normalizedResourceId = operation.resourceId?.trim();
       if (
         !normalizedResourceId ||
         TERMINAL_AGENT_RUN_ASYNC_OPERATION_STATUSES.has(operation.status)
       ) {
         return null;
+      }
+
+      if (operation.kind === 'mobile-controller-handoff') {
+        const handoff = qualifyAgentRunMobileControllerHandoffRef(
+          operation.mobileControllerHandoff,
+        );
+        const canonical = handoff
+          ? buildAgentRunMobileControllerAsyncOperation({
+              handoff,
+              status:
+                operation.status === 'running' || operation.status === 'cancel_requested'
+                  ? operation.status
+                  : 'running',
+              updatedAt: operation.updatedAt,
+            })
+          : null;
+        if (
+          !canonical ||
+          operation.status !== canonical.status ||
+          operation.key !== canonical.key ||
+          normalizedResourceId !== canonical.resourceId ||
+          operation.displayName !== canonical.displayName ||
+          operation.blocksFinalization !== true ||
+          operation.lastUpdatedByTool !== canonical.lastUpdatedByTool ||
+          !Array.isArray(operation.monitorToolNames) ||
+          operation.monitorToolNames.length !== 0 ||
+          operation.waitToolName !== undefined ||
+          operation.statusArgs !== undefined ||
+          operation.waitArgs !== undefined
+        ) {
+          return null;
+        }
+        return canonical;
       }
 
       const normalizedMonitorToolNames = Array.from(
@@ -114,6 +152,8 @@ export function areAgentRunAsyncOperationsEqual(
       leftOperation.lastUpdatedByTool === rightOperation.lastUpdatedByTool &&
       leftOperation.updatedAt === rightOperation.updatedAt &&
       leftOperation.waitToolName === rightOperation.waitToolName &&
+      JSON.stringify(leftOperation.mobileControllerHandoff ?? null) ===
+        JSON.stringify(rightOperation.mobileControllerHandoff ?? null) &&
       JSON.stringify(leftOperation.monitorToolNames) ===
         JSON.stringify(rightOperation.monitorToolNames) &&
       JSON.stringify(leftOperation.statusArgs ?? {}) ===

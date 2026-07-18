@@ -9,6 +9,7 @@ import type {
   AgentRunSummary,
 } from '../types/agentRun';
 import { normalizeAgentRunControlGraphState } from '../services/agents/agentControlGraphState';
+import { qualifyAgentRunMobileControllerHandoffRef } from '../services/agents/mobileControllerAsyncOperation';
 import {
   MAX_PERSISTED_AGENT_RUN_CHECKPOINTS,
   MAX_PERSISTED_AGENT_RUN_CONTROL_GRAPH_AUDIT_EVENTS,
@@ -62,6 +63,9 @@ function sanitizeAsyncOperationArgs(
 }
 
 function sanitizeAgentRunAsyncOperation(operation: AgentRunAsyncOperation): AgentRunAsyncOperation {
+  const mobileControllerHandoff = qualifyAgentRunMobileControllerHandoffRef(
+    operation.mobileControllerHandoff,
+  );
   return {
     key: truncateText(operation.key, MAX_PERSISTED_LOG_TITLE_CHARS) || operation.key,
     kind: operation.kind,
@@ -70,6 +74,7 @@ function sanitizeAgentRunAsyncOperation(operation: AgentRunAsyncOperation): Agen
     displayName:
       truncateText(operation.displayName, MAX_PERSISTED_LOG_TITLE_CHARS) || operation.displayName,
     status: operation.status,
+    blocksFinalization: operation.blocksFinalization !== false,
     lastUpdatedByTool:
       truncateText(operation.lastUpdatedByTool, MAX_PERSISTED_LOG_TITLE_CHARS) ||
       operation.lastUpdatedByTool,
@@ -77,6 +82,7 @@ function sanitizeAgentRunAsyncOperation(operation: AgentRunAsyncOperation): Agen
     monitorToolNames: operation.monitorToolNames
       .slice(0, MAX_PERSISTED_LIST_ITEMS)
       .map((toolName) => truncateText(toolName, MAX_PERSISTED_LOG_TITLE_CHARS) || toolName),
+    ...(mobileControllerHandoff ? { mobileControllerHandoff } : {}),
     ...(operation.waitToolName
       ? {
           waitToolName:

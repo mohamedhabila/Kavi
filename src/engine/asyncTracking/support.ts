@@ -50,6 +50,9 @@ export function cloneTrackedAsyncOperation(
   return {
     ...operation,
     monitorToolNames: [...operation.monitorToolNames],
+    ...(operation.mobileControllerHandoff
+      ? { mobileControllerHandoff: { ...operation.mobileControllerHandoff } }
+      : {}),
     ...(operation.statusArgs ? { statusArgs: cloneAsyncOperationArgs(operation.statusArgs) } : {}),
     ...(operation.waitArgs ? { waitArgs: cloneAsyncOperationArgs(operation.waitArgs) } : {}),
   };
