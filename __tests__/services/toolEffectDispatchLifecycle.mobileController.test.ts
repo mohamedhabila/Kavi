@@ -32,7 +32,7 @@ const CAPABILITY = Object.freeze({
   capabilityDigest: `sha256:${'b'.repeat(64)}`,
   policyAdmissionDigest: `sha256:${'c'.repeat(64)}`,
   environmentClass: 'sandbox',
-  supportedActionKinds: ['set_text'],
+  supportedActionKinds: ['input_text'],
   allowedAppIds: [],
   observationEvidence: ['screenshot', 'window_identity'],
   outcomeDeliveryModes: ['deferred'],
@@ -54,7 +54,7 @@ function input(execute: AuthorizedToolEffectDispatchInput['execute']) {
     conversationId: 'conversation-mobile-1',
     toolCallId: 'tool-call-mobile-1',
     toolName: 'mobile_ui_action',
-    argumentsText: JSON.stringify({ kind: 'set_text', text: 'private draft text' }),
+    argumentsText: JSON.stringify({ kind: 'input_text', text: 'private draft text' }),
     context: {
       agentRunId: 'agent-run-mobile-1',
       executionRunId: 'execution-run-mobile-1',
@@ -88,7 +88,7 @@ describe('mobile controller durable dispatch', () => {
     const execute = jest.fn(async () => {
       const deferred = buildMobileControllerDeferredExecution({
         capability: CAPABILITY,
-        action: { kind: 'set_text', text: 'private draft text' },
+        action: { kind: 'input_text', text: 'private draft text' },
         beforeObservation: OBSERVATION,
       });
       if (!deferred) throw new Error('test_mobile_deferred_invalid');
@@ -103,7 +103,7 @@ describe('mobile controller durable dispatch', () => {
         kind: 'persisted',
         handoff: {
           controllerId: 'android-controller-1',
-          action: { kind: 'set_text', text: 'private draft text' },
+          action: { kind: 'input_text', text: 'private draft text' },
           beforeObservation: { observationId: 'observation-before-1' },
         },
         handoffRef: {

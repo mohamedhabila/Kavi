@@ -37,7 +37,7 @@ const capability: MobileControllerCapability = {
   capabilityDigest: `sha256:${RAW_B}`,
   policyAdmissionDigest: `sha256:${RAW_C}`,
   environmentClass: 'sandbox',
-  supportedActionKinds: ['set_text'],
+  supportedActionKinds: ['input_text'],
   allowedAppIds: [],
   observationEvidence: ['screenshot', 'window_identity'],
   outcomeDeliveryModes: ['deferred'],
@@ -121,7 +121,7 @@ async function prepareClaimedHandoff() {
       controllerId: capability.controllerId,
       controllerContractVersion: capability.controllerContractVersion,
       capabilityDigest: capability.capabilityDigest,
-      action: { kind: 'set_text', text: PRIVATE_TEXT },
+      action: { kind: 'input_text', text: PRIVATE_TEXT },
       actionDigest: `sha256:${RAW_A}`,
       beforeObservation: {
         observationId: 'observation-before-1',

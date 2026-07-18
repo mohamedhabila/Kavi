@@ -81,6 +81,20 @@ describe('mobile controller tool definition', () => {
     expect(target.properties).toHaveProperty('elementId');
   });
 
+  it('describes text insertion without implying unsupported replacement semantics', () => {
+    const definition = buildMobileControllerToolDefinition({
+      ...capability,
+      supportedActionKinds: ['input_text'],
+    });
+
+    expect(definition?.input_schema.properties.text).toEqual(
+      expect.objectContaining({
+        type: 'string',
+        description: expect.stringContaining('does not clear existing content'),
+      }),
+    );
+  });
+
   it('uses a stable code-owned effect and retry contract independent of the host schema', async () => {
     expect(resolveToolEffectPolicy('mobile_ui_action')).toEqual({
       toolName: 'mobile_ui_action',

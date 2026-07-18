@@ -32,7 +32,7 @@ describe('MobileWorld graph-owned controller protocol', () => {
       { kind: 'activate', target: { kind: 'coordinate', observationId: 'screen-1', x: 10, y: 20 } },
       { action_type: 'click', coordinate: [10, 20] },
     ],
-    [{ kind: 'set_text', text: 'draft' }, { action_type: 'input_text', text: 'draft' }],
+    [{ kind: 'input_text', text: 'draft' }, { action_type: 'input_text', text: 'draft' }],
     [{ kind: 'keyboard_enter' }, { action_type: 'keyboard_enter' }],
     [{ kind: 'back' }, { action_type: 'navigate_back' }],
     [{ kind: 'home' }, { action_type: 'navigate_home' }],

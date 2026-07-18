@@ -79,8 +79,12 @@ function actionProperties(params: {
     properties.start = coordinateTargetSchema(params.coordinateScale);
     properties.end = coordinateTargetSchema(params.coordinateScale);
   }
-  if (kinds.has('set_text')) {
-    properties.text = { type: 'string' };
+  if (kinds.has('input_text')) {
+    properties.text = {
+      type: 'string',
+      description:
+        'Insert text at the current selection in the focused control. This does not clear existing content; establish the intended selection before replacing text.',
+    };
   }
   if (kinds.has('open_app')) {
     properties.appId = params.allowedAppIds

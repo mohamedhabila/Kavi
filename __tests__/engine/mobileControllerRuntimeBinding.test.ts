@@ -12,7 +12,7 @@ const CAPABILITY = Object.freeze({
   capabilityDigest: `sha256:${'a'.repeat(64)}` as const,
   policyAdmissionDigest: `sha256:${'b'.repeat(64)}` as const,
   environmentClass: 'sandbox' as const,
-  supportedActionKinds: ['activate', 'set_text'] as const,
+  supportedActionKinds: ['activate', 'input_text'] as const,
   allowedAppIds: [] as const,
   observationEvidence: ['screenshot', 'window_identity'] as const,
   outcomeDeliveryModes: ['deferred'] as const,
@@ -64,7 +64,7 @@ describe('mobile controller runtime binding', () => {
     expect(admission.runtime.toolDefinition).toMatchObject({
       name: 'mobile_ui_action',
       input_schema: {
-        properties: { kind: { enum: ['activate', 'set_text'] } },
+        properties: { kind: { enum: ['activate', 'input_text'] } },
       },
     });
     expect(admission.runtime.execution).toEqual({

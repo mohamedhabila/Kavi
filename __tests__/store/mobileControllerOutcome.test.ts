@@ -73,7 +73,7 @@ function waitingConversation() {
           {
             id: handoff.toolCallId,
             name: 'mobile_ui_action',
-            arguments: JSON.stringify({ action: { kind: 'set_text', text: 'draft' } }),
+            arguments: JSON.stringify({ action: { kind: 'input_text', text: 'draft' } }),
             status: 'running',
             startedAt: 30,
             updatedAt: 40,

@@ -15,7 +15,7 @@ const CAPABILITY = Object.freeze({
   capabilityDigest: `sha256:${'a'.repeat(64)}` as const,
   policyAdmissionDigest: `sha256:${'b'.repeat(64)}` as const,
   environmentClass: 'sandbox' as const,
-  supportedActionKinds: ['activate', 'set_text'] as const,
+  supportedActionKinds: ['activate', 'input_text'] as const,
   allowedAppIds: [] as const,
   observationEvidence: ['screenshot', 'window_identity'] as const,
   outcomeDeliveryModes: ['deferred'] as const,
@@ -82,7 +82,7 @@ describe('orchestrator mobile controller availability', () => {
         name: 'mobile_ui_action',
         input_schema: expect.objectContaining({
           properties: expect.objectContaining({
-            kind: { type: 'string', enum: ['activate', 'set_text'] },
+            kind: { type: 'string', enum: ['activate', 'input_text'] },
           }),
         }),
       }),

@@ -64,7 +64,7 @@ export function createPersistedMobileControllerHandoffFixture(): PersistedMobile
       controllerId: 'android-controller-1',
       controllerContractVersion: 1,
       capabilityDigest: CAPABILITY_DIGEST,
-      action: Object.freeze({ kind: 'set_text', text: 'private draft text' }),
+      action: Object.freeze({ kind: 'input_text', text: 'private draft text' }),
       actionDigest,
       beforeObservation: Object.freeze({
         observationId: 'observation-before-1',
@@ -157,7 +157,7 @@ export function createMobileControllerCapabilityFixture(
     capabilityDigest: CAPABILITY_DIGEST,
     policyAdmissionDigest: `sha256:${'f'.repeat(64)}`,
     environmentClass: 'sandbox',
-    supportedActionKinds: ['activate', 'set_text', 'back'],
+    supportedActionKinds: ['activate', 'input_text', 'back'],
     allowedAppIds: [],
     observationEvidence: ['screenshot', 'window_identity', 'result_code'],
     outcomeDeliveryModes: ['deferred'],

@@ -22,7 +22,7 @@ const MOBILEWORLD_ACTION_KINDS = [
   'double_tap',
   'long_press',
   'drag',
-  'set_text',
+  'input_text',
   'keyboard_enter',
   'back',
   'home',
@@ -137,7 +137,7 @@ export function mapMobileControllerActionToMobileWorld(
         start_coordinate: [action.start.x, action.start.y],
         end_coordinate: [action.end.x, action.end.y],
       };
-    case 'set_text':
+    case 'input_text':
       return { action_type: 'input_text', text: action.text };
     case 'keyboard_enter':
       return { action_type: 'keyboard_enter' };

@@ -21,7 +21,7 @@ export const MOBILE_CONTROLLER_ACTION_KINDS = [
   'double_tap',
   'long_press',
   'drag',
-  'set_text',
+  'input_text',
   'keyboard_enter',
   'back',
   'home',
@@ -91,7 +91,7 @@ export type MobileControllerAction =
       start: MobileControllerCoordinateTarget;
       end: MobileControllerCoordinateTarget;
     }>
-  | Readonly<{ kind: 'set_text'; text: string }>
+  | Readonly<{ kind: 'input_text'; text: string }>
   | Readonly<{ kind: 'keyboard_enter' | 'back' | 'home' }>
   | Readonly<{ kind: 'open_app'; appId: string }>
   | Readonly<{ kind: 'scroll'; direction: 'up' | 'down' | 'left' | 'right' }>

@@ -310,7 +310,7 @@ export function qualifyMobileControllerAction(
     ) {
       action = Object.freeze({ kind, start, end });
     }
-  } else if (kind === 'set_text') {
+  } else if (kind === 'input_text') {
     if (hasExactKeys(candidate, ['kind', 'text']) && typeof candidate.text === 'string') {
       action = Object.freeze({ kind, text: candidate.text });
     }

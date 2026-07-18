@@ -37,7 +37,7 @@ function capability(overrides: Record<string, unknown> = {}) {
       'double_tap',
       'long_press',
       'drag',
-      'set_text',
+      'input_text',
       'keyboard_enter',
       'back',
       'home',
@@ -86,7 +86,7 @@ function handoff(overrides: Record<string, unknown> = {}) {
     controllerId: 'android-controller-1',
     controllerContractVersion: 1,
     capabilityDigest: DIGEST_B,
-    action: { kind: 'set_text', text: PRIVATE_TEXT },
+    action: { kind: 'input_text', text: PRIVATE_TEXT },
     actionDigest: DIGEST_A,
     beforeObservation: {
       observationId: 'observation-before-1',
@@ -192,7 +192,7 @@ describe('mobile controller contracts', () => {
     ).toBeNull();
     expect(
       qualifyMobileControllerAction(
-        { kind: 'set_text', text: PRIVATE_TEXT },
+        { kind: 'input_text', text: PRIVATE_TEXT },
         capability({ supportedActionKinds: ['back'] }),
       ),
     ).toBeNull();
@@ -257,7 +257,7 @@ describe('mobile controller handoff reducer', () => {
         }),
         auditEvent: expect.objectContaining({
           type: 'mobile_controller_handoff_pending',
-          actionKind: 'set_text',
+          actionKind: 'input_text',
           actionDigest: DIGEST_A,
         }),
       }),
@@ -307,7 +307,7 @@ describe('mobile controller handoff reducer', () => {
         state: expect.objectContaining({
           pending: null,
           lastSettlement: expect.objectContaining({
-            actionKind: 'set_text',
+            actionKind: 'input_text',
             actionDigest: DIGEST_A,
             requiresReconciliation: false,
             automaticRetryAllowed: false,
@@ -321,7 +321,7 @@ describe('mobile controller handoff reducer', () => {
       }),
     );
     expect(JSON.stringify(transition)).not.toContain(PRIVATE_TEXT);
-    expect(state.pending?.action).toEqual({ kind: 'set_text', text: PRIVATE_TEXT });
+    expect(state.pending?.action).toEqual({ kind: 'input_text', text: PRIVATE_TEXT });
   });
 
   it('preserves an uncertain effect and explicitly forbids automatic replay', () => {
