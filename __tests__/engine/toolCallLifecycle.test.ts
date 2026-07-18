@@ -11,6 +11,8 @@ import type { VerifiedProcedureExecutionSession } from '../../src/services/memor
 import * as toolOutputSpill from '../../src/engine/tools/toolOutputSpill';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
+import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileController/toolDefinition';
+import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 
 jest.mock('../../src/services/events/bus', () => ({
   emitAgentEvent: jest.fn(),
@@ -112,6 +114,59 @@ function buildLifecycle(
 describe('executeToolCallLifecycle', () => {
   beforeEach(() => {
     mockedExecuteTool.mockReset();
+  });
+
+  it('keeps a deferred mobile action running without emitting a tool result', async () => {
+    const deferredHandoff = createPersistedMobileControllerHandoffFixture();
+    mockedExecuteTool.mockResolvedValueOnce({
+      status: 'deferred',
+      deferredHandoff,
+      effectDispatchObservation: {
+        kind: 'deferred',
+        handoff: deferredHandoff.handoffRef,
+      },
+    });
+    const onToolCallStart = jest.fn();
+    const onToolCallComplete = jest.fn();
+    const toolCallHistory: ToolExecutionLifecycleParams['toolCallHistory'] = [];
+
+    const result = await executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: deferredHandoff.handoffRef.toolCallId,
+          name: 'mobile_ui_action',
+          arguments: JSON.stringify(deferredHandoff.handoff.action),
+        },
+        agentRunId: 'agent-run-mobile-1',
+        executionRunId: deferredHandoff.handoffRef.executionRunId,
+        availableToolNames: new Set(['mobile_ui_action']),
+        groundedRequestScopedTools: [MOBILE_UI_ACTION_TOOL_DEFINITION],
+        runtimeToolAvailability: {
+          hasWorkspaceTargets: false,
+          hasBrowserControllableWorkspaceTargets: false,
+          hasDelegableWorkspaceTargets: false,
+          hasMobileController: true,
+        },
+        toolCallHistory,
+        callbacks: { onToolCallStart, onToolCallComplete },
+      }),
+    );
+
+    expect(result).toEqual({
+      toolCallId: deferredHandoff.handoffRef.toolCallId,
+      effectiveToolName: 'mobile_ui_action',
+      deferredHandoff,
+      effectDispatchObservation: {
+        kind: 'deferred',
+        handoff: deferredHandoff.handoffRef,
+      },
+    });
+    expect('toolMessage' in result).toBe(false);
+    expect(onToolCallStart).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'running', name: 'mobile_ui_action' }),
+    );
+    expect(onToolCallComplete).not.toHaveBeenCalled();
+    expect(toolCallHistory).toEqual([]);
   });
 
   it('awaits the code-owned scheduler fence before effectful tool dispatch', async () => {

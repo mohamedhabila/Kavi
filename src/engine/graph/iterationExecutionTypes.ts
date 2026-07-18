@@ -194,5 +194,5 @@ export interface ExecuteAgentControlGraphIterationParams {
 
 export interface ExecuteAgentControlGraphIterationResult {
   runtime: AgentControlGraphIterationRuntimeState;
-  status: 'continued' | 'finalized' | 'retry_current_iteration';
+  status: 'continued' | 'finalized' | 'retry_current_iteration' | 'waiting';
 }

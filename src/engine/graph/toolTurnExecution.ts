@@ -77,6 +77,12 @@ type ToolTurnExecutionResult =
       lastPendingAsyncSignature: string;
       warningInjectedThisRound: boolean;
       workingMessages: Message[];
+    }
+  | {
+      status: 'waiting';
+      lastPendingAsyncSignature: string;
+      warningInjectedThisRound: boolean;
+      workingMessages: Message[];
     };
 
 export interface ExecuteAgentControlGraphToolTurnParams {
@@ -300,7 +306,8 @@ export async function executeAgentControlGraphToolTurn(
   });
 
   const batchYieldedEarly = toolExecutionOutcomes.some((outcome) =>
-    Boolean(outcome.yieldedMessage),
+    'deferredHandoff' in outcome ||
+    ('yieldedMessage' in outcome && Boolean(outcome.yieldedMessage)),
   );
   if (
     !batchYieldedEarly &&
@@ -376,7 +383,7 @@ export async function executeAgentControlGraphToolTurn(
     workingMessages,
   });
 
-  if (executableToolCalls.length > 0) {
+  if (executableToolCalls.length > 0 && toolOutcomeResolution.status !== 'waiting') {
     const goals = params.getGraphSnapshot().goals ?? [];
     recordIterationProgressSignature(params.stagnationSignatures, {
       toolMultisetKey: buildToolMultisetKey(executableToolCalls.map((toolCall) => toolCall.name)),

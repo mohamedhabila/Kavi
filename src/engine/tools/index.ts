@@ -22,6 +22,7 @@ import type { ToolExecutionContext } from './toolExecutionContext';
 import { buildToolEffectReceipt } from '../toolExecution/toolEffectReceipt';
 import { resolveRuntimeExternalToolBinding } from '../toolExecution/runtimeExternalToolBinding';
 import { isCodeOwnedExecutionRunId } from '../../services/executionJournal/executionRunEffectBarrier';
+import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import {
   completedToolOutcome,
   failedToolOutcome,
@@ -82,8 +83,13 @@ function isModelTurnAuthorityCurrent(context: ToolExecutionContext | undefined):
   return isModelTurnMemoryPolicyBindingDurablyCurrent(binding);
 }
 
-export type ToolExecutionOutcome = ToolRuntimeOutcome &
-  Readonly<{ effectDispatchObservation: ToolEffectDispatchObservation }>;
+export type ToolExecutionOutcome =
+  | (ToolRuntimeOutcome & Readonly<{ effectDispatchObservation: ToolEffectDispatchObservation }>)
+  | Readonly<{
+      status: 'deferred';
+      deferredHandoff: PersistedMobileControllerHandoff;
+      effectDispatchObservation: Extract<ToolEffectDispatchObservation, { kind: 'deferred' }>;
+    }>;
 
 function withEffectDispatchObservation(
   outcome: ToolRuntimeOutcome,
@@ -359,6 +365,23 @@ export async function executeTool(
           : executeToolInner(normalizedName, argsString, conversationId, executorContext, claim),
     });
     finalizeEffectReceiptCapture(context);
+    if (dispatched.kind === 'deferred') {
+      logToolCall(
+        normalizedName,
+        argsString,
+        'success',
+        Date.now() - startTime,
+        conversationId,
+      );
+      return Object.freeze({
+        status: 'deferred' as const,
+        deferredHandoff: dispatched.handoff,
+        effectDispatchObservation: Object.freeze({
+          kind: 'deferred' as const,
+          handoff: dispatched.handoff.handoffRef,
+        }),
+      });
+    }
     if (dispatched.kind === 'executed') {
       publishReceipt(dispatched.receipt);
       const visibleResult = dispatched.requiresReconciliation

@@ -21,11 +21,11 @@ import {
 } from '../tools/toolGoalExecution';
 import { syncGoalTasksFromMutation } from '../../services/memory/tasks';
 import type { AgentControlGraphEvent } from './agentControlGraph';
-import type { ToolExecutionOutcome } from './toolExecutionOutcomeResolution';
+import type { TerminalToolExecutionOutcome } from './toolExecutionOutcomeResolution';
 import type { ToolCallRecord } from '../loopDetection';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 
-export type CanonicalToolExecutionOutcome = ToolExecutionOutcome & {
+export type CanonicalToolExecutionOutcome = TerminalToolExecutionOutcome & {
   canonicalized: boolean;
   graphApplied: boolean;
 };
@@ -41,9 +41,9 @@ function cloneToolMessageWithContent(message: Message, content: string): Message
 }
 
 function cloneToolExecutionOutcomeWithContent(
-  outcome: ToolExecutionOutcome,
+  outcome: TerminalToolExecutionOutcome,
   content: string,
-): ToolExecutionOutcome {
+): TerminalToolExecutionOutcome {
   return {
     ...outcome,
     toolMessage: cloneToolMessageWithContent(outcome.toolMessage, content),
@@ -377,7 +377,7 @@ function buildAutoCompletedSatisfiedGoals(
 }
 
 export function canonicalizeToolExecutionOutcome(params: {
-  outcome: ToolExecutionOutcome;
+  outcome: TerminalToolExecutionOutcome;
   toolName: string;
   executableToolCalls: ReadonlyArray<{ name: string; arguments: string }>;
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;

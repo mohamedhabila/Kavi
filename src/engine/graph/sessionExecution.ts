@@ -159,6 +159,9 @@ export async function executeAgentControlGraphSession(
       if (iterationExecution.status === 'finalized') {
         return;
       }
+      if (iterationExecution.status === 'waiting') {
+        return;
+      }
       if (iteration === params.maxToolIterations) {
         try {
           assertModelTurnMemoryPolicyBindingDurablyCurrent(

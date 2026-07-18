@@ -14,6 +14,7 @@ import type {
   ToolEffectResourceRef,
   ToolEffectReceipt,
 } from '../../types/toolEffectReceipt';
+import type { AgentRunMobileControllerHandoffRef } from '../../types/agentRun';
 import {
   buildToolContractIdentity,
   digestToolContractIdentity,
@@ -26,6 +27,7 @@ import {
 import type { EffectDispatchIdentity } from './effectDispatchPolicy';
 import {
   prepareToolEffectDispatchJournal,
+  type PreparedToolEffectDispatchJournal,
   type ToolEffectDispatchAuthority,
   type ToolEffectDispatchStoreOptions,
 } from './toolEffectDispatchStore';
@@ -44,6 +46,15 @@ import {
 import { invalidateVerifiedProcedureObservationsForExecutionRun } from '../memory/verifiedProcedure/invalidation';
 import type { AuthorizedToolEffectExecutionClaim } from './authorizedToolEffectExecutionClaim';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
+import {
+  isMobileControllerDeferredExecution,
+  type ToolRuntimeExecution,
+} from '../../engine/mobileController/runtimeExecution';
+import { buildClaimedMobileControllerHandoff } from '../../engine/mobileController/handoffBuilder';
+import {
+  persistClaimedMobileControllerHandoff,
+  type PersistedMobileControllerHandoff,
+} from './mobileControllerHandoffStore';
 import {
   buildDurableModelEffectAuthority,
   serializeDurableModelEffectAuthority,
@@ -96,6 +107,10 @@ export type ToolEffectDispatchObservation =
   | Readonly<{
       kind: 'durable_outcome_unknown';
       reason: AuthorizedToolEffectReconciliationReason;
+    }>
+  | Readonly<{
+      kind: 'deferred';
+      handoff: AgentRunMobileControllerHandoffRef;
     }>;
 
 const REPLANNABLE_TOOL_EFFECT_NOT_CLAIMED_REASONS = new Set<ToolEffectDispatchNotClaimedReason>([
@@ -129,6 +144,10 @@ export type AuthorizedToolEffectDispatchResult =
       executorThrew: boolean;
     }
   | {
+      kind: 'deferred';
+      handoff: PersistedMobileControllerHandoff;
+    }
+  | {
       kind: 'blocked';
       reason: AuthorizedToolEffectBlockReason;
       status: 'failed';
@@ -153,7 +172,7 @@ export interface AuthorizedToolEffectDispatchInput {
   modelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   authority: ToolEffectDispatchAuthority;
   runtimeExternalEvidence?: RuntimeExternalToolEvidence;
-  execute(claim: AuthorizedToolEffectExecutionClaim): Promise<ToolRuntimeOutcome>;
+  execute(claim: AuthorizedToolEffectExecutionClaim): Promise<ToolRuntimeExecution>;
 }
 
 export interface AuthorizedToolEffectDispatchOptions extends ToolEffectDispatchStoreOptions {
@@ -438,6 +457,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   }
 
   let rawOutcome: ToolRuntimeOutcome | undefined;
+  let deferredHandoff: PersistedMobileControllerHandoff | undefined;
   let exactReceipt: ToolEffectReceipt | undefined;
   let executorThrew = false;
   const buildReceipt = options.buildReceipt ?? buildToolEffectReceipt;
@@ -457,7 +477,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
       executorThrew: false,
     };
   }
-  let prepared: ReturnType<typeof prepareToolEffectDispatchJournal>;
+  let prepared: PreparedToolEffectDispatchJournal<PersistedMobileControllerHandoff>;
   try {
     prepared = prepareToolEffectDispatchJournal(
       {
@@ -481,8 +501,9 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
       input.authority,
       async (claim) => {
         let transportState: 'returned' | 'threw' = 'returned';
+        let execution: ToolRuntimeExecution | undefined;
         try {
-          rawOutcome = await input.execute(
+          execution = await input.execute(
             Object.freeze({
               executionRunId: claim.identity.executionRunId,
               toolCallId: claim.identity.toolCallId,
@@ -494,6 +515,22 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
           transportState = 'threw';
           rawOutcome = failedToolOutcome(`Error: ${safeExecutorError(error)}`);
         }
+        if (execution && isMobileControllerDeferredExecution(execution)) {
+          const createdAt = (options.now ?? Date.now)();
+          const handoff = buildClaimedMobileControllerHandoff({
+            claim,
+            deferred: execution,
+            createdAt,
+          });
+          if (!handoff) throw new Error('mobile_controller_handoff_build_invalid');
+          deferredHandoff = persistClaimedMobileControllerHandoff(
+            { capability: execution.capability, handoff },
+            options,
+          );
+          return { kind: 'deferred', deferred: deferredHandoff };
+        }
+        if (execution) rawOutcome = execution;
+        if (!rawOutcome) throw new Error('tool_runtime_outcome_missing');
         exactReceipt = await buildReceipt({
           toolCallId: input.toolCallId,
           toolName: input.toolName,
@@ -522,6 +559,13 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   }
 
   const dispatchResult = await dispatchEffectExactlyOnce(prepared.identity, prepared.ports);
+  if (
+    dispatchResult.kind === 'deferred' &&
+    deferredHandoff !== undefined &&
+    dispatchResult.deferred === deferredHandoff
+  ) {
+    return { kind: 'deferred', handoff: deferredHandoff };
+  }
   if (
     dispatchResult.kind === 'settled' &&
     rawOutcome !== undefined &&

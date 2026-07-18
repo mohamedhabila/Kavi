@@ -7,6 +7,7 @@ import { detectLoops, type ToolCallRecord } from '../loopDetection';
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import {
   executeToolCallLifecycle,
+  isDeferredToolExecutionLifecycleResult,
   type ToolExecutionLifecycleMetricsRecorder,
 } from '../toolExecution/toolCallLifecycle';
 import { executeToolExecutionBatch } from '../toolExecution/toolExecutionBatch';
@@ -34,6 +35,10 @@ import {
   bindCurrentTurnToolObservedMemoryEvidence,
   collectCurrentRunCompletedToolResults,
 } from '../../services/memory/toolObservedMemoryEvidence';
+import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
+
+const MOBILE_CONTROLLER_ISOLATED_TURN_BLOCK =
+  'Blocked: mobile_ui_action must be the only tool call in its model turn because the external action suspends execution and changes the current observation.';
 
 export async function executeAgentControlGraphToolBatch(params: {
   executableToolCalls: ReadonlyArray<PendingAgentToolCall>;
@@ -94,7 +99,16 @@ export async function executeAgentControlGraphToolBatch(params: {
     ),
   );
   const workflowBlockerByCallId = new Map<string, string>();
+  const hasMixedMobileControllerBoundary =
+    params.executableToolCalls.length > 1 &&
+    params.executableToolCalls.some(
+      (toolCall) => resolveRegisteredToolName(toolCall.name) === MOBILE_UI_ACTION_TOOL_NAME,
+    );
   for (const [index, toolCall] of params.executableToolCalls.entries()) {
+    if (hasMixedMobileControllerBoundary) {
+      workflowBlockerByCallId.set(toolCall.id, MOBILE_CONTROLLER_ISOLATED_TURN_BLOCK);
+      continue;
+    }
     const requirement = completionRequirements[index];
     if (!requirement || requirement.kind === 'effect_free') {
       continue;
@@ -186,6 +200,14 @@ export async function executeAgentControlGraphToolBatch(params: {
         error: 'tool_error',
       },
     });
+    if (isDeferredToolExecutionLifecycleResult(outcome)) {
+      return {
+        index: _index,
+        toolCallId: toolCall.id,
+        deferredHandoff: outcome.deferredHandoff,
+        effectDispatchObservation: outcome.effectDispatchObservation,
+      };
+    }
     const yieldResult = outcome.result
       ? parseAgentControlGraphSessionsYieldResult(outcome.effectiveToolName, outcome.result)
       : { yielded: false };
@@ -234,7 +256,9 @@ export async function executeAgentControlGraphToolBatch(params: {
     executePendingToolCall: (toolCall, index, context) =>
       executePendingToolCall(toolCall, index, context),
     getCompletedToolName: (outcome) =>
-      outcome.toolMessage.toolCalls?.[0]?.name?.trim() || undefined,
+      'toolMessage' in outcome
+        ? outcome.toolMessage.toolCalls?.[0]?.name?.trim() || undefined
+        : undefined,
     buildUnexpectedExecutionFailureOutcome: (toolCall, index, error) => {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
@@ -286,7 +310,9 @@ export async function executeAgentControlGraphToolBatch(params: {
         isError: true,
       },
     }),
-    getYieldedMessage: (outcome) => outcome.yieldedMessage,
+    getYieldedMessage: (outcome) =>
+      'toolMessage' in outcome ? outcome.yieldedMessage : undefined,
+    shouldSuspendAfterOutcome: (outcome) => 'deferredHandoff' in outcome,
     initialCompletedToolNames: params.completedWorkflowToolNames,
   });
 }

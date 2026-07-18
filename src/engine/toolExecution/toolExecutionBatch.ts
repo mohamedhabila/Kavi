@@ -17,6 +17,7 @@ export interface ToolExecutionBatchParams<TToolCall, TOutcome> {
   ) => TOutcome;
   initialCompletedToolNames: ReadonlySet<string>;
   getYieldedMessage: (outcome: TOutcome) => string | undefined;
+  shouldSuspendAfterOutcome?: (outcome: TOutcome) => boolean;
   getCompletedToolName?: (outcome: TOutcome) => string | undefined;
   shouldStopAfterOutcome?: (params: {
     outcome: TOutcome;
@@ -65,7 +66,7 @@ export async function executeToolExecutionBatch<TToolCall, TOutcome>(
     );
     outcomes.push(outcome);
 
-    if (params.getYieldedMessage(outcome)) {
+    if (params.shouldSuspendAfterOutcome?.(outcome) || params.getYieldedMessage(outcome)) {
       break;
     }
 

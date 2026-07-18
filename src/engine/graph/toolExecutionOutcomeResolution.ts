@@ -52,8 +52,11 @@ import {
   isTerminalToolEffectDispatchObservation,
   type ToolEffectDispatchObservation,
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
+import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
+import { buildAgentRunMobileControllerAsyncOperation } from '../../services/agents/mobileControllerAsyncOperation';
+import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 
-export interface ToolExecutionOutcome {
+export interface TerminalToolExecutionOutcome {
   index: number;
   toolCallId: string;
   toolMessage: Message;
@@ -64,6 +67,21 @@ export interface ToolExecutionOutcome {
   effectReceipt?: ToolEffectReceipt;
   effectReconciliationRequired?: boolean;
   effectDispatchObservation?: ToolEffectDispatchObservation;
+}
+
+export interface DeferredToolExecutionOutcome {
+  index: number;
+  toolCallId: string;
+  deferredHandoff: PersistedMobileControllerHandoff;
+  effectDispatchObservation: Extract<ToolEffectDispatchObservation, { kind: 'deferred' }>;
+}
+
+export type ToolExecutionOutcome = TerminalToolExecutionOutcome | DeferredToolExecutionOutcome;
+
+export function isDeferredToolExecutionOutcome(
+  outcome: ToolExecutionOutcome,
+): outcome is DeferredToolExecutionOutcome {
+  return 'deferredHandoff' in outcome;
 }
 
 export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
@@ -120,7 +138,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   }) => Promise<void>;
   workingMessages: Message[];
 }): Promise<{
-  status: 'continued' | 'finalized';
+  status: 'continued' | 'finalized' | 'waiting';
   lastPendingAsyncSignature: string;
   workingMessages: Message[];
 }> {
@@ -134,10 +152,62 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   const canonicalToolExecutionOutcomes: CanonicalToolExecutionOutcome[] = [];
   let graphMutationBoundaryReached = false;
   let clarificationRequest: RequestClarificationToolResult | undefined;
+  let deferredHandoff: PersistedMobileControllerHandoff | undefined;
 
   for (const outcome of [...params.toolExecutionOutcomes].sort(
     (left, right) => left.index - right.index,
   )) {
+    if (isDeferredToolExecutionOutcome(outcome)) {
+      if (deferredHandoff) {
+        throw new Error('multiple_mobile_controller_handoffs_in_tool_batch');
+      }
+      const executableToolCall = params.executableToolCalls[outcome.index];
+      const handoffRef = outcome.deferredHandoff.handoffRef;
+      const graph = params.getGraphSnapshot();
+      const ownsExpectedToolCall = graph.expectedToolCalls.some(
+        (toolCall) =>
+          toolCall.id === outcome.toolCallId &&
+          resolveRegisteredToolName(toolCall.name) === MOBILE_UI_ACTION_TOOL_NAME,
+      );
+      if (
+        outcome.toolCallId !== handoffRef.toolCallId ||
+        outcome.effectDispatchObservation.handoff !== handoffRef ||
+        executableToolCall?.name === undefined ||
+        resolveRegisteredToolName(executableToolCall.name) !== MOBILE_UI_ACTION_TOOL_NAME ||
+        !ownsExpectedToolCall ||
+        graph.observedToolResults.some((result) => result.id === outcome.toolCallId) ||
+        graph.asyncWork.pendingOperations.length > 0 ||
+        graph.pendingAsyncCount !== 0
+      ) {
+        throw new Error('mobile_controller_handoff_graph_identity_invalid');
+      }
+      const operation = buildAgentRunMobileControllerAsyncOperation({
+        handoff: handoffRef,
+        updatedAt: outcome.deferredHandoff.handle.createdAt,
+      });
+      if (!operation) {
+        throw new Error('mobile_controller_handoff_async_operation_invalid');
+      }
+      params.applyGraphEvents([
+        {
+          type: 'ASYNC_WAITING',
+          pendingAsyncCount: 1,
+          pendingOperations: [operation],
+          timestamp: operation.updatedAt,
+        },
+      ]);
+      const waitingGraph = params.getGraphSnapshot();
+      if (
+        waitingGraph.status !== 'waiting_async' ||
+        waitingGraph.pendingAsyncCount !== 1 ||
+        waitingGraph.asyncWork.pendingOperations.length !== 1 ||
+        waitingGraph.asyncWork.pendingOperations[0]?.key !== operation.key
+      ) {
+        throw new Error('mobile_controller_handoff_graph_projection_failed');
+      }
+      deferredHandoff = outcome.deferredHandoff;
+      continue;
+    }
     const rawGraphToolCall = outcome.toolMessage.toolCalls?.[0];
     const executableToolCall = params.executableToolCalls[outcome.index];
     const rawToolName = resolveRegisteredToolName(
@@ -354,6 +424,14 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   }
 
   await params.yieldToUiFrame();
+
+  if (deferredHandoff) {
+    return {
+      status: 'waiting',
+      lastPendingAsyncSignature: params.lastPendingAsyncSignature,
+      workingMessages,
+    };
+  }
 
   if (clarificationRequest) {
     const requestUnderstanding = buildClarificationRequestUnderstanding({

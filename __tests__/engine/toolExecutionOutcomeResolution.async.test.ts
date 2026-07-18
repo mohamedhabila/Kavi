@@ -6,8 +6,110 @@ import {
   createPendingOperation,
   createToolMessage,
 } from '../helpers/toolExecutionOutcomeHarness';
+import {
+  createInitialAgentControlGraphSnapshot,
+  reduceAgentControlGraph,
+} from '../../src/engine/graph/agentControlGraph';
+import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 
 describe('tool execution outcome resolution', () => {
+  it('projects a deferred mobile action into waiting state without a tool result', async () => {
+    const deferredHandoff = createPersistedMobileControllerHandoffFixture();
+    const params = buildBaseParams();
+    params.executableToolCalls = [
+      {
+        name: 'mobile_ui_action',
+        arguments: JSON.stringify(deferredHandoff.handoff.action),
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: deferredHandoff.handoffRef.toolCallId,
+        deferredHandoff,
+        effectDispatchObservation: {
+          kind: 'deferred',
+          handoff: deferredHandoff.handoffRef,
+        },
+      },
+    ];
+    let graph = reduceAgentControlGraph(createInitialAgentControlGraphSnapshot(), [
+      { type: 'MODEL_TURN_STARTED', iteration: 2, timestamp: 100 },
+      {
+        type: 'MODEL_TURN_COMPLETED',
+        iteration: 2,
+        toolCalls: [
+          { id: deferredHandoff.handoffRef.toolCallId, name: 'mobile_ui_action' },
+        ],
+        timestamp: 105,
+      },
+    ]);
+    params.getGraphSnapshot = jest.fn(() => graph);
+    params.applyGraphEvents = jest.fn((events) => {
+      graph = reduceAgentControlGraph(graph, events);
+    });
+
+    const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(result.status).toBe('waiting');
+    expect(result.workingMessages).toEqual([]);
+    expect(graph).toMatchObject({
+      status: 'waiting_async',
+      pendingAsyncCount: 1,
+      expectedToolCalls: [
+        { id: deferredHandoff.handoffRef.toolCallId, name: 'mobile_ui_action' },
+      ],
+      observedToolResults: [],
+      asyncWork: {
+        pendingOperations: [
+          {
+            kind: 'mobile-controller-handoff',
+            resourceId: deferredHandoff.handoffRef.handoffId,
+            mobileControllerHandoff: deferredHandoff.handoffRef,
+          },
+        ],
+      },
+    });
+    expect(params.onToolMessage).not.toHaveBeenCalled();
+    expect(params.publishWorkflowToolResultProgress).not.toHaveBeenCalled();
+    expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
+    expect(params.onStateChange).not.toHaveBeenCalled();
+  });
+
+  it('rejects a deferred mobile handoff that is not the expected graph call', async () => {
+    const deferredHandoff = createPersistedMobileControllerHandoffFixture();
+    const params = buildBaseParams();
+    params.executableToolCalls = [
+      { name: 'mobile_ui_action', arguments: JSON.stringify(deferredHandoff.handoff.action) },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: deferredHandoff.handoffRef.toolCallId,
+        deferredHandoff,
+        effectDispatchObservation: {
+          kind: 'deferred',
+          handoff: deferredHandoff.handoffRef,
+        },
+      },
+    ];
+    const graph = reduceAgentControlGraph(createInitialAgentControlGraphSnapshot(), [
+      { type: 'MODEL_TURN_STARTED', iteration: 2 },
+      {
+        type: 'MODEL_TURN_COMPLETED',
+        iteration: 2,
+        toolCalls: [{ id: 'different-tool-call', name: 'mobile_ui_action' }],
+      },
+    ]);
+    params.getGraphSnapshot = jest.fn(() => graph);
+
+    await expect(resolveAgentControlGraphToolExecutionOutcomes(params)).rejects.toThrow(
+      'mobile_controller_handoff_graph_identity_invalid',
+    );
+    expect(params.applyGraphEvents).not.toHaveBeenCalled();
+    expect(params.onToolMessage).not.toHaveBeenCalled();
+  });
+
   it('terminally blocks the graph when an effect requires reconciliation', async () => {
     const params = buildBaseParams();
     params.executableToolCalls = [

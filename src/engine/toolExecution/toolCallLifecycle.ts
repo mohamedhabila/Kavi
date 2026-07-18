@@ -159,6 +159,7 @@ export type {
   ToolExecutionLifecycleParams,
   ToolExecutionLifecycleResult,
 } from './toolCallLifecycleTypes';
+export { isDeferredToolExecutionLifecycleResult } from './toolCallLifecycleTypes';
 
 export async function executeToolCallLifecycle(
   params: ToolExecutionLifecycleParams,
@@ -353,8 +354,22 @@ export async function executeToolCallLifecycle(
         toolObservedMemoryEvidence: params.toolObservedMemoryEvidence,
       },
     );
-    let outcome: ToolRuntimeOutcome = execution;
     effectDispatchObservation = execution.effectDispatchObservation;
+    if (execution.status === 'deferred') {
+      recordLifecyclePerformanceMetrics({
+        enabled: params.usePerformanceMetrics,
+        recorder: params.onRecordPerformanceMetrics,
+        startedAt: toolExecutionStartedAt,
+        reason: 'tool_execution_deferred',
+      });
+      return {
+        toolCallId: effectiveToolCall.id,
+        effectiveToolName: effectiveToolCall.name,
+        deferredHandoff: execution.deferredHandoff,
+        effectDispatchObservation: execution.effectDispatchObservation,
+      };
+    }
+    let outcome: ToolRuntimeOutcome = execution;
     if (
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding) &&
       (effectFreeInvocation ||

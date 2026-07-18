@@ -337,7 +337,9 @@ export function qualifyMobileControllerAction(
   return action && actionFitsPayloadLimit(action, capability) ? action : null;
 }
 
-function qualifyObservationRef(candidate: unknown): MobileControllerObservationRef | null {
+export function qualifyMobileControllerObservationRef(
+  candidate: unknown,
+): MobileControllerObservationRef | null {
   if (!isPlainRecord(candidate)) return null;
   const allowedKeys = new Set(['appId', 'digest', 'observationId', 'windowId']);
   if (!hasOnlyKeys(candidate, allowedKeys)) return null;
@@ -362,7 +364,7 @@ function qualifyObservationRef(candidate: unknown): MobileControllerObservationR
   });
 }
 
-function actionReferencesObservation(
+export function mobileControllerActionReferencesObservation(
   action: MobileControllerAction,
   observationId: string,
 ): boolean {
@@ -410,7 +412,7 @@ export function qualifyMobileControllerPendingHandoff(
   const capabilityDigest = digest(candidate.capabilityDigest);
   const action = qualifyMobileControllerAction(candidate.action, capability);
   const actionDigest = digest(candidate.actionDigest);
-  const beforeObservation = qualifyObservationRef(candidate.beforeObservation);
+  const beforeObservation = qualifyMobileControllerObservationRef(candidate.beforeObservation);
   const claimedAt = safeTimestamp(candidate.claimedAt);
   const createdAt = safeTimestamp(candidate.createdAt);
   const expiresAt = safeTimestamp(candidate.expiresAt);
@@ -427,7 +429,7 @@ export function qualifyMobileControllerPendingHandoff(
     !actionDigest ||
     actionDigest !== `sha256:${dispatchIdentity.requestDigest}` ||
     !beforeObservation ||
-    !actionReferencesObservation(action, beforeObservation.observationId) ||
+    !mobileControllerActionReferencesObservation(action, beforeObservation.observationId) ||
     claimedAt === null ||
     createdAt === null ||
     expiresAt === null ||
@@ -530,7 +532,7 @@ export function qualifyMobileControllerOutcome(candidate: unknown): MobileContro
   const afterObservation =
     candidate.afterObservation === undefined
       ? undefined
-      : qualifyObservationRef(candidate.afterObservation);
+      : qualifyMobileControllerObservationRef(candidate.afterObservation);
   const stabilization =
     candidate.stabilization === undefined
       ? undefined

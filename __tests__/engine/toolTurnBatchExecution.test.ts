@@ -10,6 +10,8 @@ import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/a
 
 jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
   executeToolCallLifecycle: jest.fn(),
+  isDeferredToolExecutionLifecycleResult: (result: unknown) =>
+    Boolean(result && typeof result === 'object' && 'deferredHandoff' in result),
 }));
 
 const mockedExecuteToolCallLifecycle = jest.mocked(executeToolCallLifecycle);

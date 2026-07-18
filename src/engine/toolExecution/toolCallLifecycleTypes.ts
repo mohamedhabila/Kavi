@@ -12,6 +12,7 @@ import type { VerifiedProcedureExecutionSession } from '../../services/memory/ve
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 import type { ToolEffectDispatchObservation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import type { ToolObservedMemoryEvidenceCapability } from '../../services/memory/toolObservedMemoryEvidence';
+import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 
 export type ToolExecutionLifecycleIdPrefixes = {
   blocked: string;
@@ -70,7 +71,7 @@ export type ToolExecutionLifecycleParams = {
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
 };
 
-export type ToolExecutionLifecycleResult = {
+export type TerminalToolExecutionLifecycleResult = {
   toolCallId: string;
   toolMessage: Message;
   effectiveToolName: string;
@@ -79,3 +80,20 @@ export type ToolExecutionLifecycleResult = {
   effectReconciliationRequired?: boolean;
   effectDispatchObservation?: ToolEffectDispatchObservation;
 };
+
+export type DeferredToolExecutionLifecycleResult = {
+  toolCallId: string;
+  effectiveToolName: string;
+  deferredHandoff: PersistedMobileControllerHandoff;
+  effectDispatchObservation: Extract<ToolEffectDispatchObservation, { kind: 'deferred' }>;
+};
+
+export type ToolExecutionLifecycleResult =
+  | TerminalToolExecutionLifecycleResult
+  | DeferredToolExecutionLifecycleResult;
+
+export function isDeferredToolExecutionLifecycleResult(
+  result: ToolExecutionLifecycleResult,
+): result is DeferredToolExecutionLifecycleResult {
+  return 'deferredHandoff' in result;
+}
