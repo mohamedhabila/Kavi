@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
+from copy import deepcopy
 from io import BytesIO
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -16,7 +17,6 @@ from uuid import uuid4
 
 from mobile_world.agents.base import BaseAgent
 from mobile_world.agents.implementations.general_e2e_agent import (
-    parse_action,
     parse_response_to_action,
 )
 from mobile_world.runtime.utils.models import UNKNOWN, JSONAction
@@ -26,6 +26,7 @@ RequestFunction = Callable[[JsonObject], JsonObject]
 MAX_RESPONSE_BYTES = 1_000_000
 MAX_SCREENSHOT_BYTES = 8_000_000
 MAX_ACTION_ATTEMPTS = 3
+MAX_RECENT_ACTION_OUTCOMES = 6
 
 
 class KaviBridgeError(RuntimeError):
@@ -43,6 +44,23 @@ def _require_loopback_url(value: str) -> str:
     if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "::1", "localhost"}:
         raise KaviBridgeError("Kavi's MobileWorld bridge must use loopback HTTP.")
     return value.rstrip("/")
+
+
+def _parse_external_action_response(value: Any) -> tuple[str, JsonObject]:
+    raw = _require_text(value, "response")
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise KaviBridgeError("External action response must be one JSON object.") from error
+    if not isinstance(decoded, dict) or set(decoded) != {"thought", "action"}:
+        raise KaviBridgeError(
+            "External action response must contain exactly 'thought' and 'action'."
+        )
+    thought = _require_text(decoded.get("thought"), "response.thought")
+    action = decoded.get("action")
+    if not isinstance(action, dict) or not action:
+        raise KaviBridgeError("Bridge field 'response.action' must be a non-empty object.")
+    return thought, action
 
 
 class KaviMobileWorldAgent(BaseAgent):
@@ -71,7 +89,8 @@ class KaviMobileWorldAgent(BaseAgent):
         self._request_function = request_function or self._request_over_http
         self.step_index = 0
         self.repair_count = 0
-        self._previous_action: JsonObject | None = None
+        self._previous_handoff: JsonObject | None = None
+        self._recent_action_outcomes: list[JsonObject] = []
         self._previous_screenshot_digest: str | None = None
         self._unchanged_observation_count = 0
 
@@ -152,6 +171,23 @@ class KaviMobileWorldAgent(BaseAgent):
         self._unchanged_observation_count = (
             self._unchanged_observation_count + 1 if visual_state_unchanged else 0
         )
+        if self._previous_handoff is not None:
+            self._recent_action_outcomes.append(
+                {
+                    **self._previous_handoff,
+                    "observation": {
+                        "post_action_observation_received": True,
+                        "exact_screen_match": visual_state_unchanged,
+                        "consecutive_exact_screen_matches": self._unchanged_observation_count,
+                        "semantic_effect": "unverified",
+                        "ask_user_response": observation.get("ask_user_response"),
+                        "external_tool_result": observation.get("tool_call"),
+                    },
+                }
+            )
+            self._recent_action_outcomes = self._recent_action_outcomes[
+                -MAX_RECENT_ACTION_OUTCOMES:
+            ]
         self.step_index += 1
         last_response = ""
 
@@ -164,27 +200,30 @@ class KaviMobileWorldAgent(BaseAgent):
                 screenshot_base64=encoded,
                 screenshot_width=width,
                 screenshot_height=height,
-                tool_call=observation.get("tool_call"),
-                ask_user_response=observation.get("ask_user_response"),
-                previous_action=self._previous_action,
-                visual_state_unchanged=visual_state_unchanged,
-                unchanged_observation_count=self._unchanged_observation_count,
+                recent_action_outcomes=deepcopy(self._recent_action_outcomes),
                 **({"validation_error": "invalid_action_contract"} if attempt else {}),
             )
             self._record_usage(response)
             last_response = _require_text(response.get("response"), "response")
             try:
-                _, action_text = parse_action(last_response)
+                thought, action_payload = _parse_external_action_response(last_response)
                 parsed = parse_response_to_action(
-                    action_text,
+                    json.dumps(action_payload, ensure_ascii=False),
                     width,
                     height,
                     self.scale_factor,
                 )
-                self._previous_action = parsed
+                self._previous_handoff = {
+                    "proposed_action": action_payload,
+                    "parsed_controller_action": parsed,
+                }
                 self._previous_screenshot_digest = screenshot_digest
-                return last_response, JSONAction(**parsed)
-            except (TypeError, ValueError):
+                transcript = (
+                    f"Thought: {thought}\n"
+                    f"Action: {json.dumps(action_payload, ensure_ascii=False)}"
+                )
+                return transcript, JSONAction(**parsed)
+            except (KaviBridgeError, TypeError, ValueError):
                 if attempt + 1 < MAX_ACTION_ATTEMPTS:
                     self.repair_count += 1
 
@@ -196,6 +235,7 @@ class KaviMobileWorldAgent(BaseAgent):
     def reset(self) -> None:
         self.step_index = 0
         self.repair_count = 0
-        self._previous_action = None
+        self._previous_handoff = None
+        self._recent_action_outcomes = []
         self._previous_screenshot_digest = None
         self._unchanged_observation_count = 0

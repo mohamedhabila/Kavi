@@ -456,6 +456,9 @@ describe('runForegroundScenario', () => {
   });
 
   it('can run the agentic foreground graph with its tool surface disabled', async () => {
+    const externalActionContract = {
+      schema: { type: 'object', properties: {}, additionalProperties: false },
+    };
     await runForegroundScenario({
       provider: makeProvider('scenario-provider'),
       conversationId: 'scenario-conversation',
@@ -464,12 +467,17 @@ describe('runForegroundScenario', () => {
       defaultMode: 'agentic',
       scenarioTimeoutMs: 60_000,
       disableTools: true,
+      externalActionContract,
       turns: [{ content: 'Inspect this request without acting.', route: 'forced_agentic' }],
     });
 
     const toolFilter = mockedRunOrchestrator.mock.calls[0][0].toolFilter;
     expect(toolFilter?.('memory_recall')).toBe(false);
     expect(toolFilter?.('device_info')).toBe(false);
+    expect(mockedRunOrchestrator.mock.calls[0][0]).toMatchObject({
+      disableTooling: true,
+      externalActionContract: { ...externalActionContract, mimeType: 'application/json' },
+    });
   });
 
   it('rejects unknown or duplicate tool allowlists before running a turn', async () => {

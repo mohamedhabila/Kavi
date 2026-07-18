@@ -63,10 +63,20 @@ describe('executeAgentControlGraphModelTurnAttempt replay retries', () => {
       preparedTurn: {
         enrichedSystemPrompt: 'System guidance. '.repeat(1400),
         enrichedSystemPromptSections: [{ text: 'System guidance.', cacheable: true }],
+        externalActionContract: {
+          name: 'next_action',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: { action: { type: 'string' } },
+            required: ['action'],
+            additionalProperties: false,
+          },
+        },
         pinnedToolNames: [],
         selectedToolTokenEstimate: 0,
-        selectedTools: [{ name: 'read_file', description: 'read', parameters: {} }],
-        toolsForIteration: [{ name: 'read_file', description: 'read', parameters: {} }],
+        selectedTools: [],
+        toolsForIteration: undefined,
       },
       recordPerformanceMetrics: jest.fn(),
       reportUsage,
@@ -115,6 +125,16 @@ describe('executeAgentControlGraphModelTurnAttempt replay retries', () => {
       event: 'provider_managed',
     });
     expect(streamOptions.systemPromptSections).toBeUndefined();
+    expect(streamOptions.structuredOutput).toEqual({
+      name: 'next_action',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: { action: { type: 'string' } },
+        required: ['action'],
+        additionalProperties: false,
+      },
+    });
   });
 
   it('drops original cache sections when the final budget truncates the approved prompt', async () => {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import unittest
 from io import BytesIO
@@ -27,6 +28,10 @@ class FakeBridge:
 
 
 class KaviMobileWorldAgentTest(unittest.TestCase):
+    @staticmethod
+    def response(thought: str, action: dict) -> str:
+        return json.dumps({"thought": thought, "action": action})
+
     def make_agent(self, bridge: FakeBridge) -> KaviMobileWorldAgent:
         with patch.dict(
             os.environ,
@@ -44,7 +49,7 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
 
     def test_parses_with_the_upstream_action_parser(self) -> None:
         bridge = FakeBridge(
-            ['Thought: Tap the control.\nAction: {"action_type":"click","coordinate":[500,250]}']
+            [self.response("Tap the control.", {"action_type": "click", "coordinate": [500, 250]})]
         )
         agent = self.make_agent(bridge)
         agent.initialize("Complete the task")
@@ -61,7 +66,7 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
         bridge = FakeBridge(
             [
                 "This is not an action.",
-                'Thought: Recover.\nAction: {"action_type":"navigate_back"}',
+                self.response("Recover.", {"action_type": "navigate_back"}),
             ]
         )
         agent = self.make_agent(bridge)
@@ -75,11 +80,26 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
         self.assertEqual(bridge.requests[-1]["validation_error"], "invalid_action_contract")
         self.assertEqual(agent.repair_count, 1)
 
-    def test_reports_structural_visual_stagnation_and_previous_action(self) -> None:
+    def test_does_not_fall_back_to_the_legacy_thought_action_parser(self) -> None:
         bridge = FakeBridge(
             [
-                'Thought: Go back.\nAction: {"action_type":"navigate_back"}',
-                'Thought: Try another route.\nAction: {"action_type":"navigate_home"}',
+                'Thought: Legacy format.\nAction: {"action_type":"navigate_home"}',
+                self.response("Use the typed handoff.", {"action_type": "navigate_back"}),
+            ]
+        )
+        agent = self.make_agent(bridge)
+        agent.initialize("Complete the task")
+
+        _, action = agent.predict({"screenshot": Image.new("RGB", (100, 200))})
+
+        self.assertEqual(action.action_type, "navigate_back")
+        self.assertEqual([request["action"] for request in bridge.requests], ["reset", "act", "repair"])
+
+    def test_reports_a_bounded_typed_action_outcome_ledger(self) -> None:
+        bridge = FakeBridge(
+            [
+                self.response("Go back.", {"action_type": "navigate_back"}),
+                self.response("Try another route.", {"action_type": "navigate_home"}),
             ]
         )
         agent = self.make_agent(bridge)
@@ -90,30 +110,48 @@ class KaviMobileWorldAgentTest(unittest.TestCase):
         agent.predict({"screenshot": screenshot})
 
         first_request, second_request = bridge.requests[1:3]
-        self.assertFalse(first_request["visual_state_unchanged"])
-        self.assertIsNone(first_request["previous_action"])
-        self.assertTrue(second_request["visual_state_unchanged"])
-        self.assertEqual(second_request["unchanged_observation_count"], 1)
-        self.assertEqual(second_request["previous_action"], {"action_type": "navigate_back"})
+        self.assertEqual(first_request["recent_action_outcomes"], [])
+        self.assertEqual(
+            second_request["recent_action_outcomes"],
+            [
+                {
+                    "proposed_action": {"action_type": "navigate_back"},
+                    "parsed_controller_action": {"action_type": "navigate_back"},
+                    "observation": {
+                        "post_action_observation_received": True,
+                        "exact_screen_match": True,
+                        "consecutive_exact_screen_matches": 1,
+                        "semantic_effect": "unverified",
+                        "ask_user_response": None,
+                        "external_tool_result": None,
+                    },
+                }
+            ],
+        )
 
     def test_forwards_user_and_external_tool_observations(self) -> None:
         bridge = FakeBridge(
-            ['Thought: Continue.\nAction: {"action_type":"navigate_home"}']
+            [
+                self.response("Start.", {"action_type": "navigate_home"}),
+                self.response("Continue.", {"action_type": "wait"}),
+            ]
         )
         agent = self.make_agent(bridge)
         agent.initialize("Complete the task")
+        screenshot = Image.new("RGB", (100, 200))
 
+        agent.predict({"screenshot": screenshot})
         agent.predict(
             {
-                "screenshot": Image.new("RGB", (100, 200)),
+                "screenshot": screenshot,
                 "ask_user_response": "Use the afternoon time.",
                 "tool_call": {"status": "completed", "value": 3},
             }
         )
 
-        request = bridge.requests[1]
-        self.assertEqual(request["ask_user_response"], "Use the afternoon time.")
-        self.assertEqual(request["tool_call"], {"status": "completed", "value": 3})
+        outcome = bridge.requests[2]["recent_action_outcomes"][-1]["observation"]
+        self.assertEqual(outcome["ask_user_response"], "Use the afternoon time.")
+        self.assertEqual(outcome["external_tool_result"], {"status": "completed", "value": 3})
 
     def test_returns_unknown_after_the_bounded_recovery_budget(self) -> None:
         bridge = FakeBridge(["invalid", "still invalid", "invalid again"])

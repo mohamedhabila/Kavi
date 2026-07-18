@@ -19,6 +19,7 @@ import type {
   OrchestratorOptions,
   OrchestratorRunResult,
 } from './orchestrator/types';
+import { resolveExternalActionContract } from './externalActionContract';
 
 export { MAX_IDENTICAL_TOOL_CALLS, MAX_TOOL_ITERATIONS, MAX_TOOL_ITERATIONS_SUPERAGENT };
 export type { OrchestratorCallbacks, OrchestratorOptions, OrchestratorRunResult };
@@ -29,6 +30,13 @@ export async function runOrchestrator(
   options: OrchestratorOptions,
   callbacks: OrchestratorCallbacks,
 ): Promise<OrchestratorRunResult> {
+  const externalActionContract = resolveExternalActionContract(
+    options.externalActionContract,
+    options.disableTooling === true,
+  );
+  const normalizedOptions = externalActionContract
+    ? { ...options, externalActionContract }
+    : options;
   const {
     conversationId,
     messages,
@@ -39,7 +47,7 @@ export async function runOrchestrator(
     allProviders,
     enableFailover = true,
     internalUserMessageCount = 0,
-  } = options;
+  } = normalizedOptions;
 
   if (
     await tryHandleOrchestratorSlashCommand({
@@ -47,8 +55,8 @@ export async function runOrchestrator(
       conversationId,
       internalUserMessageCount,
       messages,
-      agentRunId: options.agentRunId,
-      signal: options.signal,
+      agentRunId: normalizedOptions.agentRunId,
+      signal: normalizedOptions.signal,
     })
   ) {
     return { terminalDisposition: 'command' };
@@ -59,7 +67,7 @@ export async function runOrchestrator(
     callbacks,
     conversationId,
     enableFailover,
-    initialPendingAsyncOperations: options.initialPendingAsyncOperations,
+    initialPendingAsyncOperations: normalizedOptions.initialPendingAsyncOperations,
     internalUserMessageCount,
     logger,
     messages,
@@ -67,11 +75,11 @@ export async function runOrchestrator(
     personaId,
     provider,
     systemPrompt,
-    toolFilter: options.toolFilter,
+    toolFilter: normalizedOptions.toolFilter,
   });
 
   return runOrchestratorGraphSession({
-    options,
+    options: normalizedOptions,
     callbacks,
     sessionBootstrap,
   });

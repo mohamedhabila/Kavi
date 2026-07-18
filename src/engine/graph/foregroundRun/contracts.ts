@@ -4,6 +4,7 @@ import type {
   MemoryContextStrategy,
   MemoryRetrievalStrategy,
 } from '../../../services/memory/memoryAccessPolicy';
+import type { StructuredOutputOptions } from '../../../services/llm/support/contracts';
 
 export type ResolvedFinalizationProviderContext = {
   provider: LlmProviderConfig;
@@ -23,6 +24,11 @@ export type RunChatOptions = {
   additionalSystemPrompt?: string;
   additionalUserPrompt?: string;
   disableTools?: boolean;
+  /**
+   * Provider-enforced response schema for handing one action to a code-owned
+   * external controller after this foreground turn. Requires disableTools.
+   */
+  externalActionContract?: StructuredOutputOptions;
   allowedToolNames?: ReadonlyArray<string>;
   memoryRetrievalStrategy?: MemoryRetrievalStrategy;
   memoryContextStrategy?: MemoryContextStrategy;

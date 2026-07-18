@@ -121,6 +121,7 @@ export function buildPreparedModelTurnPrompt(params: {
         runtimeContext: params.promptContextSupport.runtimeContext,
         runtimePolicyPrompt: buildMemoryPolicyPromptSection(options.longTermMemoryEnabled),
         skillPrompts: params.promptContextSupport.skillPrompts,
+        externalActionContract: params.promptContextSupport.externalActionContract,
         workflowRuntimePrompt: params.workflowRuntimePrompt,
         workflowTaskAnchor: transcriptCarriesSoleFirstTurnAnchor ? undefined : workflowTaskAnchor,
       },

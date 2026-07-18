@@ -21,6 +21,7 @@ import type {
   MemoryContextStrategy,
   MemoryRetrievalStrategy,
 } from '../../services/memory/memoryAccessPolicy';
+import type { StructuredOutputOptions } from '../../services/llm/support/contracts';
 
 export type ForegroundScenarioRouteDirective =
   | 'production_auto'
@@ -30,17 +31,16 @@ export type ForegroundScenarioRouteDirective =
 export type ForegroundScenarioLifecycleBoundary = 'app_relaunch' | 'new_conversation';
 
 export type ForegroundScenarioProviderOutcomeEvidenceRequirement = Readonly<
-  { turnIndex: number } &
-    (
-      | {
-          providerOutcome: IngestionProviderOutcome;
-          providerOutcomes?: never;
-        }
-      | {
-          providerOutcome?: never;
-          providerOutcomes: ReadonlyArray<IngestionProviderOutcome>;
-        }
-    )
+  { turnIndex: number } & (
+    | {
+        providerOutcome: IngestionProviderOutcome;
+        providerOutcomes?: never;
+      }
+    | {
+        providerOutcome?: never;
+        providerOutcomes: ReadonlyArray<IngestionProviderOutcome>;
+      }
+  )
 >;
 
 export function resolveForegroundScenarioProviderOutcomes(
@@ -97,6 +97,7 @@ export type ForegroundScenarioDriverInput = {
   providerOutcomeEvidenceRequirements?: ReadonlyArray<ForegroundScenarioProviderOutcomeEvidenceRequirement>;
   disableLongTermMemory?: boolean;
   disableTools?: boolean;
+  externalActionContract?: StructuredOutputOptions;
   allowedToolNames?: ReadonlyArray<string>;
   beforeTurns?: (identity: {
     conversationId: string;

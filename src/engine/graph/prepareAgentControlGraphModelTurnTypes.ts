@@ -10,6 +10,7 @@ import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
+import type { StructuredOutputOptions } from '../../services/llm/support/contracts';
 
 export type LivingMemorySection = {
   text: string;
@@ -28,6 +29,7 @@ export type PromptContextSupport = {
   runtimeContext?: string | null;
   skillPrompts: string;
   workflowTaskAnchor?: WorkflowTaskAnchor;
+  externalActionContract?: StructuredOutputOptions;
 };
 
 export type PreparedAgentControlGraphModelTurnReady = {

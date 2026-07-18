@@ -38,6 +38,7 @@ import {
 import { resolveGraphTaskId } from '../../goals/graphTaskScope';
 import { enforceSemanticMemoryHandoffGate } from './semanticMemoryHandoffGate';
 import { publishForegroundTerminalMemory } from './terminalMemoryPublication';
+import { resolveExternalActionContract } from '../../externalActionContract';
 
 function buildModelReadyMessages(messages: Message[]): Message[] {
   return deduplicateToolResults(ensureToolResultPairing(messages));
@@ -46,7 +47,17 @@ function buildModelReadyMessages(messages: Message[]): Message[] {
 export async function executeForegroundConversationRun(
   params: ExecuteForegroundConversationRunParams,
 ): Promise<void> {
-  const { context, conversationId, options } = params;
+  const externalActionContract = resolveExternalActionContract(
+    params.options?.externalActionContract,
+    params.options?.disableTools === true,
+  );
+  const normalizedParams: ExecuteForegroundConversationRunParams = externalActionContract
+    ? {
+        ...params,
+        options: { ...params.options, externalActionContract },
+      }
+    : params;
+  const { context, conversationId, options } = normalizedParams;
   const requestClaim = prepareForegroundRunRequestClaim({
     createForegroundRequestId: context.helpers.createId,
     options,
@@ -62,7 +73,7 @@ export async function executeForegroundConversationRun(
     requestClaim.foregroundRequestId,
   );
   try {
-    await executeReservedForegroundConversationRun(params, requestClaim);
+    await executeReservedForegroundConversationRun(normalizedParams, requestClaim);
   } finally {
     projectionIntent.release();
   }
@@ -514,6 +525,7 @@ async function executeReservedForegroundConversationRun(
         workspaceReadFallbackConversationId: workspaceTarget.workspaceReadFallbackConversationId,
         disableTools: options?.disableTools ?? false,
         allowedToolNames: options?.allowedToolNames,
+        externalActionContract: options?.externalActionContract,
         memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
         memoryContextStrategy: options?.memoryContextStrategy,
       },
@@ -607,6 +619,8 @@ async function executeReservedForegroundConversationRun(
           allProviders: context.state.providers.map((candidate) => ({ ...candidate })),
           enableCompaction: options?.enableCompaction ?? true,
           enableFailover: true,
+          disableTooling: options?.disableTools,
+          externalActionContract: options?.externalActionContract,
           thinkingLevel: context.state.thinkingLevel,
           linkUnderstandingEnabled: context.state.linkUnderstandingEnabled,
           mediaUnderstandingEnabled: context.state.mediaUnderstandingEnabled,

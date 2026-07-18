@@ -1,4 +1,5 @@
 import { executeForegroundConversationRun } from '../../engine/graph/foregroundRun/execution';
+import { resolveExternalActionContract } from '../../engine/externalActionContract';
 import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
 import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
 import { cancelScheduledIngestionDrain } from '../../services/memory/ingestionQueue';
@@ -132,6 +133,7 @@ async function awaitBeforeScenarioDeadline<T>(
 }
 
 function validateInput(input: ForegroundScenarioDriverInput): void {
+  resolveExternalActionContract(input.externalActionContract, input.disableTools === true);
   const conversationId = requireTrimmed(input.conversationId, 'conversationId');
   if (conversationId !== input.conversationId) {
     throw new Error('conversationId must not contain surrounding whitespace.');
@@ -344,6 +346,7 @@ async function runScenarioIsolated(
         options: {
           maxTokens: turn.maxTokens ?? input.maxTokens,
           disableTools: input.disableTools,
+          externalActionContract: input.externalActionContract,
           ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
           memoryRetrievalStrategy: input.memoryRetrievalStrategy,
           memoryContextStrategy: input.memoryContextStrategy,

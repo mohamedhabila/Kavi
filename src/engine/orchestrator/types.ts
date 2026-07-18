@@ -19,6 +19,7 @@ import type {
 import type { PendingVerifiedProcedureObservation } from '../../services/memory/verifiedProcedure/executionSession';
 import type { WorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
+import type { StructuredOutputOptions } from '../../services/llm/support/contracts';
 
 export type OrchestratorTerminalDisposition =
   | 'final_candidate'
@@ -63,6 +64,8 @@ export interface OrchestratorOptions {
   provider: LlmProviderConfig;
   model: string;
   disableTooling?: boolean;
+  /** Provider-enforced handoff to an external controller; requires disableTooling. */
+  externalActionContract?: StructuredOutputOptions;
   conversationId: string;
   usageConversationId?: string;
   /** Durable memory boundary. Defaults to the current conversation, never the file workspace. */
