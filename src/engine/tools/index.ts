@@ -32,6 +32,8 @@ import {
   buildModelTurnMemoryPolicyExpiredToolResult,
   isModelTurnMemoryPolicyBindingDurablyCurrent,
 } from '../authority/modelTurnMemoryPolicyBinding';
+import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
+import { executeMobileControllerTool } from '../mobileController/toolExecution';
 
 // ── Central dispatcher ───────────────────────────────────────────────────
 
@@ -362,7 +364,9 @@ export async function executeTool(
       execute: (claim) =>
         runtimeExternalBinding
           ? runtimeExternalBinding.execute(argsString, conversationId, executorContext)
-          : executeToolInner(normalizedName, argsString, conversationId, executorContext, claim),
+          : normalizedName === MOBILE_UI_ACTION_TOOL_NAME
+            ? executeMobileControllerTool(argsString, executorContext?.mobileController)
+            : executeToolInner(normalizedName, argsString, conversationId, executorContext, claim),
     });
     finalizeEffectReceiptCapture(context);
     if (dispatched.kind === 'deferred') {

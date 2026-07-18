@@ -4,6 +4,7 @@ import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type { ToolDefinition } from '../../types/tool';
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 import type { ToolObservedMemoryEvidenceCapability } from '../../services/memory/toolObservedMemoryEvidence';
+import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 
 export interface CodeOwnedCurrentUserMessage {
   id: string;
@@ -43,6 +44,8 @@ export interface ToolExecutionContext {
   currentUserMessage?: CodeOwnedCurrentUserMessage;
   /** Opaque authorities minted from successful code-owned reads in this execution run. */
   toolObservedMemoryEvidence?: ReadonlyArray<ToolObservedMemoryEvidenceCapability>;
+  /** Validated code-owned mobile capability and exact observation for this model turn. */
+  mobileController?: MobileControllerExecutionBinding;
 }
 
 export type ResolvedToolWorkspaceContext = {
