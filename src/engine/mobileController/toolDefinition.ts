@@ -112,6 +112,7 @@ function buildDefinition(params: {
     description:
       'Perform exactly one permitted primitive on the current mobile observation. ' +
       'Use the observation ID supplied by the controller for element or coordinate targets. ' +
+      `Coordinate x/y values are normalized across the image from 0 to ${params.coordinateScale - 1}; do not use image pixel coordinates. ` +
       'This starts an external action; its later correlated outcome, not this call, determines progress.',
     input_schema: Object.freeze({
       type: 'object',

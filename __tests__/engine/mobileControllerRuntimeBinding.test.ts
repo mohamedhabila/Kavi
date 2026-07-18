@@ -148,6 +148,11 @@ describe('mobile controller runtime binding', () => {
     expect(stale).toMatchObject({ status: 'failed' });
     expect(JSON.parse('content' in stale ? stale.content : '{}')).toMatchObject({
       code: 'action_invalid',
+      retryable: true,
+      repair: {
+        currentObservationId: OBSERVATION.observationId,
+        normalizedCoordinateRange: { minimum: 0, maximum: 999 },
+      },
     });
   });
 

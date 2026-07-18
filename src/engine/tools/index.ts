@@ -34,6 +34,7 @@ import {
 } from '../authority/modelTurnMemoryPolicyBinding';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { executeMobileControllerTool } from '../mobileController/toolExecution';
+import { isMobileControllerDeferredExecution } from '../mobileController/runtimeExecution';
 
 // ── Central dispatcher ───────────────────────────────────────────────────
 
@@ -244,6 +245,26 @@ export async function executeTool(
     );
   }
 
+  const preparedMobileControllerExecution =
+    normalizedName === MOBILE_UI_ACTION_TOOL_NAME
+      ? await executeMobileControllerTool(argsString, context?.mobileController)
+      : undefined;
+  if (
+    preparedMobileControllerExecution &&
+    !isMobileControllerDeferredExecution(preparedMobileControllerExecution)
+  ) {
+    const reason = context?.mobileController
+      ? 'tool_arguments_invalid'
+      : 'runtime_binding_unavailable';
+    finalizeEffectReceiptCapture(context);
+    logToolCall(normalizedName, argsString, 'error', 0, conversationId, reason);
+    return withPreDispatchObservation(
+      preparedMobileControllerExecution,
+      effectFreeInvocation,
+      reason,
+    );
+  }
+
   // Approval gate — blocks destructive/sensitive tools until human approves.
   // Durable effect preparation happens only after this decision.
   const approvalRequired = needsApprovalWithContext(normalizedName, parsedArgs);
@@ -361,12 +382,19 @@ export async function executeTool(
         controlGranted: () => context.executionSignal?.aborted !== true,
       },
       runtimeExternalEvidence,
-      execute: (claim) =>
+      execute: async (claim) =>
         runtimeExternalBinding
-          ? runtimeExternalBinding.execute(argsString, conversationId, executorContext)
+          ? await runtimeExternalBinding.execute(argsString, conversationId, executorContext)
           : normalizedName === MOBILE_UI_ACTION_TOOL_NAME
-            ? executeMobileControllerTool(argsString, executorContext?.mobileController)
-            : executeToolInner(normalizedName, argsString, conversationId, executorContext, claim),
+            ? preparedMobileControllerExecution ??
+              (await executeMobileControllerTool(argsString, executorContext?.mobileController))
+            : await executeToolInner(
+                normalizedName,
+                argsString,
+                conversationId,
+                executorContext,
+                claim,
+              ),
     });
     finalizeEffectReceiptCapture(context);
     if (dispatched.kind === 'deferred') {

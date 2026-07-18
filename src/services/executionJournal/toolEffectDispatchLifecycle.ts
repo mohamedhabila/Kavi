@@ -89,6 +89,7 @@ export type ToolEffectDispatchNotClaimedReason =
   | 'model_authority_changed'
   | 'tool_permission_denied'
   | 'tool_unknown'
+  | 'tool_arguments_invalid'
   | 'tool_call_identity_required'
   | 'runtime_binding_unavailable'
   | 'user_approval_denied'
@@ -115,6 +116,7 @@ export type ToolEffectDispatchObservation =
 
 const REPLANNABLE_TOOL_EFFECT_NOT_CLAIMED_REASONS = new Set<ToolEffectDispatchNotClaimedReason>([
   'tool_unknown',
+  'tool_arguments_invalid',
   'runtime_binding_unavailable',
 ]);
 
