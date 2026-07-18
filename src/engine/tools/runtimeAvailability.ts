@@ -13,6 +13,7 @@ export interface RuntimeToolAvailabilityContext {
   hasWorkspaceTargets: boolean;
   hasBrowserControllableWorkspaceTargets: boolean;
   hasDelegableWorkspaceTargets: boolean;
+  hasMobileController: boolean;
 }
 
 function normalizeWorkspaceTargets(targets?: WorkspaceTargetConfig[]): WorkspaceTargetConfig[] {
@@ -73,6 +74,7 @@ export function getRuntimeToolAvailabilityContext(
     hasWorkspaceTargets: resolvedTargets.length > 0,
     hasBrowserControllableWorkspaceTargets: hasBrowserControllableWorkspaceTargets(resolvedTargets),
     hasDelegableWorkspaceTargets: hasDelegableWorkspaceTargets(resolvedTargets),
+    hasMobileController: false,
   };
 }
 
@@ -97,6 +99,9 @@ export function isToolRuntimeAvailable(
   }
   if (toolName === 'workspace_delegate_task') {
     return resolvedContext.hasDelegableWorkspaceTargets;
+  }
+  if (toolName === 'mobile_ui_action') {
+    return resolvedContext.hasMobileController;
   }
   return true;
 }

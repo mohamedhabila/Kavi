@@ -12,6 +12,7 @@ import { ALL_BUILTIN_TOOL_DEFINITIONS } from '../builtin-definitions';
 import { ALL_NATIVE_TOOL_DEFINITIONS } from '../native/definitions';
 import { ALL_WORKSPACE_TOOL_DEFINITIONS } from '../workspace-definitions';
 import { createCodeOwnedServiceToolDefinitions } from '../../../services/integrations/codeOwnedServiceTools';
+import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../mobileController/toolDefinition';
 
 export { CORE_DOMAIN_TOOLS } from './core';
 export { EXTENDED_DOMAIN_TOOLS } from './extended';
@@ -29,5 +30,6 @@ export const DOMAIN_TOOL_DEFINITIONS: ToolDefinition[] = [
   ...ALL_BUILTIN_TOOL_DEFINITIONS,
   ...ALL_BROWSER_TOOL_DEFINITIONS,
   ...ALL_WORKSPACE_TOOL_DEFINITIONS,
+  MOBILE_UI_ACTION_TOOL_DEFINITION,
   ...createCodeOwnedServiceToolDefinitions(),
 ];

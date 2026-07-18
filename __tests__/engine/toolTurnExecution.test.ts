@@ -110,6 +110,7 @@ function createParams(
       hasWorkspaceTargets: false,
       hasBrowserControllableWorkspaceTargets: false,
       hasDelegableWorkspaceTargets: false,
+      hasMobileController: false,
     },
     toolCallHistory: [],
     stagnationSignatures: [],

@@ -96,6 +96,7 @@ describe('runtimeAvailability', () => {
       hasWorkspaceTargets: false,
       hasBrowserControllableWorkspaceTargets: false,
       hasDelegableWorkspaceTargets: false,
+      hasMobileController: false,
     });
     const filteredNames = new Set(filtered.map((tool) => tool.name));
 
@@ -117,6 +118,7 @@ describe('runtimeAvailability', () => {
       hasWorkspaceTargets: true,
       hasBrowserControllableWorkspaceTargets: true,
       hasDelegableWorkspaceTargets: false,
+      hasMobileController: false,
     });
 
     expect(filtered.map((tool) => tool.name)).toEqual([
@@ -136,6 +138,7 @@ describe('runtimeAvailability', () => {
       hasWorkspaceTargets: true,
       hasBrowserControllableWorkspaceTargets: true,
       hasDelegableWorkspaceTargets: true,
+      hasMobileController: false,
     });
 
     expect(filtered.map((tool) => tool.name)).toEqual([
@@ -152,6 +155,7 @@ describe('runtimeAvailability', () => {
         hasWorkspaceTargets: false,
         hasBrowserControllableWorkspaceTargets: false,
         hasDelegableWorkspaceTargets: false,
+        hasMobileController: false,
       },
     );
 
@@ -165,6 +169,7 @@ describe('runtimeAvailability', () => {
         hasWorkspaceTargets: true,
         hasBrowserControllableWorkspaceTargets: true,
         hasDelegableWorkspaceTargets: true,
+        hasMobileController: false,
       },
     );
 

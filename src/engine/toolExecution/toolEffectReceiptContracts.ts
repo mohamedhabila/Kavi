@@ -281,6 +281,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     sessions_spawn: operational('workflow.start'),
     sessions_send: operational('workflow.mutate'),
     sessions_cancel: operational('workflow.mutate'),
+    mobile_ui_action: operational('unknown'),
     workspace_delegate_task: operational('workflow.start'),
     skill__github__create_branch: operational('remote.mutate'),
     skill__github__commit_files: operational('remote.mutate'),

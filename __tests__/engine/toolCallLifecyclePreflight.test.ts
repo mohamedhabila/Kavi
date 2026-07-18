@@ -74,6 +74,7 @@ function buildLifecycle(
       hasWorkspaceTargets: false,
       hasBrowserControllableWorkspaceTargets: false,
       hasDelegableWorkspaceTargets: false,
+      hasMobileController: false,
     },
     toolCallHistory,
     trackedAsyncOperations: new Map(),

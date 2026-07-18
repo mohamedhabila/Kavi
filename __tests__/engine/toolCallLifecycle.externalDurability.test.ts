@@ -36,6 +36,7 @@ function lifecycle(onToolCallComplete = jest.fn()): ToolExecutionLifecycleParams
       hasWorkspaceTargets: false,
       hasBrowserControllableWorkspaceTargets: false,
       hasDelegableWorkspaceTargets: false,
+      hasMobileController: false,
     },
     toolCallHistory: [],
     groundedRequestScopedTools: [

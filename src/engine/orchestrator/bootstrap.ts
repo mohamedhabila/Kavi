@@ -245,9 +245,9 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   const catalogVisibleTools = params.toolFilter
     ? policyAuthorizedTools.filter((tool) => params.toolFilter?.(tool.name) !== false)
     : policyAuthorizedTools;
-  const catalogVisibleToolNames = new Set(catalogVisibleTools.map((tool) => tool.name));
   const runtimeToolAvailability = getRuntimeToolAvailabilityContext();
   const allTools = filterToolsByRuntimeAvailability(catalogVisibleTools, runtimeToolAvailability);
+  const catalogVisibleToolNames = new Set(allTools.map((tool) => tool.name));
 
   const llm = new LlmService(activeProvider);
   const toolCallHistory: ToolCallRecord[] = [];

@@ -35,6 +35,7 @@ function createParams(overrides: Record<string, unknown> = {}) {
           hasWorkspaceTargets: false,
           hasBrowserControllableWorkspaceTargets: false,
           hasDelegableWorkspaceTargets: false,
+          hasMobileController: false,
         },
         toolCallHistory: [],
         toolFilter: undefined,
