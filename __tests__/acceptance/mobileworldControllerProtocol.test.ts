@@ -3,10 +3,12 @@ import {
   buildMobileWorldControllerOutcome,
   buildMobileWorldObservationRef,
   mapMobileControllerActionToMobileWorld,
+  resolveMobileWorldBridgeEvent,
 } from '../../benchmarks/mobileworld/controllerProtocol';
 import { qualifyMobileControllerCapability } from '../../src/engine/mobileController/validation';
 import { buildMobileControllerPublishedHandoff } from '../../src/engine/mobileController/publication';
 import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
+import { makeTestAgentRun, makeTestConversation, makeTestMessage } from '../helpers/factories';
 
 describe('MobileWorld graph-owned controller protocol', () => {
   it('builds one screenshot-only sandbox capability with a stable app allowlist', async () => {
@@ -83,5 +85,68 @@ describe('MobileWorld graph-owned controller protocol', () => {
         afterObservation,
       }),
     );
+  });
+
+  it('translates only graph-owned host events into upstream lifecycle actions', () => {
+    const persisted = createPersistedMobileControllerHandoffFixture();
+    const publication = buildMobileControllerPublishedHandoff(persisted, {
+      conversationId: 'conversation-1',
+      agentRunId: 'agent-run-1',
+    });
+    if (!publication) throw new Error('expected publication fixture');
+    const pendingConversation = makeTestConversation({
+      id: 'conversation-1',
+      agentRuns: [makeTestAgentRun({ id: 'agent-run-1' })],
+    });
+    expect(
+      resolveMobileWorldBridgeEvent({
+        conversation: pendingConversation,
+        agentRunId: 'agent-run-1',
+        publication,
+      }),
+    ).toEqual(expect.objectContaining({ kind: 'controller_action', publication }));
+
+    const clarificationConversation = makeTestConversation({
+      id: 'conversation-1',
+      messages: [
+        makeTestMessage(1, {
+          content: 'Which time should I use?',
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'request_clarification',
+          },
+        }),
+      ],
+      agentRuns: [makeTestAgentRun({ id: 'agent-run-1', status: 'completed' })],
+    });
+    expect(
+      resolveMobileWorldBridgeEvent({
+        conversation: clarificationConversation,
+        agentRunId: 'agent-run-1',
+      }),
+    ).toEqual({ kind: 'ask_user', text: 'Which time should I use?' });
+
+    const completedConversation = makeTestConversation({
+      id: 'conversation-1',
+      messages: [
+        makeTestMessage(1, {
+          content: 'Done.',
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'stop',
+          },
+          toolCalls: [{ id: 'mobile-1', name: 'mobile_ui_action', arguments: '{}', status: 'completed' }],
+        }),
+      ],
+      agentRuns: [makeTestAgentRun({ id: 'agent-run-1', status: 'completed' })],
+    });
+    expect(
+      resolveMobileWorldBridgeEvent({
+        conversation: completedConversation,
+        agentRunId: 'agent-run-1',
+      }),
+    ).toEqual({ kind: 'status', goalStatus: 'complete' });
   });
 });

@@ -12,6 +12,7 @@ import {
   qualifyMobileControllerOutcome,
 } from '../../src/engine/mobileController/validation';
 import type { ToolEffectDigest } from '../../src/types/toolEffectReceipt';
+import type { Conversation } from '../../src/types/conversation';
 import { sha256HexUtf8Async } from '../../src/utils/sha256Async';
 
 export const MOBILEWORLD_COORDINATE_SCALE = 1_000;
@@ -41,6 +42,16 @@ export type MobileWorldControllerAction =
   | Readonly<{ action_type: 'keyboard_enter' | 'navigate_back' | 'navigate_home' | 'wait' }>
   | Readonly<{ action_type: 'open_app'; app_name: string }>
   | Readonly<{ action_type: 'scroll'; direction: 'up' | 'down' | 'left' | 'right' }>;
+
+export type MobileWorldBridgeEvent =
+  | Readonly<{
+      kind: 'controller_action';
+      publication: MobileControllerPublishedHandoff;
+      action: MobileWorldControllerAction;
+    }>
+  | Readonly<{ kind: 'ask_user'; text: string }>
+  | Readonly<{ kind: 'answer'; text: string }>
+  | Readonly<{ kind: 'status'; goalStatus: 'complete' | 'infeasible' }>;
 
 async function digest(value: string): Promise<ToolEffectDigest> {
   return `sha256:${await sha256HexUtf8Async(value)}`;
@@ -176,4 +187,49 @@ export function buildMobileWorldControllerOutcome(input: {
   });
   if (!outcome) throw new Error('mobileworld_controller_outcome_invalid');
   return outcome;
+}
+
+export function resolveMobileWorldBridgeEvent(input: {
+  conversation: Conversation;
+  agentRunId: string;
+  publication?: MobileControllerPublishedHandoff;
+}): MobileWorldBridgeEvent {
+  if (input.publication) {
+    if (
+      input.publication.owner.conversationId !== input.conversation.id ||
+      input.publication.owner.agentRunId !== input.agentRunId
+    ) {
+      throw new Error('mobileworld_controller_publication_owner_mismatch');
+    }
+    return {
+      kind: 'controller_action',
+      publication: input.publication,
+      action: mapMobileControllerActionToMobileWorld(input.publication.action),
+    };
+  }
+  const run = input.conversation.agentRuns?.find((candidate) => candidate.id === input.agentRunId);
+  if (!run) throw new Error('mobileworld_agent_run_unavailable');
+  const finalAssistant = [...input.conversation.messages]
+    .reverse()
+    .find(
+      (message) =>
+        message.role === 'assistant' &&
+        message.assistantMetadata?.kind === 'final' &&
+        message.content.trim(),
+    );
+  if (finalAssistant?.assistantMetadata?.finishReason === 'request_clarification') {
+    return { kind: 'ask_user', text: finalAssistant.content.trim() };
+  }
+  if (run.status === 'failed' || run.status === 'cancelled' || run.controlGraph?.status === 'blocked') {
+    return { kind: 'status', goalStatus: 'infeasible' };
+  }
+  if (run.status !== 'completed' || !finalAssistant) {
+    throw new Error('mobileworld_agent_run_has_no_host_event');
+  }
+  const performedMobileAction = input.conversation.messages.some((message) =>
+    message.toolCalls?.some((call) => call.name === 'mobile_ui_action'),
+  );
+  return performedMobileAction
+    ? { kind: 'status', goalStatus: 'complete' }
+    : { kind: 'answer', text: finalAssistant.content.trim() };
 }
