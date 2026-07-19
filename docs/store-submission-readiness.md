@@ -14,7 +14,7 @@ The remaining risk is not basic app quality. The main submission risks are polic
 
 - Google Play requires in-app reporting or flagging for AI-generated content.
 - Apple and Google require public privacy/support URLs and clear in-app privacy access.
-- Android photo/media access needs either a Play declaration or a reduced-permission implementation.
+- Android photo selection now uses the system picker without broad shared-library access; keep the merged-manifest guard green.
 - Dynamic code, skills, terminal, browser, local runtime, and downloadable model surfaces need a conservative reviewer story.
 - SSH native-module compatibility and release-build smoke evidence must be resolved before submission.
 
@@ -25,13 +25,13 @@ The remaining risk is not basic app quality. The main submission risks are polic
 | B1 | AI content reporting | Add an in-app "Report" or "Flag" flow for assistant-generated content. It must let users report generated text without leaving the app, and the team needs a moderation/triage process for those reports. | No user-facing report/flag action was found. Google Play's AI-generated content policy requires in-app reporting or flagging for AI-generated content. |
 | B2 | Privacy and support URLs | Publish the privacy policy and support/contact page, then expose them from Settings/About and store metadata. | `docs/privacy-policy.md` exists, but no public URL or in-app policy/support link was confirmed. Apple requires privacy policy access in metadata and in the app. Google Play requires a privacy policy link in the Data safety section. |
 | B3 | Local data deletion clarity (resolved) | Keep the exact, scoped deletion controls discoverable in-app and documented in the privacy policy. | The Settings data card explains the independent conversation, memory, provider/integration, and service-key controls and links directly to Memory. Credential-backed configuration deletion is credential-first and retains the configuration on secure-cleanup failure so the user can retry. The privacy documents record the same paths without claiming a one-tap wipe. No first-party account exists, so account deletion rules are not triggered unless account creation is added. |
-| B4 | Android photos/media permission | Decide whether to keep `READ_MEDIA_IMAGES`. If kept, prepare the Play Photos and videos permission declaration. If not essential, remove/refactor `photos_latest` to use system picker/share-sheet inputs only. | The release manifest declares `READ_MEDIA_IMAGES` and `READ_MEDIA_VISUAL_USER_SELECTED`. Google Play treats broad photo/video permissions as restricted and expects declaration approval when the picker is insufficient. |
+| B4 | Android photos/media permission (resolved) | Keep photo selection on the system picker and prevent broad shared-library read permissions from returning. | Chat attachments and the agentic `photos_pick` tool use `expo-image-picker`. `expo-media-library` is not a runtime dependency, and the Android manifest removes `READ_MEDIA_IMAGES`, `READ_MEDIA_VISUAL_USER_SELECTED`, and `READ_EXTERNAL_STORAGE`. |
 | B5 | Dynamic execution and downloadable capability posture | Prepare reviewer notes and, if needed, limit first-release exposure of ClawHub skills, dynamic JavaScript/Python, terminal, and browser automation. Do not position the feature set as a plugin/app marketplace. Bundle release runtime assets instead of depending on CDN code at runtime where practical. | `docs/dynamic-code-execution.md`, the feature matrix, WebView runtime code, ClawHub/skills, SSH, terminal, browser, and local model surfaces create extra review risk. |
 | B6 | Expo dependency health | Resolve or explicitly document the `expo-doctor` failure before release. Prefer a clean `expo-doctor` for submission builds. | `npx expo-doctor` reports 17/18 passing. The only failed check is React Native Directory metadata: `@dylankenneally/react-native-ssh-sftp` is not validated for the New Architecture, and the first-party local `@kavi/kavi-ssh` package has no directory metadata. |
 | B7 | Store assets and exact-build proof | Create final screenshots, listing copy, age/content ratings, export-compliance answers, and reviewer notes. Build the exact AAB/IPA/archive that will be submitted and smoke-test it on real devices. | No final store screenshots or fresh signed AAB/iOS archive evidence was found in the repository. |
 
-B3 is closed. Its identifier remains in the table for audit continuity. Store
-submission remains a no-go while B1, B2, and B4–B7 are unresolved.
+B3 and B4 are closed. Their identifiers remain in the table for audit continuity. Store
+submission remains a no-go while B1, B2, and B5–B7 are unresolved.
 
 ## App Store Checklist
 
@@ -169,7 +169,7 @@ Current release manifest includes sensitive permissions for:
 - Calendar read/write.
 - Fine/coarse location.
 - Notifications.
-- Photos/media image access.
+- User-mediated image selection through the system photo picker; no broad shared-library read permission.
 - Foreground services.
 - Boot completed and wake lock.
 - Termux package visibility.
@@ -178,7 +178,7 @@ Before submission:
 
 - Confirm each permission is core to a user-facing feature.
 - Confirm runtime prompts happen only after user intent.
-- Add or update Play Console declarations for restricted permissions, especially Photos and videos if `READ_MEDIA_IMAGES` remains.
+- Confirm the merged release manifest continues to omit broad photo/storage read permissions.
 - Consider whether write access to Contacts and Calendar is required for first release. Removing write permissions lowers review risk if read-only workflows are enough.
 - Confirm notification lock-screen visibility stays private.
 
@@ -205,6 +205,7 @@ Native configuration evidence:
 - `app.json` sets Android compile/target SDK to 36.
 - `android/app/build.gradle` fails release builds unless release signing is configured.
 - Release Android manifests strip `SYSTEM_ALERT_WINDOW`, `READ_MEDIA_AUDIO`, `READ_MEDIA_VIDEO`, and legacy external-storage write permissions.
+- Release Android manifests also strip `READ_MEDIA_IMAGES`, `READ_MEDIA_VISUAL_USER_SELECTED`, and `READ_EXTERNAL_STORAGE`; photo selection uses the system picker.
 - `ios/Kavi/Info.plist` has no arbitrary network loads, no always-location usage string, no local-network usage string, and no Face ID usage string.
 - `ios/Kavi/PrivacyInfo.xcprivacy` exists.
 - Secure storage fails closed in release instead of falling back to plain AsyncStorage for secrets.

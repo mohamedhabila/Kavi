@@ -162,15 +162,22 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'notification_schedule',
       'notification_cancel',
       'device_query',
-      'photos_latest',
+      'photos_pick',
       'camera_clip',
       'screen_record',
     ],
     purpose: 'Device, clipboard, notifications, location, sharing, and other mobile utility tools.',
   },
   media: {
-    tools: ['camera_snap', 'audio_transcribe', 'speak', 'image_generate', 'image_edit'],
-    purpose: 'Capture, generate, or edit media and speech.',
+    tools: [
+      'photos_pick',
+      'camera_snap',
+      'audio_transcribe',
+      'speak',
+      'image_generate',
+      'image_edit',
+    ],
+    purpose: 'Select, inspect, capture, generate, or edit media and speech.',
   },
   memory: {
     tools: [

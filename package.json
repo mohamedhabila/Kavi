@@ -128,7 +128,6 @@
     "expo-image-picker": "~55.0.22",
     "expo-location": "~55.1.12",
     "expo-mail-composer": "~55.0.16",
-    "expo-media-library": "~55.0.19",
     "expo-network": "~55.0.16",
     "expo-notifications": "~55.0.25",
     "expo-secure-store": "~55.0.16",

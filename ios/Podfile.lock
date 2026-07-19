@@ -77,9 +77,6 @@ PODS:
     - React-Core
   - ExpoMailComposer (55.0.16):
     - ExpoModulesCore
-  - ExpoMediaLibrary (55.0.19):
-    - ExpoModulesCore
-    - React-Core
   - ExpoModulesCore (55.0.25):
     - boost
     - DoubleConversion
@@ -3120,7 +3117,6 @@ DEPENDENCIES:
   - ExpoLocation (from `../node_modules/expo-location/ios`)
   - "ExpoLogBox (from `../node_modules/expo/node_modules/@expo/log-box`)"
   - ExpoMailComposer (from `../node_modules/expo-mail-composer/ios`)
-  - ExpoMediaLibrary (from `../node_modules/expo-media-library/ios`)
   - ExpoModulesCore (from `../node_modules/expo-modules-core`)
   - ExpoModulesJSI (from `../node_modules/expo-modules-core`)
   - ExpoNetwork (from `../node_modules/expo-network/ios`)
@@ -3280,8 +3276,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo/node_modules/@expo/log-box"
   ExpoMailComposer:
     :path: "../node_modules/expo-mail-composer/ios"
-  ExpoMediaLibrary:
-    :path: "../node_modules/expo-media-library/ios"
   ExpoModulesCore:
     :path: "../node_modules/expo-modules-core"
   ExpoModulesJSI:
@@ -3512,7 +3506,6 @@ SPEC CHECKSUMS:
   ExpoLocation: bf93d9f5a311c24855fcfe454baa33efc7660c7c
   ExpoLogBox: 4bb2f041d3281b8c27ed494fae3b6f217ba79857
   ExpoMailComposer: 197ab3f0525c08714b9e765541e96ba8aa6a96a9
-  ExpoMediaLibrary: 00cb64dbf0c193178049cec75ef96ce25a571807
   ExpoModulesCore: cc07ebf5b947a239f1669cb5856d905cb2b093f7
   ExpoModulesJSI: 964334271fc77832736f66ee1785761cdc778dbe
   ExpoNetwork: 07d08e56aeda0c8f432693390aec7b01935e7fe5

@@ -55,7 +55,7 @@ describe('tool invocation privacy presentation', () => {
         expected: { hasId: true, hasTitle: true },
       },
       {
-        toolName: 'photos_latest',
+        toolName: 'photos_pick',
         args: { count: 4 },
         forbidden: [],
         expected: { count: 4 },

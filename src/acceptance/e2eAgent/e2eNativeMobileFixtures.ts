@@ -617,29 +617,33 @@ async function executeE2ENativeMobileTool(
         id: typeof args.id === 'string' ? args.id : 'e2e-notification-scheduled',
         cancelled: true,
       });
-    case 'photos_latest': {
+    case 'photos_pick': {
+      const requestedCount =
+        typeof args.count === 'number' && Number.isFinite(args.count)
+          ? Math.floor(args.count)
+          : 1;
       const photos = [
         {
-          id: 'e2e-photo-1',
-          uri: 'media-library://e2e/photo-1',
-          filename: 'e2e-photo-1.jpg',
+          assetId: 'e2e-photo-1',
+          uri: 'file:///e2e/photo-1.jpg',
+          fileName: 'e2e-photo-1.jpg',
+          fileSize: 2048,
           width: 1024,
           height: 768,
-          creationTime: 1770681600000,
-          mediaType: 'photo',
+          mimeType: 'image/jpeg',
         },
         {
-          id: 'e2e-photo-2',
-          uri: 'media-library://e2e/photo-2',
-          filename: 'e2e-photo-2.jpg',
+          assetId: 'e2e-photo-2',
+          uri: 'file:///e2e/photo-2.jpg',
+          fileName: 'e2e-photo-2.jpg',
+          fileSize: 3072,
           width: 1200,
           height: 900,
-          creationTime: 1770681660000,
-          mediaType: 'photo',
+          mimeType: 'image/jpeg',
         },
-      ].slice(0, typeof args.count === 'number' ? Math.max(0, Math.min(args.count, 20)) : 2);
+      ].slice(0, Math.min(Math.max(requestedCount, 1), 20));
       e2eNativeFixtureState.media.photoCount = photos.length;
-      return completedE2ENativeOutcome(photos);
+      return completedE2ENativeOutcome({ status: 'selected', assets: photos });
     }
     case 'screen_record':
       e2eNativeFixtureState.media.screenStatus = 'captured';

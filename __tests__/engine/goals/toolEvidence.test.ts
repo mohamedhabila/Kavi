@@ -83,17 +83,17 @@ describe('toolEvidence', () => {
 
   it('adds compact array length evidence for long generic array results', () => {
     const evidence = buildToolGoalEvidenceStrings({
-      toolName: 'photos_latest',
+      toolName: 'photos_pick',
       content: JSON.stringify([
         { id: 'photo-1', uri: 'media-library://photo-1', filename: 'a'.repeat(240) },
         { id: 'photo-2', uri: 'media-library://photo-2', filename: 'b'.repeat(240) },
       ]),
     });
 
-    expect(evidence[0]).toContain('photos_latest:');
+    expect(evidence[0]).toContain('photos_pick:');
     expect(evidence[0].length).toBeLessThanOrEqual(230);
-    expect(evidence).toContain('photos_latest:{"length":2}');
-    expect(evidence).toContain('photos_latest:[{"id":"photo-1"}]');
+    expect(evidence).toContain('photos_pick:{"length":2}');
+    expect(evidence).toContain('photos_pick:[{"id":"photo-1"}]');
   });
 
   it('keeps workspace result fields as untrusted structural output', () => {

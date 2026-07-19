@@ -42,7 +42,7 @@ Kavi uses information only to provide the features you request, including to:
 1. Run conversations, tool actions, and AI-assisted workflows.
 2. Process user-selected attachments such as images, audio, documents, and other files.
 3. Save your settings, restore your app state, and keep configured integrations available on your device.
-4. Access device capabilities such as the camera, microphone, photo library, contacts, calendar, notifications, and location only when a feature you invoke requires them.
+4. Access device capabilities such as the camera, microphone, system photo picker, contacts, calendar, notifications, and location only when a feature you invoke requires them.
 5. Connect to the remote services and integrations you explicitly configure.
 6. Store secrets needed to authenticate to the services you choose to use.
 
@@ -77,8 +77,8 @@ Kavi requests sensitive permissions only when the related feature is used.
 1. Camera: to capture images or short video clips for conversations and tool
    actions.
 2. Microphone: for voice input, voice notes, and user-requested recordings.
-3. Photos and media library: to attach user-selected images and media to
-   conversations and workflows.
+3. System photo picker: to let you choose the exact images attached to
+   conversations and workflows. Kavi does not require broad Android photo-library read access.
 4. Contacts: for user-requested contact lookup, selection, creation, editing,
    viewing, or sharing actions.
 5. Calendar and reminders: for user-requested event or reminder lookup,

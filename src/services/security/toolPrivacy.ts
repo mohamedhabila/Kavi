@@ -471,7 +471,7 @@ function summarizeNativeTool(
       };
       break;
     }
-    case 'photos_latest': {
+    case 'photos_pick': {
       if (typeof args.count === 'number')
         pushDetail(details, 'toolApproval.details.limit', { count: args.count });
       redactedArguments = {

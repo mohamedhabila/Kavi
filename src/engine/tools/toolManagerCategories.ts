@@ -132,7 +132,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       'camera_snap',
       'camera_clip',
       'screen_record',
-      'photos_latest',
+      'photos_pick',
       'audio_transcribe',
       'image_generate',
       'image_edit',

@@ -205,17 +205,32 @@ describe('builtin executor tool catalog', () => {
       );
     });
 
-    it('returns both image generation and image editing when filtering by media', async () => {
+    it('returns user-mediated selection, image generation, and image editing for media', async () => {
       const result = await executeToolCatalog({ category: 'media' });
       const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.category).toBe('media');
-      expect(parsed.purpose).toContain('generate, or edit media');
+      expect(parsed.purpose).toContain('Select, inspect, capture');
       expect(parsed.tools).toEqual(
         expect.arrayContaining([
+          expect.objectContaining({ name: 'photos_pick' }),
           expect.objectContaining({ name: 'image_generate' }),
           expect.objectContaining({ name: 'image_edit' }),
         ]),
+      );
+    });
+
+    it('discovers the system photo picker from a media read request', async () => {
+      const result = await executeToolCatalog({
+        category: 'media',
+        query: 'photos_pick',
+        capabilities: ['read', 'coordinate'],
+      });
+      const parsed = parseCompletedToolOutcome(result);
+
+      expect(parsed.mode).toBe('search');
+      expect(parsed.tools).toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: 'photos_pick' })]),
       );
     });
 

@@ -216,7 +216,7 @@ export const TOOL_PERMISSION_GROUPS: ToolPermissionGroup[] = [
       'notification_send',
       'notification_schedule',
       'device_query',
-      'photos_latest',
+      'photos_pick',
       'camera_clip',
       'screen_record',
       'camera_snap',

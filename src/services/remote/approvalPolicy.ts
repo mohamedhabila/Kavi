@@ -91,7 +91,7 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
     'notification_schedule',
     'notification_cancel',
     'device_permissions',
-    'photos_latest',
+    'photos_pick',
     'camera_clip',
     'screen_record',
     'haptic_feedback',

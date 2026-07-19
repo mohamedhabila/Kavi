@@ -458,7 +458,7 @@ describe('E2E benchmark structural completion criteria', () => {
     expect(
       areGoalSuccessCriteriaSatisfied(
         goal(E2E_MEDIA_STATE_SUCCESS_CRITERIA, [
-          'photos_latest:[{"id":"photo-1"},{"id":"photo-2"}]',
+          'photos_pick:[{"id":"photo-1"},{"id":"photo-2"}]',
           'screen_record:{"status":"captured"}',
           'camera_clip:{"status":"recorded"}',
         ]),

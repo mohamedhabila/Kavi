@@ -1,11 +1,14 @@
 // ---------------------------------------------------------------------------
 // Tests for new native device tool executors:
 // device_status, device_info, device_permissions, device_health,
-// photos_latest, camera_clip, screen_record, haptic_feedback
+// photos_pick, camera_clip, screen_record, haptic_feedback
 // ---------------------------------------------------------------------------
 
 const mockGetStringAsync = jest.fn();
 const mockSetStringAsync = jest.fn();
+const mockLaunchImageLibraryAsync = jest
+  .fn()
+  .mockResolvedValue({ canceled: true, assets: [] });
 
 jest.mock('expo-clipboard', () => ({
   getStringAsync: (...args: any[]) => mockGetStringAsync(...args),
@@ -47,11 +50,8 @@ jest.mock('expo-device', () => ({
   isDevice: false,
 }));
 
-jest.mock('expo-media-library', () => ({
-  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
-}));
-
 jest.mock('expo-image-picker', () => ({
+  launchImageLibraryAsync: (...args: any[]) => mockLaunchImageLibraryAsync(...args),
   launchCameraAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
   getCameraPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
   getMediaLibraryPermissionsAsync: jest.fn().mockResolvedValue({ status: 'denied' }),
@@ -84,7 +84,7 @@ import { executeNativeTool } from '../../src/engine/tools/native/executor';
 import { executeHapticFeedback } from '../../src/engine/tools/native/haptics/executor';
 import {
   executeCameraClip,
-  executePhotosLatest,
+  executePhotosPick,
   executeScreenRecord,
 } from '../../src/engine/tools/native/media/executor';
 import { executeNotificationCancel } from '../../src/engine/tools/native/notifications/executor';
@@ -181,16 +181,47 @@ describe('Device Health Tool', () => {
   });
 });
 
-describe('Photos Latest Tool', () => {
-  it('handles permission denied', async () => {
-    const result = await executePhotosLatest({ count: 3 });
+describe('Photos Pick Tool', () => {
+  it('reports picker cancellation without claiming photo selection', async () => {
+    const result = await executePhotosPick({ count: 3 });
     const parsed = parseFailedToolOutcome(result);
-    expect(typeof parsed).toBe('object');
+    expect(parsed).toEqual({ status: 'cancelled' });
   });
 
-  it('caps count at 20', async () => {
-    const result = await executePhotosLatest({ count: 100 });
-    expect(typeof failedToolContent(result)).toBe('string');
+  it('caps user selection at 20 and returns only selected metadata', async () => {
+    mockLaunchImageLibraryAsync.mockResolvedValueOnce({
+      canceled: false,
+      assets: Array.from({ length: 25 }, (_, index) => ({
+        assetId: `asset-${index}`,
+        uri: `file:///photo-${index}.jpg`,
+        fileName: `photo-${index}.jpg`,
+        fileSize: 1000 + index,
+        width: 100,
+        height: 200,
+        mimeType: 'image/jpeg',
+      })),
+    });
+
+    const result = await executePhotosPick({ count: 100 });
+
+    expect(mockLaunchImageLibraryAsync).toHaveBeenCalledWith({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: 20,
+      quality: 1,
+    });
+    const parsed = parseCompletedToolOutcome(result);
+    expect(parsed.status).toBe('selected');
+    expect(parsed.assets).toHaveLength(20);
+    expect(parsed.assets[0]).toEqual({
+      assetId: 'asset-0',
+      uri: 'file:///photo-0.jpg',
+      fileName: 'photo-0.jpg',
+      fileSize: 1000,
+      width: 100,
+      height: 200,
+      mimeType: 'image/jpeg',
+    });
   });
 });
 
@@ -286,6 +317,11 @@ describe('Native Tool Dispatcher — New Tools', () => {
   it('routes screen_record correctly', async () => {
     const result = await executeNativeTool('screen_record', '{}');
     expect(typeof failedToolContent(result)).toBe('string');
+  });
+
+  it('routes photos_pick through the system picker', async () => {
+    const result = await executeNativeTool('photos_pick', '{"count":1}');
+    expect(parseFailedToolOutcome(result)).toEqual({ status: 'cancelled' });
   });
 
   it('routes notification_cancel correctly', async () => {

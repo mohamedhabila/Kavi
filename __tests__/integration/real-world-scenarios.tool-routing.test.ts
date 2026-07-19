@@ -66,7 +66,7 @@ describe('Tool executor routing completeness', () => {
       'device_info',
       'device_permissions',
       'device_health',
-      'photos_latest',
+      'photos_pick',
       'camera_clip',
       'screen_record',
     ];

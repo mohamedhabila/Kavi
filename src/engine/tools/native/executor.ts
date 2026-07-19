@@ -32,7 +32,7 @@ import {
 } from './device/executor';
 import { executeHapticFeedback } from './haptics/executor';
 import { executeLocationCurrent } from './location/executor';
-import { executeCameraClip, executePhotosLatest, executeScreenRecord } from './media/executor';
+import { executeCameraClip, executePhotosPick, executeScreenRecord } from './media/executor';
 import {
   executeNotificationCancel,
   executeNotificationSchedule,
@@ -159,8 +159,8 @@ export async function executeNativeTool(
         'Error: device_query kind must be one of {status, info, permissions, health}',
       );
     }
-    case 'photos_latest':
-      return executePhotosLatest(args);
+    case 'photos_pick':
+      return executePhotosPick(args);
     case 'camera_clip':
       return executeCameraClip(args);
     case 'screen_record':

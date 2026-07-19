@@ -62,7 +62,7 @@ describe('useToolPermissionsStore', () => {
     );
     expect(useToolPermissionsStore.getState().requiresConfirmation('location_current')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('clipboard_read')).toBe(true);
-    expect(useToolPermissionsStore.getState().requiresConfirmation('photos_latest')).toBe(true);
+    expect(useToolPermissionsStore.getState().requiresConfirmation('photos_pick')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('screen_record')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('notification_cancel')).toBe(
       true,

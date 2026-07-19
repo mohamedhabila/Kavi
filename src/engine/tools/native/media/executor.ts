@@ -1,41 +1,47 @@
+import * as ImagePicker from 'expo-image-picker';
+
 import {
   completedToolOutcome,
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../../../types/toolRuntimeOutcome';
 
-export async function executePhotosLatest(args: { count?: number }): Promise<ToolRuntimeOutcome> {
+export async function executePhotosPick(args: { count?: number }): Promise<ToolRuntimeOutcome> {
   try {
-    const MediaLibrary = await import('expo-media-library');
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== 'granted') {
-      return failedToolOutcome(JSON.stringify({ error: 'Media library permission denied' }));
-    }
-
-    const count = Math.min(args.count || 5, 20);
-    const assets = await MediaLibrary.getAssetsAsync({
-      first: count,
-      sortBy: [MediaLibrary.SortBy.creationTime],
-      mediaType: [MediaLibrary.MediaType.photo],
+    const requestedCount =
+      typeof args.count === 'number' && Number.isFinite(args.count) ? Math.floor(args.count) : 1;
+    const count = Math.min(Math.max(requestedCount, 1), 20);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: count > 1,
+      selectionLimit: count,
+      quality: 1,
     });
+
+    if (result.canceled || !result.assets?.length) {
+      return failedToolOutcome(JSON.stringify({ status: 'cancelled' }));
+    }
 
     return completedToolOutcome(
       JSON.stringify(
-        assets.assets.map((a: any) => ({
-          id: a.id,
-          uri: a.uri,
-          filename: a.filename,
-          width: a.width,
-          height: a.height,
-          creationTime: a.creationTime,
-          mediaType: a.mediaType,
-        })),
+        {
+          status: 'selected',
+          assets: result.assets.slice(0, count).map((asset) => ({
+            assetId: asset.assetId || null,
+            uri: asset.uri,
+            fileName: asset.fileName || null,
+            fileSize: asset.fileSize || null,
+            width: asset.width,
+            height: asset.height,
+            mimeType: asset.mimeType || null,
+          })),
+        },
       ),
     );
   } catch (err: unknown) {
     return failedToolOutcome(
       JSON.stringify({
-        error: `Photos access failed: ${err instanceof Error ? err.message : String(err)}`,
+        error: `Photo picker failed: ${err instanceof Error ? err.message : String(err)}`,
       }),
     );
   }
@@ -49,7 +55,6 @@ export async function executeCameraClip(args: {
   camera?: string;
 }): Promise<ToolRuntimeOutcome> {
   try {
-    const ImagePicker = await import('expo-image-picker');
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['videos'],
       videoMaxDuration: args.durationSeconds || 10,

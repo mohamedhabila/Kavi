@@ -255,7 +255,7 @@ describe('needsApproval', () => {
     expect(needsApprovalWithContext('calendar_update_event', { id: 'event-1' })).toBe(true);
     expect(needsApprovalWithContext('location_current', {})).toBe(true);
     expect(needsApprovalWithContext('clipboard_read', {})).toBe(true);
-    expect(needsApprovalWithContext('photos_latest', { count: 3 })).toBe(true);
+    expect(needsApprovalWithContext('photos_pick', { count: 3 })).toBe(true);
     expect(needsApprovalWithContext('screen_record', {})).toBe(true);
     expect(needsApprovalWithContext('notification_cancel', { id: 'notification-id' })).toBe(true);
   });

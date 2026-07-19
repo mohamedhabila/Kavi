@@ -182,7 +182,7 @@ const READ_ONLY_NATIVE_TOOLS = [
   'device_health',
   'device_query',
   'location_current',
-  'photos_latest',
+  'photos_pick',
   ...CODE_OWNED_EFFECT_FREE_SERVICE_TOOL_NAMES,
 ] as const;
 

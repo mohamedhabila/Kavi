@@ -58,7 +58,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 47 |
-| MIT | 892 |
+| MIT | 891 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -587,7 +587,6 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | expo-linking | 55.0.16 | transitive | MIT |
 | expo-location | 55.1.12 | runtime | MIT |
 | expo-mail-composer | 55.0.16 | runtime | MIT |
-| expo-media-library | 55.0.19 | runtime | MIT |
 | expo-modules-autolinking | 55.0.25 | transitive | MIT |
 | expo-modules-core | 55.0.25 | transitive | MIT |
 | expo-network | 55.0.16 | runtime | MIT |

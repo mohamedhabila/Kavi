@@ -83,7 +83,7 @@ export const NATIVE_TOOL_NAMES = new Set([
   'device_permissions',
   'device_health',
   'device_query',
-  'photos_latest',
+  'photos_pick',
   'camera_clip',
   'screen_record',
   'haptic_feedback',

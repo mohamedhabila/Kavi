@@ -35,7 +35,7 @@ import {
 } from './device/definitions';
 import { HAPTIC_FEEDBACK_TOOL } from './haptics/definitions';
 import { LOCATION_CURRENT_TOOL } from './location/definitions';
-import { CAMERA_CLIP_TOOL, PHOTOS_LATEST_TOOL, SCREEN_RECORD_TOOL } from './media/definitions';
+import { CAMERA_CLIP_TOOL, PHOTOS_PICK_TOOL, SCREEN_RECORD_TOOL } from './media/definitions';
 import {
   NOTIFICATION_CANCEL_TOOL,
   NOTIFICATION_SCHEDULE_TOOL,
@@ -87,7 +87,7 @@ export const ALL_NATIVE_TOOL_DEFINITIONS: ToolDefinition[] = [
   DEVICE_PERMISSIONS_TOOL,
   DEVICE_HEALTH_TOOL,
   DEVICE_QUERY_TOOL,
-  PHOTOS_LATEST_TOOL,
+  PHOTOS_PICK_TOOL,
   CAMERA_CLIP_TOOL,
   SCREEN_RECORD_TOOL,
   HAPTIC_FEEDBACK_TOOL,

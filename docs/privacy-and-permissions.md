@@ -91,7 +91,7 @@ it does not automatically cover every feature or attachment path.
 | ---------------------- | --------------------------------------------------------------------------- |
 | Microphone             | Voice input, voice notes, and user-requested audio capture.                 |
 | Camera                 | Capturing an image or short video clip for a conversation or tool action.   |
-| Photos / media library | Selecting images or other supported media for attachments.                  |
+| System photo picker    | Selecting exact images for attachments or an approved photo-aware action.   |
 | Contacts               | User-requested contact selection or contact-aware actions.                  |
 | Calendar / reminders   | User-requested event or reminder lookup, creation, update, or deletion.      |
 | Location               | User-requested map or location-aware actions.                               |

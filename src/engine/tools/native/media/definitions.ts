@@ -5,13 +5,16 @@ import {
   RECOVERABLE_PLATFORM_ERRORS,
 } from '../shared';
 
-export const PHOTOS_LATEST_TOOL: ToolDefinition = {
-  name: 'photos_latest',
-  description: 'Get the most recent photos from the device photo library.',
+export const PHOTOS_PICK_TOOL: ToolDefinition = {
+  name: 'photos_pick',
+  description: 'Open the system photo picker so the user can select images for the current task.',
   input_schema: {
     type: 'object',
     properties: {
-      count: { type: 'number', description: 'Number of photos to return (default: 5, max: 20)' },
+      count: {
+        type: 'number',
+        description: 'Maximum number of photos the user may select (default: 1, max: 20)',
+      },
     },
   },
   contract: nativeContract({
@@ -20,9 +23,9 @@ export const PHOTOS_LATEST_TOOL: ToolDefinition = {
     resourceKinds: ['device'],
     sideEffects: ['none'],
     riskLevel: 'high',
-    permissionPrerequisites: ['media_library.read'],
+    permissionPrerequisites: ['photo_picker.select'],
     recoverableErrors: [...RECOVERABLE_DEVICE_READ_ERRORS],
-    riskHints: ['read_only', 'idempotent'],
+    riskHints: ['read_only', 'requires_approval'],
     providesEvidence: ['verification'],
     workflowStages: ['inspect_resource', 'verify_evidence'],
   }),
