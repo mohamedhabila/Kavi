@@ -14,7 +14,9 @@ function readNormalizedRepoFile(relativePath: string): string {
 
 describe('coverage gate documentation', () => {
   it('exposes coverage as a durable npm script without changing the PR gate', () => {
-    expect(packageJson.scripts['test:coverage']).toBe('jest --runInBand --coverage --no-cache');
+    expect(packageJson.scripts['test:coverage']).toBe(
+      'cross-env KAVI_COVERAGE_INSTRUMENTATION=1 jest --runInBand --coverage --no-cache',
+    );
     expect(packageJson.scripts.verify).not.toContain('test:coverage');
     expect(packageJson.scripts.verify).not.toContain('--coverage');
   });
@@ -44,6 +46,9 @@ describe('coverage gate documentation', () => {
     expect(readNormalizedRepoFile('docs/testing.md')).toContain('Do not lower these floors');
     expect(readNormalizedRepoFile('docs/testing.md')).toContain(
       'Coverage reports are written under `.tmp/coverage`',
+    );
+    expect(readNormalizedRepoFile('docs/testing.md')).toContain(
+      'Coverage instrumentation does not enforce timing budgets',
     );
     expect(readRepoFile('eslint.config.mjs')).toContain("'.tmp/**'");
     expect(readNormalizedRepoFile('docs/release.md')).toContain(

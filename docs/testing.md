@@ -111,8 +111,12 @@ The coverage gate uses the same local Jest suite with source collection
 enabled for `src/**/*.{ts,tsx}`. Coverage floors are statements >=83.8%,
 branch coverage >=70.7%, function coverage >=87.6%, and line coverage >=84.3%.
 Do not lower these floors without maintainer approval. Raise them when focused
-tests improve real coverage. Coverage reports are written under
-`.tmp/coverage`, which is ignored by git.
+tests improve real coverage. Coverage instrumentation does not enforce timing
+budgets because statement probes change CPU measurements; the ordinary
+`npm run verify` lane and the dedicated local-similarity performance command
+continue to enforce those budgets without instrumentation. Functional,
+determinism, and storage assertions still run in coverage mode. Coverage reports
+are written under `.tmp/coverage`, which is ignored by git.
 
 Run lint only:
 
