@@ -1,7 +1,87 @@
 import { resolveDefaultGroundedRequestScopedTools } from '../../src/engine/graph/turnToolSurface';
+import { buildToolSchemaDigest } from '../../src/engine/tools/builtin-tool-schemaDigest';
+import { mcpManager } from '../../src/services/mcp/manager';
+import type { ToolDefinition } from '../../src/types/tool';
 import { tools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
+const INTEGRATION_SCHEMA = {
+  type: 'object',
+  properties: { recordId: { type: 'string' } },
+  required: ['recordId'],
+} as const;
+
+const INTEGRATION_TOOL_NAMES = ['mcp__ledger__get_record', 'mcp__ledger__put_record'] as const;
+
+function mockConnectedIntegration(lastConnected: number): ToolDefinition[] {
+  const definitions = INTEGRATION_TOOL_NAMES.map((name) => ({
+    name,
+    description: `Connected ledger tool ${name}`,
+    input_schema: INTEGRATION_SCHEMA,
+  }));
+  jest.spyOn(mcpManager, 'getAllToolDefinitions').mockReturnValue(definitions);
+  jest.spyOn(mcpManager, 'getAllStatuses').mockReturnValue([
+    {
+      id: 'ledger',
+      name: 'Ledger',
+      state: 'connected',
+      lastConnected,
+      tools: [
+        {
+          name: 'get_record',
+          description: 'Read a ledger record.',
+          inputSchema: INTEGRATION_SCHEMA,
+        },
+        {
+          name: 'put_record',
+          description: 'Update a ledger record.',
+          inputSchema: INTEGRATION_SCHEMA,
+        },
+      ],
+    },
+  ]);
+  return definitions;
+}
+
+function previousTurnDiscoveryMessages(schemaDigest: string) {
+  return [
+    userMessage('Find my connected ledger tools.', 100),
+    {
+      id: 'assistant-discovery',
+      role: 'assistant' as const,
+      content: '',
+      timestamp: 110,
+      toolCalls: [
+        {
+          id: 'tc-discovery',
+          name: 'tool_catalog',
+          arguments: '{"query":"ledger"}',
+          status: 'completed' as const,
+        },
+      ],
+    },
+    {
+      id: 'tool-discovery',
+      role: 'tool' as const,
+      toolCallId: 'tc-discovery',
+      content: JSON.stringify({
+        tools: INTEGRATION_TOOL_NAMES.map((name) => ({
+          name,
+          source: 'mcp',
+          schemaDigest,
+          activation: { name, eligible: true, callableNow: true },
+        })),
+      }),
+      timestamp: 120,
+    },
+    userMessage('Use those tools for the follow-up.', 130),
+  ];
+}
+
 describe('resolveDefaultGroundedRequestScopedTools', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('surfaces delegated session wait after a session producer has run', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
@@ -217,5 +297,57 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
 
     const names = new Set(selected.map((tool) => tool.name));
     expect(names.has(integrationTool.name)).toBe(true);
+  });
+
+  it('keeps exact dynamic tools discovered in the immediately preceding turn reachable', async () => {
+    const integrationTools = mockConnectedIntegration(90);
+    const schemaDigest = buildToolSchemaDigest(INTEGRATION_SCHEMA);
+    if (!schemaDigest) {
+      throw new Error('Expected the integration schema to have a digest.');
+    }
+
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: [...tools, ...integrationTools],
+      observedToolNames: new Set<string>(),
+      workingMessages: previousTurnDiscoveryMessages(schemaDigest),
+    });
+
+    const names = new Set(selected.map((tool) => tool.name));
+    expect(names.has(INTEGRATION_TOOL_NAMES[0])).toBe(true);
+    expect(names.has(INTEGRATION_TOOL_NAMES[1])).toBe(true);
+  });
+
+  it('requires rediscovery when an MCP registry refresh follows the prior discovery result', async () => {
+    const integrationTools = mockConnectedIntegration(121);
+    const schemaDigest = buildToolSchemaDigest(INTEGRATION_SCHEMA);
+    if (!schemaDigest) {
+      throw new Error('Expected the integration schema to have a digest.');
+    }
+
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: [...tools, ...integrationTools],
+      observedToolNames: new Set<string>(),
+      workingMessages: previousTurnDiscoveryMessages(schemaDigest),
+    });
+
+    const names = new Set(selected.map((tool) => tool.name));
+    expect(names.has(INTEGRATION_TOOL_NAMES[0])).toBe(false);
+    expect(names.has(INTEGRATION_TOOL_NAMES[1])).toBe(false);
+    expect(names.has('tool_catalog')).toBe(true);
+  });
+
+  it('requires rediscovery when the current dynamic tool schema no longer matches', async () => {
+    const integrationTools = mockConnectedIntegration(90);
+
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: [...tools, ...integrationTools],
+      observedToolNames: new Set<string>(),
+      workingMessages: previousTurnDiscoveryMessages('schema-fnv1a32:stale'),
+    });
+
+    const names = new Set(selected.map((tool) => tool.name));
+    expect(names.has(INTEGRATION_TOOL_NAMES[0])).toBe(false);
+    expect(names.has(INTEGRATION_TOOL_NAMES[1])).toBe(false);
+    expect(names.has('tool_catalog')).toBe(true);
   });
 });

@@ -15,6 +15,7 @@ import {
 import {
   DISCOVERY_ACTIVATION_TOOL_NAMES,
   extractDiscoveryActivatedToolNames,
+  extractPreviousTurnDynamicToolNames,
   hasUnresolvedDiscoveryToolCallInTurn,
   mergeActivatedCatalogToolNames,
 } from './discoveryToolActivation';
@@ -179,13 +180,15 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   sessionActivatedToolNames?: ReadonlyArray<string>;
 }): Promise<ToolDefinition[]> {
   const messagesSinceLatestUserMessage = getMessagesSinceLatestUserMessage(params.workingMessages);
+  const previousTurnMessages = getMessagesFromPreviousUserTurn(params.workingMessages);
   const turnActivatedCatalogToolNames = extractDiscoveryActivatedToolNames(
     messagesSinceLatestUserMessage,
   );
-  const activatedCatalogToolNames = mergeActivatedCatalogToolNames(
-    turnActivatedCatalogToolNames,
-    params.sessionActivatedToolNames,
-  );
+  const previousTurnDynamicToolNames = extractPreviousTurnDynamicToolNames(previousTurnMessages);
+  const activatedCatalogToolNames = mergeActivatedCatalogToolNames(turnActivatedCatalogToolNames, [
+    ...(params.sessionActivatedToolNames ?? []),
+    ...previousTurnDynamicToolNames,
+  ]);
   const unresolvedDiscoveryToolCallInTurn = hasUnresolvedDiscoveryToolCallInTurn(
     messagesSinceLatestUserMessage,
   );
@@ -198,9 +201,7 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   const recentContinuationToolNames = extractRecentContinuationToolNames(
     messagesSinceLatestUserMessage,
   );
-  const previousTurnToolNames = extractCompletedContinuationToolNames(
-    getMessagesFromPreviousUserTurn(params.workingMessages),
-  );
+  const previousTurnToolNames = extractCompletedContinuationToolNames(previousTurnMessages);
   const observedToolNames = Array.from(params.observedToolNames)
     .map((toolName) => normalizeToolName(toolName))
     .filter(Boolean);

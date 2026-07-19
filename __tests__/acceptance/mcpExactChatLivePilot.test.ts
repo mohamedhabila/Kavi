@@ -5,10 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server as HttpServer } from 'node:http';
 
@@ -48,8 +45,7 @@ type RunningTripLedgerServer = Readonly<{
   url: string;
 }>;
 
-const describeLivePilot =
-  process.env.RUN_MCP_EXACT_CHAT_PILOT === '1' ? describe : describe.skip;
+const describeLivePilot = process.env.RUN_MCP_EXACT_CHAT_PILOT === '1' ? describe : describe.skip;
 
 const TARGET_BOOKING_ID = 'R7N4';
 const TARGET_PICKUP_NOTE = 'Meet at the north entrance at 07:10';
@@ -61,10 +57,7 @@ function textResult(value: unknown, isError = false) {
   };
 }
 
-function requireStringArgument(
-  args: Readonly<Record<string, unknown>>,
-  name: string,
-): string {
+function requireStringArgument(args: Readonly<Record<string, unknown>>, name: string): string {
   const value = args[name];
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`trip_ledger_${name}_invalid`);
@@ -89,6 +82,14 @@ function closeHttpServer(server: HttpServer): Promise<void> {
 async function startTripLedgerServer(): Promise<RunningTripLedgerServer> {
   const ledger: TripLedger = {
     records: new Map([
+      [
+        TARGET_BOOKING_ID,
+        {
+          bookingId: TARGET_BOOKING_ID,
+          pickupNote: '',
+          revision: 0,
+        },
+      ],
       [
         'OTHER-22',
         {
@@ -240,7 +241,7 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
     teardownE2EMemorySandbox();
   });
 
-  it('discovers, updates, and independently verifies a remote record without collateral changes', async () => {
+  it('keeps a discovered integration reachable for a follow-up update and verification', async () => {
     resetE2EMemorySandbox();
     resetRemoteStore();
     mcpManager.disconnectAll();
@@ -267,10 +268,7 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
       });
       expect(mcpManager.getStatus(mcpConfig.id)).toMatchObject({
         state: 'connected',
-        tools: [
-          { name: 'get_trip_record' },
-          { name: 'put_trip_note' },
-        ],
+        tools: [{ name: 'get_trip_record' }, { name: 'put_trip_note' }],
       });
       useApprovalStore.getState().addToAllowlist('mcp__trip_ledger__get_trip_record');
       useApprovalStore.getState().addToAllowlist('mcp__trip_ledger__put_trip_note');
@@ -297,7 +295,7 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
           systemPrompt:
             'You are a careful general mobile assistant. Use connected integrations when needed, preserve user constraints, and verify changed state before claiming completion.',
           defaultMode: 'agentic',
-          scenarioTimeoutMs: 3 * 60 * 1_000,
+          scenarioTimeoutMs: 4 * 60 * 1_000,
           timeoutMs: 2 * 60 * 1_000,
           maxTokens: 4_096,
           disableLongTermMemory: true,
@@ -305,8 +303,14 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
           turns: [
             {
               content:
-                `In my Trip Ledger integration, check whether booking ${TARGET_BOOKING_ID} has a pickup note. ` +
-                `If it is missing, set it to exactly "${TARGET_PICKUP_NOTE}", then read it back. ` +
+                `In my Trip Ledger integration, read booking ${TARGET_BOOKING_ID} and tell me its current pickup note. ` +
+                'Do not change anything.',
+              route: 'production_auto',
+              selectedMode: 'agentic',
+            },
+            {
+              content:
+                `Now set the pickup note on that same booking to exactly "${TARGET_PICKUP_NOTE}", then read it back. ` +
                 'Tell me it is done only if the read-back matches. Do not change any other record.',
               route: 'production_auto',
               selectedMode: 'agentic',
@@ -335,52 +339,72 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
       const diagnostic = () =>
         JSON.stringify({
           calls: tripLedger.ledger.calls,
-          completion: result.turns[0]?.completion,
-          finalAssistant: result.turns[0]?.finalAssistant,
-          messages: result.turns[0]?.messages.map((message) => ({
-            role: message.role,
-            content: message.content,
-            toolCallId: message.toolCallId,
-            toolCalls: message.toolCalls?.map((call) => ({
-              id: call.id,
-              name: call.name,
-              arguments: call.arguments,
-              status: call.status,
-              result: call.result,
-              error: call.error,
-              effectReceipts: call.effectReceipts,
+          turns: result.turns.map((turn) => ({
+            completion: turn.completion,
+            finalAssistant: turn.finalAssistant,
+            messages: turn.messages.map((message) => ({
+              role: message.role,
+              content: message.content,
+              toolCallId: message.toolCallId,
+              toolCalls: message.toolCalls?.map((call) => ({
+                id: call.id,
+                name: call.name,
+                arguments: call.arguments,
+                status: call.status,
+                result: call.result,
+                error: call.error,
+                effectReceipts: call.effectReceipts,
+              })),
             })),
           })),
           remoteJobs: Object.values(useRemoteStore.getState().jobs),
-          run: result.turns[0]?.run
-            ? {
-                status: result.turns[0].run.status,
-                terminalReason: result.turns[0].run.terminalReason,
-                summary: result.turns[0].run.summary,
-                checkpoints: result.turns[0].run.checkpoints,
-                controlGraph: result.turns[0].run.controlGraph,
-              }
-            : null,
+          runs: result.turns.map((turn) =>
+            turn.run
+              ? {
+                  status: turn.run.status,
+                  terminalReason: turn.run.terminalReason,
+                  summary: turn.run.summary,
+                  checkpoints: turn.run.checkpoints,
+                  controlGraph: turn.run.controlGraph,
+                }
+              : null,
+          ),
           serverErrors: tripLedger.ledger.errors,
           targetRecord: tripLedger.ledger.records.get(TARGET_BOOKING_ID),
         });
 
       if (
-        result.turns[0]?.completion.executionCompleted !== true ||
-        result.turns[0]?.completion.finalResponseCompleted !== true ||
-        result.turns[0]?.completion.runStatus !== 'completed' ||
-        result.turns[0]?.completion.graphStatus !== 'finalized'
+        result.turns.length !== 2 ||
+        result.turns.some(
+          (turn) =>
+            turn.completion.executionCompleted !== true ||
+            turn.completion.finalResponseCompleted !== true ||
+            turn.completion.runStatus !== 'completed' ||
+            turn.completion.graphStatus !== 'finalized',
+        )
       ) {
         throw new Error(`mcp_exact_chat_completion_failed: ${diagnostic()}`);
       }
 
-      expect(result.turns[0]?.completion).toMatchObject({
-        executionCompleted: true,
-        finalResponseCompleted: true,
-        runStatus: 'completed',
-        graphStatus: 'finalized',
-      });
-      expect(result.turns[0]?.error).toBeNull();
+      for (const turn of result.turns) {
+        expect(turn.completion).toMatchObject({
+          executionCompleted: true,
+          finalResponseCompleted: true,
+          runStatus: 'completed',
+          graphStatus: 'finalized',
+        });
+        expect(turn.error).toBeNull();
+      }
+      const firstTurnToolNames = result.turns[0]?.messages.flatMap(
+        (message) => message.toolCalls?.map((call) => call.name) ?? [],
+      );
+      const secondTurnToolNames = result.turns[1]?.messages.flatMap(
+        (message) => message.toolCalls?.map((call) => call.name) ?? [],
+      );
+      expect(firstTurnToolNames).toContain('mcp__trip_ledger__get_trip_record');
+      expect(firstTurnToolNames).not.toContain('mcp__trip_ledger__put_trip_note');
+      expect(secondTurnToolNames).toContain('mcp__trip_ledger__put_trip_note');
+      expect(secondTurnToolNames).toContain('mcp__trip_ledger__get_trip_record');
       const targetRecord = tripLedger.ledger.records.get(TARGET_BOOKING_ID);
       if (!targetRecord) {
         throw new Error(`mcp_exact_chat_target_missing: ${diagnostic()}`);
@@ -396,9 +420,7 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
         revision: 4,
       });
 
-      const mutationCalls = tripLedger.ledger.calls.filter(
-        (call) => call.name === 'put_trip_note',
-      );
+      const mutationCalls = tripLedger.ledger.calls.filter((call) => call.name === 'put_trip_note');
       expect(mutationCalls).toHaveLength(1);
       expect(mutationCalls[0]?.arguments).toEqual({
         bookingId: TARGET_BOOKING_ID,
@@ -413,8 +435,7 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
           .slice(0, mutationIndex)
           .some(
             (call) =>
-              call.name === 'get_trip_record' &&
-              call.arguments.bookingId === TARGET_BOOKING_ID,
+              call.name === 'get_trip_record' && call.arguments.bookingId === TARGET_BOOKING_ID,
           ),
       ).toBe(true);
       const independentlyReadBack = tripLedger.ledger.calls
