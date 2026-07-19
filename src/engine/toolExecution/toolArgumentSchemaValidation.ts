@@ -119,12 +119,58 @@ function describeExpectedTypes(schema: unknown): string {
   return schemaTypes.length > 0 ? schemaTypes.join('|') : 'declared schema';
 }
 
+type InvalidArgumentShape = {
+  field: string;
+  expected: string;
+  actual: string;
+  constraint?: {
+    keyword: 'minLength' | 'maxLength';
+    limit: number;
+    actual: number;
+  };
+};
+
+function readNonNegativeInteger(value: unknown): number | undefined {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+}
+
+function collectInvalidStringLengths(params: {
+  schema: Record<string, unknown>;
+  value: string;
+  fieldPath: string;
+}): InvalidArgumentShape[] {
+  const actual = Array.from(params.value).length;
+  const minLength = readNonNegativeInteger(params.schema.minLength);
+  if (minLength !== undefined && actual < minLength) {
+    return [
+      {
+        field: params.fieldPath,
+        expected: `string with at least ${minLength} characters`,
+        actual: `string with ${actual} characters`,
+        constraint: { keyword: 'minLength', limit: minLength, actual },
+      },
+    ];
+  }
+  const maxLength = readNonNegativeInteger(params.schema.maxLength);
+  if (maxLength !== undefined && actual > maxLength) {
+    return [
+      {
+        field: params.fieldPath,
+        expected: `string with at most ${maxLength} characters`,
+        actual: `string with ${actual} characters`,
+        constraint: { keyword: 'maxLength', limit: maxLength, actual },
+      },
+    ];
+  }
+  return [];
+}
+
 function collectInvalidArgumentShapes(params: {
   schema: unknown;
   value: unknown;
   fieldPath: string;
   required?: boolean;
-}): Array<{ field: string; expected: string; actual: string }> {
+}): InvalidArgumentShape[] {
   if (params.value === undefined) {
     return [];
   }
@@ -152,6 +198,16 @@ function collectInvalidArgumentShapes(params: {
   }
 
   const schemaRecord = params.schema;
+  if (typeof params.value === 'string') {
+    const invalidLengths = collectInvalidStringLengths({
+      schema: schemaRecord,
+      value: params.value,
+      fieldPath: params.fieldPath,
+    });
+    if (invalidLengths.length > 0) {
+      return invalidLengths;
+    }
+  }
   const schemaTypes = readSchemaTypes(schemaRecord);
   if (
     schemaTypes.includes('array') &&
@@ -159,7 +215,7 @@ function collectInvalidArgumentShapes(params: {
     isJsonRecord(schemaRecord.items)
   ) {
     const itemSchema = schemaRecord.items;
-    const invalidItems: Array<{ field: string; expected: string; actual: string }> = [];
+    const invalidItems: InvalidArgumentShape[] = [];
     params.value.forEach((item, index) => {
       invalidItems.push(
         ...collectInvalidArgumentShapes({
@@ -191,7 +247,7 @@ function collectInvalidArgumentShapes(params: {
 
 function buildInvalidArgumentShapeResult(params: {
   tool: ToolDefinition;
-  invalidArguments: ReadonlyArray<{ field: string; expected: string; actual: string }>;
+  invalidArguments: ReadonlyArray<InvalidArgumentShape>;
 }): string {
   return enrichToolResultWithSchemaRepair({
     toolName: params.tool.name,

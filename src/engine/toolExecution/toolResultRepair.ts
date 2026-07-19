@@ -55,6 +55,21 @@ function readInvalidArgumentFields(value: unknown): string[] {
   );
 }
 
+function readInvalidArgumentPaths(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      value
+        .map((entry) =>
+          isJsonRecord(entry) && typeof entry.field === 'string' ? entry.field.trim() : '',
+        )
+        .filter(Boolean),
+    ),
+  );
+}
+
 function readSchemaObject(value: unknown): JsonRecord | undefined {
   return isJsonRecord(value) ? value : undefined;
 }
@@ -65,7 +80,15 @@ function compactSchemaProperty(property: unknown): JsonRecord {
   }
 
   const compact: JsonRecord = {};
-  for (const key of ['type', 'format', 'enum', 'items', 'description'] as const) {
+  for (const key of [
+    'type',
+    'format',
+    'enum',
+    'items',
+    'description',
+    'minLength',
+    'maxLength',
+  ] as const) {
     if (property[key] !== undefined) {
       compact[key] = property[key];
     }
@@ -119,6 +142,7 @@ export function enrichToolResultWithSchemaRepair(params: {
     }
 
     const invalidFields = readInvalidArgumentFields(parsed.invalidArguments);
+    const invalidPaths = readInvalidArgumentPaths(parsed.invalidArguments);
     if (invalidFields.length === 0) {
       return params.result;
     }
@@ -135,6 +159,7 @@ export function enrichToolResultWithSchemaRepair(params: {
           retryable: true,
           code: 'invalid_argument_shape',
           invalidFields,
+          invalidPaths,
           expectedShape: {
             arguments: buildExpectedArgumentsSchema({ tool, fields: invalidFields }),
           },

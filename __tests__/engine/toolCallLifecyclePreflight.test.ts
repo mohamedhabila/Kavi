@@ -1,7 +1,9 @@
 import { resolveToolCallPreflight } from '../../src/engine/toolExecution/toolCallLifecyclePreflight';
+import { validateToolArgumentsAgainstSchema } from '../../src/engine/toolExecution/toolArgumentSchemaValidation';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import type { ToolCallRecord } from '../../src/engine/loopDetection';
+import { MEMORY_REMEMBER_TOOL } from '../../src/engine/tools/builtin-definitions-memory';
 import type { ToolDefinition } from '../../src/types/tool';
 
 const calendarCreateTool: ToolDefinition = {
@@ -269,6 +271,82 @@ describe('resolveToolCallPreflight', () => {
       }),
     );
     expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('schema_validation');
+  });
+
+  it('returns the exact nested length constraint before executing an oversized memory write', () => {
+    const result = validateToolArgumentsAgainstSchema({
+      toolName: 'memory_remember',
+      tools: [MEMORY_REMEMBER_TOOL],
+      argumentsText: JSON.stringify({
+        semanticEvidence: {
+          version: 4,
+          subject: { kind: 'named', label: 'Ellie', type: 'person' },
+          predicate: 'has_fixed_trip',
+          value: 'x'.repeat(223),
+          scope: 'global',
+          importance: 0.9,
+          confidence: 0.9,
+          operation: 'record',
+          assertion_class: 'current_direct',
+          sensitivity: 'personal',
+        },
+      }),
+    });
+
+    const parsed = JSON.parse(result ?? '{}');
+    expect(parsed).toMatchObject({
+      code: 'invalid_argument_shape',
+      invalidArguments: [
+        {
+          field: 'semanticEvidence.value',
+          expected: 'string with at most 200 characters',
+          actual: 'string with 223 characters',
+          constraint: { keyword: 'maxLength', limit: 200, actual: 223 },
+        },
+      ],
+      repair: {
+        retryable: true,
+        invalidFields: ['semanticEvidence'],
+        invalidPaths: ['semanticEvidence.value'],
+        sideEffectApplied: false,
+      },
+    });
+  });
+
+  it('counts Unicode code points when enforcing string length constraints', () => {
+    const unicodeTool: ToolDefinition = {
+      name: 'unicode_note',
+      description: 'Store a bounded note.',
+      input_schema: {
+        type: 'object',
+        properties: { note: { type: 'string', minLength: 2, maxLength: 3 } },
+        required: ['note'],
+      },
+    };
+    const lifecycle = buildLifecycle({
+      availableToolNames: new Set(['unicode_note']),
+      groundedRequestScopedTools: [unicodeTool],
+    });
+
+    expect(
+      resolveToolCallPreflight(lifecycle, {
+        id: 'tc-unicode-valid',
+        name: 'unicode_note',
+        arguments: JSON.stringify({ note: '😀😀😀' }),
+      }),
+    ).toBeUndefined();
+
+    const tooShort = resolveToolCallPreflight(lifecycle, {
+      id: 'tc-unicode-short',
+      name: 'unicode_note',
+      arguments: JSON.stringify({ note: '😀' }),
+    });
+    expect(JSON.parse(tooShort?.toolMessage.content ?? '{}').invalidArguments).toEqual([
+      expect.objectContaining({
+        field: 'note',
+        constraint: { keyword: 'minLength', limit: 2, actual: 1 },
+      }),
+    ]);
   });
 
   it.each([
