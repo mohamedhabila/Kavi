@@ -78,6 +78,7 @@ const GRAPH_STATUSES = new Set([
   'awaiting_tool_results',
   'recovering',
   'waiting_async',
+  'awaiting_user',
   'awaiting_review',
   'blocked',
   'finalized',

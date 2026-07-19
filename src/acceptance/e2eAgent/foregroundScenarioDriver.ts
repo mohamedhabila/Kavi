@@ -35,6 +35,7 @@ import {
   resolveForegroundScenarioFinalAssistant,
   resolveForegroundScenarioTurnRun,
   settleForegroundScenarioMemory,
+  shouldExpectForegroundMemoryCloseout,
 } from './foregroundScenarioDriverRuntime';
 import { sealForegroundScenarioMemoryEvidenceAfterProviderWait } from './foregroundScenarioMemoryEvidence';
 import {
@@ -310,6 +311,14 @@ async function runScenarioIsolated(
         .conversations.find((candidate) => candidate.id === currentConversationId);
       if (!before) throw new Error(`Conversation ${currentConversationId} is unavailable.`);
       const priorRunIds = new Set((before.agentRuns ?? []).map((run) => run.id));
+      const awaitingUserRunIdBeforeTurn =
+        before.agentRuns?.find(
+          (run) =>
+            run.id === before.activeAgentRunId &&
+            run.status === 'running' &&
+            run.controlGraph?.status === 'awaiting_user' &&
+            run.controlGraph.pendingUserInput !== undefined,
+        )?.id ?? null;
       const messageStartIndex = before.messages.length;
       const usageBefore = before.usage;
       const memoryRecordStart = memoryRecords.length;
@@ -437,7 +446,12 @@ async function runScenarioIsolated(
         .getState()
         .conversations.find((candidate) => candidate.id === currentConversationId);
       if (!conversation) throw new Error(`Conversation ${currentConversationId} is unavailable.`);
-      const run = resolveForegroundScenarioTurnRun(conversation, userMessageId, priorRunIds);
+      const run = resolveForegroundScenarioTurnRun(
+        conversation,
+        userMessageId,
+        priorRunIds,
+        awaitingUserRunIdBeforeTurn,
+      );
       const turnMessages = conversation.messages.slice(messageStartIndex);
       const persistedUserMessage = turnMessages.find(
         (message) => message.id === userMessageId && message.role === 'user',
@@ -450,13 +464,15 @@ async function runScenarioIsolated(
       const nativeInvocations =
         getE2ENativeMobileInvocationSnapshots().slice(nativeInvocationStart);
       const chatError = runtime.getChatError();
-      const expectedMemoryCloseouts =
-        input.disableLongTermMemory !== true &&
-        !conversation.isSideThread &&
-        finalAssistant?.completionStatus === 'complete' &&
-        !timedOut
-          ? 1
-          : 0;
+      const expectedMemoryCloseouts = shouldExpectForegroundMemoryCloseout({
+        disableLongTermMemory: input.disableLongTermMemory === true,
+        finalAssistantCompleted: finalAssistant?.completionStatus === 'complete',
+        graphStatus: run?.controlGraph?.status,
+        isSideThread: conversation.isSideThread === true,
+        timedOut,
+      })
+        ? 1
+        : 0;
       const memoryInvariantError =
         !timedOut &&
         !chatError &&

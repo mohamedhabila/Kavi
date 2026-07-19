@@ -8,7 +8,11 @@ import {
   getIngestionJob,
   type IngestionJob,
 } from '../../src/services/memory/ingestionQueue';
-import { settleForegroundScenarioMemory } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
+import {
+  resolveForegroundScenarioTurnRun,
+  settleForegroundScenarioMemory,
+  shouldExpectForegroundMemoryCloseout,
+} from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
 import {
   sealForegroundScenarioMemoryEvidence,
   sealForegroundScenarioMemoryEvidenceAfterProviderWait,
@@ -113,6 +117,35 @@ describe('foreground scenario memory settlement', () => {
     mockedListIngestionDurabilityReceipts.mockReturnValue([]);
     mockedRunMemoryTransaction.mockImplementation((callback) => callback() as never);
     mockedCaptureCompleteMemoryEvidence.mockReturnValue(makeEvidenceSnapshot());
+  });
+
+  it('keeps a clarification checkpoint nonterminal and attributes its reply to the same run', () => {
+    expect(
+      shouldExpectForegroundMemoryCloseout({
+        disableLongTermMemory: false,
+        finalAssistantCompleted: true,
+        graphStatus: 'awaiting_user',
+        isSideThread: false,
+        timedOut: false,
+      }),
+    ).toBe(false);
+    const resumed = { id: 'run-awaiting-user', userMessageId: 'original-user' };
+    expect(
+      resolveForegroundScenarioTurnRun(
+        { agentRuns: [resumed] } as never,
+        'reply-user',
+        new Set([resumed.id]),
+        resumed.id,
+      ),
+    ).toBe(resumed);
+    expect(() =>
+      resolveForegroundScenarioTurnRun(
+        { agentRuns: [resumed, { id: 'replacement-run', userMessageId: 'reply-user' }] } as never,
+        'reply-user',
+        new Set([resumed.id]),
+        resumed.id,
+      ),
+    ).toThrow('created a new AgentRun instead of resuming');
   });
 
   it('counts idempotent publications of the same durable job once', async () => {

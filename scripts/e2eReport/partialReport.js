@@ -6,6 +6,7 @@ const {
   ASSESSMENT_DIMENSIONS,
   BENCHMARK_FAMILIES,
   CONTENT_CLASSES,
+  GRAPH_STATUSES,
   isPublicEvaluationId,
 } = require('./publicProjectionPolicy');
 const { projectPublicRedactedTrace } = require('./publicTraceSchema');
@@ -46,19 +47,6 @@ const OPTIONAL_ENTRY_FIELDS = [
 ];
 
 const ENTRY_FIELDS = new Set([...REQUIRED_ENTRY_FIELDS, ...OPTIONAL_ENTRY_FIELDS]);
-const GRAPH_STATUSES = new Set([
-  'ready',
-  'model_turn',
-  'awaiting_tool_results',
-  'recovering',
-  'waiting_async',
-  'awaiting_review',
-  'blocked',
-  'finalized',
-  'yielded',
-  'cancelled',
-  'failed',
-]);
 const TOKEN_BUCKET_FIELDS = [
   'systemPromptTokens',
   'toolDeclarationTokens',

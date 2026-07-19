@@ -45,7 +45,7 @@ import {
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { waitForPersistedAgentRecoveryReadiness } from '../../services/startupRecovery';
-import type { AgentRun } from '../../types/agentRun';
+import type { AgentRun, AgentRunControlGraphState } from '../../types/agentRun';
 import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { ConversationUsageSummary } from '../../types/usage';
@@ -378,16 +378,43 @@ export async function settleForegroundScenarioMemory(
   return cloneAndFreeze(snapshots);
 }
 
+export function shouldExpectForegroundMemoryCloseout(params: {
+  disableLongTermMemory: boolean;
+  finalAssistantCompleted: boolean;
+  graphStatus: AgentRunControlGraphState['status'] | null | undefined;
+  isSideThread: boolean;
+  timedOut: boolean;
+}): boolean {
+  return (
+    !params.disableLongTermMemory &&
+    !params.isSideThread &&
+    params.finalAssistantCompleted &&
+    params.graphStatus !== 'awaiting_user' &&
+    !params.timedOut
+  );
+}
+
 export function resolveForegroundScenarioTurnRun(
   conversation: Conversation,
   userMessageId: string,
   priorRunIds: ReadonlySet<string>,
+  awaitingUserRunIdBeforeTurn: string | null = null,
 ): AgentRun | null {
   const runs = (conversation.agentRuns ?? []).filter(
     (run) => run.userMessageId === userMessageId && !priorRunIds.has(run.id),
   );
   if (runs.length > 1) {
     throw new Error(`Foreground turn created ${runs.length} AgentRuns; expected at most one.`);
+  }
+  if (awaitingUserRunIdBeforeTurn) {
+    if (runs.length > 0) {
+      throw new Error('Foreground clarification reply created a new AgentRun instead of resuming.');
+    }
+    const resumed = conversation.agentRuns?.find(
+      (run) => run.id === awaitingUserRunIdBeforeTurn && priorRunIds.has(run.id),
+    );
+    if (!resumed) throw new Error('Foreground clarification AgentRun disappeared during resume.');
+    return resumed;
   }
   return runs[0] ?? null;
 }

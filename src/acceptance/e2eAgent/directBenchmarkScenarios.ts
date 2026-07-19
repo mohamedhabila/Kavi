@@ -123,7 +123,7 @@ export const DIRECT_TAU_USER_COORDINATION_STATE: E2EScenario = {
       ],
     },
     { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
-    { kind: 'turn_completion', turnIndex: 0, field: 'execution', expected: true },
+    { kind: 'turn_completion', turnIndex: 0, field: 'execution', expected: false },
     { kind: 'turn_completion', turnIndex: 0, field: 'final_response', expected: true },
     { kind: 'turn_completion', turnIndex: 1, field: 'execution', expected: true },
     { kind: 'turn_completion', turnIndex: 1, field: 'final_response', expected: true },

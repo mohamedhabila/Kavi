@@ -29,6 +29,24 @@ import {
 describe('e2eRunReport artifacts', () => {
   installE2ERunReportFixtureReset();
 
+  it('preserves the nonterminal awaiting-user graph status in current reports', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kavi-e2e-awaiting-user-'));
+    const env = { E2E_REPORT_PATH: join(dir, 'report.json') };
+    try {
+      const entry = buildE2ERunReportScenarioEntry({
+        suite: 'core',
+        result: buildFixtureResult({ graphSnapshots: [{ status: 'awaiting_user' } as never] }),
+        outcome: { fixtureId: 'file-write-read', passed: false },
+        attemptCount: 1,
+      });
+      expect(entry.trace?.graphSnapshots[0]?.status).toBe('awaiting_user');
+      recordE2ERunReportEntry(entry, env);
+      expect(flushE2ERunReport(env)?.scenarios[0]?.graphStatus).toBe('awaiting_user');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('recordE2ERunReportEntry and flushE2ERunReport write JSON artifact', () => {
     const dir = mkdtempSync(join(tmpdir(), 'kavi-e2e-private-sentinel-'));
     const reportPath = join(dir, 'e2e-agent-report.json');

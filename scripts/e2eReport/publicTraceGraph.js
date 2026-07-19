@@ -14,20 +14,7 @@ const {
   safeEnum,
   safePublicToolName,
 } = require('./publicTracePrimitives');
-
-const SAFE_GRAPH_STATUSES = new Set([
-  'ready',
-  'model_turn',
-  'awaiting_tool_results',
-  'recovering',
-  'waiting_async',
-  'awaiting_review',
-  'blocked',
-  'finalized',
-  'yielded',
-  'cancelled',
-  'failed',
-]);
+const { GRAPH_STATUSES: SAFE_GRAPH_STATUSES } = require('./publicProjectionPolicy');
 
 const SAFE_GRAPH_AUDIT_TYPES = new Set([
   'ASYNC_WAITING',
