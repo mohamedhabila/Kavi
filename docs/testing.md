@@ -318,6 +318,24 @@ settlement; each foreground model turn remains independently capped at 90 second
 The harness scripts (`eval:e2e`, `verify:strict:e2e`) load `.env.local` via
 `scripts/load-local-env.js`. They are never bundled into the app.
 
+### Exact attachment-grounding pilot
+
+The opt-in attachment pilot sends a synthetic public PNG through the same
+foreground chat entry point as the mobile composer. It requires a configured
+vision-capable provider, disables tools and long-term memory for the turn, and
+checks that the final answer comes from the current attachment:
+
+```bash
+RUN_ATTACHMENT_GROUNDING_PILOT=1 \
+E2E_PROVIDER=openai \
+E2E_OPENAI_MODEL=<vision-capable-model> \
+npm test -- --runInBand __tests__/acceptance/attachmentGroundingLivePilot.test.ts
+```
+
+The test is skipped in ordinary keyless verification. Provider credentials use
+the same environment variables listed above; the fixture contains no private
+or benchmark data.
+
 ### E2E JSON report
 
 `npm run eval:e2e` writes a structural JSON artifact (when the suite runs) with
