@@ -16,6 +16,10 @@ jest.mock('../../src/services/executionJournal/externalToolDurabilityLifecycle',
 });
 jest.mock('../../src/services/remote/approvalStore', () => ({
   needsApprovalWithContext: jest.fn(),
+  ONE_SHOT_APPROVAL_DECISION_POLICY: {
+    persistentApproval: 'forbidden',
+    expiryFallback: 'reject',
+  },
   requestToolApproval: jest.fn(),
 }));
 jest.mock('../../src/engine/tools/toolDispatchRouter', () => ({ executeToolInner: jest.fn() }));
@@ -27,6 +31,7 @@ import {
 import { executeTool } from '../../src/engine/tools';
 import {
   needsApprovalWithContext,
+  ONE_SHOT_APPROVAL_DECISION_POLICY,
   requestToolApproval,
 } from '../../src/services/remote/approvalStore';
 import { useToolPermissionsStore } from '../../src/services/security/permissions';
@@ -110,6 +115,181 @@ describe('mobile controller pre-claim validation', () => {
     expect(captureEffectReceipt).not.toHaveBeenCalled();
     expect(finalizeEffectReceiptCapture).toHaveBeenCalledTimes(1);
     expect(mockedRequestApproval).not.toHaveBeenCalled();
+    expect(
+      getExecutionJournalDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM execution_effects',
+      ),
+    ).toEqual({ count: 0 });
+  });
+
+  it('requires focused one-shot confirmation before claiming a reviewed action', async () => {
+    mockedNeedsApproval.mockReturnValue(false);
+    let resolveApproval: ((decision: 'approved') => void) | undefined;
+    mockedRequestApproval.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveApproval = resolve as (decision: 'approved') => void;
+        }),
+    );
+    const reviewAction = jest.fn().mockReturnValue({
+      kind: 'confirm',
+      title: 'Confirm message send',
+      description: 'Send the prepared message to the selected recipient.',
+    });
+
+    const execution = executeTool(
+      'mobile_ui_action',
+      JSON.stringify({
+        kind: 'activate',
+        target: {
+          kind: 'coordinate',
+          observationId: 'observation-before-1',
+          x: 90,
+          y: 850,
+        },
+      }),
+      'conversation-1',
+      {
+        toolCallId: 'tool-call-mobile-confirm',
+        executionRunId: 'execution-run-mobile-confirm',
+        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+        mobileController: {
+          capability: createMobileControllerCapabilityFixture({
+            environmentClass: 'managed',
+            supportedActionKinds: ['activate'],
+          }),
+          currentObservation: {
+            observationId: 'observation-before-1',
+            digest: `sha256:${'d'.repeat(64)}`,
+          },
+          reviewAction,
+        },
+      },
+    );
+    for (let index = 0; index < 10 && mockedRequestApproval.mock.calls.length === 0; index += 1) {
+      await Promise.resolve();
+    }
+
+    expect(mockedRequestApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'mobile_ui_action',
+        reviewPresentation: {
+          title: 'Confirm message send',
+          description: 'Send the prepared message to the selected recipient.',
+        },
+        decisionPolicy: ONE_SHOT_APPROVAL_DECISION_POLICY,
+      }),
+    );
+    expect(
+      getExecutionJournalDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM execution_effects',
+      ),
+    ).toEqual({ count: 0 });
+
+    resolveApproval?.('approved');
+    const result = await execution;
+
+    expect(result.status).toBe('deferred');
+    expect(
+      getExecutionJournalDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM execution_effects',
+      ),
+    ).toEqual({ count: 1 });
+  });
+
+  it('does not request approval or claim an action that requires takeover', async () => {
+    mockedNeedsApproval.mockReturnValue(false);
+
+    const result = await executeTool(
+      'mobile_ui_action',
+      JSON.stringify({
+        kind: 'activate',
+        target: {
+          kind: 'coordinate',
+          observationId: 'observation-before-1',
+          x: 90,
+          y: 850,
+        },
+      }),
+      'conversation-1',
+      {
+        toolCallId: 'tool-call-mobile-takeover',
+        executionRunId: 'execution-run-mobile-takeover',
+        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+        mobileController: {
+          capability: createMobileControllerCapabilityFixture({
+            environmentClass: 'policy_approved',
+            supportedActionKinds: ['activate'],
+          }),
+          currentObservation: {
+            observationId: 'observation-before-1',
+            digest: `sha256:${'e'.repeat(64)}`,
+          },
+          reviewAction: jest.fn().mockReturnValue({
+            kind: 'takeover',
+            title: 'Review account deletion',
+            description: 'Review and complete the account deletion directly.',
+          }),
+        },
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(result.effectDispatchObservation).toEqual({
+      kind: 'not_claimed',
+      reason: 'user_takeover_required',
+    });
+    expect(mockedRequestApproval).not.toHaveBeenCalled();
+    expect(
+      getExecutionJournalDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM execution_effects',
+      ),
+    ).toEqual({ count: 0 });
+  });
+
+  it('does not claim a reviewed action when focused confirmation is rejected', async () => {
+    mockedNeedsApproval.mockReturnValue(false);
+    mockedRequestApproval.mockResolvedValue('rejected');
+
+    const result = await executeTool(
+      'mobile_ui_action',
+      JSON.stringify({
+        kind: 'activate',
+        target: {
+          kind: 'coordinate',
+          observationId: 'observation-before-1',
+          x: 90,
+          y: 850,
+        },
+      }),
+      'conversation-1',
+      {
+        toolCallId: 'tool-call-mobile-rejected',
+        executionRunId: 'execution-run-mobile-rejected',
+        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+        mobileController: {
+          capability: createMobileControllerCapabilityFixture({
+            environmentClass: 'managed',
+            supportedActionKinds: ['activate'],
+          }),
+          currentObservation: {
+            observationId: 'observation-before-1',
+            digest: `sha256:${'f'.repeat(64)}`,
+          },
+          reviewAction: jest.fn().mockReturnValue({
+            kind: 'confirm',
+            title: 'Confirm message send',
+            description: 'Send the prepared message to the selected recipient.',
+          }),
+        },
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(result.effectDispatchObservation).toEqual({
+      kind: 'not_claimed',
+      reason: 'user_approval_denied',
+    });
     expect(
       getExecutionJournalDb().getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM execution_effects',

@@ -540,6 +540,33 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   }
 
   if (
+    canonicalToolExecutionOutcomes.some(
+      (outcome) =>
+        outcome.effectDispatchObservation?.kind === 'not_claimed' &&
+        outcome.effectDispatchObservation.reason === 'user_takeover_required',
+    )
+  ) {
+    await params.finishWithGraphTerminalEvent({
+      graphEvent: {
+        type: 'BLOCKED',
+        reason: 'user_takeover_required',
+      },
+      content:
+        'I stopped before performing that action because this controller requires you to review and complete the consequential step directly. No effect was dispatched.',
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'incomplete',
+        finishReason: 'tool_effect_not_claimed',
+      }),
+      sessionEndReason: 'user_takeover_required',
+    });
+    return {
+      status: 'finalized',
+      lastPendingAsyncSignature: params.lastPendingAsyncSignature,
+      workingMessages,
+    };
+  }
+
+  if (
     canonicalToolExecutionOutcomes.some((outcome) =>
       isTerminalToolEffectDispatchObservation(outcome.effectDispatchObservation),
     )

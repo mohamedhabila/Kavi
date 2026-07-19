@@ -236,6 +236,52 @@ describe('tool execution outcome resolution', () => {
     expect(params.recordPostToolFinalTextDirective).not.toHaveBeenCalled();
   });
 
+  it('hands a consequential controller boundary back to the user without dispatch', async () => {
+    const params = buildBaseParams();
+    params.executableToolCalls = [
+      {
+        name: 'mobile_ui_action',
+        arguments:
+          '{"kind":"activate","target":{"kind":"coordinate","observationId":"screen-1","x":500,"y":500}}',
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-user-takeover',
+        toolMessage: createToolMessage({
+          id: 'tc-user-takeover',
+          name: 'mobile_ui_action',
+          content: '{"status":"error","code":"user_takeover_required"}',
+          isError: true,
+        }),
+        effectDispatchObservation: {
+          kind: 'not_claimed',
+          reason: 'user_takeover_required',
+        },
+      },
+    ];
+
+    const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(result.status).toBe('finalized');
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith({
+      graphEvent: {
+        type: 'BLOCKED',
+        reason: 'user_takeover_required',
+      },
+      content: expect.stringContaining('No effect was dispatched'),
+      assistantMetadata: expect.objectContaining({
+        kind: 'final',
+        completionStatus: 'incomplete',
+        finishReason: 'tool_effect_not_claimed',
+      }),
+      sessionEndReason: 'user_takeover_required',
+    });
+    expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
+    expect(params.recordPostToolFinalTextDirective).not.toHaveBeenCalled();
+  });
+
   it('allows the model to repair a discoverable pre-dispatch tool failure', async () => {
     const params = buildBaseParams();
     params.toolExecutionOutcomes = [

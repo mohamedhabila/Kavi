@@ -198,6 +198,7 @@ export function getApprovalScope(toolName: string): ApprovalScope {
   if (toolName.startsWith('expo_eas_')) return 'expo';
   if (
     toolName.startsWith('calendar_') ||
+    toolName === 'mobile_ui_action' ||
     toolName.startsWith('contacts_') ||
     toolName.startsWith('location_') ||
     toolName.startsWith('clipboard_') ||
@@ -227,6 +228,15 @@ export function assessToolRisk(
 ): CommandRiskAssessment {
   if (toolName === 'ssh_exec' && typeof args?.command === 'string') {
     return analyzeCommandRisk(args.command);
+  }
+
+  if (toolName === 'mobile_ui_action') {
+    return {
+      level: 'high',
+      reasons: ['Host-reviewed external mobile action'],
+      executable: '',
+      destructive: false,
+    };
   }
 
   const scope = getApprovalScope(toolName);

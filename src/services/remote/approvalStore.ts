@@ -483,6 +483,22 @@ export function needsApprovalWithContext(
   return true;
 }
 
+function isBoundedReviewPresentation(
+  value: Readonly<{ title: string; description: string }>,
+): boolean {
+  const fields = [
+    [value.title, 120],
+    [value.description, 500],
+  ] as const;
+  return fields.every(
+    ([field, maximumLength]) =>
+      field === field.normalize('NFC').trim() &&
+      field.length > 0 &&
+      Array.from(field).length <= maximumLength &&
+      !/\p{C}/u.test(field),
+  );
+}
+
 export function requestToolApproval(params: {
   toolName: string;
   targetId?: string;
@@ -490,23 +506,29 @@ export function requestToolApproval(params: {
   title?: string;
   scope?: ApprovalScope;
   description: string;
+  /** Bounded code-owned copy for a host-reviewed action; never provider-authored text. */
+  reviewPresentation?: Readonly<{ title: string; description: string }>;
   args?: Record<string, unknown>;
   personaId?: string;
   decisionPolicy?: RemoteApprovalDecisionPolicy;
 }): Promise<'approved' | 'rejected' | 'expired'> {
+  if (params.reviewPresentation && !isBoundedReviewPresentation(params.reviewPresentation)) {
+    throw new Error('approval_review_presentation_invalid');
+  }
   const store = useApprovalStore.getState();
   const timeoutMs = store.policy.timeoutMs;
   const expiryFallback = store.policy.expiryFallback;
   const risk = assessToolRisk(params.toolName, params.args);
   const presentation = describeToolInvocation(params.toolName, params.args);
+  const resolvedPresentation = params.reviewPresentation ?? presentation;
 
   const requestId = store.createRequest({
     targetId: params.targetId,
     toolName: params.toolName,
     scope: params.scope || getApprovalScope(params.toolName),
     jobId: params.jobId,
-    title: params.title || presentation.title,
-    description: presentation.description,
+    title: params.title || resolvedPresentation.title,
+    description: resolvedPresentation.description,
     riskLevel: risk.level,
     riskReasons: risk.reasons,
     decisionPolicy: params.decisionPolicy,

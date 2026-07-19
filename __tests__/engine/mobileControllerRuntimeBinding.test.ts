@@ -96,6 +96,11 @@ describe('mobile controller runtime binding', () => {
       port({ capability: { ...CAPABILITY, outcomeDeliveryModes: ['synchronous'] } }),
       'deferred_outcome_unsupported',
     ],
+    [
+      'managed controller without code-owned action review',
+      port({ capability: { ...CAPABILITY, environmentClass: 'managed' } }),
+      'action_review_unsupported',
+    ],
     ['model without tools', port(), 'model_tools_unsupported'],
     ['model without vision', port(), 'model_vision_unsupported'],
   ] as const)('rejects %s without exposing action authority', (_label, candidate, reason) => {
@@ -153,6 +158,124 @@ describe('mobile controller runtime binding', () => {
         currentObservationId: OBSERVATION.observationId,
         normalizedCoordinateRange: { minimum: 0, maximum: 999 },
       },
+    });
+  });
+
+  it('binds non-sandbox action review to allow, confirm, or require takeover', async () => {
+    const action = {
+      kind: 'activate' as const,
+      target: {
+        kind: 'coordinate' as const,
+        observationId: OBSERVATION.observationId,
+        x: 500,
+        y: 500,
+      },
+    };
+    const capability = { ...CAPABILITY, environmentClass: 'managed' as const };
+    const confirmReview = jest.fn().mockResolvedValue({
+      kind: 'confirm',
+      title: 'Confirm message send',
+      description: 'Send the prepared message to the selected recipient.',
+    });
+    const confirmationAdmission = admitMobileControllerRuntime({
+      port: port({ capability, reviewAction: confirmReview }),
+      provider: provider(),
+      model: 'model-1',
+    });
+    if (confirmationAdmission.kind !== 'admitted') {
+      throw new Error(confirmationAdmission.reason);
+    }
+
+    const confirmation = await executeMobileControllerTool(
+      JSON.stringify(action),
+      confirmationAdmission.runtime.execution,
+    );
+
+    expect(isMobileControllerDeferredExecution(confirmation)).toBe(true);
+    expect(confirmation).toMatchObject({
+      approvalRequest: {
+        title: 'Confirm message send',
+        description: 'Send the prepared message to the selected recipient.',
+      },
+    });
+    expect('approvalRequest' in confirmation ? confirmation.approvalRequest : undefined).toEqual({
+      title: 'Confirm message send',
+      description: 'Send the prepared message to the selected recipient.',
+    });
+    expect(confirmReview).toHaveBeenCalledWith({
+      action,
+      currentObservation: OBSERVATION,
+    });
+
+    const allowAdmission = admitMobileControllerRuntime({
+      port: port({
+        capability,
+        reviewAction: jest.fn().mockReturnValue({ kind: 'allow' }),
+      }),
+      provider: provider(),
+      model: 'model-1',
+    });
+    if (allowAdmission.kind !== 'admitted') throw new Error(allowAdmission.reason);
+    const allowed = await executeMobileControllerTool(
+      JSON.stringify(action),
+      allowAdmission.runtime.execution,
+    );
+    expect(isMobileControllerDeferredExecution(allowed)).toBe(true);
+    expect('approvalRequest' in allowed ? allowed.approvalRequest : undefined).toBeUndefined();
+
+    const takeoverAdmission = admitMobileControllerRuntime({
+      port: port({
+        capability,
+        reviewAction: jest.fn().mockReturnValue({
+          kind: 'takeover',
+          title: 'Review account deletion',
+          description: 'Review and complete the account deletion directly.',
+        }),
+      }),
+      provider: provider(),
+      model: 'model-1',
+    });
+    if (takeoverAdmission.kind !== 'admitted') throw new Error(takeoverAdmission.reason);
+    const takeover = await executeMobileControllerTool(
+      JSON.stringify(action),
+      takeoverAdmission.runtime.execution,
+    );
+    expect(takeover).toMatchObject({
+      status: 'failed',
+      failureKind: 'user_takeover_required',
+    });
+    expect(JSON.parse('content' in takeover ? takeover.content : '{}')).toMatchObject({
+      code: 'user_takeover_required',
+      retryable: false,
+    });
+  });
+
+  it.each([
+    ['malformed decision', jest.fn().mockReturnValue({ kind: 'allow', title: 'extra' })],
+    ['review failure', jest.fn().mockRejectedValue(new Error('review failed'))],
+  ])('fails closed on %s', async (_label, reviewAction) => {
+    const admission = admitMobileControllerRuntime({
+      port: port({
+        capability: { ...CAPABILITY, environmentClass: 'policy_approved' },
+        reviewAction,
+      }),
+      provider: provider(),
+      model: 'model-1',
+    });
+    if (admission.kind !== 'admitted') throw new Error(admission.reason);
+
+    const result = await executeMobileControllerTool(
+      JSON.stringify({ kind: 'input_text', text: 'private draft' }),
+      admission.runtime.execution,
+    );
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      failureKind: 'controller_action_review_unavailable',
+    });
+    expect(JSON.parse('content' in result ? result.content : '{}')).toMatchObject({
+      code: 'controller_action_review_unavailable',
+      retryable: false,
     });
   });
 

@@ -92,6 +92,8 @@ export type ToolEffectDispatchNotClaimedReason =
   | 'tool_arguments_invalid'
   | 'tool_call_identity_required'
   | 'runtime_binding_unavailable'
+  | 'controller_action_review_unavailable'
+  | 'user_takeover_required'
   | 'user_approval_denied'
   | 'control_revoked';
 

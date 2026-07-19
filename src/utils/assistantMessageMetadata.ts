@@ -97,6 +97,7 @@ const CODE_INCOMPLETE_FINISH_REASONS = new Set([
   'response_failed',
   'surfaced_worker_output_pending',
   'terminal_review_pending',
+  'tool_effect_not_claimed',
   'tool_effect_reconciliation_required',
 ]);
 const ATTRIBUTION_PRESERVING_FINISH_REASONS = new Set([

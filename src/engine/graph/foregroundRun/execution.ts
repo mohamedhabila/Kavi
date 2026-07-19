@@ -602,6 +602,7 @@ async function executeReservedForegroundConversationRun(
       `foreground:${conversationId}:${foregroundRequestId}`,
     );
     const mobileController = options?.mobileController;
+    const mobileControllerReviewAction = mobileController?.reviewAction;
     try {
       const orchestratorResult = await runOrchestrator(
         {
@@ -644,6 +645,11 @@ async function executeReservedForegroundConversationRun(
                 mobileController: {
                   capability: mobileController.capability,
                   currentObservation: mobileController.currentObservation,
+                  ...(mobileControllerReviewAction
+                    ? {
+                        reviewAction: mobileControllerReviewAction.bind(mobileController),
+                      }
+                    : {}),
                   persistGraphState: () => context.durability.flushChatState(),
                   publishHandoff: (handoff) => mobileController.publishHandoff(handoff),
                 },

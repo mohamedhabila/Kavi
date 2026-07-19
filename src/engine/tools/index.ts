@@ -5,7 +5,11 @@
 
 import { logToolCall } from '../../services/security/audit';
 import { useToolPermissionsStore } from '../../services/security/permissions';
-import { needsApprovalWithContext, requestToolApproval } from '../../services/remote/approvalStore';
+import {
+  needsApprovalWithContext,
+  ONE_SHOT_APPROVAL_DECISION_POLICY,
+  requestToolApproval,
+} from '../../services/remote/approvalStore';
 import {
   dispatchAuthorizedToolEffect,
   isCodeOwnedEffectFreeInvocation,
@@ -113,6 +117,21 @@ function withPreDispatchObservation(
     outcome,
     effectFreeInvocation ? { kind: 'not_applicable' } : { kind: 'not_claimed', reason },
   );
+}
+
+function resolveMobileControllerPreDispatchReason(
+  outcome: ToolRuntimeOutcome,
+  hasBinding: boolean,
+): ToolEffectDispatchNotClaimedReason {
+  if (outcome.status === 'failed') {
+    if (outcome.failureKind === 'controller_action_review_unavailable') {
+      return 'controller_action_review_unavailable';
+    }
+    if (outcome.failureKind === 'user_takeover_required') {
+      return 'user_takeover_required';
+    }
+  }
+  return hasBinding ? 'tool_arguments_invalid' : 'runtime_binding_unavailable';
 }
 
 function rejectExpiredModelTurnAuthority(params: {
@@ -253,9 +272,10 @@ export async function executeTool(
     preparedMobileControllerExecution &&
     !isMobileControllerDeferredExecution(preparedMobileControllerExecution)
   ) {
-    const reason = context?.mobileController
-      ? 'tool_arguments_invalid'
-      : 'runtime_binding_unavailable';
+    const reason = resolveMobileControllerPreDispatchReason(
+      preparedMobileControllerExecution,
+      context?.mobileController !== undefined,
+    );
     finalizeEffectReceiptCapture(context);
     logToolCall(normalizedName, argsString, 'error', 0, conversationId, reason);
     return withPreDispatchObservation(
@@ -267,7 +287,14 @@ export async function executeTool(
 
   // Approval gate — blocks destructive/sensitive tools until human approves.
   // Durable effect preparation happens only after this decision.
-  const approvalRequired = needsApprovalWithContext(normalizedName, parsedArgs);
+  const mobileControllerApprovalRequest =
+    preparedMobileControllerExecution &&
+    isMobileControllerDeferredExecution(preparedMobileControllerExecution)
+      ? preparedMobileControllerExecution.approvalRequest
+      : undefined;
+  const approvalRequired =
+    mobileControllerApprovalRequest !== undefined ||
+    needsApprovalWithContext(normalizedName, parsedArgs);
   if (approvalRequired) {
     if (!isModelTurnAuthorityCurrent(context)) {
       return rejectExpiredModelTurnAuthority({
@@ -284,6 +311,12 @@ export async function executeTool(
       targetId: parsedArgs?.targetId,
       args: parsedArgs,
       description: `Execute ${normalizedName}(${truncatedArgs})`,
+      ...(mobileControllerApprovalRequest
+        ? {
+            reviewPresentation: mobileControllerApprovalRequest,
+            decisionPolicy: ONE_SHOT_APPROVAL_DECISION_POLICY,
+          }
+        : {}),
     });
     if (decision !== 'approved') {
       logToolCall(normalizedName, argsString, 'denied', 0, conversationId);

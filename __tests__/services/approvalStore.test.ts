@@ -339,6 +339,34 @@ describe('requestToolApproval', () => {
     jest.useRealTimers();
   });
 
+  it('keeps host-reviewed mobile confirmation concrete, high-risk, and one-shot', async () => {
+    const promise = requestToolApproval({
+      toolName: 'mobile_ui_action',
+      args: { kind: 'activate', target: { kind: 'coordinate', x: 500, y: 500 } },
+      description: 'Raw model action',
+      reviewPresentation: {
+        title: 'Confirm message send',
+        description: 'Send the prepared message to the selected recipient.',
+      },
+      decisionPolicy: ONE_SHOT_APPROVAL_DECISION_POLICY,
+    });
+
+    const pending = useApprovalStore.getState().getPendingRequests();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      title: 'Confirm message send',
+      description: 'Send the prepared message to the selected recipient.',
+      riskLevel: 'high',
+      decisionPolicy: ONE_SHOT_APPROVAL_DECISION_POLICY,
+    });
+
+    useApprovalStore.getState().approveAlways(pending[0].id);
+    expect(useApprovalStore.getState().getRequest(pending[0].id)?.status).toBe('pending');
+    expect(useApprovalStore.getState().allowlist).toEqual([]);
+    useApprovalStore.getState().approveRequest(pending[0].id);
+    await expect(promise).resolves.toBe('approved');
+  });
+
   it('retains the global expiry fallback for ordinary requests', async () => {
     jest.useFakeTimers();
     useApprovalStore.getState().setPolicy({ timeoutMs: 1000, expiryFallback: 'approve' });

@@ -16,6 +16,10 @@ export interface MobileControllerDeferredExecution {
   readonly capability: MobileControllerCapability;
   readonly action: MobileControllerAction;
   readonly beforeObservation: MobileControllerObservationRef;
+  readonly approvalRequest?: Readonly<{
+    title: string;
+    description: string;
+  }>;
 }
 
 export type ToolRuntimeExecution = ToolRuntimeOutcome | MobileControllerDeferredExecution;
@@ -56,4 +60,22 @@ export function isMobileControllerDeferredExecution(
     candidate.kind === 'mobile_controller_handoff_requested' &&
     CODE_OWNED_DEFERRED_EXECUTIONS.has(candidate)
   );
+}
+
+export function attachMobileControllerApprovalRequest(
+  deferred: MobileControllerDeferredExecution,
+  approvalRequest: Readonly<{ title: string; description: string }>,
+): MobileControllerDeferredExecution {
+  if (!CODE_OWNED_DEFERRED_EXECUTIONS.has(deferred)) {
+    throw new Error('mobile_controller_deferred_execution_untrusted');
+  }
+  const reviewed = Object.freeze({
+    ...deferred,
+    approvalRequest: Object.freeze({
+      title: approvalRequest.title,
+      description: approvalRequest.description,
+    }),
+  });
+  CODE_OWNED_DEFERRED_EXECUTIONS.add(reviewed);
+  return reviewed;
 }

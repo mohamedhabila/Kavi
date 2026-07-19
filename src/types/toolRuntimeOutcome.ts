@@ -12,7 +12,10 @@ export type ToolRuntimeOutcome =
   | Readonly<{
       status: 'failed';
       content: string;
-      failureKind?: 'authority_revoked';
+      failureKind?:
+        | 'authority_revoked'
+        | 'controller_action_review_unavailable'
+        | 'user_takeover_required';
     }>;
 
 export type ExactToolResultEvidence = Readonly<{
@@ -71,7 +74,7 @@ export function resolveExactToolResultEvidence(
 
 export function failedToolOutcome(
   content: string,
-  failureKind?: 'authority_revoked',
+  failureKind?: Extract<ToolRuntimeOutcome, { status: 'failed' }>['failureKind'],
 ): ToolRuntimeOutcome {
   return Object.freeze({
     status: 'failed',

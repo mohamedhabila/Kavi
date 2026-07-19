@@ -90,9 +90,23 @@ describe('foreground mobile controller binding', () => {
     );
     if (!publication) throw new Error('expected mobile controller publication fixture');
     const publishHandoff = jest.fn().mockResolvedValue(undefined);
+    const reviewAction = jest.fn().mockReturnValue({ kind: 'allow' });
     let flushCountBeforeControllerPersistence = -1;
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
       if (!options.mobileController) throw new Error('expected mobile controller runtime port');
+      expect(options.mobileController.reviewAction).toBeDefined();
+      await options.mobileController.reviewAction?.({
+        action: {
+          kind: 'activate',
+          target: {
+            kind: 'coordinate',
+            observationId: 'observation-before-1',
+            x: 500,
+            y: 500,
+          },
+        },
+        currentObservation: options.mobileController.currentObservation,
+      });
       flushCountBeforeControllerPersistence = context.durability.flushChatState.mock.calls.length;
       await options.mobileController.persistGraphState();
       await options.mobileController.publishHandoff(publication);
@@ -111,7 +125,7 @@ describe('foreground mobile controller binding', () => {
             controllerContractVersion: 1,
             capabilityDigest: `sha256:${'a'.repeat(64)}`,
             policyAdmissionDigest: `sha256:${'b'.repeat(64)}`,
-            environmentClass: 'sandbox',
+            environmentClass: 'managed',
             supportedActionKinds: ['activate'],
             allowedAppIds: [],
             observationEvidence: ['screenshot', 'window_identity'],
@@ -127,6 +141,7 @@ describe('foreground mobile controller binding', () => {
             appId: 'notes',
             windowId: 'editor',
           },
+          reviewAction,
           publishHandoff,
         },
       },
@@ -142,6 +157,7 @@ describe('foreground mobile controller binding', () => {
       ],
     ).toBeLessThan(publishHandoff.mock.invocationCallOrder[0]);
     expect(publishHandoff).toHaveBeenCalledWith(publication);
+    expect(reviewAction).toHaveBeenCalledTimes(1);
   });
 
   it('settles one host outcome and resumes the exact run with one correlated tool result', async () => {
