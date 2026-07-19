@@ -180,4 +180,62 @@ describe('runtime-external effect authority', () => {
     expect(result.effectReconciliationRequired).toBe(true);
     expect(callTool).toHaveBeenCalledTimes(1);
   });
+
+  it('continues after a trusted mutating MCP call returns while preserving unverified semantics', async () => {
+    const declaration: ToolDefinition = {
+      name: 'mcp__orders__update_order',
+      description: '[Orders] Update one order',
+      input_schema: { type: 'object', properties: {} },
+      contract: { sideEffects: ['destructive'] },
+    };
+    const rawResult = JSON.stringify({ status: 'updated', orderId: 'order-7' });
+    const callTool = jest.fn(async () => ({
+      content: [{ type: 'text' as const, text: rawResult }],
+      isError: false,
+    }));
+    jest.spyOn(mcpManager, 'captureRuntimeToolBinding').mockReturnValue({
+      client: { isConnected: () => true, callTool } as never,
+      declaration,
+      provenance: {
+        source: 'mcp',
+        namespace: 'orders',
+        connectionGeneration: 13,
+        toolRegistryGeneration: 25,
+        runtimeProcessEpoch: 'process-epoch-a',
+        targetIdentity: 'https://orders.example/mcp',
+        transport: 'streamable-http',
+        toolAnnotationsTrusted: true,
+      },
+      isCurrent: () => true,
+    });
+
+    const result = await executeToolCallLifecycle(runtimeLifecycle(declaration));
+
+    expect(result.toolMessage).toMatchObject({ content: rawResult });
+    expect(result.toolMessage.isError).toBeUndefined();
+    expect(result.effectReceipt).toMatchObject({
+      effectKind: 'unknown',
+      executionState: 'completed',
+      effectState: 'unknown',
+      verificationState: 'unverified',
+      contractIdentity: {
+        kind: 'runtime_external',
+        source: 'mcp',
+        effectClass: 'potentially_effectful',
+      },
+    });
+    expect(result.effectReconciliationRequired).toBeUndefined();
+    expect(result.effectDispatchObservation).toMatchObject({
+      kind: 'settled',
+      disposition: 'returned_unverified',
+      requiresReconciliation: false,
+    });
+    expect(callTool).toHaveBeenCalledTimes(1);
+    expect(
+      getExecutionJournalDb().getFirstSync(
+        `SELECT r.status AS run_status, e.status AS effect_status
+         FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
+      ),
+    ).toEqual({ run_status: 'succeeded', effect_status: 'returned' });
+  });
 });

@@ -337,8 +337,10 @@ export function classifyEffectDispatchReceipt(
     case 'pending':
     case 'unknown':
       if (
-        effectClass === 'unknown' &&
         receipt.contractIdentity.kind === 'runtime_external' &&
+        ((effectClass === 'unknown' && receipt.contractIdentity.effectClass === 'unknown') ||
+          (effectClass !== 'none' &&
+            receipt.contractIdentity.effectClass === 'potentially_effectful')) &&
         receipt.transportState === 'returned' &&
         receipt.executionState === 'completed' &&
         receipt.effectKind === 'unknown' &&

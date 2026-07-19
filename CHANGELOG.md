@@ -36,6 +36,15 @@ versioning where practical for tagged releases.
   while retaining the current iOS and Android application identifiers.
 - iOS EventKit permission metadata now covers both calendar and reminder
   requesters so release builds can initialize the calendar module safely.
+- Preserve explicitly trusted MCP read/write and effect metadata through
+  dynamic tool discovery instead of reducing every integration tool to an
+  unknown discovery capability.
+- Keep empty category searches inside their requested boundary while returning
+  structured alternative-category guidance, with one bounded reconsideration
+  before integration-owned work is handed back to the user.
+- Record successful mutating MCP returns as unverified acknowledgements so the
+  assistant can perform a safe read-back without treating opaque result content
+  as completion evidence or automatically replaying an uncertain mutation.
 
 ### Security
 
