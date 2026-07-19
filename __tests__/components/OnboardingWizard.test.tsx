@@ -4,6 +4,7 @@
 
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { File } from 'expo-file-system';
+import { ScrollView, StyleSheet } from 'react-native';
 import { OnboardingWizard } from '../../src/components/onboarding/OnboardingWizard';
 import { getLocalLlmCatalogEntry } from '../../src/services/localLlm/catalog';
 
@@ -148,12 +149,17 @@ beforeEach(() => {
 describe('OnboardingWizard', () => {
   it('renders welcome step initially', () => {
     const onComplete = jest.fn();
-    const { getByText } = render(<OnboardingWizard onComplete={onComplete} />);
+    const { getByText, UNSAFE_getByType } = render(
+      <OnboardingWizard onComplete={onComplete} />,
+    );
 
     expect(getByText('Welcome to Kavi')).toBeTruthy();
     expect(getByText('Setup in three passes')).toBeTruthy();
     expect(getByText('Get Started')).toBeTruthy();
     expect(getByText('Skip for now')).toBeTruthy();
+    expect(
+      StyleSheet.flatten(UNSAFE_getByType(ScrollView).props.contentContainerStyle),
+    ).toMatchObject({ flexGrow: 1, alignItems: 'center' });
   });
 
   it('shows features list on welcome step', () => {
@@ -230,7 +236,7 @@ describe('OnboardingWizard', () => {
 
   it('completes provider and tool setup, then finishes', async () => {
     const onComplete = jest.fn();
-    const { getByText, getByPlaceholderText } = render(
+    const { getByText, getByPlaceholderText, UNSAFE_getByType } = render(
       <OnboardingWizard onComplete={onComplete} />,
     );
 
@@ -255,6 +261,9 @@ describe('OnboardingWizard', () => {
     await waitFor(() => {
       expect(getByText("You're all set!")).toBeTruthy();
     });
+    expect(
+      StyleSheet.flatten(UNSAFE_getByType(ScrollView).props.contentContainerStyle),
+    ).toMatchObject({ flexGrow: 1, alignItems: 'center' });
 
     expect(mockSetWebSearchProvider).toHaveBeenCalledWith('auto');
     expect(mockSaveSecure).toHaveBeenCalledWith('GITHUB_TOKEN', 'github_pat_test123');

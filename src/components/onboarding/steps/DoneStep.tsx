@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Globe, Search, Wrench, Zap } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,7 +19,7 @@ export function DoneStep() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.centered}>
+      <ScrollView contentContainerStyle={styles.centered} showsVerticalScrollIndicator={false}>
         <Zap size={48} color={colors.success} />
         <Text style={styles.title}>{t('onboarding.step4Title')}</Text>
         <Text style={styles.subtitle}>
@@ -77,7 +77,7 @@ export function DoneStep() {
         >
           <Text style={styles.primaryBtnText}>{t('onboarding.startChatting')}</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

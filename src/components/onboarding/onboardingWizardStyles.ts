@@ -11,7 +11,7 @@ export const createOnboardingWizardStyles = (colors: AppPalette) =>
       backgroundColor: colors.background,
     },
     centered: {
-      flex: 1,
+      flexGrow: 1,
       justifyContent: 'center',
       alignItems: 'center',
       padding: 24,

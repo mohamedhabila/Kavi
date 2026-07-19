@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Check, ChevronRight } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,7 +12,7 @@ export function WelcomeStep() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.centered}>
+      <ScrollView contentContainerStyle={styles.centered} showsVerticalScrollIndicator={false}>
         <View style={styles.logoBadge}>
           <Image
             source={ONBOARDING_BRAND_ICON}
@@ -66,7 +66,7 @@ export function WelcomeStep() {
         >
           <Text style={styles.skipBtnText}>{t('onboarding.skip')}</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
