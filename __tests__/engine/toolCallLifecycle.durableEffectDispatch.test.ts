@@ -416,7 +416,7 @@ describe('production tool lifecycle durable effect wiring', () => {
     ).toEqual({ run_status: 'succeeded', effect_status: 'verified' });
   });
 
-  it('surfaces an MCP result as reconciliation-required without logging its untrusted payload', async () => {
+  it('returns an MCP operational result without trusting or logging its payload as evidence', async () => {
     mockedNeedsApproval.mockReturnValue(false);
     const declaration: ToolDefinition = {
       name: 'mcp__calendar__create_event',
@@ -452,17 +452,11 @@ describe('production tool lifecycle durable effect wiring', () => {
 
     const result = await executeToolCallLifecycle(dynamicLifecycle(declaration));
 
-    expect(JSON.parse(result.toolMessage.content)).toEqual({
-      status: 'error',
-      code: 'tool_effect_reconciliation_required',
-      error:
-        'The tool may have changed external state, but the app could not verify the outcome. Do not retry automatically.',
-      retryAllowed: false,
-      untrustedToolResult: rawResult,
-    });
-    expect(result.toolMessage.isError).toBe(true);
+    expect(result.toolMessage.content).toBe(rawResult);
+    expect(result.toolMessage.isError).toBeUndefined();
     expect(result.effectReceipt).toMatchObject({
       effectKind: 'unknown',
+      executionState: 'completed',
       effectState: 'unknown',
       verificationState: 'unverified',
       contractIdentity: { kind: 'runtime_external', source: 'mcp' },
@@ -472,10 +466,10 @@ describe('production tool lifecycle durable effect wiring', () => {
     expect(mockedLogToolCall).toHaveBeenCalledWith(
       declaration.name,
       '{}',
-      'error',
+      'success',
       expect.any(Number),
       'conversation-1',
-      'tool_effect_reconciliation_required',
+      undefined,
     );
     expect(JSON.stringify(mockedLogToolCall.mock.calls)).not.toContain(secretSentinel);
     expect(
@@ -483,7 +477,7 @@ describe('production tool lifecycle durable effect wiring', () => {
         `SELECT r.status AS run_status, e.status AS effect_status
            FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
       ),
-    ).toEqual({ run_status: 'ambiguous', effect_status: 'ambiguous' });
+    ).toEqual({ run_status: 'succeeded', effect_status: 'returned' });
   });
 
   it('does not execute a captured MCP client that becomes stale after the durable claim', async () => {
@@ -535,7 +529,7 @@ describe('production tool lifecycle durable effect wiring', () => {
     ).toEqual({ run_status: 'ambiguous', effect_status: 'ambiguous' });
   });
 
-  it('surfaces a skill result as reconciliation-required while keeping it unverified', async () => {
+  it('returns a skill operational result while keeping its semantics unverified', async () => {
     mockedNeedsApproval.mockReturnValue(false);
     const rawResult = JSON.stringify({
       status: 'completed',
@@ -564,15 +558,11 @@ describe('production tool lifecycle durable effect wiring', () => {
 
     const result = await executeToolCallLifecycle(dynamicLifecycle(declaration));
 
-    expect(JSON.parse(result.toolMessage.content)).toMatchObject({
-      status: 'error',
-      code: 'tool_effect_reconciliation_required',
-      retryAllowed: false,
-      untrustedToolResult: rawResult,
-    });
-    expect(result.toolMessage.isError).toBe(true);
+    expect(result.toolMessage.content).toBe(rawResult);
+    expect(result.toolMessage.isError).toBeUndefined();
     expect(result.effectReceipt).toMatchObject({
       effectKind: 'unknown',
+      executionState: 'completed',
       effectState: 'unknown',
       verificationState: 'unverified',
       contractIdentity: { kind: 'runtime_external', source: 'skill' },

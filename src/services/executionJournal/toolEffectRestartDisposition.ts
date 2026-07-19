@@ -103,6 +103,18 @@ function classifyRow(row: ToolEffectRestartRow): ToolEffectRestartDisposition {
     return { kind: 'verified', observedAt: row.completed_at };
   }
   if (
+    row.effect_status === 'returned' &&
+    row.run_status === 'succeeded' &&
+    row.outcome_digest !== null &&
+    row.started_at !== null &&
+    row.completed_at !== null
+  ) {
+    return {
+      kind: 'terminal_without_verified_effect',
+      observedAt: row.completed_at,
+    };
+  }
+  if (
     row.effect_status === 'planned' &&
     row.started_at === null &&
     row.completed_at === null &&

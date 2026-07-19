@@ -9,6 +9,10 @@ function sqlEnum(values: readonly string[]): string {
   return values.map((value) => `'${value}'`).join(', ');
 }
 
+const EXECUTION_EFFECT_STATUSES_V11 = EXECUTION_EFFECT_STATUSES.filter(
+  (status) => status !== 'returned',
+);
+
 const idCheck = (column: string): string =>
   `length(${column}) BETWEEN 1 AND 200 AND ${column} = trim(${column})`;
 const digestCheck = (column: string): string =>
@@ -48,7 +52,7 @@ export const CREATE_EXECUTION_EFFECTS = `
       (status = 'planned' AND started_at IS NULL AND completed_at IS NULL)
       OR (status = 'started' AND started_at IS NOT NULL AND completed_at IS NULL)
       OR (status = 'ambiguous' AND started_at IS NOT NULL)
-      OR (status IN ('applied', 'verified', 'failed', 'cancelled')
+      OR (status IN ('returned', 'applied', 'verified', 'failed', 'cancelled')
         AND started_at IS NOT NULL AND completed_at IS NOT NULL)
     ),
     UNIQUE (run_id, tool_call_id, attempt),
@@ -59,7 +63,15 @@ export const CREATE_EXECUTION_EFFECTS = `
   ) STRICT
 `;
 
-export const CREATE_EXECUTION_EFFECTS_V8 = CREATE_EXECUTION_EFFECTS.replace(
+export const CREATE_EXECUTION_EFFECTS_V11 = CREATE_EXECUTION_EFFECTS.replace(
+  `status IN (${sqlEnum(EXECUTION_EFFECT_STATUSES)})`,
+  `status IN (${sqlEnum(EXECUTION_EFFECT_STATUSES_V11)})`,
+).replace(
+  `status IN ('returned', 'applied', 'verified', 'failed', 'cancelled')`,
+  `status IN ('applied', 'verified', 'failed', 'cancelled')`,
+);
+
+export const CREATE_EXECUTION_EFFECTS_V8 = CREATE_EXECUTION_EFFECTS_V11.replace(
   `    model_authority_valid_until INTEGER CHECK (
       model_authority_valid_until IS NULL OR model_authority_valid_until >= 0
     ),

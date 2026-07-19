@@ -294,13 +294,13 @@ describe('code-owned tool contract identity', () => {
 
     expect(receipt).toMatchObject({
       effectKind: 'unknown',
+      executionState: 'completed',
       effectState: 'unknown',
       verificationState: 'unverified',
       contractIdentity: { kind: 'runtime_external' },
     });
     expect(receipt).not.toHaveProperty('resource');
     expect(receipt).not.toHaveProperty('operationHandle');
-    expect(receipt).not.toHaveProperty('executionState');
     await expect(verifyToolEffectReceiptIntegrity(receipt)).resolves.toBe(true);
     await expect(
       verifyToolEffectReceiptIntegrity({

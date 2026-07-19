@@ -17,7 +17,12 @@ import {
 import {
   CREATE_EXECUTION_EXTERNAL_HANDLES_V10,
   V10_SCHEMA_OBJECT_SQL,
+  V11_SCHEMA_OBJECT_SQL,
 } from '../../src/services/executionJournal/schemaDefinitions';
+import {
+  CREATE_EXECUTION_EFFECTS_V11,
+  CREATE_EXECUTION_EFFECTS_V7,
+} from '../../src/services/executionJournal/executionEffectSchema';
 import {
   DIGEST_C,
   DIGEST_D,
@@ -132,7 +137,54 @@ function seedPopulatedV8Database(database: SQLite.SQLiteDatabase): void {
   });
 }
 
+function downgradeExecutionEffectsToV11(database: SQLite.SQLiteDatabase): void {
+  const temporaryTable = 'execution_effects_v11';
+  const createTable = CREATE_EXECUTION_EFFECTS_V11.replace(
+    'CREATE TABLE execution_effects',
+    `CREATE TABLE ${temporaryTable}`,
+  );
+  database.execSync('PRAGMA foreign_keys = OFF');
+  database.execSync('PRAGMA legacy_alter_table = ON');
+  try {
+    database.execSync('BEGIN IMMEDIATE');
+    database.execSync(createTable);
+    database.execSync(
+      `INSERT INTO ${temporaryTable} (
+         id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
+         tool_contract_identity_digest, effect_class, idempotency_class,
+         idempotency_key_digest, request_digest, model_authority_valid_until,
+         outcome_digest, status, retry_policy, attempt, created_at, started_at,
+         completed_at, updated_at
+       )
+       SELECT id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
+              tool_contract_identity_digest, effect_class, idempotency_class,
+              idempotency_key_digest, request_digest, model_authority_valid_until,
+              outcome_digest, status, retry_policy, attempt, created_at, started_at,
+              completed_at, updated_at
+         FROM execution_effects`,
+    );
+    database.execSync('DROP TABLE execution_effects');
+    database.execSync(`ALTER TABLE ${temporaryTable} RENAME TO execution_effects`);
+    for (const name of EFFECT_INDEX_NAMES) {
+      const sql = V11_SCHEMA_OBJECT_SQL.get(name);
+      if (!sql) throw new Error(`test_fixture_v11_index_missing:${name}`);
+      database.execSync(sql);
+    }
+    database.execSync('PRAGMA user_version = 11');
+    database.execSync('COMMIT');
+  } catch (error) {
+    try {
+      database.execSync('ROLLBACK');
+    } catch {}
+    throw error;
+  } finally {
+    database.execSync('PRAGMA legacy_alter_table = OFF');
+    database.execSync('PRAGMA foreign_keys = ON');
+  }
+}
+
 function downgradeExternalHandlesToV10(database: SQLite.SQLiteDatabase): void {
+  downgradeExecutionEffectsToV11(database);
   const handles = database.getAllSync<Record<string, unknown>>(
     'SELECT * FROM execution_external_handles ORDER BY id',
   );
@@ -222,10 +274,10 @@ function downgradePopulatedFixtureToV7(database: SQLite.SQLiteDatabase): void {
   ) {
     throw new Error('test_fixture_missing_current_effect_authority_columns');
   }
-  const v7TableSql = currentTableSql
-    .replace('CREATE TABLE execution_effects', 'CREATE TABLE execution_effects_v7')
-    .replace(V9_MODEL_AUTHORITY_VALID_UNTIL_COLUMN_SQL, '')
-    .replace(V8_CONTRACT_IDENTITY_COLUMN_SQL, '');
+  const v7TableSql = CREATE_EXECUTION_EFFECTS_V7.replace(
+    'CREATE TABLE execution_effects',
+    'CREATE TABLE execution_effects_v7',
+  );
   const effectIndexes = database.getAllSync<{ name: string; sql: string }>(
     `SELECT name, sql FROM sqlite_master
      WHERE type = 'index' AND tbl_name = 'execution_effects'

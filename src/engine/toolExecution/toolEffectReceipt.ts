@@ -495,6 +495,9 @@ export async function buildToolEffectReceipt(
     contractIdentity.kind === 'runtime_external'
       ? {
           effectKind: 'unknown',
+          ...(params.transportState === 'returned'
+            ? { executionState: params.resultIsError ? ('failed' as const) : ('completed' as const) }
+            : {}),
           effectState:
             params.transportState === 'rejected'
               ? (params.terminalEffectState ?? 'failed')

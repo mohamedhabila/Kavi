@@ -72,6 +72,7 @@ export type AtomicEffectDispatchClaimResult =
 
 export type EffectDispatchReceiptDisposition =
   | 'verified'
+  | 'returned_unverified'
   | 'applied_unverified'
   | 'failed'
   | 'cancelled'
@@ -84,7 +85,7 @@ export interface EffectDispatchSettlementCandidate {
   receiptJson: string;
   nextEffectStatus: Extract<
     ExecutionEffectStatus,
-    'applied' | 'verified' | 'failed' | 'cancelled' | 'ambiguous'
+    'returned' | 'applied' | 'verified' | 'failed' | 'cancelled' | 'ambiguous'
   >;
   outcomeDigest: string;
   observedAt: number;
@@ -335,6 +336,20 @@ export function classifyEffectDispatchReceipt(
     case 'handed_off':
     case 'pending':
     case 'unknown':
+      if (
+        effectClass === 'unknown' &&
+        receipt.contractIdentity.kind === 'runtime_external' &&
+        receipt.transportState === 'returned' &&
+        receipt.executionState === 'completed' &&
+        receipt.effectKind === 'unknown' &&
+        receipt.verificationState === 'unverified'
+      ) {
+        return {
+          disposition: 'returned_unverified',
+          nextEffectStatus: 'returned',
+          requiresReconciliation: false,
+        };
+      }
       return {
         disposition: 'uncertain',
         nextEffectStatus: 'ambiguous',

@@ -1,5 +1,9 @@
 import type * as SQLite from 'expo-sqlite';
-import { CREATE_EXECUTION_EFFECTS, CREATE_EXECUTION_EFFECTS_V8 } from './executionEffectSchema';
+import {
+  CREATE_EXECUTION_EFFECTS,
+  CREATE_EXECUTION_EFFECTS_V11,
+  CREATE_EXECUTION_EFFECTS_V8,
+} from './executionEffectSchema';
 import {
   CREATE_EXECUTION_EFFECT_RECEIPTS,
   CREATE_EXECUTION_EFFECT_RECEIPT_UPDATE_GUARD,
@@ -10,6 +14,7 @@ import {
   TABLE_NAMES,
   TRIGGER_NAMES,
   V10_SCHEMA_OBJECT_SQL,
+  V11_SCHEMA_OBJECT_SQL,
   V7_SCHEMA_OBJECT_SQL,
   V8_SCHEMA_OBJECT_SQL,
   V9_SCHEMA_OBJECT_SQL,
@@ -21,7 +26,7 @@ import { qualifyExecutionExternalHandleLocator } from './externalLocators';
 /** Keep synchronous native lock contention bounded on the mobile JS thread. */
 export const EXECUTION_JOURNAL_BUSY_TIMEOUT_MS = 100;
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 11;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 12;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function pragmaNumber(database: SQLite.SQLiteDatabase, name: string): number {
@@ -218,7 +223,7 @@ function migrateV8ToV9(database: SQLite.SQLiteDatabase): void {
   assertNoForeignKeyViolations(database, 'execution_journal_v8_foreign_key_mismatch');
 
   const temporaryTable = 'execution_effects_v9';
-  const createTemporaryTable = CREATE_EXECUTION_EFFECTS.replace(
+  const createTemporaryTable = CREATE_EXECUTION_EFFECTS_V11.replace(
     'CREATE TABLE execution_effects',
     `CREATE TABLE ${temporaryTable}`,
   );
@@ -380,8 +385,8 @@ function migrateV10ToV11(database: SQLite.SQLiteDatabase): void {
       if (!sql) throw new Error(`execution_journal_v11_index_missing:${name}`);
       database.execSync(sql);
     }
-    database.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
-    assertExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 'execution_journal_schema');
+    database.execSync('PRAGMA user_version = 11');
+    assertExactSchemaObjects(database, V11_SCHEMA_OBJECT_SQL, 'execution_journal_v11_schema');
     assertNoForeignKeyViolations(database, 'execution_journal_v11_foreign_key_mismatch');
     database.execSync('COMMIT');
   } catch (error) {
@@ -389,6 +394,66 @@ function migrateV10ToV11(database: SQLite.SQLiteDatabase): void {
       database.execSync('ROLLBACK');
     } catch {
       // Preserve the migration error.
+    }
+    throw error;
+  } finally {
+    database.execSync('PRAGMA legacy_alter_table = OFF');
+    database.execSync('PRAGMA foreign_keys = ON');
+  }
+}
+
+function migrateV11ToV12(database: SQLite.SQLiteDatabase): void {
+  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
+    throw new Error('execution_journal_application_id_mismatch');
+  }
+  assertExactSchemaObjects(database, V11_SCHEMA_OBJECT_SQL, 'execution_journal_v11_schema');
+  assertNoForeignKeyViolations(database, 'execution_journal_v11_foreign_key_mismatch');
+
+  const temporaryTable = 'execution_effects_v12';
+  const createTemporaryTable = CREATE_EXECUTION_EFFECTS.replace(
+    'CREATE TABLE execution_effects',
+    `CREATE TABLE ${temporaryTable}`,
+  );
+  database.execSync('PRAGMA foreign_keys = OFF');
+  database.execSync('PRAGMA legacy_alter_table = ON');
+  try {
+    database.execSync('BEGIN IMMEDIATE');
+    database.execSync(createTemporaryTable);
+    database.execSync(
+      `INSERT INTO ${temporaryTable} (
+         id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
+         tool_contract_identity_digest, effect_class, idempotency_class,
+         idempotency_key_digest, request_digest, model_authority_valid_until,
+         outcome_digest, status, retry_policy, attempt, created_at, started_at,
+         completed_at, updated_at
+       )
+       SELECT id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
+              tool_contract_identity_digest, effect_class, idempotency_class,
+              idempotency_key_digest, request_digest, model_authority_valid_until,
+              outcome_digest, status, retry_policy, attempt, created_at, started_at,
+              completed_at, updated_at
+         FROM execution_effects`,
+    );
+    database.execSync('DROP TABLE execution_effects');
+    database.execSync(`ALTER TABLE ${temporaryTable} RENAME TO execution_effects`);
+    for (const name of [
+      'idx_execution_effects_run_status',
+      'idx_execution_effects_status_run',
+      'ux_execution_effects_idempotency_key',
+    ]) {
+      const sql = SCHEMA_OBJECT_SQL.get(name);
+      if (!sql) throw new Error(`execution_journal_v12_index_missing:${name}`);
+      database.execSync(sql);
+    }
+    database.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
+    assertExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 'execution_journal_schema');
+    assertNoForeignKeyViolations(database, 'execution_journal_v12_foreign_key_mismatch');
+    database.execSync('COMMIT');
+  } catch (error) {
+    try {
+      database.execSync('ROLLBACK');
+    } catch {
+      // Preserve the original migration error.
     }
     throw error;
   } finally {
@@ -423,6 +488,10 @@ export function ensureExecutionJournalSchema(database: SQLite.SQLiteDatabase): v
   }
   if (version === 10) {
     migrateV10ToV11(database);
+    version = 11;
+  }
+  if (version === 11) {
+    migrateV11ToV12(database);
     version = EXECUTION_JOURNAL_SCHEMA_VERSION;
   }
   if (version !== EXECUTION_JOURNAL_SCHEMA_VERSION) {

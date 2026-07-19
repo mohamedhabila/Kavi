@@ -121,6 +121,9 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
 };
 
 export function requiresActionApproval(toolName: string, args?: Record<string, unknown>): boolean {
+  if (toolName.startsWith('mcp__')) {
+    return true;
+  }
   if (DEFAULT_POLICY.alwaysApproveTools.includes(toolName)) {
     return true;
   }

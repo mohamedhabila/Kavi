@@ -114,6 +114,7 @@ export const EXECUTION_IDEMPOTENCY_CLASSES = [
 export const EXECUTION_EFFECT_STATUSES = [
   'planned',
   'started',
+  'returned',
   'applied',
   'verified',
   'failed',

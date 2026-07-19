@@ -25,6 +25,7 @@ import {
 } from './recoveryCoordinatorTypes';
 import {
   CREATE_EXECUTION_EFFECTS,
+  CREATE_EXECUTION_EFFECTS_V11,
   CREATE_EXECUTION_EFFECTS_V7,
   CREATE_EXECUTION_EFFECTS_V8,
 } from './executionEffectSchema';
@@ -402,7 +403,10 @@ export const SCHEMA_OBJECT_SQL = new Map<string, string>([
   ],
 ]);
 
-export const V10_SCHEMA_OBJECT_SQL = new Map(SCHEMA_OBJECT_SQL);
+export const V11_SCHEMA_OBJECT_SQL = new Map(SCHEMA_OBJECT_SQL);
+V11_SCHEMA_OBJECT_SQL.set('execution_effects', CREATE_EXECUTION_EFFECTS_V11);
+
+export const V10_SCHEMA_OBJECT_SQL = new Map(V11_SCHEMA_OBJECT_SQL);
 V10_SCHEMA_OBJECT_SQL.set('execution_external_handles', CREATE_EXECUTION_EXTERNAL_HANDLES_V10);
 V10_SCHEMA_OBJECT_SQL.delete('ux_execution_external_handles_locator');
 V10_SCHEMA_OBJECT_SQL.delete('ux_execution_external_handles_unresolved_mobile_run');

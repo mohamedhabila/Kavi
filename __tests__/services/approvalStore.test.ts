@@ -216,6 +216,19 @@ describe('needsApproval', () => {
     expect(needsApproval('read_file')).toBe(false);
   });
 
+  it('requires consent for each runtime MCP tool until that exact tool is allowlisted', () => {
+    const readTool = 'mcp__trip_ledger__get_trip_record';
+    const writeTool = 'mcp__trip_ledger__put_trip_note';
+
+    expect(needsApproval(readTool)).toBe(true);
+    expect(needsApproval(writeTool)).toBe(true);
+
+    useApprovalStore.getState().addToAllowlist(readTool);
+
+    expect(needsApproval(readTool)).toBe(false);
+    expect(needsApproval(writeTool)).toBe(true);
+  });
+
   it('returns true for non-auto-approved tools when global approval on', () => {
     useApprovalStore.getState().setPolicy({ requireApproval: true });
     expect(needsApproval('some_random_tool')).toBe(true);

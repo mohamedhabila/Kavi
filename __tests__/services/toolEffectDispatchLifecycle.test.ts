@@ -252,12 +252,14 @@ describe('authorized durable tool effect dispatch', () => {
       expect(first).toMatchObject({
         kind: 'executed',
         result: rawResult,
-        requiresReconciliation: true,
+        disposition: 'returned_unverified',
+        requiresReconciliation: false,
         executorThrew: false,
         receipt: {
           executionRunId: input.context.executionRunId,
           dispatchRunId: expect.stringMatching(/^effect-run-/u),
           effectKind: 'unknown',
+          executionState: 'completed',
           effectState: 'unknown',
           verificationState: 'unverified',
           contractIdentity: {
@@ -272,7 +274,7 @@ describe('authorized durable tool effect dispatch', () => {
           `SELECT r.status AS run_status, e.status AS effect_status
              FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
         ),
-      ).toEqual({ run_status: 'ambiguous', effect_status: 'ambiguous' });
+      ).toEqual({ run_status: 'succeeded', effect_status: 'returned' });
 
       await expect(
         readToolEffectRestartDisposition({
@@ -283,9 +285,8 @@ describe('authorized durable tool effect dispatch', () => {
           argumentsText: input.argumentsText,
         }),
       ).resolves.toEqual({
-        kind: 'reconciliation_required',
+        kind: 'terminal_without_verified_effect',
         observedAt: 100,
-        reason: 'ambiguous_effect',
       });
 
       const replayExecutor = jest.fn(async () => completedToolOutcome(rawResult));
@@ -299,7 +300,7 @@ describe('authorized durable tool effect dispatch', () => {
           }),
           { now: () => 101 },
         ),
-      ).resolves.toMatchObject({ kind: 'reconciliation_required' });
+      ).resolves.toMatchObject({ kind: 'blocked' });
       expect(replayExecutor).not.toHaveBeenCalled();
     },
   );
@@ -347,7 +348,7 @@ describe('authorized durable tool effect dispatch', () => {
         }),
         { now: () => 101 },
       ),
-    ).resolves.toMatchObject({ kind: 'reconciliation_required' });
+    ).resolves.toMatchObject({ kind: 'blocked' });
     expect(firstExecutor).toHaveBeenCalledTimes(1);
     expect(changedExecutor).not.toHaveBeenCalled();
   });

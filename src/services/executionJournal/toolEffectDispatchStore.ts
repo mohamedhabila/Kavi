@@ -285,7 +285,7 @@ function cancelUnclaimedDispatch(
 function runTerminalStatusFor(
   effectStatus: EffectDispatchSettlementCandidate['nextEffectStatus'],
 ): 'succeeded' | 'failed' | 'cancelled' | 'ambiguous' {
-  if (effectStatus === 'verified') return 'succeeded';
+  if (effectStatus === 'returned' || effectStatus === 'verified') return 'succeeded';
   if (effectStatus === 'failed') return 'failed';
   if (effectStatus === 'cancelled') return 'cancelled';
   return 'ambiguous';

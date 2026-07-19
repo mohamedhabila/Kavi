@@ -341,7 +341,9 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
       (transportState === 'rejected'
         ? effectState !== 'failed' && effectState !== 'cancelled'
         : effectState !== 'unknown') ||
-      executionState !== undefined ||
+      (transportState === 'returned'
+        ? executionState !== 'completed' && executionState !== 'failed'
+        : executionState !== undefined) ||
       resource !== undefined ||
       operationHandle !== undefined)
   ) {

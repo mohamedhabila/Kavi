@@ -27,7 +27,8 @@ const RUN_TRANSITIONS = {
 
 const EFFECT_TRANSITIONS = {
   planned: ['started'],
-  started: ['applied', 'failed', 'cancelled', 'ambiguous'],
+  started: ['returned', 'applied', 'failed', 'cancelled', 'ambiguous'],
+  returned: [],
   applied: ['verified', 'ambiguous'],
   verified: [],
   failed: [],

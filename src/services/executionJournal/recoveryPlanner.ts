@@ -130,6 +130,7 @@ const RUN_RECOVERY_CLASS = {
 const EFFECT_RECOVERY_CLASS = {
   planned: 'planned',
   started: 'uncertain',
+  returned: 'completed',
   applied: 'applied',
   verified: 'completed',
   failed: 'completed',

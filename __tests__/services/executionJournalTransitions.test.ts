@@ -67,7 +67,8 @@ describe('closed execution journal transition contracts', () => {
   it('matches the exhaustive effect transition matrix', () => {
     const expected = {
       planned: ['started'],
-      started: ['applied', 'failed', 'cancelled', 'ambiguous'],
+      started: ['returned', 'applied', 'failed', 'cancelled', 'ambiguous'],
+      returned: [],
       applied: ['verified', 'ambiguous'],
       verified: [],
       failed: [],
