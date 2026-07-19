@@ -527,6 +527,7 @@ describe('chatPersistence', () => {
         executionBindingDigest: `sha256:${'7'.repeat(64)}`,
       },
       effectKind: 'unknown',
+      executionState: 'completed',
       effectState: 'unknown',
       verificationState: 'unverified',
       resource: undefined,
