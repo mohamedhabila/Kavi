@@ -49,6 +49,9 @@ import {
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import { resolveMobileControllerRecoveryPreflight } from './mobileControllerRecoveryPolicy';
+import { buildMobileControllerGoalAdmissionBlock } from '../mobileController/goalAdmission';
+import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
+import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 
 type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
@@ -243,24 +246,6 @@ export async function executeAgentControlGraphToolTurn(
   let workingMessages = toolTurnPreparation.workingMessages;
   const warningInjectedThisRound = toolTurnPreparation.warningInjectedThisRound;
 
-  const mobileControllerRecoveryDecision =
-    executableToolCalls.length === 1
-      ? resolveMobileControllerRecoveryPreflight({
-          toolCall: executableToolCalls[0]!,
-          binding: params.mobileController,
-          directives: params.getGraphSnapshot().turnDirectives,
-        })
-      : { kind: 'not_applicable' as const };
-  const toolCallBlockers = new Map<string, string>();
-  if (mobileControllerRecoveryDecision.kind !== 'not_applicable') {
-    if (mobileControllerRecoveryDecision.kind === 'block') {
-      toolCallBlockers.set(
-        executableToolCalls[0]!.id,
-        mobileControllerRecoveryDecision.blocker,
-      );
-    }
-  }
-
   const effectGoalMaterialization = await materializeToolEffectCompletionGoals({
     toolCalls: executableToolCalls,
     goals: params.getGraphSnapshot().goals,
@@ -271,6 +256,25 @@ export async function executeAgentControlGraphToolTurn(
     effectGoalMaterialization.status === 'materialized'
       ? effectGoalMaterialization.goals
       : params.getGraphSnapshot().goals;
+  const isMobileControllerTurn =
+    executableToolCalls.length === 1 &&
+    resolveRegisteredToolName(executableToolCalls[0]!.name) === MOBILE_UI_ACTION_TOOL_NAME;
+  const mobileControllerAdmissionBlock =
+    isMobileControllerTurn
+      ? buildMobileControllerGoalAdmissionBlock(projectedControlGraphGoals)
+      : undefined;
+  const mobileControllerRecoveryDecision =
+    isMobileControllerTurn && !mobileControllerAdmissionBlock
+      ? resolveMobileControllerRecoveryPreflight({
+          toolCall: executableToolCalls[0]!,
+          binding: params.mobileController,
+          directives: params.getGraphSnapshot().turnDirectives,
+        })
+      : { kind: 'not_applicable' as const };
+  const toolCallBlockers = new Map<string, string>();
+  if (mobileControllerRecoveryDecision.kind === 'block') {
+    toolCallBlockers.set(executableToolCalls[0]!.id, mobileControllerRecoveryDecision.blocker);
+  }
 
   const toolExecutionOutcomes = await executeAgentControlGraphToolBatch({
     executableToolCalls,

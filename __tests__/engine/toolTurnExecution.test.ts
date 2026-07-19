@@ -25,6 +25,7 @@ import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAu
 import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileController/toolDefinition';
 import { createMobileControllerCapabilityFixture } from '../helpers/mobileControllerHandoffFixture';
 import { resolveMobileControllerRecoveryPreflight } from '../../src/engine/graph/mobileControllerRecoveryPolicy';
+import { createGoal } from '../../src/engine/goals/types';
 
 jest.mock('../../src/engine/loopDetection', () => {
   const actual = jest.requireActual('../../src/engine/loopDetection');
@@ -480,7 +481,22 @@ describe('toolTurnExecution', () => {
     }
     const strategyFingerprint = initial.directives.mobileControllerRecovery.strategyFingerprint;
     const snapshot = {
-      goals: [],
+      goals: [
+        createGoal({
+          id: 'mobile-recovery-goal',
+          title: 'Complete the requested device task',
+          status: 'active',
+          completionPolicy: 'blocking',
+          successCriteria: ['evidence.tool:mobile_ui_action'],
+          userConstraints: [
+            {
+              text: 'Update the device according to my request.',
+              sourceMessageId: 'user-message-1',
+            },
+          ],
+          now: 100,
+        }),
+      ],
       turnDirectives: {
         forceFinalText: false,
         requireWorkflowTool: false,
@@ -510,7 +526,6 @@ describe('toolTurnExecution', () => {
       recordTurnDirectives,
       mobileController: { capability, currentObservation },
     });
-
     await executeAgentControlGraphToolTurn(params);
 
     expect(recordTurnDirectives).toHaveBeenCalledWith(
@@ -523,6 +538,56 @@ describe('toolTurnExecution', () => {
       'mobile_controller_strategy_change_required',
     );
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not arm controller recovery when graph admission rejects the action', async () => {
+    mockedDetectLoops.mockReturnValue({ loopDetected: false });
+    mockedExecuteToolExecutionBatch.mockResolvedValue([
+      {
+        index: 0,
+        toolCallId: 'mobile-before-goal',
+        toolMessage: {
+          id: 'blocked-mobile-admission',
+          role: 'tool',
+          content: '{"code":"mobile_controller_goal_required"}',
+          toolCallId: 'mobile-before-goal',
+          timestamp: 1001,
+          isError: true,
+        },
+      },
+    ]);
+    const capability = createMobileControllerCapabilityFixture();
+    const currentObservation = {
+      observationId: 'observation-1',
+      digest: `sha256:${'a'.repeat(64)}` as const,
+    };
+    const params = createParams({
+      groundedRequestScopedTools: [MOBILE_UI_ACTION_TOOL_DEFINITION],
+      pendingToolCalls: [
+        {
+          id: 'mobile-before-goal',
+          name: 'mobile_ui_action',
+          arguments: JSON.stringify({ kind: 'back' }),
+        },
+      ],
+      getGraphSnapshot: () =>
+        ({
+          goals: [],
+          turnDirectives: {
+            forceFinalText: false,
+            requireWorkflowTool: false,
+            incompleteFinalTextRecoveryCount: 0,
+          },
+        }) as any,
+      mobileController: { capability, currentObservation },
+    });
+
+    await executeAgentControlGraphToolTurn(params);
+
+    expect(params.recordTurnDirectives).not.toHaveBeenCalledWith(
+      expect.objectContaining({ mobileControllerRecovery: expect.anything() }),
+      expect.any(String),
+    );
   });
 
   it('records stagnation signatures after successful tool execution', async () => {
