@@ -1,6 +1,4 @@
-import {
-  TOOL_CATALOG_AVAILABLE_CATEGORIES,
-} from './builtin-tool-catalogConfig';
+import { TOOL_CATALOG_AVAILABLE_CATEGORIES } from './builtin-tool-catalogConfig';
 import type {
   ExecuteToolCatalogOptions,
   ToolCatalogSearchToolEntry,
@@ -159,13 +157,27 @@ export function buildToolCatalogSearchResponse(params: {
     category,
     options: params.options,
   });
-  if (searchResult.tools.length === 0 && capabilities.length > 0 && (query || category)) {
+  if (searchResult.tools.length === 0 && capabilities.length > 0 && query && !category) {
     searchResult = searchToolCatalogEntriesWithMetadata({
       capabilities,
       options: params.options,
     });
   }
   const tools = searchResult.tools;
+  const suggestedCategories =
+    category && tools.length === 0
+      ? Array.from(
+          new Set(
+            searchToolCatalogEntriesWithMetadata({
+              query,
+              capabilities,
+              options: params.options,
+            }).tools.map((tool) => tool.category),
+          ),
+        )
+          .filter((candidate) => candidate !== category)
+          .slice(0, 5)
+      : [];
   const projectedTools = tools.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -188,6 +200,14 @@ export function buildToolCatalogSearchResponse(params: {
       ? {
           relaxedFilters: ['capabilities'],
           relaxationReason: 'query_or_workflow_match_without_all_requested_capabilities',
+        }
+      : {}),
+    ...(category && tools.length === 0
+      ? {
+          recovery: {
+            searchWithoutCategory: true,
+            suggestedCategories,
+          },
         }
       : {}),
     tools: projectedTools,
@@ -228,10 +248,7 @@ function searchInitialCatalogEntries(
       searchIndex.some((entry) => entry.name.toLowerCase() === token),
     ),
   );
-  if (
-    exactIdentifierTokens.size > 1 &&
-    exactIdentifierTokens.size === params.queryTokens.length
-  ) {
+  if (exactIdentifierTokens.size > 1 && exactIdentifierTokens.size === params.queryTokens.length) {
     return searchIndex.filter(
       (entry) =>
         exactIdentifierTokens.has(entry.name.toLowerCase()) &&

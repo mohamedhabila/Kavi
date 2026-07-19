@@ -480,6 +480,121 @@ describe('builtin executor tool catalog', () => {
       expect(result.tools.every((tool: any) => tool.category === 'mcp')).toBe(true);
     });
 
+    it('keeps an empty dynamic category search inside its requested boundary', async () => {
+      const { mcpManager } = require('../../src/services/mcp/manager');
+
+      mcpManager.getAllStatuses.mockReturnValue([
+        {
+          id: 'trip-ledger',
+          name: 'Trip Ledger',
+          state: 'connected',
+          tools: [
+            {
+              name: 'get_trip_record',
+              description: 'Read one booking record',
+              inputSchema: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseCompletedToolOutcome(
+        await executeToolCatalog({
+          category: 'skills',
+          query: 'Trip Ledger booking pickup note',
+          capabilities: ['discover', 'read', 'write'],
+        }),
+      );
+
+      expect(result).toMatchObject({
+        mode: 'search',
+        category: 'skills',
+        tools: [],
+        totalMatches: 0,
+        recovery: {
+          searchWithoutCategory: true,
+          suggestedCategories: expect.arrayContaining(['mcp']),
+        },
+      });
+    });
+
+    it('preserves trusted MCP contracts while searching dynamic tools', async () => {
+      const { mcpManager } = require('../../src/services/mcp/manager');
+
+      mcpManager.getAllStatuses.mockReturnValue([
+        {
+          id: 'trip-ledger',
+          name: 'Trip Ledger',
+          state: 'connected',
+          tools: [
+            { name: 'get_trip_record', description: 'Read one booking record' },
+            { name: 'put_trip_note', description: 'Update one booking note' },
+          ],
+        },
+      ]);
+      mcpManager.getAllToolDefinitions.mockReturnValue([
+        {
+          name: 'mcp__trip-ledger__get_trip_record',
+          description: '[Trip Ledger] Read one booking record',
+          input_schema: { type: 'object', properties: {} },
+          contract: {
+            category: 'mcp',
+            capabilities: ['read'],
+            resourceKinds: ['unknown'],
+            sideEffects: ['none'],
+            riskHints: ['trusted_metadata', 'read_only'],
+            workflowStages: ['inspect_resource'],
+          },
+        },
+        {
+          name: 'mcp__trip-ledger__put_trip_note',
+          description: '[Trip Ledger] Update one booking note',
+          input_schema: { type: 'object', properties: {} },
+          contract: {
+            category: 'mcp',
+            capabilities: ['write'],
+            resourceKinds: ['unknown'],
+            sideEffects: ['remote_mutation'],
+            riskHints: ['trusted_metadata', 'idempotent'],
+            workflowStages: ['mutate_remote_state'],
+          },
+        },
+      ]);
+
+      const result = parseCompletedToolOutcome(
+        await executeToolCatalog({
+          category: 'mcp',
+          query: 'Trip Ledger booking',
+          capabilities: ['write'],
+        }),
+      );
+
+      expect(result.relaxedFilters).toEqual(['capabilities']);
+      expect(result.tools).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'mcp__trip-ledger__get_trip_record',
+            category: 'mcp',
+            capabilitySummary: expect.objectContaining({
+              capabilities: ['read'],
+              sideEffects: ['none'],
+              workflowStages: ['inspect_resource'],
+            }),
+          }),
+          expect.objectContaining({
+            name: 'mcp__trip-ledger__put_trip_note',
+            category: 'mcp',
+            capabilitySummary: expect.objectContaining({
+              capabilities: ['write'],
+              resourceKinds: ['unknown'],
+              sideEffects: ['remote_mutation'],
+              workflowStages: ['mutate_remote_state'],
+            }),
+          }),
+        ]),
+      );
+    });
+
     it('marks MCP catalog results discoverable when the current tool policy hides dynamic tools', async () => {
       const { mcpManager } = require('../../src/services/mcp/manager');
 

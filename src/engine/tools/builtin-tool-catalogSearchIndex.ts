@@ -1,6 +1,10 @@
 import { TOOL_CATALOG_CATEGORIES } from './builtin-tool-catalogConfig';
 import { buildCapabilitySummary } from './builtin-tool-catalogCapabilitySummary';
-import { getDynamicMcpCatalog, getDynamicSkillCatalog } from './builtin-tool-catalogDynamic';
+import {
+  getDynamicMcpCatalog,
+  getDynamicMcpToolDefinitions,
+  getDynamicSkillCatalog,
+} from './builtin-tool-catalogDynamic';
 import type {
   ExecuteToolCatalogOptions,
   ToolCatalogActivation,
@@ -98,9 +102,12 @@ function buildStaticCatalogSearchEntries(
 function buildDynamicCatalogSearchEntries(
   options?: ExecuteToolCatalogOptions,
 ): CatalogSearchableEntry[] {
+  const mcpDefinitions = getDynamicMcpToolDefinitions();
   return [
     ...getDynamicMcpCatalog().tools.map((tool) => {
-      const descriptor = inferToolCapabilityDescriptor(tool);
+      const definition = mcpDefinitions.get(tool.name);
+      const describedTool = definition ?? tool;
+      const descriptor = inferToolCapabilityDescriptor(describedTool);
       const capabilities = descriptor.capabilities;
       return {
         name: tool.name,
@@ -110,7 +117,7 @@ function buildDynamicCatalogSearchEntries(
         schemaVersion: TOOL_CATALOG_ENTRY_SCHEMA_VERSION,
         ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
         serverName: tool.serverName,
-        capabilitySummary: buildCapabilitySummary(tool),
+        capabilitySummary: buildCapabilitySummary(describedTool),
         activation: buildToolCatalogActivation(tool.name, options),
         searchTokens: buildSearchTokens({
           name: tool.name,
@@ -126,6 +133,7 @@ function buildDynamicCatalogSearchEntries(
           produces: descriptor.produces,
           consumes: descriptor.consumes,
           precedes: descriptor.precedes,
+          inputSchema: definition?.input_schema,
         }),
         capabilityTokens: new Set(capabilities.map((capability) => capability.toLowerCase())),
         resourceKindTokens: new Set(

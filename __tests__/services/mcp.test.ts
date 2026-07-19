@@ -78,7 +78,12 @@ describe('mcpToolToDefinition', () => {
 
     expect(mcpToolToDefinition(entry).contract).toBeUndefined();
     expect(mcpToolToDefinition({ ...entry, trustToolAnnotations: true }).contract).toEqual({
+      category: 'mcp',
+      capabilities: ['read'],
+      resourceKinds: ['unknown'],
       sideEffects: ['none'],
+      riskHints: ['trusted_metadata', 'read_only'],
+      workflowStages: ['inspect_resource'],
     });
   });
 
@@ -96,8 +101,12 @@ describe('mcpToolToDefinition', () => {
     });
 
     expect(definition.contract).toEqual({
+      category: 'mcp',
+      capabilities: ['write'],
+      resourceKinds: ['unknown'],
       sideEffects: ['destructive'],
-      riskHints: ['idempotent'],
+      riskHints: ['trusted_metadata', 'destructive', 'idempotent'],
+      workflowStages: ['mutate_remote_state'],
     });
   });
 

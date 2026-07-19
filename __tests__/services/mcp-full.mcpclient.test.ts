@@ -370,7 +370,14 @@ describe('McpConnectionManager', () => {
         toolAnnotationsTrusted: true,
       }),
     );
-    expect(binding?.declaration.contract).toEqual({ sideEffects: ['none'] });
+    expect(binding?.declaration.contract).toEqual({
+      category: 'mcp',
+      capabilities: ['read'],
+      resourceKinds: ['unknown'],
+      sideEffects: ['none'],
+      riskHints: ['trusted_metadata', 'read_only'],
+      workflowStages: ['inspect_resource'],
+    });
     const serialized = JSON.stringify(binding?.provenance);
     expect(serialized).not.toContain('user');
     expect(serialized).not.toContain('password');

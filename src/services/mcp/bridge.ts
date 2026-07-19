@@ -34,6 +34,29 @@ function normalizeMcpInputSchema(schema: unknown): ToolDefinition['input_schema'
   return normalizeToolInputSchema(schema);
 }
 
+function buildTrustedMcpContract(
+  annotations: NonNullable<McpToolInfo['annotations']>,
+): NonNullable<ToolDefinition['contract']> {
+  const readOnly = annotations.readOnlyHint === true;
+  const destructive = !readOnly && annotations.destructiveHint !== false;
+  const riskHints = [
+    'trusted_metadata',
+    ...(readOnly ? ['read_only'] : []),
+    ...(destructive ? ['destructive'] : []),
+    ...(!readOnly && annotations.idempotentHint === true ? ['idempotent'] : []),
+    ...(annotations.openWorldHint === true ? ['open_world'] : []),
+  ];
+
+  return {
+    category: 'mcp',
+    capabilities: [readOnly ? 'read' : 'write'],
+    resourceKinds: ['unknown'],
+    sideEffects: readOnly ? ['none'] : [destructive ? 'destructive' : 'remote_mutation'],
+    riskHints,
+    workflowStages: [readOnly ? 'inspect_resource' : 'mutate_remote_state'],
+  };
+}
+
 export interface McpToolExecutionOptions {
   isToolAllowed?: (serverId: string, toolName: string) => boolean;
   signal?: AbortSignal;
@@ -45,17 +68,7 @@ export interface McpToolExecutionOptions {
 export function mcpToolToDefinition(entry: McpToolEntry): ToolDefinition {
   const schema = normalizeMcpInputSchema(entry.tool.inputSchema);
   const annotations = entry.trustToolAnnotations ? entry.tool.annotations : undefined;
-  const contract = annotations
-    ? {
-        sideEffects:
-          annotations.readOnlyHint === true
-            ? ['none']
-            : [annotations.destructiveHint === false ? 'remote_mutation' : 'destructive'],
-        ...(annotations.readOnlyHint !== true && annotations.idempotentHint === true
-          ? { riskHints: ['idempotent'] }
-          : {}),
-      }
-    : undefined;
+  const contract = annotations ? buildTrustedMcpContract(annotations) : undefined;
   return {
     name: `mcp__${entry.serverId}__${entry.tool.name}`,
     description: `[${entry.serverName}] ${entry.tool.description ?? entry.tool.name}`,

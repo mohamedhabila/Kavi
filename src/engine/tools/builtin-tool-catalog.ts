@@ -9,7 +9,11 @@ import {
 } from './builtin-tool-catalogBrowseExecution';
 import { inferToolCapabilityDescriptor } from './capabilityRegistry';
 import { buildCapabilitySummary } from './builtin-tool-catalogCapabilitySummary';
-import { getDynamicMcpCatalog, getDynamicSkillCatalog } from './builtin-tool-catalogDynamic';
+import {
+  getDynamicMcpCatalog,
+  getDynamicMcpToolDefinitions,
+  getDynamicSkillCatalog,
+} from './builtin-tool-catalogDynamic';
 import {
   buildToolCatalogActivation,
   buildToolCatalogSearchResponse,
@@ -74,10 +78,12 @@ function getGithubCapabilityTools(options: {
   availableToolNames?: ReadonlySet<string>;
   visibleToolNames?: ReadonlySet<string>;
 }) {
+  const mcpDefinitions = getDynamicMcpToolDefinitions();
   const githubMcpTools = options.mcpCatalog.tools
     .filter((tool) => options.visibleToolNames?.has(tool.name) ?? true)
-    .filter((tool) => inferToolCapabilityDescriptor(tool).category === 'github')
-    .map((tool) => ({
+    .map((tool) => ({ tool, definition: mcpDefinitions.get(tool.name) ?? tool }))
+    .filter(({ definition }) => inferToolCapabilityDescriptor(definition).category === 'github')
+    .map(({ tool, definition }) => ({
       name: tool.name,
       description: tool.description,
       category: 'github' as const,
@@ -85,7 +91,7 @@ function getGithubCapabilityTools(options: {
       schemaVersion: TOOL_CATALOG_ENTRY_SCHEMA_VERSION,
       purpose: TOOL_CATALOG_CATEGORIES.github.purpose,
       serverName: tool.serverName,
-      capabilitySummary: buildCapabilitySummary(tool),
+      capabilitySummary: buildCapabilitySummary(definition),
       activation: buildToolCatalogActivation(tool.name, {
         availableToolNames: options.availableToolNames,
       }),

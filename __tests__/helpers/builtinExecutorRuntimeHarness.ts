@@ -228,6 +228,7 @@ jest.mock('../../src/engine/tools/definitions', () => ({
 jest.mock('../../src/services/mcp/manager', () => ({
   mcpManager: {
     getAllStatuses: jest.fn().mockReturnValue([]),
+    getAllToolDefinitions: jest.fn().mockReturnValue([]),
   },
 }));
 
@@ -327,6 +328,17 @@ export function installBuiltinExecutorRuntimeReset(): void {
       }),
     });
     mcpManager.getAllStatuses.mockReturnValue([]);
+    mcpManager.getAllToolDefinitions.mockImplementation(() =>
+      mcpManager.getAllStatuses().flatMap((status: any) =>
+        status.state === 'connected'
+          ? status.tools.map((tool: any) => ({
+              name: `mcp__${status.id}__${tool.name}`,
+              description: `[${status.name}] ${tool.description ?? tool.name}`,
+              input_schema: tool.inputSchema,
+            }))
+          : [],
+      ),
+    );
     useSkillsStore.getState.mockReturnValue({
       getEnabled: () => [],
     });

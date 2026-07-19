@@ -6,7 +6,11 @@ import {
 } from '../../services/skills/manager';
 import type { SkillEntry } from '../../services/skills/types';
 import { buildToolSchemaDigest } from './builtin-tool-schemaDigest';
-import type { ToolCatalogMcpCatalog, ToolCatalogSkillCatalog } from './builtin-tool-catalogTypes';
+import type {
+  ToolCatalogDescribedTool,
+  ToolCatalogMcpCatalog,
+  ToolCatalogSkillCatalog,
+} from './builtin-tool-catalogTypes';
 
 function slugifyCatalogValue(value: string | undefined): string {
   const normalized = (value || '')
@@ -23,23 +27,35 @@ function getSkillCatalogLocation(entry: SkillEntry): string {
   return `skills/${managedDir}/SKILL.md`;
 }
 
+function hasDynamicMcpToolDefinitionSource(): boolean {
+  return (
+    typeof (
+      mcpManager as {
+        getAllToolDefinitions?: () => ToolCatalogDescribedTool[];
+      }
+    ).getAllToolDefinitions === 'function'
+  );
+}
+
+export function getDynamicMcpToolDefinitions(): ReadonlyMap<string, ToolCatalogDescribedTool> {
+  const getAllToolDefinitions = (
+    mcpManager as {
+      getAllToolDefinitions?: () => ToolCatalogDescribedTool[];
+    }
+  ).getAllToolDefinitions;
+  return new Map(
+    typeof getAllToolDefinitions === 'function'
+      ? getAllToolDefinitions.call(mcpManager).map((tool) => [tool.name, tool])
+      : [],
+  );
+}
+
 export function getDynamicMcpCatalog(): ToolCatalogMcpCatalog {
   const statuses = mcpManager.getAllStatuses();
-  const definitionNames =
-    typeof (mcpManager as { getAllToolDefinitions?: () => Array<{ name: string }> })
-      .getAllToolDefinitions === 'function'
-      ? new Set(mcpManager.getAllToolDefinitions().map((tool) => tool.name))
-      : null;
-  const definitionByName =
-    typeof (mcpManager as {
-      getAllToolDefinitions?: () => Array<{ name: string; input_schema?: unknown }>;
-    }).getAllToolDefinitions === 'function'
-      ? new Map(
-          mcpManager
-            .getAllToolDefinitions()
-            .map((tool) => [tool.name, tool as { name: string; input_schema?: unknown }]),
-        )
-      : new Map<string, { name: string; input_schema?: unknown }>();
+  const definitionByName = getDynamicMcpToolDefinitions();
+  const definitionNames = hasDynamicMcpToolDefinitionSource()
+    ? new Set(definitionByName.keys())
+    : null;
   const isToolVisible = (toolName: string): boolean => {
     if (definitionNames && !definitionNames.has(toolName)) {
       return false;
