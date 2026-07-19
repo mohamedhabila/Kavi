@@ -1,4 +1,4 @@
-import type { AgentGoal } from './types';
+import { isBlockingGoal, type AgentGoal } from './types';
 import {
   extractJsonPayloadFromEvidenceEntry,
   readJsonFieldAtPath,
@@ -314,6 +314,18 @@ export function areGoalSuccessCriteriaSatisfied(
     updatedAt: 0,
   };
   return criteria.every((criterion) => isSuccessCriterionMet(hypotheticalGoal, criterion));
+}
+
+export function areBlockingGoalsStructurallyComplete(
+  goals: ReadonlyArray<AgentGoal>,
+): boolean {
+  return goals.every(
+    (goal) =>
+      !isBlockingGoal(goal) ||
+      (goal.status === 'completed' &&
+        (goal.successCriteria?.length ?? 0) > 0 &&
+        areGoalSuccessCriteriaSatisfied(goal)),
+  );
 }
 
 export function evaluateGoalEvidenceGaps(goals: ReadonlyArray<AgentGoal>): GoalEvidenceGap[] {

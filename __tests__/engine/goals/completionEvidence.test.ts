@@ -1,4 +1,5 @@
 import {
+  areBlockingGoalsStructurallyComplete,
   buildMissingRequiredEvidenceLabels,
   evaluateGoalEvidenceGaps,
   formatModelAuthoredSuccessCriteriaFormsDescription,
@@ -324,6 +325,23 @@ describe('completionEvidence', () => {
         'evidence.exit_code:0',
       ),
     ).toBe(false);
+  });
+
+  it('revalidates completed blocking goals at terminal authority boundaries', () => {
+    const satisfied = createGoal({
+      id: 'satisfied',
+      title: 'Persist the artifact',
+      status: 'completed',
+      completionPolicy: 'blocking',
+      successCriteria: ['evidence.artifact:artifacts/out.txt'],
+      evidence: [verifiedArtifactEvidence()],
+    });
+    const missingEvidence = { ...satisfied, id: 'missing-evidence', evidence: [] };
+    const missingCriteria = { ...satisfied, id: 'missing-criteria', successCriteria: [] };
+
+    expect(areBlockingGoalsStructurallyComplete([satisfied])).toBe(true);
+    expect(areBlockingGoalsStructurallyComplete([missingEvidence])).toBe(false);
+    expect(areBlockingGoalsStructurallyComplete([missingCriteria])).toBe(false);
   });
 
   it('ignores completed goals and satisfied criteria', () => {

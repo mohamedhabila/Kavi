@@ -1,5 +1,5 @@
 import { readPendingGoalUserConstraintDelivery } from '../goals/userConstraintFinalDelivery';
-import { hasIncompleteBlockingGoals } from '../goals/types';
+import { areBlockingGoalsStructurallyComplete } from '../goals/completionEvidence';
 import {
   buildAgentRunMessageScope,
   getLatestAssistantProjectionFinalResponsePreview,
@@ -83,7 +83,7 @@ export function buildAgentControlGraphAfterPersistedFinalDelivery(params: {
   if (
     !graph ||
     !isAgentControlGraphAtPersistedFinalDeliveryBoundary(graph) ||
-    hasIncompleteBlockingGoals(graph.goals ?? [])
+    !areBlockingGoalsStructurallyComplete(graph.goals ?? [])
   ) {
     return undefined;
   }

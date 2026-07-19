@@ -379,7 +379,7 @@ describe('useChatStore', () => {
               title: 'Deliver verified result',
               status: 'completed',
               dependencies: [],
-              evidence: ['verified'],
+              evidence: ['read_file:{"status":"completed"}'],
               successCriteria: ['evidence.tool:read_file'],
               completionPolicy: 'blocking',
               userConstraints: [

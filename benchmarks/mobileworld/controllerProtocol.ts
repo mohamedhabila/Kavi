@@ -5,6 +5,7 @@ import type {
   MobileControllerOutcome,
   MobileControllerTarget,
 } from '../../src/engine/mobileController/contracts';
+import { MOBILE_UI_ACTION_TOOL_NAME } from '../../src/engine/mobileController/contracts';
 import type { MobileControllerPublishedHandoff } from '../../src/engine/mobileController/publication';
 import {
   qualifyMobileControllerCapability,
@@ -13,6 +14,14 @@ import {
 } from '../../src/engine/mobileController/validation';
 import type { ToolEffectDigest } from '../../src/types/toolEffectReceipt';
 import type { Conversation } from '../../src/types/conversation';
+import { areBlockingGoalsStructurallyComplete } from '../../src/engine/goals/completionEvidence';
+import { parseToolEffectReceiptEvidence } from '../../src/engine/goals/effectCompletionEvidence';
+import { isBlockingGoal } from '../../src/engine/goals/types';
+import {
+  buildAgentRunMessageScope,
+  getAgentRunMessageSlice,
+  getLatestAssistantProjectionFinalResponse,
+} from '../../src/services/agents/lifecycle/agentRunStateMachine';
 import { sha256HexUtf8Async } from '../../src/utils/sha256Async';
 
 export const MOBILEWORLD_COORDINATE_SCALE = 1_000;
@@ -209,14 +218,12 @@ export function resolveMobileWorldBridgeEvent(input: {
   }
   const run = input.conversation.agentRuns?.find((candidate) => candidate.id === input.agentRunId);
   if (!run) throw new Error('mobileworld_agent_run_unavailable');
-  const finalAssistant = [...input.conversation.messages]
-    .reverse()
-    .find(
-      (message) =>
-        message.role === 'assistant' &&
-        message.assistantMetadata?.kind === 'final' &&
-        message.content.trim(),
-    );
+  const runScope = buildAgentRunMessageScope(run);
+  const runMessages = getAgentRunMessageSlice(input.conversation.messages, runScope);
+  const finalAssistant = getLatestAssistantProjectionFinalResponse(
+    input.conversation.messages,
+    runScope,
+  );
   if (finalAssistant?.assistantMetadata?.finishReason === 'request_clarification') {
     return { kind: 'ask_user', text: finalAssistant.content.trim() };
   }
@@ -226,10 +233,35 @@ export function resolveMobileWorldBridgeEvent(input: {
   if (run.status !== 'completed' || !finalAssistant) {
     throw new Error('mobileworld_agent_run_has_no_host_event');
   }
-  const performedMobileAction = input.conversation.messages.some((message) =>
-    message.toolCalls?.some((call) => call.name === 'mobile_ui_action'),
+  const performedMobileAction = runMessages.some((message) =>
+    message.toolCalls?.some((call) => call.name === MOBILE_UI_ACTION_TOOL_NAME),
   );
-  return performedMobileAction
+  if (!performedMobileAction) {
+    return { kind: 'answer', text: finalAssistant.content.trim() };
+  }
+
+  const blockingGoals = (run.controlGraph?.goals ?? []).filter(isBlockingGoal);
+  const goalsAreStructurallyComplete =
+    run.controlGraph?.status === 'finalized' &&
+    blockingGoals.length > 0 &&
+    areBlockingGoalsStructurallyComplete(blockingGoals);
+  if (!goalsAreStructurallyComplete) {
+    return { kind: 'status', goalStatus: 'infeasible' };
+  }
+
+  const hasVerifiedGoalEffect = blockingGoals.some((goal) =>
+    goal.evidence.some((entry) => {
+      const receipt = parseToolEffectReceiptEvidence(entry);
+      return (
+        receipt !== null &&
+        receipt.toolName !== MOBILE_UI_ACTION_TOOL_NAME &&
+        receipt.transportState === 'returned' &&
+        receipt.effectState === 'applied' &&
+        receipt.verificationState === 'verified'
+      );
+    }),
+  );
+  return hasVerifiedGoalEffect
     ? { kind: 'status', goalStatus: 'complete' }
     : { kind: 'answer', text: finalAssistant.content.trim() };
 }

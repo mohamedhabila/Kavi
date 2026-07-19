@@ -171,6 +171,7 @@ describe('persisted final delivery graph boundary', () => {
         status: 'active',
         completionPolicy: 'blocking',
         successCriteria: ['evidence.tool:read_file'],
+        evidence: ['read_file:{"status":"completed"}'],
         userConstraints: [{ text: 'Reply in Dutch.', sourceMessageId: 'user-1' }],
         now: 1,
       }),
