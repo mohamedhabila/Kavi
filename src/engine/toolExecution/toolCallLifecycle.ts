@@ -358,7 +358,7 @@ export async function executeToolCallLifecycle(
     );
     effectDispatchObservation = execution.effectDispatchObservation;
     resolvedEffectFreeInvocation =
-      effectFreeInvocation || execution.effectDispatchObservation.kind === 'not_applicable';
+      effectFreeInvocation || effectDispatchObservation?.kind === 'not_applicable';
     if (execution.status === 'deferred') {
       recordLifecyclePerformanceMetrics({
         enabled: params.usePerformanceMetrics,
