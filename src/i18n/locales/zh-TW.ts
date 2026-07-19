@@ -311,6 +311,9 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     serverLegacySseUrlPlaceholder: 'https://mcp-server.example.com/sse',
     mcpMetadata: '連線中繼資料',
     mcpManualServerHint: '手動伺服器完全由你自行管理。連線前請檢查 URL、標頭、權杖與 OAuth 設定。',
+    mcpTrustToolAnnotations: '信任工具安全提示',
+    mcpTrustToolAnnotationsHint:
+      '僅對你信任的伺服器啟用。其唯讀與重試提示將影響復原決策。',
     mcpOAuthSessionSaved: 'OAuth 工作階段已儲存',
     mcpResetOAuthSession: '重設 OAuth 工作階段',
     mcpResetOAuthSessionConfirm: '要清除此 MCP 伺服器已儲存的 OAuth 權杖嗎？',

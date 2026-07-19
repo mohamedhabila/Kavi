@@ -4,6 +4,14 @@ export interface McpToolSchema {
   inputSchema: any;
 }
 
+export interface McpToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 export interface McpOAuthConfig {
   clientId?: string;
   clientSecretRef?: string;
@@ -45,6 +53,8 @@ export interface McpServerConfig {
   tools: McpToolSchema[];
   allowedTools: string[];
   autoApprovedTools?: string[];
+  /** User decision to trust this exact server's MCP tool-effect annotations. */
+  trustToolAnnotations?: boolean;
   trust?: McpTrustMetadata;
   capabilities?: McpCapabilityMetadata;
 }

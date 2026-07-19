@@ -255,6 +255,7 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
       tools: [],
       allowedTools: [],
       trust: { source: 'manual' },
+      trustToolAnnotations: true,
     };
 
     try {

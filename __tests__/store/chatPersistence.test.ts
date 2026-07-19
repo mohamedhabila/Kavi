@@ -519,10 +519,11 @@ describe('chatPersistence', () => {
       toolName,
       contractIdentity: {
         kind: 'runtime_external',
-        version: 1,
+        version: 2,
         toolName,
         source: 'mcp',
         namespace: 'calendar',
+        effectClass: 'unknown',
         declarationDigest: `sha256:${'6'.repeat(64)}`,
         executionBindingDigest: `sha256:${'7'.repeat(64)}`,
       },

@@ -32,13 +32,13 @@ class MockEventSource {
 jest.mock('../../src/services/events/bus', () => ({
   emitMcpEvent: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../../src/services/mcp/bridge', () => ({
-  mcpToolToDefinition: jest.fn((entry: any) => ({
-    name: `mcp__${entry.serverId}__${entry.tool.name}`,
-    description: entry.tool.description || '',
-    input_schema: entry.tool.inputSchema || {},
-  })),
-}));
+jest.mock('../../src/services/mcp/bridge', () => {
+  const actual = jest.requireActual('../../src/services/mcp/bridge');
+  return {
+    ...actual,
+    mcpToolToDefinition: jest.fn(actual.mcpToolToDefinition),
+  };
+});
 
 describe('McpClient', () => {
   let client: McpClient;
@@ -337,6 +337,7 @@ describe('McpConnectionManager', () => {
               name: 'echo',
               description: 'Echo',
               inputSchema: { type: 'object', properties: {} },
+              annotations: { readOnlyHint: true },
             },
           ],
         },
@@ -350,9 +351,13 @@ describe('McpConnectionManager', () => {
       url: 'https://user:password@mcp.example.com/private?token=query-secret#fragment',
       token: 'config-secret',
       headers: { Authorization: 'Bearer header-secret' },
+      trustToolAnnotations: true,
       enabled: true,
     });
 
+    expect(mcpManager.getStatus('secret-target')?.tools[0]?.annotations).toEqual({
+      readOnlyHint: true,
+    });
     const binding = mcpManager.captureRuntimeToolBinding('secret-target', 'echo');
     expect(binding).toBeDefined();
     expect(binding?.provenance).toEqual(
@@ -362,8 +367,10 @@ describe('McpConnectionManager', () => {
         connectionGeneration: expect.any(Number),
         toolRegistryGeneration: expect.any(Number),
         targetIdentity: 'https://mcp.example.com',
+        toolAnnotationsTrusted: true,
       }),
     );
+    expect(binding?.declaration.contract).toEqual({ sideEffects: ['none'] });
     const serialized = JSON.stringify(binding?.provenance);
     expect(serialized).not.toContain('user');
     expect(serialized).not.toContain('password');
@@ -444,7 +451,7 @@ describe('McpConnectionManager', () => {
     expect(
       mcpManager.captureRuntimeToolBinding('mutable-registry', 'mutate')?.declaration,
     ).toMatchObject({
-      description: 'Replacement mutation',
+      description: '[Mutable registry] Replacement mutation',
       input_schema: expect.objectContaining({
         properties: { force: { type: 'boolean' } },
       }),

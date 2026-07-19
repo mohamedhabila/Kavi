@@ -10,9 +10,14 @@ import {
 } from '../tools/toolExecutionContext';
 import { createConversationFileContext } from '../tools/toolWorkspaceFiles';
 import type { ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
+import {
+  resolveRuntimeExternalToolEffectPolicy,
+  type ToolEffectPolicy,
+} from '../durability/toolEffectPolicy';
 
 export type RuntimeExternalToolBinding = Readonly<{
   evidence: RuntimeExternalToolEvidence;
+  effectPolicy?: ToolEffectPolicy;
   isCurrent(): boolean;
   execute(
     argsString: string,
@@ -68,8 +73,15 @@ export function resolveRuntimeExternalToolBinding(
     const captured = mcpManager.captureRuntimeToolBinding(mcp.serverId, mcp.toolName);
     if (!captured || !declarationsMatch(declaration, captured.declaration)) return undefined;
     const clients = new Map([[mcp.serverId, captured.client]]);
+    const evidence = { declaration, provenance: captured.provenance } as const;
+    const effectPolicy = resolveRuntimeExternalToolEffectPolicy(
+      toolName,
+      declaration,
+      captured.provenance.toolAnnotationsTrusted === true,
+    );
     return {
-      evidence: { declaration, provenance: captured.provenance },
+      evidence,
+      ...(effectPolicy ? { effectPolicy } : {}),
       isCurrent: captured.isCurrent,
       execute: async (argsString, _conversationId, context) => {
         if (!captured.isCurrent()) {

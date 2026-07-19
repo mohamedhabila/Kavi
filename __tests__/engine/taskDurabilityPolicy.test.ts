@@ -4,7 +4,10 @@ import {
   classifyCurrentToolTaskDurability,
   qualifyExternalDurableHandle,
 } from '../../src/engine/durability/taskDurability';
-import { resolveToolEffectPolicy } from '../../src/engine/durability/toolEffectPolicy';
+import {
+  resolveRuntimeExternalToolEffectPolicy,
+  resolveToolEffectPolicy,
+} from '../../src/engine/durability/toolEffectPolicy';
 
 describe('task durability policy', () => {
   it('keeps the durability taxonomy closed and versionable', () => {
@@ -323,6 +326,29 @@ describe('code-owned tool effect policy', () => {
       retryPolicy: 'replay_safe',
     });
     expect(resolveToolEffectPolicy('mcp__github__workflow_runs').source).toBe('unknown');
+  });
+
+  it('accepts an exact runtime effect contract only behind explicit annotation trust', () => {
+    const declaration = {
+      name: 'mcp__calendar__find_events',
+      description: '[Calendar] Find events',
+      input_schema: { type: 'object', properties: {} },
+      contract: { sideEffects: ['none'] },
+    };
+
+    expect(
+      resolveRuntimeExternalToolEffectPolicy(declaration.name, declaration, false),
+    ).toBeUndefined();
+    expect(resolveRuntimeExternalToolEffectPolicy(declaration.name, declaration, true)).toEqual({
+      toolName: declaration.name,
+      source: 'runtime_external',
+      effects: ['none'],
+      idempotency: 'effect_free',
+      retryPolicy: 'replay_safe',
+    });
+    expect(
+      resolveRuntimeExternalToolEffectPolicy('mcp__other__find_events', declaration, true),
+    ).toBeUndefined();
   });
 
   it('has a closed effect policy for every registered builtin', () => {

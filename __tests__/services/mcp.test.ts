@@ -64,6 +64,43 @@ describe('mcpToolToDefinition', () => {
     expect(def.description).toContain('my_tool');
   });
 
+  it('uses MCP effect annotations only after explicit server trust', () => {
+    const entry: McpToolEntry = {
+      serverId: 'calendar',
+      serverName: 'Calendar',
+      tool: {
+        name: 'find_events',
+        description: 'Find events',
+        inputSchema: { type: 'object', properties: {} },
+        annotations: { readOnlyHint: true },
+      },
+    };
+
+    expect(mcpToolToDefinition(entry).contract).toBeUndefined();
+    expect(mcpToolToDefinition({ ...entry, trustToolAnnotations: true }).contract).toEqual({
+      sideEffects: ['none'],
+    });
+  });
+
+  it('keeps trusted mutating annotations conservative by default', () => {
+    const definition = mcpToolToDefinition({
+      serverId: 'calendar',
+      serverName: 'Calendar',
+      trustToolAnnotations: true,
+      tool: {
+        name: 'create_event',
+        description: 'Create an event',
+        inputSchema: { type: 'object', properties: {} },
+        annotations: { readOnlyHint: false, idempotentHint: true },
+      },
+    });
+
+    expect(definition.contract).toEqual({
+      sideEffects: ['destructive'],
+      riskHints: ['idempotent'],
+    });
+  });
+
   it('normalizes live-style MCP schemas into provider-safe leaf nodes while preserving metadata', () => {
     const entry: McpToolEntry = {
       serverId: 'atars',

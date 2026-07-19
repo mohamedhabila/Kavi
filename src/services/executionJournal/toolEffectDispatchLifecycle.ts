@@ -176,6 +176,7 @@ export interface AuthorizedToolEffectDispatchInput {
   modelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   authority: ToolEffectDispatchAuthority;
   runtimeExternalEvidence?: RuntimeExternalToolEvidence;
+  runtimeExternalEffectPolicy?: ToolEffectPolicy;
   execute(claim: AuthorizedToolEffectExecutionClaim): Promise<ToolRuntimeExecution>;
 }
 
@@ -218,6 +219,17 @@ function executionSurfaceFor(policy: ToolEffectPolicy): ExecutionSurface {
   if (policy.toolName.startsWith('mcp__')) return 'mcp';
   if (policy.toolName.startsWith('skill__')) return 'delegated_worker';
   return 'external_api';
+}
+
+function resolveDispatchToolEffectPolicy(
+  toolName: string,
+  runtimePolicy: ToolEffectPolicy | undefined,
+): ToolEffectPolicy {
+  const codeOwnedPolicy = resolveToolEffectPolicy(toolName);
+  return runtimePolicy?.source === 'runtime_external' &&
+    runtimePolicy.toolName === codeOwnedPolicy.toolName
+    ? runtimePolicy
+    : codeOwnedPolicy;
 }
 
 function isIdentityValue(value: unknown): value is string | number {
@@ -421,7 +433,10 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   input: AuthorizedToolEffectDispatchInput,
   options: AuthorizedToolEffectDispatchOptions = {},
 ): Promise<AuthorizedToolEffectDispatchResult> {
-  const policy = resolveToolEffectPolicy(input.toolName);
+  const policy = resolveDispatchToolEffectPolicy(
+    input.toolName,
+    input.runtimeExternalEffectPolicy,
+  );
   const effectClass = effectClassFor(policy);
   if (effectClass === 'none') {
     throw new Error('effect_dispatch_effect_free_tool');
@@ -615,7 +630,10 @@ export async function dispatchAuthorizedToolEffect(
   input: AuthorizedToolEffectDispatchInput,
   options: AuthorizedToolEffectDispatchOptions = {},
 ): Promise<AuthorizedToolEffectDispatchResult> {
-  const policy = resolveToolEffectPolicy(input.toolName);
+  const policy = resolveDispatchToolEffectPolicy(
+    input.toolName,
+    input.runtimeExternalEffectPolicy,
+  );
   if (effectClassFor(policy) === 'none') {
     throw new Error('effect_dispatch_effect_free_tool');
   }

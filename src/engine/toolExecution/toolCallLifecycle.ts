@@ -317,6 +317,7 @@ export async function executeToolCallLifecycle(
   let authoritativeReceiptFinalized = false;
   let effectReconciliationRequired = false;
   let effectDispatchObservation: ToolEffectDispatchObservation | undefined;
+  let resolvedEffectFreeInvocation = effectFreeInvocation;
 
   try {
     const execution = await executeTool(
@@ -356,6 +357,8 @@ export async function executeToolCallLifecycle(
       },
     );
     effectDispatchObservation = execution.effectDispatchObservation;
+    resolvedEffectFreeInvocation =
+      effectFreeInvocation || execution.effectDispatchObservation.kind === 'not_applicable';
     if (execution.status === 'deferred') {
       recordLifecyclePerformanceMetrics({
         enabled: params.usePerformanceMetrics,
@@ -373,7 +376,7 @@ export async function executeToolCallLifecycle(
     let outcome: ToolRuntimeOutcome = execution;
     if (
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding) &&
-      (effectFreeInvocation ||
+      (resolvedEffectFreeInvocation ||
         (outcome.status === 'failed' && outcome.failureKind === 'authority_revoked'))
     ) {
       return completeMemoryPolicyRevocation();
@@ -395,7 +398,7 @@ export async function executeToolCallLifecycle(
         recordedAt: Date.now(),
       });
       if (
-        effectFreeInvocation &&
+        resolvedEffectFreeInvocation &&
         !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
       ) {
         return completeMemoryPolicyRevocation();
@@ -409,7 +412,7 @@ export async function executeToolCallLifecycle(
       reconciliationRequired: effectReconciliationRequired,
     });
     if (
-      effectFreeInvocation &&
+      resolvedEffectFreeInvocation &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
     ) {
       return completeMemoryPolicyRevocation();
@@ -425,7 +428,7 @@ export async function executeToolCallLifecycle(
         observedAt: Date.now(),
       });
       if (
-        effectFreeInvocation &&
+        resolvedEffectFreeInvocation &&
         !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
       ) {
         return completeMemoryPolicyRevocation();
@@ -449,7 +452,7 @@ export async function executeToolCallLifecycle(
       toolName: effectiveToolCall.name,
     });
     if (
-      effectFreeInvocation &&
+      resolvedEffectFreeInvocation &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
     ) {
       return completeMemoryPolicyRevocation();
@@ -464,7 +467,7 @@ export async function executeToolCallLifecycle(
       params.toolResultContextWindow ?? getWorkingContextWindow(params.model);
     result = enforceToolResultBudget(result, effectiveBudgetWindow);
     if (
-      effectFreeInvocation &&
+      resolvedEffectFreeInvocation &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
     ) {
       return completeMemoryPolicyRevocation();
@@ -521,7 +524,7 @@ export async function executeToolCallLifecycle(
     };
   } catch (err: unknown) {
     if (
-      effectFreeInvocation &&
+      resolvedEffectFreeInvocation &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
     ) {
       return completeMemoryPolicyRevocation();
@@ -539,7 +542,7 @@ export async function executeToolCallLifecycle(
         recordedAt: completedAt,
       });
       if (
-        effectFreeInvocation &&
+        resolvedEffectFreeInvocation &&
         !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
       ) {
         return completeMemoryPolicyRevocation();
@@ -553,7 +556,7 @@ export async function executeToolCallLifecycle(
       reconciliationRequired: effectReconciliationRequired,
     });
     if (
-      effectFreeInvocation &&
+      resolvedEffectFreeInvocation &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
     ) {
       return completeMemoryPolicyRevocation();

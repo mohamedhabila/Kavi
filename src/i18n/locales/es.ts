@@ -318,6 +318,9 @@ export const es: TranslationMap = mergeTranslations(en, {
     mcpMetadata: 'Metadatos de conexión',
     mcpManualServerHint:
       'Los servidores manuales se gestionan completamente por ti. Revisa la URL, los encabezados, el token y la configuración OAuth antes de conectarte.',
+    mcpTrustToolAnnotations: 'Confiar en las indicaciones de seguridad',
+    mcpTrustToolAnnotationsHint:
+      'Actívalo solo para un servidor de confianza. Sus indicaciones de solo lectura y reintento afectarán la recuperación.',
     mcpOAuthSessionSaved: 'Sesión OAuth guardada',
     mcpResetOAuthSession: 'Restablecer sesión OAuth',
     mcpResetOAuthSessionConfirm: '¿Borrar los tokens OAuth almacenados para este servidor MCP?',

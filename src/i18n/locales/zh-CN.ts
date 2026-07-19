@@ -312,6 +312,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     mcpMetadata: '连接元数据',
     mcpManualServerHint:
       '手动服务器完全由你自行管理。连接前请检查 URL、请求头、令牌和 OAuth 设置。',
+    mcpTrustToolAnnotations: '信任工具安全提示',
+    mcpTrustToolAnnotationsHint:
+      '仅对你信任的服务器启用。其只读和重试提示将影响恢复决策。',
     mcpOAuthSessionSaved: 'OAuth 会话已保存',
     mcpResetOAuthSession: '重置 OAuth 会话',
     mcpResetOAuthSessionConfirm: '要清除此 MCP 服务器已保存的 OAuth 令牌吗？',

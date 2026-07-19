@@ -10,6 +10,7 @@ import {
 } from '../../src/engine/toolExecution/toolContractIdentity';
 import * as effectContracts from '../../src/engine/toolExecution/toolEffectReceiptContracts';
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
+import { decodeToolEffectReceipt } from '../../src/utils/toolEffectReceipt';
 
 const EXECUTION_RUN_ID = 'execution-run-1';
 
@@ -225,10 +226,11 @@ describe('code-owned tool contract identity', () => {
 
       expect(identity).toEqual({
         kind: 'runtime_external',
-        version: 1,
+        version: 2,
         toolName,
         source,
         namespace,
+        effectClass: 'unknown',
         declarationDigest: expect.stringMatching(SHA256_PATTERN),
         executionBindingDigest: expect.stringMatching(SHA256_PATTERN),
       });
@@ -273,6 +275,40 @@ describe('code-owned tool contract identity', () => {
     expect(bindingDrift.executionBindingDigest).not.toBe(baseline.executionBindingDigest);
     expect(processDrift.declarationDigest).toBe(baseline.declarationDigest);
     expect(processDrift.executionBindingDigest).not.toBe(baseline.executionBindingDigest);
+  });
+
+  it('binds effect-free authority to the exact explicitly trusted MCP declaration', async () => {
+    const trustedRead: RuntimeExternalToolEvidence = {
+      declaration: {
+        ...MCP_EVIDENCE.declaration,
+        contract: { sideEffects: ['none'] },
+      },
+      provenance: {
+        ...MCP_EVIDENCE.provenance,
+        toolAnnotationsTrusted: true,
+      },
+    };
+    const trustedMutation: RuntimeExternalToolEvidence = {
+      declaration: {
+        ...MCP_EVIDENCE.declaration,
+        contract: { sideEffects: ['remote_mutation'] },
+      },
+      provenance: trustedRead.provenance,
+    };
+    const untrustedRead: RuntimeExternalToolEvidence = {
+      declaration: trustedRead.declaration,
+      provenance: MCP_EVIDENCE.provenance,
+    };
+
+    await expect(
+      buildRuntimeExternalToolContractIdentity(trustedRead.declaration.name, trustedRead),
+    ).resolves.toEqual(expect.objectContaining({ effectClass: 'none' }));
+    await expect(
+      buildRuntimeExternalToolContractIdentity(trustedMutation.declaration.name, trustedMutation),
+    ).resolves.toEqual(expect.objectContaining({ effectClass: 'potentially_effectful' }));
+    await expect(
+      buildRuntimeExternalToolContractIdentity(untrustedRead.declaration.name, untrustedRead),
+    ).resolves.toEqual(expect.objectContaining({ effectClass: 'unknown' }));
   });
 
   it('seals multiline declaration documentation without relaxing provenance identities', async () => {
@@ -321,6 +357,23 @@ describe('code-owned tool contract identity', () => {
     });
     expect(receipt).not.toHaveProperty('resource');
     expect(receipt).not.toHaveProperty('operationHandle');
+    expect(
+      decodeToolEffectReceipt({
+        ...receipt,
+        effectState: 'none',
+        verificationState: 'not_applicable',
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeToolEffectReceipt({
+        ...receipt,
+        contractIdentity: {
+          ...receipt.contractIdentity,
+          version: 1,
+          effectClass: undefined,
+        },
+      }),
+    ).toBeUndefined();
     await expect(verifyToolEffectReceiptIntegrity(receipt)).resolves.toBe(true);
     await expect(
       verifyToolEffectReceiptIntegrity({

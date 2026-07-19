@@ -3,6 +3,7 @@ import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { AppPalette } from '../../../theme/useAppTheme';
 import type { McpServerConfig } from '../../../types/remote';
+import { updateMcpServerEndpoint } from '../../../screens/configDrafts';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -56,7 +57,9 @@ export const McpBasicsSection: React.FC<McpBasicsSectionProps> = ({
         style={styles.configInput}
         value={draft.url}
         onChangeText={(value) =>
-          setDraft((current) => (current ? { ...current, url: value } : current))
+          setDraft((current) =>
+            current ? updateMcpServerEndpoint(current, 'url', value) : current,
+          )
         }
         placeholder={t('settings.serverUrlPlaceholder')}
         placeholderTextColor={colors.placeholder}
@@ -93,7 +96,9 @@ export const McpBasicsSection: React.FC<McpBasicsSectionProps> = ({
         style={styles.configInput}
         value={draft.sseUrl || ''}
         onChangeText={(value) =>
-          setDraft((current) => (current ? { ...current, sseUrl: value } : current))
+          setDraft((current) =>
+            current ? updateMcpServerEndpoint(current, 'sseUrl', value) : current,
+          )
         }
         placeholder={t('settings.serverLegacySseUrlPlaceholder')}
         placeholderTextColor={colors.placeholder}

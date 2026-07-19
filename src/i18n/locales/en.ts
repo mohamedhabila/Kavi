@@ -321,6 +321,9 @@ export const en: TranslationMap = {
     mcpMetadata: 'Connection metadata',
     mcpManualServerHint:
       'Manual servers are fully user-managed. Review the URL, headers, token, and OAuth settings before connecting.',
+    mcpTrustToolAnnotations: 'Trust tool safety hints',
+    mcpTrustToolAnnotationsHint:
+      'Only enable this for a server you trust. Its read-only and retry hints will affect recovery decisions.',
     mcpOAuthSessionSaved: 'OAuth session saved',
     mcpResetOAuthSession: 'Reset OAuth session',
     mcpResetOAuthSessionConfirm: 'Clear the stored OAuth tokens for this MCP server?',

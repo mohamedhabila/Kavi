@@ -314,6 +314,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
     mcpMetadata: 'بيانات الاتصال',
     mcpManualServerHint:
       'الخوادم اليدوية تُدار بالكامل من طرفك. راجع الرابط والرؤوس والرمز وإعدادات OAuth قبل الاتصال.',
+    mcpTrustToolAnnotations: 'الثقة بتلميحات أمان الأدوات',
+    mcpTrustToolAnnotationsHint:
+      'فعّل هذا لخادم تثق به فقط. ستؤثر تلميحات القراءة فقط وإعادة المحاولة في قرارات الاسترداد.',
     mcpOAuthSessionSaved: 'تم حفظ جلسة OAuth',
     mcpResetOAuthSession: 'إعادة تعيين جلسة OAuth',
     mcpResetOAuthSessionConfirm: 'هل تريد مسح رموز OAuth المخزنة لهذا الخادم MCP؟',

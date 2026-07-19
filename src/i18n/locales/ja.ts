@@ -317,6 +317,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     mcpMetadata: '接続メタデータ',
     mcpManualServerHint:
       '手動サーバーは完全にユーザー管理です。接続前に URL、ヘッダー、トークン、OAuth 設定を確認してください。',
+    mcpTrustToolAnnotations: 'ツールの安全性ヒントを信頼',
+    mcpTrustToolAnnotationsHint:
+      '信頼できるサーバーでのみ有効にしてください。読み取り専用と再試行のヒントが復旧判断に使われます。',
     mcpOAuthSessionSaved: 'OAuth セッション保存済み',
     mcpResetOAuthSession: 'OAuth セッションをリセット',
     mcpResetOAuthSessionConfirm: 'この MCP サーバーの保存済み OAuth トークンを削除しますか？',

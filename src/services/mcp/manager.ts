@@ -44,6 +44,7 @@ export interface CapturedMcpRuntimeToolBinding {
     transport: 'auto' | 'streamable-http' | 'sse';
     trustSource?: 'manual' | 'official-registry';
     registryName?: string;
+    toolAnnotationsTrusted?: true;
   }>;
   isCurrent(): boolean;
 }
@@ -353,6 +354,8 @@ class McpConnectionManager {
           serverId,
           serverName: status.name,
           tool,
+          trustToolAnnotations:
+            this.serverConfigs.get(serverId)?.trustToolAnnotations === true,
         };
         definitions.push(mcpToolToDefinition(entry));
       }
@@ -396,6 +399,7 @@ class McpConnectionManager {
       serverId,
       serverName: status.name,
       tool,
+      trustToolAnnotations: config.trustToolAnnotations === true,
     });
     const isCurrent = (): boolean =>
       this.clients.get(serverId) === client &&
@@ -419,6 +423,7 @@ class McpConnectionManager {
         transport: config.transport ?? 'auto',
         ...(config.trust?.source ? { trustSource: config.trust.source } : {}),
         ...(config.trust?.registryName ? { registryName: config.trust.registryName } : {}),
+        ...(config.trustToolAnnotations === true ? { toolAnnotationsTrusted: true as const } : {}),
       },
       isCurrent,
     };

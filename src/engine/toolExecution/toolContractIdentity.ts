@@ -1,4 +1,8 @@
-import { resolveToolEffectPolicy } from '../durability/toolEffectPolicy';
+import {
+  isEffectFreeToolPolicy,
+  resolveRuntimeExternalToolEffectPolicy,
+  resolveToolEffectPolicy,
+} from '../durability/toolEffectPolicy';
 import { TOOL_DEFINITIONS } from '../tools/definitions';
 import { inferToolCapabilityDescriptor } from '../tools/capabilityRegistry';
 import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameNormalization';
@@ -7,6 +11,7 @@ import type { ToolDefinition } from '../../types/tool';
 import type {
   CodeOwnedToolContractIdentity,
   RuntimeExternalToolContractIdentity,
+  RuntimeExternalToolEffectClass,
   RuntimeExternalToolSource,
   ToolContractIdentity,
   ToolEffectDigest,
@@ -14,7 +19,8 @@ import type {
 import { getCodeOwnedToolEffectContract } from './toolEffectReceiptContracts';
 import { sha256HexUtf8Async } from '../../utils/sha256Async';
 
-const IDENTITY_VERSION = 1 as const;
+const CODE_OWNED_IDENTITY_VERSION = 1 as const;
+const RUNTIME_EXTERNAL_IDENTITY_VERSION = 2 as const;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 const UNSAFE_DECLARATION_TEXT_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u;
 
@@ -73,10 +79,14 @@ function canonicalize(value: unknown): unknown {
   throw new TypeError('Tool contract identity contains a non-canonical value.');
 }
 
-async function digestContractComponent(domain: string, value: unknown): Promise<ToolEffectDigest> {
+async function digestContractComponent(
+  domain: string,
+  value: unknown,
+  identityVersion: 1 | 2 = CODE_OWNED_IDENTITY_VERSION,
+): Promise<ToolEffectDigest> {
   const canonical = JSON.stringify({
     domain,
-    identityVersion: IDENTITY_VERSION,
+    identityVersion,
     value: canonicalize(value),
   });
   const digest = await sha256HexUtf8Async(canonical);
@@ -168,7 +178,7 @@ export async function buildCodeOwnedToolContractIdentity(
 
   return Object.freeze({
     kind: 'code_owned' as const,
-    version: IDENTITY_VERSION,
+    version: CODE_OWNED_IDENTITY_VERSION,
     toolName,
     schemaDigest,
     capabilityContractDigest,
@@ -190,6 +200,7 @@ export type RuntimeExternalToolProvenance =
       transport: 'auto' | 'streamable-http' | 'sse';
       trustSource?: 'manual' | 'official-registry';
       registryName?: string;
+      toolAnnotationsTrusted?: true;
     }>
   | Readonly<{
       source: 'skill';
@@ -205,6 +216,23 @@ export type RuntimeExternalToolEvidence = Readonly<{
   declaration: ToolDefinition;
   provenance: RuntimeExternalToolProvenance;
 }>;
+
+function resolveRuntimeExternalEffectClass(
+  toolName: string,
+  evidence: RuntimeExternalToolEvidence,
+): RuntimeExternalToolEffectClass {
+  if (
+    evidence.provenance.source !== 'mcp' ||
+    evidence.provenance.toolAnnotationsTrusted !== true
+  ) {
+    return 'unknown';
+  }
+  const policy = resolveRuntimeExternalToolEffectPolicy(toolName, evidence.declaration, true);
+  if (!policy || policy.effects.includes('unknown')) {
+    return 'unknown';
+  }
+  return isEffectFreeToolPolicy(policy) ? 'none' : 'potentially_effectful';
+}
 
 function parseRuntimeExternalToolName(
   toolName: string,
@@ -246,7 +274,10 @@ function isValidRuntimeProvenance(provenance: RuntimeExternalToolProvenance): bo
       (provenance.trustSource === undefined ||
         provenance.trustSource === 'manual' ||
         provenance.trustSource === 'official-registry') &&
-      (provenance.registryName === undefined || isBoundedIdentityPart(provenance.registryName, 256))
+      (provenance.registryName === undefined ||
+        isBoundedIdentityPart(provenance.registryName, 256)) &&
+      (provenance.toolAnnotationsTrusted === undefined ||
+        provenance.toolAnnotationsTrusted === true)
     );
   }
   return (
@@ -260,8 +291,9 @@ function isValidRuntimeProvenance(provenance: RuntimeExternalToolProvenance): bo
 
 /**
  * Seals the exact dynamic declaration and runtime provenance selected by the
- * app. The resulting identity is deliberately observation-only and never
- * upgrades third-party metadata into a code-owned contract.
+ * app. Trusted integration annotations can certify only whether the call is
+ * effect-free; provider outcomes remain unverified and never become a
+ * code-owned contract.
  */
 export async function buildRuntimeExternalToolContractIdentity(
   rawToolName: string,
@@ -283,22 +315,32 @@ export async function buildRuntimeExternalToolContractIdentity(
   ) {
     return undefined;
   }
+  const effectClass = resolveRuntimeExternalEffectClass(toolName, evidence);
   const [declarationDigest, executionBindingDigest] = await Promise.all([
-    digestContractComponent('kavi.tool.runtime-external-declaration', {
-      name: toolName,
-      description: evidence.declaration.description,
-      inputSchema: evidence.declaration.input_schema,
-      strict: evidence.declaration.strict ?? 'auto',
-      declaredContract: evidence.declaration.contract ?? null,
-    }),
-    digestContractComponent('kavi.tool.runtime-external-execution-binding', evidence.provenance),
+    digestContractComponent(
+      'kavi.tool.runtime-external-declaration',
+      {
+        name: toolName,
+        description: evidence.declaration.description,
+        inputSchema: evidence.declaration.input_schema,
+        strict: evidence.declaration.strict ?? 'auto',
+        declaredContract: evidence.declaration.contract ?? null,
+      },
+      RUNTIME_EXTERNAL_IDENTITY_VERSION,
+    ),
+    digestContractComponent(
+      'kavi.tool.runtime-external-execution-binding',
+      evidence.provenance,
+      RUNTIME_EXTERNAL_IDENTITY_VERSION,
+    ),
   ]);
   return Object.freeze({
     kind: 'runtime_external' as const,
-    version: IDENTITY_VERSION,
+    version: RUNTIME_EXTERNAL_IDENTITY_VERSION,
     toolName,
     source: parsed.source,
     namespace: parsed.namespace,
+    effectClass,
     declarationDigest,
     executionBindingDigest,
   });
@@ -307,7 +349,7 @@ export async function buildRuntimeExternalToolContractIdentity(
 export async function digestToolContractIdentity(
   identity: ToolContractIdentity,
 ): Promise<ToolEffectDigest> {
-  return digestContractComponent('kavi.tool.contract-identity', identity);
+  return digestContractComponent('kavi.tool.contract-identity', identity, identity.version);
 }
 
 export async function buildToolContractIdentity(
@@ -352,6 +394,7 @@ export function toolContractIdentitiesEqual(
       left.toolName === right.toolName &&
       left.source === right.source &&
       left.namespace === right.namespace &&
+      left.effectClass === right.effectClass &&
       left.declarationDigest === right.declarationDigest &&
       left.executionBindingDigest === right.executionBindingDigest
     );

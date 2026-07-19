@@ -4,6 +4,7 @@
 
 import { APP_DISPLAY_NAME, APP_VERSION } from '../../constants/appMetadata';
 import { McpTransport, JsonRpcRequest, TransportPreference } from './transport';
+import type { McpToolAnnotations } from '../../types/remote';
 
 export interface McpServerCapabilities {
   tools?: { listChanged?: boolean };
@@ -15,6 +16,7 @@ export interface McpToolInfo {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  annotations?: McpToolAnnotations;
 }
 
 export interface McpResourceInfo {

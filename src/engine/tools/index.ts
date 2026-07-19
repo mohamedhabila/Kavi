@@ -39,6 +39,7 @@ import {
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { executeMobileControllerTool } from '../mobileController/toolExecution';
 import { isMobileControllerDeferredExecution } from '../mobileController/runtimeExecution';
+import { isEffectFreeToolPolicy } from '../durability/toolEffectPolicy';
 
 // ── Central dispatcher ───────────────────────────────────────────────────
 
@@ -344,6 +345,9 @@ export async function executeTool(
     context?.runtimeToolDeclaration,
   );
   const runtimeExternalEvidence = runtimeExternalBinding?.evidence;
+  const runtimeExternalEffectPolicy = runtimeExternalBinding?.effectPolicy;
+  const resolvedEffectFreeInvocation =
+    effectFreeInvocation || isEffectFreeToolPolicy(runtimeExternalEffectPolicy);
   const captureReceipt = context?.captureEffectReceipt;
   const publishReceipt = (receipt: Parameters<NonNullable<typeof captureReceipt>>[0]): void => {
     try {
@@ -367,7 +371,7 @@ export async function executeTool(
     );
     return withPreDispatchObservation(
       failedToolOutcome(result),
-      effectFreeInvocation,
+      resolvedEffectFreeInvocation,
       'runtime_binding_unavailable',
     );
   }
@@ -386,12 +390,12 @@ export async function executeTool(
     );
     return withPreDispatchObservation(
       failedToolOutcome(result),
-      effectFreeInvocation,
+      resolvedEffectFreeInvocation,
       'tool_call_identity_required',
     );
   }
 
-  if (context?.toolCallId && !effectFreeInvocation) {
+  if (context?.toolCallId && !resolvedEffectFreeInvocation) {
     if (!isCodeOwnedExecutionRunId(executionRunId)) {
       throw new Error('execution_run_identity_invariant_violated');
     }
@@ -415,6 +419,7 @@ export async function executeTool(
         controlGranted: () => context.executionSignal?.aborted !== true,
       },
       runtimeExternalEvidence,
+      runtimeExternalEffectPolicy,
       execute: async (claim) =>
         runtimeExternalBinding
           ? await runtimeExternalBinding.execute(argsString, conversationId, executorContext)
@@ -489,7 +494,7 @@ export async function executeTool(
           normalizedName,
           argsString,
           conversationId,
-          effectFreeInvocation,
+          effectFreeInvocation: resolvedEffectFreeInvocation,
         });
       }
       if (dispatched.kind === 'reconciliation_required') {
@@ -520,7 +525,7 @@ export async function executeTool(
         normalizedName,
         argsString,
         conversationId,
-        effectFreeInvocation,
+        effectFreeInvocation: resolvedEffectFreeInvocation,
       });
     }
     outcome = runtimeExternalBinding
@@ -532,7 +537,7 @@ export async function executeTool(
         normalizedName,
         argsString,
         conversationId,
-        effectFreeInvocation,
+        effectFreeInvocation: resolvedEffectFreeInvocation,
       });
     }
     logToolCall(
@@ -555,7 +560,7 @@ export async function executeTool(
     );
     return withPreDispatchObservation(
       failedToolOutcome(`Error: ${message}`),
-      effectFreeInvocation,
+      resolvedEffectFreeInvocation,
       'runtime_binding_unavailable',
     );
   }
@@ -565,23 +570,23 @@ export async function executeTool(
     }
     try {
       const receipt = await buildToolEffectReceipt({
-          toolCallId: context.toolCallId,
-          toolName: normalizedName,
-          argumentsText: argsString,
-          resultText: outcome.content,
-          transportState: 'returned',
-          resultIsError: outcome.status === 'failed',
-          executionRunId: context.executionRunId,
-          recordedAt: Date.now(),
-          runtimeExternalEvidence,
-        });
+        toolCallId: context.toolCallId,
+        toolName: normalizedName,
+        argumentsText: argsString,
+        resultText: outcome.content,
+        transportState: 'returned',
+        resultIsError: outcome.status === 'failed',
+        executionRunId: context.executionRunId,
+        recordedAt: Date.now(),
+        runtimeExternalEvidence,
+      });
       if (!isModelTurnAuthorityCurrent(context)) {
         return rejectExpiredModelTurnAuthority({
           context,
           normalizedName,
           argsString,
           conversationId,
-          effectFreeInvocation,
+          effectFreeInvocation: resolvedEffectFreeInvocation,
         });
       }
       publishReceipt(receipt);

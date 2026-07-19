@@ -23,6 +23,7 @@ export interface McpToolEntry {
   serverId: string;
   serverName: string;
   tool: McpToolInfo;
+  trustToolAnnotations?: boolean;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, any> {
@@ -43,10 +44,23 @@ export interface McpToolExecutionOptions {
  */
 export function mcpToolToDefinition(entry: McpToolEntry): ToolDefinition {
   const schema = normalizeMcpInputSchema(entry.tool.inputSchema);
+  const annotations = entry.trustToolAnnotations ? entry.tool.annotations : undefined;
+  const contract = annotations
+    ? {
+        sideEffects:
+          annotations.readOnlyHint === true
+            ? ['none']
+            : [annotations.destructiveHint === false ? 'remote_mutation' : 'destructive'],
+        ...(annotations.readOnlyHint !== true && annotations.idempotentHint === true
+          ? { riskHints: ['idempotent'] }
+          : {}),
+      }
+    : undefined;
   return {
     name: `mcp__${entry.serverId}__${entry.tool.name}`,
     description: `[${entry.serverName}] ${entry.tool.description ?? entry.tool.name}`,
     input_schema: schema,
+    ...(contract ? { contract } : {}),
   };
 }
 

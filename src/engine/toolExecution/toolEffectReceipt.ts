@@ -491,19 +491,33 @@ export async function buildToolEffectReceipt(
   const codeOwnedContract = getCodeOwnedToolEffectContract(toolName);
   const codeOwnedEffectKind = codeOwnedContract?.effectKind ?? 'unknown';
   const tracksExecution = codeOwnedContract?.tracksExecution === true;
+  const runtimeExternalEffectFree =
+    contractIdentity.kind === 'runtime_external' &&
+    contractIdentity.effectClass === 'none';
   const effectOutcome: ResolvedEffectOutcome =
     contractIdentity.kind === 'runtime_external'
-      ? {
-          effectKind: 'unknown',
-          ...(params.transportState === 'returned'
-            ? { executionState: params.resultIsError ? ('failed' as const) : ('completed' as const) }
-            : {}),
-          effectState:
-            params.transportState === 'rejected'
-              ? (params.terminalEffectState ?? 'failed')
-              : 'unknown',
-          verificationState: 'unverified',
-        }
+      ? runtimeExternalEffectFree && params.transportState === 'returned'
+        ? {
+            effectKind: 'unknown',
+            executionState: params.resultIsError ? ('failed' as const) : ('completed' as const),
+            effectState: 'none',
+            verificationState: 'not_applicable',
+          }
+        : {
+            effectKind: 'unknown',
+            ...(params.transportState === 'returned'
+              ? {
+                  executionState: params.resultIsError
+                    ? ('failed' as const)
+                    : ('completed' as const),
+                }
+              : {}),
+            effectState:
+              params.transportState === 'rejected'
+                ? (params.terminalEffectState ?? 'failed')
+                : 'unknown',
+            verificationState: 'unverified',
+          }
       : params.transportState === 'returned'
         ? resolveReturnedOutcome(normalizedParams)
         : params.transportState === 'rejected'

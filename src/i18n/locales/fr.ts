@@ -318,6 +318,9 @@ export const fr: TranslationMap = mergeTranslations(en, {
     mcpMetadata: 'Métadonnées de connexion',
     mcpManualServerHint:
       'Les serveurs manuels sont entièrement gérés par vous. Vérifiez l’URL, les en-têtes, le jeton et les paramètres OAuth avant de vous connecter.',
+    mcpTrustToolAnnotations: 'Faire confiance aux indications de sécurité',
+    mcpTrustToolAnnotationsHint:
+      'Activez uniquement pour un serveur fiable. Ses indications de lecture seule et de nouvelle tentative guideront la récupération.',
     mcpOAuthSessionSaved: 'Session OAuth enregistrée',
     mcpResetOAuthSession: 'Réinitialiser la session OAuth',
     mcpResetOAuthSessionConfirm: 'Effacer les jetons OAuth enregistrés pour ce serveur MCP ?',

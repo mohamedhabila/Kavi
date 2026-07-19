@@ -181,7 +181,10 @@ function sanitizeImportedProvider(provider: LlmProviderConfig): LlmProviderConfi
 }
 
 function sanitizeImportedMcpServer(server: McpServerConfig): McpServerConfig {
-  return sanitizeMcpServerForExport(server);
+  return {
+    ...sanitizeMcpServerForExport(server),
+    trustToolAnnotations: false,
+  };
 }
 
 function sanitizeImportedSshTarget(target: SshTargetConfig): SshTargetConfig {

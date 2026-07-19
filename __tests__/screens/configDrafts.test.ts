@@ -1,4 +1,5 @@
 import {
+  createMcpServerDraft,
   formatPathList,
   getExpoProjectPlatforms,
   parsePathList,
@@ -7,6 +8,7 @@ import {
   prepareMcpServerDraft,
   prepareSshDraft,
   toggleExpoProjectPlatform,
+  updateMcpServerEndpoint,
 } from '../../src/screens/configDrafts';
 
 describe('configDrafts helpers', () => {
@@ -85,5 +87,24 @@ describe('configDrafts helpers', () => {
     expect(prepared.transport).toBe('auto');
     expect(prepared.timeoutMs).toBe(20000);
     expect(prepared.headers).toEqual({});
+    expect(createMcpServerDraft().trustToolAnnotations).toBe(false);
+  });
+
+  it('revokes MCP annotation trust when either execution endpoint changes', () => {
+    const trusted = createMcpServerDraft({
+      url: 'https://mcp.example.com/mcp',
+      sseUrl: 'https://mcp.example.com/sse',
+      trustToolAnnotations: true,
+    });
+
+    expect(updateMcpServerEndpoint(trusted, 'url', trusted.url).trustToolAnnotations).toBe(true);
+    expect(
+      updateMcpServerEndpoint(trusted, 'url', 'https://other.example.com/mcp')
+        .trustToolAnnotations,
+    ).toBe(false);
+    expect(
+      updateMcpServerEndpoint(trusted, 'sseUrl', 'https://other.example.com/sse')
+        .trustToolAnnotations,
+    ).toBe(false);
   });
 });

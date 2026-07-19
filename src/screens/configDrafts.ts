@@ -212,7 +212,21 @@ export function createMcpServerDraft(overrides: Partial<McpServerConfig> = {}): 
     enabled: true,
     tools: [],
     allowedTools: [],
+    trustToolAnnotations: false,
     ...overrides,
+  };
+}
+
+export function updateMcpServerEndpoint(
+  server: McpServerConfig,
+  field: 'url' | 'sseUrl',
+  value: string,
+): McpServerConfig {
+  const currentValue = field === 'url' ? server.url : server.sseUrl || '';
+  return {
+    ...server,
+    [field]: value,
+    ...(value === currentValue ? {} : { trustToolAnnotations: false }),
   };
 }
 

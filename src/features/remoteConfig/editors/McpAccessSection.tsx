@@ -191,6 +191,23 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
 
       <View style={styles.switchRow}>
         <View style={styles.switchLabelWrap}>
+          <Text style={styles.switchTitle}>{t('settings.mcpTrustToolAnnotations')}</Text>
+          <Text style={styles.switchHint}>{t('settings.mcpTrustToolAnnotationsHint')}</Text>
+        </View>
+        <Switch
+          value={draft.trustToolAnnotations === true}
+          onValueChange={(value) =>
+            setDraft((current) =>
+              current ? { ...current, trustToolAnnotations: value } : current,
+            )
+          }
+          trackColor={{ false: colors.surfaceAlt, true: colors.primarySoft }}
+          thumbColor={draft.trustToolAnnotations ? colors.primary : colors.textSecondary}
+        />
+      </View>
+
+      <View style={styles.switchRow}>
+        <View style={styles.switchLabelWrap}>
           <Text style={styles.switchTitle}>{t('common.enabled')}</Text>
           <Text style={styles.switchHint}>{t('remoteWork.enabledSurfaceHint')}</Text>
         </View>

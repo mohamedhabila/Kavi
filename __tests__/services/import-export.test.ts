@@ -311,6 +311,7 @@ describe('Settings Import/Export', () => {
               tokenRef: 'mcp_token_mcp-2',
               headers: { Authorization: 'Bearer secret-token' },
               oauth: { clientId: 'client', clientSecretRef: 'mcp_oauth_client_secret_mcp-2' },
+              trustToolAnnotations: true,
               enabled: true,
               tools: [],
               allowedTools: [],
@@ -384,6 +385,7 @@ describe('Settings Import/Export', () => {
       expect(arg.mcpServers[0].tokenRef).toBeUndefined();
       expect(arg.mcpServers[0].headers).toEqual({ Authorization: '' });
       expect(arg.mcpServers[0].oauth.clientSecretRef).toBeUndefined();
+      expect(arg.mcpServers[0].trustToolAnnotations).toBe(false);
       expect(arg.sshTargets[0].passwordRef).toBeUndefined();
       expect(arg.workspaceTargets[0].accessTokenRef).toBeUndefined();
       expect(arg.browserProviders[0].apiKeyRef).toBeUndefined();

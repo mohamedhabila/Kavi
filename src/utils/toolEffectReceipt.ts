@@ -56,6 +56,7 @@ const RUNTIME_EXTERNAL_IDENTITY_KEYS = new Set([
   'toolName',
   'source',
   'namespace',
+  'effectClass',
   'declarationDigest',
   'executionBindingDigest',
 ]);
@@ -181,19 +182,25 @@ function decodeRuntimeExternalContractIdentity(
   if (
     !hasOnlyKeys(value, RUNTIME_EXTERNAL_IDENTITY_KEYS) ||
     value.kind !== 'runtime_external' ||
-    value.version !== 1
+    value.version !== 2
   ) {
     return undefined;
   }
   const toolName = boundedString(value.toolName, 256);
   const source = value.source === 'mcp' || value.source === 'skill' ? value.source : undefined;
   const namespace = boundedString(value.namespace, 256);
+  const effectClass = enumValue(value.effectClass, [
+    'none',
+    'potentially_effectful',
+    'unknown',
+  ] as const);
   const declarationDigest = boundedString(value.declarationDigest, 71);
   const executionBindingDigest = boundedString(value.executionBindingDigest, 71);
   if (
     !toolName ||
     !source ||
     !namespace ||
+    !effectClass ||
     !runtimeExternalNameMatches(toolName, source, namespace) ||
     !declarationDigest ||
     !SHA256_PATTERN.test(declarationDigest) ||
@@ -204,10 +211,11 @@ function decodeRuntimeExternalContractIdentity(
   }
   return Object.freeze({
     kind: 'runtime_external' as const,
-    version: 1,
+    version: 2,
     toolName,
     source,
     namespace,
+    effectClass,
     declarationDigest:
       declarationDigest as RuntimeExternalToolContractIdentity['declarationDigest'],
     executionBindingDigest:
@@ -334,20 +342,31 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
   ) {
     return undefined;
   }
-  if (
-    contractIdentity.kind === 'runtime_external' &&
-    (effectKind !== 'unknown' ||
-      verificationState !== 'unverified' ||
+  if (contractIdentity.kind === 'runtime_external') {
+    const validEffectFreeObservation =
+      contractIdentity.effectClass === 'none' &&
+      transportState === 'returned' &&
+      effectKind === 'unknown' &&
+      effectState === 'none' &&
+      verificationState === 'not_applicable' &&
+      (executionState === 'completed' || executionState === 'failed') &&
+      resource === undefined &&
+      operationHandle === undefined;
+    const validConservativeObservation =
+      (contractIdentity.effectClass !== 'none' || transportState !== 'returned') &&
+      effectKind === 'unknown' &&
+      verificationState === 'unverified' &&
       (transportState === 'rejected'
-        ? effectState !== 'failed' && effectState !== 'cancelled'
-        : effectState !== 'unknown') ||
+        ? effectState === 'failed' || effectState === 'cancelled'
+        : effectState === 'unknown') &&
       (transportState === 'returned'
-        ? executionState !== 'completed' && executionState !== 'failed'
-        : executionState !== undefined) ||
-      resource !== undefined ||
-      operationHandle !== undefined)
-  ) {
-    return undefined;
+        ? executionState === 'completed' || executionState === 'failed'
+        : executionState === undefined) &&
+      resource === undefined &&
+      operationHandle === undefined;
+    if (!validEffectFreeObservation && !validConservativeObservation) {
+      return undefined;
+    }
   }
 
   return Object.freeze({
@@ -391,6 +410,7 @@ function receiptsMatchReplay(left: ToolEffectReceipt, right: ToolEffectReceipt):
         left.contractIdentity.toolName === right.contractIdentity.toolName &&
         left.contractIdentity.source === right.contractIdentity.source &&
         left.contractIdentity.namespace === right.contractIdentity.namespace &&
+        left.contractIdentity.effectClass === right.contractIdentity.effectClass &&
         left.contractIdentity.declarationDigest === right.contractIdentity.declarationDigest &&
         left.contractIdentity.executionBindingDigest ===
           right.contractIdentity.executionBindingDigest);

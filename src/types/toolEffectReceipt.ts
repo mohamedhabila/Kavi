@@ -77,18 +77,21 @@ export interface CodeOwnedToolContractIdentity {
 }
 
 export type RuntimeExternalToolSource = 'mcp' | 'skill';
+export type RuntimeExternalToolEffectClass = 'none' | 'potentially_effectful' | 'unknown';
 
 /**
  * Content-free evidence for the exact dynamic declaration and runtime target
- * selected by product code. It records observation identity only; unlike a
- * code-owned identity, it cannot certify effect semantics or procedure reuse.
+ * selected by product code. Effect-free authority is recorded only when the
+ * app explicitly trusts the integration's standard effect annotations; this
+ * still does not certify provider outcomes or procedure reuse.
  */
 export interface RuntimeExternalToolContractIdentity {
   readonly kind: 'runtime_external';
-  readonly version: 1;
+  readonly version: 2;
   readonly toolName: string;
   readonly source: RuntimeExternalToolSource;
   readonly namespace: string;
+  readonly effectClass: RuntimeExternalToolEffectClass;
   readonly declarationDigest: ToolEffectDigest;
   readonly executionBindingDigest: ToolEffectDigest;
 }
