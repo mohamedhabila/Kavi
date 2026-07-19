@@ -20,6 +20,8 @@ versioning where practical for tagged releases.
   installation checks, and fallback handling.
 - Long-term memory with local fact, entity, focus, episode, recall, and
   task-scoped context storage.
+- Explicit, user-authorized preservation of bounded source text for exact
+  cross-conversation recall, with local withdrawal and memory opt-out controls.
 - Public contributor documentation for development setup, testing, privacy,
   permissions, release checks, third-party notices, and provenance.
 

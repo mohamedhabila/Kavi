@@ -20,6 +20,7 @@ describe('conversation-mode tool authority', () => {
   const ordinaryTools = [
     tool('memory_recall', 'memory'),
     tool('memory_remember', 'memory'),
+    tool('memory_preserve_source', 'memory'),
     tool('memory_manage', 'memory'),
     tool('memory_forget', 'memory'),
     tool('web_search', 'web'),

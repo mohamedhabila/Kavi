@@ -4,6 +4,7 @@ const INTERNAL_AGENT_CONTROL_TOOL_NAMES = new Set([
   'memory_search',
   'memory_recall',
   'memory_remember',
+  'memory_preserve_source',
   'memory_pin',
   'memory_unpin',
   'memory_forget',

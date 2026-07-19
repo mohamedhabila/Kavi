@@ -1,6 +1,7 @@
 const mockExecuteMemoryRecall = jest.fn();
 const mockExecuteMemorySearch = jest.fn();
 const mockExecuteMemoryRemember = jest.fn();
+const mockExecuteMemoryPreserveSource = jest.fn();
 const mockExecuteMemoryPin = jest.fn();
 const mockExecuteMemoryUnpin = jest.fn();
 const mockExecuteMemoryInvalidate = jest.fn();
@@ -35,6 +36,7 @@ jest.mock('../../src/engine/tools/builtin-memory', () => ({
   executeMemoryRecall: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
   executeMemorySearch: (...args: unknown[]) => mockExecuteMemorySearch(...args),
   executeMemoryRemember: (...args: unknown[]) => mockExecuteMemoryRemember(...args),
+  executeMemoryPreserveSource: (...args: unknown[]) => mockExecuteMemoryPreserveSource(...args),
   executeMemoryPin: (...args: unknown[]) => mockExecuteMemoryPin(...args),
   executeMemoryUnpin: (...args: unknown[]) => mockExecuteMemoryUnpin(...args),
   executeMemoryForget: (...args: unknown[]) => mockExecuteMemoryForget(...args),
@@ -61,6 +63,7 @@ beforeEach(() => {
   mockExecuteMemoryRecall.mockReturnValue(completedOutcome);
   mockExecuteMemorySearch.mockResolvedValue(completedOutcome);
   mockExecuteMemoryRemember.mockReturnValue(completedOutcome);
+  mockExecuteMemoryPreserveSource.mockReturnValue(completedOutcome);
   mockExecuteMemoryPin.mockReturnValue(completedOutcome);
   mockExecuteMemoryUnpin.mockReturnValue(completedOutcome);
   mockExecuteMemoryInvalidate.mockReturnValue(completedOutcome);
@@ -118,6 +121,47 @@ describe('builtin memory execution scope', () => {
     });
     expect(mockExecuteMemoryRemember.mock.calls[0]?.[0]).not.toHaveProperty('executionClaim');
     expect(providerArgs).not.toHaveProperty('sourceRunId');
+  });
+
+  it('copies source authority from the current turn instead of provider arguments', async () => {
+    const executionClaim = Object.freeze({
+      executionRunId: 'execution-preserve-source',
+      toolCallId: 'tool-call-preserve-source',
+      claimedAt: 2_000_000_000_000,
+    });
+    const providerArgs = {
+      title: 'Aurora brief',
+      sensitivity: 'normal',
+    };
+
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      authorizedEffectExecutionClaim: executionClaim,
+      context: {
+        ...BASE_PARAMS.context,
+        currentUserMessage: {
+          id: 'user-message-preserve-source',
+          text: 'Preserve Aurora brief.\nAurora brief\nMarker: delta-17',
+        },
+        agentRunId: 'agent-run-preserve-source',
+      },
+      name: 'memory_preserve_source',
+      args: providerArgs,
+    });
+
+    expect(mockExecuteMemoryPreserveSource).toHaveBeenCalledWith(providerArgs, {
+      personaId: 'coder',
+      sourceRunId: 'agent-run-preserve-source',
+      executionClaim,
+      requestEvidence: {
+        memoryConversationId: 'delegated-memory-scope',
+        sourceThreadId: 'child-thread',
+        taskId: 'active-task',
+        userMessageId: 'user-message-preserve-source',
+        userMessageText: 'Preserve Aurora brief.\nAurora brief\nMarker: delta-17',
+      },
+    });
+    expect(providerArgs).not.toHaveProperty('content');
   });
 
   it.each([

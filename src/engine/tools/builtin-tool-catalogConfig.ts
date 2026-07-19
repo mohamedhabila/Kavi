@@ -177,6 +177,7 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'memory_search',
       'memory_recall',
       'memory_remember',
+      'memory_preserve_source',
       'memory_forget',
       'memory_manage',
     ],

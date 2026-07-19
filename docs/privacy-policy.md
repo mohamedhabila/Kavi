@@ -109,12 +109,17 @@ Kavi requests sensitive permissions only when the related feature is used.
 
 1. Kavi maintains an on-device long-term memory store so the assistant can
    refer back to durable details across conversations.
-2. The memory store lives on your device in the app database. Memory is not
+2. When you explicitly ask Kavi to preserve a bounded source for later
+   conversations, the exact current message can be stored in that local memory
+   database rather than reduced to individual facts.
+3. The memory store lives on your device in the app database. Memory is not
    uploaded by default as a standalone sync service.
-3. If you enable memory-consolidation features that use a configured model
+4. If you enable memory-consolidation features that use a configured model
    provider, the prompts sent for consolidation are limited to the conversation
    content needed for that user-requested feature.
-4. You can disable long-term memory in Settings.
+5. You can disable long-term memory in Settings and remove preserved sources
+   through the same withdrawal or memory-clearing controls used for other
+   durable memory.
 
 ## International Transfers
 

@@ -212,9 +212,9 @@ claim labels, split governance, and adapted-versus-official boundaries.
 ## Privacy And Memory
 
 Kavi keeps optional long-term memory on-device in SQLite: facts, entities,
-scoped focus blocks, episodes, and recall indexes. Optional consolidation or
-embedding providers can send selected snippets to the user-configured provider
-when those features are enabled.
+explicitly preserved bounded source records, scoped focus blocks, episodes, and
+recall indexes. Optional consolidation or embedding providers can send selected
+snippets to the user-configured provider when those features are enabled.
 
 You can fully disable long-term memory in Settings. When disabled:
 

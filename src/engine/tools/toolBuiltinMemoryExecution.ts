@@ -6,16 +6,17 @@ import {
   executeMemoryForget,
   executeMemoryInvalidate,
   executeMemoryPin,
+  executeMemoryPreserveSource,
   executeMemoryRecall,
   executeMemoryRemember,
   executeMemorySearch,
   executeMemoryUnpin,
 } from './builtin-memory';
 import type {
-  MemoryRememberArgs,
   MemoryRememberExecutionContext,
   MemoryRecallExecutionContext,
 } from '../../services/memory/memoryTools';
+import type { MemoryPreserveSourceArgs } from '../../services/memory/memoryPreserveSource';
 import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
 import { createExplicitMemoryRecallGrant } from '../../services/memory/explicitMemoryRecallGrant';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
@@ -29,6 +30,7 @@ export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
   'memory_search',
   'memory_recall',
   'memory_remember',
+  'memory_preserve_source',
   'memory_pin',
   'memory_unpin',
   'memory_forget',
@@ -117,17 +119,12 @@ function withRecallExecutionContext(
   }
 }
 
-function withExecutionMemoryContext(
-  args: unknown,
+function buildMemoryWriteExecutionContext(
   conversationId: string,
   memoryConversationId: string,
   context?: ToolExecutionContext,
   executionClaim?: AuthorizedToolEffectExecutionClaim,
-): { args: MemoryRememberArgs; context: MemoryRememberExecutionContext } | null {
-  const source =
-    args && typeof args === 'object' && !Array.isArray(args)
-      ? (args as Partial<MemoryRememberArgs>)
-      : {};
+): MemoryRememberExecutionContext | null {
   const sourceRunId =
     context?.agentRunId === undefined
       ? null
@@ -157,7 +154,7 @@ function withExecutionMemoryContext(
       ? { toolObservedEvidence: context.toolObservedMemoryEvidence }
       : {}),
   };
-  return { args: source as MemoryRememberArgs, context: rememberContext };
+  return rememberContext;
 }
 
 export async function executeBuiltinMemoryTool(
@@ -207,14 +204,13 @@ export async function executeBuiltinMemoryTool(
     );
   }
   if (name === 'memory_remember') {
-    const request = withExecutionMemoryContext(
-      args,
+    const memoryWriteContext = buildMemoryWriteExecutionContext(
       conversationId,
       memoryConversationId,
       context,
       authorizedEffectExecutionClaim,
     );
-    if (!request) {
+    if (!memoryWriteContext) {
       return failedToolOutcome(
         JSON.stringify({
           status: 'rejected',
@@ -224,7 +220,26 @@ export async function executeBuiltinMemoryTool(
         }),
       );
     }
-    return executeMemoryRemember(request.args, request.context);
+    return executeMemoryRemember(args, memoryWriteContext);
+  }
+  if (name === 'memory_preserve_source') {
+    const memoryWriteContext = buildMemoryWriteExecutionContext(
+      conversationId,
+      memoryConversationId,
+      context,
+      authorizedEffectExecutionClaim,
+    );
+    if (!memoryWriteContext) {
+      return failedToolOutcome(
+        JSON.stringify({
+          status: 'rejected',
+          ok: false,
+          code: 'internal',
+          error: 'memory_preserve_source execution authority invariant failed.',
+        }),
+      );
+    }
+    return executeMemoryPreserveSource(args as MemoryPreserveSourceArgs, memoryWriteContext);
   }
   const executionMemoryContext = resolveExecutionMemoryContext(
     conversationId,

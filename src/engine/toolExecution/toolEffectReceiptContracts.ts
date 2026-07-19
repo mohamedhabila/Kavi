@@ -235,6 +235,11 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       { created: VERIFIED, duplicate: VERIFIED, rejected: FAILED },
       { resource: selector('memory_fact', 'result', ['fact', 'id']) },
     ),
+    memory_preserve_source: effectful(
+      'memory.write',
+      { created: VERIFIED, duplicate: VERIFIED, rejected: FAILED },
+      { resource: selector('memory_fact', 'result', ['fact', 'id']) },
+    ),
     memory_forget: effectful(
       'memory.delete',
       { withdrawn: VERIFIED, already_withdrawn: VERIFIED, rejected: FAILED },

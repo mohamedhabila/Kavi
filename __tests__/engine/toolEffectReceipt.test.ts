@@ -292,6 +292,17 @@ describe('ToolEffectReceipt', () => {
       },
     ],
     [
+      'verified preserved memory source',
+      'memory_preserve_source',
+      { status: 'created', ok: true, fact: { id: 'fact-source-1' } },
+      {
+        effectKind: 'memory.write',
+        effectState: 'applied',
+        verificationState: 'verified',
+        resource: { kind: 'memory_fact', id: 'fact-source-1' },
+      },
+    ],
+    [
       'definitive memory withdrawal precondition rejection',
       'memory_forget',
       { status: 'rejected', ok: false, code: 'not_found' },

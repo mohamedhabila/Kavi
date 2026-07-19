@@ -20,6 +20,8 @@ Kavi stores application state locally for usability and continuity.
 Examples include:
 
 - conversation history and drafts
+- durable memory facts and exact bounded source records that the user asks Kavi
+  to preserve across conversations
 - non-secret settings
 - workflow state and local metadata
 - generated artifacts tied to active conversations or tools
@@ -27,6 +29,10 @@ Examples include:
 Secrets such as provider API keys, remote access tokens, and private SSH
 material are intended to flow through secure-storage abstractions rather than
 the plain persisted settings store.
+
+Long-term memory can be disabled in Settings. Explicitly preserved sources use
+the same local memory withdrawal and clearing controls as other durable memory;
+they are not uploaded as a standalone sync service.
 
 ## Remote Data Flows
 

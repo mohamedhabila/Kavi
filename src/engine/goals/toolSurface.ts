@@ -23,6 +23,7 @@ export const DEFAULT_CORE_TOOL_ORDER = [
   GOAL_BOOTSTRAP_TOOL_NAME,
   'memory_recall',
   'memory_remember',
+  'memory_preserve_source',
   'memory_forget',
   'read_file',
   'write_file',
@@ -35,6 +36,7 @@ const STABLE_TOOL_SURFACE_ORDER_VALUES = [
   GOAL_BOOTSTRAP_TOOL_NAME,
   'memory_recall',
   'memory_remember',
+  'memory_preserve_source',
   'memory_forget',
   'read_file',
   'write_file',
@@ -56,6 +58,7 @@ const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   REQUEST_CLARIFICATION_TOOL_NAME,
   'memory_recall',
   'memory_remember',
+  'memory_preserve_source',
   'memory_forget',
 ]);
 const STABLE_TOOL_SURFACE_ORDER = new Map(
