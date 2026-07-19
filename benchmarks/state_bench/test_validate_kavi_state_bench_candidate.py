@@ -179,7 +179,7 @@ class CandidateValidatorTests(unittest.TestCase):
         self._write_json(
             self.outputs / "travel/metrics.json",
             {
-                "benchmark_version": "0.8.0",
+                "benchmark_version": "0.8.1",
                 "timestamp": "2026-07-11T00:00:00+00:00",
                 "evaluation_protocol_id": VALIDATOR.EXPECTED_PROTOCOL_ID,
                 "num_runs": 1,

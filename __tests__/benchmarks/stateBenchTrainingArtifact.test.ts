@@ -57,8 +57,8 @@ describe('STATE-Bench training-only artifact', () => {
 
     expect(artifact.source).toEqual(
       expect.objectContaining({
-        release: 'v0.8.0',
-        commit: 'e2c8d7af51ef48fbbea51bb2ce1fb859af36b423',
+        release: 'v0.8.1',
+        commit: '4efcbf2d4fe60df04878859b692d9391f3d5b33a',
         trainOnly: true,
       }),
     );
@@ -87,7 +87,7 @@ describe('STATE-Bench training-only artifact', () => {
     const learnings = retrieveExperienceLearnings({
       artifact: artifact.learning,
       domainId: 'travel',
-      environmentId: 'state-bench-v0.8.0',
+      environmentId: 'state-bench-v0.8.1',
       query: 'Cancel my booking and calculate the refund',
       topK: 3,
     });

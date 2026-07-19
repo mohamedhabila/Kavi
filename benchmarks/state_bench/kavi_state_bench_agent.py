@@ -1,4 +1,4 @@
-"""Official STATE-Bench v0.8.0 Agent Learning hook for Kavi learnings."""
+"""Official STATE-Bench v0.8.1 Agent Learning hook for Kavi learnings."""
 
 from __future__ import annotations
 

@@ -6,8 +6,8 @@ import {
   type ExperienceProcedureObservation,
 } from '../../src/services/memory/experienceLearningArtifact';
 
-export const STATE_BENCH_ADAPTER_RELEASE = 'v0.8.0';
-export const STATE_BENCH_ADAPTER_COMMIT = 'e2c8d7af51ef48fbbea51bb2ce1fb859af36b423';
+export const STATE_BENCH_ADAPTER_RELEASE = 'v0.8.1';
+export const STATE_BENCH_ADAPTER_COMMIT = '4efcbf2d4fe60df04878859b692d9391f3d5b33a';
 export const STATE_BENCH_TRAIN_TASKS_PER_DOMAIN = 100;
 export const STATE_BENCH_DOMAINS = ['travel', 'customer_support', 'shopping_assistant'] as const;
 

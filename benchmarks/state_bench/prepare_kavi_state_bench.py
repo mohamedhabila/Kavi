@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the pinned Kavi adapter inside a clean STATE-Bench v0.8.0 checkout."""
+"""Prepare the pinned Kavi adapter inside a clean STATE-Bench v0.8.1 checkout."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-RELEASE = "v0.8.0"
-COMMIT = "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423"
+RELEASE = "v0.8.1"
+COMMIT = "4efcbf2d4fe60df04878859b692d9391f3d5b33a"
 PREPARATION_SCHEMA_VERSION = "kavi-state-bench-preparation-v1"
-EXPECTED_PROTOCOL_ID = "state_bench_v0.8.0_gpt54"
+EXPECTED_PROTOCOL_ID = "state_bench_v0.8.1_gpt54"
 EXPECTED_DOMAINS = ["travel", "customer_support", "shopping_assistant"]
 
 

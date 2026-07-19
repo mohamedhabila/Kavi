@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a complete STATE-Bench v0.8.0 run before candidate packaging."""
+"""Validate a complete STATE-Bench v0.8.1 run before candidate packaging."""
 
 from __future__ import annotations
 
@@ -16,11 +16,11 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-RELEASE = "v0.8.0"
-COMMIT = "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423"
+RELEASE = "v0.8.1"
+COMMIT = "4efcbf2d4fe60df04878859b692d9391f3d5b33a"
 PREPARATION_SCHEMA_VERSION = "kavi-state-bench-preparation-v1"
 CANDIDATE_SCHEMA_VERSION = "kavi-state-bench-candidate-v2"
-EXPECTED_PROTOCOL_ID = "state_bench_v0.8.0_gpt54"
+EXPECTED_PROTOCOL_ID = "state_bench_v0.8.1_gpt54"
 EXPECTED_DOMAINS = ("travel", "customer_support", "shopping_assistant")
 EXPECTED_RUNS = 5
 EXPECTED_TASKS_PER_DOMAIN = 50
@@ -293,7 +293,7 @@ def compute_official_public_metrics(
         if record["cost_usd"] is not None
     ]
 
-    # Match STATE-Bench v0.8.0 compute_summary followed by build_standard_metrics.
+    # Match STATE-Bench v0.8.1 compute_summary followed by build_standard_metrics.
     return {
         "task_completion_pass@1": round(round(average(per_run_completion_rates), 4), 2),
         "task_completion_pass@1_std_dev": round(
@@ -324,7 +324,7 @@ def verify_metrics(
         },
         "STATE-Bench metrics",
     )
-    require(metrics.get("benchmark_version") == "0.8.0", f"Metrics version mismatch: {path}")
+    require(metrics.get("benchmark_version") == "0.8.1", f"Metrics version mismatch: {path}")
     require(
         isinstance(metrics.get("timestamp"), str) and bool(metrics["timestamp"].strip()),
         f"Metrics timestamp is missing: {path}",

@@ -1,6 +1,6 @@
 # Kavi STATE-Bench Agent Learning adapter
 
-This adapter targets the official STATE-Bench Agent Learning track at release `v0.8.0`, commit `e2c8d7af51ef48fbbea51bb2ce1fb859af36b423`.
+This adapter targets the official STATE-Bench Agent Learning track at release `v0.8.1`, commit `4efcbf2d4fe60df04878859b692d9391f3d5b33a`.
 
 It evaluates one deliberately narrow product claim: whether Kavi's corroborated experience-learning retrieval improves held-out task completion and UX. STATE-Bench still owns the domain tools, simulator, judge, task environments, and scoring. The adapter uses the upstream `StateBenchAgent` tool loop plus Kavi's read-only learned-experience artifact; it is not evidence that the full mobile UI/runtime ran inside STATE-Bench.
 
@@ -17,7 +17,7 @@ It evaluates one deliberately narrow product claim: whether Kavi's corroborated 
 ## Prepare the pinned checkout
 
 ```bash
-rtk git clone --branch v0.8.0 --depth 1 \
+rtk git clone --branch v0.8.1 --depth 1 \
   https://github.com/microsoft/STATE-Bench.git \
   .private/evals/upstream/STATE-Bench
 
@@ -60,8 +60,8 @@ shape:
   "condition": "baseline",
   "configuration": {
     "appCommit": "<clean-40-character-kavi-commit>",
-    "upstream": { "release": "v0.8.0", "commit": "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423" },
-    "evaluationProtocolId": "state_bench_v0.8.0_gpt54",
+    "upstream": { "release": "v0.8.1", "commit": "4efcbf2d4fe60df04878859b692d9391f3d5b33a" },
+    "evaluationProtocolId": "state_bench_v0.8.1_gpt54",
     "domains": ["travel", "customer_support", "shopping_assistant"],
     "runs": 5,
     "numWorkers": 4,
@@ -175,5 +175,5 @@ maintainer verification and leaderboard acceptance.
 
 Official references:
 
-- https://github.com/microsoft/STATE-Bench/blob/v0.8.0/docs/AGENT_LEARNING_TRACK.md
-- https://github.com/microsoft/STATE-Bench/blob/v0.8.0/docs/SUBMIT.md
+- https://github.com/microsoft/STATE-Bench/blob/v0.8.1/docs/AGENT_LEARNING_TRACK.md
+- https://github.com/microsoft/STATE-Bench/blob/v0.8.1/docs/SUBMIT.md

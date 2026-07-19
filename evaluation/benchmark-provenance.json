@@ -134,14 +134,14 @@
         "integrationKind": "upstream_agent_learning_hook",
         "roots": ["benchmarks/state_bench"],
         "sourceDigestAlgorithm": "sha256_versionable_path_nul_bytes_nul_v2",
-        "sourceSha256": "233d0877874c208a1fd7116d801dc30256c6df72a2ca75cd26181a7b6b7fb165",
+        "sourceSha256": "53cf9d560f181ecbf32aba733f45776cbb37a995107eb50814deebeba3848ab7",
         "modifiesUpstream": true
       },
       "upstream": {
         "repositoryUrl": "https://github.com/microsoft/STATE-Bench",
-        "releaseTag": "v0.8.0",
-        "commitSha": "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423",
-        "immutableSourceUrl": "https://github.com/microsoft/STATE-Bench/tree/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423",
+        "releaseTag": "v0.8.1",
+        "commitSha": "4efcbf2d4fe60df04878859b692d9391f3d5b33a",
+        "immutableSourceUrl": "https://github.com/microsoft/STATE-Bench/tree/4efcbf2d4fe60df04878859b692d9391f3d5b33a",
         "checkoutPath": ".private/evals/upstream/STATE-Bench",
         "cleanBaseRequired": true,
         "allowedInstalledChanges": ["agents/kavi_state_bench_agent.py"]
@@ -150,19 +150,19 @@
         "code": {
           "spdxId": "MIT",
           "scope": "upstream_repository",
-          "sourceUrl": "https://github.com/microsoft/STATE-Bench/blob/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423/LICENSE",
+          "sourceUrl": "https://github.com/microsoft/STATE-Bench/blob/4efcbf2d4fe60df04878859b692d9391f3d5b33a/LICENSE",
           "redistribution": "permitted_with_mit_notice"
         },
         "data": {
           "spdxId": "MIT",
           "scope": "released_dataset",
-          "sourceUrl": "https://github.com/microsoft/STATE-Bench/blob/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423/LICENSE",
+          "sourceUrl": "https://github.com/microsoft/STATE-Bench/blob/4efcbf2d4fe60df04878859b692d9391f3d5b33a/LICENSE",
           "redistribution": "permitted_with_mit_notice"
         }
       },
       "data": {
-        "sourceUrl": "https://github.com/microsoft/STATE-Bench/tree/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423/datasets/train_task_trajectories",
-        "revision": "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423",
+        "sourceUrl": "https://github.com/microsoft/STATE-Bench/tree/4efcbf2d4fe60df04878859b692d9391f3d5b33a/datasets/train_task_trajectories",
+        "revision": "4efcbf2d4fe60df04878859b692d9391f3d5b33a",
         "integrity": [
           {
             "id": "customer-support-train",
@@ -221,7 +221,7 @@
       "submission": {
         "route": "github_issue",
         "url": "https://github.com/microsoft/STATE-Bench/issues/new",
-        "instructionsUrl": "https://github.com/microsoft/STATE-Bench/blob/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423/docs/SUBMIT.md",
+        "instructionsUrl": "https://github.com/microsoft/STATE-Bench/blob/4efcbf2d4fe60df04878859b692d9391f3d5b33a/docs/SUBMIT.md",
         "maintainerAcceptanceRequired": true,
         "resultStatus": "not_submitted",
         "submissionRecordUrl": null
