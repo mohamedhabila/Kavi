@@ -17,6 +17,17 @@ import {
   readOpenAIResponsesStreamResponseId,
 } from './streamState';
 
+function readOpenAIStreamErrorMessage(
+  event: unknown,
+  fallback: string,
+): string {
+  if (!isPlainRecord(event)) return fallback;
+  const direct = event.message;
+  if (typeof direct === 'string' && direct.trim()) return direct;
+  const nested = isPlainRecord(event.error) ? event.error.message : undefined;
+  return typeof nested === 'string' && nested.trim() ? nested : fallback;
+}
+
 export async function* streamOpenAIResponses(
   args: OpenAIResponsesStreamArgs,
 ): AsyncGenerator<StreamEvent> {
@@ -269,7 +280,7 @@ export async function* streamOpenAIResponses(
           throw new Error(message);
         }
         case 'error': {
-          throw new Error(parsed.message || 'OpenAI streaming error');
+          throw new Error(readOpenAIStreamErrorMessage(parsed, 'OpenAI streaming error'));
         }
         default:
           break;

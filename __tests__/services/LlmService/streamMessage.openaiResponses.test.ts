@@ -317,5 +317,32 @@ describe('LlmService', () => {
         }),
       );
     });
+
+    it('surfaces the nested message from OpenAI Responses SSE errors', async () => {
+      const response = createMockStreamResponse([
+        'data: {"type":"error","error":{"type":"insufficient_quota","code":"insufficient_quota","message":"Your API quota is exhausted."}}\n\n',
+      ]);
+      mockFetch.mockResolvedValueOnce(response);
+
+      const service = new LlmService(
+        makeConfig({
+          id: 'openai',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-openai',
+          model: 'gpt-5.4',
+        }),
+      );
+
+      await expect(
+        (async () => {
+          for await (const _event of service.streamMessage([
+            { role: 'user', content: 'Hello' },
+          ])) {
+            // Drain the stream so the provider error is observed.
+          }
+        })(),
+      ).rejects.toThrow('Your API quota is exhausted.');
+    });
   });
 });
