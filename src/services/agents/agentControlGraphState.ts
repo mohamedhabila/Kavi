@@ -5,7 +5,6 @@ import type {
   AgentRunControlGraphAsyncWorkState,
   AgentRunControlGraphForcedTextReason,
   AgentRunControlGraphPerformance,
-  AgentRunControlGraphPendingUserInput,
   AgentRunControlGraphState,
   AgentRunControlGraphStatus,
   AgentRunControlGraphToolCallRef,
@@ -28,9 +27,9 @@ import {
 } from './agentRunAsyncState';
 import { normalizeRequestUnderstandingSnapshot } from './requestUnderstandingProjection';
 import {
-  isRequestInformationKey,
-  MAX_REQUEST_CLARIFICATION_FIELDS,
-} from './requestClarification';
+  admitAgentControlGraphClarificationReply,
+  normalizeAgentControlGraphPendingUserInput,
+} from './agentControlGraphClarificationState';
 
 export const AGENT_RUN_CONTROL_GRAPH_VERSION = 1;
 export const MAX_AGENT_RUN_CONTROL_GRAPH_AUDIT_EVENTS = 128;
@@ -89,45 +88,6 @@ function normalizeOptionalText(value: unknown): string | undefined {
 
 function normalizeOptionalNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
-}
-
-function normalizePendingUserInput(
-  value: Partial<AgentRunControlGraphPendingUserInput> | undefined,
-): AgentRunControlGraphPendingUserInput | undefined {
-  const requestedAfterUserMessageId = normalizeOptionalText(
-    value?.requestedAfterUserMessageId,
-  );
-  if (!requestedAfterUserMessageId || !Array.isArray(value?.requiredInformation)) {
-    return undefined;
-  }
-  const requiredInformation = value.requiredInformation
-    .map((entry) => {
-      if (
-        !entry ||
-        !isRequestInformationKey(entry.key) ||
-        (entry.requiredFor !== 'understanding' && entry.requiredFor !== 'execution')
-      ) {
-        return undefined;
-      }
-      return { key: entry.key, requiredFor: entry.requiredFor };
-    })
-    .filter(
-      (entry): entry is AgentRunControlGraphPendingUserInput['requiredInformation'][number] =>
-        entry !== undefined,
-    );
-  if (
-    requiredInformation.length === 0 ||
-    requiredInformation.length > MAX_REQUEST_CLARIFICATION_FIELDS ||
-    requiredInformation.length !== value.requiredInformation.length ||
-    new Set(requiredInformation.map((entry) => entry.key)).size !== requiredInformation.length
-  ) {
-    return undefined;
-  }
-  return {
-    requestedAfterUserMessageId,
-    requiredInformation,
-    updatedAt: normalizeTimestamp(value.updatedAt),
-  };
 }
 
 function isDefinedText(value: string | undefined): value is string {
@@ -556,7 +516,7 @@ export function createInitialAgentRunControlGraphState(
     state.sessionActivatedToolNames,
   );
   const requestUnderstanding = normalizeRequestUnderstandingSnapshot(state.requestUnderstanding);
-  const pendingUserInput = normalizePendingUserInput(state.pendingUserInput);
+  const pendingUserInput = normalizeAgentControlGraphPendingUserInput(state.pendingUserInput);
 
   return {
     version: AGENT_RUN_CONTROL_GRAPH_VERSION,
@@ -610,7 +570,11 @@ export function isAgentRunControlGraphTerminal(
 
 export function prepareAgentRunControlGraphForResume(
   state: Partial<AgentRunControlGraphState> | undefined,
-  params: { updatedAt?: number; reason?: string } = {},
+  params: {
+    resolvedUserInformationKeys?: ReadonlyArray<string>;
+    updatedAt?: number;
+    reason?: string;
+  } = {},
 ): AgentRunControlGraphState | undefined {
   const normalized = normalizeAgentRunControlGraphState(state);
   if (!normalized) {
@@ -628,6 +592,11 @@ export function prepareAgentRunControlGraphForResume(
   const timestamp = params.updatedAt ?? Date.now();
   const previousStatus = normalized.status;
   const clearsPendingDelivery = previousStatus === 'cancelled';
+  const pendingUserInput = admitAgentControlGraphClarificationReply({
+    pendingUserInput: normalized.pendingUserInput,
+    resolvedUserInformationKeys: params.resolvedUserInformationKeys,
+    updatedAt: timestamp,
+  });
   return {
     ...normalized,
     goals: clearsPendingDelivery
@@ -640,6 +609,7 @@ export function prepareAgentRunControlGraphForResume(
         })
       : normalized.goals,
     status: 'ready',
+    pendingUserInput,
     expectedToolCalls: [],
     observedToolResults: [],
     pendingAsyncCount: 0,

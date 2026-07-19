@@ -104,11 +104,11 @@ export function resolveGraphEntryRequestDecision(params: {
     return resolveRequestDecision({
       frame: params.frame,
       requiredInformation: params.graphSnapshot.pendingUserInput.requiredInformation.map(
-        ({ key, requiredFor }) => ({
+        ({ key, requiredFor, resolution }) => ({
           key,
           authority: 'user' as const,
           requiredFor,
-          resolution: 'user_provided' as const,
+          resolution,
         }),
       ),
       policyDisposition: 'allowed',

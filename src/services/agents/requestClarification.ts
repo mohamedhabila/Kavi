@@ -2,6 +2,7 @@ import type {
   RequiredInformationPurpose,
   RequiredRequestInformation,
 } from './requestFrame';
+import type { AgentRunControlGraphUserInformationSemanticRole } from '../../types/agentRun';
 
 export const REQUEST_CLARIFICATION_TOOL_NAME = 'request_clarification';
 export const REQUEST_CLARIFICATION_RESULT_VERSION = 2 as const;
@@ -10,18 +11,7 @@ export const MAX_REQUEST_CLARIFICATION_QUESTION_CHARACTERS = 1_200;
 export const REQUEST_INFORMATION_KEY_PATTERN = /^[a-z][a-z0-9_.-]{0,63}$/u;
 
 export type RequestClarificationSemanticRole =
-  | 'authorization'
-  | 'constraint'
-  | 'content'
-  | 'identifier'
-  | 'location'
-  | 'other'
-  | 'preference'
-  | 'quantity'
-  | 'recipient'
-  | 'selection'
-  | 'time'
-  | 'title';
+  AgentRunControlGraphUserInformationSemanticRole;
 
 const REQUEST_CLARIFICATION_SEMANTIC_ROLES = new Set<RequestClarificationSemanticRole>([
   'authorization',

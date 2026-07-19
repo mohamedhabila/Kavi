@@ -289,9 +289,25 @@ export interface AgentRunControlGraphAsyncWorkState {
   updatedAt: number;
 }
 
+export type AgentRunControlGraphUserInformationSemanticRole =
+  | 'authorization'
+  | 'constraint'
+  | 'content'
+  | 'identifier'
+  | 'location'
+  | 'other'
+  | 'preference'
+  | 'quantity'
+  | 'recipient'
+  | 'selection'
+  | 'time'
+  | 'title';
+
 export interface AgentRunControlGraphRequiredUserInformation {
   key: string;
   requiredFor: 'understanding' | 'execution';
+  semanticRole: AgentRunControlGraphUserInformationSemanticRole;
+  resolution: 'unresolved' | 'user_provided';
 }
 
 export interface AgentRunControlGraphPendingUserInput {

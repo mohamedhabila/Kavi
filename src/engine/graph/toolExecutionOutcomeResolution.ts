@@ -473,7 +473,12 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         type: 'USER_INPUT_REQUIRED',
         requestedAfterUserMessageId,
         requiredInformation: clarificationRequest.requiredInformation.map(
-          ({ key, requiredFor }) => ({ key, requiredFor }),
+          ({ key, requiredFor, semanticRole, resolution }) => ({
+            key,
+            requiredFor,
+            semanticRole,
+            resolution,
+          }),
         ),
       },
       content: clarificationRequest.question,

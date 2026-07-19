@@ -63,6 +63,7 @@ export function prepareAgentRunResumeForOrchestrator(params: {
   existingRun?: Pick<AgentRun, 'controlGraph' | 'userMessageId' | 'workflowTaskAnchor'>;
   fallbackUserMessageId?: string;
   messages: ReadonlyArray<Message>;
+  resolvedUserInformationKeys?: ReadonlyArray<string>;
   updatedAt?: number;
 }): AgentRunResumePreparation {
   if (params.existingRun) {
@@ -107,6 +108,7 @@ export function prepareAgentRunResumeForOrchestrator(params: {
         params.existingRun.controlGraph,
         {
           reason: 'resuming a running agent run',
+          resolvedUserInformationKeys: params.resolvedUserInformationKeys,
           updatedAt: timestamp,
         },
       ),

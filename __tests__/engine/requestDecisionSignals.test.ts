@@ -66,8 +66,18 @@ describe('graph entry request decision signals', () => {
       pendingUserInput: {
         requestedAfterUserMessageId: 'user-1',
         requiredInformation: [
-          { key: 'alarm.time', requiredFor: 'execution' },
-          { key: 'alarm.label', requiredFor: 'understanding' },
+          {
+            key: 'alarm.time',
+            requiredFor: 'execution',
+            semanticRole: 'time',
+            resolution: 'user_provided',
+          },
+          {
+            key: 'alarm.label',
+            requiredFor: 'understanding',
+            semanticRole: 'title',
+            resolution: 'user_provided',
+          },
         ],
         updatedAt: 10,
       },
@@ -89,6 +99,39 @@ describe('graph entry request decision signals', () => {
         },
       ],
       decision: { action: 'act', reason: 'requirements_resolved' },
+    });
+  });
+
+  it('keeps partially answered clarification fields unresolved without guessing', () => {
+    const requestFrame = frame({ continuation: 'resume_waiting_user' });
+    const graphSnapshot = createInitialAgentRunControlGraphState({
+      status: 'ready',
+      pendingUserInput: {
+        requestedAfterUserMessageId: 'user-1',
+        requiredInformation: [
+          {
+            key: 'message.recipient',
+            requiredFor: 'execution',
+            semanticRole: 'recipient',
+            resolution: 'user_provided',
+          },
+          {
+            key: 'message.content',
+            requiredFor: 'execution',
+            semanticRole: 'content',
+            resolution: 'unresolved',
+          },
+        ],
+        updatedAt: 10,
+      },
+    });
+
+    expect(decide({ requestFrame, graphSnapshot })).toMatchObject({
+      requiredInformation: [
+        { key: 'message.recipient', resolution: 'user_provided' },
+        { key: 'message.content', resolution: 'unresolved' },
+      ],
+      decision: { action: 'clarify', reason: 'required_information_missing' },
     });
   });
 

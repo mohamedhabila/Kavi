@@ -68,7 +68,14 @@ describe('agentControlGraphRuntimeTerminal', () => {
       graphEvent: {
         type: 'USER_INPUT_REQUIRED',
         requestedAfterUserMessageId: 'user-1',
-        requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+        requiredInformation: [
+          {
+            key: 'alarm.time',
+            requiredFor: 'execution',
+            semanticRole: 'time',
+            resolution: 'unresolved',
+          },
+        ],
       },
       content: 'What time should I use?',
       assistantMetadata: {
@@ -117,7 +124,14 @@ describe('agentControlGraphRuntimeTerminal', () => {
         graphEvent: {
           type: 'USER_INPUT_REQUIRED',
           requestedAfterUserMessageId: 'user-1',
-          requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+          requiredInformation: [
+            {
+              key: 'alarm.time',
+              requiredFor: 'execution',
+              semanticRole: 'time',
+              resolution: 'unresolved',
+            },
+          ],
         },
         content: 'What time should I use?',
         assistantMetadata: {

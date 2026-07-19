@@ -79,8 +79,18 @@ describe('tool execution clarification outcome resolution', () => {
           type: 'USER_INPUT_REQUIRED',
           requestedAfterUserMessageId: 'user-test',
           requiredInformation: [
-            { key: 'recipient', requiredFor: 'execution' },
-            { key: 'message_body', requiredFor: 'execution' },
+            {
+              key: 'recipient',
+              requiredFor: 'execution',
+              semanticRole: 'recipient',
+              resolution: 'unresolved',
+            },
+            {
+              key: 'message_body',
+              requiredFor: 'execution',
+              semanticRole: 'content',
+              resolution: 'unresolved',
+            },
           ],
         },
         content: clarification.question,
