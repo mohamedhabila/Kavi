@@ -69,6 +69,8 @@ node ./scripts/mobileworld-pilot.js
 
 Set `MOBILEWORLD_DEVICE`, `MOBILEWORLD_AW_HOST`, or `MOBILEWORLD_PILOT_MAX_STEPS` only when the environment requires it. Results are written to a fresh ignored directory under `.private/evals/runs/mobileworld/`.
 
+Set `MOBILEWORLD_RELAUNCH_AFTER_FIRST_ACTION=1` only for the app-lifecycle diagnostic. The bridge then closes the local execution journal, discards and rehydrates the foreground chat state, runs normal startup recovery, and applies the first correlated controller outcome through a newly created foreground runtime. The result remains a local device diagnostic, not a separate MobileWorld score configuration.
+
 To exercise an upstream initializer and scorer on a local development AVD, set one canonical task class name:
 
 ```sh

@@ -17,6 +17,7 @@ import {
   createSeedConversation,
   ensureForegroundScenarioStoresHydrated,
 } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
+import { relaunchForegroundScenarioApp } from '../../src/acceptance/e2eAgent/foregroundScenarioLifecycle';
 import type {
   ForegroundScenarioDriverInput,
   ForegroundScenarioMemoryRecord,
@@ -36,6 +37,10 @@ import {
   flushChatStorePersistenceNow,
   requestChatStorePersistenceCheckpoint,
 } from '../../src/store/chatStorePersistence';
+import { resolveConversationWorkspaceTarget } from '../../src/services/conversationWorkspace/ownership';
+import { closeExecutionJournalDb } from '../../src/services/executionJournal/database';
+import { _resetForegroundModelExecutionProcessOwnershipForTests } from '../../src/services/executionJournal/foregroundModelExecutionProcessOwnership';
+import { recoverPersistedAgentState } from '../../src/services/startupRecovery';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { MobileControllerPublishedHandoff } from '../../src/engine/mobileController/publication';
@@ -61,8 +66,10 @@ type BridgeSession = {
   lastEventKind?: MobileWorldBridgeEvent['kind'];
   lastRunDiagnostics?: JsonObject;
   pendingPublication?: MobileControllerPublishedHandoff;
+  relaunches: number;
   rootConversationId: string;
   runtime: ReturnType<typeof createForegroundScenarioRuntime>;
+  scenarioInput: ForegroundScenarioDriverInput;
   turns: number;
   repairs: number;
 };
@@ -315,11 +322,13 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
             sessions.set(sessionId, {
               capability: await buildMobileWorldControllerCapability(controllerAppIds),
               instruction,
+              relaunches: 0,
               rootConversationId,
               runtime: createForegroundScenarioRuntime(
                 scenarioInput,
                 [] as ForegroundScenarioMemoryRecord[],
               ),
+              scenarioInput,
               turns: 0,
               repairs: 0,
             });
@@ -351,6 +360,31 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
           }
           if (session.lastEventKind === 'answer' || session.lastEventKind === 'status') {
             throw new Error('bridge_terminal_session_advanced');
+          }
+          if (
+            process.env.MOBILEWORLD_RELAUNCH_AFTER_FIRST_ACTION === '1' &&
+            session.lastEventKind === 'controller_action' &&
+            session.relaunches === 0
+          ) {
+            const memoryScope = {
+              memoryConversationId: resolveConversationWorkspaceTarget({
+                conversationId: session.rootConversationId,
+                conversations: useChatStore.getState().conversations,
+              }).workspaceConversationId,
+              sourceThreadId: session.rootConversationId,
+            };
+            closeExecutionJournalDb();
+            _resetForegroundModelExecutionProcessOwnershipForTests();
+            await relaunchForegroundScenarioApp({
+              conversationId: session.rootConversationId,
+              memoryScope,
+            });
+            await recoverPersistedAgentState();
+            session.runtime = createForegroundScenarioRuntime(
+              session.scenarioInput,
+              [] as ForegroundScenarioMemoryRecord[],
+            );
+            session.relaunches += 1;
           }
 
           const observation = buildMobileWorldObservationRef({
@@ -607,6 +641,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
         duration_ms: processResult.durationMs,
         bridge_turns: session?.turns ?? 0,
         repair_turns: session?.repairs ?? 0,
+        app_relaunches: session?.relaunches ?? 0,
         official_score: officialScore,
         state_verified: stateVerified,
         verified_rows: verifiedRows,

@@ -4,9 +4,12 @@ import {
 } from '../../src/services/agents/agentControlGraphState';
 import { reduceAgentControlGraph } from '../../src/engine/graph/agentControlGraph';
 import { prepareAgentRunResumeForOrchestrator } from '../../src/engine/graph/runResumePreparation';
+import { buildAgentRunMobileControllerAsyncOperation } from '../../src/services/agents/mobileControllerAsyncOperation';
 import { recoverInterruptedAgentRunsInConversation } from '../../src/store/agentRuns/recovery';
+import { listActiveToolEffectRestartInputs } from '../../src/store/agentRuns/toolCalls';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
+import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 
 function run(): AgentRun {
   return {
@@ -178,6 +181,101 @@ describe('agent-run restart effect reconciliation', () => {
     });
     expect(toolCall).toMatchObject({ status: 'running' });
     expect(toolCall?.error).toBeUndefined();
+  });
+
+  it('preserves a graph-owned mobile handoff for its dedicated host outcome after restart', () => {
+    const chat = conversation();
+    const handoff = createPersistedMobileControllerHandoffFixture().handoffRef;
+    const operation = buildAgentRunMobileControllerAsyncOperation({
+      handoff,
+      status: 'running',
+      updatedAt: 40,
+    });
+    if (!operation) throw new Error('expected mobile controller async operation');
+    chat.messages[1] = {
+      ...chat.messages[1]!,
+      toolCalls: [
+        {
+          id: handoff.toolCallId,
+          name: 'mobile_ui_action',
+          arguments: '{}',
+          status: 'running',
+          startedAt: 30,
+          updatedAt: 40,
+        },
+      ],
+    };
+    chat.agentRuns![0] = {
+      ...chat.agentRuns![0]!,
+      controlGraph: reduceAgentControlGraph(undefined, [
+        { type: 'MODEL_TURN_STARTED', iteration: 1, timestamp: 20 },
+        {
+          type: 'MODEL_TURN_COMPLETED',
+          iteration: 1,
+          toolCalls: [{ id: handoff.toolCallId, name: 'mobile_ui_action' }],
+          timestamp: 30,
+        },
+        {
+          type: 'ASYNC_WAITING',
+          pendingAsyncCount: 1,
+          pendingOperations: [operation],
+          timestamp: 40,
+        },
+      ]),
+    };
+    const resolveToolEffect = jest.fn(() => ({
+      kind: 'reconciliation_required' as const,
+      observedAt: null,
+      reason: 'journal_conflict' as const,
+    }));
+    expect(
+      listActiveToolEffectRestartInputs({
+        conversationId: chat.id,
+        executionRunId: 'foreground-execution-1',
+        messages: chat.messages,
+        run: chat.agentRuns![0]!,
+      }),
+    ).toEqual([]);
+    expect(
+      listActiveToolEffectRestartInputs({
+        conversationId: chat.id,
+        executionRunId: 'foreground-execution-1',
+        messages: chat.messages,
+        run: {
+          ...chat.agentRuns![0]!,
+          controlGraph: { ...chat.agentRuns![0]!.controlGraph!, status: 'recovering' },
+        },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        toolCallId: handoff.toolCallId,
+        toolName: 'mobile_ui_action',
+      }),
+    ]);
+
+    const recovered = recoverInterruptedAgentRunsInConversation(chat, [], {
+      timestamp: 200,
+      resolveToolEffect,
+    });
+
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'running',
+      controlGraph: {
+        status: 'waiting_async',
+        pendingAsyncCount: 1,
+        asyncWork: {
+          awaitingBackgroundWorkers: false,
+          pendingOperations: [
+            expect.objectContaining({
+              kind: 'mobile-controller-handoff',
+              mobileControllerHandoff: handoff,
+            }),
+          ],
+        },
+      },
+    });
+    expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({ status: 'running' });
+    expect(resolveToolEffect).not.toHaveBeenCalled();
   });
 
   it('keeps a preserved final response completed only when its active effect is verified', () => {

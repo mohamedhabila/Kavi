@@ -190,7 +190,9 @@ export function areAgentRunControlGraphAsyncWorkStatesEqual(
   );
 }
 
-export function getAgentRunPendingAsyncOperations(run: AgentRun): AgentRunAsyncOperation[] {
+export function getAgentRunPendingAsyncOperations(
+  run: Pick<AgentRun, 'controlGraph'>,
+): AgentRunAsyncOperation[] {
   const graphOperations = normalizeAgentRunAsyncOperations(
     run.controlGraph?.asyncWork?.pendingOperations,
   );
