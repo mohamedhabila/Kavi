@@ -36,7 +36,17 @@ function canonicalize(value: unknown): unknown {
 
 function declarationsMatch(left: ToolDefinition, right: ToolDefinition): boolean {
   try {
-    return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
+    const executionDeclaration = (declaration: ToolDefinition) => ({
+      name: declaration.name,
+      description: declaration.description,
+      inputSchema: declaration.input_schema,
+      strict: declaration.strict,
+      contract: declaration.contract,
+    });
+    return (
+      JSON.stringify(canonicalize(executionDeclaration(left))) ===
+      JSON.stringify(canonicalize(executionDeclaration(right)))
+    );
   } catch {
     return false;
   }

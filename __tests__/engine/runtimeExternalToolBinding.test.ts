@@ -109,6 +109,39 @@ describe('runtime-external tool binding', () => {
     ).toBeGreaterThan(firstBinding.evidence.provenance.registrationGeneration);
   });
 
+  it('ignores graph-owned prompt placement while sealing executable declaration fields', () => {
+    const runtimeSkill = skill('Stable runtime declaration', 'result');
+    registerSkill(runtimeSkill);
+    const declaration = getSkillToolDefinitions().find(
+      (tool) => tool.name === 'skill__mutable__act',
+    );
+    if (!declaration) throw new Error('dynamic declaration missing');
+
+    expect(
+      resolveRuntimeExternalToolBinding('skill__mutable__act', {
+        ...declaration,
+        promptCache: { placement: 'dynamic_suffix' },
+      }),
+    ).toBeDefined();
+    expect(
+      resolveRuntimeExternalToolBinding('skill__mutable__act', {
+        ...declaration,
+        description: 'Different executable declaration',
+        promptCache: { placement: 'dynamic_suffix' },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveRuntimeExternalToolBinding('skill__mutable__act', {
+        ...declaration,
+        input_schema: {
+          type: 'object',
+          properties: { changed: { type: 'boolean' } },
+        },
+        promptCache: { placement: 'dynamic_suffix' },
+      }),
+    ).toBeUndefined();
+  });
+
   it('invalidates a captured skill binding when its handler or declaration mutates in place', async () => {
     const handlerMutation = skill('Stable declaration', 'original result');
     registerSkill(handlerMutation);
