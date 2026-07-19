@@ -279,6 +279,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     invalidMcpUrlFormat: '请输入有效的 MCP 服务器 URL。',
     data: '数据',
     clearAllData: '清除所有对话',
+    dataDeletionHint:
+      '在此清除对话历史。使用“记忆”清除长期记忆。删除提供商和集成，或清空服务密钥字段，以移除已保存的凭据。',
+    manageMemory: '管理记忆',
     noProviders: '未配置提供商。请在上方添加一个以开始使用。',
     noMcpServers: '未配置 MCP 服务器。',
     language: '语言',

@@ -280,6 +280,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     invalidMcpUrlFormat: '有効な MCP サーバー URL を入力してください。',
     data: 'データ',
     clearAllData: 'すべての会話を消去',
+    dataDeletionHint:
+      'ここで会話履歴を削除します。長期記憶を削除するには「メモリー」を使用してください。保存された認証情報を削除するには、プロバイダーや連携を削除するか、サービスキー欄を空にしてください。',
+    manageMemory: 'メモリーを管理',
     noProviders: 'プロバイダーが設定されていません。上から追加して開始してください。',
     noMcpServers: 'MCP サーバーが設定されていません。',
     language: '言語',

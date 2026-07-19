@@ -101,9 +101,10 @@ Kavi requests sensitive permissions only when the related feature is used.
 
 1. Locally stored data remains on your device until you delete it, clear it
    from the app, or remove the app.
-2. You can remove saved integrations and secrets from Settings.
-3. You can clear stored conversation history from Settings.
-4. Data sent to a third-party service that you configure is subject to that service's retention practices and policies.
+2. You can clear stored conversation history from **Settings > Data > Clear All Conversations**.
+3. You can clear durable memories from **Memory > Clear All Memory**. This is a separate control because clearing conversations does not silently clear long-term memory.
+4. Delete a provider or integration from Settings to remove its saved credentials. Clear a built-in service-key field to remove that key. Downloaded on-device model files can be removed from the provider editor.
+5. Data sent to a third-party service that you configure is subject to that service's retention practices and policies.
 
 ## Long-Term Memory
 

@@ -281,6 +281,9 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     invalidMcpUrlFormat: 'Insira uma URL válida para o servidor MCP.',
     data: 'Dados',
     clearAllData: 'Limpar todas as conversas',
+    dataDeletionHint:
+      'Limpe o histórico de conversas aqui. Use Memória para apagar memórias duradouras. Exclua provedores e integrações, ou limpe os campos de chaves de serviço, para remover credenciais salvas.',
+    manageMemory: 'Gerenciar memória',
     noProviders: 'Nenhum provedor configurado. Adicione um acima para começar.',
     noMcpServers: 'Nenhum servidor MCP configurado.',
     language: 'Idioma',

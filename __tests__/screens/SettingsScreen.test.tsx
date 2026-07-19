@@ -85,6 +85,19 @@ describe('SettingsScreen general', () => {
     expect(getByText('Clear All Conversations')).toBeTruthy();
   });
 
+  it('explains the separate local-data controls and opens memory management', () => {
+    const { getByLabelText, getByText } = renderSettingsScreen();
+
+    expect(
+      getByText(
+        'Clear conversation history here. Use Memory to clear durable memories. Delete providers and integrations, or clear service-key fields, to remove saved credentials.',
+      ),
+    ).toBeTruthy();
+    fireEvent.press(getByLabelText('Manage Memory'));
+
+    expect(settingsMocks.navigate).toHaveBeenCalledWith('Memory');
+  });
+
   it('should show confirmation dialog when clearing conversations', () => {
     jest.spyOn(Alert, 'alert');
     const { getByText } = renderSettingsScreen();

@@ -5,7 +5,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { ArrowLeft } from 'lucide-react-native';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { SettingsAssistantSection } from './settings/SettingsAssistantSection';
@@ -49,6 +49,7 @@ import { useSettingsLocalRuntimeStatuses } from './settings/useSettingsLocalRunt
 import { useSettingsRemoteConfigDraftHydration } from './settings/useSettingsRemoteConfigDraftHydration';
 
 export const SettingsScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const handleBack = useBackToChat();
   const { colors } = useAppTheme();
@@ -268,12 +269,16 @@ export const SettingsScreen: React.FC = () => {
   }, []);
 
   // --- MCP Server Edit ---
-  const handleClearAllData = useCallback(() => {
+  const handleClearAllConversations = useCallback(() => {
     Alert.alert(t('chat.clearAll'), t('chat.clearAllConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('common.delete'), style: 'destructive', onPress: clearAllConversations },
     ]);
   }, [clearAllConversations, t]);
+
+  const handleManageMemory = useCallback(() => {
+    navigation.navigate('Memory');
+  }, [navigation]);
 
   // --- Provider Edit Section ---
   if (section === 'provider-edit' && editingProvider) {
@@ -507,7 +512,8 @@ export const SettingsScreen: React.FC = () => {
               onLayout={(event) => {
                 mainSectionOffsetsRef.current.data = event.nativeEvent.layout.y;
               }}
-              onClearAllData={handleClearAllData}
+              onManageMemory={handleManageMemory}
+              onClearAllConversations={handleClearAllConversations}
             />
           </SettingsManagedScrollView>
         </>

@@ -282,6 +282,9 @@ export const de: TranslationMap = mergeTranslations(en, {
     invalidMcpUrlFormat: 'Bitte geben Sie eine gültige URL für den MCP-Server ein.',
     data: 'Daten',
     clearAllData: 'Alle Gespräche löschen',
+    dataDeletionHint:
+      'Lösche hier den Gesprächsverlauf. Unter Erinnerungen kannst du dauerhafte Erinnerungen löschen. Lösche Anbieter und Integrationen oder leere Dienstschlüsselfelder, um gespeicherte Zugangsdaten zu entfernen.',
+    manageMemory: 'Erinnerungen verwalten',
     noProviders: 'Keine Anbieter konfiguriert. Fügen Sie oben einen hinzu.',
     noMcpServers: 'Keine MCP-Server konfiguriert.',
     language: 'Sprache',

@@ -1,4 +1,4 @@
-import { Brain, Trash2 } from 'lucide-react-native';
+import { Brain, ChevronRight, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -27,7 +27,8 @@ type SettingsDataSectionProps = {
   setCompactionModel: (model: string | null) => void;
   consolidationStatus: ConsolidationStatusSnapshot;
   onLayout: (event: any) => void;
-  onClearAllData: () => void;
+  onManageMemory: () => void;
+  onClearAllConversations: () => void;
 };
 
 const MODE_CHIP_ORDER: ReadonlyArray<{
@@ -69,7 +70,8 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
   setCompactionModel,
   consolidationStatus,
   onLayout,
-  onClearAllData,
+  onManageMemory,
+  onClearAllConversations,
 }) => {
   return (
     <View style={styles.sectionCard} onLayout={onLayout}>
@@ -216,10 +218,24 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
       </View>
 
       <Text style={[styles.sectionTitle, { marginTop: 24 }]}>{t('settings.data')}</Text>
+      <Text style={styles.listItemSubtitle}>{t('settings.dataDeletionHint')}</Text>
+
+      <TouchableOpacity
+        style={[styles.featureRow, { marginTop: 12 }]}
+        onPress={onManageMemory}
+        accessibilityRole="button"
+        accessibilityLabel={t('settings.manageMemory')}
+      >
+        <Brain size={18} color={colors.primary} />
+        <View style={styles.featureContent}>
+          <Text style={styles.switchLabel}>{t('settings.manageMemory')}</Text>
+        </View>
+        <ChevronRight size={18} color={colors.textTertiary} />
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.dangerBtn}
-        onPress={onClearAllData}
+        onPress={onClearAllConversations}
         accessibilityRole="button"
         accessibilityLabel={t('settings.clearAllData')}
       >

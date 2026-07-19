@@ -279,6 +279,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
     invalidMcpUrlFormat: 'الرجاء إدخال رابط صالح لخادم MCP.',
     data: 'البيانات',
     clearAllData: 'مسح جميع المحادثات',
+    dataDeletionHint:
+      'امسح سجل المحادثات من هنا. استخدم الذاكرة لمسح الذكريات الدائمة. احذف مزودي الخدمة وعمليات التكامل، أو أفرغ حقول مفاتيح الخدمات، لإزالة بيانات الاعتماد المحفوظة.',
+    manageMemory: 'إدارة الذاكرة',
     noProviders: 'لم يتم تكوين أي مزود. أضف واحداً أعلاه للبدء.',
     noMcpServers: 'لم يتم تكوين أي خادم MCP.',
     language: 'اللغة',

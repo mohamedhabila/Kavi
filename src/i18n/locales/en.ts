@@ -286,6 +286,9 @@ export const en: TranslationMap = {
     invalidMcpUrlFormat: 'Please enter a valid URL for the MCP server.',
     data: 'Data',
     clearAllData: 'Clear All Conversations',
+    dataDeletionHint:
+      'Clear conversation history here. Use Memory to clear durable memories. Delete providers and integrations, or clear service-key fields, to remove saved credentials.',
+    manageMemory: 'Manage Memory',
     noProviders: 'No providers configured. Add one above to get started.',
     noMcpServers: 'No MCP servers configured.',
     language: 'Language',

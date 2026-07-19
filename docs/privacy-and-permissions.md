@@ -34,6 +34,19 @@ Long-term memory can be disabled in Settings. Explicitly preserved sources use
 the same local memory withdrawal and clearing controls as other durable memory;
 they are not uploaded as a standalone sync service.
 
+The in-app deletion controls are intentionally scoped and separate:
+
+- **Settings > Data > Clear All Conversations** removes conversation history.
+- **Memory > Clear All Memory** removes durable memories; the Settings data
+  card links directly to this screen.
+- Deleting a provider or integration removes its saved credentials. Clearing a
+  built-in service-key field removes that key. Downloaded on-device model files
+  can be removed from the provider editor.
+
+No control is labeled as a complete local-data wipe unless it owns every data
+store. This avoids implying that clearing conversations also clears memory or
+credentials.
+
 ## Remote Data Flows
 
 Depending on configuration, Kavi may send user-provided content to:

@@ -281,6 +281,9 @@ export const es: TranslationMap = mergeTranslations(en, {
     invalidMcpUrlFormat: 'Ingrese una URL válida para el servidor MCP.',
     data: 'Datos',
     clearAllData: 'Borrar todas las conversaciones',
+    dataDeletionHint:
+      'Borra aquí el historial de conversaciones. Usa Memoria para borrar los recuerdos duraderos. Elimina proveedores e integraciones, o vacía los campos de claves de servicio, para borrar las credenciales guardadas.',
+    manageMemory: 'Gestionar memoria',
     noProviders: 'Ningún proveedor configurado. Agregue uno arriba para comenzar.',
     noMcpServers: 'Ningún servidor MCP configurado.',
     language: 'Idioma',

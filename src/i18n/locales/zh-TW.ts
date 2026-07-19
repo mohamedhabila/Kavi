@@ -279,6 +279,9 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     invalidMcpUrlFormat: '請輸入有效的 MCP 伺服器 URL。',
     data: '資料',
     clearAllData: '清除所有對話',
+    dataDeletionHint:
+      '在此清除對話紀錄。使用「記憶」清除長期記憶。刪除供應商和整合，或清空服務金鑰欄位，以移除已儲存的憑證。',
+    manageMemory: '管理記憶',
     noProviders: '未設定供應商。請在上方新增一個以開始使用。',
     noMcpServers: '未設定 MCP 伺服器。',
     language: '語言',

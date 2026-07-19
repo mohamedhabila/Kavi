@@ -1,6 +1,6 @@
 # Store Submission Readiness
 
-Reviewed: 2026-06-23
+Reviewed: 2026-07-19
 
 Status: No-go for App Store or Play Store submission until the launch blockers below are closed and verified on release builds.
 
@@ -16,7 +16,7 @@ The remaining risk is not basic app quality. The main submission risks are polic
 - Apple and Google require public privacy/support URLs and clear in-app privacy access.
 - Android photo/media access needs either a Play declaration or a reduced-permission implementation.
 - Dynamic code, skills, terminal, browser, local runtime, and downloadable model surfaces need a conservative reviewer story.
-- Expo dependency drift and release-build smoke evidence must be resolved before submission.
+- SSH native-module compatibility and release-build smoke evidence must be resolved before submission.
 
 ## Launch Blockers
 
@@ -24,11 +24,14 @@ The remaining risk is not basic app quality. The main submission risks are polic
 | --- | --- | --- | --- |
 | B1 | AI content reporting | Add an in-app "Report" or "Flag" flow for assistant-generated content. It must let users report generated text without leaving the app, and the team needs a moderation/triage process for those reports. | No user-facing report/flag action was found. Google Play's AI-generated content policy requires in-app reporting or flagging for AI-generated content. |
 | B2 | Privacy and support URLs | Publish the privacy policy and support/contact page, then expose them from Settings/About and store metadata. | `docs/privacy-policy.md` exists, but no public URL or in-app policy/support link was confirmed. Apple requires privacy policy access in metadata and in the app. Google Play requires a privacy policy link in the Data safety section. |
-| B3 | Local data deletion clarity | Either add a clear "Delete all local app data" flow or document the exact deletion controls in-app and in the privacy policy. | Conversations and memory can be cleared, and integrations can be removed, but no single full local-data wipe was confirmed. No first-party account exists, so account deletion rules are not triggered unless account creation is added. |
+| B3 | Local data deletion clarity (resolved) | Keep the exact, scoped deletion controls discoverable in-app and documented in the privacy policy. | The Settings data card now explains the independent conversation, memory, provider/integration, and service-key controls and links directly to Memory. The privacy documents record the same paths without claiming a one-tap wipe. No first-party account exists, so account deletion rules are not triggered unless account creation is added. |
 | B4 | Android photos/media permission | Decide whether to keep `READ_MEDIA_IMAGES`. If kept, prepare the Play Photos and videos permission declaration. If not essential, remove/refactor `photos_latest` to use system picker/share-sheet inputs only. | The release manifest declares `READ_MEDIA_IMAGES` and `READ_MEDIA_VISUAL_USER_SELECTED`. Google Play treats broad photo/video permissions as restricted and expects declaration approval when the picker is insufficient. |
 | B5 | Dynamic execution and downloadable capability posture | Prepare reviewer notes and, if needed, limit first-release exposure of ClawHub skills, dynamic JavaScript/Python, terminal, and browser automation. Do not position the feature set as a plugin/app marketplace. Bundle release runtime assets instead of depending on CDN code at runtime where practical. | `docs/dynamic-code-execution.md`, the feature matrix, WebView runtime code, ClawHub/skills, SSH, terminal, browser, and local model surfaces create extra review risk. |
-| B6 | Expo dependency health | Resolve or explicitly document the `expo-doctor` failures before release. Prefer a clean `expo-doctor` for submission builds. | `npx expo-doctor` reported 16/18 passing, with Expo SDK patch drift and an SSH/SFTP package not validated for the New Architecture. |
+| B6 | Expo dependency health | Resolve or explicitly document the `expo-doctor` failure before release. Prefer a clean `expo-doctor` for submission builds. | `npx expo-doctor` reports 17/18 passing. The only failed check is React Native Directory metadata: `@dylankenneally/react-native-ssh-sftp` is not validated for the New Architecture, and the first-party local `@kavi/kavi-ssh` package has no directory metadata. |
 | B7 | Store assets and exact-build proof | Create final screenshots, listing copy, age/content ratings, export-compliance answers, and reviewer notes. Build the exact AAB/IPA/archive that will be submitted and smoke-test it on real devices. | No final store screenshots or fresh signed AAB/iOS archive evidence was found in the repository. |
+
+B3 is closed. Its identifier remains in the table for audit continuity. Store
+submission remains a no-go while B1, B2, and B4–B7 are unresolved.
 
 ## App Store Checklist
 
@@ -195,7 +198,7 @@ Current local checks:
 | `npm audit --omit=dev --audit-level=high` | Pass | No high or critical production advisories; moderate advisories remain and should be triaged. |
 | `npm run check:public-hygiene` | Pass | Passed after this document was added. Re-run after every public-doc change. |
 | `npm run check:links` | Pass | Passed after this document was added. Re-run after every public-doc change. |
-| `npx expo-doctor` | Fail | 16/18 checks passed. Dependency version drift and SSH/SFTP New Architecture compatibility need resolution or explicit sign-off. |
+| `npx expo-doctor` | Fail | 17/18 checks passed. SSH/SFTP New Architecture compatibility and the first-party local package's missing directory metadata need resolution or explicit sign-off. |
 
 Native configuration evidence:
 
