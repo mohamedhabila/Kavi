@@ -52,6 +52,7 @@ import { resolveMobileControllerRecoveryPreflight } from './mobileControllerReco
 import { buildMobileControllerGoalAdmissionBlock } from '../mobileController/goalAdmission';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
+import { buildClarificationReviewBlock } from './clarificationReviewPolicy';
 
 type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
@@ -274,6 +275,15 @@ export async function executeAgentControlGraphToolTurn(
   const toolCallBlockers = new Map<string, string>();
   if (mobileControllerRecoveryDecision.kind === 'block') {
     toolCallBlockers.set(executableToolCalls[0]!.id, mobileControllerRecoveryDecision.blocker);
+  }
+  for (const toolCall of executableToolCalls) {
+    const clarificationReviewBlock = buildClarificationReviewBlock({
+      toolName: toolCall.name,
+      toolCallHistory: params.toolCallHistory,
+    });
+    if (clarificationReviewBlock) {
+      toolCallBlockers.set(toolCall.id, clarificationReviewBlock);
+    }
   }
 
   const toolExecutionOutcomes = await executeAgentControlGraphToolBatch({
