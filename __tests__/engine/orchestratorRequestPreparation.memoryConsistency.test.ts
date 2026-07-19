@@ -147,7 +147,7 @@ describe('orchestrator request memory consistency identity', () => {
     });
   });
 
-  it('retains exact internal user identities for safe session refresh exclusion', async () => {
+  it('keeps internal user turns model-visible without granting user-intent authority', async () => {
     const visibleArabic = {
       id: 'visible-ar',
       role: 'user' as const,
@@ -157,7 +157,7 @@ describe('orchestrator request memory consistency identity', () => {
     const internalJapanese = {
       id: 'internal-ja',
       role: 'user' as const,
-      content: '内部継続制御',
+      content: `内部継続制御${'画'.repeat(600)}`,
       timestamp: 5,
     };
     mockedBuildUnifiedMemoryAccessContext.mockResolvedValueOnce({
@@ -201,7 +201,11 @@ describe('orchestrator request memory consistency identity', () => {
     });
 
     expect(result.memoryRefreshInternalUserMessages).toEqual([internalJapanese]);
-    expect(result.workingMessages).toEqual([visibleArabic]);
+    expect(result.workingMessages).toEqual([visibleArabic, internalJapanese]);
+    expect(result.currentUserMessage).toEqual({
+      id: visibleArabic.id,
+      text: visibleArabic.content,
+    });
     expect(mockedBuildUnifiedMemoryAccessContext).toHaveBeenCalledWith(
       expect.objectContaining({
         internalUserMessageCount: 1,

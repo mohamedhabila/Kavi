@@ -88,6 +88,7 @@ export interface OrchestratorOptions {
   /** Deliberate request-scoped pins. Authorization filters never imply grounding. */
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   toolFilter?: (toolName: string) => boolean;
+  /** Trailing code-owned user turns that stay model-visible but cannot own user intent. */
   internalUserMessageCount?: number;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
   initialAgentControlGraphState?: AgentRunControlGraphState;

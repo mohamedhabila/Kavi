@@ -337,8 +337,11 @@ async function executeReservedForegroundConversationRun(
   const mobileControllerRecoveryState = latestConversationForRequest?.agentRuns?.find(
     (run) => run.id === bootstrapResult.trackedAgentRunId,
   )?.controlGraph?.turnDirectives.mobileControllerRecovery;
-  const { durableMessages: durableOrchestratorMessages, modelMessages: orchestratorMessages } =
-    buildForegroundOrchestratorMessages({
+  const {
+    durableMessages: durableOrchestratorMessages,
+    internalUserMessageCount,
+    modelMessages: orchestratorMessages,
+  } = buildForegroundOrchestratorMessages({
       persistedMessages: persistedProjectionMessages,
       ...(bootstrap.shouldInsertPlaceholderAssistant
         ? { excludedAssistantMessageId: bootstrap.assistantMessageId }
@@ -610,7 +613,7 @@ async function executeReservedForegroundConversationRun(
             : allowedToolNames
               ? (toolName) => allowedToolNames.has(toolName)
               : undefined,
-          internalUserMessageCount: 0,
+          internalUserMessageCount,
           initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
           initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,
           workflowScopeUserMessageId: resumePreparation.workflowScopeUserMessageId,

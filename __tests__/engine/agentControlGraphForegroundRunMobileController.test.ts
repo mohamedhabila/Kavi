@@ -241,6 +241,7 @@ describe('foreground mobile controller binding', () => {
     mockedSettleMobileControllerOutcome.mockResolvedValue(settlement);
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
       expect(options.agentRunId).toBe('agent-run-mobile-1');
+      expect(options.internalUserMessageCount).toBe(1);
       expect(options.initialAgentControlGraphState).toEqual(
         expect.objectContaining({ status: 'ready', pendingAsyncCount: 0 }),
       );

@@ -16,7 +16,11 @@ export function buildForegroundOrchestratorMessages(params: {
   mobileControllerRecoveryState?: AgentRunMobileControllerRecoveryState;
   createId: () => string;
   timestamp: number;
-}): { durableMessages: Message[]; modelMessages: Message[] } {
+}): {
+  durableMessages: Message[];
+  internalUserMessageCount: number;
+  modelMessages: Message[];
+} {
   const sourceMessages = params.excludedAssistantMessageId
     ? params.persistedMessages.filter(
         (message) => message.id !== params.excludedAssistantMessageId,
@@ -35,14 +39,16 @@ export function buildForegroundOrchestratorMessages(params: {
         },
       ]
     : modelReadyMessages;
+  const modelMessages = appendEphemeralMobileControllerObservation({
+    messages: durableMessages,
+    controller: params.mobileController,
+    recoveryState: params.mobileControllerRecoveryState,
+    createId: params.createId,
+    timestamp: params.timestamp,
+  });
   return {
     durableMessages,
-    modelMessages: appendEphemeralMobileControllerObservation({
-      messages: durableMessages,
-      controller: params.mobileController,
-      recoveryState: params.mobileControllerRecoveryState,
-      createId: params.createId,
-      timestamp: params.timestamp,
-    }),
+    internalUserMessageCount: modelMessages.length - durableMessages.length,
+    modelMessages,
   };
 }

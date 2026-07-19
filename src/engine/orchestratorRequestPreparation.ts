@@ -24,7 +24,10 @@ import {
 import { repairModelVisibleToolResultTranscript } from './orchestratorToolTranscript';
 import type { CodeOwnedCurrentUserMessage } from './tools/toolExecutionContext';
 import { isMemoryReadEpochCurrent } from '../services/memory/policy';
-import { captureSessionInternalUserMessages } from './orchestrator/sessionMemoryRefreshMessages';
+import {
+  captureSessionInternalUserMessages,
+  rebuildSessionMemoryRefreshMessages,
+} from './orchestrator/sessionMemoryRefreshMessages';
 
 type LoggerLike = {
   devLog: (message: string, payload?: unknown) => void;
@@ -326,6 +329,10 @@ export async function prepareOrchestratorRequestBundle(params: {
       );
     }
   }
+  workingMessages = rebuildSessionMemoryRefreshMessages({
+    internalUserMessages: memoryRefreshInternalUserMessages,
+    workingMessages,
+  });
 
   return {
     ...(requestContext.requestContextLastUserMessage
