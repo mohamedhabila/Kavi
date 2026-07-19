@@ -391,6 +391,44 @@ describe('tool execution outcome resolution', () => {
         {
           type: 'SESSION_ACTIVATED_TOOLS_UPDATED',
           toolNames: ['calendar_create_event'],
+          updateMode: 'replace',
+          reason: 'tool_catalog:discovery',
+          timestamp: expect.any(Number),
+        },
+      ]),
+    );
+  });
+
+  it('publishes an empty activation set when a successful discovery has no matches', async () => {
+    const params = buildBaseParams();
+    params.executableToolCalls = [{ name: 'tool_catalog', arguments: '{"query":"unavailable"}' }];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-catalog-empty',
+        toolMessage: {
+          id: 'msg_tc-catalog-empty',
+          role: 'tool',
+          content: JSON.stringify({
+            mode: 'search',
+            query: 'unavailable',
+            tools: [],
+          }),
+          toolCallId: 'tc-catalog-empty',
+          timestamp: 1000,
+        },
+      },
+    ];
+
+    await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    const appliedEvents = params.applyGraphEvents.mock.calls.flatMap(([events]) => events);
+    expect(appliedEvents).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'SESSION_ACTIVATED_TOOLS_UPDATED',
+          toolNames: [],
+          updateMode: 'replace',
           reason: 'tool_catalog:discovery',
           timestamp: expect.any(Number),
         },

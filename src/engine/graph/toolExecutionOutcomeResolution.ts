@@ -24,7 +24,10 @@ import {
   buildEvidenceSatisfiedGoalAutoCompleteEvent,
   findEvidenceSatisfiedGoals,
 } from './completionGateGoalAutoComplete';
-import { extractActivatedToolNamesFromDiscoveryToolResult } from './discoveryToolActivation';
+import {
+  DISCOVERY_ACTIVATION_TOOL_NAMES,
+  extractActivatedToolNamesFromDiscoveryToolResult,
+} from './discoveryToolActivation';
 import {
   canonicalizeToolExecutionOutcome,
   type CanonicalToolExecutionOutcome,
@@ -322,21 +325,23 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       },
     ]);
 
-    if (!canonicalOutcome.toolMessage.isError) {
+    if (
+      !canonicalOutcome.toolMessage.isError &&
+      DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)
+    ) {
       const discoveryActivatedToolNames = extractActivatedToolNamesFromDiscoveryToolResult(
         toolName,
         canonicalOutcome.toolMessage.content,
       );
-      if (discoveryActivatedToolNames.length > 0) {
-        params.applyGraphEvents([
-          {
-            type: 'SESSION_ACTIVATED_TOOLS_UPDATED',
-            toolNames: discoveryActivatedToolNames,
-            reason: `${toolName}:discovery`,
-            timestamp: Date.now(),
-          },
-        ]);
-      }
+      params.applyGraphEvents([
+        {
+          type: 'SESSION_ACTIVATED_TOOLS_UPDATED',
+          toolNames: discoveryActivatedToolNames,
+          updateMode: toolName === 'tool_describe' ? 'merge' : 'replace',
+          reason: `${toolName}:discovery`,
+          timestamp: Date.now(),
+        },
+      ]);
     }
 
     // ── Auto-link tool results to active goal evidence ───────────────────

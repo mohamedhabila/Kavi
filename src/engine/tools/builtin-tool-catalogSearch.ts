@@ -1,4 +1,6 @@
-import { TOOL_CATALOG_CATEGORIES } from './builtin-tool-catalogConfig';
+import {
+  TOOL_CATALOG_AVAILABLE_CATEGORIES,
+} from './builtin-tool-catalogConfig';
 import type {
   ExecuteToolCatalogOptions,
   ToolCatalogSearchToolEntry,
@@ -147,7 +149,10 @@ export function buildToolCatalogSearchResponse(params: {
   const query = params.query?.trim();
   const capabilities = normalizeCapabilityFilters(params.capabilities);
   const rawCategory = params.category?.trim().toLowerCase();
-  const category = rawCategory && TOOL_CATALOG_CATEGORIES[rawCategory] ? rawCategory : undefined;
+  const category =
+    rawCategory && TOOL_CATALOG_AVAILABLE_CATEGORIES.includes(rawCategory)
+      ? rawCategory
+      : undefined;
   let searchResult = searchToolCatalogEntriesWithMetadata({
     query,
     capabilities,

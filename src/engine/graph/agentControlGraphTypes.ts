@@ -109,6 +109,7 @@ export type AgentControlGraphEvent =
   | {
       type: 'SESSION_ACTIVATED_TOOLS_UPDATED';
       toolNames: string[];
+      updateMode: 'merge' | 'replace';
       reason?: string;
       timestamp?: number;
     }

@@ -104,6 +104,10 @@ function isMemoryResourceTool(tool: Pick<ToolDefinition, 'contract'> | undefined
   return (tool?.contract?.resourceKinds ?? []).includes('memory');
 }
 
+function isRuntimeExternalToolName(toolName: string): boolean {
+  return toolName.startsWith('mcp__') || toolName.startsWith('skill__');
+}
+
 function isDefaultMobileDiscoveryTool(
   tool: Pick<ToolDefinition, 'contract' | 'input_schema'> | undefined,
 ): boolean {
@@ -222,9 +226,11 @@ function shouldAcceptContinuationTool(params: {
   completedGoalEvidenceToolNames: ReadonlySet<string>;
   completedWorkflowToolNames: ReadonlySet<string>;
   allowUnownedSideEffectfulTool?: boolean;
+  allowCompletedTool?: boolean;
 }): boolean {
   const tool = params.toolByName.get(params.toolName);
   if (
+    params.allowCompletedTool !== true &&
     !isMemoryResourceTool(tool) &&
     !params.resourceScopedGoalCapabilityToolNames.has(params.toolName) &&
     params.completedWorkflowToolNames.has(params.toolName)
@@ -241,7 +247,8 @@ function shouldAcceptContinuationTool(params: {
       params.allowUnownedSideEffectfulTool === true &&
       !params.completedResourceScopedGoalCapabilityToolNames.has(params.toolName) &&
       !params.completedGoalEvidenceToolNames.has(params.toolName) &&
-      !params.completedWorkflowToolNames.has(params.toolName)
+      (params.allowCompletedTool === true ||
+        !params.completedWorkflowToolNames.has(params.toolName))
     );
   }
   return true;
@@ -564,6 +571,7 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
         completedGoalEvidenceToolNames,
         completedWorkflowToolNames,
         allowUnownedSideEffectfulTool: true,
+        allowCompletedTool: isRuntimeExternalToolName(toolName),
       })
     ) {
       selectedNames.add(toolName);

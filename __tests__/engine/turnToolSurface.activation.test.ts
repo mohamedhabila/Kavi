@@ -174,4 +174,48 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(names.has('memory_recall')).toBe(true);
     expect(names.has('tool_catalog')).toBe(true);
   });
+
+  it('keeps an explicitly activated runtime integration callable after an earlier read', async () => {
+    const integrationTool = {
+      name: 'mcp__ledger__get_record',
+      description: 'Read one connected ledger record.',
+      input_schema: {
+        type: 'object',
+        properties: { recordId: { type: 'string' } },
+        required: ['recordId'],
+      },
+    };
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: [...tools, integrationTool],
+      observedToolNames: new Set<string>([integrationTool.name]),
+      sessionActivatedToolNames: [integrationTool.name],
+      workingMessages: [
+        userMessage('Complete the current workflow.'),
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [
+            {
+              id: 'tc-integration-read',
+              name: integrationTool.name,
+              arguments: '{"recordId":"record-1"}',
+              status: 'completed',
+            },
+          ],
+        },
+        {
+          id: 'tool-1',
+          role: 'tool',
+          toolCallId: 'tc-integration-read',
+          content: '{"status":"found"}',
+          timestamp: 3,
+        },
+      ],
+    });
+
+    const names = new Set(selected.map((tool) => tool.name));
+    expect(names.has(integrationTool.name)).toBe(true);
+  });
 });

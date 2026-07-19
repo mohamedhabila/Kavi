@@ -441,6 +441,45 @@ describe('builtin executor tool catalog', () => {
       ]);
     });
 
+    it('keeps dynamic MCP searches inside the requested integration category', async () => {
+      const { mcpManager } = require('../../src/services/mcp/manager');
+
+      mcpManager.getAllStatuses.mockReturnValue([
+        {
+          id: 'trip-ledger',
+          name: 'Trip Ledger',
+          state: 'connected',
+          tools: [
+            {
+              name: 'get_trip_record',
+              description: 'Read one booking record',
+              inputSchema: { type: 'object', properties: {} },
+            },
+            {
+              name: 'put_trip_note',
+              description: 'Update one booking note',
+              inputSchema: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      ]);
+
+      const result = parseCompletedToolOutcome(
+        await executeToolCatalog({
+          category: 'mcp',
+          query: 'Trip Ledger booking read update',
+          capabilities: ['discover', 'read', 'write', 'verify'],
+        }),
+      );
+
+      expect(result.category).toBe('mcp');
+      expect(result.tools.map((tool: any) => tool.name)).toEqual([
+        'mcp__trip-ledger__get_trip_record',
+        'mcp__trip-ledger__put_trip_note',
+      ]);
+      expect(result.tools.every((tool: any) => tool.category === 'mcp')).toBe(true);
+    });
+
     it('marks MCP catalog results discoverable when the current tool policy hides dynamic tools', async () => {
       const { mcpManager } = require('../../src/services/mcp/manager');
 

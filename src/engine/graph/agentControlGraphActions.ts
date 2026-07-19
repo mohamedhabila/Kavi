@@ -3,7 +3,6 @@ import {
   normalizeAgentRunControlGraphGoals,
   normalizeAgentRunControlGraphSessionActivatedToolNames,
 } from '../../services/agents/agentControlGraphState';
-import { mergeSessionActivatedToolNames } from './discoveryToolActivation';
 import {
   appendAudit,
   clearOneShotTurnDirectives,
@@ -244,7 +243,9 @@ export function createAgentControlGraphActions() {
         return {};
       }
       const sessionActivatedToolNames = normalizeAgentRunControlGraphSessionActivatedToolNames(
-        mergeSessionActivatedToolNames(context.sessionActivatedToolNames, event.toolNames),
+        event.updateMode === 'merge'
+          ? [...(context.sessionActivatedToolNames ?? []), ...event.toolNames]
+          : event.toolNames,
       );
       return {
         sessionActivatedToolNames:

@@ -164,13 +164,6 @@ export function selectOneShotDiscoveryToolCalls<T extends { name?: string }>(
   return discoveryCall ? [discoveryCall] : [];
 }
 
-export function mergeSessionActivatedToolNames(
-  existing: ReadonlyArray<string> | undefined,
-  activated: Iterable<string>,
-): string[] {
-  return normalizeToolNameList([...(existing ?? []), ...activated]);
-}
-
 export function mergeActivatedCatalogToolNames(
   turnActivated: ReadonlySet<string>,
   sessionActivated?: ReadonlyArray<string>,
