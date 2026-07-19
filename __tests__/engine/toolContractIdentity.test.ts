@@ -275,6 +275,26 @@ describe('code-owned tool contract identity', () => {
     expect(processDrift.executionBindingDigest).not.toBe(baseline.executionBindingDigest);
   });
 
+  it('seals multiline declaration documentation without relaxing provenance identities', async () => {
+    const evidence: RuntimeExternalToolEvidence = {
+      ...MCP_EVIDENCE,
+      declaration: {
+        ...MCP_EVIDENCE.declaration,
+        description: '[Calendar]\nCreate an event after checking:\n\t- title\n\t- start time',
+      },
+    };
+
+    await expect(
+      buildRuntimeExternalToolContractIdentity(evidence.declaration.name, evidence),
+    ).resolves.toEqual(expect.objectContaining({ kind: 'runtime_external' }));
+    await expect(
+      buildRuntimeExternalToolContractIdentity(evidence.declaration.name, {
+        ...evidence,
+        provenance: { ...evidence.provenance, namespace: 'calendar\nspoofed' },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it('keeps provider-asserted dynamic success conservative and seals all receipt evidence', async () => {
     const receipt = await buildToolEffectReceipt({
       toolCallId: 'tc-external',

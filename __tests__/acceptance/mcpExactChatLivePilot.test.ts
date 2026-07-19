@@ -111,7 +111,7 @@ async function startTripLedgerServer(): Promise<RunningTripLedgerServer> {
       {
         name: 'get_trip_record',
         description:
-          'Read one Trip Ledger record by bookingId. Returns status found or not_found and the current revision. This tool does not change state.',
+          'Read one Trip Ledger record by bookingId.\n\nReturns status found or not_found and the current revision. This tool does not change state.',
         inputSchema: {
           type: 'object',
           additionalProperties: false,

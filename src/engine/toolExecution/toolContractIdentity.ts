@@ -16,6 +16,7 @@ import { sha256HexUtf8Async } from '../../utils/sha256Async';
 
 const IDENTITY_VERSION = 1 as const;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
+const UNSAFE_DECLARATION_TEXT_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u;
 
 const CODE_OWNED_TOOL_BY_NAME = new Map(
   TOOL_DEFINITIONS.map((tool) => [normalizeToolName(tool.name), tool] as const),
@@ -36,6 +37,16 @@ function isBoundedIdentityPart(value: unknown, maximumLength = 512): value is st
     value.length <= maximumLength &&
     value === value.trim() &&
     !CONTROL_CHARACTER_PATTERN.test(value)
+  );
+}
+
+function isBoundedDeclarationText(value: unknown, maximumLength: number): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maximumLength &&
+    value.trim().length > 0 &&
+    !UNSAFE_DECLARATION_TEXT_PATTERN.test(value)
   );
 }
 
@@ -264,7 +275,7 @@ export async function buildRuntimeExternalToolContractIdentity(
     !evidence ||
     !evidence.declaration ||
     normalizeToolName(evidence.declaration.name) !== toolName ||
-    !isBoundedIdentityPart(evidence.declaration.description, 16_384) ||
+    !isBoundedDeclarationText(evidence.declaration.description, 16_384) ||
     !isPlainRecord(evidence.declaration.input_schema) ||
     evidence.provenance.source !== parsed.source ||
     evidence.provenance.namespace !== parsed.namespace ||

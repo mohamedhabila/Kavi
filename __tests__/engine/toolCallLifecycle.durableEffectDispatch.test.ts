@@ -420,7 +420,7 @@ describe('production tool lifecycle durable effect wiring', () => {
     mockedNeedsApproval.mockReturnValue(false);
     const declaration: ToolDefinition = {
       name: 'mcp__calendar__create_event',
-      description: '[Calendar] Create event',
+      description: '[Calendar]\nCreate an event after checking the title and start time.',
       input_schema: { type: 'object', properties: {} },
     };
     const secretSentinel = 'UNTRUSTED_RESULT_SECRET_DO_NOT_LOG';
