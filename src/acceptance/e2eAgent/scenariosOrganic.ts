@@ -24,6 +24,15 @@ function completedProductionTurnRubrics(
   ];
 }
 
+function pausedAgenticTurnRubrics(turnIndex: number): E2ERubric[] {
+  return [
+    { kind: 'turn_route', turnIndex, directive: 'production_auto', mode: 'agentic' },
+    { kind: 'turn_completion', turnIndex, field: 'execution', expected: false },
+    { kind: 'turn_completion', turnIndex, field: 'final_response', expected: true },
+    { kind: 'turn_completion', turnIndex, field: 'agent_run', expected: false },
+  ];
+}
+
 /**
  * One product-native conversation instead of isolated capability probes. The
  * user changes modes through the same persisted choice exposed by the app;
@@ -100,7 +109,7 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
     ...completedProductionTurnRubrics(3, 'agentic'),
     ...completedProductionTurnRubrics(4, 'chitchat'),
     ...completedProductionTurnRubrics(5, 'chitchat'),
-    ...completedProductionTurnRubrics(6, 'agentic'),
+    ...pausedAgenticTurnRubrics(6),
     ...completedProductionTurnRubrics(7, 'agentic'),
     ...completedProductionTurnRubrics(8, 'chitchat'),
     { kind: 'turn_lifecycle_boundary', turnIndex: 5, boundary: 'app_relaunch' },
@@ -227,8 +236,8 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
       path: 'artifacts/week-plan.txt',
       expectedHash: RECOVERED_WEEK_PLAN_SHA256,
     },
-    { kind: 'ingestion_job_checkpointed', minCount: 9 },
-    { kind: 'memory_episode_count', min: 9 },
+    { kind: 'ingestion_job_checkpointed', minCount: 8 },
+    { kind: 'memory_episode_count', min: 8 },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

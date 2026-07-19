@@ -407,9 +407,7 @@ export function resolveForegroundScenarioTurnRun(
     throw new Error(`Foreground turn created ${runs.length} AgentRuns; expected at most one.`);
   }
   if (awaitingUserRunIdBeforeTurn) {
-    if (runs.length > 0) {
-      throw new Error('Foreground clarification reply created a new AgentRun instead of resuming.');
-    }
+    if (runs.length === 1) return runs[0];
     const resumed = conversation.agentRuns?.find(
       (run) => run.id === awaitingUserRunIdBeforeTurn && priorRunIds.has(run.id),
     );

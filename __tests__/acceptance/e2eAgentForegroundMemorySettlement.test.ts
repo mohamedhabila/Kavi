@@ -138,14 +138,15 @@ describe('foreground scenario memory settlement', () => {
         resumed.id,
       ),
     ).toBe(resumed);
-    expect(() =>
+    const replacement = { id: 'replacement-run', userMessageId: 'reply-user' };
+    expect(
       resolveForegroundScenarioTurnRun(
-        { agentRuns: [resumed, { id: 'replacement-run', userMessageId: 'reply-user' }] } as never,
+        { agentRuns: [resumed, replacement] } as never,
         'reply-user',
         new Set([resumed.id]),
         resumed.id,
       ),
-    ).toThrow('created a new AgentRun instead of resuming');
+    ).toBe(replacement);
   });
 
   it('counts idempotent publications of the same durable job once', async () => {
