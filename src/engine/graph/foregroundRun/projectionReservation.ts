@@ -45,6 +45,42 @@ export async function claimForegroundProjectionReservation(params: {
   }
 }
 
+/** Persistently retarget an owned, not-yet-started projection after request admission. */
+export async function retargetForegroundProjectionReservation(params: {
+  durability: ProjectionDurability;
+  conversationId: string;
+  owner: ModelProjectionOwner;
+  requestMessageId: string;
+  onOwnerChanged?: (owner: ModelProjectionOwner) => void;
+}): Promise<ModelProjectionOwner> {
+  if (params.owner.requestMessageId === params.requestMessageId) return params.owner;
+  const nextOwner: ModelProjectionOwner = {
+    ...params.owner,
+    requestMessageId: params.requestMessageId,
+  };
+  const mutation = params.durability.mutateModelProjection<string>({
+    conversationId: params.conversationId,
+    owner: params.owner,
+    mutate: (conversation) =>
+      conversation.messages.some((message) => message.id === params.requestMessageId)
+        ? {
+            kind: 'applied',
+            conversation: { ...conversation, modelProjectionOwner: nextOwner },
+            value: 'retargeted',
+          }
+        : { kind: 'rejected', value: 'request_missing' },
+  });
+  if (mutation.kind !== 'applied') {
+    throw new Error(`model_projection_retarget_${mutation.kind}`);
+  }
+  params.onOwnerChanged?.(nextOwner);
+  await params.durability.flushChatState();
+  if (!params.durability.ownsModelProjection(params.conversationId, nextOwner)) {
+    throw new Error('model_projection_retarget_ownership_changed');
+  }
+  return nextOwner;
+}
+
 /** Persist a terminal placeholder while ownership is retained, then release it durably. */
 export async function terminalizeAndReleaseForegroundProjectionReservation(params: {
   durability: ProjectionDurability;

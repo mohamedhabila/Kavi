@@ -63,7 +63,14 @@ describe('foregroundRun bootstrap', () => {
             status: 'awaiting_user',
             pendingUserInput: {
               requestedAfterUserMessageId: 'user-1',
-              requiredInformation: [{ key: 'alarm.time', requiredFor: 'execution' }],
+              requiredInformation: [
+                {
+                  key: 'alarm.time',
+                  requiredFor: 'execution',
+                  semanticRole: 'time',
+                  resolution: 'unresolved',
+                },
+              ],
               updatedAt: 2,
             },
           }),
@@ -89,12 +96,59 @@ describe('foregroundRun bootstrap', () => {
     const result = buildForegroundRunBootstrapSelection({
       conversation,
       createAssistantMessageId: () => 'assistant-new',
+      clarificationReplyAdmission: {
+        runId: 'run-1',
+        disposition: 'answer',
+        resolvedInformationKeys: ['alarm.time'],
+      },
     });
 
     expect(result.existingRun?.id).toBe('run-1');
     expect(result.supersededRun).toBeUndefined();
     expect(result.shouldAbortPreviousForegroundRequest).toBe(false);
     expect(result.latestUserMessage?.id).toBe('user-2');
+  });
+
+  it('supersedes the paused run when admission identifies a separate request', () => {
+    const run = createRunningAgentRun({
+      controlGraph: createInitialAgentRunControlGraphState({
+        status: 'awaiting_user',
+        pendingUserInput: {
+          requestedAfterUserMessageId: 'user-1',
+          requiredInformation: [
+            {
+              key: 'alarm.time',
+              requiredFor: 'execution',
+              semanticRole: 'time',
+              resolution: 'unresolved',
+            },
+          ],
+          updatedAt: 2,
+        },
+      }),
+    });
+    const conversation = createConversation({
+      activeAgentRunId: run.id,
+      agentRuns: [run],
+      messages: [
+        { id: 'user-1', role: 'user', content: 'Set an alarm.', timestamp: 1 } as Message,
+        { id: 'user-2', role: 'user', content: 'Start a different task.', timestamp: 3 } as Message,
+      ],
+    });
+
+    const result = buildForegroundRunBootstrapSelection({
+      conversation,
+      createAssistantMessageId: () => 'assistant-new',
+      clarificationReplyAdmission: {
+        runId: run.id,
+        disposition: 'new_request',
+        resolvedInformationKeys: [],
+      },
+    });
+
+    expect(result.existingRun).toBeUndefined();
+    expect(result.supersededRun?.id).toBe(run.id);
+    expect(result.shouldAbortPreviousForegroundRequest).toBe(true);
   });
 
   it('reuses a visible incomplete assistant draft when resuming an existing run', () => {

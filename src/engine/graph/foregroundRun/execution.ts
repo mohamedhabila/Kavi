@@ -4,14 +4,11 @@ import { resolveConversationWorkspaceTarget } from '../../../services/conversati
 import { isAbortErrorLike } from '../../../services/agents/agentRunCancellation';
 import { createAgentRunAbortError } from '../../../services/runtimeError';
 import { supersedeForegroundConversationRun } from '../foregroundConversationCancellation';
-import { prepareAgentRunResumeForOrchestrator } from '../runResumePreparation';
 import { startOrReuseForegroundTrackedRun } from './bootstrap';
 import { createForegroundConversationRunRuntime } from './executionRuntime';
 import type { ExecuteForegroundConversationRunParams } from './executionTypes';
-import { resolveForegroundRunPreflight } from './preflight';
 import {
   completeForegroundRunRequestBootstrap,
-  prepareForegroundRunRequestBootstrap,
   prepareForegroundRunRequestClaim,
   type ForegroundRunRequestClaim,
   type ForegroundRunRequestBootstrapResult,
@@ -25,8 +22,6 @@ import type { ModelProjectionOwner } from '../../../types/conversation';
 import { modelProjectionOwnersEqual } from '../../../utils/modelProjectionOwner';
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
 import {
-  buildForegroundProjectionReservation,
-  claimForegroundProjectionReservation,
   terminalizeAndReleaseForegroundProjectionReservation,
 } from './projectionReservation';
 import {
@@ -37,10 +32,10 @@ import { resolveGraphTaskId } from '../../goals/graphTaskScope';
 import { enforceSemanticMemoryHandoffGate } from './semanticMemoryHandoffGate';
 import { publishForegroundTerminalMemory } from './terminalMemoryPublication';
 import { resolveForegroundMobileControllerOutcomeGate } from './mobileControllerOutcome';
-import {
-  buildForegroundOrchestratorMessages,
-  buildModelReadyMessages,
-} from './modelReadyMessages';
+import { buildForegroundOrchestratorMessages } from './modelReadyMessages';
+import { transitionForegroundClarificationAdmission } from './clarificationReplyAdmissionFlow';
+import { resolveForegroundRequestProviderReadiness } from './requestProviderReadiness';
+import { reserveForegroundRunRequest } from './requestReservation';
 
 export async function executeForegroundConversationRun(
   params: ExecuteForegroundConversationRunParams,
@@ -125,62 +120,25 @@ async function executeReservedForegroundConversationRun(
     clearForegroundRequestIfCurrent();
     return;
   }
-  const preparedBootstrap = prepareForegroundRunRequestBootstrap({
+  const requestReservation = await reserveForegroundRunRequest({
     claim: requestClaim,
     conversation: runConversation,
+    conversationId,
     createAssistantMessageId: context.helpers.createId,
     defaultConversationMode: context.state.defaultConversationMode,
+    durability: context.durability,
+    foregroundRequestId,
     options,
   });
-  if (preparedBootstrap.kind === 'reuse_unavailable') {
+  if (requestReservation.kind === 'unavailable') {
     clearForegroundRequestIfCurrent();
+    context.helpers.setChatError(requestReservation.message);
     return;
   }
-  const { bootstrap } = preparedBootstrap.prepared;
-  const resumePreparation = prepareAgentRunResumeForOrchestrator({
-    existingRun: bootstrap.existingRun,
-    fallbackUserMessageId: bootstrap.latestUserMessage?.id,
-    messages: buildModelReadyMessages(runConversation?.messages ?? []),
-  });
-  if (resumePreparation.kind === 'unavailable') {
-    clearForegroundRequestIfCurrent();
-    context.helpers.setChatError(
-      resumePreparation.reason === 'missing_existing_owner'
-        ? 'The original request for this agent run is unavailable. Restore it before resuming.'
-        : resumePreparation.reason === 'missing_user_response'
-          ? 'Answer the pending clarification before resuming this agent run.'
-        : 'Foreground request message is missing.',
-    );
-    return;
-  }
-  const reservationRequest = resumePreparation.workflowScopeUserMessageId;
-  let projectionOwner: ModelProjectionOwner | null = buildForegroundProjectionReservation({
-    runId: foregroundRequestId,
-    requestMessageId: reservationRequest,
-    assistantMessageId: bootstrap.assistantMessageId,
-  });
-  try {
-    await claimForegroundProjectionReservation({
-      durability: context.durability,
-      conversationId,
-      owner: projectionOwner,
-      insertAssistantPlaceholder: bootstrap.shouldInsertPlaceholderAssistant,
-    });
-  } catch (error: unknown) {
-    if (context.durability.ownsModelProjection(conversationId, projectionOwner)) {
-      await terminalizeAndReleaseForegroundProjectionReservation({
-        durability: context.durability,
-        conversationId,
-        owner: projectionOwner,
-        detail: `Projection reservation persistence failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      });
-    }
-    clearForegroundRequestIfCurrent();
-    context.helpers.setChatError(error instanceof Error ? error.message : String(error));
-    return;
-  }
+  let preparedBootstrap = requestReservation.preparedBootstrap;
+  let bootstrap = preparedBootstrap.bootstrap;
+  let resumePreparation = requestReservation.resumePreparation;
+  let projectionOwner: ModelProjectionOwner | null = requestReservation.projectionOwner;
   let projectionClaimed = true;
   let projectionReleased = false;
   context.refs.forceNextScrollRef.current = true;
@@ -203,37 +161,57 @@ async function executeReservedForegroundConversationRun(
     projectionClaimed = false;
   };
 
-  let preflight: Awaited<ReturnType<typeof resolveForegroundRunPreflight>>;
+  const providerReadiness = await resolveForegroundRequestProviderReadiness({
+    conversation: runConversation,
+    conversationId,
+    options,
+    state: context.state,
+  });
+  if (providerReadiness.kind === 'unavailable') {
+    await closeReservationFailure('Provider preflight did not admit this request.');
+    clearForegroundRequestIfCurrent();
+    context.helpers.setChatError(providerReadiness.message);
+    return;
+  }
+  const { preflight } = providerReadiness;
+
+  let admissionTransition;
   try {
-    preflight = await resolveForegroundRunPreflight({
-      activeModel: context.state.activeModel,
-      activeProviderId: context.state.activeProviderId,
+    admissionTransition = await transitionForegroundClarificationAdmission({
+      claim: requestClaim,
       conversation: runConversation,
       conversationId,
+      defaultConversationMode: context.state.defaultConversationMode,
+      durability: context.durability,
+      foregroundRequestId,
+      isCurrentRunInvocation,
+      onProjectionOwnerChanged: (owner) => {
+        projectionOwner = owner;
+      },
       options,
-      providers: context.state.providers,
-      systemPrompt: context.state.systemPrompt,
+      preflight,
+      preparedBootstrap,
+      projectionOwner,
+      signal: abortController.signal,
     });
   } catch (error: unknown) {
     await closeReservationFailure(
-      `Provider preflight failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Clarification admission failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     clearForegroundRequestIfCurrent();
     context.helpers.setChatError(error instanceof Error ? error.message : String(error));
     return;
   }
-  if (preflight.kind !== 'ready') {
-    const message =
-      preflight.kind === 'missing_provider'
-        ? context.state.chatNoProviderMessage
-        : preflight.kind === 'missing_api_key'
-          ? context.state.chatNoApiKeyMessage
-          : context.state.chatNoModelMessage;
-    await closeReservationFailure(`Provider preflight ended with ${preflight.kind}.`);
+  if (admissionTransition.kind === 'stopped') {
+    await closeReservationFailure(admissionTransition.detail);
     clearForegroundRequestIfCurrent();
-    context.helpers.setChatError(message);
     return;
   }
+  preparedBootstrap = admissionTransition.preparedBootstrap;
+  bootstrap = preparedBootstrap.bootstrap;
+  projectionOwner = admissionTransition.projectionOwner;
+  resumePreparation = admissionTransition.resumePreparation;
+
   if (!isCurrentRunInvocation()) {
     await closeReservationFailure('The request was superseded before generation started.');
     clearForegroundRequestIfCurrent();
@@ -261,7 +239,7 @@ async function executeReservedForegroundConversationRun(
   let bootstrapResult: ForegroundRunRequestBootstrapResult;
   try {
     bootstrapResult = completeForegroundRunRequestBootstrap({
-      prepared: preparedBootstrap.prepared,
+      prepared: preparedBootstrap,
       conversation: runConversation,
       startTrackedRun: (bootstrap) =>
         startOrReuseForegroundTrackedRun({

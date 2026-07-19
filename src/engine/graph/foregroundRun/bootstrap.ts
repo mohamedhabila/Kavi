@@ -7,6 +7,7 @@ import { findLatestIncompleteAgentRunAssistantMessage } from './assistantMessage
 import { buildAgentRunMessageScope } from '../../../services/agents/lifecycle/agentRunStateMachine';
 import type { WorkflowTaskAnchor } from '../../../types/workflowTaskAnchor';
 import type { AssistantDraftMode } from './contracts';
+import type { ClarificationReplyAdmission } from '../../../services/agents/clarificationReplyAdmission';
 
 function normalizeId(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -65,12 +66,17 @@ export function buildForegroundRunBootstrapSelection(params: {
   defaultConversationMode?: ConversationMode;
   reuseAgentRunId?: string;
   assistantDraftMode?: AssistantDraftMode;
+  clarificationReplyAdmission?: ClarificationReplyAdmission;
 }): ForegroundRunBootstrapSelection {
   const explicitlyReusedAgentRunId = normalizeId(params.reuseAgentRunId);
   const latestUserMessage = findLatestUserMessage(params.conversation);
-  const awaitingUserRun = !explicitlyReusedAgentRunId
+  const awaitingUserRun =
+    !explicitlyReusedAgentRunId &&
+    params.clarificationReplyAdmission?.disposition !== 'new_request'
     ? params.conversation?.agentRuns?.find(
         (run) =>
+          (!params.clarificationReplyAdmission ||
+            run.id === params.clarificationReplyAdmission.runId) &&
           run.id === params.conversation?.activeAgentRunId &&
           run.status === 'running' &&
           run.controlGraph?.status === 'awaiting_user' &&

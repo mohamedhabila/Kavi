@@ -585,8 +585,8 @@ describe('foreground run target-conversation execution context', () => {
       context,
       conversationId: secondConversation.id,
     });
-    for (let attempt = 0; attempt < 10 && callbacksByConversation.size < 2; attempt += 1) {
-      await Promise.resolve();
+    for (let attempt = 0; attempt < 20 && callbacksByConversation.size < 2; attempt += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 2));
     }
 
     expect(callbacksByConversation.size).toBe(2);
