@@ -43,6 +43,10 @@ The in-app deletion controls are intentionally scoped and separate:
   built-in service-key field removes that key. Downloaded on-device model files
   can be removed from the provider editor.
 
+Credential-backed provider and integration records remain visible when secure
+credential deletion fails, so the user can retry instead of leaving an
+unreachable stored secret.
+
 No control is labeled as a complete local-data wipe unless it owns every data
 store. This avoids implying that clearing conversations also clears memory or
 credentials.

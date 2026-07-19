@@ -256,7 +256,9 @@ describe('SettingsScreen remote config', () => {
       expect(getByText('Delete MCP Server')).toBeTruthy();
     });
     fireEvent.press(getByText('Delete MCP Server'));
-    expect(settingsMocks.removeMcpServer).toHaveBeenCalledWith('mcp1');
+    await waitFor(() => {
+      expect(settingsMocks.removeMcpServer).toHaveBeenCalledWith('mcp1');
+    });
   });
 
   it('should save existing MCP server with updateMcpServer', async () => {

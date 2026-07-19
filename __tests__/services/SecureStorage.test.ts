@@ -156,6 +156,30 @@ describe('SecureStorage', () => {
 
       expect(mockFallbackRemoveItem).toHaveBeenCalledWith('@kavi_secure_test_key');
     });
+
+    it('reports SecureStore deletion failure in production after fallback cleanup', async () => {
+      const previousWorkerId = process.env.JEST_WORKER_ID;
+      const previousNodeEnv = process.env.NODE_ENV;
+      const previousDevFlag = (globalThis as { __DEV__?: boolean }).__DEV__;
+
+      delete process.env.JEST_WORKER_ID;
+      process.env.NODE_ENV = 'production';
+      (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+      mockDeleteItemAsync.mockRejectedValueOnce(new Error('secure delete failed'));
+
+      await expect(deleteSecure('test_key')).rejects.toThrow('secure delete failed');
+      expect(mockFallbackRemoveItem).toHaveBeenCalledWith('@kavi_secure_test_key');
+
+      process.env.JEST_WORKER_ID = previousWorkerId;
+      process.env.NODE_ENV = previousNodeEnv;
+      (globalThis as { __DEV__?: boolean }).__DEV__ = previousDevFlag;
+    });
+
+    it('reports fallback deletion failure instead of silently retaining a value', async () => {
+      mockFallbackRemoveItem.mockRejectedValueOnce(new Error('fallback delete failed'));
+
+      await expect(deleteSecure('test_key')).rejects.toThrow('fallback delete failed');
+    });
   });
 
   describe('Provider API Key helpers', () => {

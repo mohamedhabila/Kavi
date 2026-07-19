@@ -11,6 +11,7 @@ import {
   saveMcpOAuthClientSecret,
   saveSecure,
 } from '../../../services/storage/SecureStorage';
+import { removeCredentialBackedConfiguration } from '../../../services/storage/credentialBackedConfigRemoval';
 import type { McpServerConfig } from '../../../types/remote';
 import { SharedControllerOptions, confirmDeletion } from './useRemoteConfigControllerShared';
 
@@ -197,10 +198,16 @@ export function useMcpConfigController(
         t,
         'settings.deleteMcpConfirm',
         async () => {
-          settings.removeMcpServer(id);
-          await deleteSecure(`mcp_server_token_${id}`);
-          await deleteMcpOAuthClientSecret(id);
-          await clearMcpOAuth(id);
+          const removed = await removeCredentialBackedConfiguration({
+            deleteCredentials: async () => {
+              await deleteSecure(`mcp_server_token_${id}`);
+              await clearMcpOAuth(id);
+            },
+            removeConfiguration: () => settings.removeMcpServer(id),
+            onCredentialDeleteFailure: () =>
+              Alert.alert(t('common.error'), t('settings.secureKeyDeleteFailed')),
+          });
+          if (!removed) return;
           onDeleted?.(id);
           close();
         },

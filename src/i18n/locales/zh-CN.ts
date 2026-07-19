@@ -297,6 +297,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     secureKeys: '服务 API 密钥',
     secureKeysHint: '这些密钥会安全地存储在设备上，并启用内置的网页与服务工具。',
     secureKeySaveFailed: '保存安全密钥失败。请重试。',
+    secureKeyDeleteFailed: '无法移除已保存的凭据。配置已保留，以便你重试。',
     builtInTools: '内置工具访问',
     maxLinks: '最大提取链接数',
     serverTransport: '传输方式',

@@ -253,6 +253,53 @@ describe('remote config controllers', () => {
     expect(useSettingsStore.getState().workspaceTargets).toEqual([]);
   });
 
+  it('keeps a workspace target when its stored token cannot be removed', async () => {
+    const target = makeWorkspaceTarget({
+      accessTokenRef: 'workspace_access_token_workspace-1',
+    });
+    useSettingsStore.getState().addWorkspaceTarget(target);
+    mockDeleteSecure.mockRejectedValueOnce(new Error('private secure-store detail'));
+
+    const { result } = renderHook(() => {
+      const settings = useRemoteConfigSettingsSlice();
+      return useWorkspaceConfigController({ settings, t });
+    });
+
+    act(() => result.current.remove('workspace-1'));
+    const buttons = (Alert.alert as jest.Mock).mock.calls[0][2] as Array<{ onPress?: () => void }>;
+    await act(async () => buttons[1]?.onPress?.());
+
+    expect(useSettingsStore.getState().workspaceTargets).toEqual([
+      expect.objectContaining({
+        id: target.id,
+        accessTokenRef: target.accessTokenRef,
+      }),
+    ]);
+    expect(Alert.alert).toHaveBeenLastCalledWith(
+      'common.error',
+      'settings.secureKeyDeleteFailed',
+    );
+  });
+
+  it('deletes all SSH credentials before removing the target', async () => {
+    useSettingsStore.getState().addSshTarget(makeSshTarget());
+    const { result } = renderHook(() => {
+      const settings = useRemoteConfigSettingsSlice();
+      return useSshConfigController({ settings, t });
+    });
+
+    act(() => result.current.remove('ssh-1'));
+    const buttons = (Alert.alert as jest.Mock).mock.calls[0][2] as Array<{ onPress?: () => void }>;
+    await act(async () => buttons[1]?.onPress?.());
+
+    expect(mockDeleteSecure.mock.calls).toEqual([
+      ['ssh_password_ssh-1'],
+      ['ssh_private_key_ssh-1'],
+      ['ssh_passphrase_ssh-1'],
+    ]);
+    expect(useSettingsStore.getState().sshTargets).toEqual([]);
+  });
+
   it('fetches an SSH fingerprint and saves a private-key target', async () => {
     const { result } = renderHook(() => {
       const settings = useRemoteConfigSettingsSlice();
@@ -560,6 +607,7 @@ describe('remote config controllers', () => {
     });
 
     expect(mockDeleteSecure).toHaveBeenCalledWith('mcp_server_token_mcp-1');
+    expect(mockClearMcpOAuth).toHaveBeenCalledWith('mcp-1');
     expect(useSettingsStore.getState().mcpServers).toEqual([]);
   });
 });

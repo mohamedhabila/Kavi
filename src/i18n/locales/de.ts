@@ -303,6 +303,8 @@ export const de: TranslationMap = mergeTranslations(en, {
       'Diese Schlüssel werden sicher auf dem Gerät gespeichert und schalten die integrierten Web- und Servicetools frei.',
     secureKeySaveFailed:
       'Der sichere Schlüssel konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.',
+    secureKeyDeleteFailed:
+      'Die gespeicherten Zugangsdaten konnten nicht entfernt werden. Die Konfiguration wurde beibehalten, damit Sie es erneut versuchen können.',
     builtInTools: 'Zugriff auf integrierte Tools',
     maxLinks: 'Maximale Links zum Extrahieren',
     serverTransport: 'Transport',

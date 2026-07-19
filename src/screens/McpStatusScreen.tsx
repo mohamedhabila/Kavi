@@ -19,6 +19,8 @@ import {
   McpHubInputSpec,
 } from '../services/mcp/registryClient';
 import { normalizeMcpServerConfigMetadata } from '../services/mcp/metadata';
+import { removeCredentialBackedConfiguration } from '../services/storage/credentialBackedConfigRemoval';
+import { deleteSecure } from '../services/storage/SecureStorage';
 import type { McpServerConfig } from '../types/remote';
 import { useBackToChat } from '../navigation/useBackToChat';
 
@@ -267,8 +269,15 @@ export const McpStatusScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             mcpManager.disconnectServer(serverId);
-            await mcpManager.clearServerAuth(serverId);
-            removeMcpServer(serverId);
+            await removeCredentialBackedConfiguration({
+              deleteCredentials: async () => {
+                await deleteSecure(`mcp_server_token_${serverId}`);
+                await mcpManager.clearServerAuth(serverId);
+              },
+              removeConfiguration: () => removeMcpServer(serverId),
+              onCredentialDeleteFailure: () =>
+                Alert.alert(t('common.error'), t('settings.secureKeyDeleteFailed')),
+            });
             await refresh();
           },
         },

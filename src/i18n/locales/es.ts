@@ -301,6 +301,8 @@ export const es: TranslationMap = mergeTranslations(en, {
     secureKeysHint:
       'Estas claves se almacenan de forma segura en el dispositivo y habilitan las herramientas web y de servicio integradas.',
     secureKeySaveFailed: 'No se pudo guardar la clave segura. Inténtalo de nuevo.',
+    secureKeyDeleteFailed:
+      'No se pudo eliminar la credencial guardada. La configuración se conservó para que puedas volver a intentarlo.',
     builtInTools: 'Acceso a herramientas integradas',
     maxLinks: 'Máximo de enlaces a extraer',
     serverTransport: 'Transporte',

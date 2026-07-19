@@ -14,6 +14,7 @@ async function pressAndFlush(target: any) {
 const mockListOfficialMcpRegistry = jest.fn();
 const mockAddMcpServer = jest.fn();
 const mockRemoveMcpServer = jest.fn();
+const mockDeleteSecure = jest.fn().mockResolvedValue(undefined);
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {
     const React = require('react');
@@ -72,6 +73,9 @@ jest.mock('../../src/services/mcp/registryClient', () => ({
   ...jest.requireActual('../../src/services/mcp/registryClient'),
   listOfficialMcpRegistry: (...args: any[]) => mockListOfficialMcpRegistry(...args),
 }));
+jest.mock('../../src/services/storage/SecureStorage', () => ({
+  deleteSecure: (...args: any[]) => mockDeleteSecure(...args),
+}));
 const mockGetStatus = jest.fn();
 const mockGetAllStatuses = jest.fn();
 const mockConnectServer = jest.fn().mockResolvedValue(undefined);
@@ -103,6 +107,8 @@ jest.mock('../../src/services/mcp/manager', () => ({
 }));
 beforeEach(() => {
   jest.clearAllMocks();
+  mockDeleteSecure.mockReset().mockResolvedValue(undefined);
+  mockClearServerAuth.mockReset().mockResolvedValue(undefined);
   mockMcpServers = [];
   mockAddMcpServer.mockImplementation((server: any) => {
     mockMcpServers = [...mockMcpServers, server];
@@ -138,6 +144,30 @@ describe('McpStatusScreen', () => {
       expect(getByText('Offline Server')).toBeTruthy();
       expect(getByText('disconnected')).toBeTruthy();
     });
+  });
+  it('keeps a server visible when all of its stored authentication cannot be removed', async () => {
+    mockMcpServers = [
+      { id: 'srv2', name: 'Offline Server', url: 'https://off.com', enabled: true },
+    ];
+    mockClearServerAuth.mockRejectedValueOnce(new Error('private secure-store detail'));
+
+    const { getByLabelText } = render(<McpStatusScreen />);
+    await waitFor(() => expect(getByLabelText('Remove Offline Server')).toBeTruthy());
+    await pressAndFlush(getByLabelText('Remove Offline Server'));
+
+    const buttons = (Alert.alert as jest.Mock).mock.calls[0][2] as Array<{
+      style?: string;
+      onPress?: () => Promise<void>;
+    }>;
+    await act(async () => buttons.find((button) => button.style === 'destructive')?.onPress?.());
+
+    expect(mockDeleteSecure).toHaveBeenCalledWith('mcp_server_token_srv2');
+    expect(mockClearServerAuth).toHaveBeenCalledWith('srv2');
+    expect(mockRemoveMcpServer).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenLastCalledWith(
+      'Error',
+      'Could not remove the saved credential. The configuration was kept so you can retry.',
+    );
   });
   it('renders server with many tools (shows +N more)', async () => {
     mockMcpServers = [{ id: 'srv3', name: 'Big Server', url: 'https://big.com', enabled: true }];

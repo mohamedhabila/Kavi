@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { createSshDraft, prepareSshDraft } from '../../../screens/configDrafts';
 import { getSshHostFingerprint } from '../../../services/ssh/connector';
 import { deleteSecure, saveSecure } from '../../../services/storage/SecureStorage';
+import { removeCredentialBackedConfiguration } from '../../../services/storage/credentialBackedConfigRemoval';
 import type { SshTargetConfig } from '../../../types/remote';
 import { SharedControllerOptions, confirmDeletion } from './useRemoteConfigControllerShared';
 
@@ -183,10 +184,17 @@ export function useSshConfigController(
   const remove = useCallback(
     (id: string) => {
       confirmDeletion(t, 'settings.deleteSshTargetConfirm', async () => {
-        settings.removeSshTarget(id);
-        await deleteSecure(`ssh_password_${id}`);
-        await deleteSecure(`ssh_private_key_${id}`);
-        await deleteSecure(`ssh_passphrase_${id}`);
+        const removed = await removeCredentialBackedConfiguration({
+          deleteCredentials: async () => {
+            await deleteSecure(`ssh_password_${id}`);
+            await deleteSecure(`ssh_private_key_${id}`);
+            await deleteSecure(`ssh_passphrase_${id}`);
+          },
+          removeConfiguration: () => settings.removeSshTarget(id),
+          onCredentialDeleteFailure: () =>
+            Alert.alert(t('common.error'), t('settings.secureKeyDeleteFailed')),
+        });
+        if (!removed) return;
         onDeleted?.(id);
         close();
       });

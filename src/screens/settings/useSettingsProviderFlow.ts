@@ -18,6 +18,7 @@ import {
   getProviderApiKey,
   saveProviderApiKey,
 } from '../../services/storage/SecureStorage';
+import { removeCredentialBackedConfiguration } from '../../services/storage/credentialBackedConfigRemoval';
 import type { LlmProviderConfig } from '../../types/provider';
 import { generateId } from '../../utils/id';
 import { useSettingsLocalModelRecovery } from './useSettingsLocalModelRecovery';
@@ -185,8 +186,13 @@ export function useSettingsProviderFlow({
           text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
-            removeProvider(id);
-            await deleteProviderApiKey(id);
+            const removed = await removeCredentialBackedConfiguration({
+              deleteCredentials: () => deleteProviderApiKey(id),
+              removeConfiguration: () => removeProvider(id),
+              onCredentialDeleteFailure: () =>
+                Alert.alert(t('common.error'), t('settings.secureKeyDeleteFailed')),
+            });
+            if (!removed) return;
             setSection('main');
             setEditingProvider(null);
           },

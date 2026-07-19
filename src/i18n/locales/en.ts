@@ -306,6 +306,8 @@ export const en: TranslationMap = {
     secureKeysHint:
       'These keys are stored securely on-device and unlock the built-in web and service tools.',
     secureKeySaveFailed: 'Failed to save the secure key. Please try again.',
+    secureKeyDeleteFailed:
+      'Could not remove the saved credential. The configuration was kept so you can retry.',
     builtInTools: 'Built-In Tool Access',
     maxLinks: 'Max links to extract',
     serverTransport: 'Transport',

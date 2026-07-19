@@ -328,6 +328,29 @@ describe('SettingsScreen providers', () => {
     });
   });
 
+  it('keeps a provider when its saved API key cannot be removed', async () => {
+    const { deleteProviderApiKey } = require('../../src/services/storage/SecureStorage');
+    deleteProviderApiKey.mockRejectedValueOnce(new Error('private secure-store detail'));
+    jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons: any) => {
+      const deleteBtn = buttons?.find((button: any) => button.style === 'destructive');
+      deleteBtn?.onPress?.();
+    });
+
+    const { getByText } = renderSettingsScreen();
+    fireEvent.press(getByText('gpt-5.4'));
+    await waitFor(() => expect(getByText('Delete Provider')).toBeTruthy());
+    fireEvent.press(getByText('Delete Provider'));
+
+    await waitFor(() => {
+      expect(deleteProviderApiKey).toHaveBeenCalledWith('openai');
+      expect(settingsMocks.removeProvider).not.toHaveBeenCalled();
+      expect(Alert.alert).toHaveBeenLastCalledWith(
+        'Error',
+        'Could not remove the saved credential. The configuration was kept so you can retry.',
+      );
+    });
+  });
+
   it('should save provider with API key', async () => {
     const { saveProviderApiKey } = require('../../src/services/storage/SecureStorage');
     const { getByText, getByDisplayValue } = renderSettingsScreen();

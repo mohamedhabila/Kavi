@@ -8,6 +8,7 @@ import {
   prepareWorkspaceDraft,
 } from '../../../screens/configDrafts';
 import { deleteSecure, saveSecure } from '../../../services/storage/SecureStorage';
+import { removeCredentialBackedConfiguration } from '../../../services/storage/credentialBackedConfigRemoval';
 import {
   getWorkspaceTargetDisplayName,
   normalizeWorkspaceTargetLinks,
@@ -121,9 +122,14 @@ export function useWorkspaceConfigController(
 
   const remove = useCallback(
     (id: string) => {
-      confirmDeletion(t, 'settings.deleteWorkspaceTargetConfirm', () => {
-        settings.removeWorkspaceTarget(id);
-        void deleteSecure(`workspace_access_token_${id}`);
+      confirmDeletion(t, 'settings.deleteWorkspaceTargetConfirm', async () => {
+        const removed = await removeCredentialBackedConfiguration({
+          deleteCredentials: () => deleteSecure(`workspace_access_token_${id}`),
+          removeConfiguration: () => settings.removeWorkspaceTarget(id),
+          onCredentialDeleteFailure: () =>
+            Alert.alert(t('common.error'), t('settings.secureKeyDeleteFailed')),
+        });
+        if (!removed) return;
         onDeleted?.(id);
         close();
       });

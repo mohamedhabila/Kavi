@@ -10,6 +10,7 @@ import {
 } from '../../../screens/configDrafts';
 import { syncExpoAccountProjects } from '../../../services/expo/projectSync';
 import { deleteSecure, saveSecure } from '../../../services/storage/SecureStorage';
+import { removeCredentialBackedConfiguration } from '../../../services/storage/credentialBackedConfigRemoval';
 import { useSettingsStore } from '../../../store/useSettingsStore';
 import type { ExpoAccountConfig, ExpoProjectConfig } from '../../../types/remote';
 import { SharedControllerOptions, confirmDeletion } from './useRemoteConfigControllerShared';
@@ -205,9 +206,14 @@ export function useExpoConfigController(
 
   const removeAccount = useCallback(
     (id: string) => {
-      confirmDeletion(t, 'settings.deleteExpoAccountDetachConfirm', () => {
-        settings.removeExpoAccount(id);
-        void deleteSecure(`expo_account_token_${id}`);
+      confirmDeletion(t, 'settings.deleteExpoAccountDetachConfirm', async () => {
+        const removed = await removeCredentialBackedConfiguration({
+          deleteCredentials: () => deleteSecure(`expo_account_token_${id}`),
+          removeConfiguration: () => settings.removeExpoAccount(id),
+          onCredentialDeleteFailure: () =>
+            Alert.alert(t('common.error'), t('settings.secureKeyDeleteFailed')),
+        });
+        if (!removed) return;
         onAccountDeleted?.(id);
         close();
       });

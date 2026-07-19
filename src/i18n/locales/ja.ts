@@ -300,6 +300,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
     secureKeysHint:
       'これらのキーは端末内に安全に保存され、組み込みの Web / サービスツールを有効にします。',
     secureKeySaveFailed: '安全なキーの保存に失敗しました。もう一度お試しください。',
+    secureKeyDeleteFailed:
+      '保存された認証情報を削除できませんでした。再試行できるように設定は保持されています。',
     builtInTools: '組み込みツールへのアクセス',
     maxLinks: '最大抽出リンク数',
     serverTransport: 'トランスポート',

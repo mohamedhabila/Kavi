@@ -301,6 +301,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     secureKeysHint:
       'Essas chaves são armazenadas com segurança no dispositivo e liberam as ferramentas integradas de web e serviços.',
     secureKeySaveFailed: 'Falha ao salvar a chave segura. Tente novamente.',
+    secureKeyDeleteFailed:
+      'Não foi possível remover a credencial salva. A configuração foi mantida para que você possa tentar novamente.',
     builtInTools: 'Acesso às ferramentas integradas',
     maxLinks: 'Máximo de links para extrair',
     serverTransport: 'Transporte',

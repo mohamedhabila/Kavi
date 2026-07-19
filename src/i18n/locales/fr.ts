@@ -301,6 +301,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
     secureKeysHint:
       "Ces clés sont stockées de façon sécurisée sur l'appareil et activent les outils web et de service intégrés.",
     secureKeySaveFailed: "Impossible d'enregistrer la clé sécurisée. Veuillez réessayer.",
+    secureKeyDeleteFailed:
+      "Impossible de supprimer l'identifiant enregistré. La configuration a été conservée afin que vous puissiez réessayer.",
     builtInTools: 'Accès aux outils intégrés',
     maxLinks: 'Liens maximum à extraire',
     serverTransport: 'Transport',

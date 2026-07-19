@@ -298,6 +298,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
     secureKeys: 'مفاتيح API للخدمات',
     secureKeysHint: 'يتم تخزين هذه المفاتيح بأمان على الجهاز وتُفعّل أدوات الويب والخدمات المدمجة.',
     secureKeySaveFailed: 'فشل حفظ المفتاح الآمن. يرجى المحاولة مرة أخرى.',
+    secureKeyDeleteFailed:
+      'تعذرت إزالة بيانات الاعتماد المحفوظة. تم الاحتفاظ بالإعداد حتى تتمكن من المحاولة مرة أخرى.',
     builtInTools: 'الوصول إلى الأدوات المدمجة',
     maxLinks: 'الحد الأقصى للروابط المستخرجة',
     serverTransport: 'النقل',

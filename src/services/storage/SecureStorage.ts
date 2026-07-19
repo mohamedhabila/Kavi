@@ -73,12 +73,20 @@ export async function getSecure(key: string): Promise<string | null> {
 }
 
 export async function deleteSecure(key: string): Promise<void> {
+  let deletionError: unknown;
   try {
     await SecureStore.deleteItemAsync(`${KEY_PREFIX}${key}`);
-  } catch {
-    // Ignore
+  } catch (error) {
+    if (!allowInsecureFallback()) {
+      deletionError = error;
+    }
   }
-  await clearFallbackValue(key);
+  try {
+    await AsyncStorage.removeItem(getFallbackKey(key));
+  } catch (error) {
+    deletionError ??= error;
+  }
+  if (deletionError) throw deletionError;
 }
 
 export async function saveProviderApiKey(providerId: string, apiKey: string): Promise<void> {

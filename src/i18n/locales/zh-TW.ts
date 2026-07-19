@@ -297,6 +297,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     secureKeys: '服務 API 金鑰',
     secureKeysHint: '這些金鑰會安全地儲存在裝置上，並啟用內建的網頁與服務工具。',
     secureKeySaveFailed: '儲存安全金鑰失敗。請再試一次。',
+    secureKeyDeleteFailed: '無法移除已儲存的憑證。設定已保留，方便你重試。',
     builtInTools: '內建工具存取',
     maxLinks: '最大擷取連結數',
     serverTransport: '傳輸方式',

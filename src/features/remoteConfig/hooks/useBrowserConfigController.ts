@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { createBrowserDraft, prepareBrowserDraft } from '../../../screens/configDrafts';
 import { isValidBrowserProviderBaseUrl } from '../../../services/browser/providers/registry';
 import { deleteSecure, saveSecure } from '../../../services/storage/SecureStorage';
+import { removeCredentialBackedConfiguration } from '../../../services/storage/credentialBackedConfigRemoval';
 import type { BrowserProviderConfig } from '../../../types/remote';
 import { SharedControllerOptions, confirmDeletion } from './useRemoteConfigControllerShared';
 
@@ -92,9 +93,14 @@ export function useBrowserConfigController(
 
   const remove = useCallback(
     (id: string) => {
-      confirmDeletion(t, 'settings.deleteBrowserProviderConfirm', () => {
-        settings.removeBrowserProvider(id);
-        void deleteSecure(`browser_provider_api_key_${id}`);
+      confirmDeletion(t, 'settings.deleteBrowserProviderConfirm', async () => {
+        const removed = await removeCredentialBackedConfiguration({
+          deleteCredentials: () => deleteSecure(`browser_provider_api_key_${id}`),
+          removeConfiguration: () => settings.removeBrowserProvider(id),
+          onCredentialDeleteFailure: () =>
+            Alert.alert(t('common.error'), t('settings.secureKeyDeleteFailed')),
+        });
+        if (!removed) return;
         onDeleted?.(id);
         close();
       });
