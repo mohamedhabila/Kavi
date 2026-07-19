@@ -128,6 +128,15 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
   }) as E2EScenarioTurnTrace;
 }
 
+function scenarioTurnSequenceCompleted(turns: ReadonlyArray<E2EScenarioTurnTrace>): boolean {
+  const finalTurnIndex = turns.length - 1;
+  return turns.every((turn, index) => {
+    if (!turn.completion.finalResponseCompleted) return false;
+    if (turn.completion.executionCompleted) return true;
+    return index < finalTurnIndex && turn.completion.graphStatus === 'awaiting_user';
+  });
+}
+
 export function mapForegroundScenarioResult(params: {
   contentClass: E2EScenarioContentClass;
   driverResult: ForegroundScenarioDriverResult;
@@ -154,7 +163,7 @@ export function mapForegroundScenarioResult(params: {
     errors,
     completed:
       turnTraces.length === params.requestedUserTurnCount &&
-      turnTraces.every((turn) => turn.completed),
+      scenarioTurnSequenceCompleted(turnTraces),
     durationMs: params.durationMs,
     userTurnCount: params.requestedUserTurnCount,
   }) as E2EScenarioResult;

@@ -22,6 +22,7 @@ import {
 import { E2E_SCENARIO_MANIFEST_VERSION } from '../../src/acceptance/e2eAgent/thresholds';
 
 import {
+  buildFixtureTurnTrace,
   buildFixtureResult,
   installE2ERunReportFixtureReset,
 } from '../helpers/e2eRunReportHarness';
@@ -42,6 +43,53 @@ describe('e2eRunReport artifacts', () => {
       expect(entry.trace?.graphSnapshots[0]?.status).toBe('awaiting_user');
       recordE2ERunReportEntry(entry, env);
       expect(flushE2ERunReport(env)?.scenarios[0]?.graphStatus).toBe('awaiting_user');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('records a task resumed from an awaiting-user graph state', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kavi-e2e-resume-user-'));
+    const env = { E2E_REPORT_PATH: join(dir, 'report.json') };
+    const graphSnapshot = {
+      status: 'finalized',
+      requestUnderstanding: {
+        version: 2,
+        integrity: 'valid',
+        routing: {
+          status: 'known',
+          mode: 'agentic',
+          inputKind: 'text',
+          attachmentCount: 0,
+          continuation: 'resume_waiting_user',
+          decisionAction: 'act',
+          decisionReason: 'requirements_resolved',
+        },
+        declaredObjectives: { status: 'unknown', count: 0, omittedCount: 0 },
+        structuredSuccessConditions: { status: 'unknown', count: 0, omittedCount: 0 },
+        executionRequirements: { status: 'unknown', count: 0, omittedCount: 0 },
+        userConstraints: { status: 'unknown', count: 0, omittedCount: 0 },
+        registeredRequiredInformation: {
+          status: 'known',
+          count: 2,
+          omittedCount: 0,
+          unresolvedCount: 0,
+        },
+        effectAuthorization: { status: 'unknown' },
+      },
+    } as never;
+    try {
+      const entry = buildE2ERunReportScenarioEntry({
+        suite: 'core',
+        result: buildFixtureResult({
+          graphSnapshots: [graphSnapshot],
+          turnTraces: [buildFixtureTurnTrace({ graphSnapshots: [graphSnapshot] })],
+        }),
+        outcome: { fixtureId: 'file-write-read', passed: true },
+        attemptCount: 1,
+      });
+      recordE2ERunReportEntry(entry, env);
+      expect(flushE2ERunReport(env)?.scenarios[0]?.graphStatus).toBe('finalized');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

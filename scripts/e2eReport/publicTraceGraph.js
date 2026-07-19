@@ -15,6 +15,9 @@ const {
   safePublicToolName,
 } = require('./publicTracePrimitives');
 const { GRAPH_STATUSES: SAFE_GRAPH_STATUSES } = require('./publicProjectionPolicy');
+const {
+  E2E_PUBLIC_REQUEST_CONTINUATIONS,
+} = require('../../src/acceptance/e2eAgent/e2eTraceExecutionPolicy.ts');
 
 const SAFE_GRAPH_AUDIT_TYPES = new Set([
   'ASYNC_WAITING',
@@ -51,7 +54,7 @@ const SAFE_REQUEST_UNDERSTANDING_FIELD_STATUSES = new Set(['known', 'unknown', '
 const SAFE_REQUEST_UNDERSTANDING_INTEGRITY = new Set(['valid', 'conflict']);
 const SAFE_REQUEST_MODES = new Set(['chitchat', 'agentic']);
 const SAFE_REQUEST_INPUT_KINDS = new Set(['empty', 'text', 'attachments', 'text_and_attachments']);
-const SAFE_REQUEST_CONTINUATIONS = new Set(['new', 'resume', 'resume_waiting_async']);
+const SAFE_REQUEST_CONTINUATIONS = new Set(E2E_PUBLIC_REQUEST_CONTINUATIONS);
 const SAFE_REQUEST_DECISION_ACTIONS = new Set(['act', 'clarify', 'wait', 'decline', 'consent']);
 const SAFE_REQUEST_DECISION_REASONS = new Set([
   'actionable_input',
