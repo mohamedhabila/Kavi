@@ -34,6 +34,18 @@ versioning where practical for tagged releases.
   structural guards, lint, typecheck, and the Jest suite.
 - Generated editor assets remain committed and reproducible so native builds do
   not depend on runtime bundling.
+- The terminal renderer and addons are now generated from pinned npm inputs and
+  bundled into both platform assets, so the local terminal does not load
+  executable code from a runtime CDN.
+- Python automation now requires explicit per-invocation network authority,
+  routes supported HTTP through the native URL, bounded redirect, and
+  response-size policy, and reports content-free network-effect evidence to
+  durable execution receipts.
+- Effect-free Python interpreter failures remain ordinary failed computations
+  that the agent can recover from, while possible or indeterminate external
+  mutations continue to require reconciliation.
+- Intermediate provider tool markup is hidden when the same turn already has a
+  structured tool call, while ordinary final-answer content is preserved.
 - App, package, native, and MCP client metadata are aligned at version `1.0.0`
   while retaining the current iOS and Android application identifiers.
 - iOS EventKit permission metadata now covers both calendar and reminder
@@ -57,6 +69,9 @@ versioning where practical for tagged releases.
 - Added dependency license inventory checks and generated third-party notices.
 - Kept signing material, local environment files, generated reports, and
   release artifacts out of the public tree.
+- Updated vulnerable direct and lockfile dependency resolutions without forcing
+  incompatible MCP or Expo downgrades; remaining moderate transitive advisories
+  and their reachability are documented in the release checklist.
 
 ### Tests
 

@@ -83,8 +83,8 @@ tag candidate and run the release gate from a clean checkout.
   exception before any SDK tuple change, run Expo's unfiltered check, and add a
   new exception only when the upstream incompatibility and both native build
   results are documented.
-- The SDK 55 build graph currently retains one moderate advisory,
-  [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq),
+- The SDK 55 build graph currently retains the moderate advisory
+  [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq)
   through Expo's build-time
   `@expo/config-plugins -> xcode@3.0.1 -> uuid@7.0.3` chain. npm expands that
   one chain into multiple findings. Kavi does not execute this package in the
@@ -93,6 +93,13 @@ tag candidate and run the release gate from a clean checkout.
   disposition must be reviewed whenever Expo, `xcode`, or `uuid` changes; it
   stops being acceptable if the call sites or reachability change, severity
   increases, or an SDK-compatible upstream fix becomes available.
+- The MCP SDK dependency graph also retains
+  [GHSA-frvp-7c67-39w9](https://github.com/advisories/GHSA-frvp-7c67-39w9)
+  through `@hono/node-server`. The affected Windows static-file server is not
+  imported or exposed by Kavi's mobile MCP client. npm's forced remediation
+  downgrades the MCP SDK, so keep the current compatible SDK and review this
+  disposition whenever the SDK or `@hono/node-server` changes. Treat it as a
+  release blocker if the affected server API becomes reachable from the app.
 - Run the Android release environment check with
   `npm run check:android:release-env`.
 - Run iOS simulator release validation with `npm run build:ios:release-sim`

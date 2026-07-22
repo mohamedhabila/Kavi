@@ -41,6 +41,67 @@ and covered by tests whenever their behavior changes.
   module resolution, path traversal rejection, unsupported module rejection, and
   explicit environment scoping.
 
+## Terminal WebView Renderer
+
+- Surface: `assets/terminal/xterm.template.html`,
+  `assets/terminal/runtime/xterm-runtime.js`, and
+  `scripts/build-terminal-assets.js`
+- Executable dependency: xterm and its fit, search, and web-links addons are
+  bundled at build time from the exact npm versions recorded in the lockfile.
+- Why it exists: renders local JavaScript, Android local-shell, and remote SSH
+  terminal sessions through `src/components/terminal/TerminalWebView.tsx`.
+- Input: output and configuration messages from the React Native bridge, plus
+  user keyboard input returned through `window.ReactNativeWebView.postMessage`.
+- Trust boundary: the renderer is reviewed application code. It does not make
+  the commands or JavaScript displayed inside it safe to execute; those retain
+  their separate user-driven execution boundaries.
+- Guards and limits: generated iOS and Android HTML assets are identical,
+  contain the local runtime marker, and have no runtime CDN script loader. A
+  missing template placeholder or bundle fails the build instead of falling
+  back to remote executable code.
+- Tests: `__tests__/components/TerminalHtmlAsset.test.ts` covers local bundling,
+  CDN absence, template generation, and platform asset parity. Terminal bridge
+  and screen tests cover message handling and local/SSH mode behavior.
+
+## Python Pyodide Worker
+
+- Surface: `src/services/python/` and the `python` agent tool.
+- Dynamic call: Pyodide's `runPythonAsync` executes inline Python or a
+  workspace-relative script in a dedicated Web Worker hosted by a hidden
+  WebView.
+- Why it exists: provides Python data processing, compatible packages,
+  workspace artifact generation, and optional HTTP reads without requiring a
+  Kavi backend.
+- Input: user- or tool-provided Python, explicit environment values, optional
+  packages, and conversation-workspace files.
+- Trust boundary: trusted-by-user automation code. Pyodide isolates the Python
+  process from native operating-system APIs, but it is not a general-purpose
+  sandbox for hostile code.
+- Network authority: `allowNetwork` is false by default. While Python code is
+  running, worker network primitives are blocked and supported HTTP must use
+  `kavi.http`, `pyodide.http.pyfetch`, or the controlled global `fetch`, all of
+  which route through the native URL, bounded redirect, and response-size
+  policy. Redirect targets are checked before they are requested, and
+  credentials are removed across origins. Synchronous `open_url`, raw XHR,
+  sockets, subprocesses, and child-worker network escapes are not supported.
+- Effect evidence: the code-owned worker reports whether network access was
+  blocked or enabled, the request count, and whether every observed method was
+  an HTTP safe method (`GET`, `HEAD`, or `OPTIONS`). A successful run with no
+  workspace change and no observed mutation-capable method can settle as a
+  verified computation/read. An interpreter failure with the same effect-free
+  evidence settles as a failed computation and remains eligible for normal
+  agent recovery. Mutation-capable methods, timeouts, persistence failures, and
+  indeterminate results remain unverified and require reconciliation; model
+  prose or Python source text cannot grant evidence.
+- Runtime delivery: the pinned Pyodide distribution is currently downloaded
+  from the documented CDN, so first startup and uncached packages require
+  network access. This is separate from per-invocation Python network authority
+  and remains a release-review item.
+- Tests: Python bootstrap, HTTP bridge, request normalization, result contract,
+  effect receipt, and durable dispatch suites cover denied/allowed authority,
+  safe-read classification, mutation-capable classification, and fail-closed
+  evidence parsing.
+
 ## Productivity Calculator
 
 - Surface: `src/services/integrations/productivity/skill.ts`
