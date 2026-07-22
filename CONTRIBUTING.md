@@ -123,9 +123,11 @@ Agent run control graph state must mutate only through the graph layer (`src/eng
 
 Kavi includes generated editor assets and native build outputs.
 
-- `npm install` automatically runs `patch-package` and rebuilds editor assets.
-- If you change the editor runtime or templates, run `npm run build:editor-assets`
-  and commit only the generated runtime files that belong in source control.
+- `npm install` automatically runs `patch-package` and rebuilds the editor and
+  terminal WebView assets.
+- If you change an editor or terminal runtime/template, run
+  `npm run build:webview-assets` and commit only the generated runtime files
+  that belong in source control.
 - Do not commit local cache directories, coverage output, emulator artifacts, or native build output.
 - After changing iOS native dependencies, run `cd ios && pod install`.
 - Use `npm run check:android:release-env` before debugging Android release-build failures.

@@ -57,8 +57,8 @@ network edges, and all the interruptions real mobile software has to survive.
   rubrics such as file hashes, native fixture state, memory predicates, graph
   terminal status, token budgets, and cache reads.
 - **No mystery build step:** Expo, React Native, native iOS/Android code,
-  patches, generated editor assets, and verification scripts are all in the
-  repo.
+  patches, generated editor and terminal WebView assets, and verification
+  scripts are all in the repo.
 
 ## Quality Snapshot
 

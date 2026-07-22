@@ -29,7 +29,7 @@ npm install
 The install step also:
 
 - applies `patch-package`
-- rebuilds the generated editor assets used by the in-app editor
+- rebuilds the generated WebView assets used by the in-app editor and terminal
 
 To reproduce the clean dependency install used by GitHub Actions, start from a
 clean checkout and run:
@@ -173,20 +173,23 @@ native dependency lock. The simulator build is intentionally arm64-only to
 match the pinned LiteRT-LM binary; this command-scoped setting does not change
 iOS device archive architectures.
 
-## Generated Assets
+## Generated WebView Assets
 
-Kavi commits generated editor assets because the native app depends on them at runtime.
+Kavi commits generated editor and terminal assets because the native app depends
+on them at runtime. Their JavaScript runtimes are built from the pinned npm
+dependency graph; installed apps do not fetch executable editor or terminal code
+from a CDN.
 
-If you touch the editor runtime or template files, regenerate the bundle:
+If you touch either runtime, template, or generator, regenerate both bundles:
 
 ```bash
-npm run build:editor-assets
+npm run build:webview-assets
 ```
 
 `npm install`, `npm run android`, `npm run ios`, and release build scripts run
 the same asset build automatically before starting their native work. Commit
-the generated runtime files that belong to the editor bundle; keep local build
-caches and release outputs untracked.
+the generated runtime files under `assets/editor`, `assets/terminal`, and their
+Android asset mirrors; keep local build caches and release outputs untracked.
 
 ## Repository Hygiene
 

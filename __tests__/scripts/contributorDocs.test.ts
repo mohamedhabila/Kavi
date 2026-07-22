@@ -59,7 +59,7 @@ describe('contributor documentation', () => {
     expect(testingGuide).toContain('Android release environment check');
     expect(testingGuide).toContain('npm run build:android:aab');
     expect(readRepoFile('README.md')).toContain('Selected-provider E2E');
-    expect(setupGuide).toContain('npm run build:editor-assets');
+    expect(setupGuide).toContain('npm run build:webview-assets');
     expect(combinedDocs).not.toContain(legacyProjectPath);
     expect(combinedDocs).not.toMatch(/sk-proj-[A-Za-z0-9_-]{20,}/);
   });

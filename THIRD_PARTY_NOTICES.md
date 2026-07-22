@@ -58,7 +58,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 47 |
-| MIT | 891 |
+| MIT | 896 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -367,6 +367,10 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @typescript-eslint/visitor-keys | 8.58.2 | transitive | MIT |
 | @ungap/structured-clone | 1.3.0 | transitive | ISC |
 | @xmldom/xmldom | 0.8.13 | transitive | MIT |
+| @xterm/addon-fit | 0.10.0 | development | MIT |
+| @xterm/addon-search | 0.15.0 | development | MIT |
+| @xterm/addon-web-links | 0.11.0 | development | MIT |
+| @xterm/xterm | 5.5.0 | development | MIT |
 | @yarnpkg/lockfile | 1.1.0 | transitive | BSD-2-Clause |
 | abab | 2.0.6 | transitive | BSD-3-Clause |
 | abort-controller | 3.0.0 | transitive | MIT |
@@ -422,7 +426,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | big-integer | 1.6.52 | transitive | Unlicense |
 | bindings | 1.5.0 | transitive | MIT |
 | bl | 4.1.0 | transitive | MIT |
-| body-parser | 2.2.2 | transitive | MIT |
+| body-parser | 2.3.0 | transitive | MIT |
 | boolbase | 1.0.0 | transitive | ISC |
 | bplist-creator | 0.1.0 | transitive | MIT |
 | bplist-parser | 0.3.1 | transitive | MIT |
@@ -476,6 +480,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | connect | 3.7.0 | transitive | MIT |
 | content-disposition | 1.0.1 | transitive | MIT |
 | content-type | 1.0.5 | transitive | MIT |
+| content-type | 2.0.0 | transitive | MIT |
 | convert-source-map | 2.0.0 | transitive | MIT |
 | cookie | 0.7.2 | transitive | MIT |
 | cookie-signature | 1.2.2 | transitive | MIT |
@@ -607,7 +612,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | fast-deep-equal | 3.1.3 | transitive | MIT |
 | fast-json-stable-stringify | 2.1.0 | transitive | MIT |
 | fast-levenshtein | 2.0.6 | transitive | MIT |
-| fast-uri | 3.1.2 | transitive | BSD-3-Clause |
+| fast-uri | 3.1.4 | transitive | BSD-3-Clause |
 | fb-dotslash | 0.5.8 | transitive | (MIT OR Apache-2.0) |
 | fb-watchman | 2.0.2 | transitive | Apache-2.0 |
 | fdir | 6.5.0 | transitive | MIT |
@@ -666,7 +671,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | hermes-parser | 0.32.1 | transitive | MIT |
 | hermes-parser | 0.35.0 | transitive | MIT |
 | hoist-non-react-statics | 3.3.2 | transitive | BSD-3-Clause |
-| hono | 4.12.26 | transitive | MIT |
+| hono | 4.12.31 | transitive | MIT |
 | hosted-git-info | 7.0.2 | transitive | ISC |
 | html-encoding-sniffer | 3.0.0 | transitive | MIT |
 | html-entities | 2.6.0 | transitive | MIT |
@@ -977,7 +982,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | sf-symbols-typescript | 2.2.0 | transitive | MIT |
 | shebang-command | 2.0.0 | transitive | MIT |
 | shebang-regex | 3.0.0 | transitive | MIT |
-| shell-quote | 1.8.4 | runtime | MIT |
+| shell-quote | 1.10.0 | runtime | MIT |
 | side-channel | 1.1.1 | transitive | MIT |
 | side-channel-list | 1.0.1 | transitive | MIT |
 | side-channel-map | 1.0.1 | transitive | MIT |
@@ -1052,7 +1057,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | type-detect | 4.0.8 | transitive | MIT |
 | type-fest | 0.21.3 | transitive | (MIT OR CC0-1.0) |
 | type-fest | 0.7.1 | transitive | (MIT OR CC0-1.0) |
-| type-is | 2.0.1 | transitive | MIT |
+| type-is | 2.1.0 | transitive | MIT |
 | typescript | 5.9.3 | development | Apache-2.0 |
 | typescript-eslint | 8.58.2 | development | MIT |
 | ua-parser-js | 0.7.41 | transitive | MIT |
