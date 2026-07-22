@@ -1,5 +1,8 @@
 import { Message, ToolCall } from '../../types/message';
-import { stripInternalAssistantTranscriptArtifacts } from '../../utils/assistantTextSanitizer';
+import {
+  stripInternalAssistantTranscriptArtifacts,
+  stripRawProviderToolCallMarkupForDisplay,
+} from '../../utils/assistantTextSanitizer';
 import { mergeAttachmentLists } from '../../utils/messageAttachments';
 import {
   findMatchingToolCallIndex,
@@ -76,11 +79,19 @@ function buildOrderedAssistantSegments(params: {
         },
       ];
 
-  return rawSegments.map((segment) => ({
-    ...segment,
-    toolCalls: collapseSameSegmentToolCalls(segment.toolCalls),
-    content: stripInternalAssistantTranscriptArtifacts(segment.content || ''),
-  }));
+  return rawSegments.map((segment) => {
+    const sanitizedContent = stripInternalAssistantTranscriptArtifacts(segment.content || '');
+    const content =
+      segment.assistantMetadata?.kind === 'intermediate' && (segment.toolCalls?.length ?? 0) > 0
+        ? stripRawProviderToolCallMarkupForDisplay(sanitizedContent)
+        : sanitizedContent;
+
+    return {
+      ...segment,
+      toolCalls: collapseSameSegmentToolCalls(segment.toolCalls),
+      content,
+    };
+  });
 }
 
 function collapseSameSegmentToolCalls(toolCalls: ToolCall[] | undefined): ToolCall[] | undefined {

@@ -49,6 +49,76 @@ describe('buildAssistantBubbleViewModel', () => {
       expect.objectContaining({ id: 'tool-1', status: 'pending' }),
     );
   });
+  it('hides provider tool-call markup while preserving the structured tool row and final answer', () => {
+    const rawToolMarkup = [
+      '<function=python>',
+      '<parameter=code>',
+      'print(3981)',
+      '</parameter>',
+      '</function>',
+      '</tool_call>',
+    ].join('\n');
+    const model = buildAssistantBubbleViewModel({
+      message: makeAssistantMessage({ content: '3981' }),
+      responseSegments: [
+        {
+          id: 'segment-tool-turn',
+          messageId: 'assistant-tool-turn',
+          content: rawToolMarkup,
+          timestamp,
+          assistantMetadata: {
+            kind: 'intermediate',
+            completionStatus: 'complete',
+            finishReason: 'tool_calls',
+          },
+          toolCalls: [
+            makeToolCall({
+              id: 'tool-catalog-1',
+              name: 'tool_catalog',
+              arguments: '{"query":"python"}',
+              result: '{"tools":[{"name":"python"}]}',
+            }),
+          ],
+        },
+        {
+          id: 'segment-final',
+          messageId: 'assistant-final',
+          content: '3981',
+          timestamp: timestamp + 1,
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'stop',
+          },
+        },
+      ],
+    });
+
+    expect(model.contentSegments).toEqual([
+      expect.objectContaining({
+        id: 'segment-tool-turn',
+        content: '',
+        toolCalls: [expect.objectContaining({ id: 'tool-catalog-1' })],
+      }),
+      expect.objectContaining({ id: 'segment-final', content: '3981' }),
+    ]);
+    expect(model.copyText).toBe('3981');
+  });
+  it('preserves tool-call markup when it is ordinary final answer content', () => {
+    const content = '<tool_call><function=example></function></tool_call>';
+    const model = buildAssistantBubbleViewModel({
+      message: makeAssistantMessage({
+        content,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
+      }),
+    });
+
+    expect(model.copyText).toBe(content);
+  });
   it('interleaves reasoning and content in assistant round order', () => {
     const model = buildAssistantBubbleViewModel({
       message: makeAssistantMessage({ content: 'Second answer' }),
