@@ -1,7 +1,14 @@
 import {
+  MAX_PYTHON_HTTP_REDIRECTS,
   MAX_PYTHON_HTTP_RESPONSE_BYTES,
   performPythonHttpRequest,
 } from '../../src/services/python/httpBridge';
+
+const mockExpoFetch = jest.fn();
+
+jest.mock('expo/fetch', () => ({
+  fetch: (...args: unknown[]) => mockExpoFetch(...args),
+}));
 
 type HeaderBag = {
   get: (name: string) => string | null;
@@ -44,23 +51,17 @@ function createMockResponse(
 }
 
 describe('python http bridge', () => {
-  let originalFetch: typeof fetch;
-
   beforeEach(() => {
-    originalFetch = global.fetch;
+    mockExpoFetch.mockReset();
     jest.useRealTimers();
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
   it('blocks disallowed URLs before issuing fetch', async () => {
-    const fetchMock = jest.fn();
-    global.fetch = fetchMock as unknown as typeof fetch;
-
     const result = await performPythonHttpRequest({
       type: 'python-http-request',
       runtimeId: 'rt-1',
@@ -70,20 +71,18 @@ describe('python http bridge', () => {
     });
 
     expect(result.error).toContain('blocked by security policy');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockExpoFetch).not.toHaveBeenCalled();
   });
 
   it('serializes successful responses back to base64 payloads', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(
+    mockExpoFetch.mockResolvedValue(
       createMockResponse('hello from bridge', {
         status: 202,
         statusText: 'Accepted',
         headers: { 'content-type': 'text/plain' },
-        url: 'https://example.com/final',
-        redirected: true,
+        url: 'https://example.com/data',
       }),
     );
-    global.fetch = fetchMock as unknown as typeof fetch;
 
     const result = await performPythonHttpRequest({
       type: 'python-http-request',
@@ -96,30 +95,119 @@ describe('python http bridge', () => {
       timeoutMs: 250,
     });
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(mockExpoFetch).toHaveBeenCalledWith(
       'https://example.com/data',
       expect.objectContaining({
         method: 'POST',
         headers: { 'content-type': 'text/plain' },
         credentials: 'omit',
-        redirect: 'follow',
+        redirect: 'manual',
       }),
     );
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const init = mockExpoFetch.mock.calls[0]?.[1] as RequestInit;
     expect(new TextDecoder().decode(new Uint8Array(init.body as ArrayBuffer))).toBe('payload');
     expect(result.status).toBe(202);
     expect(result.statusText).toBe('Accepted');
     expect(result.headers).toEqual({ 'content-type': 'text/plain' });
-    expect(result.url).toBe('https://example.com/final');
-    expect(result.redirected).toBe(true);
+    expect(result.url).toBe('https://example.com/data');
+    expect(result.redirected).toBe(false);
     expect(Buffer.from(String(result.bodyBase64 || ''), 'base64').toString('utf8')).toBe(
       'hello from bridge',
     );
   });
 
+  it('rejects a redirect to a blocked URL before issuing the redirected request', async () => {
+    mockExpoFetch.mockResolvedValueOnce(
+      createMockResponse('', {
+        status: 302,
+        statusText: 'Found',
+        headers: { location: 'http://169.254.169.254/latest/meta-data/' },
+        url: 'https://example.com/redirect',
+      }),
+    );
+
+    const result = await performPythonHttpRequest({
+      type: 'python-http-request',
+      runtimeId: 'rt-1',
+      requestId: 'req-1',
+      url: 'https://example.com/redirect',
+      method: 'GET',
+    });
+
+    expect(result.error).toContain('redirect blocked by security policy');
+    expect(mockExpoFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('follows bounded allowed redirects and strips credentials across origins', async () => {
+    mockExpoFetch
+      .mockResolvedValueOnce(
+        createMockResponse('', {
+          status: 302,
+          statusText: 'Found',
+          headers: { location: 'https://cdn.example.org/final' },
+          url: 'https://example.com/start',
+        }),
+      )
+      .mockResolvedValueOnce(
+        createMockResponse('done', {
+          url: 'https://cdn.example.org/final',
+        }),
+      );
+
+    const result = await performPythonHttpRequest({
+      type: 'python-http-request',
+      runtimeId: 'rt-1',
+      requestId: 'req-1',
+      url: 'https://example.com/start',
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer secret',
+        'content-type': 'text/plain',
+        'x-request-id': 'safe',
+      },
+      bodyBase64: Buffer.from('payload', 'utf8').toString('base64'),
+    });
+
+    expect(mockExpoFetch).toHaveBeenCalledTimes(2);
+    expect(mockExpoFetch.mock.calls[1]).toEqual([
+      'https://cdn.example.org/final',
+      expect.objectContaining({
+        method: 'GET',
+        headers: { 'x-request-id': 'safe' },
+        redirect: 'manual',
+      }),
+    ]);
+    expect(result.redirected).toBe(true);
+    expect(result.status).toBe(200);
+  });
+
+  it('stops an allowed redirect loop at the configured bound', async () => {
+    for (let index = 0; index <= MAX_PYTHON_HTTP_REDIRECTS; index += 1) {
+      mockExpoFetch.mockResolvedValueOnce(
+        createMockResponse('', {
+          status: 307,
+          statusText: 'Temporary Redirect',
+          headers: { location: `/redirect-${index + 1}` },
+          url: `https://example.com/redirect-${index}`,
+        }),
+      );
+    }
+
+    const result = await performPythonHttpRequest({
+      type: 'python-http-request',
+      runtimeId: 'rt-1',
+      requestId: 'req-1',
+      url: 'https://example.com/redirect-0',
+      method: 'GET',
+    });
+
+    expect(result.error).toContain(`exceeded ${MAX_PYTHON_HTTP_REDIRECTS} redirects`);
+    expect(mockExpoFetch).toHaveBeenCalledTimes(MAX_PYTHON_HTTP_REDIRECTS + 1);
+  });
+
   it('returns a timeout error when the native fetch stalls', async () => {
     jest.useRealTimers();
-    const fetchMock = jest.fn().mockImplementation(
+    mockExpoFetch.mockImplementation(
       (_, init?: RequestInit) =>
         new Promise((_, reject) => {
           init?.signal?.addEventListener(
@@ -133,8 +221,6 @@ describe('python http bridge', () => {
           );
         }),
     );
-    global.fetch = fetchMock as unknown as typeof fetch;
-
     const resultPromise = performPythonHttpRequest({
       type: 'python-http-request',
       runtimeId: 'rt-1',
@@ -149,13 +235,11 @@ describe('python http bridge', () => {
   });
 
   it('rejects responses that exceed the bridge size limit', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(
+    mockExpoFetch.mockResolvedValue(
       createMockResponse('tiny body', {
         headers: { 'content-length': String(MAX_PYTHON_HTTP_RESPONSE_BYTES + 1) },
       }),
     );
-    global.fetch = fetchMock as unknown as typeof fetch;
-
     const result = await performPythonHttpRequest({
       type: 'python-http-request',
       runtimeId: 'rt-1',

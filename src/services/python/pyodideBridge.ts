@@ -1,6 +1,10 @@
 import { getPyodideHtml } from './runtimeBootstrap';
-import { performPythonHttpRequest } from './httpBridge';
 import { createPythonFailureResult } from './executionResults';
+import {
+  abortPendingPythonHttpRequests,
+  handlePythonHttpAbort,
+  handlePythonHttpRequest,
+} from './httpRequestBridge';
 import {
   getDispatchAcknowledgementTimeoutMs,
   normalizePythonExecutionRequest,
@@ -14,8 +18,6 @@ import {
   PYODIDE_WEBVIEW_BASE_URL,
   PYODIDE_WEBVIEW_BRIDGE_NAME,
   type PythonBridgeMessage,
-  type PythonHttpAbortMessage,
-  type PythonHttpRequestMessage,
   type PythonRuntimeMessage,
 } from './runtimeProtocol';
 import type {
@@ -73,19 +75,7 @@ const queuedExecutions: QueuedExecution[] = [];
 let activeExecution: ActiveExecution | null = null;
 let drainPromise: Promise<void> | null = null;
 let requestId = 0;
-const pendingHttpRequests = new Map<string, AbortController>();
 const mountRequestListeners = new Set<PyodideMountRequestListener>();
-
-function getPendingHttpRequestKey(runtimeId: string, requestIdValue: string): string {
-  return `${runtimeId}:${requestIdValue}`;
-}
-
-function abortPendingHttpRequests(reason: string): void {
-  for (const controller of pendingHttpRequests.values()) {
-    controller.abort(reason);
-  }
-  pendingHttpRequests.clear();
-}
 
 function createDeferred<T>(): Deferred<T> {
   let settled = false;
@@ -142,7 +132,7 @@ function startActiveExecutionTimer(execution: ActiveExecution): void {
 }
 
 function startRuntimeBoot(): void {
-  abortPendingHttpRequests('Python runtime reloaded.');
+  abortPendingPythonHttpRequests('Python runtime reloaded.');
   pyodideReady = false;
   runtimeError = null;
   runtimeInstanceId = null;
@@ -238,7 +228,7 @@ export function reportPyodideRuntimeFailure(
 ): void {
   const message = reason.trim() || 'Python runtime failed to initialize.';
 
-  abortPendingHttpRequests(message);
+  abortPendingPythonHttpRequests(message);
   pyodideReady = false;
   runtimeError = message;
   runtimeInstanceId = null;
@@ -419,6 +409,7 @@ async function drainExecutionQueue(): Promise<void> {
         packages: entry.request.packages,
         indexUrls: entry.request.indexUrls,
         env: entry.request.env,
+        allowNetwork: entry.request.allowNetwork,
         ...(entry.request.workflowBridge ? { workflowBridge: entry.request.workflowBridge } : {}),
       });
     } catch (err: unknown) {
@@ -461,63 +452,6 @@ function acceptRuntimeMessage(message: PythonRuntimeMessage): boolean {
   return runtimeInstanceId === message.runtimeId;
 }
 
-async function handlePythonHttpRequest(message: PythonHttpRequestMessage): Promise<void> {
-  if (!message.runtimeId || !message.requestId) {
-    return;
-  }
-
-  const key = getPendingHttpRequestKey(message.runtimeId, message.requestId);
-  const controller = new AbortController();
-  pendingHttpRequests.set(key, controller);
-
-  try {
-    const response = await performPythonHttpRequest(message, { signal: controller.signal });
-    if (!pendingHttpRequests.has(key)) {
-      return;
-    }
-
-    sendPyodideBridgeMessage({
-      type: 'python-http-response',
-      runtimeId: message.runtimeId,
-      requestId: message.requestId,
-      ...response,
-    });
-  } catch (error) {
-    if (!pendingHttpRequests.has(key)) {
-      return;
-    }
-
-    if (controller.signal.aborted) {
-      return;
-    }
-
-    sendPyodideBridgeMessage({
-      type: 'python-http-response',
-      runtimeId: message.runtimeId,
-      requestId: message.requestId,
-      error:
-        error instanceof Error ? error.message : String(error || 'Python HTTP request failed.'),
-    });
-  } finally {
-    pendingHttpRequests.delete(key);
-  }
-}
-
-function handlePythonHttpAbort(message: PythonHttpAbortMessage): void {
-  if (!message.runtimeId || !message.requestId) {
-    return;
-  }
-
-  const key = getPendingHttpRequestKey(message.runtimeId, message.requestId);
-  const controller = pendingHttpRequests.get(key);
-  if (!controller) {
-    return;
-  }
-
-  pendingHttpRequests.delete(key);
-  controller.abort(message.reason || 'Python HTTP request was aborted.');
-}
-
 export function registerPyodideWebView(ref: PythonWebViewRef | null): void {
   webViewRef = ref;
   if (ref) {
@@ -527,7 +461,7 @@ export function registerPyodideWebView(ref: PythonWebViewRef | null): void {
 }
 
 export function unregisterPyodideWebView(): void {
-  abortPendingHttpRequests('Pyodide WebView was unmounted.');
+  abortPendingPythonHttpRequests('Pyodide WebView was unmounted.');
   webViewRef = null;
   pyodideReady = false;
   runtimeError = null;
@@ -598,7 +532,7 @@ export function handlePyodideMessage(data: string): void {
     }
 
     if (message.type === 'python-http-request') {
-      void handlePythonHttpRequest(message);
+      void handlePythonHttpRequest(message, sendPyodideBridgeMessage);
       return;
     }
 
@@ -635,6 +569,21 @@ export function handlePyodideMessage(data: string): void {
       activeExecution = null;
       const commonResult = {
         output: message.output ?? '',
+        networkAccessState:
+          message.networkAccessState === 'blocked' || message.networkAccessState === 'enabled'
+            ? message.networkAccessState
+            : ('unknown' as const),
+        networkMutationState:
+          message.networkMutationState === 'none_observed' ||
+          message.networkMutationState === 'possible'
+            ? message.networkMutationState
+            : ('unknown' as const),
+        networkRequestCount:
+          typeof message.networkRequestCount === 'number' &&
+          Number.isSafeInteger(message.networkRequestCount) &&
+          message.networkRequestCount >= 0
+            ? message.networkRequestCount
+            : 0,
         durationMs: message.durationMs,
         files: normalizeWorkspaceFiles(message.files),
         ...(normalizePythonWorkflowBridgeResult(message.workflowBridge)

@@ -165,6 +165,7 @@ export function normalizePythonExecutionRequest(request: PythonExecutionRequest)
       packages: normalizePackageSpecs(request.packages),
       indexUrls: normalizeIndexUrls(request.indexUrls),
       env: normalizePythonEnv(request.env),
+      allowNetwork: request.allowNetwork === true,
       timeoutMs,
       ...(normalizePythonWorkflowBridgeState(request.workflowBridge)
         ? { workflowBridge: normalizePythonWorkflowBridgeState(request.workflowBridge) }

@@ -100,7 +100,13 @@ describe('code execution tools', () => {
   });
 
   it('returns a structured Python completion contract', async () => {
-    mockedExecutePython.mockResolvedValueOnce({ success: true, output: '42' });
+    mockedExecutePython.mockResolvedValueOnce({
+      success: true,
+      output: '42',
+      networkAccessState: 'blocked',
+      networkMutationState: 'none_observed',
+      networkRequestCount: 0,
+    });
 
     const result = await executePythonTool({ code: 'print(42)' }, 'conversation-1', 'workspace-1');
 
@@ -108,9 +114,89 @@ describe('code execution tools', () => {
       expect.objectContaining({
         status: 'completed',
         workspaceMutationState: 'none_observed',
+        networkAccessState: 'blocked',
+        networkMutationState: 'none_observed',
+        networkRequestCount: 0,
+        executionEffectState: 'none_observed',
         output: '42',
       }),
     );
+    expect(mockedExecutePython).toHaveBeenCalledWith(
+      expect.objectContaining({ allowNetwork: false }),
+    );
+  });
+
+  it('requires explicit Python network authority and verifies an observed safe read', async () => {
+    mockedExecutePython.mockResolvedValueOnce({
+      success: true,
+      output: 'remote data',
+      networkAccessState: 'enabled',
+      networkMutationState: 'none_observed',
+      networkRequestCount: 1,
+    });
+
+    const result = await executePythonTool(
+      { code: 'await kavi.http.get_text("https://example.com")', allowNetwork: true },
+      'conversation-1',
+      'workspace-1',
+    );
+
+    expect(mockedExecutePython).toHaveBeenCalledWith(
+      expect.objectContaining({ allowNetwork: true }),
+    );
+    expect(parseCompletedToolOutcome(result)).toEqual(
+      expect.objectContaining({
+        status: 'completed',
+        networkAccessState: 'enabled',
+        networkMutationState: 'none_observed',
+        networkRequestCount: 1,
+        executionEffectState: 'none_observed',
+      }),
+    );
+  });
+
+  it('keeps mutation-capable Python network execution unverified', async () => {
+    mockedExecutePython.mockResolvedValueOnce({
+      success: true,
+      output: 'accepted',
+      networkAccessState: 'enabled',
+      networkMutationState: 'possible',
+      networkRequestCount: 1,
+    });
+
+    const result = await executePythonTool(
+      {
+        code: 'await kavi.http.post_json("https://example.com", json={"ok": True})',
+        allowNetwork: true,
+      },
+      'conversation-1',
+      'workspace-1',
+    );
+
+    expect(parseCompletedToolOutcome(result)).toEqual(
+      expect.objectContaining({
+        status: 'completed',
+        networkMutationState: 'possible',
+        executionEffectState: 'unknown',
+      }),
+    );
+  });
+
+  it('rejects non-boolean Python network authority before runtime dispatch', async () => {
+    const result = await executePythonTool(
+      { code: 'print(42)', allowNetwork: 'yes' as unknown as boolean },
+      'conversation-1',
+      'workspace-1',
+    );
+
+    expect(parseFailedToolOutcome(result)).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        failureKind: 'invalid_request',
+        error: expect.stringContaining('allowNetwork'),
+      }),
+    );
+    expect(mockedExecutePython).not.toHaveBeenCalled();
   });
 
   it('returns structured Python validation and runtime failures', async () => {

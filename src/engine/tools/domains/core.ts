@@ -159,6 +159,7 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
       'Captures stdout, stderr, tracebacks, and the return value of the last expression for inline code. Top-level `await` is supported for inline code and script files. ' +
       'For both inline code and script files, the conversation workspace is mounted into the runtime, workspace-root imports are available on `sys.path`, and any changed output files are synced back into the conversation workspace. ' +
       'During agent workflow runs, Python code can use async native-backed HTTP helpers on the built-in `kavi.http` module or `await pyodide.http.pyfetch(...)`. ' +
+      'Network access is disabled by default; set `allowNetwork` to true only when the invocation must contact a remote host. ' +
       'Preferred HTTP patterns are `from kavi.http import get_json, get_text, post_json`, `data = await get_json(url, params={...}, headers={...}, timeout=30)`, or `response = await kavi.http.get(url); response.raise_for_status(); data = await response.json()`. ' +
       'Capabilities: workspace artifact generation and conversion when supported by Pyodide-compatible packages, data processing, math/science (numpy, pandas, scipy), async HTTP requests to remote hosts through `kavi.http` / `pyfetch`, ' +
       'JSON/CSV/XML parsing, regex, string manipulation, encoding/decoding. ' +
@@ -206,6 +207,12 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
           additionalProperties: { type: 'string' },
           description:
             'Optional environment variables exposed through `os.environ`, for example `{ "GEMINI_API_KEY": "..." }`.',
+        },
+        allowNetwork: {
+          type: 'boolean',
+          description:
+            'Explicitly enable remote network access for this invocation. Defaults to false. ' +
+            'Leave false for local computation and workspace-only work; set true before using kavi.http or pyodide.http.pyfetch.',
         },
         timeoutMs: {
           type: 'number',

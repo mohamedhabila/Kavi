@@ -48,6 +48,12 @@ describe('python runtime bootstrap', () => {
     expect(workerSource).toContain('self.__kavi_native_http__');
     expect(workerSource).toContain('await _kavi_execute_inline');
     expect(workerSource).toContain('python-http-response');
+    expect(workerSource).toContain('beginPythonNetworkObservation(message.allowNetwork === true)');
+    expect(workerSource).toContain('self.fetch = bridgeNativeHttpRequest');
+    expect(workerSource).toContain('requirePythonNetworkAccess();');
+    expect(workerSource).toContain('["GET", "HEAD", "OPTIONS"].indexOf(requestMethod) === -1');
+    expect(workerSource).toContain('activePythonNetworkObservation.mutationState = "possible"');
+    expect(workerSource).toContain('installControlledNetworkPrimitives();');
     expect(() => new Function(workerSource)).not.toThrow();
   });
 
@@ -66,6 +72,8 @@ describe('python runtime bootstrap', () => {
 
     expect(runtimeHelpers).toContain('eval_code_async');
     expect(runtimeHelpers).toContain('_kavi_pyodide_http.pyfetch = _kavi_native_pyfetch');
+    expect(runtimeHelpers).toContain('_kavi_pyodide_http._jsfetch = __kavi_native_http__.fetch');
+    expect(runtimeHelpers).toContain('_kavi_pyodide_http.open_url = _kavi_blocked_open_url');
     expect(runtimeHelpers).toContain('def _kavi_merge_query_params(url: str, params=None) -> str:');
     expect(runtimeHelpers).toContain('class _KaviHttpResponse:');
     expect(runtimeHelpers).toContain('async def get_json(self, url: str, **kwargs):');

@@ -15,8 +15,14 @@ export type PythonExecutionFailureKind =
   | 'workspace_persistence_failed'
   | 'timed_out';
 
+export type PythonNetworkAccessState = 'blocked' | 'enabled' | 'unknown';
+export type PythonNetworkMutationState = 'none_observed' | 'possible' | 'unknown';
+
 interface PythonExecutionResultBase {
   output: string;
+  networkAccessState: PythonNetworkAccessState;
+  networkMutationState: PythonNetworkMutationState;
+  networkRequestCount: number;
   durationMs?: number;
   files?: PythonWorkspaceFile[];
   workflowBridge?: PythonWorkflowBridgeResult;
@@ -37,6 +43,7 @@ export interface PythonExecutionRequest {
   packages?: string[];
   indexUrls?: string[];
   env?: Record<string, string>;
+  allowNetwork?: boolean;
   timeoutMs?: number;
   workflowBridge?: PythonWorkflowBridgeState;
 }
@@ -50,6 +57,7 @@ export interface NormalizedPythonExecutionRequest {
   packages: string[];
   indexUrls: string[];
   env: Record<string, string>;
+  allowNetwork: boolean;
   timeoutMs: number;
   workflowBridge?: PythonWorkflowBridgeState;
 }

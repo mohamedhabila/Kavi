@@ -23,7 +23,15 @@ function pythonFailure(
   output?: string,
 ): ToolRuntimeOutcome {
   return failedToolOutcome(
-    normalizePythonToolResult({ success: false, error, failureKind, output }),
+    normalizePythonToolResult({
+      success: false,
+      error,
+      failureKind,
+      output,
+      networkAccessState: 'unknown',
+      networkMutationState: 'unknown',
+      networkRequestCount: 0,
+    }),
   );
 }
 
@@ -144,6 +152,19 @@ function normalizePythonTimeoutMs(value: unknown): { timeoutMs?: number; error?:
   return { timeoutMs: normalized };
 }
 
+function normalizePythonAllowNetwork(value: unknown): {
+  allowNetwork: boolean;
+  error?: string;
+} {
+  if (value == null) {
+    return { allowNetwork: false };
+  }
+  if (typeof value !== 'boolean') {
+    return { allowNetwork: false, error: 'Error: "allowNetwork" for python must be a boolean' };
+  }
+  return { allowNetwork: value };
+}
+
 export async function executePythonTool(
   args: {
     code?: string;
@@ -153,6 +174,7 @@ export async function executePythonTool(
     indexUrls?: string[];
     argv?: string[];
     env?: Record<string, string>;
+    allowNetwork?: boolean;
     timeoutMs?: number;
   },
   _conversationId: string,
@@ -213,6 +235,11 @@ export async function executePythonTool(
       return pythonFailure(timeoutArg.error, 'invalid_request');
     }
 
+    const allowNetworkArg = normalizePythonAllowNetwork(rawArgs?.allowNetwork);
+    if (allowNetworkArg.error) {
+      return pythonFailure(allowNetworkArg.error, 'invalid_request');
+    }
+
     if (codeArg.value && argvArg.argv?.length) {
       return pythonFailure('"argv" for python can only be used with "path".', 'invalid_request');
     }
@@ -240,6 +267,7 @@ export async function executePythonTool(
         packages: Array.from(new Set([...(packagesArg.packages || []), ...prepared.packages])),
         ...(indexUrlsArg.indexUrls ? { indexUrls: indexUrlsArg.indexUrls } : {}),
         env: envArg.env,
+        allowNetwork: allowNetworkArg.allowNetwork,
         ...(timeoutArg.timeoutMs != null ? { timeoutMs: timeoutArg.timeoutMs } : {}),
       });
     } else {
@@ -255,6 +283,7 @@ export async function executePythonTool(
         packages: Array.from(new Set([...(packagesArg.packages || []), ...prepared.packages])),
         ...(indexUrlsArg.indexUrls ? { indexUrls: indexUrlsArg.indexUrls } : {}),
         env: envArg.env,
+        allowNetwork: allowNetworkArg.allowNetwork,
         ...(timeoutArg.timeoutMs != null ? { timeoutMs: timeoutArg.timeoutMs } : {}),
       });
     }

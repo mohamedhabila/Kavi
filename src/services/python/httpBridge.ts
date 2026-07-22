@@ -1,3 +1,5 @@
+import { fetch as expoFetch } from 'expo/fetch';
+
 import { isAllowedUrl } from '../security/ssrf';
 import { unrefTimerIfSupported } from './requestNormalization';
 import type { PythonHttpRequestMessage, PythonHttpResponseMessage } from './runtimeProtocol';
@@ -5,6 +7,11 @@ import type { PythonHttpRequestMessage, PythonHttpResponseMessage } from './runt
 export const DEFAULT_PYTHON_HTTP_TIMEOUT_MS = 30_000;
 export const MAX_PYTHON_HTTP_TIMEOUT_MS = 120_000;
 export const MAX_PYTHON_HTTP_RESPONSE_BYTES = 2 * 1024 * 1024;
+export const MAX_PYTHON_HTTP_REDIRECTS = 5;
+
+const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
+const CROSS_ORIGIN_SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization']);
+const BODY_HEADERS = new Set(['content-length', 'content-type', 'transfer-encoding']);
 
 type PythonHttpResponsePayload = Omit<
   PythonHttpResponseMessage,
@@ -91,6 +98,90 @@ function normalizeFetchError(error: unknown): string {
   return `Python HTTP request failed: ${message}`;
 }
 
+function withoutHeaders(
+  headers: Record<string, string>,
+  blockedNames: ReadonlySet<string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !blockedNames.has(name.toLowerCase())),
+  );
+}
+
+function resolveRedirectMethod(status: number, method: string): string {
+  if (status === 303 && method !== 'HEAD') {
+    return 'GET';
+  }
+  if ((status === 301 || status === 302) && method === 'POST') {
+    return 'GET';
+  }
+  return method;
+}
+
+async function fetchWithUrlPolicy(params: {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body?: ArrayBuffer;
+  signal: AbortSignal;
+}): Promise<{ response?: Response; redirected: boolean; error?: string }> {
+  let currentUrl = params.url;
+  let currentMethod = params.method;
+  let currentHeaders = params.headers;
+  let currentBody = params.body;
+  let redirectCount = 0;
+
+  while (true) {
+    if (!isAllowedUrl(currentUrl)) {
+      return {
+        redirected: redirectCount > 0,
+        error: `Python HTTP request blocked by security policy: ${currentUrl}`,
+      };
+    }
+
+    const response = await expoFetch(currentUrl, {
+      method: currentMethod,
+      headers: currentHeaders,
+      signal: params.signal,
+      redirect: 'manual',
+      credentials: 'omit',
+      ...(currentBody && currentMethod !== 'GET' && currentMethod !== 'HEAD'
+        ? { body: currentBody }
+        : {}),
+    });
+    const location = response.headers.get('location');
+    if (!REDIRECT_STATUS_CODES.has(response.status) || !location) {
+      return { response: response as unknown as Response, redirected: redirectCount > 0 };
+    }
+    if (redirectCount >= MAX_PYTHON_HTTP_REDIRECTS) {
+      return {
+        redirected: true,
+        error: `Python HTTP request exceeded ${MAX_PYTHON_HTTP_REDIRECTS} redirects.`,
+      };
+    }
+
+    const nextUrl = new URL(location, currentUrl).toString();
+    if (!isAllowedUrl(nextUrl)) {
+      return {
+        redirected: true,
+        error: `Python HTTP redirect blocked by security policy: ${nextUrl}`,
+      };
+    }
+
+    if (new URL(nextUrl).origin !== new URL(currentUrl).origin) {
+      currentHeaders = withoutHeaders(currentHeaders, CROSS_ORIGIN_SENSITIVE_HEADERS);
+    }
+    const nextMethod = resolveRedirectMethod(response.status, currentMethod);
+    if (nextMethod !== currentMethod) {
+      currentHeaders = withoutHeaders(currentHeaders, BODY_HEADERS);
+      currentBody = undefined;
+    }
+
+    currentUrl = nextUrl;
+    currentMethod = nextMethod;
+    redirectCount += 1;
+  }
+}
+
 export async function performPythonHttpRequest(
   request: PythonHttpRequestMessage,
   options?: { signal?: AbortSignal },
@@ -137,14 +228,17 @@ export async function performPythonHttpRequest(
       bodyBytes && method !== 'GET' && method !== 'HEAD'
         ? (bodyBytes.slice().buffer as ArrayBuffer)
         : undefined;
-    const response = await fetch(request.url, {
+    const fetchResult = await fetchWithUrlPolicy({
+      url: request.url,
       method,
       headers,
       signal: controller.signal,
-      redirect: 'follow',
-      credentials: 'omit',
       ...(requestBody ? { body: requestBody } : {}),
     });
+    if (!fetchResult.response) {
+      return { error: fetchResult.error || 'Python HTTP request failed URL validation.' };
+    }
+    const response = fetchResult.response;
 
     const contentLength = Number(response.headers.get('content-length'));
     if (Number.isFinite(contentLength) && contentLength > MAX_PYTHON_HTTP_RESPONSE_BYTES) {
@@ -178,7 +272,7 @@ export async function performPythonHttpRequest(
       headers: responseHeaders,
       bodyBase64: responseBody.byteLength > 0 ? encodeBytesToBase64(responseBody) : undefined,
       url: response.url || request.url,
-      redirected: response.redirected,
+      redirected: fetchResult.redirected,
     };
   } catch (error) {
     if (timedOut) {

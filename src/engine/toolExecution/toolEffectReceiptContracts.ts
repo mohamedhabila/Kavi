@@ -19,6 +19,10 @@ export interface CodeOwnedToolEffectContract {
   readonly completion?: {
     readonly resource?: ToolEffectIdentitySelector;
     readonly sha256ArgumentPath?: readonly string[];
+    readonly executionEffectFreeWhen?: {
+      readonly resultPath: readonly string[];
+      readonly values: readonly string[];
+    };
     readonly effectFreeWhen?: {
       readonly argumentPath: readonly string[];
       readonly values: readonly string[];
@@ -115,6 +119,16 @@ function effectful(
                   sha256ArgumentPath: Object.freeze([...options.completion.sha256ArgumentPath]),
                 }
               : {}),
+            ...(options.completion.executionEffectFreeWhen
+              ? {
+                  executionEffectFreeWhen: Object.freeze({
+                    resultPath: Object.freeze([
+                      ...options.completion.executionEffectFreeWhen.resultPath,
+                    ]),
+                    values: Object.freeze([...options.completion.executionEffectFreeWhen.values]),
+                  }),
+                }
+              : {}),
             ...(options.completion.effectFreeWhen
               ? {
                   effectFreeWhen: Object.freeze({
@@ -147,16 +161,6 @@ function trackedOperational(effectKind: ToolEffectKind): CodeOwnedToolEffectCont
     effectKind,
     completionMode: 'operational',
     tracksExecution: true,
-  });
-}
-
-function operationalExecution(
-  effectKind: ToolEffectKind,
-  outcomes: Readonly<Record<string, ToolEffectResultOutcome>>,
-): CodeOwnedToolEffectContract {
-  return Object.freeze({
-    ...effectful(effectKind, outcomes, { tracksExecution: true }),
-    completionMode: 'operational',
   });
 }
 
@@ -194,18 +198,55 @@ const READ_ONLY_CONTRACTS = Object.fromEntries(
 // MCP, and skill declarations must never be able to grant themselves evidence.
 const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEffectContract>> =
   Object.freeze({
-    // A successful interpreter exit proves execution, not the completeness or
-    // verification of arbitrary side effects produced by user-authored code.
-    javascript: operationalExecution('compute.execute', {
-      completed: executionOutcome('completed'),
-      effect_failed: executionOutcome('completed'),
-      failed: executionOutcome('failed'),
+    // JavaScript has no network or native bridge access. A successful run with
+    // no observed workspace mutation therefore verifies the requested compute
+    // execution. Workspace-changing runs remain unverified until their exact
+    // artifacts can be reconciled independently.
+    javascript: Object.freeze({
+      ...effectful(
+        'compute.execute',
+        {
+          completed: executionOutcome('completed'),
+          effect_failed: executionOutcome('completed'),
+          failed: executionOutcome('failed'),
+        },
+        {
+          tracksExecution: true,
+          completion: {
+            executionEffectFreeWhen: {
+              resultPath: ['workspaceMutationState'],
+              values: ['none_observed'],
+            },
+          },
+        },
+      ),
+      completionMode: 'operational' as const,
     }),
-    python: operationalExecution('compute.execute', {
-      completed: executionOutcome('completed'),
-      effect_failed: executionOutcome('completed'),
-      failed: executionOutcome('failed'),
-      timed_out: executionOutcome('timed_out'),
+    // Python blocks worker network primitives unless the invocation explicitly
+    // enables network access. The runtime may therefore verify a successful
+    // computation with no observed workspace mutation and no mutation-capable
+    // HTTP method. Workspace-changing or mutation-capable runs remain
+    // unverified.
+    python: Object.freeze({
+      ...effectful(
+        'compute.execute',
+        {
+          completed: executionOutcome('completed'),
+          effect_failed: executionOutcome('completed'),
+          failed: executionOutcome('failed'),
+          timed_out: executionOutcome('timed_out'),
+        },
+        {
+          tracksExecution: true,
+          completion: {
+            executionEffectFreeWhen: {
+              resultPath: ['executionEffectState'],
+              values: ['none_observed'],
+            },
+          },
+        },
+      ),
+      completionMode: 'operational' as const,
     }),
     // Workspace writes read the exact resource back after mutation. A result
     // is verified only when that readback matches the requested content.
@@ -408,10 +449,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         completion: { effectFreeWhen: { argumentPath: ['action'], values: ['view'] } },
       },
     ),
-    contacts_share: effectful(
-      'share.handoff',
-      nativeOutcomes({ handed_off: VERIFIED_HANDOFF }),
-    ),
+    contacts_share: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_contact: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_text: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_url: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),

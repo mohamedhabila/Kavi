@@ -109,6 +109,7 @@ describe('python runtime helpers', () => {
         packages: ['requests', 'httpx'],
         indexUrls: ['https://packages.example/simple'],
         env: { KEY: 'value' },
+        allowNetwork: false,
         timeoutMs: 300000,
       });
     });

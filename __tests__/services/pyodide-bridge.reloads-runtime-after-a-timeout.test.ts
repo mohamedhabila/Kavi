@@ -118,6 +118,7 @@ describe('pyodideBridge', () => {
 
     const sent = getPostedPayload();
     expect(sent.env).toEqual({ KEY: 'value' });
+    expect(sent.allowNetwork).toBe(false);
 
     handlePyodideMessage(
       JSON.stringify({
@@ -129,6 +130,40 @@ describe('pyodideBridge', () => {
     );
 
     await resultPromise;
+  });
+  it('forwards explicit network authority and accepts only runtime-owned network evidence', async () => {
+    bootRuntime();
+
+    const resultPromise = executePython({
+      code: 'print("network")',
+      allowNetwork: true,
+      timeoutMs: 200,
+    });
+    await flushAsyncWork();
+
+    const sent = getPostedPayload();
+    expect(sent.allowNetwork).toBe(true);
+
+    handlePyodideMessage(
+      JSON.stringify({
+        type: 'python-result',
+        runtimeId: 'rt-1',
+        id: sent.id,
+        output: 'network',
+        networkAccessState: 'enabled',
+        networkMutationState: 'none_observed',
+        networkRequestCount: 2,
+      }),
+    );
+
+    await expect(resultPromise).resolves.toEqual(
+      expect.objectContaining({
+        success: true,
+        networkAccessState: 'enabled',
+        networkMutationState: 'none_observed',
+        networkRequestCount: 2,
+      }),
+    );
   });
   it('deduplicates and filters package specs before dispatching to the runtime', async () => {
     bootRuntime();

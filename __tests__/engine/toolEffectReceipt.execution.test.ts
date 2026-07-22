@@ -90,35 +90,167 @@ describe('ToolEffectReceipt code execution truth', () => {
     ).toBeUndefined();
   });
 
-  it.each(['javascript', 'python'])(
-    'records %s completion separately from unverified arbitrary side effects',
-    async (toolName) => {
-      const receipt = await buildToolEffectReceipt({
-        toolCallId: `tc-${toolName}-completed`,
-        toolName,
-        argumentsText: '{"code":"42"}',
-        resultText: JSON.stringify({
-          status: 'completed',
-          workspaceMutationState: 'none_observed',
-          output: '42',
-        }),
-        transportState: 'returned',
-        recordedAt: 10,
-      });
+  it('records a compute-only JavaScript run as verified execution', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-javascript-completed',
+      toolName: 'javascript',
+      argumentsText: '{"code":"42"}',
+      resultText: JSON.stringify({
+        status: 'completed',
+        workspaceMutationState: 'none_observed',
+        output: '42',
+      }),
+      transportState: 'returned',
+      recordedAt: 10,
+    });
 
-      expect(receipt).toEqual(
-        expect.objectContaining({
-          transportState: 'returned',
-          executionState: 'completed',
-          effectKind: 'compute.execute',
-          effectState: 'unknown',
-          verificationState: 'unverified',
-        }),
-      );
-      expect(receipt.resource).toBeUndefined();
-      expect(receipt.operationHandle).toBeUndefined();
-    },
-  );
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        transportState: 'returned',
+        executionState: 'completed',
+        effectKind: 'compute.execute',
+        effectState: 'applied',
+        verificationState: 'verified',
+      }),
+    );
+    expect(receipt.resource).toBeUndefined();
+    expect(receipt.operationHandle).toBeUndefined();
+  });
+
+  it('keeps JavaScript workspace mutations unverified', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-javascript-workspace-mutation',
+      toolName: 'javascript',
+      argumentsText: '{"code":"fs.writeFileSync(\\"out.txt\\", \\"42\\")"}',
+      resultText: JSON.stringify({
+        status: 'completed',
+        workspaceMutationState: 'applied',
+        files: [{ path: 'out.txt', size: 2 }],
+      }),
+      transportState: 'returned',
+      recordedAt: 10,
+    });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        executionState: 'completed',
+        effectKind: 'compute.execute',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      }),
+    );
+  });
+
+  it('keeps Python completion separate from unverified arbitrary side effects', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-completed',
+      toolName: 'python',
+      argumentsText: '{"code":"42"}',
+      resultText: JSON.stringify({
+        status: 'completed',
+        workspaceMutationState: 'none_observed',
+        output: '42',
+      }),
+      transportState: 'returned',
+      recordedAt: 10,
+    });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        transportState: 'returned',
+        executionState: 'completed',
+        effectKind: 'compute.execute',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      }),
+    );
+  });
+
+  it('verifies a network-blocked Python computation from code-owned runtime evidence', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-local-compute',
+      toolName: 'python',
+      argumentsText: '{"code":"42","allowNetwork":false}',
+      resultText: JSON.stringify({
+        status: 'completed',
+        workspaceMutationState: 'none_observed',
+        networkAccessState: 'blocked',
+        networkMutationState: 'none_observed',
+        networkRequestCount: 0,
+        executionEffectState: 'none_observed',
+        output: '42',
+      }),
+      transportState: 'returned',
+      recordedAt: 10,
+    });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        transportState: 'returned',
+        executionState: 'completed',
+        effectKind: 'compute.execute',
+        effectState: 'applied',
+        verificationState: 'verified',
+      }),
+    );
+  });
+
+  it('settles a failed Python execution when code-owned evidence proves no effect', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-safe-read-failed',
+      toolName: 'python',
+      argumentsText: '{"code":"await get()","allowNetwork":true}',
+      resultText: JSON.stringify({
+        status: 'failed',
+        isError: true,
+        failureKind: 'execution_failed',
+        executionEffectState: 'none_observed',
+        networkMutationState: 'none_observed',
+        error: 'AttributeError',
+      }),
+      transportState: 'returned',
+      resultIsError: true,
+      recordedAt: 10,
+    });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        transportState: 'returned',
+        executionState: 'failed',
+        effectKind: 'compute.execute',
+        effectState: 'failed',
+        verificationState: 'unverified',
+      }),
+    );
+  });
+
+  it('keeps a failed mutation-capable Python execution reconciliation-required', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-mutation-failed',
+      toolName: 'python',
+      argumentsText: '{"code":"await post()","allowNetwork":true}',
+      resultText: JSON.stringify({
+        status: 'failed',
+        isError: true,
+        failureKind: 'execution_failed',
+        executionEffectState: 'unknown',
+        networkMutationState: 'possible',
+        error: 'RuntimeError',
+      }),
+      transportState: 'returned',
+      resultIsError: true,
+      recordedAt: 10,
+    });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        executionState: 'failed',
+        effectKind: 'compute.execute',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      }),
+    );
+  });
 
   it.each([
     ['javascript failure', 'javascript', 'failed', 'failed'],

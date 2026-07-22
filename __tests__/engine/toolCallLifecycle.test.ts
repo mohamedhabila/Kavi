@@ -528,9 +528,12 @@ describe('executeToolCallLifecycle', () => {
     expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
   });
 
-  it.each(['javascript', 'python'] as const)(
-    'records %s interpreter completion without claiming side-effect completion',
-    async (toolName) => {
+  it.each([
+    ['javascript', 'applied', 'verified'],
+    ['python', 'unknown', 'unverified'],
+  ] as const)(
+    'records %s interpreter completion with the appropriate effect authority',
+    async (toolName, effectState, verificationState) => {
       mockedExecuteTool.mockResolvedValueOnce(
         completedToolOutcome(
           JSON.stringify({
@@ -548,8 +551,8 @@ describe('executeToolCallLifecycle', () => {
           transportState: 'returned',
           executionState: 'completed',
           effectKind: 'compute.execute',
-          effectState: 'unknown',
-          verificationState: 'unverified',
+          effectState,
+          verificationState,
         }),
       );
       expect(result.effectReceipt?.resource).toBeUndefined();

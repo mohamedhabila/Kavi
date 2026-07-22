@@ -1,5 +1,9 @@
 import { limitArray } from './resultNormalizer';
 import type { PythonExecutionFailureKind } from '../../../services/python/types';
+import type {
+  PythonNetworkAccessState,
+  PythonNetworkMutationState,
+} from '../../../services/python/types';
 import {
   approxBinaryBytes,
   buildRelevantOutputExcerpt,
@@ -29,12 +33,18 @@ type PythonToolResult =
       success: true;
       output?: string;
       files?: Array<{ path: string; contentBase64?: string }>;
+      networkAccessState: PythonNetworkAccessState;
+      networkMutationState: PythonNetworkMutationState;
+      networkRequestCount: number;
     }
   | {
       success: false;
       output?: string;
       error: string;
       failureKind: PythonExecutionFailureKind;
+      networkAccessState: PythonNetworkAccessState;
+      networkMutationState: PythonNetworkMutationState;
+      networkRequestCount: number;
     };
 
 export function normalizePythonToolResult(result: PythonToolResult): string {
@@ -60,6 +70,13 @@ export function normalizePythonToolResult(result: PythonToolResult): string {
       error,
       failureKind: result.failureKind,
       workspaceMutationState: 'unknown',
+      networkAccessState: result.networkAccessState,
+      networkMutationState: result.networkMutationState,
+      networkRequestCount: result.networkRequestCount,
+      executionEffectState:
+        status === 'failed' && result.networkMutationState === 'none_observed'
+          ? 'none_observed'
+          : 'unknown',
       ...buildExecutionOutputFields(output),
     });
   }
@@ -86,6 +103,13 @@ export function normalizePythonToolResult(result: PythonToolResult): string {
     summary,
     status: 'completed',
     workspaceMutationState: normalizedFiles.length > 0 ? 'applied' : 'none_observed',
+    networkAccessState: result.networkAccessState,
+    networkMutationState: result.networkMutationState,
+    networkRequestCount: result.networkRequestCount,
+    executionEffectState:
+      normalizedFiles.length === 0 && result.networkMutationState === 'none_observed'
+        ? 'none_observed'
+        : 'unknown',
     ...buildExecutionOutputFields(output || '(no output)'),
     ...(normalizedFiles.length > 0
       ? {

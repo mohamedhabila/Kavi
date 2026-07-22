@@ -28,6 +28,7 @@ export function buildPyodideBootWorkerSource(): string[] {
     '    pyodide.setStderr({ batched: onStderr });',
     '    await pyodide.loadPackage("micropip");',
     '    await pyodide.runPythonAsync(PYODIDE_RUNTIME_HELPERS);',
+    '    installControlledNetworkPrimitives();',
     '    installedPackageSpecs = Object.create(null);',
     '    self.postMessage({ type: "pyodide-ready" });',
     '  } catch (error) {',

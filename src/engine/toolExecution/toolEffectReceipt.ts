@@ -353,11 +353,27 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
   if (!outcome) {
     return unknownResolvedOutcome(effectKind, unknownExecutionState);
   }
+  const executionEffectFreeWhen = codeOwnedContract.completion?.executionEffectFreeWhen;
+  const executionEffectFreeValue = executionEffectFreeWhen
+    ? readPath(resultValue, executionEffectFreeWhen.resultPath)
+    : undefined;
+  const executionIsEffectFree =
+    effectKind === 'compute.execute' &&
+    outcome.effectState === 'unknown' &&
+    typeof executionEffectFreeValue === 'string' &&
+    executionEffectFreeWhen?.values.includes(executionEffectFreeValue) === true;
   if (params.resultIsError) {
     if (outcome.effectState === 'failed' || outcome.effectState === 'cancelled') {
       return {
         effectKind: outcome.effectKind ?? effectKind,
         ...outcome,
+      };
+    }
+    if (outcome.executionState === 'failed' && executionIsEffectFree) {
+      return {
+        effectKind: outcome.effectKind ?? effectKind,
+        ...outcome,
+        effectState: 'failed',
       };
     }
     const executionState =
@@ -368,6 +384,7 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
   }
 
   const argumentsValue = parseJsonRecord(params.argumentsText);
+  const executionIsVerified = outcome.executionState === 'completed' && executionIsEffectFree;
   const resource = resolveResource(contract.resource, argumentsValue, resultValue);
   const operationHandle = resolveIdentity(contract.operationHandle, argumentsValue, resultValue);
   if ((contract.resource && !resource) || (contract.operationHandle && !operationHandle)) {
@@ -375,7 +392,13 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
   }
   return {
     effectKind: outcome.effectKind ?? effectKind,
-    ...outcome,
+    ...(executionIsVerified
+      ? {
+          ...outcome,
+          effectState: 'applied' as const,
+          verificationState: 'verified' as const,
+        }
+      : outcome),
     ...(resource ? { resource } : {}),
     ...(operationHandle ? { operationHandle } : {}),
   };
@@ -492,8 +515,7 @@ export async function buildToolEffectReceipt(
   const codeOwnedEffectKind = codeOwnedContract?.effectKind ?? 'unknown';
   const tracksExecution = codeOwnedContract?.tracksExecution === true;
   const runtimeExternalEffectFree =
-    contractIdentity.kind === 'runtime_external' &&
-    contractIdentity.effectClass === 'none';
+    contractIdentity.kind === 'runtime_external' && contractIdentity.effectClass === 'none';
   const effectOutcome: ResolvedEffectOutcome =
     contractIdentity.kind === 'runtime_external'
       ? runtimeExternalEffectFree && params.transportState === 'returned'
@@ -639,7 +661,10 @@ export async function verifyToolEffectReceiptIntegrity(value: unknown): Promise<
   }
   if ((await rebuildToolEffectReceiptId(receipt)) !== receipt.receiptId) return false;
   if (receipt.contractIdentity.kind === 'runtime_external') return true;
-  if (receipt.executionState && getCodeOwnedToolEffectContract(receipt.toolName)?.tracksExecution !== true) {
+  if (
+    receipt.executionState &&
+    getCodeOwnedToolEffectContract(receipt.toolName)?.tracksExecution !== true
+  ) {
     return false;
   }
   const currentIdentity = await buildCodeOwnedToolContractIdentity(receipt.toolName);

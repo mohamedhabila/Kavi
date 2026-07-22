@@ -1,4 +1,9 @@
-import type { NormalizedPythonExecutionRequest, PythonWorkspaceFile } from './types';
+import type {
+  NormalizedPythonExecutionRequest,
+  PythonNetworkAccessState,
+  PythonNetworkMutationState,
+  PythonWorkspaceFile,
+} from './types';
 import type { PythonWorkflowBridgeResult, PythonWorkflowBridgeState } from './workflowBridge';
 
 export const DEFAULT_PYTHON_EXECUTION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -35,6 +40,9 @@ export type PythonResultMessage = {
   error?: string;
   durationMs?: number;
   files?: PythonWorkspaceFile[];
+  networkAccessState?: PythonNetworkAccessState;
+  networkMutationState?: PythonNetworkMutationState;
+  networkRequestCount?: number;
   workflowBridge?: PythonWorkflowBridgeResult;
 };
 
@@ -97,5 +105,6 @@ export type PythonDispatchMessage = {
   packages: NormalizedPythonExecutionRequest['packages'];
   indexUrls: NormalizedPythonExecutionRequest['indexUrls'];
   env: NormalizedPythonExecutionRequest['env'];
+  allowNetwork: NormalizedPythonExecutionRequest['allowNetwork'];
   workflowBridge?: PythonWorkflowBridgeState;
 };

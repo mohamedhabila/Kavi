@@ -42,9 +42,7 @@ import {
 } from '../../src/services/skills/manager';
 import type { ToolDefinition } from '../../src/types/tool';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
-import {
-  POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-} from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
