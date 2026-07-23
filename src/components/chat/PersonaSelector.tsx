@@ -12,8 +12,10 @@ import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 
 interface PersonaSelectorProps {
+  disabled?: boolean;
   selectedPersonaId: string | null;
   onSelect: (personaId: string) => void;
+  variant?: 'compact' | 'full';
 }
 
 type PersonaVisual = {
@@ -55,7 +57,7 @@ function PersonaBadge({ persona, size }: { persona: AgentPersona; size: 'compact
 }
 
 export const PersonaSelector: React.FC<PersonaSelectorProps> = React.memo(
-  ({ selectedPersonaId, onSelect }) => {
+  ({ disabled = false, selectedPersonaId, onSelect, variant = 'compact' }) => {
     const { colors } = useAppTheme();
     const { t } = useTranslation();
     const styles = createStyles(colors);
@@ -72,13 +74,29 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = React.memo(
     return (
       <>
         <TouchableOpacity
-          style={styles.selector}
+          style={[
+            styles.selector,
+            variant === 'full' ? styles.selectorFull : null,
+            disabled ? styles.selectorDisabled : null,
+          ]}
           onPress={() => setVisible(true)}
+          disabled={disabled}
           accessibilityRole="button"
           accessibilityLabel={t('persona.selectorLabel', { name: current.name })}
+          accessibilityState={{ disabled }}
         >
           <PersonaBadge persona={current} size="compact" />
-          <ChevronDown size={12} color={colors.textSecondary} />
+          {variant === 'full' ? (
+            <View style={styles.selectorFullText}>
+              <Text style={styles.selectorName} numberOfLines={1}>
+                {current.name}
+              </Text>
+              <Text style={styles.selectorDescription} numberOfLines={1}>
+                {current.description}
+              </Text>
+            </View>
+          ) : null}
+          <ChevronDown size={variant === 'full' ? 18 : 12} color={colors.textSecondary} />
         </TouchableOpacity>
 
         <Modal
@@ -146,6 +164,32 @@ const createStyles = (colors: AppPalette) =>
       paddingVertical: 4,
       backgroundColor: colors.surfaceAlt,
       borderRadius: 12,
+    },
+    selectorFull: {
+      width: '100%',
+      minHeight: 52,
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    selectorDisabled: {
+      opacity: 0.5,
+    },
+    selectorFullText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    selectorName: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    selectorDescription: {
+      marginTop: 2,
+      color: colors.textSecondary,
+      fontSize: 12,
     },
     modalOverlay: {
       flex: 1,

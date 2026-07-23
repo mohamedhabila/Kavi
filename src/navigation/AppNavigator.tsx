@@ -14,6 +14,7 @@ import { LibraryScreen } from '../screens/LibraryScreen';
 import { MoreScreen } from '../screens/MoreScreen';
 import { DeveloperWorkScreen } from '../screens/DeveloperWorkScreen';
 import { ConversationFilesScreen } from '../screens/ConversationFilesScreen';
+import { ConversationSettingsScreen } from '../screens/ConversationSettingsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SchedulerScreen } from '../screens/SchedulerScreen';
 import { McpStatusScreen } from '../screens/McpStatusScreen';
@@ -220,6 +221,7 @@ export const AppNavigator: React.FC = () => {
           <Drawer.Screen name="More" component={MoreScreen} />
           <Drawer.Screen name="DeveloperWork" component={DeveloperWorkScreen} />
           <Drawer.Screen name="ConversationFiles" component={ConversationFilesScreen} />
+          <Drawer.Screen name="ConversationSettings" component={ConversationSettingsScreen} />
           <Drawer.Screen name="Settings" component={SettingsScreen} />
           <Drawer.Screen name="Scheduler" component={SchedulerScreen} />
           <Drawer.Screen name="McpStatus" component={McpStatusScreen} />

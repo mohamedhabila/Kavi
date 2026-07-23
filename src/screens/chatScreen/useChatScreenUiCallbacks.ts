@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
+import { Alert } from 'react-native';
 import type { DrawerNavigationProp } from '@react-navigation/drawer';
 import { shareConversationWorkspaceFile } from '../../services/share/localShare';
 import type { Attachment } from '../../types/attachment';
@@ -100,12 +101,19 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     }
 
     if (activeConversation.isSideThread) {
-      discardSideThread?.(activeConversation.id);
+      Alert.alert(t('chat.discardSideThreadConfirmTitle'), t('chat.discardSideThreadConfirmBody'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('chat.discardSideThreadAction'),
+          style: 'destructive',
+          onPress: () => discardSideThread?.(activeConversation.id),
+        },
+      ]);
       return;
     }
 
     createSideThread?.(activeConversation.id);
-  }, [activeConversation, createSideThread, discardSideThread]);
+  }, [activeConversation, createSideThread, discardSideThread, t]);
 
   const handleShareWorkspaceFile = useCallback(
     async (attachment: Attachment) => {

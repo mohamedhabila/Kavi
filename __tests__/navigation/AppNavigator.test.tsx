@@ -81,6 +81,18 @@ jest.mock('../../src/screens/ConversationFilesScreen', () => ({
   },
 }));
 
+jest.mock('../../src/screens/ConversationSettingsScreen', () => ({
+  ConversationSettingsScreen: () => {
+    const React = require('react');
+    const { View, Text } = require('react-native');
+    return React.createElement(
+      View,
+      null,
+      React.createElement(Text, null, 'ConversationSettingsScreen'),
+    );
+  },
+}));
+
 jest.mock('../../src/screens/SettingsScreen', () => ({
   SettingsScreen: () => {
     const React = require('react');

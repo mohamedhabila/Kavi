@@ -18,20 +18,20 @@ describe('ChatScreen UX performance contracts', () => {
   beforeEach(resetChatScreenTestEnvironment);
   afterEach(cleanupChatScreenTestEnvironment);
 
-  it('uses mobile-sized touch targets for header icon actions', () => {
-    const { getByLabelText } = render(<ChatScreen />);
+  it('uses mobile-sized touch targets without crowding the primary header', () => {
+    const { getByLabelText, getByTestId } = render(<ChatScreen />);
 
     const menuButtonStyle = StyleSheet.flatten(getByLabelText('Open menu').props.style);
-    const filesButtonStyle = StyleSheet.flatten(getByLabelText('Files').props.style);
-    const terminalButtonStyle = StyleSheet.flatten(getByLabelText('Terminal').props.style);
-    const sideThreadButtonStyle = StyleSheet.flatten(
-      getByLabelText('Start a side thread').props.style,
+    const optionsButtonStyle = StyleSheet.flatten(
+      getByLabelText('Open conversation options').props.style,
     );
 
-    expect(menuButtonStyle).toEqual(expect.objectContaining({ width: 44, height: 44 }));
-    expect(filesButtonStyle).toEqual(expect.objectContaining({ width: 44, height: 44 }));
-    expect(terminalButtonStyle).toEqual(expect.objectContaining({ width: 44, height: 44 }));
-    expect(sideThreadButtonStyle).toEqual(expect.objectContaining({ width: 44, height: 44 }));
+    expect(menuButtonStyle).toEqual(expect.objectContaining({ width: 48, height: 48 }));
+    expect(optionsButtonStyle).toEqual(expect.objectContaining({ width: 48, height: 48 }));
+
+    fireEvent.press(getByTestId('chat-open-conversation-options'));
+    const filesRowStyle = StyleSheet.flatten(getByTestId('chat-open-files').props.style);
+    expect(filesRowStyle).toEqual(expect.objectContaining({ minHeight: 56 }));
   });
 
   it('keeps the message list render function stable while the composer changes', () => {

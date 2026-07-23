@@ -11,7 +11,7 @@ import {
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState } from '../../../testSupport/chatScreen/state';
 import { createDefaultConversations } from '../../../testSupport/chatScreen/fixtures';
-import { mockOpenDrawer } from '../../../testSupport/chatScreen/componentMocks';
+import { mockNavigate, mockOpenDrawer } from '../../../testSupport/chatScreen/componentMocks';
 import { mockGetOrCreateCanonicalThread } from '../../../testSupport/chatScreen/storeMocks';
 
 describe('ChatScreen rendering and layout', () => {
@@ -46,9 +46,17 @@ describe('ChatScreen rendering and layout', () => {
     expect(mockOpenDrawer).toHaveBeenCalled();
   });
 
-  it('renders the model selector', () => {
-    const { getByText } = render(<ChatScreen />);
-    expect(getByText('gpt-5.4')).toBeTruthy();
+  it('moves model selection behind conversation settings', () => {
+    const { getByTestId, queryByText } = render(<ChatScreen />);
+
+    expect(queryByText('gpt-5.4')).toBeNull();
+    fireEvent.press(getByTestId('chat-open-conversation-options'));
+    fireEvent.press(getByTestId('chat-open-conversation-settings'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('ConversationSettings', {
+      conversationId: 'conv1',
+      returnTo: { name: 'Chat' },
+    });
   });
 
   it('renders the telemetry strip and toggle logs panel', () => {
@@ -242,30 +250,6 @@ describe('ChatScreen rendering and layout', () => {
       });
       jest.useRealTimers();
     }
-  });
-
-  it('toggles conversation mode with mode badge', () => {
-    mockChatScreenState.activeConversationId = null;
-    mockGetOrCreateCanonicalThread.mockReturnValueOnce('new-conv');
-
-    const { getByLabelText } = render(<ChatScreen />);
-
-    // Default is agentic mode - toggle to direct
-    // Accessibility label now includes current mode description
-    fireEvent.press(getByLabelText(/Switch to chitchat mode/));
-
-    expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
-      'openai',
-      'You are helpful',
-      'gpt-5.4',
-      {
-        activate: undefined,
-        personaId: 'default',
-        mode: 'chitchat',
-      },
-    );
-    // For new conversations (no existing convId), handleToggleMode creates the conversation
-    // then uses atomic setState on the new convId
   });
 
   it('renders message input', () => {

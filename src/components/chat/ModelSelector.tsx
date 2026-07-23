@@ -23,13 +23,15 @@ import { isOnDeviceLlmProvider } from '../../services/localLlm/provider';
 import { getLocalLlmModelDisplayName } from '../../services/localLlm/catalog';
 
 interface ModelSelectorProps {
+  disabled?: boolean;
   selectedProviderId: string | null;
   selectedModel: string | null;
   onSelect: (providerId: string, model: string) => void;
+  variant?: 'compact' | 'full';
 }
 
 export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
-  ({ selectedProviderId, selectedModel, onSelect }) => {
+  ({ disabled = false, selectedProviderId, selectedModel, onSelect, variant = 'compact' }) => {
     const { colors } = useAppTheme();
     const { t } = useTranslation();
     const styles = createStyles(colors);
@@ -156,12 +158,21 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
       <>
         <TouchableOpacity
           testID="model-selector-trigger"
-          style={styles.selector}
+          style={[
+            styles.selector,
+            variant === 'full' ? styles.selectorFull : null,
+            disabled ? styles.selectorDisabled : null,
+          ]}
           onPress={() => setVisible(true)}
+          disabled={disabled}
           accessibilityRole="button"
           accessibilityLabel={t('model.selectorLabel', { name: displayName })}
+          accessibilityState={{ disabled }}
         >
-          <Text style={styles.selectorText} numberOfLines={1}>
+          <Text
+            style={[styles.selectorText, variant === 'full' ? styles.selectorTextFull : null]}
+            numberOfLines={1}
+          >
             {displayName}
           </Text>
           <ChevronDown size={14} color={colors.textSecondary} />
@@ -308,6 +319,24 @@ const createStyles = (colors: AppPalette) =>
       color: colors.text,
       flexShrink: 1,
       minWidth: 0,
+    },
+    selectorTextFull: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    selectorFull: {
+      width: '100%',
+      minHeight: 52,
+      alignSelf: 'stretch',
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+    },
+    selectorDisabled: {
+      opacity: 0.5,
     },
     modalOverlay: {
       flex: 1,

@@ -248,8 +248,24 @@ export const ChatScreen: React.FC = () => {
     () => navigation.navigate('Settings' as any),
     [navigation],
   );
+  const handleOpenConversationSettings = useCallback(() => {
+    if (!activeConversationId) {
+      return;
+    }
+    navigation.navigate('ConversationSettings' as any, {
+      conversationId: activeConversationId,
+      returnTo: { name: 'Chat' },
+    });
+  }, [activeConversationId, navigation]);
+  const handleOpenDeveloperTools = useCallback(
+    () =>
+      navigation.navigate('DeveloperWork' as any, {
+        returnTo: { name: 'Chat' },
+      }),
+    [navigation],
+  );
 
-  const { activeLocalRuntimeStatus, activeErrorMessage } = useLocalModelRuntimeState({
+  const { activeErrorMessage } = useLocalModelRuntimeState({
     activeProvider,
     currentModel: currentModel ?? undefined,
     chatError,
@@ -270,9 +286,6 @@ export const ChatScreen: React.FC = () => {
 
   const {
     ensureCanonicalConversation,
-    handleModelSelect,
-    handlePersonaSelect,
-    handleToggleMode,
     resolveConversationFinalizationContext,
     resolveConversationFinalizationContextRef,
   } = useConversationGraphController({
@@ -571,18 +584,12 @@ export const ChatScreen: React.FC = () => {
 
       <ChatScreenHeader
         activeConversation={activeConversation ?? undefined}
-        activeLocalRuntimeStatus={activeLocalRuntimeStatus}
-        activeProviderId={activeProviderId}
         colors={colors}
-        currentModel={currentModel}
-        isAgenticMode={isAgenticMode}
         isConversationBusy={isConversationBusy}
-        onModelSelect={handleModelSelect}
-        onOpenFiles={() => handleViewFiles()}
+        onOpenConversationSettings={handleOpenConversationSettings}
+        onOpenDeveloperTools={handleOpenDeveloperTools}
+        onOpenFiles={handleViewFiles}
         onOpenMenu={() => navigation.openDrawer()}
-        onOpenTerminal={() => navigation.navigate('Terminal' as any)}
-        onPersonaSelect={handlePersonaSelect}
-        onToggleMode={handleToggleMode}
         onToggleSideThread={handleToggleSideThread}
         styles={styles}
         t={t}

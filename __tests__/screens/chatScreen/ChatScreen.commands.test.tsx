@@ -11,6 +11,7 @@ import {
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState } from '../../../testSupport/chatScreen/state';
 import { createDefaultConversations } from '../../../testSupport/chatScreen/fixtures';
+import { mockNavigate } from '../../../testSupport/chatScreen/componentMocks';
 import { mockUpdateMessage } from '../../../testSupport/chatScreen/storeMocks';
 import {
   mockRunOrchestrator,
@@ -89,13 +90,17 @@ describe('ChatScreen command results and sharing', () => {
     expect(screen.getByDisplayValue('Draft for second conversation')).toBeTruthy();
   });
 
-  it('handles model selection via ModelSelector', () => {
-    // ModelSelector calls onSelect(providerId, model) which triggers handleModelSelect
-    // handleModelSelect calls updateModelInConversation and setLastUsedModel
-    const { getByText } = render(<ChatScreen />);
-    expect(getByText('gpt-5.4')).toBeTruthy();
-    // We can verify the ModelSelector renders and the handleModelSelect is properly wired
-    // by checking that the component renders without error
+  it('routes model overrides through conversation settings', () => {
+    const { getByTestId, queryByText } = render(<ChatScreen />);
+
+    expect(queryByText('gpt-5.4')).toBeNull();
+    fireEvent.press(getByTestId('chat-open-conversation-options'));
+    fireEvent.press(getByTestId('chat-open-conversation-settings'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('ConversationSettings', {
+      conversationId: 'conv1',
+      returnTo: { name: 'Chat' },
+    });
   });
 
   it('handles export command result', async () => {

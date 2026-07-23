@@ -168,22 +168,32 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityState={{ selected: currentRouteName === 'Chat' }}
+          accessibilityState={{
+            selected: currentRouteName === 'Chat' || currentRouteName === 'ConversationSettings',
+          }}
           onPress={handleOpenChat}
           style={[
             styles.assistantBtn,
-            currentRouteName === 'Chat' ? styles.assistantBtnActive : null,
+            currentRouteName === 'Chat' || currentRouteName === 'ConversationSettings'
+              ? styles.assistantBtnActive
+              : null,
           ]}
           testID="sidebar-assistant"
         >
           <Sparkles
             size={20}
-            color={currentRouteName === 'Chat' ? colors.primary : colors.textSecondary}
+            color={
+              currentRouteName === 'Chat' || currentRouteName === 'ConversationSettings'
+                ? colors.primary
+                : colors.textSecondary
+            }
           />
           <Text
             style={[
               styles.assistantText,
-              currentRouteName === 'Chat' ? styles.assistantTextActive : null,
+              currentRouteName === 'Chat' || currentRouteName === 'ConversationSettings'
+                ? styles.assistantTextActive
+                : null,
             ]}
           >
             {t('nav.assistant')}

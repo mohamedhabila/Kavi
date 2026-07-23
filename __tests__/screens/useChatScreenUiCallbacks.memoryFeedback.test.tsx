@@ -1,4 +1,5 @@
-import { renderHook } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { act, renderHook } from '@testing-library/react-native';
 import { useChatScreenUiCallbacks } from '../../src/screens/chatScreen/useChatScreenUiCallbacks';
 import { makeTestConversation, makeTestMessage } from '../helpers/factories';
 
@@ -24,7 +25,10 @@ jest.mock('../../src/services/memory/retrievalOutcomeStore', () => ({
 
 const EVENT_ID = 'retrieval_event_m123_1_abc';
 
-function renderCallbacks(params?: { completionStatus?: 'complete' | 'incomplete' }) {
+function renderCallbacks(params?: {
+  completionStatus?: 'complete' | 'incomplete';
+  discardSideThread?: jest.Mock;
+}) {
   const assistantMessage = makeTestMessage(1, {
     id: 'assistant-exact',
     role: 'assistant',
@@ -48,6 +52,7 @@ function renderCallbacks(params?: { completionStatus?: 'complete' | 'incomplete'
       activeConversation: side,
       activeConversationId: side.id,
       conversations: [root, side],
+      discardSideThread: params?.discardSideThread,
       navigation: { navigate: jest.fn() },
       setChatError: jest.fn(),
       setEditingContent: jest.fn(),
@@ -61,7 +66,7 @@ function renderCallbacks(params?: { completionStatus?: 'complete' | 'incomplete'
   );
 }
 
-describe('useChatScreenUiCallbacks memory feedback', () => {
+describe('useChatScreenUiCallbacks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockReadExplicitMemoryRetrievalFeedback.mockResolvedValue({
@@ -127,6 +132,31 @@ describe('useChatScreenUiCallbacks memory feedback', () => {
       result.current.handleMemoryFeedback('assistant-exact', EVENT_ID, 'helpful'),
     ).rejects.toThrow('memory_retrieval_feedback_target_invalid');
     expect(mockRecordExplicitMemoryRetrievalFeedback).not.toHaveBeenCalled();
+  });
+
+  it('requires confirmation before discarding a side conversation', () => {
+    const discardSideThread = jest.fn();
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      const { result } = renderCallbacks({ discardSideThread });
+
+      act(() => result.current.handleToggleSideThread());
+
+      expect(discardSideThread).not.toHaveBeenCalled();
+      expect(alertSpy).toHaveBeenCalledWith(
+        'chat.discardSideThreadConfirmTitle',
+        'chat.discardSideThreadConfirmBody',
+        expect.any(Array),
+      );
+
+      const actions = alertSpy.mock.calls[0]?.[2];
+      const destructiveAction = actions?.find((action) => action.style === 'destructive');
+      act(() => destructiveAction?.onPress?.());
+
+      expect(discardSideThread).toHaveBeenCalledWith('side-conversation');
+    } finally {
+      alertSpy.mockRestore();
+    }
   });
 
   it('shares side-thread artifacts from the canonical parent with the child as fallback', async () => {
