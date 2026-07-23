@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FactsSection } from './FactsSection';
 import { OverviewSection } from './OverviewSection';
 import { AdvancedSection } from './AdvancedSection';
+import { MemoryCorrectionModal } from './MemoryCorrectionModal';
+import type { MemoryFactManagementController } from './useMemoryFactManagement';
 import type {
   MemoryDiagnostics,
   MemoryEpisodeRow,
@@ -27,10 +29,9 @@ type MemoryScreenViewProps = {
   facts: MemoryFactRow[];
   factsFilter: string;
   factsPinnedOnly: boolean;
+  factManagement: MemoryFactManagementController;
   handleBack: () => void;
   handleClearAll: () => void;
-  handleFactForget: (fact: MemoryFactRow) => void;
-  handleFactToggleStar: (fact: MemoryFactRow) => void;
   loadFacts: () => void;
   loadOverviewFacts: (query: string) => void;
   memoryStatus: string;
@@ -58,10 +59,9 @@ export function MemoryScreenView({
   facts,
   factsFilter,
   factsPinnedOnly,
+  factManagement,
   handleBack,
   handleClearAll,
-  handleFactForget,
-  handleFactToggleStar,
   loadFacts,
   loadOverviewFacts,
   memoryStatus,
@@ -174,8 +174,9 @@ export function MemoryScreenView({
           facts={facts}
           factsFilter={factsFilter}
           factsPinnedOnly={factsPinnedOnly}
-          handleFactForget={handleFactForget}
-          handleFactToggleStar={handleFactToggleStar}
+          handleFactCorrect={factManagement.handleFactCorrect}
+          handleFactForget={factManagement.handleFactForget}
+          handleFactTogglePin={factManagement.handleFactTogglePin}
           setFactsFilter={setFactsFilter}
           setFactsPinnedOnly={setFactsPinnedOnly}
           styles={styles}
@@ -202,6 +203,15 @@ export function MemoryScreenView({
           {t('memory.attribution')}
         </Text>
       ) : null}
+      <MemoryCorrectionModal
+        colors={colors}
+        error={factManagement.correctionError}
+        fact={factManagement.correctionFact}
+        onCancel={factManagement.cancelCorrection}
+        onEdit={factManagement.clearCorrectionError}
+        onSave={factManagement.saveCorrection}
+        t={t}
+      />
     </SafeAreaView>
   );
 }

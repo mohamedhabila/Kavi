@@ -33,13 +33,21 @@ jest.mock('../../src/theme/useAppTheme', () => ({
     colors: {
       background: '#000',
       surface: '#111',
+      surfaceAlt: '#191919',
+      panel: '#111',
+      border: '#333',
+      subtleBorder: '#292929',
       text: '#fff',
       textSecondary: '#aaa',
       textTertiary: '#777',
       placeholder: '#555',
       primary: '#0f0',
+      onPrimary: '#000',
       primarySoft: '#030',
       danger: '#f00',
+      inputBackground: '#181818',
+      inputBorder: '#333',
+      overlay: 'rgba(0,0,0,0.65)',
       warningBackground: '#332900',
       warning: '#ff0',
     },
@@ -71,6 +79,8 @@ jest.mock('../../src/store/useChatStore', () => ({
 }));
 
 jest.mock('../../src/services/memory/memoryTools', () => ({
+  MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH: 2_000,
+  correctMemoryFactForManagement: jest.fn(),
   executeMemoryRecall: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
   queryMemoryFactsForManagement: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
   forgetMemoryFactForManagement: jest.fn(),
@@ -203,7 +213,7 @@ describe('MemoryScreen overview tab', () => {
 
     expect(getByDisplayValue('atlas')).toBeTruthy();
     expect(mockExecuteMemoryRecall).toHaveBeenCalledWith(
-      expect.objectContaining({ subject: 'atlas' }),
+      expect.objectContaining({ search: 'atlas', memoryKind: 'semantic_fact' }),
     );
     expect(getByTestId('memory-overview-focus').props.children).toContain('Release hardening');
     expect(getByTestId('memory-overview-task').props.children).toContain('Ship Android build');
@@ -244,7 +254,7 @@ describe('MemoryScreen overview tab', () => {
 
     await waitFor(() => {
       expect(mockExecuteMemoryRecall).toHaveBeenCalledWith(
-        expect.objectContaining({ subject: 'metadata' }),
+        expect.objectContaining({ search: 'metadata', memoryKind: 'semantic_fact' }),
       );
     });
   });

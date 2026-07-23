@@ -14,11 +14,7 @@ import {
   subscribeToMemoryChanges,
 } from '../services/memory/changeNotifications';
 import { resetCanonicalMemoryForManagement } from '../services/memory/memoryReset';
-import {
-  queryMemoryFactsForManagement,
-  forgetMemoryFactForManagement,
-  setMemoryFactPinnedForManagement,
-} from '../services/memory/memoryTools';
+import { queryMemoryFactsForManagement } from '../services/memory/memoryTools';
 import { recallRecentEpisodes } from '../services/memory/episodeRecall';
 import { useAppTheme } from '../theme/useAppTheme';
 import { MemoryScreenView } from './memory/MemoryScreenView';
@@ -32,6 +28,7 @@ import type {
 import { createMemoryScreenStyles as createStyles } from './memory/memoryScreenStyles';
 import { useTranslation } from '../i18n/useTranslation';
 import { useBackToChat } from '../navigation/useBackToChat';
+import { useMemoryFactManagement } from './memory/useMemoryFactManagement';
 
 function resolveRouteTab(tabParam: unknown): Tab {
   if (tabParam === 'facts') return 'facts';
@@ -85,10 +82,10 @@ export const MemoryScreen: React.FC = () => {
   const loadFacts = useCallback(() => {
     const subject = factsFilter.trim();
     const result = queryMemoryFactsForManagement({
-      ...(subject ? { subject } : {}),
+      ...(subject ? { search: subject } : { all: true }),
+      memoryKind: 'semantic_fact',
       ...(factsPinnedOnly ? { pinnedOnly: true } : {}),
-      ...(!subject && !factsPinnedOnly ? { all: true } : {}),
-      limit: 100,
+      limit: subject ? 50 : 100,
     });
     if ('ok' in result && result.ok) {
       setFacts(result.facts);
@@ -108,7 +105,8 @@ export const MemoryScreen: React.FC = () => {
   const loadOverviewFacts = useCallback((query: string) => {
     const subject = query.trim();
     const result = queryMemoryFactsForManagement({
-      ...(subject ? { subject } : { all: true }),
+      ...(subject ? { search: subject } : { all: true }),
+      memoryKind: 'semantic_fact',
       limit: 8,
     });
     if ('ok' in result && result.ok) {
@@ -238,42 +236,11 @@ export const MemoryScreen: React.FC = () => {
     loadEpisodes();
   }, [tab, loadFacts, loadEpisodes]);
 
-  const handleFactToggleStar = useCallback(
-    (fact: FactRow) => {
-      const result = fact.pinned
-        ? setMemoryFactPinnedForManagement({ factId: fact.id }, false)
-        : setMemoryFactPinnedForManagement({ factId: fact.id }, true);
-      if ('ok' in result && result.ok) {
-        loadFacts();
-      }
-    },
-    [loadFacts],
-  );
-
-  const handleFactForget = useCallback(
-    (fact: FactRow) => {
-      Alert.alert(t('memory.factForgetTitle'), t('memory.factForgetConfirm'), [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('memory.factForget'),
-          style: 'destructive',
-          onPress: () => {
-            try {
-              const result = forgetMemoryFactForManagement({ factId: fact.id });
-              if ('ok' in result && result.ok) {
-                loadFacts();
-                return;
-              }
-            } catch {
-              // The user-facing alert below is deliberately content-free.
-            }
-            Alert.alert(t('memory.factForgetFailedTitle'), t('memory.factForgetFailedMessage'));
-          },
-        },
-      ]);
-    },
-    [loadFacts, t],
-  );
+  const reloadManagedFacts = useCallback(() => {
+    loadFacts();
+    loadOverviewFacts(overviewSearch);
+  }, [loadFacts, loadOverviewFacts, overviewSearch]);
+  const factManagement = useMemoryFactManagement({ onChanged: reloadManagedFacts, t });
 
   const memoryStatus = isRefreshing
     ? t('memory.refreshing')
@@ -292,10 +259,9 @@ export const MemoryScreen: React.FC = () => {
       facts={facts}
       factsFilter={factsFilter}
       factsPinnedOnly={factsPinnedOnly}
+      factManagement={factManagement}
       handleBack={handleBack}
       handleClearAll={handleClearAll}
-      handleFactForget={handleFactForget}
-      handleFactToggleStar={handleFactToggleStar}
       loadFacts={loadFacts}
       loadOverviewFacts={loadOverviewFacts}
       memoryStatus={memoryStatus}

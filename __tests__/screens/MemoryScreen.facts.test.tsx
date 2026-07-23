@@ -13,6 +13,7 @@ import { MemoryScreen } from '../../src/screens/MemoryScreen';
 const mockExecuteMemoryRecall = jest.fn();
 const mockSetMemoryFactPinnedForManagement = jest.fn();
 const mockExecuteMemoryForget = jest.fn();
+const mockCorrectMemoryFactForManagement = jest.fn();
 const mockSubscribeToMemoryChanges = jest.fn();
 let mockRouteParams: Record<string, unknown> = {};
 let memoryListener: ((event: { updatedAt: number }) => void) | null = null;
@@ -39,15 +40,21 @@ jest.mock('../../src/theme/useAppTheme', () => ({
     colors: {
       background: '#000',
       surface: '#111',
+      surfaceAlt: '#191919',
       panel: '#111',
       border: '#333',
+      subtleBorder: '#292929',
       text: '#fff',
       textSecondary: '#aaa',
       textTertiary: '#777',
       placeholder: '#555',
       primary: '#0f0',
+      onPrimary: '#000',
       primarySoft: '#030',
       danger: '#f00',
+      inputBackground: '#181818',
+      inputBorder: '#333',
+      overlay: 'rgba(0,0,0,0.65)',
       warning: '#ff0',
       warningBackground: '#332900',
       mode: 'dark',
@@ -110,6 +117,9 @@ jest.mock('../../src/store/useChatStore', () => ({
 }));
 
 jest.mock('../../src/services/memory/memoryTools', () => ({
+  MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH: 2_000,
+  correctMemoryFactForManagement: (...args: any[]) =>
+    mockCorrectMemoryFactForManagement(...args),
   executeMemoryRecall: (...args: any[]) => mockExecuteMemoryRecall(...args),
   queryMemoryFactsForManagement: (...args: any[]) => mockExecuteMemoryRecall(...args),
   executeMemoryRemember: jest.fn(),
@@ -144,6 +154,12 @@ describe('MemoryScreen — Facts & Episodes', () => {
       ok: true,
       fact: sampleFact({ pinned }),
     }));
+    mockCorrectMemoryFactForManagement.mockReturnValue({
+      ok: true,
+      status: 'corrected',
+      fact: sampleFact({ value: 'Mohamed' }),
+      supersededFactId: 'fact-1',
+    });
     mockExecuteMemoryForget.mockReturnValue({
       ok: true,
       action: 'withdrawal',
@@ -160,13 +176,15 @@ describe('MemoryScreen — Facts & Episodes', () => {
   it('renders the Facts tab and shows the empty state when no facts match', async () => {
     const { getByText, getByTestId } = render(<MemoryScreen />);
 
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => {
       expect(getByTestId('memory-facts-tab')).toBeTruthy();
     });
     expect(
-      getByText('No facts recorded yet. The AI will remember structured facts here.'),
+      getByText(
+        'Nothing remembered yet. Ask Kavi to remember a preference or detail, and it will appear here.',
+      ),
     ).toBeTruthy();
   });
 
@@ -177,13 +195,14 @@ describe('MemoryScreen — Facts & Episodes', () => {
       facts: [sampleFact(), sampleFact({ id: 'fact-2', value: 'Habila', predicate: 'lastname' })],
     });
 
-    const { getByText } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    const { getAllByText, getByText } = render(<MemoryScreen />);
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => {
-      expect(getByText('user · name')).toBeTruthy();
+      expect(getAllByText('About you')).toHaveLength(2);
+      expect(getByText('Name')).toBeTruthy();
       expect(getByText('Mo')).toBeTruthy();
-      expect(getByText('user · lastname')).toBeTruthy();
+      expect(getByText('Lastname')).toBeTruthy();
       expect(getByText('Habila')).toBeTruthy();
     });
   });
@@ -196,7 +215,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
     });
 
     const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => expect(getByTestId('memory-fact-pin-fact-1')).toBeTruthy());
 
@@ -216,12 +235,111 @@ describe('MemoryScreen — Facts & Episodes', () => {
     });
 
     const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => expect(getByTestId('memory-fact-pin-fact-1')).toBeTruthy());
 
     fireEvent.press(getByTestId('memory-fact-pin-fact-1'));
     expect(mockSetMemoryFactPinnedForManagement).toHaveBeenCalledWith({ factId: 'fact-1' }, false);
+  });
+
+  it('shows a content-free recovery alert when pinning fails', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockExecuteMemoryRecall.mockReturnValue({
+      ok: true,
+      subject: null,
+      facts: [sampleFact()],
+    });
+    mockSetMemoryFactPinnedForManagement.mockReturnValue({
+      ok: false,
+      code: 'internal',
+      error: 'private storage detail',
+    });
+
+    const { getByText, getByTestId } = render(<MemoryScreen />);
+    fireEvent.press(getByText('All memories'));
+    await waitFor(() => expect(getByTestId('memory-fact-pin-fact-1')).toBeTruthy());
+
+    fireEvent.press(getByTestId('memory-fact-pin-fact-1'));
+
+    expect(alertSpy).toHaveBeenLastCalledWith(
+      'Memory not updated',
+      'Reload memory and try again.',
+    );
+    expect(JSON.stringify(alertSpy.mock.calls.at(-1))).not.toContain('private storage detail');
+    alertSpy.mockRestore();
+  });
+
+  it('corrects an exact remembered fact and refreshes the visible memories', async () => {
+    mockExecuteMemoryRecall.mockReturnValue({
+      ok: true,
+      subject: null,
+      facts: [sampleFact()],
+    });
+
+    const { getByText, getByTestId, queryByTestId } = render(<MemoryScreen />);
+    fireEvent.press(getByText('All memories'));
+    await waitFor(() => expect(getByTestId('memory-fact-correct-fact-1')).toBeTruthy());
+
+    fireEvent.press(getByTestId('memory-fact-correct-fact-1'));
+
+    expect(getByTestId('memory-correction-input').props.value).toBe('Mo');
+    expect(getByTestId('memory-correction-save').props.accessibilityState).toEqual({
+      disabled: true,
+    });
+
+    fireEvent.changeText(getByTestId('memory-correction-input'), 'x'.repeat(2_001));
+    expect(getByTestId('memory-correction-save').props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(getByText('Keep this memory to 2000 characters or fewer.')).toBeTruthy();
+
+    fireEvent.changeText(getByTestId('memory-correction-input'), 'x'.repeat(2_000));
+    expect(getByTestId('memory-correction-save').props.accessibilityState).toEqual({
+      disabled: false,
+    });
+
+    fireEvent.changeText(getByTestId('memory-correction-input'), 'Mohamed');
+    mockExecuteMemoryRecall.mockClear();
+    fireEvent.press(getByTestId('memory-correction-save'));
+
+    expect(mockCorrectMemoryFactForManagement).toHaveBeenCalledWith({
+      factId: 'fact-1',
+      value: 'Mohamed',
+    });
+    expect(queryByTestId('memory-correction-modal')).toBeNull();
+    expect(mockExecuteMemoryRecall).toHaveBeenCalled();
+  });
+
+  it('keeps correction failures private and clears feedback when editing resumes', async () => {
+    mockExecuteMemoryRecall.mockReturnValue({
+      ok: true,
+      subject: null,
+      facts: [sampleFact()],
+    });
+    mockCorrectMemoryFactForManagement.mockReturnValue({
+      ok: false,
+      status: 'failed_unknown',
+      code: 'internal',
+      error: 'PRIVATE STORAGE DETAIL',
+    });
+
+    const { getByText, getByTestId, queryByText } = render(<MemoryScreen />);
+    fireEvent.press(getByText('All memories'));
+    await waitFor(() => expect(getByTestId('memory-fact-correct-fact-1')).toBeTruthy());
+
+    fireEvent.press(getByTestId('memory-fact-correct-fact-1'));
+    fireEvent.changeText(getByTestId('memory-correction-input'), 'Mohamed');
+    fireEvent.press(getByTestId('memory-correction-save'));
+
+    expect(
+      getByText('This memory could not be updated. Close it and try again.'),
+    ).toBeTruthy();
+    expect(queryByText('PRIVATE STORAGE DETAIL')).toBeNull();
+    expect(getByTestId('memory-correction-modal')).toBeTruthy();
+
+    fireEvent.changeText(getByTestId('memory-correction-input'), 'Mohamed Habila');
+    expect(queryByText('This memory could not be updated. Close it and try again.')).toBeNull();
   });
 
   it('Forget confirmation cancels safely and executes withdrawal exactly once on confirm', async () => {
@@ -233,7 +351,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
     });
 
     const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => expect(getByTestId('memory-fact-forget-fact-1')).toBeTruthy());
 
@@ -267,7 +385,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
     });
 
     const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
     await waitFor(() => expect(getByTestId('memory-fact-forget-fact-1')).toBeTruthy());
 
     fireEvent.press(getByTestId('memory-fact-forget-fact-1'));
@@ -277,15 +395,15 @@ describe('MemoryScreen — Facts & Episodes', () => {
 
     expect(mockExecuteMemoryForget).toHaveBeenCalledTimes(1);
     expect(mockExecuteMemoryRecall).toHaveBeenCalledTimes(recallCountBeforeConfirm);
-    expect(alertSpy).toHaveBeenLastCalledWith('Fact not removed', 'Reload memory and try again.');
+    expect(alertSpy).toHaveBeenLastCalledWith('Memory not removed', 'Reload memory and try again.');
     expect(JSON.stringify(alertSpy.mock.calls.at(-1))).not.toContain('sensitive database detail');
 
     alertSpy.mockRestore();
   });
 
-  it('typing in the search filter passes subject to executeMemoryRecall', async () => {
+  it('searches across remembered details and keeps results semantic', async () => {
     const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => expect(getByTestId('memory-facts-search')).toBeTruthy());
 
@@ -296,7 +414,9 @@ describe('MemoryScreen — Facts & Episodes', () => {
       expect(mockExecuteMemoryRecall).toHaveBeenCalled();
     });
     const lastCall = mockExecuteMemoryRecall.mock.calls.at(-1)?.[0];
-    expect(lastCall?.subject).toBe('mo');
+    expect(lastCall).toEqual(
+      expect.objectContaining({ search: 'mo', memoryKind: 'semantic_fact' }),
+    );
   });
 
   it('seeds facts search from route params', async () => {
@@ -308,7 +428,11 @@ describe('MemoryScreen — Facts & Episodes', () => {
       expect(getByTestId('memory-facts-search').props.value).toBe('release target');
     });
     const calls = mockExecuteMemoryRecall.mock.calls.map((call) => call[0]);
-    expect(calls.some((args) => args?.subject === 'release target')).toBe(true);
+    expect(
+      calls.some(
+        (args) => args?.search === 'release target' && args?.memoryKind === 'semantic_fact',
+      ),
+    ).toBe(true);
   });
 
   it('reloads facts when structured memory changes', async () => {
@@ -320,7 +444,9 @@ describe('MemoryScreen — Facts & Episodes', () => {
 
     await waitFor(() => {
       expect(
-        getByText('No facts recorded yet. The AI will remember structured facts here.'),
+        getByText(
+          'Nothing remembered yet. Ask Kavi to remember a preference or detail, and it will appear here.',
+        ),
       ).toBeTruthy();
     });
 
@@ -337,7 +463,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
 
   it('shows the episodes empty state when no episodes exist', async () => {
     const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => expect(getByTestId('memory-facts-tab')).toBeTruthy());
     expect(getByText('Episodes')).toBeTruthy();
@@ -358,7 +484,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
     ]);
 
     const { getByText, getByTestId } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => {
       expect(getByTestId('memory-episode-ep-1')).toBeTruthy();
@@ -375,7 +501,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
       ]);
 
     const { getByText } = render(<MemoryScreen />);
-    fireEvent.press(getByText('Facts'));
+    fireEvent.press(getByText('All memories'));
 
     await waitFor(() => {
       expect(
