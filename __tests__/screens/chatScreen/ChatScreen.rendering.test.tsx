@@ -331,9 +331,12 @@ describe('ChatScreen rendering and layout', () => {
     }
   });
 
-  it('renders the startup hint while the canonical conversation is being materialized', () => {
+  it('renders the guided assistant start while the canonical conversation is being materialized', () => {
     mockChatScreenState.activeConversationId = null;
-    const { getByText } = render(<ChatScreen />);
-    expect(getByText(/Send a message to get started/)).toBeTruthy();
+    const { getByTestId, getByText } = render(<ChatScreen />);
+
+    expect(getByTestId('assistant-start')).toBeTruthy();
+    expect(getByText('How can I help?')).toBeTruthy();
+    expect(getByText('Ask & understand')).toBeTruthy();
   });
 });

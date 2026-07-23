@@ -53,27 +53,4 @@ export const createChatMessageStyles = (colors: AppPalette) => ({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginBottom: 16,
-  },
-  emptyHint: {
-    fontSize: 14,
-    color: colors.textTertiary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
 } as const);

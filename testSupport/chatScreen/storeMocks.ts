@@ -71,6 +71,7 @@ export const mockGetOrCreateCanonicalThread = jest.fn().mockReturnValue('new-con
 export const mockAddMessage = jest.fn();
 export const mockUpdateMessage = jest.fn();
 export const mockSetLoading = jest.fn();
+export const mockSetActiveConversation = jest.fn();
 export const mockRewindUserMessageForResend = jest.fn();
 export const mockUpdateModelInConversation = jest.fn();
 export const mockSetActiveProviderAndModel = jest.fn();
@@ -103,6 +104,7 @@ jest.mock('../../src/store/useChatStore', () => {
     conversations: mockGetConversations(),
     activeConversationId: mockChatScreenState.activeConversationId,
     isLoading: mockChatScreenState.loadingState,
+    setActiveConversation: mockSetActiveConversation,
     createConversation: mockCreateConversation,
     getOrCreateCanonicalThread: mockGetOrCreateCanonicalThread,
     addMessage: mockAddMessage,

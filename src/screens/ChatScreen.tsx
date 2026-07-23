@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Kavi — Chat Screen
 // ---------------------------------------------------------------------------
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
@@ -59,6 +59,8 @@ import { useRecoveredAsyncRunResume } from './useRecoveredAsyncRunResume';
 import { useTerminalBackgroundReviewQueue } from './useTerminalBackgroundReviewQueue';
 import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import { getRunningLiveSubAgentsForRun } from '../services/agents/subAgentRunTracking';
+import { resolveConversationStartSelection } from '../services/llm/support/providerSupport';
+import { getNavigableConversations } from '../utils/conversationNavigation';
 
 export const ChatScreen: React.FC = () => {
   const navigation = useNavigation<DrawerNavigationProp<any>>();
@@ -74,6 +76,7 @@ export const ChatScreen: React.FC = () => {
     conversations,
     activeConversation,
     activeConversationId,
+    setActiveConversation,
     createConversation,
     getOrCreateCanonicalThread,
     addMessage,
@@ -217,6 +220,34 @@ export const ChatScreen: React.FC = () => {
     hasLiveBackgroundWorker,
     providers,
   });
+  const conversationStartSelection = useMemo(
+    () =>
+      resolveConversationStartSelection(
+        providers,
+        activeConversation?.providerId || activeProviderId,
+        activeConversation?.modelOverride || activeModel,
+      ),
+    [
+      activeConversation?.modelOverride,
+      activeConversation?.providerId,
+      activeModel,
+      activeProviderId,
+      providers,
+    ],
+  );
+  const hasProviderReady = Boolean(conversationStartSelection?.model);
+  const recentConversation = useMemo(
+    () =>
+      getNavigableConversations(conversations).find(
+        (conversation) =>
+          conversation.id !== activeConversationId && conversation.messages.length > 0,
+      ),
+    [activeConversationId, conversations],
+  );
+  const handleOpenProviderSetup = useCallback(
+    () => navigation.navigate('Settings' as any),
+    [navigation],
+  );
 
   const { activeLocalRuntimeStatus, activeErrorMessage } = useLocalModelRuntimeState({
     activeProvider,
@@ -610,12 +641,17 @@ export const ChatScreen: React.FC = () => {
         handleUserScrollStart={handleUserScrollStart}
         handleViewFiles={handleViewFiles}
         hiddenSourceMessageCount={hiddenSourceMessageCount}
+        hasProviderReady={hasProviderReady}
         interactionReleaseTimerRef={interactionReleaseTimerRef}
         isConversationBusy={isConversationBusy}
         isEditing={editingMessageId !== null}
         listMetricsRef={listMetricsRef}
         maybeScrollToBottom={maybeScrollToBottom}
+        onOpenProviderSetup={handleOpenProviderSetup}
+        onResumeConversation={setActiveConversation}
         personaSwitchMarkersByMessageId={personaSwitchMarkersByMessageId}
+        providerName={conversationStartSelection?.provider.name}
+        recentConversation={recentConversation}
         resolvedDisplayMessages={resolvedDisplayMessages}
         scrollToBottom={scrollToBottom}
         setEditingContent={setEditingContent}

@@ -22,6 +22,7 @@ import { useConversationMessageRenderItem } from './useConversationMessageRender
 import { ChatLatestActivityButton } from './ChatLatestActivityButton';
 import { useLatestActivityPrompt } from './useLatestActivityPrompt';
 import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
+import { AssistantStart } from '../../components/chat/AssistantStart';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -55,6 +56,7 @@ type ChatScreenConversationPaneProps = {
   handleViewFiles: (path?: string) => void;
   hiddenSourceMessageCount: number;
   interactionReleaseTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  hasProviderReady: boolean;
   isConversationBusy: boolean;
   isEditing: boolean;
   listMetricsRef: MutableRefObject<{
@@ -63,7 +65,11 @@ type ChatScreenConversationPaneProps = {
     offsetY: number;
   }>;
   maybeScrollToBottom: (animated: boolean) => void;
+  onOpenProviderSetup: () => void;
+  onResumeConversation: (conversationId: string) => void;
   personaSwitchMarkersByMessageId: Map<string, PersonaSwitchMarker>;
+  providerName?: string;
+  recentConversation?: { id: string; title: string };
   resolvedDisplayMessages: ResolvedDisplayMessageItem[];
   scrollToBottom: (animated: boolean) => void;
   setEditingContent: (content: string | undefined) => void;
@@ -104,12 +110,17 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     handleUserScrollStart,
     handleViewFiles,
     hiddenSourceMessageCount,
+    hasProviderReady,
     interactionReleaseTimerRef,
     isConversationBusy,
     isEditing,
     listMetricsRef,
     maybeScrollToBottom,
+    onOpenProviderSetup,
+    onResumeConversation,
     personaSwitchMarkersByMessageId,
+    providerName,
+    recentConversation,
     resolvedDisplayMessages,
     scrollToBottom,
     setEditingContent,
@@ -168,12 +179,23 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
   );
   const listEmptyComponent = useMemo(
     () => (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyTitle}>{t('common.appName')}</Text>
-        <Text style={styles.emptyHint}>{t('chat.emptyStateHint')}</Text>
-      </View>
+      <AssistantStart
+        hasProviderReady={hasProviderReady}
+        onOpenProviderSetup={onOpenProviderSetup}
+        onResumeConversation={onResumeConversation}
+        onSelectStarter={handleComposerTextChange}
+        providerName={providerName}
+        recentConversation={recentConversation}
+      />
     ),
-    [styles, t],
+    [
+      handleComposerTextChange,
+      hasProviderReady,
+      onOpenProviderSetup,
+      onResumeConversation,
+      providerName,
+      recentConversation,
+    ],
   );
   const handleListLayout = useCallback(
     (event: LayoutChangeEvent) => {
