@@ -1437,7 +1437,7 @@ export const en: TranslationMap = {
   onboarding: {
     welcome: 'Welcome to Kavi',
     welcomeHint:
-      'Your personal AI assistant with tool use, web search, memory, MCP support, and more.',
+      'A general-purpose assistant for questions, research, planning, creating, and safe actions.',
     step1Title: 'Choose Your Language',
     step1Hint: 'Select your preferred interface language.',
     step2Title: 'Choose your AI provider',
@@ -1446,8 +1446,7 @@ export const en: TranslationMap = {
     step3Hint:
       'Your key is stored securely on-device and never sent to any server except your chosen provider.',
     step4Title: "You're all set!",
-    step4Hint:
-      'Start chatting with your AI assistant. You can access more features via slash commands (type /) or through Settings.',
+    step4Hint: 'Start with a question, a goal, or something you want to create.',
     next: 'Continue',
     skip: 'Skip for now',
     getStarted: 'Get Started',
@@ -1461,45 +1460,38 @@ export const en: TranslationMap = {
     saveFailed: 'Failed to save securely. Please try again.',
     saving: 'Saving...',
     quickTips: 'Quick tips:',
-    tipSlashCommands: 'Type / for commands (/help, /compact, /memory)',
-    tipLongPress: 'Long-press a chat to delete it',
-    tipModelSelector: 'Tap the model name to switch models',
-    tipMcpServers: 'Add MCP servers in Settings for more tools',
+    tipAskNaturally: 'Ask naturally—Kavi answers directly or uses a relevant tool when useful.',
+    tipAttachSomething: 'Attach a photo or file to summarize, explain, or create something new.',
+    tipReviewActions:
+      'Kavi asks before sensitive actions so you can review exactly what will happen.',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: "Explore What's Possible",
-    exploreHint: "Here's what you can do with Kavi beyond just chatting:",
-    featureJavaScriptTerminalTitle: 'JavaScript Terminal',
-    featureJavaScriptTerminalDescription:
-      'Run code directly with a built-in JS REPL for quick computing and scripting.',
-    featureFileWorkspaceTitle: 'File Workspace',
-    featureFileWorkspaceDescription:
-      'The assistant can create, read, and edit files. Tap the folder icon in chat to browse.',
-    featureRemoteWorkTitle: 'Remote Work',
-    featureRemoteWorkDescription:
-      'Connect SSH targets, remote workspaces, and browser automation from Settings.',
-    featureMcpServersTitle: 'MCP Servers',
-    featureMcpServersDescription:
-      'Extend capabilities by connecting Model Context Protocol servers.',
-    featureBuiltInToolsTitle: '90+ Built-in Tools',
-    featureBuiltInToolsDescription:
-      'Web search, file operations, canvas, scheduling, memory, and more are available to the assistant.',
-    featurePersonasTitle: 'Personas & Skills',
-    featurePersonasDescription:
-      'Switch personalities, create custom skills, and configure reasoning levels.',
+    exploreTitle: 'Ways Kavi can help',
+    exploreHint: 'Ask naturally. Kavi can answer directly or use a relevant tool when it helps.',
+    outcomeAskTitle: 'Ask & understand',
+    outcomeAskDescription:
+      'Explain a topic, compare options, rewrite something, or work through a decision.',
+    outcomeResearchTitle: 'Research current information',
+    outcomeResearchDescription:
+      'Search the web when freshness matters and keep the answer grounded in sources.',
+    outcomePlanTitle: 'Plan & remind',
+    outcomePlanDescription:
+      'Turn an idea into steps, prepare for an event, or schedule a reminder.',
+    outcomeRememberTitle: 'Remember preferences',
+    outcomeRememberDescription:
+      'Keep useful preferences and context across conversations under your control.',
+    outcomeCreateTitle: 'Create from attachments',
+    outcomeCreateDescription:
+      'Use photos and files to summarize, analyze, draft, or produce a new result.',
+    outcomeActSafelyTitle: 'Take action safely',
+    outcomeActSafelyDescription:
+      'Review sensitive actions before Kavi uses a tool or changes something.',
     continueToFinish: 'Continue to finish',
-    featureChat: 'Chat with any AI model (OpenAI, Anthropic, etc.)',
-    featureWebSearch: 'Web search & fetch built-in',
-    featureMemory: 'Persistent memory across conversations',
-    featureMcp: 'MCP server connections',
-    featureCalendar: 'Calendar, contacts, location access',
-    featureAutomation: 'Scheduled automations',
-    featureSkills: 'Skills system for extensibility',
-    heroTitle: 'Setup in three passes',
-    heroStep1: '1. Pick your main model provider.',
-    heroStep2: '2. Unlock web search and service tools only if you want them.',
-    heroStep3: '3. Review what is free to try versus what usually needs credits.',
+    heroTitle: 'Set up the essentials',
+    heroStep1: '1. Connect an AI provider so Kavi can answer.',
+    heroStep2: '2. See practical ways Kavi can help.',
+    heroStep3: '3. Add optional services only when you need them.',
     progressModel: 'Model',
-    progressTools: 'Tools',
+    progressExplore: 'Explore',
     progressFinish: 'Finish',
     chooseMainProviderTitle: 'Choose your main model provider',
     chooseMainProviderHint:
@@ -1536,6 +1528,7 @@ export const en: TranslationMap = {
     guideCta: 'Guide',
     openServiceGuide: 'Open {name} documentation',
     finishSetup: 'Finish setup',
+    optionalToolsAction: 'Set up optional services',
     doneConfiguredNoServices:
       'Your {provider} chat provider is ready. You can unlock more tools any time from Settings.',
     doneConfiguredWithServices:
@@ -1544,12 +1537,8 @@ export const en: TranslationMap = {
       'You skipped model setup for now. You can finish provider setup from Settings whenever you are ready.',
     serviceKeySingular: 'key',
     serviceKeyPlural: 'keys',
-    summaryChatProvider: 'Chat provider',
-    summaryWebSearch: 'Web search',
-    summaryExtraServiceKeys: 'Extra service keys',
+    summaryChatProvider: 'AI provider',
     notConfiguredYet: 'Not configured yet',
-    settingsKeysTip:
-      'Settings now includes GitHub and Alpha Vantage keys if you want those built-in skills.',
     providers: {
       openai: {
         title: 'OpenAI',

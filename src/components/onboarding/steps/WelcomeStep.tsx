@@ -33,13 +33,12 @@ export function WelcomeStep() {
 
         <View style={styles.featureList}>
           {[
-            t('onboarding.featureChat'),
-            t('onboarding.featureWebSearch'),
-            t('onboarding.featureMemory'),
-            t('onboarding.featureMcp'),
-            t('onboarding.featureCalendar'),
-            t('onboarding.featureAutomation'),
-            t('onboarding.featureSkills'),
+            t('onboarding.outcomeAskTitle'),
+            t('onboarding.outcomeResearchTitle'),
+            t('onboarding.outcomePlanTitle'),
+            t('onboarding.outcomeRememberTitle'),
+            t('onboarding.outcomeCreateTitle'),
+            t('onboarding.outcomeActSafelyTitle'),
           ].map((feature: string, idx: number) => (
             <View key={idx} style={styles.featureItem}>
               <Check size={16} color={colors.success} />

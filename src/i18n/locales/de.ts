@@ -1429,7 +1429,8 @@ export const de: TranslationMap = mergeTranslations(en, {
   },
   onboarding: {
     welcome: 'Willkommen bei Kavi',
-    welcomeHint: 'Ihr persönlicher KI-Assistent mit Superkräften.',
+    welcomeHint:
+      'Ein vielseitiger Assistent für Fragen, Recherche, Planung, Gestaltung und sichere Aktionen.',
     step1Title: 'Wählen Sie Ihre Sprache',
     step1Hint: 'Wählen Sie Ihre bevorzugte UI-Sprache.',
     step2Title: 'KI-Anbieter hinzufügen',
@@ -1437,7 +1438,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     step3Title: 'Geben Sie Ihren API-Schlüssel ein',
     step3Hint: 'Ihr API-Schlüssel wird sicher im Geräteschlüsselbund gespeichert.',
     step4Title: 'Alles bereit!',
-    step4Hint: 'Beginnen Sie zu chatten, erkunden Sie Tools und bauen Sie mit KI.',
+    step4Hint: 'Beginnen Sie mit einer Frage, einem Ziel oder etwas, das Sie erstellen möchten.',
     next: 'Weiter',
     skip: 'Überspringen',
     getStarted: "Los geht's",
@@ -1451,45 +1452,41 @@ export const de: TranslationMap = mergeTranslations(en, {
     saveFailed: 'Sicheres Speichern fehlgeschlagen. Bitte versuchen Sie es erneut.',
     saving: 'Speichern…',
     quickTips: 'Schnelltipps:',
-    tipSlashCommands: 'Tippen Sie / für Befehle (/help, /compact, /memory)',
-    tipLongPress: 'Lange auf einen Chat drücken zum Löschen',
-    tipModelSelector: 'Tippen Sie auf den Modellnamen, um Modelle zu wechseln',
-    tipMcpServers: 'Fügen Sie MCP-Server in Einstellungen für mehr Tools hinzu',
+    tipAskNaturally:
+      'Fragen Sie einfach natürlich – Kavi antwortet direkt oder nutzt bei Bedarf ein passendes Tool.',
+    tipAttachSomething:
+      'Hängen Sie ein Foto oder eine Datei an, um etwas zusammenzufassen, zu erklären oder neu zu erstellen.',
+    tipReviewActions:
+      'Vor sensiblen Aktionen fragt Kavi nach, damit Sie genau prüfen können, was passieren wird.',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: "Explore What's Possible",
-    exploreHint: "Here's what you can do with Kavi beyond just chatting:",
-    featureJavaScriptTerminalTitle: 'JavaScript Terminal',
-    featureJavaScriptTerminalDescription:
-      'Run code directly with a built-in JS REPL for quick computing and scripting.',
-    featureFileWorkspaceTitle: 'File Workspace',
-    featureFileWorkspaceDescription:
-      'The assistant can create, read, and edit files. Tap the folder icon in chat to browse.',
-    featureRemoteWorkTitle: 'Remote Work',
-    featureRemoteWorkDescription:
-      'Connect SSH targets, remote workspaces, and browser automation from Settings.',
-    featureMcpServersTitle: 'MCP Servers',
-    featureMcpServersDescription:
-      'Extend capabilities by connecting Model Context Protocol servers.',
-    featureBuiltInToolsTitle: '90+ Built-in Tools',
-    featureBuiltInToolsDescription:
-      'Web search, file operations, canvas, scheduling, memory, and more are available to the assistant.',
-    featurePersonasTitle: 'Personas & Skills',
-    featurePersonasDescription:
-      'Switch personalities, create custom skills, and configure reasoning levels.',
-    continueToFinish: 'Continue to finish',
-    featureChat: 'Chat mit jedem KI-Modell (OpenAI, Anthropic, etc.)',
-    featureWebSearch: 'Integrierte Websuche & Abruf',
-    featureMemory: 'Persistenter Speicher über Gespräche hinweg',
-    featureMcp: 'MCP-Serververbindungen',
-    featureCalendar: 'Zugriff auf Kalender, Kontakte, Standort',
-    featureAutomation: 'Geplante Automatisierungen',
-    featureSkills: 'Fähigkeitensystem für Erweiterbarkeit',
-    heroTitle: 'Einrichtung in drei Schritten',
-    heroStep1: '1. Wählen Sie Ihren wichtigsten Modellanbieter.',
-    heroStep2: '2. Aktivieren Sie Websuche und Dienstdienste nur, wenn Sie sie wirklich möchten.',
-    heroStep3: '3. Prüfen Sie, was kostenlos testbar ist und was in der Regel Guthaben benötigt.',
+    exploreTitle: 'So kann Kavi helfen',
+    exploreHint:
+      'Fragen Sie einfach natürlich. Kavi kann direkt antworten oder bei Bedarf ein passendes Tool nutzen.',
+    outcomeAskTitle: 'Fragen und verstehen',
+    outcomeAskDescription:
+      'Lassen Sie sich ein Thema erklären, Optionen vergleichen, Texte umformulieren oder Entscheidungen durchdenken.',
+    outcomeResearchTitle: 'Aktuelle Informationen recherchieren',
+    outcomeResearchDescription:
+      'Durchsuchen Sie bei zeitkritischen Themen das Web und erhalten Sie eine quellenbasierte Antwort.',
+    outcomePlanTitle: 'Planen und erinnern',
+    outcomePlanDescription:
+      'Machen Sie aus einer Idee konkrete Schritte, bereiten Sie ein Ereignis vor oder planen Sie eine Erinnerung.',
+    outcomeRememberTitle: 'Präferenzen merken',
+    outcomeRememberDescription:
+      'Bewahren Sie nützliche Präferenzen und Kontext unter Ihrer Kontrolle gesprächsübergreifend auf.',
+    outcomeCreateTitle: 'Aus Anhängen erstellen',
+    outcomeCreateDescription:
+      'Nutzen Sie Fotos und Dateien zum Zusammenfassen, Analysieren, Entwerfen oder Erstellen neuer Ergebnisse.',
+    outcomeActSafelyTitle: 'Sicher handeln',
+    outcomeActSafelyDescription:
+      'Prüfen Sie sensible Aktionen, bevor Kavi ein Tool verwendet oder etwas ändert.',
+    continueToFinish: 'Weiter zum Abschluss',
+    heroTitle: 'Das Wesentliche einrichten',
+    heroStep1: '1. Verbinden Sie einen KI-Anbieter, damit Kavi antworten kann.',
+    heroStep2: '2. Entdecken Sie, wie Kavi Sie praktisch unterstützen kann.',
+    heroStep3: '3. Fügen Sie optionale Dienste erst hinzu, wenn Sie sie brauchen.',
     progressModel: 'Modell',
-    progressTools: 'Tools',
+    progressExplore: 'Entdecken',
     progressFinish: 'Fertig',
     chooseMainProviderTitle: 'Wählen Sie Ihren wichtigsten Modellanbieter',
     chooseMainProviderHint:
@@ -1526,6 +1523,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     guideCta: 'Anleitung',
     openServiceGuide: '{name}-Dokumentation öffnen',
     finishSetup: 'Einrichtung abschließen',
+    optionalToolsAction: 'Optionale Dienste einrichten',
     doneConfiguredNoServices:
       'Ihr Chat-Anbieter {provider} ist bereit. Sie können jederzeit weitere Tools in den Einstellungen freischalten.',
     doneConfiguredWithServices:
@@ -1534,12 +1532,8 @@ export const de: TranslationMap = mergeTranslations(en, {
       'Sie haben die Modelleinrichtung vorerst übersprungen. Sie können die Anbieter-Einrichtung jederzeit in den Einstellungen abschließen.',
     serviceKeySingular: 'Schlüssel',
     serviceKeyPlural: 'Schlüssel',
-    summaryChatProvider: 'Chat-Anbieter',
-    summaryWebSearch: 'Websuche',
-    summaryExtraServiceKeys: 'Zusätzliche Dienstschlüssel',
+    summaryChatProvider: 'KI-Anbieter',
     notConfiguredYet: 'Noch nicht konfiguriert',
-    settingsKeysTip:
-      'Die Einstellungen enthalten jetzt auch GitHub- und Alpha-Vantage-Schlüssel, falls Sie diese integrierten Skills nutzen möchten.',
     providers: {
       openai: {
         title: 'OpenAI',

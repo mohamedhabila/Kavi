@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { Globe, Search, Wrench, Zap } from 'lucide-react-native';
+import { Globe, Zap } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOnboardingWizardContext } from '../OnboardingWizardContext';
@@ -11,10 +11,9 @@ export function DoneStep() {
     configuredProviderName,
     configuredServiceCount,
     handleFinish,
+    setStep,
     styles,
     t,
-    webProviderOptions,
-    webSearchProvider,
   } = useOnboardingWizardContext();
 
   return (
@@ -45,29 +44,23 @@ export function DoneStep() {
               {configuredProviderName || t('onboarding.notConfiguredYet')}
             </Text>
           </View>
-          <View style={styles.summaryCard}>
-            <Search size={18} color={colors.primary} />
-            <Text style={styles.summaryTitle}>{t('onboarding.summaryWebSearch')}</Text>
-            <Text style={styles.summaryText}>
-              {webProviderOptions.find((option: { value: string }) => option.value === webSearchProvider)
-                ?.title || t('onboarding.webProviders.auto.title')}
-            </Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Wrench size={18} color={colors.primary} />
-            <Text style={styles.summaryTitle}>{t('onboarding.summaryExtraServiceKeys')}</Text>
-            <Text style={styles.summaryText}>{configuredServiceCount}</Text>
-          </View>
         </View>
 
         <View style={styles.tipBox}>
           <Text style={styles.tipTitle}>{t('onboarding.quickTips')}</Text>
-          <Text style={styles.tipText}>{`\u2022 ${t('onboarding.tipSlashCommands')}`}</Text>
-          <Text style={styles.tipText}>{`\u2022 ${t('onboarding.tipLongPress')}`}</Text>
-          <Text style={styles.tipText}>{`\u2022 ${t('onboarding.tipModelSelector')}`}</Text>
-          <Text style={styles.tipText}>{`\u2022 ${t('onboarding.tipMcpServers')}`}</Text>
-          <Text style={styles.tipText}>{`\u2022 ${t('onboarding.settingsKeysTip')}`}</Text>
+          <Text style={styles.tipText}>{`\u2022 ${t('onboarding.tipAskNaturally')}`}</Text>
+          <Text style={styles.tipText}>{`\u2022 ${t('onboarding.tipAttachSomething')}`}</Text>
+          <Text style={styles.tipText}>{`\u2022 ${t('onboarding.tipReviewActions')}`}</Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.secondaryBtn}
+          onPress={() => setStep('tools')}
+          accessibilityRole="button"
+          accessibilityLabel={t('onboarding.optionalToolsAction')}
+        >
+          <Text style={styles.secondaryBtnText}>{t('onboarding.optionalToolsAction')}</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.primaryBtn}

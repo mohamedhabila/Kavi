@@ -1403,7 +1403,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
   },
   onboarding: {
     welcome: 'Kavi へようこそ',
-    welcomeHint: 'スーパーパワーを持つ個人 AI アシスタント。',
+    welcomeHint: '質問、調査、計画、作成、安全な操作を幅広く支える汎用アシスタントです。',
     step1Title: '言語を選択',
     step1Hint: 'お好みのインターフェース言語を選択してください。',
     step2Title: 'AI プロバイダーを追加',
@@ -1411,7 +1411,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     step3Title: 'API キーを入力',
     step3Hint: 'API キーはデバイスキーチェーンに安全に保存されます。',
     step4Title: '準備完了！',
-    step4Hint: 'チャットを開始し、ツールを探索し、AI とともに構築しましょう。',
+    step4Hint: '質問、目標、または作りたいものから始めましょう。',
     next: '次へ',
     skip: 'スキップ',
     getStarted: '始める',
@@ -1425,45 +1425,40 @@ export const ja: TranslationMap = mergeTranslations(en, {
     saveFailed: '安全な保存に失敗しました。もう一度お試しください。',
     saving: '保存中…',
     quickTips: 'クイックヒント：',
-    tipSlashCommands: '/ を入力してコマンド（/help、/compact、/memory）を使用',
-    tipLongPress: 'チャットを長押しして削除',
-    tipModelSelector: 'モデル名をタップしてモデルを切り替え',
-    tipMcpServers: '設定で MCP サーバーを追加してツールを拡張',
+    tipAskNaturally:
+      '普段の言葉で質問してください。Kavi は直接答えるか、必要に応じて適切なツールを使います。',
+    tipAttachSomething: '写真やファイルを添付すると、要約、説明、新しい成果物の作成ができます。',
+    tipReviewActions:
+      '機密性の高い操作の前に Kavi が確認を求めるため、実行内容を正確に確認できます。',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: "Explore What's Possible",
-    exploreHint: "Here's what you can do with Kavi beyond just chatting:",
-    featureJavaScriptTerminalTitle: 'JavaScript Terminal',
-    featureJavaScriptTerminalDescription:
-      'Run code directly with a built-in JS REPL for quick computing and scripting.',
-    featureFileWorkspaceTitle: 'File Workspace',
-    featureFileWorkspaceDescription:
-      'The assistant can create, read, and edit files. Tap the folder icon in chat to browse.',
-    featureRemoteWorkTitle: 'Remote Work',
-    featureRemoteWorkDescription:
-      'Connect SSH targets, remote workspaces, and browser automation from Settings.',
-    featureMcpServersTitle: 'MCP Servers',
-    featureMcpServersDescription:
-      'Extend capabilities by connecting Model Context Protocol servers.',
-    featureBuiltInToolsTitle: '90+ Built-in Tools',
-    featureBuiltInToolsDescription:
-      'Web search, file operations, canvas, scheduling, memory, and more are available to the assistant.',
-    featurePersonasTitle: 'Personas & Skills',
-    featurePersonasDescription:
-      'Switch personalities, create custom skills, and configure reasoning levels.',
-    continueToFinish: 'Continue to finish',
-    featureChat: 'あらゆる AI モデルとチャット（OpenAI、Anthropic など）',
-    featureWebSearch: 'Web 検索・取得機能内蔵',
-    featureMemory: '会話をまたぐ永続メモリ',
-    featureMcp: 'MCP サーバー接続',
-    featureCalendar: 'カレンダー、連絡先、位置情報アクセス',
-    featureAutomation: 'スケジュール自動化',
-    featureSkills: '拡張性のためのスキルシステム',
-    heroTitle: '3 ステップで設定',
-    heroStep1: '1. メインで使うモデルプロバイダーを選びます。',
-    heroStep2: '2. Web 検索やサービスツールは必要なものだけ有効にします。',
-    heroStep3: '3. 無料で試せるものと通常クレジットが必要なものを確認します。',
+    exploreTitle: 'Kavi にできること',
+    exploreHint:
+      '普段の言葉で質問してください。Kavi は直接答えるか、必要に応じて適切なツールを使います。',
+    outcomeAskTitle: '質問して理解する',
+    outcomeAskDescription:
+      'トピックの説明、選択肢の比較、文章の書き直し、意思決定の検討を依頼できます。',
+    outcomeResearchTitle: '最新情報を調べる',
+    outcomeResearchDescription:
+      '最新性が重要なときは Web を検索し、出典に基づいた回答を得られます。',
+    outcomePlanTitle: '計画とリマインダー',
+    outcomePlanDescription:
+      'アイデアを手順に変えたり、予定の準備やリマインダーの設定をしたりできます。',
+    outcomeRememberTitle: '好みを覚える',
+    outcomeRememberDescription:
+      '役立つ設定や文脈を、自分で管理しながら会話をまたいで保存できます。',
+    outcomeCreateTitle: '添付ファイルから作る',
+    outcomeCreateDescription:
+      '写真やファイルを使って、要約、分析、下書き、新しい成果物の作成ができます。',
+    outcomeActSafelyTitle: '安全に操作する',
+    outcomeActSafelyDescription:
+      'Kavi がツールを使ったり何かを変更したりする前に、機密性の高い操作を確認できます。',
+    continueToFinish: '完了へ進む',
+    heroTitle: '必要な設定を完了',
+    heroStep1: '1. Kavi が回答できるように AI プロバイダーを接続します。',
+    heroStep2: '2. Kavi の実用的な活用方法を確認します。',
+    heroStep3: '3. オプションのサービスは必要になったときだけ追加します。',
     progressModel: 'モデル',
-    progressTools: 'ツール',
+    progressExplore: '活用方法',
     progressFinish: '完了',
     chooseMainProviderTitle: 'メインで使うモデルプロバイダーを選択',
     chooseMainProviderHint:
@@ -1499,6 +1494,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     guideCta: 'ガイド',
     openServiceGuide: '{name} のドキュメントを開く',
     finishSetup: 'セットアップ完了',
+    optionalToolsAction: 'オプションサービスを設定',
     doneConfiguredNoServices:
       '{provider} のチャットプロバイダーは準備完了です。追加ツールはいつでも設定から有効にできます。',
     doneConfiguredWithServices:
@@ -1507,12 +1503,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
       '今回はモデル設定をスキップしました。必要になったら設定からいつでも完了できます。',
     serviceKeySingular: '件',
     serviceKeyPlural: '件',
-    summaryChatProvider: 'チャットプロバイダー',
-    summaryWebSearch: 'Web 検索',
-    summaryExtraServiceKeys: '追加サービスキー',
+    summaryChatProvider: 'AI プロバイダー',
     notConfiguredYet: '未設定',
-    settingsKeysTip:
-      '設定には GitHub と Alpha Vantage のキーも追加されているので、必要なら組み込みスキルを有効にできます。',
     providers: {
       openai: {
         title: 'OpenAI',

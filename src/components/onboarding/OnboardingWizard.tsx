@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Kavi — Onboarding Wizard
 // ---------------------------------------------------------------------------
-// First-run experience: Welcome → Model setup → Tool setup → Summary.
+// First-run experience: Welcome → Provider setup → Assistant outcomes → Summary.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { Linking, Text, View } from 'react-native';
@@ -251,7 +251,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
       }
       addProvider(finalizedProvider);
       setConfiguredProviderName(finalizedProvider.name);
-      setStep('tools');
+      setStep('features');
     } catch {
       setSaveError(t('onboarding.saveFailed'));
     } finally {
@@ -270,7 +270,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
   const handleSkipProvider = useCallback(() => {
     setSaveError(null);
-    setStep('tools');
+    setStep('features');
   }, []);
 
   const handleSaveTools = useCallback(async () => {
@@ -287,7 +287,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         }),
       );
       setWebSearchProvider(webSearchProvider);
-      setStep('features');
+      setStep('done');
     } catch {
       setSaveError(t('onboarding.saveFailed'));
     } finally {
@@ -315,21 +315,18 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
   const progress = [
     t('onboarding.progressModel'),
-    t('onboarding.progressTools'),
-    'Features',
+    t('onboarding.progressExplore'),
     t('onboarding.progressFinish'),
   ];
 
   const currentProgressIndex =
     step === 'provider' || step === 'providerKey'
       ? 0
-      : step === 'tools'
+      : step === 'features'
         ? 1
-        : step === 'features'
+        : step === 'tools' || step === 'done'
           ? 2
-          : step === 'done'
-            ? 3
-            : -1;
+          : -1;
 
   const progressHeader =
     currentProgressIndex >= 0 ? (

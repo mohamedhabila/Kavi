@@ -86,7 +86,10 @@ export function ToolsStep() {
           {webProviderOptions.map((option: { value: string; title: string; detail: string }) => (
             <TouchableOpacity
               key={option.value}
-              style={[styles.optionCard, webSearchProvider === option.value && styles.optionCardActive]}
+              style={[
+                styles.optionCard,
+                webSearchProvider === option.value && styles.optionCardActive,
+              ]}
               onPress={() => setWebSearchProviderState(option.value)}
               accessibilityRole="button"
               accessibilityLabel={t('onboarding.chooseWebProvider', { name: option.title })}
@@ -147,7 +150,7 @@ export function ToolsStep() {
 
         <TouchableOpacity
           style={styles.skipBtn}
-          onPress={() => setStep('providerKey')}
+          onPress={() => setStep('done')}
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
         >

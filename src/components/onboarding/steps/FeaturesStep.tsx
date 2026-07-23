@@ -1,43 +1,50 @@
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { FolderOpen, Globe, Monitor, Server, Terminal, Wrench } from 'lucide-react-native';
+import {
+  Brain,
+  CalendarClock,
+  FilePlus2,
+  MessageCircleQuestion,
+  Search,
+  ShieldCheck,
+} from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOnboardingWizardContext } from '../OnboardingWizardContext';
 
 export function FeaturesStep() {
-  const { colors, currentProgressIndex, progress, setStep, styles, t } =
+  const { colors, configuredProviderName, currentProgressIndex, progress, setStep, styles, t } =
     useOnboardingWizardContext();
   const features = [
     {
-      icon: <Terminal size={20} color={colors.primary} />,
-      title: t('onboarding.featureJavaScriptTerminalTitle'),
-      desc: t('onboarding.featureJavaScriptTerminalDescription'),
+      icon: <MessageCircleQuestion size={20} color={colors.primary} />,
+      title: t('onboarding.outcomeAskTitle'),
+      desc: t('onboarding.outcomeAskDescription'),
     },
     {
-      icon: <FolderOpen size={20} color={colors.primary} />,
-      title: t('onboarding.featureFileWorkspaceTitle'),
-      desc: t('onboarding.featureFileWorkspaceDescription'),
+      icon: <Search size={20} color={colors.primary} />,
+      title: t('onboarding.outcomeResearchTitle'),
+      desc: t('onboarding.outcomeResearchDescription'),
     },
     {
-      icon: <Monitor size={20} color={colors.primary} />,
-      title: t('onboarding.featureRemoteWorkTitle'),
-      desc: t('onboarding.featureRemoteWorkDescription'),
+      icon: <CalendarClock size={20} color={colors.primary} />,
+      title: t('onboarding.outcomePlanTitle'),
+      desc: t('onboarding.outcomePlanDescription'),
     },
     {
-      icon: <Server size={20} color={colors.primary} />,
-      title: t('onboarding.featureMcpServersTitle'),
-      desc: t('onboarding.featureMcpServersDescription'),
+      icon: <Brain size={20} color={colors.primary} />,
+      title: t('onboarding.outcomeRememberTitle'),
+      desc: t('onboarding.outcomeRememberDescription'),
     },
     {
-      icon: <Wrench size={20} color={colors.primary} />,
-      title: t('onboarding.featureBuiltInToolsTitle'),
-      desc: t('onboarding.featureBuiltInToolsDescription'),
+      icon: <FilePlus2 size={20} color={colors.primary} />,
+      title: t('onboarding.outcomeCreateTitle'),
+      desc: t('onboarding.outcomeCreateDescription'),
     },
     {
-      icon: <Globe size={20} color={colors.primary} />,
-      title: t('onboarding.featurePersonasTitle'),
-      desc: t('onboarding.featurePersonasDescription'),
+      icon: <ShieldCheck size={20} color={colors.primary} />,
+      title: t('onboarding.outcomeActSafelyTitle'),
+      desc: t('onboarding.outcomeActSafelyDescription'),
     },
   ];
 
@@ -87,14 +94,16 @@ export function FeaturesStep() {
         >
           <Text style={styles.primaryBtnText}>{t('onboarding.next')}</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.skipBtn}
-          onPress={() => setStep('tools')}
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back')}
-        >
-          <Text style={styles.skipBtnText}>{t('common.back')}</Text>
-        </TouchableOpacity>
+        {!configuredProviderName ? (
+          <TouchableOpacity
+            style={styles.skipBtn}
+            onPress={() => setStep('provider')}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+          >
+            <Text style={styles.skipBtnText}>{t('common.back')}</Text>
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

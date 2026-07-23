@@ -149,12 +149,10 @@ beforeEach(() => {
 describe('OnboardingWizard', () => {
   it('renders welcome step initially', () => {
     const onComplete = jest.fn();
-    const { getByText, UNSAFE_getByType } = render(
-      <OnboardingWizard onComplete={onComplete} />,
-    );
+    const { getByText, UNSAFE_getByType } = render(<OnboardingWizard onComplete={onComplete} />);
 
     expect(getByText('Welcome to Kavi')).toBeTruthy();
-    expect(getByText('Setup in three passes')).toBeTruthy();
+    expect(getByText('Set up the essentials')).toBeTruthy();
     expect(getByText('Get Started')).toBeTruthy();
     expect(getByText('Skip for now')).toBeTruthy();
     expect(
@@ -164,9 +162,9 @@ describe('OnboardingWizard', () => {
 
   it('shows features list on welcome step', () => {
     const { getByText } = render(<OnboardingWizard onComplete={jest.fn()} />);
-    expect(getByText(/Web search/)).toBeTruthy();
-    expect(getByText(/Persistent memory/)).toBeTruthy();
-    expect(getByText(/MCP server/)).toBeTruthy();
+    expect(getByText('Ask & understand')).toBeTruthy();
+    expect(getByText('Research current information')).toBeTruthy();
+    expect(getByText('Remember preferences')).toBeTruthy();
   });
 
   it('calls onComplete when skip pressed', () => {
@@ -234,7 +232,7 @@ describe('OnboardingWizard', () => {
     expect(mockSaveProviderApiKey).not.toHaveBeenCalled();
   });
 
-  it('completes provider and tool setup, then finishes', async () => {
+  it('defers optional services and completes the essential setup', async () => {
     const onComplete = jest.fn();
     const { getByText, getByPlaceholderText, UNSAFE_getByType } = render(
       <OnboardingWizard onComplete={onComplete} />,
@@ -246,15 +244,10 @@ describe('OnboardingWizard', () => {
     fireEvent.press(getByText('Save provider'));
 
     await waitFor(() => {
-      expect(getByText('Unlock tools you actually plan to use')).toBeTruthy();
+      expect(getByText('Ways Kavi can help')).toBeTruthy();
     });
-
-    fireEvent.changeText(getByPlaceholderText('github_pat_...'), 'github_pat_test123');
-    fireEvent.press(getByText('Finish setup'));
-
-    await waitFor(() => {
-      expect(getByText("Explore What's Possible")).toBeTruthy();
-    });
+    expect(getByText('Ask & understand')).toBeTruthy();
+    expect(getByText('Take action safely')).toBeTruthy();
 
     fireEvent.press(getByText('Continue'));
 
@@ -265,11 +258,41 @@ describe('OnboardingWizard', () => {
       StyleSheet.flatten(UNSAFE_getByType(ScrollView).props.contentContainerStyle),
     ).toMatchObject({ flexGrow: 1, alignItems: 'center' });
 
-    expect(mockSetWebSearchProvider).toHaveBeenCalledWith('auto');
-    expect(mockSaveSecure).toHaveBeenCalledWith('GITHUB_TOKEN', 'github_pat_test123');
+    expect(getByText('Set up optional services')).toBeTruthy();
+    expect(mockSetWebSearchProvider).not.toHaveBeenCalled();
+    expect(mockSaveSecure).not.toHaveBeenCalled();
 
     fireEvent.press(getByText('Start Chatting'));
     expect(onComplete).toHaveBeenCalled();
+  });
+
+  it('lets people configure optional services after essential setup', async () => {
+    const { getByText, getByPlaceholderText } = render(<OnboardingWizard onComplete={jest.fn()} />);
+
+    fireEvent.press(getByText('Get Started'));
+    fireEvent.press(getByText('OpenAI'));
+    fireEvent.changeText(getByPlaceholderText('sk-...'), 'sk-test123');
+    fireEvent.press(getByText('Save provider'));
+
+    await waitFor(() => {
+      expect(getByText('Ways Kavi can help')).toBeTruthy();
+    });
+    fireEvent.press(getByText('Continue'));
+
+    await waitFor(() => {
+      expect(getByText('Set up optional services')).toBeTruthy();
+    });
+    fireEvent.press(getByText('Set up optional services'));
+
+    expect(getByText('Unlock tools you actually plan to use')).toBeTruthy();
+    fireEvent.changeText(getByPlaceholderText('github_pat_...'), 'github_pat_test123');
+    fireEvent.press(getByText('Finish setup'));
+
+    await waitFor(() => {
+      expect(getByText("You're all set!")).toBeTruthy();
+    });
+    expect(mockSetWebSearchProvider).toHaveBeenCalledWith('auto');
+    expect(mockSaveSecure).toHaveBeenCalledWith('GITHUB_TOKEN', 'github_pat_test123');
   });
 
   it('shows error when secure storage fails', async () => {
