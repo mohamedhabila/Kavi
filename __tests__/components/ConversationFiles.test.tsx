@@ -9,6 +9,8 @@ import * as Sharing from 'expo-sharing';
 type MockDirectoryEntry = {
   name: string;
   type: 'file' | 'directory';
+  size?: number;
+  modificationTime?: number;
 };
 
 const mockFileContentsByPath: Record<string, string | Uint8Array | Error> = {};
@@ -83,6 +85,7 @@ const mockDirList = jest.fn((path: string) => {
       return {
         name: entry.name,
         uri: mockToFileUri(entryPath),
+        modificationTime: entry.modificationTime,
         list: () => mockDirList(entryPath),
       };
     }
@@ -90,6 +93,8 @@ const mockDirList = jest.fn((path: string) => {
     return {
       name: entry.name,
       uri: mockToFileUri(entryPath),
+      modificationTime: entry.modificationTime,
+      size: entry.size,
       text: () => mockFileText(entryPath),
       bytes: () => mockFileBytes(entryPath),
     };
@@ -141,6 +146,29 @@ const mockTranslate = (key: string, params?: Record<string, string>) => {
       'common.files': 'Files',
       'common.retry': 'Retry',
       'common.share': 'Share',
+      'conversationFiles.title': 'Files & creations',
+      'conversationFiles.searchLabel': 'Search files and creations',
+      'conversationFiles.searchPlaceholder': 'Search this folder',
+      'conversationFiles.clearSearch': 'Clear file search',
+      'conversationFiles.refresh': 'Refresh files',
+      'conversationFiles.refreshHint': 'Checks this conversation for new or updated files',
+      'conversationFiles.filtersLabel': 'File type filters',
+      'conversationFiles.filterAll': 'All',
+      'conversationFiles.filterDocuments': 'Documents',
+      'conversationFiles.filterImages': 'Images',
+      'conversationFiles.filterAudio': 'Audio',
+      'conversationFiles.filterCode': 'Code',
+      'conversationFiles.filterOther': 'Other',
+      'conversationFiles.sortNewest': 'Newest',
+      'conversationFiles.sortName': 'Name',
+      'conversationFiles.sortLabel': 'Sort: {sort}',
+      'conversationFiles.sortHint': 'Switches between newest first and alphabetical order',
+      'conversationFiles.noMatchesTitle': 'No matching files',
+      'conversationFiles.noMatchesHint': 'Try another search or file type.',
+      'conversationFiles.untitledItem': 'Untitled item',
+      'conversationFiles.openFolderLabel': 'Open folder {name}',
+      'conversationFiles.openFileLabel': 'Open file {name}',
+      'conversationFiles.shareFileLabel': 'Share or save {name}',
       'conversationFiles.emptyTitle': 'No files yet',
       'conversationFiles.emptyHint': "Ask the assistant to create files and they'll appear here",
       'conversationFiles.loadingTitle': 'Loading files…',
@@ -175,6 +203,7 @@ jest.mock('../../src/i18n/manager', () => ({
 jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => mockTranslate(key, params),
+    locale: 'en',
   }),
 }));
 
@@ -191,6 +220,8 @@ jest.mock('../../src/theme/useAppTheme', () => ({
       textTertiary: '#888',
       primary: '#22c55e',
       primarySoft: '#123524',
+      inputBackground: '#111',
+      placeholder: '#777',
       onPrimary: '#fff',
       danger: '#ef4444',
       warning: '#f59e0b',
@@ -255,12 +286,29 @@ describe('ConversationFiles', () => {
     const { findByText, getByTestId, getByText, queryByText } = render(
       <ConversationFiles visible={true} onClose={jest.fn()} conversationId="conv1" />,
     );
-    expect(getByText('Files')).toBeTruthy();
+    expect(getByText('Files & creations')).toBeTruthy();
     expect(getByTestId('conversation-files-loading')).toBeTruthy();
     expect(queryByText('No files yet')).toBeNull();
     expect(await findByText('index.ts')).toBeTruthy();
     expect(await findByText('utils')).toBeTruthy();
     expect(await findByText('README.md')).toBeTruthy();
+  });
+
+  it('refreshes manually without hiding the current file list', async () => {
+    const { findByText, getByTestId, getByText } = render(
+      <ConversationFiles visible={true} onClose={jest.fn()} conversationId="conv1" />,
+    );
+    await findByText('index.ts');
+    mockDirectoryEntriesByPath['/mock/document/workspace/conv1'].push({
+      name: 'later.txt',
+      type: 'file',
+    });
+    mockFileContentsByPath['/mock/document/workspace/conv1/later.txt'] = 'later';
+
+    fireEvent.press(getByTestId('conversation-files-refresh'));
+
+    expect(getByText('index.ts')).toBeTruthy();
+    expect(await findByText('later.txt')).toBeTruthy();
   });
 
   it('shows empty state when no files', async () => {
@@ -559,6 +607,35 @@ describe('ConversationFiles', () => {
       expect(getByTestId('conversation-file-image-preview')).toBeTruthy();
     });
     expect(getByText('generated-image.png')).toBeTruthy();
+  });
+
+  it('redacts credential-shaped names in the file viewer and share dialog', async () => {
+    const credential = ['gh', 'p_', 'D'.repeat(24)].join('');
+    const fileName = `${credential}.txt`;
+    mockDirectoryEntriesByPath['/mock/document/workspace/conv1'].push({
+      name: fileName,
+      type: 'file',
+    });
+    mockFileContentsByPath[`/mock/document/workspace/conv1/${fileName}`] = 'safe content';
+    const shareAsync = jest.spyOn(Sharing, 'shareAsync');
+    const { findByText, getByTestId, queryByText } = render(
+      <ConversationFiles
+        visible={true}
+        onClose={jest.fn()}
+        conversationId="conv1"
+        initialFilePath={fileName}
+      />,
+    );
+
+    expect(await findByText('[REDACTED].txt')).toBeTruthy();
+    expect(queryByText(fileName)).toBeNull();
+    fireEvent.press(getByTestId('conversation-file-share'));
+    await waitFor(() => {
+      expect(shareAsync).toHaveBeenCalledWith(
+        expect.stringContaining(fileName),
+        expect.objectContaining({ dialogTitle: '[REDACTED].txt' }),
+      );
+    });
   });
 
   it('delegates the requested initial text file to the editor callback when provided', async () => {
