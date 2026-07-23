@@ -1802,8 +1802,13 @@ export const de: TranslationMap = mergeTranslations(en, {
     elapsedMinutes: 'vor {count}m',
     targetLabel: 'Ziel: {target}',
     reject: 'Ablehnen',
-    approve: 'Genehmigen',
-    alwaysAllow: 'Immer',
+    approve: 'Einmal erlauben',
+    reviewPermission: 'Berechtigung speichern…',
+    persistentTitle: 'Dieses Tool künftig erlauben?',
+    persistentMessage:
+      'Dies erlaubt „{action}“ jetzt und speichert die Berechtigung für jede zukünftige Anfrage dieses Tools. Das ist umfassender als Einmal erlauben.',
+    persistentHint: 'Öffnet eine Bestätigung, bevor die Berechtigung gespeichert wird',
+    confirmPersistent: 'Immer erlauben',
   },
   approvalHistory: {
     title: 'Approvals',

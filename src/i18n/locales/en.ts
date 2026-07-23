@@ -1802,9 +1802,14 @@ export const en: TranslationMap = {
     elapsedSeconds: '{count}s ago',
     elapsedMinutes: '{count}m ago',
     targetLabel: 'Target: {target}',
-    reject: 'Reject',
-    approve: 'Approve',
-    alwaysAllow: 'Always allow',
+    reject: 'Deny',
+    approve: 'Allow once',
+    reviewPermission: 'Save permission…',
+    persistentTitle: 'Allow this tool in the future?',
+    persistentMessage:
+      'This approves “{action}” now and saves permission for every future request using this tool. This is broader than Allow once.',
+    persistentHint: 'Opens a confirmation before saving permission',
+    confirmPersistent: 'Allow always',
   },
   approvalHistory: {
     title: 'Approvals',

@@ -1698,8 +1698,13 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     elapsedMinutes: '{count} 分鐘前',
     targetLabel: '目標：{target}',
     reject: '拒絕',
-    approve: '核准',
-    alwaysAllow: '始終允許',
+    approve: '僅允許一次',
+    reviewPermission: '儲存權限…',
+    persistentTitle: '日後也允許此工具嗎？',
+    persistentMessage:
+      '這會立即核准「{action}」，並為日後每次使用此工具的請求儲存權限。其範圍比「僅允許一次」更廣。',
+    persistentHint: '儲存權限前開啟確認提示',
+    confirmPersistent: '始終允許',
   },
   approvalHistory: {
     title: 'Approvals',

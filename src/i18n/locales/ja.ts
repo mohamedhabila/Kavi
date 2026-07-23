@@ -1767,8 +1767,13 @@ export const ja: TranslationMap = mergeTranslations(en, {
     elapsedMinutes: '{count}分前',
     targetLabel: '対象: {target}',
     reject: '拒否',
-    approve: '承認',
-    alwaysAllow: '常に許可',
+    approve: '今回のみ許可',
+    reviewPermission: '権限を保存…',
+    persistentTitle: '今後もこのツールを許可しますか？',
+    persistentMessage:
+      '「{action}」を今すぐ許可し、今後このツールを使うすべてのリクエストにも権限を保存します。「今回のみ許可」より広い権限です。',
+    persistentHint: '権限を保存する前に確認を表示します',
+    confirmPersistent: '常に許可',
   },
   approvalHistory: {
     title: 'Approvals',

@@ -1790,8 +1790,13 @@ export const fr: TranslationMap = mergeTranslations(en, {
     elapsedMinutes: 'il y a {count} min',
     targetLabel: 'Cible : {target}',
     reject: 'Refuser',
-    approve: 'Approuver',
-    alwaysAllow: 'Toujours',
+    approve: 'Autoriser une fois',
+    reviewPermission: 'Enregistrer l’autorisation…',
+    persistentTitle: 'Autoriser cet outil à l’avenir ?',
+    persistentMessage:
+      'Cela autorise « {action} » maintenant et enregistre l’autorisation pour chaque future demande utilisant cet outil. Cette portée est plus large qu’Autoriser une fois.',
+    persistentHint: 'Ouvre une confirmation avant d’enregistrer l’autorisation',
+    confirmPersistent: 'Toujours autoriser',
   },
   approvalHistory: {
     title: 'Approvals',

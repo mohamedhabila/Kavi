@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { ApprovalBanner } from '../../src/components/approval/ApprovalBanner';
 
 const mockApprovalStoreState = {
@@ -43,11 +44,21 @@ jest.mock('../../src/i18n/useTranslation', () => ({
         case 'approvalBanner.targetLabel':
           return `Target: ${params?.target ?? ''}`;
         case 'approvalBanner.reject':
-          return 'Reject';
-        case 'approvalBanner.alwaysAllow':
-          return 'Always allow';
+          return 'Deny';
+        case 'approvalBanner.reviewPermission':
+          return 'Save permission…';
+        case 'approvalBanner.persistentTitle':
+          return 'Allow this tool in the future?';
+        case 'approvalBanner.persistentMessage':
+          return `This approves “${params?.action ?? ''}” now and saves permission for every future request using this tool.`;
+        case 'approvalBanner.persistentHint':
+          return 'Opens a confirmation before saving permission';
+        case 'approvalBanner.confirmPersistent':
+          return 'Allow always';
         case 'approvalBanner.approve':
-          return 'Approve';
+          return 'Allow once';
+        case 'common.cancel':
+          return 'Cancel';
         default:
           return key;
       }
@@ -61,6 +72,11 @@ describe('ApprovalBanner', () => {
     mockApprovalStoreState.approveRequest.mockReset();
     mockApprovalStoreState.rejectRequest.mockReset();
     mockApprovalStoreState.approveAlways.mockReset();
+    jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('renders nothing when there are no pending approvals', () => {
@@ -122,7 +138,7 @@ describe('ApprovalBanner', () => {
     expect(getByText('1 more pending')).toBeTruthy();
   });
 
-  it('dispatches approve, reject, and always-allow actions for the visible request', () => {
+  it('requires a separate confirmation before saving persistent approval', () => {
     mockApprovalStoreState.requests = {
       critical: {
         id: 'critical',
@@ -145,13 +161,22 @@ describe('ApprovalBanner', () => {
     expect(getByText('writes to prod · restarts service')).toBeTruthy();
     expect(getByText('Target: prod-server')).toBeTruthy();
 
-    fireEvent.press(getByText('Reject'));
-    fireEvent.press(getByText('Always allow'));
-    fireEvent.press(getByText('Approve'));
+    fireEvent.press(getByText('Deny'));
+    fireEvent.press(getByText('Save permission…'));
+    fireEvent.press(getByText('Allow once'));
 
     expect(mockApprovalStoreState.rejectRequest).toHaveBeenCalledWith('critical');
-    expect(mockApprovalStoreState.approveAlways).toHaveBeenCalledWith('critical');
     expect(mockApprovalStoreState.approveRequest).toHaveBeenCalledWith('critical');
+    expect(mockApprovalStoreState.approveAlways).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Allow this tool in the future?',
+      expect.stringContaining('Deploy prod change'),
+      expect.any(Array),
+    );
+
+    const alertButtons = (Alert.alert as jest.Mock).mock.calls[0]?.[2];
+    alertButtons?.[1]?.onPress?.();
+    expect(mockApprovalStoreState.approveAlways).toHaveBeenCalledWith('critical');
   });
 
   it('hides persistent approval while keeping one-shot approve and reject actions', () => {
@@ -172,9 +197,9 @@ describe('ApprovalBanner', () => {
 
     const { getByText, queryByText } = render(<ApprovalBanner />);
 
-    expect(queryByText('Always allow')).toBeNull();
-    fireEvent.press(getByText('Reject'));
-    fireEvent.press(getByText('Approve'));
+    expect(queryByText('Save permission…')).toBeNull();
+    fireEvent.press(getByText('Deny'));
+    fireEvent.press(getByText('Allow once'));
 
     expect(mockApprovalStoreState.rejectRequest).toHaveBeenCalledWith('memory');
     expect(mockApprovalStoreState.approveRequest).toHaveBeenCalledWith('memory');

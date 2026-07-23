@@ -4,8 +4,8 @@
 // Renders pending approval requests as dismissible banners.
 // Designed to be embedded in ChatScreen or as an overlay.
 
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ShieldCheck, ShieldX, Clock, ShieldAlert, CheckCheck } from 'lucide-react-native';
 import { useApprovalStore } from '../../services/remote/approvalStore';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
@@ -32,6 +32,22 @@ export const ApprovalBanner: React.FC = () => {
     () => Object.values(requests).filter((request) => request.status === 'pending'),
     [requests],
   );
+  const requestPersistentApproval = useCallback(
+    (request: RemoteApprovalRequest) => {
+      Alert.alert(
+        t('approvalBanner.persistentTitle'),
+        `${t('approvalBanner.persistentMessage', { action: request.title })}\n\n${request.description}`,
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('approvalBanner.confirmPersistent'),
+            onPress: () => approveAlways(request.id),
+          },
+        ],
+      );
+    },
+    [approveAlways, t],
+  );
 
   if (pending.length === 0) return null;
 
@@ -45,7 +61,7 @@ export const ApprovalBanner: React.FC = () => {
           styles={styles}
           onApprove={() => approve(req.id)}
           onReject={() => reject(req.id)}
-          onAlwaysAllow={() => approveAlways(req.id)}
+          onAlwaysAllow={() => requestPersistentApproval(req)}
         />
       ))}
       {pending.length > 3 && (
@@ -110,25 +126,37 @@ const ApprovalCard: React.FC<{
         </Text>
       )}
       <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.rejectBtn} onPress={onReject} accessibilityRole="button">
+        <TouchableOpacity
+          style={styles.rejectBtn}
+          onPress={onReject}
+          accessibilityRole="button"
+          accessibilityLabel={t('approvalBanner.reject')}
+        >
           <ShieldX size={14} color={colors.danger} />
           <Text style={styles.rejectText}>{t('approvalBanner.reject')}</Text>
         </TouchableOpacity>
-        {allowsPersistentApproval && (
-          <TouchableOpacity
-            style={styles.alwaysAllowBtn}
-            onPress={onAlwaysAllow}
-            accessibilityRole="button"
-          >
-            <CheckCheck size={14} color={colors.primary} />
-            <Text style={styles.alwaysAllowText}>{t('approvalBanner.alwaysAllow')}</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity style={styles.approveBtn} onPress={onApprove} accessibilityRole="button">
+        <TouchableOpacity
+          style={styles.approveBtn}
+          onPress={onApprove}
+          accessibilityRole="button"
+          accessibilityLabel={t('approvalBanner.approve')}
+        >
           <ShieldCheck size={14} color={colors.onPrimary} />
           <Text style={styles.approveText}>{t('approvalBanner.approve')}</Text>
         </TouchableOpacity>
       </View>
+      {allowsPersistentApproval && (
+        <TouchableOpacity
+          style={styles.alwaysAllowBtn}
+          onPress={onAlwaysAllow}
+          accessibilityRole="button"
+          accessibilityLabel={t('approvalBanner.reviewPermission')}
+          accessibilityHint={t('approvalBanner.persistentHint')}
+        >
+          <CheckCheck size={16} color={colors.primary} />
+          <Text style={styles.alwaysAllowText}>{t('approvalBanner.reviewPermission')}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -156,10 +184,13 @@ const createStyles = (colors: AppPalette) =>
     },
     riskBadgeText: { fontSize: 9, fontWeight: '700', color: '#fff' },
     riskReasons: { fontSize: 11, color: colors.warning, fontStyle: 'italic' },
-    cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
+    cardActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
     rejectBtn: {
+      flex: 1,
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       gap: 4,
       paddingHorizontal: 12,
       paddingVertical: 6,
@@ -169,8 +200,10 @@ const createStyles = (colors: AppPalette) =>
     },
     rejectText: { fontSize: 12, fontWeight: '600', color: colors.danger },
     alwaysAllowBtn: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       gap: 4,
       paddingHorizontal: 12,
       paddingVertical: 6,
@@ -180,8 +213,11 @@ const createStyles = (colors: AppPalette) =>
     },
     alwaysAllowText: { fontSize: 12, fontWeight: '600', color: colors.primary },
     approveBtn: {
+      flex: 1,
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       gap: 4,
       paddingHorizontal: 12,
       paddingVertical: 6,

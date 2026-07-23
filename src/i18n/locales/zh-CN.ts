@@ -1703,8 +1703,13 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     elapsedMinutes: '{count}分钟前',
     targetLabel: '目标：{target}',
     reject: '拒绝',
-    approve: '批准',
-    alwaysAllow: '始终允许',
+    approve: '仅允许一次',
+    reviewPermission: '保存权限…',
+    persistentTitle: '以后也允许此工具吗？',
+    persistentMessage:
+      '这会立即批准“{action}”，并为以后每次使用此工具的请求保存权限。其范围比“仅允许一次”更广。',
+    persistentHint: '保存权限前打开确认提示',
+    confirmPersistent: '始终允许',
   },
   approvalHistory: {
     title: 'Approvals',

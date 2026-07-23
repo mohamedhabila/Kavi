@@ -1784,9 +1784,14 @@ export const es: TranslationMap = mergeTranslations(en, {
     elapsedSeconds: 'hace {count}s',
     elapsedMinutes: 'hace {count} min',
     targetLabel: 'Destino: {target}',
-    reject: 'Rechazar',
-    approve: 'Aprobar',
-    alwaysAllow: 'Siempre',
+    reject: 'Denegar',
+    approve: 'Permitir una vez',
+    reviewPermission: 'Guardar permiso…',
+    persistentTitle: '¿Permitir esta herramienta en el futuro?',
+    persistentMessage:
+      'Esto aprueba «{action}» ahora y guarda el permiso para cada solicitud futura que use esta herramienta. Es más amplio que Permitir una vez.',
+    persistentHint: 'Abre una confirmación antes de guardar el permiso',
+    confirmPersistent: 'Permitir siempre',
   },
   approvalHistory: {
     title: 'Approvals',
