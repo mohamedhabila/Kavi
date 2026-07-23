@@ -1,5 +1,8 @@
 import React from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ListTodo, MessageCircle, RefreshCw, Target } from 'lucide-react-native';
+
+import { MemoryFactCard } from './MemoryFactCard';
 
 import type {
   MemoryFactRow,
@@ -11,9 +14,14 @@ import type {
 
 type OverviewSectionProps = {
   colors: MemoryScreenPalette;
-  loadOverviewFacts: (query: string) => void;
+  onAskKavi: () => void;
+  onCorrect: (fact: MemoryFactRow) => void;
+  onForget: (fact: MemoryFactRow) => void;
+  onRetry: () => void;
+  onTogglePin: (fact: MemoryFactRow) => void;
   overview: MemoryOverview | null;
   overviewFacts: MemoryFactRow[];
+  overviewLoaded: boolean;
   overviewSearch: string;
   setOverviewSearch: React.Dispatch<React.SetStateAction<string>>;
   styles: MemoryScreenStyles;
@@ -22,60 +30,147 @@ type OverviewSectionProps = {
 
 export function OverviewSection({
   colors,
-  loadOverviewFacts,
+  onAskKavi,
+  onCorrect,
+  onForget,
+  onRetry,
+  onTogglePin,
   overview,
   overviewFacts,
+  overviewLoaded,
   overviewSearch,
   setOverviewSearch,
   styles,
   t,
 }: OverviewSectionProps) {
+  if (!overview) {
+    return (
+      <View style={styles.editorContainer} testID="memory-overview-tab-panel">
+        {overviewLoaded ? (
+          <View style={styles.overviewUnavailableCard} testID="memory-overview-unavailable">
+            <Text style={styles.overviewUnavailableText}>{t('memory.overviewUnavailable')}</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={onRetry}
+              style={styles.overviewSecondaryAction}
+              testID="memory-overview-retry"
+            >
+              <RefreshCw size={16} color={colors.primary} />
+              <Text style={styles.overviewSecondaryActionText}>{t('common.retry')}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text accessibilityLiveRegion="polite" style={styles.emptyText}>
+            {t('memory.overviewLoading')}
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  const focus = overview.focus?.content?.trim() ?? '';
+  const activeTask = overview.activeTask?.title?.trim() ?? '';
+  const hasSearch = overviewSearch.trim().length > 0;
+
   return (
     <View style={styles.editorContainer} testID="memory-overview-tab-panel">
-      {overview ? (
-        <>
-          <Text style={styles.overviewSectionTitle}>{t('memory.overviewFocusTitle')}</Text>
-          <Text style={styles.overviewBody} testID="memory-overview-focus">
-            {overview.focus?.content?.trim() || t('memory.overviewFocusEmpty')}
+      <ScrollView
+        contentContainerStyle={styles.overviewContent}
+        keyboardShouldPersistTaps="handled"
+        style={styles.editorScroll}
+      >
+        <View style={styles.overviewHero}>
+          <Text accessibilityRole="header" style={styles.overviewHeading}>
+            {t('memory.overviewHeading')}
           </Text>
+          <Text style={styles.overviewIntro}>{t('memory.overviewIntro')}</Text>
+        </View>
 
-          <Text style={styles.overviewSectionTitle}>{t('memory.overviewTaskTitle')}</Text>
-          <Text style={styles.overviewBody} testID="memory-overview-task">
-            {overview.activeTask?.title?.trim() || t('memory.overviewTaskEmpty')}
+        <View style={styles.overviewSummaryCard}>
+          <View style={styles.overviewSummaryHeader}>
+            <View style={styles.overviewSummaryIcon}>
+              <Target size={18} color={colors.primary} />
+            </View>
+            <Text accessibilityRole="header" style={styles.overviewSummaryTitle}>
+              {t('memory.overviewFocusTitle')}
+            </Text>
+          </View>
+          <Text
+            style={focus ? styles.overviewSummaryValue : styles.overviewSummaryEmpty}
+            testID="memory-overview-focus"
+          >
+            {focus || t('memory.overviewFocusEmpty')}
           </Text>
+          {!focus ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={onAskKavi}
+              style={styles.overviewPrimaryAction}
+              testID="memory-overview-ask-kavi"
+            >
+              <MessageCircle size={17} color={colors.onPrimary} />
+              <Text style={styles.overviewPrimaryActionText}>
+                {t('memory.overviewFocusAction')}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
 
-          <TextInput
-            style={styles.factsSearch}
-            value={overviewSearch}
-            onChangeText={setOverviewSearch}
-            onSubmitEditing={() => loadOverviewFacts(overviewSearch)}
-            placeholder={t('memory.overviewSearchPlaceholder')}
-            placeholderTextColor={colors.placeholder}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-            testID="memory-overview-search"
-          />
+        <View style={styles.overviewSummaryCard}>
+          <View style={styles.overviewSummaryHeader}>
+            <View style={styles.overviewSummaryIcon}>
+              <ListTodo size={18} color={colors.primary} />
+            </View>
+            <Text accessibilityRole="header" style={styles.overviewSummaryTitle}>
+              {t('memory.overviewTaskTitle')}
+            </Text>
+          </View>
+          <Text
+            style={activeTask ? styles.overviewSummaryValue : styles.overviewSummaryEmpty}
+            testID="memory-overview-task"
+          >
+            {activeTask || t('memory.overviewTaskEmpty')}
+          </Text>
+        </View>
 
-          <Text style={styles.overviewSectionTitle}>{t('memory.overviewRecentFactsTitle')}</Text>
-          <ScrollView style={styles.editorScroll}>
-            {overviewFacts.length === 0 ? (
-              <Text style={styles.emptyText}>{t('memory.factsEmpty')}</Text>
-            ) : (
-              overviewFacts.map((fact) => (
-                <View key={fact.id} style={styles.factRow} testID={`memory-overview-fact-${fact.id}`}>
-                  <Text style={styles.factSubject}>
-                    {fact.subject} · {fact.predicate}
-                  </Text>
-                  <Text style={styles.factValue}>{fact.value}</Text>
-                </View>
-              ))
-            )}
-          </ScrollView>
-        </>
-      ) : (
-        <Text style={styles.emptyText}>{t('memory.overviewLoading')}</Text>
-      )}
+        <Text style={styles.overviewSearchLabel}>{t('memory.overviewSearchLabel')}</Text>
+        <TextInput
+          accessibilityLabel={t('memory.overviewSearchLabel')}
+          autoCapitalize="none"
+          autoCorrect
+          onChangeText={setOverviewSearch}
+          placeholder={t('memory.overviewSearchPlaceholder')}
+          placeholderTextColor={colors.placeholder}
+          returnKeyType="search"
+          style={styles.factsSearch}
+          testID="memory-overview-search"
+          value={overviewSearch}
+        />
+
+        <Text accessibilityRole="header" style={styles.overviewRecentTitle}>
+          {hasSearch
+            ? t('memory.overviewSearchResultsTitle')
+            : t('memory.overviewRecentFactsTitle')}
+        </Text>
+        {overviewFacts.length === 0 ? (
+          <Text style={styles.overviewRecentEmpty}>
+            {hasSearch ? t('memory.overviewSearchEmpty') : t('memory.overviewRecentEmpty')}
+          </Text>
+        ) : (
+          overviewFacts.map((fact) => (
+            <MemoryFactCard
+              colors={colors}
+              fact={fact}
+              key={fact.id}
+              onCorrect={onCorrect}
+              onForget={onForget}
+              onTogglePin={onTogglePin}
+              t={t}
+              testIDPrefix="memory-overview-fact"
+            />
+          ))
+        )}
+      </ScrollView>
     </View>
   );
 }

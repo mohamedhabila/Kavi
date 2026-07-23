@@ -15,6 +15,7 @@ const mockSetMemoryFactPinnedForManagement = jest.fn();
 const mockExecuteMemoryForget = jest.fn();
 const mockCorrectMemoryFactForManagement = jest.fn();
 const mockSubscribeToMemoryChanges = jest.fn();
+const mockNavigate = jest.fn();
 let mockRouteParams: Record<string, unknown> = {};
 let memoryListener: ((event: { updatedAt: number }) => void) | null = null;
 
@@ -28,6 +29,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => undefined,
+  useNavigation: () => ({ navigate: mockNavigate }),
   useRoute: () => ({ params: mockRouteParams }),
 }));
 
@@ -444,9 +446,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
 
     await waitFor(() => {
       expect(
-        getByText(
-          'Nothing remembered yet. Ask Kavi to remember a preference or detail, and it will appear here.',
-        ),
+        getByText('No recent memories yet. Ask Kavi to remember a preference or detail.'),
       ).toBeTruthy();
     });
 

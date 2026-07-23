@@ -5,7 +5,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import { useFocusEffect, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { loadMemoryDiagnosticsSnapshot } from '../services/memory/memoryDiagnostics';
 import { loadMemoryOverviewSnapshot } from '../services/memory/memoryOverview';
 import { useChatStore } from '../store/useChatStore';
@@ -39,6 +39,7 @@ function resolveRouteTab(tabParam: unknown): Tab {
 export const MemoryScreen: React.FC = () => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const handleBack = useBackToChat();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -47,6 +48,7 @@ export const MemoryScreen: React.FC = () => {
 
   const [tab, setTab] = useState<Tab>(routeTab);
   const [overview, setOverview] = useState<MemoryOverview | null>(null);
+  const [overviewLoaded, setOverviewLoaded] = useState(false);
   const [diagnostics, setDiagnostics] = useState<MemoryDiagnostics | null>(null);
   const [diagnosticsError, setDiagnosticsError] = useState(false);
   const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
@@ -124,6 +126,8 @@ export const MemoryScreen: React.FC = () => {
       if (overviewRequestEpochRef.current === requestEpoch) setOverview(snapshot);
     } catch {
       if (overviewRequestEpochRef.current === requestEpoch) setOverview(null);
+    } finally {
+      if (overviewRequestEpochRef.current === requestEpoch) setOverviewLoaded(true);
     }
   }, []);
 
@@ -176,8 +180,13 @@ export const MemoryScreen: React.FC = () => {
   useEffect(() => {
     if (tab !== 'overview') return;
     void loadOverviewSnapshot();
-    loadOverviewFacts(overviewSearch);
-  }, [tab, overviewSearch, loadOverviewSnapshot, loadOverviewFacts]);
+  }, [tab, loadOverviewSnapshot]);
+
+  useEffect(() => {
+    if (tab !== 'overview') return;
+    const timeout = setTimeout(() => loadOverviewFacts(overviewSearch), 150);
+    return () => clearTimeout(timeout);
+  }, [tab, overviewSearch, loadOverviewFacts]);
 
   useEffect(() => {
     void refreshMemory();
@@ -241,6 +250,7 @@ export const MemoryScreen: React.FC = () => {
     loadOverviewFacts(overviewSearch);
   }, [loadFacts, loadOverviewFacts, overviewSearch]);
   const factManagement = useMemoryFactManagement({ onChanged: reloadManagedFacts, t });
+  const handleAskKavi = useCallback(() => navigation.navigate('Chat'), [navigation]);
 
   const memoryStatus = isRefreshing
     ? t('memory.refreshing')
@@ -260,14 +270,15 @@ export const MemoryScreen: React.FC = () => {
       factsFilter={factsFilter}
       factsPinnedOnly={factsPinnedOnly}
       factManagement={factManagement}
+      handleAskKavi={handleAskKavi}
       handleBack={handleBack}
       handleClearAll={handleClearAll}
       loadFacts={loadFacts}
-      loadOverviewFacts={loadOverviewFacts}
       memoryStatus={memoryStatus}
       onToggleDiagnostics={handleToggleDiagnostics}
       overview={overview}
       overviewFacts={overviewFacts}
+      overviewLoaded={overviewLoaded}
       overviewSearch={overviewSearch}
       refreshMemory={refreshVisibleMemory}
       setFactsFilter={setFactsFilter}

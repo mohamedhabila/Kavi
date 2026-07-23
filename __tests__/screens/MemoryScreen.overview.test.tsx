@@ -6,6 +6,7 @@ const mockLoadOverview = jest.fn();
 const mockLoadDiagnostics = jest.fn();
 const mockExecuteMemoryRecall = jest.fn();
 const mockResetCanonicalMemory = jest.fn();
+const mockNavigate = jest.fn();
 let mockActiveConversationId = 'conv-overview';
 let mockFocusEffectCallback: (() => void) | null = null;
 
@@ -21,6 +22,7 @@ const mockUseFocusEffect = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (callback: () => void) => mockUseFocusEffect(callback),
+  useNavigation: () => ({ navigate: mockNavigate }),
   useRoute: () => ({ params: { tab: 'overview', query: 'atlas' } }),
 }));
 
@@ -209,17 +211,79 @@ describe('MemoryScreen overview tab', () => {
 
     await waitFor(() => {
       expect(getByTestId('memory-overview-tab-panel')).toBeTruthy();
+      expect(mockExecuteMemoryRecall).toHaveBeenCalledWith(
+        expect.objectContaining({ search: 'atlas', memoryKind: 'semantic_fact' }),
+      );
+      expect(getByTestId('memory-overview-fact-fact-1')).toBeTruthy();
     });
 
     expect(getByDisplayValue('atlas')).toBeTruthy();
-    expect(mockExecuteMemoryRecall).toHaveBeenCalledWith(
-      expect.objectContaining({ search: 'atlas', memoryKind: 'semantic_fact' }),
-    );
     expect(getByTestId('memory-overview-focus').props.children).toContain('Release hardening');
     expect(getByTestId('memory-overview-task').props.children).toContain('Ship Android build');
+    expect(getByTestId('memory-overview-fact-correct-fact-1')).toBeTruthy();
     expect(queryByTestId('memory-diagnostics-panel')).toBeNull();
     expect(queryByTestId('memory-overview-ingestion-pending')).toBeNull();
     expect(mockLoadDiagnostics).not.toHaveBeenCalled();
+  });
+
+  it('guides an empty focus back to the assistant', async () => {
+    mockLoadOverview.mockReturnValue({
+      focus: null,
+      activeTask: null,
+      recentFacts: [],
+      consolidation: {
+        memoryDisabled: false,
+        tier: 'deterministic',
+        providerName: null,
+        explicitProviderSelected: false,
+        isFallback: true,
+      },
+      pendingIngestionJobs: 0,
+    });
+
+    const { getByText, getByTestId } = render(<MemoryScreen />);
+
+    await waitFor(() => {
+      expect(
+        getByText(
+          'No focus yet. Tell Kavi what matters now and it can keep the conversation oriented.',
+        ),
+      ).toBeTruthy();
+    });
+    expect(getByText('No active task right now.')).toBeTruthy();
+
+    fireEvent.press(getByTestId('memory-overview-ask-kavi'));
+    expect(mockNavigate).toHaveBeenCalledWith('Chat');
+  });
+
+  it('opens correction from a recent memory card', async () => {
+    const { getByTestId } = render(<MemoryScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('memory-overview-fact-correct-fact-1')).toBeTruthy();
+    });
+    fireEvent.press(getByTestId('memory-overview-fact-correct-fact-1'));
+
+    expect(getByTestId('memory-correction-input').props.value).toBe('Atlas');
+  });
+
+  it('shows a recoverable state when the overview cannot be loaded', async () => {
+    mockLoadOverview.mockImplementation(() => {
+      throw new Error('memory unavailable');
+    });
+
+    const { getByText, getByTestId } = render(<MemoryScreen />);
+
+    await waitFor(() => {
+      expect(getByText('Memory could not be loaded. Try again.')).toBeTruthy();
+    });
+    const callsBeforeRetry = mockLoadOverview.mock.calls.length;
+
+    fireEvent.press(getByTestId('memory-overview-retry'));
+
+    await waitFor(() => {
+      expect(mockLoadOverview.mock.calls.length).toBeGreaterThan(callsBeforeRetry);
+    });
   });
 
   it('keeps diagnostics collapsed in Advanced and loads them only on request', async () => {
@@ -245,18 +309,26 @@ describe('MemoryScreen overview tab', () => {
     expect(getByTestId('memory-diagnostics-retrieval-rl-1')).toBeTruthy();
   });
 
-  it('runs recall when overview search is submitted', async () => {
-    const { getByTestId } = render(<MemoryScreen />);
+  it('debounces overview search without reloading the whole snapshot', async () => {
+    const { getByText, getByTestId } = render(<MemoryScreen />);
     const input = getByTestId('memory-overview-search');
 
+    await waitFor(() => {
+      expect(mockExecuteMemoryRecall).toHaveBeenCalledWith(
+        expect.objectContaining({ search: 'atlas', memoryKind: 'semantic_fact' }),
+      );
+    });
+    const overviewCallsBeforeSearch = mockLoadOverview.mock.calls.length;
+
     fireEvent.changeText(input, 'metadata');
-    fireEvent(input, 'submitEditing');
 
     await waitFor(() => {
       expect(mockExecuteMemoryRecall).toHaveBeenCalledWith(
         expect.objectContaining({ search: 'metadata', memoryKind: 'semantic_fact' }),
       );
     });
+    expect(getByText('Search results')).toBeTruthy();
+    expect(mockLoadOverview).toHaveBeenCalledTimes(overviewCallsBeforeSearch);
   });
 
   it('clears canonical memory only after destructive confirmation', async () => {

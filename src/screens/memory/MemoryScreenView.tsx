@@ -30,14 +30,15 @@ type MemoryScreenViewProps = {
   factsFilter: string;
   factsPinnedOnly: boolean;
   factManagement: MemoryFactManagementController;
+  handleAskKavi: () => void;
   handleBack: () => void;
   handleClearAll: () => void;
   loadFacts: () => void;
-  loadOverviewFacts: (query: string) => void;
   memoryStatus: string;
   onToggleDiagnostics: () => void;
   overview: MemoryOverview | null;
   overviewFacts: MemoryFactRow[];
+  overviewLoaded: boolean;
   overviewSearch: string;
   refreshMemory: () => Promise<void>;
   setFactsFilter: React.Dispatch<React.SetStateAction<string>>;
@@ -60,14 +61,15 @@ export function MemoryScreenView({
   factsFilter,
   factsPinnedOnly,
   factManagement,
+  handleAskKavi,
   handleBack,
   handleClearAll,
   loadFacts,
-  loadOverviewFacts,
   memoryStatus,
   onToggleDiagnostics,
   overview,
   overviewFacts,
+  overviewLoaded,
   overviewSearch,
   refreshMemory,
   setFactsFilter,
@@ -159,9 +161,14 @@ export function MemoryScreenView({
       {tab === 'overview' ? (
         <OverviewSection
           colors={colors}
-          loadOverviewFacts={loadOverviewFacts}
+          onAskKavi={handleAskKavi}
+          onCorrect={factManagement.handleFactCorrect}
+          onForget={factManagement.handleFactForget}
+          onRetry={() => void refreshMemory()}
+          onTogglePin={factManagement.handleFactTogglePin}
           overview={overview}
           overviewFacts={overviewFacts}
+          overviewLoaded={overviewLoaded}
           overviewSearch={overviewSearch}
           setOverviewSearch={setOverviewSearch}
           styles={styles}
