@@ -21,7 +21,12 @@
 import { findEntityByName } from './entities';
 import { markFactsRecalled } from './facts/factAccessMutations';
 import { listFacts, listFactsForRecallEligibleScan } from './facts/queries';
-import { requireMemoryFactScope, type MemoryFactScope } from './facts/types';
+import {
+  requireMemoryFactScope,
+  type MemoryFactKind,
+  type MemoryFactScope,
+} from './facts/types';
+import { searchMemoryFactsForManagement } from './facts/managementSearch';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 import { ensureFactSchema } from './schema';
@@ -138,8 +143,10 @@ function trimNonEmpty(value: unknown, max = 200): string | null {
 // ── memory_recall ────────────────────────────────────────────────────────
 
 export interface MemoryFactManagementQueryArgs {
+  search?: string;
   subject?: string;
   predicate?: string;
+  memoryKind?: MemoryFactKind;
   scope?: MemoryFactScope;
   originConversationId?: string;
   originTaskId?: string;
@@ -162,10 +169,26 @@ export function queryMemoryFactsForManagement(
   ensureFactSchema();
   const subject = trimNonEmpty(args.subject, 80);
   const predicate = trimNonEmpty(args.predicate, 80);
+  const search = trimNonEmpty(args.search, 200);
 
   if (
+    search &&
+    (subject ||
+      predicate ||
+      args.scope ||
+      args.originConversationId ||
+      args.originTaskId ||
+      args.all === true ||
+      args.includeHistory === true)
+  ) {
+    return err('invalid_args', 'Search cannot be combined with exact or historical filters.');
+  }
+
+  if (
+    !search &&
     !subject &&
     !predicate &&
+    !args.memoryKind &&
     !args.scope &&
     !args.originConversationId &&
     !args.originTaskId &&
@@ -173,6 +196,19 @@ export function queryMemoryFactsForManagement(
     args.all !== true
   ) {
     return err('invalid_args', 'Provide a filter or set all=true to list all facts.');
+  }
+
+  if (search) {
+    const result = searchMemoryFactsForManagement(search, {
+      ...(typeof args.limit === 'number' ? { limit: args.limit } : {}),
+      ...(args.memoryKind ? { memoryKind: args.memoryKind } : {}),
+      ...(args.pinnedOnly ? { pinnedOnly: true } : {}),
+    });
+    return {
+      ok: true,
+      subject: null,
+      facts: result.facts.map(serializeMemoryFact),
+    };
   }
 
   let subjectId: string | undefined;
@@ -188,6 +224,7 @@ export function queryMemoryFactsForManagement(
     ...(subjectId ? { subjectId } : {}),
     ...(predicate ? { predicate } : {}),
     ...(args.scope ? { scope: args.scope } : {}),
+    ...(args.memoryKind ? { memoryKind: args.memoryKind } : {}),
     ...(args.originConversationId ? { originConversationId: args.originConversationId } : {}),
     ...(args.originTaskId ? { originTaskId: args.originTaskId } : {}),
     ...(args.pinnedOnly ? { pinnedOnly: true } : {}),

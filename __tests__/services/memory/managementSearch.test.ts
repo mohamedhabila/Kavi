@@ -71,4 +71,44 @@ describe('management memory search', () => {
     expect(result.facts).toHaveLength(7);
     expect(result.facts.map((fact) => fact.updatedAt)).toEqual([25, 24, 23, 22, 21, 20, 19]);
   });
+
+  it('can constrain product search to semantic and pinned memories', () => {
+    const subject = upsertEntity({ name: 'User', type: 'self' });
+    const pinned = recordFact({
+      subjectId: subject.id,
+      predicate: 'preferred_editor',
+      objectText: 'shared marker Nova',
+      scope: 'global',
+      pinned: true,
+      memoryKind: 'semantic_fact',
+      now: 1,
+    }).fact;
+    recordFact({
+      subjectId: subject.id,
+      predicate: 'secondary_editor',
+      objectText: 'shared marker Zed',
+      scope: 'global',
+      memoryKind: 'semantic_fact',
+      now: 2,
+    });
+    recordFact({
+      subjectId: subject.id,
+      predicate: 'run_summary',
+      objectText: 'shared marker internal',
+      scope: 'global',
+      pinned: true,
+      memoryKind: 'summary',
+      now: 3,
+    });
+
+    const result = searchMemoryFactsForManagement('shared marker', {
+      limit: 10,
+      memoryKind: 'semantic_fact',
+      pinnedOnly: true,
+    });
+
+    expect(result.totalCurrentFacts).toBe(1);
+    expect(result.totalMatches).toBe(1);
+    expect(result.facts.map((fact) => fact.id)).toEqual([pinned.id]);
+  });
 });

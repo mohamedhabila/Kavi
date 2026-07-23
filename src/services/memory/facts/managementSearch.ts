@@ -2,7 +2,13 @@ import { findEntityByName } from '../entities';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { tokenizeLexicalUnits } from '../ranking/lexical';
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
-import { rowToFact, type FactRow, type MemoryFact } from './types';
+import {
+  normalizeFactKind,
+  rowToFact,
+  type FactRow,
+  type MemoryFact,
+  type MemoryFactKind,
+} from './types';
 
 const DEFAULT_MANAGEMENT_SEARCH_LIMIT = 10;
 const MAX_MANAGEMENT_SEARCH_LIMIT = 50;
@@ -14,6 +20,12 @@ export interface MemoryFactManagementSearchResult {
   facts: MemoryFact[];
   totalCurrentFacts: number;
   totalMatches: number;
+}
+
+export interface MemoryFactManagementSearchOptions {
+  limit?: number;
+  memoryKind?: MemoryFactKind;
+  pinnedOnly?: boolean;
 }
 
 function normalizeQuery(value: string): string {
@@ -29,23 +41,41 @@ function clampLimit(value: number | undefined): number {
   return Math.max(1, Math.min(Math.floor(value), MAX_MANAGEMENT_SEARCH_LIMIT));
 }
 
+function searchOptions(
+  value: number | MemoryFactManagementSearchOptions | undefined,
+): MemoryFactManagementSearchOptions {
+  if (typeof value === 'number') return { limit: value };
+  if (!value) return {};
+  if (value.memoryKind && normalizeFactKind(value.memoryKind) !== value.memoryKind) {
+    throw new Error('memory_management_search_kind_invalid');
+  }
+  return value;
+}
+
 export function searchMemoryFactsForManagement(
   rawQuery: string,
-  limit?: number,
+  limitOrOptions?: number | MemoryFactManagementSearchOptions,
 ): MemoryFactManagementSearchResult {
+  const options = searchOptions(limitOrOptions);
   const query = normalizeQuery(rawQuery.slice(0, MAX_MANAGEMENT_SEARCH_QUERY_CHARS));
   if (!query) return { query, facts: [], totalCurrentFacts: 0, totalMatches: 0 };
 
   const db = getSchemaReadyMemoryDb();
   const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+  const memoryClauses = [
+    'f.memory_owner_id = ?',
+    'f.invalid_at IS NULL',
+    'f.deleted_at IS NULL',
+    ...(options.memoryKind ? ['f.memory_kind = ?'] : []),
+    ...(options.pinnedOnly ? ['f.pinned = 1'] : []),
+  ];
+  const memoryParams = [memoryOwnerId, ...(options.memoryKind ? [options.memoryKind] : [])];
   const totalCurrentFacts =
     db.getFirstSync<{ count: number }>(
       `SELECT COUNT(*) AS count
-         FROM memory_facts
-        WHERE memory_owner_id = ?
-          AND invalid_at IS NULL
-          AND deleted_at IS NULL`,
-      memoryOwnerId,
+         FROM memory_facts f
+        WHERE ${memoryClauses.join('\n          AND ')}`,
+      ...memoryParams,
     )?.count ?? 0;
   const exactSubjectId = findEntityByName(query)?.id ?? null;
   const units = Array.from(tokenizeLexicalUnits(query)).slice(0, MAX_MANAGEMENT_SEARCH_UNITS);
@@ -63,9 +93,7 @@ export function searchMemoryFactsForManagement(
          SELECT NULL AS fact_id, 0 AS matched_units, 0 AS matched_weight WHERE 0
        )`;
   const subjectClause = exactSubjectId ? 'OR f.subject_id = ?' : '';
-  const filters = `f.memory_owner_id = ?
-      AND f.invalid_at IS NULL
-      AND f.deleted_at IS NULL
+  const filters = `${memoryClauses.join('\n      AND ')}
       AND (
         mt.fact_id IS NOT NULL
         OR LOWER(e.canonical_name) LIKE ? ESCAPE '\\'
@@ -75,7 +103,7 @@ export function searchMemoryFactsForManagement(
         ${subjectClause}
       )`;
   const filterParams = [
-    memoryOwnerId,
+    ...memoryParams,
     likePattern,
     likePattern,
     likePattern,
@@ -109,7 +137,7 @@ export function searchMemoryFactsForManagement(
                f.id ASC
       LIMIT ?`,
     ...sharedParams,
-    clampLimit(limit),
+    clampLimit(options.limit),
   );
 
   return {
