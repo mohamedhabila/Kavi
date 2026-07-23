@@ -250,7 +250,11 @@ describe('CodeEditorScreen', () => {
       content: 'console.log(1);',
       returnToConversationFiles: {
         conversationId: 'conv-1',
-        initialDirectoryPath: 'src',
+        initialDirectoryPath: '../src',
+        initialScrollOffset: 380,
+        initialSearchQuery: 'App',
+        initialFileFilter: 'code',
+        initialFileSort: 'name',
       },
     };
 
@@ -265,6 +269,10 @@ describe('CodeEditorScreen', () => {
             conversationId: 'conv-1',
             initialFilePath: undefined,
             initialDirectoryPath: 'src',
+            initialScrollOffset: 380,
+            initialSearchQuery: 'App',
+            initialFileFilter: 'code',
+            initialFileSort: 'name',
           },
         },
       }),

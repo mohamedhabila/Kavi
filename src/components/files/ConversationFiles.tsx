@@ -3,15 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  Image,
-  Modal,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Image, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { File as FileIcon, ChevronLeft, Copy, Share2 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -30,7 +22,9 @@ import { ConversationFilesStatusView } from './ConversationFilesStatusView';
 import { ConversationFilesDirectory } from './ConversationFilesDirectory';
 import { createConversationFilesStyles } from './ConversationFiles.styles';
 import {
+  getConversationFilesBrowseState,
   getSafeConversationFileName,
+  type ConversationFilesBrowseState,
   type ConversationFileFilter,
   type ConversationFileSort,
 } from './conversationFilesPresentation';
@@ -44,7 +38,16 @@ interface ConversationFilesProps {
   refreshToken?: string | number;
   initialFilePath?: string | null;
   initialDirectoryPath?: string | null;
-  onOpenTextFile?: (filePath: string, content: string, sourceConversationId?: string) => void;
+  initialScrollOffset?: number | null;
+  initialSearchQuery?: string | null;
+  initialFileFilter?: ConversationFileFilter | null;
+  initialFileSort?: ConversationFileSort | null;
+  onOpenTextFile?: (
+    filePath: string,
+    content: string,
+    sourceConversationId?: string,
+    browseState?: ConversationFilesBrowseState,
+  ) => void;
   presentation?: 'modal' | 'screen';
   workspaceLabel?: string;
 }
@@ -69,6 +72,10 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   refreshToken,
   initialFilePath,
   initialDirectoryPath,
+  initialScrollOffset,
+  initialSearchQuery,
+  initialFileFilter,
+  initialFileSort,
   onOpenTextFile,
   presentation = 'modal',
   workspaceLabel,
@@ -86,14 +93,34 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   const fileOpenErrorTitle = t('conversationFiles.fileOpenErrorTitle');
   const fileOpenErrorHint = t('conversationFiles.fileOpenErrorHint');
   const retryLabel = t('common.retry');
-  const [currentPath, setCurrentPath] = useState('');
+  const restoredBrowseState = React.useMemo(
+    () =>
+      getConversationFilesBrowseState({
+        directoryPath: initialDirectoryPath,
+        scrollOffset: initialScrollOffset,
+        searchQuery: initialSearchQuery,
+        fileFilter: initialFileFilter,
+        fileSort: initialFileSort,
+      }),
+    [
+      initialDirectoryPath,
+      initialFileFilter,
+      initialFileSort,
+      initialScrollOffset,
+      initialSearchQuery,
+    ],
+  );
+  const [currentPath, setCurrentPath] = useState(restoredBrowseState.directoryPath);
   const [entries, setEntries] = useState<ConversationWorkspaceDirectoryEntry[]>([]);
   const [directoryStatus, setDirectoryStatus] = useState<DirectoryStatus>('loading');
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [fileFilter, setFileFilter] = useState<ConversationFileFilter>('all');
-  const [fileSort, setFileSort] = useState<ConversationFileSort>('recent');
+  const [searchQuery, setSearchQuery] = useState(restoredBrowseState.searchQuery);
+  const [fileFilter, setFileFilter] = useState<ConversationFileFilter>(
+    restoredBrowseState.fileFilter,
+  );
+  const [fileSort, setFileSort] = useState<ConversationFileSort>(restoredBrowseState.fileSort);
+  const [restoreScrollOffset, setRestoreScrollOffset] = useState(restoredBrowseState.scrollOffset);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState('');
   const [viewerMode, setViewerMode] = useState<ViewerMode>('text');
@@ -102,48 +129,52 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   const directoryRequestIdRef = useRef(0);
   const fileRequestIdRef = useRef(0);
   const entriesRef = useRef<ConversationWorkspaceDirectoryEntry[]>([]);
+  const browseStateRef = useRef(restoredBrowseState);
 
-  const refresh = useCallback(async (options?: { preserveContent?: boolean }) => {
-    const requestId = directoryRequestIdRef.current + 1;
-    directoryRequestIdRef.current = requestId;
-    const preserveContent = options?.preserveContent ?? entriesRef.current.length > 0;
-    if (preserveContent) {
-      setIsRefreshing(true);
-    } else {
-      setDirectoryStatus('loading');
-    }
-    setDirectoryError(null);
-
-    if (!conversationId) {
-      entriesRef.current = [];
-      setEntries([]);
-      setDirectoryStatus('ready');
-      setIsRefreshing(false);
-      return;
-    }
-
-    try {
-      const result = await listConversationWorkspaceDirectory(
-        conversationId,
-        currentPath,
-        fallbackConversationIds,
-      );
-      if (requestId !== directoryRequestIdRef.current) return;
-      entriesRef.current = result.entries;
-      setEntries(result.entries);
-      setDirectoryStatus('ready');
-    } catch (error) {
-      if (requestId !== directoryRequestIdRef.current) return;
-      entriesRef.current = [];
-      setEntries([]);
-      setDirectoryError(error instanceof Error ? error.message : String(error));
-      setDirectoryStatus('error');
-    } finally {
-      if (requestId === directoryRequestIdRef.current) {
-        setIsRefreshing(false);
+  const refresh = useCallback(
+    async (options?: { preserveContent?: boolean }) => {
+      const requestId = directoryRequestIdRef.current + 1;
+      directoryRequestIdRef.current = requestId;
+      const preserveContent = options?.preserveContent ?? entriesRef.current.length > 0;
+      if (preserveContent) {
+        setIsRefreshing(true);
+      } else {
+        setDirectoryStatus('loading');
       }
-    }
-  }, [conversationId, currentPath, fallbackConversationIds]);
+      setDirectoryError(null);
+
+      if (!conversationId) {
+        entriesRef.current = [];
+        setEntries([]);
+        setDirectoryStatus('ready');
+        setIsRefreshing(false);
+        return;
+      }
+
+      try {
+        const result = await listConversationWorkspaceDirectory(
+          conversationId,
+          currentPath,
+          fallbackConversationIds,
+        );
+        if (requestId !== directoryRequestIdRef.current) return;
+        entriesRef.current = result.entries;
+        setEntries(result.entries);
+        setDirectoryStatus('ready');
+      } catch (error) {
+        if (requestId !== directoryRequestIdRef.current) return;
+        entriesRef.current = [];
+        setEntries([]);
+        setDirectoryError(error instanceof Error ? error.message : String(error));
+        setDirectoryStatus('error');
+      } finally {
+        if (requestId === directoryRequestIdRef.current) {
+          setIsRefreshing(false);
+        }
+      }
+    },
+    [conversationId, currentPath, fallbackConversationIds],
+  );
 
   const openFilePath = useCallback(
     async (filePath: string) => {
@@ -166,8 +197,29 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
         if (requestId !== fileRequestIdRef.current) return;
 
         if (result.kind === 'text' && onOpenTextFile) {
+          const directoryPath = getParentPath(result.path);
+          const currentBrowseState = browseStateRef.current;
+          const browseState = getConversationFilesBrowseState({
+            directoryPath,
+            scrollOffset:
+              currentBrowseState.directoryPath === directoryPath
+                ? currentBrowseState.scrollOffset
+                : 0,
+            searchQuery:
+              currentBrowseState.directoryPath === directoryPath
+                ? currentBrowseState.searchQuery
+                : '',
+            fileFilter:
+              currentBrowseState.directoryPath === directoryPath
+                ? currentBrowseState.fileFilter
+                : 'all',
+            fileSort:
+              currentBrowseState.directoryPath === directoryPath
+                ? currentBrowseState.fileSort
+                : 'recent',
+          });
           setFileViewState({ status: 'ready' });
-          onOpenTextFile(result.path, result.content, result.conversationId);
+          onOpenTextFile(result.path, result.content, result.conversationId, browseState);
           return;
         }
 
@@ -236,9 +288,17 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
     setFileContent('');
     setViewingFileUri(null);
     setFileViewState({ status: 'ready' });
-    setSearchQuery('');
-    setFileFilter('all');
-    setFileSort('recent');
+    const requestedBrowseState = initialFilePath
+      ? getConversationFilesBrowseState({
+          ...restoredBrowseState,
+          directoryPath: getParentPath(initialFilePath),
+        })
+      : restoredBrowseState;
+    browseStateRef.current = requestedBrowseState;
+    setSearchQuery(requestedBrowseState.searchQuery);
+    setFileFilter(requestedBrowseState.fileFilter);
+    setFileSort(requestedBrowseState.fileSort);
+    setRestoreScrollOffset(requestedBrowseState.scrollOffset);
 
     if (!conversationId) {
       setCurrentPath('');
@@ -251,17 +311,17 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
     }
 
     if (initialFilePath) {
-      setCurrentPath(getParentPath(initialFilePath));
+      setCurrentPath(requestedBrowseState.directoryPath);
       void openFilePath(initialFilePath);
       return;
     }
 
-    setCurrentPath(normalizeConversationWorkspacePath(initialDirectoryPath ?? ''));
+    setCurrentPath(requestedBrowseState.directoryPath);
     setViewingFile(null);
     setViewerMode('text');
     setDirectoryStatus('loading');
     setDirectoryError(null);
-  }, [visible, conversationId, initialDirectoryPath, initialFilePath, openFilePath]);
+  }, [visible, conversationId, initialFilePath, openFilePath, restoredBrowseState]);
 
   useEffect(() => {
     if (visible && !viewingFile) {
@@ -269,27 +329,37 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
     }
   }, [currentPath, refresh, refreshToken, viewingFile, visible]);
 
-  const prepareDirectoryNavigation = useCallback(() => {
+  const prepareDirectoryNavigation = useCallback((nextPath: string) => {
     entriesRef.current = [];
     setEntries([]);
     setDirectoryStatus('loading');
     setDirectoryError(null);
     setSearchQuery('');
+    setRestoreScrollOffset(0);
+    browseStateRef.current = {
+      ...browseStateRef.current,
+      directoryPath: nextPath,
+      scrollOffset: 0,
+      searchQuery: '',
+    };
   }, []);
 
-  const navigateInto = useCallback((name: string) => {
-    prepareDirectoryNavigation();
-    setCurrentPath((prev) => (prev ? `${prev}/${name}` : name));
-  }, [prepareDirectoryNavigation]);
+  const navigateInto = useCallback(
+    (name: string) => {
+      const nextPath = currentPath ? `${currentPath}/${name}` : name;
+      prepareDirectoryNavigation(nextPath);
+      setCurrentPath(nextPath);
+    },
+    [currentPath, prepareDirectoryNavigation],
+  );
 
   const navigateUp = useCallback(() => {
-    prepareDirectoryNavigation();
-    setCurrentPath((prev) => {
-      const parts = prev.split('/');
-      parts.pop();
-      return parts.join('/');
-    });
-  }, [prepareDirectoryNavigation]);
+    const parts = currentPath.split('/');
+    parts.pop();
+    const nextPath = parts.join('/');
+    prepareDirectoryNavigation(nextPath);
+    setCurrentPath(nextPath);
+  }, [currentPath, prepareDirectoryNavigation]);
 
   const closeViewer = () => {
     fileRequestIdRef.current += 1;
@@ -301,6 +371,7 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   const openFile = useCallback(
     (name: string) => {
       const filePath = currentPath ? `${currentPath}/${name}` : name;
+      setRestoreScrollOffset(browseStateRef.current.scrollOffset);
       void openFilePath(filePath);
     },
     [currentPath, openFilePath],
@@ -309,6 +380,25 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   const handleManualRefresh = useCallback(() => {
     void refresh({ preserveContent: entriesRef.current.length > 0 });
   }, [refresh]);
+
+  const handleSearchQueryChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    browseStateRef.current = { ...browseStateRef.current, searchQuery: query };
+  }, []);
+
+  const handleFileFilterChange = useCallback((filter: ConversationFileFilter) => {
+    setFileFilter(filter);
+    browseStateRef.current = { ...browseStateRef.current, fileFilter: filter };
+  }, []);
+
+  const handleFileSortChange = useCallback((sort: ConversationFileSort) => {
+    setFileSort(sort);
+    browseStateRef.current = { ...browseStateRef.current, fileSort: sort };
+  }, []);
+
+  const handleScrollOffsetChange = useCallback((scrollOffset: number) => {
+    browseStateRef.current = { ...browseStateRef.current, scrollOffset };
+  }, []);
 
   const handleCopy = async () => {
     try {
@@ -354,10 +444,7 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   if (!visible) return null;
 
   const safeViewingFileName = viewingFile
-    ? getSafeConversationFileName(
-        viewingFile.split('/').pop(),
-        t('conversationFiles.untitledItem'),
-      )
+    ? getSafeConversationFileName(viewingFile.split('/').pop(), t('conversationFiles.untitledItem'))
     : '';
   const safeViewingFilePath = viewingFile
     ? getSafeConversationFileName(viewingFile, safeViewingFileName)
@@ -474,15 +561,17 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
           entries={entries}
           fileFilter={fileFilter}
           fileSort={fileSort}
+          initialScrollOffset={restoreScrollOffset}
           isRefreshing={isRefreshing}
           onClose={onClose}
-          onFileFilterChange={setFileFilter}
-          onFileSortChange={setFileSort}
+          onFileFilterChange={handleFileFilterChange}
+          onFileSortChange={handleFileSortChange}
           onNavigateInto={navigateInto}
           onNavigateUp={navigateUp}
           onOpenFile={openFile}
           onRefresh={handleManualRefresh}
-          onSearchQueryChange={setSearchQuery}
+          onSearchQueryChange={handleSearchQueryChange}
+          onScrollOffsetChange={handleScrollOffsetChange}
           onShareFile={(filePath, displayName) => {
             void shareFilePath(filePath, displayName);
           }}

@@ -1,15 +1,38 @@
 import type { FileEntry } from '../../services/files/contracts';
+import { normalizeConversationWorkspacePath } from '../../services/files/pathUtils';
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 
-export type ConversationFileFilter =
-  | 'all'
-  | 'documents'
-  | 'images'
-  | 'audio'
-  | 'code'
-  | 'other';
+export type ConversationFileFilter = 'all' | 'documents' | 'images' | 'audio' | 'code' | 'other';
 
 export type ConversationFileSort = 'recent' | 'name';
+
+export interface ConversationFilesBrowseState {
+  directoryPath: string;
+  scrollOffset: number;
+  searchQuery: string;
+  fileFilter: ConversationFileFilter;
+  fileSort: ConversationFileSort;
+}
+
+interface ConversationFilesBrowseStateInput {
+  directoryPath?: unknown;
+  scrollOffset?: unknown;
+  searchQuery?: unknown;
+  fileFilter?: unknown;
+  fileSort?: unknown;
+}
+
+const FILE_FILTERS = new Set<ConversationFileFilter>([
+  'all',
+  'documents',
+  'images',
+  'audio',
+  'code',
+  'other',
+]);
+const FILE_SORTS = new Set<ConversationFileSort>(['recent', 'name']);
+const MAX_RESTORED_SCROLL_OFFSET = 10_000_000;
+const MAX_RESTORED_SEARCH_LENGTH = 160;
 
 const DOCUMENT_EXTENSIONS = new Set([
   'doc',
@@ -69,6 +92,37 @@ function getModifiedTimestamp(entry: FileEntry): number {
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 }
 
+export function getConversationFilesBrowseState(
+  input: ConversationFilesBrowseStateInput = {},
+): ConversationFilesBrowseState {
+  const scrollOffset =
+    typeof input.scrollOffset === 'number' &&
+    Number.isFinite(input.scrollOffset) &&
+    input.scrollOffset > 0
+      ? Math.min(input.scrollOffset, MAX_RESTORED_SCROLL_OFFSET)
+      : 0;
+  const searchQuery =
+    typeof input.searchQuery === 'string'
+      ? input.searchQuery
+          .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
+          .slice(0, MAX_RESTORED_SEARCH_LENGTH)
+      : '';
+
+  return {
+    directoryPath: normalizeConversationWorkspacePath(
+      typeof input.directoryPath === 'string' ? input.directoryPath : '',
+    ),
+    scrollOffset,
+    searchQuery,
+    fileFilter: FILE_FILTERS.has(input.fileFilter as ConversationFileFilter)
+      ? (input.fileFilter as ConversationFileFilter)
+      : 'all',
+    fileSort: FILE_SORTS.has(input.fileSort as ConversationFileSort)
+      ? (input.fileSort as ConversationFileSort)
+      : 'recent',
+  };
+}
+
 export function getSafeConversationFileName(name: unknown, fallback: string): string {
   if (typeof name !== 'string') return fallback;
   const safeName = redactSensitiveText(name)
@@ -100,7 +154,9 @@ export function getVisibleConversationFileEntries<TEntry extends FileEntry>(
       if (normalizedQuery && !entry.name.toLocaleLowerCase().includes(normalizedQuery)) {
         return false;
       }
-      return entry.isDirectory || filter === 'all' || getConversationFileCategory(entry.name) === filter;
+      return (
+        entry.isDirectory || filter === 'all' || getConversationFileCategory(entry.name) === filter
+      );
     })
     .sort((left, right) => {
       if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1;

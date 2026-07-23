@@ -1,6 +1,7 @@
 import {
   formatConversationFileSize,
   getConversationFileCategory,
+  getConversationFilesBrowseState,
   getSafeConversationFileName,
   getVisibleConversationFileEntries,
 } from '../../src/components/files/conversationFilesPresentation';
@@ -27,28 +28,21 @@ describe('conversation files presentation', () => {
   });
 
   it('filters the current folder while preserving directory navigation', () => {
-    expect(getVisibleConversationFileEntries(entries, '', 'images', 'name').map((entry) => entry.name)).toEqual([
-      'folder',
-      'photo.png',
-    ]);
-    expect(getVisibleConversationFileEntries(entries, 'app', 'all', 'name').map((entry) => entry.name)).toEqual([
-      'app.ts',
-    ]);
+    expect(
+      getVisibleConversationFileEntries(entries, '', 'images', 'name').map((entry) => entry.name),
+    ).toEqual(['folder', 'photo.png']);
+    expect(
+      getVisibleConversationFileEntries(entries, 'app', 'all', 'name').map((entry) => entry.name),
+    ).toEqual(['app.ts']);
   });
 
   it('sorts files by newest or name with folders first', () => {
-    expect(getVisibleConversationFileEntries(entries, '', 'all', 'recent').map((entry) => entry.name)).toEqual([
-      'folder',
-      'photo.png',
-      'app.ts',
-      'notes.pdf',
-    ]);
-    expect(getVisibleConversationFileEntries(entries, '', 'all', 'name').map((entry) => entry.name)).toEqual([
-      'folder',
-      'app.ts',
-      'notes.pdf',
-      'photo.png',
-    ]);
+    expect(
+      getVisibleConversationFileEntries(entries, '', 'all', 'recent').map((entry) => entry.name),
+    ).toEqual(['folder', 'photo.png', 'app.ts', 'notes.pdf']);
+    expect(
+      getVisibleConversationFileEntries(entries, '', 'all', 'name').map((entry) => entry.name),
+    ).toEqual(['folder', 'app.ts', 'notes.pdf', 'photo.png']);
   });
 
   it('formats sizes and redacts credential-shaped file names', () => {
@@ -57,5 +51,23 @@ describe('conversation files presentation', () => {
     expect(getSafeConversationFileName(`${credential}.txt`, 'Untitled item')).toBe(
       '[REDACTED].txt',
     );
+  });
+
+  it('sanitizes restored browsing state from navigation params', () => {
+    expect(
+      getConversationFilesBrowseState({
+        directoryPath: '../src//components',
+        scrollOffset: Number.POSITIVE_INFINITY,
+        searchQuery: `report\u0000${'x'.repeat(200)}`,
+        fileFilter: 'invalid',
+        fileSort: 'invalid',
+      }),
+    ).toEqual({
+      directoryPath: 'src/components',
+      scrollOffset: 0,
+      searchQuery: `report ${'x'.repeat(153)}`,
+      fileFilter: 'all',
+      fileSort: 'recent',
+    });
   });
 });

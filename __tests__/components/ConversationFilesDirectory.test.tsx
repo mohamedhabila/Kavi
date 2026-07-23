@@ -88,9 +88,13 @@ const defaultEntries: ConversationWorkspaceDirectoryEntry[] = [
 function DirectoryHarness({
   entries = defaultEntries,
   onRefresh = jest.fn(),
+  initialScrollOffset = 0,
+  onScrollOffsetChange = jest.fn(),
 }: {
   entries?: ConversationWorkspaceDirectoryEntry[];
   onRefresh?: jest.Mock;
+  initialScrollOffset?: number;
+  onScrollOffsetChange?: jest.Mock;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [fileFilter, setFileFilter] = useState<ConversationFileFilter>('all');
@@ -105,6 +109,7 @@ function DirectoryHarness({
       fileFilter={fileFilter}
       fileSort={fileSort}
       isRefreshing={false}
+      initialScrollOffset={initialScrollOffset}
       onClose={jest.fn()}
       onFileFilterChange={setFileFilter}
       onFileSortChange={setFileSort}
@@ -113,6 +118,7 @@ function DirectoryHarness({
       onOpenFile={jest.fn()}
       onRefresh={onRefresh}
       onSearchQueryChange={setSearchQuery}
+      onScrollOffsetChange={onScrollOffsetChange}
       onShareFile={jest.fn()}
       presentation="screen"
       searchQuery={searchQuery}
@@ -179,12 +185,28 @@ describe('ConversationFilesDirectory', () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it('restores and tracks the directory scroll position', () => {
+    const onScrollOffsetChange = jest.fn();
+    const { getByTestId } = render(
+      <DirectoryHarness initialScrollOffset={320} onScrollOffsetChange={onScrollOffsetChange} />,
+    );
+    const list = getByTestId('conversation-files-list');
+
+    expect(list.props.contentOffset).toEqual({ x: 0, y: 320 });
+    fireEvent.scroll(list, {
+      nativeEvent: {
+        contentOffset: { x: 0, y: 480 },
+        contentSize: { height: 1200, width: 320 },
+        layoutMeasurement: { height: 640, width: 320 },
+      },
+    });
+    expect(onScrollOffsetChange).toHaveBeenLastCalledWith(480);
+  });
+
   it('redacts credential-shaped names from visible and accessible controls', () => {
     const credential = ['gh', 'p_', 'C'.repeat(24)].join('');
     const { getByLabelText, getByTestId, getByText, queryByLabelText, queryByText } = render(
-      <DirectoryHarness
-        entries={[{ name: `${credential}.txt`, isDirectory: false }]}
-      />,
+      <DirectoryHarness entries={[{ name: `${credential}.txt`, isDirectory: false }]} />,
     );
 
     expect(getByText('[REDACTED].txt')).toBeTruthy();

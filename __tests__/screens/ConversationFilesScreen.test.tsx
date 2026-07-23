@@ -68,6 +68,19 @@ jest.mock('../../src/components/files/ConversationFiles', () => {
           <TouchableOpacity onPress={() => props.onOpenTextFile?.('README.md', '# readme')}>
             <Text>open-root-file</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() =>
+              props.onOpenTextFile?.('notes/report.md', '# report', undefined, {
+                directoryPath: 'notes',
+                scrollOffset: 420,
+                searchQuery: 'report',
+                fileFilter: 'documents',
+                fileSort: 'name',
+              })
+            }
+          >
+            <Text>open-restored-file</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => props.onClose?.()}>
             <Text>close-files</Text>
           </TouchableOpacity>
@@ -392,6 +405,45 @@ describe('ConversationFilesScreen', () => {
       returnToConversationFiles: {
         conversationId: 'conv-1',
         initialDirectoryPath: '',
+      },
+    });
+  });
+
+  it('carries the full browsing context through the editor return target', () => {
+    mockRouteParams = {
+      conversationId: 'conv-1',
+      initialDirectoryPath: 'notes',
+      initialScrollOffset: 420,
+      initialSearchQuery: 'report',
+      initialFileFilter: 'documents',
+      initialFileSort: 'name',
+    };
+
+    const { getByText } = render(<ConversationFilesScreen />);
+
+    expect(capturedConversationFilesProps).toEqual(
+      expect.objectContaining({
+        initialDirectoryPath: 'notes',
+        initialScrollOffset: 420,
+        initialSearchQuery: 'report',
+        initialFileFilter: 'documents',
+        initialFileSort: 'name',
+      }),
+    );
+    fireEvent.press(getByText('open-restored-file'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('CodeEditor', {
+      source: 'local',
+      conversationId: 'conv-1',
+      filePath: 'notes/report.md',
+      content: '# report',
+      returnToConversationFiles: {
+        conversationId: 'conv-1',
+        initialDirectoryPath: 'notes',
+        initialScrollOffset: 420,
+        initialSearchQuery: 'report',
+        initialFileFilter: 'documents',
+        initialFileSort: 'name',
       },
     });
   });

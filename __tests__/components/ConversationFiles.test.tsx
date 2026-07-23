@@ -1,7 +1,3 @@
-// ---------------------------------------------------------------------------
-// Tests for ConversationFiles component
-// ---------------------------------------------------------------------------
-
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
@@ -16,6 +12,13 @@ type MockDirectoryEntry = {
 const mockFileContentsByPath: Record<string, string | Uint8Array | Error> = {};
 const mockDirectoryEntriesByPath: Record<string, MockDirectoryEntry[]> = {};
 const mockDirectoryErrorsByPath: Record<string, Error> = {};
+const defaultBrowseState = {
+  directoryPath: '',
+  scrollOffset: 0,
+  searchQuery: '',
+  fileFilter: 'all',
+  fileSort: 'recent',
+};
 
 function mockNormalizeBasePath(value: unknown): string {
   if (typeof value === 'string') {
@@ -358,7 +361,7 @@ describe('ConversationFiles', () => {
 
   it('delegates text files to the editor callback when provided', async () => {
     const onOpenTextFile = jest.fn();
-    const { findByText, getByText, queryByText } = render(
+    const { findByText, getByTestId, getByText, queryByText } = render(
       <ConversationFiles
         visible={true}
         onClose={jest.fn()}
@@ -368,6 +371,7 @@ describe('ConversationFiles', () => {
     );
 
     await findByText('index.ts');
+    fireEvent.changeText(getByTestId('conversation-files-search'), 'index');
     fireEvent.press(getByText('index.ts'));
 
     await waitFor(() => {
@@ -375,6 +379,7 @@ describe('ConversationFiles', () => {
         'index.ts',
         'console.log("hello world");',
         'conv1',
+        { ...defaultBrowseState, searchQuery: 'index' },
       );
     });
     expect(queryByText('console.log("hello world");')).toBeNull();
@@ -406,6 +411,7 @@ describe('ConversationFiles', () => {
         'skills/prompt-skill/SKILL.md',
         'Always be helpful.',
         'session-1',
+        { ...defaultBrowseState, directoryPath: 'skills/prompt-skill' },
       );
     });
   });
@@ -652,7 +658,12 @@ describe('ConversationFiles', () => {
     );
 
     await waitFor(() => {
-      expect(onOpenTextFile).toHaveBeenCalledWith('README.md', '# readme', 'conv1');
+      expect(onOpenTextFile).toHaveBeenCalledWith(
+        'README.md',
+        '# readme',
+        'conv1',
+        defaultBrowseState,
+      );
     });
   });
 

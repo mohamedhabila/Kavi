@@ -37,6 +37,11 @@ import {
 } from '../services/conversationWorkspace/files';
 import { useBackToChat } from '../navigation/useBackToChat';
 import type { SshTargetConfig, WorkspaceTargetConfig } from '../types/remote';
+import {
+  getConversationFilesBrowseState,
+  type ConversationFileFilter,
+  type ConversationFileSort,
+} from '../components/files/conversationFilesPresentation';
 
 type EditorRouteParams = {
   CodeEditor: {
@@ -53,6 +58,10 @@ type EditorRouteParams = {
       conversationId?: string;
       initialFilePath?: string;
       initialDirectoryPath?: string;
+      initialScrollOffset?: number;
+      initialSearchQuery?: string;
+      initialFileFilter?: ConversationFileFilter;
+      initialFileSort?: ConversationFileSort;
     };
   };
 };
@@ -89,12 +98,28 @@ export const CodeEditorScreen: React.FC = () => {
       return null;
     }
 
+    const browseState = getConversationFilesBrowseState({
+      directoryPath: target.initialDirectoryPath,
+      scrollOffset: target.initialScrollOffset,
+      searchQuery: target.initialSearchQuery,
+      fileFilter: target.initialFileFilter,
+      fileSort: target.initialFileSort,
+    });
+
     return {
       conversationId,
       initialFilePath:
         typeof target.initialFilePath === 'string' ? target.initialFilePath : undefined,
       initialDirectoryPath:
-        typeof target.initialDirectoryPath === 'string' ? target.initialDirectoryPath : undefined,
+        typeof target.initialDirectoryPath === 'string' ? browseState.directoryPath : undefined,
+      initialScrollOffset:
+        typeof target.initialScrollOffset === 'number' ? browseState.scrollOffset : undefined,
+      initialSearchQuery:
+        typeof target.initialSearchQuery === 'string' ? browseState.searchQuery : undefined,
+      initialFileFilter:
+        typeof target.initialFileFilter === 'string' ? browseState.fileFilter : undefined,
+      initialFileSort:
+        typeof target.initialFileSort === 'string' ? browseState.fileSort : undefined,
     };
   }, [params.returnToConversationFiles]);
   const conversationWorkspaceId =

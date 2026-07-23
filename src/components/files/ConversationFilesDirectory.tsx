@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -48,6 +48,7 @@ interface ConversationFilesDirectoryProps {
   fileFilter: ConversationFileFilter;
   fileSort: ConversationFileSort;
   isRefreshing: boolean;
+  initialScrollOffset: number;
   onClose: () => void;
   onFileFilterChange: (filter: ConversationFileFilter) => void;
   onFileSortChange: (sort: ConversationFileSort) => void;
@@ -56,6 +57,7 @@ interface ConversationFilesDirectoryProps {
   onOpenFile: (name: string) => void;
   onRefresh: () => void;
   onSearchQueryChange: (query: string) => void;
+  onScrollOffsetChange: (offset: number) => void;
   onShareFile: (filePath: string, displayName: string) => void;
   presentation: 'modal' | 'screen';
   searchQuery: string;
@@ -63,14 +65,7 @@ interface ConversationFilesDirectoryProps {
   workspaceLabel?: string;
 }
 
-const FILTERS: ConversationFileFilter[] = [
-  'all',
-  'documents',
-  'images',
-  'audio',
-  'code',
-  'other',
-];
+const FILTERS: ConversationFileFilter[] = ['all', 'documents', 'images', 'audio', 'code', 'other'];
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -100,6 +95,7 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
   fileFilter,
   fileSort,
   isRefreshing,
+  initialScrollOffset,
   onClose,
   onFileFilterChange,
   onFileSortChange,
@@ -108,6 +104,7 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
   onOpenFile,
   onRefresh,
   onSearchQueryChange,
+  onScrollOffsetChange,
   onShareFile,
   presentation,
   searchQuery,
@@ -115,6 +112,8 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
   workspaceLabel,
 }) => {
   const { locale, t } = useTranslation();
+  const listRef = useRef<FlatList<ConversationWorkspaceDirectoryEntry>>(null);
+  const pendingScrollRestorationRef = useRef(true);
   const visibleEntries = useMemo(
     () => getVisibleConversationFileEntries(entries, searchQuery, fileFilter, fileSort),
     [entries, fileFilter, fileSort, searchQuery],
@@ -128,6 +127,27 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
     : presentation === 'screen'
       ? t('common.back')
       : t('common.close');
+
+  useEffect(() => {
+    pendingScrollRestorationRef.current = true;
+  }, [currentPath, initialScrollOffset]);
+
+  const restoreScrollOffset = useCallback(() => {
+    if (directoryStatus !== 'ready' || !pendingScrollRestorationRef.current) {
+      return;
+    }
+
+    pendingScrollRestorationRef.current = false;
+    if (initialScrollOffset <= 0) {
+      return;
+    }
+
+    listRef.current?.scrollToOffset({ animated: false, offset: initialScrollOffset });
+  }, [directoryStatus, initialScrollOffset]);
+
+  useEffect(() => {
+    restoreScrollOffset();
+  }, [restoreScrollOffset, visibleEntries.length]);
 
   return (
     <View style={styles.flex}>
@@ -156,7 +176,10 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
           ) : workspaceLabel ? (
             <Text style={styles.headerSubtitle} numberOfLines={1}>
               {t('conversationFiles.sharedFromConversation', {
-                title: getSafeConversationFileName(workspaceLabel, t('conversationFiles.untitledItem')),
+                title: getSafeConversationFileName(
+                  workspaceLabel,
+                  t('conversationFiles.untitledItem'),
+                ),
               })}
             </Text>
           ) : null}
@@ -232,10 +255,7 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
                   testID={`conversation-files-filter-${filter}`}
                 >
                   <Text
-                    style={[
-                      styles.filterChipText,
-                      selected ? styles.filterChipTextSelected : null,
-                    ]}
+                    style={[styles.filterChipText, selected ? styles.filterChipTextSelected : null]}
                   >
                     {label}
                   </Text>
@@ -262,13 +282,21 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
       </View>
 
       <FlatList
+        ref={listRef}
+        testID="conversation-files-list"
         contentContainerStyle={styles.listContent}
+        contentOffset={{ x: 0, y: initialScrollOffset }}
         data={directoryStatus === 'ready' ? visibleEntries : []}
         initialNumToRender={20}
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         keyboardShouldPersistTaps="handled"
         keyExtractor={(item) => item.name}
         maxToRenderPerBatch={16}
+        onContentSizeChange={restoreScrollOffset}
+        onScroll={(event) => {
+          const offset = event.nativeEvent.contentOffset.y;
+          onScrollOffsetChange(Number.isFinite(offset) && offset > 0 ? offset : 0);
+        }}
         refreshControl={
           <RefreshControl
             colors={[colors.primary]}
@@ -278,6 +306,7 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
           />
         }
         removeClippedSubviews={Platform.OS === 'android'}
+        scrollEventThrottle={16}
         renderItem={({ item }) => {
           const filePath = currentPath ? `${currentPath}/${item.name}` : item.name;
           const displayName = getSafeConversationFileName(
@@ -302,7 +331,9 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
                     : t('conversationFiles.openFileLabel', { name: displayName })
                 }
                 accessibilityRole="button"
-                onPress={() => (item.isDirectory ? onNavigateInto(item.name) : onOpenFile(item.name))}
+                onPress={() =>
+                  item.isDirectory ? onNavigateInto(item.name) : onOpenFile(item.name)
+                }
                 style={styles.fileRowMain}
               >
                 {item.isDirectory ? (

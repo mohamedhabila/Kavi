@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { ConversationFiles } from '../components/files/ConversationFiles';
+import type {
+  ConversationFileFilter,
+  ConversationFileSort,
+  ConversationFilesBrowseState,
+} from '../components/files/conversationFilesPresentation';
 import { onSubAgentEvent, listActiveSubAgents } from '../services/agents/subAgent';
 import { resolveOwningConversationId } from '../services/agents/lifecycle/stateMachine';
 import { resolveConversationWorkspaceReadScope } from '../services/conversationWorkspace/fallbacks';
@@ -14,6 +19,10 @@ type ConversationFilesRouteParams = {
     conversationId?: string | null;
     initialFilePath?: string | null;
     initialDirectoryPath?: string | null;
+    initialScrollOffset?: number | null;
+    initialSearchQuery?: string | null;
+    initialFileFilter?: ConversationFileFilter | null;
+    initialFileSort?: ConversationFileSort | null;
   };
 };
 
@@ -118,22 +127,37 @@ export const ConversationFilesScreen: React.FC = () => {
   const refreshToken = `${conversation?.updatedAt ?? 0}${workspaceOwnerRefreshToken}:${workspaceRefreshVersion}`;
 
   const handleOpenTextFile = useCallback(
-    (filePath: string, content: string, sourceConversationId?: string) => {
+    (
+      filePath: string,
+      content: string,
+      sourceConversationId?: string,
+      browseState?: ConversationFilesBrowseState,
+    ) => {
       const editorConversationId =
         sourceConversationId?.trim() || workspaceScope.workspaceConversationId;
       if (!conversationId || !editorConversationId) {
         return;
       }
 
+      const returnToConversationFiles = {
+        conversationId,
+        initialDirectoryPath: browseState?.directoryPath ?? getParentWorkspacePath(filePath),
+        ...(browseState
+          ? {
+              initialScrollOffset: browseState.scrollOffset,
+              initialSearchQuery: browseState.searchQuery,
+              initialFileFilter: browseState.fileFilter,
+              initialFileSort: browseState.fileSort,
+            }
+          : {}),
+      };
+
       navigation.navigate('CodeEditor' as any, {
         source: 'local',
         conversationId: editorConversationId,
         filePath,
         content,
-        returnToConversationFiles: {
-          conversationId,
-          initialDirectoryPath: getParentWorkspacePath(filePath),
-        },
+        returnToConversationFiles,
       });
     },
     [conversationId, navigation, workspaceScope.workspaceConversationId],
@@ -152,6 +176,10 @@ export const ConversationFilesScreen: React.FC = () => {
       refreshToken={refreshToken}
       initialFilePath={params.initialFilePath}
       initialDirectoryPath={params.initialDirectoryPath}
+      initialScrollOffset={params.initialScrollOffset}
+      initialSearchQuery={params.initialSearchQuery}
+      initialFileFilter={params.initialFileFilter}
+      initialFileSort={params.initialFileSort}
       onOpenTextFile={handleOpenTextFile}
     />
   );
