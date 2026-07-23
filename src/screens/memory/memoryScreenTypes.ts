@@ -5,7 +5,7 @@ import type { MemoryOverviewSnapshot } from '../../services/memory/memoryOvervie
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { createMemoryScreenStyles } from './memoryScreenStyles';
 
-export type MemoryTab = 'overview' | 'facts';
+export type MemoryTab = 'overview' | 'facts' | 'advanced';
 export type MemoryFactRow = MemoryFactManagementQueryResult['facts'][number];
 export type MemoryEpisodeRow = MemoryEpisode;
 export type MemoryScreenStyles = ReturnType<typeof createMemoryScreenStyles>;

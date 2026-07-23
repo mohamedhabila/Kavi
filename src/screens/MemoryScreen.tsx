@@ -35,6 +35,7 @@ import { useBackToChat } from '../navigation/useBackToChat';
 
 function resolveRouteTab(tabParam: unknown): Tab {
   if (tabParam === 'facts') return 'facts';
+  if (tabParam === 'advanced') return 'advanced';
   return 'overview';
 }
 
@@ -50,6 +51,9 @@ export const MemoryScreen: React.FC = () => {
   const [tab, setTab] = useState<Tab>(routeTab);
   const [overview, setOverview] = useState<MemoryOverview | null>(null);
   const [diagnostics, setDiagnostics] = useState<MemoryDiagnostics | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState(false);
+  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const [overviewSearch, setOverviewSearch] = useState(routeQuery);
   const [overviewFacts, setOverviewFacts] = useState<FactRow[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -62,6 +66,12 @@ export const MemoryScreen: React.FC = () => {
   const [episodes, setEpisodes] = useState<MemoryEpisode[]>([]);
 
   const overviewRequestEpochRef = useRef(0);
+  const diagnosticsRequestEpochRef = useRef(0);
+  const diagnosticsExpandedRef = useRef(false);
+
+  useEffect(() => {
+    diagnosticsExpandedRef.current = diagnosticsExpanded;
+  }, [diagnosticsExpanded]);
 
   useEffect(() => {
     if (!route.params?.tab && !routeQuery) return;
@@ -111,23 +121,39 @@ export const MemoryScreen: React.FC = () => {
   const loadOverviewSnapshot = useCallback(async () => {
     const requestEpoch = overviewRequestEpochRef.current + 1;
     overviewRequestEpochRef.current = requestEpoch;
-    const threadId = useChatStore.getState().activeConversationId;
     try {
-      setOverview(loadMemoryOverviewSnapshot({ recentFactLimit: 8 }));
+      const snapshot = loadMemoryOverviewSnapshot({ recentFactLimit: 8 });
+      if (overviewRequestEpochRef.current === requestEpoch) setOverview(snapshot);
+    } catch {
+      if (overviewRequestEpochRef.current === requestEpoch) setOverview(null);
+    }
+  }, []);
+
+  const loadDiagnostics = useCallback(async () => {
+    const requestEpoch = diagnosticsRequestEpochRef.current + 1;
+    diagnosticsRequestEpochRef.current = requestEpoch;
+    const threadId = useChatStore.getState().activeConversationId;
+    setDiagnosticsLoading(true);
+    setDiagnosticsError(false);
+    try {
       const snapshot = await loadMemoryDiagnosticsSnapshot({ threadId });
       if (
-        overviewRequestEpochRef.current === requestEpoch &&
+        diagnosticsRequestEpochRef.current === requestEpoch &&
         useChatStore.getState().activeConversationId === threadId
       ) {
         setDiagnostics(snapshot);
       }
     } catch {
-      setOverview(null);
       if (
-        overviewRequestEpochRef.current === requestEpoch &&
+        diagnosticsRequestEpochRef.current === requestEpoch &&
         useChatStore.getState().activeConversationId === threadId
       ) {
         setDiagnostics(null);
+        setDiagnosticsError(true);
+      }
+    } finally {
+      if (diagnosticsRequestEpochRef.current === requestEpoch) {
+        setDiagnosticsLoading(false);
       }
     }
   }, []);
@@ -144,6 +170,11 @@ export const MemoryScreen: React.FC = () => {
     }
   }, [loadOverviewSnapshot, loadFacts, loadEpisodes]);
 
+  const refreshVisibleMemory = useCallback(async () => {
+    await refreshMemory();
+    if (diagnosticsExpandedRef.current) await loadDiagnostics();
+  }, [loadDiagnostics, refreshMemory]);
+
   useEffect(() => {
     if (tab !== 'overview') return;
     void loadOverviewSnapshot();
@@ -156,9 +187,9 @@ export const MemoryScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshMemory();
+      void refreshVisibleMemory();
       return undefined;
-    }, [refreshMemory]),
+    }, [refreshVisibleMemory]),
   );
 
   useEffect(() => {
@@ -169,11 +200,12 @@ export const MemoryScreen: React.FC = () => {
       }
       loadFacts();
       loadEpisodes();
+      if (diagnosticsExpandedRef.current) void loadDiagnostics();
       setLastSyncedAt(event.updatedAt);
     });
 
     return unsubscribe;
-  }, [loadOverviewSnapshot, loadOverviewFacts, loadFacts, loadEpisodes, tab, overviewSearch]);
+  }, [loadDiagnostics, loadOverviewSnapshot, loadOverviewFacts, loadFacts, loadEpisodes, tab, overviewSearch]);
 
   const handleClearAll = useCallback(() => {
     Alert.alert(t('memory.clearTitle'), t('memory.clearConfirm'), [
@@ -183,12 +215,21 @@ export const MemoryScreen: React.FC = () => {
         style: 'destructive',
         onPress: () => {
           resetCanonicalMemoryForManagement();
-          void refreshMemory();
+          void refreshVisibleMemory();
           setLastSyncedAt(Date.now());
         },
       },
     ]);
-  }, [refreshMemory, t]);
+  }, [refreshVisibleMemory, t]);
+
+  const handleToggleDiagnostics = useCallback(() => {
+    if (diagnosticsExpanded) {
+      setDiagnosticsExpanded(false);
+      return;
+    }
+    setDiagnosticsExpanded(true);
+    void loadDiagnostics();
+  }, [diagnosticsExpanded, loadDiagnostics]);
 
   // Re-query when facts filter / pinned toggle changes.
   useEffect(() => {
@@ -244,6 +285,9 @@ export const MemoryScreen: React.FC = () => {
     <MemoryScreenView
       colors={colors}
       diagnostics={diagnostics}
+      diagnosticsError={diagnosticsError}
+      diagnosticsExpanded={diagnosticsExpanded}
+      diagnosticsLoading={diagnosticsLoading}
       episodes={episodes}
       facts={facts}
       factsFilter={factsFilter}
@@ -255,10 +299,11 @@ export const MemoryScreen: React.FC = () => {
       loadFacts={loadFacts}
       loadOverviewFacts={loadOverviewFacts}
       memoryStatus={memoryStatus}
+      onToggleDiagnostics={handleToggleDiagnostics}
       overview={overview}
       overviewFacts={overviewFacts}
       overviewSearch={overviewSearch}
-      refreshMemory={refreshMemory}
+      refreshMemory={refreshVisibleMemory}
       setFactsFilter={setFactsFilter}
       setFactsPinnedOnly={setFactsPinnedOnly}
       setOverviewSearch={setOverviewSearch}

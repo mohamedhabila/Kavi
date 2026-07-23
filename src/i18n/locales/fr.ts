@@ -838,9 +838,17 @@ export const fr: TranslationMap = mergeTranslations(en, {
     overviewTaskEmpty: 'Aucun segment de tâche actif.',
     overviewRecentFactsTitle: 'Faits récents',
     overviewSearchPlaceholder: 'Rechercher dans la mémoire…',
-    overviewConsolidationTitle: 'Consolidation',
     overviewLoading: 'Chargement de l’aperçu mémoire…',
     factsTab: 'Faits',
+    advancedTab: 'Avancé',
+    advancedStatusTitle: 'État de la mémoire',
+    diagnosticsHint:
+      'Détails techniques sur la récupération, le contexte et l’indexation, masqués des vues courantes.',
+    showDiagnostics: 'Afficher les diagnostics mémoire',
+    hideDiagnostics: 'Masquer les diagnostics mémoire',
+    diagnosticsLoading: 'Chargement des diagnostics…',
+    diagnosticsUnavailable: 'Impossible de charger les diagnostics. Actualisez et réessayez.',
+    privacyTitle: 'Confidentialité et suppression',
     clearTitle: 'Effacer toute la mémoire',
     clearConfirm:
       'Cela supprimera définitivement tous les faits, épisodes et tâches enregistrés. Cette action est irréversible.',

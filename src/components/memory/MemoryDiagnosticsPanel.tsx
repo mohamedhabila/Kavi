@@ -10,6 +10,7 @@ import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 
 interface MemoryDiagnosticsPanelProps {
   diagnostics: MemoryDiagnosticsSnapshot;
+  showTitle?: boolean;
 }
 
 function createStyles(colors: AppPalette) {
@@ -49,14 +50,17 @@ function createStyles(colors: AppPalette) {
   });
 }
 
-export const MemoryDiagnosticsPanel: React.FC<MemoryDiagnosticsPanelProps> = ({ diagnostics }) => {
+export const MemoryDiagnosticsPanel: React.FC<MemoryDiagnosticsPanelProps> = ({
+  diagnostics,
+  showTitle = true,
+}) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <View style={styles.container} testID="memory-diagnostics-panel">
-      <Text style={styles.sectionTitle}>{t('memory.diagnosticsTitle')}</Text>
+      {showTitle ? <Text style={styles.sectionTitle}>{t('memory.diagnosticsTitle')}</Text> : null}
 
       {diagnostics.localSimilarity ? (
         <View style={styles.row} testID="memory-diagnostics-local-similarity">

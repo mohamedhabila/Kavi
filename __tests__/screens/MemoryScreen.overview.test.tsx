@@ -194,8 +194,8 @@ describe('MemoryScreen overview tab', () => {
     });
   });
 
-  it('opens overview by default and seeds search from sidebar query', async () => {
-    const { getByTestId, getByDisplayValue } = render(<MemoryScreen />);
+  it('opens overview by default without loading or exposing diagnostics', async () => {
+    const { getByTestId, getByDisplayValue, queryByTestId } = render(<MemoryScreen />);
 
     await waitFor(() => {
       expect(getByTestId('memory-overview-tab-panel')).toBeTruthy();
@@ -207,11 +207,30 @@ describe('MemoryScreen overview tab', () => {
     );
     expect(getByTestId('memory-overview-focus').props.children).toContain('Release hardening');
     expect(getByTestId('memory-overview-task').props.children).toContain('Ship Android build');
-    expect(getByTestId('memory-overview-ingestion-pending')).toBeTruthy();
+    expect(queryByTestId('memory-diagnostics-panel')).toBeNull();
+    expect(queryByTestId('memory-overview-ingestion-pending')).toBeNull();
+    expect(mockLoadDiagnostics).not.toHaveBeenCalled();
+  });
+
+  it('keeps diagnostics collapsed in Advanced and loads them only on request', async () => {
+    const { getByTestId, queryByTestId } = render(<MemoryScreen />);
+
+    fireEvent.press(getByTestId('memory-advanced-tab'));
+
+    expect(getByTestId('memory-advanced-tab-panel')).toBeTruthy();
+    expect(getByTestId('memory-advanced-consolidation')).toBeTruthy();
+    expect(getByTestId('memory-advanced-ingestion-pending')).toBeTruthy();
+    expect(queryByTestId('memory-diagnostics-panel')).toBeNull();
+    expect(mockLoadDiagnostics).not.toHaveBeenCalled();
+
+    fireEvent.press(getByTestId('memory-diagnostics-toggle'));
+
+    await waitFor(() => {
+      expect(getByTestId('memory-diagnostics-panel')).toBeTruthy();
+    });
     expect(mockLoadDiagnostics).toHaveBeenCalledWith(
       expect.objectContaining({ threadId: 'conv-overview' }),
     );
-    expect(getByTestId('memory-diagnostics-panel')).toBeTruthy();
     expect(getByTestId('memory-diagnostics-budget-1')).toBeTruthy();
     expect(getByTestId('memory-diagnostics-retrieval-rl-1')).toBeTruthy();
   });
@@ -232,9 +251,10 @@ describe('MemoryScreen overview tab', () => {
 
   it('clears canonical memory only after destructive confirmation', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert');
-    const { getByLabelText } = render(<MemoryScreen />);
+    const { getByTestId } = render(<MemoryScreen />);
 
-    fireEvent.press(getByLabelText('Clear All'));
+    fireEvent.press(getByTestId('memory-advanced-tab'));
+    fireEvent.press(getByTestId('memory-clear-all'));
     const destructiveAction = alertSpy.mock.calls[0]?.[2]?.find(
       (action) => action.style === 'destructive',
     );
@@ -256,6 +276,8 @@ describe('MemoryScreen overview tab', () => {
         : Promise.resolve(diagnosticsSnapshot('conv-b', 'rl-b')),
     );
     const { getByTestId, queryByTestId } = render(<MemoryScreen />);
+    fireEvent.press(getByTestId('memory-advanced-tab'));
+    fireEvent.press(getByTestId('memory-diagnostics-toggle'));
     await waitFor(() => {
       expect(mockLoadDiagnostics).toHaveBeenCalledWith({ threadId: 'conv-a' });
     });
@@ -275,5 +297,22 @@ describe('MemoryScreen overview tab', () => {
 
     expect(getByTestId('memory-diagnostics-retrieval-rl-b')).toBeTruthy();
     expect(queryByTestId('memory-diagnostics-retrieval-rl-a')).toBeNull();
+  });
+
+  it('keeps the everyday overview available when diagnostics fail', async () => {
+    mockLoadDiagnostics.mockRejectedValueOnce(new Error('diagnostics unavailable'));
+    const { getByTestId, getByText } = render(<MemoryScreen />);
+
+    fireEvent.press(getByTestId('memory-advanced-tab'));
+    fireEvent.press(getByTestId('memory-diagnostics-toggle'));
+
+    await waitFor(() => {
+      expect(
+        getByText('Diagnostics could not be loaded. Refresh and try again.'),
+      ).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('memory-overview-tab'));
+    expect(getByTestId('memory-overview-focus').props.children).toContain('Release hardening');
   });
 });

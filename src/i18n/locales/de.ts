@@ -841,9 +841,17 @@ export const de: TranslationMap = mergeTranslations(en, {
     overviewTaskEmpty: 'Kein aktives Aufgabensegment.',
     overviewRecentFactsTitle: 'Aktuelle Fakten',
     overviewSearchPlaceholder: 'Speicher durchsuchen…',
-    overviewConsolidationTitle: 'Konsolidierung',
     overviewLoading: 'Speicherübersicht wird geladen…',
     factsTab: 'Fakten',
+    advancedTab: 'Erweitert',
+    advancedStatusTitle: 'Speicherstatus',
+    diagnosticsHint:
+      'Technische Details zu Abruf, Kontext und Indizierung. In normalen Speicheransichten ausgeblendet.',
+    showDiagnostics: 'Speicherdiagnose anzeigen',
+    hideDiagnostics: 'Speicherdiagnose ausblenden',
+    diagnosticsLoading: 'Diagnose wird geladen…',
+    diagnosticsUnavailable: 'Die Diagnose konnte nicht geladen werden. Aktualisieren Sie erneut.',
+    privacyTitle: 'Datenschutz & Löschen',
     clearTitle: 'Gesamten Speicher löschen',
     clearConfirm:
       'Dadurch werden alle gespeicherten Fakten, Episoden und Aufgaben dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.',

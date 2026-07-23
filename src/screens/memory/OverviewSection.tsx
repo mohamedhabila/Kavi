@@ -1,10 +1,7 @@
 import React from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 
-import { MemoryDiagnosticsPanel } from '../../components/memory/MemoryDiagnosticsPanel';
-import { consolidationTierLabel } from './consolidationStatusLabel';
 import type {
-  MemoryDiagnostics,
   MemoryFactRow,
   MemoryOverview,
   MemoryScreenPalette,
@@ -14,9 +11,7 @@ import type {
 
 type OverviewSectionProps = {
   colors: MemoryScreenPalette;
-  diagnostics: MemoryDiagnostics | null;
   loadOverviewFacts: (query: string) => void;
-  memoryStatus: string;
   overview: MemoryOverview | null;
   overviewFacts: MemoryFactRow[];
   overviewSearch: string;
@@ -27,9 +22,7 @@ type OverviewSectionProps = {
 
 export function OverviewSection({
   colors,
-  diagnostics,
   loadOverviewFacts,
-  memoryStatus,
   overview,
   overviewFacts,
   overviewSearch,
@@ -39,22 +32,8 @@ export function OverviewSection({
 }: OverviewSectionProps) {
   return (
     <View style={styles.editorContainer} testID="memory-overview-tab-panel">
-      <Text style={styles.statusLine}>{memoryStatus}</Text>
       {overview ? (
         <>
-          <Text style={styles.overviewSectionTitle}>{t('memory.overviewConsolidationTitle')}</Text>
-          <Text style={styles.overviewBody} testID="memory-overview-consolidation">
-            {consolidationTierLabel(overview.consolidation, t)}
-            {overview.consolidation.isFallback && !overview.consolidation.memoryDisabled
-              ? ` · ${t('memory.consolidationFallbackActive')}`
-              : ''}
-          </Text>
-          {overview.pendingIngestionJobs > 0 ? (
-            <Text style={styles.statusLine} testID="memory-overview-ingestion-pending">
-              {t('memory.ingestionPendingJobs', { count: overview.pendingIngestionJobs })}
-            </Text>
-          ) : null}
-
           <Text style={styles.overviewSectionTitle}>{t('memory.overviewFocusTitle')}</Text>
           <Text style={styles.overviewBody} testID="memory-overview-focus">
             {overview.focus?.content?.trim() || t('memory.overviewFocusEmpty')}
@@ -64,8 +43,6 @@ export function OverviewSection({
           <Text style={styles.overviewBody} testID="memory-overview-task">
             {overview.activeTask?.title?.trim() || t('memory.overviewTaskEmpty')}
           </Text>
-
-          {diagnostics ? <MemoryDiagnosticsPanel diagnostics={diagnostics} /> : null}
 
           <TextInput
             style={styles.factsSearch}

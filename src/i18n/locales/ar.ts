@@ -814,9 +814,17 @@ export const ar: TranslationMap = mergeTranslations(en, {
     overviewTaskEmpty: 'لا يوجد مقطع مهمة نشط.',
     overviewRecentFactsTitle: 'حقائق حديثة',
     overviewSearchPlaceholder: 'ابحث في الذاكرة…',
-    overviewConsolidationTitle: 'التوطيد',
     overviewLoading: 'جارٍ تحميل نظرة الذاكرة…',
     factsTab: 'حقائق',
+    advancedTab: 'متقدم',
+    advancedStatusTitle: 'حالة الذاكرة',
+    diagnosticsHint:
+      'تفاصيل تقنية عن الاسترجاع والسياق والفهرسة، مخفية عن عروض الذاكرة اليومية.',
+    showDiagnostics: 'عرض تشخيصات الذاكرة',
+    hideDiagnostics: 'إخفاء تشخيصات الذاكرة',
+    diagnosticsLoading: 'جارٍ تحميل التشخيصات…',
+    diagnosticsUnavailable: 'تعذر تحميل التشخيصات. حدّث الصفحة وحاول مجددًا.',
+    privacyTitle: 'الخصوصية والحذف',
     clearTitle: 'مسح كل الذاكرة',
     clearConfirm:
       'سيؤدي هذا إلى حذف جميع الحقائق والتجارب والمهام المحفوظة نهائيًا. لا يمكن التراجع عن ذلك.',

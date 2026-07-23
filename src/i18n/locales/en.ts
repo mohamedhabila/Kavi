@@ -841,9 +841,17 @@ export const en: TranslationMap = {
     overviewTaskEmpty: 'No active task segment.',
     overviewRecentFactsTitle: 'Recent facts',
     overviewSearchPlaceholder: 'Search memory…',
-    overviewConsolidationTitle: 'Consolidation',
     overviewLoading: 'Loading memory overview…',
     factsTab: 'Facts',
+    advancedTab: 'Advanced',
+    advancedStatusTitle: 'Memory status',
+    diagnosticsHint:
+      'Technical retrieval, context, and indexing details. Hidden from everyday memory views.',
+    showDiagnostics: 'Show memory diagnostics',
+    hideDiagnostics: 'Hide memory diagnostics',
+    diagnosticsLoading: 'Loading diagnostics…',
+    diagnosticsUnavailable: 'Diagnostics could not be loaded. Refresh and try again.',
+    privacyTitle: 'Privacy & deletion',
     clearTitle: 'Clear All Memory',
     clearConfirm:
       'This permanently deletes all remembered facts, episodes, and tasks. This cannot be undone.',
