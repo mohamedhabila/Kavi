@@ -28,6 +28,7 @@ const EVENT_ID = 'retrieval_event_m123_1_abc';
 function renderCallbacks(params?: {
   completionStatus?: 'complete' | 'incomplete';
   discardSideThread?: jest.Mock;
+  navigate?: jest.Mock;
 }) {
   const assistantMessage = makeTestMessage(1, {
     id: 'assistant-exact',
@@ -53,7 +54,7 @@ function renderCallbacks(params?: {
       activeConversationId: side.id,
       conversations: [root, side],
       discardSideThread: params?.discardSideThread,
-      navigation: { navigate: jest.fn() },
+      navigation: { navigate: params?.navigate ?? jest.fn() },
       setChatError: jest.fn(),
       setEditingContent: jest.fn(),
       setEditingMessageId: jest.fn(),
@@ -157,6 +158,15 @@ describe('useChatScreenUiCallbacks', () => {
     } finally {
       alertSpy.mockRestore();
     }
+  });
+
+  it('opens Canvas directly from a completed canvas result', () => {
+    const navigate = jest.fn();
+    const { result } = renderCallbacks({ navigate });
+
+    act(() => result.current.handleViewCanvas());
+
+    expect(navigate).toHaveBeenCalledWith('Canvas');
   });
 
   it('shares side-thread artifacts from the canonical parent with the child as fallback', async () => {

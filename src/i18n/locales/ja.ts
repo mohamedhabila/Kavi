@@ -1375,6 +1375,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
     accessibilityLabel: '{name} ツール呼び出し、状態: {status}',
     viewFile: '{path} を表示',
     viewFileHint: '詳細表示を変えずにこの結果を開きます',
+    viewCanvas: 'キャンバスを表示',
+    viewCanvasHint: 'この操作で作成または更新されたキャンバスを開きます',
     expandDetailsHint: '入力、結果、技術的な詳細を表示',
     collapseDetailsHint: '入力、結果、技術的な詳細を非表示',
     technicalDetails: '技術的な詳細',

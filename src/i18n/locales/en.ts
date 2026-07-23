@@ -1407,6 +1407,8 @@ export const en: TranslationMap = {
     accessibilityLabel: '{name} tool call, status: {status}',
     viewFile: 'View {path}',
     viewFileHint: 'Opens this result without changing the details view',
+    viewCanvas: 'View canvas',
+    viewCanvasHint: 'Opens the canvas created or updated by this action',
     expandDetailsHint: 'Show inputs, result, and technical details',
     collapseDetailsHint: 'Hide inputs, result, and technical details',
     technicalDetails: 'Technical details',

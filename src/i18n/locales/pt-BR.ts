@@ -1395,6 +1395,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     accessibilityLabel: 'Chamada da ferramenta {name}, status: {status}',
     viewFile: 'Ver {path}',
     viewFileHint: 'Abre este resultado sem alterar a visualização dos detalhes',
+    viewCanvas: 'Ver tela',
+    viewCanvasHint: 'Abre a tela criada ou atualizada por esta ação',
     expandDetailsHint: 'Mostrar entradas, resultado e detalhes técnicos',
     collapseDetailsHint: 'Ocultar entradas, resultado e detalhes técnicos',
     technicalDetails: 'Detalhes técnicos',

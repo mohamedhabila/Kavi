@@ -61,7 +61,7 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
       fontSize: 10,
       color: colors.textSecondary,
     },
-    viewFileBtn: {
+    viewResultBtn: {
       minWidth: 64,
       minHeight: 48,
       flexDirection: 'row',
@@ -74,7 +74,7 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
       borderLeftColor: colors.border,
       backgroundColor: colors.primarySoft,
     },
-    viewFileBtnText: {
+    viewResultBtnText: {
       fontSize: 12,
       fontWeight: '600',
       color: colors.primary,

@@ -55,6 +55,7 @@ type ChatScreenConversationPaneProps = {
   handleStop: () => void;
   handleUserScrollEnd: () => void;
   handleUserScrollStart: () => void;
+  handleViewCanvas: () => void;
   handleViewFiles: (path?: string) => void;
   hiddenSourceMessageCount: number;
   interactionReleaseTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -112,6 +113,7 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     handleStop,
     handleUserScrollEnd,
     handleUserScrollStart,
+    handleViewCanvas,
     handleViewFiles,
     hiddenSourceMessageCount,
     hasProviderReady,
@@ -144,6 +146,7 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     handleMemoryFeedback,
     handleRetry,
     handleShareWorkspaceFile,
+    handleViewCanvas,
     handleViewFiles,
     personaSwitchMarkersByMessageId,
     styles,

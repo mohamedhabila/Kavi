@@ -25,6 +25,7 @@ interface MessageBubbleProps {
   responseSegments?: Array<DisplayResponseSegment & { isStreaming?: boolean }>;
   onEdit?: (id: string, content: string) => void;
   onRetry?: (messageId: string) => void;
+  onViewCanvas?: () => void;
   onViewFile?: (path: string) => void;
   onShareWorkspaceFile?: (attachment: Attachment) => void;
   onOpenSubAgentDetails?: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
@@ -50,6 +51,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
     responseSegments,
     onEdit,
     onRetry,
+    onViewCanvas,
     onViewFile,
     onShareWorkspaceFile,
     onOpenSubAgentDetails,
@@ -89,6 +91,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
           isStreaming={isStreaming}
           responseSegments={responseSegments}
           onRetry={onRetry}
+          onViewCanvas={onViewCanvas}
           onViewFile={onViewFile}
           onShareWorkspaceFile={onShareWorkspaceFile}
           onOpenSubAgentDetails={onOpenSubAgentDetails}

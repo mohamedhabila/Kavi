@@ -23,6 +23,7 @@ export { humanizeToolName, summarizeToolCall };
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall;
+  onViewCanvas?: () => void;
   onViewFile?: (path: string) => void;
 }
 
@@ -63,7 +64,16 @@ function getCompletedFileToolPath(
   }
 }
 
-const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, onViewFile }) => {
+function hasCompletedCanvasResult(toolName: string, toolStatus: ToolCall['status']): boolean {
+  if (toolStatus !== 'completed') return false;
+  return ['canvas_create', 'canvas_update', 'canvas_navigate', 'canvas_snapshot'].includes(toolName);
+}
+
+const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({
+  toolCall,
+  onViewCanvas,
+  onViewFile,
+}) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = createToolCallDisplayStyles(colors);
@@ -86,6 +96,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
     () => getCompletedFileToolPath(toolCall.name, toolCall.status, toolCall.arguments),
     [toolCall.name, toolCall.status, toolCall.arguments],
   );
+  const canViewCanvas = hasCompletedCanvasResult(toolCall.name, toolCall.status);
   const parsedPoll = useMemo(
     () => parseToolCallPoll(toolCall.name, toolCall.result),
     [toolCall.name, toolCall.result],
@@ -171,7 +182,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
         </TouchableOpacity>
         {fileToolPath && onViewFile ? (
           <TouchableOpacity
-            style={styles.viewFileBtn}
+            style={styles.viewResultBtn}
             onPress={() => onViewFile(fileToolPath)}
             accessibilityRole="button"
             accessibilityLabel={t('toolCall.viewFile', {
@@ -181,7 +192,19 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
             testID={`tool-call-view-file-${toolCall.id}`}
           >
             <Eye size={18} color={colors.primary} />
-            <Text style={styles.viewFileBtnText}>{t('common.view')}</Text>
+            <Text style={styles.viewResultBtnText}>{t('common.view')}</Text>
+          </TouchableOpacity>
+        ) : canViewCanvas && onViewCanvas ? (
+          <TouchableOpacity
+            style={styles.viewResultBtn}
+            onPress={onViewCanvas}
+            accessibilityRole="button"
+            accessibilityLabel={t('toolCall.viewCanvas')}
+            accessibilityHint={t('toolCall.viewCanvasHint')}
+            testID={`tool-call-view-canvas-${toolCall.id}`}
+          >
+            <Eye size={18} color={colors.primary} />
+            <Text style={styles.viewResultBtnText}>{t('common.view')}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -201,6 +224,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
 export const ToolCallDisplay = React.memo(
   ToolCallDisplayComponent,
   (previousProps, nextProps) =>
+    previousProps.onViewCanvas === nextProps.onViewCanvas &&
     previousProps.onViewFile === nextProps.onViewFile &&
     buildToolCallRenderSignature(previousProps.toolCall) ===
       buildToolCallRenderSignature(nextProps.toolCall),

@@ -39,6 +39,7 @@ interface AssistantBubbleProps {
   isStreaming?: boolean;
   responseSegments?: Array<DisplayResponseSegment & { isStreaming?: boolean }>;
   onRetry?: (messageId: string) => void;
+  onViewCanvas?: () => void;
   onViewFile?: (path: string) => void;
   onShareWorkspaceFile?: (attachment: Attachment) => void;
   onOpenSubAgentDetails?: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
@@ -63,6 +64,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
     isStreaming,
     responseSegments,
     onRetry,
+    onViewCanvas,
     onViewFile,
     onShareWorkspaceFile,
     onOpenSubAgentDetails,
@@ -161,7 +163,12 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
 
     const renderToolCalls = (toolCalls?: NonNullable<Message['toolCalls']>) =>
       toolCalls?.map((toolCall) => (
-        <ToolCallDisplay key={toolCall.id} toolCall={toolCall} onViewFile={onViewFile} />
+        <ToolCallDisplay
+          key={toolCall.id}
+          toolCall={toolCall}
+          onViewCanvas={onViewCanvas}
+          onViewFile={onViewFile}
+        />
       ));
 
     const renderContentSegment = (segment: AssistantBubbleSegment) => {

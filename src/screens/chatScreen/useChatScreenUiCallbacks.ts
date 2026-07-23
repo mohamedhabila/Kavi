@@ -52,6 +52,7 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
   handleShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
   handleShowEarlierMessages: () => void;
   handleToggleSideThread: () => void;
+  handleViewCanvas: () => void;
   handleViewFiles: (path?: string) => void;
 } {
   const {
@@ -94,6 +95,10 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     },
     [activeConversationId],
   );
+
+  const handleViewCanvas = useCallback(() => {
+    navigationRef.current.navigate('Canvas' as any);
+  }, []);
 
   const handleToggleSideThread = useCallback(() => {
     if (!activeConversation) {
@@ -238,6 +243,7 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     handleShareWorkspaceFile,
     handleShowEarlierMessages,
     handleToggleSideThread,
+    handleViewCanvas,
     handleViewFiles,
   };
 }

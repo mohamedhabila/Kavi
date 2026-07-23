@@ -1399,6 +1399,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
     accessibilityLabel: "Appel d'outil {name}, statut : {status}",
     viewFile: 'Voir {path}',
     viewFileHint: 'Ouvre ce résultat sans modifier la vue des détails',
+    viewCanvas: 'Voir le canevas',
+    viewCanvasHint: 'Ouvre le canevas créé ou mis à jour par cette action',
     expandDetailsHint: 'Afficher les entrées, le résultat et les détails techniques',
     collapseDetailsHint: 'Masquer les entrées, le résultat et les détails techniques',
     technicalDetails: 'Détails techniques',

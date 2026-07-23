@@ -567,6 +567,7 @@ export const ChatScreen: React.FC = () => {
     handleShareWorkspaceFile,
     handleShowEarlierMessages,
     handleToggleSideThread,
+    handleViewCanvas,
     handleViewFiles,
   } = useChatScreenUiCallbacks({
     activeConversation: activeConversation ?? undefined,
@@ -652,6 +653,7 @@ export const ChatScreen: React.FC = () => {
         handleStop={handleStop}
         handleUserScrollEnd={handleUserScrollEnd}
         handleUserScrollStart={handleUserScrollStart}
+        handleViewCanvas={handleViewCanvas}
         handleViewFiles={handleViewFiles}
         hiddenSourceMessageCount={hiddenSourceMessageCount}
         hasProviderReady={hasProviderReady}

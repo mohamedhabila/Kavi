@@ -24,6 +24,7 @@ type RenderMessageContext = {
   ) => Promise<MemoryRetrievalFeedbackChoice>;
   handleRetry: (messageId: string) => Promise<void>;
   handleShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
+  handleViewCanvas: () => void;
   handleViewFiles: (path?: string) => void;
   personaSwitchMarkersByMessageId: Map<string, PersonaSwitchMarker>;
   styles: ReturnType<typeof createStyles>;
@@ -61,6 +62,7 @@ export function useConversationMessageRenderItem(params: UseConversationMessageR
         onMemoryFeedback={renderContext.handleMemoryFeedback}
         onRetry={renderContext.handleRetry}
         onShareWorkspaceFile={renderContext.handleShareWorkspaceFile}
+        onViewCanvas={renderContext.handleViewCanvas}
         onViewFiles={renderContext.handleViewFiles}
         personaMarkerId={personaMarker?.id}
         personaMarkerText={personaMarkerText}

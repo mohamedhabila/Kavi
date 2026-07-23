@@ -1360,6 +1360,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
     accessibilityLabel: 'استدعاء الأداة {name}، الحالة: {status}',
     viewFile: 'عرض {path}',
     viewFileHint: 'يفتح هذه النتيجة دون تغيير عرض التفاصيل',
+    viewCanvas: 'عرض اللوحة',
+    viewCanvasHint: 'يفتح اللوحة التي أنشأها هذا الإجراء أو حدّثها',
     expandDetailsHint: 'إظهار المدخلات والنتيجة والتفاصيل التقنية',
     collapseDetailsHint: 'إخفاء المدخلات والنتيجة والتفاصيل التقنية',
     technicalDetails: 'التفاصيل التقنية',

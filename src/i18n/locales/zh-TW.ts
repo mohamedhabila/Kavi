@@ -1333,6 +1333,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     accessibilityLabel: '{name} 工具呼叫，狀態：{status}',
     viewFile: '檢視 {path}',
     viewFileHint: '開啟此結果且不改變詳細資料檢視',
+    viewCanvas: '檢視畫布',
+    viewCanvasHint: '開啟此操作建立或更新的畫布',
     expandDetailsHint: '顯示輸入、結果和技術詳細資料',
     collapseDetailsHint: '隱藏輸入、結果和技術詳細資料',
     technicalDetails: '技術詳細資料',

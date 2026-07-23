@@ -1407,6 +1407,8 @@ export const de: TranslationMap = mergeTranslations(en, {
     accessibilityLabel: 'Tool-Aufruf {name}, Status: {status}',
     viewFile: '{path} anzeigen',
     viewFileHint: 'Öffnet dieses Ergebnis, ohne die Detailansicht zu ändern',
+    viewCanvas: 'Canvas anzeigen',
+    viewCanvasHint: 'Öffnet den durch diese Aktion erstellten oder aktualisierten Canvas',
     expandDetailsHint: 'Eingaben, Ergebnis und technische Details anzeigen',
     collapseDetailsHint: 'Eingaben, Ergebnis und technische Details ausblenden',
     technicalDetails: 'Technische Details',

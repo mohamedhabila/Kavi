@@ -1335,6 +1335,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     accessibilityLabel: '{name} 工具调用，状态：{status}',
     viewFile: '查看 {path}',
     viewFileHint: '打开此结果且不改变详情视图',
+    viewCanvas: '查看画布',
+    viewCanvasHint: '打开此操作创建或更新的画布',
     expandDetailsHint: '显示输入、结果和技术详情',
     collapseDetailsHint: '隐藏输入、结果和技术详情',
     technicalDetails: '技术详情',

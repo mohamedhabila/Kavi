@@ -304,6 +304,47 @@ describe('ToolCallDisplay', () => {
     expect(onViewFile).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['canvas_create', 'canvas_update', 'canvas_navigate', 'canvas_snapshot'])(
+    'opens completed %s results in Canvas on a separate 48-point action',
+    (name) => {
+      const onViewCanvas = jest.fn();
+      const { getByTestId, queryByText } = render(
+        <ToolCallDisplay
+          toolCall={makeToolCall({ name, arguments: '{"id":"surface-1"}' })}
+          onViewCanvas={onViewCanvas}
+        />,
+      );
+
+      const viewAction = getByTestId('tool-call-view-canvas-tc1');
+      expect(viewAction.props.accessibilityLabel).toBe('View canvas');
+      expect(StyleSheet.flatten(viewAction.props.style)).toEqual(
+        expect.objectContaining({ minHeight: 48, minWidth: 64 }),
+      );
+
+      fireEvent.press(viewAction);
+      expect(onViewCanvas).toHaveBeenCalledTimes(1);
+      expect(queryByText('Technical details')).toBeNull();
+    },
+  );
+
+  it('does not offer Canvas for unfinished or non-viewable canvas actions', () => {
+    const { queryByTestId, rerender } = render(
+      <ToolCallDisplay
+        toolCall={makeToolCall({ name: 'canvas_create', status: 'running' })}
+        onViewCanvas={jest.fn()}
+      />,
+    );
+    expect(queryByTestId('tool-call-view-canvas-tc1')).toBeNull();
+
+    rerender(
+      <ToolCallDisplay
+        toolCall={makeToolCall({ name: 'canvas_delete', status: 'completed' })}
+        onViewCanvas={jest.fn()}
+      />,
+    );
+    expect(queryByTestId('tool-call-view-canvas-tc1')).toBeNull();
+  });
+
   it('should show elapsed duration for completed tools with significant runtime', () => {
     jest.useFakeTimers();
     const now = Date.now();

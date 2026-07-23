@@ -22,6 +22,7 @@ type ConversationMessageRowProps = {
   ) => Promise<MemoryRetrievalFeedbackChoice>;
   onRetry: (messageId: string) => void;
   onShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
+  onViewCanvas: () => void;
   onViewFiles: (path?: string) => void;
   personaMarkerId?: string;
   personaMarkerText?: string | null;
@@ -78,6 +79,7 @@ export const ConversationMessageRow = memo(function ConversationMessageRow(
         responseSegments={props.item.resolvedResponseSegments}
         onEdit={props.onEdit}
         onRetry={props.onRetry}
+        onViewCanvas={props.onViewCanvas}
         onViewFile={props.onViewFiles}
         onShareWorkspaceFile={props.onShareWorkspaceFile}
         onOpenSubAgentDetails={props.onOpenSubAgentDetails}

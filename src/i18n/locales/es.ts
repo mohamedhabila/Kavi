@@ -1394,6 +1394,8 @@ export const es: TranslationMap = mergeTranslations(en, {
     accessibilityLabel: 'Llamada a la herramienta {name}, estado: {status}',
     viewFile: 'Ver {path}',
     viewFileHint: 'Abre este resultado sin cambiar la vista de detalles',
+    viewCanvas: 'Ver lienzo',
+    viewCanvasHint: 'Abre el lienzo creado o actualizado por esta acción',
     expandDetailsHint: 'Mostrar entradas, resultado y detalles técnicos',
     collapseDetailsHint: 'Ocultar entradas, resultado y detalles técnicos',
     technicalDetails: 'Detalles técnicos',

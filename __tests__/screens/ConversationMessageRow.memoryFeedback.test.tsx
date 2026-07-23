@@ -69,6 +69,7 @@ function renderRow(item: ResolvedDisplayMessageItem) {
       onOpenSubAgentDetails={jest.fn()}
       onRetry={jest.fn()}
       onShareWorkspaceFile={jest.fn()}
+      onViewCanvas={jest.fn()}
       onViewFiles={jest.fn()}
       styles={{} as any}
     />,
