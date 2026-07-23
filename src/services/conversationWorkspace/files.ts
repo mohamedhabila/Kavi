@@ -30,6 +30,41 @@ export interface ConversationWorkspaceReadResult extends UriFileReadResult {
 
 export type ConversationWorkspaceWriteResult = UriFileWriteResult;
 
+export class ConversationWorkspaceDirectoryReadError extends Error {
+  readonly code = 'conversation_workspace_directory_read_failed';
+  readonly path: string;
+
+  constructor(path: string, cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`Unable to read files${path ? ` in ${path}` : ''}: ${detail}`);
+    this.name = 'ConversationWorkspaceDirectoryReadError';
+    this.path = path;
+  }
+}
+
+export class ConversationWorkspaceFileNotFoundError extends Error {
+  readonly code = 'conversation_workspace_file_not_found';
+  readonly path: string;
+
+  constructor(path: string) {
+    super(`file not found: ${path}`);
+    this.name = 'ConversationWorkspaceFileNotFoundError';
+    this.path = path;
+  }
+}
+
+export class ConversationWorkspaceFileReadError extends Error {
+  readonly code = 'conversation_workspace_file_read_failed';
+  readonly path: string;
+
+  constructor(path: string, cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`Unable to read ${path}: ${detail}`);
+    this.name = 'ConversationWorkspaceFileReadError';
+    this.path = path;
+  }
+}
+
 export type ConversationWorkspaceFileInspection =
   | {
       conversationId: string;
@@ -52,6 +87,14 @@ function getConversationWorkspaceTargetDir(conversationId: string, safePath: str
   return safePath ? new Directory(workspaceDir, safePath) : workspaceDir;
 }
 
+function conversationWorkspaceFileExists(file: File, safePath: string): boolean {
+  try {
+    return file.exists;
+  } catch (error) {
+    throw new ConversationWorkspaceFileReadError(safePath, error);
+  }
+}
+
 export function isConversationWorkspaceImagePath(path: string): boolean {
   return hasFileExtension(path, IMAGE_FILE_EXTENSIONS);
 }
@@ -63,16 +106,28 @@ export async function listConversationWorkspaceDirectory(
 ): Promise<ConversationWorkspaceDirectoryResult> {
   const safePath = normalizeConversationWorkspacePath(path);
   const entriesByName = new Map<string, ConversationWorkspaceDirectoryEntry>();
+  let readError: unknown;
 
   for (const targetConversationId of getWorkspaceSearchConversationIds(
     conversationId,
     fallbackConversationIds,
   )) {
     const targetDir = getConversationWorkspaceTargetDir(targetConversationId, safePath);
+    let directoryExists: boolean;
+    try {
+      directoryExists = targetDir.exists;
+    } catch (error) {
+      readError ??= error;
+      continue;
+    }
+
     let entries: ReturnType<Directory['list']>;
     try {
       entries = targetDir.list();
-    } catch {
+    } catch (error) {
+      if (directoryExists) {
+        readError ??= error;
+      }
       continue;
     }
 
@@ -88,6 +143,10 @@ export async function listConversationWorkspaceDirectory(
         modifiedAt: getFileEntryModifiedAt(entry),
       });
     }
+  }
+
+  if (readError) {
+    throw new ConversationWorkspaceDirectoryReadError(safePath, readError);
   }
 
   return {
@@ -138,11 +197,16 @@ export async function readConversationWorkspaceTextFile(
     fallbackConversationIds,
   )) {
     const file = new File(getConversationWorkspaceDir(sourceConversationId), safePath);
-    if (!file.exists) {
+    if (!conversationWorkspaceFileExists(file, safePath)) {
       continue;
     }
 
-    const content = await file.text();
+    let content: string;
+    try {
+      content = await file.text();
+    } catch (error) {
+      throw new ConversationWorkspaceFileReadError(safePath, error);
+    }
     return {
       conversationId: sourceConversationId,
       path: safePath,
@@ -152,7 +216,7 @@ export async function readConversationWorkspaceTextFile(
     };
   }
 
-  throw new Error(`file not found: ${safePath}`);
+  throw new ConversationWorkspaceFileNotFoundError(safePath);
 }
 
 export async function writeConversationWorkspaceTextFile(
@@ -192,7 +256,7 @@ export async function inspectConversationWorkspaceFile(
     fallbackConversationIds,
   )) {
     const file = new File(getConversationWorkspaceDir(sourceConversationId), safePath);
-    if (!file.exists) {
+    if (!conversationWorkspaceFileExists(file, safePath)) {
       continue;
     }
 
@@ -214,7 +278,16 @@ export async function inspectConversationWorkspaceFile(
         uri: file.uri,
         content,
       };
-    } catch {
+    } catch (textError) {
+      try {
+        await file.bytes();
+      } catch (binaryReadError) {
+        throw new ConversationWorkspaceFileReadError(
+          safePath,
+          binaryReadError instanceof Error ? binaryReadError : textError,
+        );
+      }
+
       return {
         conversationId: sourceConversationId,
         kind: 'binary',
@@ -224,5 +297,5 @@ export async function inspectConversationWorkspaceFile(
     }
   }
 
-  throw new Error(`file not found: ${safePath}`);
+  throw new ConversationWorkspaceFileNotFoundError(safePath);
 }

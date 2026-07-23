@@ -19,7 +19,9 @@ type MockDirectoryEntry = {
 };
 
 const mockFileContentsByPath: Record<string, string | Uint8Array | Error> = {};
+const mockFileExistErrorsByPath: Record<string, Error> = {};
 const mockDirectoryEntriesByPath: Record<string, MockDirectoryEntry[]> = {};
+const mockDirectoryErrorsByPath: Record<string, Error> = {};
 const mockCreatedDirectories: string[] = [];
 const mockWrites: Array<{ path: string; content: string }> = [];
 const mockBinaryWrites: Array<{ path: string; content: Uint8Array }> = [];
@@ -63,8 +65,12 @@ function mockToFileUri(path: string): string {
   return `file://${path}`;
 }
 
-const mockFileExists = (path: string) =>
-  Object.prototype.hasOwnProperty.call(mockFileContentsByPath, path);
+const mockFileExists = (path: string) => {
+  if (mockFileExistErrorsByPath[path]) {
+    throw mockFileExistErrorsByPath[path];
+  }
+  return Object.prototype.hasOwnProperty.call(mockFileContentsByPath, path);
+};
 const mockFileSize = (path: string) => {
   const content = mockFileContentsByPath[path];
   if (typeof content === 'string') {
@@ -102,6 +108,10 @@ const mockDirExists = (path: string) =>
   Object.prototype.hasOwnProperty.call(mockDirectoryEntriesByPath, path);
 
 const mockDirList = jest.fn((path: string) => {
+  if (mockDirectoryErrorsByPath[path]) {
+    throw mockDirectoryErrorsByPath[path];
+  }
+
   const entriesByName = new Map<string, MockDirectoryEntry>();
   for (const entry of mockDirectoryEntriesByPath[path] || []) {
     entriesByName.set(entry.name, entry);
@@ -239,8 +249,14 @@ describe('conversation workspace file service', () => {
     Object.keys(mockFileContentsByPath).forEach((key) => {
       delete mockFileContentsByPath[key];
     });
+    Object.keys(mockFileExistErrorsByPath).forEach((key) => {
+      delete mockFileExistErrorsByPath[key];
+    });
     Object.keys(mockDirectoryEntriesByPath).forEach((key) => {
       delete mockDirectoryEntriesByPath[key];
+    });
+    Object.keys(mockDirectoryErrorsByPath).forEach((key) => {
+      delete mockDirectoryErrorsByPath[key];
     });
 
     mockDirectoryEntriesByPath['/mock/document/workspace/conv1'] = [
@@ -254,9 +270,11 @@ describe('conversation workspace file service', () => {
     ];
 
     mockFileContentsByPath['/mock/document/workspace/conv1/README.md'] = '# readme';
-    mockFileContentsByPath['/mock/document/workspace/conv1/image.png'] = new Error('binary');
+    mockFileContentsByPath['/mock/document/workspace/conv1/image.png'] = new Uint8Array([1, 2]);
     mockFileContentsByPath['/mock/document/workspace/conv1/src/App.tsx'] = 'const app = 1;';
-    mockFileContentsByPath['/mock/document/workspace/conv1/src/archive.bin'] = new Error('binary');
+    mockFileContentsByPath['/mock/document/workspace/conv1/src/archive.bin'] = new Uint8Array([
+      1, 2, 3,
+    ]);
 
     mockDirectoryEntriesByPath['/mock/document/workspace/session-1'] = [
       { name: 'skills', type: 'directory', modifiedAt: '2026-04-10T12:05:00.000Z' },
@@ -288,9 +306,8 @@ describe('conversation workspace file service', () => {
   });
 
   it('lists and detects inferred directories from file-backed workspace entries', async () => {
-    mockFileContentsByPath[
-      '/mock/document/workspace/conv-inferred/inbox/untrusted_note.txt'
-    ] = 'safe';
+    mockFileContentsByPath['/mock/document/workspace/conv-inferred/inbox/untrusted_note.txt'] =
+      'safe';
 
     expect(conversationWorkspaceDirectoryExists('conv-inferred', '.')).toBe(true);
     expect(conversationWorkspaceDirectoryExists('conv-inferred', './inbox')).toBe(true);
@@ -319,6 +336,15 @@ describe('conversation workspace file service', () => {
     });
   });
 
+  it('surfaces directory read failures instead of returning a false empty directory', async () => {
+    mockDirectoryErrorsByPath['/mock/document/workspace/conv1'] = new Error('EACCES denied');
+
+    await expect(listConversationWorkspaceDirectory('conv1')).rejects.toMatchObject({
+      code: 'conversation_workspace_directory_read_failed',
+      message: expect.stringContaining('EACCES denied'),
+    });
+  });
+
   it('classifies image and binary files without forcing text reads', async () => {
     await expect(inspectConversationWorkspaceFile('conv1', 'image.png')).resolves.toEqual({
       conversationId: 'conv1',
@@ -332,6 +358,33 @@ describe('conversation workspace file service', () => {
       kind: 'binary',
       path: 'src/archive.bin',
       uri: 'file:///mock/document/workspace/conv1/src/archive.bin',
+    });
+  });
+
+  it('distinguishes an unreadable file from a missing file', async () => {
+    mockDirectoryEntriesByPath['/mock/document/workspace/conv1'].push({
+      name: 'private.txt',
+      type: 'file',
+    });
+    mockFileContentsByPath['/mock/document/workspace/conv1/private.txt'] = new Error(
+      'EACCES denied',
+    );
+
+    await expect(inspectConversationWorkspaceFile('conv1', 'private.txt')).rejects.toMatchObject({
+      code: 'conversation_workspace_file_read_failed',
+      message: expect.stringContaining('EACCES denied'),
+    });
+    await expect(inspectConversationWorkspaceFile('conv1', 'missing.txt')).rejects.toMatchObject({
+      code: 'conversation_workspace_file_not_found',
+      path: 'missing.txt',
+    });
+
+    mockFileExistErrorsByPath['/mock/document/workspace/conv1/metadata.txt'] = new Error(
+      'metadata access denied',
+    );
+    await expect(inspectConversationWorkspaceFile('conv1', 'metadata.txt')).rejects.toMatchObject({
+      code: 'conversation_workspace_file_read_failed',
+      message: expect.stringContaining('metadata access denied'),
     });
   });
 

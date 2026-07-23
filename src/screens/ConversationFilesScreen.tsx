@@ -146,6 +146,9 @@ export const ConversationFilesScreen: React.FC = () => {
       onClose={handleBack}
       conversationId={workspaceScope.workspaceConversationId}
       fallbackConversationIds={workspaceScope.fallbackConversationIds}
+      workspaceLabel={
+        workspaceConversation?.id !== conversation?.id ? workspaceConversation?.title : undefined
+      }
       refreshToken={refreshToken}
       initialFilePath={params.initialFilePath}
       initialDirectoryPath={params.initialDirectoryPath}

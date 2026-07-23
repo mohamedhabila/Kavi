@@ -185,6 +185,7 @@ describe('ConversationFilesScreen', () => {
       expect.objectContaining({
         conversationId: 'conv-root',
         fallbackConversationIds: ['conv-side'],
+        workspaceLabel: 'Main conversation',
         refreshToken: '200:100:0',
       }),
     );

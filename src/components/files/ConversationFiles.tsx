@@ -2,7 +2,7 @@
 // Kavi — Conversation File Viewer
 // ---------------------------------------------------------------------------
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -26,13 +26,16 @@ import {
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from '../../i18n/useTranslation';
-import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
+import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import {
+  ConversationWorkspaceFileNotFoundError,
   inspectConversationWorkspaceFile,
   listConversationWorkspaceDirectory,
 } from '../../services/conversationWorkspace/files';
 import { normalizeConversationWorkspacePath } from '../../services/files/pathUtils';
 import { shareConversationWorkspaceFile } from '../../services/share/localShare';
+import { ConversationFilesStatusView } from './ConversationFilesStatusView';
+import { getConversationFileTypeLabel } from './filePresentation';
 
 interface FileEntry {
   name: string;
@@ -49,45 +52,19 @@ interface ConversationFilesProps {
   initialDirectoryPath?: string | null;
   onOpenTextFile?: (filePath: string, content: string, sourceConversationId?: string) => void;
   presentation?: 'modal' | 'screen';
+  workspaceLabel?: string;
 }
 
 type ViewerMode = 'text' | 'image' | 'binary';
+type DirectoryStatus = 'loading' | 'ready' | 'error';
+type FileViewState =
+  | { status: 'ready' | 'loading' }
+  | { status: 'error'; title: string; hint: string; detail: string };
 
 function getParentPath(path: string): string {
   const segments = path.split('/').filter(Boolean);
   segments.pop();
   return segments.join('/');
-}
-
-function getLanguageFromExt(name: string): string {
-  const ext = name.split('.').pop()?.toLowerCase() || '';
-  const map: Record<string, string> = {
-    ts: 'TypeScript',
-    tsx: 'TypeScript',
-    js: 'JavaScript',
-    jsx: 'JavaScript',
-    py: 'Python',
-    rb: 'Ruby',
-    go: 'Go',
-    rs: 'Rust',
-    java: 'Java',
-    html: 'HTML',
-    css: 'CSS',
-    json: 'JSON',
-    md: 'Markdown',
-    txt: 'Text',
-    sh: 'Shell',
-    yaml: 'YAML',
-    yml: 'YAML',
-    xml: 'XML',
-    sql: 'SQL',
-    c: 'C',
-    cpp: 'C++',
-    h: 'C Header',
-    swift: 'Swift',
-    kt: 'Kotlin',
-  };
-  return map[ext] || ext.toUpperCase() || 'File';
 }
 
 export const ConversationFiles: React.FC<ConversationFilesProps> = ({
@@ -100,6 +77,7 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   initialDirectoryPath,
   onOpenTextFile,
   presentation = 'modal',
+  workspaceLabel,
 }) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
@@ -110,16 +88,36 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   const imageFileAccessibilityLabel = t('conversationFiles.imageFileAccessibilityLabel');
   const emptyTitle = t('conversationFiles.emptyTitle');
   const emptyHint = t('conversationFiles.emptyHint');
+  const loadingTitle = t('conversationFiles.loadingTitle');
+  const loadErrorTitle = t('conversationFiles.loadErrorTitle');
+  const loadErrorHint = t('conversationFiles.loadErrorHint');
+  const fileOpeningTitle = t('conversationFiles.fileOpeningTitle');
+  const fileMissingTitle = t('conversationFiles.fileMissingTitle');
+  const fileMissingHint = t('conversationFiles.fileMissingHint');
+  const fileOpenErrorTitle = t('conversationFiles.fileOpenErrorTitle');
+  const fileOpenErrorHint = t('conversationFiles.fileOpenErrorHint');
+  const retryLabel = t('common.retry');
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
+  const [directoryStatus, setDirectoryStatus] = useState<DirectoryStatus>('loading');
+  const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState('');
   const [viewerMode, setViewerMode] = useState<ViewerMode>('text');
   const [viewingFileUri, setViewingFileUri] = useState<string | null>(null);
+  const [fileViewState, setFileViewState] = useState<FileViewState>({ status: 'ready' });
+  const directoryRequestIdRef = useRef(0);
+  const fileRequestIdRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = directoryRequestIdRef.current + 1;
+    directoryRequestIdRef.current = requestId;
+    setDirectoryStatus('loading');
+    setDirectoryError(null);
+
     if (!conversationId) {
       setEntries([]);
+      setDirectoryStatus('ready');
       return;
     }
 
@@ -129,14 +127,19 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
         currentPath,
         fallbackConversationIds,
       );
+      if (requestId !== directoryRequestIdRef.current) return;
       setEntries(
         result.entries.map((entry) => ({
           name: entry.name,
           isDirectory: entry.isDirectory,
         })),
       );
-    } catch {
+      setDirectoryStatus('ready');
+    } catch (error) {
+      if (requestId !== directoryRequestIdRef.current) return;
       setEntries([]);
+      setDirectoryError(error instanceof Error ? error.message : String(error));
+      setDirectoryStatus('error');
     }
   }, [conversationId, currentPath, fallbackConversationIds]);
 
@@ -144,14 +147,24 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
     async (filePath: string) => {
       if (!conversationId) return;
 
+      const displayPath = normalizeConversationWorkspacePath(filePath) || filePath;
+      const requestId = fileRequestIdRef.current + 1;
+      fileRequestIdRef.current = requestId;
+      setViewingFile(displayPath);
+      setViewingFileUri(null);
+      setFileContent('');
+      setFileViewState({ status: 'loading' });
+
       try {
         const result = await inspectConversationWorkspaceFile(
           conversationId,
           filePath,
           fallbackConversationIds,
         );
+        if (requestId !== fileRequestIdRef.current) return;
 
         if (result.kind === 'text' && onOpenTextFile) {
+          setFileViewState({ status: 'ready' });
           onOpenTextFile(result.path, result.content, result.conversationId);
           return;
         }
@@ -162,47 +175,72 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
         if (result.kind === 'image') {
           setViewerMode('image');
           setFileContent('');
+          setFileViewState({ status: 'ready' });
           return;
         }
 
         if (result.kind === 'binary') {
           setViewerMode('binary');
           setFileContent(unreadableFileMessage);
+          setFileViewState({ status: 'ready' });
           return;
         }
 
         if (result.kind === 'text') {
           setFileContent(result.content);
           setViewerMode('text');
+          setFileViewState({ status: 'ready' });
         }
-      } catch {
-        setViewingFile(normalizeConversationWorkspacePath(filePath) || filePath);
+      } catch (error) {
+        if (requestId !== fileRequestIdRef.current) return;
+        const isMissing = error instanceof ConversationWorkspaceFileNotFoundError;
         setViewingFileUri(null);
-        setFileContent(fileNotFoundMessage);
+        setFileContent('');
         setViewerMode('text');
+        setFileViewState({
+          status: 'error',
+          title: isMissing ? fileMissingTitle : fileOpenErrorTitle,
+          hint: isMissing ? fileMissingHint : fileOpenErrorHint,
+          detail:
+            error instanceof Error
+              ? error.message
+              : isMissing
+                ? fileNotFoundMessage
+                : String(error),
+        });
       }
     },
     [
       conversationId,
       fallbackConversationIds,
+      fileMissingHint,
+      fileMissingTitle,
       fileNotFoundMessage,
+      fileOpenErrorHint,
+      fileOpenErrorTitle,
       onOpenTextFile,
       unreadableFileMessage,
     ],
   );
 
   useEffect(() => {
+    directoryRequestIdRef.current += 1;
+    fileRequestIdRef.current += 1;
+
     if (!visible) {
       return;
     }
 
     setFileContent('');
     setViewingFileUri(null);
+    setFileViewState({ status: 'ready' });
 
     if (!conversationId) {
       setCurrentPath('');
       setViewingFile(null);
       setEntries([]);
+      setDirectoryStatus('ready');
+      setDirectoryError(null);
       return;
     }
 
@@ -215,6 +253,8 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
     setCurrentPath(normalizeConversationWorkspacePath(initialDirectoryPath ?? ''));
     setViewingFile(null);
     setViewerMode('text');
+    setDirectoryStatus('loading');
+    setDirectoryError(null);
   }, [visible, conversationId, initialDirectoryPath, initialFilePath, openFilePath]);
 
   useEffect(() => {
@@ -224,15 +264,28 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
   }, [currentPath, refresh, refreshToken, viewingFile, visible]);
 
   const navigateInto = (name: string) => {
+    setEntries([]);
+    setDirectoryStatus('loading');
+    setDirectoryError(null);
     setCurrentPath((prev) => (prev ? `${prev}/${name}` : name));
   };
 
   const navigateUp = () => {
+    setEntries([]);
+    setDirectoryStatus('loading');
+    setDirectoryError(null);
     setCurrentPath((prev) => {
       const parts = prev.split('/');
       parts.pop();
       return parts.join('/');
     });
+  };
+
+  const closeViewer = () => {
+    fileRequestIdRef.current += 1;
+    setViewingFile(null);
+    setFileViewState({ status: 'ready' });
+    setDirectoryStatus('loading');
   };
 
   const openFile = async (name: string) => {
@@ -283,7 +336,14 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
         // ── File Viewer ──
         <View style={styles.flex}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => setViewingFile(null)} hitSlop={8}>
+            <TouchableOpacity
+              accessibilityLabel={t('common.back')}
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={closeViewer}
+              style={styles.headerIconButton}
+              testID="conversation-file-back"
+            >
               <ChevronLeft size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={styles.headerTitleWrap}>
@@ -291,19 +351,57 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
                 {viewingFile.split('/').pop()}
               </Text>
               <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {getLanguageFromExt(viewingFile)} · {viewingFile}
+                {getConversationFileTypeLabel(viewingFile)} · {viewingFile}
               </Text>
             </View>
             <View style={styles.headerActions}>
-              <TouchableOpacity onPress={handleCopy} hitSlop={8}>
-                <Copy size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleShare} hitSlop={8}>
-                <Share2 size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
+              {fileViewState.status === 'ready' && viewerMode === 'text' ? (
+                <TouchableOpacity
+                  accessibilityLabel={t('common.copy')}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={handleCopy}
+                  style={styles.headerIconButton}
+                  testID="conversation-file-copy"
+                >
+                  <Copy size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              ) : null}
+              {fileViewState.status === 'ready' ? (
+                <TouchableOpacity
+                  accessibilityLabel={t('common.share')}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={handleShare}
+                  style={styles.headerIconButton}
+                  testID="conversation-file-share"
+                >
+                  <Share2 size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
-          {viewerMode === 'image' && viewingFileUri ? (
+          {fileViewState.status === 'loading' ? (
+            <ConversationFilesStatusView
+              colors={colors}
+              status="loading"
+              testID="conversation-file-loading"
+              title={fileOpeningTitle}
+            />
+          ) : fileViewState.status === 'error' ? (
+            <ConversationFilesStatusView
+              colors={colors}
+              detail={t('conversationFiles.technicalDetails', {
+                detail: fileViewState.detail,
+              })}
+              hint={fileViewState.hint}
+              onRetry={() => void openFilePath(viewingFile)}
+              retryLabel={retryLabel}
+              status="error"
+              testID="conversation-file-error"
+              title={fileViewState.title}
+            />
+          ) : viewerMode === 'image' && viewingFileUri ? (
             <View style={styles.imagePreviewContainer}>
               <Image
                 source={{ uri: viewingFileUri }}
@@ -337,7 +435,14 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
         // ── Directory Listing ──
         <View style={styles.flex}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} hitSlop={8}>
+            <TouchableOpacity
+              accessibilityLabel={t('common.close')}
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={onClose}
+              style={styles.headerIconButton}
+              testID="conversation-files-close"
+            >
               <X size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={styles.headerTitleWrap}>
@@ -346,18 +451,29 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
                 <Text style={styles.headerSubtitle} numberOfLines={1}>
                   /{currentPath}
                 </Text>
+              ) : workspaceLabel ? (
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
+                  {t('conversationFiles.sharedFromConversation', { title: workspaceLabel })}
+                </Text>
               ) : null}
             </View>
             {currentPath ? (
-              <TouchableOpacity onPress={navigateUp} hitSlop={8}>
+              <TouchableOpacity
+                accessibilityLabel={t('common.back')}
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={navigateUp}
+                style={styles.headerIconButton}
+                testID="conversation-files-up"
+              >
                 <ChevronLeft size={24} color={colors.primary} />
               </TouchableOpacity>
             ) : (
-              <View style={{ width: 24 }} />
+              <View style={styles.headerIconButton} />
             )}
           </View>
           <FlatList
-            data={entries}
+            data={directoryStatus === 'ready' ? entries : []}
             keyExtractor={(item) => item.name}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => {
@@ -398,11 +514,37 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
               );
             }}
             ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <FileIcon size={40} color={colors.textTertiary} />
-                <Text style={styles.emptyText}>{emptyTitle}</Text>
-                <Text style={styles.emptyHint}>{emptyHint}</Text>
-              </View>
+              directoryStatus === 'loading' ? (
+                <ConversationFilesStatusView
+                  colors={colors}
+                  status="loading"
+                  testID="conversation-files-loading"
+                  title={loadingTitle}
+                />
+              ) : directoryStatus === 'error' ? (
+                <ConversationFilesStatusView
+                  colors={colors}
+                  detail={
+                    directoryError
+                      ? t('conversationFiles.technicalDetails', { detail: directoryError })
+                      : undefined
+                  }
+                  hint={loadErrorHint}
+                  onRetry={() => void refresh()}
+                  retryLabel={retryLabel}
+                  status="error"
+                  testID="conversation-files-error"
+                  title={loadErrorTitle}
+                />
+              ) : (
+                <ConversationFilesStatusView
+                  colors={colors}
+                  hint={emptyHint}
+                  status="empty"
+                  testID="conversation-files-empty"
+                  title={emptyTitle}
+                />
+              )
             }
           />
         </View>
@@ -458,7 +600,13 @@ const createStyles = (colors: AppPalette) =>
     },
     headerActions: {
       flexDirection: 'row',
-      gap: 16,
+      gap: 4,
+    },
+    headerIconButton: {
+      width: 44,
+      height: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     listContent: {
       paddingVertical: 8,
@@ -489,24 +637,6 @@ const createStyles = (colors: AppPalette) =>
       paddingLeft: 12,
       justifyContent: 'center',
       alignItems: 'center',
-    },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingTop: 80,
-      gap: 8,
-    },
-    emptyText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    emptyHint: {
-      fontSize: 13,
-      color: colors.textTertiary,
-      textAlign: 'center',
-      paddingHorizontal: 40,
     },
     fileContentScroll: {
       flex: 1,

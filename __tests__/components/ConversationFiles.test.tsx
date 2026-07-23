@@ -11,8 +11,9 @@ type MockDirectoryEntry = {
   type: 'file' | 'directory';
 };
 
-const mockFileContentsByPath: Record<string, string | Error> = {};
+const mockFileContentsByPath: Record<string, string | Uint8Array | Error> = {};
 const mockDirectoryEntriesByPath: Record<string, MockDirectoryEntry[]> = {};
+const mockDirectoryErrorsByPath: Record<string, Error> = {};
 
 function mockNormalizeBasePath(value: unknown): string {
   if (typeof value === 'string') {
@@ -50,13 +51,33 @@ const mockFileText = jest.fn(async (path: string) => {
   if (content instanceof Error) {
     throw content;
   }
+  if (content instanceof Uint8Array) {
+    throw new Error('binary');
+  }
   return typeof content === 'string' ? content : '(file not found)';
+});
+const mockFileBytes = jest.fn(async (path: string) => {
+  const content = mockFileContentsByPath[path];
+  if (content instanceof Error) {
+    throw content;
+  }
+  if (content instanceof Uint8Array) {
+    return content;
+  }
+  if (typeof content === 'string') {
+    return new Uint8Array(content.length);
+  }
+  throw new Error('file not found');
 });
 const mockDirExists = jest.fn((path: string) =>
   Object.prototype.hasOwnProperty.call(mockDirectoryEntriesByPath, path),
 );
-const mockDirList = jest.fn((path: string) =>
-  (mockDirectoryEntriesByPath[path] || []).map((entry) => {
+const mockDirList = jest.fn((path: string) => {
+  if (mockDirectoryErrorsByPath[path]) {
+    throw mockDirectoryErrorsByPath[path];
+  }
+
+  return (mockDirectoryEntriesByPath[path] || []).map((entry) => {
     const entryPath = mockJoinPath(path, entry.name);
     if (entry.type === 'directory') {
       return {
@@ -70,9 +91,10 @@ const mockDirList = jest.fn((path: string) =>
       name: entry.name,
       uri: mockToFileUri(entryPath),
       text: () => mockFileText(entryPath),
+      bytes: () => mockFileBytes(entryPath),
     };
-  }),
-);
+  });
+});
 
 jest.mock('expo-file-system', () => ({
   Paths: { document: '/mock/document' },
@@ -81,6 +103,7 @@ jest.mock('expo-file-system', () => ({
     return {
       exists: mockFileExists(path),
       text: () => mockFileText(path),
+      bytes: () => mockFileBytes(path),
       uri: mockToFileUri(path),
     };
   }),
@@ -108,27 +131,50 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
-const mockTranslate = (key: string) =>
-  ({
-    'common.files': 'Files',
-    'conversationFiles.emptyTitle': 'No files yet',
-    'conversationFiles.emptyHint': "Ask the assistant to create files and they'll appear here",
-    'conversationFiles.binaryPreviewUnavailable': 'Binary file preview unavailable',
-    'conversationFiles.imageFileAccessibilityLabel': 'Image file',
-    'conversationFiles.fileNotFoundMessage': '(file not found)',
-    'conversationFiles.unreadableFileMessage': '(unable to read file — may be binary)',
-    'conversationFiles.shareFileFailed': 'Unable to share this file right now.',
-    'settings.defaultSystemPrompt': 'Default system prompt',
-  })[key] ?? key;
+const mockTranslate = (key: string, params?: Record<string, string>) => {
+  const translation =
+    {
+      'common.back': 'Back',
+      'common.close': 'Close',
+      'common.copy': 'Copy',
+      'common.error': 'Error',
+      'common.files': 'Files',
+      'common.retry': 'Retry',
+      'common.share': 'Share',
+      'conversationFiles.emptyTitle': 'No files yet',
+      'conversationFiles.emptyHint': "Ask the assistant to create files and they'll appear here",
+      'conversationFiles.loadingTitle': 'Loading files…',
+      'conversationFiles.loadErrorTitle': 'Couldn’t load files',
+      'conversationFiles.loadErrorHint': 'Check access and try again.',
+      'conversationFiles.fileOpeningTitle': 'Opening file…',
+      'conversationFiles.fileMissingTitle': 'File unavailable',
+      'conversationFiles.fileMissingHint': 'This file may have been moved or deleted.',
+      'conversationFiles.fileOpenErrorTitle': 'Couldn’t open file',
+      'conversationFiles.fileOpenErrorHint': 'Check access and try again.',
+      'conversationFiles.technicalDetails': 'Details: {detail}',
+      'conversationFiles.sharedFromConversation': 'Shared from {title}',
+      'conversationFiles.binaryPreviewUnavailable': 'Binary file preview unavailable',
+      'conversationFiles.imageFileAccessibilityLabel': 'Image file',
+      'conversationFiles.fileNotFoundMessage': '(file not found)',
+      'conversationFiles.unreadableFileMessage': '(unable to read file — may be binary)',
+      'conversationFiles.shareFileFailed': 'Unable to share this file right now.',
+      'settings.defaultSystemPrompt': 'Default system prompt',
+    }[key] ?? key;
+
+  return Object.entries(params ?? {}).reduce(
+    (value, [name, replacement]) => value.replace(`{${name}}`, replacement),
+    translation,
+  );
+};
 
 jest.mock('../../src/i18n/manager', () => ({
   i18n: {
-    t: (key: string) => mockTranslate(key),
+    t: (key: string, params?: Record<string, string>) => mockTranslate(key, params),
   },
 }));
 jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
-    t: (key: string) => mockTranslate(key),
+    t: (key: string, params?: Record<string, string>) => mockTranslate(key, params),
   }),
 }));
 
@@ -164,6 +210,9 @@ describe('ConversationFiles', () => {
     Object.keys(mockDirectoryEntriesByPath).forEach((key) => {
       delete mockDirectoryEntriesByPath[key];
     });
+    Object.keys(mockDirectoryErrorsByPath).forEach((key) => {
+      delete mockDirectoryErrorsByPath[key];
+    });
 
     mockDirectoryEntriesByPath['/mock/document/workspace/conv1'] = [
       { name: 'utils', type: 'directory' },
@@ -177,10 +226,10 @@ describe('ConversationFiles', () => {
     mockFileContentsByPath['/mock/document/workspace/conv1/index.ts'] =
       'console.log("hello world");';
     mockFileContentsByPath['/mock/document/workspace/conv1/README.md'] = '# readme';
-    mockFileContentsByPath['/mock/document/workspace/conv1/archive.bin'] = new Error('binary file');
-    mockFileContentsByPath['/mock/document/workspace/conv1/generated-image.png'] = new Error(
-      'binary file',
-    );
+    mockFileContentsByPath['/mock/document/workspace/conv1/archive.bin'] = new Uint8Array([1, 2]);
+    mockFileContentsByPath['/mock/document/workspace/conv1/generated-image.png'] = new Uint8Array([
+      3, 4,
+    ]);
 
     mockDirectoryEntriesByPath['/mock/document/workspace/session-1'] = [
       { name: 'skills', type: 'directory' },
@@ -203,10 +252,12 @@ describe('ConversationFiles', () => {
   });
 
   it('renders file list when visible', async () => {
-    const { findByText, getByText } = render(
+    const { findByText, getByTestId, getByText, queryByText } = render(
       <ConversationFiles visible={true} onClose={jest.fn()} conversationId="conv1" />,
     );
     expect(getByText('Files')).toBeTruthy();
+    expect(getByTestId('conversation-files-loading')).toBeTruthy();
+    expect(queryByText('No files yet')).toBeNull();
     expect(await findByText('index.ts')).toBeTruthy();
     expect(await findByText('utils')).toBeTruthy();
     expect(await findByText('README.md')).toBeTruthy();
@@ -226,6 +277,23 @@ describe('ConversationFiles', () => {
       <ConversationFiles visible={true} onClose={jest.fn()} conversationId="conv1" />,
     );
     expect(await findByText('No files yet')).toBeTruthy();
+  });
+
+  it('shows directory access failures with details and recovers on retry', async () => {
+    const rootPath = '/mock/document/workspace/conv1';
+    mockDirectoryErrorsByPath[rootPath] = new Error('EACCES denied');
+    const { findByTestId, findByText, getByText } = render(
+      <ConversationFiles visible={true} onClose={jest.fn()} conversationId="conv1" />,
+    );
+
+    expect(await findByTestId('conversation-files-error')).toBeTruthy();
+    expect(getByText('Couldn’t load files')).toBeTruthy();
+    expect(getByText(/EACCES denied/)).toBeTruthy();
+
+    delete mockDirectoryErrorsByPath[rootPath];
+    fireEvent.press(getByText('Retry'));
+
+    expect(await findByText('index.ts')).toBeTruthy();
   });
 
   it('opens a file when tapped', async () => {
@@ -342,7 +410,7 @@ describe('ConversationFiles', () => {
     });
   });
 
-  it('shows a file-not-found message when opening a missing path directly', async () => {
+  it('distinguishes a missing file from an access failure', async () => {
     const { getByText } = render(
       <ConversationFiles
         visible={true}
@@ -353,14 +421,38 @@ describe('ConversationFiles', () => {
     );
 
     await waitFor(() => {
-      expect(getByText('(file not found)')).toBeTruthy();
+      expect(getByText('File unavailable')).toBeTruthy();
+      expect(getByText('This file may have been moved or deleted.')).toBeTruthy();
+      expect(getByText(/file not found: missing\.txt/)).toBeTruthy();
     });
+  });
+
+  it('shows unreadable file details and retries the same file', async () => {
+    const privatePath = '/mock/document/workspace/conv1/private.txt';
+    mockFileContentsByPath[privatePath] = new Error('EACCES denied');
+
+    const { findByText, getByTestId, getByText } = render(
+      <ConversationFiles
+        visible={true}
+        onClose={jest.fn()}
+        conversationId="conv1"
+        initialFilePath="private.txt"
+      />,
+    );
+
+    expect(await findByText('Couldn’t open file')).toBeTruthy();
+    expect(getByText(/EACCES denied/)).toBeTruthy();
+
+    mockFileContentsByPath[privatePath] = 'recovered';
+    fireEvent.press(getByTestId('conversation-file-error-retry'));
+
+    expect(await findByText('recovered')).toBeTruthy();
   });
 
   it('copies and shares file content from the viewer header actions', async () => {
     const setStringAsync = jest.spyOn(Clipboard, 'setStringAsync');
     const shareAsync = jest.spyOn(Sharing, 'shareAsync');
-    const { UNSAFE_getAllByType } = render(
+    const { getByTestId } = render(
       <ConversationFiles
         visible={true}
         onClose={jest.fn()}
@@ -373,9 +465,12 @@ describe('ConversationFiles', () => {
       expect(setStringAsync).not.toHaveBeenCalled();
     });
 
-    const buttons = UNSAFE_getAllByType(require('react-native').TouchableOpacity);
-    fireEvent.press(buttons[1]);
-    fireEvent.press(buttons[2]);
+    await waitFor(() => {
+      expect(getByTestId('conversation-file-copy')).toBeTruthy();
+      expect(getByTestId('conversation-file-share')).toBeTruthy();
+    });
+    fireEvent.press(getByTestId('conversation-file-copy'));
+    fireEvent.press(getByTestId('conversation-file-share'));
 
     await waitFor(() => {
       expect(setStringAsync).toHaveBeenCalledWith('# readme');
@@ -498,5 +593,19 @@ describe('ConversationFiles', () => {
     expect(getByText('/utils')).toBeTruthy();
     expect(queryByText('index.ts')).toBeNull();
     expect(await findByText('No files yet')).toBeTruthy();
+  });
+
+  it('identifies a parent workspace when side-thread files are shown', async () => {
+    const { findByText } = render(
+      <ConversationFiles
+        visible={true}
+        presentation="screen"
+        onClose={jest.fn()}
+        conversationId="conv1"
+        workspaceLabel="Main conversation"
+      />,
+    );
+
+    expect(await findByText('Shared from Main conversation')).toBeTruthy();
   });
 });
