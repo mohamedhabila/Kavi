@@ -2,6 +2,7 @@ import type { CronJob, SchedulerTerminalReport } from '../cron/types';
 import type { AgentRun } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
 import type { RemoteApprovalRequest } from '../../types/remote';
+import type { ExecutionTrace } from '../scheduler/traceStore';
 import { redactSensitiveText } from '../security/toolDetailRedaction';
 import {
   selectActiveConversationExecutionState,
@@ -46,6 +47,7 @@ export interface ActivityFeedInput {
   liveWorkerRunKeys?: ReadonlySet<string>;
   schedulerJobs: readonly CronJob[];
   schedulerReports: readonly SchedulerTerminalReport[];
+  schedulerTraces?: readonly ExecutionTrace[];
 }
 
 const MAX_ACTIVITY_TEXT_LENGTH = 180;
@@ -144,6 +146,13 @@ function getAutomationReportStatus(status: SchedulerTerminalReport['status']): A
   return 'failed';
 }
 
+function getAutomationTraceStatus(status: ExecutionTrace['status']): ActivityItemStatus {
+  if (status === 'success') return 'completed';
+  if (status === 'retrying') return 'retrying';
+  if (status === 'skipped') return 'interrupted';
+  return 'failed';
+}
+
 function sortActivityItems(left: ActivityItem, right: ActivityItem): number {
   const statusWeight = (status: ActivityItemStatus): number => {
     if (PENDING_STATUSES.has(status)) return 0;
@@ -233,7 +242,28 @@ export function buildActivityFeed(input: ActivityFeedInput): ActivityItem[] {
     });
   }
 
+  const schedulerTraces = input.schedulerTraces ?? [];
+  const tracedReportIds = new Set(
+    schedulerTraces
+      .map((trace) => (trace.id.startsWith('trace-') ? trace.id.slice('trace-'.length) : ''))
+      .filter(Boolean),
+  );
+
+  for (const trace of schedulerTraces) {
+    const detail = safeActivityText(trace.error || trace.warnings?.[0]);
+    items.push({
+      id: `automation-result:${trace.id}`,
+      kind: 'automation-result',
+      status: getAutomationTraceStatus(trace.status),
+      title: safeActivityText(trace.jobName),
+      ...(detail ? { detail } : {}),
+      timestamp: trace.completedAt,
+      automationId: trace.jobId,
+    });
+  }
+
   for (const report of input.schedulerReports) {
+    if (tracedReportIds.has(report.id)) continue;
     const conversation = report.conversationId
       ? conversationsById.get(report.conversationId)
       : undefined;

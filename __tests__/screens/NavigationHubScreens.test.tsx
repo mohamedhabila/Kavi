@@ -111,6 +111,10 @@ jest.mock('../../src/services/scheduler/store', () => ({
     }),
 }));
 
+jest.mock('../../src/services/scheduler/traceStore', () => ({
+  useExecutionTraceStore: (selector: (state: any) => unknown) => selector({ traces: [] }),
+}));
+
 jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: (selector: (state: any) => unknown) =>
     selector({

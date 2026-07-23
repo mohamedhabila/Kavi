@@ -12,6 +12,7 @@ import { onSubAgentEvent, listActiveSubAgents } from '../services/agents/subAgen
 import { getSubAgentsForAgentRun } from '../services/agents/lifecycle/stateMachine';
 import { useApprovalStore } from '../services/remote/approvalStore';
 import { useSchedulerStore } from '../services/scheduler/store';
+import { useExecutionTraceStore } from '../services/scheduler/traceStore';
 import { useChatStore } from '../store/useChatStore';
 
 export const ActivityScreen: React.FC = () => {
@@ -21,6 +22,7 @@ export const ActivityScreen: React.FC = () => {
   const approvalRequestsById = useApprovalStore((state) => state.requests);
   const schedulerJobs = useSchedulerStore((state) => state.jobs);
   const schedulerReports = useSchedulerStore((state) => state.terminalReports);
+  const schedulerTraces = useExecutionTraceStore((state) => state.traces);
   const foregroundSnapshot = useSyncExternalStore(
     appForegroundRequestRegistry.subscribe,
     appForegroundRequestRegistry.getSnapshot,
@@ -65,6 +67,7 @@ export const ActivityScreen: React.FC = () => {
         liveWorkerRunKeys,
         schedulerJobs,
         schedulerReports,
+        schedulerTraces,
       }),
     [
       approvalRequests,
@@ -73,6 +76,7 @@ export const ActivityScreen: React.FC = () => {
       liveWorkerRunKeys,
       schedulerJobs,
       schedulerReports,
+      schedulerTraces,
     ],
   );
 

@@ -8,6 +8,7 @@ import type { AgentRun } from '../../../src/types/agentRun';
 import type { Conversation } from '../../../src/types/conversation';
 import type { RemoteApprovalRequest } from '../../../src/types/remote';
 import type { CronJob, SchedulerTerminalReport } from '../../../src/services/cron/types';
+import type { ExecutionTrace } from '../../../src/services/scheduler/traceStore';
 
 function run(id: string, status: AgentRun['status'], updatedAt: number): AgentRun {
   return {
@@ -78,6 +79,18 @@ const report: SchedulerTerminalReport = {
   attempt: 1,
   trigger: 'scheduled',
   conversationId: 'conversation-1',
+};
+
+const trace: ExecutionTrace = {
+  id: 'trace-report-1',
+  jobId: 'job-1',
+  jobName: 'Morning briefing',
+  status: 'success',
+  startedAt: 55,
+  completedAt: 60,
+  durationMs: 5,
+  attempt: 1,
+  trigger: 'scheduled',
 };
 
 describe('activity feed', () => {
@@ -168,5 +181,23 @@ describe('activity feed', () => {
       }),
     ]);
     expect(JSON.stringify(items)).not.toContain(credential);
+  });
+
+  it('uses durable scheduler traces for history and deduplicates the delivery queue', () => {
+    const items = buildActivityFeed({
+      approvalRequests: [],
+      conversations: [],
+      schedulerJobs: [job],
+      schedulerReports: [report],
+      schedulerTraces: [trace],
+    });
+
+    expect(items.filter((item) => item.kind === 'automation-result')).toEqual([
+      expect.objectContaining({
+        id: 'automation-result:trace-report-1',
+        automationId: 'job-1',
+        status: 'completed',
+      }),
+    ]);
   });
 });
