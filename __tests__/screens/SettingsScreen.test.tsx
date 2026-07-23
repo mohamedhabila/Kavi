@@ -98,6 +98,14 @@ describe('SettingsScreen general', () => {
     expect(settingsMocks.navigate).toHaveBeenCalledWith('Memory');
   });
 
+  it('opens approval and reusable permission management', () => {
+    const { getByLabelText } = renderSettingsScreen();
+
+    fireEvent.press(getByLabelText('Approvals & permissions'));
+
+    expect(settingsMocks.navigate).toHaveBeenCalledWith('ApprovalHistory');
+  });
+
   it('should show confirmation dialog when clearing conversations', () => {
     jest.spyOn(Alert, 'alert');
     const { getByText } = renderSettingsScreen();

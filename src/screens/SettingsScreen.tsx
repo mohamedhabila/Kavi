@@ -280,6 +280,10 @@ export const SettingsScreen: React.FC = () => {
     navigation.navigate('Memory');
   }, [navigation]);
 
+  const handleManageApprovals = useCallback(() => {
+    navigation.navigate('ApprovalHistory');
+  }, [navigation]);
+
   // --- Provider Edit Section ---
   if (section === 'provider-edit' && editingProvider) {
     return (
@@ -513,6 +517,7 @@ export const SettingsScreen: React.FC = () => {
                 mainSectionOffsetsRef.current.data = event.nativeEvent.layout.y;
               }}
               onManageMemory={handleManageMemory}
+              onManageApprovals={handleManageApprovals}
               onClearAllConversations={handleClearAllConversations}
             />
           </SettingsManagedScrollView>

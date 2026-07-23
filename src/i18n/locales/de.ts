@@ -1811,15 +1811,18 @@ export const de: TranslationMap = mergeTranslations(en, {
     confirmPersistent: 'Immer erlauben',
   },
   approvalHistory: {
-    title: 'Approvals',
+    title: 'Freigaben & Berechtigungen',
     emptyTitle: 'No approval requests',
     emptyDescription: 'When tools require approval, requests will appear here.',
-    globalApprovalOn: 'Global approval: ON',
-    globalApprovalOff: 'Global approval: OFF',
+    clearResolved: 'Erledigte Anfragen löschen',
+    reviewEveryTool: 'Jede Tool-Anfrage prüfen',
+    reviewSensitiveTools: 'Sensible Tool-Anfragen prüfen',
+    policyHint:
+      'Gespeicherte Berechtigungen überspringen die Prüfung nur für die genaue Aktion und das Ziel.',
     targetLabel: 'Target: {target}',
     action: {
-      approve: 'Approve',
-      reject: 'Reject',
+      approve: 'Einmal erlauben',
+      reject: 'Ablehnen',
     },
     filter: {
       all: 'All',
@@ -1850,6 +1853,26 @@ export const de: TranslationMap = mergeTranslations(en, {
       nativeErrors: 'Native errors',
     },
     noNativeActivity: 'No recent native tool activity.',
+    permissions: {
+      title: 'Gespeicherte Berechtigungen',
+      description:
+        'Prüfe wiederverwendbaren Zugriff. Kontextabhängige oder riskante Aktionen fragen immer erneut.',
+      empty: 'Keine gespeicherten Berechtigungen. Tools fragen weiterhin bei Bedarf nach.',
+      active: 'Erlaubt',
+      reviewRequired: 'Prüfung nötig',
+      actionLabel: 'Aktion: {action}',
+      targetLabel: 'Ziel: {target}',
+      localDevice: 'Ziel: dieses Gerät',
+      exactMcpTool: 'Umfang: genau dieses MCP-Tool',
+      exactTool: 'Umfang: genau dieses Tool',
+      personaLabel: 'Assistentenprofil: {persona}',
+      legacyDescription:
+        'Eine ältere, weitreichende Berechtigung für „{permission}“ wurde beim Sicherheitsupgrade deaktiviert.',
+      revoke: 'Widerrufen',
+      revokeLabel: 'Berechtigung für {tool} widerrufen',
+      settingsTitle: 'Freigaben & Berechtigungen',
+      settingsHint: 'Anfragen prüfen und wiederverwendbaren Zugriff widerrufen.',
+    },
   },
   toolApproval: {
     redactedNotice: 'Sensitive details are redacted.',

@@ -1,4 +1,4 @@
-import { Brain, ChevronRight, Trash2 } from 'lucide-react-native';
+import { Brain, ChevronRight, ShieldCheck, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -28,6 +28,7 @@ type SettingsDataSectionProps = {
   consolidationStatus: ConsolidationStatusSnapshot;
   onLayout: (event: any) => void;
   onManageMemory: () => void;
+  onManageApprovals: () => void;
   onClearAllConversations: () => void;
 };
 
@@ -71,6 +72,7 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
   consolidationStatus,
   onLayout,
   onManageMemory,
+  onManageApprovals,
   onClearAllConversations,
 }) => {
   return (
@@ -229,6 +231,20 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
         <Brain size={18} color={colors.primary} />
         <View style={styles.featureContent}>
           <Text style={styles.switchLabel}>{t('settings.manageMemory')}</Text>
+        </View>
+        <ChevronRight size={18} color={colors.textTertiary} />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.featureRow}
+        onPress={onManageApprovals}
+        accessibilityRole="button"
+        accessibilityLabel={t('approvalHistory.permissions.settingsTitle')}
+      >
+        <ShieldCheck size={18} color={colors.primary} />
+        <View style={styles.featureContent}>
+          <Text style={styles.switchLabel}>{t('approvalHistory.permissions.settingsTitle')}</Text>
+          <Text style={styles.featureHint}>{t('approvalHistory.permissions.settingsHint')}</Text>
         </View>
         <ChevronRight size={18} color={colors.textTertiary} />
       </TouchableOpacity>

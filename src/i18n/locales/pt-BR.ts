@@ -1794,15 +1794,17 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     confirmPersistent: 'Permitir sempre',
   },
   approvalHistory: {
-    title: 'Approvals',
+    title: 'Aprovações e permissões',
     emptyTitle: 'No approval requests',
     emptyDescription: 'When tools require approval, requests will appear here.',
-    globalApprovalOn: 'Global approval: ON',
-    globalApprovalOff: 'Global approval: OFF',
+    clearResolved: 'Limpar solicitações resolvidas',
+    reviewEveryTool: 'Revisar toda solicitação de ferramenta',
+    reviewSensitiveTools: 'Revisar solicitações de ferramentas sensíveis',
+    policyHint: 'Permissões salvas só pulam a revisão para a ação e o destino exatos.',
     targetLabel: 'Target: {target}',
     action: {
-      approve: 'Approve',
-      reject: 'Reject',
+      approve: 'Permitir uma vez',
+      reject: 'Negar',
     },
     filter: {
       all: 'All',
@@ -1833,6 +1835,27 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       nativeErrors: 'Native errors',
     },
     noNativeActivity: 'No recent native tool activity.',
+    permissions: {
+      title: 'Permissões salvas',
+      description:
+        'Revise acessos reutilizáveis. Ações contextuais ou de alto risco sempre perguntam novamente.',
+      empty:
+        'Nenhuma permissão salva. As ferramentas continuarão pedindo revisão quando necessário.',
+      active: 'Permitido',
+      reviewRequired: 'Revisão necessária',
+      actionLabel: 'Ação: {action}',
+      targetLabel: 'Destino: {target}',
+      localDevice: 'Destino: este dispositivo',
+      exactMcpTool: 'Escopo: esta ferramenta MCP exata',
+      exactTool: 'Escopo: esta ferramenta exata',
+      personaLabel: 'Perfil do assistente: {persona}',
+      legacyDescription:
+        'Uma permissão ampla anterior para “{permission}” foi desativada durante a atualização de segurança.',
+      revoke: 'Revogar',
+      revokeLabel: 'Revogar permissão para {tool}',
+      settingsTitle: 'Aprovações e permissões',
+      settingsHint: 'Revise solicitações e revogue acessos reutilizáveis pelo assistente.',
+    },
   },
   toolApproval: {
     redactedNotice: 'Sensitive details are redacted.',

@@ -1794,15 +1794,18 @@ export const es: TranslationMap = mergeTranslations(en, {
     confirmPersistent: 'Permitir siempre',
   },
   approvalHistory: {
-    title: 'Approvals',
+    title: 'Aprobaciones y permisos',
     emptyTitle: 'No approval requests',
     emptyDescription: 'When tools require approval, requests will appear here.',
-    globalApprovalOn: 'Global approval: ON',
-    globalApprovalOff: 'Global approval: OFF',
+    clearResolved: 'Borrar solicitudes resueltas',
+    reviewEveryTool: 'Revisar cada solicitud de herramienta',
+    reviewSensitiveTools: 'Revisar solicitudes de herramientas sensibles',
+    policyHint:
+      'Los permisos guardados solo omiten la revisión para la acción y el destino exactos.',
     targetLabel: 'Target: {target}',
     action: {
-      approve: 'Approve',
-      reject: 'Reject',
+      approve: 'Permitir una vez',
+      reject: 'Denegar',
     },
     filter: {
       all: 'All',
@@ -1833,6 +1836,27 @@ export const es: TranslationMap = mergeTranslations(en, {
       nativeErrors: 'Native errors',
     },
     noNativeActivity: 'No recent native tool activity.',
+    permissions: {
+      title: 'Permisos guardados',
+      description:
+        'Revisa el acceso reutilizable. Las acciones contextuales o de alto riesgo siempre vuelven a preguntar.',
+      empty:
+        'No hay permisos guardados. Las herramientas seguirán pidiendo revisión cuando corresponda.',
+      active: 'Permitido',
+      reviewRequired: 'Revisión necesaria',
+      actionLabel: 'Acción: {action}',
+      targetLabel: 'Destino: {target}',
+      localDevice: 'Destino: este dispositivo',
+      exactMcpTool: 'Alcance: esta herramienta MCP exacta',
+      exactTool: 'Alcance: esta herramienta exacta',
+      personaLabel: 'Perfil del asistente: {persona}',
+      legacyDescription:
+        'Un permiso amplio anterior para «{permission}» se desactivó durante la mejora de seguridad.',
+      revoke: 'Revocar',
+      revokeLabel: 'Revocar permiso para {tool}',
+      settingsTitle: 'Aprobaciones y permisos',
+      settingsHint: 'Revisa solicitudes y revoca el acceso que el asistente puede reutilizar.',
+    },
   },
   toolApproval: {
     redactedNotice: 'Sensitive details are redacted.',

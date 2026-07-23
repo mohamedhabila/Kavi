@@ -5,7 +5,7 @@
 // Provides audit trail, search/filter, and batch actions.
 
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useNavigation } from '@react-navigation/native';
@@ -20,6 +20,7 @@ import {
   subscribeAuditLog,
 } from '../services/security/audit';
 import type { RemoteApprovalRequest } from '../types/remote';
+import { ApprovalPermissionsSection } from './approvalHistory/ApprovalPermissionsSection';
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'expired';
 
@@ -31,11 +32,12 @@ export const ApprovalHistoryScreen: React.FC = () => {
 
   const requests = useApprovalStore((s) => s.requests);
   const policy = useApprovalStore((s) => s.policy);
+  const allowlist = useApprovalStore((s) => s.allowlist);
   const analytics = useApprovalStore((s) => s.analytics);
   const approve = useApprovalStore((s) => s.approveRequest);
   const reject = useApprovalStore((s) => s.rejectRequest);
   const clearResolved = useApprovalStore((s) => s.clearResolved);
-  const setPolicy = useApprovalStore((s) => s.setPolicy);
+  const removeFromAllowlist = useApprovalStore((s) => s.removeFromAllowlist);
   useSyncExternalStore(subscribeAuditLog, getAuditLogVersion, getAuditLogVersion);
 
   const [filter, setFilter] = useState<StatusFilter>('all');
@@ -49,6 +51,22 @@ export const ApprovalHistoryScreen: React.FC = () => {
   const pendingCount = useMemo(
     () => Object.values(requests).filter((r) => r.status === 'pending').length,
     [requests],
+  );
+  const hasResolvedRequests = useMemo(
+    () => Object.values(requests).some((request) => request.status !== 'pending'),
+    [requests],
+  );
+
+  const manageablePermissions = useMemo(
+    () =>
+      allowlist
+        .filter((entry) => entry.source !== 'internal')
+        .slice()
+        .sort((left, right) => {
+          if (left.status !== right.status) return left.status === 'review-required' ? -1 : 1;
+          return right.addedAt - left.addedAt;
+        }),
+    [allowlist],
   );
 
   const nativeAuditStats = getAuditStats({ category: 'native', type: 'tool_call' });
@@ -75,7 +93,7 @@ export const ApprovalHistoryScreen: React.FC = () => {
     (status: string) => {
       switch (status) {
         case 'approved':
-          return <ShieldCheck size={16} color="#22c55e" />;
+          return <ShieldCheck size={16} color={colors.success} />;
         case 'rejected':
           return <ShieldX size={16} color={colors.danger} />;
         case 'expired':
@@ -84,7 +102,7 @@ export const ApprovalHistoryScreen: React.FC = () => {
           return <ShieldAlert size={16} color={colors.warning} />;
       }
     },
-    [colors.danger, colors.textTertiary, colors.warning],
+    [colors.danger, colors.success, colors.textTertiary, colors.warning],
   );
 
   const getStatusLabel = useCallback(
@@ -93,43 +111,39 @@ export const ApprovalHistoryScreen: React.FC = () => {
         case 'approved':
           return t('approvalHistory.status.approved');
         case 'success':
-          return colors.success;
+          return t('approvalHistory.status.success');
         case 'rejected':
           return t('approvalHistory.status.rejected');
         case 'error':
-          return colors.danger;
+          return t('approvalHistory.status.error');
         case 'expired':
           return t('approvalHistory.status.expired');
         default:
           return t('approvalHistory.status.pending');
       }
     },
-    [colors.danger, colors.success, t],
+    [t],
   );
 
   const getStatusColor = useCallback(
     (status: string) => {
       switch (status) {
         case 'approved':
-          return '#22c55e';
+          return colors.success;
         case 'success':
-          return t('approvalHistory.status.success');
+          return colors.success;
         case 'rejected':
           return colors.danger;
         case 'error':
-          return t('approvalHistory.status.error');
+          return colors.danger;
         case 'expired':
           return colors.textTertiary;
         default:
           return colors.warning;
       }
     },
-    [colors.danger, colors.textTertiary, colors.warning, t],
+    [colors.danger, colors.success, colors.textTertiary, colors.warning],
   );
-
-  const handleTogglePolicy = useCallback(() => {
-    setPolicy({ requireApproval: !policy.requireApproval });
-  }, [policy.requireApproval, setPolicy]);
 
   const getFilterLabel = useCallback(
     (value: StatusFilter): string => {
@@ -203,11 +217,21 @@ export const ApprovalHistoryScreen: React.FC = () => {
         </View>
         {item.status === 'pending' && (
           <View style={styles.cardActions}>
-            <TouchableOpacity style={styles.rejectBtn} onPress={() => reject(item.id)}>
+            <TouchableOpacity
+              style={styles.rejectBtn}
+              onPress={() => reject(item.id)}
+              accessibilityRole="button"
+              accessibilityLabel={t('approvalHistory.action.reject')}
+            >
               <ShieldX size={14} color={colors.danger} />
               <Text style={styles.rejectText}>{t('approvalHistory.action.reject')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.approveBtn} onPress={() => approve(item.id)}>
+            <TouchableOpacity
+              style={styles.approveBtn}
+              onPress={() => approve(item.id)}
+              accessibilityRole="button"
+              accessibilityLabel={t('approvalHistory.action.approve')}
+            >
               <ShieldCheck size={14} color={colors.onPrimary} />
               <Text style={styles.approveText}>{t('approvalHistory.action.approve')}</Text>
             </TouchableOpacity>
@@ -224,36 +248,58 @@ export const ApprovalHistoryScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()} hitSlop={8}>
+        <TouchableOpacity
+          style={styles.headerAction}
+          onPress={() => navigation.openDrawer()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.openMenu')}
+        >
           <Menu size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('approvalHistory.title')}</Text>
-        <TouchableOpacity onPress={clearResolved} hitSlop={8}>
+        <TouchableOpacity
+          style={[styles.headerAction, !hasResolvedRequests && styles.headerActionDisabled]}
+          onPress={clearResolved}
+          disabled={!hasResolvedRequests}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('approvalHistory.clearResolved')}
+          accessibilityState={{ disabled: !hasResolvedRequests }}
+        >
           <Trash2 size={20} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
-      {/* Policy toggle */}
-      <TouchableOpacity style={styles.policyBar} onPress={handleTogglePolicy}>
+      {/* Policy summary */}
+      <View style={styles.policyBar}>
         <ShieldAlert
           size={16}
           color={policy.requireApproval ? colors.primary : colors.textTertiary}
         />
-        <Text style={styles.policyText}>
-          {policy.requireApproval
-            ? t('approvalHistory.globalApprovalOn')
-            : t('approvalHistory.globalApprovalOff')}
-        </Text>
+        <View style={styles.policyContent}>
+          <Text style={styles.policyText}>
+            {policy.requireApproval
+              ? t('approvalHistory.reviewEveryTool')
+              : t('approvalHistory.reviewSensitiveTools')}
+          </Text>
+          <Text style={styles.policyHint}>{t('approvalHistory.policyHint')}</Text>
+        </View>
         <View
           style={[
             styles.policyDot,
             { backgroundColor: policy.requireApproval ? colors.primary : colors.textTertiary },
           ]}
         />
-      </TouchableOpacity>
+      </View>
 
       {/* Filter bar */}
-      <View style={styles.filterBar}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
+        contentContainerStyle={styles.filterBar}
+      >
         {FILTERS.map((f) => (
           <TouchableOpacity
             key={f}
@@ -266,7 +312,7 @@ export const ApprovalHistoryScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {/* List */}
       <FlatList
@@ -276,6 +322,11 @@ export const ApprovalHistoryScreen: React.FC = () => {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View style={styles.dashboard}>
+            <ApprovalPermissionsSection
+              entries={manageablePermissions}
+              onRevoke={removeFromAllowlist}
+            />
+
             <Text style={styles.sectionTitle}>{t('approvalHistory.section.approvalMetrics')}</Text>
             <View style={styles.metricsRow}>
               {approvalMetrics.map((metric) => (
@@ -353,12 +404,19 @@ const createStyles = (colors: AppPalette) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       backgroundColor: colors.header,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
+    headerAction: {
+      width: 48,
+      height: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerActionDisabled: { opacity: 0.35 },
     headerTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
     policyBar: {
       flexDirection: 'row',
@@ -370,19 +428,20 @@ const createStyles = (colors: AppPalette) =>
       borderBottomColor: colors.border,
       backgroundColor: colors.surface,
     },
-    policyText: { flex: 1, fontSize: 13, color: colors.text },
+    policyContent: { flex: 1, gap: 2 },
+    policyText: { fontSize: 13, fontWeight: '600', color: colors.text },
+    policyHint: { fontSize: 11, lineHeight: 15, color: colors.textSecondary },
     policyDot: { width: 8, height: 8, borderRadius: 4 },
-    filterBar: {
-      flexDirection: 'row',
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+    filterScroll: {
+      flexGrow: 0,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
+    filterBar: { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 8 },
     filterChip: {
+      minHeight: 44,
+      justifyContent: 'center',
       paddingHorizontal: 12,
-      paddingVertical: 6,
       borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
@@ -428,8 +487,11 @@ const createStyles = (colors: AppPalette) =>
     cardTime: { fontSize: 11, color: colors.textTertiary },
     cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
     rejectBtn: {
+      flex: 1,
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       gap: 4,
       paddingHorizontal: 12,
       paddingVertical: 6,
@@ -439,8 +501,11 @@ const createStyles = (colors: AppPalette) =>
     },
     rejectText: { fontSize: 12, fontWeight: '600', color: colors.danger },
     approveBtn: {
+      flex: 1,
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       gap: 4,
       paddingHorizontal: 12,
       paddingVertical: 6,

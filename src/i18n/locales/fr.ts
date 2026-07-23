@@ -1799,15 +1799,18 @@ export const fr: TranslationMap = mergeTranslations(en, {
     confirmPersistent: 'Toujours autoriser',
   },
   approvalHistory: {
-    title: 'Approvals',
+    title: 'Autorisations et validations',
     emptyTitle: 'No approval requests',
     emptyDescription: 'When tools require approval, requests will appear here.',
-    globalApprovalOn: 'Global approval: ON',
-    globalApprovalOff: 'Global approval: OFF',
+    clearResolved: 'Effacer les demandes traitées',
+    reviewEveryTool: 'Vérifier chaque demande d’outil',
+    reviewSensitiveTools: 'Vérifier les demandes d’outils sensibles',
+    policyHint:
+      'Les autorisations enregistrées évitent la vérification uniquement pour l’action et la cible exactes.',
     targetLabel: 'Target: {target}',
     action: {
-      approve: 'Approve',
-      reject: 'Reject',
+      approve: 'Autoriser une fois',
+      reject: 'Refuser',
     },
     filter: {
       all: 'All',
@@ -1838,6 +1841,27 @@ export const fr: TranslationMap = mergeTranslations(en, {
       nativeErrors: 'Native errors',
     },
     noNativeActivity: 'No recent native tool activity.',
+    permissions: {
+      title: 'Autorisations enregistrées',
+      description:
+        'Vérifiez les accès réutilisables. Les actions contextuelles ou à risque redemandent toujours confirmation.',
+      empty:
+        'Aucune autorisation enregistrée. Les outils continueront à demander une vérification.',
+      active: 'Autorisé',
+      reviewRequired: 'Vérification requise',
+      actionLabel: 'Action : {action}',
+      targetLabel: 'Cible : {target}',
+      localDevice: 'Cible : cet appareil',
+      exactMcpTool: 'Portée : cet outil MCP précis',
+      exactTool: 'Portée : cet outil précis',
+      personaLabel: 'Profil de l’assistant : {persona}',
+      legacyDescription:
+        'Une ancienne autorisation étendue pour « {permission} » a été désactivée lors de la mise à niveau de sécurité.',
+      revoke: 'Révoquer',
+      revokeLabel: 'Révoquer l’autorisation pour {tool}',
+      settingsTitle: 'Autorisations et validations',
+      settingsHint: 'Vérifiez les demandes et révoquez les accès réutilisables.',
+    },
   },
   toolApproval: {
     redactedNotice: 'Sensitive details are redacted.',
