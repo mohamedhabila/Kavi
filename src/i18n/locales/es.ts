@@ -116,6 +116,13 @@ export const es: TranslationMap = mergeTranslations(en, {
     send: 'Enviar',
     stop: 'Detener generación',
     attach: 'Adjuntar archivo',
+    inputOptions: 'Opciones de entrada',
+    openInputOptions: 'Abrir opciones de entrada',
+    exactText: 'Texto exacto',
+    exactTextHint:
+      'Desactiva las correcciones del teclado para código, rutas, URL, identificadores y texto citado.',
+    exactTextActiveHint: 'La corrección del teclado y el espaciado inteligente están desactivados.',
+    disableExactText: 'Desactivar Texto exacto',
     editMessage: 'Editar mensaje',
     cancelEdit: 'Cancelar edición',
     noProvider: 'Ningún proveedor configurado. Vaya a Ajustes para agregar uno.',

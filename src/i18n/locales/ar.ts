@@ -115,6 +115,13 @@ export const ar: TranslationMap = mergeTranslations(en, {
     send: 'إرسال',
     stop: 'إيقاف التوليد',
     attach: 'إرفاق ملف',
+    inputOptions: 'خيارات الإدخال',
+    openInputOptions: 'فتح خيارات الإدخال',
+    exactText: 'نص دقيق',
+    exactTextHint:
+      'يوقف تصحيحات لوحة المفاتيح للرموز البرمجية والمسارات وعناوين URL والمعرّفات والنصوص المقتبسة.',
+    exactTextActiveHint: 'تم إيقاف تصحيح لوحة المفاتيح والتباعد الذكي.',
+    disableExactText: 'إيقاف وضع النص الدقيق',
     editMessage: 'تعديل الرسالة',
     cancelEdit: 'إلغاء التعديل',
     noProvider: 'لم يتم تكوين مزود. اذهب إلى الإعدادات لإضافة واحد.',

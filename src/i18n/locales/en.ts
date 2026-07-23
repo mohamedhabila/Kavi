@@ -120,6 +120,13 @@ export const en: TranslationMap = {
     send: 'Send message',
     stop: 'Stop generating',
     attach: 'Attach file',
+    inputOptions: 'Input options',
+    openInputOptions: 'Open input options',
+    exactText: 'Exact text',
+    exactTextHint:
+      'Turns off keyboard corrections for code, paths, URLs, IDs, and quoted source text.',
+    exactTextActiveHint: 'Keyboard correction and smart spacing are off.',
+    disableExactText: 'Turn off Exact text',
     editMessage: 'Editing message',
     cancelEdit: 'Cancel editing',
     noProvider: 'No provider configured. Go to Settings to add one.',

@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import renderer from 'react-test-renderer';
 import { ChatInput } from '../../src/components/chat/ChatInput';
 import * as ImagePicker from 'expo-image-picker';
@@ -50,6 +50,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
       danger: '#f00',
       inputBackground: '#222',
       inputBorder: '#444',
+      overlay: 'rgba(0,0,0,0.6)',
     },
   }),
   AppPalette: {},
@@ -114,7 +115,9 @@ describe('ChatInput', () => {
     onSend: jest.fn(),
     onStop: jest.fn(),
     isLoading: false,
+    exactText: false,
     text: '',
+    onChangeExactText: jest.fn(),
     onChangeText: jest.fn(),
     attachments: [],
     onChangeAttachments: jest.fn(),
@@ -129,12 +132,18 @@ describe('ChatInput', () => {
     const ControlledChatInput = () => {
       const [text, setText] = React.useState(props.text);
       const [attachments, setAttachments] = React.useState(props.attachments);
+      const [exactText, setExactText] = React.useState(props.exactText);
 
       return (
         <ChatInput
           {...props}
+          exactText={exactText}
           text={text}
           attachments={attachments}
+          onChangeExactText={(value) => {
+            props.onChangeExactText(value);
+            setExactText(value);
+          }}
           onChangeText={(value) => {
             props.onChangeText(value);
             setText(value);
@@ -162,6 +171,44 @@ describe('ChatInput', () => {
   it('should render the text input', () => {
     const { getByPlaceholderText } = render(<ChatInput {...createProps()} />);
     expect(getByPlaceholderText('Message...')).toBeTruthy();
+  });
+
+  it('uses familiar prose assistance by default and disables it in Exact text mode', () => {
+    const screen = renderControlledChatInput({ text: 'ios-ux-proof.txt --keep-this' });
+    const input = screen.getByTestId('chat-composer-input');
+
+    expect(input.props.autoCapitalize).toBe('sentences');
+    expect(input.props.autoCorrect).toBe(true);
+    expect(input.props.spellCheck).toBe(true);
+    expect(input.props.smartInsertDelete).toBe(true);
+
+    fireEvent.press(screen.getByTestId('chat-open-input-options'));
+    fireEvent(screen.getByTestId('chat-exact-text-switch'), 'valueChange', true);
+
+    expect(screen.getByTestId('chat-exact-text-indicator')).toBeTruthy();
+    expect(input.props.value).toBe('ios-ux-proof.txt --keep-this');
+    expect(input.props.autoCapitalize).toBe('none');
+    expect(input.props.autoCorrect).toBe(false);
+    expect(input.props.keyboardType).toBe(
+      Platform.OS === 'ios' ? 'ascii-capable' : Platform.OS === 'android' ? 'visible-password' : 'default',
+    );
+    expect(input.props.spellCheck).toBe(false);
+    expect(input.props.smartInsertDelete).toBe(false);
+
+    fireEvent.press(screen.getByTestId('chat-disable-exact-text'));
+    expect(screen.queryByTestId('chat-exact-text-indicator')).toBeNull();
+  });
+
+  it('preserves source-sensitive text byte-for-byte when sending', () => {
+    const onSend = jest.fn();
+    const source = '  ios-ux-proof.txt\nhttps://example.test/A_B?q=x--y\n"quoted source"  ';
+    const screen = renderControlledChatInput({ onSend });
+
+    fireEvent.changeText(screen.getByTestId('chat-composer-input'), source);
+    fireEvent.press(screen.getByTestId('chat-send-button'));
+
+    expect(onSend).toHaveBeenCalledWith(source, undefined);
+    expect(screen.getByTestId('chat-composer-input').props.maxLength).toBeUndefined();
   });
 
   it('should not call onSend when text is empty', () => {

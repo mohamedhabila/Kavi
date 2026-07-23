@@ -23,8 +23,10 @@ export function useChatComposerState({
   activeComposerDraftKey: string;
   clearComposerDraft: (draftKey: string) => void;
   composerAttachments: Attachment[];
+  composerExactText: boolean;
   composerText: string;
   handleComposerAttachmentsChange: (attachments: Attachment[]) => void;
+  handleComposerExactTextChange: (exactText: boolean) => void;
   handleComposerTextChange: (value: string) => void;
 } {
   const [composerDrafts, setComposerDrafts] = useState<Record<string, ComposerDraftState>>({});
@@ -79,10 +81,12 @@ export function useChatComposerState({
       updateComposerDraft(activeComposerDraftKey, {
         text: value,
         attachments: activeComposerDraft.attachments,
+        exactText: activeComposerDraft.exactText,
       });
     },
     [
       activeComposerDraft.attachments,
+      activeComposerDraft.exactText,
       activeComposerDraftKey,
       editingMessageId,
       setEditingContent,
@@ -99,17 +103,36 @@ export function useChatComposerState({
       updateComposerDraft(activeComposerDraftKey, {
         text: activeComposerDraft.text,
         attachments,
+        exactText: activeComposerDraft.exactText,
       });
     },
-    [activeComposerDraft.text, activeComposerDraftKey, editingMessageId, updateComposerDraft],
+    [
+      activeComposerDraft.exactText,
+      activeComposerDraft.text,
+      activeComposerDraftKey,
+      editingMessageId,
+      updateComposerDraft,
+    ],
+  );
+
+  const handleComposerExactTextChange = useCallback(
+    (exactText: boolean) => {
+      updateComposerDraft(activeComposerDraftKey, {
+        text: activeComposerDraft.text,
+        attachments: activeComposerDraft.attachments,
+        exactText,
+      });
+    }, [activeComposerDraft, activeComposerDraftKey, updateComposerDraft],
   );
 
   return {
     activeComposerDraftKey,
     clearComposerDraft,
     composerAttachments: editingMessageId ? [] : activeComposerDraft.attachments,
+    composerExactText: activeComposerDraft.exactText,
     composerText: editingMessageId ? (editingContent ?? '') : activeComposerDraft.text,
     handleComposerAttachmentsChange,
+    handleComposerExactTextChange,
     handleComposerTextChange,
   };
 }

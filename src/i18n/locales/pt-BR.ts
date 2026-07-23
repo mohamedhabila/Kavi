@@ -117,6 +117,13 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     send: 'Enviar',
     stop: 'Parar geração',
     attach: 'Anexar arquivo',
+    inputOptions: 'Opções de entrada',
+    openInputOptions: 'Abrir opções de entrada',
+    exactText: 'Texto exato',
+    exactTextHint:
+      'Desativa correções do teclado para código, caminhos, URLs, identificadores e texto citado.',
+    exactTextActiveHint: 'A correção do teclado e o espaçamento inteligente estão desativados.',
+    disableExactText: 'Desativar Texto exato',
     editMessage: 'Editar mensagem',
     cancelEdit: 'Cancelar edição',
     noProvider: 'Nenhum provedor configurado. Vá em Configurações para adicionar um.',

@@ -2,7 +2,7 @@
 // Kavi — ChatInput Component
 // ---------------------------------------------------------------------------
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Send, Square, Paperclip, X, Mic } from 'lucide-react-native';
+import { Send, Square, Paperclip, X, Mic, MoreHorizontal } from 'lucide-react-native';
 import { Attachment } from '../../types/attachment';
 import { useAppTheme } from '../../theme/useAppTheme';
 import { AttachmentPreview } from './AttachmentPreview';
@@ -23,13 +23,19 @@ import { createChatInputStyles } from './ChatInput.styles';
 import { ChatInputCommandSuggestions } from './ChatInputCommandSuggestions';
 import { ChatInputVoiceOverlayLayer } from './ChatInputVoiceOverlayLayer';
 import { useChatInputAttachments } from './useChatInputAttachments';
+import {
+  ChatInputExactTextIndicator,
+  ChatInputOptionsSheet,
+} from './ChatInputOptionsSheet';
 
 interface ChatInputProps {
   onSend: (text: string, attachments?: Attachment[]) => void;
   onStop: () => void;
   isLoading: boolean;
   isInputDisabled?: boolean;
+  exactText: boolean;
   text: string;
+  onChangeExactText: (exactText: boolean) => void;
   onChangeText: (text: string) => void;
   attachments: Attachment[];
   onChangeAttachments: (attachments: Attachment[]) => void;
@@ -45,7 +51,9 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     onStop,
     isLoading,
     isInputDisabled = false,
+    exactText,
     text,
+    onChangeExactText,
     onChangeText,
     attachments,
     onChangeAttachments,
@@ -58,6 +66,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const { t } = useTranslation();
     const styles = useMemo(() => createChatInputStyles(colors, bottomInset), [bottomInset, colors]);
     const inputRef = useRef<TextInput>(null);
+    const [optionsVisible, setOptionsVisible] = useState(false);
 
     const allCommands = useMemo(() => getAllCommands(), []);
     const commandSuggestions = useMemo(() => {
@@ -89,10 +98,9 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     }, [isEditing]);
 
     const handleSend = useCallback(() => {
-      const trimmed = text.trim();
-      if (!trimmed && attachments.length === 0) return;
+      if (!text.trim() && attachments.length === 0) return;
       voiceRecorder.clearError();
-      onSend(trimmed, attachments.length > 0 ? attachments : undefined);
+      onSend(text, attachments.length > 0 ? attachments : undefined);
     }, [attachments, onSend, text, voiceRecorder]);
 
     const { handlePickAttachment, removeAttachment } = useChatInputAttachments({
@@ -126,6 +134,12 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const sendDisabled = composerDisabled || (!text.trim() && attachments.length === 0);
     const showStopButton = isLoading && !text.trim() && attachments.length === 0;
 
+    useEffect(() => {
+      if (composerDisabled) {
+        setOptionsVisible(false);
+      }
+    }, [composerDisabled]);
+
     return (
       <View style={styles.container}>
         {isEditing && onCancelEdit && (
@@ -148,6 +162,14 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
           <View style={styles.voiceErrorBanner}>
             <Text style={styles.voiceErrorText}>{voiceRecorder.errorMessage}</Text>
           </View>
+        ) : null}
+        {exactText ? (
+          <ChatInputExactTextIndicator
+            colors={colors}
+            onDisable={() => onChangeExactText(false)}
+            styles={styles}
+            t={t}
+          />
         ) : null}
         <ChatInputCommandSuggestions
           disabled={composerDisabled}
@@ -213,13 +235,39 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             onChangeText={handleTextChange}
             placeholder={t('chat.placeholder')}
             placeholderTextColor={colors.placeholder}
+            autoCapitalize={exactText ? 'none' : 'sentences'}
+            autoComplete="off"
+            autoCorrect={!exactText}
+            keyboardType={
+              exactText
+                ? Platform.OS === 'ios'
+                  ? 'ascii-capable'
+                  : Platform.OS === 'android'
+                    ? 'visible-password'
+                    : 'default'
+                : 'default'
+            }
             multiline
-            maxLength={32000}
+            smartInsertDelete={!exactText}
+            spellCheck={!exactText}
             textAlignVertical="top"
+            textContentType="none"
             editable={!composerDisabled}
             onSubmitEditing={Platform.OS === 'web' ? handleSend : undefined}
             blurOnSubmit={false}
           />
+          <TouchableOpacity
+            accessibilityLabel={t('chat.openInputOptions')}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: composerDisabled, expanded: optionsVisible }}
+            disabled={composerDisabled}
+            hitSlop={8}
+            onPress={() => setOptionsVisible(true)}
+            style={[styles.attachBtn, composerDisabled ? styles.attachBtnDisabled : null]}
+            testID="chat-open-input-options"
+          >
+            <MoreHorizontal size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
           {showStopButton ? (
             <TouchableOpacity
               style={styles.sendBtn}
@@ -251,6 +299,15 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             </TouchableOpacity>
           )}
         </View>
+        <ChatInputOptionsSheet
+          colors={colors}
+          exactText={exactText}
+          onChangeExactText={onChangeExactText}
+          onClose={() => setOptionsVisible(false)}
+          styles={styles}
+          t={t}
+          visible={optionsVisible}
+        />
       </View>
     );
   },

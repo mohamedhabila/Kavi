@@ -3,6 +3,7 @@ import type { Attachment } from '../types/attachment';
 export type ComposerDraftState = {
   text: string;
   attachments: Attachment[];
+  exactText: boolean;
 };
 
 const NEW_CONVERSATION_DRAFT_KEY = '__new_conversation__';
@@ -17,9 +18,10 @@ export function normalizeComposerDraftState(
   return {
     text: typeof draft?.text === 'string' ? draft.text : '',
     attachments: Array.isArray(draft?.attachments) ? draft.attachments : [],
+    exactText: draft?.exactText === true,
   };
 }
 
 export function isComposerDraftStateEmpty(draft: ComposerDraftState): boolean {
-  return draft.text.length === 0 && draft.attachments.length === 0;
+  return draft.text.length === 0 && draft.attachments.length === 0 && !draft.exactText;
 }

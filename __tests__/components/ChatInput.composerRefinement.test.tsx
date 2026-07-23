@@ -46,6 +46,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
       dangerSoft: '#300',
       inputBackground: '#222',
       inputBorder: '#444',
+      overlay: 'rgba(0,0,0,0.6)',
     },
   }),
 }));
@@ -56,7 +57,9 @@ const createProps = (
   onSend: jest.fn(),
   onStop: jest.fn(),
   isLoading: false,
+  exactText: false,
   text: '',
+  onChangeExactText: jest.fn(),
   onChangeText: jest.fn(),
   attachments: [],
   onChangeAttachments: jest.fn(),
@@ -105,6 +108,7 @@ describe('ChatInput composer refinement', () => {
     expect(rowQueries.getByTestId('chat-attach-button')).toBeTruthy();
     expect(rowQueries.getByTestId('chat-voice-button')).toBeTruthy();
     expect(rowQueries.getByTestId('chat-composer-input')).toBeTruthy();
+    expect(rowQueries.getByTestId('chat-open-input-options')).toBeTruthy();
     expect(rowQueries.getByTestId('chat-send-button')).toBeTruthy();
     expect(inputStyle).toEqual(expect.objectContaining({ minHeight: 44, maxHeight: 120 }));
     expect(screen.queryByTestId('chat-composer-keyboard-avoider')).toBeNull();

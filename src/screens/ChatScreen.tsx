@@ -368,8 +368,10 @@ export const ChatScreen: React.FC = () => {
   const {
     clearComposerDraft,
     composerAttachments,
+    composerExactText,
     composerText,
     handleComposerAttachmentsChange,
+    handleComposerExactTextChange,
     handleComposerTextChange,
   } = useChatComposerState({
     activeConversationId,
@@ -628,10 +630,12 @@ export const ChatScreen: React.FC = () => {
         clearInteractionReleaseTimer={clearInteractionReleaseTimer}
         colors={colors}
         composerAttachments={composerAttachments}
+        composerExactText={composerExactText}
         composerText={composerText}
         flatListRef={flatListRef}
         forceNextScrollRef={forceNextScrollRef}
         handleComposerAttachmentsChange={handleComposerAttachmentsChange}
+        handleComposerExactTextChange={handleComposerExactTextChange}
         handleComposerTextChange={handleComposerTextChange}
         handleEdit={handleEdit}
         handleEditSend={handleEditSend}

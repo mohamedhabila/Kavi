@@ -30,9 +30,11 @@ type ChatScreenConversationPaneProps = {
   bottomInset: number;
   colors: AppPalette;
   composerAttachments: Attachment[];
+  composerExactText: boolean;
   composerText: string;
   forceNextScrollRef: MutableRefObject<boolean>;
   handleComposerAttachmentsChange: (attachments: Attachment[]) => void;
+  handleComposerExactTextChange: (exactText: boolean) => void;
   handleComposerTextChange: (text: string) => void;
   handleEdit: (messageId: string, content: string) => void;
   handleEditSend: (text: string, attachments?: Attachment[]) => Promise<void>;
@@ -91,10 +93,12 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     clearInteractionReleaseTimer,
     colors,
     composerAttachments,
+    composerExactText,
     composerText,
     flatListRef,
     forceNextScrollRef,
     handleComposerAttachmentsChange,
+    handleComposerExactTextChange,
     handleComposerTextChange,
     handleEdit,
     handleEditSend,
@@ -294,7 +298,9 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
         onStop={handleStop}
         isLoading={isConversationBusy}
         isInputDisabled={false}
+        exactText={composerExactText}
         text={composerText}
+        onChangeExactText={handleComposerExactTextChange}
         onChangeText={handleComposerTextChange}
         attachments={composerAttachments}
         onChangeAttachments={handleComposerAttachmentsChange}

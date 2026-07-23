@@ -47,6 +47,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
       dangerSoft: '#300',
       inputBackground: '#222',
       inputBorder: '#444',
+      overlay: 'rgba(0,0,0,0.6)',
     },
   }),
 }));
@@ -57,7 +58,9 @@ const createProps = (
   onSend: jest.fn(),
   onStop: jest.fn(),
   isLoading: false,
+  exactText: false,
   text: '',
+  onChangeExactText: jest.fn(),
   onChangeText: jest.fn(),
   attachments: [],
   onChangeAttachments: jest.fn(),
@@ -70,10 +73,12 @@ describe('ChatInput touch targets', () => {
 
     const attachButtonStyle = StyleSheet.flatten(getByLabelText('Attach file').props.style);
     const voiceButtonStyle = StyleSheet.flatten(getByTestId('chat-voice-button').props.style);
+    const inputOptionsStyle = StyleSheet.flatten(getByTestId('chat-open-input-options').props.style);
     const sendButtonStyle = StyleSheet.flatten(getByLabelText('Send message').props.style);
 
     expect(attachButtonStyle).toEqual(expect.objectContaining({ minWidth: 44, minHeight: 44 }));
     expect(voiceButtonStyle).toEqual(expect.objectContaining({ minWidth: 44, minHeight: 44 }));
+    expect(inputOptionsStyle).toEqual(expect.objectContaining({ minWidth: 44, minHeight: 44 }));
     expect(sendButtonStyle).toEqual(expect.objectContaining({ minWidth: 44, minHeight: 44 }));
   });
 });
