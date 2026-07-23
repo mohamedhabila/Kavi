@@ -8,19 +8,11 @@ import { DrawerContentComponentProps } from '@react-navigation/drawer';
 import {
   Plus,
   Settings,
-  Clock,
-  Server,
-  Puzzle,
-  Layers,
-  Mic,
-  Radio,
-  Brain,
-  Monitor,
-  Terminal,
-  FileCode,
-  Globe,
-  Users,
   Sparkles,
+  ListChecks,
+  Library,
+  MoreHorizontal,
+  type LucideIcon,
 } from 'lucide-react-native';
 import { TodaysFocusTile } from './SidebarMemorySections';
 import { SidebarRecentChats } from './SidebarRecentChats';
@@ -46,7 +38,51 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
   const systemPrompt = useSettingsStore((s) => s.systemPrompt);
   const activeProviderId = useSettingsStore((s) => s.activeProviderId);
   const activeModel = useSettingsStore((s) => s.activeModel);
-  const currentRouteName = state.routes[state.index]?.name;
+  const currentRoute = state.routes[state.index];
+  const currentRouteName = currentRoute?.name;
+  const currentAgentRosterTab =
+    currentRouteName === 'AgentRoster' &&
+    typeof currentRoute.params === 'object' &&
+    currentRoute.params !== null &&
+    'initialTab' in currentRoute.params
+      ? currentRoute.params.initialTab
+      : undefined;
+  const groupedRoutes: Array<{
+    name: 'Activity' | 'Library' | 'More';
+    label: string;
+    icon: LucideIcon;
+    children: string[];
+  }> = [
+    {
+      name: 'Activity',
+      label: t('nav.activity'),
+      icon: ListChecks,
+      children: ['Activity', 'Scheduler', 'ApprovalHistory'],
+    },
+    {
+      name: 'Library',
+      label: t('nav.library'),
+      icon: Library,
+      children: ['Library', 'Memory', 'Canvas', 'ConversationFiles'],
+    },
+    {
+      name: 'More',
+      label: t('nav.more'),
+      icon: MoreHorizontal,
+      children: [
+        'More',
+        'DeveloperWork',
+        'Voice',
+        'McpStatus',
+        'Skills',
+        'Gateway',
+        'RemoteWork',
+        'Terminal',
+        'CodeEditor',
+        'BrowserSession',
+      ],
+    },
+  ];
 
   const handleNew = () => {
     const selection = resolveConversationStartSelection(providers, activeProviderId, activeModel);
@@ -157,162 +193,38 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
           onSelect={handleSelectConversation}
         />
         <MigrationProgressBanner colors={colors} />
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('Scheduler');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.scheduler')}
-        >
-          <Clock size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.scheduler')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('McpStatus');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.mcpStatus')}
-        >
-          <Server size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.mcpStatus')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('Skills');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.skills')}
-        >
-          <Puzzle size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.skills')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('Memory');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.memory')}
-        >
-          <Brain size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.memory')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('Canvas');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.canvas')}
-        >
-          <Layers size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.canvas')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('Voice');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.voice')}
-        >
-          <Mic size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.voice')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('Gateway');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.gateway')}
-        >
-          <Radio size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.gateway')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('Terminal');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.terminal')}
-        >
-          <Terminal size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.terminal')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('CodeEditor');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.codeEditor')}
-        >
-          <FileCode size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.codeEditor')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('BrowserSession');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.browserSessions')}
-        >
-          <Globe size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.browserSessions')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('AgentRoster');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.agentRoster')}
-        >
-          <Users size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.agentRoster')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => {
-            navigation.navigate('RemoteWork');
-            navigation.closeDrawer();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.remoteWork')}
-        >
-          <Monitor size={20} color={colors.textSecondary} />
-          <Text style={styles.settingsText}>{t('nav.remoteWork')}</Text>
-        </TouchableOpacity>
+        <View style={styles.destinationGroup}>
+          {groupedRoutes.map((route) => {
+            const active = currentRouteName
+              ? route.children.includes(currentRouteName) ||
+                (currentRouteName === 'AgentRoster' &&
+                  ((route.name === 'Activity' && currentAgentRosterTab === 'queue') ||
+                    (route.name === 'More' && currentAgentRosterTab !== 'queue')))
+              : false;
+            const Icon = route.icon;
+            return (
+              <TouchableOpacity
+                key={route.name}
+                accessibilityLabel={route.label}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                onPress={() => {
+                  navigation.navigate(route.name);
+                  navigation.closeDrawer();
+                }}
+                style={[styles.destinationBtn, active ? styles.destinationBtnActive : null]}
+                testID={`sidebar-${route.name.toLowerCase()}`}
+              >
+                <Icon size={20} color={active ? colors.primary : colors.textSecondary} />
+                <Text
+                  style={[styles.destinationText, active ? styles.destinationTextActive : null]}
+                >
+                  {route.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </ScrollView>
 
       <TouchableOpacity
@@ -398,5 +310,32 @@ const createStyles = (colors: AppPalette) =>
     settingsText: {
       fontSize: 15,
       color: colors.textSecondary,
+    },
+    destinationGroup: {
+      marginTop: 8,
+      paddingTop: 8,
+      paddingHorizontal: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    destinationBtn: {
+      minHeight: 52,
+      paddingHorizontal: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      borderRadius: 12,
+    },
+    destinationBtnActive: {
+      backgroundColor: colors.primarySoft,
+    },
+    destinationText: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    destinationTextActive: {
+      color: colors.primary,
+      fontWeight: '600',
     },
   });

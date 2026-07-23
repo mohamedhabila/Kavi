@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Menu, Users, Plus, Edit3, Trash2, Bot, Cpu, X } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
@@ -34,6 +34,7 @@ import { generateId } from '../utils/id';
 
 export const AgentRosterScreen: React.FC = () => {
   const navigation = useNavigation<DrawerNavigationProp<any>>();
+  const route = useRoute<any>();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -45,7 +46,8 @@ export const AgentRosterScreen: React.FC = () => {
   const setOverride = usePersonaConfigStore((s) => s.setOverride);
   const clearOverride = usePersonaConfigStore((s) => s.clearOverride);
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'queue'>('roster');
+  const requestedTab = route.params?.initialTab === 'queue' ? 'queue' : 'roster';
+  const [activeTab, setActiveTab] = useState<'roster' | 'queue'>(requestedTab);
   const [showEditor, setShowEditor] = useState(false);
   const [editingPersona, setEditingPersona] = useState<AgentPersona | null>(null);
   const [subAgents, setSubAgents] = useState(listActiveSubAgents());
@@ -73,6 +75,10 @@ export const AgentRosterScreen: React.FC = () => {
       }),
     [],
   );
+
+  useEffect(() => {
+    setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   const hierarchicalSubAgents = useMemo(() => buildSubAgentHierarchy(subAgents), [subAgents]);
   const subAgentRollups = useMemo(() => buildSubAgentRollupMap(subAgents), [subAgents]);

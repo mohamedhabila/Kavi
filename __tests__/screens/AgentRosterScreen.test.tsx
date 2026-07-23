@@ -3,6 +3,7 @@ import { AgentRosterScreen } from '../../src/screens/AgentRosterScreen';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 const mockOpenDrawer = jest.fn();
+let mockRouteParams: Record<string, unknown> = {};
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
@@ -10,6 +11,7 @@ jest.mock('@react-navigation/native', () => ({
     navigate: jest.fn(),
     goBack: jest.fn(),
   }),
+  useRoute: () => ({ params: mockRouteParams }),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -124,6 +126,15 @@ describe('AgentRosterScreen', () => {
     jest.clearAllMocks();
     mockSubAgentListener = null;
     mockSubAgents = [];
+    mockRouteParams = {};
+  });
+
+  it('opens directly to work activity when requested by the Activity hub', () => {
+    mockRouteParams = { initialTab: 'queue' };
+
+    const { getByText } = render(<AgentRosterScreen />);
+
+    expect(getByText('No Active Sub-Agents')).toBeTruthy();
   });
 
   it('renders a nested sub-agent queue using hierarchy cards', () => {

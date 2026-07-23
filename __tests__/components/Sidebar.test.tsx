@@ -245,10 +245,47 @@ describe('Sidebar', () => {
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Settings');
   });
 
-  it('should navigate to remote work', () => {
-    const { getByText } = render(<Sidebar {...defaultProps} />);
-    fireEvent.press(getByText('Remote Work'));
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('RemoteWork');
+  it.each([
+    ['sidebar-activity', 'Activity'],
+    ['sidebar-library', 'Library'],
+    ['sidebar-more', 'More'],
+  ])('opens the grouped destination from %s', (testID, routeName) => {
+    const { getByTestId } = render(<Sidebar {...defaultProps} />);
+    fireEvent.press(getByTestId(testID));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith(routeName);
+    expect(mockNavigation.closeDrawer).toHaveBeenCalled();
+  });
+
+  it('keeps specialist and developer screens out of primary navigation', () => {
+    const { queryByText } = render(<Sidebar {...defaultProps} />);
+    expect(queryByText('Scheduled Tasks')).toBeNull();
+    expect(queryByText('MCP Servers')).toBeNull();
+    expect(queryByText('Terminal')).toBeNull();
+    expect(queryByText('Code Editor')).toBeNull();
+    expect(queryByText('Remote Work')).toBeNull();
+  });
+
+  it('keeps Activity selected while viewing detailed work activity', () => {
+    const props = {
+      ...defaultProps,
+      state: {
+        ...defaultProps.state,
+        index: 0,
+        routes: [
+          {
+            key: 'agent-roster',
+            name: 'AgentRoster',
+            params: { initialTab: 'queue' },
+          },
+        ],
+        routeNames: ['AgentRoster'],
+      },
+    } as any;
+
+    const { getByTestId } = render(<Sidebar {...props} />);
+
+    expect(getByTestId('sidebar-activity').props.accessibilityState).toEqual({ selected: true });
+    expect(getByTestId('sidebar-more').props.accessibilityState).toEqual({ selected: false });
   });
 
   it('returns to the active Assistant from any route in one tap', () => {

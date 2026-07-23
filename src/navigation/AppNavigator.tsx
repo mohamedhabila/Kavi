@@ -9,6 +9,10 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatScreen } from '../screens/ChatScreen';
 import { ChatsScreen } from '../screens/ChatsScreen';
+import { ActivityScreen } from '../screens/ActivityScreen';
+import { LibraryScreen } from '../screens/LibraryScreen';
+import { MoreScreen } from '../screens/MoreScreen';
+import { DeveloperWorkScreen } from '../screens/DeveloperWorkScreen';
 import { ConversationFilesScreen } from '../screens/ConversationFilesScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SchedulerScreen } from '../screens/SchedulerScreen';
@@ -211,6 +215,10 @@ export const AppNavigator: React.FC = () => {
         >
           <Drawer.Screen name="Chat" component={ChatScreen} />
           <Drawer.Screen name="Chats" component={ChatsScreen} />
+          <Drawer.Screen name="Activity" component={ActivityScreen} />
+          <Drawer.Screen name="Library" component={LibraryScreen} />
+          <Drawer.Screen name="More" component={MoreScreen} />
+          <Drawer.Screen name="DeveloperWork" component={DeveloperWorkScreen} />
           <Drawer.Screen name="ConversationFiles" component={ConversationFilesScreen} />
           <Drawer.Screen name="Settings" component={SettingsScreen} />
           <Drawer.Screen name="Scheduler" component={SchedulerScreen} />
