@@ -341,7 +341,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
 
       setPolicy: (patch) =>
         set((state) => ({
-          policy: { ...state.policy, ...patch },
+          policy: { ...state.policy, ...patch, expiryFallback: 'reject' },
         })),
 
       addPersonaOverride: (override) =>
@@ -440,7 +440,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
     {
       name: 'kavi-approvals',
       storage: createJSONStorage(() => AsyncStorage),
-      version: 4,
+      version: 5,
       migrate: (persistedState: unknown, version: number) => {
         const persisted = isRecord(persistedState) ? persistedState : {};
         let migrated: Record<string, unknown> = { ...persisted };
@@ -479,6 +479,18 @@ export const useApprovalStore = create<ApprovalStoreState>()(
           };
         }
 
+        if (version < 5) {
+          const persistedPolicy = isRecord(migrated.policy) ? migrated.policy : {};
+          migrated = {
+            ...migrated,
+            policy: {
+              ...DEFAULT_POLICY,
+              ...persistedPolicy,
+              expiryFallback: 'reject',
+            },
+          };
+        }
+
         return migrated;
       },
       partialize: (state) => ({
@@ -497,7 +509,11 @@ export const useApprovalStore = create<ApprovalStoreState>()(
               })
             : currentState.requests,
           policy: isRecord(persistedState.policy)
-            ? (persistedState.policy as unknown as ApprovalPolicy)
+            ? {
+                ...currentState.policy,
+                ...(persistedState.policy as unknown as Partial<ApprovalPolicy>),
+                expiryFallback: 'reject',
+              }
             : currentState.policy,
           allowlist: Object.prototype.hasOwnProperty.call(persistedState, 'allowlist')
             ? normalizePersistedAllowlist(persistedState.allowlist)
@@ -587,7 +603,6 @@ export function requestToolApproval(params: {
   }
   const store = useApprovalStore.getState();
   const timeoutMs = store.policy.timeoutMs;
-  const expiryFallback = store.policy.expiryFallback;
   const risk = assessToolRisk(params.toolName, params.args);
   const presentation = describeToolInvocation(params.toolName, params.args);
   const resolvedPresentation = params.reviewPresentation ?? presentation;
@@ -638,11 +653,7 @@ export function requestToolApproval(params: {
     const expiryTimer = setTimeout(() => {
       const request = useApprovalStore.getState().getRequest(requestId);
       if (request?.status === 'pending') {
-        if (isStandardDecisionPolicy(request.decisionPolicy) && expiryFallback === 'approve') {
-          useApprovalStore.getState().approveRequest(requestId);
-        } else {
-          useApprovalStore.getState().expireRequest(requestId);
-        }
+        useApprovalStore.getState().expireRequest(requestId);
       }
     }, timeoutMs);
     unrefTimerIfSupported(expiryTimer);

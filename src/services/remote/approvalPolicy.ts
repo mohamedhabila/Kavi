@@ -17,7 +17,10 @@ export interface ApprovalPolicy {
   autoApproveTools: string[];
   /** Approval timeout in milliseconds. */
   timeoutMs: number;
-  /** Fallback decision when approval times out. */
+  /**
+   * Fallback decision when approval times out.
+   * @deprecated Approval timeouts always fail closed; retained for persisted-schema compatibility.
+   */
   expiryFallback: 'reject' | 'approve';
   /** Per-persona overrides. */
   personaOverrides: PersonaPolicyOverride[];

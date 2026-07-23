@@ -411,9 +411,11 @@ describe('requestToolApproval', () => {
     await expect(promise).resolves.toBe('approved');
   });
 
-  it('retains the global expiry fallback for ordinary requests', async () => {
+  it('fails closed for ordinary requests even when a legacy policy requested auto-approval', async () => {
     jest.useFakeTimers();
     useApprovalStore.getState().setPolicy({ timeoutMs: 1000, expiryFallback: 'approve' });
+
+    expect(useApprovalStore.getState().policy.expiryFallback).toBe('reject');
 
     const promise = requestToolApproval({
       toolName: 'ssh_exec',
@@ -422,7 +424,7 @@ describe('requestToolApproval', () => {
 
     await jest.advanceTimersByTimeAsync(1250);
 
-    await expect(promise).resolves.toBe('approved');
+    await expect(promise).resolves.toBe('expired');
 
     jest.useRealTimers();
   });
@@ -503,5 +505,22 @@ describe('approval request persistence schema', () => {
         legacyKey: 'ssh_exec',
       }),
     ]);
+  });
+
+  it('migrates legacy auto-approval timeouts to a fail-closed policy', async () => {
+    const migrate = useApprovalStore.persist.getOptions().migrate;
+    expect(migrate).toBeDefined();
+
+    const migrated = (await migrate!(
+      {
+        policy: {
+          ...useApprovalStore.getState().policy,
+          expiryFallback: 'approve',
+        },
+      },
+      4,
+    )) as any;
+
+    expect(migrated.policy.expiryFallback).toBe('reject');
   });
 });
