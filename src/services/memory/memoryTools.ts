@@ -86,6 +86,14 @@ export type {
   MemoryInvalidateArgs,
   MemoryPinArgs,
 } from './memoryFactActions';
+export {
+  correctMemoryFactForManagement,
+  MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH,
+} from './memoryFactCorrection';
+export type {
+  MemoryFactCorrectionArgs,
+  MemoryFactCorrectionResult,
+} from './memoryFactCorrection';
 
 function serializeSupersessionReceipt(fact: {
   id: string;
