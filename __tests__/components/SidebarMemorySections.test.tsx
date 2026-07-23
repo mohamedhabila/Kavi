@@ -5,12 +5,10 @@
 import { act, render, fireEvent } from '@testing-library/react-native';
 import {
   TodaysFocusTile,
-  OpenThreadsChips,
   PinnedMoments,
   RecallSearchInput,
   MemoryStats,
   bucketConversationsByTime,
-  parseOpenThreads,
 } from '../../src/components/sidebar/SidebarMemorySections';
 
 // Mock memory readers used by the components.
@@ -77,9 +75,6 @@ jest.mock('../../src/i18n/useTranslation', () => ({
     t: (key: string, params?: Record<string, unknown>) => {
       const map: Record<string, string> = {
         'nav.todaysFocus': "Today's focus",
-        'nav.todaysFocusEmpty': 'Nothing in focus yet.',
-        'nav.openThreads': 'Open threads',
-        'nav.openThreadsEmpty': 'No open threads.',
         'nav.pinnedMoments': 'Pinned moments',
         'nav.pinnedMomentsEmpty': 'Pin a fact to surface it here.',
         'nav.recallPlaceholder': 'Recall a moment…',
@@ -137,30 +132,6 @@ beforeEach(() => {
   );
 });
 
-// ── parseOpenThreads ────────────────────────────────────────────────────────
-
-describe('parseOpenThreads', () => {
-  it('returns empty array for null/empty content', () => {
-    expect(parseOpenThreads(null)).toEqual([]);
-    expect(parseOpenThreads('')).toEqual([]);
-    expect(parseOpenThreads('   ')).toEqual([]);
-  });
-
-  it('splits on newlines and strips bullet/markup prefixes', () => {
-    const out = parseOpenThreads('- thread one\n* thread two\n• thread three\n   thread four');
-    expect(out).toEqual(['thread one', 'thread two', 'thread three', 'thread four']);
-  });
-
-  it('caps to 12 chips', () => {
-    const long = Array.from({ length: 25 }, (_, i) => `t${i}`).join('\n');
-    expect(parseOpenThreads(long)).toHaveLength(12);
-  });
-
-  it('drops blank lines', () => {
-    expect(parseOpenThreads('a\n\n\nb\n  \nc')).toEqual(['a', 'b', 'c']);
-  });
-});
-
 // ── bucketConversationsByTime ───────────────────────────────────────────────
 
 describe('bucketConversationsByTime', () => {
@@ -195,9 +166,9 @@ describe('bucketConversationsByTime', () => {
 // ── TodaysFocusTile ─────────────────────────────────────────────────────────
 
 describe('TodaysFocusTile', () => {
-  it('shows the empty hint when no active_focus block exists', () => {
-    const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
-    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe('Nothing in focus yet.');
+  it('does not render when no active_focus block exists', () => {
+    const { toJSON } = render(<TodaysFocusTile colors={colors} />);
+    expect(toJSON()).toBeNull();
   });
 
   it('renders the active_focus content', () => {
@@ -234,8 +205,8 @@ describe('TodaysFocusTile', () => {
 
   it('refreshes when structured memory changes', () => {
     workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValueOnce([]);
-    const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
-    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe('Nothing in focus yet.');
+    const { getByTestId, queryByTestId } = render(<TodaysFocusTile colors={colors} />);
+    expect(queryByTestId('sidebar-todays-focus-body')).toBeNull();
 
     workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
       { content: 'Fresh focus from the completed turn.' },
@@ -257,10 +228,10 @@ describe('TodaysFocusTile', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('does not invoke onPress when the focus block is empty (disabled)', () => {
+  it('does not expose a dead control when the focus block is empty', () => {
     const onPress = jest.fn();
-    const { getByTestId } = render(<TodaysFocusTile colors={colors} onPress={onPress} />);
-    fireEvent.press(getByTestId('sidebar-todays-focus'));
+    const { queryByTestId } = render(<TodaysFocusTile colors={colors} onPress={onPress} />);
+    expect(queryByTestId('sidebar-todays-focus')).toBeNull();
     expect(onPress).not.toHaveBeenCalled();
   });
 
@@ -268,53 +239,8 @@ describe('TodaysFocusTile', () => {
     workingBlocksMock.__mockListRecentWorkingBlocks.mockImplementation(() => {
       throw new Error('boom');
     });
-    const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
-    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe('Nothing in focus yet.');
-  });
-});
-
-// ── OpenThreadsChips ────────────────────────────────────────────────────────
-
-describe('OpenThreadsChips', () => {
-  it('shows empty hint when block is missing', () => {
-    const { getByTestId } = render(<OpenThreadsChips colors={colors} />);
-    expect(getByTestId('sidebar-open-threads-empty')).toBeTruthy();
-  });
-
-  it('renders one chip per parsed line and forwards selection', () => {
-    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
-      {
-        content: '- alpha\n- beta\n- gamma',
-      },
-    ]);
-    const onSelect = jest.fn();
-    const { getByTestId } = render(<OpenThreadsChips colors={colors} onSelect={onSelect} />);
-    fireEvent.press(getByTestId('sidebar-open-thread-beta'));
-    expect(onSelect).toHaveBeenCalledWith('beta');
-  });
-
-  it('uses scoped open threads for the active conversation instead of unrelated recent blocks', () => {
-    workingBlocksMock.__mockGetWorkingBlock.mockImplementation((label: string, scope: any) => {
-      if (
-        label === 'open_threads' &&
-        scope?.conversationId === 'conv-side' &&
-        scope?.threadId === 'conv-side'
-      ) {
-        return { content: '- scoped alpha\n- scoped beta' };
-      }
-      return null;
-    });
-    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
-      { content: '- stale unrelated thread' },
-    ]);
-
-    const onSelect = jest.fn();
-    const { getByTestId, queryByTestId } = render(
-      <OpenThreadsChips colors={colors} conversationId="conv-side" onSelect={onSelect} />,
-    );
-    expect(queryByTestId('sidebar-open-thread-stale unrelated thread')).toBeNull();
-    fireEvent.press(getByTestId('sidebar-open-thread-scoped beta'));
-    expect(onSelect).toHaveBeenCalledWith('scoped beta');
+    const { toJSON } = render(<TodaysFocusTile colors={colors} />);
+    expect(toJSON()).toBeNull();
   });
 });
 

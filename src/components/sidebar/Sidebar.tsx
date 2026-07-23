@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
-// Kavi — Sidebar (Memory-First Navigation)
+// Kavi — Sidebar (Assistant-first navigation)
 // ---------------------------------------------------------------------------
 
 import React, { useCallback, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 import {
-  MoreVertical,
+  Plus,
   Settings,
   Clock,
   Server,
@@ -20,14 +20,10 @@ import {
   FileCode,
   Globe,
   Users,
+  Sparkles,
 } from 'lucide-react-native';
-import {
-  TodaysFocusTile,
-  OpenThreadsChips,
-  RecallSearchInput,
-  PinnedMoments,
-  MemoryStats,
-} from './SidebarMemorySections';
+import { TodaysFocusTile } from './SidebarMemorySections';
+import { SidebarRecentChats } from './SidebarRecentChats';
 import MigrationProgressBanner from '../MigrationProgressBanner';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -35,10 +31,8 @@ import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { resolveConversationStartSelection } from '../../services/llm/support/providerSupport';
-import { getConsolidationStatusSnapshot } from '../../services/memory/consolidationStatus';
-import { consolidationTierLabel } from '../../screens/memory/consolidationStatusLabel';
 
-export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) => {
+export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, state }) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -47,23 +41,19 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
   const activeId = useChatStore((s) => s.activeConversationId);
   const getOrCreateCanonicalThread = useChatStore((s) => s.getOrCreateCanonicalThread);
   const createSideThread = useChatStore((s) => s.createSideThread);
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const providers = useSettingsStore((s) => s.providers);
   const systemPrompt = useSettingsStore((s) => s.systemPrompt);
   const activeProviderId = useSettingsStore((s) => s.activeProviderId);
   const activeModel = useSettingsStore((s) => s.activeModel);
-  const disableLongTermMemory = useSettingsStore((s) => s.disableLongTermMemory === true);
-  const memoryConsolidationTierLabel = useMemo(() => {
-    if (disableLongTermMemory) {
-      return null;
-    }
-    return consolidationTierLabel(getConsolidationStatusSnapshot(), t);
-  }, [disableLongTermMemory, t]);
+  const currentRouteName = state.routes[state.index]?.name;
 
   const handleNew = () => {
     const selection = resolveConversationStartSelection(providers, activeProviderId, activeModel);
     if (!selection) {
       Alert.alert(t('common.error'), t('chat.noProvider'));
       navigation.navigate('Settings');
+      navigation.closeDrawer();
       return;
     }
 
@@ -95,28 +85,26 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
     }
 
     getOrCreateCanonicalThread(selection.providerId, systemPrompt, selection.model || undefined);
+    navigation.navigate('Chat');
     navigation.closeDrawer();
   };
-
-  const handleOpenThreadOptions = () => {
-    Alert.alert(t('nav.threadOptions'), t('nav.startSideThreadHint'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('nav.startSideThread'), onPress: handleNew },
-    ]);
-  };
-
-  const handleOpenMemory = useCallback(
-    (query?: string) => {
-      navigation.navigate('Memory', query ? { tab: 'overview', query } : { tab: 'overview' });
-      navigation.closeDrawer();
-    },
-    [navigation],
-  );
 
   const handleOpenChat = useCallback(() => {
     navigation.navigate('Chat');
     navigation.closeDrawer();
   }, [navigation]);
+
+  const handleSelectConversation = useCallback(
+    (conversationId: string) => {
+      if (!conversations.some((conversation) => conversation.id === conversationId)) {
+        return;
+      }
+      setActiveConversation(conversationId);
+      navigation.navigate('Chat');
+      navigation.closeDrawer();
+    },
+    [conversations, navigation, setActiveConversation],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -124,192 +112,208 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
         <Text style={styles.title}>{t('common.appName')}</Text>
         <TouchableOpacity
           style={styles.newBtn}
-          onPress={handleOpenThreadOptions}
+          onPress={handleNew}
           accessibilityRole="button"
-          accessibilityLabel={t('nav.threadOptions')}
-          testID="sidebar-thread-options"
+          accessibilityLabel={t('nav.newChat')}
+          testID="sidebar-new-chat"
         >
-          <MoreVertical size={20} color={colors.onPrimary} />
+          <Plus size={22} color={colors.onPrimary} />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-        <MigrationProgressBanner colors={colors} />
-        <TodaysFocusTile
-          colors={colors}
-          conversationId={activeId}
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ selected: currentRouteName === 'Chat' }}
           onPress={handleOpenChat}
-        />
-        <OpenThreadsChips
+          style={[
+            styles.assistantBtn,
+            currentRouteName === 'Chat' ? styles.assistantBtnActive : null,
+          ]}
+          testID="sidebar-assistant"
+        >
+          <Sparkles
+            size={20}
+            color={currentRouteName === 'Chat' ? colors.primary : colors.textSecondary}
+          />
+          <Text
+            style={[
+              styles.assistantText,
+              currentRouteName === 'Chat' ? styles.assistantTextActive : null,
+            ]}
+          >
+            {t('nav.assistant')}
+          </Text>
+        </TouchableOpacity>
+        <TodaysFocusTile colors={colors} conversationId={activeId} onPress={handleOpenChat} />
+        <SidebarRecentChats
+          activeConversationId={activeId}
           colors={colors}
-          conversationId={activeId}
-          onSelect={handleOpenChat}
+          conversations={conversations}
+          onSeeAll={() => {
+            navigation.navigate('Chats');
+            navigation.closeDrawer();
+          }}
+          onSelect={handleSelectConversation}
         />
-        <RecallSearchInput colors={colors} onSubmit={handleOpenMemory} />
-        <PinnedMoments colors={colors} onSelect={() => handleOpenMemory()} />
-        <MemoryStats
-          colors={colors}
-          conversationId={activeId}
-          consolidationTierLabel={memoryConsolidationTierLabel}
-          onPress={() => handleOpenMemory()}
-        />
+        <MigrationProgressBanner colors={colors} />
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('Scheduler');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.scheduler')}
+        >
+          <Clock size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.scheduler')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('McpStatus');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.mcpStatus')}
+        >
+          <Server size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.mcpStatus')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('Skills');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.skills')}
+        >
+          <Puzzle size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.skills')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('Memory');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.memory')}
+        >
+          <Brain size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.memory')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('Canvas');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.canvas')}
+        >
+          <Layers size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.canvas')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('Voice');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.voice')}
+        >
+          <Mic size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.voice')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('Gateway');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.gateway')}
+        >
+          <Radio size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.gateway')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('Terminal');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.terminal')}
+        >
+          <Terminal size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.terminal')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('CodeEditor');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.codeEditor')}
+        >
+          <FileCode size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.codeEditor')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('BrowserSession');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.browserSessions')}
+        >
+          <Globe size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.browserSessions')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('AgentRoster');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.agentRoster')}
+        >
+          <Users size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.agentRoster')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => {
+            navigation.navigate('RemoteWork');
+            navigation.closeDrawer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('nav.remoteWork')}
+        >
+          <Monitor size={20} color={colors.textSecondary} />
+          <Text style={styles.settingsText}>{t('nav.remoteWork')}</Text>
+        </TouchableOpacity>
       </ScrollView>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('Scheduler');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.scheduler')}
-      >
-        <Clock size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.scheduler')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('McpStatus');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.mcpStatus')}
-      >
-        <Server size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.mcpStatus')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('Skills');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.skills')}
-      >
-        <Puzzle size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.skills')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('Memory');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.memory')}
-      >
-        <Brain size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.memory')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('Canvas');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.canvas')}
-      >
-        <Layers size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.canvas')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('Voice');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.voice')}
-      >
-        <Mic size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.voice')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('Gateway');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.gateway')}
-      >
-        <Radio size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.gateway')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('Terminal');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.terminal')}
-      >
-        <Terminal size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.terminal')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('CodeEditor');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.codeEditor')}
-      >
-        <FileCode size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.codeEditor')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('BrowserSession');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.browserSessions')}
-      >
-        <Globe size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.browserSessions')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('AgentRoster');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.agentRoster')}
-      >
-        <Users size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.agentRoster')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.settingsBtn}
-        onPress={() => {
-          navigation.navigate('RemoteWork');
-          navigation.closeDrawer();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={t('nav.remoteWork')}
-      >
-        <Monitor size={20} color={colors.textSecondary} />
-        <Text style={styles.settingsText}>{t('nav.remoteWork')}</Text>
-      </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.settingsBtn}
@@ -348,9 +352,9 @@ const createStyles = (colors: AppPalette) =>
       color: colors.text,
     },
     newBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       backgroundColor: colors.primary,
       justifyContent: 'center',
       alignItems: 'center',
@@ -361,67 +365,26 @@ const createStyles = (colors: AppPalette) =>
     listContent: {
       paddingBottom: 8,
     },
-    bucketHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 16,
-      paddingTop: 10,
-      paddingBottom: 4,
-    },
-    bucketHeaderText: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-    },
-    item: {
+    assistantBtn: {
+      minHeight: 52,
+      marginHorizontal: 8,
+      marginVertical: 8,
+      paddingHorizontal: 12,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 8,
-      marginHorizontal: 8,
-      marginVertical: 2,
+      borderRadius: 12,
     },
-    itemActive: {
+    assistantBtnActive: {
       backgroundColor: colors.primarySoft,
     },
-    itemContent: {
-      flex: 1,
-    },
-    itemTitle: {
-      fontSize: 14,
+    assistantText: {
       color: colors.text,
-    },
-    itemTitleActive: {
+      fontSize: 16,
       fontWeight: '600',
+    },
+    assistantTextActive: {
       color: colors.primary,
-    },
-    itemDate: {
-      fontSize: 11,
-      color: colors.textTertiary,
-      marginTop: 2,
-    },
-    itemUsage: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      marginTop: 2,
-    },
-    empty: {
-      padding: 40,
-      alignItems: 'center',
-    },
-    emptyText: {
-      fontSize: 15,
-      color: colors.textSecondary,
-    },
-    emptySubtext: {
-      fontSize: 13,
-      color: colors.textTertiary,
-      marginTop: 4,
     },
     settingsBtn: {
       flexDirection: 'row',
@@ -435,21 +398,5 @@ const createStyles = (colors: AppPalette) =>
     settingsText: {
       fontSize: 15,
       color: colors.textSecondary,
-    },
-    archivedHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    archivedHeaderText: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
     },
   });

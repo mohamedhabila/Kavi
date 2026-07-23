@@ -53,11 +53,10 @@ const mockCreateConversation = jest.fn();
 const mockGetOrCreateCanonicalThread = jest.fn(
   (providerId: string, _systemPrompt: string, _model?: string) => `canonical-${providerId}`,
 );
-const mockCreateSideThread = jest.fn(
-  (parentId: string, _options?: any) => `side-of-${parentId}`,
-);
+const mockCreateSideThread = jest.fn((parentId: string, _options?: any) => `side-of-${parentId}`);
 const mockSetActiveConversation = jest.fn();
 const mockDeleteConversation = jest.fn();
+let mockActiveConversationId: string | null = 'conv1';
 let mockProviders = [
   {
     id: 'openai',
@@ -73,7 +72,7 @@ jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: (selector: (s: any) => any) => {
     const state = {
       conversations: mockConversations,
-      activeConversationId: 'conv1',
+      activeConversationId: mockActiveConversationId,
       createConversation: mockCreateConversation,
       getOrCreateCanonicalThread: mockGetOrCreateCanonicalThread,
       createSideThread: mockCreateSideThread,
@@ -172,6 +171,7 @@ const defaultProps = {
 describe('Sidebar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockActiveConversationId = 'conv1';
     mockProviders = [
       {
         id: 'openai',
@@ -189,22 +189,18 @@ describe('Sidebar', () => {
     expect(getByText('Kavi')).toBeTruthy();
   });
 
-  it('should not render the legacy conversation list UX', () => {
-    const { queryByText, queryByTestId } = render(<Sidebar {...defaultProps} />);
-    expect(queryByText('First Chat')).toBeNull();
-    expect(queryByText('Second Chat')).toBeNull();
-    expect(queryByTestId('sidebar-time-buckets')).toBeNull();
-    expect(queryByTestId('sidebar-archived-section')).toBeNull();
+  it('renders recent chats from the conversation store and marks the active chat', () => {
+    const { getByText, getByTestId } = render(<Sidebar {...defaultProps} />);
+    expect(getByText('First Chat')).toBeTruthy();
+    expect(getByText('Second Chat')).toBeTruthy();
+    expect(getByTestId('sidebar-recent-chat-conv1').props.accessibilityState).toEqual({
+      selected: true,
+    });
   });
 
-  it('should open the thread-options sheet and start a side thread', () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
-      const start = (buttons || []).find((b) => b.text === 'Start a side thread');
-      start?.onPress?.();
-    });
+  it('starts a new chat in one tap', () => {
     const { getByTestId } = render(<Sidebar {...defaultProps} />);
-    fireEvent.press(getByTestId('sidebar-thread-options'));
-    expect(alertSpy).toHaveBeenCalled();
+    fireEvent.press(getByTestId('sidebar-new-chat'));
     expect(mockCreateSideThread).toHaveBeenCalledWith('conv1', {
       providerId: 'openai',
       modelOverride: 'gpt-5.4',
@@ -214,57 +210,26 @@ describe('Sidebar', () => {
   });
 
   it('should materialize the canonical thread before starting a side thread when none is active', () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
-      const start = (buttons || []).find((b) => b.text === 'Start a side thread');
-      start?.onPress?.();
+    mockActiveConversationId = null;
+    const { getByTestId } = render(<Sidebar {...defaultProps} />);
+    fireEvent.press(getByTestId('sidebar-new-chat'));
+    expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+      'openai',
+      'You are helpful',
+      'gpt-5.4',
+    );
+    expect(mockCreateSideThread).toHaveBeenCalledWith('canonical-openai', {
+      providerId: 'openai',
+      modelOverride: 'gpt-5.4',
     });
-    const originalActiveConversationId = 'conv1';
-    const useChatStoreModule = jest.requireMock('../../src/store/useChatStore') as {
-      useChatStore: (selector: (s: any) => any) => any;
-    };
-    const originalUseChatStore = useChatStoreModule.useChatStore;
-    useChatStoreModule.useChatStore = (selector: (s: any) => any) =>
-      selector({
-        conversations: mockConversations,
-        activeConversationId: null,
-        createConversation: mockCreateConversation,
-        getOrCreateCanonicalThread: mockGetOrCreateCanonicalThread,
-        createSideThread: mockCreateSideThread,
-        setActiveConversation: mockSetActiveConversation,
-        deleteConversation: mockDeleteConversation,
-      });
-
-    try {
-      const { getByTestId } = render(<Sidebar {...defaultProps} />);
-      fireEvent.press(getByTestId('sidebar-thread-options'));
-      expect(alertSpy).toHaveBeenCalled();
-      expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
-        'openai',
-        'You are helpful',
-        'gpt-5.4',
-      );
-      expect(mockCreateSideThread).toHaveBeenCalledWith('canonical-openai', {
-        providerId: 'openai',
-        modelOverride: 'gpt-5.4',
-      });
-    } finally {
-      useChatStoreModule.useChatStore = originalUseChatStore;
-      mockActiveConversationId = originalActiveConversationId;
-    }
   });
 
   it('should route users to settings instead of starting a side thread without a provider', () => {
-    jest.spyOn(Alert, 'alert').mockImplementation((title, _msg, buttons) => {
-      // Simulate the user tapping "Start a side thread" from the sheet.
-      if (title === 'Thread options') {
-        const start = (buttons || []).find((b) => b.text === 'Start a side thread');
-        start?.onPress?.();
-      }
-    });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockProviders = [];
 
     const { getByTestId } = render(<Sidebar {...defaultProps} />);
-    fireEvent.press(getByTestId('sidebar-thread-options'));
+    fireEvent.press(getByTestId('sidebar-new-chat'));
 
     expect(Alert.alert).toHaveBeenCalledWith(
       'Error',
@@ -286,28 +251,50 @@ describe('Sidebar', () => {
     expect(mockNavigation.navigate).toHaveBeenCalledWith('RemoteWork');
   });
 
-  // Memory-driven navigation sits above the single-thread shell.
-  describe('memory IA sections', () => {
-    it("renders the Today's focus tile and memory IA without the legacy chat list", () => {
-      const { getByTestId, queryByTestId } = render(<Sidebar {...defaultProps} />);
-      expect(getByTestId('sidebar-todays-focus')).toBeTruthy();
-      expect(getByTestId('sidebar-open-threads')).toBeTruthy();
-      expect(getByTestId('sidebar-recall-input')).toBeTruthy();
-      expect(getByTestId('sidebar-pinned-moments')).toBeTruthy();
-      expect(queryByTestId('sidebar-time-buckets')).toBeNull();
-      expect(queryByTestId('sidebar-archived-section')).toBeNull();
-    });
+  it('returns to the active Assistant from any route in one tap', () => {
+    const props = {
+      ...defaultProps,
+      state: {
+        ...defaultProps.state,
+        routes: [{ key: 'settings', name: 'Settings' }],
+        routeNames: ['Settings'],
+      },
+    } as any;
+    const { getByTestId } = render(<Sidebar {...props} />);
 
-    it('opens the Memory screen when the recall input is submitted', () => {
-      const { getByTestId } = render(<Sidebar {...defaultProps} />);
-      const input = getByTestId('sidebar-recall-input');
-      fireEvent.changeText(input, 'beach trip');
-      fireEvent(input, 'submitEditing');
-      expect(mockNavigation.navigate).toHaveBeenCalledWith('Memory', {
-        tab: 'overview',
-        query: 'beach trip',
-      });
-      expect(mockNavigation.closeDrawer).toHaveBeenCalled();
+    fireEvent.press(getByTestId('sidebar-assistant'));
+
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
+    expect(mockNavigation.closeDrawer).toHaveBeenCalled();
+  });
+
+  it('opens the exact selected recent conversation', () => {
+    const { getByTestId } = render(<Sidebar {...defaultProps} />);
+
+    fireEvent.press(getByTestId('sidebar-recent-chat-conv2'));
+
+    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv2');
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
+    expect(mockNavigation.closeDrawer).toHaveBeenCalled();
+  });
+
+  it('opens the complete Chats route from recent chats', () => {
+    const { getByTestId } = render(<Sidebar {...defaultProps} />);
+
+    fireEvent.press(getByTestId('sidebar-see-all-chats'));
+
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Chats');
+    expect(mockNavigation.closeDrawer).toHaveBeenCalled();
+  });
+
+  describe('contextual memory', () => {
+    it('omits empty Focus and memory diagnostics from primary navigation', () => {
+      const { queryByTestId } = render(<Sidebar {...defaultProps} />);
+      expect(queryByTestId('sidebar-todays-focus')).toBeNull();
+      expect(queryByTestId('sidebar-open-threads')).toBeNull();
+      expect(queryByTestId('sidebar-recall-input')).toBeNull();
+      expect(queryByTestId('sidebar-pinned-moments')).toBeNull();
+      expect(queryByTestId('sidebar-memory-stats')).toBeNull();
     });
   });
 });

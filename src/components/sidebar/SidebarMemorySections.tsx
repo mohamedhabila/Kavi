@@ -1,19 +1,14 @@
 // ---------------------------------------------------------------------------
 // Kavi — Sidebar memory sections
 // ---------------------------------------------------------------------------
-// Renders the four memory-driven IA sections that sit above the conversation
-// list:
-//   1. Today's focus tile — most recent scoped `active_focus` working block.
-//   2. Open threads chips — items parsed from scoped `open_threads` working blocks.
-//   3. Recall search input — opens the Memory screen with the query.
-//   4. Pinned moments — top user-pinned facts.
+// Reusable contextual memory summaries for Assistant and Library surfaces.
 // All memory reads are guarded so a missing/uninitialised SQLite store
 // degrades gracefully (the section simply renders empty).
 // ---------------------------------------------------------------------------
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Compass, Pin, Search, Hash, Brain } from 'lucide-react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Compass, Pin, Search, Brain } from 'lucide-react-native';
 import { AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 import type { Conversation } from '../../types/conversation';
@@ -23,7 +18,7 @@ import { subscribeToMemoryChanges } from '../../services/memory/changeNotificati
 // ── Memory readers (guarded) ────────────────────────────────────────────────
 
 function safeGetWorkingBlockContent(
-  label: 'active_focus' | 'open_threads',
+  label: 'active_focus',
   options?: { conversationId?: string | null },
 ): string | null {
   try {
@@ -96,18 +91,6 @@ function useMemoryVersion(): number {
   return version;
 }
 
-// ── Open-threads parser ─────────────────────────────────────────────────────
-
-/** Split `open_threads` block content into chip labels. */
-export function parseOpenThreads(content: string | null | undefined): string[] {
-  if (!content) return [];
-  return content
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^[\s\-•·*]+/, '').trim())
-    .filter((line) => line.length > 0)
-    .slice(0, 12);
-}
-
 // ── Time bucketing ──────────────────────────────────────────────────────────
 
 export type TimeBucket = 'today' | 'yesterday' | 'thisWeek' | 'earlier';
@@ -169,11 +152,15 @@ export const TodaysFocusTile: React.FC<TodaysFocusTileProps> = ({
   const focus = (safeGetWorkingBlockContent('active_focus', { conversationId }) ?? '').trim();
   const isEmpty = focus.length === 0;
 
+  if (isEmpty) {
+    return null;
+  }
+
   return (
     <TouchableOpacity
       style={styles.focusTile}
       onPress={onPress}
-      disabled={!onPress || isEmpty}
+      disabled={!onPress}
       accessibilityRole="button"
       accessibilityLabel={t('nav.todaysFocus')}
       testID="sidebar-todays-focus"
@@ -182,68 +169,10 @@ export const TodaysFocusTile: React.FC<TodaysFocusTileProps> = ({
         <Compass size={14} color={colors.primary} />
         <Text style={styles.sectionTitle}>{t('nav.todaysFocus')}</Text>
       </View>
-      <Text
-        style={[styles.focusBody, isEmpty && styles.focusBodyEmpty]}
-        numberOfLines={3}
-        testID="sidebar-todays-focus-body"
-      >
-        {isEmpty ? t('nav.todaysFocusEmpty') : focus}
+      <Text style={styles.focusBody} numberOfLines={3} testID="sidebar-todays-focus-body">
+        {focus}
       </Text>
     </TouchableOpacity>
-  );
-};
-
-interface OpenThreadsChipsProps {
-  colors: AppPalette;
-  conversationId?: string | null;
-  onSelect?: (label: string) => void;
-}
-
-export const OpenThreadsChips: React.FC<OpenThreadsChipsProps> = ({
-  colors,
-  conversationId,
-  onSelect,
-}) => {
-  const { t } = useTranslation();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  useMemoryVersion();
-  const content = safeGetWorkingBlockContent('open_threads', { conversationId });
-  const labels = useMemo(() => parseOpenThreads(content), [content]);
-
-  return (
-    <View style={styles.section} testID="sidebar-open-threads">
-      <View style={styles.sectionHeader}>
-        <Hash size={14} color={colors.textSecondary} />
-        <Text style={styles.sectionTitle}>{t('nav.openThreads')}</Text>
-      </View>
-      {labels.length === 0 ? (
-        <Text style={styles.emptyHint} testID="sidebar-open-threads-empty">
-          {t('nav.openThreadsEmpty')}
-        </Text>
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-          style={{ flexGrow: 0, flexShrink: 0 }}
-        >
-          {labels.map((label) => (
-            <TouchableOpacity
-              key={label}
-              style={styles.chip}
-              onPress={() => onSelect?.(label)}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-              testID={`sidebar-open-thread-${label}`}
-            >
-              <Text style={styles.chipText} numberOfLines={1}>
-                {label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-    </View>
   );
 };
 
@@ -440,27 +369,6 @@ const createStyles = (colors: AppPalette) =>
       fontSize: 13,
       color: colors.text,
       lineHeight: 18,
-    },
-    focusBodyEmpty: {
-      color: colors.textTertiary,
-      fontStyle: 'italic',
-    },
-    chipsRow: {
-      gap: 6,
-      paddingVertical: 2,
-    },
-    chip: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-      maxWidth: 180,
-    },
-    chipText: {
-      fontSize: 12,
-      color: colors.text,
     },
     recallRow: {
       flexDirection: 'row',
