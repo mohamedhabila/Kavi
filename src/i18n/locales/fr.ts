@@ -1397,14 +1397,40 @@ export const fr: TranslationMap = mergeTranslations(en, {
   },
   toolCall: {
     accessibilityLabel: "Appel d'outil {name}, statut : {status}",
-    viewFile: 'View {path}',
+    viewFile: 'Voir {path}',
     viewFileHint: 'Ouvre ce résultat sans modifier la vue des détails',
     expandDetailsHint: 'Afficher les entrées, le résultat et les détails techniques',
     collapseDetailsHint: 'Masquer les entrées, le résultat et les détails techniques',
+    technicalDetails: 'Détails techniques',
+    showTechnicalDetailsHint: 'Afficher les entrées, résultats et erreurs expurgés',
+    hideTechnicalDetailsHint: 'Masquer les entrées, résultats et erreurs expurgés',
+    redactedNotice: 'Les valeurs sensibles sont masquées ici et dans le texte copié.',
+    previewShortened: 'Aperçu abrégé. Ouvrez les détails techniques pour en voir plus.',
+    detailsShortened: 'Les détails ont été abrégés pour faciliter la lecture.',
     sections: {
-      arguments: 'Arguments :',
-      result: 'Résultat :',
-      error: 'Erreur :',
+      arguments: 'Entrées',
+      result: 'Résultat',
+      error: "Détails de l'erreur",
+    },
+    outcomes: {
+      uncertainTitle: 'Vérifiez avant de réessayer',
+      uncertainDetail:
+        "L'action a peut-être abouti, mais l'app n'a pas pu le confirmer. Vérifiez la destination avant toute nouvelle demande.",
+      declinedTitle: "Cette action n'a pas été approuvée",
+      declinedDetail:
+        "Rien n'a été modifié. Vous pouvez faire une nouvelle demande si vous souhaitez toujours cette action.",
+      accessTitle: 'Un accès est nécessaire',
+      accessDetail: "Vérifiez l'autorisation de l'app ou du service, puis réessayez.",
+      unavailableTitle: "Cette fonctionnalité n'est pas disponible",
+      unavailableDetail:
+        "Essayez un autre mode ou une autre connexion, ou demandez une autre approche à l'assistant.",
+      connectionTitle: 'La connexion a été interrompue',
+      connectionDetail: 'Vérifiez la connexion et la configuration du service, puis réessayez.',
+      stoppedTitle: "L'action a été arrêtée en toute sécurité",
+      stoppedDetail: 'Vérifiez la demande la plus récente, puis réessayez lorsque vous êtes prêt.',
+      failedTitle: "Cette action n'a pas pu être effectuée",
+      failedDetail:
+        "Consultez les détails techniques ou demandez une autre approche à l'assistant.",
     },
     status: {
       pending: 'En attente',

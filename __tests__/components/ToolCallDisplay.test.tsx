@@ -161,15 +161,21 @@ describe('ToolCallDisplay', () => {
   });
 
   it('should show arguments when expanded', () => {
-    const { getByText, getByTestId } = render(<ToolCallDisplay toolCall={makeToolCall()} />);
+    const { getByText, getByTestId, queryByText } = render(
+      <ToolCallDisplay toolCall={makeToolCall()} />,
+    );
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
-    expect(getByText('Arguments:')).toBeTruthy();
+    expect(getByText('Technical details')).toBeTruthy();
+    expect(queryByText('Inputs')).toBeNull();
+    fireEvent.press(getByTestId('tool-call-technical-disclosure-tc1'));
+    expect(getByText('Inputs')).toBeTruthy();
   });
 
   it('should show formatted JSON arguments', () => {
     const tc = makeToolCall({ arguments: '{"path":"test.txt","encoding":"utf8"}' });
     const { getByTestId, getAllByText } = render(<ToolCallDisplay toolCall={tc} />);
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
+    fireEvent.press(getByTestId('tool-call-technical-disclosure-tc1'));
     // Should contain pretty-printed JSON
     expect(getAllByText(/test\.txt/).length).toBeGreaterThan(0);
   });
@@ -178,15 +184,18 @@ describe('ToolCallDisplay', () => {
     const tc = makeToolCall({ result: 'file content here' });
     const { getByText, getByTestId } = render(<ToolCallDisplay toolCall={tc} />);
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
-    expect(getByText('Result:')).toBeTruthy();
+    expect(getByText('Result')).toBeTruthy();
     expect(getByText('file content here')).toBeTruthy();
   });
 
-  it('should show error when expanded and failed', () => {
+  it('should explain a failed action before showing its technical error', () => {
     const tc = makeToolCall({ status: 'failed', error: 'Permission denied' });
-    const { getByText, getByTestId } = render(<ToolCallDisplay toolCall={tc} />);
+    const { getByText, getByTestId, queryByText } = render(<ToolCallDisplay toolCall={tc} />);
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
-    expect(getByText('Error:')).toBeTruthy();
+    expect(getByText('Access is needed')).toBeTruthy();
+    expect(queryByText('Permission denied')).toBeNull();
+    fireEvent.press(getByTestId('tool-call-technical-disclosure-tc1'));
+    expect(getByText('Error details')).toBeTruthy();
     expect(getByText('Permission denied')).toBeTruthy();
   });
 
@@ -194,6 +203,7 @@ describe('ToolCallDisplay', () => {
     const tc = makeToolCall({ arguments: 'not valid json' });
     const { getByText, getByTestId } = render(<ToolCallDisplay toolCall={tc} />);
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
+    fireEvent.press(getByTestId('tool-call-technical-disclosure-tc1'));
     expect(getByText('not valid json')).toBeTruthy();
   });
 
@@ -203,12 +213,27 @@ describe('ToolCallDisplay', () => {
       expanded: false,
     });
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
-    expect(queryByText('Arguments:')).toBeTruthy();
+    expect(queryByText('Technical details')).toBeTruthy();
     expect(getByTestId('tool-call-disclosure-tc1').props.accessibilityState).toEqual({
       expanded: true,
     });
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
-    expect(queryByText('Arguments:')).toBeNull();
+    expect(queryByText('Technical details')).toBeNull();
+  });
+
+  it('exposes technical disclosure state on a 48-point target', () => {
+    const { getByTestId } = render(<ToolCallDisplay toolCall={makeToolCall()} />);
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
+
+    const disclosure = getByTestId('tool-call-technical-disclosure-tc1');
+    expect(StyleSheet.flatten(disclosure.props.style)).toEqual(
+      expect.objectContaining({ minHeight: 48 }),
+    );
+    expect(disclosure.props.accessibilityState).toEqual({ expanded: false });
+    fireEvent.press(disclosure);
+    expect(getByTestId('tool-call-technical-disclosure-tc1').props.accessibilityState).toEqual({
+      expanded: true,
+    });
   });
 
   it('should render interactive polls from poll_create results', () => {
@@ -272,10 +297,10 @@ describe('ToolCallDisplay', () => {
     );
     fireEvent.press(viewAction);
     expect(onViewFile).toHaveBeenCalledWith('src/app.ts');
-    expect(queryByText('Arguments:')).toBeNull();
+    expect(queryByText('Technical details')).toBeNull();
 
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
-    expect(queryByText('Arguments:')).toBeTruthy();
+    expect(queryByText('Technical details')).toBeTruthy();
     expect(onViewFile).toHaveBeenCalledTimes(1);
   });
 

@@ -1405,14 +1405,39 @@ export const de: TranslationMap = mergeTranslations(en, {
   },
   toolCall: {
     accessibilityLabel: 'Tool-Aufruf {name}, Status: {status}',
-    viewFile: 'View {path}',
+    viewFile: '{path} anzeigen',
     viewFileHint: 'Öffnet dieses Ergebnis, ohne die Detailansicht zu ändern',
     expandDetailsHint: 'Eingaben, Ergebnis und technische Details anzeigen',
     collapseDetailsHint: 'Eingaben, Ergebnis und technische Details ausblenden',
+    technicalDetails: 'Technische Details',
+    showTechnicalDetailsHint: 'Bereinigte Eingaben, Ergebnisse und Fehlerdetails anzeigen',
+    hideTechnicalDetailsHint: 'Bereinigte Eingaben, Ergebnisse und Fehlerdetails ausblenden',
+    redactedNotice: 'Vertrauliche Werte werden hier und in kopiertem Text ausgeblendet.',
+    previewShortened: 'Vorschau gekürzt. Öffne die technischen Details für mehr.',
+    detailsShortened: 'Details wurden zur besseren Lesbarkeit gekürzt.',
     sections: {
-      arguments: 'Argumente:',
-      result: 'Ergebnis:',
-      error: 'Fehler:',
+      arguments: 'Eingaben',
+      result: 'Ergebnis',
+      error: 'Fehlerdetails',
+    },
+    outcomes: {
+      uncertainTitle: 'Vor einem neuen Versuch prüfen',
+      uncertainDetail:
+        'Die Aktion wurde möglicherweise ausgeführt, konnte aber nicht bestätigt werden. Prüfe das Ziel vor einer neuen Anfrage.',
+      declinedTitle: 'Diese Aktion wurde nicht genehmigt',
+      declinedDetail: 'Es wurde nichts geändert. Du kannst bei Bedarf eine neue Anfrage stellen.',
+      accessTitle: 'Zugriff erforderlich',
+      accessDetail: 'Prüfe die Berechtigung der App oder des Dienstes und versuche es erneut.',
+      unavailableTitle: 'Diese Funktion ist nicht verfügbar',
+      unavailableDetail:
+        'Probiere einen anderen Modus oder eine andere Verbindung oder bitte den Assistenten um einen anderen Ansatz.',
+      connectionTitle: 'Die Verbindung wurde unterbrochen',
+      connectionDetail: 'Prüfe die Verbindung und die Diensteinstellungen und versuche es erneut.',
+      stoppedTitle: 'Diese Aktion wurde sicher beendet',
+      stoppedDetail: 'Prüfe die neueste Anfrage und versuche es erneut, wenn du bereit bist.',
+      failedTitle: 'Diese Aktion konnte nicht abgeschlossen werden',
+      failedDetail:
+        'Prüfe die technischen Details oder bitte den Assistenten um einen anderen Ansatz.',
     },
     status: {
       pending: 'Wartet',

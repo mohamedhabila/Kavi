@@ -86,7 +86,68 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
     },
     body: {
       padding: 10,
+      gap: 10,
+    },
+    outcomeCard: {
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+      borderRadius: 8,
+      borderWidth: 1,
+      gap: 3,
+    },
+    outcomeCardDanger: {
+      backgroundColor: colors.dangerSoft,
+      borderColor: colors.danger,
+    },
+    outcomeCardWarning: {
+      backgroundColor: colors.warningBackground,
+      borderColor: colors.warning,
+    },
+    outcomeTitle: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    outcomeDetail: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    resultSection: {
       gap: 6,
+    },
+    technicalDisclosure: {
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceAlt,
+    },
+    technicalTitle: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    technicalDetails: {
+      gap: 10,
+    },
+    detailSection: {
+      gap: 6,
+    },
+    privacyNotice: {
+      color: colors.textSecondary,
+      fontSize: 11,
+      lineHeight: 16,
+    },
+    detailNotice: {
+      color: colors.textTertiary,
+      fontSize: 11,
+      lineHeight: 15,
     },
     pollCard: {
       paddingHorizontal: 10,

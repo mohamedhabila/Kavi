@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 import type { ToolCallDisplayStyles } from './ToolCallDisplay.styles';
 
 interface PollOption {
@@ -27,10 +28,29 @@ export function parseToolCallPoll(toolName: string, result?: string): ParsedPoll
   try {
     const parsed = JSON.parse(result);
     const poll = parsed?.poll as ParsedPoll | undefined;
-    if (!poll?.question || !Array.isArray(poll.options)) {
+    if (typeof poll?.question !== 'string' || !poll.question.trim() || !Array.isArray(poll.options)) {
       return null;
     }
-    return poll;
+    const options = poll.options
+      .filter(
+        (option): option is PollOption =>
+          Boolean(
+            option &&
+              typeof option.id === 'string' &&
+              typeof option.label === 'string' &&
+              typeof option.votes === 'number' &&
+              Number.isFinite(option.votes),
+          ),
+      )
+      .map((option) => ({
+        ...option,
+        label: redactSensitiveText(option.label),
+      }));
+    return {
+      question: redactSensitiveText(poll.question),
+      options,
+      ...(poll.allowMultiple === true ? { allowMultiple: true } : {}),
+    };
   } catch {
     return null;
   }

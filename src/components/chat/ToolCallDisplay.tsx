@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Eye } from 'lucide-react-native';
 import type { ToolCall } from '../../types/message';
 import { useAppTheme } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
+import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 import { createToolCallDisplayStyles } from './ToolCallDisplay.styles';
 import { ToolCallBody } from './ToolCallBody';
 import { parseToolCallPoll, ToolCallPoll } from './ToolCallPoll';
@@ -62,14 +63,6 @@ function getCompletedFileToolPath(
   }
 }
 
-function formatToolArguments(toolArguments: string): string {
-  try {
-    return JSON.stringify(JSON.parse(toolArguments), null, 2);
-  } catch {
-    return toolArguments;
-  }
-}
-
 const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, onViewFile }) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
@@ -97,21 +90,32 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
     () => parseToolCallPoll(toolCall.name, toolCall.result),
     [toolCall.name, toolCall.result],
   );
-  const parsedArgs = useMemo(() => formatToolArguments(toolCall.arguments), [toolCall.arguments]);
-  const summary = summarizeToolCall(toolCall, t);
+  const unsafeSummary = summarizeToolCall(toolCall, t);
+  const summary = unsafeSummary ? redactSensitiveText(unsafeSummary) : null;
   const toolName = humanizeToolName(toolCall.name, t);
   const statusText = t(`toolCall.status.${toolCall.status}`);
   const elapsedMs = getElapsedMs(toolCall, now);
-  const waitingPresentation =
+  const unsafeWaitingPresentation =
     toolCall.status === 'pending' || toolCall.status === 'running'
       ? getWaitingPresentation(toolCall)
       : null;
+  const waitingPresentation = unsafeWaitingPresentation
+    ? {
+        title: redactSensitiveText(unsafeWaitingPresentation.title),
+        detail: unsafeWaitingPresentation.detail
+          ? redactSensitiveText(unsafeWaitingPresentation.detail)
+          : undefined,
+      }
+    : null;
   const displayTitle = waitingPresentation?.title || summary || toolName;
   const isActive = toolCall.status === 'pending' || toolCall.status === 'running';
   const isFinished = toolCall.status === 'completed' || toolCall.status === 'failed';
-  const runningDetailText =
+  const unsafeRunningDetailText =
     toolCall.progressText ||
     (elapsedMs !== null && isActive ? `${formatCompactDuration(elapsedMs)} elapsed` : null);
+  const runningDetailText = unsafeRunningDetailText
+    ? redactSensitiveText(unsafeRunningDetailText)
+    : null;
   const completedDurationText =
     isFinished && elapsedMs !== null && elapsedMs >= 500 ? formatHumanDuration(elapsedMs) : null;
 
@@ -170,7 +174,9 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
             style={styles.viewFileBtn}
             onPress={() => onViewFile(fileToolPath)}
             accessibilityRole="button"
-            accessibilityLabel={t('toolCall.viewFile', { path: fileToolPath })}
+            accessibilityLabel={t('toolCall.viewFile', {
+              path: redactSensitiveText(fileToolPath),
+            })}
             accessibilityHint={t('toolCall.viewFileHint')}
             testID={`tool-call-view-file-${toolCall.id}`}
           >
@@ -183,9 +189,8 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
       {expanded ? (
         <ToolCallBody
           toolCall={toolCall}
-          parsedArgs={parsedArgs}
           styles={styles}
-          dangerColor={colors.danger}
+          iconColor={colors.textSecondary}
           t={t}
         />
       ) : null}
