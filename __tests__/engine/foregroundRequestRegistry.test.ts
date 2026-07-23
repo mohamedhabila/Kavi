@@ -64,4 +64,34 @@ describe('foreground request registry', () => {
     expect(registry.size).toBe(0);
     expect(registry.clear(first)).toBe(false);
   });
+
+  it('publishes a monotonic snapshot when visible request state changes', () => {
+    const registry = createForegroundRequestRegistry();
+    const request = handle('conversation-a', 'request-a');
+    const versions: number[] = [];
+    const unsubscribe = registry.subscribe(() => versions.push(registry.getVersion()));
+
+    registry.register(request);
+    const registeredSnapshot = registry.getSnapshot();
+    registry.setStreamingMessageId(request, 'message-a');
+    expect(registry.clear(handle('conversation-a', 'stale-request'))).toBe(false);
+    expect(registry.clear(request)).toBe(true);
+    unsubscribe();
+    registry.register(handle('conversation-b', 'request-b'));
+
+    expect(versions).toEqual([1, 2, 3]);
+    expect(registry.getVersion()).toBe(4);
+    expect(registeredSnapshot).toEqual({
+      activeConversationIds: new Set(['conversation-a']),
+      streamingMessageIds: new Map(),
+      size: 1,
+      version: 1,
+    });
+    expect(registry.getSnapshot()).toEqual({
+      activeConversationIds: new Set(['conversation-b']),
+      streamingMessageIds: new Map(),
+      size: 1,
+      version: 4,
+    });
+  });
 });

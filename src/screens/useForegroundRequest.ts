@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createForegroundRequestRegistry } from '../engine/graph/foregroundRun/requestRegistry';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { appForegroundRequestRegistry } from '../engine/graph/foregroundRun/requestRegistry';
 
 type UseForegroundRequestParams = {
   setLoading: (isLoading: boolean) => void;
@@ -32,28 +32,18 @@ export function useForegroundRequest({ setLoading }: UseForegroundRequestParams)
     messageId: string | null,
   ) => boolean;
 } {
-  const [registry] = useState(createForegroundRequestRegistry);
-  const [activeForegroundConversationIds, setActiveForegroundConversationIds] = useState<
-    ReadonlySet<string>
-  >(new Set());
-  const [foregroundStreamingMessageIds, setForegroundStreamingMessageIds] = useState<
-    ReadonlyMap<string, string>
-  >(new Map());
+  const registry = appForegroundRequestRegistry;
+  const registrySnapshot = useSyncExternalStore(
+    registry.subscribe,
+    registry.getSnapshot,
+    registry.getSnapshot,
+  );
+  const activeForegroundConversationIds = registrySnapshot.activeConversationIds;
+  const foregroundStreamingMessageIds = registrySnapshot.streamingMessageIds;
 
-  const publishRegistryState = useCallback(() => {
-    const activeConversationIds = registry.getActiveConversationIds();
-    const streamingMessageIds = new Map<string, string>();
-    for (const conversationId of activeConversationIds) {
-      const messageId = registry.getStreamingMessageId(conversationId);
-      if (messageId) {
-        streamingMessageIds.set(conversationId, messageId);
-      }
-    }
-
-    setActiveForegroundConversationIds(activeConversationIds);
-    setForegroundStreamingMessageIds(streamingMessageIds);
-    setLoading(registry.size > 0);
-  }, [registry, setLoading]);
+  useEffect(() => {
+    setLoading(registrySnapshot.size > 0);
+  }, [registrySnapshot.size, setLoading]);
 
   const registerForegroundRequest = useCallback(
     (requestId: string, conversationId: string, abortController: AbortController) => {
@@ -62,9 +52,8 @@ export function useForegroundRequest({ setLoading }: UseForegroundRequestParams)
         conversationId,
         controller: abortController,
       });
-      publishRegistryState();
     },
-    [publishRegistryState, registry],
+    [registry],
   );
 
   const isCurrentForegroundRequest = useCallback(
@@ -88,10 +77,9 @@ export function useForegroundRequest({ setLoading }: UseForegroundRequestParams)
         return false;
       }
 
-      publishRegistryState();
       return true;
     },
-    [publishRegistryState, registry],
+    [registry],
   );
 
   const abortForegroundRequestForConversation = useCallback(
@@ -106,10 +94,9 @@ export function useForegroundRequest({ setLoading }: UseForegroundRequestParams)
         return false;
       }
 
-      publishRegistryState();
       return true;
     },
-    [publishRegistryState, registry],
+    [registry],
   );
 
   const setForegroundRequestStreamingMessageId = useCallback(
@@ -123,12 +110,9 @@ export function useForegroundRequest({ setLoading }: UseForegroundRequestParams)
         { conversationId, requestId, controller: abortController },
         messageId,
       );
-      if (updated) {
-        publishRegistryState();
-      }
       return updated;
     },
-    [publishRegistryState, registry],
+    [registry],
   );
 
   useEffect(
