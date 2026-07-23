@@ -112,7 +112,7 @@ describe('MessageBubble status and tool states', () => {
       ],
     });
     const { getByText } = render(<MessageBubble message={msg} />);
-    expect(getByText('Read File')).toBeTruthy();
+    expect(getByText('Reading test.txt')).toBeTruthy();
   });
 
   it('should render grouped assistant rounds as one bubble with inline tool order', () => {
@@ -147,7 +147,7 @@ describe('MessageBubble status and tool states', () => {
     );
 
     expect(getByText('First round')).toBeTruthy();
-    expect(getByText('Read File')).toBeTruthy();
+    expect(getByText('Reading test.txt')).toBeTruthy();
     expect(getByText('Second round')).toBeTruthy();
   });
 
@@ -207,7 +207,7 @@ describe('MessageBubble status and tool states', () => {
 
     expect(getByText('Checking the file.')).toBeTruthy();
     expect(getByText('Found the issue.')).toBeTruthy();
-    expect(queryAllByText('Read File')).toHaveLength(1);
+    expect(queryAllByText('Reading test.txt')).toHaveLength(1);
   });
 
   it('should show a working banner while assistant response is streaming', () => {

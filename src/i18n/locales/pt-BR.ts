@@ -1394,16 +1394,19 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
   toolCall: {
     accessibilityLabel: 'Chamada da ferramenta {name}, status: {status}',
     viewFile: 'View {path}',
+    viewFileHint: 'Abre este resultado sem alterar a visualização dos detalhes',
+    expandDetailsHint: 'Mostrar entradas, resultado e detalhes técnicos',
+    collapseDetailsHint: 'Ocultar entradas, resultado e detalhes técnicos',
     sections: {
       arguments: 'Argumentos:',
       result: 'Resultado:',
       error: 'Erro:',
     },
     status: {
-      pending: 'pendente',
-      running: 'em execução',
-      completed: 'concluído',
-      failed: 'falhou',
+      pending: 'Aguardando',
+      running: 'Trabalhando',
+      completed: 'Concluído',
+      failed: 'Falhou',
     },
     tools: {
       write_file: 'Escrever arquivo',

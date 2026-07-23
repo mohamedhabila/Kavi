@@ -1332,6 +1332,9 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
   toolCall: {
     accessibilityLabel: '{name} 工具呼叫，狀態：{status}',
     viewFile: 'View {path}',
+    viewFileHint: '開啟此結果且不改變詳細資料檢視',
+    expandDetailsHint: '顯示輸入、結果和技術詳細資料',
+    collapseDetailsHint: '隱藏輸入、結果和技術詳細資料',
     sections: {
       arguments: '參數：',
       result: '結果：',
@@ -1339,8 +1342,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     },
     status: {
       pending: '等待中',
-      running: '執行中',
-      completed: '已完成',
+      running: '處理中',
+      completed: '完成',
       failed: '失敗',
     },
     tools: {

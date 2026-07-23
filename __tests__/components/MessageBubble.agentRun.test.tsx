@@ -435,7 +435,7 @@ describe('MessageBubble agent run widgets', () => {
     );
 
     expect(getAllByTestId('sub-agent-card-depth-1')).toHaveLength(1);
-    expect(getByText('Read File')).toBeTruthy();
-    expect(getByText('Write File')).toBeTruthy();
+    expect(getByText('Reading src/store/useChatStore.ts')).toBeTruthy();
+    expect(getByText('Creating src/components/chat/assistantBubbleModel.ts')).toBeTruthy();
   });
 });

@@ -2,6 +2,7 @@
 // Tests — ToolCallDisplay Component
 // ---------------------------------------------------------------------------
 
+import { StyleSheet } from 'react-native';
 import { act, render, fireEvent } from '@testing-library/react-native';
 import { summarizeToolCall, ToolCallDisplay } from '../../src/components/chat/ToolCallDisplay';
 import { parseToolCallPoll } from '../../src/components/chat/ToolCallPoll';
@@ -47,9 +48,9 @@ describe('ToolCallDisplay', () => {
     jest.useRealTimers();
   });
 
-  it('should render tool name', () => {
+  it('should render the human outcome before the internal tool name', () => {
     const { getByText } = render(<ToolCallDisplay toolCall={makeToolCall()} />);
-    expect(getByText('Read File')).toBeTruthy();
+    expect(getByText('Reading test.txt')).toBeTruthy();
   });
 
   it('should render a friendly summary for file operations', () => {
@@ -77,7 +78,7 @@ describe('ToolCallDisplay', () => {
     const { getByText } = render(
       <ToolCallDisplay toolCall={makeToolCall({ status: 'completed' })} />,
     );
-    expect(getByText('completed')).toBeTruthy();
+    expect(getByText('Done')).toBeTruthy();
   });
 
   it('should show check icon for completed status', () => {
@@ -160,47 +161,53 @@ describe('ToolCallDisplay', () => {
   });
 
   it('should show arguments when expanded', () => {
-    const { getByText } = render(<ToolCallDisplay toolCall={makeToolCall()} />);
-    fireEvent.press(getByText('Read File'));
+    const { getByText, getByTestId } = render(<ToolCallDisplay toolCall={makeToolCall()} />);
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
     expect(getByText('Arguments:')).toBeTruthy();
   });
 
   it('should show formatted JSON arguments', () => {
     const tc = makeToolCall({ arguments: '{"path":"test.txt","encoding":"utf8"}' });
-    const { getByText, getAllByText } = render(<ToolCallDisplay toolCall={tc} />);
-    fireEvent.press(getByText('Read File'));
+    const { getByTestId, getAllByText } = render(<ToolCallDisplay toolCall={tc} />);
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
     // Should contain pretty-printed JSON
     expect(getAllByText(/test\.txt/).length).toBeGreaterThan(0);
   });
 
   it('should show result when expanded', () => {
     const tc = makeToolCall({ result: 'file content here' });
-    const { getByText } = render(<ToolCallDisplay toolCall={tc} />);
-    fireEvent.press(getByText('Read File'));
+    const { getByText, getByTestId } = render(<ToolCallDisplay toolCall={tc} />);
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
     expect(getByText('Result:')).toBeTruthy();
     expect(getByText('file content here')).toBeTruthy();
   });
 
   it('should show error when expanded and failed', () => {
     const tc = makeToolCall({ status: 'failed', error: 'Permission denied' });
-    const { getByText } = render(<ToolCallDisplay toolCall={tc} />);
-    fireEvent.press(getByText('Read File'));
+    const { getByText, getByTestId } = render(<ToolCallDisplay toolCall={tc} />);
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
     expect(getByText('Error:')).toBeTruthy();
     expect(getByText('Permission denied')).toBeTruthy();
   });
 
   it('should handle invalid JSON arguments gracefully', () => {
     const tc = makeToolCall({ arguments: 'not valid json' });
-    const { getByText } = render(<ToolCallDisplay toolCall={tc} />);
-    fireEvent.press(getByText('Read File'));
+    const { getByText, getByTestId } = render(<ToolCallDisplay toolCall={tc} />);
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
     expect(getByText('not valid json')).toBeTruthy();
   });
 
   it('should toggle expansion', () => {
-    const { getByText, queryByText } = render(<ToolCallDisplay toolCall={makeToolCall()} />);
-    fireEvent.press(getByText('Read File'));
+    const { getByTestId, queryByText } = render(<ToolCallDisplay toolCall={makeToolCall()} />);
+    expect(getByTestId('tool-call-disclosure-tc1').props.accessibilityState).toEqual({
+      expanded: false,
+    });
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
     expect(queryByText('Arguments:')).toBeTruthy();
-    fireEvent.press(getByText('Read File'));
+    expect(getByTestId('tool-call-disclosure-tc1').props.accessibilityState).toEqual({
+      expanded: true,
+    });
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
     expect(queryByText('Arguments:')).toBeNull();
   });
 
@@ -250,17 +257,26 @@ describe('ToolCallDisplay', () => {
     expect(getAllByText('1')).toHaveLength(1);
   });
 
-  it('should invoke the file viewer action for completed file tools', () => {
+  it('keeps file viewing separate from disclosure on a 48-point action target', () => {
     const onViewFile = jest.fn();
-    const { getByText } = render(
+    const { getByTestId, queryByText } = render(
       <ToolCallDisplay
         toolCall={makeToolCall({ name: 'write_file', arguments: '{"path":"src/app.ts"}' })}
         onViewFile={onViewFile}
       />,
     );
 
-    fireEvent.press(getByText('View'));
+    const viewAction = getByTestId('tool-call-view-file-tc1');
+    expect(StyleSheet.flatten(viewAction.props.style)).toEqual(
+      expect.objectContaining({ minHeight: 48, minWidth: 64 }),
+    );
+    fireEvent.press(viewAction);
     expect(onViewFile).toHaveBeenCalledWith('src/app.ts');
+    expect(queryByText('Arguments:')).toBeNull();
+
+    fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
+    expect(queryByText('Arguments:')).toBeTruthy();
+    expect(onViewFile).toHaveBeenCalledTimes(1);
   });
 
   it('should show elapsed duration for completed tools with significant runtime', () => {
@@ -274,8 +290,7 @@ describe('ToolCallDisplay', () => {
       completedAt: now,
     });
     const { getByText } = render(<ToolCallDisplay toolCall={tc} />);
-    // "completed · 5s" format
-    expect(getByText(/completed.*5s/i)).toBeTruthy();
+    expect(getByText(/Done.*5s/i)).toBeTruthy();
   });
 
   it('should not show elapsed for completed tools with sub-500ms runtime', () => {
@@ -289,8 +304,7 @@ describe('ToolCallDisplay', () => {
       completedAt: now,
     });
     const { getByText, queryByText } = render(<ToolCallDisplay toolCall={tc} />);
-    // Should show "completed" without duration suffix
-    expect(getByText('completed')).toBeTruthy();
+    expect(getByText('Done')).toBeTruthy();
     expect(queryByText(/\d+s/)).toBeNull();
   });
 });

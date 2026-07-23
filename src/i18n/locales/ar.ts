@@ -1359,16 +1359,19 @@ export const ar: TranslationMap = mergeTranslations(en, {
   toolCall: {
     accessibilityLabel: 'استدعاء الأداة {name}، الحالة: {status}',
     viewFile: 'عرض {path}',
+    viewFileHint: 'يفتح هذه النتيجة دون تغيير عرض التفاصيل',
+    expandDetailsHint: 'إظهار المدخلات والنتيجة والتفاصيل التقنية',
+    collapseDetailsHint: 'إخفاء المدخلات والنتيجة والتفاصيل التقنية',
     sections: {
       arguments: 'الوسائط:',
       result: 'النتيجة:',
       error: 'الخطأ:',
     },
     status: {
-      pending: 'قيد الانتظار',
-      running: 'قيد التشغيل',
-      completed: 'مكتمل',
-      failed: 'فشل',
+      pending: 'بانتظار البدء',
+      running: 'جارٍ العمل',
+      completed: 'تم',
+      failed: 'تعذر',
     },
     tools: {
       write_file: 'كتابة ملف',

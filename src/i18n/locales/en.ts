@@ -1406,16 +1406,19 @@ export const en: TranslationMap = {
   toolCall: {
     accessibilityLabel: '{name} tool call, status: {status}',
     viewFile: 'View {path}',
+    viewFileHint: 'Opens this result without changing the details view',
+    expandDetailsHint: 'Show inputs, result, and technical details',
+    collapseDetailsHint: 'Hide inputs, result, and technical details',
     sections: {
       arguments: 'Arguments:',
       result: 'Result:',
       error: 'Error:',
     },
     status: {
-      pending: 'pending',
-      running: 'running',
-      completed: 'completed',
-      failed: 'failed',
+      pending: 'Waiting',
+      running: 'Working',
+      completed: 'Done',
+      failed: 'Failed',
     },
     tools: {
       write_file: 'Write File',

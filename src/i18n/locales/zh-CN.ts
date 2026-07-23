@@ -1334,6 +1334,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
   toolCall: {
     accessibilityLabel: '{name} 工具调用，状态：{status}',
     viewFile: 'View {path}',
+    viewFileHint: '打开此结果且不改变详情视图',
+    expandDetailsHint: '显示输入、结果和技术详情',
+    collapseDetailsHint: '隐藏输入、结果和技术详情',
     sections: {
       arguments: '参数：',
       result: '结果：',
@@ -1341,8 +1344,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     },
     status: {
       pending: '等待中',
-      running: '运行中',
-      completed: '已完成',
+      running: '处理中',
+      completed: '完成',
       failed: '失败',
     },
     tools: {

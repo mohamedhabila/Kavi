@@ -106,6 +106,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
     toolCall.status === 'pending' || toolCall.status === 'running'
       ? getWaitingPresentation(toolCall)
       : null;
+  const displayTitle = waitingPresentation?.title || summary || toolName;
   const isActive = toolCall.status === 'pending' || toolCall.status === 'running';
   const isFinished = toolCall.status === 'completed' || toolCall.status === 'failed';
   const runningDetailText =
@@ -116,64 +117,68 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({ toolCall, on
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.header}
-        onPress={() => setExpanded(!expanded)}
-        accessibilityRole="button"
-        accessibilityLabel={t('toolCall.accessibilityLabel', {
-          name: toolName,
-          status: statusText,
-        })}
-      >
-        <ToolCallStatusIcon
-          status={toolCall.status}
-          color={colors.textTertiary}
-          successColor={colors.success}
-          dangerColor={colors.danger}
-        />
-        <View style={styles.headerTextBlock}>
-          <Text style={styles.toolName}>{toolName}</Text>
-          {summary ? (
-            <Text style={styles.summaryText} numberOfLines={1} ellipsizeMode="middle">
-              {summary}
-            </Text>
-          ) : null}
-          {waitingPresentation ? (
-            <View style={styles.waitingBanner} testID="tool-call-waiting-banner">
-              <Text style={styles.waitingTitle}>{waitingPresentation.title}</Text>
-              <Text style={styles.waitingDetail} numberOfLines={2}>
-                {[pickWaitingPhrase(elapsedMs), runningDetailText, waitingPresentation.detail]
-                  .filter(Boolean)
-                  .join(' • ')}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.disclosureButton}
+          onPress={() => setExpanded((current) => !current)}
+          accessibilityRole="button"
+          accessibilityLabel={t('toolCall.accessibilityLabel', {
+            name: displayTitle,
+            status: statusText,
+          })}
+          accessibilityHint={
+            expanded ? t('toolCall.collapseDetailsHint') : t('toolCall.expandDetailsHint')
+          }
+          accessibilityState={{ expanded }}
+          testID={`tool-call-disclosure-${toolCall.id}`}
+        >
+          <ToolCallStatusIcon
+            status={toolCall.status}
+            color={colors.textTertiary}
+            successColor={colors.success}
+            dangerColor={colors.danger}
+          />
+          <View style={styles.headerTextBlock}>
+            <Text style={styles.toolName}>{displayTitle}</Text>
+            {waitingPresentation ? (
+              <View style={styles.waitingBanner} testID="tool-call-waiting-banner">
+                <Text style={styles.waitingDetail} numberOfLines={2}>
+                  {[pickWaitingPhrase(elapsedMs), runningDetailText, waitingPresentation.detail]
+                    .filter(Boolean)
+                    .join(' • ')}
+                </Text>
+              </View>
+            ) : runningDetailText ? (
+              <Text style={styles.liveDetailText} numberOfLines={1}>
+                {runningDetailText}
               </Text>
-            </View>
-          ) : runningDetailText ? (
-            <Text style={styles.liveDetailText} numberOfLines={1}>
-              {runningDetailText}
+            ) : null}
+          </View>
+          <View style={styles.disclosureStatus}>
+            <Text style={styles.statusText} numberOfLines={1}>
+              {completedDurationText ? `${statusText} · ${completedDurationText}` : statusText}
             </Text>
-          ) : null}
-        </View>
+            {expanded ? (
+              <ChevronDown size={18} color={colors.textTertiary} />
+            ) : (
+              <ChevronRight size={18} color={colors.textTertiary} />
+            )}
+          </View>
+        </TouchableOpacity>
         {fileToolPath && onViewFile ? (
           <TouchableOpacity
             style={styles.viewFileBtn}
             onPress={() => onViewFile(fileToolPath)}
-            hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel={t('toolCall.viewFile', { path: fileToolPath })}
+            accessibilityHint={t('toolCall.viewFileHint')}
+            testID={`tool-call-view-file-${toolCall.id}`}
           >
-            <Eye size={13} color={colors.primary} />
+            <Eye size={18} color={colors.primary} />
             <Text style={styles.viewFileBtnText}>{t('common.view')}</Text>
           </TouchableOpacity>
         ) : null}
-        <Text style={styles.statusText}>
-          {completedDurationText ? `${statusText} · ${completedDurationText}` : statusText}
-        </Text>
-        {expanded ? (
-          <ChevronDown size={14} color={colors.textTertiary} />
-        ) : (
-          <ChevronRight size={14} color={colors.textTertiary} />
-        )}
-      </TouchableOpacity>
+      </View>
       {parsedPoll ? <ToolCallPoll poll={parsedPoll} styles={styles} /> : null}
       {expanded ? (
         <ToolCallBody

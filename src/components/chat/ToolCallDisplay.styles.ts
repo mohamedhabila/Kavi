@@ -14,9 +14,17 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 10,
-      gap: 8,
       backgroundColor: colors.toolCardHeader,
+    },
+    disclosureButton: {
+      minWidth: 0,
+      minHeight: 48,
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      gap: 8,
     },
     headerTextBlock: {
       flex: 1,
@@ -27,9 +35,12 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
       fontWeight: '600',
       color: colors.text,
     },
-    summaryText: {
-      fontSize: 11,
-      color: colors.textSecondary,
+    disclosureStatus: {
+      flexShrink: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: 4,
     },
     waitingBanner: {
       marginTop: 6,
@@ -41,11 +52,6 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
       borderColor: colors.border,
       gap: 2,
     },
-    waitingTitle: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.text,
-    },
     waitingDetail: {
       fontSize: 10,
       color: colors.textSecondary,
@@ -56,23 +62,27 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
       color: colors.textSecondary,
     },
     viewFileBtn: {
+      minWidth: 64,
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       gap: 3,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 4,
+      alignSelf: 'stretch',
+      paddingHorizontal: 10,
+      borderLeftWidth: 1,
+      borderLeftColor: colors.border,
       backgroundColor: colors.primarySoft,
     },
     viewFileBtnText: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
       color: colors.primary,
     },
     statusText: {
+      flexShrink: 1,
       fontSize: 11,
       color: colors.textTertiary,
-      textTransform: 'capitalize',
     },
     body: {
       padding: 10,

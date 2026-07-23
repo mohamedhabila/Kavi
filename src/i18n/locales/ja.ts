@@ -1374,14 +1374,17 @@ export const ja: TranslationMap = mergeTranslations(en, {
   toolCall: {
     accessibilityLabel: '{name} ツール呼び出し、状態: {status}',
     viewFile: 'View {path}',
+    viewFileHint: '詳細表示を変えずにこの結果を開きます',
+    expandDetailsHint: '入力、結果、技術的な詳細を表示',
+    collapseDetailsHint: '入力、結果、技術的な詳細を非表示',
     sections: {
       arguments: '引数:',
       result: '結果:',
       error: 'エラー:',
     },
     status: {
-      pending: '保留中',
-      running: '実行中',
+      pending: '待機中',
+      running: '作業中',
       completed: '完了',
       failed: '失敗',
     },
