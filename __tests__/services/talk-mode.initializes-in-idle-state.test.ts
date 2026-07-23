@@ -76,6 +76,29 @@ describe('TalkModeManager', () => {
     await mgr.start(); // Should not re-enter listening
     expect(states.length).toBe(countBefore);
   });
+  it('does not open the microphone when the session ends during startup', async () => {
+    const voice = require('../../src/services/voice/voice');
+    let releasePlaybackStop!: () => void;
+    voice.stopSpeaking
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releasePlaybackStop = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const mgr = new TalkModeManager(mockAgentHandler, {}, { autoListen: false });
+
+    const start = mgr.start();
+    await Promise.resolve();
+    const stop = mgr.stop();
+    releasePlaybackStop();
+    await Promise.all([start, stop]);
+
+    expect(voice.startRecording).not.toHaveBeenCalled();
+    expect(mgr.getState()).toBe('idle');
+    expect(mgr.isActive()).toBe(false);
+  });
   it('pause goes to paused state', async () => {
     const mgr = new TalkModeManager(mockAgentHandler, {}, { autoListen: false });
     await mgr.start();

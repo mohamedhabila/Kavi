@@ -59,7 +59,11 @@ type UseForegroundConversationActionsParams = {
 export function useForegroundConversationActions(params: UseForegroundConversationActionsParams): {
   handleEditSend: (text: string, attachments?: Attachment[]) => Promise<void>;
   handleRetry: (messageId: string) => Promise<void>;
-  handleSend: (text: string, attachments?: Attachment[]) => Promise<void>;
+  handleSend: (
+    text: string,
+    attachments?: Attachment[],
+    runOptions?: RunChatOptions,
+  ) => Promise<void>;
   handleStop: () => void;
 } {
   const {
@@ -169,7 +173,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
   );
 
   const handleSend = useCallback(
-    async (text: string, attachments?: Attachment[]) => {
+    async (text: string, attachments?: Attachment[], runOptions?: RunChatOptions) => {
       setChatError(null);
 
       let conversationId = getLiveActiveConversationId();
@@ -226,7 +230,9 @@ export function useForegroundConversationActions(params: UseForegroundConversati
         } as Partial<Message> & Pick<Message, 'content' | 'id' | 'role'>);
 
         clearComposerDraft(getComposerDraftKey(conversationId));
-        const execution = runChat(conversationId);
+        const execution = runOptions
+          ? runChat(conversationId, runOptions)
+          : runChat(conversationId);
         writeIntent.release();
         writeIntent = undefined;
         releaseConversationWrite(conversationId);

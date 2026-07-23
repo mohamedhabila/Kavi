@@ -1,12 +1,30 @@
 // ---------------------------------------------------------------------------
-// Kavi — Voice / Talk Mode Screen
+// Kavi — Immersive voice conversation
 // ---------------------------------------------------------------------------
-// Full-screen voice interface: tap to start, auto-listen, visual feedback.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Linking,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Mic, Volume2, Loader, AlertCircle, PauseCircle } from 'lucide-react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Keyboard,
+  Mic,
+  PauseCircle,
+  RotateCcw,
+  Settings,
+  ShieldCheck,
+  Volume2,
+} from 'lucide-react-native';
+import { ApprovalBanner } from '../components/approval/ApprovalBanner';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 import {
@@ -15,25 +33,21 @@ import {
   TalkModeConfig,
   AgentHandler,
 } from '../services/voice/talkMode';
-import { runOrchestrator, OrchestratorCallbacks } from '../engine/orchestrator';
-import { useSettingsStore } from '../store/useSettingsStore';
-import { generateId } from '../utils/id';
+import { VoiceOperationError, type VoiceOperationFailureKind } from '../services/voice/voiceErrors';
+import { resolveSpeechBackend } from '../services/voice/voiceBackend';
+import {
+  sendVoiceConversationTurn,
+  VoiceConversationBridgeError,
+} from '../services/voice/voiceConversationBridge';
 import { emitVoiceEvent } from '../services/events/bus';
 import { useBackToChat } from '../navigation/useBackToChat';
-import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
-import {
-  isAgentControlGraphFailureResponseState,
-  resolveAgentControlGraphTerminalFailure,
-} from '../engine/graph/terminalOutcome';
-import type { AgentRunControlGraphState } from '../types/agentRun';
-import {
-  providerRequiresApiKey,
-  resolveEnabledProvider,
-  resolveProviderApiKey,
-} from '../services/llm/support/providerSupport';
+import { useChatStore } from '../store/useChatStore';
+import { createVoiceScreenStyles } from './VoiceScreen.styles';
 
 const defaultConfig: TalkModeConfig = {
-  ttsProvider: 'auto',
+  // System speech keeps assistant replies on-device by default. Recorded audio
+  // still uses the explicitly configured transcription service.
+  ttsProvider: 'system',
   initialSilenceTimeoutMs: 1800,
   silenceTimeoutMs: 900,
   shortSpeechSilenceTimeoutMs: 550,
@@ -47,13 +61,23 @@ const defaultConfig: TalkModeConfig = {
 };
 
 const stateLabelsMap: Record<TalkModeState, string> = {
-  idle: 'voice.tapToSpeak',
+  idle: 'voice.ready',
   listening: 'voice.listening',
   transcribing: 'voice.transcribing',
   processing: 'voice.processing',
   speaking: 'voice.speaking',
   paused: 'voice.paused',
-  error: 'voice.error',
+  error: 'voice.needsAttention',
+};
+
+const stateHintsMap: Record<TalkModeState, string> = {
+  idle: 'voice.startHint',
+  listening: 'voice.finishSpeakingHint',
+  transcribing: 'voice.transcribingHint',
+  processing: 'voice.processingHint',
+  speaking: 'voice.stopReplyHint',
+  paused: 'voice.resumeHint',
+  error: 'voice.retryHint',
 };
 
 const stateColors = (colors: AppPalette): Record<TalkModeState, string> => ({
@@ -66,368 +90,469 @@ const stateColors = (colors: AppPalette): Record<TalkModeState, string> => ({
   error: colors.danger,
 });
 
+type VoiceTurn = {
+  id: number;
+  transcript: string;
+  response?: string;
+};
+
+function resolveFailureKind(error: unknown): VoiceOperationFailureKind {
+  return error instanceof VoiceOperationError ? error.kind : 'unexpected';
+}
+
+function getFailureMessageKey(kind: VoiceOperationFailureKind): string {
+  switch (kind) {
+    case 'permission_denied':
+      return 'voice.permissionDeniedError';
+    case 'provider_unavailable':
+      return 'voice.providerUnavailableError';
+    case 'invalid_recording':
+      return 'voice.invalidRecordingError';
+    case 'transport':
+      return 'voice.networkError';
+    case 'provider_response':
+      return 'voice.serviceError';
+    case 'unexpected':
+      return 'voice.genericError';
+  }
+}
+
 export const VoiceScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
-  const handleBack = useBackToChat();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createVoiceScreenStyles(colors), [colors]);
+  const activeConversationTitle = useChatStore((store) => {
+    const activeConversation = store.activeConversationId
+      ? store.conversations.find((conversation) => conversation.id === store.activeConversationId)
+      : undefined;
+    return activeConversation?.title;
+  });
 
   const [state, setState] = useState<TalkModeState>('idle');
-  const [transcript, setTranscript] = useState<string>('');
-  const [response, setResponse] = useState<string>('');
-  const [errorMsg, setErrorMsg] = useState<string>('');
+  const [turns, setTurns] = useState<VoiceTurn[]>([]);
+  const [voiceError, setVoiceError] = useState<Error | null>(null);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const nextTurnIdRef = useRef(1);
+  const isScreenFocusedRef = useRef(false);
+  const startAttemptRef = useRef(0);
+  const isPreparingRef = useRef(false);
 
-  const agentHandlerRef = useRef<AgentHandler>(async (input: string) => {
-    const settings = useSettingsStore.getState();
-    const provider = resolveEnabledProvider(settings.providers, settings.activeProviderId);
-    if (!provider) return t('chat.noProvider');
-
-    const model =
-      (provider.id === settings.activeProviderId ? settings.activeModel || '' : '') ||
-      provider.model;
-    if (!model) return t('chat.noModel');
-
-    const apiKey = await resolveProviderApiKey(provider);
-    if (providerRequiresApiKey(provider) && !apiKey) return t('chat.noApiKey');
-
-    const voiceSystemPrompt = settings.systemPrompt
-      ? `${settings.systemPrompt}\n${t('voice.conciseResponseInstruction')}`
-      : t('voice.defaultSystemPrompt');
-
-    let result = '';
-    let latestControlGraphState: AgentRunControlGraphState | undefined;
-    let reportedOrchestratorError: Error | undefined;
-    const convId = `voice_${generateId()}`;
-    const callbacks: OrchestratorCallbacks = {
-      onAgentControlGraphStateChange: (state) => {
-        latestControlGraphState = state;
-      },
-      onStateChange: () => {},
-      onToken: (token: string) => {
-        result += token;
-      },
-      onReasoning: () => {},
-      onAssistantStreamReset: () => {
-        result = '';
-      },
-      onToolCallStart: () => {},
-      onToolCallComplete: () => {},
-      onAssistantMessage: (content) => {
-        if (content) result = content;
-      },
-      onToolMessage: () => {},
-      onError: (error) => {
-        reportedOrchestratorError = error;
-      },
-      onUsage: () => {},
-      onDone: () => {},
-    };
+  const agentHandlerRef = useRef<AgentHandler>(async () => '');
+  agentHandlerRef.current = async (input: string) => {
     try {
-      await runOrchestrator(
-        {
-          provider: { ...provider, apiKey },
-          model,
-          conversationId: convId,
-          personaId: resolveConversationPersonaForMode({ nextMode: 'chitchat' }),
-          taskId: null,
-          executionRunId: convId,
-          systemPrompt: voiceSystemPrompt,
-          messages: [{ id: generateId(), role: 'user', content: input, timestamp: Date.now() }],
-          linkUnderstandingEnabled: settings.linkUnderstandingEnabled,
-          mediaUnderstandingEnabled: settings.mediaUnderstandingEnabled,
-          maxLinks: settings.maxLinks,
-        },
-        callbacks,
-      );
-      const terminalFailure = resolveAgentControlGraphTerminalFailure({
-        state: latestControlGraphState,
-        reportedError: reportedOrchestratorError,
+      return await sendVoiceConversationTurn(input, {
+        additionalSystemPrompt: t('voice.conciseResponseInstruction'),
       });
-      if (terminalFailure) {
-        const preserveGraphFailureResponse =
-          !reportedOrchestratorError &&
-          result.trim().length > 0 &&
-          isAgentControlGraphFailureResponseState(latestControlGraphState);
-        if (!preserveGraphFailureResponse) {
-          result = `Error: ${terminalFailure.message}`;
-        }
-      }
-    } catch (err: unknown) {
-      result = `Error: ${err instanceof Error ? err.message : String(err)}`;
+    } catch (error) {
+      const kind =
+        error instanceof VoiceConversationBridgeError && error.kind === 'unavailable'
+          ? 'unexpected'
+          : 'provider_response';
+      throw new VoiceOperationError(kind, 'Voice assistant turn failed', { cause: error });
     }
-    return result;
-  });
+  };
 
   const [manager] = useState(
     () =>
       new TalkModeManager(
-        agentHandlerRef.current,
+        (input) => agentHandlerRef.current(input),
         {
-          onError: (err) => setErrorMsg(err.message),
+          onError: (error) => setVoiceError(error),
         },
         defaultConfig,
       ),
   );
 
+  const cancelPendingStart = useCallback(() => {
+    startAttemptRef.current += 1;
+    isPreparingRef.current = false;
+  }, []);
+
+  const handleBack = useBackToChat({
+    beforeNavigate: (continueNavigation) => {
+      cancelPendingStart();
+      void manager.stop().finally(continueNavigation);
+    },
+  });
+
   useEffect(() => {
-    const unsubState = manager.onStateChange((s) => {
-      setState(s);
-      if (s !== 'error') setErrorMsg('');
-      if (s === 'error') void emitVoiceEvent('error');
+    const unsubscribeState = manager.onStateChange((nextState) => {
+      setState(nextState);
+      if (nextState !== 'error') {
+        setVoiceError(null);
+      }
+      if (nextState === 'error') {
+        void emitVoiceEvent('error');
+      }
     });
-    const unsubTranscript = manager.onTranscript((text) => {
-      setTranscript(text);
-      if (text) void emitVoiceEvent('transcript', { transcript: text });
+    const unsubscribeTranscript = manager.onTranscript((text) => {
+      const id = nextTurnIdRef.current++;
+      setTurns((currentTurns) => [...currentTurns, { id, transcript: text }]);
+      if (text) {
+        void emitVoiceEvent('transcript', { transcript: text });
+      }
     });
-    const unsubResponse = manager.onResponse((r) => {
-      setResponse(r);
-      if (r) void emitVoiceEvent('response');
+    const unsubscribeResponse = manager.onResponse((response) => {
+      setTurns((currentTurns) => {
+        const lastTurn = currentTurns[currentTurns.length - 1];
+        if (!lastTurn || lastTurn.response) {
+          return [
+            ...currentTurns,
+            { id: nextTurnIdRef.current++, transcript: '', response },
+          ];
+        }
+        return [
+          ...currentTurns.slice(0, -1),
+          {
+            ...lastTurn,
+            response,
+          },
+        ];
+      });
+      if (response) {
+        void emitVoiceEvent('response');
+      }
     });
 
     return () => {
-      unsubState();
-      unsubTranscript();
-      unsubResponse();
-      manager.stop();
+      unsubscribeState();
+      unsubscribeTranscript();
+      unsubscribeResponse();
+      void manager.stop();
     };
   }, [manager]);
 
-  const handleToggle = useCallback(() => {
-    if (state === 'idle' || state === 'error') {
-      setErrorMsg('');
-      manager.start();
-      void emitVoiceEvent('started');
-    } else {
-      manager.stop();
-      void emitVoiceEvent('stopped');
+  useFocusEffect(
+    useCallback(
+      () => {
+        isScreenFocusedRef.current = true;
+        isPreparingRef.current = false;
+        setIsPreparing(false);
+
+        return () => {
+          isScreenFocusedRef.current = false;
+          cancelPendingStart();
+          void manager.stop();
+        };
+      },
+      [cancelPendingStart, manager],
+    ),
+  );
+
+  const handleStart = useCallback(async () => {
+    if (isPreparingRef.current) {
+      return;
     }
-  }, [state, manager]);
 
-  const isActive = state !== 'idle' && state !== 'error';
-  const sColors = useMemo(() => stateColors(colors), [colors]);
+    const attempt = startAttemptRef.current + 1;
+    startAttemptRef.current = attempt;
+    isPreparingRef.current = true;
+    setIsPreparing(true);
+    setVoiceError(null);
+    try {
+      const speechBackend = await resolveSpeechBackend();
+      if (!isScreenFocusedRef.current || startAttemptRef.current !== attempt) {
+        return;
+      }
+      if (!speechBackend) {
+        setVoiceError(
+          new VoiceOperationError('provider_unavailable', 'Speech provider unavailable'),
+        );
+        setState('error');
+        void emitVoiceEvent('error');
+        return;
+      }
 
-  const stateIcon = useMemo(() => {
+      await manager.start();
+      if (
+        isScreenFocusedRef.current &&
+        startAttemptRef.current === attempt &&
+        manager.getState() !== 'error'
+      ) {
+        void emitVoiceEvent('started');
+      }
+    } catch (error) {
+      if (!isScreenFocusedRef.current || startAttemptRef.current !== attempt) {
+        return;
+      }
+      setVoiceError(
+        error instanceof Error
+          ? error
+          : new VoiceOperationError('unexpected', 'Voice conversation failed to start'),
+      );
+      setState('error');
+      void emitVoiceEvent('error');
+    } finally {
+      if (startAttemptRef.current === attempt) {
+        isPreparingRef.current = false;
+        if (isScreenFocusedRef.current) {
+          setIsPreparing(false);
+        }
+      }
+    }
+  }, [manager]);
+
+  const handlePrimaryAction = useCallback(() => {
+    if (isPreparing) {
+      return;
+    }
+
+    switch (state) {
+      case 'idle':
+      case 'error':
+        void handleStart();
+        break;
+      case 'listening':
+        void manager.stopAndProcess();
+        break;
+      case 'speaking':
+        void manager.pause();
+        break;
+      case 'paused':
+        void manager.resume();
+        break;
+      case 'transcribing':
+      case 'processing':
+        break;
+    }
+  }, [handleStart, isPreparing, manager, state]);
+
+  const handleEndSession = useCallback(async () => {
+    cancelPendingStart();
+    setIsPreparing(false);
+    await manager.stop();
+    void emitVoiceEvent('stopped');
+  }, [cancelPendingStart, manager]);
+
+  const handleContinueWithText = useCallback(async () => {
+    cancelPendingStart();
+    await manager.stop();
+    navigation.navigate('Chat');
+  }, [cancelPendingStart, manager, navigation]);
+
+  const failureKind = voiceError ? resolveFailureKind(voiceError) : null;
+  const handleOpenRecoverySettings = useCallback(async () => {
+    cancelPendingStart();
+    await manager.stop();
+    if (failureKind === 'permission_denied') {
+      try {
+        await Linking.openSettings();
+      } catch {
+        setVoiceError(
+          new VoiceOperationError('unexpected', 'Device settings could not be opened'),
+        );
+        setState('error');
+        void emitVoiceEvent('error');
+      }
+      return;
+    }
+
+    navigation.navigate('Settings', {
+      returnTo: { name: 'Voice' },
+    });
+  }, [cancelPendingStart, failureKind, manager, navigation]);
+
+  const isSessionActive = state !== 'idle' && state !== 'error';
+  const isPrimaryDisabled =
+    isPreparing || state === 'transcribing' || state === 'processing';
+  const semanticState = isPreparing ? 'processing' : state;
+  const statusColors = useMemo(() => stateColors(colors), [colors]);
+  const statusLabel = isPreparing ? t('voice.preparing') : t(stateLabelsMap[state]);
+  const statusHint = isPreparing ? t('voice.preparingHint') : t(stateHintsMap[state]);
+  const primaryActionLabel = (() => {
+    if (isPreparing) return t('voice.preparing');
+    switch (state) {
+      case 'listening':
+        return t('voice.finishSpeaking');
+      case 'speaking':
+        return t('voice.stopReply');
+      case 'paused':
+        return t('voice.resume');
+      case 'error':
+        return t('common.retry');
+      default:
+        return t('voice.start');
+    }
+  })();
+
+  const stateIcon = (() => {
+    if (isPreparing || state === 'transcribing' || state === 'processing') {
+      return <ActivityIndicator size="large" color={statusColors[semanticState]} />;
+    }
     switch (state) {
       case 'listening':
         return <Mic size={48} color={colors.primary} />;
-      case 'transcribing':
-        return <Loader size={48} color={sColors[state]} />;
-      case 'processing':
-        return <Loader size={48} color={sColors[state]} />;
       case 'speaking':
-        return <Volume2 size={48} color={sColors[state]} />;
+        return <Volume2 size={48} color={statusColors[state]} />;
       case 'paused':
-        return <PauseCircle size={48} color={sColors[state]} />;
+        return <PauseCircle size={48} color={statusColors[state]} />;
       case 'error':
-        return <AlertCircle size={48} color={sColors[state]} />;
+        return <AlertCircle size={48} color={statusColors[state]} />;
       default:
         return <Mic size={48} color={colors.textTertiary} />;
     }
-  }, [state, colors, sColors]);
+  })();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity
           onPress={handleBack}
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
+          style={styles.headerAction}
+          testID="voice-back-button"
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('voice.title')}</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerAction} />
       </View>
 
-      <View style={styles.content}>
-        {/* Microphone button — centered prominently */}
+      <ApprovalBanner />
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.micSection}>
           <TouchableOpacity
             style={[
               styles.micButton,
-              isActive && styles.micButtonActive,
-              state === 'error' && styles.micButtonError,
-              { borderColor: sColors[state] },
+              isSessionActive ? styles.micButtonActive : null,
+              state === 'error' ? styles.micButtonError : null,
+              { borderColor: statusColors[semanticState] },
             ]}
-            onPress={handleToggle}
-            activeOpacity={0.7}
+            onPress={handlePrimaryAction}
+            disabled={isPrimaryDisabled}
+            activeOpacity={0.72}
             accessibilityRole="button"
-            accessibilityLabel={isActive ? t('voice.tapToStop') : t('voice.tapToStart')}
-            accessibilityState={{ busy: state === 'processing' || state === 'transcribing' }}
+            accessibilityLabel={primaryActionLabel}
+            accessibilityHint={statusHint}
+            accessibilityState={{
+              busy: isPreparing || state === 'processing' || state === 'transcribing',
+              disabled: isPrimaryDisabled,
+            }}
+            testID="voice-primary-button"
           >
             {stateIcon}
           </TouchableOpacity>
 
-          <Text style={[styles.stateLabel, { color: sColors[state] }]}>
-            {t(stateLabelsMap[state])}
+          <Text
+            style={[styles.stateLabel, { color: statusColors[semanticState] }]}
+            accessibilityLiveRegion="polite"
+            testID="voice-status"
+          >
+            {statusLabel}
           </Text>
-
-          <Text style={styles.hint}>
-            {state === 'error'
-              ? t('voice.tapToStart')
-              : isActive
-                ? t('voice.tapToStop')
-                : t('voice.tapToStart')}
-          </Text>
+          <Text style={styles.hint}>{statusHint}</Text>
         </View>
 
-        {/* Error message */}
-        {errorMsg ? (
-          <View style={styles.errorBox}>
-            <AlertCircle size={14} color={colors.danger} />
-            <Text style={styles.errorText} numberOfLines={3}>
-              {errorMsg}
-            </Text>
+        {voiceError ? (
+          <View style={styles.errorBox} accessibilityRole="alert" testID="voice-error">
+            <AlertCircle size={18} color={colors.danger} />
+            <View style={styles.errorCopy}>
+              <Text style={styles.errorTitle}>{t('voice.errorTitle')}</Text>
+              <Text style={styles.errorText}>{t(getFailureMessageKey(failureKind!))}</Text>
+            </View>
           </View>
         ) : null}
 
-        {/* Conversation area */}
-        <ScrollView
-          style={styles.conversationArea}
-          contentContainerStyle={styles.conversationContent}
-        >
-          {transcript ? (
-            <View style={styles.transcriptBox}>
-              <Text style={styles.boxLabel}>{t('voice.you')}</Text>
-              <Text style={styles.transcriptText}>{transcript}</Text>
-            </View>
+        <View style={styles.actionRow}>
+          {isSessionActive ? (
+            <TouchableOpacity
+              accessibilityLabel={t('voice.endSession')}
+              accessibilityRole="button"
+              onPress={handleEndSession}
+              style={styles.secondaryButton}
+              testID="voice-end-session"
+            >
+              <Text style={styles.secondaryButtonText}>{t('voice.endSession')}</Text>
+            </TouchableOpacity>
           ) : null}
-
-          {response ? (
-            <View style={styles.responseBox}>
-              <Text style={styles.boxLabel}>{t('voice.ai')}</Text>
-              <Text style={styles.responseText}>{response}</Text>
-            </View>
+          {voiceError ? (
+            <TouchableOpacity
+              accessibilityLabel={t('common.retry')}
+              accessibilityRole="button"
+              onPress={handleStart}
+              style={styles.primaryTextButton}
+              testID="voice-retry-button"
+            >
+              <RotateCcw size={18} color={colors.onPrimary} />
+              <Text style={styles.primaryTextButtonText}>{t('common.retry')}</Text>
+            </TouchableOpacity>
           ) : null}
+          {failureKind === 'permission_denied' || failureKind === 'provider_unavailable' ? (
+            <TouchableOpacity
+              accessibilityLabel={
+                failureKind === 'permission_denied'
+                  ? t('voice.openDeviceSettings')
+                  : t('voice.setUpVoice')
+              }
+              accessibilityRole="button"
+              onPress={handleOpenRecoverySettings}
+              style={styles.secondaryButton}
+              testID="voice-recovery-settings"
+            >
+              <Settings size={18} color={colors.text} />
+              <Text style={styles.secondaryButtonText}>
+                {failureKind === 'permission_denied'
+                  ? t('voice.openDeviceSettings')
+                  : t('voice.setUpVoice')}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            accessibilityLabel={t('voice.continueWithText')}
+            accessibilityRole="button"
+            onPress={handleContinueWithText}
+            style={styles.secondaryButton}
+            testID="voice-continue-with-text"
+          >
+            <Keyboard size={18} color={colors.text} />
+            <Text style={styles.secondaryButtonText}>{t('voice.continueWithText')}</Text>
+          </TouchableOpacity>
+        </View>
 
-          {!transcript && !response && (
+        <View style={styles.privacyCard}>
+          <ShieldCheck size={20} color={colors.primary} />
+          <View style={styles.privacyCopy}>
+            <Text style={styles.privacyTitle}>{t('voice.privacyTitle')}</Text>
+            <Text style={styles.privacyText}>{t('voice.privacyDescription')}</Text>
+            <Text style={styles.savedToChatText}>
+              {t('voice.savedToChat', {
+                title: activeConversationTitle || t('voice.currentChat'),
+              })}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.conversationSection}>
+          <Text style={styles.sectionTitle}>{t('voice.sessionTranscript')}</Text>
+          {turns.length === 0 ? (
             <Text style={styles.placeholderText}>{t('voice.conversationPlaceholder')}</Text>
+          ) : (
+            turns.map((turn) => (
+              <View key={turn.id} style={styles.turnGroup}>
+                {turn.transcript ? (
+                  <View style={styles.transcriptBox}>
+                    <Text style={styles.boxLabel}>{t('voice.you')}</Text>
+                    <Text style={styles.transcriptText}>{turn.transcript}</Text>
+                  </View>
+                ) : null}
+                {turn.response ? (
+                  <View style={styles.responseBox}>
+                    <Text style={styles.boxLabel}>{t('voice.kavi')}</Text>
+                    <Text style={styles.responseText}>{turn.response}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ))
           )}
-        </ScrollView>
-      </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
-
-const createStyles = (colors: AppPalette) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      backgroundColor: colors.header,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    content: {
-      flex: 1,
-      padding: 16,
-    },
-    micSection: {
-      alignItems: 'center',
-      paddingVertical: 24,
-    },
-    stateLabel: {
-      fontSize: 16,
-      fontWeight: '600',
-      marginTop: 16,
-    },
-    hint: {
-      fontSize: 13,
-      color: colors.textTertiary,
-      marginTop: 4,
-    },
-    micButton: {
-      width: 120,
-      height: 120,
-      borderRadius: 60,
-      backgroundColor: colors.surface,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 3,
-      borderColor: colors.border,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
-      elevation: 4,
-    },
-    micButtonActive: {
-      backgroundColor: colors.primarySoft,
-      shadowOpacity: 0.2,
-      shadowRadius: 12,
-    },
-    micButtonError: {
-      backgroundColor: colors.dangerSoft,
-    },
-    errorBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: colors.dangerSoft,
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 12,
-    },
-    errorText: {
-      flex: 1,
-      fontSize: 13,
-      color: colors.danger,
-    },
-    conversationArea: {
-      flex: 1,
-    },
-    conversationContent: {
-      flexGrow: 1,
-      gap: 12,
-    },
-    transcriptBox: {
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    responseBox: {
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: colors.primarySoft,
-    },
-    boxLabel: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.textTertiary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginBottom: 6,
-    },
-    transcriptText: {
-      fontSize: 15,
-      color: colors.text,
-      lineHeight: 22,
-    },
-    responseText: {
-      fontSize: 15,
-      color: colors.text,
-      lineHeight: 22,
-    },
-    placeholderText: {
-      fontSize: 14,
-      color: colors.textTertiary,
-      textAlign: 'center',
-      marginTop: 24,
-    },
-  });

@@ -217,6 +217,24 @@ describe('useForegroundConversationActions', () => {
     expect(hasModelProjectionIntent(conversationId)).toBe(false);
   });
 
+  it('passes voice-specific run guidance through the canonical foreground runner', async () => {
+    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const runChat = jest.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useForegroundConversationActions(createParams(conversationId, { runChat })),
+    );
+
+    await act(async () => {
+      await result.current.handleSend('spoken request', undefined, {
+        additionalSystemPrompt: 'Keep this spoken response concise.',
+      });
+    });
+
+    expect(runChat).toHaveBeenCalledWith(conversationId, {
+      additionalSystemPrompt: 'Keep this spoken response concise.',
+    });
+  });
+
   it('starts an assistant retry from a freshly identified user turn', async () => {
     const conversationId = useChatStore.getState().createConversation('openai', 'system');
     useChatStore.getState().addMessage(conversationId, {

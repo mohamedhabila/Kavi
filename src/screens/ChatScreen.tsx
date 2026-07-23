@@ -60,6 +60,7 @@ import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import { getRunningLiveSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 import { resolveConversationStartSelection } from '../services/llm/support/providerSupport';
 import { getNavigableConversations } from '../utils/conversationNavigation';
+import { useVoiceConversationBridge } from './chatScreen/useVoiceConversationBridge';
 
 export const ChatScreen: React.FC = () => {
   const navigation = useNavigation<DrawerNavigationProp<any>>();
@@ -520,6 +521,8 @@ export const ChatScreen: React.FC = () => {
     setEditingMessageId,
     updateAgentRunControlGraph,
   });
+
+  useVoiceConversationBridge(handleSend);
 
   const personaCustomList = usePersonaConfigStore((state) => state.customPersonas);
   const personaOverrides = usePersonaConfigStore((state) => state.overrides);

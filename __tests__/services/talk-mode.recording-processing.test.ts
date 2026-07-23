@@ -488,7 +488,7 @@ describe('TalkModeManager', () => {
       await mgr.stop();
     });
 
-    it('handles error in processRecording and auto-recovers', async () => {
+    it('holds an error for an explicit retry instead of silently reopening the microphone', async () => {
       const voice = require('../../src/services/voice/voice');
       voice.stopRecording.mockRejectedValueOnce(new Error('file error'));
       voice.startRecording.mockResolvedValue(undefined);
@@ -517,16 +517,64 @@ describe('TalkModeManager', () => {
       );
 
       await mgr.start();
+      expect(voice.startRecording).toHaveBeenCalledTimes(1);
       jest.advanceTimersByTime(100);
       await flushAsync();
 
-      // Error should have been caught
       expect(errors.length).toBeGreaterThanOrEqual(1);
+      expect(mgr.getState()).toBe('error');
+      expect(mgr.isActive()).toBe(false);
 
-      // Auto-recovery timeout (2 seconds)
       jest.advanceTimersByTime(3000);
       await flushAsync();
+      expect(voice.startRecording).toHaveBeenCalledTimes(1);
+
+      await mgr.start();
+      expect(voice.startRecording).toHaveBeenCalledTimes(2);
       await mgr.stop();
+    });
+
+    it('does not submit a transcript after the user ends the session during transcription', async () => {
+      const voice = require('../../src/services/voice/voice');
+      let resolveTranscription!: (value: { text: string }) => void;
+      voice.transcribeAudio.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveTranscription = resolve;
+          }),
+      );
+      let metering = -18;
+      voice.getRecordingStatus.mockImplementation(() => ({
+        canRecord: true,
+        isRecording: true,
+        durationMillis: 1000,
+        mediaServicesDidReset: false,
+        metering,
+        url: 'file://mock-audio.m4a',
+      }));
+      const agent = jest.fn().mockResolvedValue('should not run');
+      const mgr = new TalkModeManager(agent, {}, {
+        autoListen: true,
+        silenceTimeoutMs: 50,
+        minSpeechDurationMs: 50,
+        recorderStatusPollIntervalMs: 25,
+        maxRecordingMs: 60000,
+      });
+
+      await mgr.start();
+      jest.advanceTimersByTime(100);
+      await flushAsync(2);
+      metering = -80;
+      jest.advanceTimersByTime(100);
+      await flushAsync(2);
+      expect(mgr.getState()).toBe('transcribing');
+
+      await mgr.stop();
+      resolveTranscription({ text: 'do not send this' });
+      await flushAsync();
+
+      expect(agent).not.toHaveBeenCalled();
+      expect(mgr.getState()).toBe('idle');
     });
   });
 });

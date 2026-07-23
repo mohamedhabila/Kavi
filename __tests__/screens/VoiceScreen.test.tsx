@@ -1,31 +1,35 @@
-// ---------------------------------------------------------------------------
-// Tests — VoiceScreen
-// ---------------------------------------------------------------------------
-
-import { act, fireEvent, render } from '@testing-library/react-native';
+import React from 'react';
+import { Linking } from 'react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { VoiceScreen } from '../../src/screens/VoiceScreen';
+import { VoiceOperationError } from '../../src/services/voice/voiceErrors';
 
-// Mock safe area
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {
-    const React = require('react');
+    const ReactModule = require('react');
     const { View } = require('react-native');
-    return React.createElement(View, props, children);
+    return ReactModule.createElement(View, props, children);
   },
 }));
 
-// Mock navigation
-const mockGoBack = jest.fn();
+const mockNavigate = jest.fn();
 const mockHandleBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: mockGoBack }),
+  useNavigation: () => ({ navigate: mockNavigate }),
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const ReactModule = require('react');
+    ReactModule.useEffect(callback, [callback]);
+  },
 }));
 
 jest.mock('../../src/navigation/useBackToChat', () => ({
   useBackToChat: () => mockHandleBack,
 }));
 
-// Mock theme
+jest.mock('../../src/components/approval/ApprovalBanner', () => ({
+  ApprovalBanner: () => null,
+}));
+
 jest.mock('../../src/theme/useAppTheme', () => ({
   useAppTheme: () => ({
     colors: {
@@ -54,430 +58,316 @@ jest.mock('../../src/theme/useAppTheme', () => ({
   AppPalette: {},
 }));
 
-// Mock TalkModeManager
+jest.mock('../../src/store/useChatStore', () => ({
+  useChatStore: (selector: (state: unknown) => unknown) =>
+    selector({
+      activeConversationId: 'conversation-1',
+      conversations: [{ id: 'conversation-1', title: 'Trip planning' }],
+    }),
+}));
+
 const mockStart = jest.fn();
 const mockStop = jest.fn();
+const mockPause = jest.fn();
+const mockResume = jest.fn();
+const mockStopAndProcess = jest.fn();
 const mockOnStateChange = jest.fn();
 const mockOnTranscript = jest.fn();
 const mockOnResponse = jest.fn();
-const mockEmitVoiceEvent = jest.fn();
-const mockRunOrchestrator = jest.fn();
-const mockGetSettingsState = jest.fn();
-const mockGetProviderApiKey = jest.fn();
-const mockGenerateId = jest.fn();
+let mockManagerState = 'idle';
 
 jest.mock('../../src/services/voice/talkMode', () => ({
   TalkModeManager: jest.fn().mockImplementation(() => ({
     start: mockStart,
     stop: mockStop,
-    pause: jest.fn(),
-    resume: jest.fn(),
-    getState: jest.fn().mockReturnValue('idle'),
+    pause: mockPause,
+    resume: mockResume,
+    stopAndProcess: mockStopAndProcess,
+    getState: jest.fn(() => mockManagerState),
     onStateChange: mockOnStateChange,
     onTranscript: mockOnTranscript,
     onResponse: mockOnResponse,
   })),
 }));
 
-jest.mock('../../src/engine/orchestrator', () => ({
-  runOrchestrator: (...args: any[]) => mockRunOrchestrator(...args),
+const mockResolveSpeechBackend = jest.fn();
+jest.mock('../../src/services/voice/voiceBackend', () => ({
+  resolveSpeechBackend: (...args: unknown[]) => mockResolveSpeechBackend(...args),
 }));
 
-jest.mock('../../src/store/useSettingsStore', () => ({
-  useSettingsStore: {
-    getState: (...args: any[]) => mockGetSettingsState(...args),
-  },
-}));
+const mockSendVoiceConversationTurn = jest.fn();
+jest.mock('../../src/services/voice/voiceConversationBridge', () => {
+  class MockVoiceConversationBridgeError extends Error {
+    kind: 'unavailable' | 'no_response';
 
-jest.mock('../../src/services/storage/SecureStorage', () => ({
-  getProviderApiKey: (...args: any[]) => mockGetProviderApiKey(...args),
-}));
+    constructor(kind: 'unavailable' | 'no_response') {
+      super(kind);
+      this.kind = kind;
+    }
+  }
 
-jest.mock('../../src/utils/id', () => ({
-  generateId: (...args: any[]) => mockGenerateId(...args),
-}));
-
-// Mock event bus
-jest.mock('../../src/services/events/bus', () => ({
-  emitVoiceEvent: (...args: any[]) => mockEmitVoiceEvent(...args),
-}));
-
-const buildSettingsState = (overrides: Record<string, unknown> = {}) => ({
-  providers: [
-    {
-      id: 'provider-1',
-      enabled: true,
-      model: 'provider-model',
-      apiKey: undefined,
-    },
-  ],
-  activeProviderId: 'provider-1',
-  activeModel: undefined,
-  systemPrompt: '',
-  linkUnderstandingEnabled: true,
-  mediaUnderstandingEnabled: false,
-  maxLinks: 5,
-  ...overrides,
+  return {
+    sendVoiceConversationTurn: (...args: unknown[]) => mockSendVoiceConversationTurn(...args),
+    VoiceConversationBridgeError: MockVoiceConversationBridgeError,
+  };
 });
 
-const getLatestAgentHandler = (): ((input: string) => Promise<string>) => {
+const mockEmitVoiceEvent = jest.fn();
+jest.mock('../../src/services/events/bus', () => ({
+  emitVoiceEvent: (...args: unknown[]) => mockEmitVoiceEvent(...args),
+}));
+
+function getLatestManagerCall(): any[] {
   const { TalkModeManager } = jest.requireMock('../../src/services/voice/talkMode');
-  const calls = TalkModeManager.mock.calls;
-  return calls[calls.length - 1][0];
-};
+  return TalkModeManager.mock.calls[TalkModeManager.mock.calls.length - 1];
+}
+
+function getLatestAgentHandler(): (input: string) => Promise<string> {
+  return getLatestManagerCall()[0];
+}
+
+function emitManagerError(error: Error): void {
+  const handlers = getLatestManagerCall()[1];
+  handlers.onError(error);
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockStart.mockReset();
-  mockStop.mockReset();
-  mockOnStateChange.mockReset().mockReturnValue(jest.fn());
-  mockOnTranscript.mockReset().mockReturnValue(jest.fn());
-  mockOnResponse.mockReset().mockReturnValue(jest.fn());
-  mockEmitVoiceEvent.mockReset().mockResolvedValue(undefined);
-  mockRunOrchestrator.mockReset().mockResolvedValue(undefined);
-  mockGetSettingsState.mockReset().mockReturnValue(buildSettingsState());
-  mockGetProviderApiKey.mockReset().mockResolvedValue('secure-key');
-  mockGenerateId.mockReset().mockReturnValue('voice-id');
+  mockManagerState = 'idle';
+  mockStart.mockImplementation(async () => {
+    mockManagerState = 'listening';
+  });
+  mockStop.mockResolvedValue(undefined);
+  mockPause.mockResolvedValue(undefined);
+  mockResume.mockResolvedValue(undefined);
+  mockStopAndProcess.mockResolvedValue(undefined);
+  mockOnStateChange.mockReturnValue(jest.fn());
+  mockOnTranscript.mockReturnValue(jest.fn());
+  mockOnResponse.mockReturnValue(jest.fn());
+  mockResolveSpeechBackend.mockResolvedValue({
+    apiKey: 'not-rendered',
+    baseUrl: 'https://speech.example.test',
+    providerName: 'Speech',
+  });
+  mockSendVoiceConversationTurn.mockResolvedValue('A concise reply');
+  mockEmitVoiceEvent.mockResolvedValue(undefined);
   mockHandleBack.mockReset();
+  jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 describe('VoiceScreen', () => {
-  it('renders header with title', () => {
+  it('presents an assistant-first title, privacy contract, and active chat destination', () => {
     const { getByText } = render(<VoiceScreen />);
-    expect(getByText('Talk Mode')).toBeTruthy();
+
+    expect(getByText('Voice conversation')).toBeTruthy();
+    expect(getByText('Ready for a voice turn')).toBeTruthy();
+    expect(getByText('Your voice, under your control')).toBeTruthy();
+    expect(getByText('Transcripts and replies are saved in Trip planning.')).toBeTruthy();
+    expect(
+      getByText('Your spoken turns appear here and are also saved in your current chat.'),
+    ).toBeTruthy();
   });
 
-  it('shows idle state initially', () => {
-    const { getByText } = render(<VoiceScreen />);
-    expect(getByText('Tap the microphone to start')).toBeTruthy();
+  it('uses safe system speech and the canonical chat handler for assistant turns', async () => {
+    render(<VoiceScreen />);
+
+    const config = getLatestManagerCall()[2];
+    expect(config.ttsProvider).toBe('system');
+
+    await expect(getLatestAgentHandler()('Plan my afternoon')).resolves.toBe('A concise reply');
+    expect(mockSendVoiceConversationTurn).toHaveBeenCalledWith('Plan my afternoon', {
+      additionalSystemPrompt: 'Keep responses concise and conversational.',
+    });
   });
 
-  it('shows transcript placeholder', () => {
-    const { getByText } = render(<VoiceScreen />);
-    expect(getByText('Your conversation will appear here')).toBeTruthy();
-  });
+  it('checks speech readiness before starting and emits a truthful start event', async () => {
+    const { getByTestId } = render(<VoiceScreen />);
 
-  it('shows response placeholder', () => {
-    const { getByText } = render(<VoiceScreen />);
-    // In the new design, both transcript and response boxes share a single placeholder
-    expect(getByText('Your conversation will appear here')).toBeTruthy();
-  });
+    fireEvent.press(getByTestId('voice-primary-button'));
 
-  it('shows hint text', () => {
-    const { getByText } = render(<VoiceScreen />);
-    expect(getByText('Tap to start voice conversation')).toBeTruthy();
-  });
-
-  it('navigates back on back button press', () => {
-    const { UNSAFE_getAllByType } = render(<VoiceScreen />);
-    const touchables = UNSAFE_getAllByType(require('react-native').TouchableOpacity);
-    fireEvent.press(touchables[0]); // Back button
-    expect(mockHandleBack).toHaveBeenCalled();
-  });
-
-  it('starts talk mode on mic button press', () => {
-    const { UNSAFE_getAllByType } = render(<VoiceScreen />);
-    const touchables = UNSAFE_getAllByType(require('react-native').TouchableOpacity);
-    const micButton = touchables[touchables.length - 1];
-    fireEvent.press(micButton);
-    expect(mockStart).toHaveBeenCalled();
+    await waitFor(() => expect(mockResolveSpeechBackend).toHaveBeenCalledTimes(1));
+    expect(mockStart).toHaveBeenCalledTimes(1);
     expect(mockEmitVoiceEvent).toHaveBeenCalledWith('started');
   });
 
-  it('registers state/transcript/response listeners on mount', () => {
+  it('cancels a pending readiness check when the voice screen closes', async () => {
+    let resolveBackend!: (value: { apiKey: string; baseUrl: string; providerName: string }) => void;
+    mockResolveSpeechBackend.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveBackend = resolve;
+        }),
+    );
+    const { getByTestId, unmount } = render(<VoiceScreen />);
+
+    fireEvent.press(getByTestId('voice-primary-button'));
+    await waitFor(() => expect(mockResolveSpeechBackend).toHaveBeenCalledTimes(1));
+    unmount();
+    await act(async () => {
+      resolveBackend({
+        apiKey: 'not-rendered',
+        baseUrl: 'https://speech.example.test',
+        providerName: 'Speech',
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  it('offers setup and text fallback when transcription is not configured', async () => {
+    mockResolveSpeechBackend.mockResolvedValueOnce(null);
+    const { getByTestId, getByText } = render(<VoiceScreen />);
+
+    fireEvent.press(getByTestId('voice-primary-button'));
+
+    await waitFor(() => {
+      expect(
+        getByText(
+          'Voice transcription is not set up yet. Connect a supported speech service in Settings or continue with text.',
+        ),
+      ).toBeTruthy();
+    });
+    expect(mockStart).not.toHaveBeenCalled();
+
+    fireEvent.press(getByTestId('voice-recovery-settings'));
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('Settings', {
+        returnTo: { name: 'Voice' },
+      }),
+    );
+  });
+
+  it('maps microphone denial to safe copy and opens device settings without raw errors', async () => {
+    let stateCallback: (state: string) => void = () => {};
+    mockOnStateChange.mockImplementation((callback) => {
+      stateCallback = callback;
+      return jest.fn();
+    });
+    const { getByTestId, getByText, queryByText } = render(<VoiceScreen />);
+    const rawError = new VoiceOperationError(
+      'permission_denied',
+      'secret native recorder code 0xBAD',
+    );
+
+    act(() => {
+      emitManagerError(rawError);
+      stateCallback('error');
+    });
+
+    expect(
+      getByText(
+        'Microphone access is off. Enable it in your device settings, then try again.',
+      ),
+    ).toBeTruthy();
+    expect(queryByText('secret native recorder code 0xBAD')).toBeNull();
+
+    fireEvent.press(getByTestId('voice-recovery-settings'));
+    await waitFor(() => expect(Linking.openSettings).toHaveBeenCalledTimes(1));
+  });
+
+  it('turns a bridge failure into a typed voice error without returning raw text for speech', async () => {
+    const { VoiceConversationBridgeError } = jest.requireMock(
+      '../../src/services/voice/voiceConversationBridge',
+    );
+    mockSendVoiceConversationTurn.mockRejectedValueOnce(
+      new VoiceConversationBridgeError('unavailable'),
+    );
     render(<VoiceScreen />);
-    expect(mockOnStateChange).toHaveBeenCalled();
-    expect(mockOnTranscript).toHaveBeenCalled();
-    expect(mockOnResponse).toHaveBeenCalled();
+
+    await expect(getLatestAgentHandler()('hello')).rejects.toMatchObject({
+      name: 'VoiceOperationError',
+      kind: 'unexpected',
+      message: 'Voice assistant turn failed',
+    });
   });
 
-  it('renders listening state icon when state changes', () => {
-    let stateCallback: (s: string) => void = () => {};
-    mockOnStateChange.mockImplementation((cb: any) => {
-      stateCallback = cb;
+  it('finishes the current utterance instead of discarding it when the mic is tapped', () => {
+    let stateCallback: (state: string) => void = () => {};
+    mockOnStateChange.mockImplementation((callback) => {
+      stateCallback = callback;
       return jest.fn();
     });
-    const { getByText } = render(<VoiceScreen />);
+    const { getByTestId, getByText } = render(<VoiceScreen />);
+
     act(() => stateCallback('listening'));
-    expect(getByText('Listening…')).toBeTruthy();
+    expect(getByText('Tap the microphone when you are finished speaking.')).toBeTruthy();
+    fireEvent.press(getByTestId('voice-primary-button'));
+
+    expect(mockStopAndProcess).toHaveBeenCalledTimes(1);
+    expect(mockStop).not.toHaveBeenCalled();
   });
 
-  it('renders transcribing state label', () => {
-    let stateCallback: (s: string) => void = () => {};
-    mockOnStateChange.mockImplementation((cb: any) => {
-      stateCallback = cb;
+  it('provides explicit end, stop-reply, and resume controls for session states', async () => {
+    let stateCallback: (state: string) => void = () => {};
+    mockOnStateChange.mockImplementation((callback) => {
+      stateCallback = callback;
       return jest.fn();
     });
-    const { getByText } = render(<VoiceScreen />);
-    act(() => stateCallback('transcribing'));
-    expect(getByText('Transcribing…')).toBeTruthy();
-  });
+    const { getByTestId } = render(<VoiceScreen />);
 
-  it('renders processing state label', () => {
-    let stateCallback: (s: string) => void = () => {};
-    mockOnStateChange.mockImplementation((cb: any) => {
-      stateCallback = cb;
-      return jest.fn();
-    });
-    const { getByText } = render(<VoiceScreen />);
-    act(() => stateCallback('processing'));
-    expect(getByText('Thinking…')).toBeTruthy();
-  });
-
-  it('renders speaking state label', () => {
-    let stateCallback: (s: string) => void = () => {};
-    mockOnStateChange.mockImplementation((cb: any) => {
-      stateCallback = cb;
-      return jest.fn();
-    });
-    const { getByText } = render(<VoiceScreen />);
     act(() => stateCallback('speaking'));
-    expect(getByText('Speaking…')).toBeTruthy();
-  });
+    fireEvent.press(getByTestId('voice-primary-button'));
+    expect(mockPause).toHaveBeenCalledTimes(1);
 
-  it('renders error state and emits an error event', () => {
-    let stateCallback: (s: string) => void = () => {};
-    mockOnStateChange.mockImplementation((cb: any) => {
-      stateCallback = cb;
-      return jest.fn();
-    });
+    act(() => stateCallback('paused'));
+    fireEvent.press(getByTestId('voice-primary-button'));
+    expect(mockResume).toHaveBeenCalledTimes(1);
 
-    const { getByText } = render(<VoiceScreen />);
-    act(() => stateCallback('error'));
-
-    expect(getByText('Error — tap to retry')).toBeTruthy();
-    expect(mockEmitVoiceEvent).toHaveBeenCalledWith('error');
-  });
-
-  it('shows Tap to stop when active', () => {
-    let stateCallback: (s: string) => void = () => {};
-    mockOnStateChange.mockImplementation((cb: any) => {
-      stateCallback = cb;
-      return jest.fn();
-    });
-    const { getByText } = render(<VoiceScreen />);
-    act(() => stateCallback('listening'));
-    expect(getByText('Tap to stop')).toBeTruthy();
-  });
-
-  it('calls stop when pressing mic while active', () => {
-    let stateCallback: (s: string) => void = () => {};
-    mockOnStateChange.mockImplementation((cb: any) => {
-      stateCallback = cb;
-      return jest.fn();
-    });
-    const { UNSAFE_getAllByType } = render(<VoiceScreen />);
-    act(() => stateCallback('listening'));
-    const touchables = UNSAFE_getAllByType(require('react-native').TouchableOpacity);
-    const micButton = touchables[touchables.length - 1];
-    fireEvent.press(micButton);
-    expect(mockStop).toHaveBeenCalled();
+    fireEvent.press(getByTestId('voice-end-session'));
+    await waitFor(() => expect(mockStop).toHaveBeenCalled());
     expect(mockEmitVoiceEvent).toHaveBeenCalledWith('stopped');
   });
 
-  it('displays transcript when set', () => {
-    let transcriptCb: (t: string) => void = () => {};
-    mockOnTranscript.mockImplementation((cb: any) => {
-      transcriptCb = cb;
+  it('keeps multiple transcript and response turns grouped in session order', () => {
+    let transcriptCallback: (text: string) => void = () => {};
+    let responseCallback: (text: string) => void = () => {};
+    mockOnTranscript.mockImplementation((callback) => {
+      transcriptCallback = callback;
+      return jest.fn();
+    });
+    mockOnResponse.mockImplementation((callback) => {
+      responseCallback = callback;
       return jest.fn();
     });
     const { getByText } = render(<VoiceScreen />);
-    act(() => transcriptCb('Hello world'));
-    expect(getByText('Hello world')).toBeTruthy();
-    expect(mockEmitVoiceEvent).toHaveBeenCalledWith('transcript', { transcript: 'Hello world' });
-  });
 
-  it('displays response when set', () => {
-    let responseCb: (r: string) => void = () => {};
-    mockOnResponse.mockImplementation((cb: any) => {
-      responseCb = cb;
-      return jest.fn();
+    act(() => {
+      transcriptCallback('First question');
+      responseCallback('First answer');
+      transcriptCallback('Second question');
+      responseCallback('Second answer');
     });
-    const { getByText } = render(<VoiceScreen />);
-    act(() => responseCb('AI says hello'));
-    expect(getByText('AI says hello')).toBeTruthy();
-    expect(mockEmitVoiceEvent).toHaveBeenCalledWith('response');
+
+    expect(getByText('First question')).toBeTruthy();
+    expect(getByText('First answer')).toBeTruthy();
+    expect(getByText('Second question')).toBeTruthy();
+    expect(getByText('Second answer')).toBeTruthy();
+    expect(mockEmitVoiceEvent).toHaveBeenCalledWith('transcript', {
+      transcript: 'Second question',
+    });
   });
 
-  it('stops the talk mode manager on unmount', () => {
-    const { unmount } = render(<VoiceScreen />);
+  it('stops voice and returns to Chat for text fallback', async () => {
+    const { getByTestId } = render(<VoiceScreen />);
+
+    fireEvent.press(getByTestId('voice-continue-with-text'));
+
+    await waitFor(() => expect(mockStop).toHaveBeenCalled());
+    expect(mockNavigate).toHaveBeenCalledWith('Chat');
+  });
+
+  it('uses the shared back contract and stops the manager on unmount', () => {
+    const { getByTestId, unmount } = render(<VoiceScreen />);
+
+    fireEvent.press(getByTestId('voice-back-button'));
+    expect(mockHandleBack).toHaveBeenCalledTimes(1);
+
     unmount();
     expect(mockStop).toHaveBeenCalled();
-  });
-
-  it('returns a no-provider message when no provider is enabled', async () => {
-    mockGetSettingsState.mockReturnValue(
-      buildSettingsState({
-        providers: [],
-        activeProviderId: null,
-      }),
-    );
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('hello')).resolves.toBe(
-      'No provider configured. Go to Settings to add one.',
-    );
-    expect(mockRunOrchestrator).not.toHaveBeenCalled();
-  });
-
-  it('returns a no-model message when the provider has no selected model', async () => {
-    mockGetSettingsState.mockReturnValue(
-      buildSettingsState({
-        providers: [{ id: 'provider-1', enabled: true, model: undefined, apiKey: undefined }],
-        activeModel: undefined,
-      }),
-    );
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('hello')).resolves.toBe('No model selected.');
-    expect(mockRunOrchestrator).not.toHaveBeenCalled();
-  });
-
-  it('returns a no-api-key message when neither secure storage nor provider config has a key', async () => {
-    mockGetSettingsState.mockReturnValue(
-      buildSettingsState({
-        providers: [
-          { id: 'provider-1', enabled: true, model: 'provider-model', apiKey: undefined },
-        ],
-      }),
-    );
-    mockGetProviderApiKey.mockResolvedValueOnce(null);
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('hello')).resolves.toBe(
-      'No API key configured for this provider.',
-    );
-    expect(mockRunOrchestrator).not.toHaveBeenCalled();
-  });
-
-  it('runs the orchestrator with the secure API key and custom voice prompt', async () => {
-    mockGetSettingsState.mockReturnValue(
-      buildSettingsState({
-        activeModel: 'active-model',
-        systemPrompt: 'Be precise',
-        providers: [
-          { id: 'provider-1', enabled: true, model: 'provider-model', apiKey: 'fallback-key' },
-        ],
-      }),
-    );
-    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
-      callbacks.onToken('Hello');
-      callbacks.onToken(' world');
-    });
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('How are you?')).resolves.toBe('Hello world');
-    expect(mockRunOrchestrator).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: expect.objectContaining({ id: 'provider-1', apiKey: 'secure-key' }),
-        model: 'active-model',
-        conversationId: 'voice_voice-id',
-        executionRunId: 'voice_voice-id',
-        systemPrompt: 'Be precise\nKeep responses concise and conversational.',
-        linkUnderstandingEnabled: true,
-        mediaUnderstandingEnabled: false,
-        maxLinks: 5,
-        messages: [expect.objectContaining({ role: 'user', content: 'How are you?' })],
-      }),
-      expect.any(Object),
-    );
-  });
-
-  it('falls back to the provider API key and default voice prompt', async () => {
-    mockGetSettingsState.mockReturnValue(
-      buildSettingsState({
-        providers: [
-          { id: 'provider-1', enabled: true, model: 'provider-model', apiKey: 'inline-key' },
-        ],
-        systemPrompt: '',
-      }),
-    );
-    mockGetProviderApiKey.mockResolvedValueOnce(null);
-    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
-      callbacks.onAssistantMessage('Fallback answer');
-    });
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('hello')).resolves.toBe('Fallback answer');
-    expect(mockRunOrchestrator).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: expect.objectContaining({ id: 'provider-1', apiKey: 'inline-key' }),
-        systemPrompt:
-          'You are a helpful voice assistant. Keep responses concise and conversational.',
-      }),
-      expect.any(Object),
-    );
-  });
-
-  it('returns an orchestrator error when the run throws before producing output', async () => {
-    mockRunOrchestrator.mockRejectedValueOnce(new Error('orchestrator boom'));
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('hello')).resolves.toBe('Error: orchestrator boom');
-  });
-
-  it('returns an orchestrator callback error when no assistant output is produced', async () => {
-    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
-      callbacks.onError(new Error('callback boom'));
-    });
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('hello')).resolves.toBe('Error: callback boom');
-  });
-
-  it('replaces partial streamed output with a concrete provider failure', async () => {
-    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
-      callbacks.onToken('This answer was cut');
-      callbacks.onAgentControlGraphStateChange?.({
-        status: 'failed',
-        terminalReason: 'provider_stream_failed',
-      });
-      callbacks.onError(new Error('provider stream failed'));
-      callbacks.onDone?.();
-    });
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('hello')).resolves.toBe('Error: provider stream failed');
-  });
-
-  it('returns a visible blocker response from a blocked voice run', async () => {
-    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
-      callbacks.onAssistantMessage('I could not complete that action safely.');
-      callbacks.onAgentControlGraphStateChange?.({
-        status: 'blocked',
-        terminalReason: 'missing_required_side_effect',
-      });
-      callbacks.onDone?.();
-    });
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('do the action')).resolves.toBe(
-      'I could not complete that action safely.',
-    );
-  });
-
-  it('returns a graph error when a blocked voice run has no visible response', async () => {
-    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
-      callbacks.onAgentControlGraphStateChange?.({
-        status: 'blocked',
-        terminalReason: 'empty_final_text_after_recovery',
-      });
-      callbacks.onDone?.();
-    });
-
-    render(<VoiceScreen />);
-
-    await expect(getLatestAgentHandler()('hello')).resolves.toBe(
-      'Error: Agent control graph was blocked: empty_final_text_after_recovery.',
-    );
   });
 });

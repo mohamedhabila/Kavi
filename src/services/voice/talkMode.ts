@@ -65,7 +65,6 @@ export class TalkModeManager {
   private transcriptListeners: Array<(t: string) => void> = [];
   private responseListeners: Array<(r: string) => void> = [];
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
-  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSpokenResponse = '';
   private lastSpokenAt = 0;
   private listeningStartedAt = 0;
@@ -73,6 +72,9 @@ export class TalkModeManager {
   private lastSpeechAt = 0;
   private heardSpeechDuringCurrentTurn = false;
   private pendingProcessing = false;
+  private sessionGeneration = 0;
+  private pendingStartListening: Promise<void> | null = null;
+  private pendingStop: Promise<void> | null = null;
 
   constructor(
     configOrAgent: TalkModeConfig | AgentHandler,
@@ -140,43 +142,80 @@ export class TalkModeManager {
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   async start(): Promise<void> {
+    if (this.pendingStop) {
+      await this.pendingStop;
+    }
     if (this.active) return;
+    this.sessionGeneration += 1;
     this.active = true;
     await this.startListening();
   }
 
-  async stop(): Promise<void> {
-    this.active = false;
-    this.clearTimers();
-    await stopSpeaking();
+  stop(): Promise<void> {
+    if (this.pendingStop) {
+      return this.pendingStop;
+    }
 
-    if (this.state === 'listening') {
-      await stopRecording();
+    const stopOperation = this.performStop();
+    const trackedStop = stopOperation.finally(() => {
+      if (this.pendingStop === trackedStop) {
+        this.pendingStop = null;
+      }
+    });
+    this.pendingStop = trackedStop;
+    return trackedStop;
+  }
+
+  private async performStop(): Promise<void> {
+    const pendingStartListening = this.pendingStartListening;
+    this.active = false;
+    this.sessionGeneration += 1;
+    this.clearTimers();
+    await Promise.allSettled([
+      stopSpeaking(),
+      ...(this.state === 'listening' || this.pendingProcessing ? [stopRecording()] : []),
+    ]);
+    if (pendingStartListening) {
+      await Promise.allSettled([pendingStartListening]);
+      await Promise.allSettled([stopSpeaking(), stopRecording()]);
     }
 
     this.setState('idle');
   }
 
   async pause(): Promise<void> {
+    this.sessionGeneration += 1;
     this.clearTimers();
-    if (this.state === 'speaking') {
-      await stopSpeaking();
-    }
-    if (this.state === 'listening') {
-      await stopRecording();
-    }
+    await Promise.allSettled([
+      ...(this.state === 'speaking' ? [stopSpeaking()] : []),
+      ...(this.state === 'listening' ? [stopRecording()] : []),
+    ]);
     this.setState('paused');
   }
 
   async resume(): Promise<void> {
     if (this.state !== 'paused') return;
+    this.sessionGeneration += 1;
     await this.startListening();
   }
 
   // ── Internal state machine ────────────────────────────────────────
 
-  private async startListening(): Promise<void> {
-    if (!this.active) return;
+  private startListening(): Promise<void> {
+    if (!this.active) return Promise.resolve();
+
+    const startOperation = this.performStartListening();
+    const trackedStart = startOperation.finally(() => {
+      if (this.pendingStartListening === trackedStart) {
+        this.pendingStartListening = null;
+      }
+    });
+    this.pendingStartListening = trackedStart;
+    return trackedStart;
+  }
+
+  private async performStartListening(): Promise<void> {
+    const sessionGeneration = this.sessionGeneration;
 
     try {
       this.clearRestartTimer();
@@ -186,8 +225,16 @@ export class TalkModeManager {
       this.lastSpeechAt = 0;
       this.heardSpeechDuringCurrentTurn = false;
       await stopSpeaking();
-      this.setState('listening');
+      if (!this.isCurrentActiveSession(sessionGeneration)) {
+        return;
+      }
       await startRecording();
+      if (!this.isCurrentActiveSession(sessionGeneration)) {
+        await Promise.allSettled([stopRecording()]);
+        this.setState('idle');
+        return;
+      }
+      this.setState('listening');
 
       this.startRecorderStatusPolling();
 
@@ -199,28 +246,41 @@ export class TalkModeManager {
       }, this.config.maxRecordingMs!);
       unrefTimerIfSupported(this.maxTimer);
     } catch (err: unknown) {
-      this.handleError(err instanceof Error ? err : new Error(String(err)));
+      if (this.isCurrentActiveSession(sessionGeneration)) {
+        await this.handleError(err instanceof Error ? err : new Error(String(err)));
+      } else {
+        await Promise.allSettled([stopRecording()]);
+      }
     }
   }
 
   private async processRecording(): Promise<void> {
     if (this.state !== 'listening' || this.pendingProcessing) return;
+    const sessionGeneration = this.sessionGeneration;
     this.pendingProcessing = true;
     this.clearTimers();
 
     try {
       this.setState('transcribing');
       const audioUri = await stopRecording();
+      if (!this.isCurrentActiveSession(sessionGeneration)) {
+        this.setState('idle');
+        return;
+      }
       if (!audioUri) {
         if (this.config.autoListen && this.active) {
           await this.startListening();
         } else {
-          this.setState('idle');
+          this.finishSession();
         }
         return;
       }
 
       const result = await transcribeAudio(audioUri);
+      if (!this.isCurrentActiveSession(sessionGeneration)) {
+        this.setState('idle');
+        return;
+      }
       const text = result.text.trim();
 
       if (!text) {
@@ -228,7 +288,7 @@ export class TalkModeManager {
         if (this.config.autoListen && this.active) {
           await this.startListening();
         } else {
-          this.setState('idle');
+          this.finishSession();
         }
         return;
       }
@@ -237,7 +297,7 @@ export class TalkModeManager {
         if (this.config.autoListen && this.active) {
           this.scheduleListeningRestart();
         } else {
-          this.setState('idle');
+          this.finishSession();
         }
         return;
       }
@@ -253,6 +313,8 @@ export class TalkModeManager {
           // Wake word not detected, restart listening
           if (this.config.autoListen && this.active) {
             await this.startListening();
+          } else {
+            this.finishSession();
           }
           return;
         }
@@ -261,6 +323,10 @@ export class TalkModeManager {
       // Process through agent
       this.setState('processing');
       const response = await this.agentHandler(text);
+      if (!this.isCurrentActiveSession(sessionGeneration)) {
+        this.setState('idle');
+        return;
+      }
       this.handlers.onAgentResponse?.(response);
       for (const cb of this.responseListeners) cb(response);
 
@@ -270,16 +336,21 @@ export class TalkModeManager {
         this.lastSpokenResponse = response;
         this.lastSpokenAt = Date.now();
         await speakText(response, this.config.ttsProvider);
+        if (!this.isCurrentActiveSession(sessionGeneration) || this.getState() === 'paused') {
+          return;
+        }
       }
 
       // Auto-restart listening
       if (this.config.autoListen && this.active) {
         this.scheduleListeningRestart();
       } else {
-        this.setState('idle');
+        this.finishSession();
       }
     } catch (err: unknown) {
-      this.handleError(err instanceof Error ? err : new Error(String(err)));
+      if (this.isCurrentActiveSession(sessionGeneration)) {
+        await this.handleError(err instanceof Error ? err : new Error(String(err)));
+      }
     } finally {
       this.pendingProcessing = false;
     }
@@ -303,23 +374,13 @@ export class TalkModeManager {
     for (const cb of this.stateListeners) cb(state);
   }
 
-  private handleError(error: Error): void {
+  private async handleError(error: Error): Promise<void> {
+    this.active = false;
+    this.sessionGeneration += 1;
+    this.clearTimers();
+    await Promise.allSettled([stopSpeaking(), stopRecording()]);
     this.handlers.onError?.(error);
     this.setState('error');
-
-    // Auto-recover: restart listening after a short delay
-    if (this.active) {
-      if (this.recoveryTimer) {
-        clearTimeout(this.recoveryTimer);
-      }
-      this.recoveryTimer = setTimeout(async () => {
-        this.recoveryTimer = null;
-        if (this.active) {
-          await this.startListening();
-        }
-      }, 2000);
-      unrefTimerIfSupported(this.recoveryTimer);
-    }
   }
 
   private clearTimers(): void {
@@ -331,11 +392,16 @@ export class TalkModeManager {
       clearInterval(this.recorderPollTimer);
       this.recorderPollTimer = null;
     }
-    if (this.recoveryTimer) {
-      clearTimeout(this.recoveryTimer);
-      this.recoveryTimer = null;
-    }
     this.clearRestartTimer();
+  }
+
+  private finishSession(): void {
+    this.active = false;
+    this.setState('idle');
+  }
+
+  private isCurrentActiveSession(sessionGeneration: number): boolean {
+    return this.active && this.sessionGeneration === sessionGeneration;
   }
 
   private clearRestartTimer(): void {
