@@ -85,7 +85,7 @@ describe('MessageBubble attachments', () => {
         },
       ],
     });
-    const { getByTestId, UNSAFE_getByType } = render(
+    const { getByTestId, getByText, queryByText, UNSAFE_getByType } = render(
       <MessageBubble
         message={msg}
         onViewFile={onViewFile}
@@ -102,6 +102,25 @@ describe('MessageBubble attachments', () => {
     expect(getByTestId('message-attachment-generated-image-tool-1')).toBeTruthy();
     expect(getByTestId('message-attachment-generated-image-tool-1')).toBeTruthy();
     expect(UNSAFE_getByType(Image)).toBeTruthy();
+    expect(getByText('Image')).toBeTruthy();
+    expect(getByText('Created in this conversation')).toBeTruthy();
+    expect(getByText('Preview')).toBeTruthy();
+    expect(getByText('Open')).toBeTruthy();
+    expect(getByText('Share / save')).toBeTruthy();
+    expect(queryByText('image/png')).toBeNull();
+
+    const previewStyle = StyleSheet.flatten(
+      getByTestId('artifact-preview-generated-image-tool-1').props.style,
+    );
+    const openStyle = StyleSheet.flatten(
+      getByTestId('message-attachment-open-file-generated-image-tool-1').props.style,
+    );
+    const shareStyle = StyleSheet.flatten(
+      getByTestId('message-attachment-share-file-generated-image-tool-1').props.style,
+    );
+    expect(previewStyle.minHeight).toBeGreaterThanOrEqual(48);
+    expect(openStyle.minHeight).toBeGreaterThanOrEqual(48);
+    expect(shareStyle.minHeight).toBeGreaterThanOrEqual(48);
 
     fireEvent.press(getByTestId('message-attachment-generated-image-tool-1'));
     expect(getByTestId('message-attachment-preview-modal')).toBeTruthy();
@@ -117,6 +136,38 @@ describe('MessageBubble attachments', () => {
         workspacePath: 'generated-image-tool-1.png',
       }),
     );
+  });
+
+  it('uses friendly file types and redacts secret-shaped names from visible and accessible text', () => {
+    const credential = ['gh', 'p_', 'A'.repeat(24)].join('');
+    const msg = makeMessage({
+      role: 'assistant',
+      content: 'I created the requested report.',
+      attachments: [
+        {
+          id: 'generated-report-1',
+          type: 'file',
+          uri: 'file:///mock/documents/workspace/conv-1/report.pdf',
+          name: `${credential}.pdf`,
+          mimeType: 'application/pdf',
+          size: 8192,
+          workspacePath: 'report.pdf',
+        },
+      ],
+    });
+
+    const { getByText, queryByText, toJSON } = render(
+      <MessageBubble
+        message={msg}
+        onViewFile={jest.fn()}
+        onShareWorkspaceFile={jest.fn()}
+      />,
+    );
+
+    expect(getByText('PDF')).toBeTruthy();
+    expect(getByText('[REDACTED].pdf')).toBeTruthy();
+    expect(queryByText('application/pdf')).toBeNull();
+    expect(JSON.stringify(toJSON())).not.toContain(credential);
   });
 
   it('should render attachment-only assistant response segments', () => {

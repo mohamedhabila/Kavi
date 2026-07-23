@@ -5,6 +5,8 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import type { Attachment } from '../../types/attachment';
 import { AppPalette, useAppTheme } from '../../theme/useAppTheme';
 import { compactVoiceWaveformLevels } from '../../services/voice/voiceNote';
+import { useTranslation } from '../../i18n/useTranslation';
+import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 
 interface AudioAttachmentCardProps {
   attachment: Attachment;
@@ -39,6 +41,7 @@ export const AudioAttachmentCard: React.FC<AudioAttachmentCardProps> = ({
   interactive = true,
 }) => {
   const { colors } = useAppTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors, isUser, compact), [colors, compact, isUser]);
   const player = useAudioPlayer(attachment.uri, {
     updateInterval: compact ? 250 : 120,
@@ -46,6 +49,12 @@ export const AudioAttachmentCard: React.FC<AudioAttachmentCardProps> = ({
   });
   const status = useAudioPlayerStatus(player);
   const transcript = attachment.transcript?.trim() || '';
+  const safeName =
+    redactSensitiveText(attachment.name || '')
+      .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim()
+      .slice(0, 160) || t('artifactCard.voiceNote');
   const waveformLevels = useMemo(
     () => compactVoiceWaveformLevels(attachment.waveformLevels ?? [], compact ? 14 : 24),
     [attachment.waveformLevels, compact],
@@ -83,8 +92,10 @@ export const AudioAttachmentCard: React.FC<AudioAttachmentCardProps> = ({
         accessibilityRole={interactive ? 'button' : undefined}
         accessibilityLabel={
           interactive
-            ? `${status.playing ? 'Pause' : 'Play'} ${attachment.name || 'voice note'}`
-            : attachment.name || 'voice note'
+            ? status.playing
+              ? t('artifactCard.pauseAudioLabel', { name: safeName })
+              : t('artifactCard.playAudioLabel', { name: safeName })
+            : safeName
         }
         testID={`audio-attachment-toggle-${attachment.id}`}
       >
@@ -104,7 +115,7 @@ export const AudioAttachmentCard: React.FC<AudioAttachmentCardProps> = ({
       <View style={styles.content}>
         <View style={styles.metaRow}>
           <Text style={styles.title} numberOfLines={1}>
-            {attachment.name || 'Voice note'}
+            {safeName}
           </Text>
           <Text style={styles.duration} numberOfLines={1}>
             {buildDurationLabel(currentTimeSeconds, durationSeconds)}
@@ -151,8 +162,8 @@ const createStyles = (colors: AppPalette, isUser: boolean, compact: boolean) =>
       gap: compact ? 8 : 10,
     },
     playButton: {
-      width: compact ? 32 : 40,
-      height: compact ? 32 : 40,
+      width: 48,
+      height: 48,
       borderRadius: 999,
       backgroundColor: isUser ? 'rgba(255,255,255,0.16)' : colors.surfaceAlt,
       alignItems: 'center',

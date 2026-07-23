@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { AudioAttachmentCard } from '../../src/components/chat/AudioAttachmentCard';
 import type { Attachment } from '../../src/types/attachment';
 
@@ -53,8 +54,12 @@ describe('AudioAttachmentCard', () => {
   it('plays audio when toggled from the paused state', () => {
     const { getByTestId } = render(<AudioAttachmentCard attachment={makeAttachment()} />);
     const player = expoAudio.useAudioPlayer.mock.results[0]?.value;
+    const toggle = getByTestId('audio-attachment-toggle-audio-1');
 
-    fireEvent.press(getByTestId('audio-attachment-toggle-audio-1'));
+    expect(toggle.props.accessibilityLabel).toBe('Play voice-note.m4a');
+    expect(StyleSheet.flatten(toggle.props.style).width).toBeGreaterThanOrEqual(48);
+    expect(StyleSheet.flatten(toggle.props.style).height).toBeGreaterThanOrEqual(48);
+    fireEvent.press(toggle);
 
     expect(player.play).toHaveBeenCalled();
   });
