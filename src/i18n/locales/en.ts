@@ -65,9 +65,6 @@ export const en: TranslationMap = {
     activity: 'Activity',
     library: 'Library',
     more: 'More',
-    pendingDecisions: 'Pending decisions',
-    remindersAutomations: 'Reminders & automations',
-    workActivity: 'Work activity',
     filesAndCreations: 'Files & creations',
     interactiveCreations: 'Interactive creations',
     assistantStyles: 'Assistant styles',
@@ -97,9 +94,6 @@ export const en: TranslationMap = {
   },
 
   navigationHub: {
-    activityIntro: 'Review anything that needs you and keep up with ongoing or scheduled work.',
-    needsAttention: 'Needs attention',
-    stayOrganized: 'Stay organized',
     libraryIntro:
       'Find what Kavi remembers and the files or interactive results it created with you.',
     memoryAndCreations: 'Memory & creations',
@@ -110,6 +104,50 @@ export const en: TranslationMap = {
     advanced: 'Advanced',
     developerIntro: 'Optional tools for coding, terminals, and connected workspaces.',
     developerTools: 'Developer tools',
+  },
+  activity: {
+    intro: 'See what needs you, what is underway, and what happened in each chat.',
+    filtersLabel: 'Activity filters',
+    filterLabelWithCount: '{label}, {count}',
+    filter: { pending: 'Pending', active: 'Active', recent: 'Recent', automations: 'Automations' },
+    status: {
+      waiting: 'Waiting for you',
+      active: 'In progress',
+      'needs-attention': 'Needs attention',
+      scheduled: 'Scheduled',
+      paused: 'Paused',
+      completed: 'Completed',
+      failed: 'Failed',
+      denied: 'Denied',
+      expired: 'Expired',
+      interrupted: 'Interrupted',
+      retrying: 'Retrying',
+    },
+    fallbackDecision: 'Decision requested',
+    fallbackAutomation: 'Reminder or automation',
+    fallbackAssistantWork: 'Assistant work',
+    openDecisionHint: 'Opens the decision and its permission details',
+    openAutomationHint: 'Opens this reminder or automation',
+    openConversationHint: 'Returns to the source chat',
+    fromConversation: 'From {title}',
+    nextOccurrence: 'Next: {time}',
+    openCreation: 'Open linked creation',
+    openCreationHint: 'Opens the file or creation produced by this work',
+    empty: {
+      pendingTitle: 'Nothing needs your attention',
+      pendingHint: 'Decisions and interrupted work will appear here.',
+      activeTitle: 'No work in progress',
+      activeHint: 'Longer tasks and delegated work will appear here while they run.',
+      recentTitle: 'No recent activity',
+      recentHint: 'Completed, failed, and interrupted work will appear here.',
+      automationsTitle: 'No reminders or automations',
+      automationsHint:
+        'Create a reminder or routine and its next run and results will appear here.',
+    },
+    createAutomation: 'Create reminder or automation',
+    openAssistant: 'Open Assistant',
+    advancedTitle: 'Advanced work details',
+    advancedHint: 'View worker hierarchy, sessions, and tool counts.',
   },
 
   // ── Chat Screen ────────────────────────────────────────────────────────
@@ -1095,7 +1133,8 @@ export const en: TranslationMap = {
     providerUnavailableError:
       'Voice transcription is not set up yet. Connect a supported speech service in Settings or continue with text.',
     invalidRecordingError: 'That recording could not be read. Try speaking again.',
-    networkError: 'Voice could not reach the transcription service. Check your connection and retry.',
+    networkError:
+      'Voice could not reach the transcription service. Check your connection and retry.',
     serviceError: 'Kavi could not finish this voice turn. Retry or continue in Chat.',
     genericError: 'Voice stopped unexpectedly. Retry or continue in Chat.',
     you: 'You',
@@ -1427,11 +1466,13 @@ export const en: TranslationMap = {
       uncertainDetail:
         'This action may have completed, but the app could not confirm it. Check the destination before making a new request.',
       declinedTitle: 'This action was not approved',
-      declinedDetail: 'Nothing was changed. You can make a new request if you still want this action.',
+      declinedDetail:
+        'Nothing was changed. You can make a new request if you still want this action.',
       accessTitle: 'Access is needed',
       accessDetail: 'Review this app or service permission, then try again.',
       unavailableTitle: 'This capability is not available',
-      unavailableDetail: 'Try another mode or connection, or ask the assistant for a different approach.',
+      unavailableDetail:
+        'Try another mode or connection, or ask the assistant for a different approach.',
       connectionTitle: 'The connection was interrupted',
       connectionDetail: 'Check your connection and service setup, then try again.',
       stoppedTitle: 'This action stopped safely',

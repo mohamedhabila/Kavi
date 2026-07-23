@@ -64,9 +64,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     activity: 'Activité',
     library: 'Bibliothèque',
     more: 'Plus',
-    pendingDecisions: 'Décisions en attente',
-    remindersAutomations: 'Rappels et automatisations',
-    workActivity: 'Activité du travail',
     filesAndCreations: 'Fichiers et créations',
     interactiveCreations: 'Créations interactives',
     assistantStyles: 'Styles de l’assistant',
@@ -95,10 +92,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     recallSearch: 'Rechercher la mémoire',
   },
   navigationHub: {
-    activityIntro:
-      'Examinez ce qui nécessite votre attention et suivez le travail en cours ou planifié.',
-    needsAttention: 'À examiner',
-    stayOrganized: 'Restez organisé',
     libraryIntro:
       'Retrouvez ce que Kavi mémorise ainsi que les fichiers et créations réalisés avec vous.',
     memoryAndCreations: 'Mémoire et créations',
@@ -111,6 +104,56 @@ export const fr: TranslationMap = mergeTranslations(en, {
     developerIntro:
       'Outils facultatifs pour le code, les terminaux et les espaces de travail connectés.',
     developerTools: 'Outils de développement',
+  },
+  activity: {
+    intro:
+      'Voyez ce qui vous attend, ce qui est en cours et ce qui s’est passé dans chaque discussion.',
+    filtersLabel: 'Filtres d’activité',
+    filterLabelWithCount: '{label}, {count}',
+    filter: {
+      pending: 'En attente',
+      active: 'Actif',
+      recent: 'Récent',
+      automations: 'Automatisations',
+    },
+    status: {
+      waiting: 'Attend votre réponse',
+      active: 'En cours',
+      'needs-attention': 'Nécessite votre attention',
+      scheduled: 'Planifié',
+      paused: 'En pause',
+      completed: 'Terminé',
+      failed: 'Échec',
+      denied: 'Refusé',
+      expired: 'Expiré',
+      interrupted: 'Interrompu',
+      retrying: 'Nouvelle tentative',
+    },
+    fallbackDecision: 'Décision demandée',
+    fallbackAutomation: 'Rappel ou automatisation',
+    fallbackAssistantWork: 'Travail de l’assistant',
+    openDecisionHint: 'Ouvre la décision et les détails d’autorisation',
+    openAutomationHint: 'Ouvre ce rappel ou cette automatisation',
+    openConversationHint: 'Retourne à la discussion source',
+    fromConversation: 'Depuis {title}',
+    nextOccurrence: 'Prochaine exécution : {time}',
+    openCreation: 'Ouvrir la création liée',
+    openCreationHint: 'Ouvre le fichier ou la création produit par ce travail',
+    empty: {
+      pendingTitle: 'Rien ne nécessite votre attention',
+      pendingHint: 'Les décisions et les travaux interrompus apparaîtront ici.',
+      activeTitle: 'Aucun travail en cours',
+      activeHint: 'Les tâches longues et déléguées apparaîtront ici pendant leur exécution.',
+      recentTitle: 'Aucune activité récente',
+      recentHint: 'Les travaux terminés, échoués et interrompus apparaîtront ici.',
+      automationsTitle: 'Aucun rappel ni automatisation',
+      automationsHint:
+        'Créez un rappel ou une routine ; sa prochaine exécution et ses résultats apparaîtront ici.',
+    },
+    createAutomation: 'Créer un rappel ou une automatisation',
+    openAssistant: 'Ouvrir l’Assistant',
+    advancedTitle: 'Détails avancés du travail',
+    advancedHint: 'Afficher la hiérarchie des agents, les sessions et le nombre d’outils.',
   },
   chat: {
     title: 'Chat',
@@ -879,8 +922,10 @@ export const fr: TranslationMap = mergeTranslations(en, {
     correctionPlaceholder: 'Saisissez le détail exact',
     correctionTooLong: 'Ce souvenir doit contenir au maximum {count} caractères.',
     correctionChanged: 'Ce souvenir a changé avant l’enregistrement. Fermez-le et réessayez.',
-    correctionMemoryDisabled: 'La mémoire à long terme est désactivée. Activez-la avant d’enregistrer.',
-    correctionRestricted: 'Pour protéger votre vie privée, cette valeur sensible ne peut pas être enregistrée.',
+    correctionMemoryDisabled:
+      'La mémoire à long terme est désactivée. Activez-la avant d’enregistrer.',
+    correctionRestricted:
+      'Pour protéger votre vie privée, cette valeur sensible ne peut pas être enregistrée.',
     correctionInvalid: 'Saisissez une valeur différente et non vide.',
     correctionFailed: 'Ce souvenir n’a pas pu être mis à jour. Fermez-le et réessayez.',
     factForget: 'Oublier',
@@ -1093,8 +1138,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
       'Impossible de joindre le service de transcription. Vérifiez votre connexion et réessayez.',
     serviceError:
       "Kavi n'a pas pu terminer cet échange vocal. Réessayez ou continuez dans le chat.",
-    genericError:
-      "La voix s'est arrêtée de façon inattendue. Réessayez ou continuez dans le chat.",
+    genericError: "La voix s'est arrêtée de façon inattendue. Réessayez ou continuez dans le chat.",
     you: 'Vous',
     kavi: 'Kavi',
     conciseResponseInstruction: 'Gardez les réponses concises et conversationnelles.',
@@ -2061,12 +2105,14 @@ export const fr: TranslationMap = mergeTranslations(en, {
     },
     reversibilityLevel: {
       low: 'Limitée à l’action affichée ; vous gardez le contrôle des accès futurs.',
-      medium: 'Elle peut modifier la destination ; certains changements peuvent nécessiter une annulation manuelle.',
+      medium:
+        'Elle peut modifier la destination ; certains changements peuvent nécessiter une annulation manuelle.',
       high: 'Elle peut apporter des changements importants. Vérifiez la destination avant d’autoriser.',
       critical: 'Elle peut entraîner des changements destructifs ou difficiles à annuler.',
     },
     reviewReason: {
-      destructive: 'Cette action peut supprimer, écraser ou modifier des données de façon irréversible.',
+      destructive:
+        'Cette action peut supprimer, écraser ou modifier des données de façon irréversible.',
       sensitiveData: 'Cette action peut accéder à des données sensibles ou privées.',
       systemAccess: 'Cette action peut intervenir sur un système extérieur à cette conversation.',
       compoundAction: 'Cette demande combine plusieurs opérations ou étapes de commande.',

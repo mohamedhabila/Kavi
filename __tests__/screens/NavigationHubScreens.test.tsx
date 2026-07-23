@@ -11,6 +11,13 @@ const mockNavigation = {
   goBack: jest.fn(),
   canGoBack: jest.fn(),
 };
+const mockSetActiveConversation = jest.fn();
+const mockForegroundSnapshot = {
+  activeConversationIds: new Set<string>(),
+  streamingMessageIds: new Map<string, string>(),
+  size: 0,
+  version: 0,
+};
 let mockRouteName = 'More';
 let mockRouteParams: Record<string, unknown> = {};
 
@@ -29,29 +36,55 @@ jest.mock('../../src/theme/useAppTheme', () => ({
     colors: {
       background: '#000',
       border: '#333',
+      danger: '#f00',
+      dangerSoft: '#300',
       header: '#111',
+      onPrimary: '#000',
       primary: '#0f0',
       primarySoft: '#030',
       surface: '#111',
+      surfaceAlt: '#222',
+      success: '#0f0',
       text: '#fff',
       textSecondary: '#aaa',
       textTertiary: '#777',
+      warning: '#fc0',
+      warningBackground: '#320',
     },
   }),
 }));
 
 jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
+    locale: 'en',
     t: (key: string) => key,
   }),
+}));
+
+jest.mock('../../src/engine/graph/foregroundRun/requestRegistry', () => ({
+  appForegroundRequestRegistry: {
+    subscribe: jest.fn(() => jest.fn()),
+    getSnapshot: jest.fn(() => mockForegroundSnapshot),
+  },
+}));
+
+jest.mock('../../src/services/agents/subAgent', () => ({
+  listActiveSubAgents: jest.fn(() => []),
+  onSubAgentEvent: jest.fn(() => jest.fn()),
 }));
 
 jest.mock('../../src/services/remote/approvalStore', () => ({
   useApprovalStore: (selector: (state: any) => unknown) =>
     selector({
       requests: {
-        pending: { status: 'pending' },
-        resolved: { status: 'approved' },
+        pending: {
+          id: 'approval-1',
+          title: 'Share the itinerary',
+          description: 'Send the result to the calendar service',
+          status: 'pending',
+          requestedAt: 80,
+          decisionPolicy: { persistentApproval: 'forbidden', expiryFallback: 'reject' },
+        },
       },
     }),
 }));
@@ -60,15 +93,42 @@ jest.mock('../../src/services/scheduler/store', () => ({
   useSchedulerStore: (selector: (state: any) => unknown) =>
     selector({
       jobs: [
-        { id: 'enabled', enabled: true },
-        { id: 'disabled', enabled: false },
+        {
+          id: 'enabled',
+          definitionRevision: 1,
+          name: 'Morning briefing',
+          enabled: true,
+          createdAtMs: 10,
+          updatedAtMs: 70,
+          schedule: { kind: 'every', everyMs: 86_400_000 },
+          sessionTarget: 'isolated',
+          wakeMode: 'new',
+          payload: { prompt: 'Summarize the day', mode: 'agentic' },
+          nextRunAtMs: 1_000,
+        },
       ],
+      terminalReports: [],
     }),
 }));
 
 jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: (selector: (state: any) => unknown) =>
-    selector({ activeConversationId: 'conversation-42' }),
+    selector({
+      activeConversationId: 'conversation-42',
+      conversations: [
+        {
+          id: 'conversation-42',
+          title: 'Trip planning',
+          messages: [],
+          providerId: 'provider-1',
+          systemPrompt: '',
+          createdAt: 1,
+          updatedAt: 50,
+          agentRuns: [],
+        },
+      ],
+      setActiveConversation: mockSetActiveConversation,
+    }),
 }));
 
 describe('navigation hub screens', () => {
@@ -81,17 +141,20 @@ describe('navigation hub screens', () => {
   it('routes Activity choices to decisions, reminders, and detailed work', () => {
     const { getByTestId } = render(<ActivityScreen />);
 
-    fireEvent.press(getByTestId('activity-hub-pending-decisions'));
+    fireEvent.press(getByTestId('activity-item-approval:approval-1'));
     expect(mockNavigation.navigate).toHaveBeenLastCalledWith('ApprovalHistory', {
+      initialRequestId: 'approval-1',
       returnTo: { name: 'Activity' },
     });
 
-    fireEvent.press(getByTestId('activity-hub-reminders-automations'));
+    fireEvent.press(getByTestId('activity-filter-automations'));
+    fireEvent.press(getByTestId('activity-item-automation:enabled'));
     expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Scheduler', {
+      initialJobId: 'enabled',
       returnTo: { name: 'Activity' },
     });
 
-    fireEvent.press(getByTestId('activity-hub-work-activity'));
+    fireEvent.press(getByTestId('activity-open-advanced-work'));
     expect(mockNavigation.navigate).toHaveBeenLastCalledWith('AgentRoster', {
       initialTab: 'queue',
       returnTo: { name: 'Activity' },

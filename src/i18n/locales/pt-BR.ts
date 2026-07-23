@@ -64,9 +64,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     activity: 'Atividade',
     library: 'Biblioteca',
     more: 'Mais',
-    pendingDecisions: 'Decisões pendentes',
-    remindersAutomations: 'Lembretes e automações',
-    workActivity: 'Atividade de trabalho',
     filesAndCreations: 'Arquivos e criações',
     interactiveCreations: 'Criações interativas',
     assistantStyles: 'Estilos do assistente',
@@ -95,10 +92,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     recallSearch: 'Buscar na memória',
   },
   navigationHub: {
-    activityIntro:
-      'Revise o que precisa da sua atenção e acompanhe trabalhos em andamento ou agendados.',
-    needsAttention: 'Precisa de atenção',
-    stayOrganized: 'Mantenha-se organizado',
     libraryIntro: 'Encontre o que Kavi lembra e os arquivos ou criações que produziu com você.',
     memoryAndCreations: 'Memória e criações',
     moreIntro: 'Gerencie recursos, conexões, preferências do assistente e opções avançadas.',
@@ -109,6 +102,51 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     developerIntro:
       'Ferramentas opcionais para código, terminais e espaços de trabalho conectados.',
     developerTools: 'Ferramentas de desenvolvimento',
+  },
+  activity: {
+    intro:
+      'Veja o que precisa de você, o que está em andamento e o que aconteceu em cada conversa.',
+    filtersLabel: 'Filtros de atividade',
+    filterLabelWithCount: '{label}, {count}',
+    filter: { pending: 'Pendente', active: 'Ativo', recent: 'Recente', automations: 'Automações' },
+    status: {
+      waiting: 'Aguardando você',
+      active: 'Em andamento',
+      'needs-attention': 'Precisa de atenção',
+      scheduled: 'Agendado',
+      paused: 'Pausado',
+      completed: 'Concluído',
+      failed: 'Falhou',
+      denied: 'Negado',
+      expired: 'Expirado',
+      interrupted: 'Interrompido',
+      retrying: 'Tentando novamente',
+    },
+    fallbackDecision: 'Decisão solicitada',
+    fallbackAutomation: 'Lembrete ou automação',
+    fallbackAssistantWork: 'Trabalho do assistente',
+    openDecisionHint: 'Abre a decisão e os detalhes da permissão',
+    openAutomationHint: 'Abre este lembrete ou automação',
+    openConversationHint: 'Volta à conversa de origem',
+    fromConversation: 'De {title}',
+    nextOccurrence: 'Próxima: {time}',
+    openCreation: 'Abrir criação vinculada',
+    openCreationHint: 'Abre o arquivo ou a criação produzida por este trabalho',
+    empty: {
+      pendingTitle: 'Nada precisa da sua atenção',
+      pendingHint: 'Decisões e trabalhos interrompidos aparecerão aqui.',
+      activeTitle: 'Nenhum trabalho em andamento',
+      activeHint: 'Tarefas longas e trabalhos delegados aparecerão aqui durante a execução.',
+      recentTitle: 'Nenhuma atividade recente',
+      recentHint: 'Trabalhos concluídos, com falha ou interrompidos aparecerão aqui.',
+      automationsTitle: 'Nenhum lembrete ou automação',
+      automationsHint:
+        'Crie um lembrete ou rotina; a próxima execução e os resultados aparecerão aqui.',
+    },
+    createAutomation: 'Criar lembrete ou automação',
+    openAssistant: 'Abrir Assistente',
+    advancedTitle: 'Detalhes avançados do trabalho',
+    advancedHint: 'Veja a hierarquia de agentes, sessões e contagens de ferramentas.',
   },
   chat: {
     title: 'Chat',
@@ -862,8 +900,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     refreshing: 'Atualizando memória…',
     lastSynced: 'Última sincronização às {time}',
     notSyncedYet: 'A memória ainda não foi sincronizada nesta sessão.',
-    factsEmpty:
-      'Nada foi lembrado ainda. Peça ao Kavi para lembrar uma preferência ou um detalhe.',
+    factsEmpty: 'Nada foi lembrado ainda. Peça ao Kavi para lembrar uma preferência ou um detalhe.',
     factsSearchPlaceholder: 'Buscar detalhes lembrados…',
     factsPinnedOnly: 'Apenas fixados',
     factsCount: '{count} memórias',
@@ -882,8 +919,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     correctionFailed: 'Não foi possível atualizar esta memória. Feche e tente novamente.',
     factForget: 'Esquecer',
     factForgetTitle: 'Esquecer esta memória?',
-    factForgetConfirm:
-      'Isso remove permanentemente esta memória. Esta ação não pode ser desfeita.',
+    factForgetConfirm: 'Isso remove permanentemente esta memória. Esta ação não pode ser desfeita.',
     factForgetFailedTitle: 'Memória não removida',
     factForgetFailedMessage: 'Recarregue a memória e tente novamente.',
     factPin: 'Fixar',
@@ -1089,14 +1125,12 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     invalidRecordingError: 'Não foi possível ler essa gravação. Tente falar novamente.',
     networkError:
       'Não foi possível acessar o serviço de transcrição. Verifique sua conexão e tente novamente.',
-    serviceError:
-      'Kavi não conseguiu concluir esta fala. Tente novamente ou continue no chat.',
+    serviceError: 'Kavi não conseguiu concluir esta fala. Tente novamente ou continue no chat.',
     genericError: 'A voz parou inesperadamente. Tente novamente ou continue no chat.',
     you: 'Você',
     kavi: 'Kavi',
     conciseResponseInstruction: 'Mantenha as respostas concisas e conversacionais.',
-    conversationPlaceholder:
-      'Suas falas aparecem aqui e também são salvas no seu chat atual.',
+    conversationPlaceholder: 'Suas falas aparecem aqui e também são salvas no seu chat atual.',
   },
   terminal: {
     searchPlaceholder: 'Search...',
@@ -1415,7 +1449,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       uncertainDetail:
         'A ação pode ter sido concluída, mas o app não conseguiu confirmar. Confira o destino antes de fazer uma nova solicitação.',
       declinedTitle: 'Esta ação não foi aprovada',
-      declinedDetail: 'Nada foi alterado. Você pode fazer uma nova solicitação se ainda quiser esta ação.',
+      declinedDetail:
+        'Nada foi alterado. Você pode fazer uma nova solicitação se ainda quiser esta ação.',
       accessTitle: 'É necessário conceder acesso',
       accessDetail: 'Revise a permissão do app ou serviço e tente novamente.',
       unavailableTitle: 'Este recurso não está disponível',
@@ -2029,8 +2064,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     boundaries: 'Quando será solicitada nova aprovação',
     boundariesDescription:
       'Um destino diferente, outra ação ou uma solicitação de maior risco ainda exigirá aprovação.',
-    revokePath:
-      'Revogue quando quiser em Atividade → Aprovações e permissões → Permissões salvas.',
+    revokePath: 'Revogue quando quiser em Atividade → Aprovações e permissões → Permissões salvas.',
     confirmPersistent: 'Salvar permissão',
     thisDevice: 'Este dispositivo',
     selectedDestination: 'O destino selecionado',
