@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import {
   AlertCircle,
   ArrowLeft,
@@ -119,6 +119,7 @@ function getFailureMessageKey(kind: VoiceOperationFailureKind): string {
 
 export const VoiceScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const isScreenFocused = useIsFocused();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createVoiceScreenStyles(colors), [colors]);
@@ -410,7 +411,7 @@ export const VoiceScreen: React.FC = () => {
         <View style={styles.headerAction} />
       </View>
 
-      <ApprovalBanner />
+      <ApprovalBanner enabled={isScreenFocused} />
 
       <ScrollView
         style={styles.scrollView}

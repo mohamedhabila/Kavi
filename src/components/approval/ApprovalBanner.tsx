@@ -1,230 +1,436 @@
-// ---------------------------------------------------------------------------
-// Kavi — Approval Banner Component
-// ---------------------------------------------------------------------------
-// Renders pending approval requests as dismissible banners.
-// Designed to be embedded in ChatScreen or as an overlay.
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  Modal,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  CheckCheck,
+  Clock3,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
+} from 'lucide-react-native';
 
-import React, { useCallback, useMemo } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ShieldCheck, ShieldX, Clock, ShieldAlert, CheckCheck } from 'lucide-react-native';
-import { useApprovalStore } from '../../services/remote/approvalStore';
-import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
-import type { RemoteApprovalRequest } from '../../types/remote';
+import { useApprovalStore } from '../../services/remote/approvalStore';
+import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
+import type { RemoteApprovalRequest, RemoteApprovalScope } from '../../types/remote';
+import { createApprovalBannerStyles } from './approvalBannerStyles';
+import {
+  buildApprovalPresentation,
+  formatApprovalCountdown,
+  secondsUntilExpiry,
+  sortPendingApprovals,
+  type ApprovalReviewReason,
+  type ApprovalRiskLevel,
+} from './approvalPresentation';
 
-const RISK_COLORS: Record<string, (colors: AppPalette) => string> = {
-  low: (c) => c.success,
-  medium: (c) => c.warning,
-  high: (c) => c.danger,
-  critical: (c) => c.danger,
+const RISK_COLORS: Record<ApprovalRiskLevel, (colors: AppPalette) => string> = {
+  low: (colors) => colors.success,
+  medium: (colors) => colors.warning,
+  high: (colors) => colors.danger,
+  critical: (colors) => colors.danger,
 };
 
-export const ApprovalBanner: React.FC = () => {
+export const ApprovalBanner: React.FC<{ enabled?: boolean }> = ({ enabled = true }) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createApprovalBannerStyles(colors), [colors]);
+  const requests = useApprovalStore((state) => state.requests);
+  const approve = useApprovalStore((state) => state.approveRequest);
+  const reject = useApprovalStore((state) => state.rejectRequest);
+  const approveAlways = useApprovalStore((state) => state.approveAlways);
+  const pending = useMemo(() => sortPendingApprovals(requests), [requests]);
+  const request = pending[0];
 
-  const requests = useApprovalStore((s) => s.requests);
-  const approve = useApprovalStore((s) => s.approveRequest);
-  const reject = useApprovalStore((s) => s.rejectRequest);
-  const approveAlways = useApprovalStore((s) => s.approveAlways);
-  const pending = useMemo(
-    () => Object.values(requests).filter((request) => request.status === 'pending'),
-    [requests],
-  );
-  const requestPersistentApproval = useCallback(
-    (request: RemoteApprovalRequest) => {
-      Alert.alert(
-        t('approvalBanner.persistentTitle'),
-        `${t('approvalBanner.persistentMessage', { action: request.title })}\n\n${request.description}`,
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('approvalBanner.confirmPersistent'),
-            onPress: () => approveAlways(request.id),
-          },
-        ],
-      );
-    },
-    [approveAlways, t],
-  );
-
-  if (pending.length === 0) return null;
+  if (!enabled || !request) return null;
 
   return (
-    <View style={styles.container}>
-      {pending.slice(0, 3).map((req) => (
-        <ApprovalCard
-          key={req.id}
-          request={req}
-          colors={colors}
-          styles={styles}
-          onApprove={() => approve(req.id)}
-          onReject={() => reject(req.id)}
-          onAlwaysAllow={() => requestPersistentApproval(req)}
-        />
-      ))}
-      {pending.length > 3 && (
-        <Text style={styles.moreText}>
-          {t('approvalBanner.morePending', { count: pending.length - 3 })}
-        </Text>
-      )}
-    </View>
+    <Modal
+      animationType="slide"
+      hardwareAccelerated
+      onRequestClose={() => undefined}
+      statusBarTranslucent
+      transparent
+      visible
+    >
+      <View style={styles.overlay}>
+        <View
+          style={styles.sheet}
+          accessibilityLabel={t('approvalBanner.decisionSheetLabel')}
+          accessibilityViewIsModal
+          testID="approval-decision-sheet"
+        >
+          <ScrollView
+            contentContainerStyle={styles.container}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            testID="approval-decision-scroll"
+          >
+            <ApprovalCard
+              key={request.id}
+              request={request}
+              queueCount={pending.length}
+              colors={colors}
+              styles={styles}
+              onApprove={() => approve(request.id)}
+              onReject={() => reject(request.id)}
+              onApproveAlways={() => approveAlways(request.id)}
+            />
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
-const ApprovalCard: React.FC<{
+interface ApprovalCardProps {
   request: RemoteApprovalRequest;
+  queueCount: number;
   colors: AppPalette;
-  styles: ReturnType<typeof createStyles>;
+  styles: ReturnType<typeof createApprovalBannerStyles>;
   onApprove: () => void;
   onReject: () => void;
-  onAlwaysAllow: () => void;
-}> = ({ request, colors, styles, onApprove, onReject, onAlwaysAllow }) => {
-  const { t } = useTranslation();
-  const elapsed = Math.round((Date.now() - request.requestedAt) / 1000);
-  const elapsedText =
-    elapsed < 60
-      ? t('approvalBanner.elapsedSeconds', { count: elapsed })
-      : t('approvalBanner.elapsedMinutes', { count: Math.floor(elapsed / 60) });
+  onApproveAlways: () => void;
+}
 
-  const riskLevel = request.riskLevel || 'low';
-  const riskColor = RISK_COLORS[riskLevel]?.(colors) || colors.textSecondary;
-  const borderColor =
-    riskLevel === 'critical' || riskLevel === 'high' ? colors.danger : colors.warning;
+const ApprovalCard: React.FC<ApprovalCardProps> = ({
+  request,
+  queueCount,
+  colors,
+  styles,
+  onApprove,
+  onReject,
+  onApproveAlways,
+}) => {
+  const { t } = useTranslation();
+  const [now, setNow] = useState(() => Date.now());
+  const [reviewingPermission, setReviewingPermission] = useState(false);
+  const announcedRequestId = useRef<string | null>(null);
+  const presentation = useMemo(() => buildApprovalPresentation(request), [request]);
+  const action = presentation.action || t('approvalBanner.unknownAction');
+  const description =
+    presentation.description || t('approvalBanner.actionDetailsUnavailable');
+  const expiresAt =
+    typeof request.expiresAt === 'number' && Number.isFinite(request.expiresAt)
+      ? request.expiresAt
+      : undefined;
+  const riskColor = RISK_COLORS[presentation.riskLevel](colors);
   const allowsPersistentApproval =
     request.decisionPolicy?.persistentApproval === 'allowed' &&
     request.decisionPolicy.expiryFallback === 'global-policy' &&
     request.grantCandidate !== undefined;
 
+  useEffect(() => {
+    if (announcedRequestId.current === request.id) return;
+    announcedRequestId.current = request.id;
+    AccessibilityInfo.announceForAccessibility(
+      t('approvalBanner.announcement', { action }),
+    );
+  }, [action, request.id, t]);
+
+  useEffect(() => {
+    if (!expiresAt) return undefined;
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+
+  if (reviewingPermission && allowsPersistentApproval) {
+    return (
+      <PermissionReview
+        request={request}
+        colors={colors}
+        styles={styles}
+        onCancel={() => setReviewingPermission(false)}
+        onConfirm={onApproveAlways}
+      />
+    );
+  }
+
+  const expiresIn = expiresAt
+    ? formatApprovalCountdown(secondsUntilExpiry(expiresAt, now))
+    : undefined;
+
   return (
-    <View style={[styles.card, { borderColor }]}>
-      <View style={styles.cardHeader}>
-        {riskLevel === 'high' || riskLevel === 'critical' ? (
-          <ShieldAlert size={14} color={riskColor} />
-        ) : (
-          <Clock size={14} color={colors.warning} />
-        )}
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {request.title}
-        </Text>
-        <View style={[styles.riskBadge, { backgroundColor: riskColor }]}>
-          <Text style={styles.riskBadgeText}>{riskLevel.toUpperCase()}</Text>
+    <View style={[styles.card, { borderColor: riskColor }]} testID="approval-decision-card">
+      <View style={styles.topRow}>
+        <View style={styles.eyebrowRow}>
+          <ShieldAlert size={16} color={riskColor} />
+          <Text style={[styles.eyebrow, { color: riskColor }]}>
+            {t('approvalBanner.needsDecision')}
+          </Text>
         </View>
-        <Text style={styles.cardTime}>{elapsedText}</Text>
+        <Text style={styles.queueText}>
+          {t('approvalBanner.queuePosition', { current: 1, total: queueCount })}
+        </Text>
       </View>
-      <Text style={styles.cardDescription} numberOfLines={2}>
-        {request.description}
+
+      <Text style={styles.title} accessibilityRole="header">
+        {action}
       </Text>
-      {request.riskReasons && request.riskReasons.length > 0 && (
-        <Text style={styles.riskReasons} numberOfLines={2}>
-          {request.riskReasons.join(' · ')}
+
+      <View style={styles.riskRow}>
+        <View style={[styles.riskBadge, { borderColor: riskColor }]}>
+          <Text style={[styles.riskBadgeText, { color: riskColor }]}>
+            {riskLabel(presentation.riskLevel, t)}
+          </Text>
+        </View>
+        <Text style={styles.timeoutText} accessible={false} importantForAccessibility="no">
+          {expiresIn
+            ? t('approvalBanner.expiresIn', { time: expiresIn })
+            : t('approvalBanner.waitingForDecision')}
         </Text>
-      )}
-      {request.targetId && (
-        <Text style={styles.cardTarget}>
-          {t('approvalBanner.targetLabel', { target: request.targetId })}
-        </Text>
-      )}
-      <View style={styles.cardActions}>
+      </View>
+
+      <View style={styles.detailPanel}>
+        <DecisionDetail
+          label={t('approvalBanner.whatWillHappen')}
+          value={description}
+          styles={styles}
+        />
+        <DecisionDetail
+          label={t('approvalBanner.affectedData')}
+          value={scopeImpact(presentation.scope, t)}
+          styles={styles}
+          bordered
+        />
+        <DecisionDetail
+          label={t('approvalBanner.target')}
+          value={presentation.target ?? scopeTarget(presentation.scope, t)}
+          styles={styles}
+          bordered
+        />
+        <DecisionDetail
+          label={t('approvalBanner.reversibility')}
+          value={reversibility(presentation.riskLevel, t)}
+          styles={styles}
+          bordered
+        />
+        {presentation.reviewReason && (
+          <DecisionDetail
+            label={t('approvalBanner.whyReview')}
+            value={reviewReason(presentation.reviewReason, t)}
+            styles={styles}
+            bordered
+          />
+        )}
+      </View>
+
+      <View style={styles.safeDefault}>
+        <Clock3 size={16} color={colors.warning} />
+        <Text style={styles.safeDefaultText}>{t('approvalBanner.safeDefault')}</Text>
+      </View>
+
+      <View style={styles.actions}>
         <TouchableOpacity
-          style={styles.rejectBtn}
+          style={[styles.actionButton, styles.denyButton]}
           onPress={onReject}
           accessibilityRole="button"
           accessibilityLabel={t('approvalBanner.reject')}
+          accessibilityHint={t('approvalBanner.rejectHint')}
         >
-          <ShieldX size={14} color={colors.danger} />
-          <Text style={styles.rejectText}>{t('approvalBanner.reject')}</Text>
+          <ShieldX size={17} color={colors.danger} />
+          <Text style={styles.denyText}>{t('approvalBanner.reject')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.approveBtn}
+          style={[styles.actionButton, styles.allowButton]}
           onPress={onApprove}
           accessibilityRole="button"
           accessibilityLabel={t('approvalBanner.approve')}
+          accessibilityHint={t('approvalBanner.approveHint')}
         >
-          <ShieldCheck size={14} color={colors.onPrimary} />
-          <Text style={styles.approveText}>{t('approvalBanner.approve')}</Text>
+          <ShieldCheck size={17} color={colors.onPrimary} />
+          <Text style={styles.allowText}>{t('approvalBanner.approve')}</Text>
         </TouchableOpacity>
       </View>
+
       {allowsPersistentApproval && (
-        <TouchableOpacity
-          style={styles.alwaysAllowBtn}
-          onPress={onAlwaysAllow}
-          accessibilityRole="button"
-          accessibilityLabel={t('approvalBanner.reviewPermission')}
-          accessibilityHint={t('approvalBanner.persistentHint')}
-        >
-          <CheckCheck size={16} color={colors.primary} />
-          <Text style={styles.alwaysAllowText}>{t('approvalBanner.reviewPermission')}</Text>
-        </TouchableOpacity>
+        <View style={styles.permissionDivider}>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={() => setReviewingPermission(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('approvalBanner.reviewPermission')}
+            accessibilityHint={t('approvalBanner.persistentHint')}
+          >
+            <CheckCheck size={17} color={colors.primary} />
+            <Text style={styles.permissionButtonText}>
+              {t('approvalBanner.reviewPermission')}
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
 };
 
-const createStyles = (colors: AppPalette) =>
-  StyleSheet.create({
-    container: { gap: 8, paddingHorizontal: 12, paddingVertical: 6 },
-    card: {
-      backgroundColor: colors.surface,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.warning,
-      padding: 12,
-      gap: 6,
-    },
-    cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    cardTitle: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.text },
-    cardTime: { fontSize: 11, color: colors.textTertiary },
-    cardDescription: { fontSize: 12, color: colors.textSecondary, lineHeight: 16 },
-    cardTarget: { fontSize: 11, color: colors.textTertiary, fontFamily: 'monospace' },
-    riskBadge: {
-      paddingHorizontal: 6,
-      paddingVertical: 1,
-      borderRadius: 4,
-    },
-    riskBadgeText: { fontSize: 9, fontWeight: '700', color: '#fff' },
-    riskReasons: { fontSize: 11, color: colors.warning, fontStyle: 'italic' },
-    cardActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
-    rejectBtn: {
-      flex: 1,
-      minHeight: 48,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: colors.danger,
-    },
-    rejectText: { fontSize: 12, fontWeight: '600', color: colors.danger },
-    alwaysAllowBtn: {
-      minHeight: 48,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: colors.primary,
-    },
-    alwaysAllowText: { fontSize: 12, fontWeight: '600', color: colors.primary },
-    approveBtn: {
-      flex: 1,
-      minHeight: 48,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
-      backgroundColor: colors.primary,
-    },
-    approveText: { fontSize: 12, fontWeight: '600', color: colors.onPrimary },
-    moreText: { fontSize: 12, color: colors.textTertiary, textAlign: 'center', paddingVertical: 4 },
-  });
+const PermissionReview: React.FC<{
+  request: RemoteApprovalRequest;
+  colors: AppPalette;
+  styles: ReturnType<typeof createApprovalBannerStyles>;
+  onCancel: () => void;
+  onConfirm: () => void;
+}> = ({ request, colors, styles, onCancel, onConfirm }) => {
+  const { t } = useTranslation();
+  const presentation = buildApprovalPresentation(request);
+  const action = presentation.action || t('approvalBanner.unknownAction');
+  const description =
+    presentation.description || t('approvalBanner.actionDetailsUnavailable');
+
+  return (
+    <View style={styles.card} testID="approval-permission-review">
+      <View style={styles.reviewHeader}>
+        <Text style={styles.eyebrow}>{t('approvalBanner.permissionReviewEyebrow')}</Text>
+        <Text style={styles.reviewTitle} accessibilityRole="header">
+          {t('approvalBanner.permissionReviewTitle')}
+        </Text>
+        <Text style={styles.reviewDescription}>
+          {t('approvalBanner.permissionReviewDescription')}
+        </Text>
+      </View>
+
+      <View style={styles.detailPanel}>
+        <DecisionDetail
+          label={t('approvalBanner.savedAction')}
+          value={action}
+          styles={styles}
+        />
+        <DecisionDetail
+          label={t('approvalBanner.savedActionDetails')}
+          value={description}
+          styles={styles}
+          bordered
+        />
+        <DecisionDetail
+          label={t('approvalBanner.savedTarget')}
+          value={presentation.target ?? scopeTarget(presentation.scope, t)}
+          styles={styles}
+          bordered
+        />
+        <DecisionDetail
+          label={t('approvalBanner.savedScope')}
+          value={scopeImpact(presentation.scope, t)}
+          styles={styles}
+          bordered
+        />
+        <DecisionDetail
+          label={t('approvalBanner.duration')}
+          value={t('approvalBanner.untilRevoked')}
+          styles={styles}
+          bordered
+        />
+        <DecisionDetail
+          label={t('approvalBanner.boundaries')}
+          value={t('approvalBanner.boundariesDescription')}
+          styles={styles}
+          bordered
+        />
+      </View>
+
+      <Text style={styles.reviewPath}>{t('approvalBanner.revokePath')}</Text>
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.cancelButton]}
+          onPress={onCancel}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.cancel')}
+        >
+          <Text style={styles.cancelText}>{t('common.cancel')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.allowButton]}
+          onPress={onConfirm}
+          accessibilityRole="button"
+          accessibilityLabel={t('approvalBanner.confirmPersistent')}
+        >
+          <CheckCheck size={17} color={colors.onPrimary} />
+          <Text style={styles.allowText}>{t('approvalBanner.confirmPersistent')}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+const DecisionDetail: React.FC<{
+  label: string;
+  value: string;
+  styles: ReturnType<typeof createApprovalBannerStyles>;
+  bordered?: boolean;
+}> = ({ label, value, styles, bordered = false }) => (
+  <View style={[styles.detailRow, bordered && styles.detailRowBorder]}>
+    <Text style={styles.detailLabel}>{label}</Text>
+    <Text style={styles.detailValue}>{value}</Text>
+  </View>
+);
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function riskLabel(level: ApprovalRiskLevel, t: Translate): string {
+  switch (level) {
+    case 'medium':
+      return t('approvalBanner.risk.medium');
+    case 'high':
+      return t('approvalBanner.risk.high');
+    case 'critical':
+      return t('approvalBanner.risk.critical');
+    default:
+      return t('approvalBanner.risk.low');
+  }
+}
+
+function scopeImpact(scope: RemoteApprovalScope, t: Translate): string {
+  switch (scope) {
+    case 'ssh':
+      return t('approvalBanner.scope.ssh');
+    case 'workspace':
+      return t('approvalBanner.scope.workspace');
+    case 'browser':
+      return t('approvalBanner.scope.browser');
+    case 'expo':
+      return t('approvalBanner.scope.expo');
+    case 'native':
+      return t('approvalBanner.scope.native');
+    default:
+      return t('approvalBanner.scope.other');
+  }
+}
+
+function scopeTarget(scope: RemoteApprovalScope, t: Translate): string {
+  return scope === 'native'
+    ? t('approvalBanner.thisDevice')
+    : t('approvalBanner.selectedDestination');
+}
+
+function reversibility(level: ApprovalRiskLevel, t: Translate): string {
+  switch (level) {
+    case 'medium':
+      return t('approvalBanner.reversibilityLevel.medium');
+    case 'high':
+      return t('approvalBanner.reversibilityLevel.high');
+    case 'critical':
+      return t('approvalBanner.reversibilityLevel.critical');
+    default:
+      return t('approvalBanner.reversibilityLevel.low');
+  }
+}
+
+function reviewReason(reason: ApprovalReviewReason, t: Translate): string {
+  switch (reason) {
+    case 'destructive':
+      return t('approvalBanner.reviewReason.destructive');
+    case 'sensitiveData':
+      return t('approvalBanner.reviewReason.sensitiveData');
+    case 'systemAccess':
+      return t('approvalBanner.reviewReason.systemAccess');
+    case 'compoundAction':
+      return t('approvalBanner.reviewReason.compoundAction');
+    default:
+      return t('approvalBanner.reviewReason.unverified');
+  }
+}

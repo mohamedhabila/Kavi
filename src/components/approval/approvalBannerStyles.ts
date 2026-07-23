@@ -1,0 +1,211 @@
+import { StyleSheet } from 'react-native';
+import type { AppPalette } from '../../theme/useAppTheme';
+
+export const createApprovalBannerStyles = (colors: AppPalette) =>
+  StyleSheet.create({
+    container: {
+      padding: 12,
+      paddingBottom: 36,
+    },
+    overlay: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: colors.overlay,
+    },
+    sheet: {
+      maxHeight: '92%',
+      backgroundColor: colors.background,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      overflow: 'hidden',
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.warning,
+      padding: 14,
+      gap: 12,
+    },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    eyebrowRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexShrink: 1,
+      gap: 6,
+    },
+    eyebrow: {
+      color: colors.warning,
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.3,
+    },
+    queueText: {
+      color: colors.textTertiary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    title: {
+      color: colors.text,
+      fontSize: 17,
+      fontWeight: '700',
+      lineHeight: 22,
+    },
+    riskRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    riskBadge: {
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+    },
+    riskBadgeText: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    timeoutText: {
+      color: colors.textSecondary,
+      flex: 1,
+      fontSize: 12,
+      textAlign: 'right',
+    },
+    detailPanel: {
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.subtleBorder,
+      overflow: 'hidden',
+    },
+    detailRow: {
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 3,
+    },
+    detailRowBorder: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.subtleBorder,
+    },
+    detailLabel: {
+      color: colors.textTertiary,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.2,
+      textTransform: 'uppercase',
+    },
+    detailValue: {
+      color: colors.text,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    safeDefault: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: colors.warningBackground,
+      borderRadius: 9,
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+    },
+    safeDefaultText: {
+      color: colors.text,
+      flex: 1,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    actionButton: {
+      minHeight: 48,
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 9,
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    denyButton: {
+      borderWidth: 1,
+      borderColor: colors.danger,
+      backgroundColor: colors.surface,
+    },
+    denyText: {
+      color: colors.danger,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    allowButton: {
+      backgroundColor: colors.primary,
+    },
+    allowText: {
+      color: colors.onPrimary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    permissionDivider: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.subtleBorder,
+      paddingTop: 10,
+    },
+    permissionButton: {
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 9,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    permissionButtonText: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    reviewHeader: {
+      gap: 4,
+    },
+    reviewTitle: {
+      color: colors.text,
+      fontSize: 17,
+      fontWeight: '700',
+      lineHeight: 22,
+    },
+    reviewDescription: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    reviewPath: {
+      backgroundColor: colors.primarySoft,
+      borderRadius: 9,
+      color: colors.text,
+      fontSize: 12,
+      lineHeight: 18,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+    },
+    cancelButton: {
+      borderWidth: 1,
+      borderColor: colors.subtleBorder,
+      backgroundColor: colors.surface,
+    },
+    cancelText: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+  });

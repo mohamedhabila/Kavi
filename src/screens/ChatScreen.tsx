@@ -617,7 +617,7 @@ export const ChatScreen: React.FC = () => {
         </View>
       )}
 
-      <ApprovalBanner />
+      <ApprovalBanner enabled={isFocused} />
 
       <ProactiveTaskSuggestionBanner
         conversation={activeConversation ?? undefined}
