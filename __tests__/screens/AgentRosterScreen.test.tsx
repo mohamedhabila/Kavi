@@ -11,7 +11,8 @@ jest.mock('@react-navigation/native', () => ({
     navigate: jest.fn(),
     goBack: jest.fn(),
   }),
-  useRoute: () => ({ params: mockRouteParams }),
+  useRoute: () => ({ name: 'AgentRoster', params: mockRouteParams }),
+  useFocusEffect: jest.fn(),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({

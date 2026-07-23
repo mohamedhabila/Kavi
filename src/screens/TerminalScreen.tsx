@@ -15,9 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerNavigationProp } from '@react-navigation/drawer';
-import { useNavigation } from '@react-navigation/native';
-import { Menu, Wifi } from 'lucide-react-native';
+import { Wifi } from 'lucide-react-native';
 import { useTranslation } from '../i18n/useTranslation';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { executeJavaScriptWithResult, formatJavaScriptResult } from '../utils/javascript';
@@ -38,6 +36,7 @@ import {
   type SshReadinessReason,
 } from '../services/ssh/connector';
 import type { SshTargetConfig } from '../types/remote';
+import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
 
 type TerminalMode = TerminalRuntimeMode | 'ssh';
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -120,7 +119,6 @@ function getSshErrorMessage(error: unknown, t: TranslateFn): string {
 }
 
 export const TerminalScreen: React.FC = () => {
-  const navigation = useNavigation<DrawerNavigationProp<any>>();
   const { t } = useTranslation();
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -424,9 +422,7 @@ export const TerminalScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()} hitSlop={8}>
-          <Menu size={24} color={colors.text} />
-        </TouchableOpacity>
+        <RouteLeadingButton />
         <Text style={styles.headerTitle}>{t('nav.terminal')}</Text>
         <View style={styles.headerActions}>
           {mode === 'ssh' && sshSession?.connected && (
@@ -550,14 +546,28 @@ const createStyles = (colors: AppPalette) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      minHeight: 56,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
       backgroundColor: colors.header,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    headerTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
-    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    headerTitle: {
+      flex: 1,
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.text,
+      textAlign: 'center',
+    },
+    headerActions: {
+      width: 44,
+      minHeight: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+    },
     headerBtn: { padding: 4 },
     connectedBadge: {
       width: 20,

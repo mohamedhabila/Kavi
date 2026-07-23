@@ -288,6 +288,29 @@ describe('Sidebar', () => {
     expect(getByTestId('sidebar-more').props.accessibilityState).toEqual({ selected: false });
   });
 
+  it('keeps the originating hub selected for a shared child route', () => {
+    const props = {
+      ...defaultProps,
+      state: {
+        ...defaultProps.state,
+        index: 0,
+        routes: [
+          {
+            key: 'approval-history',
+            name: 'ApprovalHistory',
+            params: { returnTo: { name: 'More' } },
+          },
+        ],
+        routeNames: ['ApprovalHistory'],
+      },
+    } as any;
+
+    const { getByTestId } = render(<Sidebar {...props} />);
+
+    expect(getByTestId('sidebar-activity').props.accessibilityState).toEqual({ selected: false });
+    expect(getByTestId('sidebar-more').props.accessibilityState).toEqual({ selected: true });
+  });
+
   it('returns to the active Assistant from any route in one tap', () => {
     const props = {
       ...defaultProps,

@@ -2,10 +2,11 @@ import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useNavigation } from '@react-navigation/native';
-import { ChevronRight, Menu, Sparkles, type LucideIcon } from 'lucide-react-native';
+import { ChevronRight, Sparkles, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
+import { RouteLeadingButton } from './RouteLeadingButton';
 
 export type NavigationHubItem = {
   id: string;
@@ -43,15 +44,7 @@ export const NavigationHubScreen: React.FC<NavigationHubScreenProps> = ({
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']} testID={testID}>
       <View style={styles.header}>
-        <TouchableOpacity
-          accessibilityLabel={t('chat.openMenu')}
-          accessibilityRole="button"
-          onPress={() => navigation.openDrawer()}
-          style={styles.headerButton}
-          testID={`${testID}-open-menu`}
-        >
-          <Menu size={24} color={colors.text} />
-        </TouchableOpacity>
+        <RouteLeadingButton style={styles.headerButton} testID={`${testID}-leading`} />
         <Text style={styles.headerTitle}>{title}</Text>
         <TouchableOpacity
           accessibilityLabel={t('nav.assistant')}

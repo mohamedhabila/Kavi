@@ -30,7 +30,7 @@ export const ActivityScreen: React.FC = () => {
           title: t('nav.pendingDecisions'),
           icon: ShieldCheck,
           badge: pendingApprovalCount > 0 ? String(pendingApprovalCount) : undefined,
-          onPress: () => navigation.navigate('ApprovalHistory'),
+          onPress: () => navigation.navigate('ApprovalHistory', { returnTo: { name: 'Activity' } }),
         },
       ],
     },
@@ -43,13 +43,17 @@ export const ActivityScreen: React.FC = () => {
           title: t('nav.remindersAutomations'),
           icon: AlarmClock,
           badge: enabledAutomationCount > 0 ? String(enabledAutomationCount) : undefined,
-          onPress: () => navigation.navigate('Scheduler'),
+          onPress: () => navigation.navigate('Scheduler', { returnTo: { name: 'Activity' } }),
         },
         {
           id: 'work-activity',
           title: t('nav.workActivity'),
           icon: ListChecks,
-          onPress: () => navigation.navigate('AgentRoster', { initialTab: 'queue' }),
+          onPress: () =>
+            navigation.navigate('AgentRoster', {
+              initialTab: 'queue',
+              returnTo: { name: 'Activity' },
+            }),
         },
       ],
     },

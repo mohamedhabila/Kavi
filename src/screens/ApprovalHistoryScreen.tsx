@@ -7,9 +7,7 @@
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerNavigationProp } from '@react-navigation/drawer';
-import { useNavigation } from '@react-navigation/native';
-import { Menu, ShieldCheck, ShieldX, Clock, Trash2, ShieldAlert } from 'lucide-react-native';
+import { ShieldCheck, ShieldX, Clock, Trash2, ShieldAlert } from 'lucide-react-native';
 import { useAppTheme, type AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 import { useApprovalStore } from '../services/remote/approvalStore';
@@ -21,11 +19,11 @@ import {
 } from '../services/security/audit';
 import type { RemoteApprovalRequest } from '../types/remote';
 import { ApprovalPermissionsSection } from './approvalHistory/ApprovalPermissionsSection';
+import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'expired';
 
 export const ApprovalHistoryScreen: React.FC = () => {
-  const navigation = useNavigation<DrawerNavigationProp<any>>();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -248,15 +246,7 @@ export const ApprovalHistoryScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerAction}
-          onPress={() => navigation.openDrawer()}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.openMenu')}
-        >
-          <Menu size={24} color={colors.text} />
-        </TouchableOpacity>
+        <RouteLeadingButton style={styles.headerAction} />
         <Text style={styles.headerTitle}>{t('approvalHistory.title')}</Text>
         <TouchableOpacity
           style={[styles.headerAction, !hasResolvedRequests && styles.headerActionDisabled]}

@@ -19,7 +19,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useNavigation } from '@react-navigation/native';
 import {
-  Menu,
   Globe,
   Camera,
   RefreshCw,
@@ -40,6 +39,7 @@ import { useBrowserTraceStore, type BrowserTraceEntry } from '../services/browse
 import type { RemoteSessionRecord } from '../types/remote';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { getBrowserProviderReadiness } from '../services/browser/providers/readiness';
+import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
 
 // ── Component ────────────────────────────────────────────────────────────
 
@@ -227,11 +227,9 @@ export const BrowserSessionScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.openDrawer()} hitSlop={8}>
-            <Menu size={24} color={colors.text} />
-          </TouchableOpacity>
+          <RouteLeadingButton />
           <Text style={styles.headerTitle}>{t('browserSessions.title')}</Text>
-          <View style={{ width: 24 }} />
+          <View style={styles.headerSpacer} />
         </View>
         <View style={styles.emptyState}>
           <Globe size={48} color={colors.textTertiary} />
@@ -254,11 +252,9 @@ export const BrowserSessionScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.openDrawer()} hitSlop={8}>
-            <Menu size={24} color={colors.text} />
-          </TouchableOpacity>
+          <RouteLeadingButton />
           <Text style={styles.headerTitle}>{t('browserSessions.title')}</Text>
-          <View style={{ width: 24 }} />
+          <View style={styles.headerSpacer} />
         </View>
         <View style={styles.emptyState}>
           <Monitor size={48} color={colors.textTertiary} />
@@ -275,11 +271,9 @@ export const BrowserSessionScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()} hitSlop={8}>
-          <Menu size={24} color={colors.text} />
-        </TouchableOpacity>
+        <RouteLeadingButton />
         <Text style={styles.headerTitle}>{t('browserSessions.title')}</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerSpacer} />
       </View>
 
       {/* Session tabs */}
@@ -468,13 +462,21 @@ const createStyles = (colors: AppPalette) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      minHeight: 56,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
       backgroundColor: colors.header,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    headerTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
+    headerSpacer: { width: 44, minHeight: 44 },
+    headerTitle: {
+      flex: 1,
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.text,
+      textAlign: 'center',
+    },
     tabBar: {
       maxHeight: 44,
       borderBottomWidth: 1,

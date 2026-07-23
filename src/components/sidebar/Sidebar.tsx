@@ -23,6 +23,7 @@ import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { resolveConversationStartSelection } from '../../services/llm/support/providerSupport';
+import { getRouteReturnTarget } from '../../navigation/useBackToChat';
 
 export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, state }) => {
   const { colors } = useAppTheme();
@@ -40,13 +41,20 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
   const activeModel = useSettingsStore((s) => s.activeModel);
   const currentRoute = state.routes[state.index];
   const currentRouteName = currentRoute?.name;
-  const currentAgentRosterTab =
-    currentRouteName === 'AgentRoster' &&
-    typeof currentRoute.params === 'object' &&
-    currentRoute.params !== null &&
-    'initialTab' in currentRoute.params
-      ? currentRoute.params.initialTab
+  const currentRouteParams =
+    typeof currentRoute?.params === 'object' && currentRoute.params !== null
+      ? (currentRoute.params as Record<string, unknown>)
       : undefined;
+  const currentReturnTarget = getRouteReturnTarget(currentRouteParams?.returnTo);
+  const currentAgentRosterTab =
+    currentRouteName === 'AgentRoster' && currentRouteParams && 'initialTab' in currentRouteParams
+      ? currentRouteParams.initialTab
+      : undefined;
+  const declaredParentRoute =
+    currentReturnTarget?.name ||
+    (currentRouteName === 'CodeEditor' && currentRouteParams?.returnToConversationFiles
+      ? 'Library'
+      : undefined);
   const groupedRoutes: Array<{
     name: 'Activity' | 'Library' | 'More';
     label: string;
@@ -195,12 +203,14 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
         <MigrationProgressBanner colors={colors} />
         <View style={styles.destinationGroup}>
           {groupedRoutes.map((route) => {
-            const active = currentRouteName
-              ? route.children.includes(currentRouteName) ||
-                (currentRouteName === 'AgentRoster' &&
-                  ((route.name === 'Activity' && currentAgentRosterTab === 'queue') ||
-                    (route.name === 'More' && currentAgentRosterTab !== 'queue')))
-              : false;
+            const active = declaredParentRoute
+              ? declaredParentRoute === route.name || route.children.includes(declaredParentRoute)
+              : currentRouteName
+                ? route.children.includes(currentRouteName) ||
+                  (currentRouteName === 'AgentRoster' &&
+                    ((route.name === 'Activity' && currentAgentRosterTab === 'queue') ||
+                      (route.name === 'More' && currentAgentRosterTab !== 'queue')))
+                : false;
             const Icon = route.icon;
             return (
               <TouchableOpacity

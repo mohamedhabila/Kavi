@@ -8,10 +8,16 @@ import { MoreScreen } from '../../src/screens/MoreScreen';
 const mockNavigation = {
   navigate: jest.fn(),
   openDrawer: jest.fn(),
+  goBack: jest.fn(),
+  canGoBack: jest.fn(),
 };
+let mockRouteName = 'More';
+let mockRouteParams: Record<string, unknown> = {};
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => mockNavigation,
+  useRoute: () => ({ name: mockRouteName, params: mockRouteParams }),
+  useFocusEffect: jest.fn(),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -68,20 +74,27 @@ jest.mock('../../src/store/useChatStore', () => ({
 describe('navigation hub screens', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRouteName = 'More';
+    mockRouteParams = {};
   });
 
   it('routes Activity choices to decisions, reminders, and detailed work', () => {
     const { getByTestId } = render(<ActivityScreen />);
 
     fireEvent.press(getByTestId('activity-hub-pending-decisions'));
-    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('ApprovalHistory');
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('ApprovalHistory', {
+      returnTo: { name: 'Activity' },
+    });
 
     fireEvent.press(getByTestId('activity-hub-reminders-automations'));
-    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Scheduler');
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Scheduler', {
+      returnTo: { name: 'Activity' },
+    });
 
     fireEvent.press(getByTestId('activity-hub-work-activity'));
     expect(mockNavigation.navigate).toHaveBeenLastCalledWith('AgentRoster', {
       initialTab: 'queue',
+      returnTo: { name: 'Activity' },
     });
   });
 
@@ -92,6 +105,7 @@ describe('navigation hub screens', () => {
 
     expect(mockNavigation.navigate).toHaveBeenCalledWith('ConversationFiles', {
       conversationId: 'conversation-42',
+      returnTo: { name: 'Library' },
     });
   });
 
@@ -99,23 +113,33 @@ describe('navigation hub screens', () => {
     const { getByTestId } = render(<MoreScreen />);
 
     fireEvent.press(getByTestId('more-hub-skills'));
-    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Skills');
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Skills', {
+      returnTo: { name: 'More' },
+    });
 
     fireEvent.press(getByTestId('more-hub-developer-remote-work'));
-    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('DeveloperWork');
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('DeveloperWork', {
+      returnTo: { name: 'More' },
+    });
   });
 
   it('keeps developer tools reachable from their dedicated hub', () => {
     const { getByTestId } = render(<DeveloperWorkScreen />);
 
     fireEvent.press(getByTestId('developer-work-hub-terminal'));
-    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Terminal');
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Terminal', {
+      returnTo: { name: 'DeveloperWork' },
+    });
 
     fireEvent.press(getByTestId('developer-work-hub-code-editor'));
-    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('CodeEditor');
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('CodeEditor', {
+      returnTo: { name: 'DeveloperWork' },
+    });
 
     fireEvent.press(getByTestId('developer-work-hub-remote-work'));
-    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('RemoteWork');
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('RemoteWork', {
+      returnTo: { name: 'DeveloperWork' },
+    });
   });
 
   it('keeps the active Assistant one tap away from every hub', () => {
@@ -124,7 +148,17 @@ describe('navigation hub screens', () => {
     fireEvent.press(getByTestId('more-hub-open-assistant'));
     expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Chat');
 
-    fireEvent.press(getByTestId('more-hub-open-menu'));
+    fireEvent.press(getByTestId('more-hub-leading'));
     expect(mockNavigation.openDrawer).toHaveBeenCalled();
+  });
+
+  it('returns a nested hub to its declared parent in one tap', () => {
+    mockRouteName = 'DeveloperWork';
+    mockRouteParams = { returnTo: { name: 'More' } };
+    const { getByTestId } = render(<DeveloperWorkScreen />);
+
+    fireEvent.press(getByTestId('developer-work-hub-leading'));
+
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('More');
   });
 });

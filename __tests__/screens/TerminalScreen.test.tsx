@@ -10,7 +10,10 @@ const mockOpenDrawer = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     openDrawer: mockOpenDrawer,
+    navigate: jest.fn(),
   }),
+  useRoute: () => ({ name: 'Terminal', params: {} }),
+  useFocusEffect: jest.fn(),
 }));
 
 jest.mock('@react-navigation/drawer', () => ({

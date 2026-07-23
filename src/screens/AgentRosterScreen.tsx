@@ -16,9 +16,8 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerNavigationProp } from '@react-navigation/drawer';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { Menu, Users, Plus, Edit3, Trash2, Bot, Cpu, X } from 'lucide-react-native';
+import { useRoute } from '@react-navigation/native';
+import { Users, Plus, Edit3, Trash2, Bot, Cpu, X } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 import { SubAgentActivityCard } from '../components/agents/SubAgentActivityCard';
@@ -31,9 +30,9 @@ import {
   buildSubAgentRollupMap,
 } from '../services/agents/lifecycle/subAgentHierarchyPresentation';
 import { generateId } from '../utils/id';
+import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
 
 export const AgentRosterScreen: React.FC = () => {
-  const navigation = useNavigation<DrawerNavigationProp<any>>();
   const route = useRoute<any>();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
@@ -149,11 +148,14 @@ export const AgentRosterScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()} hitSlop={8}>
-          <Menu size={24} color={colors.text} />
-        </TouchableOpacity>
+        <RouteLeadingButton />
         <Text style={styles.headerTitle}>{t('agentRoster.title')}</Text>
-        <TouchableOpacity onPress={handleNewPersona} hitSlop={8}>
+        <TouchableOpacity
+          accessibilityLabel={t('agentRoster.newPersonaTitle')}
+          accessibilityRole="button"
+          onPress={handleNewPersona}
+          style={styles.headerButton}
+        >
           <Plus size={24} color={colors.primary} />
         </TouchableOpacity>
       </View>
@@ -428,13 +430,26 @@ const createStyles = (colors: AppPalette) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      minHeight: 56,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
       backgroundColor: colors.header,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    headerTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
+    headerButton: {
+      width: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerTitle: {
+      flex: 1,
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.text,
+      textAlign: 'center',
+    },
     tabBar: {
       flexDirection: 'row',
       borderBottomWidth: 1,

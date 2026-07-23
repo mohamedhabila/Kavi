@@ -24,6 +24,8 @@ jest.mock('@react-navigation/native', () => ({
     openDrawer: mockOpenDrawer,
     navigate: mockNavigate,
   }),
+  useRoute: () => ({ name: 'BrowserSession', params: {} }),
+  useFocusEffect: jest.fn(),
 }));
 
 jest.mock('@react-navigation/drawer', () => ({

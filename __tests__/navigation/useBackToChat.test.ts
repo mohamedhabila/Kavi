@@ -6,6 +6,7 @@ const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
 const mockCanGoBack = jest.fn();
 let mockCurrentRouteName = 'Voice';
+let mockCurrentRouteParams: Record<string, unknown> = {};
 let mockCapturedFocusEffect: (() => void | (() => void)) | undefined;
 
 jest.mock('@react-navigation/native', () => ({
@@ -14,7 +15,7 @@ jest.mock('@react-navigation/native', () => ({
     goBack: mockGoBack,
     canGoBack: mockCanGoBack,
   }),
-  useRoute: () => ({ name: mockCurrentRouteName }),
+  useRoute: () => ({ name: mockCurrentRouteName, params: mockCurrentRouteParams }),
   useFocusEffect: (callback: () => void | (() => void)) => {
     mockCapturedFocusEffect = callback;
   },
@@ -29,6 +30,7 @@ describe('useBackToChat', () => {
     mockGoBack.mockReset();
     mockCanGoBack.mockReset();
     mockCurrentRouteName = 'Voice';
+    mockCurrentRouteParams = {};
     mockCapturedFocusEffect = undefined;
     removeListener = jest.fn();
 
@@ -129,6 +131,28 @@ describe('useBackToChat', () => {
       initialDirectoryPath: 'src',
     });
     expect(mockGoBack).not.toHaveBeenCalled();
+  });
+
+  it('returns to the parent declared in route params', () => {
+    mockCurrentRouteParams = { returnTo: { name: 'Activity' } };
+    const { result } = renderHook(() => useBackToChat());
+
+    act(() => {
+      result.current();
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('Activity');
+  });
+
+  it('ignores malformed parent route params', () => {
+    mockCurrentRouteParams = { returnTo: { name: '  ' } };
+    const { result } = renderHook(() => useBackToChat());
+
+    act(() => {
+      result.current();
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('Chat');
   });
 
   it('uses the navigation interceptor for hardware back presses too', () => {

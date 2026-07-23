@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 
@@ -12,14 +12,43 @@ type UseBackToChatOptions = {
   targetRoute?: BackToRouteTarget | null;
 };
 
+export function getRouteReturnTarget(value: unknown): BackToRouteTarget | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.name !== 'string' || !candidate.name.trim()) {
+    return null;
+  }
+
+  const params = candidate.params;
+  return {
+    name: candidate.name.trim(),
+    ...(params && typeof params === 'object' && !Array.isArray(params)
+      ? { params: params as Record<string, unknown> }
+      : {}),
+  };
+}
+
 export function useBackToChat(options: UseBackToChatOptions = {}): () => void {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const routeReturnTarget = useMemo(
+    () => getRouteReturnTarget(route.params?.returnTo),
+    [route.params?.returnTo],
+  );
+  const targetRoute = options.targetRoute ?? routeReturnTarget;
+  const beforeNavigate = options.beforeNavigate;
 
   const completeNavigation = useCallback(() => {
     if (route.name !== 'Chat') {
-      if (options.targetRoute?.name && route.name !== options.targetRoute.name) {
-        navigation.navigate(options.targetRoute.name, options.targetRoute.params);
+      if (targetRoute?.name && route.name !== targetRoute.name) {
+        if (targetRoute.params) {
+          navigation.navigate(targetRoute.name, targetRoute.params);
+        } else {
+          navigation.navigate(targetRoute.name);
+        }
         return;
       }
 
@@ -30,16 +59,16 @@ export function useBackToChat(options: UseBackToChatOptions = {}): () => void {
     if (navigation.canGoBack?.()) {
       navigation.goBack();
     }
-  }, [navigation, options.targetRoute, route.name]);
+  }, [navigation, route.name, targetRoute]);
 
   const backToChat = useCallback(() => {
-    if (options.beforeNavigate) {
-      options.beforeNavigate(completeNavigation);
+    if (beforeNavigate) {
+      beforeNavigate(completeNavigation);
       return;
     }
 
     completeNavigation();
-  }, [completeNavigation, options]);
+  }, [beforeNavigate, completeNavigation]);
 
   useFocusEffect(
     useCallback(() => {

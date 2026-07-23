@@ -22,7 +22,7 @@ export const LibraryScreen: React.FC = () => {
           id: 'memory',
           title: t('nav.memory'),
           icon: Brain,
-          onPress: () => navigation.navigate('Memory'),
+          onPress: () => navigation.navigate('Memory', { returnTo: { name: 'Library' } }),
         },
         {
           id: 'files-creations',
@@ -31,13 +31,14 @@ export const LibraryScreen: React.FC = () => {
           onPress: () =>
             navigation.navigate('ConversationFiles', {
               conversationId: activeConversationId,
+              returnTo: { name: 'Library' },
             }),
         },
         {
           id: 'interactive-creations',
           title: t('nav.interactiveCreations'),
           icon: Layers,
-          onPress: () => navigation.navigate('Canvas'),
+          onPress: () => navigation.navigate('Canvas', { returnTo: { name: 'Library' } }),
         },
       ],
     },
