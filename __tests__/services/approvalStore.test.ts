@@ -277,6 +277,12 @@ describe('requestToolApproval', () => {
     // Find the pending request and approve it
     const pending = useApprovalStore.getState().getPendingRequests();
     expect(pending.length).toBe(1);
+    expect(pending[0].grantCandidate).toMatchObject({
+      version: 1,
+      toolName: 'test_tool',
+      actionClass: 'test_tool',
+      targetKind: 'tool',
+    });
     useApprovalStore.getState().approveRequest(pending[0].id);
 
     const result = await promise;
@@ -296,6 +302,30 @@ describe('requestToolApproval', () => {
     expect(result).toBe('rejected');
   });
 
+  it('saves and applies only the exact reusable action and target', async () => {
+    const promise = requestToolApproval({
+      toolName: 'ssh_exec',
+      targetId: 'staging-host',
+      args: { command: 'pwd', targetId: 'staging-host' },
+      description: 'Run pwd on staging',
+    });
+
+    const pending = useApprovalStore.getState().getPendingRequests();
+    expect(pending[0].grantCandidate).toMatchObject({
+      actionClass: 'pwd',
+      targetId: 'staging-host',
+    });
+    useApprovalStore.getState().approveAlways(pending[0].id);
+
+    await expect(promise).resolves.toBe('approved');
+    expect(needsApprovalWithContext('ssh_exec', { command: 'pwd', targetId: 'staging-host' })).toBe(
+      false,
+    );
+    expect(
+      needsApprovalWithContext('ssh_exec', { command: 'pwd', targetId: 'production-host' }),
+    ).toBe(true);
+  });
+
   it('creates redacted approval copy for native actions', async () => {
     const promise = requestToolApproval({
       toolName: 'email_compose',
@@ -313,6 +343,7 @@ describe('requestToolApproval', () => {
     expect(pending[0].description).toContain('1 recipient');
     expect(pending[0].description).not.toContain('jane@example.com');
     expect(pending[0].description).not.toContain('Private subject');
+    expect(pending[0].grantCandidate).toBeUndefined();
 
     useApprovalStore.getState().rejectRequest(pending[0].id);
     await expect(promise).resolves.toBe('rejected');
@@ -451,5 +482,26 @@ describe('approval request persistence schema', () => {
       persistentApproval: 'forbidden',
       expiryFallback: 'reject',
     });
+  });
+
+  it('migrates broad v3 allowlist entries to review-required grants', async () => {
+    const migrate = useApprovalStore.persist.getOptions().migrate;
+    expect(migrate).toBeDefined();
+
+    const migrated = (await migrate!(
+      {
+        allowlist: [{ key: 'ssh_exec', addedAt: 42 }],
+      },
+      3,
+    )) as any;
+
+    expect(migrated.allowlist).toEqual([
+      expect.objectContaining({
+        toolName: 'ssh_exec',
+        status: 'review-required',
+        source: 'legacy',
+        legacyKey: 'ssh_exec',
+      }),
+    ]);
   });
 });

@@ -6,6 +6,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type {
   RemoteApprovalDecisionPolicy,
+  RemoteApprovalGrantCandidate,
   RemoteApprovalRequest,
 } from '../../types/remote';
 import { generateId } from '../../utils/id';
@@ -17,13 +18,20 @@ import {
   type ApprovalAnalytics,
 } from './approvalAnalytics';
 import {
-  buildAllowlistKey,
   DEFAULT_POLICY,
   requiresActionApproval,
-  type AllowlistEntry,
   type ApprovalPolicy,
   type PersonaPolicyOverride,
 } from './approvalPolicy';
+import {
+  buildApprovalGrantCandidate,
+  createInternalAllowlistEntry,
+  createUserApprovalGrant,
+  hasMatchingActiveApprovalGrant,
+  isApprovalGrantCandidate,
+  normalizePersistedAllowlist,
+  type AllowlistEntry,
+} from './approvalGrants';
 import {
   assessToolRisk,
   getApprovalScope,
@@ -34,7 +42,8 @@ import {
 export { analyzeCommandRisk, assessToolRisk } from './approvalRisk';
 export type { ApprovalScope, CommandRiskAssessment, RiskLevel } from './approvalRisk';
 export type { ApprovalAnalytics } from './approvalAnalytics';
-export type { AllowlistEntry, ApprovalPolicy, PersonaPolicyOverride } from './approvalPolicy';
+export type { AllowlistEntry } from './approvalGrants';
+export type { ApprovalPolicy, PersonaPolicyOverride } from './approvalPolicy';
 
 const STANDARD_APPROVAL_DECISION_POLICY = Object.freeze({
   persistentApproval: 'allowed',
@@ -60,9 +69,7 @@ function isStandardDecisionPolicy(value: unknown): boolean {
 
 function isOneShotDecisionPolicy(value: unknown): boolean {
   return (
-    isRecord(value) &&
-    value.persistentApproval === 'forbidden' &&
-    value.expiryFallback === 'reject'
+    isRecord(value) && value.persistentApproval === 'forbidden' && value.expiryFallback === 'reject'
   );
 }
 
@@ -81,6 +88,25 @@ function normalizeDecisionPolicy(
     : { ...ONE_SHOT_APPROVAL_DECISION_POLICY };
 }
 
+function grantCandidateMatchesRequest(
+  candidate: unknown,
+  request: Readonly<{
+    toolName?: unknown;
+    scope?: unknown;
+    targetId?: unknown;
+    riskLevel?: unknown;
+  }>,
+): candidate is RemoteApprovalGrantCandidate {
+  return (
+    isApprovalGrantCandidate(candidate) &&
+    candidate.toolName === request.toolName &&
+    (request.scope === undefined || candidate.scope === request.scope) &&
+    candidate.targetId === request.targetId &&
+    request.riskLevel !== 'high' &&
+    request.riskLevel !== 'critical'
+  );
+}
+
 function normalizePersistedRequests(
   value: unknown,
   fallbacks: {
@@ -93,14 +119,19 @@ function normalizePersistedRequests(
   const requests: Record<string, RemoteApprovalRequest> = {};
   for (const [id, rawRequest] of Object.entries(value)) {
     if (!isRecord(rawRequest)) continue;
+    const decisionPolicy = normalizeDecisionPolicy(
+      rawRequest.decisionPolicy,
+      rawRequest.decisionPolicy === undefined ? fallbacks.missingPolicy : fallbacks.invalidPolicy,
+    );
+    const grantCandidate =
+      isStandardDecisionPolicy(decisionPolicy) &&
+      grantCandidateMatchesRequest(rawRequest.grantCandidate, rawRequest)
+        ? rawRequest.grantCandidate
+        : undefined;
     requests[id] = {
       ...(rawRequest as unknown as RemoteApprovalRequest),
-      decisionPolicy: normalizeDecisionPolicy(
-        rawRequest.decisionPolicy,
-        rawRequest.decisionPolicy === undefined
-          ? fallbacks.missingPolicy
-          : fallbacks.invalidPolicy,
-      ),
+      ...(grantCandidate ? { grantCandidate } : { grantCandidate: undefined }),
+      decisionPolicy,
     };
   }
   return requests;
@@ -122,6 +153,7 @@ interface ApprovalStoreState {
     riskLevel?: RiskLevel;
     riskReasons?: string[];
     decisionPolicy?: RemoteApprovalDecisionPolicy;
+    grantCandidate?: RemoteApprovalGrantCandidate;
   }) => string;
   approveRequest: (id: string) => void;
   approveAlways: (id: string) => void;
@@ -168,6 +200,15 @@ export const useApprovalStore = create<ApprovalStoreState>()(
         const id = `approval-${generateId()}`;
         const now = Date.now();
         const timeoutMs = get().policy.timeoutMs;
+        const decisionPolicy =
+          params.decisionPolicy === undefined
+            ? { ...STANDARD_APPROVAL_DECISION_POLICY }
+            : normalizeDecisionPolicy(params.decisionPolicy, 'one-shot');
+        const grantCandidate =
+          isStandardDecisionPolicy(decisionPolicy) &&
+          grantCandidateMatchesRequest(params.grantCandidate, params)
+            ? params.grantCandidate
+            : undefined;
         const request: RemoteApprovalRequest = {
           id,
           targetId: params.targetId,
@@ -181,10 +222,8 @@ export const useApprovalStore = create<ApprovalStoreState>()(
           expiresAt: now + timeoutMs,
           riskLevel: params.riskLevel,
           riskReasons: params.riskReasons,
-          decisionPolicy:
-            params.decisionPolicy === undefined
-              ? { ...STANDARD_APPROVAL_DECISION_POLICY }
-              : normalizeDecisionPolicy(params.decisionPolicy, 'one-shot'),
+          decisionPolicy,
+          grantCandidate,
         };
         set((state) => ({
           requests: trimRequests({ ...state.requests, [id]: request }),
@@ -215,17 +254,20 @@ export const useApprovalStore = create<ApprovalStoreState>()(
       approveAlways: (id) =>
         set((state) => {
           const req = state.requests[id];
-          if (
-            !req ||
-            req.status !== 'pending' ||
-            !isStandardDecisionPolicy(req.decisionPolicy)
-          ) {
+          if (!req || req.status !== 'pending' || !isStandardDecisionPolicy(req.decisionPolicy)) {
             return state;
           }
           const now = Date.now();
-          const key = req.toolName || 'unknown';
-          const entry: AllowlistEntry = { key, addedAt: now };
-          const newAllowlist = state.allowlist.some((e) => e.key === key)
+          const entry = req.grantCandidate
+            ? createUserApprovalGrant(req.grantCandidate, now, req.id)
+            : undefined;
+          if (!entry) return state;
+          const newAllowlist = state.allowlist.some(
+            (candidate) =>
+              candidate.status === 'active' &&
+              candidate.key === entry.key &&
+              candidate.personaId === entry.personaId,
+          )
             ? state.allowlist
             : [...state.allowlist, entry];
           return {
@@ -236,7 +278,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
             allowlist: newAllowlist,
             analytics: recordAnalyticsOutcome(
               state.analytics,
-              key,
+              req.toolName || 'unknown',
               'allow-always',
               now - req.requestedAt,
             ),
@@ -327,22 +369,40 @@ export const useApprovalStore = create<ApprovalStoreState>()(
 
       addToAllowlist: (key, personaId) =>
         set((state) => {
-          if (state.allowlist.some((entry) => entry.key === key)) return state;
+          if (
+            state.allowlist.some(
+              (entry) =>
+                entry.status === 'active' && entry.key === key && entry.personaId === personaId,
+            )
+          ) {
+            return state;
+          }
+          const entry = createInternalAllowlistEntry(key, personaId, Date.now());
+          if (!entry) return state;
           return {
-            allowlist: [...state.allowlist, { key, addedAt: Date.now(), personaId }],
+            allowlist: [...state.allowlist, entry],
           };
         }),
 
       removeFromAllowlist: (key) =>
-        set((state) => ({
-          allowlist: state.allowlist.filter((entry) => entry.key !== key),
-        })),
+        set((state) => {
+          const hasInternalEntry = state.allowlist.some(
+            (entry) => entry.key === key && entry.source === 'internal',
+          );
+          return {
+            allowlist: state.allowlist.filter(
+              (entry) => entry.key !== key || (hasInternalEntry && entry.source !== 'internal'),
+            ),
+          };
+        }),
 
       isAllowlisted: (key, personaId) => {
         const { allowlist } = get();
         return allowlist.some(
           (entry) =>
-            entry.key === key && (entry.personaId === undefined || entry.personaId === personaId),
+            entry.status === 'active' &&
+            entry.key === key &&
+            (entry.personaId === undefined || entry.personaId === personaId),
         );
       },
 
@@ -366,11 +426,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
         for (const [id, request] of Object.entries(nextRequests)) {
           if (request.status === 'pending' && now - request.requestedAt > timeoutMs) {
             nextRequests[id] = { ...request, status: 'expired', resolvedAt: now };
-            analytics = recordAnalyticsOutcome(
-              analytics,
-              request.toolName || 'unknown',
-              'expired',
-            );
+            analytics = recordAnalyticsOutcome(analytics, request.toolName || 'unknown', 'expired');
             count++;
           }
         }
@@ -384,7 +440,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
     {
       name: 'kavi-approvals',
       storage: createJSONStorage(() => AsyncStorage),
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown, version: number) => {
         const persisted = isRecord(persistedState) ? persistedState : {};
         let migrated: Record<string, unknown> = { ...persisted };
@@ -416,8 +472,19 @@ export const useApprovalStore = create<ApprovalStoreState>()(
           };
         }
 
+        if (version < 4) {
+          migrated = {
+            ...migrated,
+            allowlist: normalizePersistedAllowlist(migrated.allowlist),
+          };
+        }
+
         return migrated;
       },
+      partialize: (state) => ({
+        ...state,
+        allowlist: state.allowlist.filter((entry) => entry.source !== 'internal'),
+      }),
       merge: (persistedState, currentState) => {
         if (!isRecord(persistedState)) return currentState;
 
@@ -432,8 +499,8 @@ export const useApprovalStore = create<ApprovalStoreState>()(
           policy: isRecord(persistedState.policy)
             ? (persistedState.policy as unknown as ApprovalPolicy)
             : currentState.policy,
-          allowlist: Array.isArray(persistedState.allowlist)
-            ? (persistedState.allowlist as AllowlistEntry[])
+          allowlist: Object.prototype.hasOwnProperty.call(persistedState, 'allowlist')
+            ? normalizePersistedAllowlist(persistedState.allowlist)
             : currentState.allowlist,
           analytics: isRecord(persistedState.analytics)
             ? (persistedState.analytics as unknown as ApprovalAnalytics)
@@ -454,14 +521,17 @@ export function needsApprovalWithContext(
   personaId?: string,
 ): boolean {
   const { policy, allowlist } = useApprovalStore.getState();
+  const risk = assessToolRisk(toolName, args);
 
-  const allowKey = buildAllowlistKey(toolName, args);
   if (
-    allowlist.some(
-      (entry) =>
-        (entry.key === allowKey || entry.key === toolName) &&
-        (entry.personaId === undefined || entry.personaId === personaId),
-    )
+    hasMatchingActiveApprovalGrant({
+      allowlist,
+      toolName,
+      args,
+      personaId,
+      riskLevel: risk.level,
+      destructive: risk.destructive,
+    })
   ) {
     return false;
   }
@@ -521,17 +591,33 @@ export function requestToolApproval(params: {
   const risk = assessToolRisk(params.toolName, params.args);
   const presentation = describeToolInvocation(params.toolName, params.args);
   const resolvedPresentation = params.reviewPresentation ?? presentation;
+  const scope = params.scope || getApprovalScope(params.toolName);
+  const decisionPolicy =
+    params.decisionPolicy === undefined
+      ? { ...STANDARD_APPROVAL_DECISION_POLICY }
+      : normalizeDecisionPolicy(params.decisionPolicy, 'one-shot');
+  const grantCandidate = isStandardDecisionPolicy(decisionPolicy)
+    ? buildApprovalGrantCandidate({
+        toolName: params.toolName,
+        args: params.args,
+        targetId: params.targetId,
+        personaId: params.personaId,
+        riskLevel: risk.level,
+        destructive: risk.destructive,
+      })
+    : undefined;
 
   const requestId = store.createRequest({
-    targetId: params.targetId,
+    targetId: params.targetId ?? grantCandidate?.targetId,
     toolName: params.toolName,
-    scope: params.scope || getApprovalScope(params.toolName),
+    scope,
     jobId: params.jobId,
     title: params.title || resolvedPresentation.title,
     description: resolvedPresentation.description,
     riskLevel: risk.level,
     riskReasons: risk.reasons,
-    decisionPolicy: params.decisionPolicy,
+    decisionPolicy,
+    grantCandidate,
   });
 
   return new Promise((resolve) => {

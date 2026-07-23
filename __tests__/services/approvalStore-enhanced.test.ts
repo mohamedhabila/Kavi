@@ -9,6 +9,7 @@ import {
   assessToolRisk,
   analyzeCommandRisk,
 } from '../../src/services/remote/approvalStore';
+import { buildApprovalGrantCandidate } from '../../src/services/remote/approvalGrants';
 
 beforeEach(() => {
   useApprovalStore.setState({
@@ -143,17 +144,61 @@ describe('allowlist management', () => {
 });
 
 describe('approveAlways', () => {
-  it('approves and adds to allowlist', () => {
+  it('approves and adds a bounded grant to the allowlist', () => {
+    const grantCandidate = buildApprovalGrantCandidate({
+      toolName: 'ssh_exec',
+      targetId: 'staging-host',
+      args: { command: 'pwd' },
+      riskLevel: 'low',
+      destructive: false,
+    });
+    expect(grantCandidate).toBeDefined();
     const id = useApprovalStore.getState().createRequest({
       title: 'Test',
       description: 'test',
       toolName: 'ssh_exec',
+      targetId: 'staging-host',
+      scope: 'ssh',
+      grantCandidate,
     });
     useApprovalStore.getState().approveAlways(id);
 
     const req = useApprovalStore.getState().getRequest(id);
     expect(req!.status).toBe('approved');
-    expect(useApprovalStore.getState().allowlist.length).toBeGreaterThan(0);
+    expect(useApprovalStore.getState().allowlist).toEqual([
+      expect.objectContaining({
+        key: grantCandidate!.key,
+        targetId: 'staging-host',
+        actionClass: 'pwd',
+        status: 'active',
+        source: 'user',
+      }),
+    ]);
+    expect(needsApprovalWithContext('ssh_exec', { command: 'pwd', targetId: 'staging-host' })).toBe(
+      false,
+    );
+    expect(
+      needsApprovalWithContext('ssh_exec', { command: 'pwd', targetId: 'production-host' }),
+    ).toBe(true);
+    expect(
+      needsApprovalWithContext('ssh_exec', {
+        command: 'rm -rf /tmp/data',
+        targetId: 'staging-host',
+      }),
+    ).toBe(true);
+  });
+
+  it('does not resolve a request that has no safe reusable grant', () => {
+    const id = useApprovalStore.getState().createRequest({
+      title: 'Delete production data',
+      description: 'Critical operation',
+      toolName: 'ssh_exec',
+    });
+
+    useApprovalStore.getState().approveAlways(id);
+
+    expect(useApprovalStore.getState().getRequest(id)?.status).toBe('pending');
+    expect(useApprovalStore.getState().allowlist).toHaveLength(0);
   });
 
   it('does not resolve or persist a one-shot request', () => {

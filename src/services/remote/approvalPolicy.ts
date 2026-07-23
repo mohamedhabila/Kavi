@@ -1,13 +1,3 @@
-import { analyzeCommandRisk } from './approvalRisk';
-
-export interface AllowlistEntry {
-  /** Tool name or `ssh_exec:<executable>` for command-level granularity. */
-  key: string;
-  addedAt: number;
-  /** Optional persona that scoped this entry. */
-  personaId?: string;
-}
-
 export interface PersonaPolicyOverride {
   personaId: string;
   /** Additional tools that always require approval for this persona. */
@@ -145,10 +135,11 @@ export function requiresActionApproval(toolName: string, args?: Record<string, u
   }
 }
 
+/** Stable administrative key format; persisted user grants use versioned exact keys. */
 export function buildAllowlistKey(toolName: string, args?: Record<string, unknown>): string {
   if (toolName === 'ssh_exec' && typeof args?.command === 'string') {
-    const risk = analyzeCommandRisk(args.command);
-    return `ssh_exec:${risk.executable}`;
+    return `ssh_exec:${analyzeCommandRisk(args.command).executable}`;
   }
   return toolName;
 }
+import { analyzeCommandRisk } from './approvalRisk';

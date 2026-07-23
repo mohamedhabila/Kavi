@@ -1,6 +1,7 @@
 import { fireEvent, render } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { ApprovalBanner } from '../../src/components/approval/ApprovalBanner';
+import { buildApprovalGrantCandidate } from '../../src/services/remote/approvalGrants';
 
 const mockApprovalStoreState = {
   requests: {} as Record<string, any>,
@@ -139,44 +140,52 @@ describe('ApprovalBanner', () => {
   });
 
   it('requires a separate confirmation before saving persistent approval', () => {
+    const grantCandidate = buildApprovalGrantCandidate({
+      toolName: 'ssh_exec',
+      targetId: 'staging-server',
+      args: { command: 'pwd' },
+      riskLevel: 'low',
+      destructive: false,
+    });
     mockApprovalStoreState.requests = {
-      critical: {
-        id: 'critical',
+      scoped: {
+        id: 'scoped',
         status: 'pending',
-        title: 'Deploy prod change',
-        description: 'Apply release patch',
+        title: 'Run status check',
+        description: 'Run pwd on the selected host',
         requestedAt: Date.now() - 90_000,
-        riskLevel: 'critical',
-        riskReasons: ['writes to prod', 'restarts service'],
-        targetId: 'prod-server',
+        riskLevel: 'medium',
+        riskReasons: ['remote command'],
+        targetId: 'staging-server',
         decisionPolicy: {
           persistentApproval: 'allowed',
           expiryFallback: 'global-policy',
         },
+        grantCandidate,
       },
     };
 
     const { getByText } = render(<ApprovalBanner />);
 
-    expect(getByText('writes to prod · restarts service')).toBeTruthy();
-    expect(getByText('Target: prod-server')).toBeTruthy();
+    expect(getByText('remote command')).toBeTruthy();
+    expect(getByText('Target: staging-server')).toBeTruthy();
 
     fireEvent.press(getByText('Deny'));
     fireEvent.press(getByText('Save permission…'));
     fireEvent.press(getByText('Allow once'));
 
-    expect(mockApprovalStoreState.rejectRequest).toHaveBeenCalledWith('critical');
-    expect(mockApprovalStoreState.approveRequest).toHaveBeenCalledWith('critical');
+    expect(mockApprovalStoreState.rejectRequest).toHaveBeenCalledWith('scoped');
+    expect(mockApprovalStoreState.approveRequest).toHaveBeenCalledWith('scoped');
     expect(mockApprovalStoreState.approveAlways).not.toHaveBeenCalled();
     expect(Alert.alert).toHaveBeenCalledWith(
       'Allow this tool in the future?',
-      expect.stringContaining('Deploy prod change'),
+      expect.stringContaining('Run status check'),
       expect.any(Array),
     );
 
     const alertButtons = (Alert.alert as jest.Mock).mock.calls[0]?.[2];
     alertButtons?.[1]?.onPress?.();
-    expect(mockApprovalStoreState.approveAlways).toHaveBeenCalledWith('critical');
+    expect(mockApprovalStoreState.approveAlways).toHaveBeenCalledWith('scoped');
   });
 
   it('hides persistent approval while keeping one-shot approve and reject actions', () => {
@@ -204,5 +213,26 @@ describe('ApprovalBanner', () => {
     expect(mockApprovalStoreState.rejectRequest).toHaveBeenCalledWith('memory');
     expect(mockApprovalStoreState.approveRequest).toHaveBeenCalledWith('memory');
     expect(mockApprovalStoreState.approveAlways).not.toHaveBeenCalled();
+  });
+
+  it('hides persistent approval when product code cannot derive a bounded grant', () => {
+    mockApprovalStoreState.requests = {
+      email: {
+        id: 'email',
+        status: 'pending',
+        title: 'Send email',
+        description: 'Send the prepared message to one recipient',
+        requestedAt: Date.now() - 1000,
+        riskLevel: 'low',
+        decisionPolicy: {
+          persistentApproval: 'allowed',
+          expiryFallback: 'global-policy',
+        },
+      },
+    };
+
+    const { queryByText } = render(<ApprovalBanner />);
+
+    expect(queryByText('Save permission…')).toBeNull();
   });
 });

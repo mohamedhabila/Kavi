@@ -197,11 +197,37 @@ export type RemoteApprovalDecisionPolicy =
       expiryFallback: 'reject';
     };
 
+export type RemoteApprovalScope = 'ssh' | 'workspace' | 'browser' | 'expo' | 'native' | 'other';
+
+export type RemoteApprovalGrantTargetKind =
+  | 'local-device'
+  | 'ssh-host'
+  | 'workspace'
+  | 'browser-provider'
+  | 'expo-project'
+  | 'mcp-tool'
+  | 'tool';
+
+/**
+ * Code-owned, bounded metadata describing the narrow permission that may be
+ * saved for a reviewed request. Raw tool arguments never belong here.
+ */
+export interface RemoteApprovalGrantCandidate {
+  version: 1;
+  key: string;
+  toolName: string;
+  scope: RemoteApprovalScope;
+  actionClass: string;
+  targetKind: RemoteApprovalGrantTargetKind;
+  targetId?: string;
+  personaId?: string;
+}
+
 export interface RemoteApprovalRequest {
   id: string;
   targetId?: string;
   toolName?: string;
-  scope?: 'ssh' | 'workspace' | 'browser' | 'expo' | 'native' | 'other';
+  scope?: RemoteApprovalScope;
   jobId?: string;
   title: string;
   description: string;
@@ -212,6 +238,8 @@ export interface RemoteApprovalRequest {
   riskLevel?: 'low' | 'medium' | 'high' | 'critical';
   riskReasons?: string[];
   decisionPolicy: RemoteApprovalDecisionPolicy;
+  /** Present only when product code can derive a bounded reusable grant. */
+  grantCandidate?: RemoteApprovalGrantCandidate;
 }
 
 export interface RemoteJobRecord {

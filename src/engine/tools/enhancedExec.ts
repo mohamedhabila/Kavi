@@ -64,6 +64,7 @@ export async function enhancedExec(
     const decision = await requestToolApproval({
       toolName: 'ssh_exec',
       targetId: options.targetId,
+      args: { command, cwd: options.cwd, targetId: options.targetId },
       description: `Execute command: ${command}${options.cwd ? ` (in ${options.cwd})` : ''}`,
     });
 

@@ -94,7 +94,8 @@ const ApprovalCard: React.FC<{
     riskLevel === 'critical' || riskLevel === 'high' ? colors.danger : colors.warning;
   const allowsPersistentApproval =
     request.decisionPolicy?.persistentApproval === 'allowed' &&
-    request.decisionPolicy.expiryFallback === 'global-policy';
+    request.decisionPolicy.expiryFallback === 'global-policy' &&
+    request.grantCandidate !== undefined;
 
   return (
     <View style={[styles.card, { borderColor }]}>
