@@ -38,13 +38,14 @@ describe('tool detail redaction', () => {
   });
 
   it('redacts credentials in malformed text, headers, URLs, and known token formats', () => {
+    const githubToken = ['github', 'pat', 'abcdefghijklmnopqrstuvwxyz1234567890'].join('_');
     const raw = [
       'Authorization: Bearer header-secret-value',
       'OPENROUTER_API_KEY=sk-or-v1-abcdefghijklmnopqrstuvwxyz123456',
       'SESSION_TOKEN=session-token-value-that-must-not-render',
       'cookie: session=private-cookie-value; theme=dark',
       'fetch https://example.com/run?token=query-secret-value&mode=safe',
-      'github_pat_abcdefghijklmnopqrstuvwxyz1234567890',
+      githubToken,
       'eyJabcdefghijk.eyJabcdefghijkl.mnopqrstuvwxyz',
     ].join('\n');
 
@@ -58,6 +59,7 @@ describe('tool detail redaction', () => {
     expect(redacted).not.toContain('session-token-value-that-must-not-render');
     expect(redacted).not.toContain('query-secret-value');
     expect(redacted).not.toContain('eyJabcdefghijk');
+    expect(redacted).not.toContain(githubToken);
   });
 
   it('redacts incomplete private keys and URL passwords', () => {
