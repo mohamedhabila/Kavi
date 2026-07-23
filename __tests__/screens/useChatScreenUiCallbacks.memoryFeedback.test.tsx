@@ -4,6 +4,16 @@ import { makeTestConversation, makeTestMessage } from '../helpers/factories';
 
 const mockReadExplicitMemoryRetrievalFeedback = jest.fn();
 const mockRecordExplicitMemoryRetrievalFeedback = jest.fn();
+const mockShareConversationWorkspaceFile = jest.fn();
+
+jest.mock('../../src/services/agents/subAgent', () => ({
+  listActiveSubAgents: () => [],
+}));
+
+jest.mock('../../src/services/share/localShare', () => ({
+  shareConversationWorkspaceFile: (...args: unknown[]) =>
+    mockShareConversationWorkspaceFile(...args),
+}));
 
 jest.mock('../../src/services/memory/retrievalOutcomeStore', () => ({
   readExplicitMemoryRetrievalFeedback: (...args: unknown[]) =>
@@ -65,6 +75,11 @@ describe('useChatScreenUiCallbacks memory feedback', () => {
       createdAt: 200,
       updatedAt: 200,
     });
+    mockShareConversationWorkspaceFile.mockResolvedValue({
+      conversationId: 'root-conversation',
+      path: 'report.md',
+      fileUri: 'file:///report.md',
+    });
   });
 
   it('binds reads and explicit writes to the root, side thread, event, and persisted message', async () => {
@@ -112,5 +127,27 @@ describe('useChatScreenUiCallbacks memory feedback', () => {
       result.current.handleMemoryFeedback('assistant-exact', EVENT_ID, 'helpful'),
     ).rejects.toThrow('memory_retrieval_feedback_target_invalid');
     expect(mockRecordExplicitMemoryRetrievalFeedback).not.toHaveBeenCalled();
+  });
+
+  it('shares side-thread artifacts from the canonical parent with the child as fallback', async () => {
+    const { result } = renderCallbacks();
+
+    await result.current.handleShareWorkspaceFile({
+      id: 'attachment-1',
+      name: 'report.md',
+      type: 'file',
+      uri: 'file:///report.md',
+      workspacePath: 'report.md',
+      mimeType: 'text/markdown',
+      size: 128,
+    });
+
+    expect(mockShareConversationWorkspaceFile).toHaveBeenCalledWith({
+      conversationId: 'root-conversation',
+      path: 'report.md',
+      fallbackConversationIds: ['side-conversation'],
+      dialogTitle: 'report.md',
+      mimeType: 'text/markdown',
+    });
   });
 });

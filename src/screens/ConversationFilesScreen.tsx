@@ -4,7 +4,7 @@ import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navig
 import { ConversationFiles } from '../components/files/ConversationFiles';
 import { onSubAgentEvent, listActiveSubAgents } from '../services/agents/subAgent';
 import { resolveOwningConversationId } from '../services/agents/lifecycle/stateMachine';
-import { getConversationWorkspaceFallbackConversationIds } from '../services/conversationWorkspace/fallbacks';
+import { resolveConversationWorkspaceReadScope } from '../services/conversationWorkspace/fallbacks';
 import { useBackToChat } from '../navigation/useBackToChat';
 import { normalizeConversationWorkspacePath } from '../services/files/pathUtils';
 import { useChatStore } from '../store/useChatStore';
@@ -48,6 +48,34 @@ export const ConversationFilesScreen: React.FC = () => {
     [conversationId, conversations],
   );
 
+  const workspaceScope = useMemo(
+    () =>
+      resolveConversationWorkspaceReadScope({
+        conversationId,
+        conversations,
+        messages: conversation?.messages,
+        usageEntries: conversation?.usage?.entries,
+        agentRuns: conversation?.agentRuns,
+        liveSubAgents: listActiveSubAgents(),
+      }),
+    // The sub-agent registry is not reactive; the event-backed version intentionally
+    // invalidates this snapshot while preserving stable child prop identities.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      conversation?.agentRuns,
+      conversation?.messages,
+      conversation?.usage?.entries,
+      conversationId,
+      conversations,
+      workspaceRefreshVersion,
+    ],
+  );
+  const workspaceConversation = useMemo(
+    () =>
+      conversations.find((candidate) => candidate.id === workspaceScope.workspaceConversationId),
+    [conversations, workspaceScope.workspaceConversationId],
+  );
+
   useFocusEffect(
     useCallback(() => {
       setWorkspaceRefreshVersion((value) => value + 1);
@@ -56,38 +84,43 @@ export const ConversationFilesScreen: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!conversationId) {
+    if (!workspaceScope.workspaceConversationId) {
       return undefined;
     }
 
     return onSubAgentEvent((agent) => {
+      const liveSubAgents = listActiveSubAgents();
       const ownerConversationId =
-        resolveOwningConversationId(agent.sessionId, listActiveSubAgents()) ||
-        agent.parentConversationId;
+        resolveOwningConversationId(agent.sessionId, liveSubAgents) || agent.parentConversationId;
 
-      if (ownerConversationId?.trim() !== conversationId) {
+      if (!ownerConversationId) {
+        return;
+      }
+
+      const eventWorkspaceScope = resolveConversationWorkspaceReadScope({
+        conversationId: ownerConversationId,
+        conversations,
+        liveSubAgents,
+      });
+
+      if (eventWorkspaceScope.workspaceConversationId !== workspaceScope.workspaceConversationId) {
         return;
       }
 
       setWorkspaceRefreshVersion((value) => value + 1);
     });
-  }, [conversationId]);
+  }, [conversations, workspaceScope.workspaceConversationId]);
 
-  const fallbackConversationIds = useMemo(
-    () =>
-      getConversationWorkspaceFallbackConversationIds({
-        conversationId,
-        messages: conversation?.messages,
-        usageEntries: conversation?.usage?.entries,
-        agentRuns: conversation?.agentRuns,
-      }),
-    [conversation?.agentRuns, conversation?.messages, conversation?.usage?.entries, conversationId],
-  );
-  const refreshToken = `${conversation?.updatedAt ?? 0}:${workspaceRefreshVersion}`;
+  const workspaceOwnerRefreshToken =
+    workspaceConversation?.id && workspaceConversation.id !== conversation?.id
+      ? `:${workspaceConversation.updatedAt ?? 0}`
+      : '';
+  const refreshToken = `${conversation?.updatedAt ?? 0}${workspaceOwnerRefreshToken}:${workspaceRefreshVersion}`;
 
   const handleOpenTextFile = useCallback(
     (filePath: string, content: string, sourceConversationId?: string) => {
-      const editorConversationId = sourceConversationId?.trim() || conversationId;
+      const editorConversationId =
+        sourceConversationId?.trim() || workspaceScope.workspaceConversationId;
       if (!conversationId || !editorConversationId) {
         return;
       }
@@ -103,7 +136,7 @@ export const ConversationFilesScreen: React.FC = () => {
         },
       });
     },
-    [conversationId, navigation],
+    [conversationId, navigation, workspaceScope.workspaceConversationId],
   );
 
   return (
@@ -111,8 +144,8 @@ export const ConversationFilesScreen: React.FC = () => {
       visible={true}
       presentation="screen"
       onClose={handleBack}
-      conversationId={conversationId}
-      fallbackConversationIds={fallbackConversationIds}
+      conversationId={workspaceScope.workspaceConversationId}
+      fallbackConversationIds={workspaceScope.fallbackConversationIds}
       refreshToken={refreshToken}
       initialFilePath={params.initialFilePath}
       initialDirectoryPath={params.initialDirectoryPath}

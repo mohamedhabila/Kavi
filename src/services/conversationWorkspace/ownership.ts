@@ -13,6 +13,11 @@ export type ConversationWorkspaceTarget = {
   workspaceReadFallbackConversationId?: string;
 };
 
+export type ConversationWorkspaceReadTarget = {
+  workspaceConversationId: string;
+  workspaceReadFallbackConversationIds: string[];
+};
+
 export function resolveConfiguredConversationWorkspaceTarget(params: {
   workspaceConversationId?: string | null;
   workspaceReadFallbackConversationId?: string | null;
@@ -49,11 +54,11 @@ export function resolveConfiguredConversationWorkspaceTarget(params: {
   };
 }
 
-export function resolveConversationWorkspaceTarget(params: {
+export function resolveConversationWorkspaceReadTarget(params: {
   conversationId: string;
   conversations?: ReadonlyArray<ConversationOwnershipLink>;
   subAgents?: ReadonlyArray<SubAgentOwnershipLink>;
-}): ConversationWorkspaceTarget {
+}): ConversationWorkspaceReadTarget {
   const initialConversationId = requireExactDurableScopeId(
     params.conversationId,
     'conversation_workspace_id_invalid',
@@ -73,10 +78,12 @@ export function resolveConversationWorkspaceTarget(params: {
   );
 
   const visitedIds = new Set<string>();
+  const ownershipPath: string[] = [];
   let workspaceConversationId = initialConversationId;
 
   while (!visitedIds.has(workspaceConversationId)) {
     visitedIds.add(workspaceConversationId);
+    ownershipPath.push(workspaceConversationId);
 
     const subAgentParentConversationId = resolveOptionalExactDurableScopeId(
       subAgentsBySessionId.get(workspaceConversationId)?.parentConversationId,
@@ -104,8 +111,22 @@ export function resolveConversationWorkspaceTarget(params: {
 
   return {
     workspaceConversationId,
-    ...(workspaceConversationId !== initialConversationId
-      ? { workspaceReadFallbackConversationId: initialConversationId }
-      : {}),
+    workspaceReadFallbackConversationIds: ownershipPath.filter(
+      (conversationId) => conversationId !== workspaceConversationId,
+    ),
+  };
+}
+
+export function resolveConversationWorkspaceTarget(params: {
+  conversationId: string;
+  conversations?: ReadonlyArray<ConversationOwnershipLink>;
+  subAgents?: ReadonlyArray<SubAgentOwnershipLink>;
+}): ConversationWorkspaceTarget {
+  const target = resolveConversationWorkspaceReadTarget(params);
+  const workspaceReadFallbackConversationId = target.workspaceReadFallbackConversationIds[0];
+
+  return {
+    workspaceConversationId: target.workspaceConversationId,
+    ...(workspaceReadFallbackConversationId ? { workspaceReadFallbackConversationId } : {}),
   };
 }

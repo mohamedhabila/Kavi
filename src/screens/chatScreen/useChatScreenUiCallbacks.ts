@@ -7,6 +7,7 @@ import type { Message } from '../../types/message';
 import { hasCompleteFinalAssistantMetadata } from '../../utils/assistantMessageMetadata';
 import { CHAT_SOURCE_MESSAGE_PAGE_SIZE } from '../chatScreenDisplayState';
 import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
+import { resolveConversationWorkspaceReadScope } from '../../services/conversationWorkspace/fallbacks';
 import {
   readExplicitMemoryRetrievalFeedback,
   recordExplicitMemoryRetrievalFeedback,
@@ -113,10 +114,22 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
       }
 
       try {
-        await shareConversationWorkspaceFile({
+        const workspaceScope = resolveConversationWorkspaceReadScope({
           conversationId: activeConversationId,
+          conversations,
+          messages: activeConversation?.messages,
+          usageEntries: activeConversation?.usage?.entries,
+          agentRuns: activeConversation?.agentRuns,
+          additionalConversationIds: workspaceFallbackConversationIds,
+        });
+        if (!workspaceScope.workspaceConversationId) {
+          return;
+        }
+
+        await shareConversationWorkspaceFile({
+          conversationId: workspaceScope.workspaceConversationId,
           path: attachment.workspacePath,
-          fallbackConversationIds: workspaceFallbackConversationIds,
+          fallbackConversationIds: workspaceScope.fallbackConversationIds,
           dialogTitle: attachment.name || t('common.share'),
           mimeType: attachment.mimeType,
         });
@@ -127,6 +140,8 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     },
     [
       activeConversationId,
+      activeConversation,
+      conversations,
       setChatError,
       shareFileFailedMessage,
       t,

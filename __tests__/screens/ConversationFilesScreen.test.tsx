@@ -158,6 +158,51 @@ describe('ConversationFilesScreen', () => {
     );
   });
 
+  it('uses the canonical parent workspace for a side thread and returns the editor to that thread', () => {
+    mockRouteParams = { conversationId: 'conv-side' };
+    mockConversations = [
+      {
+        id: 'conv-root',
+        title: 'Main conversation',
+        messages: [],
+        usage: { entries: [] },
+        updatedAt: 100,
+      },
+      {
+        id: 'conv-side',
+        title: 'Side thread',
+        parentConversationId: 'conv-root',
+        isSideThread: true,
+        messages: [],
+        usage: { entries: [] },
+        updatedAt: 200,
+      },
+    ];
+
+    const { getByText } = render(<ConversationFilesScreen />);
+
+    expect(capturedConversationFilesProps).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-root',
+        fallbackConversationIds: ['conv-side'],
+        refreshToken: '200:100:0',
+      }),
+    );
+
+    fireEvent.press(getByText('open-text-file'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('CodeEditor', {
+      source: 'local',
+      conversationId: 'conv-root',
+      filePath: 'src/App.tsx',
+      content: 'console.log(1);',
+      returnToConversationFiles: {
+        conversationId: 'conv-side',
+        initialDirectoryPath: 'src',
+      },
+    });
+  });
+
   it('includes live sub-agent workspace ids and passes a refresh token to the explorer', () => {
     mockConversations = [
       {
@@ -210,6 +255,26 @@ describe('ConversationFilesScreen', () => {
     });
 
     expect(capturedConversationFilesProps.refreshToken).toBe('123:1');
+  });
+
+  it('keeps workspace scope props stable across unrelated parent renders', () => {
+    mockConversations = [
+      {
+        id: 'conv-active',
+        messages: [],
+        usage: { entries: [] },
+        updatedAt: 123,
+      },
+    ];
+
+    const screen = render(<ConversationFilesScreen />);
+    const initialFallbackConversationIds = capturedConversationFilesProps.fallbackConversationIds;
+
+    screen.rerender(<ConversationFilesScreen />);
+
+    expect(capturedConversationFilesProps.fallbackConversationIds).toBe(
+      initialFallbackConversationIds,
+    );
   });
 
   it('bumps the refresh token when a live worker event targets the active conversation', () => {

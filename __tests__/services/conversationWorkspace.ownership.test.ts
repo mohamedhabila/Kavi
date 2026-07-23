@@ -1,5 +1,6 @@
 import {
   resolveConfiguredConversationWorkspaceTarget,
+  resolveConversationWorkspaceReadTarget,
   resolveConversationWorkspaceTarget,
 } from '../../src/services/conversationWorkspace/ownership';
 
@@ -49,6 +50,24 @@ describe('conversation workspace ownership', () => {
     ).toEqual({
       workspaceConversationId: 'conv-root',
       workspaceReadFallbackConversationId: 'sub-child',
+    });
+
+    expect(
+      resolveConversationWorkspaceReadTarget({
+        conversationId: 'sub-child',
+        conversations: [
+          { id: 'conv-root', isSideThread: false } as any,
+          {
+            id: 'conv-side',
+            isSideThread: true,
+            parentConversationId: 'conv-root',
+          } as any,
+        ],
+        subAgents: [{ sessionId: 'sub-child', parentConversationId: 'conv-side' } as any],
+      }),
+    ).toEqual({
+      workspaceConversationId: 'conv-root',
+      workspaceReadFallbackConversationIds: ['sub-child', 'conv-side'],
     });
   });
 

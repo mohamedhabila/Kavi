@@ -1,16 +1,30 @@
 import type { AgentRun } from '../../types/agentRun';
+import type { Conversation } from '../../types/conversation';
 import type { ConversationUsageEntry } from '../../types/usage';
 import type { Message } from '../../types/message';
 import type { SubAgentSnapshot } from '../../types/subAgent';
 import { listActiveSubAgents } from '../agents/subAgent';
-import { getSubAgentsForConversation } from '../agents/lifecycle/stateMachine';
+import {
+  getSubAgentsForConversation,
+  resolveOwningConversationId,
+} from '../agents/lifecycle/stateMachine';
+import { resolveConversationWorkspaceReadTarget } from './ownership';
 
 type ConversationWorkspaceFallbackSources = {
   conversationId: string | null | undefined;
+  conversations?: ReadonlyArray<Pick<Conversation, 'id' | 'parentConversationId' | 'isSideThread'>>;
+  additionalConversationIds?: ReadonlyArray<string | null | undefined>;
   messages?: ReadonlyArray<Pick<Message, 'subAgentEvent'>>;
   usageEntries?: ReadonlyArray<Pick<ConversationUsageEntry, 'sessionId' | 'parentSessionId'>>;
   agentRuns?: ReadonlyArray<Pick<AgentRun, 'evidence'>>;
-  liveSubAgents?: ReadonlyArray<Pick<SubAgentSnapshot, 'sessionId' | 'parentSessionId'>>;
+  liveSubAgents?: ReadonlyArray<
+    Pick<SubAgentSnapshot, 'sessionId' | 'parentConversationId' | 'parentSessionId'>
+  >;
+};
+
+export type ConversationWorkspaceReadScope = {
+  workspaceConversationId: string | null;
+  fallbackConversationIds: string[];
 };
 
 function normalizeConversationId(conversationId: string | null | undefined): string {
@@ -35,6 +49,10 @@ export function collectConversationWorkspaceFallbackConversationIds(
 ): string[] {
   const primaryConversationId = normalizeConversationId(sources.conversationId);
   const fallbackIds: string[] = [];
+
+  for (const conversationId of sources.additionalConversationIds ?? []) {
+    addFallbackConversationId(fallbackIds, primaryConversationId, conversationId);
+  }
 
   for (const message of sources.messages ?? []) {
     const snapshot = message.subAgentEvent?.snapshot;
@@ -73,4 +91,54 @@ export function getConversationWorkspaceFallbackConversationIds(
     ...sources,
     liveSubAgents,
   });
+}
+
+export function resolveConversationWorkspaceReadScope(
+  sources: ConversationWorkspaceFallbackSources,
+): ConversationWorkspaceReadScope {
+  const requestedConversationId =
+    typeof sources.conversationId === 'string' ? sources.conversationId : '';
+  if (!requestedConversationId) {
+    return { workspaceConversationId: null, fallbackConversationIds: [] };
+  }
+
+  const allLiveSubAgents = sources.liveSubAgents ?? listActiveSubAgents();
+  const target = resolveConversationWorkspaceReadTarget({
+    conversationId: requestedConversationId,
+    conversations: sources.conversations,
+    subAgents: allLiveSubAgents,
+  });
+  const relatedConversationIds = new Set<string>([target.workspaceConversationId]);
+  for (const conversation of sources.conversations ?? []) {
+    try {
+      const conversationTarget = resolveConversationWorkspaceReadTarget({
+        conversationId: conversation.id,
+        conversations: sources.conversations,
+        subAgents: allLiveSubAgents,
+      });
+      if (conversationTarget.workspaceConversationId === target.workspaceConversationId) {
+        relatedConversationIds.add(conversation.id);
+      }
+    } catch {
+      // Invalid ownership links cannot become workspace read fallbacks.
+    }
+  }
+  const liveSubAgents = allLiveSubAgents.filter((agent) => {
+    const ownerConversationId = resolveOwningConversationId(agent.sessionId, allLiveSubAgents);
+    return !!ownerConversationId && relatedConversationIds.has(ownerConversationId);
+  });
+  const fallbackConversationIds = collectConversationWorkspaceFallbackConversationIds({
+    ...sources,
+    conversationId: target.workspaceConversationId,
+    additionalConversationIds: [
+      ...target.workspaceReadFallbackConversationIds,
+      ...(sources.additionalConversationIds ?? []),
+    ],
+    liveSubAgents,
+  });
+
+  return {
+    workspaceConversationId: target.workspaceConversationId,
+    fallbackConversationIds,
+  };
 }
