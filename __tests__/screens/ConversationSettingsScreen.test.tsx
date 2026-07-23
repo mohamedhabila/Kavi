@@ -12,7 +12,7 @@ const mockSetActiveProviderAndModel = jest.fn();
 const mockSetLastUsedModel = jest.fn();
 let mockRouteParams: Record<string, unknown> = { conversationId: 'conversation-1' };
 
-const mockConversation = {
+const mockConversation: any = {
   id: 'conversation-1',
   title: 'Plan a family trip',
   messages: [],
@@ -109,6 +109,8 @@ jest.mock('../../src/theme/useAppTheme', () => ({
     colors: {
       background: '#000000',
       border: '#333333',
+      danger: '#ff4444',
+      dangerSoft: '#331111',
       header: '#111111',
       onPrimary: '#ffffff',
       primary: '#3388ff',
@@ -117,6 +119,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
       surfaceAlt: '#242424',
       text: '#ffffff',
       textSecondary: '#bbbbbb',
+      textTertiary: '#888888',
     },
   }),
 }));
@@ -133,6 +136,12 @@ const translations: Record<string, string> = {
   'chat.automaticMode': 'Automatic',
   'chat.automaticModeDescription': 'Uses tools when useful.',
   'chat.conversationSettings': 'Conversation settings',
+  'chat.hideUsageDetails': 'Hide usage details',
+  'chat.logsEmpty': 'No logs yet.',
+  'chat.showLogs': 'Show logs',
+  'chat.showUsageDetails': 'Show usage details',
+  'chat.usageActivity': 'Usage & activity',
+  'chat.usageActivityHint': 'Optional technical details.',
   'common.back': 'Back',
   'nav.advancedAI': 'Advanced AI',
 };
@@ -147,6 +156,8 @@ describe('ConversationSettingsScreen', () => {
     mockRouteParams = { conversationId: 'conversation-1' };
     mockConversation.mode = 'agentic';
     mockConversation.personaId = 'default';
+    mockConversation.logs = undefined;
+    mockConversation.usage = undefined;
     mockChatState.isLoading = false;
   });
 
@@ -192,5 +203,44 @@ describe('ConversationSettingsScreen', () => {
 
     fireEvent.press(getByTestId('conversation-open-advanced-ai'));
     expect(mockNavigate).toHaveBeenCalledWith('Settings');
+  });
+
+  it('keeps usage details collapsed until requested', () => {
+    const { getByTestId, queryByTestId } = render(<ConversationSettingsScreen />);
+
+    expect(queryByTestId('chat-usage-strip')).toBeNull();
+    fireEvent.press(getByTestId('conversation-usage-toggle'));
+
+    expect(getByTestId('chat-usage-strip')).toBeTruthy();
+    fireEvent.press(getByTestId('chat-logs-toggle'));
+    expect(getByTestId('chat-logs-panel')).toBeTruthy();
+  });
+
+  it('opens usage directly from the two-tap chat overflow route', () => {
+    mockRouteParams = { conversationId: 'conversation-1', showUsage: true };
+    const { getByTestId } = render(<ConversationSettingsScreen />);
+
+    expect(getByTestId('conversation-usage-details')).toBeTruthy();
+    expect(getByTestId('chat-usage-strip')).toBeTruthy();
+  });
+
+  it('keeps the complete event log available in the expanded details', () => {
+    mockConversation.logs = Array.from({ length: 15 }, (_value, index) => ({
+      id: `log-${index + 1}`,
+      timestamp: 1_700_000_000_000 + index,
+      level: 'info',
+      kind: 'system',
+      title: `Log ${index + 1}`,
+      detail: `Detail ${index + 1}`,
+    }));
+    const { getByTestId, getByText } = render(<ConversationSettingsScreen />);
+
+    fireEvent.press(getByTestId('conversation-usage-toggle'));
+    fireEvent.press(getByTestId('chat-logs-toggle'));
+
+    expect(getByTestId('chat-logs-scroll')).toBeTruthy();
+    expect(getByText('15/15')).toBeTruthy();
+    expect(getByText('Log 1')).toBeTruthy();
+    expect(getByText('Log 15')).toBeTruthy();
   });
 });

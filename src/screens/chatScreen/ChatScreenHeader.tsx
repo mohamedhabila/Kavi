@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
+  BarChart3,
   ChevronRight,
   FolderOpen,
   GitBranch,
@@ -27,6 +28,7 @@ type ChatScreenHeaderProps = {
   onOpenDeveloperTools: () => void;
   onOpenFiles: () => void;
   onOpenMenu: () => void;
+  onOpenUsage: () => void;
   onToggleSideThread: () => void;
   styles: ReturnType<typeof createStyles>;
   t: TranslationFn;
@@ -179,6 +181,13 @@ export function ChatScreenHeader(props: ChatScreenHeaderProps) {
                     onPress={() => runAndClose(props.onOpenFiles)}
                     props={props}
                     testID="chat-open-files"
+                  />
+                  <ConversationMenuRow
+                    Icon={BarChart3}
+                    label={props.t('chat.usageActivity')}
+                    onPress={() => runAndClose(props.onOpenUsage)}
+                    props={props}
+                    testID="chat-open-usage"
                   />
                   <ConversationMenuRow
                     Icon={props.activeConversation.isSideThread ? Trash2 : GitBranch}

@@ -59,42 +59,18 @@ describe('ChatScreen rendering and layout', () => {
     });
   });
 
-  it('renders the telemetry strip and toggle logs panel', () => {
-    const { getByTestId, getByText } = render(<ChatScreen />);
+  it('keeps telemetry out of chat and opens detailed usage in two taps', () => {
+    const { getByTestId, queryByTestId } = render(<ChatScreen />);
 
-    expect(getByTestId('chat-usage-strip')).toBeTruthy();
-    expect(getByText('No usage yet for this conversation.')).toBeTruthy();
+    expect(queryByTestId('chat-usage-strip')).toBeNull();
+    fireEvent.press(getByTestId('chat-open-conversation-options'));
+    fireEvent.press(getByTestId('chat-open-usage'));
 
-    fireEvent.press(getByTestId('chat-logs-toggle'));
-
-    expect(getByTestId('chat-logs-panel')).toBeTruthy();
-    expect(getByText('No logs yet.')).toBeTruthy();
-  });
-
-  it('renders the full log history inside a scrollable panel', () => {
-    mockChatScreenState.conversations = [
-      {
-        ...createDefaultConversations()[0],
-        logs: Array.from({ length: 15 }, (_value, index) => ({
-          id: `log-${index + 1}`,
-          timestamp: 1_700_000_000_000 + index,
-          level: 'info',
-          kind: 'system',
-          title: `Log ${index + 1}`,
-          detail: `Detail ${index + 1}`,
-        })),
-      },
-    ];
-
-    const { getByTestId, getByText } = render(<ChatScreen />);
-
-    fireEvent.press(getByTestId('chat-logs-toggle'));
-
-    expect(getByTestId('chat-logs-panel')).toBeTruthy();
-    expect(getByTestId('chat-logs-scroll')).toBeTruthy();
-    expect(getByText('15/15')).toBeTruthy();
-    expect(getByText('Log 1')).toBeTruthy();
-    expect(getByText('Log 15')).toBeTruthy();
+    expect(mockNavigate).toHaveBeenCalledWith('ConversationSettings', {
+      conversationId: 'conv1',
+      returnTo: { name: 'Chat' },
+      showUsage: true,
+    });
   });
 
   it('mounts the inline workflow widget for persisted agent runs', () => {

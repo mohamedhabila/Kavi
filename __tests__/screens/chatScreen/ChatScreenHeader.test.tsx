@@ -35,6 +35,7 @@ const translations: Record<string, string> = {
   'chat.openConversationOptions': 'Open conversation options',
   'chat.openMenu': 'Open menu',
   'chat.startSideThread': 'Start a side thread',
+  'chat.usageActivity': 'Usage & activity',
   'common.close': 'Close',
   'nav.developerAndRemoteWork': 'Developer & remote work',
   'nav.filesAndCreations': 'Files & creations',
@@ -62,6 +63,7 @@ function createProps(overrides: Record<string, unknown> = {}) {
     onOpenDeveloperTools: jest.fn(),
     onOpenFiles: jest.fn(),
     onOpenMenu: jest.fn(),
+    onOpenUsage: jest.fn(),
     onToggleSideThread: jest.fn(),
     styles,
     t,
@@ -105,6 +107,7 @@ describe('ChatScreenHeader', () => {
     expect(getByText('Conversation options')).toBeTruthy();
     expect(getByText('Conversation settings')).toBeTruthy();
     expect(getByText('Files & creations')).toBeTruthy();
+    expect(getByText('Usage & activity')).toBeTruthy();
     expect(getByText('Start a side thread')).toBeTruthy();
     expect(getByText('Developer & remote work')).toBeTruthy();
 

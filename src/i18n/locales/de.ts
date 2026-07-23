@@ -190,6 +190,11 @@ export const de: TranslationMap = mergeTranslations(en, {
     advancedAiModel: 'KI-Modell überschreiben',
     advancedAiModelHint:
       'Optional. Behalten Sie das konfigurierte Modell bei, sofern dieses Gespräch kein anderes benötigt.',
+    usageActivity: 'Nutzung & Aktivität',
+    usageActivityHint:
+      'Optionale technische Details zu Modellaufrufen, Kosten und Ereignisprotokoll.',
+    showUsageDetails: 'Nutzungsdetails anzeigen',
+    hideUsageDetails: 'Nutzungsdetails ausblenden',
     personaSwitchEvent: 'Persona gewechselt: {from} → {to}',
     personaSwitchEventInitial: 'Persona: {to}',
     assistantTyping: 'Assistent schreibt',

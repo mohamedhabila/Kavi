@@ -16,6 +16,7 @@ type TranslationFn = (key: string, params?: Record<string, string | number>) => 
 type ChatScreenTelemetryPanelProps = {
   activeConversation?: Conversation;
   colors: AppPalette;
+  embedded?: boolean;
   onToggleLogs: () => void;
   showLogs: boolean;
   styles: ReturnType<typeof createStyles>;
@@ -54,7 +55,13 @@ export function ChatScreenTelemetryPanel(props: ChatScreenTelemetryPanelProps) {
 
   return (
     <>
-      <View style={props.styles.telemetryCard} testID="chat-usage-strip">
+      <View
+        style={[
+          props.styles.telemetryCard,
+          props.embedded ? props.styles.telemetryCardEmbedded : null,
+        ]}
+        testID="chat-usage-strip"
+      >
         <View style={props.styles.telemetryRow}>
           <View style={props.styles.telemetryMetric}>
             <Text style={props.styles.telemetryLabel}>{props.t('chat.usageTokens')}</Text>
@@ -98,7 +105,10 @@ export function ChatScreenTelemetryPanel(props: ChatScreenTelemetryPanelProps) {
       </View>
 
       {props.showLogs ? (
-        <View style={props.styles.logsPanel} testID="chat-logs-panel">
+        <View
+          style={[props.styles.logsPanel, props.embedded ? props.styles.logsPanelEmbedded : null]}
+          testID="chat-logs-panel"
+        >
           <View style={props.styles.logsHeader}>
             <Text style={props.styles.logsTitle}>{props.t('chat.latestLogs')}</Text>
             <Text

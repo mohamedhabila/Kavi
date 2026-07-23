@@ -192,6 +192,11 @@ export const fr: TranslationMap = mergeTranslations(en, {
     advancedAiModel: 'Modèle d’IA personnalisé',
     advancedAiModelHint:
       'Facultatif. Conservez le modèle configuré sauf si cette conversation en nécessite un autre.',
+    usageActivity: 'Utilisation et activité',
+    usageActivityHint:
+      'Détails techniques facultatifs sur les appels au modèle, le coût et le journal des événements.',
+    showUsageDetails: 'Afficher les détails d’utilisation',
+    hideUsageDetails: 'Masquer les détails d’utilisation',
     personaSwitchEvent: 'Persona changé : {from} → {to}',
     personaSwitchEventInitial: 'Persona : {to}',
     assistantTyping: "L'assistant écrit",

@@ -22,6 +22,10 @@ export const createChatTelemetryStyles = (colors: AppPalette) => ({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  telemetryCardEmbedded: {
+    borderWidth: 1,
+    borderRadius: 14,
+  },
   telemetryRow: {
     flexDirection: 'row',
     gap: 12,

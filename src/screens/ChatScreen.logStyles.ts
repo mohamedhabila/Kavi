@@ -3,6 +3,7 @@ import { MAX_LOG_PANEL_HEIGHT } from './chatScreenConstants';
 
 export const createChatLogStyles = (colors: AppPalette) => ({
   logsToggle: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -32,6 +33,11 @@ export const createChatLogStyles = (colors: AppPalette) => ({
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  logsPanelEmbedded: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 14,
   },
   logsScroll: {
     maxHeight: MAX_LOG_PANEL_HEIGHT,

@@ -187,6 +187,11 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     advancedAiModel: 'Substituição do modelo de IA',
     advancedAiModelHint:
       'Opcional. Mantenha o modelo configurado, a menos que esta conversa precise de outro.',
+    usageActivity: 'Uso e atividade',
+    usageActivityHint:
+      'Detalhes técnicos opcionais sobre chamadas do modelo, custo e registro de eventos.',
+    showUsageDetails: 'Mostrar detalhes de uso',
+    hideUsageDetails: 'Ocultar detalhes de uso',
     personaSwitchEvent: 'Persona alterada: {from} → {to}',
     personaSwitchEventInitial: 'Persona: {to}',
     assistantTyping: 'O assistente está digitando',

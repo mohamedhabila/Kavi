@@ -183,6 +183,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
     advancedAiModel: 'AI モデルの上書き',
     advancedAiModelHint:
       '任意。この会話で別のモデルが必要な場合を除き、設定済みのモデルを使用します。',
+    usageActivity: '使用状況とアクティビティ',
+    usageActivityHint: 'モデル呼び出し、コスト、イベントログに関する任意の技術情報です。',
+    showUsageDetails: '使用状況の詳細を表示',
+    hideUsageDetails: '使用状況の詳細を非表示',
     personaSwitchEvent: 'ペルソナ切り替え: {from} → {to}',
     personaSwitchEventInitial: 'ペルソナ: {to}',
     assistantTyping: 'アシスタントが入力中',

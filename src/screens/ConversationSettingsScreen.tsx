@@ -1,11 +1,21 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ChevronLeft, Check, MessageCircle, Sparkles } from 'lucide-react-native';
+import {
+  BarChart3,
+  ChevronDown,
+  ChevronLeft,
+  ChevronUp,
+  Check,
+  MessageCircle,
+  Sparkles,
+} from 'lucide-react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ModelSelector } from '../components/chat/ModelSelector';
 import { PersonaSelector } from '../components/chat/PersonaSelector';
+import { ChatScreenTelemetryPanel } from './chatScreen/ChatScreenTelemetryPanel';
+import { createStyles as createChatStyles } from './ChatScreen.styles';
 import { resolveConversationModel } from '../services/llm/support/providerSupport';
 import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
 import { useBackToChat } from '../navigation/useBackToChat';
@@ -19,6 +29,7 @@ type ConversationSettingsRouteParams = {
   ConversationSettings: {
     conversationId?: string;
     returnTo?: { name: string; params?: Record<string, unknown> };
+    showUsage?: boolean;
   };
 };
 
@@ -83,6 +94,15 @@ export const ConversationSettingsScreen: React.FC = () => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const chatStyles = useMemo(() => createChatStyles(colors), [colors]);
+  const [showUsageDetails, setShowUsageDetails] = useState(route.params?.showUsage === true);
+  const [showLogs, setShowLogs] = useState(false);
+
+  useEffect(() => {
+    if (route.params?.showUsage === true) {
+      setShowUsageDetails(true);
+    }
+  }, [route.params?.showUsage]);
 
   const conversations = useChatStore((state) => state.conversations);
   const activeConversationId = useChatStore((state) => state.activeConversationId);
@@ -273,6 +293,48 @@ export const ConversationSettingsScreen: React.FC = () => {
             <Text style={styles.advancedSettingsLinkText}>{t('nav.advancedAI')}</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('chat.usageActivity')}</Text>
+          <Text style={styles.sectionHint}>{t('chat.usageActivityHint')}</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showUsageDetails }}
+            onPress={() => {
+              if (showUsageDetails) {
+                setShowLogs(false);
+              }
+              setShowUsageDetails(!showUsageDetails);
+            }}
+            style={styles.usageToggle}
+            testID="conversation-usage-toggle"
+          >
+            <View style={styles.usageToggleIcon}>
+              <BarChart3 size={20} color={colors.primary} />
+            </View>
+            <Text style={styles.usageToggleText}>
+              {showUsageDetails ? t('chat.hideUsageDetails') : t('chat.showUsageDetails')}
+            </Text>
+            {showUsageDetails ? (
+              <ChevronUp size={19} color={colors.textSecondary} />
+            ) : (
+              <ChevronDown size={19} color={colors.textSecondary} />
+            )}
+          </TouchableOpacity>
+          {showUsageDetails ? (
+            <View style={styles.usageDetails} testID="conversation-usage-details">
+              <ChatScreenTelemetryPanel
+                activeConversation={conversation}
+                colors={colors}
+                embedded
+                onToggleLogs={() => setShowLogs((current) => !current)}
+                showLogs={showLogs}
+                styles={chatStyles}
+                t={t}
+              />
+            </View>
+          ) : null}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -377,6 +439,28 @@ const createStyles = (colors: AppPalette) =>
       paddingHorizontal: 4,
     },
     advancedSettingsLinkText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
+    usageToggle: {
+      minHeight: 56,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      backgroundColor: colors.surface,
+    },
+    usageToggleIcon: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 11,
+      backgroundColor: colors.primarySoft,
+    },
+    usageToggleText: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
+    usageDetails: { marginTop: 10 },
     emptyState: {
       flex: 1,
       alignItems: 'center',

@@ -46,7 +46,6 @@ import { useChatScreenConversationState } from './chatScreen/useChatScreenConver
 import { ChatScreenHeader } from './chatScreen/ChatScreenHeader';
 import { useChatScreenPresentationState } from './chatScreen/useChatScreenPresentationState';
 import { useChatScreenRuntimeHelpers } from './chatScreen/useChatScreenRuntimeHelpers';
-import { ChatScreenTelemetryPanel } from './chatScreen/ChatScreenTelemetryPanel';
 import { useChatScreenUiCallbacks } from './chatScreen/useChatScreenUiCallbacks';
 import { useChatComposerState } from './useChatComposerState';
 import { useChatScrollController } from './useChatScrollController';
@@ -127,7 +126,6 @@ export const ChatScreen: React.FC = () => {
   const [visibleSourceMessageLimit, setVisibleSourceMessageLimit] = useState(
     INITIAL_CHAT_SOURCE_MESSAGE_LIMIT,
   );
-  const [showLogs, setShowLogs] = useState(false);
   const {
     clearStreamingDraft,
     mergeStreamingDraft,
@@ -264,6 +262,16 @@ export const ChatScreen: React.FC = () => {
       }),
     [navigation],
   );
+  const handleOpenUsage = useCallback(() => {
+    if (!activeConversationId) {
+      return;
+    }
+    navigation.navigate('ConversationSettings' as any, {
+      conversationId: activeConversationId,
+      returnTo: { name: 'Chat' },
+      showUsage: true,
+    });
+  }, [activeConversationId, navigation]);
 
   const { activeErrorMessage } = useLocalModelRuntimeState({
     activeProvider,
@@ -373,7 +381,6 @@ export const ChatScreen: React.FC = () => {
   // Clear error when switching conversations
   useEffect(() => {
     setChatError(null);
-    setShowLogs(false);
     previousVisibleCountRef.current = 0;
     previousSourceMessageCountRef.current = 0;
     resetScrollState();
@@ -590,6 +597,7 @@ export const ChatScreen: React.FC = () => {
         onOpenDeveloperTools={handleOpenDeveloperTools}
         onOpenFiles={handleViewFiles}
         onOpenMenu={() => navigation.openDrawer()}
+        onOpenUsage={handleOpenUsage}
         onToggleSideThread={handleToggleSideThread}
         styles={styles}
         t={t}
@@ -613,15 +621,6 @@ export const ChatScreen: React.FC = () => {
         onContinue={() =>
           handleComposerTextChange(t('chat.proactiveTaskSuggestionContinuationPrompt'))
         }
-      />
-
-      <ChatScreenTelemetryPanel
-        activeConversation={activeConversation ?? undefined}
-        colors={colors}
-        onToggleLogs={() => setShowLogs((current) => !current)}
-        showLogs={showLogs}
-        styles={styles}
-        t={t}
       />
 
       <ChatScreenConversationPane

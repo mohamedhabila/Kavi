@@ -190,6 +190,10 @@ export const en: TranslationMap = {
     advancedAiModel: 'AI model override',
     advancedAiModelHint:
       'Optional. Keep the configured model unless this conversation needs something different.',
+    usageActivity: 'Usage & activity',
+    usageActivityHint: 'Optional technical details about model calls, cost, and the event log.',
+    showUsageDetails: 'Show usage details',
+    hideUsageDetails: 'Hide usage details',
     personaSwitchEvent: 'Switched persona: {from} → {to}',
     personaSwitchEventInitial: 'Persona: {to}',
     assistantTyping: 'Assistant is typing',
