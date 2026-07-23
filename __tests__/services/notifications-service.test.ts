@@ -1,9 +1,11 @@
 import * as Notifications from 'expo-notifications';
 import {
   cancelLocalNotification,
+  getNotificationPermissionReadiness,
   getPendingNotificationRoute,
   initializeNotifications,
   listScheduledLocalNotifications,
+  requestNotificationPermission,
   sendLocalNotification,
   subscribeToNotificationRoutes,
 } from '../../src/services/notifications/service';
@@ -146,6 +148,50 @@ describe('notifications service', () => {
     await sendLocalNotification({ title: 'Hello', body: 'World' });
 
     expect(Notifications.requestPermissionsAsync).toHaveBeenCalled();
+  });
+
+  it('reports whether notification permission is granted, requestable, or blocked', async () => {
+    await expect(getNotificationPermissionReadiness()).resolves.toEqual({
+      status: 'granted',
+      canRequest: false,
+    });
+
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValueOnce({
+      status: 'undetermined',
+      canAskAgain: true,
+    });
+    await expect(getNotificationPermissionReadiness()).resolves.toEqual({
+      status: 'requestable',
+      canRequest: true,
+    });
+
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValueOnce({
+      status: 'denied',
+      canAskAgain: false,
+    });
+    await expect(getNotificationPermissionReadiness()).resolves.toEqual({
+      status: 'blocked',
+      canRequest: false,
+    });
+  });
+
+  it('requests notification permission only while the OS still permits a prompt', async () => {
+    (Notifications.getPermissionsAsync as jest.Mock)
+      .mockResolvedValueOnce({ status: 'undetermined', canAskAgain: true })
+      .mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValueOnce({
+      status: 'granted',
+    });
+
+    await expect(requestNotificationPermission()).resolves.toEqual({
+      status: 'granted',
+      canRequest: false,
+    });
+    await expect(requestNotificationPermission()).resolves.toEqual({
+      status: 'blocked',
+      canRequest: false,
+    });
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
   });
 
   it('throws when notification permission is denied', async () => {

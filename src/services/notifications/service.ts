@@ -4,6 +4,11 @@ import { NotificationPermissionDeniedError } from './errors';
 let notificationHandlerConfigured = false;
 const DEFAULT_CHANNEL_ID = 'kavi-default';
 
+export type NotificationPermissionReadiness =
+  | { status: 'granted'; canRequest: false }
+  | { status: 'requestable'; canRequest: true }
+  | { status: 'blocked'; canRequest: false };
+
 export interface NotificationRouteData extends Record<string, unknown> {
   notificationId?: string;
   screen?: 'Chat' | 'Scheduler';
@@ -27,9 +32,28 @@ function ensureNotificationHandlerConfigured(): void {
   notificationHandlerConfigured = true;
 }
 
-async function ensurePermissions(): Promise<void> {
-  const existing = await Notifications.getPermissionsAsync();
-  if (allowsNotifications(existing)) return;
+function getPermissionReadiness(
+  permission: Notifications.NotificationPermissionsStatus,
+): NotificationPermissionReadiness {
+  if (allowsNotifications(permission)) {
+    return { status: 'granted', canRequest: false };
+  }
+  if (
+    permission.status === Notifications.PermissionStatus.UNDETERMINED ||
+    permission.canAskAgain !== false
+  ) {
+    return { status: 'requestable', canRequest: true };
+  }
+  return { status: 'blocked', canRequest: false };
+}
+
+export async function getNotificationPermissionReadiness(): Promise<NotificationPermissionReadiness> {
+  return getPermissionReadiness(await Notifications.getPermissionsAsync());
+}
+
+export async function requestNotificationPermission(): Promise<NotificationPermissionReadiness> {
+  const existing = await getNotificationPermissionReadiness();
+  if (!existing.canRequest) return existing;
 
   const requested = await Notifications.requestPermissionsAsync({
     ios: {
@@ -39,7 +63,12 @@ async function ensurePermissions(): Promise<void> {
     },
   });
 
-  if (!allowsNotifications(requested)) {
+  return getPermissionReadiness(requested);
+}
+
+async function ensurePermissions(): Promise<void> {
+  const readiness = await requestNotificationPermission();
+  if (readiness.status !== 'granted') {
     throw new NotificationPermissionDeniedError();
   }
 }
