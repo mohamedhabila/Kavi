@@ -303,6 +303,19 @@ function isDispatchCallbackResult<TDeferred extends object>(
   );
 }
 
+function isTerminalAcknowledgedNotification(receipt: ToolEffectReceipt): boolean {
+  return (
+    receipt.contractIdentity.kind === 'code_owned' &&
+    receipt.toolName === 'notification_send' &&
+    receipt.transportState === 'returned' &&
+    receipt.effectKind === 'notification.send' &&
+    receipt.verificationState === 'acknowledged' &&
+    receipt.resource?.kind === 'notification' &&
+    receipt.operationHandle?.kind === 'notification_request' &&
+    receipt.resource.id === receipt.operationHandle.id
+  );
+}
+
 export function classifyEffectDispatchReceipt(
   effectClass: ExecutionEffectClass,
   receipt: ToolEffectReceipt,
@@ -333,6 +346,22 @@ export function classifyEffectDispatchReceipt(
         requiresReconciliation: false,
       };
     case 'accepted':
+      // The first-party notification executor returns only after the OS has
+      // accepted the exact local notification request and supplied its stable
+      // identifier. That acknowledgement is terminal for dispatch and replay,
+      // but it does not claim that the user saw the notification.
+      if (isTerminalAcknowledgedNotification(receipt)) {
+        return {
+          disposition: 'returned_unverified',
+          nextEffectStatus: 'returned',
+          requiresReconciliation: false,
+        };
+      }
+      return {
+        disposition: 'uncertain',
+        nextEffectStatus: 'ambiguous',
+        requiresReconciliation: true,
+      };
     case 'handed_off':
     case 'pending':
     case 'unknown':
