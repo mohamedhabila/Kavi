@@ -201,6 +201,8 @@ export const de: TranslationMap = mergeTranslations(en, {
       evidenceCount: '{count} Belege',
       status: {
         running: 'Läuft',
+        waitingForYou: 'Wartet auf dich',
+        needsAttention: 'Prüfung nötig',
         completed: 'Abgeschlossen',
         failed: 'Fehlgeschlagen',
         cancelled: 'Abgebrochen',

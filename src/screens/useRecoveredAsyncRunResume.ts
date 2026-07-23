@@ -17,6 +17,7 @@ import {
 } from '../services/agents/agentRunCancellation';
 import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import { ResumeAgentRun } from '../engine/graph/foregroundRun/contracts';
+import { selectActiveConversationExecutionState } from '../services/agents/activeConversationExecutionState';
 
 type AppendConversationLog = (
   conversationId: string,
@@ -169,16 +170,22 @@ export function useRecoveredAsyncRunResume({
         continue;
       }
 
-      const resumableRuns = (conversation.agentRuns ?? []).filter((run) => {
-        if (run.status !== 'running' || isAgentRunAwaitingBackgroundWorkers(run)) {
-          return false;
-        }
-        const pendingOperations = getAgentRunPendingAsyncOperations(run);
-        return (
-          pendingOperations.length > 0 &&
-          pendingOperations.every((operation) => operation.kind !== 'mobile-controller-handoff')
-        );
-      });
+      const executionState = selectActiveConversationExecutionState(
+        conversation,
+        { hasActiveRequest: false },
+        {},
+      );
+      const activeRun = executionState.activeRun;
+      const resumableRuns =
+        activeRun &&
+        executionState.kind === 'background' &&
+        executionState.backgroundEvidence === 'async_operation' &&
+        !isAgentRunAwaitingBackgroundWorkers(activeRun) &&
+        getAgentRunPendingAsyncOperations(activeRun).every(
+          (operation) => operation.kind !== 'mobile-controller-handoff',
+        )
+          ? [activeRun]
+          : [];
 
       for (const run of resumableRuns) {
         void queueRecoveredAsyncRunResume({

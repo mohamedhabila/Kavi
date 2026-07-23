@@ -3,6 +3,10 @@ import { SUPER_AGENT_PERSONA_ID } from '../../services/agents/personas';
 import { resolveConversationModel } from '../../services/llm/support/providerSupport';
 import type { Conversation } from '../../types/conversation';
 import type { LlmProviderConfig } from '../../types/provider';
+import {
+  selectActiveConversationExecutionState,
+  type ActiveConversationExecutionState,
+} from '../../services/agents/activeConversationExecutionState';
 
 type UseChatScreenConversationStateParams = {
   activeConversation?: Conversation;
@@ -10,6 +14,8 @@ type UseChatScreenConversationStateParams = {
   activeProviderId: string | null;
   defaultConversationMode: Conversation['mode'];
   hasForegroundRequest: boolean;
+  hasActiveRecoveryOperation: boolean;
+  hasLiveBackgroundWorker: boolean;
   providers: LlmProviderConfig[];
 };
 
@@ -18,6 +24,7 @@ type ChatScreenConversationState = {
   currentModel: string | null;
   effectiveMode: Conversation['mode'];
   effectivePersonaId: string;
+  executionState: ActiveConversationExecutionState;
   isAgenticMode: boolean;
   isConversationBusy: boolean;
   supportsVision: boolean;
@@ -44,10 +51,24 @@ export function useChatScreenConversationState(
   const effectiveMode =
     params.activeConversation?.mode ?? params.defaultConversationMode ?? 'agentic';
   const isAgenticMode = effectiveMode === 'agentic';
-  const activeConversationHasRunningRun = (params.activeConversation?.agentRuns ?? []).some(
-    (run) => run.status === 'running',
+  const executionState = useMemo(
+    () =>
+      selectActiveConversationExecutionState(
+        params.activeConversation,
+        { hasActiveRequest: params.hasForegroundRequest },
+        {
+          hasActiveRecoveryOperation: params.hasActiveRecoveryOperation,
+          hasLiveBackgroundWorker: params.hasLiveBackgroundWorker,
+        },
+      ),
+    [
+      params.activeConversation,
+      params.hasActiveRecoveryOperation,
+      params.hasForegroundRequest,
+      params.hasLiveBackgroundWorker,
+    ],
   );
-  const isConversationBusy = params.hasForegroundRequest || activeConversationHasRunningRun;
+  const isConversationBusy = executionState.isBusy;
   const effectivePersonaId = isAgenticMode
     ? SUPER_AGENT_PERSONA_ID
     : params.activeConversation?.personaId || 'default';
@@ -58,6 +79,7 @@ export function useChatScreenConversationState(
     currentModel,
     effectiveMode,
     effectivePersonaId,
+    executionState,
     isAgenticMode,
     isConversationBusy,
     supportsVision,

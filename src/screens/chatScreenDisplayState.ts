@@ -10,6 +10,7 @@ import { resolveDisplayedSubAgentSnapshot } from '../services/agents/lifecycle/s
 import { AgentRun } from '../types/agentRun';
 import { Message, ToolCall } from '../types/message';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
+import type { AgentRunExecutionPresentation } from '../services/agents/activeConversationExecutionState';
 import {
   filterVisibleAssistantMessagesForAgentRun,
   findAgentRunDisplayAnchorMessageId,
@@ -28,6 +29,7 @@ export type ResolvedDisplayMessageItem = DisplayMessageItem & {
   resolvedResponseSegments?: Array<DisplayResponseSegment & { isStreaming: boolean }>;
   isStreaming: boolean;
   agentRun?: AgentRun;
+  agentRunExecutionPresentation?: AgentRunExecutionPresentation;
 };
 
 type StableDisplayMessageCacheEntry = {
@@ -493,9 +495,11 @@ export function resolveDisplayMessages(params: {
   streamingMessageId: string | null;
   liveSubAgentSnapshotsById: ReadonlyMap<string, NonNullable<Message['subAgentEvent']>['snapshot']>;
   agentRunByDisplayItemId: ReadonlyMap<string, AgentRun>;
+  agentRunExecutionPresentationByDisplayItemId?: ReadonlyMap<string, AgentRunExecutionPresentation>;
 }): ResolvedDisplayMessageItem[] {
   const {
     agentRunByDisplayItemId,
+    agentRunExecutionPresentationByDisplayItemId,
     cache,
     displayMessages,
     liveSubAgentSnapshotsById,
@@ -514,6 +518,9 @@ export function resolveDisplayMessages(params: {
       const sourceSignatures = buildSourceSignatures(projectionSourceMessages);
       const sourceMessages = buildSourceMessages(messageById, item.sourceMessageIds);
       const agentRun = agentRunByDisplayItemId.get(item.id);
+      const agentRunExecutionPresentation = agentRunExecutionPresentationByDisplayItemId?.get(
+        item.id,
+      );
       const isStreaming =
         !!streamingMessageId && item.sourceMessageIds.includes(streamingMessageId);
       const draftSignature = isStreaming
@@ -526,7 +533,9 @@ export function resolveDisplayMessages(params: {
             )
             .join('|')
         : '';
-      const agentRunSignature = buildAgentRunSignature(agentRun);
+      const agentRunSignature = `${buildAgentRunSignature(agentRun)}:${
+        agentRunExecutionPresentation ?? ''
+      }`;
       const liveSubAgentSignature = buildLiveSubAgentSignature(item, liveSubAgentSnapshotsById);
       const cached = cache.resolvedDisplayMessages.get(item.id);
 
@@ -639,6 +648,7 @@ export function resolveDisplayMessages(params: {
         resolvedResponseSegments,
         isStreaming,
         agentRun,
+        agentRunExecutionPresentation,
       };
 
       nextCache.set(item.id, {

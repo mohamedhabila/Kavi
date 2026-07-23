@@ -200,6 +200,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
       evidenceCount: '証拠 {count}',
       status: {
         running: '実行中',
+        waitingForYou: '入力待ち',
+        needsAttention: '確認が必要',
         completed: '完了',
         failed: '失敗',
         cancelled: 'キャンセル',

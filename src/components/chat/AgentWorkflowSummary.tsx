@@ -4,30 +4,39 @@ import { ChevronDown, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme } from '../../theme/useAppTheme';
 import type { AgentRun } from '../../types/agentRun';
-import {
-  buildAgentWorkflowPresentation,
-  formatGoalStatusLabel,
-} from './agentWorkflowPresentation';
+import { buildAgentWorkflowPresentation, formatGoalStatusLabel } from './agentWorkflowPresentation';
 import { createAgentWorkflowSummaryStyles } from './AgentWorkflowSummary.styles';
+import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
 
 interface AgentWorkflowSummaryProps {
   run: AgentRun;
+  executionPresentation?: AgentRunExecutionPresentation;
 }
 
-export const AgentWorkflowSummary: React.FC<AgentWorkflowSummaryProps> = React.memo(({ run }) => {
+const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
+  run,
+  executionPresentation,
+}) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createAgentWorkflowSummaryStyles(colors), [colors]);
   const [goalsExpanded, setGoalsExpanded] = useState(false);
   const [traceExpanded, setTraceExpanded] = useState(false);
-  const presentation = useMemo(() => buildAgentWorkflowPresentation(run, t), [run, t]);
+  const presentation = useMemo(
+    () => buildAgentWorkflowPresentation(run, t, executionPresentation),
+    [executionPresentation, run, t],
+  );
   const hasGoals = presentation.goals.length > 0;
-  const showBootstrapGoals = !hasGoals && run.status === 'running';
+  const isPresentedRunning =
+    run.status === 'running' &&
+    executionPresentation !== 'needs_attention' &&
+    executionPresentation !== 'waiting_for_user';
+  const showBootstrapGoals = !hasGoals && isPresentedRunning;
 
   return (
     <View style={styles.container} testID="agent-workflow-summary">
       <View style={styles.currentRow} testID="agent-workflow-current">
-        <View style={[styles.statusDot, run.status === 'running' ? null : styles.statusDotSettled]} />
+        <View style={[styles.statusDot, isPresentedRunning ? null : styles.statusDotSettled]} />
         <View style={styles.currentCopy}>
           <Text style={styles.eyebrow}>{t('chat.agentWorkflow.currentWork')}</Text>
           <Text style={styles.currentTitle} numberOfLines={2}>
@@ -147,6 +156,8 @@ export const AgentWorkflowSummary: React.FC<AgentWorkflowSummaryProps> = React.m
       ) : null}
     </View>
   );
-});
+};
+
+export const AgentWorkflowSummary = React.memo(AgentWorkflowSummaryComponent);
 
 AgentWorkflowSummary.displayName = 'AgentWorkflowSummary';

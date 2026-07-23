@@ -199,6 +199,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       evidenceCount: '{count} 条证据',
       status: {
         running: '运行中',
+        waitingForYou: '等待你的回复',
+        needsAttention: '需要处理',
         completed: '已完成',
         failed: '失败',
         cancelled: '已取消',

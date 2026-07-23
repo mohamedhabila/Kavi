@@ -201,6 +201,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       evidenceCount: '{count} evidências',
       status: {
         running: 'Em execução',
+        waitingForYou: 'Aguardando você',
+        needsAttention: 'Requer atenção',
         completed: 'Concluído',
         failed: 'Falhou',
         cancelled: 'Cancelado',

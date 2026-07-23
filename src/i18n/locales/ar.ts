@@ -199,6 +199,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
       evidenceCount: '{count} أدلة',
       status: {
         running: 'قيد التشغيل',
+        waitingForYou: 'بانتظارك',
+        needsAttention: 'تحتاج إلى مراجعة',
         completed: 'مكتمل',
         failed: 'فشل',
         cancelled: 'ملغى',

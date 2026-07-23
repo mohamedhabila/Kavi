@@ -78,8 +78,19 @@ describe('ChatScreen run cancellation', () => {
             userMessageId: 'msg1',
             currentPhase: 'pilot',
             latestSummary: 'Pilot review still active.',
+            controlGraph: createAgentRunAsyncWorkControlGraph({
+              awaitingBackgroundWorkers: true,
+            }),
           }),
         ],
+      },
+    ];
+    mockChatScreenState.activeSubAgents = [
+      {
+        sessionId: 'pilot-worker-1',
+        parentConversationId: 'conv1',
+        agentRunId: 'run-pilot-1',
+        status: 'running',
       },
     ];
 
@@ -105,6 +116,9 @@ describe('ChatScreen run cancellation', () => {
             currentPhase: 'work',
             phases: [],
             checkpoints: [],
+            controlGraph: createAgentRunAsyncWorkControlGraph({
+              awaitingBackgroundWorkers: true,
+            }),
             summary: {
               assistantTurns: 1,
               startedTools: 1,
@@ -200,7 +214,7 @@ describe('ChatScreen run cancellation', () => {
     expect(mockSetLoading).toHaveBeenCalledWith(false);
   });
 
-  it('cancels a running pilot-stage workflow even when activeAgentRunId is missing', async () => {
+  it('does not present or cancel a historical running record without active identity', () => {
     const cancelAgentRunOperationsSpy = jest.spyOn(
       require('../../../src/services/agents/agentRunCancellation'),
       'cancelAgentRunOperations',
@@ -223,27 +237,13 @@ describe('ChatScreen run cancellation', () => {
         },
       ];
 
-      const { getByTestId } = render(<ChatScreen />);
-      const stopIcon = getByTestId('icon-Square');
-      fireEvent.press(stopIcon.parent || stopIcon);
+      const screen = render(<ChatScreen />);
 
-      await waitFor(() => {
-        expect(cancelAgentRunOperationsSpy).toHaveBeenCalledWith(
-          'conv1',
-          'run-pilot-stop-1',
-          'Cancelled because the supervising turn was stopped by the user.',
-        );
-        expect(mockCompleteAgentRun).toHaveBeenCalledWith(
-          'conv1',
-          expect.objectContaining({
-            status: 'cancelled',
-            latestSummary: 'The current run was cancelled.',
-            checkpointTitle: 'Turn cancelled',
-            checkpointDetail: 'The current run was cancelled.',
-          }),
-          'run-pilot-stop-1',
-        );
-      });
+      expect(screen.UNSAFE_getByType(memoizedChatInputType).props.isLoading).toBe(false);
+      expect(screen.queryByTestId('icon-Square')).toBeNull();
+      expect(screen.queryByText('Running')).toBeNull();
+      expect(cancelAgentRunOperationsSpy).not.toHaveBeenCalled();
+      expect(mockCompleteAgentRun).not.toHaveBeenCalled();
     } finally {
       cancelAgentRunOperationsSpy.mockRestore();
     }
@@ -266,6 +266,9 @@ describe('ChatScreen run cancellation', () => {
             currentPhase: 'work',
             phases: [],
             checkpoints: [],
+            controlGraph: createAgentRunAsyncWorkControlGraph({
+              awaitingBackgroundWorkers: true,
+            }),
             summary: {
               assistantTurns: 1,
               startedTools: 1,

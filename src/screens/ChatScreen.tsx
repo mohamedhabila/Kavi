@@ -57,6 +57,8 @@ import { useStreamingDrafts } from './useStreamingDrafts';
 import { useSubAgentRunBridge } from './useSubAgentRunBridge';
 import { useRecoveredAsyncRunResume } from './useRecoveredAsyncRunResume';
 import { useTerminalBackgroundReviewQueue } from './useTerminalBackgroundReviewQueue';
+import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
+import { getRunningLiveSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 
 export const ChatScreen: React.FC = () => {
   const navigation = useNavigation<DrawerNavigationProp<any>>();
@@ -163,6 +165,23 @@ export const ChatScreen: React.FC = () => {
       }) => Promise<void>)
     | null
   >(null);
+  const activeRunIdentityKey =
+    activeConversationId && activeConversation?.activeAgentRunId
+      ? createAgentRunIdentityKey({
+          conversationId: activeConversationId,
+          runId: activeConversation.activeAgentRunId,
+        })
+      : null;
+  const hasActiveRecoveryOperation = activeRunIdentityKey
+    ? pendingAgentRunAsyncResumesRef.current.has(activeRunIdentityKey) ||
+      pendingAgentRunFinalizationsRef.current.has(activeRunIdentityKey) ||
+      pendingAgentRunTerminalReviewsRef.current.has(activeRunIdentityKey)
+    : false;
+  const hasLiveBackgroundWorker =
+    activeConversation && activeConversation.activeAgentRunId
+      ? getRunningLiveSubAgentsForRun(activeConversation, activeConversation.activeAgentRunId)
+          .length > 0
+      : false;
   const {
     clearInteractionReleaseTimer,
     clearPendingScrollFrames,
@@ -182,6 +201,7 @@ export const ChatScreen: React.FC = () => {
     currentModel,
     effectiveMode,
     effectivePersonaId,
+    executionState,
     isAgenticMode,
     isConversationBusy,
     supportsVision,
@@ -190,9 +210,11 @@ export const ChatScreen: React.FC = () => {
     activeModel,
     activeProviderId,
     defaultConversationMode,
+    hasActiveRecoveryOperation,
     hasForegroundRequest: activeConversationId
       ? activeForegroundConversationIds.has(activeConversationId)
       : false,
+    hasLiveBackgroundWorker,
     providers,
   });
 
@@ -463,6 +485,7 @@ export const ChatScreen: React.FC = () => {
     liveSubAgentSnapshotsById,
     personaCustomList,
     personaOverrides,
+    executionState,
     streamingDrafts: streamingDraftState.drafts,
     streamingMessageId,
     visibleSourceMessageLimit,

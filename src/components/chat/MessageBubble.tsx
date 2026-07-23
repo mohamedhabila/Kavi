@@ -15,10 +15,12 @@ import { MessageContentRenderer } from './MessageContentRenderer';
 import { DisplayResponseSegment } from './messageGrouping';
 import { MessageActionButton } from './MessageActionButton';
 import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
+import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
 
 interface MessageBubbleProps {
   message: Message;
   agentRun?: AgentRun;
+  agentRunExecutionPresentation?: AgentRunExecutionPresentation;
   isStreaming?: boolean;
   responseSegments?: Array<DisplayResponseSegment & { isStreaming?: boolean }>;
   onEdit?: (id: string, content: string) => void;
@@ -43,6 +45,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
   ({
     message,
     agentRun,
+    agentRunExecutionPresentation,
     isStreaming,
     responseSegments,
     onEdit,
@@ -82,6 +85,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
         <AssistantBubble
           message={message}
           agentRun={agentRun}
+          agentRunExecutionPresentation={agentRunExecutionPresentation}
           isStreaming={isStreaming}
           responseSegments={responseSegments}
           onRetry={onRetry}

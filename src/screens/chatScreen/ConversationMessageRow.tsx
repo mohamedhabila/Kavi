@@ -73,6 +73,7 @@ export const ConversationMessageRow = memo(function ConversationMessageRow(
       <MessageBubble
         message={props.item.resolvedMessage}
         agentRun={props.item.agentRun}
+        agentRunExecutionPresentation={props.item.agentRunExecutionPresentation}
         isStreaming={props.item.isStreaming}
         responseSegments={props.item.resolvedResponseSegments}
         onEdit={props.onEdit}

@@ -15,6 +15,10 @@ import { getConversationWorkspaceFallbackConversationIds } from '../../services/
 import type { Conversation } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import {
+  selectAgentRunExecutionPresentation,
+  type ActiveConversationExecutionState,
+} from '../../services/agents/activeConversationExecutionState';
+import {
   buildAgentRunDisplayItemMap,
   getStableDisplayMessages,
   getVisibleSourceMessageWindow,
@@ -30,6 +34,7 @@ type UseChatScreenPresentationStateParams = {
   activeConversation?: Conversation;
   activeConversationId: string | null;
   displayStateCacheRef: MutableRefObject<ChatDisplayStateCache>;
+  executionState: ActiveConversationExecutionState;
   liveSubAgentSnapshotsById: ReadonlyMap<string, SubAgentSnapshot>;
   personaCustomList: ReturnType<typeof usePersonaConfigStore.getState>['customPersonas'];
   personaOverrides: ReturnType<typeof usePersonaConfigStore.getState>['overrides'];
@@ -99,6 +104,16 @@ export function useChatScreenPresentationState(
       ),
     [params.activeConversation?.agentRuns, messages, visibleDisplayMessages],
   );
+  const agentRunExecutionPresentationByDisplayItemId = useMemo(
+    () =>
+      new Map(
+        Array.from(agentRunByDisplayItemId, ([displayItemId, run]) => [
+          displayItemId,
+          selectAgentRunExecutionPresentation(run, params.executionState),
+        ]),
+      ),
+    [agentRunByDisplayItemId, params.executionState],
+  );
   const resolvedDisplayMessages = useMemo(
     () =>
       resolveDisplayMessages({
@@ -109,9 +124,11 @@ export function useChatScreenPresentationState(
         streamingMessageId: params.streamingMessageId,
         liveSubAgentSnapshotsById: params.liveSubAgentSnapshotsById,
         agentRunByDisplayItemId,
+        agentRunExecutionPresentationByDisplayItemId,
       }),
     [
       agentRunByDisplayItemId,
+      agentRunExecutionPresentationByDisplayItemId,
       messageById,
       params.displayStateCacheRef,
       params.liveSubAgentSnapshotsById,

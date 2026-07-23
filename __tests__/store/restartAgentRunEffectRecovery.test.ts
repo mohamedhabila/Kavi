@@ -120,6 +120,58 @@ const executionRunOwners = new Map([
 ]);
 
 describe('agent-run restart effect reconciliation', () => {
+  it('terminalizes an orphan running record without active conversation identity', () => {
+    const chat = conversation();
+    chat.activeAgentRunId = undefined;
+    chat.messages[1] = { ...chat.messages[1], toolCalls: undefined };
+
+    const recovered = recoverInterruptedAgentRunsInConversation(chat, [], { timestamp: 200 });
+
+    expect(recovered.activeAgentRunId).toBeUndefined();
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'failed',
+      latestSummary: expect.stringContaining('historical run was interrupted'),
+      completedAt: 200,
+    });
+    expect(recovered.agentRuns?.[0]?.checkpoints.at(-1)).toMatchObject({
+      title: 'Recovered orphaned run',
+    });
+  });
+
+  it('repairs a single orphan identity only when validated async work is resumable', () => {
+    const chat = conversation();
+    chat.activeAgentRunId = undefined;
+    chat.messages[1] = { ...chat.messages[1], toolCalls: undefined };
+    chat.agentRuns![0] = {
+      ...chat.agentRuns![0],
+      controlGraph: updateAgentRunControlGraphAsyncWorkState(chat.agentRuns![0].controlGraph, {
+        awaitingBackgroundWorkers: false,
+        pendingOperations: [
+          {
+            key: 'expo-workflow:workflow-101',
+            kind: 'expo-workflow',
+            resourceId: 'workflow-101',
+            displayName: 'Expo workflow 101',
+            status: 'running',
+            blocksFinalization: true,
+            lastUpdatedByTool: 'expo_eas_build',
+            updatedAt: 10,
+            monitorToolNames: ['expo_eas_workflow_status'],
+          },
+        ],
+        updatedAt: 10,
+      }),
+    };
+
+    const recovered = recoverInterruptedAgentRunsInConversation(chat, [], { timestamp: 200 });
+
+    expect(recovered.activeAgentRunId).toBe('run-1');
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'running',
+      latestSummary: expect.stringContaining('pending asynchronous operation'),
+    });
+  });
+
   it('counts a durably verified effect as completed while leaving the interrupted run failed', () => {
     const resolveToolEffect = jest.fn(() => ({ kind: 'verified' as const, observedAt: 150 }));
     const recovered = recoverInterruptedAgentRunsInConversation(conversation(), [], {

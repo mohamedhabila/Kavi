@@ -47,25 +47,13 @@ export function cancelRunningSubAgentsForRun(
 export function getRunningConversationRunsForCancellation(
   conversation: Pick<Conversation, 'activeAgentRunId' | 'agentRuns'>,
 ): AgentRun[] {
-  const runningRuns = (conversation.agentRuns ?? []).filter((run) => run.status === 'running');
-  if (runningRuns.length <= 1) {
-    return runningRuns;
-  }
+  const activeRunId = conversation.activeAgentRunId?.trim();
+  if (!activeRunId) return [];
 
-  const activeRun = conversation.activeAgentRunId
-    ? runningRuns.find((run) => run.id === conversation.activeAgentRunId)
-    : undefined;
-  const remainingRuns = runningRuns
-    .filter((run) => run.id !== activeRun?.id)
-    .sort((left, right) => {
-      if (right.updatedAt !== left.updatedAt) {
-        return right.updatedAt - left.updatedAt;
-      }
-
-      return right.createdAt - left.createdAt;
-    });
-
-  return activeRun ? [activeRun, ...remainingRuns] : remainingRuns;
+  const activeRun = conversation.agentRuns?.find(
+    (run) => run.id === activeRunId && run.status === 'running',
+  );
+  return activeRun ? [activeRun] : [];
 }
 
 export function getReviewableSubAgentsForRun(

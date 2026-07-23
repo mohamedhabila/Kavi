@@ -1,5 +1,6 @@
 import type { AgentGoal, AgentRun, AgentRunStatus } from '../../types/agentRun';
 import { buildAgentRunTrace, type AgentRunTraceIteration } from '../../services/agents/runTrace';
+import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -13,7 +14,18 @@ export interface AgentWorkflowPresentation {
   traceEventCount: number;
 }
 
-export function formatRunStatusLabel(status: AgentRunStatus, t: TranslateFn): string {
+export function formatRunStatusLabel(
+  status: AgentRunStatus,
+  t: TranslateFn,
+  executionPresentation?: AgentRunExecutionPresentation,
+): string {
+  if (status === 'running' && executionPresentation === 'waiting_for_user') {
+    return t('chat.agentGoals.status.waitingForYou');
+  }
+  if (status === 'running' && executionPresentation === 'needs_attention') {
+    return t('chat.agentGoals.status.needsAttention');
+  }
+
   switch (status) {
     case 'completed':
       return t('chat.agentGoals.status.completed');
@@ -51,6 +63,7 @@ function resolvePrimaryGoal(goals: AgentGoal[]): AgentGoal | undefined {
 export function buildAgentWorkflowPresentation(
   run: AgentRun,
   t: TranslateFn,
+  executionPresentation?: AgentRunExecutionPresentation,
 ): AgentWorkflowPresentation {
   const goals = run.controlGraph?.goals ?? [];
   const activePhase =
@@ -63,7 +76,7 @@ export function buildAgentWorkflowPresentation(
     activeGoal,
     detail: activePhase?.detail ?? run.latestSummary,
     goals,
-    statusLabel: formatRunStatusLabel(run.status, t),
+    statusLabel: formatRunStatusLabel(run.status, t, executionPresentation),
     title: activeGoal?.title ?? activePhase?.title ?? run.goal,
     trace,
     traceEventCount: trace.reduce((count, entry) => count + entry.events.length, 0),

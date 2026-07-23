@@ -68,6 +68,24 @@ export function recoverInterruptedAgentRunsInConversation(
   const timestamp = params?.timestamp ?? Date.now();
   let didUpdateConversation = false;
   let nextMessages = conversation.messages;
+  const runningRuns = (conversation.agentRuns ?? []).filter((run) => run.status === 'running');
+  const persistedActiveRunId = runningRuns.some((run) => run.id === conversation.activeAgentRunId)
+    ? conversation.activeAgentRunId
+    : undefined;
+  const recoverableOrphanRunIds = persistedActiveRunId
+    ? []
+    : runningRuns
+        .filter((run) => {
+          const hasPendingAsyncOperation = getAgentRunPendingAsyncOperations(run).length > 0;
+          const hasLiveWorker = getSubAgentsForAgentRun(conversation, run.id, activeSubAgents).some(
+            (worker) => worker.status === 'running',
+          );
+          return hasPendingAsyncOperation || hasLiveWorker;
+        })
+        .map((run) => run.id);
+  const resolvedActiveRunId =
+    persistedActiveRunId ??
+    (recoverableOrphanRunIds.length === 1 ? recoverableOrphanRunIds[0] : undefined);
 
   const nextRuns = (conversation.agentRuns ?? []).map((run) => {
     if (run.status !== 'running') {
@@ -109,11 +127,21 @@ export function recoverInterruptedAgentRunsInConversation(
       nextMessages = interruptedToolUpdate.messages;
     }
 
-    const recoveredState = buildRecoveredAgentRunStateAfterAppRestart({
-      messages: nextMessages,
-      run,
-      subAgents: recoveredWorkers,
-    });
+    const recoveredState =
+      run.id !== resolvedActiveRunId
+        ? {
+            status: 'failed' as const,
+            latestSummary:
+              'A historical run was interrupted because it no longer had the active conversation identity after restart.',
+            checkpointTitle: 'Recovered orphaned run',
+            checkpointDetail:
+              'The run was finalized instead of being resumed without an active conversation identity.',
+          }
+        : buildRecoveredAgentRunStateAfterAppRestart({
+            messages: nextMessages,
+            run,
+            subAgents: recoveredWorkers,
+          });
 
     if (interruptedToolUpdate.reconciliationPendingCount > 0) {
       const alreadyPending =
@@ -330,9 +358,9 @@ export function recoverInterruptedAgentRunsInConversation(
   });
 
   const nextActiveAgentRunId =
-    conversation.activeAgentRunId &&
-    nextRuns.some((run) => run.id === conversation.activeAgentRunId && run.status === 'running')
-      ? conversation.activeAgentRunId
+    resolvedActiveRunId &&
+    nextRuns.some((run) => run.id === resolvedActiveRunId && run.status === 'running')
+      ? resolvedActiveRunId
       : undefined;
 
   if (!didUpdateConversation && nextActiveAgentRunId === conversation.activeAgentRunId) {

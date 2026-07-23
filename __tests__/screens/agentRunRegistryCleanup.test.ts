@@ -125,4 +125,70 @@ describe('agent run registry cleanup', () => {
     expect(pending.size).toBe(0);
     expect(resumeAgentRun).not.toHaveBeenCalled();
   });
+
+  it('does not resume a historical async run without the active conversation identity', async () => {
+    const operation = {
+      key: 'expo-workflow:workflow-101',
+      kind: 'expo-workflow' as const,
+      resourceId: 'workflow-101',
+      displayName: 'Expo workflow 101',
+      status: 'running' as const,
+      blocksFinalization: true,
+      lastUpdatedByTool: 'expo_eas_build',
+      updatedAt: 40,
+      monitorToolNames: ['expo_eas_workflow_status'],
+    };
+    const conversation = makeTestConversation({
+      id: 'historical-conversation',
+      activeAgentRunId: undefined,
+      agentRuns: [
+        makeTestAgentRun({
+          id: 'historical-run',
+          status: 'running',
+          updatedAt: 40,
+          controlGraph: {
+            version: 1,
+            status: 'waiting_async',
+            iteration: 1,
+            expectedToolCalls: [],
+            observedToolResults: [],
+            pendingAsyncCount: 1,
+            lastModelToolNames: [],
+            turnDirectives: {
+              forceFinalText: false,
+              requireDelegationTool: false,
+              requireWorkflowTool: false,
+              incompleteFinalTextRecoveryCount: 0,
+            },
+            audit: [],
+            updatedAt: 40,
+            asyncWork: {
+              awaitingBackgroundWorkers: false,
+              pendingOperations: [operation],
+              updatedAt: 40,
+            },
+          },
+        }),
+      ],
+    });
+    useChatStore.setState({ conversations: [conversation] });
+    const resumeAgentRun = jest.fn().mockResolvedValue(undefined);
+
+    renderHook(() =>
+      useRecoveredAsyncRunResume({
+        activeForegroundConversationIds: new Set(),
+        appendConversationLog: jest.fn(),
+        conversations: [conversation],
+        pendingAgentRunAsyncResumesRef: { current: new Map() },
+        resumeAgentRunRef: { current: resumeAgentRun },
+        setAgentRunPhase: jest.fn(),
+        updateAgentRunSummary: jest.fn(),
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(resumeAgentRun).not.toHaveBeenCalled();
+  });
 });

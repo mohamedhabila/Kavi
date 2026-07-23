@@ -14,6 +14,8 @@ jest.mock('../../src/i18n/useTranslation', () => ({
         'chat.agentGoals.bootstrapPending': 'Goals pending bootstrap',
         'chat.agentGoals.evidenceCount': '{count} evidence',
         'chat.agentGoals.status.running': 'Running',
+        'chat.agentGoals.status.waitingForYou': 'Waiting for you',
+        'chat.agentGoals.status.needsAttention': 'Needs attention',
         'chat.agentGoals.status.completed': 'Completed',
         'chat.agentGoals.status.failed': 'Failed',
         'chat.agentGoals.status.cancelled': 'Cancelled',
@@ -219,5 +221,21 @@ describe('AgentWorkflowSummary', () => {
     expect(screen.getAllByText('Goals pending bootstrap')).toHaveLength(1);
     expect(screen.queryByTestId('agent-goals-toggle')).toBeNull();
     expect(screen.queryByTestId('agent-goals-details')).toBeNull();
+  });
+
+  it.each([
+    ['waiting_for_user', 'Waiting for you'],
+    ['needs_attention', 'Needs attention'],
+  ] as const)('does not present %s workflow state as Running', (executionPresentation, label) => {
+    const screen = render(
+      <AgentWorkflowSummary
+        run={makeRun({ controlGraph: makeControlGraph({ goals: [] }) })}
+        executionPresentation={executionPresentation}
+      />,
+    );
+
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.queryByText('Running')).toBeNull();
+    expect(screen.queryByText('Goals pending bootstrap')).toBeNull();
   });
 });

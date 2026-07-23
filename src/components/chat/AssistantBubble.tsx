@@ -30,10 +30,12 @@ import { AssistantBubbleActions } from './AssistantBubbleActions';
 import { AssistantMemoryFeedback } from './AssistantMemoryFeedback';
 import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
 import { isMemoryRetrievalEventId } from '../../utils/assistantMessageMetadata';
+import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
 
 interface AssistantBubbleProps {
   message: Message;
   agentRun?: AgentRun;
+  agentRunExecutionPresentation?: AgentRunExecutionPresentation;
   isStreaming?: boolean;
   responseSegments?: Array<DisplayResponseSegment & { isStreaming?: boolean }>;
   onRetry?: (messageId: string) => void;
@@ -57,6 +59,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
   ({
     message,
     agentRun,
+    agentRunExecutionPresentation,
     isStreaming,
     responseSegments,
     onRetry,
@@ -92,7 +95,12 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
       return t('chat.workingOnIt');
     }, [bubbleModel.activeToolCall, isStreaming, t]);
     const reviewStatusText = useMemo(() => {
-      if (isStreaming || !agentRun || agentRun.status !== 'running') {
+      if (
+        isStreaming ||
+        !agentRun ||
+        agentRun.status !== 'running' ||
+        (agentRunExecutionPresentation ?? 'running') !== 'running'
+      ) {
         return null;
       }
 
@@ -106,7 +114,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
       }
 
       return null;
-    }, [agentRun, isStreaming, t]);
+    }, [agentRun, agentRunExecutionPresentation, isStreaming, t]);
     const { bubbleAnimationStyle, effectDecorations } = useAssistantBubbleEffects({
       colors,
       effectId: message.effectId,
@@ -253,7 +261,12 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
 
     return (
       <View style={[styles.wrapper, styles.assistantWrapper]}>
-        {agentRun ? <AgentWorkflowSummary run={agentRun} /> : null}
+        {agentRun ? (
+          <AgentWorkflowSummary
+            run={agentRun}
+            executionPresentation={agentRunExecutionPresentation}
+          />
+        ) : null}
         <Animated.View style={[styles.bubble, styles.assistantBubble, bubbleAnimationStyle]}>
           {effectDecorations}
           <View style={styles.assistantChrome} testID="assistant-bubble-chrome">

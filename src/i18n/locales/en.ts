@@ -203,6 +203,8 @@ export const en: TranslationMap = {
       evidenceCount: '{count} evidence',
       status: {
         running: 'Running',
+        waitingForYou: 'Waiting for you',
+        needsAttention: 'Needs attention',
         completed: 'Completed',
         failed: 'Failed',
         cancelled: 'Cancelled',
