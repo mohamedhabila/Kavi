@@ -1,6 +1,7 @@
 import { decodeToolEffectReceipt } from '../../utils/toolEffectReceipt';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import { digestToolContractIdentity } from '../../engine/toolExecution/toolContractIdentity';
+import { getCodeOwnedToolEffectContract } from '../../engine/toolExecution/toolEffectReceiptContracts';
 import {
   planEffectDispatch,
   type AtomicEffectDispatchClaimCandidate,
@@ -316,6 +317,15 @@ function isTerminalAcknowledgedNotification(receipt: ToolEffectReceipt): boolean
   );
 }
 
+function isReturnedCodeOwnedOperationalEffect(receipt: ToolEffectReceipt): boolean {
+  return (
+    receipt.contractIdentity.kind === 'code_owned' &&
+    receipt.transportState === 'returned' &&
+    getCodeOwnedToolEffectContract(receipt.toolName)?.receiptSettlementMode ===
+      'returned_unverified'
+  );
+}
+
 export function classifyEffectDispatchReceipt(
   effectClass: ExecutionEffectClass,
   receipt: ToolEffectReceipt,
@@ -365,6 +375,16 @@ export function classifyEffectDispatchReceipt(
     case 'handed_off':
     case 'pending':
     case 'unknown':
+      // An operational contract deliberately separates "the code-owned
+      // operation returned" from user-level completion. Settle that durable
+      // observation without making it verified goal evidence or retrying it.
+      if (isReturnedCodeOwnedOperationalEffect(receipt)) {
+        return {
+          disposition: 'returned_unverified',
+          nextEffectStatus: 'returned',
+          requiresReconciliation: false,
+        };
+      }
       if (
         receipt.contractIdentity.kind === 'runtime_external' &&
         ((effectClass === 'unknown' && receipt.contractIdentity.effectClass === 'unknown') ||

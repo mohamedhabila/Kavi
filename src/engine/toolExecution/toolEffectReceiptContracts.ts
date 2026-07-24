@@ -14,6 +14,7 @@ export interface CodeOwnedToolEffectContract {
   readonly effectMode: 'none' | 'effectful';
   readonly effectKind: ToolEffectKind;
   readonly completionMode?: 'operational';
+  readonly receiptSettlementMode?: 'returned_unverified';
   readonly tracksExecution?: true;
   readonly result?: ToolEffectResultContract;
   readonly completion?: {
@@ -153,6 +154,13 @@ function effectful(
 
 function operational(effectKind: ToolEffectKind): CodeOwnedToolEffectContract {
   return Object.freeze({ effectMode: 'effectful', effectKind, completionMode: 'operational' });
+}
+
+function returnedOperational(effectKind: ToolEffectKind): CodeOwnedToolEffectContract {
+  return Object.freeze({
+    ...operational(effectKind),
+    receiptSettlementMode: 'returned_unverified',
+  });
 }
 
 function trackedOperational(effectKind: ToolEffectKind): CodeOwnedToolEffectContract {
@@ -334,7 +342,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     // Operational mutations are explicit code-owned effects, but their return
     // values never prove user-level completion. A later graph terminal event
     // or independent observation must provide completion evidence.
-    sessions_spawn: operational('workflow.start'),
+    sessions_spawn: returnedOperational('workflow.start'),
     sessions_send: operational('workflow.mutate'),
     sessions_cancel: operational('workflow.mutate'),
     mobile_ui_action: trackedOperational('unknown'),
