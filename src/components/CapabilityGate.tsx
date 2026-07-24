@@ -108,6 +108,7 @@ export function CapabilityGate({
       </View>
       {actionLabel && onAction ? (
         <TouchableOpacity
+          accessibilityLabel={actionLabel}
           accessibilityRole="button"
           accessibilityState={{ disabled: actionDisabled }}
           disabled={actionDisabled}
@@ -184,7 +185,7 @@ const createStyles = (colors: AppPalette) =>
       borderRadius: 10,
       borderWidth: 1,
       justifyContent: 'center',
-      minHeight: 44,
+      minHeight: 48,
       paddingHorizontal: 14,
       paddingVertical: 10,
     },

@@ -32,18 +32,27 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const title = this.props.fallbackTitle || i18n.t('errorBoundary.title');
+      const message = this.props.fallbackMessage || i18n.t('errorBoundary.message');
       return (
         <View style={styles.container}>
           <ScrollView contentContainerStyle={styles.content}>
-            <Text style={styles.icon}>⚠️</Text>
-            <Text style={styles.title}>
-              {this.props.fallbackTitle || i18n.t('errorBoundary.title')}
+            <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.icon}>
+              ⚠️
             </Text>
-            <Text style={styles.message}>
-              {this.props.fallbackMessage || i18n.t('errorBoundary.message')}
+            <Text accessibilityRole="header" style={styles.title}>
+              {title}
             </Text>
-            {this.state.error ? <Text style={styles.error}>{this.state.error.message}</Text> : null}
-            <TouchableOpacity style={styles.retryBtn} onPress={this.handleRetry}>
+            <Text accessibilityLiveRegion="assertive" style={styles.message}>
+              {message}
+            </Text>
+            <TouchableOpacity
+              accessibilityLabel={i18n.t('common.retry')}
+              accessibilityRole="button"
+              style={styles.retryBtn}
+              onPress={this.handleRetry}
+              testID="error-boundary-retry"
+            >
               <Text style={styles.retryText}>{i18n.t('common.retry')}</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -60,7 +69,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#111',
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
@@ -83,14 +92,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  error: {
-    fontSize: 12,
-    color: '#f66',
-    marginBottom: 16,
-    textAlign: 'center',
-    fontFamily: 'monospace',
-  },
   retryBtn: {
+    minHeight: 48,
+    justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 10,
     backgroundColor: '#333',

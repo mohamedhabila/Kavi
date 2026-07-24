@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 
@@ -45,12 +45,16 @@ describe('ErrorBoundary', () => {
     }
 
     try {
-      const { getByText, queryByText } = render(<Wrapper />);
+      const { getByTestId, getByText, queryByText } = render(<Wrapper />);
 
       expect(getByText('Custom title')).toBeTruthy();
       expect(getByText('Custom message')).toBeTruthy();
-      expect(getByText('boom')).toBeTruthy();
+      expect(queryByText('boom')).toBeNull();
       expect(warnSpy).toHaveBeenCalledWith('[ErrorBoundary]', 'boom', expect.any(String));
+      expect(getByTestId('error-boundary-retry').props.accessibilityRole).toBe('button');
+      expect(StyleSheet.flatten(getByTestId('error-boundary-retry').props.style).minHeight).toBe(
+        48,
+      );
 
       fireEvent.press(getByText('Retry'));
 

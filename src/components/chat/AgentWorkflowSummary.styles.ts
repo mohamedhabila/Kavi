@@ -69,7 +69,7 @@ export const createAgentWorkflowSummaryStyles = (colors: AppPalette) =>
       borderTopColor: colors.subtleBorder,
     },
     sectionToggle: {
-      minHeight: 44,
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',

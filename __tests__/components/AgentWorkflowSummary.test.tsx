@@ -149,7 +149,7 @@ const makeRun = (overrides: Partial<AgentRun> = {}): AgentRun => ({
 });
 
 const expectMobileToggle = (node: { props: { style: unknown } }) => {
-  expect(StyleSheet.flatten(node.props.style)).toEqual(expect.objectContaining({ minHeight: 44 }));
+  expect(StyleSheet.flatten(node.props.style)).toEqual(expect.objectContaining({ minHeight: 48 }));
 };
 
 describe('AgentWorkflowSummary', () => {
@@ -165,6 +165,8 @@ describe('AgentWorkflowSummary', () => {
     expect(screen.queryByTestId('agent-run-trace-details')).toBeNull();
     expectMobileToggle(screen.getByTestId('agent-goals-toggle'));
     expectMobileToggle(screen.getByTestId('agent-run-trace-toggle'));
+    expect(screen.getByTestId('agent-goals-toggle').props.accessibilityLabel).toBe('Goals (2)');
+    expect(screen.getByTestId('agent-run-trace-toggle').props.accessibilityLabel).toBe('Run trace');
 
     fireEvent.press(screen.getByTestId('agent-goals-toggle'));
     expect(screen.getByTestId('agent-goals-item-goal-audit')).toBeTruthy();

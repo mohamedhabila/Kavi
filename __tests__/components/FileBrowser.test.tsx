@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { FileBrowser, type FileEntry } from '../../src/components/files/FileBrowser';
 
 jest.mock('../../src/theme/useAppTheme', () => ({
@@ -29,11 +30,20 @@ jest.mock('../../src/theme/useAppTheme', () => ({
 
 jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
-    t: (key: string) =>
-      ({
-        'common.retry': 'Retry',
-        'common.emptyDirectory': 'Empty directory',
-      })[key] ?? key,
+    t: (key: string, params?: Record<string, string>) => {
+      if (key === 'conversationFiles.openFolderLabel') return `Open folder ${params?.name}`;
+      if (key === 'conversationFiles.openFileLabel') return `Open file ${params?.name}`;
+      return (
+        {
+          'common.back': 'Back',
+          'common.loading': 'Loading…',
+          'common.retry': 'Retry',
+          'common.emptyDirectory': 'Empty directory',
+          'conversationFiles.refresh': 'Refresh files',
+          'conversationFiles.loadErrorTitle': 'Couldn’t load files',
+        }[key] ?? key
+      );
+    },
   }),
 }));
 
@@ -76,11 +86,20 @@ describe('FileBrowser', () => {
   });
 
   it('should render and load directory contents', async () => {
-    const { getByText } = render(<FileBrowser {...defaultProps} />);
+    const { getByLabelText, getByTestId, getByText } = render(<FileBrowser {...defaultProps} />);
     await waitFor(() => {
       expect(getByText('src')).toBeTruthy();
     });
     expect(defaultProps.listDirectory).toHaveBeenCalledWith('/home/user/project');
+    expect(getByLabelText('Open folder src').props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(getByLabelText('Open folder src').props.style).minHeight).toBe(48);
+    expect(getByTestId('file-browser-up').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    expect(StyleSheet.flatten(getByTestId('file-browser-refresh').props.style)).toMatchObject({
+      minHeight: 48,
+      minWidth: 48,
+    });
   });
 
   it('should sort directories before files', async () => {
@@ -142,13 +161,19 @@ describe('FileBrowser', () => {
   });
 
   it('should show error state when listDirectory fails', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     defaultProps.listDirectory.mockRejectedValueOnce(new Error('Connection lost'));
 
-    const { getByText } = render(<FileBrowser {...defaultProps} />);
-    await waitFor(() => {
-      expect(getByText('Connection lost')).toBeTruthy();
-      expect(getByText('Retry')).toBeTruthy();
-    });
+    try {
+      const { getByText, queryByText } = render(<FileBrowser {...defaultProps} />);
+      await waitFor(() => {
+        expect(getByText('Couldn’t load files')).toBeTruthy();
+        expect(getByText('Retry')).toBeTruthy();
+      });
+      expect(queryByText('Connection lost')).toBeNull();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('should show empty state for empty directories', async () => {
@@ -168,16 +193,21 @@ describe('FileBrowser', () => {
   });
 
   it('should retry on pressing retry button after error', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     defaultProps.listDirectory
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce(mockFiles);
 
-    const { getByText } = render(<FileBrowser {...defaultProps} />);
-    await waitFor(() => expect(getByText('Retry')).toBeTruthy());
+    try {
+      const { getByText } = render(<FileBrowser {...defaultProps} />);
+      await waitFor(() => expect(getByText('Retry')).toBeTruthy());
 
-    fireEvent.press(getByText('Retry'));
-    await waitFor(() => {
-      expect(defaultProps.listDirectory).toHaveBeenCalledTimes(2);
-    });
+      fireEvent.press(getByText('Retry'));
+      await waitFor(() => {
+        expect(defaultProps.listDirectory).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

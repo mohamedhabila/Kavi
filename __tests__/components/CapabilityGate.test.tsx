@@ -56,8 +56,9 @@ describe('CapabilityGate', () => {
 
     fireEvent.press(getByText('Set up'));
     expect(onAction).toHaveBeenCalledTimes(1);
+    expect(getByTestId('capability-gate-action').props.accessibilityLabel).toBe('Set up');
     expect(getByTestId('capability-gate-action').props.style).toEqual(
-      expect.objectContaining({ minHeight: 44 }),
+      expect.objectContaining({ minHeight: 48 }),
     );
   });
 

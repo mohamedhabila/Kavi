@@ -24,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
+import { AppIconButton } from '../navigation/AppIconButton';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [currentPath, setCurrentPath] = useState(initialPath || rootPath);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   const breadcrumbs = useMemo((): BreadcrumbSegment[] => {
     const root = rootPath.replace(/\/+$/, '');
@@ -94,7 +95,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const loadDirectory = useCallback(
     async (path: string) => {
       setLoading(true);
-      setError(null);
+      setError(false);
       try {
         const result = await listDirectory(path);
         // Sort: directories first, then alphabetically
@@ -105,7 +106,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         });
         setEntries(sorted);
       } catch (err: unknown) {
-        setError((err instanceof Error ? err.message : '') || 'Failed to list directory');
+        console.warn('[FileBrowser] Failed to list directory:', err);
+        setError(true);
         setEntries([]);
       } finally {
         setLoading(false);
@@ -155,6 +157,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const renderEntry = useCallback(
     ({ item }: { item: FileEntry }) => (
       <TouchableOpacity
+        accessibilityLabel={t(
+          item.isDirectory
+            ? 'conversationFiles.openFolderLabel'
+            : 'conversationFiles.openFileLabel',
+          { name: item.name },
+        )}
+        accessibilityRole="button"
         style={styles.entryRow}
         onPress={() => handleNavigate(item)}
         onLongPress={() => handleLongPress(item)}
@@ -180,7 +189,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         {item.isDirectory && <ChevronRight size={16} color={colors.textTertiary} />}
       </TouchableOpacity>
     ),
-    [colors, handleNavigate, handleLongPress, styles],
+    [colors, handleNavigate, handleLongPress, styles, t],
   );
 
   const canGoUp = currentPath.replace(/\/+$/, '') !== rootPath.replace(/\/+$/, '');
@@ -189,9 +198,15 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     <View style={[styles.container, maxHeight ? { maxHeight } : undefined]}>
       {/* Breadcrumb bar */}
       <View style={styles.breadcrumbBar}>
-        <TouchableOpacity style={styles.navBtn} onPress={handleGoUp} disabled={!canGoUp}>
+        <AppIconButton
+          disabled={!canGoUp}
+          label={t('common.back')}
+          onPress={handleGoUp}
+          style={styles.navBtn}
+          testID="file-browser-up"
+        >
           <ArrowLeft size={16} color={canGoUp ? colors.primary : colors.textTertiary} />
-        </TouchableOpacity>
+        </AppIconButton>
         <FlatList
           horizontal
           data={breadcrumbs}
@@ -200,6 +215,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           contentContainerStyle={styles.breadcrumbs}
           renderItem={({ item, index }) => (
             <TouchableOpacity
+              accessibilityLabel={t('conversationFiles.openFolderLabel', { name: item.label })}
+              accessibilityRole="button"
               onPress={() => setCurrentPath(item.path)}
               style={styles.breadcrumbItem}
             >
@@ -216,20 +233,34 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             </TouchableOpacity>
           )}
         />
-        <TouchableOpacity style={styles.navBtn} onPress={() => loadDirectory(currentPath)}>
+        <AppIconButton
+          label={t('conversationFiles.refresh')}
+          onPress={() => loadDirectory(currentPath)}
+          style={styles.navBtn}
+          testID="file-browser-refresh"
+        >
           <RefreshCw size={14} color={colors.primary} />
-        </TouchableOpacity>
+        </AppIconButton>
       </View>
 
       {/* Content */}
       {loading ? (
         <View style={styles.centerState}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator
+            accessibilityLabel={t('common.loading')}
+            size="small"
+            color={colors.primary}
+          />
         </View>
       ) : error ? (
-        <View style={styles.centerState}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => loadDirectory(currentPath)}>
+        <View accessibilityLiveRegion="assertive" style={styles.centerState}>
+          <Text style={styles.errorText}>{t('conversationFiles.loadErrorTitle')}</Text>
+          <TouchableOpacity
+            accessibilityLabel={t('common.retry')}
+            accessibilityRole="button"
+            onPress={() => loadDirectory(currentPath)}
+            style={styles.retryButton}
+          >
             <Text style={styles.retryText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
@@ -273,7 +304,7 @@ const createStyles = (colors: AppPalette) =>
       backgroundColor: colors.header,
     },
     navBtn: {
-      padding: 6,
+      borderRadius: 8,
     },
     breadcrumbs: {
       alignItems: 'center',
@@ -281,6 +312,7 @@ const createStyles = (colors: AppPalette) =>
       paddingHorizontal: 4,
     },
     breadcrumbItem: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 2,
@@ -299,6 +331,7 @@ const createStyles = (colors: AppPalette) =>
       fontWeight: '600',
     },
     entryRow: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 12,
@@ -341,6 +374,11 @@ const createStyles = (colors: AppPalette) =>
       fontSize: 13,
       color: colors.primary,
       fontWeight: '500',
+    },
+    retryButton: {
+      minHeight: 48,
+      justifyContent: 'center',
+      paddingHorizontal: 16,
     },
     emptyText: {
       fontSize: 13,

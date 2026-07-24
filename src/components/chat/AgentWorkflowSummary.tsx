@@ -56,6 +56,7 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
       {hasGoals ? (
         <View style={styles.section} testID="agent-goals-widget">
           <TouchableOpacity
+            accessibilityLabel={t('chat.agentGoals.header', { count: presentation.goals.length })}
             accessibilityRole="button"
             accessibilityState={{ expanded: goalsExpanded }}
             onPress={() => setGoalsExpanded((value) => !value)}
@@ -105,6 +106,7 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
       {presentation.trace.length > 0 ? (
         <View style={styles.section} testID="agent-run-trace-widget">
           <TouchableOpacity
+            accessibilityLabel={t('chat.agentRunTrace.header')}
             accessibilityRole="button"
             accessibilityState={{ expanded: traceExpanded }}
             onPress={() => setTraceExpanded((value) => !value)}
