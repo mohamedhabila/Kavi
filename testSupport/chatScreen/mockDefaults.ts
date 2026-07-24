@@ -13,7 +13,7 @@ import {
   updateMockConversation,
   upsertMockToolCall,
 } from './state';
-import { mockOpenDrawer } from './componentMocks';
+import { mockChatRoute, mockOpenDrawer } from './componentMocks';
 import {
   applyMockMessageMemoryPublicationTransition,
   mockAddConversationLog,
@@ -150,6 +150,7 @@ export function resetChatScreenTestEnvironment() {
 
     mockFn.mockReset();
   });
+  mockChatRoute.params = {};
 
   __resetAgentRunCancellationRegistryForTests();
   resetMockChatScreenState();

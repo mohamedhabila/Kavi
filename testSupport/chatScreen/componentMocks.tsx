@@ -20,17 +20,20 @@ export const mockOpenDrawer = jest.fn();
 export const mockNavigate = jest.fn();
 export const mockGoBack = jest.fn();
 export const mockCloseDrawer = jest.fn();
+export const mockSetParams = jest.fn();
+export const mockChatRoute = { params: {} as Record<string, unknown> };
 const mockNavigation = {
   openDrawer: mockOpenDrawer,
   navigate: mockNavigate,
   goBack: mockGoBack,
   closeDrawer: mockCloseDrawer,
+  setParams: mockSetParams,
 };
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => mockNavigation,
   useIsFocused: () => true,
-  useRoute: () => ({ params: {} }),
+  useRoute: () => mockChatRoute,
 }));
 
 // Mock safe area

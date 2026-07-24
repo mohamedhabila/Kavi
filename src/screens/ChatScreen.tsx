@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
-import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import { useShallow } from 'zustand/react/shallow';
 import { AlertTriangle } from 'lucide-react-native';
 import { requestChatStorePersistenceCheckpoint } from '../store/chatStorePersistence';
@@ -61,9 +61,11 @@ import { getRunningLiveSubAgentsForRun } from '../services/agents/subAgentRunTra
 import { resolveConversationStartSelection } from '../services/llm/support/providerSupport';
 import { getNavigableConversations } from '../utils/conversationNavigation';
 import { useVoiceConversationBridge } from './chatScreen/useVoiceConversationBridge';
+import { usePreparedChatDraft } from './usePreparedChatDraft';
 
 export const ChatScreen: React.FC = () => {
   const navigation = useNavigation<DrawerNavigationProp<any>>();
+  const route = useRoute<{ key: string; name: string; params?: { preparedDraft?: unknown } }>();
   const isFocused = useIsFocused();
   const flatListRef = useRef<FlatList<ResolvedDisplayMessageItem>>(null);
   const { colors } = useAppTheme();
@@ -379,6 +381,17 @@ export const ChatScreen: React.FC = () => {
     editingContent,
     editingMessageId,
     setEditingContent,
+  });
+  const handlePreparedDraftConsumed = useCallback(() => {
+    navigation.setParams({ preparedDraft: undefined });
+  }, [navigation]);
+  usePreparedChatDraft({
+    activeConversationId,
+    composerText,
+    editingMessageId,
+    onApplyText: handleComposerTextChange,
+    onConsumed: handlePreparedDraftConsumed,
+    preparedDraft: route.params?.preparedDraft,
   });
 
   // Clear error when switching conversations

@@ -11,7 +11,12 @@ import {
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState } from '../../../testSupport/chatScreen/state';
 import { createDefaultConversations } from '../../../testSupport/chatScreen/fixtures';
-import { mockNavigate, mockOpenDrawer } from '../../../testSupport/chatScreen/componentMocks';
+import {
+  mockChatRoute,
+  mockNavigate,
+  mockOpenDrawer,
+  mockSetParams,
+} from '../../../testSupport/chatScreen/componentMocks';
 import { mockGetOrCreateCanonicalThread } from '../../../testSupport/chatScreen/storeMocks';
 
 describe('ChatScreen rendering and layout', () => {
@@ -231,6 +236,24 @@ describe('ChatScreen rendering and layout', () => {
   it('renders message input', () => {
     const { getByPlaceholderText } = render(<ChatScreen />);
     expect(getByPlaceholderText('Message...')).toBeTruthy();
+  });
+
+  it('opens a delegated-work retry as an editable draft without sending it', () => {
+    mockChatRoute.params = {
+      preparedDraft: {
+        requestId: 'retry-1',
+        conversationId: 'conv1',
+        source: 'delegated-work-retry',
+        text: 'Please retry this work after reviewing the previous result.',
+      },
+    };
+
+    const { getByPlaceholderText } = render(<ChatScreen />);
+
+    expect(getByPlaceholderText('Message...').props.value).toBe(
+      'Please retry this work after reviewing the previous result.',
+    );
+    expect(mockSetParams).toHaveBeenCalledWith({ preparedDraft: undefined });
   });
 
   it('relies on native keyboard behavior for the chat body', () => {
