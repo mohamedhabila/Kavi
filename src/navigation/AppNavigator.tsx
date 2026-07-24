@@ -46,6 +46,10 @@ import {
 } from '../services/notifications/service';
 import { runJobNow } from '../services/scheduler/engine';
 import { consumeSchedulerJobWake } from '../services/scheduler/wakeNotifications';
+import {
+  getSchedulerNotificationTarget,
+  type SchedulerNotificationTarget,
+} from './notificationNavigation';
 
 const Drawer = createDrawerNavigator();
 const ONBOARDING_KEY = 'kavi_onboarding_complete';
@@ -59,7 +63,8 @@ export const AppNavigator: React.FC = () => {
   );
   const [navReady, setNavReady] = useState(false);
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
-  const [pendingSchedulerOpen, setPendingSchedulerOpen] = useState(false);
+  const [pendingSchedulerRoute, setPendingSchedulerRoute] =
+    useState<SchedulerNotificationTarget | null>(null);
 
   useEffect(() => {
     if (chatHydrated) {
@@ -92,11 +97,9 @@ export const AppNavigator: React.FC = () => {
           );
           await runJobNow(jobId, { trigger: 'notification-tap', force: false });
         })().catch((e) => console.warn('[AppNavigator] Failed to run wake notification task:', e));
-        setPendingSchedulerOpen(true);
       }
-      if (route.screen === 'Scheduler') {
-        setPendingSchedulerOpen(true);
-      }
+      const schedulerTarget = getSchedulerNotificationTarget(route);
+      if (schedulerTarget) setPendingSchedulerRoute(schedulerTarget);
       if (route.conversationId) {
         setPendingConversationId(route.conversationId);
       }
@@ -151,15 +154,18 @@ export const AppNavigator: React.FC = () => {
     if (
       !navReady ||
       showOnboarding !== false ||
-      !pendingSchedulerOpen ||
+      !pendingSchedulerRoute ||
       !navigationRef.isReady()
     ) {
       return;
     }
 
-    navigationRef.navigate('Scheduler');
-    setPendingSchedulerOpen(false);
-  }, [navReady, pendingSchedulerOpen, showOnboarding]);
+    navigationRef.navigate(
+      'Scheduler',
+      pendingSchedulerRoute.jobId ? { initialJobId: pendingSchedulerRoute.jobId } : undefined,
+    );
+    setPendingSchedulerRoute(null);
+  }, [navReady, pendingSchedulerRoute, showOnboarding]);
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
