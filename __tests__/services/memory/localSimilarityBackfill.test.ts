@@ -254,6 +254,49 @@ describe('local-similarity backfill', () => {
     expect(maintainCurrentFactLocalSimilarity({ now: 20 })).toBeNull();
   });
 
+  it('skips completed maintenance until the durable projection changes', () => {
+    recordFact({
+      subjectId: 'profile',
+      predicate: 'preferred_editor',
+      objectText: 'Neovim',
+      scope: 'global',
+      now: 10,
+    });
+    const database = getMemoryDb();
+    const getAllSpy = jest.spyOn(database, 'getAllSync');
+    const maintenanceScanCount = () =>
+      getAllSpy.mock.calls.filter(([sql]) =>
+        String(sql).includes('AND NOT (\n  local_similarity_model IS ?'),
+      ).length;
+
+    expect(maintainCurrentFactLocalSimilarity({ now: 20 })).toMatchObject({
+      processedCount: 0,
+      hasMore: false,
+    });
+    const completedScanCount = maintenanceScanCount();
+    expect(completedScanCount).toBeGreaterThan(0);
+
+    expect(maintainCurrentFactLocalSimilarity({ now: 21 })).toMatchObject({
+      processedCount: 0,
+      hasMore: false,
+    });
+    expect(maintenanceScanCount()).toBe(completedScanCount);
+
+    recordFact({
+      subjectId: 'profile',
+      predicate: 'preferred_terminal',
+      objectText: 'iTerm',
+      scope: 'global',
+      supersedePrior: false,
+      now: 22,
+    });
+    expect(maintainCurrentFactLocalSimilarity({ now: 23 })).toMatchObject({
+      processedCount: 0,
+      hasMore: false,
+    });
+    expect(maintenanceScanCount()).toBeGreaterThan(completedScanCount);
+  });
+
   it('keeps full bounded batches within the recorded local maintenance budget', () => {
     for (let index = 0; index < 160; index += 1) {
       recordFact({

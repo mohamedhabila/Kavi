@@ -1,5 +1,5 @@
 import { createLogger } from '../../utils/logger';
-import { getSchemaReadyMemoryDb } from './access/schemaGuard';
+import { getSchemaReadyMemoryDb, type MemoryDatabase } from './access/schemaGuard';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/transaction';
 import { requireFactMutationTimestamp } from './facts/mutationValidation';
 import {
@@ -13,6 +13,7 @@ import {
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { advanceMemoryProjectionInTransaction } from './memoryAuthority';
+import { readMemoryAuthorityRevisions } from './memoryAuthorityState';
 
 const logger = createLogger('memory.localSimilarityBackfill');
 const DEFAULT_BACKFILL_LIMIT = 16;
@@ -39,6 +40,36 @@ export interface LocalSimilarityBackfillResult {
   hasMore: boolean;
   model: typeof LOCAL_SIMILARITY_MODEL;
   dimensions: typeof LOCAL_SIMILARITY_DIMENSIONS;
+}
+
+type CompletedMaintenanceIdentity = Readonly<{
+  database: MemoryDatabase;
+  memoryOwnerId: string;
+  projectionRevision: number;
+}>;
+
+// Reuse a completed scan only while both the database and durable projection are unchanged.
+let completedMaintenanceIdentity: CompletedMaintenanceIdentity | null = null;
+
+function readMaintenanceIdentity(): CompletedMaintenanceIdentity {
+  const database = getSchemaReadyMemoryDb();
+  const memoryOwnerId = getLocalMemoryVaultOwnerId(database);
+  return {
+    database,
+    memoryOwnerId,
+    projectionRevision: readMemoryAuthorityRevisions(database, memoryOwnerId).projection.value,
+  };
+}
+
+function isSameMaintenanceIdentity(
+  left: CompletedMaintenanceIdentity | null,
+  right: CompletedMaintenanceIdentity,
+): boolean {
+  return (
+    left?.database === right.database &&
+    left.memoryOwnerId === right.memoryOwnerId &&
+    left.projectionRevision === right.projectionRevision
+  );
 }
 
 const CURRENT_VECTOR_SQL = `
@@ -184,8 +215,26 @@ export function maintainCurrentFactLocalSimilarity(
   } = {},
 ): LocalSimilarityBackfillResult | null {
   try {
-    return backfillCurrentFactLocalSimilarity(input);
+    const limit = normalizeBackfillLimit(input.limit);
+    const now = requireFactMutationTimestamp(
+      input.now ?? Date.now(),
+      'memory_local_similarity_clock_invalid',
+    );
+    const identity = readMaintenanceIdentity();
+    if (isSameMaintenanceIdentity(completedMaintenanceIdentity, identity)) {
+      return {
+        processedCount: 0,
+        hasMore: false,
+        model: LOCAL_SIMILARITY_MODEL,
+        dimensions: LOCAL_SIMILARITY_DIMENSIONS,
+      };
+    }
+
+    const result = backfillCurrentFactLocalSimilarity({ limit, now });
+    completedMaintenanceIdentity = result.hasMore ? null : readMaintenanceIdentity();
+    return result;
   } catch (error) {
+    completedMaintenanceIdentity = null;
     logger.devWarn(
       'Local-similarity backfill failed; lexical retrieval remains available.',
       error instanceof Error ? error.message : String(error),
