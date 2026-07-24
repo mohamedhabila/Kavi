@@ -43,6 +43,7 @@ export const McpBasicsSection: React.FC<McpBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.serverName')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.serverName')}
         style={styles.configInput}
         value={draft.name}
         onChangeText={(value) =>
@@ -54,6 +55,7 @@ export const McpBasicsSection: React.FC<McpBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.serverUrl')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.serverUrl')}
         style={styles.configInput}
         value={draft.url}
         onChangeText={(value) =>
@@ -70,14 +72,23 @@ export const McpBasicsSection: React.FC<McpBasicsSectionProps> = ({
       <Text style={styles.formHint}>{t('settings.mcpManualServerHint')}</Text>
 
       <Text style={styles.detailLabel}>{t('settings.serverTransport')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('settings.serverTransport')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="mcp-transport-group"
+      >
         {MCP_TRANSPORT_OPTIONS.map((option) => (
           <TouchableOpacity
+            accessibilityLabel={getLocalizedMcpTransportLabel(option)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: draft.transport === option }}
             key={option}
             style={[styles.optionChip, draft.transport === option ? styles.optionChipActive : null]}
             onPress={() =>
               setDraft((current) => (current ? { ...current, transport: option } : current))
             }
+            testID={`mcp-transport-${option}`}
           >
             <Text
               style={[
@@ -93,6 +104,7 @@ export const McpBasicsSection: React.FC<McpBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.serverLegacySseUrl')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.serverLegacySseUrl')}
         style={styles.configInput}
         value={draft.sseUrl || ''}
         onChangeText={(value) =>
@@ -110,6 +122,7 @@ export const McpBasicsSection: React.FC<McpBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.serverTimeoutMs')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.serverTimeoutMs')}
         style={styles.configInput}
         value={mcpTimeoutText ?? String(draft.timeoutMs ?? 30000)}
         onChangeText={(value) => {

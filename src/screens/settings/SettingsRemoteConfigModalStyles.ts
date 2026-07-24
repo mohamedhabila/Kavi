@@ -76,6 +76,7 @@ export function createSettingsRemoteConfigModalStyles(colors: AppPalette): {
       flexShrink: 1,
     },
     configInput: {
+      minHeight: 48,
       backgroundColor: colors.inputBackground,
       borderWidth: 1,
       borderColor: colors.inputBorder,
@@ -99,6 +100,8 @@ export function createSettingsRemoteConfigModalStyles(colors: AppPalette): {
       paddingRight: 4,
     },
     optionChip: {
+      minHeight: 48,
+      justifyContent: 'center',
       borderRadius: 999,
       paddingHorizontal: 12,
       paddingVertical: 9,
@@ -165,6 +168,7 @@ export function createSettingsRemoteConfigModalStyles(colors: AppPalette): {
       paddingTop: 4,
     },
     primaryBtn: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -180,6 +184,7 @@ export function createSettingsRemoteConfigModalStyles(colors: AppPalette): {
       fontSize: 13,
     },
     secondaryBtn: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -197,6 +202,7 @@ export function createSettingsRemoteConfigModalStyles(colors: AppPalette): {
       fontSize: 13,
     },
     destructiveBtn: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',

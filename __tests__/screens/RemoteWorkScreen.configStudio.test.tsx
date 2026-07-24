@@ -1,4 +1,5 @@
 import { fireEvent, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import {
   confirmRemoteWorkDestructiveAlert,
@@ -193,10 +194,29 @@ describe('RemoteWorkScreen config studio', () => {
   it('saves a new browser provider with a stored token', async () => {
     const settingsState = getRemoteWorkSettingsState();
     const storage = getRemoteWorkSecureStorageMocks();
-    const { findByPlaceholderText, getByLabelText, getByText } = renderRemoteWorkScreen();
+    const { findByPlaceholderText, getByLabelText, getByTestId, getByText } =
+      renderRemoteWorkScreen();
 
     fireEvent.press(getByLabelText('Browser providers'));
     fireEvent.press(getByLabelText('Add Browser Provider'));
+    expect(getByTestId('browser-provider-group').props.accessibilityRole).toBe('radiogroup');
+    expect(getByTestId('browser-provider-browserbase').props).toEqual(
+      expect.objectContaining({
+        accessibilityRole: 'radio',
+        accessibilityState: { selected: true },
+      }),
+    );
+    expect(getByTestId('browser-auth-api-key-header').props).toEqual(
+      expect.objectContaining({
+        accessibilityRole: 'radio',
+        accessibilityState: { selected: true },
+      }),
+    );
+    expect(
+      StyleSheet.flatten(getByTestId('browser-preset-browserbase-default').props.style).minHeight,
+    ).toBeGreaterThanOrEqual(48);
+    expect(getByLabelText('Project ID')).toBeTruthy();
+    expect(getByLabelText('API Key')).toBeTruthy();
     fireEvent.changeText(await findByPlaceholderText('bb_project_123'), 'proj_live');
     fireEvent.changeText(await findByPlaceholderText('browser provider key'), 'browser-token');
     fireEvent.press(getByText('Save'));

@@ -62,6 +62,7 @@ export const createRemoteWorkScreenWorkspaceStyleFragments = (colors: AppPalette
     paddingTop: 4,
   },
   destructiveBtn: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

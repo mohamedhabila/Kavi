@@ -30,6 +30,7 @@ export const WorkspaceBasicsSection: React.FC<WorkspaceBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.workspaceTargetName')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.workspaceTargetName')}
         style={styles.configInput}
         value={draft.name}
         onChangeText={(value) =>
@@ -41,6 +42,7 @@ export const WorkspaceBasicsSection: React.FC<WorkspaceBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.workspaceRootPath')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.workspaceRootPath')}
         style={styles.configInput}
         value={draft.rootPath}
         onChangeText={(value) =>
@@ -54,6 +56,7 @@ export const WorkspaceBasicsSection: React.FC<WorkspaceBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.workspaceBaseUrl')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.workspaceBaseUrl')}
         style={styles.configInput}
         value={draft.baseUrl || ''}
         onChangeText={(value) =>

@@ -76,6 +76,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
 
             <Text style={styles.detailLabel}>{t('settings.browserProviderName')}</Text>
             <TextInput
+              accessibilityLabel={t('settings.browserProviderName')}
               style={styles.configInput}
               value={draft.name}
               onChangeText={(value) =>
@@ -86,9 +87,17 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
             />
 
             <Text style={styles.detailLabel}>{t('settings.browserProviderType')}</Text>
-            <View style={styles.optionRow}>
+            <View
+              accessibilityLabel={t('settings.browserProviderType')}
+              accessibilityRole="radiogroup"
+              style={styles.optionRow}
+              testID="browser-provider-group"
+            >
               {BROWSER_PROVIDER_OPTIONS.map((option) => (
                 <TouchableOpacity
+                  accessibilityLabel={getBrowserProviderLabel(option)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: draft.provider === option }}
                   key={option}
                   style={[
                     styles.optionChip,
@@ -116,6 +125,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
                         : current,
                     )
                   }
+                  testID={`browser-provider-${option}`}
                 >
                   <Text
                     style={[
@@ -137,6 +147,8 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
             >
               {BROWSER_PROVIDER_PRESETS.map((preset) => (
                 <TouchableOpacity
+                  accessibilityLabel={preset.label}
+                  accessibilityRole="button"
                   key={preset.id}
                   style={styles.optionChip}
                   onPress={() =>
@@ -144,6 +156,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
                       current ? applyBrowserProviderPreset(current, preset.id) : current,
                     )
                   }
+                  testID={`browser-preset-${preset.id}`}
                 >
                   <Text style={styles.optionChipText}>{preset.label}</Text>
                 </TouchableOpacity>
@@ -152,6 +165,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
 
             <Text style={styles.detailLabel}>{t('settings.browserBaseUrl')}</Text>
             <TextInput
+              accessibilityLabel={t('settings.browserBaseUrl')}
               style={styles.configInput}
               value={draft.baseUrl || ''}
               onChangeText={(value) =>
@@ -168,6 +182,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
               <>
                 <Text style={styles.detailLabel}>{t('settings.browserProjectId')}</Text>
                 <TextInput
+                  accessibilityLabel={t('settings.browserProjectId')}
                   style={styles.configInput}
                   value={draft.projectId || ''}
                   onChangeText={(value) =>
@@ -188,9 +203,17 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
             </Text>
 
             <Text style={styles.detailLabel}>{t('settings.browserAuthMode')}</Text>
-            <View style={styles.optionRow}>
+            <View
+              accessibilityLabel={t('settings.browserAuthMode')}
+              accessibilityRole="radiogroup"
+              style={styles.optionRow}
+              testID="browser-auth-group"
+            >
               {BROWSER_PROVIDER_AUTH_OPTIONS.map((option) => (
                 <TouchableOpacity
+                  accessibilityLabel={getLocalizedBrowserAuthModeLabel(option)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: draft.authMode === option }}
                   key={option}
                   style={[
                     styles.optionChip,
@@ -199,6 +222,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
                   onPress={() =>
                     setDraft((current) => (current ? { ...current, authMode: option } : current))
                   }
+                  testID={`browser-auth-${option}`}
                 >
                   <Text
                     style={[
@@ -217,6 +241,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
               <>
                 <Text style={styles.detailLabel}>{t('settings.browserQueryTokenParam')}</Text>
                 <TextInput
+                  accessibilityLabel={t('settings.browserQueryTokenParam')}
                   style={styles.configInput}
                   value={draft.queryTokenParam || ''}
                   onChangeText={(value) =>
@@ -236,6 +261,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
               <>
                 <Text style={styles.detailLabel}>{t('settings.browserApiKey')}</Text>
                 <TextInput
+                  accessibilityLabel={t('settings.browserApiKey')}
                   style={styles.configInput}
                   value={browserApiKey}
                   onChangeText={setBrowserApiKey}
@@ -258,6 +284,7 @@ export const RemoteWorkBrowserEditorModal: React.FC<RemoteWorkBrowserEditorModal
                 <Text style={styles.switchHint}>{t('remoteWork.enabledSurfaceHint')}</Text>
               </View>
               <Switch
+                accessibilityLabel={t('common.enabled')}
                 value={draft.enabled}
                 onValueChange={(value) =>
                   setDraft((current) => (current ? { ...current, enabled: value } : current))

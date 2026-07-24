@@ -244,6 +244,7 @@ export const createRemoteWorkScreenOverviewStyleFragments = (colors: AppPalette)
     gap: 4,
   },
   configInput: {
+    minHeight: 48,
     backgroundColor: colors.panel,
     borderWidth: 1,
     borderColor: colors.border,
@@ -265,6 +266,8 @@ export const createRemoteWorkScreenOverviewStyleFragments = (colors: AppPalette)
     gap: 8,
   },
   optionChip: {
+    minHeight: 48,
+    justifyContent: 'center',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 9,

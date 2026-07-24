@@ -1,5 +1,5 @@
 import { fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 
 import { createMcpServer } from '../helpers/remoteConfigFixtures';
 import {
@@ -30,9 +30,21 @@ describe('SettingsScreen remote config', () => {
   });
 
   it('should navigate to new SSH target edit when SSH plus button is tapped', () => {
-    const { getByText, getByLabelText } = renderDeveloperSettings();
+    const { getByText, getByLabelText, getByTestId } = renderDeveloperSettings();
     fireEvent.press(getByLabelText('Add SSH target'));
     expect(getByText('Add SSH Target')).toBeTruthy();
+    expect(getByLabelText('Host')).toBeTruthy();
+    expect(getByLabelText('Username')).toBeTruthy();
+    expect(getByTestId('ssh-auth-group').props.accessibilityRole).toBe('radiogroup');
+    expect(getByTestId('ssh-auth-password').props).toEqual(
+      expect.objectContaining({
+        accessibilityRole: 'radio',
+        accessibilityState: { selected: true },
+      }),
+    );
+    expect(
+      StyleSheet.flatten(getByTestId('ssh-auth-password').props.style).minHeight,
+    ).toBeGreaterThanOrEqual(48);
   });
 
   it('should save a new SSH target', () => {
@@ -84,9 +96,21 @@ describe('SettingsScreen remote config', () => {
   });
 
   it('should navigate to new workspace target edit when workspace plus button is tapped', () => {
-    const { getByText, getByLabelText } = renderDeveloperSettings();
+    const { getByText, getByLabelText, getByTestId } = renderDeveloperSettings();
     fireEvent.press(getByLabelText('Add Workspace Target'));
     expect(getByText('Add Workspace Target')).toBeTruthy();
+    expect(getByLabelText('Root Path')).toBeTruthy();
+    expect(getByLabelText('Workspace URL')).toBeTruthy();
+    expect(getByTestId('workspace-provider-group').props.accessibilityRole).toBe('radiogroup');
+    expect(getByTestId('workspace-provider-code-server').props).toEqual(
+      expect.objectContaining({
+        accessibilityRole: 'radio',
+        accessibilityState: { selected: true },
+      }),
+    );
+    expect(
+      StyleSheet.flatten(getByTestId('workspace-provider-code-server').props.style).minHeight,
+    ).toBeGreaterThanOrEqual(48);
   });
 
   it('should save a new workspace target', () => {
@@ -133,7 +157,7 @@ describe('SettingsScreen remote config', () => {
   });
 
   it('should show MCP edit form fields', async () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByLabelText, getByTestId, getByText } = renderSettingsScreen();
     fireEvent.press(getByText('Test MCP'));
     await waitFor(() => {
       expect(getByText('Name')).toBeTruthy();
@@ -146,6 +170,18 @@ describe('SettingsScreen remote config', () => {
       expect(getByText('Auto transport')).toBeTruthy();
       expect(getByText('No auth')).toBeTruthy();
     });
+    expect(getByLabelText('Name')).toBeTruthy();
+    expect(getByLabelText('URL')).toBeTruthy();
+    expect(getByTestId('mcp-transport-group').props.accessibilityRole).toBe('radiogroup');
+    expect(getByTestId('mcp-transport-auto').props).toEqual(
+      expect.objectContaining({
+        accessibilityRole: 'radio',
+        accessibilityState: { selected: true },
+      }),
+    );
+    expect(
+      StyleSheet.flatten(getByTestId('mcp-transport-auto').props.style).minHeight,
+    ).toBeGreaterThanOrEqual(48);
   });
 
   it('should persist normalized trust and capability metadata when saving an MCP server', async () => {

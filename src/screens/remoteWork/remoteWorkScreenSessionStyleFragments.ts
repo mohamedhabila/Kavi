@@ -52,6 +52,7 @@ export const createRemoteWorkScreenSessionStyleFragments = (colors: AppPalette) 
     flexWrap: 'wrap',
   },
   primaryBtn: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -67,6 +68,7 @@ export const createRemoteWorkScreenSessionStyleFragments = (colors: AppPalette) 
     fontSize: 13,
   },
   secondaryBtn: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

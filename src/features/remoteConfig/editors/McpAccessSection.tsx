@@ -52,6 +52,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.serverToken')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.serverToken')}
         style={styles.configInput}
         value={mcpToken ?? draft.token ?? ''}
         onChangeText={(value) => {
@@ -75,6 +76,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.mcpOAuthClientId')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.mcpOAuthClientId')}
         style={styles.configInput}
         value={draft.oauth?.clientId || ''}
         onChangeText={(value) =>
@@ -92,6 +94,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
         <>
           <Text style={styles.detailLabel}>{t('settings.mcpOAuthClientSecret')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.mcpOAuthClientSecret')}
             style={styles.configInput}
             value={mcpOauthClientSecret || ''}
             onChangeText={setMcpOauthClientSecret}
@@ -106,6 +109,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.mcpOAuthAuthorizationUrl')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.mcpOAuthAuthorizationUrl')}
         style={styles.configInput}
         value={draft.oauth?.authorizationUrl || ''}
         onChangeText={(value) =>
@@ -124,6 +128,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.mcpOAuthTokenUrl')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.mcpOAuthTokenUrl')}
         style={styles.configInput}
         value={draft.oauth?.tokenUrl || ''}
         onChangeText={(value) =>
@@ -140,6 +145,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.mcpOAuthScope')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.mcpOAuthScope')}
         style={styles.configInput}
         value={draft.oauth?.scope || ''}
         onChangeText={(value) =>
@@ -155,6 +161,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.mcpOAuthProxyProjectName')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.mcpOAuthProxyProjectName')}
         style={styles.configInput}
         value={draft.oauth?.projectNameForProxy || ''}
         onChangeText={(value) =>
@@ -175,6 +182,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
           <Text style={styles.detailLabel}>{t('settings.serverHeaders')}</Text>
           <Text style={styles.formHint}>{t('settings.serverHeadersHint')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.serverHeaders')}
             style={[styles.configInput, styles.configTextArea]}
             value={mcpHeadersText || ''}
             onChangeText={setMcpHeadersText}
@@ -195,11 +203,10 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
           <Text style={styles.switchHint}>{t('settings.mcpTrustToolAnnotationsHint')}</Text>
         </View>
         <Switch
+          accessibilityLabel={t('settings.mcpTrustToolAnnotations')}
           value={draft.trustToolAnnotations === true}
           onValueChange={(value) =>
-            setDraft((current) =>
-              current ? { ...current, trustToolAnnotations: value } : current,
-            )
+            setDraft((current) => (current ? { ...current, trustToolAnnotations: value } : current))
           }
           trackColor={{ false: colors.surfaceAlt, true: colors.primarySoft }}
           thumbColor={draft.trustToolAnnotations ? colors.primary : colors.textSecondary}
@@ -212,6 +219,7 @@ export const McpAccessSection: React.FC<McpAccessSectionProps> = ({
           <Text style={styles.switchHint}>{t('remoteWork.enabledSurfaceHint')}</Text>
         </View>
         <Switch
+          accessibilityLabel={t('common.enabled')}
           value={draft.enabled}
           onValueChange={(value) =>
             setDraft((current) => (current ? { ...current, enabled: value } : current))

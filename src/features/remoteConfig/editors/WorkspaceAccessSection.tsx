@@ -49,14 +49,23 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
       </Text>
 
       <Text style={styles.detailLabel}>{t('settings.workspaceProvider')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('settings.workspaceProvider')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="workspace-provider-group"
+      >
         {WORKSPACE_PROVIDER_OPTIONS.map((option) => (
           <TouchableOpacity
+            accessibilityLabel={getLocalizedWorkspaceProviderLabel(option)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: draft.provider === option }}
             key={option}
             style={[styles.optionChip, draft.provider === option ? styles.optionChipActive : null]}
             onPress={() =>
               setDraft((current) => (current ? { ...current, provider: option } : current))
             }
+            testID={`workspace-provider-${option}`}
           >
             <Text
               style={[
@@ -71,14 +80,23 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
       </View>
 
       <Text style={styles.detailLabel}>{t('settings.workspaceAuthMode')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('settings.workspaceAuthMode')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="workspace-auth-group"
+      >
         {WORKSPACE_AUTH_MODE_OPTIONS.map((option) => (
           <TouchableOpacity
+            accessibilityLabel={getWorkspaceAuthModeLabel(option)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: draft.authMode === option }}
             key={option}
             style={[styles.optionChip, draft.authMode === option ? styles.optionChipActive : null]}
             onPress={() =>
               setDraft((current) => (current ? { ...current, authMode: option } : current))
             }
+            testID={`workspace-auth-${option}`}
           >
             <Text
               style={[
@@ -96,6 +114,7 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
         <>
           <Text style={styles.detailLabel}>{t('settings.workspaceQueryTokenParam')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.workspaceQueryTokenParam')}
             style={styles.configInput}
             value={draft.queryTokenParam || ''}
             onChangeText={(value) =>
@@ -113,6 +132,7 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
         <>
           <Text style={styles.detailLabel}>{t('settings.workspaceAccessToken')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.workspaceAccessToken')}
             style={styles.configInput}
             value={workspaceAccessToken}
             onChangeText={setWorkspaceAccessToken}
@@ -131,14 +151,23 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
       ) : null}
 
       <Text style={styles.detailLabel}>{t('remoteWork.workspaceBrowserProvider')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('remoteWork.workspaceBrowserProvider')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="workspace-browser-provider-group"
+      >
         <TouchableOpacity
+          accessibilityLabel={t('remoteWork.workspaceBrowserProviderAutoSelect')}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: !draft.browserProviderId }}
           style={[styles.optionChip, !draft.browserProviderId ? styles.optionChipActive : null]}
           onPress={() =>
             setDraft((current) =>
               current ? { ...current, browserProviderId: undefined } : current,
             )
           }
+          testID="workspace-browser-provider-auto"
         >
           <Text
             style={[
@@ -151,6 +180,9 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
         </TouchableOpacity>
         {browserProviders.map((provider) => (
           <TouchableOpacity
+            accessibilityLabel={provider.name}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: draft.browserProviderId === provider.id }}
             key={provider.id}
             style={[
               styles.optionChip,
@@ -161,6 +193,7 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
                 current ? { ...current, browserProviderId: provider.id } : current,
               )
             }
+            testID={`workspace-browser-provider-${provider.id}`}
           >
             <Text
               style={[
@@ -176,12 +209,21 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
       <Text style={styles.formHint}>{t('remoteWork.workspaceBrowserProviderHint')}</Text>
 
       <Text style={styles.detailLabel}>{t('remoteWork.workspaceSshTarget')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('remoteWork.workspaceSshTarget')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="workspace-ssh-target-group"
+      >
         <TouchableOpacity
+          accessibilityLabel={t('common.none')}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: !draft.sshTargetId }}
           style={[styles.optionChip, !draft.sshTargetId ? styles.optionChipActive : null]}
           onPress={() =>
             setDraft((current) => (current ? { ...current, sshTargetId: undefined } : current))
           }
+          testID="workspace-ssh-target-none"
         >
           <Text
             style={[styles.optionChipText, !draft.sshTargetId ? styles.optionChipTextActive : null]}
@@ -191,6 +233,9 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
         </TouchableOpacity>
         {sshTargets.map((target) => (
           <TouchableOpacity
+            accessibilityLabel={target.name}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: draft.sshTargetId === target.id }}
             key={target.id}
             style={[
               styles.optionChip,
@@ -199,6 +244,7 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
             onPress={() =>
               setDraft((current) => (current ? { ...current, sshTargetId: target.id } : current))
             }
+            testID={`workspace-ssh-target-${target.id}`}
           >
             <Text
               style={[
@@ -215,6 +261,7 @@ export const WorkspaceAccessSection: React.FC<WorkspaceAccessSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('remoteWork.workspaceAiCommandTemplate')}</Text>
       <TextInput
+        accessibilityLabel={t('remoteWork.workspaceAiCommandTemplate')}
         style={styles.configInput}
         value={draft.aiTaskCommandTemplate || ''}
         onChangeText={(value) =>

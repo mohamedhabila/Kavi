@@ -63,9 +63,17 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
       </Text>
 
       <Text style={styles.detailLabel}>{t('settings.sshAuthMode')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('settings.sshAuthMode')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="ssh-auth-group"
+      >
         {SSH_AUTH_MODE_OPTIONS.map((option) => (
           <TouchableOpacity
+            accessibilityLabel={t(option.labelKey as any)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: draft.authMode === option.value }}
             key={option.value}
             style={[
               styles.optionChip,
@@ -74,6 +82,7 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
             onPress={() =>
               setDraft((current) => (current ? { ...current, authMode: option.value } : current))
             }
+            testID={`ssh-auth-${option.value}`}
           >
             <Text
               style={[
@@ -91,6 +100,7 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
         <>
           <Text style={styles.detailLabel}>{t('settings.sshPassword')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.sshPassword')}
             style={styles.configInput}
             value={sshPassword}
             onChangeText={setSshPassword}
@@ -109,6 +119,7 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
         <>
           <Text style={styles.detailLabel}>{t('settings.sshPrivateKey')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.sshPrivateKey')}
             style={[styles.configInput, styles.configTextArea]}
             value={sshPrivateKey}
             onChangeText={setSshPrivateKey}
@@ -127,6 +138,7 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
 
           <Text style={styles.detailLabel}>{t('settings.sshPassphrase')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.sshPassphrase')}
             style={styles.configInput}
             value={sshPassphrase}
             onChangeText={setSshPassphrase}
@@ -140,9 +152,17 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
       )}
 
       <Text style={styles.detailLabel}>{t('settings.sshHostKeyPolicy')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('settings.sshHostKeyPolicy')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="ssh-host-key-group"
+      >
         {SSH_HOST_KEY_POLICY_OPTIONS.map((option) => (
           <TouchableOpacity
+            accessibilityLabel={getLocalizedSshHostKeyPolicyOptionLabel(option)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: draft.hostKeyPolicy === option }}
             key={option}
             style={[
               styles.optionChip,
@@ -151,6 +171,7 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
             onPress={() =>
               setDraft((current) => (current ? { ...current, hostKeyPolicy: option } : current))
             }
+            testID={`ssh-host-key-${option}`}
           >
             <Text
               style={[
@@ -173,10 +194,12 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
       </Text>
       <View style={styles.configActionRow}>
         <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={() => void handleFetchFingerprint()}
           accessibilityRole="button"
           accessibilityLabel={t('settings.sshFetchFingerprint')}
+          accessibilityState={{ busy: sshFingerprintPending, disabled: sshFingerprintPending }}
+          disabled={sshFingerprintPending}
+          onPress={() => void handleFetchFingerprint()}
+          style={styles.secondaryBtn}
         >
           <Text style={styles.secondaryBtnText}>
             {sshFingerprintPending
@@ -194,6 +217,7 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
         </TouchableOpacity>
       </View>
       <TextInput
+        accessibilityLabel={t('settings.sshTrustedFingerprint')}
         style={styles.configInput}
         value={draft.trustedHostFingerprint || ''}
         onChangeText={(value) =>
@@ -206,12 +230,20 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
       />
 
       <Text style={styles.detailLabel}>{t('settings.sshPtyType')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('settings.sshPtyType')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="ssh-pty-group"
+      >
         {(Array.isArray(SSH_PTY_OPTIONS) && SSH_PTY_OPTIONS.length
           ? SSH_PTY_OPTIONS
           : DEFAULT_SSH_PTY_OPTIONS
         ).map((option) => (
           <TouchableOpacity
+            accessibilityLabel={option.label}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: (draft.ptyType || 'xterm') === option.value }}
             key={option.value}
             style={[
               styles.optionChip,
@@ -220,8 +252,7 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
             onPress={() =>
               setDraft((current) => (current ? { ...current, ptyType: option.value } : current))
             }
-            accessibilityRole="button"
-            accessibilityLabel={option.label}
+            testID={`ssh-pty-${option.value}`}
           >
             <Text
               style={[
@@ -241,6 +272,7 @@ export const SshAccessSection: React.FC<SshAccessSectionProps> = ({
           <Text style={styles.switchHint}>{t('remoteWork.enabledSurfaceHint')}</Text>
         </View>
         <Switch
+          accessibilityLabel={t('common.enabled')}
           value={draft.enabled}
           onValueChange={(value) =>
             setDraft((current) => (current ? { ...current, enabled: value } : current))

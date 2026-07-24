@@ -42,6 +42,7 @@ export const WorkspaceRoutingSection: React.FC<WorkspaceRoutingSectionProps> = (
 
       <Text style={styles.detailLabel}>{t('settings.workspaceConfigRoots')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.workspaceConfigRoots')}
         style={[styles.configInput, styles.configTextArea]}
         value={workspaceConfigRootsText}
         onChangeText={setWorkspaceConfigRootsText}
@@ -57,6 +58,7 @@ export const WorkspaceRoutingSection: React.FC<WorkspaceRoutingSectionProps> = (
       <View style={styles.switchRow}>
         <Text style={styles.switchTitle}>{t('common.enabled')}</Text>
         <Switch
+          accessibilityLabel={t('common.enabled')}
           value={draft.enabled}
           onValueChange={(value) =>
             setDraft((current) => (current ? { ...current, enabled: value } : current))

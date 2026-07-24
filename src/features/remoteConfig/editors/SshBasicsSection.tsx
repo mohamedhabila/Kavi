@@ -36,6 +36,7 @@ export const SshBasicsSection: React.FC<SshBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.sshTargetName')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.sshTargetName')}
         style={styles.configInput}
         value={draft.name}
         onChangeText={(value) =>
@@ -49,6 +50,7 @@ export const SshBasicsSection: React.FC<SshBasicsSectionProps> = ({
         <View style={styles.formGridItem}>
           <Text style={styles.detailLabel}>{t('settings.sshHost')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.sshHost')}
             style={styles.configInput}
             value={draft.host}
             onChangeText={(value) =>
@@ -63,6 +65,7 @@ export const SshBasicsSection: React.FC<SshBasicsSectionProps> = ({
         <View style={[styles.formGridItem, styles.formGridPortItem]}>
           <Text style={styles.detailLabel}>{t('settings.sshPort')}</Text>
           <TextInput
+            accessibilityLabel={t('settings.sshPort')}
             style={styles.configInput}
             value={sshPortText}
             onChangeText={setSshPortText}
@@ -75,6 +78,7 @@ export const SshBasicsSection: React.FC<SshBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.sshUsername')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.sshUsername')}
         style={styles.configInput}
         value={draft.username}
         onChangeText={(value) =>
@@ -88,6 +92,7 @@ export const SshBasicsSection: React.FC<SshBasicsSectionProps> = ({
 
       <Text style={styles.detailLabel}>{t('settings.sshRemoteRoot')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.sshRemoteRoot')}
         style={styles.configInput}
         value={draft.remoteRoot || ''}
         onChangeText={(value) =>
