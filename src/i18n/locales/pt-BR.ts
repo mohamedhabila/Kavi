@@ -360,6 +360,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     dark: 'Escuro',
     system: 'Sistema',
     systemPrompt: 'Prompt do sistema',
+    assistantSystemPromptAccessibility: 'Prompt de sistema do assistente',
+    personaSystemPromptAccessibility: 'Prompt de sistema da persona',
     systemPromptPlaceholder: 'Prompt do sistema…',
     defaultSystemPrompt: 'Você é um assistente pessoal de IA útil com acesso a ferramentas.',
     providers: 'Provedores de IA',

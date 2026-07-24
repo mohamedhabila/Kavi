@@ -352,6 +352,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     dark: '深色',
     system: '系统',
     systemPrompt: '系统提示',
+    assistantSystemPromptAccessibility: '助手系统提示词',
+    personaSystemPromptAccessibility: '角色系统提示词',
     systemPromptPlaceholder: '系统提示…',
     defaultSystemPrompt: '你是一个有用的个人 AI 助手，并且可以使用工具。',
     providers: 'AI 提供商',

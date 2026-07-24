@@ -70,6 +70,7 @@ export function ProviderKeyStep() {
 
         {!selectedGuide.preset ? (
           <TextInput
+            accessibilityLabel={t('settings.providerName')}
             style={styles.input}
             value={customName}
             onChangeText={setCustomName}
@@ -82,6 +83,7 @@ export function ProviderKeyStep() {
 
         {!selectedGuideIsOnDevice ? (
           <TextInput
+            accessibilityLabel={t('settings.baseUrl')}
             style={styles.input}
             value={customBaseUrl}
             onChangeText={setCustomBaseUrl}
@@ -114,6 +116,7 @@ export function ProviderKeyStep() {
           </View>
         ) : (
           <TextInput
+            accessibilityLabel={t('settings.defaultModel')}
             style={styles.input}
             value={customModel}
             onChangeText={setCustomModel}
@@ -126,6 +129,7 @@ export function ProviderKeyStep() {
 
         {selectedGuide.requiresKey ? (
           <TextInput
+            accessibilityLabel={t('settings.apiKey')}
             style={styles.input}
             value={apiKey}
             onChangeText={setApiKey}

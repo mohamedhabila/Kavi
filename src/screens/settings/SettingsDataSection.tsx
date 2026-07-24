@@ -211,6 +211,7 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
         </ScrollView>
         {compactionProviderId ? (
           <TextInput
+            accessibilityLabel={t('memory.compactionModelPlaceholder')}
             style={[styles.input, { marginTop: 8 }]}
             value={compactionModel ?? ''}
             onChangeText={(value) => setCompactionModel(value.trim() ? value : null)}

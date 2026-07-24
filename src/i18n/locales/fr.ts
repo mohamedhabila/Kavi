@@ -370,6 +370,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
     dark: 'Sombre',
     system: 'Système',
     systemPrompt: 'Prompt système',
+    assistantSystemPromptAccessibility: 'Prompt système de l’assistant',
+    personaSystemPromptAccessibility: 'Prompt système de la persona',
     systemPromptPlaceholder: 'Prompt système…',
     defaultSystemPrompt: 'Vous êtes un assistant IA personnel utile avec accès aux outils.',
     providers: 'Fournisseurs IA',

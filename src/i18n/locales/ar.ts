@@ -355,6 +355,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
     dark: 'داكن',
     system: 'النظام',
     systemPrompt: 'تعليمات النظام',
+    assistantSystemPromptAccessibility: 'موجّه نظام المساعد',
+    personaSystemPromptAccessibility: 'موجّه نظام الشخصية',
     systemPromptPlaceholder: 'تعليمات النظام…',
     defaultSystemPrompt: 'أنت مساعد ذكاء اصطناعي شخصي مفيد لديه إمكانية الوصول إلى الأدوات.',
     providers: 'مزودو الذكاء الاصطناعي',

@@ -106,8 +106,16 @@ export const createSettingsScreenConfigStyleFragments = (colors: AppPalette) => 
   permissionGroupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     padding: 12,
+  },
+  permissionGroupToggle: {
+    flex: 1,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   permissionGroupHeaderText: {
     flex: 1,
@@ -121,11 +129,6 @@ export const createSettingsScreenConfigStyleFragments = (colors: AppPalette) => 
     fontSize: 12,
     color: colors.textTertiary,
     marginTop: 2,
-  },
-  permissionGroupActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   permissionGroupDescription: {
     fontSize: 12,

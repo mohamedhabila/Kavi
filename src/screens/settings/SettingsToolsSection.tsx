@@ -178,6 +178,7 @@ export const SettingsToolsSection: React.FC<SettingsToolsSectionProps> = ({
               <Text style={styles.setupLabel}>{t('settings.freeUseLabel')}</Text> {copy.freeAccess}
             </Text>
             <TextInput
+              accessibilityLabel={copy.label}
               style={styles.input}
               value={serviceKeys[field.storageKey] || ''}
               onChangeText={(value) =>
@@ -246,44 +247,48 @@ export const SettingsToolsSection: React.FC<SettingsToolsSectionProps> = ({
 
           return (
             <View key={group.id} style={styles.permissionGroup}>
-              <TouchableOpacity
-                style={styles.permissionGroupHeader}
-                onPress={() => toggleGroup(group.id)}
-                accessibilityRole="button"
-                accessibilityLabel={t('settings.toolGroupAccessibility', {
-                  name: t(`settings.toolGroups.${group.id}.title`),
-                  enabled: String(enabledCount),
-                  total: String(totalTools),
-                })}
-              >
-                <View style={styles.permissionGroupHeaderText}>
-                  <Text style={styles.permissionGroupTitle}>
-                    {t(`settings.toolGroups.${group.id}.title`)}
-                  </Text>
-                  <Text style={styles.permissionGroupCount}>
-                    {t('settings.toolGroupCount', {
-                      enabled: String(enabledCount),
-                      total: String(totalTools),
-                    })}
-                  </Text>
-                </View>
-                <View style={styles.permissionGroupActions}>
-                  <Switch
-                    value={enableAll}
-                    onValueChange={(value) => {
-                      for (const definition of group.definitions) {
-                        setToolPermission(definition.name, value);
-                      }
-                    }}
-                    trackColor={{ true: colors.primary }}
-                  />
+              <View style={styles.permissionGroupHeader}>
+                <TouchableOpacity
+                  accessibilityLabel={t('settings.toolGroupAccessibility', {
+                    name: t(`settings.toolGroups.${group.id}.title`),
+                    enabled: String(enabledCount),
+                    total: String(totalTools),
+                  })}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: isExpanded }}
+                  onPress={() => toggleGroup(group.id)}
+                  style={styles.permissionGroupToggle}
+                  testID={`tool-group-${group.id}-toggle`}
+                >
+                  <View style={styles.permissionGroupHeaderText}>
+                    <Text style={styles.permissionGroupTitle}>
+                      {t(`settings.toolGroups.${group.id}.title`)}
+                    </Text>
+                    <Text style={styles.permissionGroupCount}>
+                      {t('settings.toolGroupCount', {
+                        enabled: String(enabledCount),
+                        total: String(totalTools),
+                      })}
+                    </Text>
+                  </View>
                   <ChevronDown
                     size={18}
                     color={colors.textSecondary}
                     style={isExpanded ? { transform: [{ rotate: '180deg' }] } : undefined}
                   />
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+                <Switch
+                  accessibilityLabel={t(`settings.toolGroups.${group.id}.title`)}
+                  value={enableAll}
+                  onValueChange={(value) => {
+                    for (const definition of group.definitions) {
+                      setToolPermission(definition.name, value);
+                    }
+                  }}
+                  trackColor={{ true: colors.primary }}
+                  testID={`tool-group-${group.id}-switch`}
+                />
+              </View>
               {isExpanded
                 ? group.definitions.map((definition) => {
                     const permission = permissionStateByTool.get(definition.name);
@@ -298,6 +303,8 @@ export const SettingsToolsSection: React.FC<SettingsToolsSectionProps> = ({
                           </Text>
                         </View>
                         <Switch
+                          accessibilityHint={definition.description}
+                          accessibilityLabel={definition.name}
                           value={allowed}
                           onValueChange={(value) => setToolPermission(definition.name, value)}
                           trackColor={{ true: colors.primary }}

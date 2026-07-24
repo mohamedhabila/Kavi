@@ -163,8 +163,9 @@ describe('SkillsScreen', () => {
       },
     });
 
-    const { getByText } = render(<SkillsScreen />);
+    const { getByLabelText, getByText } = render(<SkillsScreen />);
     expect(getByText('Weather Skill')).toBeTruthy();
+    expect(getByLabelText('Weather Skill').props.accessibilityRole).toBe('switch');
     expect(getByText('Get weather info')).toBeTruthy();
     expect(getByText('v1.2.0')).toBeTruthy();
     expect(getByText('2 tools')).toBeTruthy();

@@ -217,7 +217,7 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
 
             <Text style={styles.label}>{t('settings.systemPrompt')}</Text>
             <TextInput
-              accessibilityLabel={t('settings.systemPrompt')}
+              accessibilityLabel={t('settings.personaSystemPromptAccessibility')}
               style={[styles.input, styles.textArea]}
               value={personaDraft.systemPrompt || ''}
               onChangeText={(value) =>

@@ -106,6 +106,7 @@ export function InstalledSkillCard({
           ) : null}
         </View>
         <Switch
+          accessibilityLabel={item.metadata.name}
           value={item.enabled}
           onValueChange={() => toggleEntry(item.id)}
           trackColor={{ true: colors.primary }}

@@ -49,6 +49,7 @@ export function ToolsStep() {
       </View>
       <Text style={styles.serviceUnlocks}>{guide.unlocks}</Text>
       <TextInput
+        accessibilityLabel={guide.title}
         style={styles.input}
         value={serviceKeys[guide.storageKey] || ''}
         onChangeText={(value) =>

@@ -57,6 +57,7 @@ export const SettingsAssistantBehaviorControls: React.FC<
         <Text style={styles.featureHint}>{t('settings.linkUnderstandingHint')}</Text>
       </View>
       <Switch
+        accessibilityLabel={t('settings.linkUnderstanding')}
         onValueChange={setLinkUnderstandingEnabled}
         trackColor={{ true: colors.primary }}
         value={linkUnderstandingEnabled}
@@ -97,6 +98,7 @@ export const SettingsAssistantBehaviorControls: React.FC<
         <Text style={styles.featureHint}>{t('settings.mediaUnderstandingHint')}</Text>
       </View>
       <Switch
+        accessibilityLabel={t('settings.mediaUnderstanding')}
         onValueChange={setMediaUnderstandingEnabled}
         trackColor={{ true: colors.primary }}
         value={mediaUnderstandingEnabled}
@@ -190,6 +192,7 @@ export const SettingsAssistantBehaviorControls: React.FC<
 
     <Text style={styles.sectionTitle}>{t('settings.systemPrompt')}</Text>
     <TextInput
+      accessibilityLabel={t('settings.assistantSystemPromptAccessibility')}
       multiline
       numberOfLines={4}
       onChangeText={setSystemPrompt}

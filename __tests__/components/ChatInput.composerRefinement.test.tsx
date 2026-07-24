@@ -108,6 +108,7 @@ describe('ChatInput composer refinement', () => {
     expect(rowQueries.getByTestId('chat-attach-button')).toBeTruthy();
     expect(rowQueries.getByTestId('chat-voice-button')).toBeTruthy();
     expect(rowQueries.getByTestId('chat-composer-input')).toBeTruthy();
+    expect(rowQueries.getByLabelText('Message...')).toBeTruthy();
     expect(rowQueries.getByTestId('chat-open-input-options')).toBeTruthy();
     expect(rowQueries.getByTestId('chat-send-button')).toBeTruthy();
     expect(inputStyle).toEqual(expect.objectContaining({ minHeight: 44, maxHeight: 120 }));

@@ -184,11 +184,14 @@ describe('OnboardingWizard', () => {
   });
 
   it('shows provider setup guidance on provider selection', () => {
-    const { getByText } = render(<OnboardingWizard onComplete={jest.fn()} />);
+    const { getByLabelText, getByText } = render(<OnboardingWizard onComplete={jest.fn()} />);
     fireEvent.press(getByText('Get Started'));
     fireEvent.press(getByText('OpenAI'));
     expect(getByText('How to get access')).toBeTruthy();
     expect(getByText(/OpenAI dashboard/)).toBeTruthy();
+    expect(getByLabelText('Base URL')).toBeTruthy();
+    expect(getByLabelText('Default Model')).toBeTruthy();
+    expect(getByLabelText('API Key')).toBeTruthy();
     expect(getByText('Save provider')).toBeTruthy();
   });
 

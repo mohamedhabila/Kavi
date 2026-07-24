@@ -352,6 +352,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     dark: '深色',
     system: '系統',
     systemPrompt: '系統提示',
+    assistantSystemPromptAccessibility: '助理系統提示詞',
+    personaSystemPromptAccessibility: '角色系統提示詞',
     systemPromptPlaceholder: '系統提示…',
     defaultSystemPrompt: '你是一個有用的個人 AI 助理，並且可以使用工具。',
     providers: 'AI 供應商',

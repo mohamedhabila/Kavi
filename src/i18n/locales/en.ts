@@ -363,6 +363,8 @@ export const en: TranslationMap = {
     dark: 'Dark',
     system: 'System',
     systemPrompt: 'System Prompt',
+    assistantSystemPromptAccessibility: 'Assistant system prompt',
+    personaSystemPromptAccessibility: 'Persona system prompt',
     systemPromptPlaceholder: 'System prompt…',
     defaultSystemPrompt: 'You are a helpful personal AI assistant with access to tools.',
     providers: 'AI Providers',

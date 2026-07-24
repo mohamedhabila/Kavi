@@ -228,6 +228,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             </Pressable>
           ) : null}
           <TextInput
+            accessibilityLabel={t('chat.placeholder')}
             ref={inputRef}
             style={styles.input}
             testID="chat-composer-input"

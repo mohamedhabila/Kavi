@@ -361,6 +361,8 @@ export const de: TranslationMap = mergeTranslations(en, {
     dark: 'Dunkel',
     system: 'System',
     systemPrompt: 'System-Prompt',
+    assistantSystemPromptAccessibility: 'System-Prompt des Assistenten',
+    personaSystemPromptAccessibility: 'System-Prompt der Persona',
     systemPromptPlaceholder: 'System-Prompt…',
     defaultSystemPrompt:
       'Sie sind ein hilfreicher persönlicher KI-Assistent mit Zugriff auf Tools.',

@@ -357,6 +357,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
     dark: 'ダーク',
     system: 'システム',
     systemPrompt: 'システムプロンプト',
+    assistantSystemPromptAccessibility: 'アシスタントのシステムプロンプト',
+    personaSystemPromptAccessibility: 'ペルソナのシステムプロンプト',
     systemPromptPlaceholder: 'システムプロンプト…',
     defaultSystemPrompt: 'あなたはツールにアクセスできる役立つ個人用 AI アシスタントです。',
     providers: 'AI プロバイダー',

@@ -82,7 +82,8 @@ describe('SettingsScreen general', () => {
     expect(personaThinkingOption.props.accessibilityRole).toBe('radio');
     expect(StyleSheet.flatten(personaThinkingOption.props.style).minHeight).toBe(48);
     expect(assistant.getByLabelText('Display Name')).toBeTruthy();
-    expect(assistant.getByLabelText('System Prompt')).toBeTruthy();
+    expect(assistant.getByLabelText('Assistant system prompt')).toBeTruthy();
+    expect(assistant.getByLabelText('Persona system prompt')).toBeTruthy();
     expect(assistant.queryByText('Appearance')).toBeNull();
     assistant.unmount();
 
@@ -298,13 +299,24 @@ describe('SettingsScreen general', () => {
   });
 
   it('keeps tool setup focused on services and permissions', () => {
-    const { getByText, queryByText } = renderSettingsScreen({
+    const { getByLabelText, getByText, queryByText } = renderSettingsScreen({
       destination: 'tools-permissions',
     });
     expect(getByText('Tool Permissions')).toBeTruthy();
     expect(getByText('OpenWeather API Key')).toBeTruthy();
+    expect(getByLabelText('OpenWeather API Key')).toBeTruthy();
     expect(queryByText('Thinking Level')).toBeNull();
     expect(queryByText('Configure Personas')).toBeNull();
+  });
+
+  it('names assistant behavior fields and switches', () => {
+    const { getByLabelText } = renderSettingsScreen({
+      destination: 'assistant-personalization',
+    });
+
+    expect(getByLabelText('Link Understanding').props.accessibilityRole).toBe('switch');
+    expect(getByLabelText('Media Understanding').props.accessibilityRole).toBe('switch');
+    expect(getByLabelText('Assistant system prompt')).toBeTruthy();
   });
 
   it('should update the preferred web search provider', () => {
@@ -366,9 +378,22 @@ describe('SettingsScreen general', () => {
   });
 
   it('should toggle a tool permission', () => {
-    const { getAllByRole } = renderSettingsScreen({ destination: 'tools-permissions' });
+    const { getAllByRole, getByTestId } = renderSettingsScreen({
+      destination: 'tools-permissions',
+    });
     const switches = getAllByRole('switch');
-    fireEvent(switches[0], 'valueChange', false);
+    const groupSwitch = switches.find((entry) => entry.props.testID?.startsWith('tool-group-'));
+    if (!groupSwitch) {
+      throw new Error('Expected a tool-group switch');
+    }
+    const groupToggle = getByTestId(groupSwitch.props.testID.replace('-switch', '-toggle'));
+    let ancestor = groupSwitch.parent;
+    while (ancestor) {
+      expect(ancestor).not.toBe(groupToggle);
+      ancestor = ancestor.parent;
+    }
+    expect(groupSwitch.props.accessibilityLabel).toBeTruthy();
+    fireEvent(groupSwitch, 'valueChange', false);
     expect(settingsMocks.setPermission).toHaveBeenCalled();
   });
 
