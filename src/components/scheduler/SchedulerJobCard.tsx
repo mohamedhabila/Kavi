@@ -114,6 +114,11 @@ export function SchedulerJobCard({
   const feedbackTone = feedback ? getFeedbackTone(feedback, colors) : undefined;
   const isPending = Boolean(pendingAction);
   const isRunning = pendingAction === 'run' || presentation.state === 'running';
+  const runActionLabel = isRunning
+    ? t('scheduler.runningNow')
+    : retryAction
+      ? t('scheduler.tryAgain')
+      : t('scheduler.runNow');
 
   const scheduleText = (() => {
     if (job.schedule.kind === 'cron') {
@@ -231,6 +236,7 @@ export function SchedulerJobCard({
 
       <View style={styles.jobActions}>
         <TouchableOpacity
+          accessibilityLabel={runActionLabel}
           accessibilityRole="button"
           accessibilityState={{ busy: isRunning, disabled: isPending || isRunning }}
           disabled={isPending || isRunning}
@@ -245,13 +251,7 @@ export function SchedulerJobCard({
           ) : (
             <Play color={colors.onPrimary} size={17} />
           )}
-          <Text style={styles.primaryActionText}>
-            {isRunning
-              ? t('scheduler.runningNow')
-              : retryAction
-                ? t('scheduler.tryAgain')
-                : t('scheduler.runNow')}
-          </Text>
+          <Text style={styles.primaryActionText}>{runActionLabel}</Text>
         </TouchableOpacity>
         <View style={styles.secondaryActions}>
           <TouchableOpacity

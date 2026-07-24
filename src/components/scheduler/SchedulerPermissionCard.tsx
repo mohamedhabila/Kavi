@@ -99,6 +99,7 @@ export function SchedulerPermissionCard({
       </View>
       {copy.actionKey ? (
         <TouchableOpacity
+          accessibilityLabel={t(copy.actionKey)}
           accessibilityRole="button"
           accessibilityState={{ busy: isWorking, disabled: isWorking }}
           disabled={isWorking}

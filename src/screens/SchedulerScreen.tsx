@@ -357,6 +357,7 @@ export const SchedulerScreen: React.FC = () => {
             <Text style={styles.emptyTitle}>{t('scheduler.noJobs')}</Text>
             <Text style={styles.emptyHint}>{t('scheduler.noJobsHint')}</Text>
             <TouchableOpacity
+              accessibilityLabel={t('scheduler.emptyAction')}
               accessibilityRole="button"
               onPress={() => setShowCreateSheet(true)}
               style={styles.emptyAction}

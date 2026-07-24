@@ -255,8 +255,14 @@ export function SchedulerCreateSheet({
             ) : null}
 
             <Text style={styles.fieldLabel}>{t('scheduler.scheduleType')}</Text>
-            <View accessibilityRole="radiogroup" style={styles.segmentRow}>
+            <View
+              accessibilityLabel={t('scheduler.scheduleType')}
+              accessibilityRole="radiogroup"
+              style={styles.segmentRow}
+              testID="scheduler-schedule-type-group"
+            >
               <TouchableOpacity
+                accessibilityLabel={t('scheduler.repeat')}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: scheduleType === 'every' }}
                 onPress={() => {
@@ -279,6 +285,7 @@ export function SchedulerCreateSheet({
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
+                accessibilityLabel={t('scheduler.advancedSchedule')}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: scheduleType === 'cron' }}
                 onPress={() => {
@@ -321,11 +328,17 @@ export function SchedulerCreateSheet({
                   testID="scheduler-interval-input"
                   value={intervalValue}
                 />
-                <View style={styles.unitRow}>
+                <View
+                  accessibilityLabel={t('scheduler.intervalValue')}
+                  accessibilityRole="radiogroup"
+                  style={styles.unitRow}
+                  testID="scheduler-interval-unit-group"
+                >
                   {(Object.keys(UNIT_KEYS) as IntervalUnit[]).map((unit) => {
                     const selected = intervalUnit === unit;
                     return (
                       <TouchableOpacity
+                        accessibilityLabel={t(UNIT_KEYS[unit])}
                         accessibilityRole="radio"
                         accessibilityState={{ selected }}
                         key={unit}
@@ -375,6 +388,7 @@ export function SchedulerCreateSheet({
               </Text>
               {permissionActionKey ? (
                 <TouchableOpacity
+                  accessibilityLabel={t(permissionActionKey)}
                   accessibilityRole="button"
                   accessibilityState={{ busy: isPermissionWorking, disabled: isPermissionWorking }}
                   disabled={isPermissionWorking}
@@ -397,6 +411,7 @@ export function SchedulerCreateSheet({
             ) : null}
 
             <TouchableOpacity
+              accessibilityLabel={isCreating ? t('scheduler.creating') : t('scheduler.create')}
               accessibilityRole="button"
               accessibilityState={{ busy: isCreating, disabled: isCreating }}
               disabled={isCreating}

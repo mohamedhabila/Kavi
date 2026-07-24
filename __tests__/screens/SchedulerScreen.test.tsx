@@ -146,7 +146,9 @@ describe('SchedulerScreen', () => {
 
     expect(getByText('Reminders & automations')).toBeTruthy();
     expect(getByText('Nothing scheduled yet')).toBeTruthy();
-    expect(getByTestId('scheduler-empty-create')).toBeTruthy();
+    expect(getByTestId('scheduler-empty-create').props.accessibilityLabel).toBe(
+      'Create reminder or automation',
+    );
     expect(await findByText('Notifications are ready')).toBeTruthy();
     expect(mockRequestNotificationPermission).not.toHaveBeenCalled();
   });
@@ -161,7 +163,9 @@ describe('SchedulerScreen', () => {
 
     expect(await findByText('Get alerts when something is due')).toBeTruthy();
     expect(mockRequestNotificationPermission).not.toHaveBeenCalled();
-    fireEvent.press(getByTestId('scheduler-notification-action'));
+    const permissionAction = getByTestId('scheduler-notification-action');
+    expect(permissionAction.props.accessibilityLabel).toBe('Allow notifications');
+    fireEvent.press(permissionAction);
 
     await waitFor(() => expect(mockRequestNotificationPermission).toHaveBeenCalledTimes(1));
     expect(await findByText('Notifications are ready')).toBeTruthy();
@@ -208,6 +212,7 @@ describe('SchedulerScreen', () => {
     expect(getByText(/^Last result: Failed/)).toBeTruthy();
     expect(getByText('Provider unavailable')).toBeTruthy();
     expect(getByTestId('scheduler-notification-issue-job-history')).toBeTruthy();
+    expect(getByTestId('scheduler-run-job-history').props.accessibilityLabel).toBe('Try again');
     expect(queryByText(/sk-secret-token/)).toBeNull();
   });
 
@@ -230,7 +235,9 @@ describe('SchedulerScreen', () => {
     mockJobs.push(job());
     const { findByText, getByTestId } = render(<SchedulerScreen />);
 
-    fireEvent.press(getByTestId('scheduler-run-job-1'));
+    const runNow = getByTestId('scheduler-run-job-1');
+    expect(runNow.props.accessibilityLabel).toBe('Run now');
+    fireEvent.press(runNow);
 
     await waitFor(() =>
       expect(mockRunJobNow).toHaveBeenCalledWith('job-1', {
@@ -291,6 +298,24 @@ describe('SchedulerScreen', () => {
 
     fireEvent.press(getByTestId('scheduler-add'));
     expect(getByTestId('scheduler-create-sheet')).toBeTruthy();
+    expect(getByTestId('scheduler-schedule-type-group').props.accessibilityLabel).toBe(
+      'When should it happen?',
+    );
+    expect(getByTestId('scheduler-schedule-type-group').props.accessibilityRole).toBe(
+      'radiogroup',
+    );
+    const repeat = getByTestId('scheduler-schedule-repeat');
+    expect(repeat.props.accessibilityLabel).toBe('Repeat');
+    expect(repeat.props.accessibilityState).toEqual({ selected: true });
+    expect(StyleSheet.flatten(repeat.props.style).minHeight).toBe(48);
+    expect(getByTestId('scheduler-schedule-advanced').props.accessibilityLabel).toBe(
+      'Advanced schedule',
+    );
+    expect(getByTestId('scheduler-interval-unit-group').props.accessibilityRole).toBe(
+      'radiogroup',
+    );
+    expect(getByTestId('scheduler-unit-days').props.accessibilityLabel).toBe('days');
+    expect(getByTestId('scheduler-create-submit').props.accessibilityLabel).toBe('Create');
     fireEvent.press(getByTestId('scheduler-create-close'));
     expect(queryByTestId('scheduler-create-sheet')).toBeNull();
   });
