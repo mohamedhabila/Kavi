@@ -189,7 +189,7 @@ export function useConversationGraphController(params: UseConversationGraphContr
     });
 
     params.updateModeInConversation(conversationId, nextMode);
-    params.updatePersonaInConversation(conversationId, nextPersonaId);
+    params.updatePersonaInConversation(conversationId, nextPersonaId, { recordEvent: false });
   }, [ensureCanonicalConversation, params]);
 
   return {

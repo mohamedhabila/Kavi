@@ -143,7 +143,7 @@ export const ConversationSettingsScreen: React.FC = () => {
         nextMode,
       });
       updateModeInConversation(conversation.id, nextMode);
-      updatePersonaInConversation(conversation.id, nextPersonaId);
+      updatePersonaInConversation(conversation.id, nextPersonaId, { recordEvent: false });
     },
     [conversation, isLoading, mode, updateModeInConversation, updatePersonaInConversation],
   );

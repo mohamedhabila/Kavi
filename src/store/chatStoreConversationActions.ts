@@ -336,12 +336,15 @@ export function createConversationStoreActions(
         ),
       })),
 
-    updatePersonaInConversation: (conversationId, personaId) => {
+    updatePersonaInConversation: (conversationId, personaId, options) => {
       set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id !== conversationId) return c;
           const previousPersonaId = c.personaId;
-          const shouldRecordEvent = previousPersonaId !== personaId && c.messages.length > 0;
+          const shouldRecordEvent =
+            options?.recordEvent !== false &&
+            previousPersonaId !== personaId &&
+            c.messages.length > 0;
           const personaEvents = shouldRecordEvent
             ? [
                 ...(c.personaEvents ?? []),

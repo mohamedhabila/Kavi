@@ -128,6 +128,7 @@ export function applyForegroundScenarioRoute(
         conversationPersonaId: before.personaId,
         nextMode: selectedMode,
       }),
+      { recordEvent: false },
     );
   }
 
@@ -142,7 +143,7 @@ export function applyForegroundScenarioRoute(
     });
     const store = useChatStore.getState();
     store.updateModeInConversation(conversationId, mode);
-    store.updatePersonaInConversation(conversationId, personaId);
+    store.updatePersonaInConversation(conversationId, personaId, { recordEvent: false });
   }
 
   return resolveForegroundScenarioExecutionContext(conversationId, defaultMode);

@@ -118,7 +118,7 @@ export function synchronizeScheduledConversationMode(
     nextMode: mode,
   });
   chatState.updateModeInConversation(conversationId, mode);
-  chatState.updatePersonaInConversation(conversationId, personaId);
+  chatState.updatePersonaInConversation(conversationId, personaId, { recordEvent: false });
   return personaId;
 }
 

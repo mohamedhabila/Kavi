@@ -184,7 +184,9 @@ describe('ConversationSettingsScreen', () => {
     fireEvent.press(getByTestId('conversation-mode-answer-only'));
 
     expect(mockUpdateMode).toHaveBeenCalledWith('conversation-1', 'chitchat');
-    expect(mockUpdatePersona).toHaveBeenCalledWith('conversation-1', 'default');
+    expect(mockUpdatePersona).toHaveBeenCalledWith('conversation-1', 'default', {
+      recordEvent: false,
+    });
   });
 
   it('keeps response style contextual to Answer only behavior', () => {

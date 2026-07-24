@@ -105,7 +105,11 @@ export interface ChatState {
   deleteConversation: (id: string) => void;
   clearAllConversations: () => void;
   updateModelInConversation: (conversationId: string, providerId: string, model: string) => void;
-  updatePersonaInConversation: (conversationId: string, personaId: string) => void;
+  updatePersonaInConversation: (
+    conversationId: string,
+    personaId: string,
+    options?: { recordEvent?: boolean },
+  ) => void;
   updateModeInConversation: (conversationId: string, mode: ConversationMode) => void;
   addMessage: (
     conversationId: string,
