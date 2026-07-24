@@ -28,6 +28,7 @@ describe('useChatStore', () => {
         totalCalls: 0,
       });
       expect(state.conversations[0].logs).toEqual([]);
+      expect(state.conversations[0].isStandaloneThread).toBe(true);
     });
 
     it('should atomically replace the persona canonical for a durable new chat', () => {
@@ -76,6 +77,25 @@ describe('useChatStore', () => {
 
       expect(state.conversations).toHaveLength(2);
       expect(state.conversations[0].providerId).toBe('p2'); // Most recent first
+    });
+
+    it('preserves independent conversations across persisted-state normalization', () => {
+      const firstId = useChatStore.getState().createConversation('p1', 'sys');
+      const secondId = useChatStore.getState().createConversation('p1', 'sys');
+
+      const restarted = normalizePersistedChatState(useChatStore.getState());
+
+      expect(restarted.activeConversationId).toBe(secondId);
+      expect(restarted.conversations.map((conversation) => conversation.id)).toEqual([
+        secondId,
+        firstId,
+      ]);
+      expect(
+        restarted.conversations.every(
+          (conversation) =>
+            conversation.isStandaloneThread === true && !conversation.archivedFromMigration,
+        ),
+      ).toBe(true);
     });
 
     it('should support creating a conversation without activating it', () => {

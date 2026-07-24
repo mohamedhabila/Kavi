@@ -117,7 +117,7 @@ describe('foreground run target-conversation execution context', () => {
       'target-provider',
       conversation.systemPrompt,
       'target-model',
-      { mode: 'chitchat', personaId: 'reviewer', activate: true, replaceCanonical: true },
+      { mode: 'chitchat', personaId: 'reviewer', activate: true },
     );
     expect(recordConversationTurnMemory).toHaveBeenCalledWith(
       conversation.id,

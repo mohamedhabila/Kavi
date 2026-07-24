@@ -110,7 +110,7 @@ export function collapseConversationsToCanonical(conversations: Conversation[]):
   const groups = new Map<string, Conversation[]>();
   for (const conv of conversations) {
     const isArchivedOnly = conv.archivedFromMigration && !conv.isCanonical;
-    if (conv.isSideThread || isArchivedOnly) {
+    if (conv.isSideThread || conv.isStandaloneThread || isArchivedOnly) {
       continue;
     }
     const key = conv.personaId && conv.personaId.length > 0 ? conv.personaId : '__default__';
@@ -136,7 +136,7 @@ export function collapseConversationsToCanonical(conversations: Conversation[]):
     }
   }
   return conversations.map((conv) => {
-    if (conv.isSideThread) return conv;
+    if (conv.isSideThread || conv.isStandaloneThread) return conv;
     if (canonicalIds.has(conv.id)) {
       if (conv.isCanonical && !conv.archivedFromMigration) {
         return conv;
@@ -178,6 +178,7 @@ export function normalizePersistedChatState(
     const canonicalConversation = conversations.find((conversation) => {
       if (
         conversation.isSideThread ||
+        conversation.isStandaloneThread ||
         conversation.archivedFromMigration ||
         !conversation.isCanonical
       ) {

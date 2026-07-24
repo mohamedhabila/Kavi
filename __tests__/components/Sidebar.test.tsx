@@ -50,10 +50,6 @@ const mockConversations = [
 ];
 
 const mockCreateConversation = jest.fn();
-const mockGetOrCreateCanonicalThread = jest.fn(
-  (providerId: string, _systemPrompt: string, _model?: string) => `canonical-${providerId}`,
-);
-const mockCreateSideThread = jest.fn((parentId: string, _options?: any) => `side-of-${parentId}`);
 const mockSetActiveConversation = jest.fn();
 const mockDeleteConversation = jest.fn();
 let mockActiveConversationId: string | null = 'conv1';
@@ -74,8 +70,6 @@ jest.mock('../../src/store/useChatStore', () => ({
       conversations: mockConversations,
       activeConversationId: mockActiveConversationId,
       createConversation: mockCreateConversation,
-      getOrCreateCanonicalThread: mockGetOrCreateCanonicalThread,
-      createSideThread: mockCreateSideThread,
       setActiveConversation: mockSetActiveConversation,
       deleteConversation: mockDeleteConversation,
     };
@@ -201,32 +195,29 @@ describe('Sidebar', () => {
   it('starts a new chat in one tap', () => {
     const { getByTestId } = render(<Sidebar {...defaultProps} />);
     fireEvent.press(getByTestId('sidebar-new-chat'));
-    expect(mockCreateSideThread).toHaveBeenCalledWith('conv1', {
-      providerId: 'openai',
-      modelOverride: 'gpt-5.4',
-      title: 'New Conversation',
-    });
+    expect(mockCreateConversation).toHaveBeenCalledWith(
+      'openai',
+      'You are helpful',
+      'gpt-5.4',
+      {},
+    );
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
     expect(mockNavigation.closeDrawer).toHaveBeenCalled();
   });
 
-  it('should materialize the canonical thread before starting a side thread when none is active', () => {
+  it('starts an independent chat when no conversation is active', () => {
     mockActiveConversationId = null;
     const { getByTestId } = render(<Sidebar {...defaultProps} />);
     fireEvent.press(getByTestId('sidebar-new-chat'));
-    expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+    expect(mockCreateConversation).toHaveBeenCalledWith(
       'openai',
       'You are helpful',
       'gpt-5.4',
+      {},
     );
-    expect(mockCreateSideThread).toHaveBeenCalledWith('canonical-openai', {
-      providerId: 'openai',
-      modelOverride: 'gpt-5.4',
-      title: 'New Conversation',
-    });
   });
 
-  it('should route users to settings instead of starting a side thread without a provider', () => {
+  it('should route users to settings instead of starting a chat without a provider', () => {
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockProviders = [];
 
@@ -237,7 +228,7 @@ describe('Sidebar', () => {
       'Error',
       'No provider configured. Go to Settings to add one.',
     );
-    expect(mockCreateSideThread).not.toHaveBeenCalled();
+    expect(mockCreateConversation).not.toHaveBeenCalled();
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Settings', {
       destination: 'advanced-ai',
     });

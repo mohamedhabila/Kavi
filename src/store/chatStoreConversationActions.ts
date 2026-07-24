@@ -114,7 +114,7 @@ export function createConversationStoreActions(
         updatedAt: now,
         personaId: options?.personaId,
         mode: options?.mode,
-        ...(replaceCanonical ? { isCanonical: true } : {}),
+        ...(replaceCanonical ? { isCanonical: true } : { isStandaloneThread: true }),
         usage: buildEmptyConversationUsage(),
         logs: [],
         agentRuns: [],
@@ -157,7 +157,7 @@ export function createConversationStoreActions(
         options?.personaId && options.personaId.length > 0 ? options.personaId : '__default__';
       const { conversations } = get();
       const existingCandidates = conversations.filter((c) => {
-        if (c.isSideThread || c.archivedFromMigration) return false;
+        if (c.isSideThread || c.isStandaloneThread || c.archivedFromMigration) return false;
         if (!c.isCanonical) return false;
         const ownKey = c.personaId && c.personaId.length > 0 ? c.personaId : '__default__';
         return ownKey === groupKey;

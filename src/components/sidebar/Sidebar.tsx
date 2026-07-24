@@ -32,8 +32,7 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
 
   const conversations = useChatStore((s) => s.conversations);
   const activeId = useChatStore((s) => s.activeConversationId);
-  const getOrCreateCanonicalThread = useChatStore((s) => s.getOrCreateCanonicalThread);
-  const createSideThread = useChatStore((s) => s.createSideThread);
+  const createConversation = useChatStore((s) => s.createConversation);
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const providers = useSettingsStore((s) => s.providers);
   const systemPrompt = useSettingsStore((s) => s.systemPrompt);
@@ -101,35 +100,13 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
       return;
     }
 
-    // Side-thread sandbox branches off the canonical main thread.
-    let parentId: string | null = activeId;
-    if (!parentId) {
-      parentId = getOrCreateCanonicalThread(
-        selection.providerId,
-        systemPrompt,
-        selection.model || undefined,
-      );
-    } else {
-      const current = conversations.find((c) => c.id === parentId);
-      if (current?.isSideThread) {
-        parentId = current.parentConversationId ?? parentId;
-      }
-    }
-
-    if (typeof createSideThread === 'function' && parentId) {
-      const sideId = createSideThread(parentId, {
-        providerId: selection.providerId,
-        modelOverride: selection.model || undefined,
-        title: t('nav.newConversation'),
-      });
-      if (sideId) {
-        navigation.navigate('Chat');
-        navigation.closeDrawer();
-        return;
-      }
-    }
-
-    getOrCreateCanonicalThread(selection.providerId, systemPrompt, selection.model || undefined);
+    const current = activeId
+      ? conversations.find((conversation) => conversation.id === activeId)
+      : undefined;
+    createConversation(selection.providerId, systemPrompt, selection.model || undefined, {
+      ...(current?.personaId ? { personaId: current.personaId } : {}),
+      ...(current?.mode ? { mode: current.mode } : {}),
+    });
     navigation.navigate('Chat');
     navigation.closeDrawer();
   };

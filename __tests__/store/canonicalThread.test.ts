@@ -25,6 +25,7 @@ function makeConversation(overrides: Partial<Conversation>): Conversation {
     personaId: overrides.personaId,
     mode: overrides.mode,
     isSideThread: overrides.isSideThread,
+    isStandaloneThread: overrides.isStandaloneThread,
     parentConversationId: overrides.parentConversationId,
     isCanonical: overrides.isCanonical,
     archivedFromMigration: overrides.archivedFromMigration,
@@ -83,6 +84,23 @@ describe('collapseConversationsToCanonical (v6→v7)', () => {
     expect(byId.side.isCanonical).not.toBe(true);
     expect(byId.side.archivedFromMigration).not.toBe(true);
     expect(byId.main.isCanonical).toBe(true);
+  });
+
+  it('never folds standalone chats into the persona canonical', () => {
+    const standalone = makeConversation({
+      id: 'standalone',
+      updatedAt: 200,
+      isStandaloneThread: true,
+    });
+    const out = collapseConversationsToCanonical([
+      makeConversation({ id: 'main', updatedAt: 100 }),
+      standalone,
+    ]);
+    const byId = Object.fromEntries(out.map((conversation) => [conversation.id, conversation]));
+
+    expect(byId.main.isCanonical).toBe(true);
+    expect(byId.standalone).toEqual(standalone);
+    expect(byId.standalone.archivedFromMigration).not.toBe(true);
   });
 
   it('is idempotent — already-flagged input passes through unchanged', () => {

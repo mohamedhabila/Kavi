@@ -278,7 +278,7 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
           provider.id,
           currentConversation?.systemPrompt ?? shared.state.systemPrompt,
           currentConversation?.modelOverride ?? provider.model,
-          { ...options, activate: true, replaceCanonical: true },
+          { ...options, activate: true },
         );
       },
       updateAssistantMessage: (messageId, content) =>
