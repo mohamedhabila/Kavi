@@ -14,7 +14,7 @@ export const createCodeEditorScreenStyles = (colors: AppPalette) =>
     sourceChip: {
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: 44,
+      minHeight: 48,
       paddingHorizontal: 10,
       borderRadius: 999,
       borderWidth: 1,
@@ -57,7 +57,7 @@ export const createCodeEditorScreenStyles = (colors: AppPalette) =>
     targetChip: {
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: 44,
+      minHeight: 48,
       maxWidth: '100%',
       paddingHorizontal: 10,
       borderRadius: 999,
@@ -107,8 +107,8 @@ export const createCodeEditorScreenStyles = (colors: AppPalette) =>
     headerBtn: {
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: 44,
-      width: 44,
+      minHeight: 48,
+      width: 48,
     },
     pathBar: {
       flexDirection: 'row',
@@ -122,7 +122,7 @@ export const createCodeEditorScreenStyles = (colors: AppPalette) =>
     },
     pathInput: {
       flex: 1,
-      minHeight: 44,
+      minHeight: 48,
       fontSize: 11,
       color: colors.textTertiary,
       fontFamily: 'monospace',
@@ -158,7 +158,7 @@ export const createCodeEditorScreenStyles = (colors: AppPalette) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      minHeight: 44,
+      minHeight: 48,
       paddingHorizontal: 10,
       borderRadius: 999,
       borderWidth: 1,
@@ -221,7 +221,7 @@ export const createCodeEditorScreenStyles = (colors: AppPalette) =>
       alignItems: 'center',
       alignSelf: 'flex-start',
       justifyContent: 'center',
-      minHeight: 44,
+      minHeight: 48,
       paddingHorizontal: 12,
       borderRadius: 999,
       backgroundColor: colors.primary,
@@ -238,7 +238,7 @@ export const createCodeEditorScreenStyles = (colors: AppPalette) =>
       borderRadius: 999,
       borderWidth: 1,
       justifyContent: 'center',
-      minHeight: 44,
+      minHeight: 48,
       paddingHorizontal: 12,
     },
     secondaryCtaText: {

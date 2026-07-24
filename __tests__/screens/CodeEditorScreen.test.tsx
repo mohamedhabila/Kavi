@@ -241,8 +241,10 @@ describe('CodeEditorScreen', () => {
       disabled: true,
       selected: false,
     });
+    expect(getByLabelText('codeEditor.startScratch')).toBeTruthy();
+    expect(getByLabelText('codeEditor.openRemoteWork')).toBeTruthy();
     expect(StyleSheet.flatten(getByTestId('code-editor-start-scratch').props.style).minHeight).toBe(
-      44,
+      48,
     );
 
     fireEvent.press(getByTestId('code-editor-start-scratch'));
@@ -251,6 +253,10 @@ describe('CodeEditorScreen', () => {
     expect(getByTestId('code-editor-scratch-notice')).toBeTruthy();
     expect(getByText('codeEditor.scratchModeMessage')).toBeTruthy();
     expect(getByLabelText('codeEditor.filePathLabel').props.editable).toBe(false);
+    expect(getByTestId('code-editor-new-file').props.accessibilityLabel).toBe(
+      'codeEditor.newFile',
+    );
+    expect(StyleSheet.flatten(getByTestId('code-editor-new-file').props.style).minHeight).toBe(48);
     expect(queryByLabelText('codeEditor.saveFile')).toBeNull();
 
     fireEvent.press(getByText('set-codemirror-mode'));
@@ -258,9 +264,9 @@ describe('CodeEditorScreen', () => {
   });
 
   it('offers connected saved files as the alternate standalone path', () => {
-    const { getByText } = render(<CodeEditorScreen />);
+    const { getByLabelText } = render(<CodeEditorScreen />);
 
-    fireEvent.press(getByText('codeEditor.openRemoteWork'));
+    fireEvent.press(getByLabelText('codeEditor.openRemoteWork'));
     expect(mockNavigate).toHaveBeenCalledWith('RemoteWork');
   });
 
@@ -268,11 +274,11 @@ describe('CodeEditorScreen', () => {
     const { getByLabelText, getByTestId } = render(<CodeEditorScreen />);
 
     expect(StyleSheet.flatten(getByLabelText('Back').props.style)).toMatchObject({
-      minHeight: 44,
-      width: 44,
+      minHeight: 48,
+      width: 48,
     });
     expect(StyleSheet.flatten(getByTestId('code-editor-source-local').props.style).minHeight).toBe(
-      44,
+      48,
     );
   });
 
@@ -335,9 +341,22 @@ describe('CodeEditorScreen', () => {
       },
     ];
 
-    const { getByText, getByDisplayValue, getByLabelText, queryByText } = render(
+    const { getByText, getByDisplayValue, getByLabelText, getByTestId, queryByText } = render(
       <CodeEditorScreen />,
     );
+
+    expect(getByTestId('code-editor-target-group').props.accessibilityRole).toBe('radiogroup');
+    expect(getByTestId('code-editor-target-ws-1').props.accessibilityRole).toBe('radio');
+    expect(getByTestId('code-editor-target-ws-1').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(StyleSheet.flatten(getByTestId('code-editor-target-ws-1').props.style).minHeight).toBe(48);
+    expect(getByTestId('code-editor-browse-files').props.accessibilityLabel).toBe(
+      'codeEditor.browseFiles',
+    );
+    expect(getByTestId('code-editor-browse-files').props.accessibilityState).toEqual({
+      expanded: true,
+    });
 
     await act(async () => {
       fireEvent.press(getByText('open-browser-file'));
@@ -376,7 +395,7 @@ describe('CodeEditorScreen', () => {
       content: 'console.log(1);',
     };
 
-    const { getAllByText, getByDisplayValue, getByLabelText, getByText } = render(
+    const { getAllByText, getByDisplayValue, getByLabelText, getByTestId, getByText } = render(
       <CodeEditorScreen />,
     );
 
@@ -395,7 +414,10 @@ describe('CodeEditorScreen', () => {
       );
     });
 
-    fireEvent.press(getByText('codeEditor.reloadFile'));
+    expect(getByTestId('code-editor-reload-file').props.accessibilityLabel).toBe(
+      'codeEditor.reloadFile',
+    );
+    fireEvent.press(getByTestId('code-editor-reload-file'));
 
     await waitFor(() => {
       expect(mockReadConversationWorkspaceTextFile).toHaveBeenCalledWith('conv-1', 'src/App.tsx');
@@ -465,10 +487,10 @@ describe('CodeEditorScreen', () => {
   it('shows the no-target state when a remote source has no enabled targets', () => {
     mockRouteParams = { source: 'workspace' };
 
-    const { getByText } = render(<CodeEditorScreen />);
+    const { getByLabelText, getByText } = render(<CodeEditorScreen />);
 
     expect(getByText('codeEditor.noTargetTitle')).toBeTruthy();
-    fireEvent.press(getByText('codeEditor.openRemoteWork'));
+    fireEvent.press(getByLabelText('codeEditor.openRemoteWork'));
     expect(mockNavigate).toHaveBeenCalledWith('RemoteWork');
   });
 

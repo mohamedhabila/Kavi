@@ -256,7 +256,11 @@ export function CodeEditorScreenView({
         </View>
       </View>
 
-      <View style={styles.sourceBar}>
+      <View
+        accessibilityLabel={t('codeEditor.title')}
+        accessibilityRole="tablist"
+        style={styles.sourceBar}
+      >
         {(['workspace', 'ssh', 'local'] as CodeEditorSource[]).map((entry) => {
           const disabled =
             (entry === 'workspace' && enabledWorkspaceTargets.length === 0) ||
@@ -299,14 +303,19 @@ export function CodeEditorScreenView({
       {source !== 'local' ? (
         <View style={styles.targetBar}>
           <Text style={styles.sectionLabel}>{t('codeEditor.targetLabel')}</Text>
-          <View style={styles.targetChipsWrap}>
+          <View
+            accessibilityLabel={t('codeEditor.targetLabel')}
+            accessibilityRole="radiogroup"
+            style={styles.targetChipsWrap}
+            testID="code-editor-target-group"
+          >
             {(source === 'workspace' ? enabledWorkspaceTargets : enabledSshTargets).map(
               (target) => (
                 <TouchableOpacity
-                  key={target.id}
                   accessibilityLabel={target.name}
-                  accessibilityRole="button"
+                  accessibilityRole="radio"
                   accessibilityState={{ selected: target.id === targetId }}
+                  key={target.id}
                   style={[styles.targetChip, target.id === targetId && styles.targetChipActive]}
                   onPress={() => handleTargetChange(target.id)}
                   testID={`code-editor-target-${target.id}`}
@@ -333,6 +342,7 @@ export function CodeEditorScreenView({
           <Text style={styles.emptyBody}>{t('codeEditor.startEditingMessage')}</Text>
           <View style={styles.emptyActions}>
             <TouchableOpacity
+              accessibilityLabel={t('codeEditor.startScratch')}
               accessibilityRole="button"
               onPress={handleNewFile}
               style={styles.primaryCta}
@@ -341,9 +351,11 @@ export function CodeEditorScreenView({
               <Text style={styles.primaryCtaText}>{t('codeEditor.startScratch')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              accessibilityLabel={t('codeEditor.openRemoteWork')}
               accessibilityRole="button"
               onPress={openRemoteWork}
               style={styles.secondaryCta}
+              testID="code-editor-open-remote-setup"
             >
               <Text style={styles.secondaryCtaText}>{t('codeEditor.openRemoteWork')}</Text>
             </TouchableOpacity>
@@ -354,9 +366,11 @@ export function CodeEditorScreenView({
           <Text style={styles.emptyTitle}>{t('codeEditor.noTargetTitle')}</Text>
           <Text style={styles.emptyBody}>{t('codeEditor.noTargetMessage')}</Text>
           <TouchableOpacity
+            accessibilityLabel={t('codeEditor.openRemoteWork')}
             accessibilityRole="button"
             onPress={openRemoteWork}
             style={styles.primaryCta}
+            testID="code-editor-open-remote-missing-target"
           >
             <Text style={styles.primaryCtaText}>{t('codeEditor.openRemoteWork')}</Text>
           </TouchableOpacity>
@@ -390,27 +404,34 @@ export function CodeEditorScreenView({
             <View style={styles.contextActions}>
               {source !== 'local' ? (
                 <TouchableOpacity
+                  accessibilityLabel={t('codeEditor.browseFiles')}
                   accessibilityRole="button"
+                  accessibilityState={{ expanded: browserVisible }}
                   onPress={() => setBrowserVisible((value) => !value)}
                   style={styles.contextBtn}
+                  testID="code-editor-browse-files"
                 >
                   <FolderTree size={14} color={colors.primary} />
                   <Text style={styles.contextBtnText}>{t('codeEditor.browseFiles')}</Text>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity
+                accessibilityLabel={t('codeEditor.newFile')}
                 accessibilityRole="button"
                 onPress={handleNewFile}
                 style={styles.contextBtn}
+                testID="code-editor-new-file"
               >
                 <PlusSquare size={14} color={colors.primary} />
                 <Text style={styles.contextBtnText}>{t('codeEditor.newFile')}</Text>
               </TouchableOpacity>
               {(source !== 'local' || isConversationWorkspaceSource) && activePath ? (
                 <TouchableOpacity
+                  accessibilityLabel={t('codeEditor.reloadFile')}
                   accessibilityRole="button"
                   onPress={handleReload}
                   style={styles.contextBtn}
+                  testID="code-editor-reload-file"
                 >
                   <RefreshCw size={14} color={colors.primary} />
                   <Text style={styles.contextBtnText}>{t('codeEditor.reloadFile')}</Text>
