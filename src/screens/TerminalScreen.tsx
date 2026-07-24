@@ -9,15 +9,15 @@ import {
   KeyboardAvoidingView,
   Linking,
   Platform,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Wifi } from 'lucide-react-native';
 import { useTranslation } from '../i18n/useTranslation';
-import { useAppTheme, AppPalette } from '../theme/useAppTheme';
+import { useAppTheme } from '../theme/useAppTheme';
 import { executeJavaScriptWithResult, formatJavaScriptResult } from '../utils/javascript';
 import {
   executeLocalShellCommand,
@@ -37,6 +37,7 @@ import {
 } from '../services/ssh/connector';
 import type { SshTargetConfig } from '../types/remote';
 import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
+import { createTerminalScreenStyles } from './terminal/terminalScreenStyles';
 
 type TerminalMode = TerminalRuntimeMode | 'ssh';
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -55,7 +56,7 @@ const DEFAULT_CAPABILITIES: LocalRuntimeCapabilities = {
   unavailableReason:
     Platform.OS === 'android'
       ? 'Install Termux to enable real local shell commands on Android.'
-      : 'Real local shell is only available on Android. Use JavaScript mode or remote SSH.',
+      : 'Real local shell is only available on Android in this build. Use JavaScript mode or a remote SSH target.',
 };
 
 function getSshReadinessMessageForLocale(reason: SshReadinessReason, t: TranslateFn): string {
@@ -89,10 +90,14 @@ function localizeTerminalUnavailableReason(
       return t('terminal.androidOnlyShellUnavailable');
     case 'The Android Termux bridge is not linked in this build.':
       return t('terminal.termuxBridgeUnavailable');
+    case 'Install Termux to enable real local shell commands on Android.':
+      return t('terminal.termuxInstallRequired');
+    case 'Termux is installed, but the RUN_COMMAND service is not available.':
+      return t('terminal.termuxServiceUnavailable');
     case 'Failed to detect local shell runtime.':
       return t('terminal.detectShellRuntimeFailed');
     default:
-      return reason;
+      return t('terminal.shellUnavailable');
   }
 }
 
@@ -119,9 +124,10 @@ function getSshErrorMessage(error: unknown, t: TranslateFn): string {
 }
 
 export const TerminalScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { colors } = useAppTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createTerminalScreenStyles(colors), [colors]);
   const termRef = useRef<TerminalWebViewRef>(null);
   const activeShellRef = useRef<ConnectedSshShell | null>(null);
   const sshConnectionGenerationRef = useRef(0);
@@ -129,6 +135,7 @@ export const TerminalScreen: React.FC = () => {
 
   const [mode, setMode] = useState<TerminalMode>('javascript');
   const [capabilities, setCapabilities] = useState<LocalRuntimeCapabilities>(DEFAULT_CAPABILITIES);
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(true);
   const [sshSession, setSshSession] = useState<SshSessionState | null>(null);
   const [connectingTargetId, setConnectingTargetId] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -138,9 +145,32 @@ export const TerminalScreen: React.FC = () => {
   const sshTargets = useSettingsStore((s) => s.sshTargets ?? []);
 
   useEffect(() => {
+    let active = true;
     void getLocalRuntimeCapabilities()
-      .then(setCapabilities)
-      .catch((e) => console.warn('[Terminal] Failed to get runtime capabilities:', e));
+      .then((nextCapabilities) => {
+        if (active) {
+          setCapabilities(nextCapabilities);
+        }
+      })
+      .catch((error) => {
+        console.warn('[Terminal] Failed to get runtime capabilities:', error);
+        if (active) {
+          setCapabilities({
+            ...DEFAULT_CAPABILITIES,
+            shellAvailable: false,
+            unavailableReason: 'Failed to detect local shell runtime.',
+          });
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setCapabilitiesLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const getTerminalUnavailableReason = useCallback(
@@ -437,8 +467,18 @@ export const TerminalScreen: React.FC = () => {
         {(['javascript', 'shell', 'ssh'] as TerminalMode[]).map((m) => (
           <TouchableOpacity
             key={m}
+            accessibilityLabel={
+              m === 'javascript'
+                ? t('terminal.modeJavascript')
+                : m === 'shell'
+                  ? t('terminal.modeShell')
+                  : t('terminal.modeSsh')
+            }
+            accessibilityRole="tab"
+            accessibilityState={{ selected: mode === m }}
             style={[styles.modeButton, mode === m && styles.modeButtonActive]}
             onPress={() => handleModeChange(m)}
+            testID={`terminal-mode-${m}`}
           >
             <Text style={[styles.modeButtonText, mode === m && styles.modeButtonTextActive]}>
               {m === 'javascript'
@@ -450,6 +490,20 @@ export const TerminalScreen: React.FC = () => {
           </TouchableOpacity>
         ))}
       </View>
+
+      {mode === 'shell' && (capabilitiesLoading || !capabilities.shellAvailable) ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={styles.runtimeNotice}
+          testID="terminal-shell-readiness"
+        >
+          <Text style={styles.runtimeNoticeText}>
+            {capabilitiesLoading
+              ? t('terminal.checkingShell')
+              : getTerminalUnavailableReason(capabilities.unavailableReason)}
+          </Text>
+        </View>
+      ) : null}
 
       {mode === 'ssh' && sshSession && (
         <View style={styles.sshSessionBar}>
@@ -466,7 +520,8 @@ export const TerminalScreen: React.FC = () => {
                   : t('terminal.connectionCancelled'),
               )
             }
-            hitSlop={8}
+            accessibilityRole="button"
+            style={styles.sshSessionActionButton}
           >
             <Text style={styles.sshSessionAction}>
               {sshSession.connected ? t('common.disconnect') : t('common.cancel')}
@@ -478,7 +533,18 @@ export const TerminalScreen: React.FC = () => {
       {mode === 'ssh' && !sshSession?.connected && (
         <View style={styles.sshPicker}>
           {sshTargetsWithReadiness.length === 0 ? (
-            <Text style={styles.sshPickerEmpty}>{t('terminal.noSshTargetsHint')}</Text>
+            <View style={styles.sshEmptyState}>
+              <Text style={styles.sshPickerEmpty}>{t('terminal.noSshTargetsHint')}</Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() =>
+                  navigation.navigate('RemoteWork', { returnTo: { name: 'Terminal' } })
+                }
+                style={styles.sshSetupButton}
+              >
+                <Text style={styles.sshSetupButtonText}>{t('terminal.configureSsh')}</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             sshTargetsWithReadiness.map(({ target, readiness, label }) => {
               const disabled =
@@ -488,9 +554,13 @@ export const TerminalScreen: React.FC = () => {
               return (
                 <TouchableOpacity
                   key={target.id}
+                  accessibilityLabel={`${target.name} (${label})`}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: disabled || isConnecting }}
                   style={[styles.sshTargetBtn, disabled && styles.sshTargetBtnDisabled]}
                   onPress={() => connectSsh(target)}
                   disabled={disabled || isConnecting}
+                  testID={`terminal-ssh-target-${target.id}`}
                 >
                   <Text style={styles.sshTargetText}>
                     {target.name} ({label})
@@ -537,104 +607,3 @@ export const TerminalScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
-
-const createStyles = (colors: AppPalette) =>
-  StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    flex: { flex: 1 },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      minHeight: 56,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      backgroundColor: colors.header,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    headerTitle: {
-      flex: 1,
-      fontSize: 17,
-      fontWeight: '600',
-      color: colors.text,
-      textAlign: 'center',
-    },
-    headerActions: {
-      width: 44,
-      minHeight: 44,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 12,
-    },
-    headerBtn: { padding: 4 },
-    connectedBadge: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      backgroundColor: colors.success + '22',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    modeBar: {
-      flexDirection: 'row',
-      gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      backgroundColor: colors.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    modeButton: {
-      flex: 1,
-      paddingVertical: 10,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.background,
-    },
-    modeButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    modeButtonText: { color: colors.text, fontWeight: '600', fontSize: 13 },
-    modeButtonTextActive: { color: colors.onPrimary },
-    sshPicker: {
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      backgroundColor: colors.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    sshSessionBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      backgroundColor: colors.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    sshSessionText: { flex: 1, color: colors.text, fontSize: 13, fontFamily: 'monospace' },
-    sshSessionAction: { color: colors.primary, fontSize: 13, fontWeight: '600' },
-    sshPickerEmpty: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      textAlign: 'center',
-      paddingVertical: 8,
-    },
-    sshTargetBtn: {
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      backgroundColor: colors.background,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.border,
-      marginBottom: 6,
-    },
-    sshTargetBtnDisabled: { opacity: 0.55 },
-    sshTargetText: { color: colors.text, fontSize: 13, fontFamily: 'monospace' },
-    sshTargetMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
-  });

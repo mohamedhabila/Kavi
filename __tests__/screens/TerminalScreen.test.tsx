@@ -3,14 +3,15 @@
 // ---------------------------------------------------------------------------
 
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Linking } from 'react-native';
+import { Linking, StyleSheet } from 'react-native';
 
 // Mock navigation
 const mockOpenDrawer = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     openDrawer: mockOpenDrawer,
-    navigate: jest.fn(),
+    navigate: mockNavigate,
   }),
   useRoute: () => ({ name: 'Terminal', params: {} }),
   useFocusEffect: jest.fn(),
@@ -176,11 +177,20 @@ describe('TerminalScreen', () => {
   });
 
   it('renders terminal header and mode tabs', async () => {
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
     expect(getByText('Terminal')).toBeTruthy();
-    expect(getByText('JS')).toBeTruthy();
-    expect(getByText('Shell')).toBeTruthy();
-    expect(getByText('SSH')).toBeTruthy();
+    expect(getByText('JavaScript')).toBeTruthy();
+    expect(getByText('Local shell')).toBeTruthy();
+    expect(getByText('SSH server')).toBeTruthy();
+    expect(getByTestId('terminal-mode-javascript').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(getByTestId('terminal-mode-shell').props.accessibilityState).toEqual({
+      selected: false,
+    });
+    expect(StyleSheet.flatten(getByTestId('terminal-mode-javascript').props.style).minHeight).toBe(
+      44,
+    );
   });
 
   it('renders the WebView terminal component', async () => {
@@ -189,26 +199,65 @@ describe('TerminalScreen', () => {
   });
 
   it('switches mode when tabs are pressed', async () => {
-    const { getByText } = await renderTerminal();
+    const { getByTestId } = await renderTerminal();
 
-    // Should be in JS mode by default, switch to Shell
-    fireEvent.press(getByText('Shell'));
-    // Should not crash
-    expect(getByText('Shell')).toBeTruthy();
+    fireEvent.press(getByTestId('terminal-mode-shell'));
+    expect(getByTestId('terminal-mode-shell').props.accessibilityState).toEqual({ selected: true });
 
-    // Switch to SSH
-    fireEvent.press(getByText('SSH'));
-    expect(getByText('SSH')).toBeTruthy();
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
+    expect(getByTestId('terminal-mode-ssh').props.accessibilityState).toEqual({ selected: true });
 
-    // Switch back to JS
-    fireEvent.press(getByText('JS'));
-    expect(getByText('JS')).toBeTruthy();
+    fireEvent.press(getByTestId('terminal-mode-javascript'));
+    expect(getByTestId('terminal-mode-javascript').props.accessibilityState).toEqual({
+      selected: true,
+    });
   });
 
-  it('shows clear button in toolbar', async () => {
-    const { UNSAFE_root } = await renderTerminal();
-    // The clear button uses a Trash2 icon rather than text; confirm render doesn't crash
-    expect(UNSAFE_root).toBeTruthy();
+  it('makes toolbar actions reachable and confirms their results', async () => {
+    const { getAllByLabelText, getByLabelText, getByPlaceholderText, getByText } =
+      await renderTerminal();
+
+    const clearButton = getByLabelText('Clear terminal');
+    expect(StyleSheet.flatten(clearButton.props.style)).toMatchObject({
+      minHeight: 44,
+      width: 44,
+    });
+    fireEvent.press(clearButton);
+    expect(mockTerminalRef.clear).toHaveBeenCalled();
+    expect(getByText('Terminal cleared.')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Paste into terminal'));
+      await Promise.resolve();
+    });
+    expect(mockTerminalRef.paste).toHaveBeenCalledWith('clipboard text');
+    expect(getByText('Pasted from clipboard.')).toBeTruthy();
+
+    const searchButton = getByLabelText('Search terminal');
+    expect(searchButton.props.accessibilityState).toEqual({ expanded: false });
+    fireEvent.press(searchButton);
+    const searchInput = getByPlaceholderText('Search...');
+    expect(StyleSheet.flatten(searchInput.props.style).minHeight).toBe(44);
+    fireEvent.changeText(searchInput, 'warning');
+    fireEvent(searchInput, 'submitEditing');
+    expect(mockTerminalRef.search).toHaveBeenCalledWith('warning');
+    expect(getByText('Search updated.')).toBeTruthy();
+    expect(getAllByLabelText('Search terminal')[0].props.accessibilityState).toEqual({
+      expanded: true,
+    });
+  });
+
+  it('handles unavailable clipboard feedback without an unhandled rejection', async () => {
+    mockClipboardGetStringAsync.mockRejectedValueOnce(new Error('clipboard denied'));
+    const { getByLabelText, getByText } = await renderTerminal();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Paste into terminal'));
+      await Promise.resolve();
+    });
+
+    expect(getByText('Clipboard could not be read.')).toBeTruthy();
+    expect(mockTerminalRef.paste).not.toHaveBeenCalled();
   });
 
   it('does not crash when opening drawer', async () => {
@@ -310,13 +359,13 @@ describe('TerminalScreen', () => {
       stdoutWasTruncated: false,
       stderrWasTruncated: false,
     });
-    const { getByText } = await renderTerminal();
+    const { getByTestId } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('Shell'));
+    fireEvent.press(getByTestId('terminal-mode-shell'));
 
     await act(async () => {
       await mockTerminalProps.onInput('p');
@@ -342,13 +391,13 @@ describe('TerminalScreen', () => {
       stdoutWasTruncated: false,
       stderrWasTruncated: false,
     });
-    const { getByText } = await renderTerminal();
+    const { getByTestId } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('Shell'));
+    fireEvent.press(getByTestId('terminal-mode-shell'));
 
     await act(async () => {
       await mockTerminalProps.onInput('f');
@@ -369,38 +418,58 @@ describe('TerminalScreen', () => {
       shellSupported: true,
       shellAvailable: false,
       shellProvider: 'termux',
-      unavailableReason: 'Termux not installed.',
+      unavailableReason: 'Install Termux to enable real local shell commands on Android.',
     });
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('Shell'));
+    fireEvent.press(getByTestId('terminal-mode-shell'));
 
+    expect(getByTestId('terminal-shell-readiness')).toBeTruthy();
+    expect(getByText('Install Termux to run local shell commands on Android.')).toBeTruthy();
     expect(mockTerminalRef.writeln).toHaveBeenCalledWith(
-      expect.stringContaining('Termux not installed.'),
+      expect.stringContaining('Install Termux to run local shell commands on Android.'),
     );
   });
 
-  it('shows the SSH empty state when no enabled SSH targets exist', async () => {
+  it('shows a recoverable message instead of raw capability errors', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGetCapabilities.mockRejectedValueOnce(new Error('native runtime diagnostic'));
+    const { getByTestId, getByText, queryByText } = await renderTerminal();
+
+    fireEvent.press(getByTestId('terminal-mode-shell'));
+
+    expect(
+      getByText('The local shell could not be checked. Try again or use JavaScript or SSH.'),
+    ).toBeTruthy();
+    expect(queryByText('native runtime diagnostic')).toBeNull();
+    warnSpy.mockRestore();
+  });
+
+  it('guides SSH setup when no enabled targets exist', async () => {
     mockSshTargets.splice(0, mockSshTargets.length);
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
 
-    fireEvent.press(getByText('SSH'));
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
 
-    expect(getByText('No SSH targets configured. Add one in Remote Work settings.')).toBeTruthy();
+    expect(getByText('Connect a server to use SSH from the terminal.')).toBeTruthy();
+    fireEvent.press(getByText('Set up SSH'));
+    expect(mockNavigate).toHaveBeenCalledWith('RemoteWork', {
+      returnTo: { name: 'Terminal' },
+    });
   });
 
   it('connects to an SSH target and opens a shell session', async () => {
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('SSH'));
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
     fireEvent.press(getByText('Build Box (developer@ssh.example.com:22)'));
 
     await waitFor(() => {
@@ -422,13 +491,13 @@ describe('TerminalScreen', () => {
   });
 
   it('renders SSH output chunks immediately without waiting for a newline', async () => {
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('SSH'));
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
     fireEvent.press(getByText('Build Box (developer@ssh.example.com:22)'));
 
     await waitFor(() => {
@@ -446,13 +515,13 @@ describe('TerminalScreen', () => {
   });
 
   it('forwards keyboard input to the connected SSH shell', async () => {
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('SSH'));
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
     fireEvent.press(getByText('Build Box (developer@ssh.example.com:22)'));
 
     await waitFor(() => {
@@ -467,20 +536,20 @@ describe('TerminalScreen', () => {
   });
 
   it('disconnects the SSH session when switching away from SSH mode', async () => {
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('SSH'));
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
     fireEvent.press(getByText('Build Box (developer@ssh.example.com:22)'));
 
     await waitFor(() => {
       expect(mockOpenSshShell).toHaveBeenCalled();
     });
 
-    fireEvent.press(getByText('JS'));
+    fireEvent.press(getByTestId('terminal-mode-javascript'));
 
     await waitFor(() => {
       expect(mockShellClose).toHaveBeenCalled();
@@ -492,9 +561,9 @@ describe('TerminalScreen', () => {
       launchable: false,
       reason: 'missing-auth-secret',
     });
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
 
-    fireEvent.press(getByText('SSH'));
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
 
     expect(getByText('Missing SSH credentials')).toBeTruthy();
     fireEvent.press(getByText('Build Box (developer@ssh.example.com:22)'));
@@ -510,15 +579,15 @@ describe('TerminalScreen', () => {
         }),
     );
 
-    const { getByText } = await renderTerminal();
+    const { getByTestId, getByText } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('SSH'));
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
     fireEvent.press(getByText('Build Box (developer@ssh.example.com:22)'));
-    fireEvent.press(getByText('JS'));
+    fireEvent.press(getByTestId('terminal-mode-javascript'));
 
     await act(async () => {
       resolveShell?.({
@@ -533,13 +602,13 @@ describe('TerminalScreen', () => {
   });
 
   it('closes the active SSH shell on unmount', async () => {
-    const { getByText, unmount } = await renderTerminal();
+    const { getByTestId, getByText, unmount } = await renderTerminal();
 
     await act(async () => {
       mockTerminalProps.onReady(80, 24);
     });
 
-    fireEvent.press(getByText('SSH'));
+    fireEvent.press(getByTestId('terminal-mode-ssh'));
     fireEvent.press(getByText('Build Box (developer@ssh.example.com:22)'));
 
     await waitFor(() => {

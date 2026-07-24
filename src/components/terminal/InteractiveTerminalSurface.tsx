@@ -1,5 +1,5 @@
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Clipboard as ClipboardIcon, Search, Trash2, X } from 'lucide-react-native';
 import * as ExpoClipboard from 'expo-clipboard';
 import { useTranslation } from '../../i18n/useTranslation';
@@ -32,6 +32,7 @@ export const InteractiveTerminalSurface = forwardRef<
   const terminalRef = useRef<TerminalWebViewRef>(null);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   useImperativeHandle(
     ref,
@@ -51,36 +52,60 @@ export const InteractiveTerminalSurface = forwardRef<
   );
 
   const handlePaste = useCallback(async () => {
-    const text = await ExpoClipboard.getStringAsync();
-    if (text) {
-      terminalRef.current?.paste(text);
+    try {
+      const text = await ExpoClipboard.getStringAsync();
+      if (text) {
+        terminalRef.current?.paste(text);
+        setFeedback(t('terminal.pasteComplete'));
+      } else {
+        setFeedback(t('terminal.clipboardEmpty'));
+      }
+    } catch {
+      setFeedback(t('terminal.clipboardUnavailable'));
     }
-  }, []);
+  }, [t]);
 
   const handleSearch = useCallback(() => {
     const query = searchQuery.trim();
     if (query) {
       terminalRef.current?.search(query);
+      setFeedback(t('terminal.searchComplete'));
     }
-  }, [searchQuery]);
+  }, [searchQuery, t]);
 
-  const styles = createStyles(colors);
+  const handleClear = useCallback(() => {
+    terminalRef.current?.clear();
+    setFeedback(t('terminal.clearComplete'));
+  }, [t]);
+
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <View style={[styles.container, style]}>
       <View style={styles.toolbar}>
+        {feedback ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            numberOfLines={1}
+            style={styles.feedback}
+            testID="terminal-action-feedback"
+          >
+            {feedback}
+          </Text>
+        ) : (
+          <View style={styles.feedback} />
+        )}
         <TouchableOpacity
           onPress={() => setSearchVisible((current) => !current)}
-          hitSlop={8}
           style={styles.toolbarBtn}
           accessibilityRole="button"
           accessibilityLabel={t('terminal.searchTerminal')}
+          accessibilityState={{ expanded: searchVisible }}
         >
           <Search size={18} color={colors.textSecondary} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => void handlePaste()}
-          hitSlop={8}
           style={styles.toolbarBtn}
           accessibilityRole="button"
           accessibilityLabel={t('terminal.pasteIntoTerminal')}
@@ -88,8 +113,7 @@ export const InteractiveTerminalSurface = forwardRef<
           <ClipboardIcon size={18} color={colors.textSecondary} />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => terminalRef.current?.clear()}
-          hitSlop={8}
+          onPress={handleClear}
           style={styles.toolbarBtn}
           accessibilityRole="button"
           accessibilityLabel={t('terminal.clearTerminal')}
@@ -101,6 +125,7 @@ export const InteractiveTerminalSurface = forwardRef<
       {searchVisible ? (
         <View style={styles.searchBar}>
           <TextInput
+            accessibilityLabel={t('terminal.searchQueryLabel')}
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -113,7 +138,7 @@ export const InteractiveTerminalSurface = forwardRef<
           />
           <TouchableOpacity
             onPress={() => setSearchVisible(false)}
-            hitSlop={8}
+            style={styles.toolbarBtn}
             accessibilityRole="button"
             accessibilityLabel={t('terminal.closeTerminalSearch')}
           >
@@ -140,16 +165,25 @@ function createStyles(colors: AppPalette) {
     toolbar: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'flex-end',
-      gap: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      gap: 4,
+      minHeight: 52,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       backgroundColor: colors.surface,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
     toolbarBtn: {
-      padding: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 44,
+      width: 44,
+    },
+    feedback: {
+      color: colors.textSecondary,
+      flex: 1,
+      fontSize: 12,
+      paddingHorizontal: 4,
     },
     searchBar: {
       flexDirection: 'row',
@@ -163,6 +197,7 @@ function createStyles(colors: AppPalette) {
     },
     searchInput: {
       flex: 1,
+      minHeight: 44,
       fontSize: 14,
       color: colors.text,
       paddingVertical: 6,
