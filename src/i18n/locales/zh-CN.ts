@@ -563,6 +563,12 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     quickSetupExpo: 'Expo / EAS',
     configured: '已配置',
     needsSetup: '需要设置',
+    destinations: {
+      advancedAI: {
+        title: '高级 AI',
+        hint: '连接和管理为助手提供支持的 AI 服务商。',
+      },
+    },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',
     defaultConversationModeHint:

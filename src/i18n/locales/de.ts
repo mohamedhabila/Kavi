@@ -583,6 +583,12 @@ export const de: TranslationMap = mergeTranslations(en, {
     quickSetupExpo: 'Expo / EAS',
     configured: 'Konfiguriert',
     needsSetup: 'Einrichtung erforderlich',
+    destinations: {
+      advancedAI: {
+        title: 'Erweiterte KI',
+        hint: 'Verbinde und verwalte die KI-Anbieter für deinen Assistenten.',
+      },
+    },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',
     defaultConversationModeHint:

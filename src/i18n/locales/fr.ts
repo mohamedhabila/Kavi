@@ -589,6 +589,12 @@ export const fr: TranslationMap = mergeTranslations(en, {
     quickSetupExpo: 'Expo / EAS',
     configured: 'Configure',
     needsSetup: 'Configuration requise',
+    destinations: {
+      advancedAI: {
+        title: 'IA avancée',
+        hint: 'Connectez et gérez les fournisseurs d’IA qui alimentent votre assistant.',
+      },
+    },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',
     defaultConversationModeHint:

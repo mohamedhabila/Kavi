@@ -33,6 +33,8 @@ import { getLocalLlmModelDisplayName } from '../services/localLlm/catalog';
 import { isOnDeviceLlmProvider } from '../services/localLlm/provider';
 import { deriveConsolidationStatusSnapshot } from '../services/memory/consolidationStatus';
 import { SettingsProviderEditor } from './components/settings/SettingsProviderEditor';
+import { SettingsProviderSurfaces } from './settings/SettingsProviderSurfaces';
+import { resolveSettingsDestination } from './settings/settingsDestination';
 import {
   useSettingsRemoteConfigFlow,
   type SettingsSection,
@@ -51,12 +53,32 @@ import { useSettingsRemoteConfigDraftHydration } from './settings/useSettingsRem
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const handleBack = useBackToChat();
+  const clearTransientRouteState = useCallback(
+    (continueNavigation: () => void) => {
+      if (
+        route.params?.destination ||
+        route.params?.returnTo ||
+        route.params?.section ||
+        route.params?.serverId
+      ) {
+        navigation.setParams({
+          destination: undefined,
+          returnTo: undefined,
+          section: undefined,
+          serverId: undefined,
+        });
+      }
+      continueNavigation();
+    },
+    [navigation, route.params],
+  );
+  const handleBack = useBackToChat({ beforeNavigate: clearTransientRouteState });
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const isWide = width >= 680;
   const styles = useMemo(() => createSettingsScreenStyles(colors), [colors]);
+  const destination = resolveSettingsDestination(route.params?.destination);
 
   const providers = useSettingsStore((s) => s.providers);
   const theme = useSettingsStore((s) => s.theme);
@@ -320,6 +342,48 @@ export const SettingsScreen: React.FC = () => {
         onTrackedScroll={(y) => updateTrackedScroll('provider-edit', y)}
         onRestore={() => restoreTrackedScroll('provider-edit', editorScrollRef)}
       />
+    );
+  }
+
+  if (destination === 'advanced-ai') {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={handleBack}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+          >
+            <ArrowLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('settings.destinations.advancedAI.title')}</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <SettingsManagedScrollView
+          ref={mainScrollRef}
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          onTrackedScroll={(y) => updateTrackedScroll('main', y)}
+          onRestore={() => restoreTrackedScroll('main', mainScrollRef)}
+        >
+          <View style={styles.sectionCard} testID="settings-advanced-ai">
+            <Text style={styles.sectionCardHint}>{t('settings.destinations.advancedAI.hint')}</Text>
+            <SettingsProviderSurfaces
+              colors={colors}
+              styles={styles}
+              t={t}
+              providers={providers}
+              localRuntimeStatusesByProviderId={localRuntimeStatusesByProviderId}
+              isOnDeviceLlmProvider={isOnDeviceLlmProvider}
+              getLocalLlmModelDisplayName={getLocalLlmModelDisplayName}
+              formatLocalLlmRuntimeStatusLabel={formatLocalLlmRuntimeStatusLabel}
+              handleNewProvider={handleNewProvider}
+              handleEditProvider={handleEditProvider}
+            />
+          </View>
+        </SettingsManagedScrollView>
+      </SafeAreaView>
     );
   }
 

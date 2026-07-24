@@ -20,6 +20,7 @@ jest.mock('../../src/engine/tools/definitions', () => ({
 const mockSettings = {
   goBack: jest.fn(),
   navigate: jest.fn(),
+  setParams: jest.fn(),
   addProvider: jest.fn(),
   updateProvider: jest.fn(),
   removeProvider: jest.fn(),
@@ -154,7 +155,11 @@ const buildInstalledLocalProvider = (provider: any) => {
 
 export const settingsMocks = mockSettings;
 export const settingsTestState = mockSettingsState;
-export const renderSettingsScreen = () => render(<SettingsScreen />);
+let mockSettingsRouteParams: Record<string, unknown> = {};
+export const renderSettingsScreen = (routeParams: Record<string, unknown> = {}) => {
+  mockSettingsRouteParams = routeParams;
+  return render(<SettingsScreen />);
+};
 export const confirmSettingsDestructiveAlert = () =>
   require('../helpers/remoteConfigFixtures').confirmDestructiveAlert();
 
@@ -162,10 +167,11 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     goBack: mockSettings.goBack,
     navigate: mockSettings.navigate,
+    setParams: mockSettings.setParams,
     openDrawer: jest.fn(),
     closeDrawer: jest.fn(),
   }),
-  useRoute: () => ({ name: 'Settings', params: {} }),
+  useRoute: () => ({ name: 'Settings', params: mockSettingsRouteParams }),
   useFocusEffect: jest.fn(),
 }));
 
@@ -398,6 +404,7 @@ jest.mock('../../src/services/agents/registry', () => ({
 export const setupSettingsScreenTestSuite = () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSettingsRouteParams = {};
     mockSettings.getSecure.mockResolvedValue('');
     mockSettings.saveSecure.mockResolvedValue(undefined);
     mockSettings.deleteSecure.mockResolvedValue(undefined);

@@ -16,6 +16,36 @@ describe('SettingsScreen general', () => {
     expect(getByText('Settings')).toBeTruthy();
   });
 
+  it('opens Advanced AI as a focused provider destination', () => {
+    const { getByTestId, getByText, queryByText } = renderSettingsScreen({
+      destination: 'advanced-ai',
+    });
+
+    expect(getByTestId('settings-advanced-ai')).toBeTruthy();
+    expect(getByText('Advanced AI')).toBeTruthy();
+    expect(getByText('AI Providers')).toBeTruthy();
+    expect(queryByText('MCP Servers')).toBeNull();
+    expect(queryByText('Clear All Conversations')).toBeNull();
+  });
+
+  it('clears transient destination state when returning from Advanced AI', () => {
+    const { getByTestId } = renderSettingsScreen({
+      destination: 'advanced-ai',
+      returnTo: { name: 'More' },
+    });
+
+    const arrowIcon = getByTestId('icon-ArrowLeft');
+    fireEvent.press(arrowIcon.parent || arrowIcon);
+
+    expect(settingsMocks.setParams).toHaveBeenCalledWith({
+      destination: undefined,
+      returnTo: undefined,
+      section: undefined,
+      serverId: undefined,
+    });
+    expect(settingsMocks.navigate).toHaveBeenCalledWith('More');
+  });
+
   it('should render theme section', () => {
     const { getByText } = renderSettingsScreen();
     expect(getByText('Appearance')).toBeTruthy();

@@ -579,6 +579,12 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     quickSetupExpo: 'Expo / EAS',
     configured: 'Configurado',
     needsSetup: 'Precisa de configuração',
+    destinations: {
+      advancedAI: {
+        title: 'IA avançada',
+        hint: 'Conecte e gerencie os provedores de IA que alimentam seu assistente.',
+      },
+    },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',
     defaultConversationModeHint:

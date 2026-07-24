@@ -576,6 +576,12 @@ export const ja: TranslationMap = mergeTranslations(en, {
     quickSetupExpo: 'Expo / EAS',
     configured: '設定済み',
     needsSetup: '設定が必要',
+    destinations: {
+      advancedAI: {
+        title: '高度な AI',
+        hint: 'アシスタントを動かす AI プロバイダーを接続・管理します。',
+      },
+    },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',
     defaultConversationModeHint:

@@ -562,6 +562,12 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     quickSetupExpo: 'Expo / EAS',
     configured: '已設定',
     needsSetup: '需要設定',
+    destinations: {
+      advancedAI: {
+        title: '進階 AI',
+        hint: '連接並管理為助理提供支援的 AI 服務商。',
+      },
+    },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',
     defaultConversationModeHint:

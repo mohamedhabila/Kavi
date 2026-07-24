@@ -184,6 +184,12 @@ describe('navigation hub screens', () => {
       returnTo: { name: 'More' },
     });
 
+    fireEvent.press(getByTestId('more-hub-advanced-ai'));
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Settings', {
+      destination: 'advanced-ai',
+      returnTo: { name: 'More' },
+    });
+
     fireEvent.press(getByTestId('more-hub-developer-remote-work'));
     expect(mockNavigation.navigate).toHaveBeenLastCalledWith('DeveloperWork', {
       returnTo: { name: 'More' },

@@ -580,6 +580,12 @@ export const en: TranslationMap = {
     quickSetupExpo: 'Expo / EAS',
     configured: 'Configured',
     needsSetup: 'Needs setup',
+    destinations: {
+      advancedAI: {
+        title: 'Advanced AI',
+        hint: 'Connect and manage the AI providers that power your assistant.',
+      },
+    },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',
     defaultConversationModeHint:

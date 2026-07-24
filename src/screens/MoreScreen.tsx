@@ -82,7 +82,11 @@ export const MoreScreen: React.FC = () => {
           id: 'advanced-ai',
           title: t('nav.advancedAI'),
           icon: BrainCircuit,
-          onPress: () => navigation.navigate('Settings', { returnTo: { name: 'More' } }),
+          onPress: () =>
+            navigation.navigate('Settings', {
+              destination: 'advanced-ai',
+              returnTo: { name: 'More' },
+            }),
         },
         {
           id: 'privacy-permissions',

@@ -568,6 +568,12 @@ export const ar: TranslationMap = mergeTranslations(en, {
     quickSetupExpo: 'Expo / EAS',
     configured: 'تم التكوين',
     needsSetup: 'يحتاج إلى إعداد',
+    destinations: {
+      advancedAI: {
+        title: 'الذكاء الاصطناعي المتقدم',
+        hint: 'اربط موفري الذكاء الاصطناعي الذين يشغّلون مساعدك وأدِرهم.',
+      },
+    },
     defaultConversationMode: 'وضع المحادثة الافتراضي',
     defaultConversationModeSummary: 'وكيل أم دردشة',
     defaultConversationModeHint:
