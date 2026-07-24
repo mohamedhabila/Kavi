@@ -3,6 +3,11 @@ import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Cpu, Eye, EyeOff, Trash2 } from 'lucide-react-native';
 
+import { CapabilityGate, type CapabilityGateState } from '../../../components/CapabilityGate';
+import type {
+  ProviderConfigurationIssue,
+  ProviderConfigurationReadiness,
+} from '../../../services/llm/support/providerReadiness';
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { AppPalette } from '../../../theme/useAppTheme';
 import { SettingsLocalModelControls } from './SettingsLocalModelControls';
@@ -45,6 +50,7 @@ const SettingsEditorFrame: React.FC<SettingsEditorFrameProps> = ({
       <View style={styles.header}>
         <TouchableOpacity
           onPress={onBack}
+          style={styles.headerAction}
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
         >
@@ -54,6 +60,7 @@ const SettingsEditorFrame: React.FC<SettingsEditorFrameProps> = ({
         <TouchableOpacity
           onPress={() => void onSave()}
           disabled={saveDisabled}
+          style={styles.headerAction}
           accessibilityRole="button"
           accessibilityLabel={t('common.save')}
           accessibilityState={{ disabled: saveDisabled }}
@@ -83,6 +90,7 @@ type SettingsProviderEditorProps = SharedEditorProps & {
   isExisting: boolean;
   isOnDevice: boolean;
   canSave: boolean;
+  readiness: ProviderConfigurationReadiness | null;
   localCatalog: Array<{ id: string; name: string; sizeLabel: string }>;
   selectedLocalCatalogEntry: any;
   tempApiKey: string;
@@ -105,11 +113,68 @@ type SettingsProviderEditorProps = SharedEditorProps & {
   setTempApiKey: (value: string) => void;
 };
 
+function getCapabilityGateState(readiness: ProviderConfigurationReadiness): CapabilityGateState {
+  switch (readiness.state) {
+    case 'checking':
+      return 'loading';
+    case 'setup-needed':
+      return 'setup-needed';
+    case 'configured':
+      return 'ready';
+    case 'active':
+      return 'active';
+    case 'error':
+      return 'error';
+    case 'off':
+    default:
+      return 'unavailable';
+  }
+}
+
+function getReadinessCopy(readiness: ProviderConfigurationReadiness, t: TranslationFn) {
+  switch (readiness.state) {
+    case 'checking':
+      return {
+        title: t('settings.providerReadiness.checking'),
+        description: t('settings.providerReadiness.checkingHint'),
+      };
+    case 'setup-needed':
+      return {
+        title: t('settings.providerReadiness.setupNeeded'),
+        description: t('settings.providerReadiness.setupHint'),
+      };
+    case 'configured':
+      return {
+        title: t('settings.providerReadiness.configured'),
+        description: t('settings.providerReadiness.configuredHint'),
+      };
+    case 'active':
+      return {
+        title: t('settings.providerReadiness.active'),
+        description: t('settings.providerReadiness.activeHint'),
+      };
+    case 'error':
+      return {
+        title: t('settings.providerReadiness.credentialError'),
+        description: t('settings.providerReadiness.errorHint'),
+      };
+    case 'off':
+    default:
+      return {
+        title: t('settings.providerReadiness.off'),
+        description: readiness.issues[0]
+          ? t('settings.providerReadiness.offSetupHint')
+          : t('settings.providerReadiness.offHint'),
+      };
+  }
+}
+
 export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
   editingProvider,
   isExisting,
   isOnDevice,
   canSave,
+  readiness,
   localCatalog,
   selectedLocalCatalogEntry,
   tempApiKey,
@@ -138,6 +203,16 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
   onTrackedScroll,
   onRestore,
 }) => {
+  const readinessCopy = readiness ? getReadinessCopy(readiness, t) : null;
+  const hasIssue = (issue: ProviderConfigurationIssue) =>
+    readiness?.issues.includes(issue) === true;
+  const nameError = hasIssue('name-required');
+  const baseUrlError =
+    hasIssue('base-url-required') || hasIssue('base-url-invalid') || hasIssue('base-url-protocol');
+  const apiKeyError = hasIssue('api-key-required');
+  const modelError = hasIssue('model-required');
+  const localModelError = hasIssue('local-model-required');
+
   return (
     <SettingsEditorFrame
       title={isExisting ? t('settings.editProvider') : t('settings.newProvider')}
@@ -151,14 +226,30 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
       onTrackedScroll={onTrackedScroll}
       onRestore={onRestore}
     >
+      {readiness && readinessCopy ? (
+        <CapabilityGate
+          advancedLabel={t('navigationHub.advanced')}
+          description={readinessCopy.description}
+          state={getCapabilityGateState(readiness)}
+          testID="provider-readiness"
+          title={readinessCopy.title}
+        />
+      ) : null}
+
       <Text style={styles.label}>{t('settings.providerName')}</Text>
       <TextInput
-        style={styles.input}
+        accessibilityLabel={t('settings.providerName')}
+        style={[styles.input, nameError ? styles.inputError : null]}
         value={editingProvider.name}
         onChangeText={(value) => setEditingProvider({ ...editingProvider, name: value })}
         placeholder={t('settings.providerNamePlaceholder')}
         placeholderTextColor={colors.placeholder}
       />
+      {nameError ? (
+        <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
+          {t('settings.providerValidation.nameRequired')}
+        </Text>
+      ) : null}
 
       {isOnDevice ? (
         <View style={styles.localProviderNotice}>
@@ -174,7 +265,8 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
         <>
           <Text style={styles.label}>{t('settings.baseUrl')}</Text>
           <TextInput
-            style={styles.input}
+            accessibilityLabel={t('settings.baseUrl')}
+            style={[styles.input, baseUrlError ? styles.inputError : null]}
             value={editingProvider.baseUrl}
             onChangeText={(value) => setEditingProvider({ ...editingProvider, baseUrl: value })}
             placeholder={t('settings.baseUrlPlaceholder')}
@@ -182,11 +274,21 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
             autoCapitalize="none"
             keyboardType="url"
           />
+          {baseUrlError ? (
+            <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
+              {hasIssue('base-url-required')
+                ? t('settings.providerValidation.baseUrlRequired')
+                : hasIssue('base-url-protocol')
+                  ? t('settings.providerValidation.baseUrlProtocol')
+                  : t('settings.providerValidation.baseUrlInvalid')}
+            </Text>
+          ) : null}
 
           <Text style={styles.label}>{t('settings.apiKey')}</Text>
           <View style={styles.apiKeyRow}>
             <TextInput
-              style={[styles.input, { flex: 1 }]}
+              accessibilityLabel={t('settings.apiKey')}
+              style={[styles.input, { flex: 1 }, apiKeyError ? styles.inputError : null]}
               value={tempApiKey}
               onChangeText={setTempApiKey}
               placeholder={t('settings.apiKeyPlaceholder')}
@@ -200,7 +302,7 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
               onPress={onToggleShowApiKey}
               style={styles.eyeBtn}
               accessibilityRole="button"
-              accessibilityLabel={t('settings.apiKey')}
+              accessibilityLabel={showApiKey ? t('settings.hideApiKey') : t('settings.showApiKey')}
             >
               {showApiKey ? (
                 <EyeOff size={20} color={colors.textSecondary} />
@@ -209,6 +311,13 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
               )}
             </TouchableOpacity>
           </View>
+          {apiKeyError ? (
+            <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
+              {t('settings.providerValidation.apiKeyRequired')}
+            </Text>
+          ) : readiness && !readiness.apiKeyRequired ? (
+            <Text style={styles.fieldHint}>{t('settings.providerValidation.apiKeyOptional')}</Text>
+          ) : null}
         </>
       )}
 
@@ -235,7 +344,8 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
         />
       ) : (
         <TextInput
-          style={styles.input}
+          accessibilityLabel={t('settings.defaultModel')}
+          style={[styles.input, modelError ? styles.inputError : null]}
           value={editingProvider.model}
           onChangeText={(value) => setEditingProvider({ ...editingProvider, model: value })}
           placeholder={t('settings.defaultModelPlaceholder')}
@@ -243,10 +353,21 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
           autoCapitalize="none"
         />
       )}
+      {!isOnDevice && modelError ? (
+        <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
+          {t('settings.providerValidation.modelRequired')}
+        </Text>
+      ) : null}
+      {isOnDevice && localModelError ? (
+        <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
+          {t('settings.providerValidation.localModelRequired')}
+        </Text>
+      ) : null}
 
       <View style={styles.switchRow}>
         <Text style={styles.switchLabel}>{t('common.enabled')}</Text>
         <Switch
+          accessibilityLabel={t('common.enabled')}
           value={editingProvider.enabled}
           onValueChange={(value) => setEditingProvider({ ...editingProvider, enabled: value })}
           trackColor={{ true: colors.primary }}

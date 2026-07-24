@@ -196,6 +196,8 @@ export const SettingsScreen: React.FC = () => {
     localCatalog,
     selectedLocalCatalogEntry,
     canSaveProvider,
+    editingProviderReadiness,
+    providerCredentialStatuses,
     showApiKey,
     tempApiKey,
     editingLocalModelDownloadState,
@@ -219,6 +221,7 @@ export const SettingsScreen: React.FC = () => {
   } = useSettingsProviderFlow({
     t,
     providers,
+    activeProviderId,
     setSection,
     addProvider,
     updateProvider,
@@ -271,15 +274,11 @@ export const SettingsScreen: React.FC = () => {
     toolPermissions: true,
     personas: true,
   });
-  const {
-    mainScrollRef,
-    editorScrollRef,
-    updateTrackedScroll,
-    restoreTrackedScroll,
-  } = useSettingsSectionNavigation({
-    mainContentKey: destination,
-    section,
-  });
+  const { mainScrollRef, editorScrollRef, updateTrackedScroll, restoreTrackedScroll } =
+    useSettingsSectionNavigation({
+      mainContentKey: destination,
+      section,
+    });
   useSettingsRemoteConfigDraftHydration({
     section,
     editingWorkspace,
@@ -363,6 +362,7 @@ export const SettingsScreen: React.FC = () => {
         isExisting={editingProviderIsExisting}
         isOnDevice={editingProviderIsOnDevice}
         canSave={canSaveProvider}
+        readiness={editingProviderReadiness}
         localCatalog={localCatalog}
         selectedLocalCatalogEntry={selectedLocalCatalogEntry}
         tempApiKey={tempApiKey}
@@ -587,10 +587,13 @@ export const SettingsScreen: React.FC = () => {
                   styles={styles}
                   t={t}
                   providers={providers}
+                  activeProviderId={activeProviderId}
+                  providerCredentialStatuses={providerCredentialStatuses}
                   localRuntimeStatusesByProviderId={localRuntimeStatusesByProviderId}
                   isOnDeviceLlmProvider={isOnDeviceLlmProvider}
                   getLocalLlmModelDisplayName={getLocalLlmModelDisplayName}
                   formatLocalLlmRuntimeStatusLabel={formatLocalLlmRuntimeStatusLabel}
+                  isLocalLlmModelInstalled={isLocalLlmModelInstalled}
                   handleNewProvider={handleNewProvider}
                   handleEditProvider={handleEditProvider}
                 />

@@ -1,5 +1,6 @@
 import {
   assertProviderReadyForRequest,
+  providerRequiresApiKey,
   resolveConversationModel,
   resolveConversationStartSelection,
 } from '../../../src/services/llm/support/providerSupport';
@@ -243,5 +244,31 @@ describe('assertProviderReadyForRequest', () => {
         apiKey: '',
       } as any),
     ).not.toThrow();
+  });
+
+  it('allows Ollama and other loopback providers without an API key', () => {
+    expect(
+      providerRequiresApiKey({
+        name: 'Ollama (local)',
+        baseUrl: 'http://localhost:11434/v1',
+        providerFamily: 'ollama',
+      }),
+    ).toBe(false);
+    expect(
+      providerRequiresApiKey({
+        name: 'Local compatible server',
+        baseUrl: 'http://[::1]:1234/v1',
+      }),
+    ).toBe(false);
+  });
+
+  it('continues requiring keys for remote hosted providers', () => {
+    expect(
+      providerRequiresApiKey({
+        name: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        providerFamily: 'openrouter',
+      }),
+    ).toBe(true);
   });
 });

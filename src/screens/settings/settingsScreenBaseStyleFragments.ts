@@ -99,6 +99,21 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     fontSize: 15,
     color: colors.text,
   },
+  inputError: {
+    borderColor: colors.danger,
+  },
+  fieldError: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 5,
+  },
+  fieldHint: {
+    color: colors.textTertiary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 5,
+  },
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
@@ -109,7 +124,10 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     gap: 8,
   },
   eyeBtn: {
-    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 44,
   },
   localProviderNotice: {
     flexDirection: 'row',
@@ -187,7 +205,7 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
   },
   presetRow: {
     marginBottom: 12,
-    maxHeight: 40,
+    maxHeight: 48,
   },
   presetChip: {
     flexDirection: 'row',
@@ -195,6 +213,7 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    minHeight: 44,
     borderRadius: 16,
     backgroundColor: colors.primarySoft,
     marginRight: 8,
@@ -228,7 +247,13 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
   listItemContent: {
     flex: 1,
   },
+  providerTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   listItemTitle: {
+    flexShrink: 1,
     fontSize: 15,
     fontWeight: '500',
     color: colors.text,
@@ -237,5 +262,9 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     fontSize: 12,
     color: colors.textTertiary,
     marginTop: 2,
+  },
+  providerStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

@@ -205,6 +205,8 @@ jest.mock('../../src/theme/useAppTheme', () => ({
       danger: '#f00',
       dangerSoft: '#300',
       success: '#0d0',
+      warning: '#ff0',
+      warningBackground: '#330',
       overlay: 'rgba(0,0,0,0.5)',
     },
   }),
@@ -225,6 +227,8 @@ jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: (selector: (s: any) => any) => {
     const state = {
       providers: mockSettingsState.providers,
+      activeProviderId: 'openai',
+      activeModel: 'gpt-5.4',
       mcpServers: mockSettingsState.mcpServers,
       sshTargets: mockSettingsState.sshTargets,
       workspaceTargets: mockSettingsState.workspaceTargets,

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
 import {
@@ -18,6 +18,11 @@ import {
   getProviderApiKey,
   saveProviderApiKey,
 } from '../../services/storage/SecureStorage';
+import {
+  getProviderConfigurationReadiness,
+  type ProviderCredentialStatus,
+} from '../../services/llm/support/providerReadiness';
+import { providerRequiresApiKey } from '../../services/llm/support/providerSupport';
 import { removeCredentialBackedConfiguration } from '../../services/storage/credentialBackedConfigRemoval';
 import type { LlmProviderConfig } from '../../types/provider';
 import { generateId } from '../../utils/id';
@@ -26,9 +31,25 @@ import type { SettingsSection } from './useSettingsRemoteConfigFlow';
 
 type TranslationFn = (key: string, params?: any) => string;
 
+function getInitialCredentialStatus(provider: LlmProviderConfig): ProviderCredentialStatus {
+  if (!providerRequiresApiKey(provider)) {
+    return 'not-required';
+  }
+  return (provider.apiKey || '').trim() ? 'configured' : 'checking';
+}
+
+function getInitialCredentialStatuses(
+  providers: LlmProviderConfig[],
+): Record<string, ProviderCredentialStatus> {
+  return Object.fromEntries(
+    providers.map((provider) => [provider.id, getInitialCredentialStatus(provider)]),
+  );
+}
+
 type UseSettingsProviderFlowParams = {
   t: TranslationFn;
   providers: LlmProviderConfig[];
+  activeProviderId?: string | null;
   setSection: React.Dispatch<React.SetStateAction<SettingsSection>>;
   addProvider: (provider: LlmProviderConfig) => void;
   updateProvider: (provider: LlmProviderConfig) => void;
@@ -38,6 +59,7 @@ type UseSettingsProviderFlowParams = {
 export function useSettingsProviderFlow({
   t,
   providers,
+  activeProviderId,
   setSection,
   addProvider,
   updateProvider,
@@ -46,6 +68,48 @@ export function useSettingsProviderFlow({
   const [editingProvider, setEditingProvider] = useState<LlmProviderConfig | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [tempApiKey, setTempApiKey] = useState('');
+  const [editingCredentialStatus, setEditingCredentialStatus] =
+    useState<ProviderCredentialStatus>('missing');
+  const [providerCredentialStatuses, setProviderCredentialStatuses] = useState<
+    Record<string, ProviderCredentialStatus>
+  >(() => getInitialCredentialStatuses(providers));
+  const providerEditRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    const initialStatuses = getInitialCredentialStatuses(providers);
+    setProviderCredentialStatuses(initialStatuses);
+
+    const providersToCheck = providers.filter(
+      (provider) => initialStatuses[provider.id] === 'checking',
+    );
+    if (providersToCheck.length === 0) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void Promise.all(
+      providersToCheck.map(async (provider) => {
+        try {
+          const key = await getProviderApiKey(provider.id);
+          return [provider.id, key?.trim() ? 'configured' : 'missing'] as const;
+        } catch {
+          return [provider.id, 'error'] as const;
+        }
+      }),
+    ).then((resolvedStatuses) => {
+      if (!active) return;
+      setProviderCredentialStatuses((current) => ({
+        ...current,
+        ...Object.fromEntries(resolvedStatuses),
+      }));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [providers]);
 
   const editingProviderIsOnDevice = Boolean(
     editingProvider && isOnDeviceLlmProvider(editingProvider),
@@ -70,11 +134,12 @@ export function useSettingsProviderFlow({
 
   const handleNewProvider = useCallback(
     (preset?: LlmProviderPreset) => {
+      providerEditRequestIdRef.current += 1;
       const newProvider: LlmProviderConfig = preset
         ? buildProviderFromPreset(preset, { id: generateId(), enabled: true })
         : finalizeProviderConfig({
             id: generateId(),
-            name: t('settings.newProvider'),
+            name: '',
             baseUrl: '',
             apiKey: '',
             model: '',
@@ -82,19 +147,43 @@ export function useSettingsProviderFlow({
           });
       setEditingProvider(newProvider);
       setTempApiKey('');
+      setEditingCredentialStatus(
+        providerRequiresApiKey(newProvider) ? 'missing' : 'not-required',
+      );
       setShowApiKey(false);
       setSection('provider-edit');
     },
-    [setSection, t],
+    [setSection],
   );
 
   const handleEditProvider = useCallback(
-    async (provider: LlmProviderConfig) => {
-      const key = (await getProviderApiKey(provider.id)) || '';
+    (provider: LlmProviderConfig) => {
+      const requestId = providerEditRequestIdRef.current + 1;
+      providerEditRequestIdRef.current = requestId;
+      const localProvider = isOnDeviceLlmProvider(provider);
+      const initialKey = provider.apiKey || '';
+
       setEditingProvider({ ...provider });
-      setTempApiKey(key);
+      setTempApiKey(initialKey);
+      setEditingCredentialStatus(localProvider ? 'not-required' : 'checking');
       setShowApiKey(false);
       setSection('provider-edit');
+
+      if (localProvider) {
+        return;
+      }
+
+      void getProviderApiKey(provider.id)
+        .then((storedKey) => {
+          if (providerEditRequestIdRef.current !== requestId) return;
+          const key = storedKey || initialKey;
+          setTempApiKey(key);
+          setEditingCredentialStatus(key.trim() ? 'configured' : 'missing');
+        })
+        .catch(() => {
+          if (providerEditRequestIdRef.current !== requestId) return;
+          setEditingCredentialStatus('error');
+        });
     },
     [setSection],
   );
@@ -124,51 +213,55 @@ export function useSettingsProviderFlow({
     if (!editingProvider) return;
 
     const localProvider = isOnDeviceLlmProvider(editingProvider);
+    const readiness = getProviderConfigurationReadiness(editingProvider, {
+      credentialStatus: providerRequiresApiKey(editingProvider)
+        ? editingCredentialStatus
+        : 'not-required',
+      localModelInstalled: localProvider
+        ? isLocalLlmModelInstalled(editingProvider, editingProvider.model)
+        : undefined,
+    });
 
-    if (
-      localProvider &&
-      (editingLocalModelDownloadInProgress ||
-        !isLocalLlmModelInstalled(editingProvider, editingProvider.model))
-    ) {
+    if (!readiness.canSave || (localProvider && editingLocalModelDownloadInProgress)) {
       return;
     }
 
-    if (!localProvider) {
-      const url = editingProvider.baseUrl?.trim();
-      if (url) {
-        try {
-          const parsed = new URL(url);
-          if (!['http:', 'https:'].includes(parsed.protocol)) {
-            Alert.alert(t('settings.invalidUrl'), t('settings.invalidUrlHttp'));
-            return;
-          }
-        } catch {
-          Alert.alert(t('settings.invalidUrl'), t('settings.invalidUrlFormat'));
-          return;
+    try {
+      const normalizedApiKey = tempApiKey.trim();
+      if (!localProvider) {
+        if (normalizedApiKey) {
+          await saveProviderApiKey(editingProvider.id, normalizedApiKey);
+        } else {
+          await deleteProviderApiKey(editingProvider.id);
         }
       }
-    }
-
-    try {
-      if (!localProvider && tempApiKey) {
-        await saveProviderApiKey(editingProvider.id, tempApiKey);
-      }
-      const finalizedProvider = finalizeProviderConfig(editingProvider);
+      const finalizedProvider = finalizeProviderConfig({ ...editingProvider, apiKey: '' });
       const existing = providers.find((provider) => provider.id === editingProvider.id);
       if (existing) {
         updateProvider(finalizedProvider);
       } else {
         addProvider(finalizedProvider);
       }
+      setProviderCredentialStatuses((current) => ({
+        ...current,
+        [editingProvider.id]: providerRequiresApiKey(finalizedProvider)
+          ? tempApiKey.trim()
+            ? 'configured'
+            : 'missing'
+          : 'not-required',
+      }));
+      providerEditRequestIdRef.current += 1;
       setSection('main');
       setEditingProvider(null);
       setTempApiKey('');
+      setEditingCredentialStatus('missing');
       setShowApiKey(false);
     } catch {
       Alert.alert(t('common.error'), t('onboarding.saveFailed'));
     }
   }, [
     addProvider,
+    editingCredentialStatus,
     editingLocalModelDownloadInProgress,
     editingProvider,
     providers,
@@ -193,8 +286,12 @@ export function useSettingsProviderFlow({
                 Alert.alert(t('common.error'), t('settings.secureKeyDeleteFailed')),
             });
             if (!removed) return;
+            providerEditRequestIdRef.current += 1;
             setSection('main');
             setEditingProvider(null);
+            setTempApiKey('');
+            setEditingCredentialStatus('missing');
+            setShowApiKey(false);
           },
         },
       ]);
@@ -203,7 +300,12 @@ export function useSettingsProviderFlow({
   );
 
   const closeProviderEditor = useCallback(() => {
+    providerEditRequestIdRef.current += 1;
     setSection('main');
+    setEditingProvider(null);
+    setTempApiKey('');
+    setEditingCredentialStatus('missing');
+    setShowApiKey(false);
   }, [setSection]);
 
   const localCatalog = useMemo(
@@ -227,15 +329,27 @@ export function useSettingsProviderFlow({
     selectedLocalCatalogEntry,
     setEditingProvider,
   });
-  const canSaveProvider = useMemo(() => {
-    if (!editingProviderIsOnDevice) {
-      return true;
-    }
-    if (!editingProvider || editingLocalModelDownloadInProgress) {
-      return false;
-    }
-    return isLocalLlmModelInstalled(editingProvider, editingProvider.model);
-  }, [editingLocalModelDownloadInProgress, editingProvider, editingProviderIsOnDevice]);
+  const editingProviderReadiness = useMemo(() => {
+    if (!editingProvider) return null;
+
+    return getProviderConfigurationReadiness(editingProvider, {
+      active: editingProvider.id === activeProviderId,
+      credentialStatus: providerRequiresApiKey(editingProvider)
+        ? editingCredentialStatus
+        : 'not-required',
+      localModelInstalled: editingProviderIsOnDevice
+        ? isLocalLlmModelInstalled(editingProvider, editingProvider.model)
+        : undefined,
+    });
+  }, [
+    activeProviderId,
+    editingCredentialStatus,
+    editingProvider,
+    editingProviderIsOnDevice,
+  ]);
+  const canSaveProvider = Boolean(
+    editingProviderReadiness?.canSave && !editingLocalModelDownloadInProgress,
+  );
   const editingProviderIsExisting = useMemo(
     () =>
       Boolean(editingProvider && providers.some((provider) => provider.id === editingProvider.id)),
@@ -249,6 +363,8 @@ export function useSettingsProviderFlow({
     localCatalog,
     selectedLocalCatalogEntry,
     canSaveProvider,
+    editingProviderReadiness,
+    providerCredentialStatuses,
     showApiKey,
     tempApiKey,
     editingLocalModelDownloadState,
@@ -267,7 +383,17 @@ export function useSettingsProviderFlow({
     closeProviderEditor,
     onToggleShowApiKey: () => setShowApiKey((current) => !current),
     setEditingProvider,
-    setTempApiKey,
+    setTempApiKey: (value: string) => {
+      providerEditRequestIdRef.current += 1;
+      setTempApiKey(value);
+      setEditingCredentialStatus(
+        editingProvider && providerRequiresApiKey(editingProvider)
+          ? value.trim()
+            ? 'configured'
+            : 'missing'
+          : 'not-required',
+      );
+    },
     isLocalLlmModelInstalled,
   };
 }

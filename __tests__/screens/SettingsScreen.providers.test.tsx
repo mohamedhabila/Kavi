@@ -1,4 +1,4 @@
-import { fireEvent, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { File } from 'expo-file-system';
 import { Alert } from 'react-native';
 import { getLocalLlmCatalogEntry } from '../../src/services/localLlm/catalog';
@@ -168,6 +168,29 @@ describe('SettingsScreen providers', () => {
     expect(getByDisplayValue('sk-new-key')).toBeTruthy();
   });
 
+  it('opens immediately while loading a saved key and preserves newer typing', async () => {
+    const { getProviderApiKey } = require('../../src/services/storage/SecureStorage');
+    let resolveEditorKey: ((value: string) => void) | undefined;
+    getProviderApiKey
+      .mockResolvedValueOnce('sk-test')
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveEditorKey = resolve;
+          }),
+      );
+    const { getByDisplayValue, getByPlaceholderText, getByText } = renderSettingsScreen();
+
+    await waitFor(() => expect(getProviderApiKey).toHaveBeenCalledTimes(1));
+    fireEvent.press(getByText('gpt-5.4'));
+
+    expect(getByText('Checking setup')).toBeTruthy();
+    fireEvent.changeText(getByPlaceholderText('sk-…'), 'newer-user-key');
+    await act(async () => resolveEditorKey?.('stale-saved-key'));
+
+    expect(getByDisplayValue('newer-user-key')).toBeTruthy();
+  });
+
   it('should toggle provider enabled switch', async () => {
     const { getByText } = renderSettingsScreen();
     fireEvent.press(getByText('gpt-5.4'));
@@ -176,18 +199,43 @@ describe('SettingsScreen providers', () => {
     });
   });
 
-  it('should save new provider with addProvider', async () => {
-    const { getByText, getByLabelText } = renderSettingsScreen();
+  it('should explain why an incomplete new provider cannot be saved', () => {
+    const { getByLabelText, getByText } = renderSettingsScreen();
     fireEvent.press(getByLabelText('Add provider'));
     expect(getByText('Add Provider')).toBeTruthy();
+    expect(getByText('Enter a provider name.')).toBeTruthy();
+    expect(getByText('Enter the provider endpoint URL.')).toBeTruthy();
+    expect(getByText('Enter an API key before enabling this provider.')).toBeTruthy();
+    expect(getByText('Enter a default model.')).toBeTruthy();
+    expect(getByLabelText('Save').props.accessibilityState).toEqual({ disabled: true });
+    expect(settingsMocks.addProvider).not.toHaveBeenCalled();
+  });
+
+  it('should save a complete new provider with addProvider', async () => {
+    const { getByText, getByLabelText, getByPlaceholderText } = renderSettingsScreen();
+    fireEvent.press(getByLabelText('Add provider'));
+    fireEvent.changeText(getByPlaceholderText('Provider name'), 'My provider');
+    fireEvent.changeText(
+      getByPlaceholderText('https://api.openai.com/v1'),
+      'https://example.com/v1',
+    );
+    fireEvent.changeText(getByPlaceholderText('sk-…'), 'sk-new-provider');
+    fireEvent.changeText(getByPlaceholderText('gpt-5.5'), 'example-model');
     fireEvent.press(getByText('Save'));
     await waitFor(() => {
-      expect(settingsMocks.addProvider).toHaveBeenCalled();
+      expect(settingsMocks.addProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'My provider',
+          baseUrl: 'https://example.com/v1',
+          model: 'example-model',
+        }),
+      );
     });
   });
 
   it('should prefill and save the Gemini preset with the Vertex base URL', async () => {
-    const { getByLabelText, getByDisplayValue, getByText } = renderSettingsScreen();
+    const { getByLabelText, getByDisplayValue, getByPlaceholderText, getByText } =
+      renderSettingsScreen();
 
     fireEvent.press(getByLabelText('Add Gemini provider'));
 
@@ -197,6 +245,7 @@ describe('SettingsScreen providers', () => {
       expect(getByDisplayValue('gemini-3.1-pro-preview')).toBeTruthy();
     });
 
+    fireEvent.changeText(getByPlaceholderText('sk-…'), 'gemini-key');
     fireEvent.press(getByText('Save'));
 
     await waitFor(() => {
@@ -365,36 +414,47 @@ describe('SettingsScreen providers', () => {
     });
   });
 
-  it('should reject invalid provider URL on save', async () => {
-    jest.spyOn(Alert, 'alert');
-    const { getByText, getByDisplayValue } = renderSettingsScreen();
+  it('should remove a cleared API key when saving the provider off', async () => {
+    const { deleteProviderApiKey } = require('../../src/services/storage/SecureStorage');
+    const { getByDisplayValue, getByLabelText, getByText } = renderSettingsScreen();
+    fireEvent.press(getByText('gpt-5.4'));
+    await waitFor(() => {
+      expect(getByDisplayValue('sk-test')).toBeTruthy();
+    });
+
+    fireEvent(getByLabelText('Enabled'), 'valueChange', false);
+    fireEvent.changeText(getByDisplayValue('sk-test'), '');
+    fireEvent.press(getByText('Save'));
+
+    await waitFor(() => {
+      expect(deleteProviderApiKey).toHaveBeenCalledWith('openai');
+      expect(settingsMocks.updateProvider).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: '', enabled: false }),
+      );
+    });
+  });
+
+  it('should show an inline error for an invalid provider URL', async () => {
+    const { getByLabelText, getByText, getByDisplayValue } = renderSettingsScreen();
     fireEvent.press(getByText('gpt-5.4'));
     await waitFor(() => {
       expect(getByDisplayValue('https://api.openai.com/v1')).toBeTruthy();
     });
     fireEvent.changeText(getByDisplayValue('https://api.openai.com/v1'), 'not-a-valid-url');
-    fireEvent.press(getByText('Save'));
-    await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith('Invalid URL', expect.any(String));
-    });
+    expect(getByText('Enter a valid provider endpoint URL.')).toBeTruthy();
+    expect(getByLabelText('Save').props.accessibilityState).toEqual({ disabled: true });
     expect(settingsMocks.updateProvider).not.toHaveBeenCalled();
   });
 
-  it('should reject ftp:// provider URL on save', async () => {
-    jest.spyOn(Alert, 'alert');
-    const { getByText, getByDisplayValue } = renderSettingsScreen();
+  it('should show an inline protocol error for an ftp provider URL', async () => {
+    const { getByLabelText, getByText, getByDisplayValue } = renderSettingsScreen();
     fireEvent.press(getByText('gpt-5.4'));
     await waitFor(() => {
       expect(getByDisplayValue('https://api.openai.com/v1')).toBeTruthy();
     });
     fireEvent.changeText(getByDisplayValue('https://api.openai.com/v1'), 'ftp://evil.com');
-    fireEvent.press(getByText('Save'));
-    await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith(
-        'Invalid URL',
-        'Provider URL must use http or https.',
-      );
-    });
+    expect(getByText('The endpoint must use http or https.')).toBeTruthy();
+    expect(getByLabelText('Save').props.accessibilityState).toEqual({ disabled: true });
     expect(settingsMocks.updateProvider).not.toHaveBeenCalled();
   });
 });

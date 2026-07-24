@@ -2,7 +2,10 @@ import type { Conversation } from '../../../types/conversation';
 import type { LlmProviderConfig } from '../../../types/provider';
 import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import { getProviderApiKey } from '../../storage/SecureStorage';
-import { resolveModelHostedFamily } from '../catalog/providerFamilies';
+import {
+  resolveModelHostedFamily,
+  resolveProviderFamily as resolveConfiguredProviderFamily,
+} from '../catalog/providerFamilies';
 
 type ProviderModelConfig = Pick<LlmProviderConfig, 'model' | 'availableModels' | 'hiddenModels'> &
   Partial<Pick<LlmProviderConfig, 'providerFamily'>>;
@@ -111,14 +114,40 @@ export function resolveProviderModelSelection(
   return normalizeModelId(provider.model) || normalizedFallbackModel || normalizedPreferredModel;
 }
 
-export function providerRequiresApiKey(
-  provider: Pick<LlmProviderConfig, 'kind' | 'local'>,
-): boolean {
-  return !isOnDeviceLlmProvider(provider);
+type ProviderAuthenticationConfig = Pick<LlmProviderConfig, 'kind' | 'local'> &
+  Partial<Pick<LlmProviderConfig, 'name' | 'baseUrl' | 'providerFamily'>>;
+
+function isLoopbackProvider(baseUrl: string | undefined): boolean {
+  const normalizedUrl = (baseUrl || '').trim();
+  if (!normalizedUrl) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(normalizedUrl).hostname.toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+export function providerRequiresApiKey(provider: ProviderAuthenticationConfig): boolean {
+  if (isOnDeviceLlmProvider(provider) || isLoopbackProvider(provider.baseUrl)) {
+    return false;
+  }
+
+  return (
+    resolveConfiguredProviderFamily({
+      name: provider.name || '',
+      baseUrl: provider.baseUrl || '',
+      providerFamily: provider.providerFamily,
+    }) !== 'ollama'
+  );
 }
 
 export async function resolveProviderApiKey(
-  provider: Pick<LlmProviderConfig, 'id' | 'apiKey' | 'kind' | 'local'>,
+  provider: Pick<LlmProviderConfig, 'id' | 'apiKey' | 'kind' | 'local'> &
+    Partial<Pick<LlmProviderConfig, 'name' | 'baseUrl' | 'providerFamily'>>,
 ): Promise<string> {
   if (!providerRequiresApiKey(provider)) {
     return provider.apiKey || '';
@@ -150,7 +179,8 @@ export function bindProviderToModel<T extends Pick<LlmProviderConfig, 'model'>>(
 }
 
 export function assertProviderReadyForRequest(
-  provider: Pick<LlmProviderConfig, 'apiKey' | 'kind' | 'local' | 'name'>,
+  provider: Pick<LlmProviderConfig, 'apiKey' | 'kind' | 'local' | 'name'> &
+    Partial<Pick<LlmProviderConfig, 'baseUrl' | 'providerFamily'>>,
   label?: string,
 ): void {
   if (!providerRequiresApiKey(provider)) {
