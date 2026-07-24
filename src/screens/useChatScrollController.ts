@@ -34,7 +34,7 @@ export function useChatScrollController({
   const isUserInteractingRef = useRef(false);
   const interactionReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
-  const scrollFollowUpFrameRef = useRef<number | null>(null);
+  const pendingScrollAnimatedRef = useRef(false);
 
   const updateAutoFollowState = useCallback(() => {
     const { contentHeight, layoutHeight, offsetY } = listMetricsRef.current;
@@ -52,27 +52,24 @@ export function useChatScrollController({
       cancelAnimationFrame(scrollFrameRef.current);
       scrollFrameRef.current = null;
     }
-
-    if (scrollFollowUpFrameRef.current !== null) {
-      cancelAnimationFrame(scrollFollowUpFrameRef.current);
-      scrollFollowUpFrameRef.current = null;
-    }
+    pendingScrollAnimatedRef.current = false;
   }, []);
 
   const scrollToBottom = useCallback(
     (animated: boolean) => {
-      clearPendingScrollFrames();
+      pendingScrollAnimatedRef.current = pendingScrollAnimatedRef.current || animated;
+      if (scrollFrameRef.current !== null) {
+        return;
+      }
 
-      // Double-rAF waits for layout commits during rapid token streaming.
       scrollFrameRef.current = requestAnimationFrame(() => {
         scrollFrameRef.current = null;
-        scrollFollowUpFrameRef.current = requestAnimationFrame(() => {
-          scrollFollowUpFrameRef.current = null;
-          flatListRef.current?.scrollToEnd({ animated });
-        });
+        const shouldAnimate = pendingScrollAnimatedRef.current;
+        pendingScrollAnimatedRef.current = false;
+        flatListRef.current?.scrollToEnd({ animated: shouldAnimate });
       });
     },
-    [clearPendingScrollFrames, flatListRef],
+    [flatListRef],
   );
 
   const clearInteractionReleaseTimer = useCallback(() => {
@@ -102,9 +99,10 @@ export function useChatScrollController({
 
   const handleUserScrollStart = useCallback(() => {
     clearInteractionReleaseTimer();
+    clearPendingScrollFrames();
     isUserInteractingRef.current = true;
     forceNextScrollRef.current = false;
-  }, [clearInteractionReleaseTimer]);
+  }, [clearInteractionReleaseTimer, clearPendingScrollFrames]);
 
   const handleUserScrollEnd = useCallback(() => {
     clearInteractionReleaseTimer();

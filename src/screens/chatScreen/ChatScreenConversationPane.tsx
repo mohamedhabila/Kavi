@@ -26,6 +26,8 @@ import { AssistantStart } from '../../components/chat/AssistantStart';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
+const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const;
+
 type ChatScreenConversationPaneProps = {
   bottomInset: number;
   colors: AppPalette;
@@ -234,12 +236,7 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
   const handleContentSizeChange = useCallback(
     (_width: number, height: number) => {
       listMetricsRef.current.contentHeight = height;
-      if (streamingMessageId) {
-        if (forceNextScrollRef.current || shouldAutoFollowRef.current) {
-          scrollToBottom(false);
-          forceNextScrollRef.current = false;
-        }
-      } else if (forceNextScrollRef.current || shouldAutoFollowRef.current) {
+      if (forceNextScrollRef.current || shouldAutoFollowRef.current) {
         maybeScrollToBottom(false);
       }
       syncLatestActivityPrompt();
@@ -248,10 +245,8 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
       forceNextScrollRef,
       listMetricsRef,
       maybeScrollToBottom,
-      scrollToBottom,
       shouldAutoFollowRef,
       syncLatestActivityPrompt,
-      streamingMessageId,
     ],
   );
   const handleCancelEdit = useCallback(() => {
@@ -275,7 +270,7 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
         initialNumToRender={10}
         windowSize={7}
         removeClippedSubviews={Platform.OS === 'android'}
-        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
         onLayout={handleListLayout}
         onScroll={handleListScroll}
         onScrollBeginDrag={handleUserScrollStart}

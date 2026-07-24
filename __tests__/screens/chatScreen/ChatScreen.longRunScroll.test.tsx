@@ -16,6 +16,7 @@ import { mockChatScreenState } from '../../../testSupport/chatScreen/state';
 
 const moveListAwayFromBottom = (messageList: any) => {
   act(() => {
+    messageList.props.onScrollBeginDrag?.();
     messageList.props.onScroll?.({
       nativeEvent: {
         contentOffset: { y: 120 },
