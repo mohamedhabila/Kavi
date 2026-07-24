@@ -197,6 +197,8 @@ export const SettingsScreen: React.FC = () => {
     selectedLocalCatalogEntry,
     canSaveProvider,
     editingProviderReadiness,
+    providerConnectionTestResult,
+    isTestingProviderConnection,
     providerCredentialStatuses,
     showApiKey,
     tempApiKey,
@@ -212,6 +214,7 @@ export const SettingsScreen: React.FC = () => {
     handleSwitchSelectedLocalModelToCpu,
     handleChooseFallbackLocalModel,
     handleSaveProvider,
+    handleTestProviderConnection,
     handleDeleteProvider,
     closeProviderEditor,
     onToggleShowApiKey,
@@ -363,6 +366,8 @@ export const SettingsScreen: React.FC = () => {
         isOnDevice={editingProviderIsOnDevice}
         canSave={canSaveProvider}
         readiness={editingProviderReadiness}
+        connectionTestResult={providerConnectionTestResult}
+        isTestingConnection={isTestingProviderConnection}
         localCatalog={localCatalog}
         selectedLocalCatalogEntry={selectedLocalCatalogEntry}
         tempApiKey={tempApiKey}
@@ -379,6 +384,7 @@ export const SettingsScreen: React.FC = () => {
         handleSwitchSelectedLocalModelToCpu={handleSwitchSelectedLocalModelToCpu}
         handleChooseFallbackLocalModel={handleChooseFallbackLocalModel}
         handleSaveProvider={handleSaveProvider}
+        handleTestProviderConnection={handleTestProviderConnection}
         isLocalLlmModelInstalled={isLocalLlmModelInstalled}
         onToggleShowApiKey={onToggleShowApiKey}
         setEditingProvider={(provider) => setEditingProvider(provider)}

@@ -22,6 +22,10 @@ import {
   getProviderConfigurationReadiness,
   type ProviderCredentialStatus,
 } from '../../services/llm/support/providerReadiness';
+import {
+  testProviderConnection,
+  type ProviderConnectionTestResult,
+} from '../../services/llm/support/providerConnection';
 import { providerRequiresApiKey } from '../../services/llm/support/providerSupport';
 import { removeCredentialBackedConfiguration } from '../../services/storage/credentialBackedConfigRemoval';
 import type { LlmProviderConfig } from '../../types/provider';
@@ -73,7 +77,25 @@ export function useSettingsProviderFlow({
   const [providerCredentialStatuses, setProviderCredentialStatuses] = useState<
     Record<string, ProviderCredentialStatus>
   >(() => getInitialCredentialStatuses(providers));
+  const [providerConnectionTestResult, setProviderConnectionTestResult] =
+    useState<ProviderConnectionTestResult | null>(null);
+  const [isTestingProviderConnection, setIsTestingProviderConnection] = useState(false);
   const providerEditRequestIdRef = useRef(0);
+  const providerConnectionRequestIdRef = useRef(0);
+
+  const invalidateProviderConnectionTest = useCallback(() => {
+    providerConnectionRequestIdRef.current += 1;
+    setProviderConnectionTestResult(null);
+    setIsTestingProviderConnection(false);
+  }, []);
+
+  const updateEditingProvider = useCallback(
+    (provider: LlmProviderConfig) => {
+      invalidateProviderConnectionTest();
+      setEditingProvider(provider);
+    },
+    [invalidateProviderConnectionTest],
+  );
 
   useEffect(() => {
     let active = true;
@@ -135,6 +157,7 @@ export function useSettingsProviderFlow({
   const handleNewProvider = useCallback(
     (preset?: LlmProviderPreset) => {
       providerEditRequestIdRef.current += 1;
+      invalidateProviderConnectionTest();
       const newProvider: LlmProviderConfig = preset
         ? buildProviderFromPreset(preset, { id: generateId(), enabled: true })
         : finalizeProviderConfig({
@@ -153,13 +176,14 @@ export function useSettingsProviderFlow({
       setShowApiKey(false);
       setSection('provider-edit');
     },
-    [setSection],
+    [invalidateProviderConnectionTest, setSection],
   );
 
   const handleEditProvider = useCallback(
     (provider: LlmProviderConfig) => {
       const requestId = providerEditRequestIdRef.current + 1;
       providerEditRequestIdRef.current = requestId;
+      invalidateProviderConnectionTest();
       const localProvider = isOnDeviceLlmProvider(provider);
       const initialKey = provider.apiKey || '';
 
@@ -185,7 +209,7 @@ export function useSettingsProviderFlow({
           setEditingCredentialStatus('error');
         });
     },
-    [setSection],
+    [invalidateProviderConnectionTest, setSection],
   );
 
   const handleDownloadSelectedLocalModel = useCallback(async () => {
@@ -205,9 +229,14 @@ export function useSettingsProviderFlow({
     );
 
     if (updatedProvider) {
-      setEditingProvider(updatedProvider);
+      updateEditingProvider(updatedProvider);
     }
-  }, [downloadEditingLocalModel, editingProvider, editingProviderIsOnDevice]);
+  }, [
+    downloadEditingLocalModel,
+    editingProvider,
+    editingProviderIsOnDevice,
+    updateEditingProvider,
+  ]);
 
   const handleSaveProvider = useCallback(async () => {
     if (!editingProvider) return;
@@ -251,6 +280,7 @@ export function useSettingsProviderFlow({
           : 'not-required',
       }));
       providerEditRequestIdRef.current += 1;
+      invalidateProviderConnectionTest();
       setSection('main');
       setEditingProvider(null);
       setTempApiKey('');
@@ -265,6 +295,7 @@ export function useSettingsProviderFlow({
     editingLocalModelDownloadInProgress,
     editingProvider,
     providers,
+    invalidateProviderConnectionTest,
     setSection,
     t,
     tempApiKey,
@@ -287,6 +318,7 @@ export function useSettingsProviderFlow({
             });
             if (!removed) return;
             providerEditRequestIdRef.current += 1;
+            invalidateProviderConnectionTest();
             setSection('main');
             setEditingProvider(null);
             setTempApiKey('');
@@ -296,17 +328,18 @@ export function useSettingsProviderFlow({
         },
       ]);
     },
-    [removeProvider, setSection, t],
+    [invalidateProviderConnectionTest, removeProvider, setSection, t],
   );
 
   const closeProviderEditor = useCallback(() => {
     providerEditRequestIdRef.current += 1;
+    invalidateProviderConnectionTest();
     setSection('main');
     setEditingProvider(null);
     setTempApiKey('');
     setEditingCredentialStatus('missing');
     setShowApiKey(false);
-  }, [setSection]);
+  }, [invalidateProviderConnectionTest, setSection]);
 
   const localCatalog = useMemo(
     () =>
@@ -327,7 +360,7 @@ export function useSettingsProviderFlow({
     editingProviderIsOnDevice,
     downloadState: editingLocalModelDownloadState,
     selectedLocalCatalogEntry,
-    setEditingProvider,
+    setEditingProvider: updateEditingProvider,
   });
   const editingProviderReadiness = useMemo(() => {
     if (!editingProvider) return null;
@@ -356,6 +389,29 @@ export function useSettingsProviderFlow({
     [editingProvider, providers],
   );
 
+  const handleTestProviderConnection = useCallback(async () => {
+    if (!editingProvider || editingProviderIsOnDevice || !editingProviderReadiness?.canEnable) {
+      return;
+    }
+
+    const requestId = providerConnectionRequestIdRef.current + 1;
+    providerConnectionRequestIdRef.current = requestId;
+    setProviderConnectionTestResult(null);
+    setIsTestingProviderConnection(true);
+
+    const provider = finalizeProviderConfig({
+      ...editingProvider,
+      apiKey: tempApiKey.trim(),
+    });
+    const result = await testProviderConnection(provider);
+    if (providerConnectionRequestIdRef.current !== requestId) {
+      return;
+    }
+
+    setProviderConnectionTestResult(result);
+    setIsTestingProviderConnection(false);
+  }, [editingProvider, editingProviderIsOnDevice, editingProviderReadiness, tempApiKey]);
+
   return {
     editingProvider,
     editingProviderIsOnDevice,
@@ -364,6 +420,8 @@ export function useSettingsProviderFlow({
     selectedLocalCatalogEntry,
     canSaveProvider,
     editingProviderReadiness,
+    providerConnectionTestResult,
+    isTestingProviderConnection,
     providerCredentialStatuses,
     showApiKey,
     tempApiKey,
@@ -379,12 +437,14 @@ export function useSettingsProviderFlow({
     handleSwitchSelectedLocalModelToCpu: localModelRecovery.handleSwitchToCpu,
     handleChooseFallbackLocalModel: localModelRecovery.handleChooseFallback,
     handleSaveProvider,
+    handleTestProviderConnection,
     handleDeleteProvider,
     closeProviderEditor,
     onToggleShowApiKey: () => setShowApiKey((current) => !current),
-    setEditingProvider,
+    setEditingProvider: updateEditingProvider,
     setTempApiKey: (value: string) => {
       providerEditRequestIdRef.current += 1;
+      invalidateProviderConnectionTest();
       setTempApiKey(value);
       setEditingCredentialStatus(
         editingProvider && providerRequiresApiKey(editingProvider)

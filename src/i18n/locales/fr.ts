@@ -408,6 +408,31 @@ export const fr: TranslationMap = mergeTranslations(en, {
       offSetupHint:
         'Ce fournisseur est désactivé et doit encore être configuré avant son activation.',
     },
+    providerConnection: {
+      test: 'Tester la connexion',
+      testAgain: 'Tester à nouveau',
+      testing: 'Test de la connexion',
+      testingHint:
+        'Une requête de validation en lecture seule est envoyée. Aucune réponse de chat ne sera générée.',
+      success: 'Connexion vérifiée',
+      successHint:
+        'Kavi a reçu la réponse attendue de ce point de terminaison sans générer de réponse de chat.',
+      failed: 'Connexion non vérifiée',
+      authenticationHint:
+        'Le fournisseur a refusé l’identifiant. Vérifiez la clé API et ses autorisations.',
+      billingHint:
+        'Le compte doit être crédité ou sa limite de dépenses modifiée avant utilisation.',
+      rateLimitedHint: 'Le fournisseur limite les requêtes. Patientez un instant, puis réessayez.',
+      timeoutHint:
+        'Le fournisseur n’a pas répondu à temps. Vérifiez le point de terminaison et réessayez.',
+      networkHint:
+        'Kavi n’a pas pu joindre ce point de terminaison de façon sécurisée. Vérifiez l’URL et la connexion.',
+      serverHint: 'Le fournisseur est temporairement indisponible. Réessayez dans un instant.',
+      unsupportedHint:
+        'Ce point de terminaison ne propose pas de contrôle en lecture seule compatible. Confirmez l’URL de base ou testez un chat après l’enregistrement.',
+      rejectedHint:
+        'Le fournisseur a refusé la requête de validation. Vérifiez le point de terminaison et le modèle par défaut.',
+    },
     providerValidation: {
       nameRequired: 'Saisissez un nom de fournisseur.',
       baseUrlRequired: 'Saisissez l’URL de l’endpoint du fournisseur.',

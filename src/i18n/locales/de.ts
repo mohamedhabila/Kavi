@@ -401,6 +401,32 @@ export const de: TranslationMap = mergeTranslations(en, {
       offHint: 'Dieser Anbieter ist gespeichert, aber erst nach dem Einschalten verfügbar.',
       offSetupHint: 'Dieser Anbieter ist aus und muss vor dem Aktivieren noch eingerichtet werden.',
     },
+    providerConnection: {
+      test: 'Verbindung testen',
+      testAgain: 'Erneut testen',
+      testing: 'Verbindung wird getestet',
+      testingHint:
+        'Eine schreibgeschützte Prüfanfrage wird gesendet. Es wird keine Chatantwort erzeugt.',
+      success: 'Verbindung bestätigt',
+      successHint:
+        'Kavi hat die erwartete Antwort von diesem Endpunkt erhalten, ohne eine Chatantwort zu erzeugen.',
+      failed: 'Verbindung nicht bestätigt',
+      authenticationHint:
+        'Der Anbieter hat die Zugangsdaten abgelehnt. Prüfen Sie API-Schlüssel und Berechtigungen.',
+      billingHint:
+        'Das Konto benötigt Guthaben oder ein geändertes Ausgabenlimit, bevor der Anbieter nutzbar ist.',
+      rateLimitedHint:
+        'Der Anbieter begrenzt derzeit Anfragen. Warten Sie einen Moment und versuchen Sie es erneut.',
+      timeoutHint:
+        'Der Anbieter hat nicht rechtzeitig geantwortet. Prüfen Sie den Endpunkt und versuchen Sie es erneut.',
+      networkHint:
+        'Kavi konnte diesen Endpunkt nicht sicher erreichen. Prüfen Sie URL und Verbindung.',
+      serverHint: 'Der Anbieter ist vorübergehend nicht verfügbar. Versuchen Sie es gleich erneut.',
+      unsupportedHint:
+        'Dieser Endpunkt bietet keine unterstützte schreibgeschützte Prüfung. Prüfen Sie die Basis-URL oder testen Sie nach dem Speichern einen Chat.',
+      rejectedHint:
+        'Der Anbieter hat die Prüfanfrage abgelehnt. Prüfen Sie Endpunkt und Standardmodell.',
+    },
     providerValidation: {
       nameRequired: 'Geben Sie einen Anbieternamen ein.',
       baseUrlRequired: 'Geben Sie die Endpunkt-URL des Anbieters ein.',

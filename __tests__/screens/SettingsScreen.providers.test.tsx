@@ -2,6 +2,7 @@ import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { File } from 'expo-file-system';
 import { Alert } from 'react-native';
 import { getLocalLlmCatalogEntry } from '../../src/services/localLlm/catalog';
+import type { ProviderConnectionTestResult } from '../../src/services/llm/support/providerConnection';
 
 import {
   renderSettingsScreen,
@@ -200,7 +201,7 @@ describe('SettingsScreen providers', () => {
   });
 
   it('should explain why an incomplete new provider cannot be saved', () => {
-    const { getByLabelText, getByText } = renderSettingsScreen();
+    const { getByLabelText, getByTestId, getByText } = renderSettingsScreen();
     fireEvent.press(getByLabelText('Add provider'));
     expect(getByText('Add Provider')).toBeTruthy();
     expect(getByText('Enter a provider name.')).toBeTruthy();
@@ -208,7 +209,97 @@ describe('SettingsScreen providers', () => {
     expect(getByText('Enter an API key before enabling this provider.')).toBeTruthy();
     expect(getByText('Enter a default model.')).toBeTruthy();
     expect(getByLabelText('Save').props.accessibilityState).toEqual({ disabled: true });
+    expect(getByTestId('provider-readiness-action').props.accessibilityState).toEqual({
+      disabled: true,
+    });
     expect(settingsMocks.addProvider).not.toHaveBeenCalled();
+  });
+
+  it('tests a complete provider without saving or generating a chat response', async () => {
+    let resolveTest: ((result: { outcome: 'success' }) => void) | undefined;
+    settingsMocks.testProviderConnection.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveTest = resolve;
+        }),
+    );
+    const { getByDisplayValue, getByText } = renderSettingsScreen();
+
+    fireEvent.press(getByText('gpt-5.4'));
+    await waitFor(() => expect(getByText('Test connection')).toBeTruthy());
+    fireEvent.press(getByText('Test connection'));
+
+    expect(getByText('Testing connection')).toBeTruthy();
+    expect(settingsMocks.updateProvider).not.toHaveBeenCalled();
+    expect(settingsMocks.testProviderConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-5.4',
+      }),
+    );
+
+    await act(async () => resolveTest?.({ outcome: 'success' }));
+    await waitFor(() => expect(getByText('Connection verified')).toBeTruthy());
+
+    fireEvent.changeText(getByDisplayValue('gpt-5.4'), 'gpt-5-mini');
+    expect(getByText('Active')).toBeTruthy();
+    expect(getByText('Test connection')).toBeTruthy();
+  });
+
+  it('shows safe provider-specific recovery and supports retry', async () => {
+    settingsMocks.testProviderConnection
+      .mockResolvedValueOnce({ outcome: 'failure', reason: 'authentication', httpStatus: 401 })
+      .mockResolvedValueOnce({ outcome: 'success' });
+    const { getByText, queryByText } = renderSettingsScreen();
+
+    fireEvent.press(getByText('gpt-5.4'));
+    await waitFor(() => expect(getByText('Test connection')).toBeTruthy());
+    fireEvent.press(getByText('Test connection'));
+
+    await waitFor(() => {
+      expect(getByText('Connection not verified')).toBeTruthy();
+      expect(
+        getByText('The provider rejected the credential. Check the API key and its permissions.'),
+      ).toBeTruthy();
+    });
+    expect(queryByText(/401|private provider detail/i)).toBeNull();
+
+    fireEvent.press(getByText('Retry'));
+    await waitFor(() => expect(getByText('Connection verified')).toBeTruthy());
+  });
+
+  it('ignores an older connection result after the provider changes', async () => {
+    let resolveFirst: ((result: ProviderConnectionTestResult) => void) | undefined;
+    let resolveSecond: ((result: ProviderConnectionTestResult) => void) | undefined;
+    settingsMocks.testProviderConnection
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+    const { getByDisplayValue, getByText } = renderSettingsScreen();
+
+    fireEvent.press(getByText('gpt-5.4'));
+    await waitFor(() => expect(getByText('Test connection')).toBeTruthy());
+    fireEvent.press(getByText('Test connection'));
+    fireEvent.changeText(getByDisplayValue('gpt-5.4'), 'gpt-5-mini');
+    fireEvent.press(getByText('Test connection'));
+
+    await act(async () => resolveSecond?.({ outcome: 'success' }));
+    await waitFor(() => expect(getByText('Connection verified')).toBeTruthy());
+    await act(async () =>
+      resolveFirst?.({ outcome: 'failure', reason: 'authentication', httpStatus: 401 }),
+    );
+
+    expect(getByText('Connection verified')).toBeTruthy();
   });
 
   it('should save a complete new provider with addProvider', async () => {

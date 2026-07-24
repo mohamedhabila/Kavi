@@ -60,4 +60,24 @@ describe('CapabilityGate', () => {
       expect.objectContaining({ minHeight: 44 }),
     );
   });
+
+  it('exposes and enforces a disabled recovery action', () => {
+    const onAction = jest.fn();
+    const { getByTestId, getByText } = render(
+      <CapabilityGate
+        actionDisabled
+        actionLabel="Test connection"
+        description="Complete setup first"
+        onAction={onAction}
+        state="setup-needed"
+        title="Setup needed"
+      />,
+    );
+
+    fireEvent.press(getByText('Test connection'));
+    expect(onAction).not.toHaveBeenCalled();
+    expect(getByTestId('capability-gate-action').props.accessibilityState).toEqual({
+      disabled: true,
+    });
+  });
 });

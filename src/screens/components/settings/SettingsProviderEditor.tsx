@@ -8,6 +8,10 @@ import type {
   ProviderConfigurationIssue,
   ProviderConfigurationReadiness,
 } from '../../../services/llm/support/providerReadiness';
+import type {
+  ProviderConnectionFailureReason,
+  ProviderConnectionTestResult,
+} from '../../../services/llm/support/providerConnection';
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { AppPalette } from '../../../theme/useAppTheme';
 import { SettingsLocalModelControls } from './SettingsLocalModelControls';
@@ -91,6 +95,8 @@ type SettingsProviderEditorProps = SharedEditorProps & {
   isOnDevice: boolean;
   canSave: boolean;
   readiness: ProviderConfigurationReadiness | null;
+  connectionTestResult: ProviderConnectionTestResult | null;
+  isTestingConnection: boolean;
   localCatalog: Array<{ id: string; name: string; sizeLabel: string }>;
   selectedLocalCatalogEntry: any;
   tempApiKey: string;
@@ -107,6 +113,7 @@ type SettingsProviderEditorProps = SharedEditorProps & {
   handleSwitchSelectedLocalModelToCpu: () => void;
   handleChooseFallbackLocalModel: () => void;
   handleSaveProvider: () => void | Promise<void>;
+  handleTestProviderConnection: () => void | Promise<void>;
   isLocalLlmModelInstalled: (provider: LlmProviderConfig, modelId: string) => boolean;
   onToggleShowApiKey: () => void;
   setEditingProvider: (provider: LlmProviderConfig) => void;
@@ -169,12 +176,36 @@ function getReadinessCopy(readiness: ProviderConfigurationReadiness, t: Translat
   }
 }
 
+function getConnectionFailureHint(reason: ProviderConnectionFailureReason, t: TranslationFn) {
+  switch (reason) {
+    case 'authentication':
+      return t('settings.providerConnection.authenticationHint');
+    case 'billing':
+      return t('settings.providerConnection.billingHint');
+    case 'rate-limited':
+      return t('settings.providerConnection.rateLimitedHint');
+    case 'timeout':
+      return t('settings.providerConnection.timeoutHint');
+    case 'network':
+      return t('settings.providerConnection.networkHint');
+    case 'server':
+      return t('settings.providerConnection.serverHint');
+    case 'unsupported':
+      return t('settings.providerConnection.unsupportedHint');
+    case 'rejected':
+    default:
+      return t('settings.providerConnection.rejectedHint');
+  }
+}
+
 export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
   editingProvider,
   isExisting,
   isOnDevice,
   canSave,
   readiness,
+  connectionTestResult,
+  isTestingConnection,
   localCatalog,
   selectedLocalCatalogEntry,
   tempApiKey,
@@ -191,6 +222,7 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
   handleSwitchSelectedLocalModelToCpu,
   handleChooseFallbackLocalModel,
   handleSaveProvider,
+  handleTestProviderConnection,
   isLocalLlmModelInstalled,
   onToggleShowApiKey,
   setEditingProvider,
@@ -204,6 +236,41 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
   onRestore,
 }) => {
   const readinessCopy = readiness ? getReadinessCopy(readiness, t) : null;
+  const connectionCopy = isTestingConnection
+    ? {
+        title: t('settings.providerConnection.testing'),
+        description: t('settings.providerConnection.testingHint'),
+      }
+    : connectionTestResult?.outcome === 'success'
+      ? {
+          title: t('settings.providerConnection.success'),
+          description: t('settings.providerConnection.successHint'),
+        }
+      : connectionTestResult?.outcome === 'failure'
+        ? {
+            title: t('settings.providerConnection.failed'),
+            description: getConnectionFailureHint(connectionTestResult.reason, t),
+          }
+        : null;
+  const gateCopy = connectionCopy || readinessCopy;
+  const gateState: CapabilityGateState = isTestingConnection
+    ? 'loading'
+    : connectionTestResult?.outcome === 'success'
+      ? readiness?.state === 'active'
+        ? 'active'
+        : 'ready'
+      : connectionTestResult?.outcome === 'failure'
+        ? 'error'
+        : readiness
+          ? getCapabilityGateState(readiness)
+          : 'loading';
+  const connectionActionLabel = isTestingConnection
+    ? t('settings.providerConnection.test')
+    : connectionTestResult?.outcome === 'success'
+      ? t('settings.providerConnection.testAgain')
+      : connectionTestResult?.outcome === 'failure'
+        ? t('common.retry')
+        : t('settings.providerConnection.test');
   const hasIssue = (issue: ProviderConfigurationIssue) =>
     readiness?.issues.includes(issue) === true;
   const nameError = hasIssue('name-required');
@@ -226,13 +293,16 @@ export const SettingsProviderEditor: React.FC<SettingsProviderEditorProps> = ({
       onTrackedScroll={onTrackedScroll}
       onRestore={onRestore}
     >
-      {readiness && readinessCopy ? (
+      {readiness && gateCopy ? (
         <CapabilityGate
+          actionDisabled={!readiness.canEnable || isTestingConnection}
+          actionLabel={isOnDevice ? undefined : connectionActionLabel}
           advancedLabel={t('navigationHub.advanced')}
-          description={readinessCopy.description}
-          state={getCapabilityGateState(readiness)}
+          description={gateCopy.description}
+          onAction={isOnDevice ? undefined : handleTestProviderConnection}
+          state={gateState}
           testID="provider-readiness"
-          title={readinessCopy.title}
+          title={gateCopy.title}
         />
       ) : null}
 

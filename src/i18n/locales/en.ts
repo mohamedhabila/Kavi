@@ -401,6 +401,29 @@ export const en: TranslationMap = {
       offHint: 'This provider is saved but unavailable until you turn it on.',
       offSetupHint: 'This provider is off and still needs setup before it can be enabled.',
     },
+    providerConnection: {
+      test: 'Test connection',
+      testAgain: 'Test again',
+      testing: 'Testing connection',
+      testingHint: 'Sending a read-only validation request. No chat response will be generated.',
+      success: 'Connection verified',
+      successHint:
+        'Kavi received the expected response from this endpoint without generating a chat response.',
+      failed: 'Connection not verified',
+      authenticationHint:
+        'The provider rejected the credential. Check the API key and its permissions.',
+      billingHint:
+        'The account needs credits or a spending-limit change before this provider can be used.',
+      rateLimitedHint: 'The provider is rate-limiting requests. Wait a moment and retry.',
+      timeoutHint: 'The provider did not respond in time. Check the endpoint and retry.',
+      networkHint:
+        'Kavi could not reach this endpoint securely. Check the URL and your connection.',
+      serverHint: 'The provider is temporarily unavailable. Retry in a moment.',
+      unsupportedHint:
+        'This endpoint does not expose a supported read-only check. Confirm the base URL or try a chat after saving.',
+      rejectedHint:
+        'The provider rejected the validation request. Check the endpoint and default model.',
+    },
     providerValidation: {
       nameRequired: 'Enter a provider name.',
       baseUrlRequired: 'Enter the provider endpoint URL.',

@@ -13,6 +13,7 @@ export type CapabilityGateState =
   | 'error';
 
 type CapabilityGateProps = {
+  actionDisabled?: boolean;
   actionLabel?: string;
   advancedLabel?: string;
   description: string;
@@ -65,6 +66,7 @@ function getStatePresentation(state: CapabilityGateState, colors: AppPalette) {
 }
 
 export function CapabilityGate({
+  actionDisabled = false,
   actionLabel,
   advancedLabel,
   description,
@@ -107,8 +109,14 @@ export function CapabilityGate({
       {actionLabel && onAction ? (
         <TouchableOpacity
           accessibilityRole="button"
+          accessibilityState={{ disabled: actionDisabled }}
+          disabled={actionDisabled}
           onPress={onAction}
-          style={[styles.action, { borderColor: presentation.accent }]}
+          style={[
+            styles.action,
+            { borderColor: presentation.accent },
+            actionDisabled ? styles.actionDisabled : null,
+          ]}
           testID={`${testID}-action`}
         >
           <Text style={[styles.actionText, { color: presentation.accent }]}>{actionLabel}</Text>
@@ -179,6 +187,9 @@ const createStyles = (colors: AppPalette) =>
       minHeight: 44,
       paddingHorizontal: 14,
       paddingVertical: 10,
+    },
+    actionDisabled: {
+      opacity: 0.45,
     },
     actionText: {
       fontSize: 13,

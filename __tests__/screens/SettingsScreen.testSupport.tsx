@@ -53,6 +53,7 @@ const mockSettings = {
   saveSecure: jest.fn().mockResolvedValue(undefined),
   deleteSecure: jest.fn().mockResolvedValue(undefined),
   installLocalLlmModel: jest.fn(),
+  testProviderConnection: jest.fn(),
   getLocalLlmAvailability: jest.fn(),
   syncExpoAccountProjects: jest.fn().mockResolvedValue({
     accountId: 'expo-account-1',
@@ -317,6 +318,10 @@ jest.mock('../../src/services/expo/projectState', () => ({
     project.owner || account?.owner || 'owner',
 }));
 
+jest.mock('../../src/services/llm/support/providerConnection', () => ({
+  testProviderConnection: (...args: any[]) => mockSettings.testProviderConnection(...args),
+}));
+
 jest.mock('../../src/services/expo/projectAutomation', () => ({
   getExpoProjectExecutionMode: (project: any) => project.mode || 'eas-workflow',
   getExpoProjectReadiness: () => ({ launchable: true, reason: 'ready' }),
@@ -441,6 +446,8 @@ export const setupSettingsScreenTestSuite = (
         return buildInstalledLocalProvider(provider);
       },
     );
+    mockSettings.testProviderConnection.mockReset();
+    mockSettings.testProviderConnection.mockResolvedValue({ outcome: 'success' });
     mockSettings.syncExpoAccountProjects.mockResolvedValue({
       accountId: 'expo-account-1',
       syncedAt: 1,

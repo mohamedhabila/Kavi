@@ -395,6 +395,30 @@ export const ja: TranslationMap = mergeTranslations(en, {
       offHint: 'このプロバイダーは保存されていますが、オンにするまで利用できません。',
       offSetupHint: 'このプロバイダーはオフで、有効にする前に設定が必要です。',
     },
+    providerConnection: {
+      test: '接続をテスト',
+      testAgain: 'もう一度テスト',
+      testing: '接続をテスト中',
+      testingHint: '読み取り専用の検証リクエストを送信しています。チャット応答は生成されません。',
+      success: '接続を確認しました',
+      successHint:
+        'Kavi はチャット応答を生成せずに、このエンドポイントから期待される応答を受信しました。',
+      failed: '接続を確認できませんでした',
+      authenticationHint:
+        'プロバイダーが認証情報を拒否しました。API キーと権限を確認してください。',
+      billingHint: 'このプロバイダーを使用するには、残高の追加または利用上限の変更が必要です。',
+      rateLimitedHint:
+        'プロバイダーがリクエストを制限しています。しばらく待ってから再試行してください。',
+      timeoutHint:
+        'プロバイダーが時間内に応答しませんでした。エンドポイントを確認して再試行してください。',
+      networkHint:
+        'Kavi はこのエンドポイントに安全に接続できませんでした。URL と接続を確認してください。',
+      serverHint: 'プロバイダーは一時的に利用できません。しばらくしてから再試行してください。',
+      unsupportedHint:
+        'このエンドポイントでは対応する読み取り専用チェックを利用できません。ベース URL を確認するか、保存後にチャットを試してください。',
+      rejectedHint:
+        'プロバイダーが検証リクエストを拒否しました。エンドポイントと既定モデルを確認してください。',
+    },
     providerValidation: {
       nameRequired: 'プロバイダー名を入力してください。',
       baseUrlRequired: 'プロバイダーのエンドポイント URL を入力してください。',

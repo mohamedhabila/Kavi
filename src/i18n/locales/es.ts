@@ -403,6 +403,32 @@ export const es: TranslationMap = mergeTranslations(en, {
       offSetupHint:
         'Este proveedor está desactivado y aún necesita configuración antes de poder activarlo.',
     },
+    providerConnection: {
+      test: 'Probar conexión',
+      testAgain: 'Probar de nuevo',
+      testing: 'Probando conexión',
+      testingHint:
+        'Se está enviando una solicitud de validación de solo lectura. No se generará una respuesta de chat.',
+      success: 'Conexión verificada',
+      successHint:
+        'Kavi recibió la respuesta esperada de este endpoint sin generar una respuesta de chat.',
+      failed: 'Conexión no verificada',
+      authenticationHint:
+        'El proveedor rechazó la credencial. Revise la clave de API y sus permisos.',
+      billingHint:
+        'La cuenta necesita saldo o un cambio del límite de gasto para usar este proveedor.',
+      rateLimitedHint:
+        'El proveedor está limitando las solicitudes. Espere un momento y vuelva a intentarlo.',
+      timeoutHint: 'El proveedor no respondió a tiempo. Revise el endpoint y vuelva a intentarlo.',
+      networkHint:
+        'Kavi no pudo acceder de forma segura a este endpoint. Revise la URL y la conexión.',
+      serverHint:
+        'El proveedor no está disponible temporalmente. Vuelva a intentarlo en un momento.',
+      unsupportedHint:
+        'Este endpoint no ofrece una comprobación de solo lectura compatible. Confirme la URL base o pruebe un chat después de guardar.',
+      rejectedHint:
+        'El proveedor rechazó la solicitud de validación. Revise el endpoint y el modelo predeterminado.',
+    },
     providerValidation: {
       nameRequired: 'Introduzca un nombre para el proveedor.',
       baseUrlRequired: 'Introduzca la URL del endpoint del proveedor.',
