@@ -35,12 +35,31 @@ describe('RemoteWorkScreen config studio', () => {
   });
 
   it('shows the richer Expo project fields used in Settings', async () => {
-    const { findByText, getByLabelText, getByText, queryByText } = renderRemoteWorkScreen();
+    const { findByText, getByLabelText, getByTestId, getByText, queryByText } =
+      renderRemoteWorkScreen();
 
     fireEvent.press(getByLabelText('Edit Expo Project'));
     fireEvent.press(getByText('GitHub Workflow'));
 
     expect(await findByText('Workflow Ref')).toBeTruthy();
+    expect(getByLabelText('Project Name')).toBeTruthy();
+    expect(getByLabelText('GitHub Repository')).toBeTruthy();
+    expect(getByTestId('expo-mode-group').props.accessibilityRole).toBe('radiogroup');
+    expect(getByTestId('expo-mode-github-workflow').props).toEqual(
+      expect.objectContaining({
+        accessibilityRole: 'radio',
+        accessibilityState: { selected: true },
+      }),
+    );
+    expect(getByTestId('expo-platform-android').props).toEqual(
+      expect.objectContaining({
+        accessibilityRole: 'checkbox',
+        accessibilityState: { checked: true },
+      }),
+    );
+    expect(
+      StyleSheet.flatten(getByTestId('expo-platform-android').props.style).minHeight,
+    ).toBeGreaterThanOrEqual(48);
     expect(getByText('Update Channel')).toBeTruthy();
     expect(getByText('Preview URL')).toBeTruthy();
     expect(getByText('Custom Domain')).toBeTruthy();

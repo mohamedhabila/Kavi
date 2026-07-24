@@ -44,37 +44,57 @@ export const ExpoAccountEditorContent: React.FC<ExpoAccountEditorContentProps> =
       <Text style={styles.workspaceEditorSectionTitle}>{t('settings.expoAccounts')}</Text>
 
       {expoAccounts.length ? (
-        <View style={styles.optionRow}>
-          {expoAccounts.map((account) => (
-            <TouchableOpacity
-              key={account.id}
-              style={[styles.optionChip, draft.id === account.id ? styles.optionChipActive : null]}
-              onPress={() => handleEditExpoAccount(account)}
-            >
-              <Text
-                style={[
-                  styles.optionChipText,
-                  draft.id === account.id ? styles.optionChipTextActive : null,
-                ]}
-              >
-                {account.name || account.owner}
-              </Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity
-            style={styles.optionChip}
-            onPress={() => {
-              setExpoAccountDraft(createExpoAccountDraft());
-              setExpoAccountToken('');
-            }}
+        <>
+          <View
+            accessibilityLabel={t('settings.expoAccounts')}
+            accessibilityRole="radiogroup"
+            style={styles.optionRow}
+            testID="expo-account-group"
           >
-            <Text style={styles.optionChipText}>{t('settings.addExpoAccount')}</Text>
-          </TouchableOpacity>
-        </View>
+            {expoAccounts.map((account) => (
+              <TouchableOpacity
+                accessibilityLabel={account.name || account.owner}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: draft.id === account.id }}
+                key={account.id}
+                style={[
+                  styles.optionChip,
+                  draft.id === account.id ? styles.optionChipActive : null,
+                ]}
+                onPress={() => handleEditExpoAccount(account)}
+                testID={`expo-account-${account.id}`}
+              >
+                <Text
+                  style={[
+                    styles.optionChipText,
+                    draft.id === account.id ? styles.optionChipTextActive : null,
+                  ]}
+                >
+                  {account.name || account.owner}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.configActionRow}>
+            <TouchableOpacity
+              accessibilityLabel={t('settings.addExpoAccount')}
+              accessibilityRole="button"
+              style={styles.secondaryBtn}
+              onPress={() => {
+                setExpoAccountDraft(createExpoAccountDraft());
+                setExpoAccountToken('');
+              }}
+              testID="expo-account-add"
+            >
+              <Text style={styles.secondaryBtnText}>{t('settings.addExpoAccount')}</Text>
+            </TouchableOpacity>
+          </View>
+        </>
       ) : null}
 
       <Text style={styles.detailLabel}>{t('settings.expoAccountName')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.expoAccountName')}
         style={styles.configInput}
         value={draft.name}
         onChangeText={(value) =>
@@ -86,6 +106,7 @@ export const ExpoAccountEditorContent: React.FC<ExpoAccountEditorContentProps> =
 
       <Text style={styles.detailLabel}>{t('settings.expoOwner')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.expoOwner')}
         style={styles.configInput}
         value={draft.owner}
         onChangeText={(value) =>
@@ -99,9 +120,21 @@ export const ExpoAccountEditorContent: React.FC<ExpoAccountEditorContentProps> =
       <Text style={styles.formHint}>{t('settings.expoOwnerHint')}</Text>
 
       <Text style={styles.detailLabel}>{t('settings.expoAccountType')}</Text>
-      <View style={styles.optionRow}>
+      <View
+        accessibilityLabel={t('settings.expoAccountType')}
+        accessibilityRole="radiogroup"
+        style={styles.optionRow}
+        testID="expo-account-type-group"
+      >
         {(['personal', 'robot'] as const).map((option) => (
           <TouchableOpacity
+            accessibilityLabel={
+              option === 'robot'
+                ? t('settings.expoAccountTypeRobot')
+                : t('settings.expoAccountTypePersonal')
+            }
+            accessibilityRole="radio"
+            accessibilityState={{ selected: draft.accountType === option }}
             key={option}
             style={[
               styles.optionChip,
@@ -112,6 +145,7 @@ export const ExpoAccountEditorContent: React.FC<ExpoAccountEditorContentProps> =
                 current ? { ...current, accountType: option } : current,
               )
             }
+            testID={`expo-account-type-${option}`}
           >
             <Text
               style={[
@@ -129,6 +163,7 @@ export const ExpoAccountEditorContent: React.FC<ExpoAccountEditorContentProps> =
 
       <Text style={styles.detailLabel}>{t('settings.expoAccessToken')}</Text>
       <TextInput
+        accessibilityLabel={t('settings.expoAccessToken')}
         style={styles.configInput}
         value={expoAccountToken}
         onChangeText={setExpoAccountToken}

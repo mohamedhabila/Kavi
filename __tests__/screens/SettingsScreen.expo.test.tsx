@@ -1,5 +1,5 @@
 import { fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 
 import {
   confirmSettingsDestructiveAlert,
@@ -12,10 +12,28 @@ import {
 describe('SettingsScreen expo remote config', () => {
   setupSettingsScreenTestSuite({ destination: 'developer-remote-work' });
   it('should save a new Expo account, persist its token, and sync projects', async () => {
-    const { getAllByLabelText, getByDisplayValue, getByPlaceholderText, getByText } =
-      renderSettingsScreen();
+    const {
+      getAllByLabelText,
+      getByDisplayValue,
+      getByLabelText,
+      getByPlaceholderText,
+      getByTestId,
+      getByText,
+    } = renderSettingsScreen();
 
     fireEvent.press(getAllByLabelText('Add Expo account')[0]);
+    expect(getByLabelText('Account Name')).toBeTruthy();
+    expect(getByLabelText('Expo Access Token')).toBeTruthy();
+    expect(getByTestId('expo-account-type-group').props.accessibilityRole).toBe('radiogroup');
+    expect(getByTestId('expo-account-type-personal').props).toEqual(
+      expect.objectContaining({
+        accessibilityRole: 'radio',
+        accessibilityState: { selected: true },
+      }),
+    );
+    expect(
+      StyleSheet.flatten(getByTestId('expo-account-type-personal').props.style).minHeight,
+    ).toBeGreaterThanOrEqual(48);
     fireEvent.changeText(getByDisplayValue('New Expo Account'), '');
     fireEvent.changeText(getByPlaceholderText('my-org'), 'kavi');
     fireEvent.changeText(getByPlaceholderText('eas_xxx'), 'eas_live_token');
