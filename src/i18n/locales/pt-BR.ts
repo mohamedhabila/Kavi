@@ -908,6 +908,16 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
   model: {
     title: 'Selecionar modelo',
     noModels: 'Nenhum modelo disponível',
+    noSearchResults: 'Nenhum modelo corresponde à pesquisa',
+    loadingModels: 'Carregando modelos…',
+    fetchFailed:
+      'Não foi possível atualizar os modelos. Confira a conexão do provedor e tente novamente.',
+    searchModels: 'Pesquisar modelos',
+    searchModelsPlaceholder: 'Pesquisar pelo nome do modelo',
+    clearModelSearch: 'Limpar pesquisa de modelos',
+    providerLabel: 'Provedor {name}',
+    current: 'Atual',
+    recent: 'Recente',
     refreshModels: 'Atualizar lista de modelos',
     refreshModelsLabel: 'Atualizar modelos',
     retryFetchingModels: 'Tentar buscar modelos novamente',

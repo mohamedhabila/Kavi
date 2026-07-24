@@ -2,25 +2,29 @@
 // Kavi — ModelSelector Component
 // ---------------------------------------------------------------------------
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Modal,
-  StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Check, ChevronDown, RefreshCw } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Check, ChevronDown, RefreshCw, Search, X } from 'lucide-react-native';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { LlmService } from '../../services/llm/LlmService';
-import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
+import { useAppTheme } from '../../theme/useAppTheme';
 import { getProviderApiKey } from '../../services/storage/SecureStorage';
 import { useTranslation } from '../../i18n/useTranslation';
-import { getKnownProviderFallbackModels } from '../../constants/api';
+import { getKnownProviderFallbackModels, inferModelCapabilities } from '../../constants/api';
 import { isOnDeviceLlmProvider } from '../../services/localLlm/provider';
 import { getLocalLlmModelDisplayName } from '../../services/localLlm/catalog';
+import type { LlmProviderConfig } from '../../types/provider';
+import type { ModelCapabilities } from '../../types/tool';
+import { createModelSelectorStyles } from './ModelSelector.styles';
 
 interface ModelSelectorProps {
   disabled?: boolean;
@@ -30,25 +34,58 @@ interface ModelSelectorProps {
   variant?: 'compact' | 'full';
 }
 
+function uniqueModels(models: Array<string | null | undefined>): string[] {
+  return Array.from(
+    new Set(
+      models
+        .map((model) => model?.trim())
+        .filter((model): model is string => Boolean(model)),
+    ),
+  );
+}
+
+function getCapabilityLabels(
+  capabilities: ModelCapabilities,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string[] {
+  return [
+    capabilities.vision ? t('model.vision') : null,
+    capabilities.tools ? t('model.tools') : null,
+    capabilities.fileInput ? t('model.fileInput') : null,
+  ].filter((label): label is string => Boolean(label));
+}
+
 export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
   ({ disabled = false, selectedProviderId, selectedModel, onSelect, variant = 'compact' }) => {
     const { colors } = useAppTheme();
     const { t } = useTranslation();
-    const styles = createStyles(colors);
+    const styles = useMemo(() => createModelSelectorStyles(colors), [colors]);
     const providers = useSettingsStore((s) => s.providers);
+    const lastUsedModel = useSettingsStore((s) => s.lastUsedModel);
     const updateProvider = useSettingsStore((s) => s.updateProvider);
     const [visible, setVisible] = useState(false);
     const [models, setModels] = useState<Record<string, string[]>>({});
-    const [loading, setLoading] = useState(false);
-    const [fetchError, setFetchError] = useState<string | null>(null);
+    const [loadingProviderId, setLoadingProviderId] = useState<string | null>(null);
+    const [fetchErrors, setFetchErrors] = useState<Record<string, string | null>>({});
     const [viewProviderId, setViewProviderId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
     const mountedRef = useRef(true);
     const fetchRequestIdRef = useRef(0);
 
-    const activeProvider = providers.find((p) => p.id === selectedProviderId) || providers[0];
-    const viewProvider = providers.find((p) => p.id === viewProviderId) || activeProvider;
+    const enabledProviders = useMemo(
+      () => providers.filter((provider) => provider.enabled),
+      [providers],
+    );
+    const selectedProvider =
+      providers.find((provider) => provider.id === selectedProviderId) ||
+      enabledProviders[0] ||
+      providers[0];
+    const selectableProvider = selectedProvider?.enabled ? selectedProvider : enabledProviders[0];
+    const viewProvider =
+      enabledProviders.find((provider) => provider.id === viewProviderId) || selectableProvider;
+    const resolvedSelectedModel = selectedModel || selectedProvider?.model || null;
     const getModelLabel = useCallback(
-      (provider: typeof activeProvider | undefined, model: string | null | undefined) => {
+      (provider: LlmProviderConfig | undefined, model: string | null | undefined) => {
         if (!model) {
           return t('model.title');
         }
@@ -63,7 +100,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
     );
 
     const fetchModels = useCallback(
-      async (provider: typeof activeProvider) => {
+      async (provider: LlmProviderConfig | undefined) => {
         if (!provider) return;
         const requestId = ++fetchRequestIdRef.current;
         const commit = (update: () => void): boolean => {
@@ -77,8 +114,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
 
         if (
           !commit(() => {
-            setLoading(true);
-            setFetchError(null);
+            setLoadingProviderId(provider.id);
+            setFetchErrors((current) => ({ ...current, [provider.id]: null }));
           })
         ) {
           return;
@@ -110,11 +147,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
               });
             } else {
               commit(() => {
-                setFetchError(t('model.noModels'));
+                setFetchErrors((current) => ({
+                  ...current,
+                  [provider.id]: t('model.noModels'),
+                }));
               });
             }
           }
-        } catch (err: unknown) {
+        } catch {
           const fallbackModels = getKnownProviderFallbackModels(provider);
           if (fallbackModels.length > 0) {
             commit(() => {
@@ -122,12 +162,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
             });
           } else {
             commit(() => {
-              setFetchError((err instanceof Error ? err.message : '') || t('model.noModels'));
+              setFetchErrors((current) => ({
+                ...current,
+                [provider.id]: t('model.fetchFailed'),
+              }));
             });
           }
         } finally {
           commit(() => {
-            setLoading(false);
+            setLoadingProviderId(null);
           });
         }
       },
@@ -149,10 +192,57 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
       }
     }, [fetchModels, models, viewProvider, visible]);
 
-    const providerModels = viewProvider
-      ? models[viewProvider.id] || viewProvider.availableModels || []
-      : [];
-    const displayName = getModelLabel(activeProvider, selectedModel || activeProvider?.model);
+    const providerModels = useMemo(() => {
+      if (!viewProvider) return [];
+
+      const currentModel =
+        viewProvider.id === selectedProvider?.id ? resolvedSelectedModel : undefined;
+      const recentModel =
+        lastUsedModel?.providerId === viewProvider.id ? lastUsedModel.model : undefined;
+      const hiddenModels = new Set(viewProvider.hiddenModels || []);
+      const discoveredModels = models[viewProvider.id] || viewProvider.availableModels || [];
+
+      return uniqueModels([
+        currentModel,
+        recentModel,
+        viewProvider.model,
+        ...discoveredModels,
+      ]).filter((model) => model === currentModel || !hiddenModels.has(model));
+    }, [lastUsedModel, models, resolvedSelectedModel, selectedProvider?.id, viewProvider]);
+    const filteredModels = useMemo(() => {
+      const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+      if (!normalizedQuery) return providerModels;
+
+      return providerModels.filter((model) => {
+        const label = getModelLabel(viewProvider, model);
+        return (
+          model.toLocaleLowerCase().includes(normalizedQuery) ||
+          label.toLocaleLowerCase().includes(normalizedQuery)
+        );
+      });
+    }, [getModelLabel, providerModels, searchQuery, viewProvider]);
+    const loading = Boolean(viewProvider && loadingProviderId === viewProvider.id);
+    const fetchError = viewProvider ? fetchErrors[viewProvider.id] : null;
+    const displayName = getModelLabel(selectedProvider, resolvedSelectedModel);
+
+    const openSelector = useCallback(() => {
+      const initialProvider = selectedProvider?.enabled ? selectedProvider : enabledProviders[0];
+      setViewProviderId(initialProvider?.id || null);
+      setSearchQuery('');
+      setVisible(true);
+    }, [enabledProviders, selectedProvider]);
+
+    const closeSelector = useCallback(() => {
+      setSearchQuery('');
+      setVisible(false);
+    }, []);
+
+    const viewProviderModels = useCallback((provider: LlmProviderConfig) => {
+      fetchRequestIdRef.current += 1;
+      setLoadingProviderId(null);
+      setViewProviderId(provider.id);
+      setSearchQuery('');
+    }, []);
 
     return (
       <>
@@ -163,7 +253,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
             variant === 'full' ? styles.selectorFull : null,
             disabled ? styles.selectorDisabled : null,
           ]}
-          onPress={() => setVisible(true)}
+          onPress={openSelector}
           disabled={disabled}
           accessibilityRole="button"
           accessibilityLabel={t('model.selectorLabel', { name: displayName })}
@@ -182,28 +272,44 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
           visible={visible}
           transparent
           animationType="slide"
-          onRequestClose={() => setVisible(false)}
+          onRequestClose={closeSelector}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modal}>
+            <TouchableOpacity
+              accessible={false}
+              onPress={closeSelector}
+              style={styles.backdropDismiss}
+              testID="model-selector-backdrop"
+            />
+            <SafeAreaView
+              accessibilityViewIsModal
+              edges={['bottom']}
+              style={styles.modal}
+            >
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{t('model.title')}</Text>
                 <TouchableOpacity
+                  disabled={loading || !viewProvider}
                   onPress={() => viewProvider && fetchModels(viewProvider)}
                   accessibilityRole="button"
                   accessibilityLabel={t('model.refreshModelsLabel')}
+                  accessibilityState={{ busy: loading, disabled: loading || !viewProvider }}
+                  style={styles.headerAction}
                 >
-                  <RefreshCw size={18} color={colors.primary} />
+                  {loading ? (
+                    <ActivityIndicator color={colors.primary} size="small" />
+                  ) : (
+                    <RefreshCw size={19} color={colors.primary} />
+                  )}
                 </TouchableOpacity>
               </View>
 
-              {/* Provider tabs */}
-              {providers.length > 1 && (
+              {enabledProviders.length > 1 ? (
                 <FlatList
                   testID="model-selector-provider-tabs"
                   horizontal
-                  data={providers.filter((p) => p.enabled)}
-                  keyExtractor={(p) => p.id}
+                  data={enabledProviders}
+                  keyExtractor={(provider) => provider.id}
                   showsHorizontalScrollIndicator={false}
                   style={styles.providerTabs}
                   renderItem={({ item }) => (
@@ -212,18 +318,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
                         styles.providerTab,
                         item.id === viewProvider?.id && styles.providerTabActive,
                       ]}
-                      onPress={() => {
-                        setViewProviderId(item.id);
-                        if (!models[item.id]) fetchModels(item);
-                      }}
+                      onPress={() => viewProviderModels(item)}
                       accessibilityRole="button"
-                      accessibilityLabel={`${item.name} provider`}
+                      accessibilityLabel={t('model.providerLabel', { name: item.name })}
                       accessibilityState={{ selected: item.id === viewProvider?.id }}
                     >
                       <Text
                         style={[
                           styles.providerTabText,
-                          item.id === activeProvider?.id && styles.providerTabTextActive,
+                          item.id === viewProvider?.id && styles.providerTabTextActive,
                         ]}
                       >
                         {item.name}
@@ -231,30 +334,71 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
                     </TouchableOpacity>
                   )}
                 />
-              )}
+              ) : null}
+
+              <View style={styles.searchRow}>
+                <Search color={colors.textSecondary} size={18} />
+                <TextInput
+                  accessibilityLabel={t('model.searchModels')}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={setSearchQuery}
+                  placeholder={t('model.searchModelsPlaceholder')}
+                  placeholderTextColor={colors.placeholder}
+                  returnKeyType="search"
+                  style={styles.searchInput}
+                  value={searchQuery}
+                />
+                {searchQuery ? (
+                  <TouchableOpacity
+                    accessibilityLabel={t('model.clearModelSearch')}
+                    accessibilityRole="button"
+                    onPress={() => setSearchQuery('')}
+                    style={styles.searchClear}
+                  >
+                    <X color={colors.textSecondary} size={18} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
 
               {loading ? (
-                <ActivityIndicator style={{ padding: 40 }} color={colors.primary} />
+                <View style={styles.loadingState}>
+                  <ActivityIndicator color={colors.primary} />
+                  <Text style={styles.loadingText}>{t('model.loadingModels')}</Text>
+                </View>
               ) : fetchError ? (
-                <View style={{ padding: 20, alignItems: 'center', gap: 12 }}>
+                <View style={styles.errorState}>
                   <Text style={[styles.emptyText, { color: colors.danger }]}>{fetchError}</Text>
                   <TouchableOpacity
-                    style={[styles.providerTab, styles.providerTabActive]}
+                    style={styles.retryButton}
                     onPress={() => viewProvider && fetchModels(viewProvider)}
                     accessibilityRole="button"
                     accessibilityLabel={t('model.retryFetchingModels')}
                   >
-                    <Text style={styles.providerTabTextActive}>{t('common.retry')}</Text>
+                    <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 <FlatList
                   testID="model-selector-model-list"
-                  data={providerModels}
+                  data={filteredModels}
+                  initialNumToRender={12}
                   keyExtractor={(item) => item}
+                  keyboardShouldPersistTaps="handled"
+                  maxToRenderPerBatch={12}
                   style={styles.modelList}
+                  windowSize={7}
                   renderItem={({ item }) => {
-                    const isSelected = item === selectedModel;
+                    const isSelected =
+                      viewProvider?.id === selectedProvider?.id && item === resolvedSelectedModel;
+                    const isRecent =
+                      !isSelected &&
+                      lastUsedModel?.providerId === viewProvider?.id &&
+                      lastUsedModel.model === item;
+                    const modelLabel = getModelLabel(viewProvider, item);
+                    const capabilities =
+                      viewProvider?.modelCapabilities?.[item] || inferModelCapabilities(item);
+                    const capabilityLabels = getCapabilityLabels(capabilities, t);
                     return (
                       <TouchableOpacity
                         style={[styles.modelItem, isSelected && styles.modelItemSelected]}
@@ -262,169 +406,63 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
                           if (viewProvider) {
                             onSelect(viewProvider.id, item);
                           }
-                          setVisible(false);
+                          closeSelector();
                         }}
                         accessibilityRole="button"
-                        accessibilityLabel={t('model.selectModel', { name: item })}
+                        accessibilityLabel={t('model.selectModel', { name: modelLabel })}
+                        accessibilityHint={capabilityLabels.join(', ') || undefined}
                         accessibilityState={{ selected: isSelected }}
                       >
-                        <Text
-                          style={[styles.modelName, isSelected && styles.modelNameSelected]}
-                          numberOfLines={1}
-                        >
-                          {getModelLabel(viewProvider, item)}
-                        </Text>
+                        <View style={styles.modelCopy}>
+                          <View style={styles.modelTitleRow}>
+                            <Text
+                              style={[styles.modelName, isSelected && styles.modelNameSelected]}
+                              numberOfLines={1}
+                            >
+                              {modelLabel}
+                            </Text>
+                            {isSelected || isRecent ? (
+                              <View style={styles.statusBadge}>
+                                <Text style={styles.statusBadgeText}>
+                                  {isSelected ? t('model.current') : t('model.recent')}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          {capabilityLabels.length > 0 ? (
+                            <View style={styles.capabilityRow}>
+                              {capabilityLabels.map((label) => (
+                                <View key={label} style={styles.capabilityBadge}>
+                                  <Text style={styles.capabilityBadgeText}>{label}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          ) : null}
+                        </View>
                         {isSelected && <Check size={16} color={colors.primary} />}
                       </TouchableOpacity>
                     );
                   }}
-                  ListEmptyComponent={<Text style={styles.emptyText}>{t('model.noModels')}</Text>}
+                  ListEmptyComponent={
+                    <Text style={styles.emptyText}>
+                      {searchQuery.trim() ? t('model.noSearchResults') : t('model.noModels')}
+                    </Text>
+                  }
                 />
               )}
 
               <TouchableOpacity
                 style={styles.closeBtn}
-                onPress={() => setVisible(false)}
+                onPress={closeSelector}
                 accessibilityRole="button"
                 accessibilityLabel={t('model.closeSelector')}
               >
                 <Text style={styles.closeBtnText}>{t('common.close')}</Text>
               </TouchableOpacity>
-            </View>
+            </SafeAreaView>
           </View>
         </Modal>
       </>
     );
   },
 );
-
-const createStyles = (colors: AppPalette) =>
-  StyleSheet.create({
-    selector: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      backgroundColor: colors.surfaceAlt,
-      borderRadius: 16,
-      alignSelf: 'flex-start',
-      flexGrow: 0,
-      flexShrink: 1,
-      maxWidth: '100%',
-      minWidth: 0,
-    },
-    selectorText: {
-      fontSize: 13,
-      color: colors.text,
-      flexShrink: 1,
-      minWidth: 0,
-    },
-    selectorTextFull: {
-      flex: 1,
-      fontSize: 15,
-      fontWeight: '600',
-    },
-    selectorFull: {
-      width: '100%',
-      minHeight: 52,
-      alignSelf: 'stretch',
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-    },
-    selectorDisabled: {
-      opacity: 0.5,
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: colors.overlay,
-      justifyContent: 'flex-end',
-    },
-    modal: {
-      backgroundColor: colors.surface,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      maxHeight: '70%',
-      paddingTop: 16,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 12,
-    },
-    modalTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    providerTabs: {
-      flexGrow: 0,
-      height: 48,
-      paddingHorizontal: 16,
-      marginBottom: 8,
-    },
-    providerTab: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 16,
-      marginRight: 8,
-      backgroundColor: colors.surfaceAlt,
-    },
-    providerTabActive: {
-      backgroundColor: colors.primarySoft,
-    },
-    providerTabText: {
-      fontSize: 13,
-      color: colors.textSecondary,
-    },
-    providerTabTextActive: {
-      color: colors.primary,
-      fontWeight: '600',
-    },
-    modelList: {
-      flexShrink: 1,
-      paddingHorizontal: 16,
-    },
-    modelItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      borderRadius: 8,
-    },
-    modelItemSelected: {
-      backgroundColor: colors.primarySoft,
-    },
-    modelName: {
-      fontSize: 14,
-      color: colors.text,
-      flex: 1,
-    },
-    modelNameSelected: {
-      fontWeight: '600',
-      color: colors.primary,
-    },
-    emptyText: {
-      fontSize: 14,
-      color: colors.textTertiary,
-      textAlign: 'center',
-      padding: 40,
-    },
-    closeBtn: {
-      padding: 16,
-      alignItems: 'center',
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    closeBtnText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.primary,
-    },
-  });

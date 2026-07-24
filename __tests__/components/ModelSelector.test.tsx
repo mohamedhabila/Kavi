@@ -1,7 +1,3 @@
-// ---------------------------------------------------------------------------
-// Tests — ModelSelector Component
-// ---------------------------------------------------------------------------
-
 import React from 'react';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
@@ -11,6 +7,7 @@ import { getLocalLlmModelDisplayName } from '../../src/services/localLlm/catalog
 
 const mockGetProviderApiKey = jest.fn().mockResolvedValue('sk-test');
 const mockUpdateProvider = jest.fn();
+let mockLastUsedModel: { providerId: string; model: string } | null = null;
 
 const mockProviders = [
   {
@@ -45,7 +42,11 @@ const createCustomProvider = () => ({
 
 jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: (selector: (s: any) => any) => {
-    const state = { providers: mockProviders, updateProvider: mockUpdateProvider };
+    const state = {
+      providers: mockProviders,
+      lastUsedModel: mockLastUsedModel,
+      updateProvider: mockUpdateProvider,
+    };
     return selector(state);
   },
 }));
@@ -77,6 +78,8 @@ jest.mock('../../src/theme/useAppTheme', () => ({
       surfaceAlt: '#222',
       border: '#333',
       overlay: 'rgba(0,0,0,0.5)',
+      danger: '#f00',
+      placeholder: '#777',
     },
   }),
   AppPalette: {},
@@ -91,6 +94,7 @@ describe('ModelSelector', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLastUsedModel = null;
     const { LlmService } = require('../../src/services/llm/LlmService');
     LlmService.mockImplementation(() => ({
       fetchModels: jest.fn().mockResolvedValue({
@@ -145,7 +149,6 @@ describe('ModelSelector', () => {
     await act(async () => {
       fireEvent.press(getByText('gpt-5.4'));
     });
-    // Wait for fetchModels to resolve
     await waitFor(() => {
       expect(getByText('o4-mini')).toBeTruthy();
     });
@@ -235,6 +238,95 @@ describe('ModelSelector', () => {
     expect(getByText('Anthropic')).toBeTruthy();
   });
 
+  it('does not render provider tabs when only one provider is enabled', async () => {
+    const previousEnabled = mockProviders[1].enabled;
+    mockProviders[1].enabled = false;
+
+    try {
+      const { getByText, queryByTestId } = render(<ModelSelector {...defaultProps} />);
+
+      await act(async () => {
+        fireEvent.press(getByText('gpt-5.4'));
+      });
+
+      expect(queryByTestId('model-selector-provider-tabs')).toBeNull();
+    } finally {
+      mockProviders[1].enabled = previousEnabled;
+    }
+  });
+
+  it('filters models by name and supports clearing an empty search', async () => {
+    const { getByLabelText, getByText, queryByText } = render(
+      <ModelSelector {...defaultProps} />,
+    );
+
+    await act(async () => {
+      fireEvent.press(getByText('gpt-5.4'));
+    });
+    await waitFor(() => {
+      expect(getByText('gpt-5-mini')).toBeTruthy();
+    });
+
+    fireEvent.changeText(getByLabelText('Search models'), 'not-a-real-model');
+    expect(getByText('No models match your search')).toBeTruthy();
+    expect(queryByText('gpt-5-mini')).toBeNull();
+
+    fireEvent.press(getByLabelText('Clear model search'));
+    expect(getByText('gpt-5-mini')).toBeTruthy();
+    expect(queryByText('No models match your search')).toBeNull();
+  });
+
+  it('sorts the current model first and marks the provider-scoped selection', async () => {
+    const { getByLabelText, getByTestId, getByText } = render(
+      <ModelSelector selectedProviderId="openai" selectedModel={null} onSelect={jest.fn()} />,
+    );
+
+    await act(async () => {
+      fireEvent.press(getByText('gpt-5.4'));
+    });
+    await waitFor(() => {
+      expect(getByLabelText('Select model gpt-5.4')).toBeTruthy();
+    });
+
+    expect(getByTestId('model-selector-model-list').props.data[0]).toBe('gpt-5.4');
+    expect(getByLabelText('Select model gpt-5.4').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(getByText('Current')).toBeTruthy();
+  });
+
+  it('does not mark the same model ID selected under a different provider', async () => {
+    const { getByLabelText, getByText } = render(<ModelSelector {...defaultProps} />);
+
+    await act(async () => {
+      fireEvent.press(getByText('gpt-5.4'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Anthropic'));
+    });
+
+    await waitFor(() => {
+      expect(getByLabelText('Select model gpt-5.4')).toBeTruthy();
+    });
+    expect(getByLabelText('Select model gpt-5.4').props.accessibilityState).toEqual({
+      selected: false,
+    });
+  });
+
+  it('exposes model capabilities without requiring users to recognize model IDs', async () => {
+    const { getByLabelText, getByText } = render(<ModelSelector {...defaultProps} />);
+
+    await act(async () => {
+      fireEvent.press(getByText('gpt-5.4'));
+    });
+
+    await waitFor(() => {
+      expect(getByLabelText('Select model gpt-5.4').props.accessibilityHint).toBe(
+        'Vision, Tools, File Input',
+      );
+    });
+  });
+
   it('loads models when switching provider tabs and reuses cached results', async () => {
     const { LlmService } = require('../../src/services/llm/LlmService');
     const fetchModelsMock = jest.fn((providerId: string) =>
@@ -266,6 +358,11 @@ describe('ModelSelector', () => {
       expect(getByText('claude-4.7-preview')).toBeTruthy();
     });
 
+    expect(StyleSheet.flatten(getByText('Anthropic').props.style)).toMatchObject({
+      color: '#0f0',
+      fontWeight: '600',
+    });
+
     expect(fetchModelsMock).toHaveBeenCalledTimes(2);
 
     await act(async () => {
@@ -273,6 +370,27 @@ describe('ModelSelector', () => {
     });
 
     expect(fetchModelsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns to the selected provider when the selector is reopened', async () => {
+    const { getByLabelText, getByText } = render(<ModelSelector {...defaultProps} />);
+
+    await act(async () => {
+      fireEvent.press(getByText('gpt-5.4'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Anthropic'));
+    });
+    await waitFor(() => {
+      expect(getByLabelText('Anthropic provider').props.accessibilityState).toEqual({
+        selected: true,
+      });
+    });
+
+    fireEvent.press(getByLabelText('Close model selector'));
+    fireEvent.press(getByText('gpt-5.4'));
+
+    expect(getByLabelText('OpenAI provider').props.accessibilityState).toEqual({ selected: true });
   });
 
   it('sizes the selector trigger to its content while capping width', () => {
@@ -289,6 +407,7 @@ describe('ModelSelector', () => {
       flexGrow: 0,
       flexShrink: 1,
       maxWidth: '100%',
+      minHeight: 44,
       minWidth: 0,
     });
     expect(triggerText.props.numberOfLines).toBe(1);
@@ -340,11 +459,38 @@ describe('ModelSelector', () => {
 
     expect(providerTabsStyle).toMatchObject({
       flexGrow: 0,
-      height: 48,
+      height: 52,
     });
     expect(modelListStyle).toMatchObject({
       flexShrink: 1,
     });
+  });
+
+  it('keeps interactive model-selection controls at least 44 points tall', async () => {
+    const { getByLabelText, getByTestId, getByText } = render(
+      <ModelSelector {...defaultProps} />,
+    );
+
+    expect(StyleSheet.flatten(getByTestId('model-selector-trigger').props.style).minHeight).toBe(44);
+
+    await act(async () => {
+      fireEvent.press(getByText('gpt-5.4'));
+    });
+    await waitFor(() => {
+      expect(getByLabelText('Select model gpt-5.4')).toBeTruthy();
+    });
+
+    expect(StyleSheet.flatten(getByLabelText('Refresh models').props.style)).toMatchObject({
+      height: 44,
+      width: 44,
+    });
+    expect(StyleSheet.flatten(getByLabelText('OpenAI provider').props.style).minHeight).toBe(44);
+    expect(StyleSheet.flatten(getByLabelText('Select model gpt-5.4').props.style).minHeight).toBe(
+      64,
+    );
+    expect(StyleSheet.flatten(getByLabelText('Close model selector').props.style).minHeight).toBe(
+      52,
+    );
   });
 
   it('does not fetch secure API keys for on-device providers', async () => {
@@ -467,7 +613,6 @@ describe('ModelSelector', () => {
     await act(async () => {
       fireEvent.press(getByText('gpt-5.4'));
     });
-    // Known provider (OpenAI) should fall back to hardcoded models, no error shown
     await waitFor(() => {
       expect(queryByText('Network error')).toBeNull();
     });
@@ -503,8 +648,11 @@ describe('ModelSelector', () => {
       });
 
       await waitFor(() => {
-        expect(getByText('Custom provider unavailable')).toBeTruthy();
+        expect(
+          getByText("Couldn't refresh models. Check the provider connection and try again."),
+        ).toBeTruthy();
       });
+      expect(() => getByText('Custom provider unavailable')).toThrow();
 
       await act(async () => {
         fireEvent.press(getByLabelText('Retry fetching models'));

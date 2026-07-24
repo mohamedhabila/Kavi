@@ -917,6 +917,16 @@ export const fr: TranslationMap = mergeTranslations(en, {
   model: {
     title: 'Sélectionner le modèle',
     noModels: 'Aucun modèle disponible',
+    noSearchResults: 'Aucun modèle ne correspond à votre recherche',
+    loadingModels: 'Chargement des modèles…',
+    fetchFailed:
+      'Impossible d’actualiser les modèles. Vérifiez la connexion du fournisseur et réessayez.',
+    searchModels: 'Rechercher des modèles',
+    searchModelsPlaceholder: 'Rechercher par nom de modèle',
+    clearModelSearch: 'Effacer la recherche de modèles',
+    providerLabel: 'Fournisseur {name}',
+    current: 'Actuel',
+    recent: 'Récent',
     refreshModels: 'Actualiser la liste des modèles',
     refreshModelsLabel: 'Actualiser les modèles',
     retryFetchingModels: 'Réessayer de récupérer les modèles',

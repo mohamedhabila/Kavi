@@ -900,6 +900,16 @@ export const ja: TranslationMap = mergeTranslations(en, {
   model: {
     title: 'モデルを選択',
     noModels: '利用可能なモデルがありません',
+    noSearchResults: '検索に一致するモデルがありません',
+    loadingModels: 'モデルを読み込み中…',
+    fetchFailed:
+      'モデルを更新できませんでした。プロバイダー接続を確認して再試行してください。',
+    searchModels: 'モデルを検索',
+    searchModelsPlaceholder: 'モデル名で検索',
+    clearModelSearch: 'モデル検索をクリア',
+    providerLabel: '{name} プロバイダー',
+    current: '現在',
+    recent: '最近',
     refreshModels: 'モデルリストを更新',
     refreshModelsLabel: 'モデルを更新',
     retryFetchingModels: 'モデル取得を再試行',
