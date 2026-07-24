@@ -1,6 +1,7 @@
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import { executeForegroundConversationRun } from '../../src/engine/graph/foregroundRun/execution';
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
+import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
 import {
   createConversation,
   createExecutionContext,
@@ -80,6 +81,83 @@ describe('foreground run projection reservation', () => {
       completionStatus: 'incomplete',
       finishReason: 'interrupted_before_start',
     });
+  });
+
+  it('renders a stopped pre-generation reservation as a neutral cancellation', async () => {
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    const registry = createForegroundRequestRegistry();
+    context.requests = {
+      abortForegroundRequestForConversation: (conversationId, reason) =>
+        registry.abortForConversation(conversationId, reason),
+      clearForegroundRequest: (conversationId, requestId, controller) =>
+        registry.clear({ conversationId, requestId, controller }),
+      isCurrentForegroundRequest: (conversationId, requestId, controller) =>
+        registry.isCurrent({ conversationId, requestId, controller }),
+      registerForegroundRequest: (requestId, conversationId, controller) =>
+        registry.register({ conversationId, requestId, controller }),
+      setStreamingMessageId: (conversationId, requestId, controller, messageId) =>
+        registry.setStreamingMessageId({ conversationId, requestId, controller }, messageId),
+    };
+    let resolvePreflight:
+      | ((result: Awaited<ReturnType<typeof resolveForegroundRunPreflight>>) => void)
+      | undefined;
+    mockedResolveForegroundRunPreflight.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePreflight = resolve;
+        }),
+    );
+
+    const execution = executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+    });
+    while (!resolvePreflight) await Promise.resolve();
+    context.requests.abortForegroundRequestForConversation(
+      conversation.id,
+      'Cancelled because the supervising turn was stopped by the user.',
+    );
+    resolvePreflight({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+
+    await execution;
+
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+    expect(context.getCurrentConversation().messages.at(-1)).toEqual(
+      expect.objectContaining({
+        content: 'Stopped before a response was generated.',
+        isError: false,
+        assistantMetadata: expect.objectContaining({
+          kind: 'final',
+          completionStatus: 'incomplete',
+          finishReason: 'cancelled_before_start',
+        }),
+      }),
+    );
+    expect(context.getCurrentConversation().logs?.at(-1)).toEqual(
+      expect.objectContaining({
+        kind: 'state',
+        level: 'info',
+        title: 'Response stopped before generation',
+      }),
+    );
   });
 
   it('retains ownership when terminal placeholder persistence cannot be proven', async () => {

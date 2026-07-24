@@ -1,5 +1,8 @@
 import type { ModelProjectionOwner } from '../../../types/conversation';
-import { terminalizeModelProjectionReservationConversation } from '../../../store/modelProjectionTerminalization';
+import {
+  terminalizeModelProjectionReservationConversation,
+  type ProjectionReservationFinishReason,
+} from '../../../store/modelProjectionTerminalization';
 import type { ExecuteForegroundConversationRunParams } from './executionTypes';
 
 type ProjectionDurability = ExecuteForegroundConversationRunParams['context']['durability'];
@@ -87,6 +90,7 @@ export async function terminalizeAndReleaseForegroundProjectionReservation(param
   conversationId: string;
   owner: ModelProjectionOwner;
   detail: string;
+  finishReason?: ProjectionReservationFinishReason;
 }): Promise<void> {
   const timestamp = Date.now();
   const mutation = params.durability.mutateModelProjection<string>({
@@ -97,7 +101,7 @@ export async function terminalizeAndReleaseForegroundProjectionReservation(param
         conversation,
         owner: params.owner,
         detail: params.detail,
-        finishReason: 'interrupted_before_start',
+        finishReason: params.finishReason ?? 'interrupted_before_start',
         timestamp,
       }),
   });

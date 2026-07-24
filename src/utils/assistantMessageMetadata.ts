@@ -90,6 +90,7 @@ const CODE_COMPLETE_NON_DELIVERABLE_FINISH_REASONS = new Set([
 const CODE_INCOMPLETE_FINISH_REASONS = new Set([
   'app_restarted',
   'app_restarted_before_start',
+  'cancelled_before_start',
   'empty_final_text_after_recovery',
   'interrupted_before_start',
   'missing_completion_metadata',
@@ -111,6 +112,7 @@ const ATTRIBUTION_PRESERVING_FINISH_REASONS = new Set([
 const SETTLED_INCOMPLETE_FINISH_REASONS = new Set([
   'app_restarted',
   'app_restarted_before_start',
+  'cancelled_before_start',
   'empty_final_text_after_recovery',
   'interrupted_before_start',
   'response_failed',

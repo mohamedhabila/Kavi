@@ -8,9 +8,11 @@ const INTERRUPTED_BEFORE_START_TEXT =
   'Response interrupted before generation could start. Please retry when you are ready.';
 const APP_RESTARTED_BEFORE_START_TEXT =
   'Response interrupted when the app restarted before generation could start. Please retry when you are ready.';
+const CANCELLED_BEFORE_START_TEXT = 'Stopped before a response was generated.';
 
 export type ProjectionReservationFinishReason =
   | 'app_restarted_before_start'
+  | 'cancelled_before_start'
   | 'interrupted_before_start';
 
 export function terminalizeModelProjectionReservationConversation(params: {
@@ -40,14 +42,17 @@ export function terminalizeModelProjectionReservationConversation(params: {
     };
   }
   const messages = [...params.conversation.messages];
+  const wasCancelled = params.finishReason === 'cancelled_before_start';
   messages[assistantIndex] = {
     ...assistant,
     content:
       assistant.content.trim() ||
-      (params.finishReason === 'app_restarted_before_start'
-        ? APP_RESTARTED_BEFORE_START_TEXT
-        : INTERRUPTED_BEFORE_START_TEXT),
-    isError: true,
+      (wasCancelled
+        ? CANCELLED_BEFORE_START_TEXT
+        : params.finishReason === 'app_restarted_before_start'
+          ? APP_RESTARTED_BEFORE_START_TEXT
+          : INTERRUPTED_BEFORE_START_TEXT),
+    isError: !wasCancelled,
     assistantMetadata: buildAssistantMessageMetadata('final', {
       completionStatus: 'incomplete',
       finishReason: params.finishReason,
@@ -66,10 +71,12 @@ export function terminalizeModelProjectionReservationConversation(params: {
         {
           id: `projection-interrupted-${params.owner.runId}`,
           timestamp: params.timestamp,
-          level: 'warning' as const,
-          kind: 'error' as const,
+          level: wasCancelled ? ('info' as const) : ('warning' as const),
+          kind: wasCancelled ? ('state' as const) : ('error' as const),
           title:
-            params.finishReason === 'app_restarted_before_start'
+            wasCancelled
+              ? 'Response stopped before generation'
+              : params.finishReason === 'app_restarted_before_start'
               ? 'Response interrupted by app restart'
               : 'Response interrupted before generation',
           detail: params.detail,

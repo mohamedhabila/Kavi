@@ -156,6 +156,9 @@ async function executeReservedForegroundConversationRun(
       conversationId,
       owner: projectionOwner,
       detail,
+      finishReason: abortController.signal.aborted
+        ? 'cancelled_before_start'
+        : 'interrupted_before_start',
     });
     projectionReleased = true;
     projectionClaimed = false;

@@ -118,6 +118,25 @@ describe('assistantMessageMetadata', () => {
     expect(hasCompleteFinalAssistantMetadata(message)).toBe(true);
   });
 
+  it('treats a visible pre-generation cancellation notice as settled but incomplete', () => {
+    const metadata = buildAssistantMessageMetadata('final', {
+      completionStatus: 'incomplete',
+      finishReason: 'cancelled_before_start',
+    });
+    const message = makeMessage({
+      content: 'Stopped before a response was generated.',
+      assistantMetadata: metadata,
+    });
+
+    expect(metadata).toEqual({
+      kind: 'final',
+      completionStatus: 'incomplete',
+      finishReason: 'cancelled_before_start',
+    });
+    expect(hasSettledFinalAssistantMetadata(message)).toBe(true);
+    expect(hasCompleteFinalAssistantMetadata(message)).toBe(false);
+  });
+
   it('requires a nonempty plain final before terminal closure', () => {
     const metadata = buildAssistantMessageMetadata('final', {
       completionStatus: 'complete',
