@@ -17,7 +17,11 @@ function snapshot(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot {
 
 describe('delegated work queue presentation', () => {
   it('groups a canonical worker tree and links it to its source conversation', () => {
-    const root = snapshot({ activeToolName: 'web_search' });
+    const root = snapshot({
+      activeToolName: 'web_search',
+      agentRunId: 'run-1',
+      workstreamId: 'compare-options',
+    });
     const child = snapshot({
       sessionId: 'worker-child',
       parentSessionId: root.sessionId,
@@ -29,7 +33,20 @@ describe('delegated work queue presentation', () => {
 
     const result = buildDelegatedWorkQueuePresentation({
       snapshots: [root, child],
-      conversations: [{ id: 'conversation-1', title: 'Trip research' }],
+      conversations: [
+        {
+          id: 'conversation-1',
+          title: 'Trip research',
+          agentRuns: [
+            {
+              id: 'run-1',
+              plan: {
+                workstreams: [{ id: 'compare-options', title: 'Compare the strongest options' }],
+              },
+            },
+          ],
+        },
+      ],
     });
 
     expect(result.counts).toEqual({
@@ -45,6 +62,7 @@ describe('delegated work queue presentation', () => {
       activityKind: 'researching',
       sourceConversationId: 'conversation-1',
       sourceConversationTitle: 'Trip research',
+      workTitle: 'Compare the strongest options',
       canCancel: true,
       canOpenSourceConversation: true,
       canPrepareRetry: false,

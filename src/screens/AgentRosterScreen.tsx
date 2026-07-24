@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// Kavi — Agent Roster & Queue Screen
+// Kavi — Assistant Styles & Delegated Work Screen
 // ---------------------------------------------------------------------------
-// Shows built-in + custom personas, sub-agent activity, task queue status.
+// Shows assistant styles and user-controlled delegated work progress.
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
@@ -16,23 +16,26 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute } from '@react-navigation/native';
-import { Users, Plus, Edit3, Trash2, Bot, Cpu, X } from 'lucide-react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { Edit3, ListTodo, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
-import { SubAgentActivityCard } from '../components/agents/SubAgentActivityCard';
+import { DelegatedWorkQueue } from '../components/agents/DelegatedWorkQueue';
 import { SubAgentDetailModal } from '../components/agents/SubAgentDetailModal';
 import { BUILT_IN_PERSONAS, type AgentPersona } from '../services/agents/personas';
 import { usePersonaConfigStore } from '../services/agents/store';
-import { listActiveSubAgents, onSubAgentEvent } from '../services/agents/subAgent';
+import { cancelSubAgent, listActiveSubAgents, onSubAgentEvent } from '../services/agents/subAgent';
 import {
-  buildSubAgentHierarchy,
-  buildSubAgentRollupMap,
-} from '../services/agents/lifecycle/subAgentHierarchyPresentation';
+  buildDelegatedWorkQueuePresentation,
+  type DelegatedWorkGroup,
+} from '../services/agents/delegatedWorkQueuePresentation';
 import { generateId } from '../utils/id';
 import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
+import { useChatStore } from '../store/useChatStore';
+import type { PreparedChatDraft } from './usePreparedChatDraft';
 
 export const AgentRosterScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
@@ -44,6 +47,8 @@ export const AgentRosterScreen: React.FC = () => {
   const removeCustom = usePersonaConfigStore((s) => s.removeCustomPersona);
   const setOverride = usePersonaConfigStore((s) => s.setOverride);
   const clearOverride = usePersonaConfigStore((s) => s.clearOverride);
+  const conversations = useChatStore((state) => state.conversations);
+  const setActiveConversation = useChatStore((state) => state.setActiveConversation);
 
   const requestedTab = route.params?.initialTab === 'queue' ? 'queue' : 'roster';
   const [activeTab, setActiveTab] = useState<'roster' | 'queue'>(requestedTab);
@@ -79,8 +84,67 @@ export const AgentRosterScreen: React.FC = () => {
     setActiveTab(requestedTab);
   }, [requestedTab]);
 
-  const hierarchicalSubAgents = useMemo(() => buildSubAgentHierarchy(subAgents), [subAgents]);
-  const subAgentRollups = useMemo(() => buildSubAgentRollupMap(subAgents), [subAgents]);
+  const delegatedWork = useMemo(
+    () => buildDelegatedWorkQueuePresentation({ snapshots: subAgents, conversations }),
+    [conversations, subAgents],
+  );
+
+  const handleOpenSourceConversation = useCallback(
+    (group: DelegatedWorkGroup) => {
+      if (!group.canOpenSourceConversation) return;
+      setActiveConversation(group.sourceConversationId);
+      navigation.navigate('Chat');
+    },
+    [navigation, setActiveConversation],
+  );
+
+  const handlePrepareRetry = useCallback(
+    (group: DelegatedWorkGroup) => {
+      if (!group.canPrepareRetry) return;
+      const preparedDraft: PreparedChatDraft = {
+        requestId: generateId(),
+        conversationId: group.sourceConversationId,
+        source: 'delegated-work-retry',
+        text: t('agentRoster.queueRetryPrompt'),
+      };
+      setActiveConversation(group.sourceConversationId);
+      navigation.navigate('Chat', { preparedDraft });
+    },
+    [navigation, setActiveConversation, t],
+  );
+
+  const handleStop = useCallback(
+    (group: DelegatedWorkGroup) => {
+      const runningNodes = group.nodes
+        .filter((node) => node.snapshot.status === 'running')
+        .sort((left, right) => right.visualDepth - left.visualDepth);
+      if (runningNodes.length === 0) return;
+
+      Alert.alert(
+        t('agentRoster.queueStopTitle'),
+        t(
+          runningNodes.length === 1
+            ? 'agentRoster.queueStopConfirmOne'
+            : 'agentRoster.queueStopConfirmMany',
+          { count: runningNodes.length },
+        ),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('agentRoster.queueStopAction'),
+            style: 'destructive',
+            onPress: () => {
+              for (const node of runningNodes) {
+                cancelSubAgent(node.snapshot.sessionId, t('agentRoster.queueStopReason'));
+              }
+              refreshQueue();
+            },
+          },
+        ],
+      );
+    },
+    [refreshQueue, t],
+  );
 
   const handleEditPersona = useCallback((persona: AgentPersona) => {
     setEditingPersona(persona);
@@ -150,37 +214,54 @@ export const AgentRosterScreen: React.FC = () => {
       <View style={styles.header}>
         <RouteLeadingButton />
         <Text style={styles.headerTitle}>{t('agentRoster.title')}</Text>
-        <TouchableOpacity
-          accessibilityLabel={t('agentRoster.newPersonaTitle')}
-          accessibilityRole="button"
-          onPress={handleNewPersona}
-          style={styles.headerButton}
-        >
-          <Plus size={24} color={colors.primary} />
-        </TouchableOpacity>
+        {activeTab === 'roster' ? (
+          <TouchableOpacity
+            accessibilityLabel={t('agentRoster.newPersonaTitle')}
+            accessibilityRole="button"
+            onPress={handleNewPersona}
+            style={styles.headerButton}
+            testID="assistant-style-create"
+          >
+            <Plus size={24} color={colors.primary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerButton} />
+        )}
       </View>
 
       {/* Tab bar */}
       <View style={styles.tabBar}>
         <TouchableOpacity
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'roster' }}
           style={[styles.tab, activeTab === 'roster' && styles.tabActive]}
           onPress={() => setActiveTab('roster')}
+          testID="assistant-styles-tab"
         >
-          <Users size={16} color={activeTab === 'roster' ? colors.primary : colors.textSecondary} />
+          <SlidersHorizontal
+            size={16}
+            color={activeTab === 'roster' ? colors.primary : colors.textSecondary}
+          />
           <Text style={[styles.tabText, activeTab === 'roster' && styles.tabTextActive]}>
             {t('agentRoster.personasTab', { count: allPersonas.length })}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'queue' }}
           style={[styles.tab, activeTab === 'queue' && styles.tabActive]}
           onPress={() => {
             setActiveTab('queue');
             refreshQueue();
           }}
+          testID="delegated-work-tab"
         >
-          <Cpu size={16} color={activeTab === 'queue' ? colors.primary : colors.textSecondary} />
+          <ListTodo
+            size={16}
+            color={activeTab === 'queue' ? colors.primary : colors.textSecondary}
+          />
           <Text style={[styles.tabText, activeTab === 'queue' && styles.tabTextActive]}>
-            {t('agentRoster.subAgentsTab', { count: subAgents.length })}
+            {t('agentRoster.subAgentsTab', { count: delegatedWork.counts.total })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -237,6 +318,8 @@ export const AgentRosterScreen: React.FC = () => {
                 </View>
                 <View style={styles.personaActions}>
                   <TouchableOpacity
+                    accessibilityLabel={`${t('common.edit')}: ${item.name}`}
+                    accessibilityRole="button"
                     style={styles.actionBtn}
                     onPress={() => handleEditPersona(item)}
                   >
@@ -244,6 +327,10 @@ export const AgentRosterScreen: React.FC = () => {
                     <Text style={styles.actionText}>{t('common.edit')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
+                    accessibilityLabel={`${
+                      isBuiltIn ? t('agentRoster.resetAction') : t('common.delete')
+                    }: ${item.name}`}
+                    accessibilityRole="button"
                     style={styles.actionBtn}
                     onPress={() => handleDeletePersona(item)}
                   >
@@ -258,27 +345,12 @@ export const AgentRosterScreen: React.FC = () => {
           }}
         />
       ) : (
-        <FlatList
-          data={hierarchicalSubAgents}
-          keyExtractor={(item) => item.snapshot.sessionId}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Bot size={48} color={colors.textTertiary} />
-              <Text style={styles.emptyTitle}>{t('agentRoster.emptyQueueTitle')}</Text>
-              <Text style={styles.emptySubtext}>{t('agentRoster.emptyQueueDescription')}</Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <SubAgentActivityCard
-              snapshot={item.snapshot}
-              visualDepth={item.visualDepth}
-              variant="queue"
-              rollup={subAgentRollups.get(item.snapshot.sessionId)}
-              showOpenDetailsAction
-              onOpenDetails={setSelectedSubAgent}
-            />
-          )}
+        <DelegatedWorkQueue
+          presentation={delegatedWork}
+          onOpenDetails={(group) => setSelectedSubAgent(group.rootSnapshot)}
+          onOpenSourceConversation={handleOpenSourceConversation}
+          onPrepareRetry={handlePrepareRetry}
+          onStop={handleStop}
         />
       )}
 
@@ -357,13 +429,23 @@ const PersonaEditorModal: React.FC<{
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={onCancel}>
+          <TouchableOpacity
+            accessibilityLabel={t('common.close')}
+            accessibilityRole="button"
+            onPress={onCancel}
+            style={styles.modalHeaderAction}
+          >
             <X size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.modalTitle}>
             {persona ? t('agentRoster.editPersonaTitle') : t('agentRoster.newPersonaTitle')}
           </Text>
-          <TouchableOpacity onPress={handleSave}>
+          <TouchableOpacity
+            accessibilityLabel={t('common.save')}
+            accessibilityRole="button"
+            onPress={handleSave}
+            style={styles.modalHeaderAction}
+          >
             <Text style={styles.saveBtn}>{t('common.save')}</Text>
           </TouchableOpacity>
         </View>
@@ -462,10 +544,18 @@ const createStyles = (colors: AppPalette) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      paddingVertical: 12,
+      minHeight: 48,
+      paddingHorizontal: 8,
+      paddingVertical: 8,
     },
     tabActive: { borderBottomWidth: 2, borderBottomColor: colors.primary },
-    tabText: { fontSize: 13, color: colors.textSecondary },
+    tabText: {
+      flexShrink: 1,
+      fontSize: 13,
+      lineHeight: 17,
+      color: colors.textSecondary,
+      textAlign: 'center',
+    },
     tabTextActive: { color: colors.primary, fontWeight: '600' },
     list: { padding: 16, gap: 12 },
     personaCard: {
@@ -479,7 +569,7 @@ const createStyles = (colors: AppPalette) =>
     personaHeader: { flexDirection: 'row', gap: 10, alignItems: 'center' },
     personaIcon: { fontSize: 28 },
     personaInfo: { flex: 1, gap: 2 },
-    personaNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    personaNameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
     personaName: { fontSize: 15, fontWeight: '600', color: colors.text },
     builtInBadge: {
       paddingHorizontal: 6,
@@ -499,23 +589,14 @@ const createStyles = (colors: AppPalette) =>
     personaMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     metaText: { fontSize: 11, color: colors.textTertiary },
     personaActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
-    actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, padding: 4 },
-    actionText: { fontSize: 12, color: colors.primary, fontWeight: '500' },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
+    actionBtn: {
+      minHeight: 44,
+      flexDirection: 'row',
       alignItems: 'center',
-      padding: 40,
-      gap: 12,
-      marginTop: 40,
+      gap: 5,
+      paddingHorizontal: 8,
     },
-    emptyTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
-    emptySubtext: {
-      fontSize: 14,
-      color: colors.textSecondary,
-      textAlign: 'center',
-      lineHeight: 20,
-    },
+    actionText: { fontSize: 12, color: colors.primary, fontWeight: '500' },
     // Modal
     modalContainer: { flex: 1, backgroundColor: colors.background },
     modalHeader: {
@@ -528,6 +609,12 @@ const createStyles = (colors: AppPalette) =>
       borderBottomColor: colors.border,
     },
     modalTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
+    modalHeaderAction: {
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     saveBtn: { fontSize: 16, fontWeight: '600', color: colors.primary },
     modalBody: { flex: 1, padding: 16, gap: 12 },
     fieldLabel: {

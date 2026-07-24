@@ -1,18 +1,33 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { AgentRosterScreen } from '../../src/screens/AgentRosterScreen';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 const mockOpenDrawer = jest.fn();
+const mockNavigate = jest.fn();
+const mockSetActiveConversation = jest.fn();
+const mockCancelSubAgent = jest.fn();
 let mockRouteParams: Record<string, unknown> = {};
+let mockConversations: Array<{ id: string; title: string; agentRuns?: any[] }> = [
+  { id: 'conv-1', title: 'Trip research' },
+];
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     openDrawer: mockOpenDrawer,
-    navigate: jest.fn(),
+    navigate: mockNavigate,
     goBack: jest.fn(),
   }),
   useRoute: () => ({ name: 'AgentRoster', params: mockRouteParams }),
   useFocusEffect: jest.fn(),
+}));
+
+jest.mock('../../src/store/useChatStore', () => ({
+  useChatStore: (selector: (state: any) => any) =>
+    selector({
+      conversations: mockConversations,
+      setActiveConversation: mockSetActiveConversation,
+    }),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -94,6 +109,7 @@ let mockSubAgentListener:
   | null = null;
 
 jest.mock('../../src/services/agents/subAgent', () => ({
+  cancelSubAgent: (...args: unknown[]) => mockCancelSubAgent(...args),
   listActiveSubAgents: jest.fn(() => mockSubAgents),
   onSubAgentEvent: jest.fn(
     (listener: (agent: SubAgentSnapshot, event: 'started' | 'completed' | 'error') => void) => {
@@ -128,19 +144,51 @@ describe('AgentRosterScreen', () => {
     mockSubAgentListener = null;
     mockSubAgents = [];
     mockRouteParams = {};
+    mockConversations = [{ id: 'conv-1', title: 'Trip research' }];
   });
 
-  it('opens directly to work activity when requested by the Activity hub', () => {
+  it('opens directly to guided delegated work when requested by Activity', () => {
     mockRouteParams = { initialTab: 'queue' };
 
-    const { getByText } = render(<AgentRosterScreen />);
+    const { getByTestId, getByText, queryByTestId } = render(<AgentRosterScreen />);
 
-    expect(getByText('No Active Sub-Agents')).toBeTruthy();
+    expect(getByText('No delegated work yet')).toBeTruthy();
+    expect(getByTestId('delegated-work-tab').props.accessibilityState).toEqual({ selected: true });
+    expect(queryByTestId('assistant-style-create')).toBeNull();
   });
 
-  it('renders a nested sub-agent queue using hierarchy cards', () => {
+  it('keeps style actions and tabs at accessible touch sizes', () => {
+    const { getByLabelText, getByTestId } = render(<AgentRosterScreen />);
+
+    expect(StyleSheet.flatten(getByTestId('assistant-styles-tab').props.style).minHeight).toBe(48);
+    expect(StyleSheet.flatten(getByLabelText('Edit: Assistant').props.style).minHeight).toBe(44);
+    expect(StyleSheet.flatten(getByLabelText('Reset: Assistant').props.style).minHeight).toBe(44);
+  });
+
+  it('groups a worker tree into one human-readable work card', () => {
+    mockConversations = [
+      {
+        id: 'conv-1',
+        title: 'Trip research',
+        agentRuns: [
+          {
+            id: 'run-1',
+            plan: {
+              workstreams: [{ id: 'compare-options', title: 'Compare destinations' }],
+            },
+          },
+        ],
+      },
+    ];
     mockSubAgents = [
-      makeSubAgent({ sessionId: 'sub-root', name: 'Planner', depth: 0 }),
+      makeSubAgent({
+        sessionId: 'sub-root',
+        name: 'Planner',
+        depth: 0,
+        agentRunId: 'run-1',
+        workstreamId: 'compare-options',
+        currentActivity: 'Comparing the strongest options.',
+      }),
       makeSubAgent({
         sessionId: 'sub-child',
         parentSessionId: 'sub-root',
@@ -152,32 +200,36 @@ describe('AgentRosterScreen', () => {
       }),
     ];
 
-    const { getByText, getByTestId } = render(<AgentRosterScreen />);
+    const { getByTestId, getByText, queryByText } = render(<AgentRosterScreen />);
 
-    fireEvent.press(getByText('Queue (2)'));
+    fireEvent.press(getByTestId('delegated-work-tab'));
 
-    expect(getByText('Planner')).toBeTruthy();
-    expect(getByText('Implementer')).toBeTruthy();
-    expect(getByTestId('sub-agent-card-depth-0')).toBeTruthy();
-    expect(getByTestId('sub-agent-card-depth-1')).toBeTruthy();
+    expect(getByText('Delegated work (1)')).toBeTruthy();
+    expect(getByText('Compare destinations')).toBeTruthy();
+    expect(getByText('From Trip research')).toBeTruthy();
+    expect(getByText('2 delegated steps')).toBeTruthy();
+    expect(getByText('Comparing the strongest options.')).toBeTruthy();
+    expect(getByTestId('delegated-work-sub-root')).toBeTruthy();
+    expect(queryByText('Planner')).toBeNull();
+    expect(queryByText('Implementer')).toBeNull();
   });
 
-  it('refreshes the queue when sub-agent events arrive', () => {
+  it('refreshes grouped work when lifecycle events arrive', () => {
     mockSubAgents = [makeSubAgent({ sessionId: 'sub-root', name: 'Planner' })];
 
-    const { getByText, queryByText } = render(<AgentRosterScreen />);
-    fireEvent.press(getByText('Queue (1)'));
+    const { getByTestId, getByText, queryByTestId } = render(<AgentRosterScreen />);
+    fireEvent.press(getByTestId('delegated-work-tab'));
 
-    expect(queryByText('Reviewer')).toBeNull();
+    expect(getByText('Delegated work (1)')).toBeTruthy();
+    expect(queryByTestId('delegated-work-sub-review')).toBeNull();
     expect(typeof mockSubAgentListener).toBe('function');
 
     mockSubAgents = [
       makeSubAgent({ sessionId: 'sub-root', name: 'Planner' }),
       makeSubAgent({
         sessionId: 'sub-review',
-        parentSessionId: 'sub-root',
         name: 'Reviewer',
-        depth: 1,
+        depth: 0,
         status: 'running',
       }),
     ];
@@ -186,10 +238,11 @@ describe('AgentRosterScreen', () => {
       mockSubAgentListener?.(mockSubAgents[1], 'started');
     });
 
-    expect(getByText('Reviewer')).toBeTruthy();
+    expect(getByText('Delegated work (2)')).toBeTruthy();
+    expect(getByTestId('delegated-work-sub-review')).toBeTruthy();
   });
 
-  it('opens a filtered worker detail modal from the queue', () => {
+  it('keeps worker and session details behind an explicit details action', () => {
     mockSubAgents = [
       makeSubAgent({
         sessionId: 'sub-root',
@@ -211,12 +264,70 @@ describe('AgentRosterScreen', () => {
       }),
     ];
 
-    const { getAllByText, getAllByTestId, getByText } = render(<AgentRosterScreen />);
-    fireEvent.press(getByText('Queue (2)'));
+    const { getAllByText, getByTestId } = render(<AgentRosterScreen />);
+    fireEvent.press(getByTestId('delegated-work-tab'));
 
-    fireEvent.press(getAllByTestId('sub-agent-open-details')[0]);
+    fireEvent.press(getByTestId('delegated-work-details-sub-root'));
 
     expect(getAllByText('Worker tree').length).toBeGreaterThan(0);
     expect(getAllByText('Implementer').length).toBeGreaterThan(0);
+  });
+
+  it('returns completed work to its source conversation', () => {
+    mockSubAgents = [
+      makeSubAgent({
+        status: 'completed',
+        launchState: 'terminal',
+        output: 'The comparison is ready.',
+      }),
+    ];
+    const { getByTestId } = render(<AgentRosterScreen />);
+    fireEvent.press(getByTestId('delegated-work-tab'));
+
+    fireEvent.press(getByTestId('delegated-work-open-chat-sub-root'));
+
+    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-1');
+    expect(mockNavigate).toHaveBeenCalledWith('Chat');
+  });
+
+  it('prepares failed work as an editable chat retry instead of running it directly', () => {
+    mockSubAgents = [makeSubAgent({ status: 'error', launchState: 'terminal' })];
+    const { getByTestId } = render(<AgentRosterScreen />);
+    fireEvent.press(getByTestId('delegated-work-tab'));
+
+    fireEvent.press(getByTestId('delegated-work-retry-sub-root'));
+
+    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-1');
+    expect(mockNavigate).toHaveBeenCalledWith('Chat', {
+      preparedDraft: expect.objectContaining({
+        conversationId: 'conv-1',
+        source: 'delegated-work-retry',
+      }),
+    });
+    expect(mockCancelSubAgent).not.toHaveBeenCalled();
+  });
+
+  it('confirms before stopping every running step, deepest first', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockSubAgents = [
+      makeSubAgent({ sessionId: 'sub-root', depth: 0 }),
+      makeSubAgent({ sessionId: 'sub-child', parentSessionId: 'sub-root', depth: 1 }),
+    ];
+    const { getByTestId } = render(<AgentRosterScreen />);
+    fireEvent.press(getByTestId('delegated-work-tab'));
+
+    fireEvent.press(getByTestId('delegated-work-stop-sub-root'));
+    expect(mockCancelSubAgent).not.toHaveBeenCalled();
+
+    const destructiveAction = alertSpy.mock.calls[0]?.[2]?.find(
+      (action) => action.style === 'destructive',
+    );
+    act(() => destructiveAction?.onPress?.());
+
+    expect(mockCancelSubAgent.mock.calls.map(([sessionId]) => sessionId)).toEqual([
+      'sub-child',
+      'sub-root',
+    ]);
+    alertSpy.mockRestore();
   });
 });
