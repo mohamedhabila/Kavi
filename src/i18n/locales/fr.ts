@@ -590,10 +590,57 @@ export const fr: TranslationMap = mergeTranslations(en, {
     configured: 'Configure',
     needsSetup: 'Configuration requise',
     destinations: {
+      assistantPersonalization: {
+        title: 'Assistant et personnalisation',
+        hint: 'Réglez le comportement, la profondeur des réponses, les instructions et les styles.',
+      },
+      memoryPrivacy: {
+        title: 'Mémoire et confidentialité',
+        hint: 'Contrôlez les souvenirs, la synthèse des conversations et les données enregistrées.',
+      },
+      toolsPermissions: {
+        title: 'Outils et autorisations',
+        hint: 'Choisissez les outils utilisables et connectez des clés de service facultatives.',
+      },
+      connections: {
+        title: 'Connexions',
+        hint: 'Gérez les services de navigateur et MCP utilisés pour vos demandes.',
+      },
+      notificationsVoice: {
+        title: 'Notifications et voix',
+        hint: 'Gérez les conversations vocales et les alertes de rappels ou d’automatisations.',
+      },
+      appearanceLanguage: {
+        title: 'Apparence et langue',
+        hint: 'Choisissez le thème de l’application et la langue d’affichage.',
+      },
       advancedAI: {
         title: 'IA avancée',
         hint: 'Connectez et gérez les fournisseurs d’IA qui alimentent votre assistant.',
       },
+    },
+    home: {
+      intro: 'Recherchez un réglage ou choisissez une catégorie. Les options avancées restent discrètes jusqu’à leur utilisation.',
+      searchLabel: 'Rechercher dans les réglages',
+      searchPlaceholder: 'Rechercher dans les réglages',
+      clearSearch: 'Effacer la recherche de réglages',
+      everydayTitle: 'Assistant et application',
+      advancedTitle: 'Avancé',
+      stylesCount: '{count} styles',
+      blockedCount: '{count} bloqués',
+      configuredCount: '{count} configurés',
+      ready: 'Prêt',
+      deviceServices: 'Services de l’appareil',
+      appearanceSummary: '{theme} · {language}',
+      optional: 'Facultatif',
+      developerRemoteHint:
+        'Ouvrez les espaces de travail, terminaux, outils de code et exécutions distantes facultatifs.',
+      noResultsTitle: 'Aucun réglage correspondant',
+      noResultsHint: 'Essayez un terme plus général ou effacez la recherche.',
+    },
+    notificationsVoice: {
+      voiceHint: 'Démarrez une conversation vocale et vérifiez le microphone ou la configuration vocale.',
+      automationHint: 'Gérez les rappels, automatisations et leurs notifications.',
     },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',

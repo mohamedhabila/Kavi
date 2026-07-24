@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ScrollView } from 'react-native';
 
 import type { SettingsSection } from './useSettingsRemoteConfigFlow';
@@ -24,11 +24,16 @@ const MAIN_SETTINGS_SECTION_ORDER: MainSettingsSectionId[] = [
 ];
 
 type UseSettingsSectionNavigationParams = {
+  mainContentKey?: string;
   section: SettingsSection;
   t: TranslationFn;
 };
 
-export function useSettingsSectionNavigation({ section, t }: UseSettingsSectionNavigationParams) {
+export function useSettingsSectionNavigation({
+  mainContentKey = 'legacy',
+  section,
+  t,
+}: UseSettingsSectionNavigationParams) {
   const [activeMainSection, setActiveMainSection] = useState<MainSettingsSectionId>('overview');
   const activeMainSectionRef = useRef<MainSettingsSectionId>('overview');
   const mainScrollRef = useRef<ScrollView>(null);
@@ -139,6 +144,16 @@ export function useSettingsSectionNavigation({ section, t }: UseSettingsSectionN
     activeMainSectionRef.current = nextActive;
     setActiveMainSection(nextActive);
   }, [section]);
+
+  useEffect(() => {
+    scrollOffsetsRef.current.main = 0;
+    pendingRestoreSectionRef.current = 'main';
+    activeMainSectionRef.current = 'overview';
+    setActiveMainSection('overview');
+    requestAnimationFrame(() => {
+      mainScrollRef.current?.scrollTo({ y: 0, animated: false });
+    });
+  }, [mainContentKey]);
 
   return {
     activeMainSection,

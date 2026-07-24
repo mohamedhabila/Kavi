@@ -569,10 +569,57 @@ export const ar: TranslationMap = mergeTranslations(en, {
     configured: 'تم التكوين',
     needsSetup: 'يحتاج إلى إعداد',
     destinations: {
+      assistantPersonalization: {
+        title: 'المساعد والتخصيص',
+        hint: 'اضبط السلوك اليومي وعمق الردود والتعليمات وأنماط المساعد.',
+      },
+      memoryPrivacy: {
+        title: 'الذاكرة والخصوصية',
+        hint: 'تحكّم في ما يتم تذكره وكيفية تلخيص المحادثات والبيانات المحفوظة.',
+      },
+      toolsPermissions: {
+        title: 'الأدوات والأذونات',
+        hint: 'اختر ما يمكن للمساعد استخدامه واربط مفاتيح الخدمات الاختيارية.',
+      },
+      connections: {
+        title: 'الاتصالات',
+        hint: 'أدِر خدمات المتصفح وMCP التي يستخدمها المساعد لإكمال الطلبات.',
+      },
+      notificationsVoice: {
+        title: 'الإشعارات والصوت',
+        hint: 'أدِر المحادثات الصوتية وتنبيهات التذكيرات أو المهام الآلية.',
+      },
+      appearanceLanguage: {
+        title: 'المظهر واللغة',
+        hint: 'اختر سمة التطبيق ولغة العرض.',
+      },
       advancedAI: {
         title: 'الذكاء الاصطناعي المتقدم',
         hint: 'اربط موفري الذكاء الاصطناعي الذين يشغّلون مساعدك وأدِرهم.',
       },
+    },
+    home: {
+      intro: 'ابحث عن إعداد أو اختر فئة. تبقى الخيارات المتقدمة بعيدة حتى تحتاج إليها.',
+      searchLabel: 'البحث في الإعدادات',
+      searchPlaceholder: 'البحث في الإعدادات',
+      clearSearch: 'مسح بحث الإعدادات',
+      everydayTitle: 'المساعد والتطبيق',
+      advancedTitle: 'متقدم',
+      stylesCount: '{count} أنماط',
+      blockedCount: '{count} محظورة',
+      configuredCount: '{count} مهيأة',
+      ready: 'جاهز',
+      deviceServices: 'خدمات الجهاز',
+      appearanceSummary: '{theme} · {language}',
+      optional: 'اختياري',
+      developerRemoteHint:
+        'افتح مساحات العمل والطرفيات وأدوات البرمجة وإعداد التنفيذ عن بُعد الاختيارية.',
+      noResultsTitle: 'لا توجد إعدادات مطابقة',
+      noResultsHint: 'جرّب مصطلحًا أوسع أو امسح البحث.',
+    },
+    notificationsVoice: {
+      voiceHint: 'ابدأ محادثة صوتية وراجع إعداد الميكروفون أو الكلام.',
+      automationHint: 'أدِر التذكيرات والمهام الآلية وجاهزية إشعاراتها.',
     },
     defaultConversationMode: 'وضع المحادثة الافتراضي',
     defaultConversationModeSummary: 'وكيل أم دردشة',

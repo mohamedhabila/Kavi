@@ -17,9 +17,17 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     backgroundColor: colors.background,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: '700',
     color: colors.text,
+    textAlign: 'center',
+  },
+  headerAction: {
+    width: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   saveBtn: {
     fontSize: 15,

@@ -564,10 +564,56 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     configured: '已配置',
     needsSetup: '需要设置',
     destinations: {
+      assistantPersonalization: {
+        title: '助手与个性化',
+        hint: '调整日常行为、回答深度、指令和助手风格。',
+      },
+      memoryPrivacy: {
+        title: '记忆与隐私',
+        hint: '控制记住的内容、对话压缩方式和已保存的数据。',
+      },
+      toolsPermissions: {
+        title: '工具与权限',
+        hint: '选择助手可使用的功能，并连接可选的服务密钥。',
+      },
+      connections: {
+        title: '连接',
+        hint: '管理助手完成请求时可使用的浏览器和 MCP 服务。',
+      },
+      notificationsVoice: {
+        title: '通知与语音',
+        hint: '管理语音对话以及提醒或自动化的通知。',
+      },
+      appearanceLanguage: {
+        title: '外观与语言',
+        hint: '选择应用主题和显示语言。',
+      },
       advancedAI: {
         title: '高级 AI',
         hint: '连接和管理为助手提供支持的 AI 服务商。',
       },
+    },
+    home: {
+      intro: '搜索设置或选择分类。高级选项仅在需要时出现。',
+      searchLabel: '搜索设置',
+      searchPlaceholder: '搜索设置',
+      clearSearch: '清除设置搜索',
+      everydayTitle: '助手与应用',
+      advancedTitle: '高级',
+      stylesCount: '{count} 种风格',
+      blockedCount: '已阻止 {count} 项',
+      configuredCount: '已配置 {count} 项',
+      ready: '就绪',
+      deviceServices: '设备服务',
+      appearanceSummary: '{theme} · {language}',
+      optional: '可选',
+      developerRemoteHint: '打开可选的工作区、终端、代码工具和远程执行设置。',
+      noResultsTitle: '没有匹配的设置',
+      noResultsHint: '请尝试更宽泛的关键词或清除搜索。',
+    },
+    notificationsVoice: {
+      voiceHint: '开始语音对话并检查麦克风或语音设置。',
+      automationHint: '管理提醒、自动化及其通知状态。',
     },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',

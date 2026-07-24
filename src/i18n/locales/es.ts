@@ -585,10 +585,57 @@ export const es: TranslationMap = mergeTranslations(en, {
     configured: 'Configurado',
     needsSetup: 'Falta configurar',
     destinations: {
+      assistantPersonalization: {
+        title: 'Asistente y personalización',
+        hint: 'Ajusta el comportamiento, la profundidad, las instrucciones y los estilos.',
+      },
+      memoryPrivacy: {
+        title: 'Memoria y privacidad',
+        hint: 'Controla qué se recuerda, cómo se resumen las conversaciones y los datos guardados.',
+      },
+      toolsPermissions: {
+        title: 'Herramientas y permisos',
+        hint: 'Elige qué puede usar el asistente y conecta claves opcionales de servicios.',
+      },
+      connections: {
+        title: 'Conexiones',
+        hint: 'Administra servicios de navegador y MCP para completar solicitudes.',
+      },
+      notificationsVoice: {
+        title: 'Notificaciones y voz',
+        hint: 'Administra conversaciones habladas y avisos de recordatorios o automatizaciones.',
+      },
+      appearanceLanguage: {
+        title: 'Apariencia e idioma',
+        hint: 'Elige el tema de la aplicación y el idioma de pantalla.',
+      },
       advancedAI: {
         title: 'IA avanzada',
         hint: 'Conecta y administra los proveedores de IA que impulsan tu asistente.',
       },
+    },
+    home: {
+      intro: 'Busca un ajuste o elige una categoría. Las opciones avanzadas no estorban hasta que las necesites.',
+      searchLabel: 'Buscar ajustes',
+      searchPlaceholder: 'Buscar ajustes',
+      clearSearch: 'Borrar búsqueda de ajustes',
+      everydayTitle: 'Asistente y aplicación',
+      advancedTitle: 'Avanzado',
+      stylesCount: '{count} estilos',
+      blockedCount: '{count} bloqueadas',
+      configuredCount: '{count} configuradas',
+      ready: 'Listo',
+      deviceServices: 'Servicios del dispositivo',
+      appearanceSummary: '{theme} · {language}',
+      optional: 'Opcional',
+      developerRemoteHint:
+        'Abre espacios de trabajo, terminales, herramientas de código y ejecución remota opcionales.',
+      noResultsTitle: 'No hay ajustes coincidentes',
+      noResultsHint: 'Prueba un término más general o borra la búsqueda.',
+    },
+    notificationsVoice: {
+      voiceHint: 'Inicia una conversación hablada y revisa el micrófono o la configuración de voz.',
+      automationHint: 'Administra recordatorios, automatizaciones y sus notificaciones.',
     },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',

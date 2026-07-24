@@ -577,10 +577,57 @@ export const ja: TranslationMap = mergeTranslations(en, {
     configured: '設定済み',
     needsSetup: '設定が必要',
     destinations: {
+      assistantPersonalization: {
+        title: 'アシスタントとカスタマイズ',
+        hint: '日常の動作、回答の深さ、指示、アシスタントのスタイルを調整します。',
+      },
+      memoryPrivacy: {
+        title: 'メモリとプライバシー',
+        hint: '記憶する内容、会話の要約方法、保存データを管理します。',
+      },
+      toolsPermissions: {
+        title: 'ツールと権限',
+        hint: 'アシスタントが使える機能と、任意のサービスキーを管理します。',
+      },
+      connections: {
+        title: '接続',
+        hint: '依頼の実行に使うブラウザーと MCP サービスを管理します。',
+      },
+      notificationsVoice: {
+        title: '通知と音声',
+        hint: '音声会話と、リマインダーや自動化の通知を管理します。',
+      },
+      appearanceLanguage: {
+        title: '外観と言語',
+        hint: 'アプリのテーマと表示言語を選びます。',
+      },
       advancedAI: {
         title: '高度な AI',
         hint: 'アシスタントを動かす AI プロバイダーを接続・管理します。',
       },
+    },
+    home: {
+      intro: '設定を検索するか、カテゴリを選択します。詳細オプションは必要になるまで表示を抑えます。',
+      searchLabel: '設定を検索',
+      searchPlaceholder: '設定を検索',
+      clearSearch: '設定の検索をクリア',
+      everydayTitle: 'アシスタントとアプリ',
+      advancedTitle: '詳細設定',
+      stylesCount: '{count} スタイル',
+      blockedCount: '{count} 件ブロック',
+      configuredCount: '{count} 件設定済み',
+      ready: '準備完了',
+      deviceServices: 'デバイスサービス',
+      appearanceSummary: '{theme} · {language}',
+      optional: '任意',
+      developerRemoteHint:
+        '任意のワークスペース、ターミナル、コードツール、リモート実行設定を開きます。',
+      noResultsTitle: '一致する設定がありません',
+      noResultsHint: 'より広い言葉を試すか、検索をクリアしてください。',
+    },
+    notificationsVoice: {
+      voiceHint: '音声会話を開始し、マイクや音声設定を確認します。',
+      automationHint: 'リマインダー、自動化、通知の準備状況を管理します。',
     },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',

@@ -28,6 +28,86 @@ describe('SettingsScreen general', () => {
     expect(queryByText('Clear All Conversations')).toBeNull();
   });
 
+  it('renders a compact, searchable Settings home', () => {
+    const { getAllByRole, getByTestId, queryByTestId } = renderSettingsScreen({
+      destination: 'home',
+    });
+
+    expect(getByTestId('settings-home')).toBeTruthy();
+    expect(getAllByRole('button').length + 1).toBeLessThan(40);
+
+    fireEvent.changeText(getByTestId('settings-home-search'), 'privacy');
+
+    expect(getByTestId('settings-home-memory-privacy')).toBeTruthy();
+    expect(queryByTestId('settings-home-advanced-ai')).toBeNull();
+  });
+
+  it('opens a Settings category as a child of the home', () => {
+    const { getByTestId } = renderSettingsScreen({
+      destination: 'home',
+      returnTo: { name: 'More' },
+    });
+
+    fireEvent.press(getByTestId('settings-home-tools-permissions'));
+
+    expect(settingsMocks.navigate).toHaveBeenCalledWith('Settings', {
+      destination: 'tools-permissions',
+      parentDestination: 'home',
+      returnTo: { name: 'More' },
+    });
+  });
+
+  it('keeps Assistant and appearance controls in distinct destinations', () => {
+    const assistant = renderSettingsScreen({ destination: 'assistant-personalization' });
+    expect(assistant.getByText('Thinking Level')).toBeTruthy();
+    expect(assistant.getByText('Configure Personas')).toBeTruthy();
+    expect(assistant.queryByText('Appearance')).toBeNull();
+    assistant.unmount();
+
+    const appearance = renderSettingsScreen({ destination: 'appearance-language' });
+    expect(appearance.getByText('Appearance')).toBeTruthy();
+    expect(appearance.getByText('Language')).toBeTruthy();
+    expect(appearance.queryByText('Thinking Level')).toBeNull();
+    expect(appearance.queryByText('Configure Personas')).toBeNull();
+  });
+
+  it('limits Connections to browser and MCP services', () => {
+    const { getByText, queryByText } = renderSettingsScreen({ destination: 'connections' });
+
+    expect(getByText('Browser Providers')).toBeTruthy();
+    expect(getByText('MCP Servers')).toBeTruthy();
+    expect(queryByText('SSH Targets')).toBeNull();
+    expect(queryByText('AI Providers')).toBeNull();
+  });
+
+  it('limits Memory & privacy to memory and saved-data controls', () => {
+    const { getByText, queryByText } = renderSettingsScreen({ destination: 'memory-privacy' });
+
+    expect(getByText('Clear All Conversations')).toBeTruthy();
+    expect(queryByText('Appearance')).toBeNull();
+    expect(queryByText('MCP Servers')).toBeNull();
+  });
+
+  it('opens Voice and Automations with a return path to their Settings category', () => {
+    const { getByTestId } = renderSettingsScreen({ destination: 'notifications-voice' });
+
+    fireEvent.press(getByTestId('settings-open-voice'));
+    expect(settingsMocks.navigate).toHaveBeenLastCalledWith('Voice', {
+      returnTo: {
+        name: 'Settings',
+        params: { destination: 'notifications-voice', parentDestination: 'home' },
+      },
+    });
+
+    fireEvent.press(getByTestId('settings-open-scheduler'));
+    expect(settingsMocks.navigate).toHaveBeenLastCalledWith('Scheduler', {
+      returnTo: {
+        name: 'Settings',
+        params: { destination: 'notifications-voice', parentDestination: 'home' },
+      },
+    });
+  });
+
   it('clears transient destination state when returning from Advanced AI', () => {
     const { getByTestId } = renderSettingsScreen({
       destination: 'advanced-ai',
@@ -39,11 +119,29 @@ describe('SettingsScreen general', () => {
 
     expect(settingsMocks.setParams).toHaveBeenCalledWith({
       destination: undefined,
+      parentDestination: undefined,
       returnTo: undefined,
       section: undefined,
       serverId: undefined,
     });
     expect(settingsMocks.navigate).toHaveBeenCalledWith('More');
+  });
+
+  it('returns category details to Settings home before leaving Settings', () => {
+    const { getByTestId } = renderSettingsScreen({
+      destination: 'tools-permissions',
+      parentDestination: 'home',
+      returnTo: { name: 'More' },
+    });
+
+    fireEvent.press(getByTestId('settings-back'));
+
+    expect(settingsMocks.navigate).toHaveBeenCalledWith('Settings', {
+      destination: 'home',
+      parentDestination: undefined,
+      returnTo: { name: 'More' },
+    });
+    expect(settingsMocks.setParams).not.toHaveBeenCalled();
   });
 
   it('should render theme section', () => {

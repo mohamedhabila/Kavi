@@ -33,8 +33,14 @@ import { getLocalLlmModelDisplayName } from '../services/localLlm/catalog';
 import { isOnDeviceLlmProvider } from '../services/localLlm/provider';
 import { deriveConsolidationStatusSnapshot } from '../services/memory/consolidationStatus';
 import { SettingsProviderEditor } from './components/settings/SettingsProviderEditor';
+import { SettingsHome } from './settings/SettingsHome';
+import { SettingsNotificationsVoiceSection } from './settings/SettingsNotificationsVoiceSection';
 import { SettingsProviderSurfaces } from './settings/SettingsProviderSurfaces';
-import { resolveSettingsDestination } from './settings/settingsDestination';
+import {
+  getSettingsDestinationTitleKey,
+  resolveSettingsDestination,
+  type SettingsDestination,
+} from './settings/settingsDestination';
 import {
   useSettingsRemoteConfigFlow,
   type SettingsSection,
@@ -53,16 +59,28 @@ import { useSettingsRemoteConfigDraftHydration } from './settings/useSettingsRem
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const destination = resolveSettingsDestination(route.params?.destination);
   const clearTransientRouteState = useCallback(
     (continueNavigation: () => void) => {
+      if (destination && destination !== 'home' && route.params?.parentDestination === 'home') {
+        navigation.navigate('Settings', {
+          destination: 'home',
+          parentDestination: undefined,
+          returnTo: route.params?.returnTo,
+        });
+        return;
+      }
+
       if (
         route.params?.destination ||
+        route.params?.parentDestination ||
         route.params?.returnTo ||
         route.params?.section ||
         route.params?.serverId
       ) {
         navigation.setParams({
           destination: undefined,
+          parentDestination: undefined,
           returnTo: undefined,
           section: undefined,
           serverId: undefined,
@@ -70,7 +88,7 @@ export const SettingsScreen: React.FC = () => {
       }
       continueNavigation();
     },
-    [navigation, route.params],
+    [destination, navigation, route.params],
   );
   const handleBack = useBackToChat({ beforeNavigate: clearTransientRouteState });
   const { colors } = useAppTheme();
@@ -78,7 +96,6 @@ export const SettingsScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const isWide = width >= 680;
   const styles = useMemo(() => createSettingsScreenStyles(colors), [colors]);
-  const destination = resolveSettingsDestination(route.params?.destination);
 
   const providers = useSettingsStore((s) => s.providers);
   const theme = useSettingsStore((s) => s.theme);
@@ -269,6 +286,7 @@ export const SettingsScreen: React.FC = () => {
     restoreTrackedScroll,
     handleJumpToMainSection,
   } = useSettingsSectionNavigation({
+    mainContentKey: destination ?? 'legacy',
     section,
     t,
   });
@@ -305,6 +323,57 @@ export const SettingsScreen: React.FC = () => {
   const handleManageApprovals = useCallback(() => {
     navigation.navigate('ApprovalHistory');
   }, [navigation]);
+
+  const handleOpenDestination = useCallback(
+    (nextDestination: SettingsDestination) => {
+      navigation.navigate('Settings', {
+        destination: nextDestination,
+        parentDestination: 'home',
+        returnTo: route.params?.returnTo,
+      });
+    },
+    [navigation, route.params?.returnTo],
+  );
+
+  const handleOpenDeveloperWork = useCallback(() => {
+    navigation.navigate('DeveloperWork', {
+      returnTo: { name: 'Settings', params: { destination: 'home' } },
+    });
+  }, [navigation]);
+
+  const handleOpenVoice = useCallback(() => {
+    navigation.navigate('Voice', {
+      returnTo: {
+        name: 'Settings',
+        params: { destination: 'notifications-voice', parentDestination: 'home' },
+      },
+    });
+  }, [navigation]);
+
+  const handleOpenScheduler = useCallback(() => {
+    navigation.navigate('Scheduler', {
+      returnTo: {
+        name: 'Settings',
+        params: { destination: 'notifications-voice', parentDestination: 'home' },
+      },
+    });
+  }, [navigation]);
+
+  const blockedToolsCount = useMemo(
+    () =>
+      Array.from(permissionStateByTool.values()).filter((permission) => !permission.allowed).length,
+    [permissionStateByTool],
+  );
+  const settingsTitle = destination
+    ? t(getSettingsDestinationTitleKey(destination))
+    : t('settings.title');
+  const themeLabel =
+    theme === 'light'
+      ? t('settings.light')
+      : theme === 'dark'
+        ? t('settings.dark')
+        : t('settings.system');
+  const showLegacySettings = destination === null;
 
   // --- Provider Edit Section ---
   if (section === 'provider-edit' && editingProvider) {
@@ -345,48 +414,6 @@ export const SettingsScreen: React.FC = () => {
     );
   }
 
-  if (destination === 'advanced-ai') {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={handleBack}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back')}
-          >
-            <ArrowLeft size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('settings.destinations.advancedAI.title')}</Text>
-          <View style={{ width: 24 }} />
-        </View>
-
-        <SettingsManagedScrollView
-          ref={mainScrollRef}
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-          onTrackedScroll={(y) => updateTrackedScroll('main', y)}
-          onRestore={() => restoreTrackedScroll('main', mainScrollRef)}
-        >
-          <View style={styles.sectionCard} testID="settings-advanced-ai">
-            <Text style={styles.sectionCardHint}>{t('settings.destinations.advancedAI.hint')}</Text>
-            <SettingsProviderSurfaces
-              colors={colors}
-              styles={styles}
-              t={t}
-              providers={providers}
-              localRuntimeStatusesByProviderId={localRuntimeStatusesByProviderId}
-              isOnDeviceLlmProvider={isOnDeviceLlmProvider}
-              getLocalLlmModelDisplayName={getLocalLlmModelDisplayName}
-              formatLocalLlmRuntimeStatusLabel={formatLocalLlmRuntimeStatusLabel}
-              handleNewProvider={handleNewProvider}
-              handleEditProvider={handleEditProvider}
-            />
-          </View>
-        </SettingsManagedScrollView>
-      </SafeAreaView>
-    );
-  }
-
   // --- Main Settings ---
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -397,11 +424,13 @@ export const SettingsScreen: React.FC = () => {
               onPress={handleBack}
               accessibilityRole="button"
               accessibilityLabel={t('common.back')}
+              style={styles.headerAction}
+              testID="settings-back"
             >
               <ArrowLeft size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>{t('settings.title')}</Text>
-            <View style={{ width: 24 }} />
+            <Text style={styles.headerTitle}>{settingsTitle}</Text>
+            <View style={styles.headerAction} />
           </View>
 
           <SettingsManagedScrollView
@@ -411,179 +440,254 @@ export const SettingsScreen: React.FC = () => {
             onTrackedScroll={(y) => updateTrackedScroll('main', y)}
             onRestore={() => restoreTrackedScroll('main', mainScrollRef)}
           >
-            <SettingsOverviewSection
-              colors={colors}
-              styles={styles}
-              t={t}
-              onLayout={(event) => {
-                mainSectionOffsetsRef.current.overview = event.nativeEvent.layout.y;
-              }}
-              mainSections={mainSections}
-              activeMainSection={activeMainSection}
-              handleJumpToMainSection={(sectionId) =>
-                handleJumpToMainSection(sectionId as MainSettingsSectionId)
-              }
-              providersCount={providers.length}
-              mcpServersCount={mcpServers.length}
-              expoAccountsCount={expoAccounts.length}
-              expoProjectsCount={expoProjects.length}
-              sshTargetsCount={sshTargets.length}
-              browserProvidersCount={browserProviders.length}
-              workspaceTargetsCount={workspaceTargets.length}
-              handleEditFirstProvider={() => handleEditProvider(providers[0])}
-              handleNewProvider={() => handleNewProvider()}
-              handleEditFirstMcp={() => handleEditMcp(mcpServers[0])}
-              handleNewMcp={handleNewMcp}
-              handleEditFirstExpoAccount={() => handleEditExpoAccount(expoAccounts[0])}
-              handleNewExpoAccount={handleNewExpoAccount}
-              handleEditFirstSsh={() => handleEditSsh(sshTargets[0])}
-              handleNewSsh={handleNewSsh}
-              handleEditFirstBrowserProvider={() => handleEditBrowserProvider(browserProviders[0])}
-              handleNewBrowserProvider={handleNewBrowserProvider}
-              handleEditFirstWorkspace={() => handleEditWorkspace(workspaceTargets[0])}
-              handleNewWorkspace={handleNewWorkspace}
-            />
+            {destination === 'home' ? (
+              <SettingsHome
+                assistantStylesCount={personas.length}
+                blockedToolsCount={blockedToolsCount}
+                colors={colors}
+                connectionsCount={browserProviders.length + mcpServers.length}
+                localeLabel={LOCALE_DISPLAY_NAMES[locale]}
+                memoryEnabled={!disableLongTermMemory}
+                onOpenDestination={handleOpenDestination}
+                onOpenDeveloperWork={handleOpenDeveloperWork}
+                providersCount={providers.length}
+                remoteTargetsCount={
+                  sshTargets.length + workspaceTargets.length + expoProjects.length
+                }
+                t={t}
+                themeLabel={themeLabel}
+              />
+            ) : null}
 
-            <SettingsAssistantSection
-              colors={colors}
-              styles={styles}
-              t={t}
-              onLayout={(event) => {
-                mainSectionOffsetsRef.current.assistant = event.nativeEvent.layout.y;
-              }}
-              theme={theme}
-              setTheme={setTheme}
-              locale={locale}
-              localeDisplayNames={LOCALE_DISPLAY_NAMES}
-              supportedLocales={SUPPORTED_LOCALES}
-              showLanguagePicker={showLanguagePicker}
-              setShowLanguagePicker={setShowLanguagePicker}
-              handleLocaleChange={handleLocaleChange}
-              linkUnderstandingEnabled={linkUnderstandingEnabled}
-              setLinkUnderstandingEnabled={setLinkUnderstandingEnabled}
-              maxLinks={maxLinks}
-              setMaxLinks={setMaxLinks}
-              mediaUnderstandingEnabled={mediaUnderstandingEnabled}
-              setMediaUnderstandingEnabled={setMediaUnderstandingEnabled}
-              defaultConversationMode={defaultConversationMode}
-              setDefaultConversationMode={setDefaultConversationMode}
-              thinkingLevel={thinkingLevel}
-              thinkingLevelOptions={thinkingLevelOptions}
-              setThinkingLevel={setThinkingLevel}
-              systemPrompt={systemPrompt}
-              setSystemPrompt={setSystemPrompt}
-            />
+            {showLegacySettings ? (
+              <SettingsOverviewSection
+                colors={colors}
+                styles={styles}
+                t={t}
+                onLayout={(event) => {
+                  mainSectionOffsetsRef.current.overview = event.nativeEvent.layout.y;
+                }}
+                mainSections={mainSections}
+                activeMainSection={activeMainSection}
+                handleJumpToMainSection={(sectionId) =>
+                  handleJumpToMainSection(sectionId as MainSettingsSectionId)
+                }
+                providersCount={providers.length}
+                mcpServersCount={mcpServers.length}
+                expoAccountsCount={expoAccounts.length}
+                expoProjectsCount={expoProjects.length}
+                sshTargetsCount={sshTargets.length}
+                browserProvidersCount={browserProviders.length}
+                workspaceTargetsCount={workspaceTargets.length}
+                handleEditFirstProvider={() => handleEditProvider(providers[0])}
+                handleNewProvider={() => handleNewProvider()}
+                handleEditFirstMcp={() => handleEditMcp(mcpServers[0])}
+                handleNewMcp={handleNewMcp}
+                handleEditFirstExpoAccount={() => handleEditExpoAccount(expoAccounts[0])}
+                handleNewExpoAccount={handleNewExpoAccount}
+                handleEditFirstSsh={() => handleEditSsh(sshTargets[0])}
+                handleNewSsh={handleNewSsh}
+                handleEditFirstBrowserProvider={() =>
+                  handleEditBrowserProvider(browserProviders[0])
+                }
+                handleNewBrowserProvider={handleNewBrowserProvider}
+                handleEditFirstWorkspace={() => handleEditWorkspace(workspaceTargets[0])}
+                handleNewWorkspace={handleNewWorkspace}
+              />
+            ) : null}
 
-            <SettingsToolsSection
-              CollapsibleSectionComponent={SettingsCollapsibleSection}
-              colors={colors}
-              styles={styles}
-              t={t}
-              onLayout={(event) => {
-                mainSectionOffsetsRef.current.tools = event.nativeEvent.layout.y;
-              }}
-              webSearchProvider={webSearchProvider}
-              setWebSearchProvider={setWebSearchProvider}
-              webSearchProviderOptions={webSearchProviderOptions}
-              serviceSetupFields={serviceSetupFields}
-              serviceKeys={serviceKeys}
-              setServiceKeys={setServiceKeys}
-              getServiceFieldCopy={getServiceFieldCopy}
-              persistServiceKey={persistServiceKey}
-              handleOpenUrl={handleOpenUrl}
-              builtInToolSections={builtInToolSections}
-              toolGroups={toolGroups}
-              permissionStateByTool={permissionStateByTool}
-              expandedToolPermissions={expandedPanels.toolPermissions}
-              toggleToolPermissions={() => togglePanel('toolPermissions')}
-              expandedGroups={expandedGroups}
-              toggleGroup={toggleGroup}
-              setToolPermission={setToolPermission}
-            />
+            {showLegacySettings ||
+            destination === 'assistant-personalization' ||
+            destination === 'appearance-language' ? (
+              <SettingsAssistantSection
+                colors={colors}
+                styles={styles}
+                t={t}
+                onLayout={(event) => {
+                  mainSectionOffsetsRef.current.assistant = event.nativeEvent.layout.y;
+                }}
+                theme={theme}
+                setTheme={setTheme}
+                locale={locale}
+                localeDisplayNames={LOCALE_DISPLAY_NAMES}
+                supportedLocales={SUPPORTED_LOCALES}
+                showLanguagePicker={showLanguagePicker}
+                setShowLanguagePicker={setShowLanguagePicker}
+                handleLocaleChange={handleLocaleChange}
+                linkUnderstandingEnabled={linkUnderstandingEnabled}
+                setLinkUnderstandingEnabled={setLinkUnderstandingEnabled}
+                maxLinks={maxLinks}
+                setMaxLinks={setMaxLinks}
+                mediaUnderstandingEnabled={mediaUnderstandingEnabled}
+                setMediaUnderstandingEnabled={setMediaUnderstandingEnabled}
+                defaultConversationMode={defaultConversationMode}
+                setDefaultConversationMode={setDefaultConversationMode}
+                thinkingLevel={thinkingLevel}
+                thinkingLevelOptions={thinkingLevelOptions}
+                setThinkingLevel={setThinkingLevel}
+                systemPrompt={systemPrompt}
+                setSystemPrompt={setSystemPrompt}
+                mode={
+                  destination === 'assistant-personalization'
+                    ? 'assistant'
+                    : destination === 'appearance-language'
+                      ? 'appearance'
+                      : 'all'
+                }
+              />
+            ) : null}
 
-            <SettingsPersonasSection
-              CollapsibleSectionComponent={SettingsCollapsibleSection}
-              colors={colors}
-              styles={styles}
-              t={t}
-              onLayout={(event: any) => {
-                mainSectionOffsetsRef.current.personas = event.nativeEvent.layout.y;
-              }}
-              expandedPersonas={expandedPanels.personas}
-              togglePersonas={() => togglePanel('personas')}
-              personas={personas}
-              editingPersonaId={editingPersonaId}
-              setEditingPersonaId={setEditingPersonaId}
-              currentPersona={currentPersona}
-              personaDraft={personaDraft}
-              setPersonaDraft={setPersonaDraft}
-              personaThinkingLevelOptions={personaThinkingLevelOptions}
-              handleSavePersona={handleSavePersona}
-            />
+            {showLegacySettings || destination === 'tools-permissions' ? (
+              <SettingsToolsSection
+                CollapsibleSectionComponent={SettingsCollapsibleSection}
+                colors={colors}
+                styles={styles}
+                t={t}
+                onLayout={(event) => {
+                  mainSectionOffsetsRef.current.tools = event.nativeEvent.layout.y;
+                }}
+                webSearchProvider={webSearchProvider}
+                setWebSearchProvider={setWebSearchProvider}
+                webSearchProviderOptions={webSearchProviderOptions}
+                serviceSetupFields={serviceSetupFields}
+                serviceKeys={serviceKeys}
+                setServiceKeys={setServiceKeys}
+                getServiceFieldCopy={getServiceFieldCopy}
+                persistServiceKey={persistServiceKey}
+                handleOpenUrl={handleOpenUrl}
+                builtInToolSections={builtInToolSections}
+                toolGroups={toolGroups}
+                permissionStateByTool={permissionStateByTool}
+                expandedToolPermissions={expandedPanels.toolPermissions}
+                toggleToolPermissions={() => togglePanel('toolPermissions')}
+                expandedGroups={expandedGroups}
+                toggleGroup={toggleGroup}
+                setToolPermission={setToolPermission}
+                mode={destination === 'tools-permissions' ? 'focused' : 'all'}
+              />
+            ) : null}
 
-            <SettingsSurfacesSection
-              CollapsibleSectionComponent={SettingsCollapsibleSection}
-              colors={colors}
-              styles={styles}
-              t={t}
-              expandedExecutionSurfaces={expandedPanels.executionSurfaces}
-              onToggleExecutionSurfaces={() => togglePanel('executionSurfaces')}
-              onLayout={(event) => {
-                mainSectionOffsetsRef.current.surfaces = event.nativeEvent.layout.y;
-              }}
-              sshTargets={sshTargets}
-              workspaceTargets={workspaceTargets}
-              browserProviders={browserProviders}
-              expoAccounts={expoAccounts}
-              expoProjects={expoProjects}
-              providers={providers}
-              mcpServers={mcpServers}
-              localRuntimeStatusesByProviderId={localRuntimeStatusesByProviderId}
-              getSshTargetAuthModeLabel={getSshTargetAuthModeLabel}
-              getSshHostKeyPolicyLabel={getSshHostKeyPolicyLabel}
-              getBrowserProviderAuthLabel={getBrowserProviderAuthLabel}
-              getMcpMetadataChips={getMcpMetadataChips}
-              isOnDeviceLlmProvider={isOnDeviceLlmProvider}
-              getLocalLlmModelDisplayName={getLocalLlmModelDisplayName}
-              formatLocalLlmRuntimeStatusLabel={formatLocalLlmRuntimeStatusLabel}
-              handleNewSsh={handleNewSsh}
-              handleEditSsh={handleEditSsh}
-              handleNewWorkspace={handleNewWorkspace}
-              handleEditWorkspace={handleEditWorkspace}
-              handleNewBrowserProvider={handleNewBrowserProvider}
-              handleEditBrowserProvider={handleEditBrowserProvider}
-              handleNewExpoAccount={handleNewExpoAccount}
-              handleEditExpoAccount={handleEditExpoAccount}
-              handleSyncExpoAccount={handleSyncExpoAccount}
-              handleEditExpoProject={handleEditExpoProject}
-              handleNewProvider={handleNewProvider}
-              handleEditProvider={handleEditProvider}
-              handleNewMcp={handleNewMcp}
-              handleEditMcp={handleEditMcp}
-            />
+            {showLegacySettings || destination === 'assistant-personalization' ? (
+              <SettingsPersonasSection
+                CollapsibleSectionComponent={SettingsCollapsibleSection}
+                colors={colors}
+                styles={styles}
+                t={t}
+                onLayout={(event: any) => {
+                  mainSectionOffsetsRef.current.personas = event.nativeEvent.layout.y;
+                }}
+                expandedPersonas={expandedPanels.personas}
+                togglePersonas={() => togglePanel('personas')}
+                personas={personas}
+                editingPersonaId={editingPersonaId}
+                setEditingPersonaId={setEditingPersonaId}
+                currentPersona={currentPersona}
+                personaDraft={personaDraft}
+                setPersonaDraft={setPersonaDraft}
+                personaThinkingLevelOptions={personaThinkingLevelOptions}
+                handleSavePersona={handleSavePersona}
+              />
+            ) : null}
 
-            <SettingsDataSection
-              colors={colors}
-              styles={styles}
-              t={t}
-              providers={providers}
-              disableLongTermMemory={disableLongTermMemory}
-              memoryConsolidationMode={memoryConsolidationMode}
-              consolidationProviderId={consolidationProviderId}
-              compactionProviderId={compactionProviderId}
-              compactionModel={compactionModel}
-              setDisableLongTermMemory={setDisableLongTermMemory}
-              setMemoryConsolidationMode={setMemoryConsolidationMode}
-              setCompactionProvider={setCompactionProvider}
-              setCompactionModel={setCompactionModel}
-              consolidationStatus={consolidationStatus}
-              onLayout={(event) => {
-                mainSectionOffsetsRef.current.data = event.nativeEvent.layout.y;
-              }}
-              onManageMemory={handleManageMemory}
-              onManageApprovals={handleManageApprovals}
-              onClearAllConversations={handleClearAllConversations}
-            />
+            {showLegacySettings || destination === 'connections' ? (
+              <SettingsSurfacesSection
+                CollapsibleSectionComponent={SettingsCollapsibleSection}
+                colors={colors}
+                styles={styles}
+                t={t}
+                expandedExecutionSurfaces={expandedPanels.executionSurfaces}
+                onToggleExecutionSurfaces={() => togglePanel('executionSurfaces')}
+                onLayout={(event) => {
+                  mainSectionOffsetsRef.current.surfaces = event.nativeEvent.layout.y;
+                }}
+                sshTargets={sshTargets}
+                workspaceTargets={workspaceTargets}
+                browserProviders={browserProviders}
+                expoAccounts={expoAccounts}
+                expoProjects={expoProjects}
+                providers={providers}
+                mcpServers={mcpServers}
+                localRuntimeStatusesByProviderId={localRuntimeStatusesByProviderId}
+                getSshTargetAuthModeLabel={getSshTargetAuthModeLabel}
+                getSshHostKeyPolicyLabel={getSshHostKeyPolicyLabel}
+                getBrowserProviderAuthLabel={getBrowserProviderAuthLabel}
+                getMcpMetadataChips={getMcpMetadataChips}
+                isOnDeviceLlmProvider={isOnDeviceLlmProvider}
+                getLocalLlmModelDisplayName={getLocalLlmModelDisplayName}
+                formatLocalLlmRuntimeStatusLabel={formatLocalLlmRuntimeStatusLabel}
+                handleNewSsh={handleNewSsh}
+                handleEditSsh={handleEditSsh}
+                handleNewWorkspace={handleNewWorkspace}
+                handleEditWorkspace={handleEditWorkspace}
+                handleNewBrowserProvider={handleNewBrowserProvider}
+                handleEditBrowserProvider={handleEditBrowserProvider}
+                handleNewExpoAccount={handleNewExpoAccount}
+                handleEditExpoAccount={handleEditExpoAccount}
+                handleSyncExpoAccount={handleSyncExpoAccount}
+                handleEditExpoProject={handleEditExpoProject}
+                handleNewProvider={handleNewProvider}
+                handleEditProvider={handleEditProvider}
+                handleNewMcp={handleNewMcp}
+                handleEditMcp={handleEditMcp}
+                mode={destination === 'connections' ? 'connections' : 'all'}
+              />
+            ) : null}
+
+            {showLegacySettings || destination === 'memory-privacy' ? (
+              <SettingsDataSection
+                colors={colors}
+                styles={styles}
+                t={t}
+                providers={providers}
+                disableLongTermMemory={disableLongTermMemory}
+                memoryConsolidationMode={memoryConsolidationMode}
+                consolidationProviderId={consolidationProviderId}
+                compactionProviderId={compactionProviderId}
+                compactionModel={compactionModel}
+                setDisableLongTermMemory={setDisableLongTermMemory}
+                setMemoryConsolidationMode={setMemoryConsolidationMode}
+                setCompactionProvider={setCompactionProvider}
+                setCompactionModel={setCompactionModel}
+                consolidationStatus={consolidationStatus}
+                onLayout={(event) => {
+                  mainSectionOffsetsRef.current.data = event.nativeEvent.layout.y;
+                }}
+                onManageMemory={handleManageMemory}
+                onManageApprovals={handleManageApprovals}
+                onClearAllConversations={handleClearAllConversations}
+                mode={destination === 'memory-privacy' ? 'focused' : 'all'}
+              />
+            ) : null}
+
+            {destination === 'notifications-voice' ? (
+              <SettingsNotificationsVoiceSection
+                colors={colors}
+                onOpenScheduler={handleOpenScheduler}
+                onOpenVoice={handleOpenVoice}
+                styles={styles}
+                t={t}
+              />
+            ) : null}
+
+            {destination === 'advanced-ai' ? (
+              <View style={styles.sectionCard} testID="settings-advanced-ai">
+                <Text style={styles.sectionCardHint}>
+                  {t('settings.destinations.advancedAI.hint')}
+                </Text>
+                <SettingsProviderSurfaces
+                  colors={colors}
+                  styles={styles}
+                  t={t}
+                  providers={providers}
+                  localRuntimeStatusesByProviderId={localRuntimeStatusesByProviderId}
+                  isOnDeviceLlmProvider={isOnDeviceLlmProvider}
+                  getLocalLlmModelDisplayName={getLocalLlmModelDisplayName}
+                  formatLocalLlmRuntimeStatusLabel={formatLocalLlmRuntimeStatusLabel}
+                  handleNewProvider={handleNewProvider}
+                  handleEditProvider={handleEditProvider}
+                />
+              </View>
+            ) : null}
           </SettingsManagedScrollView>
         </>
       )}

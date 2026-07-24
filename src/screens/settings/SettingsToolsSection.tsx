@@ -66,6 +66,7 @@ type SettingsToolsSectionProps = {
   expandedGroups: Set<string>;
   toggleGroup: (groupId: string) => void;
   setToolPermission: (toolName: string, allowed: boolean) => void;
+  mode?: 'all' | 'focused';
 };
 
 export const SettingsToolsSection: React.FC<SettingsToolsSectionProps> = ({
@@ -91,12 +92,25 @@ export const SettingsToolsSection: React.FC<SettingsToolsSectionProps> = ({
   expandedGroups,
   toggleGroup,
   setToolPermission,
+  mode = 'all',
 }) => {
   return (
     <View style={styles.sectionCard} onLayout={onLayout}>
       <View style={styles.sectionCardHeader}>
-        <Text style={styles.sectionCardTitle}>{t('settings.mainSections.tools.title')}</Text>
-        <Text style={styles.sectionCardHint}>{t('settings.mainSections.tools.hint')}</Text>
+        <Text style={styles.sectionCardTitle}>
+          {t(
+            mode === 'focused'
+              ? 'settings.destinations.toolsPermissions.title'
+              : 'settings.mainSections.tools.title',
+          )}
+        </Text>
+        <Text style={styles.sectionCardHint}>
+          {t(
+            mode === 'focused'
+              ? 'settings.destinations.toolsPermissions.hint'
+              : 'settings.mainSections.tools.hint',
+          )}
+        </Text>
       </View>
 
       <Text style={styles.sectionTitle}>{t('settings.webAndTools')}</Text>

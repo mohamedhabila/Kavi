@@ -584,10 +584,57 @@ export const de: TranslationMap = mergeTranslations(en, {
     configured: 'Konfiguriert',
     needsSetup: 'Einrichtung erforderlich',
     destinations: {
+      assistantPersonalization: {
+        title: 'Assistent & Personalisierung',
+        hint: 'Passe Verhalten, Antworttiefe, Anweisungen und Assistentenstile an.',
+      },
+      memoryPrivacy: {
+        title: 'Erinnerungen & Datenschutz',
+        hint: 'Bestimme, was gespeichert wird und wie Unterhaltungen zusammengefasst werden.',
+      },
+      toolsPermissions: {
+        title: 'Werkzeuge & Berechtigungen',
+        hint: 'Wähle verfügbare Werkzeuge und verbinde optionale Dienstschlüssel.',
+      },
+      connections: {
+        title: 'Verbindungen',
+        hint: 'Verwalte Browser- und MCP-Dienste für Aufgaben des Assistenten.',
+      },
+      notificationsVoice: {
+        title: 'Benachrichtigungen & Sprachmodus',
+        hint: 'Verwalte Sprachunterhaltungen und Hinweise für Erinnerungen oder Automationen.',
+      },
+      appearanceLanguage: {
+        title: 'Erscheinungsbild & Sprache',
+        hint: 'Wähle App-Design und Anzeigesprache.',
+      },
       advancedAI: {
         title: 'Erweiterte KI',
         hint: 'Verbinde und verwalte die KI-Anbieter für deinen Assistenten.',
       },
+    },
+    home: {
+      intro: 'Suche eine Einstellung oder wähle eine Kategorie. Erweiterte Optionen bleiben im Hintergrund, bis du sie brauchst.',
+      searchLabel: 'Einstellungen durchsuchen',
+      searchPlaceholder: 'Einstellungen durchsuchen',
+      clearSearch: 'Einstellungssuche löschen',
+      everydayTitle: 'Assistent & App',
+      advancedTitle: 'Erweitert',
+      stylesCount: '{count} Stile',
+      blockedCount: '{count} blockiert',
+      configuredCount: '{count} konfiguriert',
+      ready: 'Bereit',
+      deviceServices: 'Gerätedienste',
+      appearanceSummary: '{theme} · {language}',
+      optional: 'Optional',
+      developerRemoteHint:
+        'Öffne optionale Arbeitsbereiche, Terminals, Code-Werkzeuge und Remote-Ausführung.',
+      noResultsTitle: 'Keine passenden Einstellungen',
+      noResultsHint: 'Versuche einen allgemeineren Begriff oder lösche die Suche.',
+    },
+    notificationsVoice: {
+      voiceHint: 'Starte eine Sprachunterhaltung und prüfe Mikrofon- oder Spracheinstellungen.',
+      automationHint: 'Verwalte Erinnerungen, Automationen und ihre Benachrichtigungen.',
     },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',

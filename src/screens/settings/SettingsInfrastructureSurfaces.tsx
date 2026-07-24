@@ -1,9 +1,7 @@
-import { ChevronRight, Cpu, Plus, Server, ShieldCheck } from 'lucide-react-native';
+import { ChevronRight, Cpu, Plus, Server } from 'lucide-react-native';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 
-import { getBrowserProviderLabel } from '../../services/browser/providers/labels';
-import { getBrowserProviderReadiness } from '../../services/browser/providers/readiness';
 import { getSshTargetReadiness } from '../../services/ssh/connector';
 import {
   getWorkspaceProviderLabel,
@@ -15,6 +13,7 @@ import type {
   SshTargetConfig,
   WorkspaceTargetConfig,
 } from '../../types/remote';
+import { SettingsBrowserSurfaces } from './SettingsBrowserSurfaces';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -149,45 +148,14 @@ export const SettingsInfrastructureSurfaces: React.FC<SettingsInfrastructureSurf
       <Text style={styles.emptyText}>{t('settings.noWorkspaceTargets')}</Text>
     ) : null}
 
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{t('settings.browserProviders')}</Text>
-      <TouchableOpacity
-        onPress={handleNewBrowserProvider}
-        accessibilityRole="button"
-        accessibilityLabel={t('settings.addBrowserProvider')}
-      >
-        <Plus size={20} color={colors.primary} />
-      </TouchableOpacity>
-    </View>
-
-    {browserProviders.map((provider) => (
-      <TouchableOpacity
-        key={provider.id}
-        style={styles.listItem}
-        onPress={() => handleEditBrowserProvider(provider)}
-        accessibilityRole="button"
-        accessibilityLabel={t('settings.editBrowserProvider')}
-      >
-        <ShieldCheck size={18} color={provider.enabled ? colors.primary : colors.textTertiary} />
-        <View style={styles.listItemContent}>
-          <Text style={styles.listItemTitle}>{provider.name}</Text>
-          <Text style={styles.listItemSubtitle}>{getBrowserProviderLabel(provider.provider)}</Text>
-          <Text style={styles.listItemSubtitle}>
-            {provider.baseUrl?.trim() || t('remoteWork.notConfigured')}
-          </Text>
-          <Text style={styles.listItemSubtitle}>
-            {getBrowserProviderAuthLabel(provider.authMode)} ·{' '}
-            {getBrowserProviderReadiness(provider).launchable
-              ? t('remoteWork.statusReady')
-              : t('remoteWork.statusSetupRequired')}
-          </Text>
-        </View>
-        <ChevronRight size={18} color={colors.textTertiary} />
-      </TouchableOpacity>
-    ))}
-
-    {browserProviders.length === 0 ? (
-      <Text style={styles.emptyText}>{t('settings.noBrowserProviders')}</Text>
-    ) : null}
+    <SettingsBrowserSurfaces
+      browserProviders={browserProviders}
+      colors={colors}
+      getBrowserProviderAuthLabel={getBrowserProviderAuthLabel}
+      handleEditBrowserProvider={handleEditBrowserProvider}
+      handleNewBrowserProvider={handleNewBrowserProvider}
+      styles={styles}
+      t={t}
+    />
   </>
 );

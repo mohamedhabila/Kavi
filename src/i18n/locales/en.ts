@@ -581,10 +581,57 @@ export const en: TranslationMap = {
     configured: 'Configured',
     needsSetup: 'Needs setup',
     destinations: {
+      assistantPersonalization: {
+        title: 'Assistant & personalization',
+        hint: 'Adjust everyday behavior, response depth, instructions, and assistant styles.',
+      },
+      memoryPrivacy: {
+        title: 'Memory & privacy',
+        hint: 'Control what is remembered, how conversations are condensed, and saved data.',
+      },
+      toolsPermissions: {
+        title: 'Tools & permissions',
+        hint: 'Choose what the assistant can use and connect optional service keys.',
+      },
+      connections: {
+        title: 'Connections',
+        hint: 'Manage browser and MCP services the assistant can use to complete requests.',
+      },
+      notificationsVoice: {
+        title: 'Notifications & voice',
+        hint: 'Manage spoken conversations and alerts for reminders or automations.',
+      },
+      appearanceLanguage: {
+        title: 'Appearance & language',
+        hint: 'Choose the app theme and display language.',
+      },
       advancedAI: {
         title: 'Advanced AI',
         hint: 'Connect and manage the AI providers that power your assistant.',
       },
+    },
+    home: {
+      intro: 'Find a setting or choose a category. Advanced options stay out of the way until you need them.',
+      searchLabel: 'Search settings',
+      searchPlaceholder: 'Search settings',
+      clearSearch: 'Clear settings search',
+      everydayTitle: 'Assistant & app',
+      advancedTitle: 'Advanced',
+      stylesCount: '{count} styles',
+      blockedCount: '{count} blocked',
+      configuredCount: '{count} configured',
+      ready: 'Ready',
+      deviceServices: 'Device services',
+      appearanceSummary: '{theme} · {language}',
+      optional: 'Optional',
+      developerRemoteHint:
+        'Open optional workspaces, terminals, code tools, and remote execution setup.',
+      noResultsTitle: 'No matching settings',
+      noResultsHint: 'Try a broader term or clear the search.',
+    },
+    notificationsVoice: {
+      voiceHint: 'Start a spoken conversation and review microphone or speech setup.',
+      automationHint: 'Manage reminders, automations, and their notification readiness.',
     },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',

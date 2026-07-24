@@ -30,6 +30,7 @@ type SettingsDataSectionProps = {
   onManageMemory: () => void;
   onManageApprovals: () => void;
   onClearAllConversations: () => void;
+  mode?: 'all' | 'focused';
 };
 
 const MODE_CHIP_ORDER: ReadonlyArray<{
@@ -74,12 +75,25 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
   onManageMemory,
   onManageApprovals,
   onClearAllConversations,
+  mode = 'all',
 }) => {
   return (
     <View style={styles.sectionCard} onLayout={onLayout}>
       <View style={styles.sectionCardHeader}>
-        <Text style={styles.sectionCardTitle}>{t('settings.mainSections.data.title')}</Text>
-        <Text style={styles.sectionCardHint}>{t('settings.mainSections.data.hint')}</Text>
+        <Text style={styles.sectionCardTitle}>
+          {t(
+            mode === 'focused'
+              ? 'settings.destinations.memoryPrivacy.title'
+              : 'settings.mainSections.data.title',
+          )}
+        </Text>
+        <Text style={styles.sectionCardHint}>
+          {t(
+            mode === 'focused'
+              ? 'settings.destinations.memoryPrivacy.hint'
+              : 'settings.mainSections.data.hint',
+          )}
+        </Text>
       </View>
 
       <View style={styles.featureRow}>

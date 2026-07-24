@@ -236,13 +236,15 @@ describe('Sidebar', () => {
       'No provider configured. Go to Settings to add one.',
     );
     expect(mockCreateSideThread).not.toHaveBeenCalled();
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Settings');
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Settings', {
+      destination: 'advanced-ai',
+    });
   });
 
   it('should navigate to settings', () => {
     const { getByText } = render(<Sidebar {...defaultProps} />);
     fireEvent.press(getByText('Settings'));
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Settings');
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Settings', { destination: 'home' });
   });
 
   it.each([

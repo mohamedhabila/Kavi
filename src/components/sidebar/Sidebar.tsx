@@ -96,7 +96,7 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
     const selection = resolveConversationStartSelection(providers, activeProviderId, activeModel);
     if (!selection) {
       Alert.alert(t('common.error'), t('chat.noProvider'));
-      navigation.navigate('Settings');
+      navigation.navigate('Settings', { destination: 'advanced-ai' });
       navigation.closeDrawer();
       return;
     }
@@ -250,7 +250,7 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
       <TouchableOpacity
         style={styles.settingsBtn}
         onPress={() => {
-          navigation.navigate('Settings');
+          navigation.navigate('Settings', { destination: 'home' });
           navigation.closeDrawer();
         }}
         accessibilityRole="button"

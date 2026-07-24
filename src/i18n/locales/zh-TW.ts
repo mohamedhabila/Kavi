@@ -563,10 +563,56 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     configured: '已設定',
     needsSetup: '需要設定',
     destinations: {
+      assistantPersonalization: {
+        title: '助理與個人化',
+        hint: '調整日常行為、回答深度、指示和助理風格。',
+      },
+      memoryPrivacy: {
+        title: '記憶與隱私',
+        hint: '控制記住的內容、對話壓縮方式和已儲存的資料。',
+      },
+      toolsPermissions: {
+        title: '工具與權限',
+        hint: '選擇助理可使用的功能，並連接選用的服務金鑰。',
+      },
+      connections: {
+        title: '連線',
+        hint: '管理助理完成要求時可使用的瀏覽器和 MCP 服務。',
+      },
+      notificationsVoice: {
+        title: '通知與語音',
+        hint: '管理語音對話以及提醒或自動化的通知。',
+      },
+      appearanceLanguage: {
+        title: '外觀與語言',
+        hint: '選擇應用程式主題和顯示語言。',
+      },
       advancedAI: {
         title: '進階 AI',
         hint: '連接並管理為助理提供支援的 AI 服務商。',
       },
+    },
+    home: {
+      intro: '搜尋設定或選擇分類。進階選項只在需要時出現。',
+      searchLabel: '搜尋設定',
+      searchPlaceholder: '搜尋設定',
+      clearSearch: '清除設定搜尋',
+      everydayTitle: '助理與應用程式',
+      advancedTitle: '進階',
+      stylesCount: '{count} 種風格',
+      blockedCount: '已封鎖 {count} 項',
+      configuredCount: '已設定 {count} 項',
+      ready: '就緒',
+      deviceServices: '裝置服務',
+      appearanceSummary: '{theme} · {language}',
+      optional: '選用',
+      developerRemoteHint: '開啟選用的工作區、終端機、程式碼工具和遠端執行設定。',
+      noResultsTitle: '沒有相符的設定',
+      noResultsHint: '請嘗試較廣泛的關鍵字或清除搜尋。',
+    },
+    notificationsVoice: {
+      voiceHint: '開始語音對話並檢查麥克風或語音設定。',
+      automationHint: '管理提醒、自動化及其通知狀態。',
     },
     defaultConversationMode: 'Default Conversation Mode',
     defaultConversationModeSummary: 'Agentic vs Chitchat',
