@@ -453,6 +453,7 @@ const PersonaEditorModal: React.FC<{
         <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
           <Text style={styles.fieldLabel}>{t('agentRoster.iconLabel')}</Text>
           <TextInput
+            accessibilityLabel={t('agentRoster.iconLabel')}
             style={styles.input}
             value={icon}
             onChangeText={setIcon}
@@ -462,6 +463,7 @@ const PersonaEditorModal: React.FC<{
 
           <Text style={styles.fieldLabel}>{t('agentRoster.nameLabel')}</Text>
           <TextInput
+            accessibilityLabel={t('agentRoster.nameLabel')}
             style={styles.input}
             value={name}
             onChangeText={setName}
@@ -471,6 +473,7 @@ const PersonaEditorModal: React.FC<{
 
           <Text style={styles.fieldLabel}>{t('agentRoster.descriptionLabel')}</Text>
           <TextInput
+            accessibilityLabel={t('agentRoster.descriptionLabel')}
             style={styles.input}
             value={description}
             onChangeText={setDescription}
@@ -480,6 +483,7 @@ const PersonaEditorModal: React.FC<{
 
           <Text style={styles.fieldLabel}>{t('agentRoster.systemPromptLabel')}</Text>
           <TextInput
+            accessibilityLabel={t('agentRoster.systemPromptLabel')}
             style={[styles.input, styles.multiline]}
             value={systemPrompt}
             onChangeText={setSystemPrompt}
@@ -492,6 +496,7 @@ const PersonaEditorModal: React.FC<{
 
           <Text style={styles.fieldLabel}>{t('agentRoster.modelOverrideLabel')}</Text>
           <TextInput
+            accessibilityLabel={t('agentRoster.modelOverrideLabel')}
             style={styles.input}
             value={model}
             onChangeText={setModel}
@@ -626,6 +631,7 @@ const createStyles = (colors: AppPalette) =>
       marginBottom: 4,
     },
     input: {
+      minHeight: 48,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 8,

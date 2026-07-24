@@ -1395,7 +1395,7 @@ export const en: TranslationMap = {
     title: 'Gateway',
     infoTitle: 'What is Gateway?',
     infoText:
-      'Gateway connects your mobile app to an Kavi Gateway node, enabling access to remote tools, shared sessions, and desktop integrations. Connect to a gateway URL to extend your AI with capabilities beyond the device.',
+      'Gateway connects your mobile app to a Kavi Gateway node, enabling access to remote tools, shared sessions, and desktop integrations. Connect to a gateway URL to extend your AI with capabilities beyond the device.',
     url: 'Gateway URL',
     urlPlaceholder: 'wss://gateway.example.invalid',
     token: 'Token',

@@ -175,6 +175,19 @@ describe('AgentRosterScreen', () => {
     expect(StyleSheet.flatten(getByLabelText('Reset: Assistant').props.style).minHeight).toBe(48);
   });
 
+  it('names every assistant style editor field', () => {
+    const { getByLabelText, getByTestId } = render(<AgentRosterScreen />);
+
+    fireEvent.press(getByTestId('assistant-style-create'));
+
+    expect(getByLabelText('Icon')).toBeTruthy();
+    expect(getByLabelText('Name')).toBeTruthy();
+    expect(getByLabelText('Description')).toBeTruthy();
+    expect(getByLabelText('Instructions')).toBeTruthy();
+    expect(getByLabelText('Preferred model')).toBeTruthy();
+    expect(StyleSheet.flatten(getByLabelText('Name').props.style).minHeight).toBe(48);
+  });
+
   it('groups a worker tree into one human-readable work card', () => {
     mockConversations = [
       {

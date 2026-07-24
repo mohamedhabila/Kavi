@@ -181,6 +181,7 @@ export const createRemoteWorkScreenSessionStyleFragments = (colors: AppPalette) 
     lineHeight: 18,
   },
   promptInput: {
+    minHeight: 48,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,

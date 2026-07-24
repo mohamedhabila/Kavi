@@ -137,14 +137,15 @@ export const GatewayScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={handleBack}
-          accessibilityRole="button"
           accessibilityLabel={t('common.back')}
+          accessibilityRole="button"
+          onPress={handleBack}
+          style={styles.headerSide}
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('gateway.title')}</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerSide} />
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
@@ -165,6 +166,7 @@ export const GatewayScreen: React.FC = () => {
           <View style={styles.section}>
             <Text style={styles.label}>{t('gateway.url')}</Text>
             <TextInput
+              accessibilityLabel={t('gateway.url')}
               style={styles.input}
               value={gatewayUrl}
               onChangeText={setGatewayUrl}
@@ -176,6 +178,7 @@ export const GatewayScreen: React.FC = () => {
             />
             <Text style={styles.label}>{t('gateway.token')}</Text>
             <TextInput
+              accessibilityLabel={t('gateway.token')}
               style={styles.input}
               value={gatewayToken}
               onChangeText={setGatewayToken}
@@ -276,16 +279,24 @@ const createStyles = (colors: AppPalette) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       backgroundColor: colors.header,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
+    headerSide: {
+      width: 48,
+      minHeight: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     headerTitle: {
+      flex: 1,
       fontSize: 18,
       fontWeight: '700',
       color: colors.text,
+      textAlign: 'center',
     },
     content: {
       flex: 1,
@@ -349,6 +360,7 @@ const createStyles = (colors: AppPalette) =>
       marginBottom: 6,
     },
     input: {
+      minHeight: 48,
       backgroundColor: colors.surface,
       borderRadius: 10,
       padding: 12,
@@ -359,6 +371,7 @@ const createStyles = (colors: AppPalette) =>
       marginBottom: 12,
     },
     primaryBtn: {
+      minHeight: 48,
       backgroundColor: colors.primary,
       borderRadius: 10,
       paddingVertical: 14,
@@ -370,6 +383,7 @@ const createStyles = (colors: AppPalette) =>
       fontWeight: '600',
     },
     secondaryBtn: {
+      minHeight: 48,
       backgroundColor: colors.surface,
       borderRadius: 10,
       paddingVertical: 12,
@@ -383,6 +397,7 @@ const createStyles = (colors: AppPalette) =>
       fontWeight: '500',
     },
     dangerBtn: {
+      minHeight: 48,
       backgroundColor: colors.surface,
       borderRadius: 10,
       paddingVertical: 14,

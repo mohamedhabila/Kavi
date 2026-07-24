@@ -53,6 +53,7 @@ export const RemoteWorkExpoWorkflowPromptModal: React.FC<
           </Text>
           <Text style={styles.detailLabel}>{t('remoteWork.expoWorkflowBranchLabel')}</Text>
           <TextInput
+            accessibilityLabel={t('remoteWork.expoWorkflowBranchLabel')}
             value={expoWorkflowPrompt?.workflowRef || ''}
             onChangeText={(value) =>
               setExpoWorkflowPrompt((current) =>

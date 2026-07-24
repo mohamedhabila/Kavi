@@ -287,10 +287,14 @@ jest.mock('../../src/services/mcp/manager', () => ({
   },
 }));
 
-jest.mock('../../src/services/expo/projectState', () => ({
-  getExpoProjectDisplayOwner: (project: any, account: any) =>
-    project.owner || account?.owner || 'owner',
-}));
+jest.mock('../../src/services/expo/projectState', () => {
+  const actual = jest.requireActual('../../src/services/expo/projectState');
+  return {
+    ...actual,
+    getExpoProjectDisplayOwner: (project: any, account: any) =>
+      project.owner || account?.owner || 'owner',
+  };
+});
 
 jest.mock('../../src/services/expo/projectAutomation', () => ({
   getExpoProjectExecutionMode: (project: any) => project.mode || 'eas-workflow',

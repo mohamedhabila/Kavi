@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { GatewayScreen } from '../../src/screens/GatewayScreen';
 
 // Mock safe area
@@ -106,8 +106,12 @@ beforeEach(() => {
 
 describe('GatewayScreen', () => {
   it('renders header with title', () => {
-    const { getByText } = render(<GatewayScreen />);
+    const { getByLabelText, getByText } = render(<GatewayScreen />);
     expect(getByText('Gateway')).toBeTruthy();
+    expect(StyleSheet.flatten(getByLabelText('Back').props.style)).toMatchObject({
+      minHeight: 48,
+      width: 48,
+    });
   });
 
   it('shows disconnected state initially', () => {
@@ -116,8 +120,11 @@ describe('GatewayScreen', () => {
   });
 
   it('shows gateway URL input when disconnected', () => {
-    const { getByPlaceholderText } = render(<GatewayScreen />);
+    const { getByLabelText, getByPlaceholderText } = render(<GatewayScreen />);
     expect(getByPlaceholderText('wss://gateway.example.invalid')).toBeTruthy();
+    expect(getByLabelText('Gateway URL')).toBeTruthy();
+    expect(getByLabelText('Token')).toBeTruthy();
+    expect(StyleSheet.flatten(getByLabelText('Gateway URL').props.style).minHeight).toBe(48);
   });
 
   it('shows connect button when disconnected', () => {

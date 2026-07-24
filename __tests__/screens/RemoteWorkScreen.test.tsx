@@ -84,6 +84,32 @@ describe('RemoteWorkScreen runtime', () => {
     });
   });
 
+  it('guides workflow actions through a named branch prompt', async () => {
+    const state = getRemoteWorkSettingsState();
+    state.expoProjects = state.expoProjects.map((project) => ({
+      ...project,
+      mode: 'github-workflow',
+      repoFullName: 'kavi/mobile',
+      workflowFile: '.github/workflows/eas.yml',
+    }));
+    const { getByLabelText, getByText } = renderRemoteWorkScreen();
+
+    fireEvent.press(getByText('Build Android'));
+
+    const branchInput = getByLabelText('Workflow branch');
+    expect(branchInput).toBeTruthy();
+    expect(StyleSheet.flatten(branchInput.props.style).minHeight).toBe(48);
+    fireEvent.changeText(branchInput, 'release');
+    fireEvent.press(getByText('Run action'));
+
+    await waitFor(() => {
+      expect(mockRunExpoProjectAction).toHaveBeenCalledWith('expo-project-1', 'build', {
+        platform: 'android',
+        workflowRef: 'release',
+      });
+    });
+  });
+
   it('runs iOS build and submit actions for Expo projects', async () => {
     const { getByText } = renderRemoteWorkScreen();
 
