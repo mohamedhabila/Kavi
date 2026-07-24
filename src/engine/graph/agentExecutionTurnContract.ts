@@ -13,6 +13,7 @@ export function resolveAgentExecutionTurnContract(params: {
   goals: ReadonlyArray<AgentGoal>;
   tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'description' | 'contract'>>;
   groundedToolNames: Iterable<string>;
+  explicitToolSurfaceToolNames?: Iterable<string>;
 }): AgentExecutionTurnContract {
   const bootstrap = resolveGoalBootstrapState(params.goals);
   const goalCapabilityToolNames = new Set(
@@ -31,8 +32,14 @@ export function resolveAgentExecutionTurnContract(params: {
   const routeRequiresSessionCoordination = Array.from(graphSelectedNames).some(
     isSessionCoordinationToolName,
   );
+  const explicitRouteRequiresSessionCoordination = Array.from(
+    params.explicitToolSurfaceToolNames ?? [],
+  )
+    .map((value) => normalizeToolName(value))
+    .some((name) => groundedNames.has(name) && isSessionCoordinationToolName(name));
 
   return {
-    allowSessionCoordinationTools: routeRequiresSessionCoordination,
+    allowSessionCoordinationTools:
+      routeRequiresSessionCoordination || explicitRouteRequiresSessionCoordination,
   };
 }

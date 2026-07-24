@@ -63,4 +63,39 @@ describe('resolveAgentExecutionTurnContract', () => {
 
     expect(contract.allowSessionCoordinationTools).toBe(true);
   });
+
+  it('enables a grounded explicit delegation route despite an unrelated live goal', () => {
+    const goals: AgentGoal[] = [
+      {
+        id: 'goal-1',
+        title: 'Research',
+        status: 'active',
+        dependencies: [],
+        evidence: [],
+        createdAt: 1,
+        updatedAt: 1,
+        requiredCapabilities: ['discover'],
+      },
+    ];
+
+    const contract = resolveAgentExecutionTurnContract({
+      goals,
+      tools,
+      groundedToolNames: ['web_search', 'sessions_spawn'],
+      explicitToolSurfaceToolNames: ['sessions_spawn'],
+    });
+
+    expect(contract.allowSessionCoordinationTools).toBe(true);
+  });
+
+  it('does not let an explicit name bypass the grounded policy surface', () => {
+    const contract = resolveAgentExecutionTurnContract({
+      goals: [],
+      tools,
+      groundedToolNames: ['update_goals'],
+      explicitToolSurfaceToolNames: ['sessions_spawn'],
+    });
+
+    expect(contract.allowSessionCoordinationTools).toBe(false);
+  });
 });

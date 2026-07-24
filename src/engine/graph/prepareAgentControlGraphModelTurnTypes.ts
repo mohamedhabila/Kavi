@@ -55,6 +55,7 @@ export interface PrepareAgentControlGraphModelTurnParams {
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   isSuperAgent: boolean;
   iteration: number;
+  latestUserMessageText: string;
   maxTokens: number;
   personaThinkingLevel?: ThinkingLevel;
   promptContextSupport: PromptContextSupport;

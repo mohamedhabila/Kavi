@@ -10,6 +10,7 @@ import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOper
 import { extractDiscoveryActivatedToolNames } from '../discoveryToolActivation';
 import { resolveDefaultGroundedRequestScopedTools } from '../turnToolSurface';
 import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
+import { resolveExplicitDelegationToolNames } from '../explicitDelegationToolSurface';
 
 export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
@@ -17,6 +18,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   completedWorkflowToolNames: ReadonlySet<string>;
   goals?: ReadonlyArray<AgentGoal>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
+  latestUserMessageText: string;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   sessionActivatedToolNames?: ReadonlyArray<string>;
   workingMessages: ReadonlyArray<Message>;
@@ -51,6 +53,15 @@ export async function resolveModelTurnGroundedToolSurface(params: {
       .map((toolName) => normalizeToolName(toolName))
       .filter(Boolean),
   );
+  const explicitToolSurfaceToolNames = Array.from(
+    new Set([
+      ...(params.explicitToolSurfaceToolNames ?? []),
+      ...resolveExplicitDelegationToolNames({
+        conversationMode: params.conversationMode,
+        latestUserMessageText: params.latestUserMessageText,
+      }),
+    ]),
+  );
 
   const resolvedGroundedRequestScopedTools = await resolveDefaultGroundedRequestScopedTools({
     allTools: policyAuthorizedTools,
@@ -59,7 +70,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     goals,
     pendingAsyncMonitorToolNames,
     workingMessages: params.workingMessages,
-    explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
+    explicitToolSurfaceToolNames,
     sessionActivatedToolNames: params.sessionActivatedToolNames,
   });
   // Tool selection may suspend while policy changes. Re-authorize the complete
@@ -77,6 +88,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     goals,
     tools: currentPolicyAuthorizedTools,
     groundedToolNames: groundedRequestScopedTools.map((tool) => tool.name),
+    explicitToolSurfaceToolNames,
   });
 
   const sessionPinnedCount = groundedRequestScopedTools.filter((tool) =>

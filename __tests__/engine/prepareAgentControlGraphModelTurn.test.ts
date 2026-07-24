@@ -151,6 +151,7 @@ function createBaseParams() {
     goals: [],
     isSuperAgent: true,
     iteration: 3,
+    latestUserMessageText: 'Create a file and reply with the result.',
     maxTokens: 4096,
     promptContextSupport: {
       maxToolIterations: 40,
