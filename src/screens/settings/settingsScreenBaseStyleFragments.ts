@@ -24,8 +24,8 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     textAlign: 'center',
   },
   headerAction: {
-    width: 44,
-    minHeight: 44,
+    width: 48,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -126,8 +126,8 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
   eyeBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
-    minWidth: 44,
+    minHeight: 48,
+    minWidth: 48,
   },
   localProviderNotice: {
     flexDirection: 'row',
@@ -213,7 +213,7 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: 16,
     backgroundColor: colors.primarySoft,
     marginRight: 8,

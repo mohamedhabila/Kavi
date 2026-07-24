@@ -162,12 +162,20 @@ describe('ConversationSettingsScreen', () => {
   });
 
   it('presents engine behavior in familiar user-facing language', () => {
-    const { getByText, queryByText } = render(<ConversationSettingsScreen />);
+    const { getByTestId, getByText, queryByText } = render(<ConversationSettingsScreen />);
 
     expect(getByText('Automatic')).toBeTruthy();
     expect(getByText('Answer only')).toBeTruthy();
     expect(queryByText('Agent')).toBeNull();
     expect(queryByText('Chitchat')).toBeNull();
+    expect(getByTestId('conversation-mode-automatic').props.accessibilityLabel).toBe('Automatic');
+    expect(getByTestId('conversation-mode-automatic').props.accessibilityHint).toBe(
+      'Uses tools when useful.',
+    );
+    expect(getByTestId('conversation-mode-automatic').props.accessibilityState).toEqual({
+      disabled: false,
+      selected: true,
+    });
   });
 
   it('maps Answer only to the internal chitchat mode and safe default style', () => {
@@ -201,7 +209,9 @@ describe('ConversationSettingsScreen', () => {
   it('links advanced provider setup without exposing it in the primary header', () => {
     const { getByTestId } = render(<ConversationSettingsScreen />);
 
-    fireEvent.press(getByTestId('conversation-open-advanced-ai'));
+    const advancedAi = getByTestId('conversation-open-advanced-ai');
+    expect(advancedAi.props.accessibilityLabel).toBe('Advanced AI');
+    fireEvent.press(advancedAi);
     expect(mockNavigate).toHaveBeenCalledWith('Settings', {
       destination: 'advanced-ai',
       returnTo: {
@@ -217,9 +227,18 @@ describe('ConversationSettingsScreen', () => {
     const { getByTestId, queryByTestId } = render(<ConversationSettingsScreen />);
 
     expect(queryByTestId('chat-usage-strip')).toBeNull();
-    fireEvent.press(getByTestId('conversation-usage-toggle'));
+    const usageToggle = getByTestId('conversation-usage-toggle');
+    expect(usageToggle.props.accessibilityLabel).toBe('Show usage details');
+    expect(usageToggle.props.accessibilityState).toEqual({ expanded: false });
+    fireEvent.press(usageToggle);
 
     expect(getByTestId('chat-usage-strip')).toBeTruthy();
+    expect(getByTestId('conversation-usage-toggle').props.accessibilityLabel).toBe(
+      'Hide usage details',
+    );
+    expect(getByTestId('conversation-usage-toggle').props.accessibilityState).toEqual({
+      expanded: true,
+    });
     fireEvent.press(getByTestId('chat-logs-toggle'));
     expect(getByTestId('chat-logs-panel')).toBeTruthy();
   });

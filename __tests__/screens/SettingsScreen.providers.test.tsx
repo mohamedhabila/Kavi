@@ -1,6 +1,6 @@
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { File } from 'expo-file-system';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { getLocalLlmCatalogEntry } from '../../src/services/localLlm/catalog';
 import type { ProviderConnectionTestResult } from '../../src/services/llm/support/providerConnection';
 
@@ -49,7 +49,12 @@ describe('SettingsScreen providers', () => {
 
   it('should navigate to new provider edit when Plus button is tapped', () => {
     const { getByText, getByLabelText } = renderSettingsScreen();
-    fireEvent.press(getByLabelText('Add provider'));
+    const addProvider = getByLabelText('Add provider');
+    expect(StyleSheet.flatten(addProvider.props.style)).toMatchObject({
+      minHeight: 48,
+      width: 48,
+    });
+    fireEvent.press(addProvider);
     expect(getByText('Add Provider')).toBeTruthy();
   });
 
@@ -73,13 +78,17 @@ describe('SettingsScreen providers', () => {
   });
 
   it('should toggle API key visibility', async () => {
-    const { getByText, getByTestId } = renderSettingsScreen();
+    const { getByLabelText, getByText, getByTestId } = renderSettingsScreen();
     fireEvent.press(getByText('gpt-5.4'));
     await waitFor(() => {
       expect(getByText('API Key')).toBeTruthy();
     });
-    const eyeIcon = getByTestId('icon-Eye');
-    fireEvent.press(eyeIcon.parent || eyeIcon);
+    const eyeButton = getByLabelText('Show API key');
+    expect(StyleSheet.flatten(eyeButton.props.style)).toMatchObject({
+      minHeight: 48,
+      minWidth: 48,
+    });
+    fireEvent.press(eyeButton);
     expect(getByTestId('icon-EyeOff')).toBeTruthy();
   });
 

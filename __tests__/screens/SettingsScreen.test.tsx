@@ -1,5 +1,5 @@
 import { fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { LOCALE_DISPLAY_NAMES } from '../../src/i18n/registry';
 
 import {
@@ -73,6 +73,16 @@ describe('SettingsScreen general', () => {
     const assistant = renderSettingsScreen({ destination: 'assistant-personalization' });
     expect(assistant.getByText('Thinking Level')).toBeTruthy();
     expect(assistant.getByText('Configure Personas')).toBeTruthy();
+    expect(assistant.getByTestId('settings-persona-default').props.accessibilityRole).toBe('radio');
+    expect(assistant.getByTestId('settings-persona-default').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    const personaThinkingOption = assistant.getByTestId('settings-persona-thinking-off');
+    expect(personaThinkingOption.props.accessibilityLabel).toBe('Off');
+    expect(personaThinkingOption.props.accessibilityRole).toBe('radio');
+    expect(StyleSheet.flatten(personaThinkingOption.props.style).minHeight).toBe(48);
+    expect(assistant.getByLabelText('Display Name')).toBeTruthy();
+    expect(assistant.getByLabelText('System Prompt')).toBeTruthy();
     expect(assistant.queryByText('Appearance')).toBeNull();
     assistant.unmount();
 

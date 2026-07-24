@@ -50,6 +50,7 @@ export function OverviewSection({
           <View style={styles.overviewUnavailableCard} testID="memory-overview-unavailable">
             <Text style={styles.overviewUnavailableText}>{t('memory.overviewUnavailable')}</Text>
             <TouchableOpacity
+              accessibilityLabel={t('common.retry')}
               accessibilityRole="button"
               onPress={onRetry}
               style={styles.overviewSecondaryAction}
@@ -103,6 +104,7 @@ export function OverviewSection({
           </Text>
           {!focus ? (
             <TouchableOpacity
+              accessibilityLabel={t('memory.overviewFocusAction')}
               accessibilityRole="button"
               onPress={onAskKavi}
               style={styles.overviewPrimaryAction}

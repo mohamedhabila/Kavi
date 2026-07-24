@@ -286,6 +286,8 @@ describe('MemoryScreen — Facts & Episodes', () => {
     fireEvent.press(getByTestId('memory-fact-correct-fact-1'));
 
     expect(getByTestId('memory-correction-input').props.value).toBe('Mo');
+    expect(getByTestId('memory-correction-cancel').props.accessibilityLabel).toBe('Cancel');
+    expect(getByTestId('memory-correction-save').props.accessibilityLabel).toBe('Save');
     expect(getByTestId('memory-correction-save').props.accessibilityState).toEqual({
       disabled: true,
     });

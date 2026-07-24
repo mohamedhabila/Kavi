@@ -59,6 +59,11 @@ export function AdvancedSection(props: AdvancedSectionProps) {
           </Text>
           <Text style={props.styles.overviewBody}>{props.t('memory.diagnosticsHint')}</Text>
           <TouchableOpacity
+            accessibilityLabel={
+              props.diagnosticsExpanded
+                ? props.t('memory.hideDiagnostics')
+                : props.t('memory.showDiagnostics')
+            }
             accessibilityRole="button"
             accessibilityState={{ expanded: props.diagnosticsExpanded }}
             onPress={props.onToggleDiagnostics}

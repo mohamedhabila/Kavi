@@ -252,7 +252,9 @@ describe('MemoryScreen overview tab', () => {
     });
     expect(getByText('No active task right now.')).toBeTruthy();
 
-    fireEvent.press(getByTestId('memory-overview-ask-kavi'));
+    const askKavi = getByTestId('memory-overview-ask-kavi');
+    expect(askKavi.props.accessibilityLabel).toBe('Ask Kavi');
+    fireEvent.press(askKavi);
     expect(mockNavigate).toHaveBeenCalledWith('Chat');
   });
 
@@ -279,7 +281,9 @@ describe('MemoryScreen overview tab', () => {
     });
     const callsBeforeRetry = mockLoadOverview.mock.calls.length;
 
-    fireEvent.press(getByTestId('memory-overview-retry'));
+    const retry = getByTestId('memory-overview-retry');
+    expect(retry.props.accessibilityLabel).toBe('Retry');
+    fireEvent.press(retry);
 
     await waitFor(() => {
       expect(mockLoadOverview.mock.calls.length).toBeGreaterThan(callsBeforeRetry);
@@ -297,10 +301,19 @@ describe('MemoryScreen overview tab', () => {
     expect(queryByTestId('memory-diagnostics-panel')).toBeNull();
     expect(mockLoadDiagnostics).not.toHaveBeenCalled();
 
-    fireEvent.press(getByTestId('memory-diagnostics-toggle'));
+    const diagnosticsToggle = getByTestId('memory-diagnostics-toggle');
+    expect(diagnosticsToggle.props.accessibilityLabel).toBe('Show memory diagnostics');
+    expect(diagnosticsToggle.props.accessibilityState).toEqual({ expanded: false });
+    fireEvent.press(diagnosticsToggle);
 
     await waitFor(() => {
       expect(getByTestId('memory-diagnostics-panel')).toBeTruthy();
+    });
+    expect(getByTestId('memory-diagnostics-toggle').props.accessibilityLabel).toBe(
+      'Hide memory diagnostics',
+    );
+    expect(getByTestId('memory-diagnostics-toggle').props.accessibilityState).toEqual({
+      expanded: true,
     });
     expect(mockLoadDiagnostics).toHaveBeenCalledWith(
       expect.objectContaining({ threadId: 'conv-overview' }),

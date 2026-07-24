@@ -117,6 +117,7 @@ export function MemoryCorrectionModal({
           </View>
           <View style={styles.correctionActions}>
             <TouchableOpacity
+              accessibilityLabel={t('common.cancel')}
               accessibilityRole="button"
               onPress={onCancel}
               style={styles.correctionSecondaryButton}
@@ -125,6 +126,7 @@ export function MemoryCorrectionModal({
               <Text style={styles.correctionSecondaryText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              accessibilityLabel={t('common.save')}
               accessibilityRole="button"
               accessibilityState={{ disabled: saveDisabled }}
               disabled={saveDisabled}

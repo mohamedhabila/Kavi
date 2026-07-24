@@ -60,6 +60,8 @@ function BehaviorChoice({
 }: BehaviorChoiceProps) {
   return (
     <TouchableOpacity
+      accessibilityHint={description}
+      accessibilityLabel={label}
       accessibilityRole="radio"
       accessibilityState={{ disabled, selected }}
       disabled={disabled}
@@ -233,7 +235,11 @@ export const ConversationSettingsScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('chat.assistantBehavior')}</Text>
           <Text style={styles.sectionHint}>{t('chat.assistantBehaviorHint')}</Text>
-          <View accessibilityRole="radiogroup" style={styles.choiceGroup}>
+          <View
+            accessibilityLabel={t('chat.assistantBehavior')}
+            accessibilityRole="radiogroup"
+            style={styles.choiceGroup}
+          >
             <BehaviorChoice
               colors={colors}
               description={t('chat.automaticModeDescription')}
@@ -285,6 +291,7 @@ export const ConversationSettingsScreen: React.FC = () => {
             variant="full"
           />
           <TouchableOpacity
+            accessibilityLabel={t('nav.advancedAI')}
             accessibilityRole="button"
             onPress={() =>
               navigation.navigate('Settings', {
@@ -309,6 +316,9 @@ export const ConversationSettingsScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>{t('chat.usageActivity')}</Text>
           <Text style={styles.sectionHint}>{t('chat.usageActivityHint')}</Text>
           <TouchableOpacity
+            accessibilityLabel={
+              showUsageDetails ? t('chat.hideUsageDetails') : t('chat.showUsageDetails')
+            }
             accessibilityRole="button"
             accessibilityState={{ expanded: showUsageDetails }}
             onPress={() => {

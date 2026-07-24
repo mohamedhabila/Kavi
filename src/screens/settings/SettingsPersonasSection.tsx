@@ -76,18 +76,25 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
             <Text style={styles.listItemSubtitle}>{t('settings.personasCardHint')}</Text>
           </View>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetRow}>
+        <ScrollView
+          accessibilityLabel={t('settings.personasTitle')}
+          accessibilityRole="radiogroup"
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.presetRow}
+        >
           {personas.map((persona) => (
             <TouchableOpacity
+              accessibilityLabel={t('settings.configurePersona', { name: persona.name })}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: editingPersonaId === persona.id }}
               key={persona.id}
+              onPress={() => setEditingPersonaId(persona.id)}
               style={[
                 styles.presetChip,
                 editingPersonaId === persona.id && styles.presetChipActive,
               ]}
-              onPress={() => setEditingPersonaId(persona.id)}
-              accessibilityRole="button"
-              accessibilityLabel={t('settings.configurePersona', { name: persona.name })}
-              accessibilityState={{ selected: editingPersonaId === persona.id }}
+              testID={`settings-persona-${persona.id}`}
             >
               <Bot
                 size={14}
@@ -111,6 +118,7 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
 
             <Text style={styles.label}>{t('settings.personaDisplayName')}</Text>
             <TextInput
+              accessibilityLabel={t('settings.personaDisplayName')}
               style={styles.input}
               value={personaDraft.name || ''}
               onChangeText={(value) => setPersonaDraft((current) => ({ ...current, name: value }))}
@@ -120,6 +128,7 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
 
             <Text style={styles.label}>{t('settings.personaDescription')}</Text>
             <TextInput
+              accessibilityLabel={t('settings.personaDescription')}
               style={styles.input}
               value={personaDraft.description || ''}
               onChangeText={(value) =>
@@ -131,6 +140,7 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
 
             <Text style={styles.label}>{t('settings.personaProviderOverride')}</Text>
             <TextInput
+              accessibilityLabel={t('settings.personaProviderOverride')}
               style={styles.input}
               value={personaDraft.providerId || ''}
               onChangeText={(value) =>
@@ -143,6 +153,7 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
 
             <Text style={styles.label}>{t('settings.personaModelOverride')}</Text>
             <TextInput
+              accessibilityLabel={t('settings.personaModelOverride')}
               style={styles.input}
               value={personaDraft.model || ''}
               onChangeText={(value) => setPersonaDraft((current) => ({ ...current, model: value }))}
@@ -152,17 +163,28 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
             />
 
             <Text style={styles.label}>{t('settings.personaThinkingLevel')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetRow}>
+            <ScrollView
+              accessibilityLabel={t('settings.personaThinkingLevel')}
+              accessibilityRole="radiogroup"
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.presetRow}
+            >
               {personaThinkingLevelOptions.map((option) => (
                 <TouchableOpacity
+                  accessibilityHint={option.hint}
+                  accessibilityLabel={option.label}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: personaDraft.thinkingLevel === option.value }}
                   key={option.value}
+                  onPress={() =>
+                    setPersonaDraft((current) => ({ ...current, thinkingLevel: option.value }))
+                  }
                   style={[
                     styles.presetChip,
                     personaDraft.thinkingLevel === option.value && styles.presetChipActive,
                   ]}
-                  onPress={() =>
-                    setPersonaDraft((current) => ({ ...current, thinkingLevel: option.value }))
-                  }
+                  testID={`settings-persona-thinking-${option.value}`}
                 >
                   <Text
                     style={[
@@ -178,6 +200,7 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
 
             <Text style={styles.label}>{t('settings.personaTemperature')}</Text>
             <TextInput
+              accessibilityLabel={t('settings.personaTemperature')}
               style={styles.input}
               value={personaDraft.temperature !== undefined ? String(personaDraft.temperature) : ''}
               onChangeText={(value) => {
@@ -194,6 +217,7 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
 
             <Text style={styles.label}>{t('settings.systemPrompt')}</Text>
             <TextInput
+              accessibilityLabel={t('settings.systemPrompt')}
               style={[styles.input, styles.textArea]}
               value={personaDraft.systemPrompt || ''}
               onChangeText={(value) =>
