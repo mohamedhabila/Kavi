@@ -70,6 +70,7 @@ That command currently runs:
 - `npm run check:graph-owned-mutations`
 - `npm run check:dead-exports`
 - `npm run check:tool-contracts`
+- `npm run check:native-accessibility`
 - `npm run check:maintainability`
 - `npm run lint`
 - `npm run typecheck`
@@ -555,6 +556,17 @@ Structural tests:
 - `__tests__/engine/toolCatalogContractConsistency.test.ts` — `tool_catalog` category browse matches registry capability summaries
 - `__tests__/acceptance/toolCatalogDiscoveryMetrics.test.ts` — catalog search/describe activates expected tools on turn surface (included in `verify:strict` via `eval:agent`)
 - `__tests__/acceptance/goalCapabilityDiscoveryMetrics.test.ts` — goal `requiredCapabilities` resolve expected tools on fixture catalog (included in `verify:strict` via `eval:agent`)
+
+## Native accessibility coverage
+
+Default `npm run verify` runs `npm run check:native-accessibility`. The check
+parses production TSX and requires React Native touch controls to define an
+accessible role and name, while `TextInput` and `Switch` controls must define
+an accessible name. Deliberately decorative touch wrappers can use
+`accessible={false}`. The harness in
+`__tests__/scripts/nativeAccessibilityCheck.harness.test.ts` verifies direct,
+aliased, and namespace imports as well as the production-source zero-finding
+contract.
 
 ## Routine Output
 

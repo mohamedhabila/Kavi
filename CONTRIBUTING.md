@@ -79,6 +79,7 @@ from `.github/workflows/ci.yml`. The gate currently runs, in order:
 - `npm run check:graph-owned-mutations`
 - `npm run check:dead-exports`
 - `npm run check:tool-contracts`
+- `npm run check:native-accessibility`
 - `npm run check:maintainability`
 - `npm run lint`
 - `npm run typecheck`
@@ -106,6 +107,7 @@ npm run check:thin-e2e-harness
 npm run check:graph-owned-mutations
 npm run check:dead-exports
 npm run check:tool-contracts
+npm run check:native-accessibility
 npm run check:maintainability
 npm run lint
 npm run typecheck
@@ -114,6 +116,11 @@ npm test -- --runInBand
 npm run test:watch
 npm run format
 ```
+
+`check:native-accessibility` requires React Native touch controls to expose an
+explicit `accessibilityRole` and `accessibilityLabel`, and form controls to
+expose an `accessibilityLabel`. A touch wrapper that is intentionally
+decorative may opt out with `accessible={false}`; form controls may not.
 
 ### Graph-owned control plane
 

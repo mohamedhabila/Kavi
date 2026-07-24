@@ -51,6 +51,9 @@ network edges, and all the interruptions real mobile software has to survive.
   model paths do not depend on a Kavi server or gateway.
 - **Tooling with contracts:** builtin tools carry capability metadata and are
   checked by `npm run check:tool-contracts`.
+- **Native accessibility contracts:** interactive React Native controls are
+  checked for explicit roles and accessible names by
+  `npm run check:native-accessibility`.
 - **Repository hygiene by default:** checks fail on local artifacts, generated
   release output, oversized contribution files, and barrel-only modules.
 - **Benchmark-shaped evals:** local and opt-in harnesses use structural outcome
@@ -151,6 +154,7 @@ npm run check:thin-e2e-harness
 npm run check:graph-owned-mutations
 npm run check:dead-exports
 npm run check:tool-contracts
+npm run check:native-accessibility
 npm run check:maintainability
 npm run lint
 npm run typecheck
