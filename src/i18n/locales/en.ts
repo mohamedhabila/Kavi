@@ -2144,7 +2144,10 @@ export const en: TranslationMap = {
     startedAt: 'Started {time}',
     noScreenshot: 'No screenshot available yet',
     liveView: 'Live View',
-    quickActions: 'Quick Actions',
+    quickActions: 'Browser actions',
+    quickActionsHint:
+      'Ask Kavi to run these actions in chat. Results and errors appear in the history below.',
+    openChat: 'Use browser in chat',
     actionSnapshot: 'Snapshot',
     actionScreenshot: 'Screenshot',
     actionClick: 'Click',

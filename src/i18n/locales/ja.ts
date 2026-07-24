@@ -2108,7 +2108,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
     startedAt: '{time} に開始',
     noScreenshot: 'まだスクリーンショットがありません',
     liveView: 'ライブビュー',
-    quickActions: 'クイック操作',
+    quickActions: 'ブラウザ操作',
+    quickActionsHint:
+      'チャットで Kavi にこれらの操作を依頼できます。結果やエラーは下の履歴に表示されます。',
+    openChat: 'チャットでブラウザを使う',
     actionSnapshot: 'スナップショット',
     actionScreenshot: 'スクリーンショット',
     actionClick: 'クリック',

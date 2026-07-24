@@ -198,6 +198,7 @@ describe('BrowserSessionScreen', () => {
     });
 
     expect(screen.getByText('browserSessions.quickActions')).toBeTruthy();
+    expect(screen.getByText('browserSessions.quickActionsHint')).toBeTruthy();
     expect(screen.getByText('browserSessions.liveView')).toBeTruthy();
     expect(screen.getByText('Older session')).toBeTruthy();
     expect(screen.getByText('browserSessions.statusConnected')).toBeTruthy();
@@ -222,6 +223,14 @@ describe('BrowserSessionScreen', () => {
       disabled: false,
     });
     expect(screen.getByTestId('browser-session-live-view').props.accessibilityRole).toBe('link');
+    expect(screen.getByTestId('browser-session-open-chat').props.accessibilityRole).toBe('button');
+    expect(
+      StyleSheet.flatten(screen.getByTestId('browser-session-open-chat').props.style).minHeight,
+    ).toBe(48);
+    expect(screen.getByTestId('browser-session-capability-click').props.onPress).toBeUndefined();
+
+    fireEvent.press(screen.getByTestId('browser-session-open-chat'));
+    expect(mockNavigate).toHaveBeenCalledWith('Chat');
 
     fireEvent.press(screen.getByText('browserSessions.liveView'));
     await waitFor(() => {

@@ -2132,7 +2132,10 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     startedAt: 'Iniciado às {time}',
     noScreenshot: 'Nenhuma captura de tela disponível ainda',
     liveView: 'Visualização ao vivo',
-    quickActions: 'Ações rápidas',
+    quickActions: 'Ações do navegador',
+    quickActionsHint:
+      'Peça ao Kavi para executar estas ações no chat. Resultados e erros aparecem no histórico abaixo.',
+    openChat: 'Usar navegador no chat',
     actionSnapshot: 'Instantâneo',
     actionScreenshot: 'Captura',
     actionClick: 'Clique',

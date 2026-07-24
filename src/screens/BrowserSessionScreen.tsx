@@ -31,6 +31,7 @@ import {
   Type as TypeIcon,
   ArrowUp,
   Eye,
+  MessageCircle,
 } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
@@ -389,37 +390,58 @@ export const BrowserSessionScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Quick actions palette */}
+            {/* Browser action guidance */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>{t('browserSessions.quickActions')}</Text>
+              <Text style={styles.sectionHint}>{t('browserSessions.quickActionsHint')}</Text>
+              <TouchableOpacity
+                accessibilityLabel={t('browserSessions.openChat')}
+                accessibilityRole="button"
+                onPress={() => navigation.navigate('Chat')}
+                style={styles.openChatButton}
+                testID="browser-session-open-chat"
+              >
+                <MessageCircle size={18} color={colors.onPrimary} />
+                <Text style={styles.openChatButtonText}>{t('browserSessions.openChat')}</Text>
+              </TouchableOpacity>
               <View style={styles.actionsGrid}>
                 {[
                   {
+                    id: 'snapshot',
                     icon: <Eye size={18} color={colors.primary} />,
                     label: t('browserSessions.actionSnapshot'),
                   },
                   {
+                    id: 'screenshot',
                     icon: <Camera size={18} color={colors.primary} />,
                     label: t('browserSessions.actionScreenshot'),
                   },
                   {
+                    id: 'click',
                     icon: <MousePointer size={18} color={colors.primary} />,
                     label: t('browserSessions.actionClick'),
                   },
                   {
+                    id: 'type',
                     icon: <TypeIcon size={18} color={colors.primary} />,
                     label: t('browserSessions.actionType'),
                   },
                   {
+                    id: 'scroll',
                     icon: <ArrowUp size={18} color={colors.primary} />,
                     label: t('browserSessions.actionScroll'),
                   },
                   {
+                    id: 'reload',
                     icon: <RefreshCw size={18} color={colors.primary} />,
                     label: t('browserSessions.actionReload'),
                   },
                 ].map((action) => (
-                  <View key={action.label} style={styles.actionCard}>
+                  <View
+                    key={action.id}
+                    style={styles.actionCard}
+                    testID={`browser-session-capability-${action.id}`}
+                  >
                     {action.icon}
                     <Text style={styles.actionLabel}>{action.label}</Text>
                   </View>
@@ -567,17 +589,32 @@ const createStyles = (colors: AppPalette) =>
     toolbarBtnText: { fontSize: 12, color: colors.primary, fontWeight: '500' },
     section: { gap: 10 },
     sectionTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
+    sectionHint: { fontSize: 13, lineHeight: 19, color: colors.textSecondary },
+    openChatButton: {
+      minHeight: 48,
+      borderRadius: 10,
+      backgroundColor: colors.primary,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    openChatButtonText: { fontSize: 14, fontWeight: '600', color: colors.onPrimary },
     actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     actionCard: {
-      width: 80,
-      height: 64,
-      borderRadius: 10,
+      minHeight: 36,
+      borderRadius: 18,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
+      flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
-      gap: 4,
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
     },
     actionLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: '500' },
     emptyActionText: { fontSize: 13, color: colors.textTertiary, fontStyle: 'italic' },

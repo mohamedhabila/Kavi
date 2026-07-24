@@ -2166,7 +2166,10 @@ export const de: TranslationMap = mergeTranslations(en, {
     startedAt: 'Gestartet {time}',
     noScreenshot: 'Noch kein Screenshot verfügbar',
     liveView: 'Live-Ansicht',
-    quickActions: 'Schnellaktionen',
+    quickActions: 'Browseraktionen',
+    quickActionsHint:
+      'Bitte Kavi im Chat, diese Aktionen auszuführen. Ergebnisse und Fehler erscheinen im Verlauf unten.',
+    openChat: 'Browser im Chat verwenden',
     actionSnapshot: 'Snapshot',
     actionScreenshot: 'Screenshot',
     actionClick: 'Klick',

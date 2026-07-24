@@ -2159,7 +2159,10 @@ export const fr: TranslationMap = mergeTranslations(en, {
     startedAt: 'Démarrée à {time}',
     noScreenshot: 'Aucune capture disponible pour le moment',
     liveView: 'Vue en direct',
-    quickActions: 'Actions rapides',
+    quickActions: 'Actions du navigateur',
+    quickActionsHint:
+      'Demandez à Kavi d’effectuer ces actions dans le chat. Les résultats et erreurs apparaissent dans l’historique ci-dessous.',
+    openChat: 'Utiliser le navigateur dans le chat',
     actionSnapshot: 'Instantané',
     actionScreenshot: 'Capture',
     actionClick: 'Cliquer',

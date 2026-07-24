@@ -2059,7 +2059,10 @@ export const ar: TranslationMap = mergeTranslations(en, {
     startedAt: 'بدأت عند {time}',
     noScreenshot: 'لا توجد لقطة شاشة بعد',
     liveView: 'عرض مباشر',
-    quickActions: 'إجراءات سريعة',
+    quickActions: 'إجراءات المتصفح',
+    quickActionsHint:
+      'اطلب من Kavi تنفيذ هذه الإجراءات في الدردشة. ستظهر النتائج والأخطاء في السجل أدناه.',
+    openChat: 'استخدام المتصفح في الدردشة',
     actionSnapshot: 'لقطة حالة',
     actionScreenshot: 'لقطة شاشة',
     actionClick: 'نقرة',
