@@ -181,7 +181,6 @@ export const CodeEditorScreen: React.FC = () => {
   const [editorKey, setEditorKey] = useState(0);
   const [browserVisible, setBrowserVisible] = useState(!initialPath && initialSource !== 'local');
   const [editorMode, setEditorMode] = useState<'unknown' | 'codemirror' | 'fallback'>('unknown');
-  const [editorModeReason, setEditorModeReason] = useState<string | null>(null);
 
   const activeSshTarget = useMemo(
     () => enabledSshTargets.find((target) => target.id === targetId) ?? null,
@@ -637,12 +636,7 @@ export const CodeEditorScreen: React.FC = () => {
     return localSourceLabel;
   }, [activeSshTarget, activeWorkspaceTarget, localSourceLabel, source]);
 
-  const modeBannerText =
-    editorMode === 'fallback'
-      ? t('codeEditor.fallbackModeMessage')
-      : editorMode === 'codemirror'
-        ? t('codeEditor.fullEditorModeMessage')
-        : null;
+  const modeBannerText = editorMode === 'fallback' ? t('codeEditor.fallbackModeMessage') : null;
 
   const openRemoteWork = useCallback(() => {
     navigation.navigate('RemoteWork');
@@ -657,8 +651,6 @@ export const CodeEditorScreen: React.FC = () => {
       canPersist={canPersist}
       colors={colors}
       editorKey={editorKey}
-      editorMode={editorMode}
-      editorModeReason={editorModeReason}
       editorRef={editorRef}
       editorSeedContent={editorSeedContent}
       enabledSshTargets={enabledSshTargets}
@@ -686,7 +678,6 @@ export const CodeEditorScreen: React.FC = () => {
       saving={saving}
       setBrowserVisible={setBrowserVisible}
       setEditorMode={setEditorMode}
-      setEditorModeReason={setEditorModeReason}
       setPathDraft={setPathDraft}
       source={source}
       styles={styles}

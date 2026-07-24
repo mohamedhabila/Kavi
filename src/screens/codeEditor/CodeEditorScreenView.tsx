@@ -42,8 +42,6 @@ type CodeEditorScreenViewProps = {
   canPersist: boolean;
   colors: CodeEditorPalette;
   editorKey: number;
-  editorMode: 'unknown' | 'codemirror' | 'fallback';
-  editorModeReason: string | null;
   editorRef: CodeEditorRef;
   editorSeedContent: string;
   enabledSshTargets: Array<{ id: string; name: string }>;
@@ -71,7 +69,6 @@ type CodeEditorScreenViewProps = {
   saving: boolean;
   setBrowserVisible: React.Dispatch<React.SetStateAction<boolean>>;
   setEditorMode: React.Dispatch<React.SetStateAction<'unknown' | 'codemirror' | 'fallback'>>;
-  setEditorModeReason: React.Dispatch<React.SetStateAction<string | null>>;
   setPathDraft: React.Dispatch<React.SetStateAction<string>>;
   source: CodeEditorSource;
   styles: CodeEditorStyles;
@@ -92,7 +89,6 @@ function EditorCanvas({
   loading,
   readOnly,
   setEditorMode,
-  setEditorModeReason,
   source,
   styles,
   t,
@@ -109,7 +105,6 @@ function EditorCanvas({
   | 'loading'
   | 'readOnly'
   | 'setEditorMode'
-  | 'setEditorModeReason'
   | 'source'
   | 'styles'
   | 't'
@@ -133,9 +128,8 @@ function EditorCanvas({
       readOnly={readOnly}
       onDirtyChange={handleDirtyChange}
       onContent={handleContent}
-      onModeChange={(mode, reason) => {
+      onModeChange={(mode) => {
         setEditorMode(mode);
-        setEditorModeReason(reason ?? null);
       }}
       style={styles.flex}
     />
@@ -150,8 +144,6 @@ export function CodeEditorScreenView({
   canPersist,
   colors,
   editorKey,
-  editorMode,
-  editorModeReason,
   editorRef,
   editorSeedContent,
   enabledSshTargets,
@@ -179,7 +171,6 @@ export function CodeEditorScreenView({
   saving,
   setBrowserVisible,
   setEditorMode,
-  setEditorModeReason,
   setPathDraft,
   source,
   styles,
@@ -188,6 +179,16 @@ export function CodeEditorScreenView({
   targetLabel,
   toggleReadOnly,
 }: CodeEditorScreenViewProps) {
+  const showMissingTargetState = source !== 'local' && !activeTarget;
+  const showScratchSetupGuide =
+    enabledWorkspaceTargets.length === 0 &&
+    enabledSshTargets.length === 0 &&
+    source === 'local' &&
+    !isConversationWorkspaceSource &&
+    !activePath &&
+    !editorSeedContent;
+  const showTemporaryScratchNotice =
+    source === 'local' && !isConversationWorkspaceSource && !showScratchSetupGuide;
   const editorCanvas = (
     <EditorCanvas
       colors={colors}
@@ -200,7 +201,6 @@ export function CodeEditorScreenView({
       loading={loading}
       readOnly={readOnly}
       setEditorMode={setEditorMode}
-      setEditorModeReason={setEditorModeReason}
       source={source}
       styles={styles}
       t={t}
@@ -211,7 +211,12 @@ export function CodeEditorScreenView({
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} hitSlop={8} accessibilityLabel={t('common.back')}>
+        <TouchableOpacity
+          accessibilityLabel={t('common.back')}
+          accessibilityRole="button"
+          onPress={handleBack}
+          style={styles.headerBtn}
+        >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -224,11 +229,11 @@ export function CodeEditorScreenView({
         <View style={styles.headerActions}>
           <TouchableOpacity
             onPress={toggleReadOnly}
-            hitSlop={8}
             style={styles.headerBtn}
             accessibilityLabel={
               readOnly ? t('codeEditor.switchToEditable') : t('codeEditor.switchToReadOnly')
             }
+            accessibilityRole="button"
           >
             {readOnly ? (
               <Eye size={18} color={colors.textSecondary} />
@@ -236,15 +241,16 @@ export function CodeEditorScreenView({
               <Edit3 size={18} color={colors.primary} />
             )}
           </TouchableOpacity>
-          {!readOnly ? (
+          {!readOnly && canPersist ? (
             <TouchableOpacity
               onPress={handleSave}
-              hitSlop={8}
               style={styles.headerBtn}
-              disabled={!isDirty || saving || !canPersist}
+              disabled={!isDirty || saving}
               accessibilityLabel={t('codeEditor.saveFile')}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !isDirty || saving }}
             >
-              <Save size={18} color={isDirty && canPersist ? colors.primary : colors.textTertiary} />
+              <Save size={18} color={isDirty ? colors.primary : colors.textTertiary} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -264,6 +270,9 @@ export function CodeEditorScreenView({
           return (
             <TouchableOpacity
               key={entry}
+              accessibilityLabel={label}
+              accessibilityRole="tab"
+              accessibilityState={{ disabled, selected: source === entry }}
               style={[
                 styles.sourceChip,
                 source === entry && styles.sourceChipActive,
@@ -271,6 +280,7 @@ export function CodeEditorScreenView({
               ]}
               onPress={() => !disabled && handleSourceChange(entry)}
               disabled={disabled}
+              testID={`code-editor-source-${entry}`}
             >
               <Text
                 style={[
@@ -294,8 +304,12 @@ export function CodeEditorScreenView({
               (target) => (
                 <TouchableOpacity
                   key={target.id}
+                  accessibilityLabel={target.name}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: target.id === targetId }}
                   style={[styles.targetChip, target.id === targetId && styles.targetChipActive]}
                   onPress={() => handleTargetChange(target.id)}
+                  testID={`code-editor-target-${target.id}`}
                 >
                   <Text
                     style={[
@@ -313,111 +327,130 @@ export function CodeEditorScreenView({
         </View>
       ) : null}
 
-      <View style={styles.pathBar}>
-        <FolderOpen size={12} color={colors.textTertiary} />
-        <TextInput
-          value={pathDraft}
-          onChangeText={setPathDraft}
-          style={styles.pathInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={(source !== 'local' || isConversationWorkspaceSource) && !readOnly}
-          placeholder={t('codeEditor.untitledPath')}
-          placeholderTextColor={colors.textTertiary}
-        />
-        {language ? (
-          <View style={styles.langBadge}>
-            <Text style={styles.langBadgeText}>{language}</Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.contextBar}>
-        <Text style={styles.contextText} numberOfLines={1}>
-          {targetLabel}
-        </Text>
-        <View style={styles.contextActions}>
-          {source !== 'local' ? (
-            <TouchableOpacity
-              style={styles.contextBtn}
-              onPress={() => setBrowserVisible((value) => !value)}
-            >
-              <FolderTree size={14} color={colors.primary} />
-              <Text style={styles.contextBtnText}>{t('codeEditor.browseFiles')}</Text>
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity style={styles.contextBtn} onPress={handleNewFile}>
-            <PlusSquare size={14} color={colors.primary} />
-            <Text style={styles.contextBtnText}>{t('codeEditor.newFile')}</Text>
-          </TouchableOpacity>
-          {(source !== 'local' || isConversationWorkspaceSource) && activePath ? (
-            <TouchableOpacity style={styles.contextBtn} onPress={handleReload}>
-              <RefreshCw size={14} color={colors.primary} />
-              <Text style={styles.contextBtnText}>{t('codeEditor.reloadFile')}</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-
-      {modeBannerText ? (
-        <View
-          style={[
-            styles.modeBanner,
-            editorMode === 'fallback' ? styles.modeBannerWarning : styles.modeBannerSuccess,
-          ]}
-        >
-          <Text style={styles.modeBannerText}>{modeBannerText}</Text>
-          {editorMode === 'fallback' && editorModeReason ? (
-            <Text style={styles.modeBannerSubtext} numberOfLines={1}>
-              {editorModeReason}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {source !== 'local' && !activeTarget ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>{t('codeEditor.noTargetTitle')}</Text>
-          <Text style={styles.emptyBody}>{t('codeEditor.noTargetMessage')}</Text>
-          <TouchableOpacity style={styles.primaryCta} onPress={openRemoteWork}>
-            <Text style={styles.primaryCtaText}>{t('codeEditor.openRemoteWork')}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {enabledWorkspaceTargets.length === 0 &&
-      enabledSshTargets.length === 0 &&
-      source === 'local' &&
-      !isConversationWorkspaceSource &&
-      !activePath &&
-      !editorSeedContent ? (
-        <View style={styles.emptyState}>
+      {showScratchSetupGuide ? (
+        <View style={styles.emptyState} testID="code-editor-setup-guide">
           <Text style={styles.emptyTitle}>{t('codeEditor.startEditingTitle')}</Text>
           <Text style={styles.emptyBody}>{t('codeEditor.startEditingMessage')}</Text>
-          <TouchableOpacity style={styles.primaryCta} onPress={openRemoteWork}>
+          <View style={styles.emptyActions}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={handleNewFile}
+              style={styles.primaryCta}
+              testID="code-editor-start-scratch"
+            >
+              <Text style={styles.primaryCtaText}>{t('codeEditor.startScratch')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={openRemoteWork}
+              style={styles.secondaryCta}
+            >
+              <Text style={styles.secondaryCtaText}>{t('codeEditor.openRemoteWork')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : showMissingTargetState ? (
+        <View style={styles.emptyState} testID="code-editor-missing-target">
+          <Text style={styles.emptyTitle}>{t('codeEditor.noTargetTitle')}</Text>
+          <Text style={styles.emptyBody}>{t('codeEditor.noTargetMessage')}</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={openRemoteWork}
+            style={styles.primaryCta}
+          >
             <Text style={styles.primaryCtaText}>{t('codeEditor.openRemoteWork')}</Text>
           </TouchableOpacity>
         </View>
-      ) : null}
-
-      {browserVisible && source !== 'local' && activeTarget ? (
-        <View style={styles.browserPanel}>
-          <Text style={styles.sectionLabel}>{t('codeEditor.fileBrowserTitle')}</Text>
-          <FileBrowser
-            rootPath={activeTargetRoot}
-            listDirectory={listCurrentDirectory}
-            onFileSelect={(nextPath) => handleOpenFile(nextPath)}
-            maxHeight={260}
-          />
-        </View>
-      ) : null}
-
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView style={styles.flex} behavior="padding">
-          {editorCanvas}
-        </KeyboardAvoidingView>
       ) : (
-        <View style={styles.flex}>{editorCanvas}</View>
+        <>
+          <View style={styles.pathBar}>
+            <FolderOpen size={12} color={colors.textTertiary} />
+            <TextInput
+              accessibilityLabel={t('codeEditor.filePathLabel')}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={(source !== 'local' || isConversationWorkspaceSource) && !readOnly}
+              onChangeText={setPathDraft}
+              placeholder={t('codeEditor.untitledPath')}
+              placeholderTextColor={colors.textTertiary}
+              style={styles.pathInput}
+              value={pathDraft}
+            />
+            {language ? (
+              <View style={styles.langBadge}>
+                <Text style={styles.langBadgeText}>{language}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.contextBar}>
+            <Text style={styles.contextText} numberOfLines={1}>
+              {targetLabel}
+            </Text>
+            <View style={styles.contextActions}>
+              {source !== 'local' ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => setBrowserVisible((value) => !value)}
+                  style={styles.contextBtn}
+                >
+                  <FolderTree size={14} color={colors.primary} />
+                  <Text style={styles.contextBtnText}>{t('codeEditor.browseFiles')}</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={handleNewFile}
+                style={styles.contextBtn}
+              >
+                <PlusSquare size={14} color={colors.primary} />
+                <Text style={styles.contextBtnText}>{t('codeEditor.newFile')}</Text>
+              </TouchableOpacity>
+              {(source !== 'local' || isConversationWorkspaceSource) && activePath ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={handleReload}
+                  style={styles.contextBtn}
+                >
+                  <RefreshCw size={14} color={colors.primary} />
+                  <Text style={styles.contextBtnText}>{t('codeEditor.reloadFile')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+
+          {showTemporaryScratchNotice ? (
+            <View style={styles.scratchNotice} testID="code-editor-scratch-notice">
+              <Text style={styles.scratchNoticeText}>{t('codeEditor.scratchModeMessage')}</Text>
+            </View>
+          ) : null}
+
+          {modeBannerText ? (
+            <View style={[styles.modeBanner, styles.modeBannerWarning]}>
+              <Text style={styles.modeBannerText}>{modeBannerText}</Text>
+            </View>
+          ) : null}
+
+          {browserVisible && source !== 'local' && activeTarget ? (
+            <View style={styles.browserPanel}>
+              <Text style={styles.sectionLabel}>{t('codeEditor.fileBrowserTitle')}</Text>
+              <FileBrowser
+                rootPath={activeTargetRoot}
+                listDirectory={listCurrentDirectory}
+                onFileSelect={(nextPath) => handleOpenFile(nextPath)}
+                maxHeight={260}
+              />
+            </View>
+          ) : null}
+
+          {Platform.OS === 'ios' ? (
+            <KeyboardAvoidingView style={styles.flex} behavior="padding">
+              {editorCanvas}
+            </KeyboardAvoidingView>
+          ) : (
+            <View style={styles.flex}>{editorCanvas}</View>
+          )}
+        </>
       )}
     </SafeAreaView>
   );

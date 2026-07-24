@@ -102,7 +102,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
     developerIntro: 'コーディング、ターミナル、接続済みワークスペース向けのオプション機能です。',
     developerTools: '開発者ツール',
     terminalDescription: 'このデバイス上で JavaScript またはローカルシェルを実行します。',
-    codeEditorDescription: 'リモート接続なしでローカルの作業ファイルを作成・編集します。',
+    codeEditorDescription:
+      '一時的なコードをローカルで下書きするか、チャットまたは接続先の保存済みファイルを編集します。',
     remoteWorkDescription: '必要なときにワークスペース、サーバー、ホスト型ブラウザへ接続します。',
   },
   activity: {
@@ -2006,6 +2007,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     sshLabel: 'SSH',
     scratchLabel: '下書き',
     targetLabel: '接続先',
+    filePathLabel: 'ファイルパス',
     browseFiles: '参照',
     newFile: '新規',
     reloadFile: '再読み込み',
@@ -2013,9 +2015,12 @@ export const ja: TranslationMap = mergeTranslations(en, {
     noTargetMessage:
       'SSH または workspace の接続先を選ぶと、電話から実際のファイルを参照して編集できます。',
     openRemoteWork: 'Remote Work を開く',
-    startEditingTitle: 'この画面には実際の編集フローが必要です',
+    startEditingTitle: '編集方法を選択',
     startEditingMessage:
-      'SSH ホストまたはリモート workspace を接続すると、ファイルを参照してエディターに読み込み、編集して保存し直せます。接続先がない場合、この画面は単なる下書きバッファです。',
+      'このエディターで一時的な下書きを始めるか、ワークスペースまたは SSH サーバーに接続してファイルを参照・保存します。',
+    startScratch: '一時的な下書きを開始',
+    scratchModeMessage:
+      '一時的な下書き: 変更内容はこのエディターを離れるまでのみ保持されます。',
     fileBrowserTitle: 'ファイル',
     loadingFile: 'ファイルを開いています...',
     targetRequired: '保存する前に接続先を選択してください。',
@@ -2028,7 +2033,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     discardAction: '破棄',
     fallbackModeMessage:
       '基本エディターモードが有効です。構文プレビュー、行番号、保存は引き続き使えますが、完全な CodeMirror エディターは読み込まれませんでした。',
-    fullEditorModeMessage: '完全なエディターモードが有効です。',
   },
   conversationFiles: {
     title: 'ファイルと作成物',

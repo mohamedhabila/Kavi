@@ -105,7 +105,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     developerTools: 'Entwicklerwerkzeuge',
     terminalDescription: 'JavaScript oder eine lokale Shell direkt auf diesem Gerät ausführen.',
     codeEditorDescription:
-      'Lokale Entwurfsdateien ohne Remote-Verbindung erstellen und bearbeiten.',
+      'Temporären Code lokal entwerfen oder gespeicherte Dateien aus einem Chat oder einer Verbindung bearbeiten.',
     remoteWorkDescription: 'Bei Bedarf einen Workspace, Server oder gehosteten Browser verbinden.',
   },
   activity: {
@@ -2065,6 +2065,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     sshLabel: 'SSH',
     scratchLabel: 'Entwurf',
     targetLabel: 'Ziel',
+    filePathLabel: 'Dateipfad',
     browseFiles: 'Durchsuchen',
     newFile: 'Neu',
     reloadFile: 'Neu laden',
@@ -2072,9 +2073,12 @@ export const de: TranslationMap = mergeTranslations(en, {
     noTargetMessage:
       'Wählen Sie ein SSH- oder Workspace-Ziel, um echte Dateien vom Telefon aus zu durchsuchen und zu bearbeiten.',
     openRemoteWork: 'Remote Work öffnen',
-    startEditingTitle: 'Dieser Editor braucht einen echten Workflow',
+    startEditingTitle: 'Wählen Sie, wie Sie arbeiten möchten',
     startEditingMessage:
-      'Verbinden Sie einen SSH-Host oder einen Remote-Workspace, um Dateien zu durchsuchen, in den Editor zu laden, zu bearbeiten und wieder zu speichern. Ohne Ziel ist dieser Bildschirm nur ein Entwurfspuffer.',
+      'Starten Sie einen temporären Entwurf in diesem Editor oder verbinden Sie einen Workspace bzw. SSH-Server, um Dateien zu durchsuchen und zu speichern.',
+    startScratch: 'Temporären Entwurf starten',
+    scratchModeMessage:
+      'Temporärer Entwurf: Änderungen bleiben nur erhalten, bis Sie diesen Editor verlassen.',
     fileBrowserTitle: 'Dateien',
     loadingFile: 'Datei wird geöffnet...',
     targetRequired: 'Wählen Sie vor dem Speichern ein Ziel aus.',
@@ -2087,7 +2091,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     discardAction: 'Verwerfen',
     fallbackModeMessage:
       'Der Basis-Editor-Modus ist aktiv. Syntaxvorschau, Zeilennummern und Speichern funktionieren weiter, aber der vollständige CodeMirror-Editor wurde nicht geladen.',
-    fullEditorModeMessage: 'Voller Editor-Modus aktiv.',
   },
   conversationFiles: {
     title: 'Dateien & Inhalte',

@@ -102,7 +102,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     developerIntro: '適用於程式開發、終端機和已連線工作區的選用工具。',
     developerTools: '開發者工具',
     terminalDescription: '直接在此裝置上執行 JavaScript 或本機 shell。',
-    codeEditorDescription: '不需遠端連線即可建立和編輯本機暫存檔案。',
+    codeEditorDescription: '在本機起草暫時程式碼，或編輯聊天或連線中的已儲存檔案。',
     remoteWorkDescription: '需要時連接工作區、伺服器或託管瀏覽器。',
   },
   activity: {
@@ -1907,15 +1907,18 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     sshLabel: 'SSH',
     scratchLabel: '草稿',
     targetLabel: '目標',
+    filePathLabel: '檔案路徑',
     browseFiles: '瀏覽',
     newFile: '新增',
     reloadFile: '重新載入',
     noTargetTitle: '尚未選擇遠端目標',
     noTargetMessage: '選擇 SSH 或工作區目標之後，你就能在手機上瀏覽並編輯真實檔案。',
     openRemoteWork: '開啟遠端工作',
-    startEditingTitle: '這個編輯器需要真實工作流',
+    startEditingTitle: '選擇編輯方式',
     startEditingMessage:
-      '連接 SSH 主機或遠端工作區後，你就可以瀏覽檔案、載入到編輯器、修改並保存回去。沒有目標時，這個畫面只是草稿緩衝區。',
+      '在此編輯器中開始暫時草稿，或連接工作區或 SSH 伺服器以瀏覽和儲存檔案。',
+    startScratch: '開始暫時草稿',
+    scratchModeMessage: '暫時草稿：變更只會保留到您離開此編輯器。',
     fileBrowserTitle: '檔案',
     loadingFile: '正在開啟檔案...',
     targetRequired: '儲存前請先選擇目標。',
@@ -1926,7 +1929,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     discardAction: '捨棄',
     fallbackModeMessage:
       '目前使用基礎編輯模式。語法預覽、行號與儲存仍然可用，但完整的 CodeMirror 編輯器沒有成功載入。',
-    fullEditorModeMessage: '完整編輯模式已啟用。',
   },
   conversationFiles: {
     title: '檔案與創作',

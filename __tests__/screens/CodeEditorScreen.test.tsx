@@ -1,5 +1,5 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { CodeEditorScreen } from '../../src/screens/CodeEditorScreen';
 
 const mockNavigate = jest.fn();
@@ -151,6 +151,9 @@ jest.mock('../../src/components/editor/CodeEditorWebView', () => {
         >
           <Text>set-fallback-mode</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => props.onModeChange?.('codemirror')}>
+          <Text>set-codemirror-mode</Text>
+        </TouchableOpacity>
       </View>
     );
   });
@@ -223,12 +226,54 @@ describe('CodeEditorScreen', () => {
     mockWriteSshTextFile.mockResolvedValue({ path: '/remote/project/src/App.tsx', size: 15 });
   });
 
-  it('shows setup guidance when no remote targets are configured', () => {
+  it('guides the user before opening a temporary standalone scratch', () => {
+    const { getByLabelText, getByTestId, getByText, queryByLabelText, queryByTestId, queryByText } =
+      render(<CodeEditorScreen />);
+
+    expect(getByTestId('code-editor-setup-guide')).toBeTruthy();
+    expect(getByText('codeEditor.startEditingTitle')).toBeTruthy();
+    expect(queryByTestId('mock-code-editor')).toBeNull();
+    expect(getByTestId('code-editor-source-local').props.accessibilityState).toEqual({
+      disabled: false,
+      selected: true,
+    });
+    expect(getByTestId('code-editor-source-workspace').props.accessibilityState).toEqual({
+      disabled: true,
+      selected: false,
+    });
+    expect(StyleSheet.flatten(getByTestId('code-editor-start-scratch').props.style).minHeight).toBe(
+      44,
+    );
+
+    fireEvent.press(getByTestId('code-editor-start-scratch'));
+
+    expect(getByTestId('mock-code-editor')).toBeTruthy();
+    expect(getByTestId('code-editor-scratch-notice')).toBeTruthy();
+    expect(getByText('codeEditor.scratchModeMessage')).toBeTruthy();
+    expect(getByLabelText('codeEditor.filePathLabel').props.editable).toBe(false);
+    expect(queryByLabelText('codeEditor.saveFile')).toBeNull();
+
+    fireEvent.press(getByText('set-codemirror-mode'));
+    expect(queryByText('codeEditor.fullEditorModeMessage')).toBeNull();
+  });
+
+  it('offers connected saved files as the alternate standalone path', () => {
     const { getByText } = render(<CodeEditorScreen />);
 
-    expect(getByText('codeEditor.startEditingTitle')).toBeTruthy();
     fireEvent.press(getByText('codeEditor.openRemoteWork'));
     expect(mockNavigate).toHaveBeenCalledWith('RemoteWork');
+  });
+
+  it('uses full touch targets for the header and source controls', () => {
+    const { getByLabelText, getByTestId } = render(<CodeEditorScreen />);
+
+    expect(StyleSheet.flatten(getByLabelText('Back').props.style)).toMatchObject({
+      minHeight: 44,
+      width: 44,
+    });
+    expect(StyleSheet.flatten(getByTestId('code-editor-source-local').props.style).minHeight).toBe(
+      44,
+    );
   });
 
   it('routes header back through the shared back handler with discard interception', () => {
@@ -290,7 +335,9 @@ describe('CodeEditorScreen', () => {
       },
     ];
 
-    const { getByText, getByDisplayValue, getByLabelText } = render(<CodeEditorScreen />);
+    const { getByText, getByDisplayValue, getByLabelText, queryByText } = render(
+      <CodeEditorScreen />,
+    );
 
     await act(async () => {
       fireEvent.press(getByText('open-browser-file'));
@@ -306,6 +353,7 @@ describe('CodeEditorScreen', () => {
     expect(getByDisplayValue('/workspace/project/src/App.tsx')).toBeTruthy();
     fireEvent.press(getByText('set-fallback-mode'));
     expect(getByText('codeEditor.fallbackModeMessage')).toBeTruthy();
+    expect(queryByText('codemirror-load-failed')).toBeNull();
 
     mockEditorContent = 'console.log(2);';
     fireEvent.press(getByText('mark-dirty'));
@@ -318,8 +366,6 @@ describe('CodeEditorScreen', () => {
         'console.log(2);',
       );
     });
-
-    expect(getByText('codemirror-load-failed')).toBeTruthy();
   });
 
   it('opens and saves a conversation workspace file through the editor workflow', async () => {

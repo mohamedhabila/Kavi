@@ -105,7 +105,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
       'Outils facultatifs pour le code, les terminaux et les espaces de travail connectés.',
     developerTools: 'Outils de développement',
     terminalDescription: 'Exécutez JavaScript ou un shell local directement sur cet appareil.',
-    codeEditorDescription: 'Créez et modifiez des fichiers locaux sans connexion distante.',
+    codeEditorDescription:
+      'Rédigez du code temporaire localement ou modifiez des fichiers enregistrés depuis un chat ou une connexion.',
     remoteWorkDescription:
       'Connectez un espace de travail, un serveur ou un navigateur hébergé au besoin.',
   },
@@ -2056,6 +2057,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
     sshLabel: 'SSH',
     scratchLabel: 'Brouillon',
     targetLabel: 'Cible',
+    filePathLabel: 'Chemin du fichier',
     browseFiles: 'Parcourir',
     newFile: 'Nouveau',
     reloadFile: 'Recharger',
@@ -2063,9 +2065,12 @@ export const fr: TranslationMap = mergeTranslations(en, {
     noTargetMessage:
       'Choisissez une cible SSH ou un workspace pour parcourir et modifier de vrais fichiers depuis votre téléphone.',
     openRemoteWork: 'Ouvrir Remote Work',
-    startEditingTitle: 'Cet éditeur a besoin d’un vrai flux',
+    startEditingTitle: 'Choisissez comment modifier',
     startEditingMessage:
-      'Connectez un hôte SSH ou un workspace distant pour parcourir des fichiers, les charger dans l’éditeur, les modifier puis les enregistrer à nouveau. Sans cible, cet écran n’est qu’un brouillon.',
+      'Commencez un brouillon temporaire dans cet éditeur ou connectez un espace de travail ou un serveur SSH pour parcourir et enregistrer des fichiers.',
+    startScratch: 'Commencer un brouillon temporaire',
+    scratchModeMessage:
+      'Brouillon temporaire : les modifications ne restent que jusqu’à ce que vous quittiez cet éditeur.',
     fileBrowserTitle: 'Fichiers',
     loadingFile: 'Ouverture du fichier...',
     targetRequired: 'Sélectionnez une cible avant d’enregistrer.',
@@ -2078,7 +2083,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     discardAction: 'Ignorer',
     fallbackModeMessage:
       'Le mode éditeur de base est actif. L’aperçu de syntaxe, les numéros de ligne et l’enregistrement fonctionnent toujours, mais l’éditeur CodeMirror complet n’a pas été chargé.',
-    fullEditorModeMessage: 'Mode éditeur complet actif.',
   },
   conversationFiles: {
     title: 'Fichiers et créations',

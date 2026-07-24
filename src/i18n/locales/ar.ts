@@ -102,7 +102,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     developerIntro: 'أدوات اختيارية للبرمجة والطرفيات ومساحات العمل المتصلة.',
     developerTools: 'أدوات المطور',
     terminalDescription: 'شغّل JavaScript أو صدفة محلية مباشرة على هذا الجهاز.',
-    codeEditorDescription: 'أنشئ ملفات محلية وعدّلها من دون اتصال بعيد.',
+    codeEditorDescription: 'اكتب مسودة شيفرة مؤقتة محليًا، أو عدّل ملفات محفوظة من محادثة أو اتصال.',
     remoteWorkDescription: 'اتصل بمساحة عمل أو خادم أو متصفح مستضاف عند الحاجة.',
   },
   activity: {
@@ -1962,15 +1962,18 @@ export const ar: TranslationMap = mergeTranslations(en, {
     sshLabel: 'SSH',
     scratchLabel: 'مسودة',
     targetLabel: 'الهدف',
+    filePathLabel: 'مسار الملف',
     browseFiles: 'استعراض',
     newFile: 'ملف جديد',
     reloadFile: 'إعادة تحميل',
     noTargetTitle: 'لم يتم تحديد هدف بعيد',
     noTargetMessage: 'اختر هدف SSH أو مساحة عمل لتصفح الملفات الحقيقية وتحريرها من هاتفك.',
     openRemoteWork: 'فتح العمل البعيد',
-    startEditingTitle: 'هذه الشاشة تحتاج سير عمل حقيقي',
+    startEditingTitle: 'اختر طريقة التحرير',
     startEditingMessage:
-      'اربط مضيف SSH أو مساحة عمل بعيدة لتصفح الملفات وتحميلها إلى المحرر وتعديلها ثم حفظها مرة أخرى. من دون هدف، تبقى هذه الشاشة مجرد مسودة.',
+      'ابدأ مسودة مؤقتة في هذا المحرر، أو اتصل بمساحة عمل أو خادم SSH لتصفح الملفات وحفظها.',
+    startScratch: 'ابدأ مسودة مؤقتة',
+    scratchModeMessage: 'مسودة مؤقتة: تبقى التغييرات فقط حتى تغادر هذا المحرر.',
     fileBrowserTitle: 'الملفات',
     loadingFile: 'جارٍ فتح الملف...',
     targetRequired: 'حدد هدفاً قبل الحفظ.',
@@ -1981,7 +1984,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     discardAction: 'تجاهل',
     fallbackModeMessage:
       'وضع المحرر الأساسي نشط. ما زالت المعاينة اللونية وأرقام السطور والحفظ تعمل، لكن محرر CodeMirror الكامل لم يتم تحميله.',
-    fullEditorModeMessage: 'وضع المحرر الكامل نشط.',
   },
   conversationFiles: {
     title: 'الملفات والإنشاءات',

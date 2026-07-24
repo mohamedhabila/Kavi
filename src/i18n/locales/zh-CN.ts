@@ -102,7 +102,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     developerIntro: '面向编程、终端和已连接工作区的可选工具。',
     developerTools: '开发者工具',
     terminalDescription: '直接在此设备上运行 JavaScript 或本地 shell。',
-    codeEditorDescription: '无需远程连接即可创建和编辑本地临时文件。',
+    codeEditorDescription: '在本地起草临时代码，或编辑聊天或连接中的已保存文件。',
     remoteWorkDescription: '需要时连接工作区、服务器或托管浏览器。',
   },
   activity: {
@@ -1912,15 +1912,18 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     sshLabel: 'SSH',
     scratchLabel: '草稿',
     targetLabel: '目标',
+    filePathLabel: '文件路径',
     browseFiles: '浏览',
     newFile: '新建',
     reloadFile: '重新加载',
     noTargetTitle: '尚未选择远程目标',
     noTargetMessage: '选择一个 SSH 或工作区目标后，你就可以在手机上浏览并编辑真实文件。',
     openRemoteWork: '打开远程工作',
-    startEditingTitle: '这个编辑器需要真实工作流',
+    startEditingTitle: '选择编辑方式',
     startEditingMessage:
-      '连接 SSH 主机或远程工作区后，就可以浏览文件、加载到编辑器、修改并保存回去。没有目标时，这个页面只是草稿缓冲区。',
+      '在此编辑器中开始临时草稿，或连接工作区或 SSH 服务器以浏览和保存文件。',
+    startScratch: '开始临时草稿',
+    scratchModeMessage: '临时草稿：更改仅保留到您离开此编辑器。',
     fileBrowserTitle: '文件',
     loadingFile: '正在打开文件...',
     targetRequired: '保存前请先选择目标。',
@@ -1931,7 +1934,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     discardAction: '放弃',
     fallbackModeMessage:
       '当前使用基础编辑模式。语法预览、行号和保存仍然可用，但完整的 CodeMirror 编辑器未能加载。',
-    fullEditorModeMessage: '完整编辑模式已启用。',
   },
   conversationFiles: {
     title: '文件与创作',

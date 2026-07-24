@@ -103,7 +103,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       'Ferramentas opcionais para código, terminais e espaços de trabalho conectados.',
     developerTools: 'Ferramentas de desenvolvimento',
     terminalDescription: 'Execute JavaScript ou um shell local diretamente neste dispositivo.',
-    codeEditorDescription: 'Crie e edite arquivos locais sem uma conexão remota.',
+    codeEditorDescription:
+      'Crie rascunhos de código temporários localmente ou edite arquivos salvos de uma conversa ou conexão.',
     remoteWorkDescription:
       'Conecte um espaço de trabalho, servidor ou navegador hospedado quando precisar.',
   },
@@ -2030,6 +2031,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     sshLabel: 'SSH',
     scratchLabel: 'Rascunho',
     targetLabel: 'Destino',
+    filePathLabel: 'Caminho do arquivo',
     browseFiles: 'Explorar',
     newFile: 'Novo',
     reloadFile: 'Recarregar',
@@ -2037,9 +2039,12 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     noTargetMessage:
       'Escolha um destino SSH ou workspace para navegar e editar arquivos reais pelo telefone.',
     openRemoteWork: 'Abrir trabalho remoto',
-    startEditingTitle: 'Este editor precisa de um fluxo real',
+    startEditingTitle: 'Escolha como editar',
     startEditingMessage:
-      'Conecte um host SSH ou um workspace remoto para navegar pelos arquivos, carregá-los no editor, editá-los e salvá-los novamente. Sem um destino, esta tela é apenas um rascunho.',
+      'Inicie um rascunho temporário neste editor ou conecte um espaço de trabalho ou servidor SSH para navegar e salvar arquivos.',
+    startScratch: 'Iniciar rascunho temporário',
+    scratchModeMessage:
+      'Rascunho temporário: as alterações permanecem somente até você sair deste editor.',
     fileBrowserTitle: 'Arquivos',
     loadingFile: 'Abrindo arquivo...',
     targetRequired: 'Selecione um destino antes de salvar.',
@@ -2052,7 +2057,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     discardAction: 'Descartar',
     fallbackModeMessage:
       'O modo básico do editor está ativo. Prévia de sintaxe, números de linha e salvamento ainda funcionam, mas o editor completo do CodeMirror não foi carregado.',
-    fullEditorModeMessage: 'Modo de editor completo ativo.',
   },
   conversationFiles: {
     title: 'Arquivos e criações',

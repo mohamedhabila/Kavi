@@ -103,7 +103,8 @@ export const es: TranslationMap = mergeTranslations(en, {
       'Herramientas opcionales para código, terminales y espacios de trabajo conectados.',
     developerTools: 'Herramientas de desarrollo',
     terminalDescription: 'Ejecuta JavaScript o un shell local directamente en este dispositivo.',
-    codeEditorDescription: 'Crea y edita archivos locales sin una conexión remota.',
+    codeEditorDescription:
+      'Esboza código temporalmente en local o edita archivos guardados desde un chat o una conexión.',
     remoteWorkDescription:
       'Conecta un espacio de trabajo, servidor o navegador alojado cuando lo necesites.',
   },
@@ -2046,6 +2047,7 @@ export const es: TranslationMap = mergeTranslations(en, {
     sshLabel: 'SSH',
     scratchLabel: 'Borrador',
     targetLabel: 'Destino',
+    filePathLabel: 'Ruta del archivo',
     browseFiles: 'Explorar',
     newFile: 'Nuevo',
     reloadFile: 'Recargar',
@@ -2053,9 +2055,12 @@ export const es: TranslationMap = mergeTranslations(en, {
     noTargetMessage:
       'Elige un destino SSH o de workspace para explorar y editar archivos reales desde el teléfono.',
     openRemoteWork: 'Abrir trabajo remoto',
-    startEditingTitle: 'Este editor necesita un flujo real',
+    startEditingTitle: 'Elige cómo quieres editar',
     startEditingMessage:
-      'Conecta un host SSH o un workspace remoto para explorar archivos, cargarlos en el editor, editarlos y guardarlos de nuevo. Sin un destino, esta pantalla es solo un borrador.',
+      'Inicia un borrador temporal en este editor o conecta un espacio de trabajo o servidor SSH para explorar y guardar archivos.',
+    startScratch: 'Iniciar borrador temporal',
+    scratchModeMessage:
+      'Borrador temporal: los cambios solo se conservan hasta que salgas de este editor.',
     fileBrowserTitle: 'Archivos',
     loadingFile: 'Abriendo archivo...',
     targetRequired: 'Selecciona un destino antes de guardar.',
@@ -2068,7 +2073,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     discardAction: 'Descartar',
     fallbackModeMessage:
       'El modo de editor básico está activo. La vista de sintaxis, los números de línea y el guardado siguen funcionando, pero el editor completo de CodeMirror no se cargó.',
-    fullEditorModeMessage: 'Modo de editor completo activo.',
   },
   conversationFiles: {
     title: 'Archivos y creaciones',

@@ -105,7 +105,8 @@ export const en: TranslationMap = {
     developerIntro: 'Optional tools for coding, terminals, and connected workspaces.',
     developerTools: 'Developer tools',
     terminalDescription: 'Run JavaScript or a local shell directly on this device.',
-    codeEditorDescription: 'Create and edit local scratch files without a remote connection.',
+    codeEditorDescription:
+      'Draft temporary code locally, or edit saved files from a chat or connection.',
     remoteWorkDescription: 'Connect a workspace, server, or hosted browser when you need one.',
   },
   activity: {
@@ -2042,6 +2043,7 @@ export const en: TranslationMap = {
     sshLabel: 'SSH',
     scratchLabel: 'Scratch',
     targetLabel: 'Target',
+    filePathLabel: 'File path',
     browseFiles: 'Browse',
     newFile: 'New',
     reloadFile: 'Reload',
@@ -2049,9 +2051,12 @@ export const en: TranslationMap = {
     noTargetMessage:
       'Choose an SSH or workspace target to browse and edit real files from your phone.',
     openRemoteWork: 'Open Remote Work',
-    startEditingTitle: 'This editor needs a real workflow',
+    startEditingTitle: 'Choose how you want to edit',
     startEditingMessage:
-      'Connect an SSH host or remote workspace to browse files, load them into the editor, edit them, and save them back. Without a target, this screen is only a scratch buffer.',
+      'Start a temporary scratch in this editor, or connect a workspace or SSH server to browse and save files.',
+    startScratch: 'Start temporary scratch',
+    scratchModeMessage:
+      'Temporary scratch: changes remain only until you leave this editor.',
     fileBrowserTitle: 'Files',
     loadingFile: 'Opening file...',
     targetRequired: 'Select a target before saving.',
@@ -2064,7 +2069,6 @@ export const en: TranslationMap = {
     discardAction: 'Discard',
     fallbackModeMessage:
       'Basic editor mode active. Syntax preview, line numbers, and save still work, but the full CodeMirror editor did not load.',
-    fullEditorModeMessage: 'Full editor mode active.',
   },
   conversationFiles: {
     title: 'Files & creations',
