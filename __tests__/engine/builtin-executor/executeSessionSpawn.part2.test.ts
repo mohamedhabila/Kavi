@@ -118,6 +118,33 @@ describe('Builtin Tool Executor', () => {
       expect(launchSubAgent.mock.calls[0][0].workstreamId).toBeUndefined();
     });
 
+    it('does not bind an ad hoc coordination id to the worker evidence contract', async () => {
+      const { launchSubAgent } = require('../../../src/services/agents/subAgent');
+
+      const result = await executeSessionSpawn(
+        {
+          prompt: 'Return exactly: DELEGATION PASS',
+          workstreamId: 'model-supplied-coordination-id',
+        },
+        'parent-conv-1',
+        {
+          id: 'test',
+          name: 'Test',
+          type: 'openai',
+          apiKey: 'k',
+          baseUrl: 'u',
+          model: 'gpt-5.4',
+          models: ['gpt-5.4'],
+          enabled: true,
+        },
+        undefined,
+      );
+
+      const parsed = parseCompletedToolOutcome(result);
+      expect(parsed.workstreamId).toBe('model-supplied-coordination-id');
+      expect(launchSubAgent.mock.calls[0][0].workstreamId).toBeUndefined();
+    });
+
     it('rejects non-array dependency arguments instead of preserving legacy string handling', async () => {
       const { launchSubAgent } = require('../../../src/services/agents/subAgent');
       mockChatStoreState.conversations = [

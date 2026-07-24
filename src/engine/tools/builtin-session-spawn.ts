@@ -218,7 +218,7 @@ export async function executeSessionSpawn(
       initialMessages,
       workerModel,
       agentRunId: activeRun?.id ?? agentRunId,
-      workstreamId: spawnGate.workstreamId,
+      workstreamId: workerContract.workstreamId,
       sanitizedName,
       workerTools,
       memorySelectionScope,
