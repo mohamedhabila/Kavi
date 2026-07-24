@@ -37,8 +37,24 @@ export const mockTerminalRef = {
   fit: jest.fn(),
 };
 
-export const remoteWorkTestState: { interactiveTerminalProps: any } = {
+const createTestSshSessions = () => ({
+  'ssh-session-1': {
+    id: 'ssh-session-1',
+    targetId: 'ssh-1',
+    targetName: 'Build box',
+    targetLabel: 'developer@ssh.example.com:22',
+    status: 'connected',
+    transcript: '$ pwd\n/home/user\n',
+  },
+});
+type TestSshSession = ReturnType<typeof createTestSshSessions>['ssh-session-1'];
+
+export const mockRemoteWorkTestState: {
+  interactiveTerminalProps: any;
+  sshSessions: Record<string, TestSshSession>;
+} = {
   interactiveTerminalProps: null,
+  sshSessions: createTestSshSessions(),
 };
 
 const getSettingsState = () =>
@@ -60,7 +76,7 @@ function resetSettingsState() {
 export const getRemoteWorkSettingsState = () => getSettingsState();
 export const getRemoteWorkSecureStorageMocks = () =>
   require('../../src/services/storage/SecureStorage');
-export const getInteractiveTerminalProps = () => remoteWorkTestState.interactiveTerminalProps;
+export const getInteractiveTerminalProps = () => mockRemoteWorkTestState.interactiveTerminalProps;
 export const renderRemoteWorkScreen = () => render(<RemoteWorkScreen />);
 export const confirmRemoteWorkDestructiveAlert = () =>
   require('../helpers/remoteConfigFixtures').confirmDestructiveAlert();
@@ -94,7 +110,7 @@ jest.mock('../../src/components/terminal/InteractiveTerminalSurface', () => {
   const React = require('react');
   const { View } = require('react-native');
   const InteractiveTerminalSurface = React.forwardRef((props: any, ref: any) => {
-    remoteWorkTestState.interactiveTerminalProps = props;
+    mockRemoteWorkTestState.interactiveTerminalProps = props;
     React.useImperativeHandle(ref, () => mockTerminalRef);
     return React.createElement(View, { testID: 'mock-interactive-terminal-surface' });
   });
@@ -248,16 +264,7 @@ jest.mock('../../src/services/remote/store', () => ({
 jest.mock('../../src/services/ssh/sessionStore', () => ({
   useSshSessionStore: (selector: (state: any) => any) =>
     selector({
-      sessions: {
-        'ssh-session-1': {
-          id: 'ssh-session-1',
-          targetId: 'ssh-1',
-          targetName: 'Build box',
-          targetLabel: 'developer@ssh.example.com:22',
-          status: 'connected',
-          transcript: '$ pwd\n/home/user\n',
-        },
-      },
+      sessions: mockRemoteWorkTestState.sshSessions,
       openShellSession: (...args: any[]) => mockOpenShellSession(...args),
       writeShellInput: (...args: any[]) => mockWriteShellInput(...args),
       sendShellCommand: jest.fn(),
@@ -318,7 +325,8 @@ export const setupRemoteWorkScreenTestSuite = () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetSettingsState();
-    remoteWorkTestState.interactiveTerminalProps = null;
+    mockRemoteWorkTestState.interactiveTerminalProps = null;
+    mockRemoteWorkTestState.sshSessions = createTestSshSessions();
     mockGetSecure.mockImplementation(() => new Promise(() => {}));
     mockResolveWorkspaceTargetLaunch.mockResolvedValue({
       uri: 'https://code.example.com/?folder=%2Fworkspace%2Frepo',

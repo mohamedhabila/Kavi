@@ -101,6 +101,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     advanced: '詳細設定',
     developerIntro: 'コーディング、ターミナル、接続済みワークスペース向けのオプション機能です。',
     developerTools: '開発者ツール',
+    terminalDescription: 'このデバイス上で JavaScript またはローカルシェルを実行します。',
+    codeEditorDescription: 'リモート接続なしでローカルの作業ファイルを作成・編集します。',
+    remoteWorkDescription: '必要なときにワークスペース、サーバー、ホスト型ブラウザへ接続します。',
   },
   activity: {
     intro: '対応が必要なこと、進行中のこと、各チャットで起きたことを確認できます。',
@@ -1379,6 +1382,16 @@ export const ja: TranslationMap = mergeTranslations(en, {
     summaryTitle: 'リモート実行サーフェス',
     summaryHint:
       'リモートワークスペースを起動し、接続状態を確認し、現在設定されているデスクトップ級の実行先を確認します。',
+    setupGuideTitle: '作業環境に接続',
+    setupGuideHint: '最初の接続先を1つ選んでください。ほかの接続は後から追加できます。',
+    setupWorkspaceTitle: '接続済みワークスペース',
+    setupWorkspaceHint: 'ブラウザベースの開発環境とそのファイルを開きます。',
+    setupSshTitle: 'SSH サーバー',
+    setupSshHint: '管理しているサーバーでコマンドを実行し、ファイルを操作します。',
+    setupBrowserTitle: 'ホスト型ブラウザ',
+    setupBrowserHint: 'リモートブラウザセッションを起動して確認します。',
+    setupGuideFootnote:
+      'リモート接続は任意です。ローカルのターミナルとコードエディターは、この設定なしで利用できます。',
     launchableTargets: '利用可能なワークスペース',
     sshSummary: 'SSH ターゲット',
     mcpSummary: 'MCP サーバー',

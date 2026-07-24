@@ -104,6 +104,9 @@ export const en: TranslationMap = {
     advanced: 'Advanced',
     developerIntro: 'Optional tools for coding, terminals, and connected workspaces.',
     developerTools: 'Developer tools',
+    terminalDescription: 'Run JavaScript or a local shell directly on this device.',
+    codeEditorDescription: 'Create and edit local scratch files without a remote connection.',
+    remoteWorkDescription: 'Connect a workspace, server, or hosted browser when you need one.',
   },
   activity: {
     intro: 'See what needs you, what is underway, and what happened in each chat.',
@@ -1408,6 +1411,16 @@ export const en: TranslationMap = {
     summaryTitle: 'Remote execution surfaces',
     summaryHint:
       'Launch remote workspaces, verify connectivity, and audit which desktop-class execution surfaces are configured right now.',
+    setupGuideTitle: 'Connect where your work lives',
+    setupGuideHint: 'Choose one starting point. You can add other connections later.',
+    setupWorkspaceTitle: 'Connected workspace',
+    setupWorkspaceHint: 'Open a browser-based development environment and its files.',
+    setupSshTitle: 'SSH server',
+    setupSshHint: 'Run commands and work with files on a server you control.',
+    setupBrowserTitle: 'Hosted browser',
+    setupBrowserHint: 'Launch and inspect a remote browser session.',
+    setupGuideFootnote:
+      'Remote connections are optional. The local Terminal and Code Editor work without this setup.',
     launchableTargets: 'Ready workspaces',
     sshSummary: 'SSH targets',
     mcpSummary: 'MCP servers',

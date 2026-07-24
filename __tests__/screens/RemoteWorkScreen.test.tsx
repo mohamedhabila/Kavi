@@ -1,4 +1,5 @@
 import { fireEvent, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import {
   getInteractiveTerminalProps,
@@ -7,6 +8,8 @@ import {
   mockRunExpoProjectAction,
   mockTerminalRef,
   mockWriteShellInput,
+  getRemoteWorkSettingsState,
+  mockRemoteWorkTestState,
   renderRemoteWorkScreen,
   setupRemoteWorkScreenTestSuite,
 } from './RemoteWorkScreen.testSupport';
@@ -25,6 +28,49 @@ describe('RemoteWorkScreen runtime', () => {
     expect(getAllByText('Primary Browserbase').length).toBeGreaterThan(0);
     expect(getAllByText('Expo / EAS').length).toBeGreaterThan(0);
     expect(getAllByText('Kavi').length).toBeGreaterThan(0);
+  });
+
+  it('replaces repeated zero dashboards with one guided setup journey', () => {
+    const state = getRemoteWorkSettingsState();
+    Object.assign(state, {
+      workspaceTargets: [],
+      defaultWorkspaceTargetId: null,
+      sshTargets: [],
+      browserProviders: [],
+      mcpServers: [],
+      expoAccounts: [],
+      expoProjects: [],
+    });
+    mockRemoteWorkTestState.sshSessions = {};
+
+    const { getByTestId, getByText, queryByText } = renderRemoteWorkScreen();
+
+    expect(getByTestId('remote-work-setup-guide')).toBeTruthy();
+    expect(getByText('Connect where your work lives')).toBeTruthy();
+    expect(getByText('Connected workspace')).toBeTruthy();
+    expect(getByText('SSH server')).toBeTruthy();
+    expect(getByText('Hosted browser')).toBeTruthy();
+    expect(queryByText('Remote execution surfaces')).toBeNull();
+    expect(queryByText('No remote workspaces configured')).toBeNull();
+    expect(
+      StyleSheet.flatten(getByTestId('remote-work-setup-workspace').props.style).minHeight,
+    ).toBe(76);
+
+    fireEvent.press(getByTestId('remote-work-setup-workspace'));
+    expect(getByText('Add workspace target')).toBeTruthy();
+  });
+
+  it('gives both header actions a full touch target', () => {
+    const { getByLabelText } = renderRemoteWorkScreen();
+
+    expect(StyleSheet.flatten(getByLabelText('Back').props.style)).toMatchObject({
+      minHeight: 44,
+      width: 44,
+    });
+    expect(StyleSheet.flatten(getByLabelText('Open Settings').props.style)).toMatchObject({
+      minHeight: 44,
+      width: 44,
+    });
   });
 
   it('runs an Expo build action', async () => {

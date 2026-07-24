@@ -197,7 +197,11 @@ describe('navigation hub screens', () => {
   });
 
   it('keeps developer tools reachable from their dedicated hub', () => {
-    const { getByTestId } = render(<DeveloperWorkScreen />);
+    const { getByTestId, getByText } = render(<DeveloperWorkScreen />);
+
+    expect(getByText('navigationHub.terminalDescription')).toBeTruthy();
+    expect(getByText('navigationHub.codeEditorDescription')).toBeTruthy();
+    expect(getByText('navigationHub.remoteWorkDescription')).toBeTruthy();
 
     fireEvent.press(getByTestId('developer-work-hub-terminal'));
     expect(mockNavigation.navigate).toHaveBeenLastCalledWith('Terminal', {

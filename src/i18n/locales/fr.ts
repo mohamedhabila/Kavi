@@ -104,6 +104,10 @@ export const fr: TranslationMap = mergeTranslations(en, {
     developerIntro:
       'Outils facultatifs pour le code, les terminaux et les espaces de travail connectés.',
     developerTools: 'Outils de développement',
+    terminalDescription: 'Exécutez JavaScript ou un shell local directement sur cet appareil.',
+    codeEditorDescription: 'Créez et modifiez des fichiers locaux sans connexion distante.',
+    remoteWorkDescription:
+      'Connectez un espace de travail, un serveur ou un navigateur hébergé au besoin.',
   },
   activity: {
     intro:
@@ -1411,6 +1415,17 @@ export const fr: TranslationMap = mergeTranslations(en, {
     summaryTitle: 'Surfaces d exécution distantes',
     summaryHint:
       'Lancez des workspaces distants, verifiez la connectivite et controlez quelles surfaces d execution de type bureau sont configurees actuellement.',
+    setupGuideTitle: 'Connectez votre environnement de travail',
+    setupGuideHint: 'Choisissez un point de départ. Ajoutez d’autres connexions plus tard.',
+    setupWorkspaceTitle: 'Espace de travail connecté',
+    setupWorkspaceHint:
+      'Ouvrez un environnement de développement dans le navigateur et ses fichiers.',
+    setupSshTitle: 'Serveur SSH',
+    setupSshHint: 'Exécutez des commandes et gérez les fichiers d’un serveur que vous contrôlez.',
+    setupBrowserTitle: 'Navigateur hébergé',
+    setupBrowserHint: 'Lancez et inspectez une session de navigateur distante.',
+    setupGuideFootnote:
+      'Les connexions distantes sont facultatives. Le Terminal et l’Éditeur de code fonctionnent localement sans cette configuration.',
     launchableTargets: 'Workspaces prets',
     sshSummary: 'Cibles SSH',
     mcpSummary: 'Serveurs MCP',

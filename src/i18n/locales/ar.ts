@@ -101,6 +101,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
     advanced: 'متقدم',
     developerIntro: 'أدوات اختيارية للبرمجة والطرفيات ومساحات العمل المتصلة.',
     developerTools: 'أدوات المطور',
+    terminalDescription: 'شغّل JavaScript أو صدفة محلية مباشرة على هذا الجهاز.',
+    codeEditorDescription: 'أنشئ ملفات محلية وعدّلها من دون اتصال بعيد.',
+    remoteWorkDescription: 'اتصل بمساحة عمل أو خادم أو متصفح مستضاف عند الحاجة.',
   },
   activity: {
     intro: 'اعرض ما يحتاج إلى تدخلك، وما يجري الآن، وما حدث في كل محادثة.',
@@ -1358,6 +1361,16 @@ export const ar: TranslationMap = mergeTranslations(en, {
     summaryTitle: 'أسطح التنفيذ البعيدة',
     summaryHint:
       'شغّل مساحات العمل البعيدة، وتحقق من الاتصال، وراجع أسطح التنفيذ المكتبية المهيأة حالياً.',
+    setupGuideTitle: 'اتصل بالمكان الذي يوجد فيه عملك',
+    setupGuideHint: 'اختر نقطة بداية واحدة. يمكنك إضافة اتصالات أخرى لاحقًا.',
+    setupWorkspaceTitle: 'مساحة عمل متصلة',
+    setupWorkspaceHint: 'افتح بيئة تطوير عبر المتصفح وملفاتها.',
+    setupSshTitle: 'خادم SSH',
+    setupSshHint: 'شغّل الأوامر واعمل مع الملفات على خادم تتحكم فيه.',
+    setupBrowserTitle: 'متصفح مستضاف',
+    setupBrowserHint: 'ابدأ جلسة متصفح بعيدة وافحصها.',
+    setupGuideFootnote:
+      'الاتصالات البعيدة اختيارية. تعمل الطرفية ومحرر الشفرة محليًا من دون هذا الإعداد.',
     launchableTargets: 'مساحات العمل الجاهزة',
     sshSummary: 'أهداف SSH',
     mcpSummary: 'خوادم MCP',

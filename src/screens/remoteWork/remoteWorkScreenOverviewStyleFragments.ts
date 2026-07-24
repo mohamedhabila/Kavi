@@ -22,6 +22,12 @@ export const createRemoteWorkScreenOverviewStyleFragments = (colors: AppPalette)
     color: colors.text,
     flexShrink: 1,
   },
+  headerButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    width: 44,
+  },
   content: {
     flex: 1,
   },

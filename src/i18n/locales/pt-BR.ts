@@ -102,6 +102,10 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     developerIntro:
       'Ferramentas opcionais para código, terminais e espaços de trabalho conectados.',
     developerTools: 'Ferramentas de desenvolvimento',
+    terminalDescription: 'Execute JavaScript ou um shell local diretamente neste dispositivo.',
+    codeEditorDescription: 'Crie e edite arquivos locais sem uma conexão remota.',
+    remoteWorkDescription:
+      'Conecte um espaço de trabalho, servidor ou navegador hospedado quando precisar.',
   },
   activity: {
     intro:
@@ -1394,6 +1398,16 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     summaryTitle: 'Superfícies de execução remota',
     summaryHint:
       'Inicie workspaces remotos, verifique a conectividade e revise quais superfícies de execução tipo desktop estão configuradas agora.',
+    setupGuideTitle: 'Conecte onde seu trabalho está',
+    setupGuideHint: 'Escolha um ponto de partida. Você pode adicionar outras conexões depois.',
+    setupWorkspaceTitle: 'Espaço de trabalho conectado',
+    setupWorkspaceHint: 'Abra um ambiente de desenvolvimento no navegador e seus arquivos.',
+    setupSshTitle: 'Servidor SSH',
+    setupSshHint: 'Execute comandos e trabalhe com arquivos em um servidor sob seu controle.',
+    setupBrowserTitle: 'Navegador hospedado',
+    setupBrowserHint: 'Inicie e inspecione uma sessão de navegador remota.',
+    setupGuideFootnote:
+      'Conexões remotas são opcionais. O Terminal e o Editor de código funcionam localmente sem esta configuração.',
     launchableTargets: 'Workspaces prontos',
     sshSummary: 'Alvos SSH',
     mcpSummary: 'Servidores MCP',

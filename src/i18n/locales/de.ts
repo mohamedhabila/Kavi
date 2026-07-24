@@ -103,6 +103,10 @@ export const de: TranslationMap = mergeTranslations(en, {
     advanced: 'Erweitert',
     developerIntro: 'Optionale Werkzeuge für Code, Terminals und verbundene Arbeitsbereiche.',
     developerTools: 'Entwicklerwerkzeuge',
+    terminalDescription: 'JavaScript oder eine lokale Shell direkt auf diesem Gerät ausführen.',
+    codeEditorDescription:
+      'Lokale Entwurfsdateien ohne Remote-Verbindung erstellen und bearbeiten.',
+    remoteWorkDescription: 'Bei Bedarf einen Workspace, Server oder gehosteten Browser verbinden.',
   },
   activity: {
     intro: 'Sieh, was dich braucht, was läuft und was in jedem Chat passiert ist.',
@@ -1415,6 +1419,16 @@ export const de: TranslationMap = mergeTranslations(en, {
     summaryTitle: 'Remote-Ausfuehrungsoberflaechen',
     summaryHint:
       'Starten Sie entfernte Workspaces, pruefen Sie die Konnektivitaet und kontrollieren Sie, welche desktopartigen Ausfuehrungsoberflaechen derzeit konfiguriert sind.',
+    setupGuideTitle: 'Arbeitsumgebung verbinden',
+    setupGuideHint: 'Wählen Sie einen Ausgangspunkt. Weitere Verbindungen können später folgen.',
+    setupWorkspaceTitle: 'Verbundener Workspace',
+    setupWorkspaceHint: 'Eine browserbasierte Entwicklungsumgebung und ihre Dateien öffnen.',
+    setupSshTitle: 'SSH-Server',
+    setupSshHint: 'Befehle ausführen und mit Dateien auf einem eigenen Server arbeiten.',
+    setupBrowserTitle: 'Gehosteter Browser',
+    setupBrowserHint: 'Eine Remote-Browsersitzung starten und prüfen.',
+    setupGuideFootnote:
+      'Remote-Verbindungen sind optional. Terminal und Code-Editor funktionieren lokal ohne diese Einrichtung.',
     launchableTargets: 'Bereite Workspaces',
     sshSummary: 'SSH-Ziele',
     mcpSummary: 'MCP-Server',

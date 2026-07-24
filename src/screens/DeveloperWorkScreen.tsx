@@ -19,18 +19,21 @@ export const DeveloperWorkScreen: React.FC = () => {
         {
           id: 'terminal',
           title: t('nav.terminal'),
+          description: t('navigationHub.terminalDescription'),
           icon: Terminal,
           onPress: () => navigation.navigate('Terminal', { returnTo: { name: 'DeveloperWork' } }),
         },
         {
           id: 'code-editor',
           title: t('nav.codeEditor'),
+          description: t('navigationHub.codeEditorDescription'),
           icon: FileCode,
           onPress: () => navigation.navigate('CodeEditor', { returnTo: { name: 'DeveloperWork' } }),
         },
         {
           id: 'remote-work',
           title: t('nav.remoteWork'),
+          description: t('navigationHub.remoteWorkDescription'),
           icon: Monitor,
           onPress: () => navigation.navigate('RemoteWork', { returnTo: { name: 'DeveloperWork' } }),
         },

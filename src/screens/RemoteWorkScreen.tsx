@@ -48,6 +48,7 @@ import { useRemoteWorkSummaryCards } from './remoteWork/useRemoteWorkSummaryCard
 import { useRemoteWorkRuntimeActions } from './remoteWork/useRemoteWorkRuntimeActions';
 import { useRemoteWorkSshSessionFlow } from './remoteWork/useRemoteWorkSshSessionFlow';
 import { createRemoteWorkScreenStyles } from './remoteWork/remoteWorkScreenStyles';
+import { RemoteWorkSetupGuide } from './remoteWork/RemoteWorkSetupGuide';
 
 // Lazy-load WebView to prevent crash when the native module is missing
 let WebView: any = null;
@@ -104,6 +105,16 @@ const RemoteWorkScreenInner: React.FC = () => {
   const sshSessions = useMemo(() => Object.values(sshSessionMap), [sshSessionMap]);
   const remoteJobs = useMemo(() => Object.values(remoteJobsById), [remoteJobsById]);
   const remoteSessions = useMemo(() => Object.values(remoteSessionsById), [remoteSessionsById]);
+  const isRemoteWorkUnconfigured =
+    workspaceTargets.length === 0 &&
+    sshTargets.length === 0 &&
+    browserProviders.length === 0 &&
+    mcpServers.length === 0 &&
+    expoAccounts.length === 0 &&
+    expoProjects.length === 0 &&
+    sshSessions.length === 0 &&
+    remoteJobs.length === 0 &&
+    remoteSessions.length === 0;
   const [mcpStatuses, setMcpStatuses] = useState<McpServerStatus[]>(() =>
     mcpManager.getAllStatuses(),
   );
@@ -252,6 +263,7 @@ const RemoteWorkScreenInner: React.FC = () => {
           onPress={handleBack}
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
+          style={styles.headerButton}
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
@@ -265,6 +277,7 @@ const RemoteWorkScreenInner: React.FC = () => {
           }
           accessibilityRole="button"
           accessibilityLabel={t('remoteWork.openSettings')}
+          style={styles.headerButton}
         >
           <ShieldCheck size={22} color={colors.primary} />
         </TouchableOpacity>
@@ -275,173 +288,183 @@ const RemoteWorkScreenInner: React.FC = () => {
         style={styles.content}
         contentContainerStyle={styles.contentInner}
       >
-        <View style={[styles.infoCard, styles.heroCard, isTablet ? styles.heroCardWide : null]}>
-          <View style={styles.heroCopy}>
-            <Text style={styles.infoTitle}>{t('remoteWork.summaryTitle')}</Text>
-            <Text style={styles.infoText}>{t('remoteWork.summaryHint')}</Text>
-          </View>
-          <View style={styles.heroStats}>
-            <View style={styles.heroStatPill}>
-              <Text style={styles.heroStatValue}>
-                {commandCenter.readyCounts.workspace +
-                  commandCenter.readyCounts.ssh +
-                  commandCenter.readyCounts.browser}
-              </Text>
-              <Text style={styles.heroStatLabel}>{t('remoteWork.launchableSurfacesStat')}</Text>
-            </View>
-            <View style={styles.heroStatPillMuted}>
-              <Text style={styles.heroStatValueMuted}>
-                {trackedRemoteSessions.filter((session) => session.status !== 'closed').length}
-              </Text>
-              <Text style={styles.heroStatLabel}>{t('remoteWork.liveSessionsStat')}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.summaryGrid}>
-          {summaryCards.map((card) => {
-            const Icon = card.icon;
-            const selected = activeConfigSurface === card.key;
-
-            return (
-              <TouchableOpacity
-                key={card.key}
-                style={styles.surfaceOverviewCard}
-                onPress={() => setActiveConfigSurface(card.key as typeof activeConfigSurface)}
-                accessibilityRole="button"
-                accessibilityLabel={card.title}
-              >
-                <View style={styles.surfaceOverviewCopy}>
-                  <Text style={styles.targetTitle}>{card.title}</Text>
-                  <Text style={styles.targetSubtitle}>{card.value}</Text>
-                </View>
-                <View style={styles.surfaceOverviewStatPill}>
-                  <Icon size={16} color={colors.primary} />
-                  <Text style={styles.surfaceOverviewLabel}>
-                    {selected ? t('remoteWork.editSettings') : t('remoteWork.openSettings')}
+        {isRemoteWorkUnconfigured ? (
+          <RemoteWorkSetupGuide
+            onCreateBrowser={handleCreateBrowser}
+            onCreateSsh={handleCreateSsh}
+            onCreateWorkspace={handleCreateWorkspace}
+          />
+        ) : (
+          <>
+            <View style={[styles.infoCard, styles.heroCard, isTablet ? styles.heroCardWide : null]}>
+              <View style={styles.heroCopy}>
+                <Text style={styles.infoTitle}>{t('remoteWork.summaryTitle')}</Text>
+                <Text style={styles.infoText}>{t('remoteWork.summaryHint')}</Text>
+              </View>
+              <View style={styles.heroStats}>
+                <View style={styles.heroStatPill}>
+                  <Text style={styles.heroStatValue}>
+                    {commandCenter.readyCounts.workspace +
+                      commandCenter.readyCounts.ssh +
+                      commandCenter.readyCounts.browser}
                   </Text>
+                  <Text style={styles.heroStatLabel}>{t('remoteWork.launchableSurfacesStat')}</Text>
                 </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                <View style={styles.heroStatPillMuted}>
+                  <Text style={styles.heroStatValueMuted}>
+                    {trackedRemoteSessions.filter((session) => session.status !== 'closed').length}
+                  </Text>
+                  <Text style={styles.heroStatLabel}>{t('remoteWork.liveSessionsStat')}</Text>
+                </View>
+              </View>
+            </View>
 
-        <View style={styles.infoCard}>
-          <View style={styles.surfaceOverviewCopy}>
-            <Text style={styles.targetTitle}>{activeConfigSurfaceCard.title}</Text>
-            <Text style={styles.targetSubtitle}>{activeConfigSurfaceCard.hint}</Text>
-          </View>
-          <View style={styles.surfaceOverviewStatPill}>
-            <Text style={styles.surfaceOverviewValue}>{activeConfigSurfaceCard.value}</Text>
-            <Text style={styles.surfaceOverviewLabel}>{t('settings.configured')}</Text>
-          </View>
-          <View style={styles.configActionRow}>
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={activeConfigSurfaceCard.onPress}
-              accessibilityRole="button"
-              accessibilityLabel={activeConfigSurfaceCard.actionLabel}
-            >
-              <Text style={styles.primaryBtnText}>{activeConfigSurfaceCard.actionLabel}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <RemoteWorkWorkspaceHubSection
-          colors={colors}
-          styles={styles}
-          t={t}
-          isWide={isWide}
-          workspaceTargets={workspaceTargets}
-          workspaceReadyCount={workspaceReadyCount}
-          workspaceNeedsSetupCount={workspaceNeedsSetupCount}
-          workspaceDisabledCount={workspaceDisabledCount}
-          selectedWorkspaceTarget={selectedWorkspaceTarget || undefined}
-          selectedWorkspaceReadiness={selectedWorkspaceReadiness}
-          selectedWorkspaceControlStatus={selectedWorkspaceControlStatus}
-          selectedWorkspaceCheckPending={selectedWorkspaceCheckPending}
-          selectedWorkspaceProbe={selectedWorkspaceProbe}
-          workspaceProbeResults={workspaceProbeResults}
-          handleCreateWorkspace={handleCreateWorkspace}
-          setSelectedWorkspaceId={setSelectedWorkspaceId}
-          isWorkspaceControlReady={isWorkspaceControlReady}
-          getWorkspaceTargetDisplayName={getWorkspaceTargetDisplayName}
-          getLocalizedWorkspaceProviderLabel={getLocalizedWorkspaceProviderLabel}
-          getWorkspaceReadinessLabel={getWorkspaceReadinessLabel}
-          getWorkspaceAuthModeLabel={getWorkspaceAuthModeLabel}
-          getWorkspaceBrowserProviderName={getWorkspaceBrowserProviderName}
-          getWorkspaceAiHandoffSummary={getWorkspaceAiHandoffSummary}
-          handleOpenWorkspace={handleOpenWorkspace}
-          handleProbeWorkspace={handleProbeWorkspace}
-          handleEditWorkspaceConfig={handleEditWorkspaceConfig}
-        />
-        <RemoteWorkInfrastructureTargetsSection
-          colors={colors}
-          styles={styles}
-          t={t}
-          mcpTargets={mcpTargets}
-          mcpServers={mcpServers}
-          sshTargets={sshTargets}
-          sshSessions={sshSessions}
-          browserProviders={browserProviders}
-          trackedRemoteSessions={trackedRemoteSessions}
-          sshProbeResults={sshProbeResults}
-          browserProbeResults={browserProbeResults}
-          pendingSshChecks={pendingSshChecks}
-          pendingBrowserChecks={pendingBrowserChecks}
-          pendingBrowserLaunches={pendingBrowserLaunches}
-          activeSshSessionId={activeSshSessionId}
-          openingShellTargetId={openingShellTargetId}
-          activeBrowserSession={activeBrowserSession}
-          getSshTargetReadiness={getSshTargetReadiness}
-          getSshTargetLabel={getSshTargetLabel}
-          getSshReadinessLabel={getSshReadinessLabel}
-          getSshTargetAuthModeLabel={getSshTargetAuthModeLabel}
-          getSshHostKeyPolicyLabel={getSshHostKeyPolicyLabel}
-          getBrowserProviderReadiness={getBrowserProviderReadiness}
-          getBrowserProviderLabel={getBrowserProviderLabel}
-          getBrowserReadinessLabel={getBrowserReadinessLabel}
-          handleCreateMcp={handleCreateMcp}
-          handleEditMcpConfig={handleEditMcpConfig}
-          handleCreateSsh={handleCreateSsh}
-          handleOpenShell={handleOpenShell}
-          handleProbeSsh={handleProbeSsh}
-          handleEditSshConfig={handleEditSshConfig}
-          handleCreateBrowser={handleCreateBrowser}
-          handleLaunchBrowser={handleLaunchBrowser}
-          handleProbeBrowser={handleProbeBrowser}
-          handleEditBrowserConfig={handleEditBrowserConfig}
-        />
+            <View style={styles.summaryGrid}>
+              {summaryCards.map((card) => {
+                const Icon = card.icon;
+                const selected = activeConfigSurface === card.key;
 
-        <RemoteWorkExpoTargetsSection
-          colors={colors}
-          styles={styles}
-          t={t}
-          expoProjects={expoProjects}
-          expoAccounts={expoAccounts}
-          sshTargets={sshTargets}
-          expoProbeResults={expoProbeResults}
-          pendingExpoChecks={pendingExpoChecks}
-          pendingExpoActions={pendingExpoActions}
-          handleCreateExpo={handleCreateExpo}
-          handleSyncExpoAccount={handleSyncExpoAccount}
-          handleRunExpoAction={handleRunExpoAction}
-          handleProbeExpo={handleProbeExpo}
-          handleEditExpoProject={handleEditExpoProject}
-        />
-        <RemoteWorkSessionsSection
-          colors={colors}
-          styles={styles}
-          t={t}
-          trackedRemoteSessions={trackedRemoteSessions}
-          setActiveBrowserSession={setActiveBrowserSession}
-          handleStopBrowser={handleStopBrowser}
-        />
-        <RemoteWorkJobsSection
-          colors={colors}
-          styles={styles}
-          t={t}
-          trackedRemoteJobs={trackedRemoteJobs}
-        />
+                return (
+                  <TouchableOpacity
+                    key={card.key}
+                    style={styles.surfaceOverviewCard}
+                    onPress={() => setActiveConfigSurface(card.key as typeof activeConfigSurface)}
+                    accessibilityRole="button"
+                    accessibilityLabel={card.title}
+                  >
+                    <View style={styles.surfaceOverviewCopy}>
+                      <Text style={styles.targetTitle}>{card.title}</Text>
+                      <Text style={styles.targetSubtitle}>{card.value}</Text>
+                    </View>
+                    <View style={styles.surfaceOverviewStatPill}>
+                      <Icon size={16} color={colors.primary} />
+                      <Text style={styles.surfaceOverviewLabel}>
+                        {selected ? t('remoteWork.editSettings') : t('remoteWork.openSettings')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.infoCard}>
+              <View style={styles.surfaceOverviewCopy}>
+                <Text style={styles.targetTitle}>{activeConfigSurfaceCard.title}</Text>
+                <Text style={styles.targetSubtitle}>{activeConfigSurfaceCard.hint}</Text>
+              </View>
+              <View style={styles.surfaceOverviewStatPill}>
+                <Text style={styles.surfaceOverviewValue}>{activeConfigSurfaceCard.value}</Text>
+                <Text style={styles.surfaceOverviewLabel}>{t('settings.configured')}</Text>
+              </View>
+              <View style={styles.configActionRow}>
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={activeConfigSurfaceCard.onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={activeConfigSurfaceCard.actionLabel}
+                >
+                  <Text style={styles.primaryBtnText}>{activeConfigSurfaceCard.actionLabel}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <RemoteWorkWorkspaceHubSection
+              colors={colors}
+              styles={styles}
+              t={t}
+              isWide={isWide}
+              workspaceTargets={workspaceTargets}
+              workspaceReadyCount={workspaceReadyCount}
+              workspaceNeedsSetupCount={workspaceNeedsSetupCount}
+              workspaceDisabledCount={workspaceDisabledCount}
+              selectedWorkspaceTarget={selectedWorkspaceTarget || undefined}
+              selectedWorkspaceReadiness={selectedWorkspaceReadiness}
+              selectedWorkspaceControlStatus={selectedWorkspaceControlStatus}
+              selectedWorkspaceCheckPending={selectedWorkspaceCheckPending}
+              selectedWorkspaceProbe={selectedWorkspaceProbe}
+              workspaceProbeResults={workspaceProbeResults}
+              handleCreateWorkspace={handleCreateWorkspace}
+              setSelectedWorkspaceId={setSelectedWorkspaceId}
+              isWorkspaceControlReady={isWorkspaceControlReady}
+              getWorkspaceTargetDisplayName={getWorkspaceTargetDisplayName}
+              getLocalizedWorkspaceProviderLabel={getLocalizedWorkspaceProviderLabel}
+              getWorkspaceReadinessLabel={getWorkspaceReadinessLabel}
+              getWorkspaceAuthModeLabel={getWorkspaceAuthModeLabel}
+              getWorkspaceBrowserProviderName={getWorkspaceBrowserProviderName}
+              getWorkspaceAiHandoffSummary={getWorkspaceAiHandoffSummary}
+              handleOpenWorkspace={handleOpenWorkspace}
+              handleProbeWorkspace={handleProbeWorkspace}
+              handleEditWorkspaceConfig={handleEditWorkspaceConfig}
+            />
+            <RemoteWorkInfrastructureTargetsSection
+              colors={colors}
+              styles={styles}
+              t={t}
+              mcpTargets={mcpTargets}
+              mcpServers={mcpServers}
+              sshTargets={sshTargets}
+              sshSessions={sshSessions}
+              browserProviders={browserProviders}
+              trackedRemoteSessions={trackedRemoteSessions}
+              sshProbeResults={sshProbeResults}
+              browserProbeResults={browserProbeResults}
+              pendingSshChecks={pendingSshChecks}
+              pendingBrowserChecks={pendingBrowserChecks}
+              pendingBrowserLaunches={pendingBrowserLaunches}
+              activeSshSessionId={activeSshSessionId}
+              openingShellTargetId={openingShellTargetId}
+              activeBrowserSession={activeBrowserSession}
+              getSshTargetReadiness={getSshTargetReadiness}
+              getSshTargetLabel={getSshTargetLabel}
+              getSshReadinessLabel={getSshReadinessLabel}
+              getSshTargetAuthModeLabel={getSshTargetAuthModeLabel}
+              getSshHostKeyPolicyLabel={getSshHostKeyPolicyLabel}
+              getBrowserProviderReadiness={getBrowserProviderReadiness}
+              getBrowserProviderLabel={getBrowserProviderLabel}
+              getBrowserReadinessLabel={getBrowserReadinessLabel}
+              handleCreateMcp={handleCreateMcp}
+              handleEditMcpConfig={handleEditMcpConfig}
+              handleCreateSsh={handleCreateSsh}
+              handleOpenShell={handleOpenShell}
+              handleProbeSsh={handleProbeSsh}
+              handleEditSshConfig={handleEditSshConfig}
+              handleCreateBrowser={handleCreateBrowser}
+              handleLaunchBrowser={handleLaunchBrowser}
+              handleProbeBrowser={handleProbeBrowser}
+              handleEditBrowserConfig={handleEditBrowserConfig}
+            />
+
+            <RemoteWorkExpoTargetsSection
+              colors={colors}
+              styles={styles}
+              t={t}
+              expoProjects={expoProjects}
+              expoAccounts={expoAccounts}
+              sshTargets={sshTargets}
+              expoProbeResults={expoProbeResults}
+              pendingExpoChecks={pendingExpoChecks}
+              pendingExpoActions={pendingExpoActions}
+              handleCreateExpo={handleCreateExpo}
+              handleSyncExpoAccount={handleSyncExpoAccount}
+              handleRunExpoAction={handleRunExpoAction}
+              handleProbeExpo={handleProbeExpo}
+              handleEditExpoProject={handleEditExpoProject}
+            />
+            <RemoteWorkSessionsSection
+              colors={colors}
+              styles={styles}
+              t={t}
+              trackedRemoteSessions={trackedRemoteSessions}
+              setActiveBrowserSession={setActiveBrowserSession}
+              handleStopBrowser={handleStopBrowser}
+            />
+            <RemoteWorkJobsSection
+              colors={colors}
+              styles={styles}
+              t={t}
+              trackedRemoteJobs={trackedRemoteJobs}
+            />
+          </>
+        )}
       </ScrollView>
 
       <RemoteWorkConfigModals
