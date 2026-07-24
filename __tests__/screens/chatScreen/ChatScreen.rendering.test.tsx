@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import {
   act,
   fireEvent,
@@ -256,12 +257,14 @@ describe('ChatScreen rendering and layout', () => {
     expect(mockSetParams).toHaveBeenCalledWith({ preparedDraft: undefined });
   });
 
-  it('relies on native keyboard behavior for the chat body', () => {
+  it('keeps transcript actions tappable while the composer has focus', () => {
     const { UNSAFE_getByType, queryByTestId } = render(<ChatScreen />);
+    const messageList = UNSAFE_getByType(FlatList);
 
     expect(queryByTestId('chat-composer-keyboard-avoider')).toBeNull();
-    expect(UNSAFE_getByType(FlatList).props.keyboardShouldPersistTaps).toBeUndefined();
-    expect(UNSAFE_getByType(FlatList).props.keyboardDismissMode).toBeUndefined();
+    expect(messageList.props.disableScrollViewPanResponder).toBe(Platform.OS === 'ios');
+    expect(messageList.props.keyboardShouldPersistTaps).toBe('always');
+    expect(messageList.props.keyboardDismissMode).toBeUndefined();
   });
 
   it('mounts only the recent transcript window and expands earlier history on demand', () => {

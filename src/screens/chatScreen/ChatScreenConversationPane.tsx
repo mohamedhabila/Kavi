@@ -269,6 +269,10 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
         updateCellsBatchingPeriod={32}
         initialNumToRender={10}
         windowSize={7}
+        // iOS can retain ScrollView's JS responder after programmatic follow-scrolls,
+        // swallowing presses on transcript controls. UIKit still owns native pan scrolling.
+        disableScrollViewPanResponder={Platform.OS === 'ios'}
+        keyboardShouldPersistTaps="always"
         removeClippedSubviews={Platform.OS === 'android'}
         maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
         onLayout={handleListLayout}
