@@ -91,9 +91,10 @@ export function useLatestActivityPrompt(params: UseLatestActivityPromptParams) {
 
   const handleJumpToLatest = useCallback(() => {
     setHasNewLatestActivity(false);
+    shouldAutoFollowRef.current = true;
     forceNextScrollRef.current = true;
     scrollToBottom(true);
-  }, [forceNextScrollRef, scrollToBottom]);
+  }, [forceNextScrollRef, scrollToBottom, shouldAutoFollowRef]);
 
   return {
     handleJumpToLatest,

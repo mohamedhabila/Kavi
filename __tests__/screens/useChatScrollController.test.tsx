@@ -74,6 +74,26 @@ describe('useChatScrollController', () => {
     expect(scrollToEnd).not.toHaveBeenCalled();
   });
 
+  it('keeps following while streamed content grows without a user gesture', () => {
+    const { result, scrollToEnd } = renderController();
+
+    act(() => {
+      result.current.listMetricsRef.current = {
+        contentHeight: 1_800,
+        layoutHeight: 600,
+        offsetY: 400,
+      };
+      result.current.updateAutoFollowState();
+      result.current.maybeScrollToBottom(false);
+    });
+
+    expect(result.current.shouldAutoFollowRef.current).toBe(true);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+
+    act(() => flushFrame());
+    expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+  });
+
   it('resumes automatic following only when a gesture ends near the latest content', () => {
     const { result, scrollToEnd } = renderController();
 

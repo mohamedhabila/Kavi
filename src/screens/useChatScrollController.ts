@@ -37,6 +37,14 @@ export function useChatScrollController({
   const pendingScrollAnimatedRef = useRef(false);
 
   const updateAutoFollowState = useCallback(() => {
+    // Content growth and layout changes can temporarily move the measured
+    // viewport away from the bottom before the queued scroll-to-end runs.
+    // Only a real user gesture may revoke follow mode; otherwise a streaming
+    // response can strand the reader above its latest content.
+    if (!isUserInteractingRef.current) {
+      return;
+    }
+
     const { contentHeight, layoutHeight, offsetY } = listMetricsRef.current;
     if (layoutHeight <= 0) {
       shouldAutoFollowRef.current = true;
@@ -106,8 +114,8 @@ export function useChatScrollController({
 
   const handleUserScrollEnd = useCallback(() => {
     clearInteractionReleaseTimer();
-    isUserInteractingRef.current = false;
     updateAutoFollowState();
+    isUserInteractingRef.current = false;
 
     if (shouldAutoFollowRef.current) {
       maybeScrollToBottom(false);
