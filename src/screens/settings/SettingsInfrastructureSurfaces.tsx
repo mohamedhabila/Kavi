@@ -34,6 +34,7 @@ type SettingsInfrastructureSurfacesProps = {
   handleEditWorkspace: (target: WorkspaceTargetConfig) => void;
   handleNewBrowserProvider: () => void;
   handleEditBrowserProvider: (provider: BrowserProviderConfig) => void;
+  showBrowserProviders?: boolean;
 };
 
 export const SettingsInfrastructureSurfaces: React.FC<SettingsInfrastructureSurfacesProps> = ({
@@ -52,6 +53,7 @@ export const SettingsInfrastructureSurfaces: React.FC<SettingsInfrastructureSurf
   handleEditWorkspace,
   handleNewBrowserProvider,
   handleEditBrowserProvider,
+  showBrowserProviders = true,
 }) => (
   <>
     <View style={styles.sectionHeader}>
@@ -148,14 +150,16 @@ export const SettingsInfrastructureSurfaces: React.FC<SettingsInfrastructureSurf
       <Text style={styles.emptyText}>{t('settings.noWorkspaceTargets')}</Text>
     ) : null}
 
-    <SettingsBrowserSurfaces
-      browserProviders={browserProviders}
-      colors={colors}
-      getBrowserProviderAuthLabel={getBrowserProviderAuthLabel}
-      handleEditBrowserProvider={handleEditBrowserProvider}
-      handleNewBrowserProvider={handleNewBrowserProvider}
-      styles={styles}
-      t={t}
-    />
+    {showBrowserProviders ? (
+      <SettingsBrowserSurfaces
+        browserProviders={browserProviders}
+        colors={colors}
+        getBrowserProviderAuthLabel={getBrowserProviderAuthLabel}
+        handleEditBrowserProvider={handleEditBrowserProvider}
+        handleNewBrowserProvider={handleNewBrowserProvider}
+        styles={styles}
+        t={t}
+      />
+    ) : null}
   </>
 );

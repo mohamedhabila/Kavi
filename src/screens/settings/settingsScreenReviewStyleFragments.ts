@@ -112,30 +112,4 @@ export const createSettingsScreenReviewStyleFragments = (colors: AppPalette) => 
     minWidth: 20,
     textAlign: 'center',
   },
-  quickSetupGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  quickSetupChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  quickSetupChipActive: {
-    borderColor: colors.success,
-    backgroundColor: colors.surface,
-  },
-  quickSetupLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.textTertiary,
-  },
 });

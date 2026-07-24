@@ -26,7 +26,7 @@ type SettingsPersonasSectionProps = {
   colors: AppPalette;
   styles: StyleMap;
   t: TranslationFn;
-  onLayout: (event: any) => void;
+  onLayout?: (event: any) => void;
   expandedPersonas: boolean;
   togglePersonas: () => void;
   personas: AgentPersona[];

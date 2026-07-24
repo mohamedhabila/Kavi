@@ -19,8 +19,8 @@ type SettingsAssistantSectionProps = {
   localeDisplayNames: Record<string, string>;
   maxLinks: number;
   mediaUnderstandingEnabled: boolean;
-  mode?: 'all' | 'assistant' | 'appearance';
-  onLayout: (event: any) => void;
+  mode: 'assistant' | 'appearance';
+  onLayout?: (event: any) => void;
   setDefaultConversationMode: (value: 'agentic' | 'chitchat') => void;
   setLinkUnderstandingEnabled: (value: boolean) => void;
   setMaxLinks: (value: number) => void;
@@ -48,7 +48,7 @@ export const SettingsAssistantSection: React.FC<SettingsAssistantSectionProps> =
   localeDisplayNames,
   maxLinks,
   mediaUnderstandingEnabled,
-  mode = 'all',
+  mode,
   onLayout,
   setDefaultConversationMode,
   setLinkUnderstandingEnabled,
@@ -70,15 +70,11 @@ export const SettingsAssistantSection: React.FC<SettingsAssistantSectionProps> =
   const titleKey =
     mode === 'assistant'
       ? 'settings.destinations.assistantPersonalization.title'
-      : mode === 'appearance'
-        ? 'settings.destinations.appearanceLanguage.title'
-        : 'settings.mainSections.assistant.title';
+      : 'settings.destinations.appearanceLanguage.title';
   const hintKey =
     mode === 'assistant'
       ? 'settings.destinations.assistantPersonalization.hint'
-      : mode === 'appearance'
-        ? 'settings.destinations.appearanceLanguage.hint'
-        : 'settings.mainSections.assistant.hint';
+      : 'settings.destinations.appearanceLanguage.hint';
 
   return (
     <View style={styles.sectionCard} onLayout={onLayout}>

@@ -441,9 +441,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     mcpResetOAuthSession: 'إعادة تعيين جلسة OAuth',
     mcpResetOAuthSessionConfirm: 'هل تريد مسح رموز OAuth المخزنة لهذا الخادم MCP؟',
     mcpResetOAuthSessionSuccess: 'تم مسح جلسة OAuth.',
-    executionSurfaces: 'أسطح التنفيذ',
-    executionSurfacesHint:
-      'هيّئ مضيفات SSH البعيدة وجذور مساحات العمل حتى تتمكن المهارات المعتمدة على سطح المكتب من التوجيه إلى وجهة فعلية.',
     sshTargets: 'أهداف SSH',
     addSshTarget: 'إضافة هدف SSH',
     editSshTarget: 'تحرير هدف SSH',
@@ -563,9 +560,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     deleteBrowserProviderConfirm: 'إزالة موفر المتصفح هذا؟',
     noBrowserProviders: 'لا يوجد موفرو متصفح مهيؤون.',
     quickSetupTitle: 'الإعداد السريع',
-    quickSetupHint: 'ابدأ بالأساسيات ثم انتقل مباشرة إلى القسم الذي تحتاجه دون أن تفقد موضعك.',
-    quickSetupAction: '{name}: تم تكوين {count}، {status}',
-    quickSetupExpo: 'Expo / EAS',
     configured: 'تم التكوين',
     needsSetup: 'يحتاج إلى إعداد',
     destinations: {
@@ -803,29 +797,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
       },
     },
     mainSections: {
-      overview: {
-        title: 'نظرة عامة',
-        hint: 'اعرف ما هو جاهز وانتقل مباشرة إلى الجزء الذي تريد تكوينه.',
-      },
-      assistant: {
-        title: 'المساعد',
-        hint: 'المظهر، واللغة، وسلوك المساعد، والاستدلال.',
-      },
-      tools: {
-        title: 'الأدوات',
-        hint: 'البحث، ومفاتيح الخدمات، والقدرات المدمجة، وعناصر التحكم في الأذونات.',
-      },
       personas: {
         title: 'الشخصيات',
         hint: 'عدّل تعليمات الشخصيات، والتجاوزات، وأسلوب الاستدلال.',
-      },
-      surfaces: {
-        title: 'الأسطح',
-        hint: 'هيئ SSH، ومساحات العمل البعيدة، والمتصفحات، وExpo، والمزوّدين، وخوادم MCP.',
-      },
-      data: {
-        title: 'البيانات',
-        hint: 'الإجراءات المدمرة وتنظيف المحادثات.',
       },
     },
     toolGroups: {

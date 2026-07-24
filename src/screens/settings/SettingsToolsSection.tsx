@@ -48,7 +48,7 @@ type SettingsToolsSectionProps = {
   colors: AppPalette;
   styles: StyleMap;
   t: TranslationFn;
-  onLayout: (event: any) => void;
+  onLayout?: (event: any) => void;
   webSearchProvider: WebSearchProvider;
   setWebSearchProvider: (value: WebSearchProvider) => void;
   webSearchProviderOptions: Array<{ value: WebSearchProvider; label: string; detail: string }>;
@@ -66,7 +66,6 @@ type SettingsToolsSectionProps = {
   expandedGroups: Set<string>;
   toggleGroup: (groupId: string) => void;
   setToolPermission: (toolName: string, allowed: boolean) => void;
-  mode?: 'all' | 'focused';
 };
 
 export const SettingsToolsSection: React.FC<SettingsToolsSectionProps> = ({
@@ -92,24 +91,15 @@ export const SettingsToolsSection: React.FC<SettingsToolsSectionProps> = ({
   expandedGroups,
   toggleGroup,
   setToolPermission,
-  mode = 'all',
 }) => {
   return (
     <View style={styles.sectionCard} onLayout={onLayout}>
       <View style={styles.sectionCardHeader}>
         <Text style={styles.sectionCardTitle}>
-          {t(
-            mode === 'focused'
-              ? 'settings.destinations.toolsPermissions.title'
-              : 'settings.mainSections.tools.title',
-          )}
+          {t('settings.destinations.toolsPermissions.title')}
         </Text>
         <Text style={styles.sectionCardHint}>
-          {t(
-            mode === 'focused'
-              ? 'settings.destinations.toolsPermissions.hint'
-              : 'settings.mainSections.tools.hint',
-          )}
+          {t('settings.destinations.toolsPermissions.hint')}
         </Text>
       </View>
 

@@ -10,7 +10,6 @@ import { ArrowLeft } from 'lucide-react-native';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { SettingsAssistantSection } from './settings/SettingsAssistantSection';
 import { SettingsDataSection } from './settings/SettingsDataSection';
-import { SettingsOverviewSection } from './settings/SettingsOverviewSection';
 import { SettingsPersonasSection } from './settings/SettingsPersonasSection';
 import { SettingsSurfacesSection } from './settings/SettingsSurfacesSection';
 import { SettingsToolsSection } from './settings/SettingsToolsSection';
@@ -46,10 +45,7 @@ import {
   type SettingsSection,
 } from './settings/useSettingsRemoteConfigFlow';
 import { useSettingsProviderFlow } from './settings/useSettingsProviderFlow';
-import {
-  useSettingsSectionNavigation,
-  type MainSettingsSectionId,
-} from './settings/useSettingsSectionNavigation';
+import { useSettingsSectionNavigation } from './settings/useSettingsSectionNavigation';
 import { useSettingsPersonaFlow } from './settings/useSettingsPersonaFlow';
 import { useSettingsToolsFlow } from './settings/useSettingsToolsFlow';
 import { useSettingsThinkingAndLocale } from './settings/useSettingsThinkingAndLocale';
@@ -274,21 +270,15 @@ export const SettingsScreen: React.FC = () => {
   const [expandedPanels, setExpandedPanels] = useState({
     toolPermissions: true,
     personas: true,
-    executionSurfaces: true,
   });
   const {
-    activeMainSection,
     mainScrollRef,
     editorScrollRef,
-    mainSectionOffsetsRef,
-    mainSections,
     updateTrackedScroll,
     restoreTrackedScroll,
-    handleJumpToMainSection,
   } = useSettingsSectionNavigation({
-    mainContentKey: destination ?? 'legacy',
+    mainContentKey: destination,
     section,
-    t,
   });
   useSettingsRemoteConfigDraftHydration({
     section,
@@ -335,12 +325,6 @@ export const SettingsScreen: React.FC = () => {
     [navigation, route.params?.returnTo],
   );
 
-  const handleOpenDeveloperWork = useCallback(() => {
-    navigation.navigate('DeveloperWork', {
-      returnTo: { name: 'Settings', params: { destination: 'home' } },
-    });
-  }, [navigation]);
-
   const handleOpenVoice = useCallback(() => {
     navigation.navigate('Voice', {
       returnTo: {
@@ -364,17 +348,13 @@ export const SettingsScreen: React.FC = () => {
       Array.from(permissionStateByTool.values()).filter((permission) => !permission.allowed).length,
     [permissionStateByTool],
   );
-  const settingsTitle = destination
-    ? t(getSettingsDestinationTitleKey(destination))
-    : t('settings.title');
+  const settingsTitle = t(getSettingsDestinationTitleKey(destination));
   const themeLabel =
     theme === 'light'
       ? t('settings.light')
       : theme === 'dark'
         ? t('settings.dark')
         : t('settings.system');
-  const showLegacySettings = destination === null;
-
   // --- Provider Edit Section ---
   if (section === 'provider-edit' && editingProvider) {
     return (
@@ -449,7 +429,6 @@ export const SettingsScreen: React.FC = () => {
                 localeLabel={LOCALE_DISPLAY_NAMES[locale]}
                 memoryEnabled={!disableLongTermMemory}
                 onOpenDestination={handleOpenDestination}
-                onOpenDeveloperWork={handleOpenDeveloperWork}
                 providersCount={providers.length}
                 remoteTargetsCount={
                   sshTargets.length + workspaceTargets.length + expoProjects.length
@@ -459,53 +438,12 @@ export const SettingsScreen: React.FC = () => {
               />
             ) : null}
 
-            {showLegacySettings ? (
-              <SettingsOverviewSection
-                colors={colors}
-                styles={styles}
-                t={t}
-                onLayout={(event) => {
-                  mainSectionOffsetsRef.current.overview = event.nativeEvent.layout.y;
-                }}
-                mainSections={mainSections}
-                activeMainSection={activeMainSection}
-                handleJumpToMainSection={(sectionId) =>
-                  handleJumpToMainSection(sectionId as MainSettingsSectionId)
-                }
-                providersCount={providers.length}
-                mcpServersCount={mcpServers.length}
-                expoAccountsCount={expoAccounts.length}
-                expoProjectsCount={expoProjects.length}
-                sshTargetsCount={sshTargets.length}
-                browserProvidersCount={browserProviders.length}
-                workspaceTargetsCount={workspaceTargets.length}
-                handleEditFirstProvider={() => handleEditProvider(providers[0])}
-                handleNewProvider={() => handleNewProvider()}
-                handleEditFirstMcp={() => handleEditMcp(mcpServers[0])}
-                handleNewMcp={handleNewMcp}
-                handleEditFirstExpoAccount={() => handleEditExpoAccount(expoAccounts[0])}
-                handleNewExpoAccount={handleNewExpoAccount}
-                handleEditFirstSsh={() => handleEditSsh(sshTargets[0])}
-                handleNewSsh={handleNewSsh}
-                handleEditFirstBrowserProvider={() =>
-                  handleEditBrowserProvider(browserProviders[0])
-                }
-                handleNewBrowserProvider={handleNewBrowserProvider}
-                handleEditFirstWorkspace={() => handleEditWorkspace(workspaceTargets[0])}
-                handleNewWorkspace={handleNewWorkspace}
-              />
-            ) : null}
-
-            {showLegacySettings ||
-            destination === 'assistant-personalization' ||
+            {destination === 'assistant-personalization' ||
             destination === 'appearance-language' ? (
               <SettingsAssistantSection
                 colors={colors}
                 styles={styles}
                 t={t}
-                onLayout={(event) => {
-                  mainSectionOffsetsRef.current.assistant = event.nativeEvent.layout.y;
-                }}
                 theme={theme}
                 setTheme={setTheme}
                 locale={locale}
@@ -527,25 +465,16 @@ export const SettingsScreen: React.FC = () => {
                 setThinkingLevel={setThinkingLevel}
                 systemPrompt={systemPrompt}
                 setSystemPrompt={setSystemPrompt}
-                mode={
-                  destination === 'assistant-personalization'
-                    ? 'assistant'
-                    : destination === 'appearance-language'
-                      ? 'appearance'
-                      : 'all'
-                }
+                mode={destination === 'assistant-personalization' ? 'assistant' : 'appearance'}
               />
             ) : null}
 
-            {showLegacySettings || destination === 'tools-permissions' ? (
+            {destination === 'tools-permissions' ? (
               <SettingsToolsSection
                 CollapsibleSectionComponent={SettingsCollapsibleSection}
                 colors={colors}
                 styles={styles}
                 t={t}
-                onLayout={(event) => {
-                  mainSectionOffsetsRef.current.tools = event.nativeEvent.layout.y;
-                }}
                 webSearchProvider={webSearchProvider}
                 setWebSearchProvider={setWebSearchProvider}
                 webSearchProviderOptions={webSearchProviderOptions}
@@ -563,19 +492,15 @@ export const SettingsScreen: React.FC = () => {
                 expandedGroups={expandedGroups}
                 toggleGroup={toggleGroup}
                 setToolPermission={setToolPermission}
-                mode={destination === 'tools-permissions' ? 'focused' : 'all'}
               />
             ) : null}
 
-            {showLegacySettings || destination === 'assistant-personalization' ? (
+            {destination === 'assistant-personalization' ? (
               <SettingsPersonasSection
                 CollapsibleSectionComponent={SettingsCollapsibleSection}
                 colors={colors}
                 styles={styles}
                 t={t}
-                onLayout={(event: any) => {
-                  mainSectionOffsetsRef.current.personas = event.nativeEvent.layout.y;
-                }}
                 expandedPersonas={expandedPanels.personas}
                 togglePersonas={() => togglePanel('personas')}
                 personas={personas}
@@ -589,32 +514,21 @@ export const SettingsScreen: React.FC = () => {
               />
             ) : null}
 
-            {showLegacySettings || destination === 'connections' ? (
+            {destination === 'connections' || destination === 'developer-remote-work' ? (
               <SettingsSurfacesSection
-                CollapsibleSectionComponent={SettingsCollapsibleSection}
                 colors={colors}
                 styles={styles}
                 t={t}
-                expandedExecutionSurfaces={expandedPanels.executionSurfaces}
-                onToggleExecutionSurfaces={() => togglePanel('executionSurfaces')}
-                onLayout={(event) => {
-                  mainSectionOffsetsRef.current.surfaces = event.nativeEvent.layout.y;
-                }}
                 sshTargets={sshTargets}
                 workspaceTargets={workspaceTargets}
                 browserProviders={browserProviders}
                 expoAccounts={expoAccounts}
                 expoProjects={expoProjects}
-                providers={providers}
                 mcpServers={mcpServers}
-                localRuntimeStatusesByProviderId={localRuntimeStatusesByProviderId}
                 getSshTargetAuthModeLabel={getSshTargetAuthModeLabel}
                 getSshHostKeyPolicyLabel={getSshHostKeyPolicyLabel}
                 getBrowserProviderAuthLabel={getBrowserProviderAuthLabel}
                 getMcpMetadataChips={getMcpMetadataChips}
-                isOnDeviceLlmProvider={isOnDeviceLlmProvider}
-                getLocalLlmModelDisplayName={getLocalLlmModelDisplayName}
-                formatLocalLlmRuntimeStatusLabel={formatLocalLlmRuntimeStatusLabel}
                 handleNewSsh={handleNewSsh}
                 handleEditSsh={handleEditSsh}
                 handleNewWorkspace={handleNewWorkspace}
@@ -625,15 +539,13 @@ export const SettingsScreen: React.FC = () => {
                 handleEditExpoAccount={handleEditExpoAccount}
                 handleSyncExpoAccount={handleSyncExpoAccount}
                 handleEditExpoProject={handleEditExpoProject}
-                handleNewProvider={handleNewProvider}
-                handleEditProvider={handleEditProvider}
                 handleNewMcp={handleNewMcp}
                 handleEditMcp={handleEditMcp}
-                mode={destination === 'connections' ? 'connections' : 'all'}
+                mode={destination === 'connections' ? 'connections' : 'developer'}
               />
             ) : null}
 
-            {showLegacySettings || destination === 'memory-privacy' ? (
+            {destination === 'memory-privacy' ? (
               <SettingsDataSection
                 colors={colors}
                 styles={styles}
@@ -649,13 +561,9 @@ export const SettingsScreen: React.FC = () => {
                 setCompactionProvider={setCompactionProvider}
                 setCompactionModel={setCompactionModel}
                 consolidationStatus={consolidationStatus}
-                onLayout={(event) => {
-                  mainSectionOffsetsRef.current.data = event.nativeEvent.layout.y;
-                }}
                 onManageMemory={handleManageMemory}
                 onManageApprovals={handleManageApprovals}
                 onClearAllConversations={handleClearAllConversations}
-                mode={destination === 'memory-privacy' ? 'focused' : 'all'}
               />
             ) : null}
 

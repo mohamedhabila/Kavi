@@ -10,7 +10,7 @@ import {
 } from './SettingsScreen.testSupport';
 
 describe('SettingsScreen expo remote config', () => {
-  setupSettingsScreenTestSuite();
+  setupSettingsScreenTestSuite({ destination: 'developer-remote-work' });
   it('should save a new Expo account, persist its token, and sync projects', async () => {
     const { getAllByLabelText, getByDisplayValue, getByPlaceholderText, getByText } =
       renderSettingsScreen();

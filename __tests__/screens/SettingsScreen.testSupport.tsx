@@ -156,8 +156,9 @@ const buildInstalledLocalProvider = (provider: any) => {
 export const settingsMocks = mockSettings;
 export const settingsTestState = mockSettingsState;
 let mockSettingsRouteParams: Record<string, unknown> = {};
-export const renderSettingsScreen = (routeParams: Record<string, unknown> = {}) => {
-  mockSettingsRouteParams = routeParams;
+let mockSettingsDefaultRouteParams: Record<string, unknown> = { destination: 'home' };
+export const renderSettingsScreen = (routeParams?: Record<string, unknown>) => {
+  mockSettingsRouteParams = routeParams ?? mockSettingsDefaultRouteParams;
   return render(<SettingsScreen />);
 };
 export const confirmSettingsDestructiveAlert = () =>
@@ -401,10 +402,13 @@ jest.mock('../../src/services/agents/registry', () => ({
   getAvailablePersonas: () => mockAvailablePersonas,
 }));
 
-export const setupSettingsScreenTestSuite = () => {
+export const setupSettingsScreenTestSuite = (
+  defaultRouteParams: Record<string, unknown> = { destination: 'home' },
+) => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSettingsRouteParams = {};
+    mockSettingsDefaultRouteParams = { ...defaultRouteParams };
+    mockSettingsRouteParams = mockSettingsDefaultRouteParams;
     mockSettings.getSecure.mockResolvedValue('');
     mockSettings.saveSecure.mockResolvedValue(undefined);
     mockSettings.deleteSecure.mockResolvedValue(undefined);

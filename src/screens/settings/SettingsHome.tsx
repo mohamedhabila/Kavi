@@ -28,7 +28,6 @@ type SettingsHomeProps = {
   localeLabel: string;
   memoryEnabled: boolean;
   onOpenDestination: (destination: SettingsDestination) => void;
-  onOpenDeveloperWork: () => void;
   providersCount: number;
   remoteTargetsCount: number;
   t: TranslationFn;
@@ -38,10 +37,9 @@ type SettingsHomeProps = {
 type HomeItem = {
   badge: string;
   description: string;
-  destination?: SettingsDestination;
+  destination: SettingsDestination;
   icon: LucideIcon;
   id: string;
-  onPress?: () => void;
   title: string;
 };
 
@@ -55,7 +53,6 @@ export const SettingsHome: React.FC<SettingsHomeProps> = ({
   localeLabel,
   memoryEnabled,
   onOpenDestination,
-  onOpenDeveloperWork,
   providersCount,
   remoteTargetsCount,
   t,
@@ -152,7 +149,7 @@ export const SettingsHome: React.FC<SettingsHomeProps> = ({
               remoteTargetsCount > 0
                 ? t('settings.home.configuredCount', { count: String(remoteTargetsCount) })
                 : t('settings.home.optional'),
-            onPress: onOpenDeveloperWork,
+            destination: 'developer-remote-work',
             icon: MonitorCog,
           },
         ],
@@ -164,7 +161,6 @@ export const SettingsHome: React.FC<SettingsHomeProps> = ({
       connectionsCount,
       localeLabel,
       memoryEnabled,
-      onOpenDeveloperWork,
       providersCount,
       remoteTargetsCount,
       t,
@@ -228,9 +224,7 @@ export const SettingsHome: React.FC<SettingsHomeProps> = ({
                   accessibilityHint={item.description}
                   accessibilityLabel={`${item.title}, ${item.badge}`}
                   accessibilityRole="button"
-                  onPress={
-                    item.onPress || (() => item.destination && onOpenDestination(item.destination))
-                  }
+                  onPress={() => onOpenDestination(item.destination)}
                   style={[styles.row, index > 0 ? styles.rowBorder : null]}
                   testID={`settings-home-${item.id}`}
                 >

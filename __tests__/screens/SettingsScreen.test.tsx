@@ -57,6 +57,18 @@ describe('SettingsScreen general', () => {
     });
   });
 
+  it('opens Developer & remote work as an advanced Settings detail', () => {
+    const { getByTestId } = renderSettingsScreen({ destination: 'home' });
+
+    fireEvent.press(getByTestId('settings-home-developer-remote-work'));
+
+    expect(settingsMocks.navigate).toHaveBeenCalledWith('Settings', {
+      destination: 'developer-remote-work',
+      parentDestination: 'home',
+      returnTo: undefined,
+    });
+  });
+
   it('keeps Assistant and appearance controls in distinct destinations', () => {
     const assistant = renderSettingsScreen({ destination: 'assistant-personalization' });
     expect(assistant.getByText('Thinking Level')).toBeTruthy();
@@ -77,6 +89,7 @@ describe('SettingsScreen general', () => {
     expect(getByText('Browser Providers')).toBeTruthy();
     expect(getByText('MCP Servers')).toBeTruthy();
     expect(queryByText('SSH Targets')).toBeNull();
+    expect(queryByText('Expo Accounts')).toBeNull();
     expect(queryByText('AI Providers')).toBeNull();
   });
 
@@ -145,76 +158,82 @@ describe('SettingsScreen general', () => {
   });
 
   it('should render theme section', () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'appearance-language' });
     expect(getByText('Appearance')).toBeTruthy();
     expect(getByText('Light')).toBeTruthy();
     expect(getByText('Dark')).toBeTruthy();
     expect(getByText('System')).toBeTruthy();
   });
 
-  it('should render quick setup and section navigation chips', () => {
-    const { getByText, getAllByText } = renderSettingsScreen();
-    expect(getByText('Quick Setup')).toBeTruthy();
-    expect(getByText('Overview')).toBeTruthy();
-    expect(getAllByText('Assistant').length).toBeGreaterThan(0);
-    expect(getAllByText('Tools').length).toBeGreaterThan(0);
-    expect(getAllByText('Surfaces').length).toBeGreaterThan(0);
+  it('defaults an unscoped Settings route to the searchable home', () => {
+    const { getByTestId, queryByText } = renderSettingsScreen({});
+
+    expect(getByTestId('settings-home')).toBeTruthy();
+    expect(queryByText('Quick Setup')).toBeNull();
   });
 
   it('should change theme on button press', () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'appearance-language' });
     fireEvent.press(getByText('Light'));
     expect(settingsMocks.setTheme).toHaveBeenCalledWith('light');
   });
 
   it('should change theme to system', () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'appearance-language' });
     fireEvent.press(getByText('System'));
     expect(settingsMocks.setTheme).toHaveBeenCalledWith('system');
   });
 
   it('should render system prompt section', () => {
-    const { getAllByText, getByDisplayValue } = renderSettingsScreen();
+    const { getAllByText, getByDisplayValue } = renderSettingsScreen({
+      destination: 'assistant-personalization',
+    });
     expect(getAllByText('System Prompt').length).toBeGreaterThan(0);
     expect(getByDisplayValue('You are helpful')).toBeTruthy();
   });
 
   it('should update system prompt', () => {
-    const { getByDisplayValue } = renderSettingsScreen();
+    const { getByDisplayValue } = renderSettingsScreen({
+      destination: 'assistant-personalization',
+    });
     fireEvent.changeText(getByDisplayValue('You are helpful'), 'New prompt');
     expect(settingsMocks.setSystemPrompt).toHaveBeenCalledWith('New prompt');
   });
 
   it('should render providers section', () => {
-    const { getByText, getAllByText } = renderSettingsScreen();
+    const { getByText, getAllByText } = renderSettingsScreen({ destination: 'advanced-ai' });
     expect(getByText('AI Providers')).toBeTruthy();
     expect(getAllByText('OpenAI').length).toBeGreaterThanOrEqual(1);
   });
 
   it('should render MCP servers section', () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'connections' });
     expect(getByText('MCP Servers')).toBeTruthy();
     expect(getByText('Test MCP')).toBeTruthy();
     expect(getByText('Manual server · Auto transport · No auth')).toBeTruthy();
   });
 
-  it('should render execution surface sections', () => {
-    const { getByText, getAllByText } = renderSettingsScreen();
-    expect(getByText('Execution Surfaces')).toBeTruthy();
+  it('keeps developer infrastructure in its own advanced destination', () => {
+    const { getAllByText, queryByText } = renderSettingsScreen({
+      destination: 'developer-remote-work',
+    });
     expect(getAllByText('SSH Targets').length).toBeGreaterThan(0);
     expect(getAllByText('Workspace Targets').length).toBeGreaterThan(0);
-    expect(getAllByText('Browser Providers').length).toBeGreaterThan(0);
     expect(getAllByText('Expo Accounts').length).toBeGreaterThan(0);
     expect(getAllByText('Expo Projects').length).toBeGreaterThan(0);
+    expect(queryByText('Browser Providers')).toBeNull();
+    expect(queryByText('MCP Servers')).toBeNull();
   });
 
   it('should show clear all conversations button', () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'memory-privacy' });
     expect(getByText('Clear All Conversations')).toBeTruthy();
   });
 
   it('explains the separate local-data controls and opens memory management', () => {
-    const { getByLabelText, getByText } = renderSettingsScreen();
+    const { getByLabelText, getByText } = renderSettingsScreen({
+      destination: 'memory-privacy',
+    });
 
     expect(
       getByText(
@@ -227,7 +246,7 @@ describe('SettingsScreen general', () => {
   });
 
   it('opens approval and reusable permission management', () => {
-    const { getByLabelText } = renderSettingsScreen();
+    const { getByLabelText } = renderSettingsScreen({ destination: 'memory-privacy' });
 
     fireEvent.press(getByLabelText('Approvals & permissions'));
 
@@ -236,7 +255,7 @@ describe('SettingsScreen general', () => {
 
   it('should show confirmation dialog when clearing conversations', () => {
     jest.spyOn(Alert, 'alert');
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'memory-privacy' });
     fireEvent.press(getByText('Clear All Conversations'));
     expect(Alert.alert).toHaveBeenCalledWith(
       'Clear All Conversations',
@@ -253,43 +272,49 @@ describe('SettingsScreen general', () => {
   });
 
   it('should render known provider presets', () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'advanced-ai' });
     expect(getByText('Anthropic')).toBeTruthy();
   });
 
-  it('should render data section title', () => {
-    const { getAllByText } = renderSettingsScreen();
-    expect(getAllByText('Data').length).toBeGreaterThan(0);
+  it('should render the focused memory and privacy title', () => {
+    const { getAllByText } = renderSettingsScreen({ destination: 'memory-privacy' });
+    expect(getAllByText('Memory & privacy').length).toBeGreaterThan(0);
   });
 
   it('should render web search provider controls', () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'tools-permissions' });
     expect(getByText('Web Search Provider')).toBeTruthy();
     expect(getByText('Brave')).toBeTruthy();
   });
 
-  it('should render the new setup and configuration sections', () => {
-    const { getByText } = renderSettingsScreen();
-    expect(getByText('Thinking Level')).toBeTruthy();
+  it('keeps tool setup focused on services and permissions', () => {
+    const { getByText, queryByText } = renderSettingsScreen({
+      destination: 'tools-permissions',
+    });
     expect(getByText('Tool Permissions')).toBeTruthy();
-    expect(getByText('Configure Personas')).toBeTruthy();
     expect(getByText('OpenWeather API Key')).toBeTruthy();
+    expect(queryByText('Thinking Level')).toBeNull();
+    expect(queryByText('Configure Personas')).toBeNull();
   });
 
   it('should update the preferred web search provider', () => {
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'tools-permissions' });
     fireEvent.press(getByText('Brave'));
     expect(settingsMocks.setWebSearchProvider).toHaveBeenCalledWith('brave');
   });
 
   it('should update the thinking level', () => {
-    const { getByLabelText } = renderSettingsScreen();
+    const { getByLabelText } = renderSettingsScreen({
+      destination: 'assistant-personalization',
+    });
     fireEvent.press(getByLabelText('Use High thinking level'));
     expect(settingsMocks.setThinkingLevel).toHaveBeenCalledWith('high');
   });
 
   it('should support selecting every thinking level option', () => {
-    const { getByLabelText } = renderSettingsScreen();
+    const { getByLabelText } = renderSettingsScreen({
+      destination: 'assistant-personalization',
+    });
 
     fireEvent.press(getByLabelText('Use Off thinking level'));
     fireEvent.press(getByLabelText('Use Minimal thinking level'));
@@ -307,7 +332,7 @@ describe('SettingsScreen general', () => {
   });
 
   it('should update the locale from the language picker', async () => {
-    const { getByLabelText } = renderSettingsScreen();
+    const { getByLabelText } = renderSettingsScreen({ destination: 'appearance-language' });
 
     fireEvent.press(getByLabelText('Language'));
     fireEvent.press(getByLabelText(LOCALE_DISPLAY_NAMES.de));
@@ -319,7 +344,9 @@ describe('SettingsScreen general', () => {
   });
 
   it('should save persona configuration for a built-in persona', () => {
-    const { getByDisplayValue, getByText } = renderSettingsScreen();
+    const { getByDisplayValue, getByText } = renderSettingsScreen({
+      destination: 'assistant-personalization',
+    });
     fireEvent.changeText(getByDisplayValue('Assistant'), 'Assistant Pro');
     fireEvent.press(getByText('Save Persona Configuration'));
     expect(settingsMocks.setPersonaOverride).toHaveBeenCalledWith(
@@ -329,14 +356,14 @@ describe('SettingsScreen general', () => {
   });
 
   it('should toggle a tool permission', () => {
-    const { getAllByRole } = renderSettingsScreen();
+    const { getAllByRole } = renderSettingsScreen({ destination: 'tools-permissions' });
     const switches = getAllByRole('switch');
-    fireEvent(switches[2], 'valueChange', false);
+    fireEvent(switches[0], 'valueChange', false);
     expect(settingsMocks.setPermission).toHaveBeenCalled();
   });
 
   it('should render theme icons', () => {
-    const { getByTestId } = renderSettingsScreen();
+    const { getByTestId } = renderSettingsScreen({ destination: 'appearance-language' });
     expect(getByTestId('icon-Sun')).toBeTruthy();
     expect(getByTestId('icon-Moon')).toBeTruthy();
     expect(getByTestId('icon-Monitor')).toBeTruthy();
@@ -347,7 +374,7 @@ describe('SettingsScreen general', () => {
       const deleteBtn = buttons?.find((b: any) => b.style === 'destructive');
       deleteBtn?.onPress?.();
     });
-    const { getByText } = renderSettingsScreen();
+    const { getByText } = renderSettingsScreen({ destination: 'memory-privacy' });
     fireEvent.press(getByText('Clear All Conversations'));
     expect(settingsMocks.clearAllConversations).toHaveBeenCalled();
   });

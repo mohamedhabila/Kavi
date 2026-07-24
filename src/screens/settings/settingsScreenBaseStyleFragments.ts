@@ -52,9 +52,6 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  overviewCard: {
-    marginTop: 4,
-  },
   sectionCardHeader: {
     marginBottom: 8,
   },
@@ -68,33 +65,6 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     lineHeight: 18,
     color: colors.textSecondary,
     marginTop: 4,
-  },
-  sectionChipScroller: {
-    marginBottom: 16,
-  },
-  sectionChipRow: {
-    paddingRight: 8,
-  },
-  sectionChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 8,
-  },
-  sectionChipActive: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  sectionChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  sectionChipTextActive: {
-    color: colors.primary,
   },
   sectionTitle: {
     fontSize: 14,

@@ -6,7 +6,8 @@ export type SettingsDestination =
   | 'connections'
   | 'notifications-voice'
   | 'appearance-language'
-  | 'advanced-ai';
+  | 'advanced-ai'
+  | 'developer-remote-work';
 
 const SETTINGS_DESTINATIONS = new Set<SettingsDestination>([
   'home',
@@ -17,6 +18,7 @@ const SETTINGS_DESTINATIONS = new Set<SettingsDestination>([
   'notifications-voice',
   'appearance-language',
   'advanced-ai',
+  'developer-remote-work',
 ]);
 
 const DESTINATION_TITLE_KEYS: Record<SettingsDestination, string> = {
@@ -28,12 +30,13 @@ const DESTINATION_TITLE_KEYS: Record<SettingsDestination, string> = {
   'notifications-voice': 'settings.destinations.notificationsVoice.title',
   'appearance-language': 'settings.destinations.appearanceLanguage.title',
   'advanced-ai': 'settings.destinations.advancedAI.title',
+  'developer-remote-work': 'nav.developerAndRemoteWork',
 };
 
-export function resolveSettingsDestination(value: unknown): SettingsDestination | null {
+export function resolveSettingsDestination(value: unknown): SettingsDestination {
   return typeof value === 'string' && SETTINGS_DESTINATIONS.has(value as SettingsDestination)
     ? (value as SettingsDestination)
-    : null;
+    : 'home';
 }
 
 export function getSettingsDestinationTitleKey(destination: SettingsDestination): string {

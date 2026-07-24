@@ -17,7 +17,6 @@ describe('useSettingsSectionNavigation', () => {
         useSettingsSectionNavigation({
           mainContentKey,
           section: 'main',
-          t: (key) => key,
         }),
       { initialProps: { mainContentKey: 'home' } },
     );

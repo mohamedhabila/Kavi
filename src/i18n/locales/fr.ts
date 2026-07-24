@@ -456,9 +456,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     mcpResetOAuthSession: 'Réinitialiser la session OAuth',
     mcpResetOAuthSessionConfirm: 'Effacer les jetons OAuth enregistrés pour ce serveur MCP ?',
     mcpResetOAuthSessionSuccess: 'Session OAuth effacée.',
-    executionSurfaces: 'Surfaces d execution',
-    executionSurfacesHint:
-      'Configurez des hotes SSH distants et des racines de workspace afin que les skills dependantes du desktop puissent etre routees vers une cible reelle.',
     sshTargets: 'Cibles SSH',
     addSshTarget: 'Ajouter une cible SSH',
     editSshTarget: 'Modifier la cible SSH',
@@ -583,10 +580,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     deleteBrowserProviderConfirm: 'Supprimer ce fournisseur de navigateur ?',
     noBrowserProviders: 'Aucun fournisseur de navigateur configure.',
     quickSetupTitle: 'Configuration rapide',
-    quickSetupHint:
-      'Commencez par l essentiel, puis sautez directement vers la section voulue sans perdre votre position.',
-    quickSetupAction: '{name} : {count} configures, {status}',
-    quickSetupExpo: 'Expo / EAS',
     configured: 'Configure',
     needsSetup: 'Configuration requise',
     destinations: {
@@ -827,29 +820,9 @@ export const fr: TranslationMap = mergeTranslations(en, {
       },
     },
     mainSections: {
-      overview: {
-        title: 'Vue d ensemble',
-        hint: 'Voyez ce qui est pret et allez directement a la partie que vous voulez configurer.',
-      },
-      assistant: {
-        title: 'Assistant',
-        hint: 'Apparence, langue, comportement de l assistant et raisonnement.',
-      },
-      tools: {
-        title: 'Outils',
-        hint: 'Recherche, cles de service, capacites integrees et controle des permissions.',
-      },
       personas: {
         title: 'Personas',
         hint: 'Ajustez les prompts, overrides et le style de raisonnement des personas.',
-      },
-      surfaces: {
-        title: 'Surfaces',
-        hint: 'Configurez SSH, workspaces distants, navigateurs, Expo, fournisseurs et serveurs MCP.',
-      },
-      data: {
-        title: 'Donnees',
-        hint: 'Actions destructives et nettoyage des conversations.',
       },
     },
     toolGroups: {

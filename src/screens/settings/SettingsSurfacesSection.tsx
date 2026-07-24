@@ -1,7 +1,6 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import type { LlmProviderPreset } from '../../constants/api';
 import type { AppPalette } from '../../theme/useAppTheme';
 import type {
   BrowserProviderConfig,
@@ -11,124 +10,90 @@ import type {
   SshTargetConfig,
   WorkspaceTargetConfig,
 } from '../../types/remote';
-import type { LlmProviderConfig } from '../../types/provider';
-import { SettingsExpoSurfaces } from './SettingsExpoSurfaces';
 import { SettingsConnectionsSurfaces } from './SettingsConnectionsSurfaces';
+import { SettingsExpoSurfaces } from './SettingsExpoSurfaces';
 import { SettingsInfrastructureSurfaces } from './SettingsInfrastructureSurfaces';
-import { SettingsMcpSurfaces } from './SettingsMcpSurfaces';
-import { SettingsProviderSurfaces } from './SettingsProviderSurfaces';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
-type CollapsibleSectionComponentType = React.ComponentType<{
-  title: string;
-  children: React.ReactNode;
-  open: boolean;
-  onToggle: () => void;
-  colors: AppPalette;
-}>;
 
 type SettingsSurfacesSectionProps = {
-  CollapsibleSectionComponent: CollapsibleSectionComponentType;
-  colors: AppPalette;
-  styles: StyleMap;
-  t: TranslationFn;
-  expandedExecutionSurfaces: boolean;
-  onToggleExecutionSurfaces: () => void;
-  onLayout: (event: any) => void;
-  sshTargets: SshTargetConfig[];
-  workspaceTargets: WorkspaceTargetConfig[];
   browserProviders: BrowserProviderConfig[];
+  colors: AppPalette;
   expoAccounts: ExpoAccountConfig[];
   expoProjects: ExpoProjectConfig[];
-  providers: LlmProviderConfig[];
-  mcpServers: McpServerConfig[];
-  localRuntimeStatusesByProviderId: Record<string, any>;
-  getSshTargetAuthModeLabel: (target: SshTargetConfig) => string;
-  getSshHostKeyPolicyLabel: (target: SshTargetConfig) => string;
   getBrowserProviderAuthLabel: (authMode?: BrowserProviderConfig['authMode']) => string;
   getMcpMetadataChips: (server: McpServerConfig) => string[];
-  isOnDeviceLlmProvider: (provider: LlmProviderConfig) => boolean;
-  getLocalLlmModelDisplayName: (modelId: string) => string;
-  formatLocalLlmRuntimeStatusLabel: (status: any) => string;
-  handleNewSsh: () => void;
+  getSshHostKeyPolicyLabel: (target: SshTargetConfig) => string;
+  getSshTargetAuthModeLabel: (target: SshTargetConfig) => string;
+  handleEditBrowserProvider: (provider: BrowserProviderConfig) => void;
+  handleEditExpoAccount: (account: ExpoAccountConfig) => void;
+  handleEditExpoProject: (project: ExpoProjectConfig) => void;
+  handleEditMcp: (server: McpServerConfig) => void | Promise<void>;
   handleEditSsh: (target: SshTargetConfig) => void;
-  handleNewWorkspace: () => void;
   handleEditWorkspace: (target: WorkspaceTargetConfig) => void;
   handleNewBrowserProvider: () => void;
-  handleEditBrowserProvider: (provider: BrowserProviderConfig) => void;
   handleNewExpoAccount: () => void;
-  handleEditExpoAccount: (account: ExpoAccountConfig) => void;
-  handleSyncExpoAccount: () => void | Promise<void>;
-  handleEditExpoProject: (project: ExpoProjectConfig) => void;
-  handleNewProvider: (preset?: LlmProviderPreset) => void;
-  handleEditProvider: (provider: LlmProviderConfig) => void;
   handleNewMcp: () => void;
-  handleEditMcp: (server: McpServerConfig) => void | Promise<void>;
-  mode?: 'all' | 'connections';
+  handleNewSsh: () => void;
+  handleNewWorkspace: () => void;
+  handleSyncExpoAccount: () => void | Promise<void>;
+  mcpServers: McpServerConfig[];
+  mode: 'connections' | 'developer';
+  onLayout?: (event: any) => void;
+  sshTargets: SshTargetConfig[];
+  styles: StyleMap;
+  t: TranslationFn;
+  workspaceTargets: WorkspaceTargetConfig[];
 };
 
 export const SettingsSurfacesSection: React.FC<SettingsSurfacesSectionProps> = ({
-  CollapsibleSectionComponent,
-  colors,
-  styles,
-  t,
-  expandedExecutionSurfaces,
-  onToggleExecutionSurfaces,
-  onLayout,
-  sshTargets,
-  workspaceTargets,
   browserProviders,
+  colors,
   expoAccounts,
   expoProjects,
-  providers,
-  mcpServers,
-  localRuntimeStatusesByProviderId,
-  getSshTargetAuthModeLabel,
-  getSshHostKeyPolicyLabel,
   getBrowserProviderAuthLabel,
   getMcpMetadataChips,
-  isOnDeviceLlmProvider,
-  getLocalLlmModelDisplayName,
-  formatLocalLlmRuntimeStatusLabel,
-  handleNewSsh,
+  getSshHostKeyPolicyLabel,
+  getSshTargetAuthModeLabel,
+  handleEditBrowserProvider,
+  handleEditExpoAccount,
+  handleEditExpoProject,
+  handleEditMcp,
   handleEditSsh,
-  handleNewWorkspace,
   handleEditWorkspace,
   handleNewBrowserProvider,
-  handleEditBrowserProvider,
   handleNewExpoAccount,
-  handleEditExpoAccount,
-  handleSyncExpoAccount,
-  handleEditExpoProject,
-  handleNewProvider,
-  handleEditProvider,
   handleNewMcp,
-  handleEditMcp,
-  mode = 'all',
+  handleNewSsh,
+  handleNewWorkspace,
+  handleSyncExpoAccount,
+  mcpServers,
+  mode,
+  onLayout,
+  sshTargets,
+  styles,
+  t,
+  workspaceTargets,
 }) => {
-  const isConnectionsOnly = mode === 'connections';
+  const isConnections = mode === 'connections';
 
   return (
     <View style={styles.sectionCard} onLayout={onLayout}>
       <View style={styles.sectionCardHeader}>
         <Text style={styles.sectionCardTitle}>
-          {t(
-            isConnectionsOnly
-              ? 'settings.destinations.connections.title'
-              : 'settings.mainSections.surfaces.title',
-          )}
+          {t(isConnections ? 'settings.destinations.connections.title' : 'nav.developerAndRemoteWork')}
         </Text>
         <Text style={styles.sectionCardHint}>
           {t(
-            isConnectionsOnly
+            isConnections
               ? 'settings.destinations.connections.hint'
-              : 'settings.mainSections.surfaces.hint',
+              : 'settings.home.developerRemoteHint',
           )}
         </Text>
       </View>
 
-      {isConnectionsOnly ? (
+      {isConnections ? (
         <SettingsConnectionsSurfaces
           browserProviders={browserProviders}
           colors={colors}
@@ -143,68 +108,38 @@ export const SettingsSurfacesSection: React.FC<SettingsSurfacesSectionProps> = (
           t={t}
         />
       ) : (
-        <CollapsibleSectionComponent
-          title={t('settings.executionSurfaces')}
-          open={expandedExecutionSurfaces}
-          onToggle={onToggleExecutionSurfaces}
-          colors={colors}
-        >
-          <Text style={styles.listItemSubtitle}>{t('settings.executionSurfacesHint')}</Text>
-
+        <>
           <SettingsInfrastructureSurfaces
-            colors={colors}
-            styles={styles}
-            t={t}
-            sshTargets={sshTargets}
-            workspaceTargets={workspaceTargets}
             browserProviders={browserProviders}
-            getSshTargetAuthModeLabel={getSshTargetAuthModeLabel}
-            getSshHostKeyPolicyLabel={getSshHostKeyPolicyLabel}
+            colors={colors}
             getBrowserProviderAuthLabel={getBrowserProviderAuthLabel}
-            handleNewSsh={handleNewSsh}
+            getSshHostKeyPolicyLabel={getSshHostKeyPolicyLabel}
+            getSshTargetAuthModeLabel={getSshTargetAuthModeLabel}
+            handleEditBrowserProvider={handleEditBrowserProvider}
             handleEditSsh={handleEditSsh}
-            handleNewWorkspace={handleNewWorkspace}
             handleEditWorkspace={handleEditWorkspace}
             handleNewBrowserProvider={handleNewBrowserProvider}
-            handleEditBrowserProvider={handleEditBrowserProvider}
+            handleNewSsh={handleNewSsh}
+            handleNewWorkspace={handleNewWorkspace}
+            showBrowserProviders={false}
+            sshTargets={sshTargets}
+            styles={styles}
+            t={t}
+            workspaceTargets={workspaceTargets}
           />
-
           <SettingsExpoSurfaces
             colors={colors}
-            styles={styles}
-            t={t}
             expoAccounts={expoAccounts}
             expoProjects={expoProjects}
-            sshTargets={sshTargets}
-            handleNewExpoAccount={handleNewExpoAccount}
             handleEditExpoAccount={handleEditExpoAccount}
-            handleSyncExpoAccount={handleSyncExpoAccount}
             handleEditExpoProject={handleEditExpoProject}
-          />
-
-          <SettingsProviderSurfaces
-            colors={colors}
+            handleNewExpoAccount={handleNewExpoAccount}
+            handleSyncExpoAccount={handleSyncExpoAccount}
+            sshTargets={sshTargets}
             styles={styles}
             t={t}
-            providers={providers}
-            localRuntimeStatusesByProviderId={localRuntimeStatusesByProviderId}
-            isOnDeviceLlmProvider={isOnDeviceLlmProvider}
-            getLocalLlmModelDisplayName={getLocalLlmModelDisplayName}
-            formatLocalLlmRuntimeStatusLabel={formatLocalLlmRuntimeStatusLabel}
-            handleNewProvider={handleNewProvider}
-            handleEditProvider={handleEditProvider}
           />
-
-          <SettingsMcpSurfaces
-            colors={colors}
-            styles={styles}
-            t={t}
-            mcpServers={mcpServers}
-            getMcpMetadataChips={getMcpMetadataChips}
-            handleNewMcp={handleNewMcp}
-            handleEditMcp={handleEditMcp}
-          />
-        </CollapsibleSectionComponent>
+        </>
       )}
     </View>
   );

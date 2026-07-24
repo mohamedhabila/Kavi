@@ -448,9 +448,6 @@ export const en: TranslationMap = {
     mcpResetOAuthSession: 'Reset OAuth session',
     mcpResetOAuthSessionConfirm: 'Clear the stored OAuth tokens for this MCP server?',
     mcpResetOAuthSessionSuccess: 'OAuth session cleared.',
-    executionSurfaces: 'Execution Surfaces',
-    executionSurfacesHint:
-      'Configure remote SSH hosts and workspace roots so desktop-dependent skills can route somewhere real.',
     sshTargets: 'SSH Targets',
     addSshTarget: 'Add SSH target',
     editSshTarget: 'Edit SSH Target',
@@ -574,10 +571,6 @@ export const en: TranslationMap = {
     deleteBrowserProviderConfirm: 'Remove this browser provider?',
     noBrowserProviders: 'No browser providers configured.',
     quickSetupTitle: 'Quick Setup',
-    quickSetupHint:
-      'Start with the essentials, then jump directly to the section you need without losing your place.',
-    quickSetupAction: '{name}: {count} configured, {status}',
-    quickSetupExpo: 'Expo / EAS',
     configured: 'Configured',
     needsSetup: 'Needs setup',
     destinations: {
@@ -815,29 +808,9 @@ export const en: TranslationMap = {
       },
     },
     mainSections: {
-      overview: {
-        title: 'Overview',
-        hint: 'See what is ready and jump directly to the part you want to configure.',
-      },
-      assistant: {
-        title: 'Assistant',
-        hint: 'Appearance, language, assistant behavior, and reasoning.',
-      },
-      tools: {
-        title: 'Tools',
-        hint: 'Search, service keys, built-in capabilities, and permission controls.',
-      },
       personas: {
         title: 'Personas',
         hint: 'Adjust persona prompts, overrides, and reasoning style.',
-      },
-      surfaces: {
-        title: 'Surfaces',
-        hint: 'Configure SSH, remote workspaces, browsers, Expo, providers, and MCP servers.',
-      },
-      data: {
-        title: 'Data',
-        hint: 'Privacy review materials, submission prep, and destructive actions.',
       },
     },
     toolGroups: {

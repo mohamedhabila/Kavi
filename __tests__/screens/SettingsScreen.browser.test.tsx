@@ -10,7 +10,7 @@ import {
 } from './SettingsScreen.testSupport';
 
 describe('SettingsScreen browser and expo remote config', () => {
-  setupSettingsScreenTestSuite();
+  setupSettingsScreenTestSuite({ destination: 'connections' });
 
   it('should save a new browser provider with a stored API key', async () => {
     const { getByLabelText, getByPlaceholderText, getByText } = renderSettingsScreen();

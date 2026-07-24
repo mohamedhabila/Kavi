@@ -9,8 +9,11 @@ import {
   setupSettingsScreenTestSuite,
 } from './SettingsScreen.testSupport';
 
+const renderDeveloperSettings = () =>
+  renderSettingsScreen({ destination: 'developer-remote-work' });
+
 describe('SettingsScreen remote config', () => {
-  setupSettingsScreenTestSuite();
+  setupSettingsScreenTestSuite({ destination: 'connections' });
 
   it('should navigate to MCP edit when server is tapped', async () => {
     const { getByText } = renderSettingsScreen();
@@ -27,13 +30,13 @@ describe('SettingsScreen remote config', () => {
   });
 
   it('should navigate to new SSH target edit when SSH plus button is tapped', () => {
-    const { getByText, getByLabelText } = renderSettingsScreen();
+    const { getByText, getByLabelText } = renderDeveloperSettings();
     fireEvent.press(getByLabelText('Add SSH target'));
     expect(getByText('Add SSH Target')).toBeTruthy();
   });
 
   it('should save a new SSH target', () => {
-    const { getByText, getByLabelText, getByPlaceholderText } = renderSettingsScreen();
+    const { getByText, getByLabelText, getByPlaceholderText } = renderDeveloperSettings();
     fireEvent.press(getByLabelText('Add SSH target'));
     fireEvent.changeText(getByPlaceholderText('ssh.example.com'), 'ssh.example.com');
     fireEvent.changeText(getByPlaceholderText('developer'), 'mohamed');
@@ -55,7 +58,7 @@ describe('SettingsScreen remote config', () => {
   });
 
   it('should save an SSH target with private key auth', async () => {
-    const { getByText, getByLabelText, getByPlaceholderText } = renderSettingsScreen();
+    const { getByText, getByLabelText, getByPlaceholderText } = renderDeveloperSettings();
     fireEvent.press(getByLabelText('Add SSH target'));
     fireEvent.changeText(getByPlaceholderText('ssh.example.com'), 'ssh.example.com');
     fireEvent.changeText(getByPlaceholderText('developer'), 'mohamed');
@@ -81,13 +84,13 @@ describe('SettingsScreen remote config', () => {
   });
 
   it('should navigate to new workspace target edit when workspace plus button is tapped', () => {
-    const { getByText, getByLabelText } = renderSettingsScreen();
+    const { getByText, getByLabelText } = renderDeveloperSettings();
     fireEvent.press(getByLabelText('Add Workspace Target'));
     expect(getByText('Add Workspace Target')).toBeTruthy();
   });
 
   it('should save a new workspace target', () => {
-    const { getByText, getByLabelText, getByPlaceholderText } = renderSettingsScreen();
+    const { getByText, getByLabelText, getByPlaceholderText } = renderDeveloperSettings();
     fireEvent.press(getByLabelText('Add Workspace Target'));
     fireEvent.changeText(getByPlaceholderText('/Users/username/project'), '/tmp/project');
     fireEvent.press(getByText('Save'));
@@ -103,7 +106,7 @@ describe('SettingsScreen remote config', () => {
   });
 
   it('should save a workspace access token securely when token auth is configured', async () => {
-    const { getByText, getByLabelText, getByPlaceholderText } = renderSettingsScreen();
+    const { getByText, getByLabelText, getByPlaceholderText } = renderDeveloperSettings();
     fireEvent.press(getByLabelText('Add Workspace Target'));
     fireEvent.changeText(getByPlaceholderText('/Users/username/project'), '/tmp/project');
     fireEvent.changeText(
@@ -208,26 +211,26 @@ describe('SettingsScreen remote config', () => {
   });
 
   it('should save MCP server and return to main', async () => {
-    const { getByText } = renderSettingsScreen();
+    const { getAllByText, getByText } = renderSettingsScreen();
     fireEvent.press(getByText('Test MCP'));
     await waitFor(() => {
       expect(getByText('Save')).toBeTruthy();
     });
     fireEvent.press(getByText('Save'));
     await waitFor(() => {
-      expect(getByText('Settings')).toBeTruthy();
+      expect(getAllByText('Connections').length).toBeGreaterThan(0);
     });
   });
 
   it('should go back from MCP edit to main', async () => {
-    const { getByText, getAllByTestId } = renderSettingsScreen();
+    const { getAllByText, getByText, getAllByTestId } = renderSettingsScreen();
     fireEvent.press(getByText('Test MCP'));
     await waitFor(() => {
       expect(getByText('Edit MCP Server')).toBeTruthy();
     });
     const arrowIcons = getAllByTestId('icon-ArrowLeft');
     fireEvent.press(arrowIcons[0].parent || arrowIcons[0]);
-    expect(getByText('Settings')).toBeTruthy();
+    expect(getAllByText('Connections').length).toBeGreaterThan(0);
   });
 
   it('should show delete confirmation for MCP server', async () => {

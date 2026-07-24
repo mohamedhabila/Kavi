@@ -434,9 +434,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     mcpResetOAuthSession: '重置 OAuth 会话',
     mcpResetOAuthSessionConfirm: '要清除此 MCP 服务器已保存的 OAuth 令牌吗？',
     mcpResetOAuthSessionSuccess: 'OAuth 会话已清除。',
-    executionSurfaces: '执行表面',
-    executionSurfacesHint:
-      '配置远程 SSH 主机和工作区根目录，让依赖桌面环境的技能可以路由到真实的执行目标。',
     sshTargets: 'SSH 目标',
     addSshTarget: '添加 SSH 目标',
     editSshTarget: '编辑 SSH 目标',
@@ -558,9 +555,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     deleteBrowserProviderConfirm: '要移除此浏览器提供商吗？',
     noBrowserProviders: '尚未配置浏览器提供商。',
     quickSetupTitle: '快速设置',
-    quickSetupHint: '先完成关键配置，然后在不丢失当前位置的情况下直接跳到所需部分。',
-    quickSetupAction: '{name}：已配置 {count}，{status}',
-    quickSetupExpo: 'Expo / EAS',
     configured: '已配置',
     needsSetup: '需要设置',
     destinations: {
@@ -793,29 +787,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       },
     },
     mainSections: {
-      overview: {
-        title: '概览',
-        hint: '查看哪些配置已就绪，并直接跳转到你要设置的部分。',
-      },
-      assistant: {
-        title: '助手',
-        hint: '外观、语言、助手行为和推理。',
-      },
-      tools: {
-        title: '工具',
-        hint: '搜索、服务密钥、内置能力和权限控制。',
-      },
       personas: {
         title: '角色人格',
         hint: '调整角色人格提示词、覆盖项和推理风格。',
-      },
-      surfaces: {
-        title: '执行表面',
-        hint: '配置 SSH、远程工作区、浏览器、Expo、提供商和 MCP 服务器。',
-      },
-      data: {
-        title: '数据',
-        hint: '破坏性操作和对话清理。',
       },
     },
     toolGroups: {

@@ -36,7 +36,7 @@ const buildInstalledLocalProvider = (provider: any) => {
 };
 
 describe('SettingsScreen providers', () => {
-  setupSettingsScreenTestSuite();
+  setupSettingsScreenTestSuite({ destination: 'advanced-ai' });
 
   it('should navigate to provider edit when provider is tapped', async () => {
     const { getByText } = renderSettingsScreen();
@@ -98,7 +98,7 @@ describe('SettingsScreen providers', () => {
     });
     fireEvent.press(getByText('Save'));
     await waitFor(() => {
-      expect(getByText('Settings')).toBeTruthy();
+      expect(getByText('Advanced AI')).toBeTruthy();
     });
   });
 
@@ -110,7 +110,7 @@ describe('SettingsScreen providers', () => {
     });
     const arrowIcons = getAllByTestId('icon-ArrowLeft');
     fireEvent.press(arrowIcons[0].parent || arrowIcons[0]);
-    expect(getByText('Settings')).toBeTruthy();
+    expect(getByText('Advanced AI')).toBeTruthy();
   });
 
   it('should show delete confirmation for provider', async () => {

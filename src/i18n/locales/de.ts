@@ -450,9 +450,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     mcpResetOAuthSession: 'OAuth-Sitzung zurücksetzen',
     mcpResetOAuthSessionConfirm: 'Gespeicherte OAuth-Tokens für diesen MCP-Server löschen?',
     mcpResetOAuthSessionSuccess: 'OAuth-Sitzung gelöscht.',
-    executionSurfaces: 'Ausfuehrungsoberflaechen',
-    executionSurfacesHint:
-      'Konfigurieren Sie entfernte SSH-Hosts und Workspace-Wurzeln, damit desktopabhaengige Skills auf echte Ausfuehrungsziele geroutet werden koennen.',
     sshTargets: 'SSH-Ziele',
     addSshTarget: 'SSH-Ziel hinzufuegen',
     editSshTarget: 'SSH-Ziel bearbeiten',
@@ -577,10 +574,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     deleteBrowserProviderConfirm: 'Diesen Browser-Anbieter entfernen?',
     noBrowserProviders: 'Keine Browser-Anbieter konfiguriert.',
     quickSetupTitle: 'Schnellstart',
-    quickSetupHint:
-      'Beginnen Sie mit dem Wesentlichen und springen Sie dann direkt zum benoetigten Bereich, ohne Ihre Position zu verlieren.',
-    quickSetupAction: '{name}: {count} konfiguriert, {status}',
-    quickSetupExpo: 'Expo / EAS',
     configured: 'Konfiguriert',
     needsSetup: 'Einrichtung erforderlich',
     destinations: {
@@ -823,29 +816,9 @@ export const de: TranslationMap = mergeTranslations(en, {
       },
     },
     mainSections: {
-      overview: {
-        title: 'Ueberblick',
-        hint: 'Sehen Sie, was bereit ist, und springen Sie direkt zu dem Teil, den Sie konfigurieren moechten.',
-      },
-      assistant: {
-        title: 'Assistent',
-        hint: 'Erscheinungsbild, Sprache, Assistentenverhalten und Schlussfolgern.',
-      },
-      tools: {
-        title: 'Tools',
-        hint: 'Suche, Service-Schluessel, integrierte Faehigkeiten und Berechtigungssteuerung.',
-      },
       personas: {
         title: 'Personas',
         hint: 'Passen Sie Persona-Prompts, Overrides und Denkstil an.',
-      },
-      surfaces: {
-        title: 'Oberflaechen',
-        hint: 'Konfigurieren Sie SSH, Remote-Workspaces, Browser, Expo, Anbieter und MCP-Server.',
-      },
-      data: {
-        title: 'Daten',
-        hint: 'Destruktive Aktionen und Gespraechsbereinigung.',
       },
     },
     toolGroups: {

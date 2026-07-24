@@ -451,9 +451,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     mcpResetOAuthSession: 'Restablecer sesión OAuth',
     mcpResetOAuthSessionConfirm: '¿Borrar los tokens OAuth almacenados para este servidor MCP?',
     mcpResetOAuthSessionSuccess: 'Sesión OAuth borrada.',
-    executionSurfaces: 'Superficies de ejecucion',
-    executionSurfacesHint:
-      'Configura hosts SSH remotos y raices de workspace para que las skills dependientes de escritorio puedan enrutar a un destino real.',
     sshTargets: 'Objetivos SSH',
     addSshTarget: 'Agregar objetivo SSH',
     editSshTarget: 'Editar objetivo SSH',
@@ -578,10 +575,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     deleteBrowserProviderConfirm: '¿Quitar este proveedor de navegador?',
     noBrowserProviders: 'No hay proveedores de navegador configurados.',
     quickSetupTitle: 'Configuración rápida',
-    quickSetupHint:
-      'Comienza con lo esencial y luego salta directamente a la sección que necesites sin perder tu lugar.',
-    quickSetupAction: '{name}: {count} configurados, {status}',
-    quickSetupExpo: 'Expo / EAS',
     configured: 'Configurado',
     needsSetup: 'Falta configurar',
     destinations: {
@@ -822,29 +815,9 @@ export const es: TranslationMap = mergeTranslations(en, {
       },
     },
     mainSections: {
-      overview: {
-        title: 'Resumen',
-        hint: 'Mira qué está listo y salta directamente a la parte que quieras configurar.',
-      },
-      assistant: {
-        title: 'Asistente',
-        hint: 'Apariencia, idioma, comportamiento del asistente y razonamiento.',
-      },
-      tools: {
-        title: 'Herramientas',
-        hint: 'Búsqueda, claves de servicio, capacidades integradas y controles de permisos.',
-      },
       personas: {
         title: 'Personas',
         hint: 'Ajusta prompts de persona, reemplazos y estilo de razonamiento.',
-      },
-      surfaces: {
-        title: 'Superficies',
-        hint: 'Configura SSH, workspaces remotos, navegadores, Expo, proveedores y servidores MCP.',
-      },
-      data: {
-        title: 'Datos',
-        hint: 'Acciones destructivas y limpieza de conversaciones.',
       },
     },
     toolGroups: {

@@ -48,7 +48,7 @@ function buildInstalledProvider(options?: { revision?: string }) {
 }
 
 describe('SettingsScreen local model recovery', () => {
-  setupSettingsScreenTestSuite();
+  setupSettingsScreenTestSuite({ destination: 'advanced-ai' });
 
   beforeEach(() => {
     (Platform as { OS: 'android' | 'ios' }).OS = 'android';

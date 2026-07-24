@@ -26,11 +26,10 @@ type SettingsDataSectionProps = {
   setCompactionProvider: (providerId: string | null) => void;
   setCompactionModel: (model: string | null) => void;
   consolidationStatus: ConsolidationStatusSnapshot;
-  onLayout: (event: any) => void;
+  onLayout?: (event: any) => void;
   onManageMemory: () => void;
   onManageApprovals: () => void;
   onClearAllConversations: () => void;
-  mode?: 'all' | 'focused';
 };
 
 const MODE_CHIP_ORDER: ReadonlyArray<{
@@ -75,24 +74,15 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
   onManageMemory,
   onManageApprovals,
   onClearAllConversations,
-  mode = 'all',
 }) => {
   return (
     <View style={styles.sectionCard} onLayout={onLayout}>
       <View style={styles.sectionCardHeader}>
         <Text style={styles.sectionCardTitle}>
-          {t(
-            mode === 'focused'
-              ? 'settings.destinations.memoryPrivacy.title'
-              : 'settings.mainSections.data.title',
-          )}
+          {t('settings.destinations.memoryPrivacy.title')}
         </Text>
         <Text style={styles.sectionCardHint}>
-          {t(
-            mode === 'focused'
-              ? 'settings.destinations.memoryPrivacy.hint'
-              : 'settings.mainSections.data.hint',
-          )}
+          {t('settings.destinations.memoryPrivacy.hint')}
         </Text>
       </View>
 

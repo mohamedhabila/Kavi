@@ -444,9 +444,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     mcpResetOAuthSession: 'OAuth セッションをリセット',
     mcpResetOAuthSessionConfirm: 'この MCP サーバーの保存済み OAuth トークンを削除しますか？',
     mcpResetOAuthSessionSuccess: 'OAuth セッションを削除しました。',
-    executionSurfaces: '実行サーフェス',
-    executionSurfacesHint:
-      'デスクトップ依存のスキルが実際の実行先へルーティングできるよう、リモート SSH ホストとワークスペースのルートを設定します。',
     sshTargets: 'SSH ターゲット',
     addSshTarget: 'SSH ターゲットを追加',
     editSshTarget: 'SSH ターゲットを編集',
@@ -570,10 +567,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     deleteBrowserProviderConfirm: 'このブラウザプロバイダーを削除しますか？',
     noBrowserProviders: 'ブラウザプロバイダーはまだ設定されていません。',
     quickSetupTitle: 'クイックセットアップ',
-    quickSetupHint:
-      'まず重要な設定から始めて、その後は現在位置を失わずに必要なセクションへ直接移動できます。',
-    quickSetupAction: '{name}: {count} 件設定済み、{status}',
-    quickSetupExpo: 'Expo / EAS',
     configured: '設定済み',
     needsSetup: '設定が必要',
     destinations: {
@@ -811,29 +804,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
       },
     },
     mainSections: {
-      overview: {
-        title: '概要',
-        hint: '準備状況を確認し、設定したい場所へすぐ移動できます。',
-      },
-      assistant: {
-        title: 'アシスタント',
-        hint: '外観、言語、アシスタントの動作、推論。',
-      },
-      tools: {
-        title: 'ツール',
-        hint: '検索、サービスキー、組み込み機能、権限制御。',
-      },
       personas: {
         title: 'ペルソナ',
         hint: 'ペルソナのプロンプト、上書き、推論スタイルを調整します。',
-      },
-      surfaces: {
-        title: 'サーフェス',
-        hint: 'SSH、リモートワークスペース、ブラウザ、Expo、プロバイダー、MCP サーバーを設定します。',
-      },
-      data: {
-        title: 'データ',
-        hint: '破壊的な操作と会話のクリーンアップ。',
       },
     },
     toolGroups: {

@@ -446,9 +446,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     mcpResetOAuthSession: 'Redefinir sessão OAuth',
     mcpResetOAuthSessionConfirm: 'Limpar os tokens OAuth armazenados para este servidor MCP?',
     mcpResetOAuthSessionSuccess: 'Sessão OAuth removida.',
-    executionSurfaces: 'Superficies de execucao',
-    executionSurfacesHint:
-      'Configure hosts SSH remotos e raizes de workspace para que skills dependentes de desktop possam ser roteadas para um destino real.',
     sshTargets: 'Alvos SSH',
     addSshTarget: 'Adicionar alvo SSH',
     editSshTarget: 'Editar alvo SSH',
@@ -573,10 +570,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     deleteBrowserProviderConfirm: 'Remover este provedor de navegador?',
     noBrowserProviders: 'Nenhum provedor de navegador configurado.',
     quickSetupTitle: 'Configuração rápida',
-    quickSetupHint:
-      'Comece pelo essencial e depois pule direto para a seção de que precisa sem perder seu lugar.',
-    quickSetupAction: '{name}: {count} configurados, {status}',
-    quickSetupExpo: 'Expo / EAS',
     configured: 'Configurado',
     needsSetup: 'Precisa de configuração',
     destinations: {
@@ -818,29 +811,9 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       },
     },
     mainSections: {
-      overview: {
-        title: 'Visão geral',
-        hint: 'Veja o que está pronto e pule direto para a parte que deseja configurar.',
-      },
-      assistant: {
-        title: 'Assistente',
-        hint: 'Aparência, idioma, comportamento do assistente e raciocínio.',
-      },
-      tools: {
-        title: 'Ferramentas',
-        hint: 'Busca, chaves de serviço, capacidades integradas e controles de permissão.',
-      },
       personas: {
         title: 'Personas',
         hint: 'Ajuste prompts de persona, substituições e estilo de raciocínio.',
-      },
-      surfaces: {
-        title: 'Superfícies',
-        hint: 'Configure SSH, workspaces remotos, navegadores, Expo, provedores e servidores MCP.',
-      },
-      data: {
-        title: 'Dados',
-        hint: 'Ações destrutivas e limpeza de conversas.',
       },
     },
     toolGroups: {
