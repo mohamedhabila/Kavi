@@ -246,7 +246,10 @@ export const ChatScreen: React.FC = () => {
     [activeConversationId, conversations],
   );
   const handleOpenProviderSetup = useCallback(
-    () => navigation.navigate('Settings' as any),
+    () =>
+      navigation.navigate('Settings' as any, {
+        destination: 'advanced-ai', returnTo: { name: 'Chat' },
+      }),
     [navigation],
   );
   const handleOpenConversationSettings = useCallback(() => {

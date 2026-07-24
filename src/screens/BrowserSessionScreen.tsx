@@ -237,7 +237,12 @@ export const BrowserSessionScreen: React.FC = () => {
           <Text style={styles.emptySubtext}>{t('browserSessions.noProviderDescription')}</Text>
           <TouchableOpacity
             style={styles.configBtn}
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() =>
+              navigation.navigate('Settings', {
+                destination: 'connections',
+                returnTo: { name: 'BrowserSession' },
+              })
+            }
           >
             <Text style={styles.configBtnText}>{t('browserSessions.openSettings')}</Text>
           </TouchableOpacity>

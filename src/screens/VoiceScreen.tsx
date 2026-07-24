@@ -350,6 +350,7 @@ export const VoiceScreen: React.FC = () => {
     }
 
     navigation.navigate('Settings', {
+      destination: 'advanced-ai',
       returnTo: { name: 'Voice' },
     });
   }, [cancelPendingStart, failureKind, manager, navigation]);

@@ -248,6 +248,8 @@ export const McpStatusScreen: React.FC = () => {
       }
 
       (navigation as any).navigate('Settings', {
+        destination: 'connections',
+        returnTo: { name: 'McpStatus' },
         section: 'mcp-edit',
         serverId: server.id,
       });
@@ -481,7 +483,10 @@ export const McpStatusScreen: React.FC = () => {
   }, []);
 
   const handleOpenSettings = useCallback(() => {
-    (navigation as any).navigate('Settings');
+    (navigation as any).navigate('Settings', {
+      destination: 'connections',
+      returnTo: { name: 'McpStatus' },
+    });
   }, [navigation]);
 
   return (

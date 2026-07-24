@@ -202,7 +202,15 @@ describe('ConversationSettingsScreen', () => {
     const { getByTestId } = render(<ConversationSettingsScreen />);
 
     fireEvent.press(getByTestId('conversation-open-advanced-ai'));
-    expect(mockNavigate).toHaveBeenCalledWith('Settings');
+    expect(mockNavigate).toHaveBeenCalledWith('Settings', {
+      destination: 'advanced-ai',
+      returnTo: {
+        name: 'ConversationSettings',
+        params: {
+          conversationId: 'conversation-1',
+        },
+      },
+    });
   });
 
   it('keeps usage details collapsed until requested', () => {

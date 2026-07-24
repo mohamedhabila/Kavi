@@ -82,7 +82,10 @@ describe('ChatScreen UX performance contracts', () => {
     expect(queryByText('Ask & understand')).toBeNull();
 
     fireEvent.press(getByText('Set up AI provider'));
-    expect(mockNavigate).toHaveBeenCalledWith('Settings');
+    expect(mockNavigate).toHaveBeenCalledWith('Settings', {
+      destination: 'advanced-ai',
+      returnTo: { name: 'Chat' },
+    });
   });
 
   it('resumes the most recent non-empty conversation from the start state', () => {

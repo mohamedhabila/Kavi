@@ -257,7 +257,12 @@ const RemoteWorkScreenInner: React.FC = () => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('remoteWork.title')}</Text>
         <TouchableOpacity
-          onPress={() => navigation.navigate('Settings' as never)}
+          onPress={() =>
+            (navigation as any).navigate('Settings', {
+              destination: 'home',
+              returnTo: { name: 'RemoteWork' },
+            })
+          }
           accessibilityRole="button"
           accessibilityLabel={t('remoteWork.openSettings')}
         >

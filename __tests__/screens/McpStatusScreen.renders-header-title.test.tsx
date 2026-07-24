@@ -136,6 +136,16 @@ describe('McpStatusScreen', () => {
     expect(getByText('No MCP servers')).toBeTruthy();
     expect(getByText(/Configure MCP servers to extend/)).toBeTruthy();
   });
+  it('opens the focused Connections settings from the empty state', () => {
+    const { getByText } = render(<McpStatusScreen />);
+
+    fireEvent.press(getByText('Add Server in Settings'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('Settings', {
+      destination: 'connections',
+      returnTo: { name: 'McpStatus' },
+    });
+  });
   it('shows installed and browse tabs', () => {
     const { getByText } = render(<McpStatusScreen />);
     expect(getByText('Installed')).toBeTruthy();
@@ -267,6 +277,8 @@ describe('McpStatusScreen', () => {
     await waitFor(() => expect(getByText('Edit')).toBeTruthy());
     fireEvent.press(getByText('Edit'));
     expect(mockNavigate).toHaveBeenCalledWith('Settings', {
+      destination: 'connections',
+      returnTo: { name: 'McpStatus' },
       section: 'mcp-edit',
       serverId: 'srv-edit',
     });

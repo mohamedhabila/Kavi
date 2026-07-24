@@ -100,6 +100,9 @@ describe('RemoteWorkScreen runtime', () => {
   it('navigates to settings from the header action', () => {
     const { getByLabelText } = renderRemoteWorkScreen();
     fireEvent.press(getByLabelText('Open Settings'));
-    expect(mockNavigate).toHaveBeenCalledWith('Settings');
+    expect(mockNavigate).toHaveBeenCalledWith('Settings', {
+      destination: 'home',
+      returnTo: { name: 'RemoteWork' },
+    });
   });
 });

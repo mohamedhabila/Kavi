@@ -117,7 +117,10 @@ describe('BrowserSessionScreen', () => {
     expect(getByText('browserSessions.noProviderTitle')).toBeTruthy();
     fireEvent.press(getByText('browserSessions.openSettings'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('Settings');
+    expect(mockNavigate).toHaveBeenCalledWith('Settings', {
+      destination: 'connections',
+      returnTo: { name: 'BrowserSession' },
+    });
   });
 
   it('renders the no-session state when browser support is configured but no sessions exist', () => {

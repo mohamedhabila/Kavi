@@ -238,6 +238,7 @@ describe('VoiceScreen', () => {
     fireEvent.press(getByTestId('voice-recovery-settings'));
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('Settings', {
+        destination: 'advanced-ai',
         returnTo: { name: 'Voice' },
       }),
     );

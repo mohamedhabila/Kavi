@@ -286,7 +286,18 @@ export const ConversationSettingsScreen: React.FC = () => {
           />
           <TouchableOpacity
             accessibilityRole="button"
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() =>
+              navigation.navigate('Settings', {
+                destination: 'advanced-ai',
+                returnTo: {
+                  name: 'ConversationSettings',
+                  params: {
+                    ...route.params,
+                    conversationId: conversation.id,
+                  },
+                },
+              })
+            }
             style={styles.advancedSettingsLink}
             testID="conversation-open-advanced-ai"
           >
