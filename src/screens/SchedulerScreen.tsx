@@ -1,603 +1,402 @@
-// ---------------------------------------------------------------------------
-// Kavi — Scheduler Dashboard Screen
-// ---------------------------------------------------------------------------
-
-import React, { useCallback, useMemo, useState } from 'react';
-import {
-  Alert,
-  FlatList,
-  Modal,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, FlatList, Linking, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Clock, Plus, Trash2, X } from 'lucide-react-native';
-import { useSchedulerStore } from '../services/scheduler/store';
+import { AlarmClock, Plus } from 'lucide-react-native';
+import type { CronJob, CronSchedule } from '../services/cron/types';
 import {
   createScheduledJob,
   deleteScheduledJob,
   setScheduledJobEnabled,
 } from '../services/scheduler/commands';
-import { useAppTheme, AppPalette } from '../theme/useAppTheme';
+import { runJobNow } from '../services/scheduler/engine';
+import { useSchedulerStore } from '../services/scheduler/store';
+import { useExecutionTraceStore } from '../services/scheduler/traceStore';
+import {
+  getNotificationPermissionReadiness,
+  requestNotificationPermission,
+} from '../services/notifications/service';
+import { redactSensitiveText } from '../services/security/toolDetailRedaction';
+import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
+import { SchedulerCreateSheet } from '../components/scheduler/SchedulerCreateSheet';
+import {
+  SchedulerJobCard,
+  type SchedulerJobFeedback,
+  type SchedulerJobPendingAction,
+} from '../components/scheduler/SchedulerJobCard';
+import {
+  SchedulerPermissionCard,
+  type SchedulerPermissionState,
+} from '../components/scheduler/SchedulerPermissionCard';
+import { createSchedulerStyles } from '../components/scheduler/Scheduler.styles';
+import { useAppTheme } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
-import type { CronJob, CronSchedule } from '../services/cron/types';
-import { useBackToChat } from '../navigation/useBackToChat';
+
+type SchedulerRouteParams = {
+  initialJobId?: string;
+};
+
+type ScreenNotice = {
+  message: string;
+  tone: 'info' | 'warning' | 'error';
+};
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function safeMessage(value: unknown): string {
+  const text = value instanceof Error ? value.message : String(value);
+  const redacted = redactSensitiveText(text).replace(/\s+/gu, ' ').trim();
+  return redacted.length > 300 ? `${redacted.slice(0, 297)}…` : redacted;
+}
+
+function safeMutationMessage(value: unknown, t: Translate): string {
+  const code =
+    value && typeof value === 'object' && 'code' in value
+      ? String((value as { code?: unknown }).code)
+      : '';
+  return code === 'scheduler_persistence_failed' ? t('scheduler.saveFailed') : safeMessage(value);
+}
 
 export const SchedulerScreen: React.FC = () => {
-  const handleBack = useBackToChat();
+  const navigation = useNavigation<any>();
+  const route = useRoute<{ key: string; name: string; params?: SchedulerRouteParams }>();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createSchedulerStyles(colors), [colors]);
+  const listRef = useRef<FlatList<CronJob>>(null);
+  const permissionRequestId = useRef(0);
+  const permissionWorkingRef = useRef(false);
+  const pendingJobIdsRef = useRef(new Set<string>());
+  const jobs = useSchedulerStore((state) => state.jobs);
+  const traces = useExecutionTraceStore((state) => state.traces);
+  const [showCreateSheet, setShowCreateSheet] = useState(false);
+  const [pendingJobActions, setPendingJobActions] = useState<
+    Record<string, SchedulerJobPendingAction>
+  >({});
+  const [jobFeedback, setJobFeedback] = useState<Record<string, SchedulerJobFeedback>>({});
+  const [notice, setNotice] = useState<ScreenNotice | null>(null);
+  const [highlightedJobId, setHighlightedJobId] = useState<string | undefined>();
+  const [permissionState, setPermissionState] = useState<SchedulerPermissionState>({
+    status: 'loading',
+    canRequest: false,
+  });
+  const [isPermissionWorking, setIsPermissionWorking] = useState(false);
+  const initialJobId = route.params?.initialJobId;
 
-  const jobs = useSchedulerStore((s) => s.jobs);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [pendingJobIds, setPendingJobIds] = useState<string[]>([]);
-  const [newName, setNewName] = useState('');
-  const [newPrompt, setNewPrompt] = useState('');
-  const [scheduleType, setScheduleType] = useState<'every' | 'cron'>('every');
-  const [intervalValue, setIntervalValue] = useState('1');
-  const [intervalUnit, setIntervalUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
-  const [cronExpr, setCronExpr] = useState('');
-
-  const getIntervalMs = useCallback((): number => {
-    const val = parseInt(intervalValue, 10);
-    if (!val || val <= 0) return 0;
-    switch (intervalUnit) {
-      case 'minutes':
-        return val * 60000;
-      case 'hours':
-        return val * 3600000;
-      case 'days':
-        return val * 86400000;
-    }
-  }, [intervalUnit, intervalValue]);
-
-  const handleAddTask = useCallback(async () => {
-    if (isCreating) return;
-    const name = newName.trim();
-    if (!name) {
-      Alert.alert(t('common.error'), t('scheduler.nameRequired'));
-      return;
-    }
-    const prompt = newPrompt.trim();
-    if (!prompt) {
-      Alert.alert(t('common.error'), t('scheduler.promptRequired'));
-      return;
-    }
-
-    let schedule: CronSchedule;
-    if (scheduleType === 'every') {
-      const ms = getIntervalMs();
-      if (!ms) {
-        Alert.alert(t('common.error'), t('scheduler.scheduleRequired'));
-        return;
-      }
-      schedule = { kind: 'every', everyMs: ms };
-    } else {
-      const expr = cronExpr.trim();
-      if (!expr) {
-        Alert.alert(t('common.error'), t('scheduler.scheduleRequired'));
-        return;
-      }
-      schedule = { kind: 'cron', expr };
-    }
-    setIsCreating(true);
+  const refreshPermission = useCallback(async () => {
+    const requestId = ++permissionRequestId.current;
+    setPermissionState({ status: 'loading', canRequest: false });
     try {
-      const created = await createScheduledJob({ name, prompt, schedule });
-      if (created.warning) Alert.alert(t('scheduler.warningTitle'), created.warning);
-    } catch (error) {
-      Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
-      return;
-    } finally {
-      setIsCreating(false);
+      const readiness = await getNotificationPermissionReadiness();
+      if (permissionRequestId.current === requestId) setPermissionState(readiness);
+    } catch {
+      if (permissionRequestId.current === requestId) {
+        setPermissionState({ status: 'error', canRequest: true });
+      }
     }
-    setNewName('');
-    setNewPrompt('');
-    setIntervalValue('1');
-    setIntervalUnit('hours');
-    setCronExpr('');
-    setShowAddModal(false);
-  }, [cronExpr, getIntervalMs, isCreating, newName, newPrompt, scheduleType, t]);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshPermission();
+      return () => {
+        permissionRequestId.current += 1;
+      };
+    }, [refreshPermission]),
+  );
+
+  useEffect(() => {
+    if (!initialJobId) return;
+    setHighlightedJobId(initialJobId);
+    navigation.setParams?.({ initialJobId: undefined });
+  }, [initialJobId, navigation]);
+
+  useEffect(() => {
+    if (!highlightedJobId) return;
+    const index = jobs.findIndex((job) => job.id === highlightedJobId);
+    if (index < 0) return;
+    const scrollTimer = setTimeout(() => {
+      listRef.current?.scrollToIndex?.({ animated: true, index, viewPosition: 0.15 });
+    }, 120);
+    const highlightTimer = setTimeout(() => setHighlightedJobId(undefined), 4_500);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(highlightTimer);
+    };
+  }, [highlightedJobId, jobs]);
+
+  const handlePermissionAction = useCallback(async () => {
+    if (permissionWorkingRef.current) return;
+    permissionWorkingRef.current = true;
+    setIsPermissionWorking(true);
+    try {
+      if (permissionState.status === 'blocked') {
+        await Linking.openSettings();
+        return;
+      }
+      if (permissionState.status === 'error') {
+        await refreshPermission();
+        return;
+      }
+      if (permissionState.status !== 'requestable') return;
+
+      const requestId = ++permissionRequestId.current;
+      const readiness = await requestNotificationPermission();
+      if (permissionRequestId.current === requestId) setPermissionState(readiness);
+    } catch {
+      setPermissionState({ status: 'error', canRequest: true });
+    } finally {
+      permissionWorkingRef.current = false;
+      setIsPermissionWorking(false);
+    }
+  }, [permissionState.status, refreshPermission]);
 
   const runJobMutation = useCallback(
-    async (jobId: string, operation: () => Promise<void>) => {
-      setPendingJobIds((ids) => (ids.includes(jobId) ? ids : [...ids, jobId]));
+    async (
+      jobId: string,
+      action: SchedulerJobPendingAction,
+      operation: () => Promise<void>,
+      onError?: (error: unknown) => void,
+    ) => {
+      if (pendingJobIdsRef.current.has(jobId)) return;
+      pendingJobIdsRef.current.add(jobId);
+      setPendingJobActions((current) => ({ ...current, [jobId]: action }));
       try {
         await operation();
       } catch (error) {
-        Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+        if (onError) onError(error);
+        else setNotice({ message: safeMutationMessage(error, t), tone: 'error' });
       } finally {
-        setPendingJobIds((ids) => ids.filter((id) => id !== jobId));
+        pendingJobIdsRef.current.delete(jobId);
+        setPendingJobActions((current) => {
+          const next = { ...current };
+          delete next[jobId];
+          return next;
+        });
       }
     },
     [t],
   );
 
-  const handleDelete = (job: CronJob) => {
-    Alert.alert(
-      t('scheduler.deleteJob'),
-      t('scheduler.deleteJobConfirm', { name: job.name || t('scheduler.untitledJob') }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: () =>
-            void runJobMutation(job.id, async () => {
-              const result = await deleteScheduledJob(job.id);
-              if (result === 'busy') throw new Error(t('scheduler.jobRunning'));
-              if (result === 'not_found') throw new Error(t('scheduler.jobMissing'));
-            }),
+  const handleToggle = useCallback(
+    (job: CronJob, enabled: boolean) => {
+      void runJobMutation(job.id, 'toggle', async () => {
+        const result = await setScheduledJobEnabled(job.id, enabled);
+        if (result.status === 'not_found') throw new Error(t('scheduler.jobMissing'));
+        const name = job.name || t('scheduler.untitledJob');
+        const changeNotice = enabled
+          ? t('scheduler.resumedNotice', { name })
+          : t('scheduler.pausedNotice', { name });
+        setNotice({
+          message: result.warning
+            ? `${changeNotice} ${t('scheduler.notificationSetupIssue')}`
+            : changeNotice,
+          tone: result.warning ? 'warning' : 'info',
+        });
+      });
+    },
+    [runJobMutation, t],
+  );
+
+  const handleDelete = useCallback(
+    (job: CronJob) => {
+      Alert.alert(
+        t('scheduler.deleteJob'),
+        t('scheduler.deleteJobConfirm', { name: job.name || t('scheduler.untitledJob') }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('common.delete'),
+            style: 'destructive',
+            onPress: () =>
+              void runJobMutation(job.id, 'delete', async () => {
+                const result = await deleteScheduledJob(job.id);
+                if (result === 'busy') throw new Error(t('scheduler.jobRunning'));
+                if (result === 'not_found') throw new Error(t('scheduler.jobMissing'));
+                setJobFeedback((current) => {
+                  const next = { ...current };
+                  delete next[job.id];
+                  return next;
+                });
+              }),
+          },
+        ],
+      );
+    },
+    [runJobMutation, t],
+  );
+
+  const handleRun = useCallback(
+    (job: CronJob) => {
+      if (pendingJobIdsRef.current.has(job.id)) return;
+      setJobFeedback((current) => ({
+        ...current,
+        [job.id]: { message: t('scheduler.runningNow'), tone: 'info' },
+      }));
+      void runJobMutation(
+        job.id,
+        'run',
+        async () => {
+          const result = await runJobNow(job.id, { force: true, trigger: 'manual' });
+          let feedback: SchedulerJobFeedback;
+          if (result.status === 'succeeded') {
+            feedback = {
+              message: result.warning
+                ? `${t('scheduler.runSucceeded')} ${safeMessage(result.warning)}`
+                : t('scheduler.runSucceeded'),
+              tone: result.warning ? 'warning' : 'success',
+            };
+          } else if (result.status === 'busy') {
+            feedback = { message: t('scheduler.runBusy'), tone: 'warning' };
+          } else if (result.status === 'skipped') {
+            feedback = { message: t('scheduler.runUnavailable'), tone: 'warning' };
+          } else if (result.status === 'retrying') {
+            feedback = {
+              message: `${t('scheduler.runRetrying')} ${safeMessage(result.error)}`,
+              tone: 'warning',
+            };
+          } else if (result.status === 'failed') {
+            feedback = {
+              message: `${t('scheduler.runFailed')} ${safeMessage(result.error)}`,
+              tone: 'error',
+            };
+          } else {
+            feedback = { message: t('scheduler.jobMissing'), tone: 'error' };
+          }
+          setJobFeedback((current) => ({ ...current, [job.id]: feedback }));
         },
-      ],
-    );
-  };
+        (error) => {
+          setJobFeedback((current) => ({
+            ...current,
+            [job.id]: {
+              message: `${t('scheduler.runFailed')} ${safeMessage(error)}`,
+              tone: 'error',
+            },
+          }));
+        },
+      );
+    },
+    [runJobMutation, t],
+  );
 
-  const formatSchedule = (job: CronJob): string => {
-    if (job.schedule.kind === 'cron') return t('scheduler.cronFormat', { expr: job.schedule.expr });
-    if (job.schedule.kind === 'every') {
-      const ms = Number(job.schedule.everyMs);
-      if (ms >= 86400000)
-        return t('scheduler.everyFormat', {
-          value: String(ms / 86400000),
-          unit: t('scheduler.days'),
-        });
-      if (ms >= 3600000)
-        return t('scheduler.everyFormat', {
-          value: String(ms / 3600000),
-          unit: t('scheduler.hours'),
-        });
-      return t('scheduler.everyFormat', {
-        value: String(ms / 60000),
-        unit: t('scheduler.minutes'),
+  const handleCreate = useCallback(
+    async (input: { name: string; prompt: string; schedule: CronSchedule }) => {
+      const created = await createScheduledJob(input);
+      setNotice({
+        message: created.warning
+          ? `${t('scheduler.createdNotice')} ${t('scheduler.notificationSetupIssue')}`
+          : t('scheduler.createdNotice'),
+        tone: created.warning ? 'warning' : 'info',
       });
-    }
-    if (job.schedule.kind === 'at')
-      return t('scheduler.atFormat', {
-        date: new Date(Number(job.schedule.atMs)).toLocaleString(),
-      });
-    return t('scheduler.unknown');
-  };
-
-  const formatTimestamp = (ts?: number) => {
-    if (!ts) return t('scheduler.never');
-    return new Date(ts).toLocaleString();
-  };
-
-  const renderJob = ({ item: job }: { item: CronJob }) => {
-    const nextRunAtMs = job.nextRetryAtMs || job.nextRunAtMs;
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <Clock size={16} color={job.enabled ? colors.primary : colors.textTertiary} />
-            <Text style={styles.cardTitle} numberOfLines={1}>
-              {job.name || t('scheduler.untitledJob')}
-            </Text>
-          </View>
-          <Switch
-            value={job.enabled}
-            disabled={pendingJobIds.includes(job.id)}
-            onValueChange={(enabled) =>
-              void runJobMutation(job.id, async () => {
-                const result = await setScheduledJobEnabled(job.id, enabled);
-                if (result.status === 'not_found') throw new Error(t('scheduler.jobMissing'));
-                if (result.warning) Alert.alert(t('scheduler.warningTitle'), result.warning);
-              })
-            }
-            trackColor={{ true: colors.primary }}
-          />
-        </View>
-
-        <Text style={styles.schedule}>{formatSchedule(job)}</Text>
-
-        {job.payload?.prompt && (
-          <Text style={styles.prompt} numberOfLines={2}>
-            {job.payload.prompt}
-          </Text>
-        )}
-
-        <View style={styles.runtimeGrid}>
-          <Text style={styles.runtimeText}>
-            {t('scheduler.nextRun')}: {formatTimestamp(nextRunAtMs)}
-          </Text>
-          <Text style={styles.runtimeText}>
-            {t('scheduler.lastRun')}: {formatTimestamp(job.lastRunAtMs)}
-          </Text>
-        </View>
-
-        {job.lastError ? (
-          <Text style={styles.errorText} numberOfLines={1}>
-            {t('common.error')}: {job.lastError}
-          </Text>
-        ) : null}
-
-        {job.lastDeliveryError ? (
-          <Text style={styles.errorText} numberOfLines={2}>
-            {t('scheduler.deliveryWarning', { error: job.lastDeliveryError })}
-          </Text>
-        ) : null}
-
-        {job.lastWakeError ? (
-          <Text style={styles.errorText} numberOfLines={2}>
-            {t('scheduler.wakeWarning', { error: job.lastWakeError })}
-          </Text>
-        ) : null}
-
-        <View style={styles.cardFooter}>
-          <Text style={styles.lastRun}>
-            {t('scheduler.lastUpdate', { date: formatTimestamp(job.updatedAtMs) })}
-          </Text>
-          <TouchableOpacity
-            onPress={() => handleDelete(job)}
-            disabled={pendingJobIds.includes(job.id)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Delete task ${job.name || job.id}`}
-          >
-            <Trash2 size={16} color={colors.danger} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
+    },
+    [t],
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']} testID="scheduler-screen">
       <View style={styles.header}>
+        <RouteLeadingButton style={styles.headerAction} testID="scheduler-leading" />
+        <Text accessibilityRole="header" style={styles.headerTitle}>
+          {t('scheduler.title')}
+        </Text>
         <TouchableOpacity
-          onPress={handleBack}
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back')}
-        >
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('scheduler.title')}</Text>
-        <TouchableOpacity
-          onPress={() => setShowAddModal(true)}
-          accessibilityRole="button"
           accessibilityLabel={t('scheduler.addTask')}
+          accessibilityRole="button"
+          onPress={() => setShowCreateSheet(true)}
+          style={styles.headerAction}
+          testID="scheduler-add"
         >
-          <Plus size={24} color={colors.primary} />
+          <Plus color={colors.primary} size={23} />
         </TouchableOpacity>
       </View>
 
       <FlatList
+        contentContainerStyle={jobs.length > 0 ? styles.listContent : styles.listContentEmpty}
         data={jobs}
-        keyExtractor={(j) => j.id}
-        contentContainerStyle={styles.list}
-        renderItem={renderJob}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Clock size={40} color={colors.textTertiary} />
-            <Text style={styles.emptyTitle}>{t('scheduler.noJobs')}</Text>
-            <Text style={styles.emptyText}>{t('scheduler.noJobsHint')}</Text>
+        initialNumToRender={12}
+        keyExtractor={(job) => job.id}
+        ListHeaderComponent={
+          <View style={styles.listHeader}>
+            <Text style={styles.intro}>{t('scheduler.intro')}</Text>
+            <SchedulerPermissionCard
+              isWorking={isPermissionWorking}
+              onAction={() => void handlePermissionAction()}
+              state={permissionState}
+            />
+            {notice ? (
+              <View
+                accessibilityLiveRegion={notice.tone === 'error' ? 'assertive' : 'polite'}
+                style={styles.notice}
+                testID="scheduler-notice"
+              >
+                <Text
+                  style={[
+                    styles.noticeText,
+                    notice.tone === 'error'
+                      ? { color: colors.danger }
+                      : notice.tone === 'warning'
+                        ? { color: colors.warning }
+                        : null,
+                  ]}
+                >
+                  {notice.message}
+                </Text>
+              </View>
+            ) : null}
           </View>
         }
-      />
-
-      {/* Add Task Modal */}
-      <Modal visible={showAddModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('scheduler.addTask')}</Text>
-              <TouchableOpacity
-                onPress={() => setShowAddModal(false)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={t('common.close')}
-              >
-                <X size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={styles.modalInput}
-              value={newName}
-              onChangeText={setNewName}
-              placeholder={t('scheduler.taskNamePlaceholder')}
-              placeholderTextColor={colors.placeholder}
-            />
-            <TextInput
-              style={[styles.modalInput, { height: 80 }]}
-              value={newPrompt}
-              onChangeText={setNewPrompt}
-              placeholder={t('scheduler.promptPlaceholder')}
-              placeholderTextColor={colors.placeholder}
-              multiline
-            />
-            {/* Schedule type selector */}
-            <View style={styles.segmentRow}>
-              <TouchableOpacity
-                style={[styles.segmentBtn, scheduleType === 'every' && styles.segmentBtnActive]}
-                onPress={() => setScheduleType('every')}
-              >
-                <Text
-                  style={[styles.segmentText, scheduleType === 'every' && styles.segmentTextActive]}
-                >
-                  {t('scheduler.every')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.segmentBtn, scheduleType === 'cron' && styles.segmentBtnActive]}
-                onPress={() => setScheduleType('cron')}
-              >
-                <Text
-                  style={[styles.segmentText, scheduleType === 'cron' && styles.segmentTextActive]}
-                >
-                  {t('scheduler.cron')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {scheduleType === 'every' ? (
-              <View>
-                <View style={styles.intervalRow}>
-                  <TextInput
-                    style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
-                    value={intervalValue}
-                    onChangeText={setIntervalValue}
-                    placeholder="1"
-                    placeholderTextColor={colors.placeholder}
-                    keyboardType="numeric"
-                  />
-                  <View style={styles.unitRow}>
-                    {(['minutes', 'hours', 'days'] as const).map((unit) => (
-                      <TouchableOpacity
-                        key={unit}
-                        style={[styles.unitBtn, intervalUnit === unit && styles.unitBtnActive]}
-                        onPress={() => setIntervalUnit(unit)}
-                      >
-                        <Text
-                          style={[styles.unitText, intervalUnit === unit && styles.unitTextActive]}
-                        >
-                          {t(`scheduler.${unit}`)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            ) : (
-              <TextInput
-                style={styles.modalInput}
-                value={cronExpr}
-                onChangeText={setCronExpr}
-                placeholder={t('scheduler.cronPlaceholder')}
-                placeholderTextColor={colors.placeholder}
-              />
-            )}
-            <TouchableOpacity
-              style={[styles.modalButton, isCreating && styles.modalButtonDisabled]}
-              onPress={handleAddTask}
-              disabled={isCreating}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <View
+              style={styles.emptyIcon}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
             >
-              <Text style={styles.modalButtonText}>{t('scheduler.create')}</Text>
+              <AlarmClock color={colors.primary} size={27} />
+            </View>
+            <Text style={styles.emptyTitle}>{t('scheduler.noJobs')}</Text>
+            <Text style={styles.emptyHint}>{t('scheduler.noJobsHint')}</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={() => setShowCreateSheet(true)}
+              style={styles.emptyAction}
+              testID="scheduler-empty-create"
+            >
+              <Text style={styles.emptyActionText}>{t('scheduler.emptyAction')}</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+        }
+        maxToRenderPerBatch={10}
+        onScrollToIndexFailed={(info) => {
+          listRef.current?.scrollToOffset?.({
+            animated: true,
+            offset: Math.max(0, info.averageItemLength * info.index),
+          });
+        }}
+        ref={listRef}
+        removeClippedSubviews={Platform.OS === 'android'}
+        renderItem={({ item }) => (
+          <SchedulerJobCard
+            feedback={jobFeedback[item.id]}
+            isSelected={item.id === highlightedJobId}
+            job={item}
+            onDelete={handleDelete}
+            onRun={handleRun}
+            onToggle={handleToggle}
+            pendingAction={pendingJobActions[item.id]}
+            traces={traces}
+          />
+        )}
+      />
+
+      <SchedulerCreateSheet
+        isPermissionWorking={isPermissionWorking}
+        onClose={() => setShowCreateSheet(false)}
+        onCreate={handleCreate}
+        onPermissionAction={() => void handlePermissionAction()}
+        permissionState={permissionState}
+        visible={showCreateSheet}
+      />
     </SafeAreaView>
   );
 };
-
-const createStyles = (colors: AppPalette) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      backgroundColor: colors.header,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    list: {
-      padding: 16,
-      flexGrow: 1,
-    },
-    card: {
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    cardHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    cardTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      flex: 1,
-    },
-    cardTitle: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: colors.text,
-      flex: 1,
-    },
-    schedule: {
-      fontSize: 13,
-      color: colors.primary,
-      fontFamily: 'monospace',
-      marginBottom: 6,
-    },
-    prompt: {
-      fontSize: 13,
-      color: colors.textSecondary,
-      lineHeight: 18,
-      marginBottom: 8,
-    },
-    runtimeGrid: {
-      gap: 2,
-      marginBottom: 8,
-    },
-    runtimeText: {
-      fontSize: 11,
-      color: colors.textTertiary,
-    },
-    errorText: {
-      fontSize: 11,
-      color: colors.danger,
-      marginBottom: 8,
-    },
-    cardFooter: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      borderTopWidth: 1,
-      borderTopColor: colors.subtleBorder,
-      paddingTop: 8,
-    },
-    lastRun: {
-      fontSize: 11,
-      color: colors.textTertiary,
-    },
-    empty: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 40,
-      marginTop: 60,
-    },
-    emptyTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: colors.textSecondary,
-      marginTop: 16,
-    },
-    emptyText: {
-      fontSize: 14,
-      color: colors.textTertiary,
-      textAlign: 'center',
-      marginTop: 8,
-      lineHeight: 20,
-    },
-    modalOverlay: {
-      flex: 1,
-      justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.4)',
-    },
-    modalContent: {
-      backgroundColor: colors.surface,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      padding: 20,
-      paddingBottom: 40,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 20,
-    },
-    modalTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    modalInput: {
-      backgroundColor: colors.inputBackground,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: 15,
-      color: colors.text,
-      borderWidth: 1,
-      borderColor: colors.inputBorder,
-      marginBottom: 12,
-    },
-    segmentRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginBottom: 12,
-    },
-    segmentBtn: {
-      flex: 1,
-      paddingVertical: 10,
-      borderRadius: 10,
-      alignItems: 'center',
-      backgroundColor: colors.inputBackground,
-      borderWidth: 1,
-      borderColor: colors.inputBorder,
-    },
-    segmentBtnActive: {
-      backgroundColor: colors.primarySoft,
-      borderColor: colors.primary,
-    },
-    segmentText: {
-      fontSize: 14,
-      color: colors.textSecondary,
-      fontWeight: '500',
-    },
-    segmentTextActive: {
-      color: colors.primary,
-      fontWeight: '600',
-    },
-    modalButton: {
-      backgroundColor: colors.primary,
-      borderRadius: 10,
-      paddingVertical: 14,
-      alignItems: 'center',
-      marginTop: 4,
-    },
-    modalButtonDisabled: {
-      opacity: 0.5,
-    },
-    modalButtonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    intervalRow: {
-      flexDirection: 'row',
-      gap: 8,
-      alignItems: 'center',
-      marginBottom: 12,
-    },
-    unitRow: {
-      flexDirection: 'row',
-      gap: 4,
-    },
-    unitBtn: {
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: 8,
-      backgroundColor: colors.inputBackground,
-      borderWidth: 1,
-      borderColor: colors.inputBorder,
-    },
-    unitBtnActive: {
-      backgroundColor: colors.primarySoft,
-      borderColor: colors.primary,
-    },
-    unitText: {
-      fontSize: 13,
-      color: colors.textSecondary,
-      fontWeight: '500',
-    },
-    unitTextActive: {
-      color: colors.primary,
-      fontWeight: '600',
-    },
-  });
