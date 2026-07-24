@@ -17,7 +17,7 @@ const DELEGATION_START_ACTION =
   /(?:\bdeleg\p{L}*\b|\bspawn(?:s|ed|ing)?\b|\b(?:launch|start|create|run)(?:s|ed|ing)?\b|委任|分担|委派|分工|فو[ّ]?ض|وك[ّ]?ل)/u;
 
 const DIRECT_DELEGATION_REQUEST =
-  /^(?:(?:please|can\s+you|could\s+you|would\s+you|i\s+(?:want|need)\s+you\s+to)\s+)?delegat(?:e|es|ed|ing)\b/u;
+  /^(?:(?:please|can\s+you|could\s+you|would\s+you|i\s+(?:want|need)\s+you\s+to)\s+)?(?:delegat(?:e|es|ed|ing)|use(?:s|d|ing)?)\b/u;
 
 const WAIT_ACTION =
   /(?:\bwait(?:s|ed|ing)?\b|\bmonitor(?:s|ed|ing)?\b|\bcheck(?:s|ed|ing)?\s+(?:on|the\s+status)\b|esper(?:a|ar|e)|attend(?:s|re|ez)|wart(?:e|en|et)|aguard(?:a|ar|e)|待(?:つ|って|機)|等待|监控|監控|انتظر|راقب)/u;

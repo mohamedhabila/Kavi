@@ -16,6 +16,21 @@ describe('explicit delegated-work tool activation', () => {
     ).toEqual(['sessions_spawn', 'sessions_status', 'sessions_wait', 'sessions_cancel']);
   });
 
+  it('treats a direct request to use a subagent as explicit delegation', () => {
+    expect(
+      resolveExplicitDelegationToolNames({
+        conversationMode: 'agentic',
+        latestUserMessageText: 'Use a subagent to find one cat fact.',
+      }),
+    ).toEqual(['sessions_spawn', 'sessions_status', 'sessions_wait', 'sessions_cancel']);
+    expect(
+      resolveExplicitDelegationToolNames({
+        conversationMode: 'agentic',
+        latestUserMessageText: 'How do I use a subagent?',
+      }),
+    ).toEqual([]);
+  });
+
   it('supports localized explicit delegation language', () => {
     expect(
       resolveExplicitDelegationToolNames({
