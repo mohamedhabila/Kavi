@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { X } from 'lucide-react-native';
 
+import { AppIconButton } from '../../components/navigation/AppIconButton';
 import type { McpHubEntry, McpHubInputSpec } from '../../services/mcp/registryClient';
 import type { McpStatusPalette, McpStatusStyles, McpStatusTranslation } from './mcpStatusTypes';
 
@@ -41,17 +42,12 @@ export function McpInstallModal({
   return (
     <Modal visible={!!installEntry} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View accessibilityViewIsModal style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t('mcpStatus.installServer')}</Text>
-            <TouchableOpacity
-              onPress={onClose}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.close')}
-            >
+            <AppIconButton onPress={onClose} label={t('common.close')} testID="mcp-install-close">
               <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </AppIconButton>
           </View>
 
           {installEntry ? (
@@ -82,6 +78,9 @@ export function McpInstallModal({
                   <View style={styles.remotePickerRow}>
                     {installEntry.remotes.map((remote) => (
                       <TouchableOpacity
+                        accessibilityLabel={remote.label}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: selectedRemoteId === remote.id }}
                         key={remote.id}
                         style={[
                           styles.remotePickerChip,
@@ -113,6 +112,7 @@ export function McpInstallModal({
                     <Text style={styles.fieldHint}>{field.description}</Text>
                   ) : null}
                   <TextInput
+                    accessibilityLabel={field.label}
                     style={styles.searchInput}
                     value={installValues[field.key] || ''}
                     onChangeText={(text) =>

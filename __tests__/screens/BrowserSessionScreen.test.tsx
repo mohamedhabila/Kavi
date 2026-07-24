@@ -1,5 +1,5 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Linking } from 'react-native';
+import { Linking, StyleSheet } from 'react-native';
 import { BrowserSessionScreen } from '../../src/screens/BrowserSessionScreen';
 
 const mockOpenDrawer = jest.fn();
@@ -112,9 +112,13 @@ describe('BrowserSessionScreen', () => {
   });
 
   it('renders the provider configuration empty state and opens settings', () => {
-    const { getByText } = render(<BrowserSessionScreen />);
+    const { getByTestId, getByText } = render(<BrowserSessionScreen />);
 
     expect(getByText('browserSessions.noProviderTitle')).toBeTruthy();
+    expect(getByTestId('browser-session-open-settings').props.accessibilityRole).toBe('button');
+    expect(
+      StyleSheet.flatten(getByTestId('browser-session-open-settings').props.style).minHeight,
+    ).toBe(48);
     fireEvent.press(getByText('browserSessions.openSettings'));
 
     expect(mockNavigate).toHaveBeenCalledWith('Settings', {
@@ -200,6 +204,24 @@ describe('BrowserSessionScreen', () => {
     expect(screen.getByText('Clicked the submit button')).toBeTruthy();
     expect(screen.getByText('Button was not visible')).toBeTruthy();
     expect(screen.getByText('https://example.test/dashboard')).toBeTruthy();
+    expect(screen.getByTestId('browser-session-tab-session-2').props.accessibilityRole).toBe('tab');
+    expect(
+      screen.getByTestId('browser-session-tab-session-2').props.accessibilityState,
+    ).toMatchObject({
+      selected: true,
+    });
+    expect(
+      screen.getByTestId('browser-session-tab-session-1').props.accessibilityState,
+    ).toMatchObject({
+      selected: false,
+    });
+    expect(
+      StyleSheet.flatten(screen.getByTestId('browser-session-tab-session-2').props.style).minHeight,
+    ).toBe(48);
+    expect(screen.getByTestId('browser-session-refresh').props.accessibilityState).toEqual({
+      disabled: false,
+    });
+    expect(screen.getByTestId('browser-session-live-view').props.accessibilityRole).toBe('link');
 
     fireEvent.press(screen.getByText('browserSessions.liveView'));
     await waitFor(() => {

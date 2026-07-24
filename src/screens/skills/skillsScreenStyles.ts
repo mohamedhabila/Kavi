@@ -11,8 +11,9 @@ export const createSkillsScreenStyles = (colors: AppPalette) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      minHeight: 56,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       backgroundColor: colors.header,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
@@ -136,6 +137,8 @@ export const createSkillsScreenStyles = (colors: AppPalette) =>
       color: colors.textSecondary,
     },
     setupButton: {
+      minHeight: 48,
+      justifyContent: 'center',
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 10,
@@ -262,6 +265,7 @@ export const createSkillsScreenStyles = (colors: AppPalette) =>
       color: colors.primary,
     },
     modalInput: {
+      minHeight: 48,
       backgroundColor: colors.inputBackground,
       borderRadius: 10,
       paddingHorizontal: 14,
@@ -297,6 +301,9 @@ export const createSkillsScreenStyles = (colors: AppPalette) =>
       fontSize: 15,
       fontWeight: '600',
       color: colors.textSecondary,
+    },
+    disabledButton: {
+      opacity: 0.55,
     },
     tabRow: {
       flexDirection: 'row',
@@ -335,7 +342,7 @@ export const createSkillsScreenStyles = (colors: AppPalette) =>
       alignItems: 'center',
     },
     searchBtn: {
-      padding: 10,
+      width: 48,
     },
     listFooter: {
       paddingVertical: 16,

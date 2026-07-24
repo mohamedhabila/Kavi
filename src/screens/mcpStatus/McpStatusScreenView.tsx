@@ -9,6 +9,8 @@ import type { McpServerConfig } from '../../types/remote';
 import { BrowseEntryCard, InstalledServerCard } from './McpStatusCards';
 import { McpInstallModal } from './McpInstallModal';
 import type { McpStatusPalette, McpStatusStyles, McpStatusTranslation } from './mcpStatusTypes';
+import { AppIconButton } from '../../components/navigation/AppIconButton';
+import { AppTabButton } from '../../components/navigation/AppTabButton';
 
 type McpStatusScreenViewProps = {
   activeTab: 'installed' | 'browse';
@@ -90,33 +92,34 @@ export function McpStatusScreenView({
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back')}
-        >
+        <AppIconButton onPress={handleBack} label={t('common.back')} testID="mcp-status-back">
           <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
+        </AppIconButton>
         <Text style={styles.headerTitle}>{t('mcpStatus.title')}</Text>
-        <TouchableOpacity
+        <AppIconButton
           onPress={() => refresh()}
-          accessibilityRole="button"
-          accessibilityLabel={t('common.refresh')}
+          label={t('common.refresh')}
+          testID="mcp-status-refresh"
         >
           <RefreshCw size={20} color={colors.primary} />
-        </TouchableOpacity>
+        </AppIconButton>
       </View>
 
       <View style={styles.tabRow}>
-        <TouchableOpacity
+        <AppTabButton
+          label={t('mcpStatus.installedTab')}
+          selected={activeTab === 'installed'}
           style={[styles.tabBtn, activeTab === 'installed' && styles.tabBtnActive]}
           onPress={() => setActiveTab('installed')}
+          testID="mcp-status-tab-installed"
         >
           <Text style={[styles.tabText, activeTab === 'installed' && styles.tabTextActive]}>
             {t('mcpStatus.installedTab')}
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </AppTabButton>
+        <AppTabButton
+          label={t('mcpStatus.browseTab')}
+          selected={activeTab === 'browse'}
           style={[styles.tabBtn, activeTab === 'browse' && styles.tabBtnActive]}
           onPress={() => {
             setActiveTab('browse');
@@ -124,15 +127,16 @@ export function McpStatusScreenView({
               void loadHubEntries('refresh');
             }
           }}
+          testID="mcp-status-tab-browse"
         >
           <Text style={[styles.tabText, activeTab === 'browse' && styles.tabTextActive]}>
             {t('mcpStatus.browseTab')}
           </Text>
-        </TouchableOpacity>
+        </AppTabButton>
       </View>
 
       {installingId && installingLabel ? (
-        <View style={styles.installingBanner}>
+        <View accessibilityLiveRegion="polite" style={styles.installingBanner}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={styles.installingBannerText}>
             {t('mcpStatus.install')} {installingLabel}...
@@ -181,6 +185,7 @@ export function McpStatusScreenView({
         <View style={styles.browseContainer}>
           <View style={styles.searchRow}>
             <TextInput
+              accessibilityLabel={t('mcpStatus.searchPlaceholder')}
               style={[styles.searchInput, { flex: 1 }]}
               value={hubQuery}
               onChangeText={setHubQuery}
@@ -191,16 +196,16 @@ export function McpStatusScreenView({
                 void loadHubEntries('refresh');
               }}
             />
-            <TouchableOpacity
+            <AppIconButton
               style={styles.searchBtn}
               onPress={() => {
                 void loadHubEntries('refresh');
               }}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.search')}
+              label={t('common.search')}
+              testID="mcp-status-search"
             >
               <Search size={18} color={colors.primary} />
-            </TouchableOpacity>
+            </AppIconButton>
           </View>
 
           {hubLoading ? (

@@ -2,9 +2,15 @@ import React from 'react';
 import { ActivityIndicator, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { X } from 'lucide-react-native';
 
+import { AppIconButton } from '../../components/navigation/AppIconButton';
+import { AppTabButton } from '../../components/navigation/AppTabButton';
 import { getSkillRequiredSecrets, getSkillSecretField } from '../../services/skills/manifest';
 import type { SkillEntry } from '../../services/skills/types';
-import type { SkillsScreenPalette, SkillsScreenStyles, SkillsScreenTranslation } from './skillsScreenTypes';
+import type {
+  SkillsScreenPalette,
+  SkillsScreenStyles,
+  SkillsScreenTranslation,
+} from './skillsScreenTypes';
 
 type AddSkillMode = 'url' | 'manual';
 
@@ -56,46 +62,55 @@ export function AddSkillModal({
   t,
 }: AddSkillModalProps) {
   return (
-    <Modal visible={showAddModal} transparent animationType="slide">
+    <Modal
+      visible={showAddModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowAddModal(false)}
+    >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View accessibilityViewIsModal style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t('skills.addSkill')}</Text>
-            <TouchableOpacity
+            <AppIconButton
               onPress={() => setShowAddModal(false)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.close')}
+              label={t('common.close')}
+              testID="skills-add-close"
             >
               <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </AppIconButton>
           </View>
           <Text style={styles.modalHelp}>{t('skills.addSkillHint')}</Text>
           <View style={styles.modeRow}>
-            <TouchableOpacity
+            <AppTabButton
+              label={t('skills.installFromUrl')}
+              selected={addMode === 'url'}
               style={[styles.modeBtn, addMode === 'url' && styles.modeBtnActive]}
               onPress={() => setAddMode('url')}
+              testID="skills-add-mode-url"
             >
               <Text style={[styles.modeBtnText, addMode === 'url' && styles.modeBtnTextActive]}>
                 {t('skills.installFromUrl')}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            </AppTabButton>
+            <AppTabButton
+              label={t('skills.createManually')}
+              selected={addMode === 'manual'}
               style={[styles.modeBtn, addMode === 'manual' && styles.modeBtnActive]}
               onPress={() => setAddMode('manual')}
+              testID="skills-add-mode-manual"
             >
-              <Text
-                style={[styles.modeBtnText, addMode === 'manual' && styles.modeBtnTextActive]}
-              >
+              <Text style={[styles.modeBtnText, addMode === 'manual' && styles.modeBtnTextActive]}>
                 {t('skills.createManually')}
               </Text>
-            </TouchableOpacity>
+            </AppTabButton>
           </View>
 
           {addMode === 'url' ? (
             <>
               <Text style={styles.modalCaption}>{t('skills.installUrlHint')}</Text>
               <TextInput
+                accessibilityLabel={t('skills.urlPlaceholder')}
                 style={styles.modalInput}
                 value={installUrl}
                 onChangeText={setInstallUrl}
@@ -109,6 +124,7 @@ export function AddSkillModal({
             <>
               <Text style={styles.modalCaption}>{t('skills.createManualHint')}</Text>
               <TextInput
+                accessibilityLabel={t('skills.skillNamePlaceholder')}
                 style={styles.modalInput}
                 value={newName}
                 onChangeText={setNewName}
@@ -116,6 +132,7 @@ export function AddSkillModal({
                 placeholderTextColor={colors.placeholder}
               />
               <TextInput
+                accessibilityLabel={t('skills.descriptionPlaceholder')}
                 style={[styles.modalInput, { height: 80 }]}
                 value={newDescription}
                 onChangeText={setNewDescription}
@@ -125,6 +142,7 @@ export function AddSkillModal({
               />
               <Text style={styles.modalCaption}>{t('skills.systemPrompt')}</Text>
               <TextInput
+                accessibilityLabel={t('skills.systemPrompt')}
                 style={[styles.modalInput, { height: 96 }]}
                 value={newSystemPrompt}
                 onChangeText={setNewSystemPrompt}
@@ -134,6 +152,7 @@ export function AddSkillModal({
               />
               <Text style={styles.modalCaption}>{t('skills.toolNames')}</Text>
               <TextInput
+                accessibilityLabel={t('skills.toolNames')}
                 style={styles.modalInput}
                 value={newToolNames}
                 onChangeText={setNewToolNames}
@@ -143,6 +162,7 @@ export function AddSkillModal({
               />
               <Text style={styles.modalCaption}>{t('skills.requiredSecretsLabel')}</Text>
               <TextInput
+                accessibilityLabel={t('skills.requiredSecretsLabel')}
                 style={styles.modalInput}
                 value={newRequiredSecrets}
                 onChangeText={setNewRequiredSecrets}
@@ -152,7 +172,15 @@ export function AddSkillModal({
               />
             </>
           )}
-          <TouchableOpacity style={styles.modalButton} onPress={handleAddSkill}>
+          <TouchableOpacity
+            accessibilityLabel={addMode === 'url' ? t('skills.installUrl') : t('skills.addSkill')}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: Boolean(installingId) }}
+            disabled={Boolean(installingId)}
+            style={[styles.modalButton, installingId ? styles.disabledButton : null]}
+            onPress={handleAddSkill}
+            testID="skills-add-submit"
+          >
             {installingId === installUrl.trim() ? (
               <ActivityIndicator color={colors.onPrimary} />
             ) : (
@@ -202,19 +230,18 @@ export function SkillSetupModal({
       onRequestClose={closeSetupModal}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View accessibilityViewIsModal style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
               {setupEntry ? t('skills.setupSkill', { name: setupEntry.metadata.name }) : ''}
             </Text>
-            <TouchableOpacity
+            <AppIconButton
               onPress={closeSetupModal}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.close')}
+              label={t('common.close')}
+              testID="skills-setup-close"
             >
               <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </AppIconButton>
           </View>
 
           {setupEntry ? (
@@ -231,6 +258,7 @@ export function SkillSetupModal({
                         <Text style={styles.secretLabel}>{field.label}</Text>
                         <Text style={styles.secretHint}>{field.hint}</Text>
                         <TextInput
+                          accessibilityLabel={field.label}
                           style={styles.modalInput}
                           value={setupValues[secretName] || ''}
                           onChangeText={(value) =>
@@ -250,14 +278,24 @@ export function SkillSetupModal({
                   })}
 
                   <View style={styles.setupFooter}>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenSettings}>
+                    <TouchableOpacity
+                      accessibilityLabel={t('skills.openSettings')}
+                      accessibilityRole="button"
+                      onPress={handleOpenSettings}
+                      style={styles.secondaryButton}
+                    >
                       <Text style={styles.secondaryButtonText}>{t('skills.openSettings')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.modalButton}
+                      accessibilityLabel={t('skills.configure')}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: setupSaving }}
+                      disabled={setupSaving}
+                      style={[styles.modalButton, setupSaving ? styles.disabledButton : null]}
                       onPress={() => {
                         void handleSaveSetup();
                       }}
+                      testID="skills-setup-save"
                     >
                       {setupSaving ? (
                         <ActivityIndicator color={colors.onPrimary} />

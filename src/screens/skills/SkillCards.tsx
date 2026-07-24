@@ -2,7 +2,12 @@ import React from 'react';
 import { ActivityIndicator, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { Download, Puzzle, Trash2, Wrench } from 'lucide-react-native';
 
-import { getSkillCompatibility, getSkillRequiredSecrets, getSkillSurfaceLabel } from '../../services/skills/manifest';
+import { AppIconButton } from '../../components/navigation/AppIconButton';
+import {
+  getSkillCompatibility,
+  getSkillRequiredSecrets,
+  getSkillSurfaceLabel,
+} from '../../services/skills/manifest';
 import { resolveSkillExecutionPlan } from '../../services/skills/routing';
 import type { SkillEntry } from '../../services/skills/types';
 import type { ClawHubSkill } from '../../types/clawhub';
@@ -176,14 +181,13 @@ export function InstalledSkillCard({
         <Text style={styles.source}>
           {formatSkillSourceLabel(item.source, t('skills.builtIn'))}
         </Text>
-        <TouchableOpacity
+        <AppIconButton
           onPress={() => onDelete(item)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`Delete skill ${item.metadata?.name || item.id}`}
+          label={t('skills.uninstallConfirm', { name: item.metadata?.name || item.id })}
+          testID={`skills-delete-${item.id}`}
         >
           <Trash2 size={16} color={colors.danger} />
-        </TouchableOpacity>
+        </AppIconButton>
       </View>
     </View>
   );
@@ -225,18 +229,18 @@ export function BrowseSkillCard({
             {t('skills.installed')}
           </Text>
         ) : (
-          <TouchableOpacity
+          <AppIconButton
             onPress={() => void onInstallFromHub(skill)}
             disabled={installingId === skill.id}
-            accessibilityRole="button"
-            accessibilityLabel={t('skills.install')}
+            label={`${t('skills.install')} ${skill.name}`}
+            testID={`skills-install-${skill.id}`}
           >
             {installingId === skill.id ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <Download size={20} color={colors.primary} />
             )}
-          </TouchableOpacity>
+          </AppIconButton>
         )}
       </View>
       {skill.description ? (
@@ -245,7 +249,9 @@ export function BrowseSkillCard({
         </Text>
       ) : null}
       <View style={styles.browseMetaRow}>
-        <Text style={styles.metaText}>{t('skills.downloads', { count: String(skill.downloads) })}</Text>
+        <Text style={styles.metaText}>
+          {t('skills.downloads', { count: String(skill.downloads) })}
+        </Text>
         {skill.version ? (
           <Text style={styles.metaText}>
             {t('common.versionShort', { version: skill.version })}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Text, TextInput, View } from 'react-native';
 import { ArrowLeft, Plus, Puzzle, Search } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,6 +13,8 @@ import type {
 } from '../../types/remote';
 import { BrowseSkillCard, InstalledSkillCard } from './SkillCards';
 import { AddSkillModal, SkillSetupModal } from './SkillModals';
+import { AppIconButton } from '../../components/navigation/AppIconButton';
+import { AppTabButton } from '../../components/navigation/AppTabButton';
 import type {
   SkillEligibilityContext,
   SkillsScreenPalette,
@@ -131,33 +133,34 @@ export function SkillsScreenView({
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back')}
-        >
+        <AppIconButton onPress={handleBack} label={t('common.back')} testID="skills-back">
           <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
+        </AppIconButton>
         <Text style={styles.headerTitle}>{t('skills.title')}</Text>
-        <TouchableOpacity
+        <AppIconButton
           onPress={() => setShowAddModal(true)}
-          accessibilityRole="button"
-          accessibilityLabel={t('skills.addSkill')}
+          label={t('skills.addSkill')}
+          testID="skills-add"
         >
           <Plus size={24} color={colors.primary} />
-        </TouchableOpacity>
+        </AppIconButton>
       </View>
 
       <View style={styles.tabRow}>
-        <TouchableOpacity
+        <AppTabButton
+          label={t('skills.installed')}
+          selected={activeTab === 'installed'}
           style={[styles.tabBtn, activeTab === 'installed' && styles.tabBtnActive]}
           onPress={() => setActiveTab('installed')}
+          testID="skills-tab-installed"
         >
           <Text style={[styles.tabText, activeTab === 'installed' && styles.tabTextActive]}>
             {t('skills.installed')}
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </AppTabButton>
+        <AppTabButton
+          label={t('skills.browse')}
+          selected={activeTab === 'browse'}
           style={[styles.tabBtn, activeTab === 'browse' && styles.tabBtnActive]}
           onPress={() => {
             setActiveTab('browse');
@@ -165,11 +168,12 @@ export function SkillsScreenView({
               void loadHubSkills('refresh');
             }
           }}
+          testID="skills-tab-browse"
         >
           <Text style={[styles.tabText, activeTab === 'browse' && styles.tabTextActive]}>
             {t('skills.browse')}
           </Text>
-        </TouchableOpacity>
+        </AppTabButton>
       </View>
 
       {activeTab === 'installed' ? (
@@ -207,6 +211,7 @@ export function SkillsScreenView({
         <View style={styles.browseContainer}>
           <View style={styles.searchRow}>
             <TextInput
+              accessibilityLabel={t('skills.searchPlaceholder')}
               style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
               value={hubQuery}
               onChangeText={setHubQuery}
@@ -217,16 +222,16 @@ export function SkillsScreenView({
               }}
               returnKeyType="search"
             />
-            <TouchableOpacity
+            <AppIconButton
               style={styles.searchBtn}
               onPress={() => {
                 void loadHubSkills('refresh');
               }}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.search')}
+              label={t('common.search')}
+              testID="skills-search"
             >
               <Search size={18} color={colors.primary} />
-            </TouchableOpacity>
+            </AppIconButton>
           </View>
           {hubLoading ? (
             <ActivityIndicator style={{ padding: 40 }} color={colors.primary} />

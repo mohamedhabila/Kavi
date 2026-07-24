@@ -11,8 +11,9 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      minHeight: 56,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       backgroundColor: colors.header,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
@@ -82,6 +83,7 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       paddingTop: 16,
     },
     searchInput: {
+      minHeight: 48,
       backgroundColor: colors.inputBackground,
       borderWidth: 1,
       borderColor: colors.inputBorder,
@@ -92,7 +94,7 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       color: colors.text,
     },
     searchBtn: {
-      width: 44,
+      width: 48,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
@@ -195,6 +197,7 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       alignSelf: 'center',
     },
     installBtn: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
@@ -219,6 +222,7 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       color: colors.textTertiary,
     },
     reconnectBtn: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -240,6 +244,7 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       marginTop: 12,
     },
     secondaryActionBtn: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
@@ -276,6 +281,7 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       lineHeight: 20,
     },
     settingsBtn: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
@@ -365,6 +371,8 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       gap: 8,
     },
     remotePickerChip: {
+      minHeight: 48,
+      justifyContent: 'center',
       paddingHorizontal: 10,
       paddingVertical: 8,
       borderRadius: 999,
@@ -385,6 +393,7 @@ export const createMcpStatusStyles = (colors: AppPalette) =>
       color: colors.primary,
     },
     primaryActionBtn: {
+      minHeight: 48,
       marginTop: 4,
       borderRadius: 10,
       paddingVertical: 12,

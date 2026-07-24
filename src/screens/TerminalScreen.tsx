@@ -513,6 +513,7 @@ export const TerminalScreen: React.FC = () => {
               : t('terminal.connectingTarget', { name: sshSession.targetLabel })}
           </Text>
           <TouchableOpacity
+            accessibilityLabel={sshSession.connected ? t('common.disconnect') : t('common.cancel')}
             onPress={() =>
               disconnectSsh(
                 sshSession.connected
@@ -536,6 +537,7 @@ export const TerminalScreen: React.FC = () => {
             <View style={styles.sshEmptyState}>
               <Text style={styles.sshPickerEmpty}>{t('terminal.noSshTargetsHint')}</Text>
               <TouchableOpacity
+                accessibilityLabel={t('terminal.configureSsh')}
                 accessibilityRole="button"
                 onPress={() =>
                   navigation.navigate('RemoteWork', { returnTo: { name: 'Terminal' } })

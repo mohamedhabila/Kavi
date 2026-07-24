@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { SkillsScreen } from '../../src/screens/SkillsScreen';
 
 const mockListClawHubSkills = jest.fn();
@@ -131,8 +131,17 @@ beforeEach(() => {
 
 describe('SkillsScreen', () => {
   it('renders header with title', () => {
-    const { getByText } = render(<SkillsScreen />);
+    const { getByTestId, getByText } = render(<SkillsScreen />);
     expect(getByText('Skills')).toBeTruthy();
+    expect(StyleSheet.flatten(getByTestId('skills-back').props.style).minWidth).toBe(48);
+    expect(StyleSheet.flatten(getByTestId('skills-add').props.style).minHeight).toBe(48);
+    expect(getByTestId('skills-tab-installed').props.accessibilityRole).toBe('tab');
+    expect(getByTestId('skills-tab-installed').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+    expect(getByTestId('skills-tab-browse').props.accessibilityState).toMatchObject({
+      selected: false,
+    });
   });
 
   it('shows empty state when no skills', () => {
@@ -485,7 +494,7 @@ describe('SkillsScreen', () => {
       expect(getByText('GitHub Skill')).toBeTruthy();
     });
 
-    fireEvent.press(getByLabelText('Install'));
+    fireEvent.press(getByLabelText('Install GitHub Skill'));
 
     expect(await findByText('Set Up GitHub Skill')).toBeTruthy();
     expect(await findByText('GitHub Personal Access Token')).toBeTruthy();
@@ -518,7 +527,7 @@ describe('SkillsScreen', () => {
     const { getByLabelText, getByText } = render(<SkillsScreen />);
     fireEvent.press(getByText('Browse'));
     await waitFor(() => expect(getByText('External Runtime')).toBeTruthy());
-    fireEvent.press(getByLabelText('Install'));
+    fireEvent.press(getByLabelText('Install External Runtime'));
 
     await waitFor(() =>
       expect(alertSpy).toHaveBeenCalledWith('Install blocked', 'هذه المهارة تتطلب سطح تنفيذ آخر.'),
@@ -553,7 +562,7 @@ describe('SkillsScreen', () => {
     const { getByLabelText, getByText } = render(<SkillsScreen />);
     fireEvent.press(getByText('Browse'));
     await waitFor(() => expect(getByText('Registry Timeout')).toBeTruthy());
-    fireEvent.press(getByLabelText('Install'));
+    fireEvent.press(getByLabelText('Install Registry Timeout'));
 
     await waitFor(() =>
       expect(alertSpy).toHaveBeenCalledWith(
@@ -597,12 +606,18 @@ describe('SkillsScreen', () => {
   });
 
   it('creates manual skills with prompt, tools, and required secrets', async () => {
-    const { getAllByText, getByLabelText, getByText, getByPlaceholderText } = render(
+    const { getAllByText, getByLabelText, getByTestId, getByText, getByPlaceholderText } = render(
       <SkillsScreen />,
     );
 
     fireEvent.press(getByLabelText('Add Skill'));
+    expect(getByTestId('skills-add-mode-url').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
     fireEvent.press(getByText('Create manually'));
+    expect(getByTestId('skills-add-mode-manual').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
     fireEvent.changeText(getByPlaceholderText('My custom skill'), 'Manual GitHub Skill');
     fireEvent.changeText(getByPlaceholderText('What does this skill do?'), 'Created in-app');
     fireEvent.changeText(

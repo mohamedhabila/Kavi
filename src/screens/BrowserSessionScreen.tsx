@@ -40,6 +40,7 @@ import type { RemoteSessionRecord } from '../types/remote';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { getBrowserProviderReadiness } from '../services/browser/providers/readiness';
 import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
+import { AppTabButton } from '../components/navigation/AppTabButton';
 
 // ── Component ────────────────────────────────────────────────────────────
 
@@ -236,6 +237,8 @@ export const BrowserSessionScreen: React.FC = () => {
           <Text style={styles.emptyTitle}>{t('browserSessions.noProviderTitle')}</Text>
           <Text style={styles.emptySubtext}>{t('browserSessions.noProviderDescription')}</Text>
           <TouchableOpacity
+            accessibilityLabel={t('browserSessions.openSettings')}
+            accessibilityRole="button"
             style={styles.configBtn}
             onPress={() =>
               navigation.navigate('Settings', {
@@ -243,6 +246,7 @@ export const BrowserSessionScreen: React.FC = () => {
                 returnTo: { name: 'BrowserSession' },
               })
             }
+            testID="browser-session-open-settings"
           >
             <Text style={styles.configBtnText}>{t('browserSessions.openSettings')}</Text>
           </TouchableOpacity>
@@ -284,21 +288,26 @@ export const BrowserSessionScreen: React.FC = () => {
       {/* Session tabs */}
       {browserSessions.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar}>
-          {browserSessions.map((s) => (
-            <TouchableOpacity
-              key={s.id}
-              style={[styles.tab, s.id === activeSession?.id && styles.tabActive]}
-              onPress={() => setSelectedSessionId(s.id)}
-            >
-              {getStatusIcon(s.status)}
-              <Text
-                style={[styles.tabText, s.id === activeSession?.id && styles.tabTextActive]}
-                numberOfLines={1}
+          {browserSessions.map((s) => {
+            const sessionLabel =
+              s.summary || s.externalId?.slice(0, 8) || t('browserSessions.sessionFallback');
+            const selected = s.id === activeSession?.id;
+            return (
+              <AppTabButton
+                key={s.id}
+                label={sessionLabel}
+                onPress={() => setSelectedSessionId(s.id)}
+                selected={selected}
+                style={[styles.tab, selected && styles.tabActive]}
+                testID={`browser-session-tab-${s.id}`}
               >
-                {s.summary || s.externalId?.slice(0, 8) || t('browserSessions.sessionFallback')}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                {getStatusIcon(s.status)}
+                <Text style={[styles.tabText, selected && styles.tabTextActive]} numberOfLines={1}>
+                  {sessionLabel}
+                </Text>
+              </AppTabButton>
+            );
+          })}
         </ScrollView>
       )}
 
@@ -328,6 +337,8 @@ export const BrowserSessionScreen: React.FC = () => {
             <View style={styles.viewport}>
               {screenshotUri ? (
                 <Image
+                  accessibilityLabel={t('browserSessions.actionScreenshot')}
+                  accessible
                   source={{ uri: screenshotUri }}
                   style={styles.screenshot}
                   resizeMode="contain"
@@ -349,9 +360,13 @@ export const BrowserSessionScreen: React.FC = () => {
               {/* Screenshot toolbar */}
               <View style={styles.screenshotToolbar}>
                 <TouchableOpacity
+                  accessibilityLabel={t('common.refresh')}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: screenshotLoading }}
                   style={styles.toolbarBtn}
                   onPress={handleRefreshScreenshot}
                   disabled={screenshotLoading}
+                  testID="browser-session-refresh"
                 >
                   <RefreshCw
                     size={16}
@@ -360,7 +375,13 @@ export const BrowserSessionScreen: React.FC = () => {
                   <Text style={styles.toolbarBtnText}>{t('common.refresh')}</Text>
                 </TouchableOpacity>
                 {activeSession.liveViewUrl && (
-                  <TouchableOpacity style={styles.toolbarBtn} onPress={handleOpenLiveView}>
+                  <TouchableOpacity
+                    accessibilityLabel={t('browserSessions.liveView')}
+                    accessibilityRole="link"
+                    onPress={handleOpenLiveView}
+                    style={styles.toolbarBtn}
+                    testID="browser-session-live-view"
+                  >
                     <ExternalLink size={16} color={colors.primary} />
                     <Text style={styles.toolbarBtnText}>{t('browserSessions.liveView')}</Text>
                   </TouchableOpacity>
@@ -483,7 +504,7 @@ const createStyles = (colors: AppPalette) =>
       textAlign: 'center',
     },
     tabBar: {
-      maxHeight: 44,
+      maxHeight: 48,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
       backgroundColor: colors.surface,
@@ -535,7 +556,14 @@ const createStyles = (colors: AppPalette) =>
       borderTopWidth: 1,
       borderTopColor: colors.border,
     },
-    toolbarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    toolbarBtn: {
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+    },
     toolbarBtnText: { fontSize: 12, color: colors.primary, fontWeight: '500' },
     section: { gap: 10 },
     sectionTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
@@ -594,6 +622,8 @@ const createStyles = (colors: AppPalette) =>
       lineHeight: 20,
     },
     configBtn: {
+      minHeight: 48,
+      justifyContent: 'center',
       marginTop: 12,
       paddingHorizontal: 20,
       paddingVertical: 10,

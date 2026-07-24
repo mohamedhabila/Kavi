@@ -222,6 +222,7 @@ export function BrowseEntryCard({
             disabled={installingId === item.id}
             accessibilityRole="button"
             accessibilityLabel={t('mcpStatus.install')}
+            accessibilityState={{ disabled: installingId === item.id }}
           >
             {installingId === item.id ? (
               <ActivityIndicator size="small" color={colors.primary} />
@@ -260,7 +261,9 @@ export function BrowseEntryCard({
         <Text style={styles.remoteMetaText}>
           {t('mcpStatus.remoteCount', { count: String(item.remotes.length) })}
         </Text>
-        <Text style={styles.remoteMetaText}>{t('mcpStatus.version', { version: item.version })}</Text>
+        <Text style={styles.remoteMetaText}>
+          {t('mcpStatus.version', { version: item.version })}
+        </Text>
       </View>
 
       <View style={styles.toolsList}>

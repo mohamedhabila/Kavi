@@ -1,5 +1,5 @@
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { McpStatusScreen } from '../../src/screens/McpStatusScreen';
 async function flushAsyncInteractions() {
   await Promise.resolve();
@@ -147,9 +147,20 @@ describe('McpStatusScreen', () => {
     });
   });
   it('shows installed and browse tabs', () => {
-    const { getByText } = render(<McpStatusScreen />);
+    const { getByTestId, getByText } = render(<McpStatusScreen />);
     expect(getByText('Installed')).toBeTruthy();
     expect(getByText('Browse')).toBeTruthy();
+    expect(getByTestId('mcp-status-tab-installed').props.accessibilityRole).toBe('tab');
+    expect(getByTestId('mcp-status-tab-installed').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+    expect(getByTestId('mcp-status-tab-browse').props.accessibilityState).toMatchObject({
+      selected: false,
+    });
+    expect(StyleSheet.flatten(getByTestId('mcp-status-tab-installed').props.style).minHeight).toBe(
+      48,
+    );
+    expect(StyleSheet.flatten(getByTestId('mcp-status-back').props.style).minWidth).toBe(48);
   });
   it('renders connected server with tools', async () => {
     mockMcpServers = [
