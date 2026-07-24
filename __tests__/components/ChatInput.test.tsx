@@ -231,6 +231,19 @@ describe('ChatInput', () => {
     expect(onSend).toHaveBeenCalledWith('Hello world', undefined);
   });
 
+  it('settles async send handlers at the press boundary', () => {
+    const catchHandler = jest.fn();
+    const pendingSend = { catch: catchHandler } as unknown as Promise<void>;
+    const onSend = jest.fn(() => pendingSend);
+    const { getByPlaceholderText, getByTestId } = renderControlledChatInput({ onSend });
+
+    fireEvent.changeText(getByPlaceholderText('Message...'), 'Stop safely');
+    const sendIcon = getByTestId('icon-Send');
+    fireEvent.press(sendIcon.parent || sendIcon);
+
+    expect(catchHandler).toHaveBeenCalledWith(expect.any(Function));
+  });
+
   it('should leave text control to the parent after sending', () => {
     const onSend = jest.fn();
     const { getByPlaceholderText, getByTestId } = renderControlledChatInput({ onSend });

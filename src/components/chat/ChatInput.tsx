@@ -29,7 +29,7 @@ import {
 } from './ChatInputOptionsSheet';
 
 interface ChatInputProps {
-  onSend: (text: string, attachments?: Attachment[]) => void;
+  onSend: (text: string, attachments?: Attachment[]) => void | Promise<void>;
   onStop: () => void;
   isLoading: boolean;
   isInputDisabled?: boolean;
@@ -100,7 +100,13 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     const handleSend = useCallback(() => {
       if (!text.trim() && attachments.length === 0) return;
       voiceRecorder.clearError();
-      onSend(text, attachments.length > 0 ? attachments : undefined);
+      const pendingSend = onSend(text, attachments.length > 0 ? attachments : undefined);
+      if (pendingSend) {
+        // ChatScreen owns user-visible run errors. React Native does not settle
+        // promises returned from press handlers, so consume the handler promise
+        // here to keep expected cancellation rejections out of the global tracker.
+        void pendingSend.catch(() => undefined);
+      }
     }, [attachments, onSend, text, voiceRecorder]);
 
     const { handlePickAttachment, removeAttachment } = useChatInputAttachments({
