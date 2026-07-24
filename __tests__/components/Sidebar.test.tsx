@@ -204,6 +204,7 @@ describe('Sidebar', () => {
     expect(mockCreateSideThread).toHaveBeenCalledWith('conv1', {
       providerId: 'openai',
       modelOverride: 'gpt-5.4',
+      title: 'New Conversation',
     });
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
     expect(mockNavigation.closeDrawer).toHaveBeenCalled();
@@ -221,6 +222,7 @@ describe('Sidebar', () => {
     expect(mockCreateSideThread).toHaveBeenCalledWith('canonical-openai', {
       providerId: 'openai',
       modelOverride: 'gpt-5.4',
+      title: 'New Conversation',
     });
   });
 

@@ -120,6 +120,7 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
       const sideId = createSideThread(parentId, {
         providerId: selection.providerId,
         modelOverride: selection.model || undefined,
+        title: t('nav.newConversation'),
       });
       if (sideId) {
         navigation.navigate('Chat');
