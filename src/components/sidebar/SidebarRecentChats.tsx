@@ -37,6 +37,7 @@ export const SidebarRecentChats: React.FC<SidebarRecentChatsProps> = ({
         <Text style={styles.heading}>{t('nav.recentChats')}</Text>
         {navigableConversations.length > 0 ? (
           <TouchableOpacity
+            accessibilityLabel={t('nav.seeAllChats')}
             accessibilityRole="button"
             onPress={onSeeAll}
             style={styles.seeAllButton}
@@ -87,7 +88,7 @@ const createStyles = (colors: AppPalette) =>
       textTransform: 'uppercase',
     },
     seeAllButton: {
-      minHeight: 40,
+      minHeight: 48,
       paddingHorizontal: 8,
       justifyContent: 'center',
     },

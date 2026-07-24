@@ -290,18 +290,26 @@ export const ApprovalHistoryScreen: React.FC = () => {
         style={styles.filterScroll}
         contentContainerStyle={styles.filterBar}
       >
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterChip, filter === f && styles.filterChipActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {getFilterLabel(f)}
-              {f === 'pending' && pendingCount > 0 ? ` (${pendingCount})` : ''}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {FILTERS.map((f) => {
+          const selected = filter === f;
+          const label = `${getFilterLabel(f)}${
+            f === 'pending' && pendingCount > 0 ? ` (${pendingCount})` : ''
+          }`;
+
+          return (
+            <TouchableOpacity
+              accessibilityLabel={label}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              key={f}
+              onPress={() => setFilter(f)}
+              style={[styles.filterChip, selected && styles.filterChipActive]}
+              testID={`approval-filter-${f}`}
+            >
+              <Text style={[styles.filterText, selected && styles.filterTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       {/* List */}
@@ -429,7 +437,7 @@ const createStyles = (colors: AppPalette) =>
     },
     filterBar: { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 8 },
     filterChip: {
-      minHeight: 44,
+      minHeight: 48,
       justifyContent: 'center',
       paddingHorizontal: 12,
       borderRadius: 16,

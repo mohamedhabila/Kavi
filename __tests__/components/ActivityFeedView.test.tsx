@@ -202,7 +202,9 @@ describe('ActivityFeedView', () => {
     );
 
     expect(getByText('No reminders or automations')).toBeTruthy();
-    fireEvent.press(getByTestId('activity-empty-action-automations'));
+    const emptyAction = getByTestId('activity-empty-action-automations');
+    expect(emptyAction.props.accessibilityLabel).toBe('Create reminder or automation');
+    fireEvent.press(emptyAction);
     expect(onOpenAutomations).toHaveBeenCalledTimes(1);
 
     const advanced = getByTestId('activity-open-advanced-work');

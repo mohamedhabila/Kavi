@@ -330,6 +330,7 @@ export const ActivityFeedView: React.FC<ActivityFeedViewProps> = ({
             <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
             <Text style={styles.emptyHint}>{emptyCopy.hint}</Text>
             <TouchableOpacity
+              accessibilityLabel={emptyCopy.action}
               accessibilityRole="button"
               onPress={filter === 'automations' ? onOpenAutomations : onOpenAssistant}
               style={styles.primaryButton}

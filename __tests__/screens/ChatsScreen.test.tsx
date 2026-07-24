@@ -114,7 +114,9 @@ describe('ChatsScreen', () => {
 
     fireEvent.changeText(getByTestId('chats-search'), 'not present');
     expect(getByText('No matching chats')).toBeTruthy();
-    fireEvent.press(getByTestId('chats-clear-search'));
+    const clearSearch = getByTestId('chats-clear-search');
+    expect(clearSearch.props.accessibilityLabel).toBe('Clear search');
+    fireEvent.press(clearSearch);
     expect(getByText('Plan a holiday')).toBeTruthy();
   });
 
@@ -123,7 +125,9 @@ describe('ChatsScreen', () => {
     const { getByTestId, getByText } = render(<ChatsScreen />);
 
     expect(getByText('No chats yet')).toBeTruthy();
-    fireEvent.press(getByTestId('chats-open-assistant'));
+    const openAssistant = getByTestId('chats-open-assistant');
+    expect(openAssistant.props.accessibilityLabel).toBe('Assistant');
+    fireEvent.press(openAssistant);
     expect(mockNavigate).toHaveBeenCalledWith('Chat');
   });
 

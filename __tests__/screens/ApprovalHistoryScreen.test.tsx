@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { ApprovalHistoryScreen } from '../../src/screens/ApprovalHistoryScreen';
 import { clearAuditLog, logToolCall } from '../../src/services/security/audit';
 
@@ -296,22 +297,27 @@ describe('ApprovalHistoryScreen', () => {
       resolvedAt: Date.now(),
     };
 
-    const { getAllByText, getByText, queryByText } = render(<ApprovalHistoryScreen />);
+    const { getByTestId, getByText, queryByText } = render(<ApprovalHistoryScreen />);
 
     // Initially "All" is selected — both should be visible
     expect(getByText('Pending Tool')).toBeTruthy();
     expect(getByText('Approved Tool')).toBeTruthy();
+    expect(getByTestId('approval-filter-all').props.accessibilityRole).toBe('tab');
+    expect(getByTestId('approval-filter-all').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(StyleSheet.flatten(getByTestId('approval-filter-all').props.style).minHeight).toBe(48);
 
-    // Click "Approved" filter chip (find by the filter chip, not the status label)
-    // There are multiple "Approved" texts — filter chip and status label. Use getAllByText.
-    const approvedTexts = getAllByText('Approved');
-    // The first match is the filter chip (it comes before card content in DOM)
-    fireEvent.press(approvedTexts[0]);
+    fireEvent.press(getByTestId('approval-filter-approved'));
     expect(queryByText('Pending Tool')).toBeNull();
     expect(getByText('Approved Tool')).toBeTruthy();
+    expect(getByTestId('approval-filter-approved').props.accessibilityState).toEqual({
+      selected: true,
+    });
 
     // Click "Pending" filter
-    fireEvent.press(getByText('Pending (1)'));
+    expect(getByTestId('approval-filter-pending').props.accessibilityLabel).toBe('Pending (1)');
+    fireEvent.press(getByTestId('approval-filter-pending'));
     expect(getByText('Pending Tool')).toBeTruthy();
     expect(queryByText('Approved Tool')).toBeNull();
   });

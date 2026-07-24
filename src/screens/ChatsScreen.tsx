@@ -100,6 +100,7 @@ export const ChatsScreen: React.FC = () => {
               {hasSearchQuery ? t('nav.noChatMatchesHint') : t('nav.chatsEmptyHint')}
             </Text>
             <TouchableOpacity
+              accessibilityLabel={hasSearchQuery ? t('nav.clearChatSearch') : t('nav.assistant')}
               accessibilityRole="button"
               onPress={() => {
                 if (hasSearchQuery) {
@@ -194,7 +195,7 @@ const createStyles = (colors: AppPalette) =>
       textAlign: 'center',
     },
     assistantButton: {
-      minHeight: 44,
+      minHeight: 48,
       marginTop: 16,
       paddingHorizontal: 18,
       alignItems: 'center',

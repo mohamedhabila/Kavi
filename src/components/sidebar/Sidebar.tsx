@@ -167,6 +167,7 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
         <TouchableOpacity
+          accessibilityLabel={t('nav.assistant')}
           accessibilityRole="button"
           accessibilityState={{
             selected: currentRouteName === 'Chat' || currentRouteName === 'ConversationSettings',

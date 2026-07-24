@@ -31,6 +31,7 @@ import {
 } from '../services/agents/delegatedWorkQueuePresentation';
 import { generateId } from '../utils/id';
 import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
+import { AppTabButton } from '../components/navigation/AppTabButton';
 import { useChatStore } from '../store/useChatStore';
 import type { PreparedChatDraft } from './usePreparedChatDraft';
 
@@ -231,9 +232,9 @@ export const AgentRosterScreen: React.FC = () => {
 
       {/* Tab bar */}
       <View style={styles.tabBar}>
-        <TouchableOpacity
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'roster' }}
+        <AppTabButton
+          label={t('agentRoster.personasTab', { count: allPersonas.length })}
+          selected={activeTab === 'roster'}
           style={[styles.tab, activeTab === 'roster' && styles.tabActive]}
           onPress={() => setActiveTab('roster')}
           testID="assistant-styles-tab"
@@ -245,10 +246,10 @@ export const AgentRosterScreen: React.FC = () => {
           <Text style={[styles.tabText, activeTab === 'roster' && styles.tabTextActive]}>
             {t('agentRoster.personasTab', { count: allPersonas.length })}
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'queue' }}
+        </AppTabButton>
+        <AppTabButton
+          label={t('agentRoster.subAgentsTab', { count: delegatedWork.counts.total })}
+          selected={activeTab === 'queue'}
           style={[styles.tab, activeTab === 'queue' && styles.tabActive]}
           onPress={() => {
             setActiveTab('queue');
@@ -263,7 +264,7 @@ export const AgentRosterScreen: React.FC = () => {
           <Text style={[styles.tabText, activeTab === 'queue' && styles.tabTextActive]}>
             {t('agentRoster.subAgentsTab', { count: delegatedWork.counts.total })}
           </Text>
-        </TouchableOpacity>
+        </AppTabButton>
       </View>
 
       {activeTab === 'roster' ? (
@@ -520,8 +521,8 @@ const createStyles = (colors: AppPalette) =>
       borderBottomColor: colors.border,
     },
     headerButton: {
-      width: 44,
-      minHeight: 44,
+      width: 48,
+      minHeight: 48,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -590,7 +591,7 @@ const createStyles = (colors: AppPalette) =>
     metaText: { fontSize: 11, color: colors.textTertiary },
     personaActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
     actionBtn: {
-      minHeight: 44,
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 5,
@@ -610,8 +611,8 @@ const createStyles = (colors: AppPalette) =>
     },
     modalTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
     modalHeaderAction: {
-      minWidth: 44,
-      minHeight: 44,
+      minWidth: 48,
+      minHeight: 48,
       alignItems: 'center',
       justifyContent: 'center',
     },

@@ -324,6 +324,7 @@ describe('Sidebar', () => {
     } as any;
     const { getByTestId } = render(<Sidebar {...props} />);
 
+    expect(getByTestId('sidebar-assistant').props.accessibilityLabel).toBe('Assistant');
     fireEvent.press(getByTestId('sidebar-assistant'));
 
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
@@ -343,7 +344,9 @@ describe('Sidebar', () => {
   it('opens the complete Chats route from recent chats', () => {
     const { getByTestId } = render(<Sidebar {...defaultProps} />);
 
-    fireEvent.press(getByTestId('sidebar-see-all-chats'));
+    const seeAll = getByTestId('sidebar-see-all-chats');
+    expect(seeAll.props.accessibilityLabel).toBe('See all');
+    fireEvent.press(seeAll);
 
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Chats');
     expect(mockNavigation.closeDrawer).toHaveBeenCalled();

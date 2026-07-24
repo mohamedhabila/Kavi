@@ -153,16 +153,26 @@ describe('AgentRosterScreen', () => {
     const { getByTestId, getByText, queryByTestId } = render(<AgentRosterScreen />);
 
     expect(getByText('No delegated work yet')).toBeTruthy();
-    expect(getByTestId('delegated-work-tab').props.accessibilityState).toEqual({ selected: true });
+    expect(getByTestId('delegated-work-tab').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
     expect(queryByTestId('assistant-style-create')).toBeNull();
   });
 
   it('keeps style actions and tabs at accessible touch sizes', () => {
     const { getByLabelText, getByTestId } = render(<AgentRosterScreen />);
 
-    expect(StyleSheet.flatten(getByTestId('assistant-styles-tab').props.style).minHeight).toBe(48);
-    expect(StyleSheet.flatten(getByLabelText('Edit: Assistant').props.style).minHeight).toBe(44);
-    expect(StyleSheet.flatten(getByLabelText('Reset: Assistant').props.style).minHeight).toBe(44);
+    const stylesTab = getByTestId('assistant-styles-tab');
+    const delegatedTab = getByTestId('delegated-work-tab');
+    expect(stylesTab.props.accessibilityLabel).toBe('Styles (1)');
+    expect(stylesTab.props.accessibilityRole).toBe('tab');
+    expect(stylesTab.props.accessibilityState).toMatchObject({ selected: true });
+    expect(delegatedTab.props.accessibilityLabel).toBe('Delegated work (0)');
+    expect(delegatedTab.props.accessibilityRole).toBe('tab');
+    expect(delegatedTab.props.accessibilityState).toMatchObject({ selected: false });
+    expect(StyleSheet.flatten(stylesTab.props.style).minHeight).toBe(48);
+    expect(StyleSheet.flatten(getByLabelText('Edit: Assistant').props.style).minHeight).toBe(48);
+    expect(StyleSheet.flatten(getByLabelText('Reset: Assistant').props.style).minHeight).toBe(48);
   });
 
   it('groups a worker tree into one human-readable work card', () => {
