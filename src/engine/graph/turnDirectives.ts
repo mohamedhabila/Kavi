@@ -34,18 +34,34 @@ export function buildAgentControlGraphResetIncompleteFinalTextRecoveryEvent(
 
 export function buildAgentControlGraphPostToolFinalTextDirectiveEvent(params: {
   pendingAsyncCount: number;
+  hasBackgroundLaunchWithoutWait?: boolean;
   hasAsyncTerminalResolution?: boolean;
   hasActivePersistentGoal?: boolean;
   hasCompletedBlockingGoal?: boolean;
   hasIncompleteBlockingGoal?: boolean;
 }): Extract<AgentControlGraphEvent, { type: 'TURN_DIRECTIVES_RECORDED' }> | undefined {
-  if (params.pendingAsyncCount === 0 && params.hasAsyncTerminalResolution === true) {
+  if (
+    params.pendingAsyncCount === 0 &&
+    params.hasAsyncTerminalResolution === true &&
+    params.hasCompletedBlockingGoal === true &&
+    params.hasIncompleteBlockingGoal !== true
+  ) {
     return buildAgentControlGraphTurnDirectivesRecordedEvent(
       {
         forceFinalText: true,
         forcedTextReason: 'async_terminal_completion',
       },
       'async_terminal_completion',
+    );
+  }
+
+  if (params.pendingAsyncCount === 0 && params.hasBackgroundLaunchWithoutWait === true) {
+    return buildAgentControlGraphTurnDirectivesRecordedEvent(
+      {
+        forceFinalText: true,
+        forcedTextReason: 'background_session_started',
+      },
+      'background_session_started',
     );
   }
 

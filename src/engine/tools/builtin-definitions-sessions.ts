@@ -3,7 +3,7 @@ import { ToolDefinition } from '../../types/tool';
 export const SESSION_SPAWN_TOOL: ToolDefinition = {
   name: 'sessions_spawn',
   description:
-    'Launch a delegated worker for a self-contained task. Use waitForCompletion=true when the current turn needs the worker result; otherwise let it run in the background. Pass a focused prompt and omit tools unless you need a narrower worker scope.',
+    'Launch a delegated worker for a self-contained task. Use waitForCompletion=true when the current turn needs the worker result; otherwise let it run in the background and return control to the user immediately. Pass a focused prompt and omit tools unless you need a narrower worker scope.',
   input_schema: {
     type: 'object',
     properties: {
@@ -90,7 +90,7 @@ export const SESSION_LIST_TOOL: ToolDefinition = {
 export const SESSION_SEND_TOOL: ToolDefinition = {
   name: 'sessions_send',
   description:
-    'Follow up on an existing sub-agent session. Use waitForCompletion=true when the current turn needs the follow-up result; otherwise let it continue in the background.',
+    'Follow up on an existing sub-agent session. Use waitForCompletion=true when the current turn needs the follow-up result; otherwise let it continue in the background and return control to the user immediately.',
   input_schema: {
     type: 'object',
     properties: {

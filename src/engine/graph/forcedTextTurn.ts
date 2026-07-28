@@ -8,6 +8,8 @@ export function buildAgentControlGraphForcedTextOnlyTurnPrompt(
   switch (reason) {
     case 'async_terminal_completion':
       return '[SYSTEM FINAL DELIVERY]\nTool use is disabled for this turn.\nAsync work is terminal; answer from the verified result now.\nPreserve exact requested format.';
+    case 'background_session_started':
+      return '[SYSTEM BACKGROUND HANDOFF]\nTool use is disabled for this turn.\nThe requested background session is running. Return control to the user now with a concise status; do not claim completion.';
     case 'workflow_route_completed':
       return '[SYSTEM FINAL DELIVERY]\nTool use is disabled for this turn.\nThe workflow is complete; answer from verified evidence now.\nPreserve exact requested format.';
     case 'yield_finalization':

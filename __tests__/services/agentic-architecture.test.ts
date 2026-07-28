@@ -58,7 +58,7 @@ describe('SUPER_AGENT_PERSONA', () => {
 
   it('tells the supervisor not to re-fetch output immediately after sessions_wait', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'sessions_output or sessions_history only when you need to recall a finished result or inspect a transcript later',
+      'sessions_output or sessions_history only when needed',
     );
     expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('sessions_surface_output');
   });
@@ -171,9 +171,11 @@ describe('SuperAgent prompt — sub-agent tool guidance', () => {
 
   it('keeps worker/session output semantics visible', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'sessions_output or sessions_history only when you need to recall a finished result or inspect a transcript later',
+      'sessions_output or sessions_history only when needed',
     );
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_wait when blocked on worker output');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('one focused sessions_send continuation');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('never duplicate it');
     expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('sessions_surface_output');
   });
 });

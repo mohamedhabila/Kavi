@@ -65,7 +65,7 @@ describe('agent control graph turn directives boundary', () => {
     expect(directives.incompleteFinalTextContinuationPrefix).toBeUndefined();
   });
 
-  it('builds post-tool final text directives from async terminal resolution', () => {
+  it('only finalizes an async terminal result when it completes the remaining blocking work', () => {
     expect(
       buildAgentControlGraphPostToolFinalTextDirectiveEvent({
         pendingAsyncCount: 1,
@@ -77,6 +77,14 @@ describe('agent control graph turn directives boundary', () => {
         pendingAsyncCount: 0,
         hasAsyncTerminalResolution: true,
       }),
+    ).toBeUndefined();
+
+    expect(
+      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
+        pendingAsyncCount: 0,
+        hasAsyncTerminalResolution: true,
+        hasCompletedBlockingGoal: true,
+      }),
     ).toEqual(
       buildAgentControlGraphTurnDirectivesRecordedEvent(
         {
@@ -86,6 +94,39 @@ describe('agent control graph turn directives boundary', () => {
         'async_terminal_completion',
       ),
     );
+
+    expect(
+      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
+        pendingAsyncCount: 0,
+        hasAsyncTerminalResolution: true,
+        hasCompletedBlockingGoal: true,
+        hasIncompleteBlockingGoal: true,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('hands control back after a successful non-blocking background launch', () => {
+    expect(
+      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
+        pendingAsyncCount: 0,
+        hasBackgroundLaunchWithoutWait: true,
+      }),
+    ).toEqual(
+      buildAgentControlGraphTurnDirectivesRecordedEvent(
+        {
+          forceFinalText: true,
+          forcedTextReason: 'background_session_started',
+        },
+        'background_session_started',
+      ),
+    );
+
+    expect(
+      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
+        pendingAsyncCount: 1,
+        hasBackgroundLaunchWithoutWait: true,
+      }),
+    ).toBeUndefined();
   });
 
   it('forces final text when persistent context is settled after tools', () => {

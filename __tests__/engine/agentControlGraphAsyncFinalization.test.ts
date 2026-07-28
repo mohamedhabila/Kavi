@@ -1,6 +1,19 @@
-import { agentControlGraphToolMessageShowsAsyncTerminalResolution } from '../../src/engine/graph/asyncTerminalResolution';
-import { buildAgentControlGraphBackgroundWorkerWaitSummary, buildAgentControlGraphInterruptedOpenWorkRecovery, buildAgentControlGraphOpenWorkCloseoutDecision, buildAgentControlGraphOpenWorkPhasePresentation, getAgentControlGraphWaitingBackgroundWorkerCount } from '../../src/engine/graph/asyncOpenWork';
-import { buildAgentControlGraphAsyncFinalizationHoldNote, buildAgentControlGraphPendingAsyncFinalizationCommand, buildAgentControlGraphPendingAsyncNoToolCorrectionNote } from '../../src/engine/graph/asyncPendingFinalization';
+import {
+  agentControlGraphToolMessageShowsAsyncTerminalResolution,
+  agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution,
+} from '../../src/engine/graph/asyncTerminalResolution';
+import {
+  buildAgentControlGraphBackgroundWorkerWaitSummary,
+  buildAgentControlGraphInterruptedOpenWorkRecovery,
+  buildAgentControlGraphOpenWorkCloseoutDecision,
+  buildAgentControlGraphOpenWorkPhasePresentation,
+  getAgentControlGraphWaitingBackgroundWorkerCount,
+} from '../../src/engine/graph/asyncOpenWork';
+import {
+  buildAgentControlGraphAsyncFinalizationHoldNote,
+  buildAgentControlGraphPendingAsyncFinalizationCommand,
+  buildAgentControlGraphPendingAsyncNoToolCorrectionNote,
+} from '../../src/engine/graph/asyncPendingFinalization';
 import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
 
 function createPendingOperation(
@@ -24,32 +37,28 @@ function createPendingOperation(
 describe('agent control graph async finalization', () => {
   it('builds the graph-owned async finalization hold note', () => {
     expect(buildAgentControlGraphAsyncFinalizationHoldNote()).toBe(
-      [
-        '[SYSTEM ASYNC HOLD]',
-        'pending_async_state: active',
-        'finalization_ready: false',
-      ].join('\n'),
+      ['[SYSTEM ASYNC HOLD]', 'pending_async_state: active', 'finalization_ready: false'].join(
+        '\n',
+      ),
     );
   });
 
   it('builds a compact correction note for stalled pending async work', () => {
     expect(
-      buildAgentControlGraphPendingAsyncNoToolCorrectionNote(
-        [
-          createPendingOperation({ displayName: 'Build session' }),
-          createPendingOperation({
-            key: 'external:deploy-1',
-            kind: 'external_run',
-            resourceId: 'deploy-1',
-            displayName: 'Deploy run',
-          }),
-          createPendingOperation({
-            key: 'session:worker-3',
-            resourceId: 'worker-3',
-            displayName: 'Worker 3',
-          }),
-        ],
-      ),
+      buildAgentControlGraphPendingAsyncNoToolCorrectionNote([
+        createPendingOperation({ displayName: 'Build session' }),
+        createPendingOperation({
+          key: 'external:deploy-1',
+          kind: 'external_run',
+          resourceId: 'deploy-1',
+          displayName: 'Deploy run',
+        }),
+        createPendingOperation({
+          key: 'session:worker-3',
+          resourceId: 'worker-3',
+          displayName: 'Worker 3',
+        }),
+      ]),
     ).toBe(
       [
         '[SYSTEM ASYNC MONITOR REQUIRED]',
@@ -257,6 +266,45 @@ describe('agent control graph async finalization', () => {
     expect(
       agentControlGraphToolMessageShowsAsyncTerminalResolution({
         content: 'completed',
+      }),
+    ).toBe(false);
+  });
+
+  it('distinguishes successful async completion from terminal worker failure', () => {
+    expect(
+      agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution({
+        content: JSON.stringify({
+          status: 'completed',
+          pendingCount: 0,
+          completedCount: 0,
+          failedCount: 1,
+          sessions: [{ sessionId: 'worker-failed', status: 'error' }],
+        }),
+      }),
+    ).toBe(false);
+    expect(
+      agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution({
+        content: JSON.stringify({
+          status: 'completed',
+          pendingCount: 0,
+          completedCount: 1,
+          failedCount: 0,
+          sessions: [{ sessionId: 'worker-complete', status: 'completed' }],
+        }),
+      }),
+    ).toBe(true);
+  });
+
+  it('requires every nested session to complete successfully', () => {
+    expect(
+      agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution({
+        content: JSON.stringify({
+          status: 'completed',
+          sessions: [
+            { sessionId: 'worker-complete', status: 'completed' },
+            { sessionId: 'worker-cancelled', status: 'cancelled' },
+          ],
+        }),
       }),
     ).toBe(false);
   });

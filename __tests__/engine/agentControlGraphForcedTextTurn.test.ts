@@ -13,6 +13,11 @@ describe('agent control graph forced text turns', () => {
       'Async work is terminal; answer from the verified result now.',
     ],
     [
+      'background_session_started',
+      '[SYSTEM BACKGROUND HANDOFF]',
+      'Return control to the user now with a concise status',
+    ],
+    [
       'workflow_route_completed',
       '[SYSTEM FINAL DELIVERY]',
       'The workflow is complete; answer from verified evidence now.',

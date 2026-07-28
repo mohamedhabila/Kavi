@@ -10,7 +10,7 @@ import type { ToolCallRecord } from '../loopDetection';
 import { resolveToolEffectPolicy } from '../durability/toolEffectPolicy';
 import { type AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphEvent, AgentControlTurnDirectives } from './agentControlGraph';
-import { agentControlGraphToolMessageShowsAsyncTerminalResolution } from './asyncTerminalResolution';
+import { agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution } from './asyncTerminalResolution';
 import { finalizeAgentControlGraphToolExecutionOutcomes } from './toolExecutionOutcomePostProcessing';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameNormalization';
@@ -58,6 +58,7 @@ import {
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import { buildAgentRunMobileControllerAsyncOperation } from '../../services/agents/mobileControllerAsyncOperation';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
+import { didSessionToolStartBackgroundWork } from './sessionBackgroundHandoff';
 
 export interface TerminalToolExecutionOutcome {
   index: number;
@@ -105,9 +106,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   warn: (message: string, error: unknown) => void;
-  publishMobileControllerHandoff?: (
-    handoff: PersistedMobileControllerHandoff,
-  ) => Promise<void>;
+  publishMobileControllerHandoff?: (handoff: PersistedMobileControllerHandoff) => Promise<void>;
   onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
   onStateChange: (state: 'thinking') => void;
   yieldToUiFrame: () => Promise<void>;
@@ -124,6 +123,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   ) => unknown;
   recordPostToolFinalTextDirective: (params: {
     pendingAsyncCount: number;
+    hasBackgroundLaunchWithoutWait?: boolean;
     hasAsyncTerminalResolution?: boolean;
     hasActivePersistentGoal?: boolean;
     hasCompletedBlockingGoal?: boolean;
@@ -133,10 +133,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   finishWithGraphTerminalEvent: (params: {
     graphEvent: Extract<
       AgentControlGraphEvent,
-      | { type: 'BLOCKED' }
-      | { type: 'FINALIZED' }
-      | { type: 'YIELDED' }
-      | { type: 'CANCELLED' }
+      { type: 'BLOCKED' } | { type: 'FINALIZED' } | { type: 'YIELDED' } | { type: 'CANCELLED' }
     >;
     content: string;
     assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
@@ -159,6 +156,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   );
   let yieldedTurnMessage: string | undefined;
   let forceFinalTextFromYieldThisTurn = false;
+  let hasBackgroundLaunchWithoutWait = false;
   let yieldCompletionNoteMessage: string | undefined;
   let workingMessages = params.workingMessages;
   const canonicalToolExecutionOutcomes: CanonicalToolExecutionOutcome[] = [];
@@ -259,9 +257,17 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         canonicalOutcome.toolCallId,
     );
     if (
-      toolName === REQUEST_CLARIFICATION_TOOL_NAME &&
-      !canonicalOutcome.toolMessage.isError
+      didSessionToolStartBackgroundWork({
+        toolName,
+        toolArguments:
+          canonicalOutcome.toolMessage.toolCalls?.[0]?.arguments ?? executableToolCall?.arguments,
+        toolResult: canonicalOutcome.toolMessage.content,
+        isError: canonicalOutcome.toolMessage.isError,
+      })
     ) {
+      hasBackgroundLaunchWithoutWait = true;
+    }
+    if (toolName === REQUEST_CLARIFICATION_TOOL_NAME && !canonicalOutcome.toolMessage.isError) {
       const parsedClarification = parseRequestClarificationToolResult(
         canonicalOutcome.toolMessage.content,
       );
@@ -325,10 +331,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       },
     ]);
 
-    if (
-      !canonicalOutcome.toolMessage.isError &&
-      DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)
-    ) {
+    if (!canonicalOutcome.toolMessage.isError && DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)) {
       const discoveryActivatedToolNames = extractActivatedToolNamesFromDiscoveryToolResult(
         toolName,
         canonicalOutcome.toolMessage.content,
@@ -398,11 +401,10 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         if (unverifiedEffectBlockEvent) {
           params.applyGraphEvents([unverifiedEffectBlockEvent]);
         }
-        const terminalFailedEffectGuardRemovalEvent =
-          buildTerminalFailedEffectGuardRemovalEvent({
-            goals: params.getGraphSnapshot().goals ?? [],
-            receiptEvidence: effectReceiptEvidenceStrings[0],
-          });
+        const terminalFailedEffectGuardRemovalEvent = buildTerminalFailedEffectGuardRemovalEvent({
+          goals: params.getGraphSnapshot().goals ?? [],
+          receiptEvidence: effectReceiptEvidenceStrings[0],
+        });
         if (terminalFailedEffectGuardRemovalEvent) {
           params.applyGraphEvents([terminalFailedEffectGuardRemovalEvent]);
         }
@@ -421,10 +423,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       }
     }
 
-    if (
-      !canonicalOutcome.skipWorkflowProgress &&
-      toolName !== REQUEST_CLARIFICATION_TOOL_NAME
-    ) {
+    if (!canonicalOutcome.skipWorkflowProgress && toolName !== REQUEST_CLARIFICATION_TOOL_NAME) {
       params.publishWorkflowToolResultProgress({
         toolMessage: canonicalOutcome.toolMessage,
         tools: params.groundedRequestScopedTools,
@@ -641,9 +640,10 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     yieldedTurnMessage,
     forceFinalTextFromYieldThisTurn,
     yieldCompletionNoteMessage,
+    hasBackgroundLaunchWithoutWait,
     hasAsyncTerminalResolution:
       canonicalToolExecutionOutcomes.some((outcome) =>
-        agentControlGraphToolMessageShowsAsyncTerminalResolution(outcome.toolMessage),
+        agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution(outcome.toolMessage),
       ) &&
       params.executableToolCalls.some((toolCall) =>
         params.pendingAsyncMonitorToolNames.has(normalizeToolName(toolCall.name)),

@@ -17,7 +17,7 @@ import {
 
 describe('Orchestrator', () => {
   describe('Tool call handling part 5', () => {
-    it('does not force a special closeout after an explicit non-blocking sessions_spawn launch', async () => {
+    it('hands control back without polling after an explicit non-blocking sessions_spawn launch', async () => {
       useSuperAgentPersona();
       (executeTool as jest.Mock).mockResolvedValueOnce({
         status: 'completed',
@@ -48,21 +48,8 @@ describe('Orchestrator', () => {
       mockStreamMessage.mockImplementationOnce(() =>
         createStreamGenerator(
           [
-            {
-              type: 'tool_call',
-              toolCall: { id: 'tc2', name: 'sessions_status', arguments: '{"sessionId":"sub-1"}' },
-            },
-            { type: 'done', content: '' },
-          ],
-          'tool',
-        ),
-      );
-
-      mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator(
-          [
-            { type: 'token', content: 'Worker completed successfully.' },
-            { type: 'done', content: 'Worker completed successfully.' },
+            { type: 'token', content: 'The worker is running in the background.' },
+            { type: 'done', content: 'The worker is running in the background.' },
           ],
           'text',
         ),
@@ -89,7 +76,7 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      expect(executeTool).toHaveBeenCalledTimes(2);
+      expect(executeTool).toHaveBeenCalledTimes(1);
       expect(executeTool).toHaveBeenNthCalledWith(
         1,
         'sessions_spawn',
@@ -97,13 +84,8 @@ describe('Orchestrator', () => {
         'conv1',
         expect.any(Object),
       );
-      expect(executeTool).toHaveBeenNthCalledWith(
-        2,
-        'sessions_status',
-        '{"sessionId":"sub-1"}',
-        'conv1',
-        expect.any(Object),
-      );
+      expect(mockStreamMessage).toHaveBeenCalledTimes(2);
+      expect(mockStreamMessage.mock.calls[1][1].tools).toBeUndefined();
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 

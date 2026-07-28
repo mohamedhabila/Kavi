@@ -58,6 +58,7 @@ const CONTROL_GRAPH_STATUSES = new Set<AgentRunControlGraphStatus>([
 
 const FORCED_TEXT_REASONS = new Set<AgentRunControlGraphForcedTextReason>([
   'async_terminal_completion',
+  'background_session_started',
   'empty_delivery_recovery',
   'execution_loop_recovery',
   'incomplete_delivery_continuation',

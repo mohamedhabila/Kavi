@@ -9,6 +9,8 @@ describe('agent persona prompts', () => {
       "omit tools unless you need to narrow the worker's scope",
     );
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_wait');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('one focused sessions_send continuation');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Verify worker status and deliverables');
     expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain(['Phase', '1'].join(' '));
     expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain(['Phase', '7'].join(' '));
   });

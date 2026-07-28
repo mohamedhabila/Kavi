@@ -134,6 +134,7 @@ export type GraphIterationBindings = {
     timestamp?: number;
   }) => AgentControlGraphSnapshot;
   recordPostToolFinalTextDirective: (params: {
+    hasBackgroundLaunchWithoutWait?: boolean;
     hasAsyncTerminalResolution?: boolean;
     hasActivePersistentGoal?: boolean;
     hasCompletedBlockingGoal?: boolean;

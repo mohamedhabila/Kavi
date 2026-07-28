@@ -38,9 +38,7 @@ describe('tool execution outcome resolution', () => {
       {
         type: 'MODEL_TURN_COMPLETED',
         iteration: 2,
-        toolCalls: [
-          { id: deferredHandoff.handoffRef.toolCallId, name: 'mobile_ui_action' },
-        ],
+        toolCalls: [{ id: deferredHandoff.handoffRef.toolCallId, name: 'mobile_ui_action' }],
         timestamp: 105,
       },
     ]);
@@ -62,9 +60,7 @@ describe('tool execution outcome resolution', () => {
     expect(graph).toMatchObject({
       status: 'waiting_async',
       pendingAsyncCount: 1,
-      expectedToolCalls: [
-        { id: deferredHandoff.handoffRef.toolCallId, name: 'mobile_ui_action' },
-      ],
+      expectedToolCalls: [{ id: deferredHandoff.handoffRef.toolCallId, name: 'mobile_ui_action' }],
       observedToolResults: [],
       asyncWork: {
         pendingOperations: [
@@ -343,6 +339,7 @@ describe('tool execution outcome resolution', () => {
     expect(params.publishWorkflowToolResultProgress).toHaveBeenCalled();
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
       pendingAsyncCount: 0,
+      hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
       hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: false,
@@ -485,6 +482,40 @@ describe('tool execution outcome resolution', () => {
 
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
       pendingAsyncCount: 0,
+      hasBackgroundLaunchWithoutWait: true,
+      hasAsyncTerminalResolution: false,
+      hasActivePersistentGoal: false,
+      hasCompletedBlockingGoal: false,
+      hasIncompleteBlockingGoal: false,
+    });
+  });
+
+  it('keeps tools enabled after a monitor reports a nested worker failure', async () => {
+    const params = buildBaseParams();
+    params.executableToolCalls = [{ name: 'sessions_wait', arguments: '{"sessionId":"sub-1"}' }];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-wait-failed',
+        toolMessage: createToolMessage({
+          id: 'tc-wait-failed',
+          name: 'sessions_wait',
+          content: JSON.stringify({
+            status: 'completed',
+            pendingCount: 0,
+            completedCount: 0,
+            failedCount: 1,
+            sessions: [{ sessionId: 'sub-1', status: 'error' }],
+          }),
+        }),
+      },
+    ];
+
+    await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
+      pendingAsyncCount: 0,
+      hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
       hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: false,
@@ -524,6 +555,7 @@ describe('tool execution outcome resolution', () => {
 
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
       pendingAsyncCount: 0,
+      hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
       hasActivePersistentGoal: true,
       hasCompletedBlockingGoal: false,
@@ -564,6 +596,7 @@ describe('tool execution outcome resolution', () => {
 
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
       pendingAsyncCount: 0,
+      hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
       hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: true,
@@ -602,6 +635,7 @@ describe('tool execution outcome resolution', () => {
 
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
       pendingAsyncCount: 0,
+      hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
       hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: false,
