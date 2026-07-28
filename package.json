@@ -151,7 +151,7 @@
     "libphonenumber-js": "^1.12.41",
     "lucide-react-native": "^0.577.0",
     "react": "19.2.0",
-    "react-native": "0.83.6",
+    "react-native": "0.83.10",
     "react-native-gesture-handler": "~2.31.2",
     "react-native-get-random-values": "~1.11.0",
     "react-native-marked": "8.0.0",

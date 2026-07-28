@@ -54,11 +54,11 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | Apache-2.0 | 28 |
 | BlueOak-1.0.0 | 6 |
 | BSD-2-Clause | 22 |
-| BSD-3-Clause | 27 |
+| BSD-3-Clause | 26 |
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
-| ISC | 47 |
-| MIT | 896 |
+| ISC | 46 |
+| MIT | 880 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -122,10 +122,8 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @babel/plugin-transform-async-to-generator | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-block-scoping | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-class-properties | 7.27.1 | transitive | MIT |
-| @babel/plugin-transform-class-properties | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-class-static-block | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-classes | 7.28.4 | transitive | MIT |
-| @babel/plugin-transform-classes | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-computed-properties | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-destructuring | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-export-namespace-from | 7.29.7 | transitive | MIT |
@@ -137,12 +135,10 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @babel/plugin-transform-modules-commonjs | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-named-capturing-groups-regex | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-nullish-coalescing-operator | 7.27.1 | transitive | MIT |
-| @babel/plugin-transform-nullish-coalescing-operator | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-numeric-separator | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-object-rest-spread | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-optional-catch-binding | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-optional-chaining | 7.27.1 | transitive | MIT |
-| @babel/plugin-transform-optional-chaining | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-parameters | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-private-methods | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-private-property-in-object | 7.29.7 | transitive | MIT |
@@ -162,7 +158,6 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @babel/plugin-transform-unicode-regex | 7.27.1 | transitive | MIT |
 | @babel/preset-react | 7.29.7 | transitive | MIT |
 | @babel/preset-typescript | 7.27.1 | transitive | MIT |
-| @babel/preset-typescript | 7.29.7 | transitive | MIT |
 | @babel/runtime | 7.28.6 | transitive | MIT |
 | @babel/template | 7.29.7 | transitive | MIT |
 | @babel/traverse | 7.29.7 | transitive | MIT |
@@ -232,11 +227,9 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @expo/devtools | 55.0.3 | transitive | MIT |
 | @expo/dom-webview | 55.0.6 | transitive | MIT |
 | @expo/env | 2.1.3 | transitive | MIT |
-| @expo/env | 2.4.2 | transitive | MIT |
 | @expo/fingerprint | 0.16.8 | transitive | MIT |
 | @expo/image-utils | 0.8.15 | transitive | MIT |
 | @expo/json-file | 10.0.16 | transitive | MIT |
-| @expo/json-file | 10.2.0 | transitive | MIT |
 | @expo/json-file | 11.0.1 | transitive | MIT |
 | @expo/local-build-cache-provider | 55.0.15 | transitive | MIT |
 | @expo/log-box | 55.0.13 | transitive | MIT |
@@ -255,7 +248,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @expo/vector-icons | 15.1.1 | transitive | MIT |
 | @expo/ws-tunnel | 1.0.6 | transitive | MIT |
 | @expo/xcpretty | 4.4.4 | transitive | BSD-3-Clause |
-| @hono/node-server | 1.19.14 | transitive | MIT |
+| @hono/node-server | 2.0.12 | transitive | MIT |
 | @humanfs/core | 0.19.2 | transitive | Apache-2.0 |
 | @humanfs/node | 0.16.8 | transitive | Apache-2.0 |
 | @humanfs/types | 0.15.0 | transitive | Apache-2.0 |
@@ -300,25 +293,20 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @lezer/xml | 1.0.6 | transitive | MIT |
 | @lezer/yaml | 1.0.4 | transitive | MIT |
 | @marijn/find-cluster-break | 1.0.2 | transitive | MIT |
-| @modelcontextprotocol/sdk | 1.29.0 | runtime | MIT |
+| @modelcontextprotocol/sdk | 1.30.0 | runtime | MIT |
 | @react-native-async-storage/async-storage | 2.2.0 | runtime | MIT |
-| @react-native/assets-registry | 0.83.6 | transitive | MIT |
+| @react-native/assets-registry | 0.83.10 | transitive | MIT |
 | @react-native/babel-plugin-codegen | 0.83.10 | transitive | MIT |
 | @react-native/babel-preset | 0.83.10 | transitive | MIT |
 | @react-native/codegen | 0.83.10 | transitive | MIT |
-| @react-native/codegen | 0.83.6 | transitive | MIT |
-| @react-native/community-cli-plugin | 0.83.6 | transitive | MIT |
+| @react-native/community-cli-plugin | 0.83.10 | transitive | MIT |
 | @react-native/debugger-frontend | 0.83.10 | transitive | BSD-3-Clause |
-| @react-native/debugger-frontend | 0.83.6 | transitive | BSD-3-Clause |
 | @react-native/debugger-shell | 0.83.10 | transitive | MIT |
-| @react-native/debugger-shell | 0.83.6 | transitive | MIT |
 | @react-native/dev-middleware | 0.83.10 | transitive | MIT |
-| @react-native/dev-middleware | 0.83.6 | transitive | MIT |
-| @react-native/gradle-plugin | 0.83.6 | transitive | MIT |
-| @react-native/js-polyfills | 0.83.6 | transitive | MIT |
+| @react-native/gradle-plugin | 0.83.10 | transitive | MIT |
+| @react-native/js-polyfills | 0.83.10 | transitive | MIT |
 | @react-native/normalize-colors | 0.83.10 | transitive | MIT |
-| @react-native/normalize-colors | 0.83.6 | transitive | MIT |
-| @react-native/virtualized-lists | 0.83.6 | transitive | MIT |
+| @react-native/virtualized-lists | 0.83.10 | transitive | MIT |
 | @react-navigation/core | 7.16.1 | transitive | MIT |
 | @react-navigation/drawer | 7.9.4 | runtime | MIT |
 | @react-navigation/elements | 2.9.10 | transitive | MIT |
@@ -382,8 +370,8 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | acorn-walk | 8.3.5 | transitive | MIT |
 | agent-base | 6.0.2 | transitive | MIT |
 | agent-base | 7.1.4 | transitive | MIT |
-| ajv | 6.14.0 | development | MIT |
-| ajv | 8.18.0 | development | MIT |
+| ajv | 6.15.0 | development | MIT |
+| ajv | 8.20.0 | development | MIT |
 | ajv-formats | 3.0.1 | development | MIT |
 | anser | 1.4.10 | transitive | MIT |
 | ansi-escapes | 4.3.2 | transitive | MIT |
@@ -410,7 +398,6 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | babel-plugin-react-compiler | 1.0.0 | transitive | MIT |
 | babel-plugin-react-native-web | 0.21.2 | transitive | MIT |
 | babel-plugin-syntax-hermes-parser | 0.32.0 | transitive | MIT |
-| babel-plugin-syntax-hermes-parser | 0.32.1 | transitive | MIT |
 | babel-plugin-transform-flow-enums | 0.0.2 | transitive | MIT |
 | babel-preset-current-node-syntax | 1.2.0 | transitive | MIT |
 | babel-preset-expo | 55.0.24 | transitive | MIT |
@@ -431,7 +418,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | bplist-creator | 0.1.0 | transitive | MIT |
 | bplist-parser | 0.3.1 | transitive | MIT |
 | brace-expansion | 1.1.16 | transitive | MIT |
-| brace-expansion | 5.0.7 | transitive | MIT |
+| brace-expansion | 5.0.8 | transitive | MIT |
 | braces | 3.0.3 | transitive | MIT |
 | brotli-js | 1.0.2 | runtime | MIT |
 | browserslist | 4.28.1 | transitive | MIT |
@@ -664,11 +651,9 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | hermes-compiler | 0.14.1 | transitive | MIT |
 | hermes-estree | 0.25.1 | transitive | MIT |
 | hermes-estree | 0.32.0 | transitive | MIT |
-| hermes-estree | 0.32.1 | transitive | MIT |
 | hermes-estree | 0.35.0 | transitive | MIT |
 | hermes-parser | 0.25.1 | transitive | MIT |
 | hermes-parser | 0.32.0 | transitive | MIT |
-| hermes-parser | 0.32.1 | transitive | MIT |
 | hermes-parser | 0.35.0 | transitive | MIT |
 | hoist-non-react-statics | 3.3.2 | transitive | BSD-3-Clause |
 | hono | 4.12.31 | transitive | MIT |
@@ -683,10 +668,10 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | https-proxy-agent | 7.0.6 | transitive | MIT |
 | human-signals | 2.1.0 | transitive | Apache-2.0 |
 | iconv-lite | 0.6.3 | transitive | MIT |
-| iconv-lite | 0.7.2 | transitive | MIT |
+| iconv-lite | 0.7.3 | transitive | MIT |
 | ieee754 | 1.2.1 | transitive | BSD-3-Clause |
 | ignore | 5.3.2 | transitive | MIT |
-| ignore | 7.0.5 | transitive | MIT |
+| ignore | 7.0.6 | transitive | MIT |
 | image-size | 1.2.1 | transitive | MIT |
 | import-local | 3.2.0 | transitive | MIT |
 | imurmurhash | 0.1.4 | transitive | MIT |
@@ -796,7 +781,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | log-symbols | 2.2.0 | transitive | MIT |
 | loose-envify | 1.4.0 | transitive | MIT |
 | lru-cache | 10.4.3 | transitive | ISC |
-| lru-cache | 11.2.6 | transitive | BlueOak-1.0.0 |
+| lru-cache | 11.5.2 | transitive | BlueOak-1.0.0 |
 | lru-cache | 5.1.1 | transitive | ISC |
 | lucide-react-native | 0.577.0 | runtime | ISC |
 | make-dir | 4.0.0 | transitive | MIT |
@@ -834,7 +819,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | mimic-fn | 2.1.0 | transitive | MIT |
 | mimic-response | 3.1.0 | transitive | MIT |
 | min-indent | 1.0.1 | transitive | MIT |
-| minimatch | 10.2.4 | transitive | BlueOak-1.0.0 |
+| minimatch | 10.2.6 | transitive | BlueOak-1.0.0 |
 | minimatch | 3.1.5 | transitive | ISC |
 | minimist | 1.2.8 | transitive | MIT |
 | minipass | 7.1.3 | transitive | BlueOak-1.0.0 |
@@ -891,7 +876,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | path-to-regexp | 8.4.2 | transitive | MIT |
 | picocolors | 1.1.1 | transitive | ISC |
 | picomatch | 2.3.2 | transitive | MIT |
-| picomatch | 4.0.4 | transitive | MIT |
+| picomatch | 4.0.5 | transitive | MIT |
 | pirates | 4.0.7 | transitive | MIT |
 | pkce-challenge | 5.0.1 | transitive | MIT |
 | pkg-dir | 4.2.0 | transitive | MIT |
@@ -924,13 +909,12 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | react-freeze | 1.0.4 | transitive | MIT |
 | react-is | 16.13.1 | transitive | MIT |
 | react-is | 18.3.1 | transitive | MIT |
-| react-is | 19.2.4 | transitive | MIT |
-| react-native | 0.83.6 | runtime | MIT |
+| react-is | 19.2.8 | transitive | MIT |
+| react-native | 0.83.10 | runtime | MIT |
 | react-native-drawer-layout | 4.2.2 | transitive | MIT |
 | react-native-gesture-handler | 2.31.2 | runtime | MIT |
 | react-native-get-random-values | 1.11.0 | runtime | MIT |
 | react-native-is-edge-to-edge | 1.2.1 | transitive | MIT |
-| react-native-is-edge-to-edge | 1.3.1 | transitive | MIT |
 | react-native-marked | 8.0.0 | runtime | MIT |
 | react-native-reanimated | 4.2.1 | runtime | MIT |
 | react-native-reanimated-table | 0.0.2 | transitive | MIT |
@@ -969,7 +953,6 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | scheduler | 0.27.0 | transitive | MIT |
 | semver | 6.3.1 | transitive | ISC |
 | semver | 7.7.3 | transitive | ISC |
-| semver | 7.7.4 | transitive | ISC |
 | semver | 7.8.5 | transitive | ISC |
 | send | 0.19.2 | transitive | MIT |
 | send | 1.2.1 | transitive | MIT |
@@ -1099,9 +1082,8 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | wrap-ansi | 7.0.0 | transitive | MIT |
 | wrappy | 1.0.2 | transitive | ISC |
 | write-file-atomic | 4.0.2 | transitive | ISC |
-| ws | 7.5.11 | transitive | MIT |
-| ws | 7.5.12 | transitive | MIT |
-| ws | 8.21.0 | transitive | MIT |
+| ws | 7.5.13 | transitive | MIT |
+| ws | 8.21.1 | transitive | MIT |
 | xcode | 3.0.1 | transitive | Apache-2.0 |
 | xml-name-validator | 4.0.0 | transitive | Apache-2.0 |
 | xml2js | 0.6.0 | transitive | MIT |

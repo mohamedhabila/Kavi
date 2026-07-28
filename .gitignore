@@ -14,6 +14,7 @@ node-compile-cache/
 android/build/
 android/app/build/
 android/app/.cxx/
+android/.kotlin/
 ios/build/
 ios/Pods/
 *.jks

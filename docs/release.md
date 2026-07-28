@@ -76,7 +76,7 @@ tag candidate and run the release gate from a clean checkout.
 - Confirm the SDK dependency matrix with `npm run check:expo-dependencies`.
   `react-native-gesture-handler` is intentionally excluded from Expo's
   best-effort version catalog: the catalog's 2.30.1 release does not compile
-  against SDK 55's React Native 0.83.6 and Kotlin 2.3 toolchain, while 2.31.2
+  against SDK 55's React Native 0.83.10 and Kotlin 2.3 toolchain, while 2.31.2
   contains the upstream compiler fix and subsequent Android accessibility
   fixes. The repository check binds this exception to the exact native-build-
   validated Expo, React Native, and Gesture Handler versions. Remove the
@@ -93,13 +93,21 @@ tag candidate and run the release gate from a clean checkout.
   disposition must be reviewed whenever Expo, `xcode`, or `uuid` changes; it
   stops being acceptable if the call sites or reachability change, severity
   increases, or an SDK-compatible upstream fix becomes available.
-- The MCP SDK dependency graph also retains
-  [GHSA-frvp-7c67-39w9](https://github.com/advisories/GHSA-frvp-7c67-39w9)
-  through `@hono/node-server`. The affected Windows static-file server is not
-  imported or exposed by Kavi's mobile MCP client. npm's forced remediation
-  downgrades the MCP SDK, so keep the current compatible SDK and review this
-  disposition whenever the SDK or `@hono/node-server` changes. Treat it as a
-  release blocker if the affected server API becomes reachable from the app.
+- The SDK 55 / React Native 0.83.10 build graph currently retains the high
+  advisory
+  [GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg)
+  through legacy `glob@7 -> minimatch@3 -> brace-expansion@1` copies used by
+  React Native codegen, the Expo CLI, and Jest coverage tooling. The affected
+  expansion code is not part of Kavi's bundled chat runtime, and Kavi does not
+  pass user or model content to these build-tool glob patterns. The compatible
+  modern dependency graph is already on `minimatch@10.2.6 ->
+  brace-expansion@5.0.8`. npm's forced remediation proposes an unsupported
+  React Native or Expo major change, while overriding legacy callers directly
+  to `brace-expansion@5` is API-incompatible. This remains a failing high-audit
+  gate, requires explicit release-owner signoff, and must be reviewed whenever
+  Expo, React Native, Jest, `glob`, `minimatch`, or `brace-expansion` changes.
+  Treat it as a release blocker if untrusted patterns can reach the affected
+  tooling or a compatible upstream fix becomes available and is not adopted.
 - Run the Android release environment check with
   `npm run check:android:release-env`.
 - Run iOS simulator release validation with `npm run build:ios:release-sim`
