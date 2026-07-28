@@ -363,7 +363,41 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
   });
 
-  it('blocks raw tool markup after one final-delivery recovery', async () => {
+  it('retries provider tool-call markup as a native call when tools remain available', async () => {
+    const params = buildBaseParams();
+    params.turnAssistantContent = [
+      '<tool_call>',
+      '<function=sessions_send>',
+      '<parameter=sessionId>',
+      'sub-primary',
+      '</parameter>',
+      '</function>',
+      '</tool_call>',
+    ].join('\n');
+    params.modelTurnAssistantContent = params.turnAssistantContent;
+    params.selectedToolNames = new Set(['sessions_send']);
+    params.selectedToolCount = 1;
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    expect(params.recordTurnDirectives).toHaveBeenCalledWith(
+      { incompleteFinalTextRecoveryCount: 1 },
+      'malformed_tool_call_retry',
+    );
+    expect(params.workingMessages.at(-1)?.content).toContain(
+      '[SYSTEM INVALID TOOL CALL RETRY]',
+    );
+    expect(params.workingMessages.at(-1)?.content).toContain('sessions_send');
+    expect(params.workingMessages.at(-1)?.content).toContain('native structured tool call');
+    expect(params.workingMessages.at(-1)?.content).not.toContain('Tools are unavailable');
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+  });
+
+  it('blocks raw tool markup after bounded final-delivery recoveries', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '<tool_call><function=calendar_events></function></tool_call>';
     params.modelTurnAssistantContent = params.turnAssistantContent;
@@ -374,7 +408,7 @@ describe('agent control graph no-tool turn resolution', () => {
       ...baseTurnDirectives,
       forceFinalText: true,
       forcedTextReason: 'empty_delivery_recovery',
-      incompleteFinalTextRecoveryCount: 1,
+      incompleteFinalTextRecoveryCount: 2,
     };
 
     const result = await resolveAgentControlGraphNoToolTurn(params);
@@ -443,13 +477,37 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
   });
 
-  it('blocks visibly after one empty-response recovery instead of finalizing empty', async () => {
+  it('allows a second bounded retry after another ordinary empty response', async () => {
+    const params = buildBaseParams();
+    params.turnAssistantContent = '';
+    params.modelTurnAssistantContent = '';
+    params.selectedToolNames = new Set(['contacts_search']);
+    params.selectedToolCount = 1;
+    params.recoveryDirectives = {
+      ...baseTurnDirectives,
+      incompleteFinalTextRecoveryCount: 1,
+    };
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    expect(params.recordTurnDirectives).toHaveBeenCalledWith(
+      { incompleteFinalTextRecoveryCount: 2 },
+      'empty_response_retry',
+    );
+    expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
+  });
+
+  it('blocks visibly after bounded empty-response recoveries instead of finalizing empty', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
     params.modelTurnAssistantContent = '';
     params.recoveryDirectives = {
       ...baseTurnDirectives,
-      incompleteFinalTextRecoveryCount: 1,
+      incompleteFinalTextRecoveryCount: 2,
     };
 
     const result = await resolveAgentControlGraphNoToolTurn(params);
@@ -481,7 +539,7 @@ describe('agent control graph no-tool turn resolution', () => {
       ...baseTurnDirectives,
       forceFinalText: true,
       forcedTextReason: 'incomplete_delivery_continuation',
-      incompleteFinalTextRecoveryCount: 1,
+      incompleteFinalTextRecoveryCount: 2,
       incompleteFinalTextContinuationPrefix: 'partial final answer',
     };
 

@@ -39,14 +39,10 @@ type NoToolTurnResolutionResult =
       status: 'finalized';
     };
 
-function requiresAgenticProgressValidation(
-  controlGraph: AgentControlGraphSnapshot,
-): boolean {
+function requiresAgenticProgressValidation(controlGraph: AgentControlGraphSnapshot): boolean {
   const routing = controlGraph.requestUnderstanding?.routing;
   return (
-    routing?.status === 'known' &&
-    routing.mode === 'agentic' &&
-    routing.decisionAction === 'act'
+    routing?.status === 'known' && routing.mode === 'agentic' && routing.decisionAction === 'act'
   );
 }
 
@@ -137,6 +133,17 @@ function buildEmptyResponseRetryPrompt(params: {
 }): string {
   const completedToolLines = buildCompletedToolRecoveryLines(params.completedToolNames);
   if (params.rawToolCallMarkup) {
+    if (params.toolsMayBeUsed) {
+      const toolNames = Array.from(params.selectedToolNames).filter(Boolean).sort();
+      return [
+        '[SYSTEM INVALID TOOL CALL RETRY]',
+        'The previous response exposed provider tool-call markup as visible chat text instead of issuing a native tool call.',
+        `Available structural tools: ${toolNames.join(', ') || 'none'}.`,
+        ...completedToolLines,
+        'Reissue the intended action now as one native structured tool call with valid JSON arguments.',
+        'Do not output tool-call tags, function blocks, XML-like tool syntax, or explanatory prose.',
+      ].join('\n');
+    }
     return [
       '[SYSTEM INVALID FINAL RESPONSE RETRY]',
       'The previous response exposed provider tool-call markup as visible chat text.',
@@ -200,7 +207,7 @@ function resolveEmptyResponseRetryReason(params: {
 
 const EMPTY_FINAL_TEXT_FAILURE_REASON = 'empty_final_text_after_recovery';
 const EMPTY_FINAL_TEXT_FAILURE_MESSAGE =
-  "I couldn't complete this request because the model returned no usable response after one recovery attempt. Please retry or choose another model.";
+  "I couldn't complete this request because the model returned no usable response after bounded recovery attempts. Please retry or choose another model.";
 
 async function continueNoToolTurn(params: {
   commandReason: CompletionGateHoldReason;
@@ -277,9 +284,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
   }
 
   const pendingAsyncOperations = getPendingTrackedAsyncOperations(params.trackedAsyncOperations);
-  const rawToolCallMarkup =
-    params.effectiveForceTextThisTurn &&
-    containsRawProviderToolCallMarkup(params.modelTurnAssistantContent);
+  const rawToolCallMarkup = containsRawProviderToolCallMarkup(params.modelTurnAssistantContent);
   const emptyResponseRetryReason =
     pendingAsyncOperations.length === 0
       ? resolveEmptyResponseRetryReason({
@@ -400,9 +405,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
       toolCallHistory: params.toolCallHistory,
       completion: params.completion,
       nextFinalizationMaxTokens: params.nextFinalizationMaxTokens,
-      requiresAgenticProgressValidation: requiresAgenticProgressValidation(
-        params.controlGraph,
-      ),
+      requiresAgenticProgressValidation: requiresAgenticProgressValidation(params.controlGraph),
     });
 
   let gateDecision = evaluateGate(params.controlGraph.goals);
