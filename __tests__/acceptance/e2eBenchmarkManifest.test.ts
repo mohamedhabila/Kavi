@@ -373,6 +373,34 @@ describe('e2eBenchmarkManifest', () => {
           coverageStatus: 'external_required',
           environmentKinds: ['provider_matrix'],
         }),
+        expect.objectContaining({
+          id: 'memgym-cross-domain-memory-runner',
+          coverageStatus: 'external_required',
+          environmentKinds: ['provider_matrix', 'simulated_mobile_web'],
+        }),
+        expect.objectContaining({
+          id: 'memgui-mobile-memory-runner',
+          coverageStatus: 'external_required',
+          environmentKinds: ['mobile_gui', 'android_emulator'],
+        }),
+        expect.objectContaining({
+          id: 'sentinelbench-long-running-monitoring-runner',
+          coverageStatus: 'external_required',
+          environmentKinds: ['simulated_mobile_web'],
+        }),
+        expect.objectContaining({
+          id: 'pi-bench-proactive-workflow-runner',
+          coverageStatus: 'external_required',
+          environmentKinds: ['provider_matrix'],
+        }),
+        expect.objectContaining({
+          id: 'mcpmark-verified-runner',
+          coverageStatus: 'external_required',
+        }),
+        expect.objectContaining({
+          id: 'agentif-oneday-daily-assistant-runner',
+          coverageStatus: 'external_required',
+        }),
       ]),
     );
   });

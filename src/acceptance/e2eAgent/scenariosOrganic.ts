@@ -195,6 +195,12 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
     },
     {
       kind: 'turn_native_invocation_count',
+      turnIndex: 3,
+      toolName: 'calendar_update_event',
+      expectedCount: 0,
+    },
+    {
+      kind: 'turn_native_invocation_count',
       turnIndex: 6,
       toolName: 'calendar_update_event',
       expectedCount: 0,

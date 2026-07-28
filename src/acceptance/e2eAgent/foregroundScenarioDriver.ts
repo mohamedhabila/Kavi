@@ -40,6 +40,7 @@ import {
 import { sealForegroundScenarioMemoryEvidenceAfterProviderWait } from './foregroundScenarioMemoryEvidence';
 import {
   cloneAndFreeze,
+  resolveForegroundScenarioAllowedToolNames,
   resolveForegroundScenarioProviderOutcomes,
   type ForegroundScenarioDriverInput,
   type ForegroundScenarioDriverResult,
@@ -105,6 +106,12 @@ function remainingScenarioTimeMs(deadline: number): number {
   return Math.max(0, deadline - Date.now());
 }
 
+function waitForEvaluatorDelay(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
 async function awaitBeforeScenarioDeadline<T>(
   promise: Promise<T>,
   deadline: number,
@@ -129,6 +136,26 @@ async function awaitBeforeScenarioDeadline<T>(
     ]);
   } finally {
     if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+function validateAllowedToolNames(
+  allowedToolNames: ReadonlyArray<string> | undefined,
+  fieldName: string,
+): void {
+  if (
+    allowedToolNames !== undefined &&
+    (allowedToolNames.length === 0 ||
+      new Set(allowedToolNames).size !== allowedToolNames.length ||
+      allowedToolNames.some(
+        (name) =>
+          typeof name !== 'string' ||
+          !name.trim() ||
+          name !== name.trim() ||
+          !FOREGROUND_PRODUCT_TOOL_NAMES.has(name),
+      ))
+  ) {
+    throw new Error(`${fieldName} must contain unique canonical tool names.`);
   }
 }
 
@@ -173,20 +200,7 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
       requirementKeys.add(key);
     }
   }
-  if (
-    input.allowedToolNames !== undefined &&
-    (input.allowedToolNames.length === 0 ||
-      new Set(input.allowedToolNames).size !== input.allowedToolNames.length ||
-      input.allowedToolNames.some(
-        (name) =>
-          typeof name !== 'string' ||
-          !name.trim() ||
-          name !== name.trim() ||
-          !FOREGROUND_PRODUCT_TOOL_NAMES.has(name),
-      ))
-  ) {
-    throw new Error('allowedToolNames must contain unique canonical tool names.');
-  }
+  validateAllowedToolNames(input.allowedToolNames, 'allowedToolNames');
   if (input.disableTools && input.allowedToolNames !== undefined) {
     throw new Error('disableTools and allowedToolNames cannot be configured together.');
   }
@@ -202,6 +216,11 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
     }
     validatePositiveNumber(turn.maxTokens, `turns[${index}].maxTokens`);
     validatePositiveNumber(turn.timeoutMs, `turns[${index}].timeoutMs`);
+    validatePositiveNumber(turn.delayBeforeMs, `turns[${index}].delayBeforeMs`);
+    validateAllowedToolNames(turn.allowedToolNames, `turns[${index}].allowedToolNames`);
+    if (input.disableTools && turn.allowedToolNames !== undefined) {
+      throw new Error('disableTools and turn allowedToolNames cannot be configured together.');
+    }
     if (turn.selectedMode !== undefined && !['agentic', 'chitchat'].includes(turn.selectedMode)) {
       throw new Error(`turns[${index}].selectedMode must be agentic or chitchat.`);
     }
@@ -261,10 +280,16 @@ async function runScenarioIsolated(
     let runtime = createForegroundScenarioRuntime(input, memoryRecords);
     const turnSnapshots: ForegroundScenarioTurnSnapshot[] = [];
     for (const [turnIndex, turn] of input.turns.entries()) {
-      const startedAt = Date.now();
       if (remainingScenarioTimeMs(scenarioDeadline) <= 0) {
         throw new Error(SCENARIO_WALL_CLOCK_TIMEOUT_ERROR);
       }
+      if (turn.delayBeforeMs !== undefined) {
+        await awaitBeforeScenarioDeadline(
+          waitForEvaluatorDelay(turn.delayBeforeMs),
+          scenarioDeadline,
+        );
+      }
+      const startedAt = Date.now();
       let lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null = null;
       if (turn.lifecycleBefore === 'app_relaunch') {
         const transition = await awaitBeforeScenarioDeadline(
@@ -347,13 +372,17 @@ async function runScenarioIsolated(
         : `Foreground scenario turn timed out after ${timeoutMs}ms.`;
       let timeout: ReturnType<typeof setTimeout> | undefined;
       let executionSettled = false;
+      const allowedToolNames = resolveForegroundScenarioAllowedToolNames(
+        input.allowedToolNames,
+        turn.allowedToolNames,
+      );
       const execution = executeForegroundConversationRun({
         conversationId: currentConversationId,
         context: runtime.context,
         options: {
           maxTokens: turn.maxTokens ?? input.maxTokens,
           disableTools: input.disableTools,
-          ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
+          ...(allowedToolNames ? { allowedToolNames } : {}),
           memoryRetrievalStrategy: input.memoryRetrievalStrategy,
           memoryContextStrategy: input.memoryContextStrategy,
           enableCompaction: input.enableCompaction,

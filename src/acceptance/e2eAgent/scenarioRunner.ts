@@ -16,8 +16,8 @@ import { buildE2EProvider, isE2EAgentEvalEnabled } from './providerConfig';
 import { seedE2EWorkspaceSandbox } from './sandboxWorkspace';
 import { resolveScenarioProviderOutcomeEvidenceRequirements } from './scenarioProviderOutcomeEvidence';
 import { mapForegroundScenarioResult } from './scenarioResultMapper';
-import { resolveE2EScenarioTimeoutMs } from './scenarioTimeout';
-import { E2E_DEFAULT_MAX_TOKENS, E2E_PER_USER_TURN_TIMEOUT_MS } from './thresholds';
+import { resolveE2EScenarioTimeoutMs, resolveE2ETurnTimeoutMs } from './scenarioTimeout';
+import { E2E_DEFAULT_MAX_TOKENS } from './thresholds';
 import type { E2EScenario, E2EScenarioContentClass, E2EScenarioResult, E2EUserTurn } from './types';
 import type { LlmProviderConfig } from '../../types/provider';
 import type {
@@ -119,7 +119,7 @@ export async function runE2EScenario(
   const perTurnTimeoutMs =
     options.perTurnTimeoutMs ??
     Math.min(
-      E2E_PER_USER_TURN_TIMEOUT_MS,
+      resolveE2ETurnTimeoutMs(),
       Math.max(1, Math.floor(scenarioTimeoutMs / userTurns.length)),
     );
   const uninstallScenarioEnvironment = installE2EScenarioEnvironment();

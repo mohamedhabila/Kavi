@@ -240,10 +240,24 @@ describe('e2eReadinessDashboard', () => {
       passedCount: 1,
       passRate: 1,
     });
+    expect(dashboard.mobileNative.externalRequirementIds).toEqual(
+      expect.arrayContaining([
+        'memgui-mobile-memory-runner',
+        'mobileworld-gui-mcp-runner',
+        'mobilesafetybench-full-runner',
+      ]),
+    );
     expect(dashboard.security).toMatchObject({
       status: 'external_required',
       targetedAttackSuccessRate: null,
     });
+    expect(dashboard.security.externalRequirementIds).toEqual(
+      expect.arrayContaining([
+        'agentdojo-prompt-injection',
+        'mobilesafetybench-full-runner',
+        'safearena-web-safety-runner',
+      ]),
+    );
     expect(dashboard.artifactRetention.defaultRetainedRuns).toBe(90);
     expect(dashboard.refreshCadence.map((entry) => entry.sourceGroup)).toEqual([
       'provider_docs',

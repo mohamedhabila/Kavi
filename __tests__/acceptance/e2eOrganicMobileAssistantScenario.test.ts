@@ -101,6 +101,12 @@ describe('organic mobile-assistant continuity scenario', () => {
           expectedValue: '45',
         },
         {
+          kind: 'turn_native_invocation_count',
+          turnIndex: 3,
+          toolName: 'calendar_update_event',
+          expectedCount: 0,
+        },
+        {
           kind: 'workspace_file',
           path: 'artifacts/week-plan.txt',
           contains: 'ORGANIC-WEEK-PLAN-RECOVERED-E2E-77',

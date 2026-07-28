@@ -19,7 +19,11 @@ import {
   failedE2ENativeOutcome,
   type E2ENativeMobileOutcome,
 } from './e2eNativeMobileOutcome';
-import { E2E_FIXTURE_CALENDAR_LIST_JSON, type E2ECalendarEvent } from './e2eNativeCalendarFixtures';
+import {
+  E2E_FIXTURE_CALENDAR_LIST_JSON,
+  hasE2ECalendarUpdateField,
+  type E2ECalendarEvent,
+} from './e2eNativeCalendarFixtures';
 
 export {
   E2E_FIXTURE_DEVICE_HEALTH_JSON,
@@ -403,6 +407,12 @@ async function executeE2ENativeMobileTool(
     }
     case 'calendar_update_event': {
       const eventId = readStringArg(args, 'id', 'e2e-event-1');
+      if (!hasE2ECalendarUpdateField(args)) {
+        return failedE2ENativeOutcome({
+          status: 'invalid_request',
+          error: 'Calendar update requires at least one field to change.',
+        });
+      }
       const eventIndex = e2eCalendarEvents.findIndex((event) => event.id === eventId);
       if (eventIndex < 0) {
         return failedE2ENativeOutcome({

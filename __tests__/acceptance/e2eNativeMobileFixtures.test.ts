@@ -172,6 +172,17 @@ describe('E2E native mobile fixtures', () => {
       }),
     );
 
+    const noOpUpdateRaw = await executeToolInner(
+      'calendar_update_event',
+      JSON.stringify({ id: created.eventId }),
+      'conv-mobile-calendar-e2e',
+    );
+    expect(noOpUpdateRaw.status).toBe('failed');
+    expect(JSON.parse(noOpUpdateRaw.content)).toEqual({
+      status: 'invalid_request',
+      error: 'Calendar update requires at least one field to change.',
+    });
+
     const updateRaw = await executeToolInner(
       'calendar_update_event',
       JSON.stringify({ id: created.eventId, title: 'Updated Review' }),

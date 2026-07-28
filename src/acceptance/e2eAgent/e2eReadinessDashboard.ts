@@ -296,6 +296,11 @@ function buildMobileNativeSummary(
     externalRequirementIds: externalRequirementsBySource(externalRequirements, [
       'androidworld',
       'mobileagentbench',
+      'mobileworld',
+      'spabench',
+      'knowu',
+      'memgui',
+      'mobilesafetybench',
       'simuwob',
     ]),
   };
@@ -307,6 +312,8 @@ function buildSecuritySummary(
   const externalRequirementIds = externalRequirementsBySource(externalRequirements, [
     'agentdojo',
     'mcptox',
+    'mobilesafetybench',
+    'safearena',
   ]);
   return {
     benignUtilityRate: null,

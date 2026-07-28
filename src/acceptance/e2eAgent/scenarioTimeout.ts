@@ -10,6 +10,7 @@ import {
 import type { E2EScenario } from './types';
 
 export const E2E_SCENARIO_TIMEOUT_MS_ENV = 'E2E_SCENARIO_TIMEOUT_MS';
+export const E2E_TURN_TIMEOUT_MS_ENV = 'E2E_TURN_TIMEOUT_MS';
 
 function resolveScenarioUserTurnCount(scenario: E2EScenario): number {
   return scenario.userTurns && scenario.userTurns.length > 0 ? scenario.userTurns.length : 1;
@@ -25,11 +26,27 @@ function resolveConfiguredTimeoutMs(env: NodeJS.ProcessEnv): number | undefined 
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+export function resolveE2ETurnTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env[E2E_TURN_TIMEOUT_MS_ENV]?.trim();
+  if (!raw) {
+    return E2E_PER_USER_TURN_TIMEOUT_MS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return E2E_PER_USER_TURN_TIMEOUT_MS;
+  }
+
+  return Math.min(E2E_MAX_SCENARIO_TIMEOUT_MS, parsed);
+}
+
 export function resolveE2EScenarioTimeoutMs(
   scenario: E2EScenario,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
-  const turnScaledTimeout = resolveScenarioUserTurnCount(scenario) * E2E_PER_USER_TURN_TIMEOUT_MS;
+  const turnScaledTimeout = resolveScenarioUserTurnCount(scenario) * resolveE2ETurnTimeoutMs(env);
   const configuredTimeout = resolveConfiguredTimeoutMs(env);
 
   return Math.min(

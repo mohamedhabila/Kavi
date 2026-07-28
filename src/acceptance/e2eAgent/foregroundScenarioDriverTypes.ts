@@ -68,13 +68,24 @@ export type ForegroundScenarioLifecycleSnapshot =
 export type ForegroundScenarioTurnInput = {
   content: string;
   attachments?: ReadonlyArray<Attachment>;
+  /** Evaluator-owned wall-clock pause before this turn; never interpreted by product code. */
+  delayBeforeMs?: number;
   lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
   route: ForegroundScenarioRouteDirective;
   selectedMode?: ConversationMode;
   maxTokens?: number;
   timeoutMs?: number;
+  /** Evaluator-owned exact tool surface for this turn; overrides the scenario-level surface. */
+  allowedToolNames?: ReadonlyArray<string>;
   timestamp?: number;
 };
+
+export function resolveForegroundScenarioAllowedToolNames(
+  scenarioAllowedToolNames: ReadonlyArray<string> | undefined,
+  turnAllowedToolNames: ReadonlyArray<string> | undefined,
+): ReadonlyArray<string> | undefined {
+  return turnAllowedToolNames ?? scenarioAllowedToolNames;
+}
 
 export type ForegroundScenarioDriverInput = {
   provider: LlmProviderConfig;

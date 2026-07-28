@@ -423,6 +423,186 @@ export function listE2EBenchmarkRequirements(): E2EBenchmarkRequirement[] {
       requiredEvidence: ['token_accounting', 'cache_event'],
     },
     {
+      id: 'amemgym-on-policy-full-runner',
+      source: 'AMemGym',
+      objective:
+        'Measure evolving user-state memory through the unchanged on-policy user simulator and exact foreground-chat entry point.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['memory_store', 'memory_receipt', 'memory_retrieval', 'token_accounting'],
+    },
+    {
+      id: 'state-bench-full-runner',
+      source: 'STATE-Bench',
+      objective:
+        'Run main and agent-learning tracks with unchanged state graders, repeated trials, user-experience metrics, and cost accounting.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['graph_state', 'memory_store', 'token_accounting'],
+    },
+    {
+      id: 'memgym-cross-domain-memory-runner',
+      source: 'MemGym',
+      objective:
+        'Isolate memory quality from reasoning quality across dialogue, deep-research, and web-navigation trajectories using the same Kavi reasoner.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix', 'simulated_mobile_web'],
+      requiredEvidence: ['memory_store', 'memory_retrieval', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'memoryarena-multisession-runner',
+      source: 'MemoryArena',
+      objective:
+        'Evaluate memory across interdependent multi-session search, planning, web-navigation, and formal-reasoning tasks.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix', 'simulated_mobile_web'],
+      requiredEvidence: ['memory_store', 'memory_retrieval', 'graph_state'],
+    },
+    {
+      id: 'worldmemarena-hidden-state-runner',
+      source: 'WorldMemArena',
+      objective:
+        'Track hidden and evolving multimodal world state without rewarding stale recall or unsupported inference.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix', 'simulated_mobile_web'],
+      requiredEvidence: ['memory_store', 'memory_retrieval', 'graph_state'],
+    },
+    {
+      id: 'memgui-mobile-memory-runner',
+      source: 'MemGUI-Bench',
+      objective:
+        'Run memory-centric multi-session mobile GUI tasks with upstream initialization, pass@3 scoring, and trajectory evidence.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['mobile_gui', 'android_emulator'],
+      requiredEvidence: ['memory_store', 'memory_retrieval', 'native_fixture_state'],
+    },
+    {
+      id: 'sentinelbench-long-running-monitoring-runner',
+      source: 'SentinelBench',
+      objective:
+        'Measure wait, monitor, act, reaction time, resource use, and correct no-op behavior in environments that evolve over wall-clock time.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['simulated_mobile_web'],
+      requiredEvidence: ['execution_state', 'lifecycle_event', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'pi-bench-proactive-workflow-runner',
+      source: 'π-Bench',
+      objective:
+        'Measure proactive but bounded assistance, hidden-intent discovery, completeness, and persistent multi-turn workspace state.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['graph_state', 'workspace_artifact', 'memory_store', 'token_accounting'],
+    },
+    {
+      id: 'gaia2-dynamic-async-runner',
+      source: 'Gaia2',
+      objective:
+        'Evaluate dynamic, asynchronous, time-dependent, noisy, and ambiguous general-assistant tasks with the upstream oracle.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['simulated_mobile_web', 'provider_matrix'],
+      requiredEvidence: ['graph_state', 'execution_state', 'workspace_artifact', 'token_accounting'],
+    },
+    {
+      id: 'mcpmark-verified-runner',
+      source: 'MCPMark Verified',
+      objective:
+        'Run version-pinned real MCP workflows with deterministic verifiers, repeated trials, compaction, and resume behavior.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix', 'simulated_mobile_web'],
+      requiredEvidence: ['graph_state', 'workspace_artifact', 'execution_state', 'token_accounting'],
+    },
+    {
+      id: 'tau-knowledge-retrieval-action-runner',
+      source: 'tau-knowledge / tau2-bench',
+      objective:
+        'Couple knowledge-base retrieval, live user coordination, and stateful tool actions under upstream policy and database graders.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['graph_state', 'memory_retrieval', 'token_accounting'],
+    },
+    {
+      id: 'agentif-oneday-daily-assistant-runner',
+      source: 'AgentIF-OneDay',
+      objective:
+        'Test attachment understanding, latent constraints, iterative refinement, and open-ended daily-assistant workflows.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['assistant_response', 'workspace_artifact', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'agents-last-exam-long-horizon-runner',
+      source: "Agents' Last Exam",
+      objective:
+        'Stress long-horizon professional task completion and verifiable final artifacts in reproducible desktop sandboxes.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['workspace_artifact', 'artifact_hash', 'execution_state', 'token_accounting'],
+    },
+    {
+      id: 'assistantbench-hidden-test-runner',
+      source: 'AssistantBench',
+      objective:
+        'Measure realistic web research and synthesis against the hidden test split without exposing target answers to the agent.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['simulated_mobile_web'],
+      requiredEvidence: ['assistant_response', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'gaia-hidden-test-runner',
+      source: 'GAIA',
+      objective:
+        'Run the official hidden test split for multi-hop general-assistant reasoning rather than reporting only adapted local shards.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['assistant_response', 'workspace_artifact', 'graph_state'],
+    },
+    {
+      id: 'appworld-stateful-app-runner',
+      source: 'AppWorld',
+      objective:
+        'Evaluate stateful multi-app workflows with unchanged initial databases and objective final-state graders.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['simulated_mobile_web'],
+      requiredEvidence: ['graph_state', 'workspace_artifact', 'token_accounting'],
+    },
+    {
+      id: 'mobilesafetybench-full-runner',
+      source: 'MobileSafetyBench',
+      objective:
+        'Measure mobile misuse refusal, negative side effects, and indirect prompt-injection resistance while preserving benign utility.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['mobile_gui', 'security_fixture'],
+      requiredEvidence: ['native_fixture_state', 'graph_state'],
+    },
+    {
+      id: 'safearena-web-safety-runner',
+      source: 'SafeArena',
+      objective:
+        'Measure benign utility and harmful-task refusal in realistic web environments with upstream safety graders.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['simulated_mobile_web', 'security_fixture'],
+      requiredEvidence: ['graph_state', 'workspace_artifact'],
+    },
+    {
       id: 'benchmark-drift-controls',
       source: 'Benchmark harness controls',
       objective: 'Pin manifest versions, seeds, provider versions, and source refresh dates.',

@@ -264,6 +264,19 @@ describe('calendar effect verification', () => {
     );
   });
 
+  it('rejects an update that contains only an event id', async () => {
+    const result = JSON.parse(
+      failedToolContent(await executeCalendarUpdate({ id: 'event-1' }, calendarRuntime)),
+    );
+
+    expect(result).toEqual({
+      status: 'invalid_request',
+      error: 'Calendar update requires at least one field to change.',
+    });
+    expect(mockGetEventAsync).not.toHaveBeenCalled();
+    expect(mockUpdateEventAsync).not.toHaveBeenCalled();
+  });
+
   it('does not report verified success when an unrelated field is lost', async () => {
     const existing = {
       id: 'event-1',

@@ -473,7 +473,7 @@ describe('runForegroundScenario', () => {
     expect(mockedRunOrchestrator.mock.calls[0][0]).toMatchObject({ disableTooling: true });
   });
 
-  it('rejects unknown or duplicate tool allowlists before running a turn', async () => {
+  it('rejects invalid evaluator controls before running a turn', async () => {
     const base = {
       provider: makeProvider('scenario-provider'),
       conversationId: 'scenario-conversation',
@@ -492,6 +492,12 @@ describe('runForegroundScenario', () => {
     await expect(
       runForegroundScenario({ ...base, disableTools: true, allowedToolNames: ['memory_recall'] }),
     ).rejects.toThrow('cannot be configured together');
+    await expect(
+      runForegroundScenario({
+        ...base,
+        turns: [{ content: 'How are you?', route: 'production_auto' as const, delayBeforeMs: 0 }],
+      }),
+    ).rejects.toThrow('delayBeforeMs must be a positive finite number');
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
