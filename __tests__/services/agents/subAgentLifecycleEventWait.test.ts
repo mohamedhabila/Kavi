@@ -2,7 +2,10 @@ import type {
   SubAgentResult,
   SubAgentSnapshot,
 } from '../../../src/types/subAgent';
-import { createSubAgentLifecycleManager } from '../../../src/services/agents/lifecycle/lifecycleManager';
+import {
+  createSubAgentLifecycleManager,
+  waitForSubAgentResultPromise,
+} from '../../../src/services/agents/lifecycle/lifecycleManager';
 import {
   createSubAgentRuntimeSignalsManager,
   type SubAgentTerminalEvent,
@@ -25,6 +28,7 @@ function createHarness(options?: { terminalizeDuringSubscription?: boolean }) {
   const agent = makeAgent();
   const activeSubAgents = new Map([[agent.sessionId, agent]]);
   const activeResultPromises = new Map<string, Promise<SubAgentResult>>();
+  const activeRunControls = new Map<string, any>();
   const terminalListeners = new Set<
     (snapshot: SubAgentSnapshot, event: SubAgentTerminalEvent) => void
   >();
@@ -40,7 +44,7 @@ function createHarness(options?: { terminalizeDuringSubscription?: boolean }) {
 
   const manager = createSubAgentLifecycleManager({
     activeSubAgents,
-    activeRunControls: new Map(),
+    activeRunControls,
     activeResultPromises,
     logger: { devWarn: jest.fn() },
     registryPersistenceManager: {
@@ -77,6 +81,7 @@ function createHarness(options?: { terminalizeDuringSubscription?: boolean }) {
   return {
     activeSubAgents,
     activeResultPromises,
+    activeRunControls,
     agent,
     emitTerminal,
     manager,
@@ -156,6 +161,76 @@ describe('event-driven sub-agent completion waits', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it('wakes cancellation waiters even when an active provider promise ignores abort', async () => {
+    jest.useFakeTimers();
+    const harness = createHarness();
+    const abortController = new AbortController();
+    harness.activeRunControls.set(harness.agent.sessionId, { abortController });
+    harness.activeResultPromises.set(
+      harness.agent.sessionId,
+      new Promise<SubAgentResult>(() => undefined),
+    );
+    const waiting = harness.manager.waitForSubAgentCompletion(
+      harness.agent.sessionId,
+      10_000,
+    );
+
+    harness.manager.cancelSubAgent(harness.agent.sessionId, 'Provider did not settle.');
+
+    await expect(waiting).resolves.toMatchObject({
+      status: 'cancelled',
+      output: 'Provider did not settle.',
+      terminationCause: 'cancelled',
+    });
+    expect(abortController.signal.aborted).toBe(true);
+    expect(harness.agent.status).toBe('cancelled');
+    expect(harness.terminalListeners.size).toBe(0);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('releases an active completion wait when the foreground execution is aborted', async () => {
+    jest.useFakeTimers();
+    const harness = createHarness();
+    const foregroundController = new AbortController();
+    harness.activeResultPromises.set(
+      harness.agent.sessionId,
+      new Promise<SubAgentResult>(() => undefined),
+    );
+
+    const waiting = harness.manager.waitForSubAgentCompletion(
+      harness.agent.sessionId,
+      300_000,
+      foregroundController.signal,
+    );
+    expect(harness.terminalListeners.size).toBe(1);
+    expect(jest.getTimerCount()).toBe(1);
+
+    foregroundController.abort('Foreground turn timed out.');
+
+    await expect(waiting).resolves.toBeNull();
+    expect(harness.agent.status).toBe('running');
+    expect(harness.terminalListeners.size).toBe(0);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('releases a started-worker result race on abort without cancelling the worker promise', async () => {
+    jest.useFakeTimers();
+    const foregroundController = new AbortController();
+    const workerResult = new Promise<SubAgentResult>(() => undefined);
+
+    const waiting = waitForSubAgentResultPromise(
+      workerResult,
+      300_000,
+      foregroundController.signal,
+    );
+    expect(jest.getTimerCount()).toBe(1);
+
+    foregroundController.abort('Foreground turn timed out.');
+
+    await expect(waiting).resolves.toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('closes the subscribe/recheck race without waiting for another event', async () => {
     const harness = createHarness({ terminalizeDuringSubscription: true });
 
@@ -188,7 +263,7 @@ describe('event-driven sub-agent completion waits', () => {
     await Promise.resolve();
 
     expect(didSettle).toBe(false);
-    expect(harness.terminalListeners.size).toBe(0);
+    expect(harness.terminalListeners.size).toBe(1);
 
     resolveResult?.({
       sessionId: harness.agent.sessionId,
@@ -203,6 +278,7 @@ describe('event-driven sub-agent completion waits', () => {
       output: 'durably finalized output',
       status: 'completed',
     });
+    expect(harness.terminalListeners.size).toBe(0);
   });
 });
 

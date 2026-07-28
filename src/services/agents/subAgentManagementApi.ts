@@ -26,6 +26,7 @@ export function createSubAgentManagementApi<
     waitForSubAgentCompletion: (
       sessionId: string,
       waitTimeoutMs?: number,
+      signal?: AbortSignal,
     ) => Promise<SubAgentResult | null>;
     observeBackgroundSubAgentResult: (
       started: { sessionId: string; resultPromise: Promise<SubAgentResult> },
@@ -53,8 +54,9 @@ export function createSubAgentManagementApi<
   function waitForSubAgentCompletion(
     sessionId: string,
     waitTimeoutMs?: number,
+    signal?: AbortSignal,
   ): Promise<SubAgentResult | null> {
-    return params.lifecycle.waitForSubAgentCompletion(sessionId, waitTimeoutMs);
+    return params.lifecycle.waitForSubAgentCompletion(sessionId, waitTimeoutMs, signal);
   }
 
   function observeBackgroundSubAgentResult(

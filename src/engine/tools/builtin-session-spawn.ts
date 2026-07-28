@@ -86,7 +86,7 @@ export async function executeSessionSpawn(
   inheritedModel?: string,
   executionContext?: Pick<
     ToolExecutionContext,
-    'controlGraphGoals' | 'agentRunId' | 'memoryConversationId'
+    'controlGraphGoals' | 'agentRunId' | 'memoryConversationId' | 'executionSignal'
   >,
 ): Promise<ToolRuntimeOutcome> {
   try {
@@ -231,7 +231,11 @@ export async function executeSessionSpawn(
       const started = await startSubAgent(config, provider, allProviders);
       const waitWindow = resolveBlockingWaitTimeoutMs(undefined);
       const waitTimeoutMs = waitWindow.waitTimeoutMs;
-      const raceResult = await waitForStartedSubAgentResult(started, waitTimeoutMs);
+      const raceResult = await waitForStartedSubAgentResult(
+        started,
+        waitTimeoutMs,
+        executionContext?.executionSignal,
+      );
 
       if (raceResult === null) {
         observeBackgroundSubAgentResult(started, { announce: true });

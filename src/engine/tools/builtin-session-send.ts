@@ -46,6 +46,7 @@ import {
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
 import { failedSessionNotFoundOutcome } from './builtin-session-errors';
+import type { ToolExecutionContext } from './toolExecutionContext';
 
 export async function executeSessionSend(
   args: {
@@ -56,6 +57,7 @@ export async function executeSessionSend(
   },
   provider: LlmProviderConfig,
   inheritedModel?: string,
+  executionSignal?: ToolExecutionContext['executionSignal'],
 ): Promise<ToolRuntimeOutcome> {
   const agent = getSubAgent(args.sessionId);
   if (!agent) return failedSessionNotFoundOutcome(args.sessionId);
@@ -202,7 +204,11 @@ export async function executeSessionSend(
       const started = await startSubAgent(followUpConfig, followUpProvider, followUpAllProviders);
       const waitWindow = resolveBlockingWaitTimeoutMs(args.waitTimeoutMs);
       const waitTimeoutMs = waitWindow.waitTimeoutMs;
-      const raceResult = await waitForStartedSubAgentResult(started, waitTimeoutMs);
+      const raceResult = await waitForStartedSubAgentResult(
+        started,
+        waitTimeoutMs,
+        executionSignal,
+      );
 
       if (raceResult === null) {
         observeBackgroundSubAgentResult(started);

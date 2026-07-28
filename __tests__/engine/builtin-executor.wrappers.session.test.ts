@@ -390,6 +390,30 @@ describe('builtin-executor wrapper coverage', () => {
     expect(parsed.usedDefaultWaitTimeout).toBeUndefined();
   });
 
+  it('routes foreground cancellation into a blocking sessions_wait call', async () => {
+    const controller = new AbortController();
+    mockGetSubAgent.mockReturnValue({
+      sessionId: 'session-abortable',
+      status: 'running',
+      startedAt: 1000,
+      updatedAt: 2000,
+      depth: 1,
+    });
+    mockWaitForSubAgentCompletion.mockResolvedValueOnce(null);
+
+    await executeSessionWait(
+      { sessionId: 'session-abortable', waitTimeoutMs: 300_000 },
+      'conv-1',
+      controller.signal,
+    );
+
+    expect(mockWaitForSubAgentCompletion).toHaveBeenCalledWith(
+      'session-abortable',
+      300_000,
+      controller.signal,
+    );
+  });
+
   it('uses launchState and lastProgressAt when diagnosing queued workers', async () => {
     const now = Date.now();
     mockPruneStaleCommandPolls.mockReturnValue(undefined);

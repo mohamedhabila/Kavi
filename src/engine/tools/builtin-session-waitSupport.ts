@@ -38,8 +38,11 @@ export function resolveBlockingWaitTimeoutMs(
 export async function waitForStartedSubAgentResult(
   started: StartedSubAgent,
   waitTimeoutMs?: number,
+  signal?: AbortSignal,
 ): Promise<StartedSubAgentResult | null> {
-  return waitForSubAgentResultPromise(started.resultPromise, waitTimeoutMs);
+  return signal
+    ? waitForSubAgentResultPromise(started.resultPromise, waitTimeoutMs, signal)
+    : waitForSubAgentResultPromise(started.resultPromise, waitTimeoutMs);
 }
 
 export function collectRequestedSessionIds(

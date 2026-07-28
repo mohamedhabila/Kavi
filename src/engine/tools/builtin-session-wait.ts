@@ -27,6 +27,7 @@ export async function executeSessionWait(
     waitTimeoutMs?: number;
   },
   conversationId: string,
+  executionSignal?: AbortSignal,
 ): Promise<ToolRuntimeOutcome> {
   pruneStaleCommandPolls(sessionStatusPollState);
 
@@ -73,7 +74,11 @@ export async function executeSessionWait(
   );
   const waitTimeoutMs = waitWindow.waitTimeoutMs;
   const waitedResults = await Promise.all(
-    selection.sessionIds.map((sessionId) => waitForSubAgentCompletion(sessionId, waitTimeoutMs)),
+    selection.sessionIds.map((sessionId) =>
+      executionSignal
+        ? waitForSubAgentCompletion(sessionId, waitTimeoutMs, executionSignal)
+        : waitForSubAgentCompletion(sessionId, waitTimeoutMs),
+    ),
   );
 
   const sessions: Record<string, unknown>[] = [];

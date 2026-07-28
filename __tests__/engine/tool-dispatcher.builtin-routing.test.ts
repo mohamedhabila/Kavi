@@ -87,6 +87,20 @@ describe('executeToolInner — raw builtin routing', () => {
     expect(moduleUnderTest[fnName as keyof typeof moduleUnderTest]).toHaveBeenCalled();
   });
 
+  it('passes the foreground execution signal to sessions_wait', async () => {
+    const controller = new AbortController();
+
+    await executeTool('sessions_wait', '{"sessionId":"s1"}', CONV_ID, {
+      executionSignal: controller.signal,
+    });
+
+    expect(sessionInspectionMod.executeSessionWait).toHaveBeenCalledWith(
+      { sessionId: 's1' },
+      CONV_ID,
+      controller.signal,
+    );
+  });
+
   it('passes the current callable tool inventory into tool_catalog', async () => {
     await executeTool('tool_catalog', '{}', CONV_ID, {
       availableToolNames: ['tool_catalog', 'read_file', 'mcp__docs__search_docs'],

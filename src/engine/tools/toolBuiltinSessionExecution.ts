@@ -38,7 +38,7 @@ export async function executeBuiltinSessionTool(
     case 'sessions_status':
       return executeSessionStatus(args);
     case 'sessions_wait':
-      return executeSessionWait(args, conversationId);
+      return executeSessionWait(args, conversationId, params.context?.executionSignal);
     case 'sessions_cancel':
       return executeSessionCancel(args);
     case 'sessions_yield':

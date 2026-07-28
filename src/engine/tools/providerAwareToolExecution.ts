@@ -42,6 +42,9 @@ export async function executeProviderAwareTool(params: {
           controlGraphGoals: params.context?.controlGraphGoals,
           agentRunId: params.context?.agentRunId,
           memoryConversationId: params.context?.memoryConversationId,
+          ...(params.context?.executionSignal
+            ? { executionSignal: params.context.executionSignal }
+            : {}),
         },
       );
     case 'sessions_send':
@@ -53,7 +56,14 @@ export async function executeProviderAwareTool(params: {
           }),
         );
       }
-      return executeSessionSend(params.args, providerContext.provider, params.context?.model);
+      return params.context?.executionSignal
+        ? executeSessionSend(
+            params.args,
+            providerContext.provider,
+            params.context.model,
+            params.context.executionSignal,
+          )
+        : executeSessionSend(params.args, providerContext.provider, params.context?.model);
     case 'web_search':
       return executeWebSearch(params.args, {
         provider: providerContext.provider ?? undefined,

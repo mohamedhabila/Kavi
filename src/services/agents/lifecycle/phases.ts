@@ -47,6 +47,7 @@ export interface RunPhase {
   waitForSubAgentCompletion(
     sessionId: string,
     waitTimeoutMs?: number,
+    signal?: AbortSignal,
   ): Promise<SubAgentResult | null>;
 }
 

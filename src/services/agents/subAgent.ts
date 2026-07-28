@@ -318,8 +318,9 @@ function schedulePreparedSubAgentRun(
 export async function waitForSubAgentCompletion(
   sessionId: string,
   waitTimeoutMs?: number,
+  signal?: AbortSignal,
 ): Promise<SubAgentResult | null> {
-  return subAgentLifecycleManager.waitForSubAgentCompletion(sessionId, waitTimeoutMs);
+  return subAgentLifecycleManager.waitForSubAgentCompletion(sessionId, waitTimeoutMs, signal);
 }
 
 export function observeBackgroundSubAgentResult(

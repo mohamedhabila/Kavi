@@ -30,8 +30,10 @@ export function buildResultFromSnapshot(agent: SubAgentSnapshot): SubAgentResult
 export async function waitForSubAgentResultPromise(
   resultPromise: Promise<SubAgentResult>,
   waitTimeoutMs?: number,
+  signal?: AbortSignal,
 ): Promise<SubAgentResult | null> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  let removeAbortListener: (() => void) | undefined;
   const timeoutPromise =
     waitTimeoutMs == null
       ? undefined
@@ -39,15 +41,25 @@ export async function waitForSubAgentResultPromise(
           timeoutHandle = setTimeout(() => resolve(null), waitTimeoutMs);
           (timeoutHandle as any)?.unref?.();
         });
+  const abortPromise = signal
+    ? new Promise<null>((resolve) => {
+        const handleAbort = () => resolve(null);
+        signal.addEventListener('abort', handleAbort, { once: true });
+        removeAbortListener = () => signal.removeEventListener('abort', handleAbort);
+        if (signal.aborted) handleAbort();
+      })
+    : undefined;
 
   try {
-    return timeoutPromise
-      ? await Promise.race([resultPromise, timeoutPromise])
-      : await resultPromise;
+    const competitors: Array<Promise<SubAgentResult | null>> = [resultPromise];
+    if (timeoutPromise) competitors.push(timeoutPromise);
+    if (abortPromise) competitors.push(abortPromise);
+    return await Promise.race(competitors);
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
     }
+    removeAbortListener?.();
   }
 }
 
@@ -57,14 +69,17 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
   function waitForTerminalSubAgentSnapshot(
     sessionId: string,
     waitTimeoutMs?: number,
+    signal?: AbortSignal,
   ): Promise<SubAgentResult | null> {
     return new Promise<SubAgentResult | null>((resolve, reject) => {
       let settled = false;
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       let unsubscribe: () => void = () => undefined;
+      let removeAbortListener: () => void = () => undefined;
 
       const dispose = (): void => {
         unsubscribe();
+        removeAbortListener();
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);
           timeoutHandle = undefined;
@@ -98,9 +113,18 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
       });
       if (settled) {
         registeredUnsubscribe();
+        return;
       } else {
         unsubscribe = registeredUnsubscribe;
       }
+
+      if (signal) {
+        const handleAbort = () => settle(null);
+        signal.addEventListener('abort', handleAbort, { once: true });
+        removeAbortListener = () => signal.removeEventListener('abort', handleAbort);
+        if (signal.aborted) handleAbort();
+      }
+      if (settled) return;
 
       // Subscribe before re-reading the registry so a terminal transition cannot
       // land between the initial caller check and listener installation.
@@ -114,6 +138,74 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
         return;
       }
 
+      if (waitTimeoutMs != null) {
+        timeoutHandle = setTimeout(() => settle(null), Math.max(0, waitTimeoutMs));
+        (timeoutHandle as any)?.unref?.();
+      }
+    });
+  }
+
+  function waitForActiveResultOrCancellation(
+    sessionId: string,
+    resultPromise: Promise<SubAgentResult>,
+    waitTimeoutMs?: number,
+    signal?: AbortSignal,
+  ): Promise<SubAgentResult | null> {
+    return new Promise<SubAgentResult | null>((resolve, reject) => {
+      let settled = false;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      let unsubscribe: () => void = () => undefined;
+      let removeAbortListener: () => void = () => undefined;
+
+      const dispose = (): void => {
+        unsubscribe();
+        removeAbortListener();
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      };
+      const settle = (result: SubAgentResult | null): void => {
+        if (settled) return;
+        settled = true;
+        dispose();
+        resolve(result);
+      };
+      const fail = (error: unknown): void => {
+        if (settled) return;
+        settled = true;
+        dispose();
+        reject(error);
+      };
+
+      const registeredUnsubscribe = params.onSubAgentTerminal((terminalAgent, event) => {
+        if (
+          terminalAgent.sessionId === sessionId &&
+          event === 'cancelled' &&
+          terminalAgent.status === 'cancelled'
+        ) {
+          settle(buildResultFromSnapshot(terminalAgent));
+        }
+      });
+      if (settled) {
+        registeredUnsubscribe();
+        return;
+      } else {
+        unsubscribe = registeredUnsubscribe;
+      }
+
+      if (signal) {
+        const handleAbort = () => settle(null);
+        signal.addEventListener('abort', handleAbort, { once: true });
+        removeAbortListener = () => signal.removeEventListener('abort', handleAbort);
+        if (signal.aborted) handleAbort();
+      }
+      if (settled) return;
+
+      const latestAgent = params.activeSubAgents.get(sessionId);
+      if (latestAgent?.status === 'cancelled') {
+        settle(buildResultFromSnapshot(latestAgent));
+        return;
+      }
+
+      void resultPromise.then(settle, fail);
       if (waitTimeoutMs != null) {
         timeoutHandle = setTimeout(() => settle(null), Math.max(0, waitTimeoutMs));
         (timeoutHandle as any)?.unref?.();
@@ -173,6 +265,7 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
   async function waitForSubAgentCompletion(
     sessionId: string,
     waitTimeoutMs?: number,
+    signal?: AbortSignal,
   ): Promise<SubAgentResult | null> {
     const agent = params.activeSubAgents.get(sessionId);
     if (!agent) {
@@ -182,7 +275,12 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
     const resultPromise = params.activeResultPromises.get(sessionId);
     if (resultPromise) {
       try {
-        return await waitForSubAgentResultPromise(resultPromise, waitTimeoutMs);
+        return await waitForActiveResultOrCancellation(
+          sessionId,
+          resultPromise,
+          waitTimeoutMs,
+          signal,
+        );
       } catch (error: unknown) {
         handleUnexpectedBackgroundSubAgentFailure(sessionId, error, false);
         const latestAgent = params.activeSubAgents.get(sessionId);
@@ -197,7 +295,7 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
       return buildResultFromSnapshot(agent);
     }
 
-    return waitForTerminalSubAgentSnapshot(sessionId, waitTimeoutMs);
+    return waitForTerminalSubAgentSnapshot(sessionId, waitTimeoutMs, signal);
   }
 
   function observeBackgroundSubAgentResult(
@@ -244,6 +342,18 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
       runControl.abortReason = 'cancelled';
       runControl.cancelReason = normalizedReason;
       runControl.abortController.abort();
+      agent.status = 'cancelled';
+      agent.terminationCause = 'cancelled';
+      agent.launchState = 'terminal';
+      agent.output = normalizedReason;
+      agent.modelResponsePendingSince = undefined;
+      agent.currentActivity = normalizedReason;
+      agent.activeToolName = undefined;
+      agent.activeToolStartedAt = undefined;
+      agent.deadlineAt = undefined;
+      agent.updatedAt = Date.now();
+      params.registryPersistenceManager.scheduleRegistryPersist();
+      params.signalTerminal(agent, 'cancelled');
     } else {
       params.clearQueuedLaunchWatch(sessionId);
       agent.status = 'cancelled';
