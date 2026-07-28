@@ -102,12 +102,12 @@ runtime digest, and Node version into both domain runs.
 Prepare immutable upstream inputs before setting provider credentials:
 
 ```bash
-rtk git clone https://github.com/xiaowu0162/LongMemEval-V2.git \
+git clone https://github.com/xiaowu0162/LongMemEval-V2.git \
   .private/evals/upstream/LongMemEval-V2
-rtk git -C .private/evals/upstream/LongMemEval-V2 checkout \
+git -C .private/evals/upstream/LongMemEval-V2 checkout \
   be15ea6e995462f3391c1a610892df3f67dfa7bd
 
-rtk .private/evals/venv-longmemeval-py311/bin/python \
+.private/evals/venv-longmemeval-py311/bin/python \
   .private/evals/upstream/LongMemEval-V2/data/download_data.py \
   --revision f152293e235517d504809563c833d7190b8c713b \
   --data-root .private/evals/data/longmemeval-v2

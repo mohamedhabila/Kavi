@@ -17,13 +17,13 @@ It evaluates one deliberately narrow product claim: whether Kavi's corroborated 
 ## Prepare the pinned checkout
 
 ```bash
-rtk git clone --branch v0.8.1 --depth 1 \
+git clone --branch v0.8.1 --depth 1 \
   https://github.com/microsoft/STATE-Bench.git \
   .private/evals/upstream/STATE-Bench
 
-rtk python3 benchmarks/state_bench/prepare_kavi_state_bench.py
+python3 benchmarks/state_bench/prepare_kavi_state_bench.py
 
-rtk sh -lc 'cd .private/evals/upstream/STATE-Bench && uv sync && cp .env.example .env'
+sh -lc 'cd .private/evals/upstream/STATE-Bench && uv sync && cp .env.example .env'
 ```
 
 Configure the protocol-locked GPT-5.4 simulator/judge client and the built-in agent client exactly as documented by upstream. Then export the two paths printed by the preparation command:
@@ -41,7 +41,7 @@ export KAVI_STATE_BENCH_ARTIFACT="<absolute artifact path>"
 Run the no-provider retrieval smoke inside the upstream environment:
 
 ```bash
-rtk uv run --project <kavi-repo>/.private/evals/upstream/STATE-Bench python \
+uv run --project <kavi-repo>/.private/evals/upstream/STATE-Bench python \
   <kavi-repo>/benchmarks/state_bench/smoke_kavi_state_bench_adapter.py \
   --upstream <kavi-repo>/.private/evals/upstream/STATE-Bench \
   --runtime "$KAVI_STATE_BENCH_RUNTIME" \
@@ -92,7 +92,7 @@ the held-out outputs.
 For each of `travel`, `customer_support`, and `shopping_assistant`:
 
 ```bash
-rtk uv run python -m state_bench.scripts.run_batch \
+uv run python -m state_bench.scripts.run_batch \
   --domain <domain> \
   --agent-class KaviStateBenchAgent \
   --agent-model-name <reported-model-name> \
@@ -101,7 +101,7 @@ rtk uv run python -m state_bench.scripts.run_batch \
   --num-workers <approved-workers> \
   --output-dir outputs/<domain>/
 
-rtk uv run python -m state_bench.scripts.compute_metrics \
+uv run python -m state_bench.scripts.compute_metrics \
   --domain <domain> \
   --results-dir outputs/<domain>/ \
   --num-runs 5 \
@@ -119,9 +119,9 @@ Package the completed output tree, then run the post-run validator from the
 same clean Kavi revision used by preparation:
 
 ```bash
-rtk sh -lc 'cd <state-bench-run-root> && zip -r outputs.zip outputs'
+sh -lc 'cd <state-bench-run-root> && zip -r outputs.zip outputs'
 
-rtk python3 benchmarks/state_bench/validate_kavi_state_bench_candidate.py \
+python3 benchmarks/state_bench/validate_kavi_state_bench_candidate.py \
   --outputs <state-bench-run-root>/outputs \
   --archive <state-bench-run-root>/outputs.zip
 ```
@@ -147,10 +147,10 @@ Provider identity and worker count therefore come from frozen launch evidence,
 not post-run declarations:
 
 ```bash
-rtk sh -lc 'cd <state-bench-run-root> && zip -r outputs-baseline.zip outputs-baseline'
-rtk sh -lc 'cd <state-bench-run-root> && zip -r outputs-learning.zip outputs-learning'
+sh -lc 'cd <state-bench-run-root> && zip -r outputs-baseline.zip outputs-baseline'
+sh -lc 'cd <state-bench-run-root> && zip -r outputs-learning.zip outputs-learning'
 
-rtk python3 benchmarks/state_bench/compare_kavi_state_bench_learning.py \
+python3 benchmarks/state_bench/compare_kavi_state_bench_learning.py \
   --baseline-outputs <state-bench-run-root>/outputs-baseline \
   --baseline-archive <state-bench-run-root>/outputs-baseline.zip \
   --baseline-launch-manifest <private-run-root>/baseline.launch.json \
