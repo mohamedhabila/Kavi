@@ -8,7 +8,7 @@ environment-dependent or manually validated flows.
 | Tier                 | Command                     | API keys              | When to use                                                   |
 | -------------------- | --------------------------- | --------------------- | ------------------------------------------------------------- |
 | **1 - Default**      | `npm run verify`            | None                  | Every PR; matches keyless CI                                  |
-| **2 - Strict**       | `npm run verify:strict`     | None                  | Maintainer pre-release; adds structural acceptance metrics    |
+| **2 - Strict**       | `npm run verify:strict`     | None                  | Maintainer pre-release; adds structural and durability gates  |
 | **3 - Strict + E2E** | `npm run verify:strict:e2e` | Selected-provider key | Full agent-quality validation before major graph/tool changes |
 
 **Tier 1 (`verify`)** is the contributor gate and matches pull request CI. It
@@ -25,6 +25,10 @@ E2E and live-provider tests are skipped unless explicitly opted in.
 - `eval:agent` - bootstrap, false-finalize (including `evidence.json_field`, `file_hash`,
   `exit_code` hold fixtures), token efficiency, tool contracts discovery, catalog/describe
   discovery, session tool activation cache, delegation metrics
+- `eval:long-tasks` - deterministic fault injection for interrupted foreground replies,
+  persisted scheduler attempts, startup/restart recovery, iOS and Android durable recovery,
+  external-operation reconciliation, terminal reporting, and duplicate-effect prevention.
+  This gate does not claim that a mobile OS granted real background execution time.
 
 **Tier 3 (`verify:strict:e2e`)** runs Tier 2, then `eval:e2e`: live
 selected-provider multi-turn scenarios through the real graph orchestrator.
@@ -142,6 +146,79 @@ Run a name-filtered subset:
 ```bash
 npm test -- --runInBand --testNamePattern="workspace"
 ```
+
+Run the focused, keyless long-task durability gate:
+
+```bash
+npm run eval:long-tasks
+```
+
+The command verifies persisted checkpoints, exact-generation recovery, idempotency,
+restart-safe final responses, scheduler completion proofs, and native recovery bridge
+contracts. Its very-long-task case also advances a claimed scheduler attempt by 30
+logical days and verifies that elapsed time alone cannot replay it. It is a fast
+structural prerequisite, not a substitute for wall-clock runs on physical iOS and
+Android devices. A release claim about background reliability must
+also include force-quit, reboot, network-loss, provider-timeout, battery-saver, and OS
+task-expiration trials on the production build, with final state checked after relaunch.
+
+Run the opt-in OpenRouter wall-clock pilot:
+
+```bash
+npm run eval:long-tasks:wall-clock
+```
+
+This command reads the normal opt-in evaluation configuration from the shell,
+`.env.local`, or the ignored local `.env` file and requires
+`E2E_PROVIDER=openrouter`. It starts work through foreground chat, requires one
+background worker to complete 15 sequential one-minute waits, verifies a single
+artifact write/read, rehydrates the persisted chat, and retrieves the worker
+result. Expect roughly 18-22 minutes. Timestamped raw evidence is written only
+under `.private/evals/long-task-wall-clock/`.
+
+The pilot proves in-process wall-clock continuity while the JavaScript runtime
+remains alive. It does not prove that iOS or Android will let arbitrary model work
+continue after suspension, force-quit, or process death; use the physical-device
+matrix above for that claim.
+
+Run the opt-in OpenRouter substantive-work pilot:
+
+```bash
+npm run eval:long-tasks:actual-work
+```
+
+This starts at foreground chat, launches a nonblocking least-privilege worker,
+crosses a persisted-chat relaunch, and requires three sequential stages: a
+20-packet source audit with durable checkpoints, an adversarial verification pass,
+and an execution-ready remediation pass. Workers may use only `read_file` and
+`write_file`; evaluator time and `wait` calls do not count as work. A passing run
+requires 14-25 aggregate active worker minutes, bounded rereads, verified artifacts,
+truthful terminal states, and no duplicate replacement worker. Progress and final
+evidence are written under `.private/evals/long-task-actual-work/` even on failure.
+
+The three chat turns use separate evaluator-owned tool surfaces: spawn-only,
+session-orchestration-only after relaunch, and one final read-only review. One
+same-session recovery is permitted; the supervisor may not replace the primary or
+perform the delegated file work itself.
+
+This is a product-native reliability evaluation, not an official benchmark or a
+mobile-OS background-execution claim. Run it without retries on an idle host after
+confirming provider connectivity. Classify DNS, transport, or provider admission
+failures as infrastructure-invalid; retain them, but do not count them as task
+passes or task failures.
+
+Run every self-contained deterministic upstream-adapter contract without credentials
+or external benchmark checkouts:
+
+```bash
+npm run test:benchmark-adapters
+```
+
+These tests validate Kavi's AMemGym, LongMemEval-V2, and STATE-Bench adapter protocols
+and artifact handling only. They do not execute or score the upstream benchmark suites.
+MobileWorld's adapter deliberately imports the pinned upstream parser; after preparing
+the private checkout and virtual environment from `benchmarks/mobileworld/README.md`, run
+`npm run test:mobileworld-adapter` separately.
 
 ## Test Categories
 
@@ -292,6 +369,8 @@ available. Recalibrate to `ceil(max observed × 1.25)` after at least three
 retries-disabled runs. The nine-turn 810-second scenario deadline is a hard
 outer wall-clock bound over execution, relaunch, persistence, and memory
 settlement; each foreground model turn remains independently capped at 90 seconds.
+For diagnosis only, `E2E_TURN_TIMEOUT_MS` can raise or lower that per-turn wall;
+record the override with the run and do not compare it with default-deadline scores.
 
 ### Environment variables
 
@@ -318,6 +397,7 @@ settlement; each foreground model turn remains independently capped at 90 second
 | `E2E_REPORT_PATH`          | No             | JSON run report path (default `.artifacts/e2e-agent-report.json`)                      |
 | `E2E_REPORT_SUMMARY_PATH`  | No             | Markdown summary path (default `.artifacts/e2e-agent-report.md`)                       |
 | `E2E_SCENARIO_IDS`         | No             | Comma/whitespace-separated scenario IDs for targeted assessment                        |
+| `E2E_TURN_TIMEOUT_MS`      | No             | Diagnostic per-turn wall-clock override; default score-bearing value is `90000`        |
 | `E2E_PRIVATE_EVIDENCE_DIR` | No             | Raw local evidence path inside `.private/evals/`; never upload it publicly             |
 
 The harness scripts (`eval:e2e`, `verify:strict:e2e`) load `.env.local` via

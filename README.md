@@ -73,7 +73,7 @@ claims; they are reproducible checks for this mobile assistant codebase.
 | Contributor CI            | `npm run verify` runs public checks, app metadata, i18n, maintainability, lint, typecheck, and deterministic Jest.               |
 | Local deterministic tests | Latest verification passed 6,100+ Jest tests across 700+ suites.                                                                 |
 | Coverage floor            | `npm run test:coverage` enforces statements >=83.8%, branches >=70.7%, functions >=87.6%, lines >=84.3%.                         |
-| Strict keyless metrics    | `npm run eval:memory` passed 3/3 memory metric tests; `npm run eval:agent` passed 13/13 agent metric tests.                      |
+| Strict keyless metrics    | `npm run eval:memory` passed 4/4 memory metric tests; `npm run eval:agent` passed 13/13 agent metric tests.                      |
 | Opt-in E2E shape          | 60 selected-provider scenarios plus 2 delegation scenarios, mapped across 24 benchmark families and 11 assessment dimensions.    |
 | E2E pass bar              | `npm run verify:strict:e2e` requires the configured selected-provider scenario pass bar; see [docs/testing.md](docs/testing.md). |
 

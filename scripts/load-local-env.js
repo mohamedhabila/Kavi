@@ -31,16 +31,15 @@ function parseEnvFile(contents) {
   return parsed;
 }
 
-function loadLocalEnv(projectRoot) {
-  const envPath = path.join(projectRoot, '.env.local');
+function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) {
     return {};
   }
   return parseEnvFile(fs.readFileSync(envPath, 'utf8'));
 }
 
-function applyLocalEnv(projectRoot) {
-  const vars = loadLocalEnv(projectRoot);
+function applyEnvFile(envPath) {
+  const vars = loadEnvFile(envPath);
   for (const [key, value] of Object.entries(vars)) {
     if (process.env[key] === undefined) {
       process.env[key] = value;
@@ -49,7 +48,18 @@ function applyLocalEnv(projectRoot) {
   return vars;
 }
 
+function loadLocalEnv(projectRoot) {
+  const envPath = path.join(projectRoot, '.env.local');
+  return loadEnvFile(envPath);
+}
+
+function applyLocalEnv(projectRoot) {
+  return applyEnvFile(path.join(projectRoot, '.env.local'));
+}
+
 module.exports = {
+  loadEnvFile,
+  applyEnvFile,
   loadLocalEnv,
   applyLocalEnv,
 };

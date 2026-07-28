@@ -507,7 +507,7 @@ describe('Scheduler Engine', () => {
         trigger: 'missed-recovery',
       });
     });
-    it('never replays a claimed long-running attempt based on elapsed time', async () => {
+    it('never replays a claimed very-long-running attempt based on elapsed time', async () => {
       const now = 1_700_000_400_000;
       const nowSpy = mockNow(now);
       const executeFn = jest.fn().mockResolvedValue({ output: 'ok' });
@@ -526,6 +526,11 @@ describe('Scheduler Engine', () => {
       expect(executeFn).not.toHaveBeenCalled();
       nowSpy.mockReturnValue(now + 11 * 60_000);
       await evaluateJobsOnce({ nowMs: now + 11 * 60_000, trigger: 'scheduled' });
+      expect(executeFn).not.toHaveBeenCalled();
+
+      const thirtyDaysLater = now + 30 * 24 * 60 * 60_000;
+      nowSpy.mockReturnValue(thirtyDaysLater);
+      await evaluateJobsOnce({ nowMs: thirtyDaysLater, trigger: 'scheduled' });
       expect(executeFn).not.toHaveBeenCalled();
     });
   });
