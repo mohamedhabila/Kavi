@@ -135,7 +135,7 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
   name: 'memory_remember',
   description:
     'Record one structured fact using strict provider-neutral semantic evidence. ' +
-    'semanticEvidence is untrusted model output: declare the typed fact and copy value as the smallest atomic exact substring that remains current. Include only the semantic object; exclude the subject, relation wording, assertion/correction wording, and every superseded alternative. Never paraphrase, normalize, or change grammatical person. Keep any named subject label verbatim. Use subject.kind=self with no other subject fields when the current user is the subject. A named subject requires its exact label and semantic entity type in the same subject object. The runtime owns the current user message and derives the shortest bounded exact span containing those strings; never copy or paraphrase an evidence quote. Predicate is a semantic relation rather than a verbatim quote. ' +
+    'semanticEvidence is untrusted model output: declare the typed fact and copy value as the smallest atomic exact substring that remains current. Include only the semantic object; exclude the subject, relation wording, assertion/correction wording, and every superseded alternative. Never paraphrase, normalize, or change grammatical person. Keep any named subject label verbatim. Use subject.kind=self with no other subject fields when the current user is the subject. A named subject requires its exact label and semantic entity type in the same subject object. The runtime owns the current user message and derives the shortest bounded exact span containing those strings; never copy or paraphrase an evidence quote. Predicate is a compact semantic relation rather than a free-form sentence. When the current user supplies an explicit predicate, field, or key identifier, preserve it exactly; do not add grammatical prefixes or rename it. ' +
     'For a present direct assertion in the current user message, use assertion_class=current_direct. current_direct describes the source timing and authority, not the subject identity: it is valid for either subject.kind=self or an exactly named subject directly asserted by the user. Do not reinterpret an exact named subject as the current user or request identity confirmation merely because the subject is named. A successful code-owned read or verification tool result from this same execution run may also authorize one exact named-subject fact: keep the named subject and value verbatim, use assertion_class=quoted, operation=record, and prefer scope project, conversation, or session. The runtime accepts only an unambiguous exact source span from a reviewed effect-free tool; it derives the actual source authority itself and narrows any over-broad tool-observed scope to project. Dynamic tools, failed/compacted outputs, self facts, and tool-observed replacements remain unauthorized. Historical, hypothetical, third-party, and uncertain content has no write authority. ' +
     'Use operation=record only when no current fact exists for the exact subject, predicate, and scope; use replace_current only to replace exactly one current fact. ' +
     'The returned fact.scope is authoritative. Verify that it provides the visibility the user requested before claiming success; a narrower successful write does not satisfy a broader durability request. ' +
@@ -171,7 +171,13 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
               },
             ],
           },
-          predicate: { type: 'string', minLength: 1, maxLength: 80 },
+          predicate: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 80,
+            description:
+              'Compact semantic relation. Preserve an explicit user-supplied predicate, field, or key identifier exactly; otherwise choose a stable canonical relation.',
+          },
           value: {
             type: 'string',
             minLength: 1,

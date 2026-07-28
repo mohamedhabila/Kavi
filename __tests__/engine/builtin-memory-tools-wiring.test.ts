@@ -161,6 +161,12 @@ describe('living-memory tool wiring', () => {
     expect(evidence.properties.value.description).toContain(
       'Smallest atomic exact value copied verbatim',
     );
+    expect(evidence.properties.predicate.description).toContain(
+      'Preserve an explicit user-supplied predicate',
+    );
+    expect(MEMORY_REMEMBER_TOOL.description).toContain(
+      'do not add grammatical prefixes or rename it',
+    );
     expect(evidence.properties.scope.description).toContain(
       'Global is visible in later conversations for the memory owner',
     );

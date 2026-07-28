@@ -89,6 +89,41 @@ describe('typed memory_remember semantic authority', () => {
     expect(findEntityByName(SUBJECT)).not.toBeNull();
   });
 
+  it.each(['has default_workspace', 'has_default_workspace'])(
+    'preserves an explicit current-user predicate identifier from %s',
+    (modelPredicate) => {
+      const caseId = modelPredicate.replace(/[^a-z0-9]+/gu, '-');
+      const userMessageText =
+        'Remember that subject `expense-app` has default_workspace `TEAM-EXPENSE-E2E`.';
+      const result = executeMemoryRemember(
+        memoryRememberArgs({
+          userMessageText,
+          subjectRef: { kind: 'named', label: 'expense-app' },
+          subjectType: 'project',
+          predicate: modelPredicate,
+          value: 'TEAM-EXPENSE-E2E',
+          scope: 'global',
+        }),
+        memoryRememberExecution({
+          userMessageId: `message-explicit-predicate-${caseId}`,
+          userMessageText,
+          executionRunId: `execution-explicit-predicate-${caseId}`,
+          toolCallId: `tool-explicit-predicate-${caseId}`,
+        }),
+      );
+
+      expect(result).toMatchObject({
+        ok: true,
+        fact: {
+          subject: 'expense-app',
+          predicate: 'default_workspace',
+          value: 'TEAM-EXPENSE-E2E',
+          scope: 'global',
+        },
+      });
+    },
+  );
+
   it.each(['historical', 'hypothetical', 'quoted', 'third_party', 'uncertain'] as const)(
     'rejects assertion_class=%s structurally without a write',
     (assertionClass) => {
