@@ -67,6 +67,40 @@ describe('inspectContextBudget', () => {
     expect(pressure.messagesTokens).toBeGreaterThan(pressure.remainingMessagesBudget);
     expect(pressure.messageOverflowTokens).toBeGreaterThan(0);
   });
+
+  it('counts OpenAI-compatible tool-call arguments in message pressure', () => {
+    const plain = inspectContextBudget(
+      'phi4',
+      'System prompt.',
+      [],
+      [{ role: 'assistant', content: '' }],
+      8000,
+    );
+    const withLargeToolCall = inspectContextBudget(
+      'phi4',
+      'System prompt.',
+      [],
+      [
+        {
+          role: 'assistant',
+          content: '',
+          tool_calls: [
+            {
+              id: 'write-1',
+              type: 'function',
+              function: {
+                name: 'write_file',
+                arguments: JSON.stringify({ content: 'x'.repeat(12_000) }),
+              },
+            },
+          ],
+        },
+      ],
+      8000,
+    );
+
+    expect(withLargeToolCall.messagesTokens).toBeGreaterThan(plain.messagesTokens + 3_000);
+  });
 });
 
 // ── System prompt truncation ──────────────────────────────────────────
@@ -170,6 +204,40 @@ describe('windowMessages', () => {
     const result = windowMessages(messages as any, 40);
     expect(result).toContainEqual(messages[3]);
     expect(result).toContainEqual(messages[4]);
+  });
+
+  it('drops an old atomic tool group when its tool-call arguments exceed the budget', () => {
+    const messages = [
+      makeMessage('system', 'System prompt.'),
+      makeMessage('user', 'Create the old report.'),
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: 'write-large',
+            type: 'function',
+            function: {
+              name: 'write_file',
+              arguments: JSON.stringify({ content: 'x'.repeat(12_000) }),
+            },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: 'Wrote report.',
+        tool_call_id: 'write-large',
+      },
+      makeMessage('user', 'Continue with the latest request.'),
+    ];
+
+    const result = windowMessages(messages as any, 200);
+
+    expect(result).toContainEqual(messages[0]);
+    expect(result).toContainEqual(messages[4]);
+    expect(result).not.toContainEqual(messages[2]);
+    expect(result).not.toContainEqual(messages[3]);
   });
 });
 
@@ -383,9 +451,16 @@ describe('enforceContextBudget', () => {
     const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(80)}`;
     const prompt = `${'baseline '.repeat(2_000)}\n\n${protectedSection}\n\n${'goals '.repeat(500)}`;
 
-    const result = enforceContextBudget('phi4', prompt, [], [makeMessage('user', 'Continue')], 4096, {
-      protectedSystemPromptSection: protectedSection,
-    });
+    const result = enforceContextBudget(
+      'phi4',
+      prompt,
+      [],
+      [makeMessage('user', 'Continue')],
+      4096,
+      {
+        protectedSystemPromptSection: protectedSection,
+      },
+    );
 
     expect(result.systemPrompt.endsWith(protectedSection)).toBe(true);
     expect(result.systemPrompt.match(/## Workflow Task Anchor/g)).toHaveLength(1);

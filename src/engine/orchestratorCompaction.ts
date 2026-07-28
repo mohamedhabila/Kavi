@@ -17,10 +17,24 @@ export function estimateWorkingMessageTokens(messages: Message[]): number {
   return estimateMessageTokens(
     messages.map((message) => ({
       role: message.role,
-      content:
-        message.role === 'user' ? message.enrichedContent || message.content : message.content,
+      content: serializeWorkingMessageContent(message),
     })),
   );
+}
+
+function serializeWorkingMessageContent(message: Message): string {
+  const content =
+    message.role === 'user' ? message.enrichedContent || message.content : message.content;
+  if (!message.toolCalls?.length) {
+    return content;
+  }
+
+  const canonicalToolCalls = message.toolCalls.map((toolCall) => ({
+    id: toolCall.id,
+    name: toolCall.name,
+    arguments: toolCall.arguments,
+  }));
+  return `${content}\n${JSON.stringify(canonicalToolCalls)}`;
 }
 
 export function applyCompactionResultToWorkingMessages(

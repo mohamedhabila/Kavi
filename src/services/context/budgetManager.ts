@@ -165,10 +165,22 @@ function estimateBudgetMessageTokens(
   return estimateMessageTokens(
     messages.map((message) => ({
       role: message.role,
-      content:
-        typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+      content: serializeBudgetMessageContent(message),
     })),
   );
+}
+
+function serializeBudgetMessageContent(message: {
+  content: string | any[];
+  [key: string]: any;
+}): string {
+  const content =
+    typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+  const toolCalls =
+    Array.isArray(message.tool_calls) && message.tool_calls.length > 0
+      ? JSON.stringify(message.tool_calls)
+      : '';
+  return toolCalls ? `${content}\n${toolCalls}` : content;
 }
 
 // ── Budget computation ───────────────────────────────────────────────────
@@ -312,8 +324,7 @@ export function windowMessages(
   const groups: MsgGroup[] = [];
 
   const costs = messages.map((msg) => {
-    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-    return estimateTokens(content) + 4; // +4 for message framing
+    return estimateTokens(serializeBudgetMessageContent(msg)) + 4; // +4 for message framing
   });
 
   const totalTokens = costs.reduce((a, b) => a + b, 0);
