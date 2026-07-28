@@ -60,6 +60,14 @@ export const CRITICAL_THRESHOLD = 6;
 export const ERROR_WARNING_THRESHOLD = 2;
 export const PREFLIGHT_BLOCKED_LOOP_THRESHOLD = 3;
 const DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
+// A completed wait advances wall-clock work even when graph goal evidence is
+// intentionally unchanged. Identical-input repetition and the global iteration
+// cap still protect against an unbounded wait loop.
+const ELAPSED_PROGRESS_TOOL_NAMES = new Set(['wait', 'sessions_wait']);
+// Reading new, successful content is real information gain for audit/research
+// tasks even before a graph goal acquires completion evidence. Keep this list
+// narrow: generic discovery scans retain the existing stagnant-progress guard.
+const DISTINCT_INFORMATION_PROGRESS_TOOL_NAMES = new Set(['read_file']);
 
 function hasIncompleteBlockingGoal(goals: ReadonlyArray<AgentGoal> | undefined): boolean {
   return (goals ?? []).some(
@@ -88,6 +96,98 @@ function resolveGoalMutationStallSeverity(
 function isDiscoveryOnlyToolMultiset(multisetKey: string | undefined): boolean {
   const toolNames = (multisetKey ?? '').split('|').filter(Boolean);
   return toolNames.length > 0 && toolNames.every((toolName) => DISCOVERY_TOOL_NAMES.has(toolName));
+}
+
+function isDistinctInformationOnlyToolMultiset(multisetKey: string | undefined): boolean {
+  const toolNames = (multisetKey ?? '').split('|').filter(Boolean);
+  return (
+    toolNames.length > 0 &&
+    toolNames.every((toolName) => DISTINCT_INFORMATION_PROGRESS_TOOL_NAMES.has(toolName))
+  );
+}
+
+function countTrailingStagnantSignatures(
+  signatures: ReadonlyArray<IterationProgressSignature>,
+): number {
+  const latest = signatures[signatures.length - 1];
+  if (!latest?.toolMultisetKey) return 0;
+
+  let count = 0;
+  for (let index = signatures.length - 1; index >= 0; index -= 1) {
+    const entry = signatures[index];
+    if (
+      entry?.toolMultisetKey !== latest.toolMultisetKey ||
+      entry.goalProgressFingerprint !== latest.goalProgressFingerprint
+    ) {
+      break;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+function isCompletedElapsedProgressWindow(params: {
+  history: ReadonlyArray<ToolCallRecord>;
+  multisetKey: string | undefined;
+  count: number | undefined;
+}): boolean {
+  const toolNames = (params.multisetKey ?? '').split('|').filter(Boolean);
+  if (
+    toolNames.length === 0 ||
+    !toolNames.every((toolName) => ELAPSED_PROGRESS_TOOL_NAMES.has(toolName))
+  ) {
+    return false;
+  }
+
+  const count = params.count ?? STAGNANT_PROGRESS_THRESHOLD;
+  const recent = params.history.slice(-count);
+  return (
+    recent.length === count &&
+    recent.every(
+      (entry) =>
+        entry.status === 'completed' &&
+        ELAPSED_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name)),
+    )
+  );
+}
+
+function isCompletedDistinctInformationProgressWindow(params: {
+  history: ReadonlyArray<ToolCallRecord>;
+  multisetKey: string | undefined;
+  count: number | undefined;
+}): boolean {
+  const toolNames = (params.multisetKey ?? '').split('|').filter(Boolean);
+  if (
+    toolNames.length === 0 ||
+    !toolNames.every((toolName) => DISTINCT_INFORMATION_PROGRESS_TOOL_NAMES.has(toolName))
+  ) {
+    return false;
+  }
+
+  const count = params.count ?? STAGNANT_PROGRESS_THRESHOLD;
+  const recent = params.history.slice(-count);
+  if (
+    recent.length !== count ||
+    recent.some(
+      (entry) =>
+        entry.status !== 'completed' ||
+        entry.result === undefined ||
+        !DISTINCT_INFORMATION_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name)),
+    )
+  ) {
+    return false;
+  }
+
+  const argumentFingerprints = recent.map(
+    (entry) => entry.argsHash ?? hashToolCall(entry.name, entry.arguments),
+  );
+  const resultFingerprints = recent.map(
+    (entry) => entry.resultHash ?? hashResult(entry.result),
+  );
+  return (
+    new Set(argumentFingerprints).size === recent.length &&
+    new Set(resultFingerprints).size === recent.length
+  );
 }
 
 function stableStringify(value: unknown): string {
@@ -544,18 +644,38 @@ export function detectLoops(
 
   const stagnantProgress = detectStagnantProgress(stagnationSignatures);
   if (stagnantProgress.detected) {
+    if (
+      isCompletedElapsedProgressWindow({
+        history,
+        multisetKey: stagnantProgress.multisetKey,
+        count: stagnantProgress.count,
+      }) ||
+      isCompletedDistinctInformationProgressWindow({
+        history,
+        multisetKey: stagnantProgress.multisetKey,
+        count: stagnantProgress.count,
+      })
+    ) {
+      return { loopDetected: false };
+    }
     const discoveryOnly = isDiscoveryOnlyToolMultiset(stagnantProgress.multisetKey);
-    const level: LoopSeverity = discoveryOnly
-      ? 'warning'
-      : resolveBlockingWorkLoopSeverity(options?.goals);
+    const distinctInformationOnly = isDistinctInformationOnlyToolMultiset(
+      stagnantProgress.multisetKey,
+    );
+    const trailingStagnantCount = countTrailingStagnantSignatures(stagnationSignatures);
+    const level: LoopSeverity =
+      discoveryOnly ||
+      (distinctInformationOnly && trailingStagnantCount < CRITICAL_THRESHOLD)
+        ? 'warning'
+        : resolveBlockingWorkLoopSeverity(options?.goals);
     return {
       loopDetected: true,
       level,
       type: discoveryOnly ? 'discovery_stall' : 'stagnant_progress',
-      count: stagnantProgress.count,
+      count: distinctInformationOnly ? trailingStagnantCount : stagnantProgress.count,
       details:
         `${level.toUpperCase()}: tool multiset ${stagnantProgress.multisetKey} repeated ` +
-        `${stagnantProgress.count} iterations without goal progress.`,
+        `${distinctInformationOnly ? trailingStagnantCount : stagnantProgress.count} iterations without goal progress.`,
     };
   }
 

@@ -1,6 +1,6 @@
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
 import { createGoal } from '../../src/engine/goals/types';
-import { ERROR_WARNING_THRESHOLD, GOAL_BOOTSTRAP_STALL_THRESHOLD, GOAL_MUTATION_STALL_THRESHOLD, STAGNANT_PROGRESS_THRESHOLD, WARNING_THRESHOLD, buildGoalProgressFingerprint, buildToolMultisetKey, detectGenericRepeat, detectGoalBootstrapStall, detectGoalFocusThrash, detectGoalMutationErrorLoop, detectGoalMutationStall, GOAL_FOCUS_THRASH_THRESHOLD, detectRepeatedErrors, detectStagnantProgress, hashResult, recordIterationProgressSignature, type IterationProgressSignature, type ToolCallRecord } from '../../src/engine/loopDetection';
+import { CRITICAL_THRESHOLD, ERROR_WARNING_THRESHOLD, GOAL_BOOTSTRAP_STALL_THRESHOLD, GOAL_MUTATION_STALL_THRESHOLD, STAGNANT_PROGRESS_THRESHOLD, WARNING_THRESHOLD, buildGoalProgressFingerprint, buildToolMultisetKey, detectGenericRepeat, detectGoalBootstrapStall, detectGoalFocusThrash, detectGoalMutationErrorLoop, detectGoalMutationStall, detectLoops, GOAL_FOCUS_THRASH_THRESHOLD, detectRepeatedErrors, detectStagnantProgress, hashResult, recordIterationProgressSignature, type IterationProgressSignature, type ToolCallRecord } from '../../src/engine/loopDetection';
 const rec = (
   name: string,
   args: string,
@@ -94,6 +94,194 @@ describe('stagnant progress detection', () => {
       detected: true,
       count: STAGNANT_PROGRESS_THRESHOLD,
       multisetKey: 'write_file',
+    });
+  });
+
+  it('treats completed sequential waits as elapsed progress while preserving repeat guards', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const history: ToolCallRecord[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['wait']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'monitor', status: 'active', evidence: [] },
+      ]),
+      activeGoalId: 'monitor',
+    };
+
+    for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
+      recordIterationProgressSignature(signatures, entry);
+      history.push(rec('wait', JSON.stringify({ ms: 60_000, reason: `phase-${index}` }), 'ok'));
+    }
+
+    expect(
+      detectLoops(history, signatures, {
+        goals: [
+          createGoal({
+            id: 'monitor',
+            title: 'Monitor',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: ['Complete monitoring'],
+          }),
+        ],
+      }),
+    ).toEqual({
+      loopDetected: false,
+    });
+  });
+
+  it('still detects stagnant wait iterations when the waits fail', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const history: ToolCallRecord[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['wait']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'monitor', status: 'active', evidence: [] },
+      ]),
+      activeGoalId: 'monitor',
+    };
+
+    for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
+      recordIterationProgressSignature(signatures, entry);
+      history.push(
+        rec(
+          'wait',
+          JSON.stringify({ ms: 60_000, reason: `phase-${index}` }),
+          `failure-${index}`,
+          'failed',
+        ),
+      );
+    }
+
+    expect(
+      detectLoops(history, signatures, {
+        goals: [
+          createGoal({
+            id: 'monitor',
+            title: 'Monitor',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: ['Complete monitoring'],
+          }),
+        ],
+      }),
+    ).toMatchObject({
+      loopDetected: true,
+      level: 'critical',
+      type: 'stagnant_progress',
+    });
+  });
+
+  it('treats distinct successful file reads as information progress', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const history: ToolCallRecord[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['read_file']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'audit', status: 'active', evidence: [] },
+      ]),
+      activeGoalId: 'audit',
+    };
+
+    for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
+      recordIterationProgressSignature(signatures, entry);
+      history.push(
+        rec(
+          'read_file',
+          JSON.stringify({ path: `packets/packet-${index}.md` }),
+          `distinct source content ${index}`,
+        ),
+      );
+    }
+
+    expect(
+      detectLoops(history, signatures, {
+        goals: [
+          createGoal({
+            id: 'audit',
+            title: 'Audit source packets',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: ['Produce a grounded audit'],
+          }),
+        ],
+      }),
+    ).toEqual({ loopDetected: false });
+  });
+
+  it('warns before stopping distinct file paths that return no new information', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const history: ToolCallRecord[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['read_file']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'audit', status: 'active', evidence: [] },
+      ]),
+      activeGoalId: 'audit',
+    };
+
+    for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
+      recordIterationProgressSignature(signatures, entry);
+      history.push(
+        rec('read_file', JSON.stringify({ path: `packets/missing-${index}.md` }), 'empty'),
+      );
+    }
+
+    expect(
+      detectLoops(history, signatures, {
+        goals: [
+          createGoal({
+            id: 'audit',
+            title: 'Audit source packets',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: ['Produce a grounded audit'],
+          }),
+        ],
+      }),
+    ).toMatchObject({
+      loopDetected: true,
+      level: 'warning',
+      type: 'stagnant_progress',
+      count: STAGNANT_PROGRESS_THRESHOLD,
+    });
+  });
+
+  it('hard-stops a prolonged distinct-path read stall', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const history: ToolCallRecord[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['read_file']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'audit', status: 'active', evidence: [] },
+      ]),
+      activeGoalId: 'audit',
+    };
+
+    for (let index = 0; index < CRITICAL_THRESHOLD; index += 1) {
+      recordIterationProgressSignature(signatures, entry);
+      history.push(
+        rec('read_file', JSON.stringify({ path: `packets/missing-${index}.md` }), 'empty'),
+      );
+    }
+
+    expect(
+      detectLoops(history, signatures, {
+        goals: [
+          createGoal({
+            id: 'audit',
+            title: 'Audit source packets',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: ['Produce a grounded audit'],
+          }),
+        ],
+      }),
+    ).toMatchObject({
+      loopDetected: true,
+      level: 'critical',
+      type: 'stagnant_progress',
+      count: CRITICAL_THRESHOLD,
     });
   });
 
