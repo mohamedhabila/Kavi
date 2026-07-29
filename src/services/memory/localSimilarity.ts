@@ -11,17 +11,28 @@ export const LOCAL_SIMILARITY_VECTOR_P95_BUDGET_MS = 25;
 export const LOCAL_SIMILARITY_PRODUCT_RETRIEVAL_P95_BUDGET_MS = 150;
 
 const LOCAL_SIMILARITY_QUANTIZATION_SCALE = 1_000_000;
+// Repeated recall turns commonly read the same default-sized fact window. Keep
+// one bounded window of validated vectors so chat does not repeatedly parse the
+// same persisted JSON. Exact serialized values are the key, so updates and
+// malformed replacements cannot reuse stale entries.
+const LOCAL_SIMILARITY_PARSE_CACHE_MAX_ENTRIES = 256;
+const parsedLocalSimilarityVectors = new Map<string, LocalSimilarityVector>();
 
 export interface LocalSimilarityVector {
   model: typeof LOCAL_SIMILARITY_MODEL;
   dimensions: typeof LOCAL_SIMILARITY_DIMENSIONS;
-  values: number[];
+  values: ReadonlyArray<number>;
 }
 
 export interface StoredLocalSimilarityVector {
   model: string | null | undefined;
   dimensions: number | null | undefined;
   serializedValues: string | null | undefined;
+}
+
+/** Release derived vectors when the memory database or owner-scoped memory is cleared. */
+export function clearLocalSimilarityVectorCache(): void {
+  parsedLocalSimilarityVectors.clear();
 }
 
 function hashString32(value: string): number {
@@ -174,6 +185,12 @@ export function parseCurrentLocalSimilarityVector(
   ) {
     return null;
   }
+  const cached = parsedLocalSimilarityVectors.get(stored.serializedValues);
+  if (cached) {
+    parsedLocalSimilarityVectors.delete(stored.serializedValues);
+    parsedLocalSimilarityVectors.set(stored.serializedValues, cached);
+    return cached;
+  }
   try {
     const values: unknown = JSON.parse(stored.serializedValues);
     if (
@@ -185,11 +202,17 @@ export function parseCurrentLocalSimilarityVector(
     ) {
       return null;
     }
-    return {
+    const vector = Object.freeze({
       model: LOCAL_SIMILARITY_MODEL,
       dimensions: LOCAL_SIMILARITY_DIMENSIONS,
-      values,
-    };
+      values: Object.freeze(values),
+    });
+    parsedLocalSimilarityVectors.set(stored.serializedValues, vector);
+    if (parsedLocalSimilarityVectors.size > LOCAL_SIMILARITY_PARSE_CACHE_MAX_ENTRIES) {
+      const oldestKey = parsedLocalSimilarityVectors.keys().next().value;
+      if (oldestKey !== undefined) parsedLocalSimilarityVectors.delete(oldestKey);
+    }
+    return vector;
   } catch {
     return null;
   }

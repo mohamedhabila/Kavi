@@ -4,6 +4,7 @@ import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { checkpointMemoryDatabaseAfterSensitiveDeletion } from './database';
 import { clearEmbeddingCache, getEmbeddingCacheEntryCount } from './embeddings';
 import type { PersistedExactMemorySourceIdentity } from './exactMemorySourceIdentity';
+import { clearLocalSimilarityVectorCache } from './localSimilarity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { purgeAllRetiredCausalPayloadsForOwnerInTransaction } from './retiredCausalPayloadPurge';
 import { retireExactMemorySources } from './sourceRetirementCoordinator';
@@ -133,6 +134,7 @@ export function resetCanonicalMemoryForManagement(): void {
     advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
     runAfterMemoryTransactionCommit(invalidateRestrictiveVerifiedProcedureAuthorityProcessEpoch);
     clearEmbeddingCache();
+    clearLocalSimilarityVectorCache();
     if (getEmbeddingCacheEntryCount() !== 0) {
       throw new Error('memory_reset_embedding_cache_residual');
     }

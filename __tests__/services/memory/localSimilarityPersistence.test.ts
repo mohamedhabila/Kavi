@@ -167,6 +167,30 @@ describe('fact local-similarity persistence', () => {
     ).toEqual({ updated_at: 10, local_similarity_updated_at: 20 });
   });
 
+  it('does not reuse a cached vector after its persisted payload changes', () => {
+    const fact = recordFact({
+      subjectId: 'profile',
+      predicate: 'preferred_editor',
+      objectText: 'Neovim',
+      scope: 'global',
+      now: 10,
+    }).fact;
+    const initiallyLoaded = getFactById(fact.id)?.localSimilarity;
+    const replacement = createCurrentLocalSimilarityVector('preferred_editor\nHelix');
+
+    expect(Object.isFrozen(initiallyLoaded)).toBe(true);
+    expect(Object.isFrozen(initiallyLoaded?.values)).toBe(true);
+    expect(setFactLocalSimilarity(fact.id, replacement, 20)).toBe(true);
+    expect(getFactById(fact.id)?.localSimilarity).toEqual(replacement);
+
+    getMemoryDb().runSync(
+      `UPDATE memory_facts SET local_similarity_vector = ? WHERE id = ?`,
+      '[malformed',
+      fact.id,
+    );
+    expect(getFactById(fact.id)?.localSimilarity).toBeNull();
+  });
+
   it('rejects oversized injected vectors while generated vectors stay bounded', () => {
     const fact = recordFact({
       subjectId: 'profile',
