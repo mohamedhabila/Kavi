@@ -14,6 +14,11 @@ type StoredSessionMessageOptions = {
   sessionContextToolContentCharLimit: number;
 };
 
+type StoredSessionTranscript = {
+  messages: Message[];
+  retainedFromStart: boolean;
+};
+
 export function cloneJsonLike<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -67,6 +72,7 @@ function sanitizeTranscriptToolCall(toolCall: ToolCall): ToolCall {
     arguments: truncateTranscriptText(toolCall.arguments, 1200) || '{}',
     ...(toolCall.raw ? { raw: cloneJsonLike(toolCall.raw) } : {}),
     status: coerceToolCallStatus(toolCall.status, 'completed'),
+    failureKind: toolCall.failureKind,
     startedAt: toolCall.startedAt,
     updatedAt: toolCall.updatedAt,
     completedAt: toolCall.completedAt,
@@ -189,14 +195,14 @@ export function cloneStoredMessages(messages?: Message[]): Message[] {
   return cloned;
 }
 
-export function buildStoredSessionMessages(
+export function buildStoredSessionTranscript(
   messages: Message[],
-  finalOutput: string | undefined,
+  terminalOutput: string | undefined,
   options: StoredSessionMessageOptions,
-): Message[] {
+): StoredSessionTranscript {
   const sanitized = messages.map((message) => sanitizeSessionContextMessage(message, options));
   const normalizedOutput = truncateTranscriptText(
-    finalOutput,
+    terminalOutput,
     options.sessionContextMessageCharLimit,
   );
   const lastMessage = sanitized[sanitized.length - 1];
@@ -213,7 +219,10 @@ export function buildStoredSessionMessages(
     });
   }
 
-  return sanitized
-    .slice(-options.sessionContextMaxMessages)
-    .map((message) => cloneStoredMessage(message));
+  return {
+    messages: sanitized
+      .slice(-options.sessionContextMaxMessages)
+      .map((message) => cloneStoredMessage(message)),
+    retainedFromStart: sanitized.length <= options.sessionContextMaxMessages,
+  };
 }

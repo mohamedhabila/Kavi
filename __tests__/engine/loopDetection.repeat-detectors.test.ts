@@ -1,6 +1,28 @@
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
 import { createGoal } from '../../src/engine/goals/types';
-import { CRITICAL_THRESHOLD, ERROR_WARNING_THRESHOLD, GOAL_BOOTSTRAP_STALL_THRESHOLD, GOAL_MUTATION_STALL_THRESHOLD, STAGNANT_PROGRESS_THRESHOLD, WARNING_THRESHOLD, buildGoalProgressFingerprint, buildToolMultisetKey, detectGenericRepeat, detectGoalBootstrapStall, detectGoalFocusThrash, detectGoalMutationErrorLoop, detectGoalMutationStall, detectLoops, GOAL_FOCUS_THRASH_THRESHOLD, detectRepeatedErrors, detectStagnantProgress, hashResult, recordIterationProgressSignature, type IterationProgressSignature, type ToolCallRecord } from '../../src/engine/loopDetection';
+import {
+  CRITICAL_THRESHOLD,
+  ERROR_WARNING_THRESHOLD,
+  GOAL_BOOTSTRAP_STALL_THRESHOLD,
+  GOAL_MUTATION_STALL_THRESHOLD,
+  STAGNANT_PROGRESS_THRESHOLD,
+  WARNING_THRESHOLD,
+  buildGoalProgressFingerprint,
+  buildToolMultisetKey,
+  detectGenericRepeat,
+  detectGoalBootstrapStall,
+  detectGoalFocusThrash,
+  detectGoalMutationErrorLoop,
+  detectGoalMutationStall,
+  detectLoops,
+  GOAL_FOCUS_THRASH_THRESHOLD,
+  detectRepeatedErrors,
+  detectStagnantProgress,
+  hashResult,
+  recordIterationProgressSignature,
+  type IterationProgressSignature,
+  type ToolCallRecord,
+} from '../../src/engine/loopDetection';
 const rec = (
   name: string,
   args: string,
@@ -20,7 +42,9 @@ describe('detectGenericRepeat', () => {
   });
 
   it('detects identical tool calls at the warning threshold', () => {
-    const history = Array.from({ length: WARNING_THRESHOLD }, () => rec('read_file', '{"path":"a"}'));
+    const history = Array.from({ length: WARNING_THRESHOLD }, () =>
+      rec('read_file', '{"path":"a"}'),
+    );
     expect(detectGenericRepeat(history)).toEqual({
       detected: true,
       tool: 'read_file',
@@ -34,6 +58,14 @@ describe('detectGenericRepeat', () => {
       rec('read_file', '{"path":"b"}'),
       rec('read_file', '{"path":"c"}'),
     ];
+    expect(detectGenericRepeat(history)).toEqual({ detected: false });
+  });
+
+  it('does not require successful elapsed-time observers to churn arguments', () => {
+    const history = Array.from({ length: CRITICAL_THRESHOLD }, () =>
+      rec('wait', '{"ms":60000}', 'waited'),
+    );
+
     expect(detectGenericRepeat(history)).toEqual({ detected: false });
   });
 });
@@ -97,7 +129,7 @@ describe('stagnant progress detection', () => {
     });
   });
 
-  it('treats completed sequential waits as elapsed progress while preserving repeat guards', () => {
+  it('treats completed sequential waits with identical inputs as elapsed progress', () => {
     const signatures: IterationProgressSignature[] = [];
     const history: ToolCallRecord[] = [];
     const entry = {
@@ -110,7 +142,7 @@ describe('stagnant progress detection', () => {
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
       recordIterationProgressSignature(signatures, entry);
-      history.push(rec('wait', JSON.stringify({ ms: 60_000, reason: `phase-${index}` }), 'ok'));
+      history.push(rec('wait', JSON.stringify({ ms: 60_000 }), 'ok'));
     }
 
     expect(
@@ -145,15 +177,15 @@ describe('stagnant progress detection', () => {
 
     const authorityRefresh = rec(
       'wait',
-      JSON.stringify({ ms: 60_000, reason: 'phase-2' }),
+      JSON.stringify({ ms: 60_000 }),
       'model_turn_memory_epoch_expired',
       'failed',
     );
     authorityRefresh.preflightBlockedKind = 'authority_revoked';
     const history = [
-      rec('wait', JSON.stringify({ ms: 60_000, reason: 'phase-1' }), 'waited'),
+      rec('wait', JSON.stringify({ ms: 60_000 }), 'waited'),
       authorityRefresh,
-      rec('wait', JSON.stringify({ ms: 60_000, reason: 'phase-2' }), 'waited'),
+      rec('wait', JSON.stringify({ ms: 60_000 }), 'waited'),
     ];
 
     expect(
@@ -457,7 +489,12 @@ describe('detectGoalFocusThrash', () => {
 describe('detectGoalMutationErrorLoop', () => {
   it('detects consecutive update_goals validation failures', () => {
     const history = Array.from({ length: GOAL_MUTATION_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'opaque', 'failed'),
+      rec(
+        GOAL_BOOTSTRAP_TOOL_NAME,
+        '{"action":"complete","goals":[{"id":"scope-b"}]}',
+        'opaque',
+        'failed',
+      ),
     );
     expect(detectGoalMutationErrorLoop(history)).toEqual({
       detected: true,
@@ -468,11 +505,26 @@ describe('detectGoalMutationErrorLoop', () => {
   it('detects recent update_goals validation failures even when other tools are interleaved', () => {
     const history = [
       rec('write_file', '{"path":"status.txt"}', '{"ok":true}'),
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'opaque', 'failed'),
+      rec(
+        GOAL_BOOTSTRAP_TOOL_NAME,
+        '{"action":"complete","goals":[{"id":"scope-b"}]}',
+        'opaque',
+        'failed',
+      ),
       rec('write_file', '{"path":"status.txt"}', '{"ok":true}'),
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'opaque', 'failed'),
+      rec(
+        GOAL_BOOTSTRAP_TOOL_NAME,
+        '{"action":"complete","goals":[{"id":"scope-b"}]}',
+        'opaque',
+        'failed',
+      ),
       rec('device_status', '{}', '{"ok":true}'),
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'opaque', 'failed'),
+      rec(
+        GOAL_BOOTSTRAP_TOOL_NAME,
+        '{"action":"complete","goals":[{"id":"scope-b"}]}',
+        'opaque',
+        'failed',
+      ),
     ];
 
     expect(detectGoalMutationErrorLoop(history)).toEqual({

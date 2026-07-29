@@ -43,5 +43,8 @@ export function cloneSessionContext(
     systemPrompt: context.systemPrompt,
     conversationSummary: context.conversationSummary,
     messages: cloneStoredMessages(context.messages),
+    // Legacy contexts did not persist this integrity signal. Treat them as incomplete so
+    // restart recovery fails closed rather than inferring transcript completeness.
+    transcriptRetainedFromStart: context.transcriptRetainedFromStart === true,
   };
 }

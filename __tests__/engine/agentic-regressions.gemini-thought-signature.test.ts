@@ -19,6 +19,7 @@ import { spawnSubAgent, getSessionContext } from '../../src/services/agents/subA
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import { LlmService } from '../../src/services/llm/LlmService';
 import { GEMINI_IMPORTED_FUNCTION_CALL_THOUGHT_SIGNATURE } from '../../src/services/llm/providers/gemini/toolTurnRepair';
+import { DEFAULT_SUB_AGENT_MAX_ITERATIONS } from '../../src/services/agents/lifecycle/runConfig';
 import type { LlmProviderConfig } from '../../src/types/provider';
 const mockProvider: LlmProviderConfig = {
   id: 'test',
@@ -609,7 +610,7 @@ describe('Bug 3: Subagent context persistence', () => {
 
   it('caps stored session transcript size for follow-up continuity', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
-      for (let index = 0; index < 20; index += 1) {
+      for (let index = 0; index < DEFAULT_SUB_AGENT_MAX_ITERATIONS * 3; index += 1) {
         callbacks.onAssistantMessage(`Step ${index}: ${'detail '.repeat(120)}`);
       }
       callbacks.onDone();
@@ -625,9 +626,35 @@ describe('Bug 3: Subagent context persistence', () => {
     );
 
     const context = getSessionContext(result.sessionId)!;
-    // Keep enough bounded evidence to recover a 15-checkpoint worker without guessing.
-    expect(context.messages.length).toBeLessThanOrEqual(40);
+    // The bound follows the default execution budget: one intent/result pair per iteration,
+    // plus one interruption/recovery pair. It is independent of any evaluation scenario.
+    expect(context.messages.length).toBe(DEFAULT_SUB_AGENT_MAX_ITERATIONS * 2 + 2);
+    expect(context.transcriptRetainedFromStart).toBe(false);
     expect(context.messages.every((message) => message.content.length <= 1400)).toBe(true);
+  });
+
+  it('retains a complete transcript through the default execution budget', async () => {
+    const assistantMessageCount = DEFAULT_SUB_AGENT_MAX_ITERATIONS * 2 - 1;
+    (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
+      for (let index = 0; index < assistantMessageCount; index += 1) {
+        callbacks.onAssistantMessage(`Observed step ${index}.`);
+      }
+      callbacks.onDone();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
+    });
+
+    const result = await spawnSubAgent(
+      {
+        parentConversationId: 'conv-1',
+        prompt: 'Long running task',
+      },
+      mockProvider,
+    );
+
+    const context = getSessionContext(result.sessionId)!;
+    expect(context.messages).toHaveLength(assistantMessageCount + 1);
+    expect(context.messages[0]).toMatchObject({ role: 'user', content: 'Long running task' });
+    expect(context.transcriptRetainedFromStart).toBe(true);
   });
 
   it('returns undefined for unknown session contexts', () => {

@@ -30,6 +30,7 @@ import { createLogger } from '../../utils/logger';
 import {
   buildInitialSubAgentMessages,
   buildSubAgentSystemPrompt,
+  DEFAULT_SUB_AGENT_MAX_ITERATIONS,
   cloneSubAgentConfig,
   MAX_SPAWN_DEPTH,
   normalizeSubAgentMaxIterations,
@@ -79,7 +80,9 @@ const FINALIZATION_MESSAGE_CHAR_LIMIT = 1800;
 const FINALIZATION_TOOL_CONTENT_CHAR_LIMIT = 2600;
 const FINALIZATION_MIN_REMAINING_MS = 1500;
 const FINALIZATION_TIMEOUT_CAP_MS = 12_000;
-const SESSION_CONTEXT_MAX_MESSAGES = 40;
+// A default-budget tool run can contribute one assistant intent and one tool result per
+// iteration. The extra pair retains an interruption result plus its recovery instruction.
+const SESSION_CONTEXT_MAX_MESSAGES = DEFAULT_SUB_AGENT_MAX_ITERATIONS * 2 + 2;
 const SESSION_CONTEXT_MESSAGE_CHAR_LIMIT = 900;
 const SESSION_CONTEXT_TOOL_CONTENT_CHAR_LIMIT = 1400;
 
@@ -123,7 +126,6 @@ const {
   maxActivityLogEntries: MAX_ACTIVITY_LOG_ENTRIES,
   maxActivityTextChars: MAX_ACTIVITY_TEXT_CHARS,
   maxToolResultPreviewChars: MAX_TOOL_RESULT_PREVIEW_CHARS,
-  finalizationMaxTranscriptMessages: FINALIZATION_MAX_TRANSCRIPT_MESSAGES,
 });
 const registryPersistenceManager = createSubAgentRegistryPersistenceManager({
   activeSubAgents,
@@ -322,9 +324,7 @@ function schedulePreparedSubAgentRun(
   });
 }
 
-async function recoverInterruptedSubAgentAfterRestart(
-  agent: ActiveSubAgent,
-): Promise<boolean> {
+async function recoverInterruptedSubAgentAfterRestart(agent: ActiveSubAgent): Promise<boolean> {
   const context = sessionContextManager.getSessionContext(agent.sessionId);
   const plan = buildSubAgentRestartRecoveryPlan({ agent, context, now: Date.now() });
   if (!plan || !plan.config.initialMessages) return false;
@@ -340,9 +340,7 @@ async function recoverInterruptedSubAgentAfterRestart(
   const allProviders = context!.allProviders
     ? await Promise.all(
         context!.allProviders.map(async (candidate) =>
-          candidate.id === provider.id
-            ? provider
-            : hydrateProviderForRequest(candidate),
+          candidate.id === provider.id ? provider : hydrateProviderForRequest(candidate),
         ),
       )
     : undefined;
@@ -384,8 +382,7 @@ async function recoverInterruptedSubAgentAfterRestart(
   });
   await registryPersistenceManager.persistRegistryNow();
 
-  const timeoutMs =
-    remainingTimeoutMs ?? normalizeSubAgentTimeoutMs(resumedConfig.timeoutMs);
+  const timeoutMs = remainingTimeoutMs ?? normalizeSubAgentTimeoutMs(resumedConfig.timeoutMs);
   const prepared: PreparedSubAgentSession<ActiveSubAgent> = {
     sessionId: agent.sessionId,
     depth: agent.depth,

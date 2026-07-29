@@ -19,7 +19,7 @@ function runningAgent(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapsh
   };
 }
 
-function context(messages: Message[]): SubAgentSessionContext {
+function context(messages: Message[], transcriptRetainedFromStart = true): SubAgentSessionContext {
   return {
     config: {
       parentConversationId: 'conversation-1',
@@ -37,6 +37,7 @@ function context(messages: Message[]): SubAgentSessionContext {
     systemPrompt: 'You are a focused worker.',
     conversationSummary: '',
     messages,
+    transcriptRetainedFromStart,
   };
 }
 
@@ -135,19 +136,23 @@ describe('sub-agent restart recovery', () => {
     expect(plan).toBeNull();
   });
 
-  it('fails closed when earlier transcript evidence was truncated', () => {
+  it('fails closed when persistence reports that earlier evidence was truncated', () => {
     const plan = buildSubAgentRestartRecoveryPlan({
       agent: runningAgent(),
-      context: context([
-        {
-          id: 'tool-old',
-          role: 'tool',
-          content: '{"status":"waited","waitedMs":60000}',
-          toolCallId: 'call-old',
-          timestamp: 8_000,
-        },
-        pendingToolMessage('wait', '{"ms":60000,"reason":"checkpoint 02/02"}'),
-      ]),
+      context: context(
+        [
+          { id: 'user-1', role: 'user', content: ORIGINAL_TASK, timestamp: 1_000 },
+          {
+            id: 'tool-old',
+            role: 'tool',
+            content: '{"status":"waited","waitedMs":60000}',
+            toolCallId: 'call-old',
+            timestamp: 8_000,
+          },
+          pendingToolMessage('wait', '{"ms":60000,"reason":"checkpoint 02/02"}'),
+        ],
+        false,
+      ),
       now: NOW,
     });
 

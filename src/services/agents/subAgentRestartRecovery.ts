@@ -131,9 +131,9 @@ export function buildSubAgentRestartRecoveryPlan(params: {
 
   const originalPrompt = normalizeSubAgentPrompt(params.context.config.prompt);
   const messages = cloneStoredMessages(params.context.messages);
-  // A missing leading user message proves the bounded persistence window dropped prior evidence.
-  // Refuse automatic continuation rather than guessing which earlier steps succeeded.
-  if (!originalPrompt || messages[0]?.role !== 'user') return null;
+  // Recovery requires an explicit persistence integrity signal. A plausible-looking leading
+  // user message cannot prove that an earlier bounded transcript window was not discarded.
+  if (!originalPrompt || params.context.transcriptRetainedFromStart !== true) return null;
 
   const recoverable = findRecoverableWait(messages);
   if (!recoverable) return null;

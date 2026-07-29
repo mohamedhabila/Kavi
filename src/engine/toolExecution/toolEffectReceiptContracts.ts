@@ -343,8 +343,8 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     // values never prove user-level completion. A later graph terminal event
     // or independent observation must provide completion evidence.
     sessions_spawn: returnedOperational('workflow.start'),
-    sessions_send: operational('workflow.mutate'),
-    sessions_cancel: operational('workflow.mutate'),
+    sessions_send: returnedOperational('workflow.mutate'),
+    sessions_cancel: returnedOperational('workflow.mutate'),
     mobile_ui_action: trackedOperational('unknown'),
     workspace_delegate_task: operational('workflow.start'),
     skill__github__create_branch: operational('remote.mutate'),

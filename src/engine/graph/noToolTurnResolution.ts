@@ -8,6 +8,7 @@ import {
   MAX_EMPTY_FINAL_TEXT_RECOVERIES,
   normalizeCompletionFinishReason,
 } from '../../services/llm/support/completionRecovery';
+import { containsRawProviderToolCallMarkup } from '../../utils/assistantTextSanitizer';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
 import {
   getPendingTrackedAsyncOperations,
@@ -71,19 +72,6 @@ function isMalformedToolCallCompletion(
   return (
     normalizedReason === 'malformed_function_call' || normalizedReason === 'malformed_tool_call'
   );
-}
-
-function containsRawProviderToolCallMarkup(content: string): boolean {
-  const openIndex = content.indexOf('<tool_call>');
-  if (openIndex < 0) {
-    return false;
-  }
-  const closeIndex = content.indexOf('</tool_call>', openIndex + '<tool_call>'.length);
-  if (closeIndex < 0) {
-    return false;
-  }
-  const block = content.slice(openIndex, closeIndex + '</tool_call>'.length);
-  return /<function=[^<>\s]+>[\s\S]*<\/function>/u.test(block);
 }
 
 const MAX_RECOVERY_COMPLETED_TOOL_NAMES = 8;

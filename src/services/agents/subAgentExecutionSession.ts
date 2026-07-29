@@ -97,6 +97,7 @@ export function createSubAgentExecutionSession(params: {
           ? { raw: cloneJsonLike(existing.raw) }
           : {}),
       status: coerceToolCallStatus(toolCallLike?.status, fallbackStatus),
+      failureKind: toolCallLike?.failureKind ?? existing?.failureKind,
       startedAt: toolCallLike?.startedAt ?? existing?.startedAt,
       updatedAt: toolCallLike?.updatedAt ?? Date.now(),
       completedAt: toolCallLike?.completedAt ?? existing?.completedAt,

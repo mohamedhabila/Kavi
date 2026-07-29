@@ -57,6 +57,7 @@ describe('persistence', () => {
     expect(storedContexts[result.sessionId]).toEqual(
       expect.objectContaining({
         conversationSummary: 'Repository inspection completed.',
+        transcriptRetainedFromStart: true,
         config: expect.objectContaining({
           prompt: 'Inspect the repository',
           systemPrompt: 'You are a focused worker.',

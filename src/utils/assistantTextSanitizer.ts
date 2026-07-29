@@ -4,8 +4,16 @@ const INTERNAL_TOOL_CONTEXT_NOTE_RE =
   /^\s*Previous internal Gemini tool context omitted for compatibility\.(?:\r?\n)?/gim;
 const INTERNAL_LINK_CONTEXT_RE = /\s*<link_context>[\s\S]*?<\/link_context>\s*/gi;
 const INTERNAL_MEDIA_CONTEXT_RE = /\s*<media_context>[\s\S]*?<\/media_context>\s*/gi;
-const RAW_PROVIDER_FUNCTION_BLOCK_RE =
-  /(?:<tool_call>\s*)?<function=[A-Za-z0-9_.:-]+>[\s\S]*?<\/function>\s*<\/tool_call>/giu;
+const RAW_PROVIDER_FUNCTION_INNER_PATTERN =
+  '<function=[A-Za-z0-9_.:-]+>[\\s\\S]*?<\\/function>\\s*<\\/tool_call>';
+const RAW_PROVIDER_FUNCTION_BLOCK_RE = new RegExp(
+  `(?:<tool_call>\\s*)?${RAW_PROVIDER_FUNCTION_INNER_PATTERN}`,
+  'giu',
+);
+const RAW_PROVIDER_FUNCTION_BLOCK_DETECTION_RE = new RegExp(
+  `<tool_call>\\s*${RAW_PROVIDER_FUNCTION_INNER_PATTERN}`,
+  'iu',
+);
 
 function normalizeTranscriptWhitespace(text: string): string {
   return text
@@ -39,6 +47,11 @@ export function stripRawProviderToolCallMarkupForDisplay(text: string): string {
   }
 
   return normalizeTranscriptWhitespace(text.replace(RAW_PROVIDER_FUNCTION_BLOCK_RE, ''));
+}
+
+/** Detect a complete provider-protocol function block, never task-language intent. */
+export function containsRawProviderToolCallMarkup(text: string): boolean {
+  return Boolean(text) && RAW_PROVIDER_FUNCTION_BLOCK_DETECTION_RE.test(text);
 }
 
 export function stripInternalUserTranscriptArtifacts(text: string): string {

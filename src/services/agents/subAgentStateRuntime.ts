@@ -53,7 +53,6 @@ export function createSubAgentStateRuntime<TAgent extends SubAgentSnapshot>(para
   maxActivityLogEntries: number;
   maxActivityTextChars: number;
   maxToolResultPreviewChars: number;
-  finalizationMaxTranscriptMessages: number;
 }) {
   function sanitizePersistedAgentSnapshot(agent: TAgent): TAgent {
     const sanitizedArtifacts = stripAttachmentPayloads(agent.artifacts);
@@ -113,9 +112,6 @@ export function createSubAgentStateRuntime<TAgent extends SubAgentSnapshot>(para
     }
 
     messages.push(sanitized);
-    if (messages.length > params.finalizationMaxTranscriptMessages) {
-      messages.splice(1, messages.length - params.finalizationMaxTranscriptMessages);
-    }
   }
 
   function appendActivity(

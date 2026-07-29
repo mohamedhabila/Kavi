@@ -157,6 +157,7 @@ describe('detectOrphans', () => {
         },
         systemPrompt: 'You are a focused worker.',
         conversationSummary: '',
+        transcriptRetainedFromStart: true,
         messages: [
           { id: 'user-wait', role: 'user', content: prompt, timestamp: now - 119_000 },
           {
@@ -179,7 +180,11 @@ describe('detectOrphans', () => {
     (runOrchestrator as jest.Mock).mockImplementation(() => new Promise(() => undefined));
 
     const orphanCount = await detectOrphans();
-    for (let attempt = 0; attempt < 20 && !(runOrchestrator as jest.Mock).mock.calls.length; attempt++) {
+    for (
+      let attempt = 0;
+      attempt < 20 && !(runOrchestrator as jest.Mock).mock.calls.length;
+      attempt++
+    ) {
       await new Promise<void>((resolve) => setTimeout(resolve, 2));
     }
 

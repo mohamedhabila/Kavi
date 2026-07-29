@@ -22,8 +22,8 @@ import {
 export { MAX_SPAWN_DEPTH };
 export const OUTPUT_TRUNCATION = FINALIZATION_OUTPUT_TRUNCATION;
 
-const MAX_ITERATIONS_DEFAULT = 25;
-const MIN_SUB_AGENT_MAX_ITERATIONS = 25;
+export const DEFAULT_SUB_AGENT_MAX_ITERATIONS = 25;
+const MIN_SUB_AGENT_MAX_ITERATIONS = DEFAULT_SUB_AGENT_MAX_ITERATIONS;
 const MIN_TIMEOUT_MS = 1_000;
 
 export function normalizeSubAgentTimeoutMs(value?: number): number | undefined {
@@ -41,12 +41,12 @@ export function normalizeSubAgentTimeoutMs(value?: number): number | undefined {
 
 export function normalizeSubAgentMaxIterations(value?: number): number {
   if (!Number.isFinite(value)) {
-    return MAX_ITERATIONS_DEFAULT;
+    return DEFAULT_SUB_AGENT_MAX_ITERATIONS;
   }
 
   const normalized = Math.floor(Number(value));
   if (normalized <= 0) {
-    return MAX_ITERATIONS_DEFAULT;
+    return DEFAULT_SUB_AGENT_MAX_ITERATIONS;
   }
 
   return Math.max(MIN_SUB_AGENT_MAX_ITERATIONS, normalized);
@@ -143,7 +143,7 @@ export function buildSubAgentSystemPrompt(
 - Use tools only for required information, verification, or side effects.
 - Support, catalog, memory, and coordination tools are not progress by themselves.
 - Use tool results as your ground truth.
-- Required delays, verification, side effects, and artifacts remain incomplete unless successful tool results prove them. Never fabricate timestamps, results, artifacts, or completion markers to replace missing execution; report the blocker.
+- Time-dependent work, verification, side effects, and artifacts remain incomplete unless successful tool results prove them. Never fabricate execution evidence or claim completion when required operations did not succeed; report the blocker.
 - Briefly state major tool phases only when it helps coordination.
 - ${PYTHON_EXTENSION_WHEN_NEEDED}
 - If the prompt or Expected output asks for an exact answer, return that exact answer and skip the report.

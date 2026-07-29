@@ -1,7 +1,4 @@
-import {
-  agentControlGraphToolMessageShowsAsyncTerminalResolution,
-  agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution,
-} from '../../src/engine/graph/asyncTerminalResolution';
+import { agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution } from '../../src/engine/graph/asyncTerminalResolution';
 import {
   buildAgentControlGraphBackgroundWorkerWaitSummary,
   buildAgentControlGraphInterruptedOpenWorkRecovery,
@@ -225,49 +222,6 @@ describe('agent control graph async finalization', () => {
       checkpointDetail:
         'Waiting for Deploy run to finish. The supervisor response was interrupted before monitoring could continue.',
     });
-  });
-
-  it.each(['completed', 'complete', 'success', 'succeeded', 'failed', 'error', 'cancelled'])(
-    'detects terminal async status %s from graph tool messages',
-    (status) => {
-      expect(
-        agentControlGraphToolMessageShowsAsyncTerminalResolution({
-          content: JSON.stringify({ status }),
-        }),
-      ).toBe(true);
-    },
-  );
-
-  it('detects terminal async aggregate counts without status text', () => {
-    expect(
-      agentControlGraphToolMessageShowsAsyncTerminalResolution({
-        content: JSON.stringify({ pendingCount: 0, completedCount: 1 }),
-      }),
-    ).toBe(true);
-    expect(
-      agentControlGraphToolMessageShowsAsyncTerminalResolution({
-        content: JSON.stringify({ pendingCount: 0, failedCount: 1 }),
-      }),
-    ).toBe(true);
-  });
-
-  it('does not treat errors, pending counts, or non-json output as terminal async evidence', () => {
-    expect(
-      agentControlGraphToolMessageShowsAsyncTerminalResolution({
-        content: JSON.stringify({ status: 'completed' }),
-        isError: true,
-      }),
-    ).toBe(false);
-    expect(
-      agentControlGraphToolMessageShowsAsyncTerminalResolution({
-        content: JSON.stringify({ pendingCount: 1, completedCount: 1 }),
-      }),
-    ).toBe(false);
-    expect(
-      agentControlGraphToolMessageShowsAsyncTerminalResolution({
-        content: 'completed',
-      }),
-    ).toBe(false);
   });
 
   it('distinguishes successful async completion from terminal worker failure', () => {

@@ -61,8 +61,8 @@ export const ERROR_WARNING_THRESHOLD = 2;
 export const PREFLIGHT_BLOCKED_LOOP_THRESHOLD = 3;
 const DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
 // A completed wait advances wall-clock work even when graph goal evidence is
-// intentionally unchanged. Identical-input repetition and the global iteration
-// cap still protect against an unbounded wait loop.
+// intentionally unchanged. Failed-repeat detection and the global iteration
+// cap still protect against broken or unbounded wait loops.
 const ELAPSED_PROGRESS_TOOL_NAMES = new Set(['wait', 'sessions_wait']);
 // Reading new, successful content is real information gain for audit/research
 // tasks even before a graph goal acquires completion evidence. Keep this list
@@ -141,9 +141,6 @@ function isCompletedElapsedProgressWindow(params: {
 
   const count = params.count ?? STAGNANT_PROGRESS_THRESHOLD;
   const recent = params.history.slice(-count);
-  const isCompletedElapsedProgress = (entry: ToolCallRecord) =>
-    entry.status === 'completed' &&
-    ELAPSED_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name));
   const isRecoverableAuthorityRefresh = (entry: ToolCallRecord) =>
     entry.status === 'failed' &&
     entry.preflightBlockedKind === 'authority_revoked' &&
@@ -154,6 +151,13 @@ function isCompletedElapsedProgressWindow(params: {
     recent.every(
       (entry) => isCompletedElapsedProgress(entry) || isRecoverableAuthorityRefresh(entry),
     )
+  );
+}
+
+function isCompletedElapsedProgress(entry: ToolCallRecord): boolean {
+  return (
+    entry.status === 'completed' &&
+    ELAPSED_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name))
   );
 }
 
@@ -187,9 +191,7 @@ function isCompletedDistinctInformationProgressWindow(params: {
   const argumentFingerprints = recent.map(
     (entry) => entry.argsHash ?? hashToolCall(entry.name, entry.arguments),
   );
-  const resultFingerprints = recent.map(
-    (entry) => entry.resultHash ?? hashResult(entry.result),
-  );
+  const resultFingerprints = recent.map((entry) => entry.resultHash ?? hashResult(entry.result));
   return (
     new Set(argumentFingerprints).size === recent.length &&
     new Set(resultFingerprints).size === recent.length
@@ -248,6 +250,12 @@ export function detectGenericRepeat(
 ): { detected: boolean; tool?: string; count?: number } {
   const counts = new Map<string, number>();
   for (const entry of history) {
+    // Successful wait/monitor calls advance elapsed or external state even when their inputs are
+    // identical. The global iteration budget bounds the run; failed repeats remain eligible for
+    // the stricter error detector below.
+    if (isCompletedElapsedProgress(entry)) {
+      continue;
+    }
     const key = buildRawToolArgsKey(entry);
     const count = (counts.get(key) ?? 0) + 1;
     counts.set(key, count);
@@ -297,9 +305,7 @@ export function detectRepeatedErrors(
 }
 
 export function buildToolMultisetKey(toolNames: ReadonlyArray<string>): string {
-  return Array.from(
-    new Set(toolNames.map((name) => normalizeToolNameKey(name)).filter(Boolean)),
-  )
+  return Array.from(new Set(toolNames.map((name) => normalizeToolNameKey(name)).filter(Boolean)))
     .sort()
     .join('|');
 }
@@ -350,9 +356,7 @@ export function detectStagnantProgress(
     return { detected: false };
   }
 
-  const repeatedMultiset = window.every(
-    (entry) => entry.toolMultisetKey === first.toolMultisetKey,
-  );
+  const repeatedMultiset = window.every((entry) => entry.toolMultisetKey === first.toolMultisetKey);
   const unchangedProgress = window.every(
     (entry) => entry.goalProgressFingerprint === first.goalProgressFingerprint,
   );
@@ -409,9 +413,7 @@ export function detectGoalFocusThrash(
     return { detected: false };
   }
 
-  const onlyGoalMutation = window.every(
-    (entry) => entry.toolMultisetKey === goalMutationMultiset,
-  );
+  const onlyGoalMutation = window.every((entry) => entry.toolMultisetKey === goalMutationMultiset);
   if (!onlyGoalMutation) {
     return { detected: false };
   }
@@ -454,9 +456,7 @@ export function detectGoalMutationStall(
     return { detected: false };
   }
 
-  const onlyGoalMutation = window.every(
-    (entry) => entry.toolMultisetKey === goalMutationMultiset,
-  );
+  const onlyGoalMutation = window.every((entry) => entry.toolMultisetKey === goalMutationMultiset);
   const unchangedProgress = window.every(
     (entry) => entry.goalProgressFingerprint === first.goalProgressFingerprint,
   );
@@ -670,8 +670,7 @@ export function detectLoops(
     );
     const trailingStagnantCount = countTrailingStagnantSignatures(stagnationSignatures);
     const level: LoopSeverity =
-      discoveryOnly ||
-      (distinctInformationOnly && trailingStagnantCount < CRITICAL_THRESHOLD)
+      discoveryOnly || (distinctInformationOnly && trailingStagnantCount < CRITICAL_THRESHOLD)
         ? 'warning'
         : resolveBlockingWorkLoopSeverity(options?.goals);
     return {

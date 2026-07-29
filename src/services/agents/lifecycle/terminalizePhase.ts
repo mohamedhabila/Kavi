@@ -85,6 +85,7 @@ async function persistTerminalSessionContext(params: {
       systemPrompt: params.systemPrompt,
       conversationSummary: params.conversationSummary,
       messages: params.messages,
+      appendConversationSummaryToMessages: true,
     },
     { immediate: true },
   );

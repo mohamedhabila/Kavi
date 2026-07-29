@@ -1,7 +1,7 @@
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { Message } from '../../../types/message';
 import type { SubAgentConfig } from '../../../types/subAgent';
-import { buildStoredSessionMessages, sanitizeTranscriptMessage } from './sessionContextMessages';
+import { buildStoredSessionTranscript, sanitizeTranscriptMessage } from './sessionContextMessages';
 import { cloneProviderConfig, cloneSessionContext } from './sessionContextClone';
 
 export interface SubAgentSessionContext {
@@ -11,6 +11,7 @@ export interface SubAgentSessionContext {
   systemPrompt: string;
   conversationSummary: string;
   messages: Message[];
+  transcriptRetainedFromStart: boolean;
 }
 
 export interface SessionContextStoreParams {
@@ -21,6 +22,7 @@ export interface SessionContextStoreParams {
   systemPrompt: string;
   conversationSummary: string;
   messages: Message[];
+  appendConversationSummaryToMessages?: boolean;
 }
 
 export type PersistRegistryBestEffortOutcome =
@@ -117,6 +119,12 @@ export function createSubAgentSessionContextManager(options: SessionContextManag
   function storeSessionContext(params: SessionContextStoreParams): void {
     clearSessionContextEviction(params.sessionId);
 
+    const storedTranscript = buildStoredSessionTranscript(
+      params.messages,
+      params.appendConversationSummaryToMessages ? params.conversationSummary : undefined,
+      options,
+    );
+
     sessionContexts.set(params.sessionId, {
       config: options.cloneConfig(params.config),
       provider: cloneProviderConfig(params.provider),
@@ -125,7 +133,8 @@ export function createSubAgentSessionContextManager(options: SessionContextManag
         : {}),
       systemPrompt: params.systemPrompt,
       conversationSummary: params.conversationSummary,
-      messages: buildStoredSessionMessages(params.messages, params.conversationSummary, options),
+      messages: storedTranscript.messages,
+      transcriptRetainedFromStart: storedTranscript.retainedFromStart,
     });
 
     enforceSessionContextLimit();
