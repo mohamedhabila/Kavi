@@ -173,7 +173,8 @@ This command reads the normal opt-in evaluation configuration from the shell,
 `E2E_PROVIDER=openrouter`. It starts work through foreground chat, requires one
 background worker to complete 15 sequential one-minute waits, verifies a single
 artifact write/read, rehydrates the persisted chat, and retrieves the worker
-result. Expect roughly 18-22 minutes. Timestamped raw evidence is written only
+result. Every wait uses the same arguments so the run validates elapsed-progress
+semantics without incidental argument variation. Expect roughly 17-22 minutes. Timestamped raw evidence is written only
 under `.private/evals/long-task-wall-clock/`.
 
 The pilot proves in-process wall-clock continuity while the JavaScript runtime
@@ -198,8 +199,8 @@ evidence are written under `.private/evals/long-task-actual-work/` even on failu
 
 The three chat turns use separate evaluator-owned tool surfaces: spawn-only,
 session-orchestration-only after relaunch, and one final read-only review. One
-same-session recovery is permitted; the supervisor may not replace the primary or
-perform the delegated file work itself.
+follow-up continuation from the persisted primary-session context is permitted; the
+supervisor may not replace the primary or perform the delegated file work itself.
 
 This is a product-native reliability evaluation, not an official benchmark or a
 mobile-OS background-execution claim. Run it without retries on an idle host after
@@ -293,10 +294,11 @@ results.
 
 ## Opt-In Live Provider Tests
 
-Two Jest files intentionally call real hosted providers and are excluded from the default contributor gate unless you opt in explicitly:
+Three Jest files intentionally call real hosted services and are excluded from the default contributor gate unless you opt in explicitly:
 
 - `__tests__/services/LlmService.anthropic.live.test.ts`
 - `__tests__/services/LlmService.nativeProviders.live.test.ts`
+- `__tests__/integration/real-world-scenarios.mcp.test.ts` (live registry cases only)
 
 These tests are not part of CI and should only be run when you are validating provider integrations or investigating transport regressions.
 
@@ -304,6 +306,7 @@ Required environment variables:
 
 - `npm run test:live:anthropic`: requires `ANTHROPIC_API_KEY`
 - `npm run test:live:native-providers`: requires `ANTHROPIC_API_KEY` and one of `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `GOOGLE_GENERATIVE_AI_API_KEY`
+- `npm run test:live:mcp-registry`: requires network access to the public MCP Registry; no API key is required
 
 Recommended workflow:
 

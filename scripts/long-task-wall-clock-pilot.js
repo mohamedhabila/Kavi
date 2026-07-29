@@ -50,7 +50,7 @@ console.log(
   `[${label}] provider=openrouter model=${process.env.E2E_OPENROUTER_MODEL} evidence=${evidencePath}`,
 );
 console.log(
-  `[${label}] Expect about 18-22 minutes: 15 measured one-minute worker waits plus live provider and verification time.`,
+  `[${label}] Expect about 17-22 minutes: 15 measured one-minute worker waits plus live provider and verification time.`,
 );
 
 const status = runJest({
