@@ -625,7 +625,8 @@ describe('Bug 3: Subagent context persistence', () => {
     );
 
     const context = getSessionContext(result.sessionId)!;
-    expect(context.messages.length).toBeLessThanOrEqual(12);
+    // Keep enough bounded evidence to recover a 15-checkpoint worker without guessing.
+    expect(context.messages.length).toBeLessThanOrEqual(40);
     expect(context.messages.every((message) => message.content.length <= 1400)).toBe(true);
   });
 

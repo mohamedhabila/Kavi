@@ -20,6 +20,8 @@ type ProgressChanges<TAgent extends SubAgentSnapshot> = Partial<
     | 'launchState'
     | 'modelResponsePendingSince'
     | 'taskLedger'
+    | 'toolsUsed'
+    | 'iterations'
   >
 >;
 
@@ -175,6 +177,12 @@ export function createSubAgentStateRuntime<TAgent extends SubAgentSnapshot>(para
     }
     if (Object.prototype.hasOwnProperty.call(changes, 'taskLedger')) {
       agent.taskLedger = cloneTaskLedgerItems(changes.taskLedger);
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, 'toolsUsed')) {
+      agent.toolsUsed = changes.toolsUsed ? [...new Set(changes.toolsUsed)] : undefined;
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, 'iterations')) {
+      agent.iterations = changes.iterations;
     }
 
     if (Object.prototype.hasOwnProperty.call(changes, 'launchState')) {

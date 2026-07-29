@@ -1,5 +1,6 @@
 import {
   installSubAgentDurabilityHarness,
+  getSubAgent,
   isToolAllowedBySandbox,
   MAX_SPAWN_DEPTH,
   mockProvider,
@@ -280,6 +281,10 @@ describe('announce system', () => {
       name: 'read_file',
       arguments: '{"path":"README.md"}',
       status: 'running',
+    });
+    expect(getSubAgent(started.sessionId)).toMatchObject({
+      iterations: 1,
+      toolsUsed: ['read_file'],
     });
     orchestratorCallbacks.onToolCallComplete?.({
       id: 'tc-progress',

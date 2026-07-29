@@ -124,6 +124,93 @@ describe('detectOrphans', () => {
     expect(agent?.output).toContain('app restarted');
   });
 
+  it('resumes the same worker when the only unmatched operation is an explicit wait', async () => {
+    const now = Date.now();
+    const runningAgent: ActiveSubAgent = {
+      sessionId: 'wait-restart-1',
+      parentConversationId: 'conv-wait-restart',
+      depth: 0,
+      startedAt: now - 120_000,
+      updatedAt: now - 30_000,
+      status: 'running',
+      sandboxPolicy: 'safe-only',
+      iterations: 1,
+      toolsUsed: ['wait'],
+      activeToolName: 'wait',
+      activeToolStartedAt: now - 30_000,
+    };
+    const prompt = 'Wait for two explicit checkpoints and report only verified results.';
+
+    await writePersistedJson(REGISTRY_KEY, [runningAgent]);
+    await writePersistedJson(REGISTRY_CONTEXTS_KEY, {
+      'wait-restart-1': {
+        config: {
+          parentConversationId: 'conv-wait-restart',
+          prompt,
+          sandboxPolicy: 'safe-only',
+          tools: ['wait'],
+        },
+        provider: {
+          ...mockProvider,
+          apiKey: '',
+          baseUrl: 'http://localhost:11434/v1',
+        },
+        systemPrompt: 'You are a focused worker.',
+        conversationSummary: '',
+        messages: [
+          { id: 'user-wait', role: 'user', content: prompt, timestamp: now - 119_000 },
+          {
+            id: 'assistant-wait',
+            role: 'assistant',
+            content: '',
+            timestamp: now - 30_000,
+            toolCalls: [
+              {
+                id: 'call-wait-restart',
+                name: 'wait',
+                arguments: '{"ms":60000,"reason":"checkpoint 01/02"}',
+                status: 'running',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    (runOrchestrator as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+
+    const orphanCount = await detectOrphans();
+    for (let attempt = 0; attempt < 20 && !(runOrchestrator as jest.Mock).mock.calls.length; attempt++) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 2));
+    }
+
+    expect(orphanCount).toBe(0);
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
+    expect((runOrchestrator as jest.Mock).mock.calls[0][0]).toMatchObject({
+      conversationId: 'wait-restart-1',
+      executionRunId: 'wait-restart-1',
+    });
+    const resumedMessages = (runOrchestrator as jest.Mock).mock.calls[0][0].messages;
+    expect(resumedMessages.at(-2)).toMatchObject({
+      role: 'tool',
+      toolCallId: 'call-wait-restart',
+      isError: true,
+    });
+    expect(JSON.parse(resumedMessages.at(-2).content)).toMatchObject({
+      status: 'interrupted',
+      code: 'app_restart',
+      successful: false,
+    });
+    expect(resumedMessages.at(-1)).toMatchObject({
+      role: 'user',
+      content: expect.stringContaining(prompt),
+    });
+    expect(getSubAgent('wait-restart-1')).toMatchObject({
+      status: 'running',
+      iterations: 1,
+      toolsUsed: ['wait'],
+    });
+  });
+
   it('restores persisted session context for interrupted workers so follow-up runs can resume with prior context', async () => {
     const now = Date.now();
     const runningAgent: ActiveSubAgent = {

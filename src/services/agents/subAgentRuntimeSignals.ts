@@ -34,6 +34,8 @@ type UpdateAgentProgressFn<TAgent extends SubAgentSnapshot> = (
       | 'launchState'
       | 'modelResponsePendingSince'
       | 'taskLedger'
+      | 'toolsUsed'
+      | 'iterations'
     >
   >,
   options?: {

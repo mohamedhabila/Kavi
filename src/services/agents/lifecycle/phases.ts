@@ -18,6 +18,8 @@ export type ProgressChanges<TAgent extends SubAgentSnapshot> = Partial<
     | 'launchState'
     | 'modelResponsePendingSince'
     | 'taskLedger'
+    | 'toolsUsed'
+    | 'iterations'
   >
 >;
 

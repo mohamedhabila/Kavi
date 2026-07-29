@@ -116,10 +116,10 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
     lastNonEmptyContent: '',
     finalNonEmptyContent: '',
     lastSubstantiveToolResult: '',
-    iterations: 0,
+    iterations: subAgent.iterations ?? 0,
     lastTokenHeartbeatAt: 0,
     lastTaskLedgerSignature: '',
-    toolsUsed: [],
+    toolsUsed: subAgent.toolsUsed ? [...subAgent.toolsUsed] : [],
     toolResultPreviews: [],
   };
   let terminalCompletionState: SubAgentResult['completionState'];

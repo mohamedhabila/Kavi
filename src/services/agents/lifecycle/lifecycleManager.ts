@@ -423,6 +423,16 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
       }
 
       if (agent.status === 'running') {
+        try {
+          if (await params.recoverInterruptedAgent?.(agent)) {
+            continue;
+          }
+        } catch (error) {
+          params.logger.devWarn(
+            'safe worker restart recovery failed:',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
         interruptRecoveredRunningAgent(agent, now, params.appendActivity);
         recoveredTerminalAgents.push(agent);
         orphanCount++;

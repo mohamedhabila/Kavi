@@ -47,6 +47,12 @@ import { createSubAgentLaunchApi } from './subAgentLaunchApi';
 import { createSubAgentManagementApi } from './subAgentManagementApi';
 import { runPreparedSubAgentSession } from './lifecycle/runPhase';
 import { reconcileSubAgentOutcomeMemory } from './subAgentOutcomeReconciliation';
+import {
+  assertProviderReadyForRequest,
+  bindProviderToModel,
+  hydrateProviderForRequest,
+} from '../llm/support/providerSupport';
+import { buildSubAgentRestartRecoveryPlan } from './subAgentRestartRecovery';
 
 export { waitForSubAgentResultPromise };
 export { MAX_SPAWN_DEPTH } from './lifecycle/runConfig';
@@ -73,7 +79,7 @@ const FINALIZATION_MESSAGE_CHAR_LIMIT = 1800;
 const FINALIZATION_TOOL_CONTENT_CHAR_LIMIT = 2600;
 const FINALIZATION_MIN_REMAINING_MS = 1500;
 const FINALIZATION_TIMEOUT_CAP_MS = 12_000;
-const SESSION_CONTEXT_MAX_MESSAGES = 12;
+const SESSION_CONTEXT_MAX_MESSAGES = 40;
 const SESSION_CONTEXT_MESSAGE_CHAR_LIMIT = 900;
 const SESSION_CONTEXT_TOOL_CONTENT_CHAR_LIMIT = 1400;
 
@@ -200,6 +206,7 @@ const subAgentLifecycleManager = createSubAgentLifecycleManager<ActiveSubAgent>(
   normalizePreviewText,
   maxToolResultPreviewChars: MAX_TOOL_RESULT_PREVIEW_CHARS,
   terminalSubAgentRetentionMs: TERMINAL_SUB_AGENT_RETENTION_MS,
+  recoverInterruptedAgent: (agent) => recoverInterruptedSubAgentAfterRestart(agent),
   reconcileOutcome: async (agent) => {
     const prior = agent.outcomeReconciliation;
     const context = sessionContextManager.getSessionContext(agent.sessionId);
@@ -313,6 +320,90 @@ function schedulePreparedSubAgentRun(
     buildResultFromSnapshot,
     runPreparedSubAgent: () => runPreparedSubAgent(prepared, config, provider, allProviders),
   });
+}
+
+async function recoverInterruptedSubAgentAfterRestart(
+  agent: ActiveSubAgent,
+): Promise<boolean> {
+  const context = sessionContextManager.getSessionContext(agent.sessionId);
+  const plan = buildSubAgentRestartRecoveryPlan({ agent, context, now: Date.now() });
+  if (!plan || !plan.config.initialMessages) return false;
+
+  const provider = bindProviderToModel(
+    await hydrateProviderForRequest(context!.provider),
+    plan.config.model,
+  );
+  assertProviderReadyForRequest(
+    provider,
+    provider.name ? `Sub-agent provider "${provider.name}"` : 'Sub-agent provider',
+  );
+  const allProviders = context!.allProviders
+    ? await Promise.all(
+        context!.allProviders.map(async (candidate) =>
+          candidate.id === provider.id
+            ? provider
+            : hydrateProviderForRequest(candidate),
+        ),
+      )
+    : undefined;
+  const maxIterations = normalizeSubAgentMaxIterations(plan.config.maxIterations);
+  if ((agent.iterations ?? 0) >= maxIterations) return false;
+  const resumedAt = Date.now();
+  const remainingTimeoutMs =
+    agent.deadlineAt === undefined ? undefined : Math.floor(agent.deadlineAt - resumedAt);
+  if (remainingTimeoutMs !== undefined && remainingTimeoutMs < 1_000) return false;
+  const resumedConfig: SubAgentConfig = {
+    ...plan.config,
+    ...(remainingTimeoutMs !== undefined ? { timeoutMs: remainingTimeoutMs } : {}),
+  };
+
+  agent.status = 'running';
+  agent.terminationCause = undefined;
+  agent.launchState = 'queued';
+  agent.output = undefined;
+  agent.completionState = undefined;
+  agent.modelResponsePendingSince = undefined;
+  agent.currentActivity = 'Resuming effect-free work after app restart';
+  agent.activeToolName = undefined;
+  agent.activeToolStartedAt = undefined;
+  agent.updatedAt = resumedAt;
+  agent.lastProgressAt = resumedAt;
+  if (remainingTimeoutMs !== undefined) {
+    agent.deadlineAt = resumedAt + remainingTimeoutMs;
+  }
+  appendActivity(agent, 'status', 'Resuming effect-free work after app restart');
+
+  sessionContextManager.storeSessionContext({
+    sessionId: agent.sessionId,
+    config: resumedConfig,
+    provider,
+    allProviders,
+    systemPrompt: buildSubAgentSystemPrompt(resumedConfig, agent.depth),
+    conversationSummary: context!.conversationSummary,
+    messages: plan.config.initialMessages,
+  });
+  await registryPersistenceManager.persistRegistryNow();
+
+  const timeoutMs =
+    remainingTimeoutMs ?? normalizeSubAgentTimeoutMs(resumedConfig.timeoutMs);
+  const prepared: PreparedSubAgentSession<ActiveSubAgent> = {
+    sessionId: agent.sessionId,
+    depth: agent.depth,
+    maxIterations,
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    sandboxPolicy: agent.sandboxPolicy,
+    subAgent: agent,
+  };
+  const resultPromise = trackSubAgentResultPromise(
+    agent.sessionId,
+    schedulePreparedSubAgentRun(prepared, resumedConfig, provider, allProviders),
+    activeResultPromises,
+  );
+  subAgentLifecycleManager.observeBackgroundSubAgentResult(
+    { sessionId: agent.sessionId, resultPromise },
+    { announce: resumedConfig.announce !== false },
+  );
+  return true;
 }
 
 export async function waitForSubAgentCompletion(

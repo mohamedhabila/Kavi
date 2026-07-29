@@ -52,6 +52,8 @@ export function createSubAgentOrchestratorToolCallbacks<TAgent extends SubAgentS
           launchState: 'active',
           activeToolName: toolCall.name,
           activeToolStartedAt: Date.now(),
+          toolsUsed: [...new Set(params.runtimeState.toolsUsed)],
+          iterations: params.runtimeState.iterations,
         } as ProgressChanges<TAgent>,
         {
           activityKind: 'tool',
