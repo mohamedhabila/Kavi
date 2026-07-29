@@ -592,4 +592,15 @@ describe('builtin-executor wrapper coverage', () => {
       jest.useRealTimers();
     }
   });
+
+  it('rejects a wait without an explicit duration', async () => {
+    await expect(executeWait({})).resolves.toEqual({
+      status: 'failed',
+      content: JSON.stringify({
+        status: 'error',
+        code: 'wait_duration_required',
+        message: 'wait requires an explicit finite ms value',
+      }),
+    });
+  });
 });

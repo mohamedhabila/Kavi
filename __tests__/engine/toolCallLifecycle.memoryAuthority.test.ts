@@ -339,4 +339,64 @@ describe('executeToolCallLifecycle memory authority', () => {
       expect.objectContaining({ status: 'failed', failureKind: 'authority_revoked' }),
     );
   });
+
+  it('publishes a completed wait when memory authority expires during the timer', async () => {
+    const memoryFence = captureCurrentModelTurnMemoryFence();
+    let releaseExecutor!: (outcome: ReturnType<typeof completedToolOutcome>) => void;
+    let markExecutorStarted!: () => void;
+    const executorStarted = new Promise<void>((resolve) => {
+      markExecutorStarted = resolve;
+    });
+    mockedExecuteTool.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseExecutor = resolve;
+          markExecutorStarted();
+        }),
+    );
+    const onToolCallComplete = jest.fn();
+    const waitedResult = JSON.stringify({
+      status: 'waited',
+      waitedMs: 60_000,
+      reason: 'minute 01/15',
+    });
+    const execution = executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: 'tc-wait-memory-authority',
+          name: 'wait',
+          arguments: JSON.stringify({ ms: 60_000, reason: 'minute 01/15' }),
+        },
+        availableToolNames: new Set(['wait']),
+        groundedRequestScopedTools: [
+          {
+            name: 'wait',
+            description: 'Wait for a bounded amount of time.',
+            input_schema: {
+              type: 'object',
+              properties: { ms: { type: 'number', description: 'Duration in milliseconds' } },
+              required: ['ms'],
+            },
+            contract: { sideEffects: [] },
+          },
+        ],
+        modelTurnMemoryPolicyBinding: buildModelTurnMemoryPolicyBinding(memoryFence),
+        callbacks: { onToolCallStart: jest.fn(), onToolCallComplete },
+      }),
+    );
+
+    await executorStarted;
+    useSettingsStore.setState({ disableLongTermMemory: true });
+    releaseExecutor(completedToolOutcome(waitedResult));
+    const result = await execution;
+
+    expect(result.result).toBe(waitedResult);
+    expect(result.toolMessage.toolCalls?.[0]).toMatchObject({
+      status: 'completed',
+      result: waitedResult,
+    });
+    expect(onToolCallComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'completed', result: waitedResult }),
+    );
+  });
 });

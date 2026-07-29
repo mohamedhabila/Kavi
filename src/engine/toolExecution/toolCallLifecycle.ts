@@ -36,6 +36,7 @@ import {
   type ToolEffectDispatchObservation,
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
+import { canSettleAfterModelAuthorityChange } from './modelAuthorityIndependentCompletion';
 import {
   buildModelTurnMemoryPolicyExpiredToolResult,
   isModelTurnMemoryPolicyBindingDurablyCurrent,
@@ -374,10 +375,13 @@ export async function executeToolCallLifecycle(
       };
     }
     let outcome: ToolRuntimeOutcome = execution;
+    const outcomeRequiresCurrentModelAuthority = (): boolean =>
+      (resolvedEffectFreeInvocation &&
+        !canSettleAfterModelAuthorityChange(effectiveToolCall.name, outcome)) ||
+      (outcome.status === 'failed' && outcome.failureKind === 'authority_revoked');
     if (
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding) &&
-      (resolvedEffectFreeInvocation ||
-        (outcome.status === 'failed' && outcome.failureKind === 'authority_revoked'))
+      outcomeRequiresCurrentModelAuthority()
     ) {
       return completeMemoryPolicyRevocation();
     }
@@ -398,7 +402,7 @@ export async function executeToolCallLifecycle(
         recordedAt: Date.now(),
       });
       if (
-        resolvedEffectFreeInvocation &&
+        outcomeRequiresCurrentModelAuthority() &&
         !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
       ) {
         return completeMemoryPolicyRevocation();
@@ -412,7 +416,7 @@ export async function executeToolCallLifecycle(
       reconciliationRequired: effectReconciliationRequired,
     });
     if (
-      resolvedEffectFreeInvocation &&
+      outcomeRequiresCurrentModelAuthority() &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
     ) {
       return completeMemoryPolicyRevocation();
@@ -428,7 +432,7 @@ export async function executeToolCallLifecycle(
         observedAt: Date.now(),
       });
       if (
-        resolvedEffectFreeInvocation &&
+        outcomeRequiresCurrentModelAuthority() &&
         !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
       ) {
         return completeMemoryPolicyRevocation();
@@ -452,7 +456,7 @@ export async function executeToolCallLifecycle(
       toolName: effectiveToolCall.name,
     });
     if (
-      resolvedEffectFreeInvocation &&
+      outcomeRequiresCurrentModelAuthority() &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
     ) {
       return completeMemoryPolicyRevocation();
@@ -467,7 +471,7 @@ export async function executeToolCallLifecycle(
       params.toolResultContextWindow ?? getWorkingContextWindow(params.model);
     result = enforceToolResultBudget(result, effectiveBudgetWindow);
     if (
-      resolvedEffectFreeInvocation &&
+      outcomeRequiresCurrentModelAuthority() &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
     ) {
       return completeMemoryPolicyRevocation();

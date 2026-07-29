@@ -114,6 +114,41 @@ describe('tool effect memory authority', () => {
     ).toEqual({ count: 0 });
   });
 
+  it('keeps a completed wait result when memory authority expires during the timer', async () => {
+    const memoryFence = captureCurrentModelTurnMemoryFence();
+    let releaseExecutor!: (outcome: ReturnType<typeof completedToolOutcome>) => void;
+    let markExecutorStarted!: () => void;
+    const executorStarted = new Promise<void>((resolve) => {
+      markExecutorStarted = resolve;
+    });
+    mockedExecuteToolInner.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseExecutor = resolve;
+          markExecutorStarted();
+        }),
+    );
+    const waitedResult = JSON.stringify({
+      status: 'waited',
+      waitedMs: 60_000,
+      reason: 'minute 01/15',
+    });
+
+    const execution = executeTool('wait', JSON.stringify({ ms: 60_000 }), 'conversation-wait', {
+      toolCallId: 'tool-call-wait-memory-authority',
+      executionRunId: 'execution-run-wait-memory-authority',
+      modelTurnMemoryPolicyBinding: buildModelTurnMemoryPolicyBinding(memoryFence),
+    });
+
+    await executorStarted;
+    useSettingsStore.setState({ disableLongTermMemory: true });
+    releaseExecutor(completedToolOutcome(waitedResult));
+    const result = await execution;
+
+    expect(mockedExecuteToolInner).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ status: 'completed', content: waitedResult });
+  });
+
   it.each([
     [
       'restrictive memory authority changes in another runtime',

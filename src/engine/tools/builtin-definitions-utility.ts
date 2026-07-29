@@ -9,14 +9,14 @@ export const WAIT_TOOL: ToolDefinition = {
     properties: {
       ms: {
         type: 'number',
-        description: 'Delay in milliseconds, clamped to 100-60000 (default: 1000)',
+        description: 'Required delay in milliseconds, clamped to 100-60000',
       },
       reason: {
         type: 'string',
         description: 'Optional reason for the wait, echoed back in the result',
       },
     },
-    required: [],
+    required: ['ms'],
   },
   contract: {
     category: 'async_wait',

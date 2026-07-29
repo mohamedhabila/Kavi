@@ -36,6 +36,7 @@ import {
   buildModelTurnMemoryPolicyExpiredToolResult,
   isModelTurnMemoryPolicyBindingDurablyCurrent,
 } from '../authority/modelTurnMemoryPolicyBinding';
+import { canSettleAfterModelAuthorityChange } from '../toolExecution/modelAuthorityIndependentCompletion';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { executeMobileControllerTool } from '../mobileController/toolExecution';
 import { isMobileControllerDeferredExecution } from '../mobileController/runtimeExecution';
@@ -531,7 +532,10 @@ export async function executeTool(
     outcome = runtimeExternalBinding
       ? await runtimeExternalBinding.execute(argsString, conversationId, executorContext)
       : await executeToolInner(normalizedName, argsString, conversationId, executorContext);
-    if (!isModelTurnAuthorityCurrent(context)) {
+    if (
+      !isModelTurnAuthorityCurrent(context) &&
+      !canSettleAfterModelAuthorityChange(normalizedName, outcome)
+    ) {
       return rejectExpiredModelTurnAuthority({
         context,
         normalizedName,
@@ -580,7 +584,10 @@ export async function executeTool(
         recordedAt: Date.now(),
         runtimeExternalEvidence,
       });
-      if (!isModelTurnAuthorityCurrent(context)) {
+      if (
+        !isModelTurnAuthorityCurrent(context) &&
+        !canSettleAfterModelAuthorityChange(normalizedName, outcome)
+      ) {
         return rejectExpiredModelTurnAuthority({
           context,
           normalizedName,

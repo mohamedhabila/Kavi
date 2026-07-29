@@ -29,7 +29,10 @@ import type {
   AgentControlTurnDirectives,
 } from './agentControlGraph';
 import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
-import { resolveAgentControlGraphToolExecutionOutcomes } from './toolExecutionOutcomeResolution';
+import {
+  resolveAgentControlGraphToolExecutionOutcomes,
+  type ToolExecutionOutcome,
+} from './toolExecutionOutcomeResolution';
 import { executeAgentControlGraphToolBatch } from './toolTurnBatchExecution';
 import { prepareAgentControlGraphToolTurn } from './toolTurnPreparation';
 import {
@@ -44,6 +47,7 @@ import type { VerifiedProcedureExecutionSession } from '../../services/memory/ve
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
+  MemoryPromptEpochExpiredError,
   type ModelTurnMemoryPolicyBinding,
 } from '../authority/modelTurnMemoryPolicyBinding';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
@@ -91,6 +95,19 @@ type ToolTurnExecutionResult =
       warningInjectedThisRound: boolean;
       workingMessages: Message[];
     };
+
+function isAuthorityRevokedToolOutcome(outcome: ToolExecutionOutcome): boolean {
+  if ('deferredHandoff' in outcome || outcome.toolMessage.isError !== true) {
+    return false;
+  }
+
+  return (
+    outcome.toolMessage.toolCalls?.some(
+      (toolCall) =>
+        toolCall.id === outcome.toolCallId && toolCall.failureKind === 'authority_revoked',
+    ) === true
+  );
+}
 
 export interface ExecuteAgentControlGraphToolTurnParams {
   iteration: number;
@@ -357,6 +374,17 @@ export async function executeAgentControlGraphToolTurn(
       params.applyGraphEvents(graphEvents);
     },
   });
+
+  // A turn whose entire batch lost memory authority did not dispatch any model-authorized
+  // work. Reprepare it with fresh memory instead of asking the model to interpret a
+  // transient preflight rejection as a task failure. Mixed batches are resolved normally:
+  // replaying them could duplicate a successful side effect from the same batch.
+  if (
+    toolExecutionOutcomes.length > 0 &&
+    toolExecutionOutcomes.every(isAuthorityRevokedToolOutcome)
+  ) {
+    throw new MemoryPromptEpochExpiredError();
+  }
 
   const batchYieldedEarly = toolExecutionOutcomes.some((outcome) =>
     'deferredHandoff' in outcome ||

@@ -12,7 +12,16 @@ export async function executeWait(args: {
   ms?: number;
   reason?: string;
 }): Promise<ToolRuntimeOutcome> {
-  const requestedMs = Number.isFinite(args.ms) ? Number(args.ms) : 1000;
+  if (typeof args.ms !== 'number' || !Number.isFinite(args.ms)) {
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        code: 'wait_duration_required',
+        message: 'wait requires an explicit finite ms value',
+      }),
+    );
+  }
+  const requestedMs = Number(args.ms);
   const ms = Math.max(100, Math.min(requestedMs, 60000));
   await sleepAsync(ms);
   return completedToolOutcome(

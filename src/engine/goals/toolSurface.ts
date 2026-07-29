@@ -13,6 +13,8 @@ import {
   workflowProductionSatisfiesConsumption,
 } from '../tools/toolWorkflowContracts';
 import { normalizeToolName } from '../tools/toolNameNormalization';
+import { inferToolCapabilityDescriptor } from '../tools/capabilityRegistry';
+import { descriptorIsPassiveAsyncObserver } from '../tools/toolLifecycleSemantics';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from './bootstrap';
 import { resolveSuccessCriterionSurfaceHints } from './completionEvidence';
 import type { AgentGoal } from './types';
@@ -232,8 +234,16 @@ function shouldAcceptContinuationTool(params: {
   allowCompletedTool?: boolean;
 }): boolean {
   const tool = params.toolByName.get(params.toolName);
+  // Completed producers normally leave the hot surface so the model cannot
+  // accidentally replay a mutation. Passive async observers are different:
+  // long-running work legitimately needs consecutive wait/monitor calls, and
+  // each successful observation advances wall-clock or external state.
+  const isRepeatablePassiveObserver =
+    tool !== undefined &&
+    descriptorIsPassiveAsyncObserver(inferToolCapabilityDescriptor(tool));
   if (
     params.allowCompletedTool !== true &&
+    !isRepeatablePassiveObserver &&
     !isMemoryResourceTool(tool) &&
     !params.resourceScopedGoalCapabilityToolNames.has(params.toolName) &&
     params.completedWorkflowToolNames.has(params.toolName)

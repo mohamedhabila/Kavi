@@ -141,12 +141,18 @@ function isCompletedElapsedProgressWindow(params: {
 
   const count = params.count ?? STAGNANT_PROGRESS_THRESHOLD;
   const recent = params.history.slice(-count);
+  const isCompletedElapsedProgress = (entry: ToolCallRecord) =>
+    entry.status === 'completed' &&
+    ELAPSED_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name));
+  const isRecoverableAuthorityRefresh = (entry: ToolCallRecord) =>
+    entry.status === 'failed' &&
+    entry.preflightBlockedKind === 'authority_revoked' &&
+    ELAPSED_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name));
   return (
     recent.length === count &&
+    recent.some(isCompletedElapsedProgress) &&
     recent.every(
-      (entry) =>
-        entry.status === 'completed' &&
-        ELAPSED_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name)),
+      (entry) => isCompletedElapsedProgress(entry) || isRecoverableAuthorityRefresh(entry),
     )
   );
 }
