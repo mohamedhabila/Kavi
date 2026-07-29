@@ -251,7 +251,7 @@ export async function executeSessionSpawn(
             waitTimeoutMs,
             ...(waitWindow.usedDefault ? { usedDefaultWaitTimeout: true } : {}),
             guidance:
-              'The worker is still running. Call sessions_wait if you need to keep blocking, or continue with other non-overlapping work until it completes.',
+              'The worker is still running. Mobile operating systems may suspend detached execution after this turn. Call sessions_wait if this turn needs the final output, or inspect the worker after returning to the app.',
           }),
         );
       }
@@ -275,7 +275,7 @@ export async function executeSessionSpawn(
         ...(spawnGate.workstreamId ? { workstreamId: spawnGate.workstreamId } : {}),
         model: config.model || provider.model,
         guidance:
-          'The worker is running in the background. Use sessions_wait when you need the final output, or continue with other non-overlapping work until it completes.',
+          'The worker is detached from this turn. Mobile operating systems may suspend background execution; inspect its status after returning to the app. Use sessions_wait when this turn needs the final output.',
       }),
     );
   } catch (err: unknown) {

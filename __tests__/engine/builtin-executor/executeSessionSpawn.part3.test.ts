@@ -100,6 +100,7 @@ describe('Builtin Tool Executor', () => {
       const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.workstreamId).toBe('workstream-2');
+      expect(parsed.guidance).toContain('may suspend background execution');
       expect(launchSubAgent).toHaveBeenCalledWith(
         expect.objectContaining({
           parentConversationId: 'parent-conv-1',

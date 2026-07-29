@@ -64,6 +64,7 @@ describe('spawnSubAgent with custom systemPrompt', () => {
     );
     expect(capturedOrchestratorOptions.systemPrompt).toContain('## Worker Contract');
     expect(capturedOrchestratorOptions.systemPrompt).toContain('capability-extension tool');
+    expect(capturedOrchestratorOptions.systemPrompt).toContain('Never fabricate timestamps');
     expect(capturedOrchestratorOptions.enableCompaction).toBe(true);
   });
 

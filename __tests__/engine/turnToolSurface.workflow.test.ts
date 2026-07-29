@@ -1,9 +1,43 @@
 import { resolveDefaultGroundedRequestScopedTools } from '../../src/engine/graph/turnToolSurface';
 import { resolveTurnToolSurface } from '../../src/engine/goals/toolSurface';
+import { WAIT_TOOL } from '../../src/engine/tools/builtin-definitions-utility';
 import type { ToolDefinition } from '../../src/types/tool';
 import { resourceFlowTools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
 describe('resolveDefaultGroundedRequestScopedTools', () => {
+  it('keeps a completed wait available for the next sequential long-horizon wait', async () => {
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: [WAIT_TOOL],
+      observedToolNames: new Set(['wait']),
+      workingMessages: [
+        userMessage('Wait twice in sequence.', 1),
+        {
+          id: 'assistant-wait-1',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [
+            {
+              id: 'tc-wait-1',
+              name: 'wait',
+              arguments: '{"ms":60000}',
+              status: 'completed',
+            },
+          ],
+        },
+        {
+          id: 'tool-wait-1',
+          role: 'tool',
+          content: '{"status":"waited","waitedMs":60000}',
+          toolCallId: 'tc-wait-1',
+          timestamp: 3,
+        },
+      ],
+    });
+
+    expect(selected.some((tool) => tool.name === 'wait')).toBe(true);
+  });
+
   it('defers required workflow consumers when an upstream producer is available but unobserved', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,

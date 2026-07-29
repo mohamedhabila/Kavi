@@ -11,7 +11,7 @@ const DELEGATED_WORK_LIFECYCLE_TOOLS = [
 const SESSION_TOOL_MENTION = /\bsessions_(spawn|send|wait|cancel|status|list|history|output)\b/gu;
 
 const DELEGATED_WORK_ANCHOR =
-  /(?:\bsub[\s-]?agent\p{L}*\b|\bdelegated?\s+(?:assistants?|helpers?|workers?)\b|\b(?:assistant|helper|worker)\s+sessions?\b|\banother\s+(?:assistant|helper|agent)\b|サブエージェント|委任|分担|子(?:代理人?|智能体)|委派|分工|وكيل\s+فرعي|مساعد\s+فرعي)/u;
+  /(?:\bsub[\s-]?agent\p{L}*\b|\bdelegated?\s+(?:assistants?|helpers?|workers?)\b|\bbackground\s+(?:agents?|assistants?|helpers?|workers?)\b|\b(?:assistant|helper|worker)\s+sessions?\b|\banother\s+(?:assistant|helper|agent)\b|サブエージェント|委任|分担|子(?:代理人?|智能体)|委派|分工|وكيل\s+فرعي|مساعد\s+فرعي)/u;
 
 const DELEGATION_START_ACTION =
   /(?:\bdeleg\p{L}*\b|\bspawn(?:s|ed|ing)?\b|\b(?:launch|start|create|run)(?:s|ed|ing)?\b|委任|分担|委派|分工|فو[ّ]?ض|وك[ّ]?ل)/u;
@@ -62,11 +62,6 @@ export function resolveExplicitDelegationToolNames(params: {
   if (!text) return [];
   if (NEGATED_DELEGATION.test(text)) return [];
 
-  const directlyMentioned = directlyMentionedSessionTools(text);
-  if (directlyMentioned.size > 0) {
-    return Array.from(directlyMentioned);
-  }
-
   const hasDelegatedWorkAnchor = DELEGATED_WORK_ANCHOR.test(text);
   const startsDelegatedWork =
     DIRECT_DELEGATION_REQUEST.test(text) ||
@@ -75,6 +70,12 @@ export function resolveExplicitDelegationToolNames(params: {
   if (startsDelegatedWork) {
     return [...DELEGATED_WORK_LIFECYCLE_TOOLS];
   }
+
+  const directlyMentioned = directlyMentionedSessionTools(text);
+  if (directlyMentioned.size > 0) {
+    return Array.from(directlyMentioned);
+  }
+
   if (!hasDelegatedWorkAnchor) return [];
 
   if (CANCEL_ACTION.test(text)) return ['sessions_status', 'sessions_cancel'];

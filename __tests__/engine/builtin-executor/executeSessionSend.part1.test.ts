@@ -148,7 +148,8 @@ describe('Builtin Tool Executor', () => {
       expect(parsed.sessionId).toBe('new-123');
       expect(parsed.previousSessionId).toBe('old-123');
       expect(parsed.workstreamId).toBe('workstream-2');
-      expect(parsed.guidance).toContain('running in the background');
+      expect(parsed.guidance).toContain('detached from this turn');
+      expect(parsed.guidance).toContain('may suspend background execution');
       expect(mockBuildLeastPrivilegeWorkerMemoryBundle).toHaveBeenCalledWith({
         enabled: true,
         query: 'Original task\nTell me more',

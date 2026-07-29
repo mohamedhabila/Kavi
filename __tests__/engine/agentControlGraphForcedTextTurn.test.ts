@@ -87,6 +87,13 @@ describe('agent control graph forced text turns', () => {
     ).toBe(buildAgentControlGraphForcedTextOnlyTurnPrompt('loop_recovery'));
   });
 
+  it('does not promise continuous mobile execution after a background handoff', () => {
+    const prompt = buildAgentControlGraphForcedTextOnlyTurnPrompt('background_session_started');
+
+    expect(prompt).toContain('Mobile operating systems may suspend background execution');
+    expect(prompt).toContain('do not claim completion or guaranteed continuous execution');
+  });
+
   it('prioritizes exact final-output constraints in completed workflow prompts', () => {
     expect(buildAgentControlGraphForcedTextOnlyTurnPrompt('workflow_route_completed')).toContain(
       'Preserve exact requested format.',

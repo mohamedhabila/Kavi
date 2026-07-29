@@ -11,6 +11,7 @@ import { extractDiscoveryActivatedToolNames } from '../discoveryToolActivation';
 import { resolveDefaultGroundedRequestScopedTools } from '../turnToolSurface';
 import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
 import { resolveExplicitDelegationToolNames } from '../explicitDelegationToolSurface';
+import { resolveExplicitPassiveObserverToolNames } from '../explicitPassiveObserverToolSurface';
 
 export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
@@ -59,6 +60,11 @@ export async function resolveModelTurnGroundedToolSurface(params: {
       ...resolveExplicitDelegationToolNames({
         conversationMode: params.conversationMode,
         latestUserMessageText: params.latestUserMessageText,
+      }),
+      ...resolveExplicitPassiveObserverToolNames({
+        conversationMode: params.conversationMode,
+        latestUserMessageText: params.latestUserMessageText,
+        tools: policyAuthorizedTools,
       }),
     ]),
   );

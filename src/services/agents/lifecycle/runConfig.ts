@@ -143,6 +143,7 @@ export function buildSubAgentSystemPrompt(
 - Use tools only for required information, verification, or side effects.
 - Support, catalog, memory, and coordination tools are not progress by themselves.
 - Use tool results as your ground truth.
+- Required delays, verification, side effects, and artifacts remain incomplete unless successful tool results prove them. Never fabricate timestamps, results, artifacts, or completion markers to replace missing execution; report the blocker.
 - Briefly state major tool phases only when it helps coordination.
 - ${PYTHON_EXTENSION_WHEN_NEEDED}
 - If the prompt or Expected output asks for an exact answer, return that exact answer and skip the report.

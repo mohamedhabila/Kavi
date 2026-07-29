@@ -90,7 +90,7 @@ export const SESSION_LIST_TOOL: ToolDefinition = {
 export const SESSION_SEND_TOOL: ToolDefinition = {
   name: 'sessions_send',
   description:
-    'Follow up on an existing sub-agent session. Use waitForCompletion=true when the current turn needs the follow-up result; otherwise let it continue in the background and return control to the user immediately.',
+    'Follow up on an existing sub-agent session. Use waitForCompletion=true when the current turn needs the follow-up result; otherwise detach it from this turn and return control immediately. Mobile operating systems may suspend background execution.',
   input_schema: {
     type: 'object',
     properties: {
@@ -104,7 +104,7 @@ export const SESSION_SEND_TOOL: ToolDefinition = {
       waitTimeoutMs: {
         type: 'number',
         description:
-          'Optional maximum time to wait when waitForCompletion=true. If omitted, a 3-minute default wait window is used; if it elapses, the tool returns while the follow-up worker continues in the background.',
+          'Optional maximum time to wait when waitForCompletion=true. If omitted, a 3-minute default wait window is used; if it elapses, the tool returns while the follow-up worker remains detached. Mobile operating systems may suspend its execution.',
       },
     },
     required: ['sessionId', 'message'],

@@ -31,6 +31,25 @@ describe('explicit delegated-work tool activation', () => {
     ).toEqual([]);
   });
 
+  it('treats starting a background worker as explicit delegation', () => {
+    expect(
+      resolveExplicitDelegationToolNames({
+        conversationMode: 'agentic',
+        latestUserMessageText: 'Start exactly one background worker for this task.',
+      }),
+    ).toEqual(['sessions_spawn', 'sessions_status', 'sessions_wait', 'sessions_cancel']);
+  });
+
+  it('does not let a negative wait constraint hide a positive worker launch', () => {
+    expect(
+      resolveExplicitDelegationToolNames({
+        conversationMode: 'agentic',
+        latestUserMessageText:
+          'Start exactly one background worker for this task. Do not use sessions_wait inside the worker.',
+      }),
+    ).toEqual(['sessions_spawn', 'sessions_status', 'sessions_wait', 'sessions_cancel']);
+  });
+
   it('supports localized explicit delegation language', () => {
     expect(
       resolveExplicitDelegationToolNames({
