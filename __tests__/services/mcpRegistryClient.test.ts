@@ -410,6 +410,42 @@ describe('registryClient', () => {
     });
   });
 
+  it('bounds pagination by one overall registry request deadline', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+    const now = jest
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(1_000 + 15_001);
+
+    try {
+      await expect(listOfficialMcpRegistry({ limit: 20 })).resolves.toEqual({
+        entries: [],
+        nextCursor: null,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('applies the registry deadline while consuming a stalled response body', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => new Promise(() => undefined),
+    }) as any;
+
+    try {
+      const result = listOfficialMcpRegistry({ limit: 20 });
+      await jest.advanceTimersByTimeAsync(15_000);
+
+      await expect(result).resolves.toEqual({ entries: [], nextCursor: null });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('maps fallback names and website_url aliases from registry entries', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,

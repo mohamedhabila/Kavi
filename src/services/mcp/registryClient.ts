@@ -283,20 +283,43 @@ function mapRegistryEntry(envelope: RegistryEnvelope): McpHubEntry | null {
   };
 }
 
-async function registryFetch(path: string): Promise<Response> {
+type RegistryFetchResult =
+  | { ok: false; payload?: undefined }
+  | { ok: true; payload: RegistryListPayload };
+
+async function registryFetch(
+  path: string,
+  timeoutMs = REQUEST_TIMEOUT,
+): Promise<RegistryFetchResult> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  const boundedTimeoutMs = Math.max(1, Math.min(REQUEST_TIMEOUT, timeoutMs));
+  let timeout: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    return await fetch(`${MCP_REGISTRY_BASE_URL}${path}`, {
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'Kavi/1.0',
-      },
-    });
+    return await Promise.race([
+      (async (): Promise<RegistryFetchResult> => {
+        const response = await fetch(`${MCP_REGISTRY_BASE_URL}${path}`, {
+          signal: controller.signal,
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'Kavi/1.0',
+          },
+        });
+        if (!response.ok) return { ok: false };
+        return {
+          ok: true,
+          payload: (await response.json()) as RegistryListPayload,
+        };
+      })(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error('mcp_registry_request_timed_out'));
+        }, boundedTimeoutMs);
+      }),
+    ]);
   } finally {
-    clearTimeout(timeout);
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 
@@ -307,6 +330,7 @@ export async function listOfficialMcpRegistry(
   const entries: McpHubEntry[] = [];
   let nextCursor = cursor;
   let attempts = 0;
+  const deadlineAt = Date.now() + REQUEST_TIMEOUT;
 
   while (entries.length < limit && attempts < 5) {
     const params = new URLSearchParams({ limit: String(limit) });
@@ -319,11 +343,13 @@ export async function listOfficialMcpRegistry(
 
     let payload: RegistryListPayload | null = null;
     try {
-      const res = await registryFetch(`/servers?${params.toString()}`);
-      if (!res.ok) {
+      const remainingMs = deadlineAt - Date.now();
+      if (remainingMs <= 0) break;
+      const result = await registryFetch(`/servers?${params.toString()}`, remainingMs);
+      if (!result.ok) {
         return { entries: [], nextCursor: null };
       }
-      payload = (await res.json()) as RegistryListPayload;
+      payload = result.payload;
     } catch {
       return { entries: [], nextCursor: null };
     }

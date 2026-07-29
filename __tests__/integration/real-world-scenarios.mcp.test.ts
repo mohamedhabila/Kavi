@@ -12,10 +12,14 @@ import {
 } from '../../src/services/mcp/bridge';
 import { failedToolContent } from '../helpers/toolRuntimeOutcome';
 
-describe('Real MCP Registry integration', () => {
-  let fetchedEntries: McpHubEntry[] = [];
+const liveRegistryEnabled = process.env.RUN_LIVE_MCP_REGISTRY === '1';
+const itLiveRegistry = liveRegistryEnabled ? it : it.skip;
+const describeLiveRegistry = liveRegistryEnabled ? describe : describe.skip;
+let fetchedEntries: McpHubEntry[] = [];
 
+describe('Real MCP Registry integration', () => {
   beforeAll(async () => {
+    if (!liveRegistryEnabled) return;
     try {
       const result = await listOfficialMcpRegistry({ limit: 10, search: 'github' });
       fetchedEntries = result.entries;
@@ -24,15 +28,11 @@ describe('Real MCP Registry integration', () => {
     }
   }, 30000);
 
-  it('fetches real MCP servers from the registry', () => {
-    if (fetchedEntries.length === 0) {
-      return;
-    }
-
+  itLiveRegistry('fetches real MCP servers from the registry', () => {
     expect(fetchedEntries.length).toBeGreaterThan(0);
   });
 
-  it('all entries have required fields', () => {
+  itLiveRegistry('all entries have required fields', () => {
     for (const entry of fetchedEntries) {
       expect(entry.id).toBeTruthy();
       expect(entry.name).toBeTruthy();
@@ -47,7 +47,7 @@ describe('Real MCP Registry integration', () => {
     }
   });
 
-  it('remote entries have valid structure', () => {
+  itLiveRegistry('remote entries have valid structure', () => {
     for (const entry of fetchedEntries) {
       for (const remote of entry.remotes) {
         expect(remote.id).toBeTruthy();
@@ -62,7 +62,7 @@ describe('Real MCP Registry integration', () => {
     }
   });
 
-  it('creates valid install drafts from fetched entries', () => {
+  itLiveRegistry('creates valid install drafts from fetched entries', () => {
     for (const entry of fetchedEntries) {
       for (const remote of entry.remotes) {
         // Build a values map with defaults for required inputs
@@ -88,7 +88,7 @@ describe('Real MCP Registry integration', () => {
     }
   });
 
-  it('entry capabilities match actual remote data', () => {
+  itLiveRegistry('entry capabilities match actual remote data', () => {
     for (const entry of fetchedEntries) {
       const transports = Array.from(new Set(entry.remotes.map((r) => r.type)));
       for (const transport of transports) {
@@ -107,7 +107,7 @@ describe('Real MCP Registry integration', () => {
     }
   });
 
-  it('converts fetched entries to MCP tool definitions', () => {
+  itLiveRegistry('converts fetched entries to MCP tool definitions', () => {
     for (const entry of fetchedEntries) {
       // Simulate MCP tools that would come from these servers
       const mockTool = {
@@ -183,19 +183,12 @@ describe('Real MCP Registry integration', () => {
   });
 });
 
-describe('End-to-end MCP flow with real fetched data', () => {
+describeLiveRegistry('End-to-end MCP flow with real fetched data', () => {
   let realEntry: McpHubEntry | null = null;
 
-  beforeAll(async () => {
-    try {
-      const result = await listOfficialMcpRegistry({ limit: 5 });
-      if (result.entries.length > 0) {
-        realEntry = result.entries[0];
-      }
-    } catch {
-      // CI may not have network access.
-    }
-  }, 30000);
+  beforeAll(() => {
+    realEntry = fetchedEntries[0] ?? null;
+  });
 
   it('full lifecycle: fetch → draft → config → definition → parse', async () => {
     if (!realEntry) return; // Skip if network unavailable
