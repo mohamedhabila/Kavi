@@ -10,8 +10,6 @@ import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOper
 import { extractDiscoveryActivatedToolNames } from '../discoveryToolActivation';
 import { resolveDefaultGroundedRequestScopedTools } from '../turnToolSurface';
 import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
-import { resolveExplicitDelegationToolNames } from '../explicitDelegationToolSurface';
-import { resolveExplicitPassiveObserverToolNames } from '../explicitPassiveObserverToolSurface';
 
 export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
@@ -19,7 +17,6 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   completedWorkflowToolNames: ReadonlySet<string>;
   goals?: ReadonlyArray<AgentGoal>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
-  latestUserMessageText: string;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   sessionActivatedToolNames?: ReadonlyArray<string>;
   workingMessages: ReadonlyArray<Message>;
@@ -54,20 +51,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
       .map((toolName) => normalizeToolName(toolName))
       .filter(Boolean),
   );
-  const explicitToolSurfaceToolNames = Array.from(
-    new Set([
-      ...(params.explicitToolSurfaceToolNames ?? []),
-      ...resolveExplicitDelegationToolNames({
-        conversationMode: params.conversationMode,
-        latestUserMessageText: params.latestUserMessageText,
-      }),
-      ...resolveExplicitPassiveObserverToolNames({
-        conversationMode: params.conversationMode,
-        latestUserMessageText: params.latestUserMessageText,
-        tools: policyAuthorizedTools,
-      }),
-    ]),
-  );
+  const explicitToolSurfaceToolNames = params.explicitToolSurfaceToolNames ?? [];
 
   const resolvedGroundedRequestScopedTools = await resolveDefaultGroundedRequestScopedTools({
     allTools: policyAuthorizedTools,
@@ -91,10 +75,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     new Set(resolveGoalCapabilityToolNames(goals, currentPolicyAuthorizedTools)),
   ).filter((name) => groundedToolNames.has(name));
   const turnContract = resolveAgentExecutionTurnContract({
-    goals,
-    tools: currentPolicyAuthorizedTools,
     groundedToolNames: groundedRequestScopedTools.map((tool) => tool.name),
-    explicitToolSurfaceToolNames,
   });
 
   const sessionPinnedCount = groundedRequestScopedTools.filter((tool) =>

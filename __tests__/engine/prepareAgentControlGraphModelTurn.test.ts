@@ -151,7 +151,6 @@ function createBaseParams() {
     goals: [],
     isSuperAgent: true,
     iteration: 3,
-    latestUserMessageText: 'Create a file and reply with the result.',
     maxTokens: 4096,
     promptContextSupport: {
       maxToolIterations: 40,
@@ -464,7 +463,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     );
   });
 
-  it('exposes only the stable discovery surface without graph session scope', async () => {
+  it('exposes stable agentic primitives without prompt-language routing', async () => {
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,
@@ -486,8 +485,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
         {
           id: 'msg-1',
           role: 'user',
-          content:
-            'Use delegated worker to inspect package json and README md, wait for completion, and return exactly three bullets.',
+          content: 'Handle the repository task carefully.',
           timestamp: 1,
         },
       ],
@@ -495,11 +493,12 @@ describe('prepareAgentControlGraphModelTurn', () => {
 
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        allowSessionCoordinationTools: false,
+        allowSessionCoordinationTools: true,
       }),
     );
     expectPreparedGroundedTools([
       { name: 'write_file', placement: 'stable_prefix' },
+      { name: 'sessions_spawn', placement: 'stable_prefix' },
       { name: 'tool_catalog', placement: 'stable_prefix' },
     ]);
   });
@@ -545,7 +544,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       }),
     );
     expectPreparedGroundedTools([
-      { name: 'sessions_spawn', placement: 'dynamic_suffix' },
+      { name: 'sessions_spawn', placement: 'stable_prefix' },
       { name: 'sessions_wait', placement: 'dynamic_suffix' },
     ]);
   });

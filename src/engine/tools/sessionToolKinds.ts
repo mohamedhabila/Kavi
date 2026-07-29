@@ -6,7 +6,6 @@ const SESSION_COORDINATION_TOOL_NAMES = new Set([
   'sessions_wait',
   'sessions_cancel',
   'sessions_yield',
-  'wait',
 ]);
 
 const SESSION_INSPECTION_TOOL_NAMES = new Set([

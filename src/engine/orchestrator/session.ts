@@ -120,7 +120,6 @@ export async function runOrchestratorGraphSession(params: {
 
   const {
     currentUserMessage,
-    latestUserMessageText,
     livingMemory,
     memoryConsistencyBarrier,
     memoryRefreshInternalUserMessages,
@@ -308,12 +307,9 @@ export async function runOrchestratorGraphSession(params: {
         toolFilter: options.toolFilter,
         workspaceConversationId: options.workspaceConversationId,
         workspaceReadFallbackConversationId: options.workspaceReadFallbackConversationId,
-        ...(mobileControllerRuntime
-          ? { mobileController: mobileControllerRuntime.execution }
-          : {}),
+        ...(mobileControllerRuntime ? { mobileController: mobileControllerRuntime.execution } : {}),
       },
       trackedAsyncOperations,
-      latestUserMessageText,
       warn: (message, error) => {
         logger.devWarn(`${message}:`, error instanceof Error ? error.message : String(error));
       },
@@ -355,7 +351,7 @@ export async function runOrchestratorGraphSession(params: {
               ? 'waiting'
               : graphSnapshot.status === 'awaiting_user'
                 ? 'waiting'
-              : 'failed';
+                : 'failed';
   return {
     terminalDisposition,
     graphSnapshot,

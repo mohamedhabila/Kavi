@@ -30,6 +30,8 @@ export const DEFAULT_CORE_TOOL_ORDER = [
   'read_file',
   'write_file',
   'list_files',
+  'sessions_spawn',
+  'wait',
   'cron',
 ] as const;
 
@@ -44,6 +46,7 @@ const STABLE_TOOL_SURFACE_ORDER_VALUES = [
   'write_file',
   'sessions_spawn',
   'sessions_wait',
+  'wait',
   'list_files',
   'cron',
   'file_edit',
@@ -239,8 +242,7 @@ function shouldAcceptContinuationTool(params: {
   // long-running work legitimately needs consecutive wait/monitor calls, and
   // each successful observation advances wall-clock or external state.
   const isRepeatablePassiveObserver =
-    tool !== undefined &&
-    descriptorIsPassiveAsyncObserver(inferToolCapabilityDescriptor(tool));
+    tool !== undefined && descriptorIsPassiveAsyncObserver(inferToolCapabilityDescriptor(tool));
   if (
     params.allowCompletedTool !== true &&
     !isRepeatablePassiveObserver &&

@@ -11,7 +11,7 @@ const PRIVATE_IP_RANGES = [
   /^169\.254\./, // Link-local
   /^0\./, // Current network
   /^100\.(6[4-9]|[7-9]\d|1[0-2]\d)\./, // Shared address space (RFC 6598)
-  /^198\.18\./, // Benchmark testing
+  /^198\.18\./, // IANA-reserved device performance-testing range
   /^::1$/, // IPv6 loopback
   /^fe80:/i, // IPv6 link-local
   /^fc00:/i, // IPv6 unique local

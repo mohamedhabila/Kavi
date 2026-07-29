@@ -1,5 +1,5 @@
 import { resolveDelegatedWorkerSpawnPlan } from '../../src/engine/graph/delegatedWorkerSpawn';
-import { buildDelegationFixtureAgentRun } from '../../src/engine/graph/delegationFixtureSupport';
+import { buildDelegationFixtureAgentRun } from '../../src/acceptance/acceptanceMetrics/delegationGraphFixtures';
 import type { AgentGoal } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
 

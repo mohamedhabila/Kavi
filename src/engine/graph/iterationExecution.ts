@@ -67,7 +67,6 @@ export async function executeAgentControlGraphIteration(
     explicitToolSurfaceToolNames: params.toolRuntime.explicitToolSurfaceToolNames,
     isSuperAgent: params.isSuperAgent,
     iteration: params.iteration,
-    latestUserMessageText: params.latestUserMessageText,
     maxTokens: params.maxTokens,
     personaThinkingLevel: params.personaThinkingLevel,
     promptContextSupport: {

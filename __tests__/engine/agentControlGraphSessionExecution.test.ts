@@ -79,7 +79,6 @@ function createParams(
       workingMessages: [],
     },
     isSuperAgent: true,
-    latestUserMessageText: '',
     maxToolIterations: 2,
     maxTokens: 8000,
     promptContextSupport: {

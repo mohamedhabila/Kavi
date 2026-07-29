@@ -37,7 +37,6 @@ export async function prepareAgentControlGraphModelTurn(
     completedWorkflowToolNames: params.completedWorkflowToolNames,
     goals: params.goals,
     explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
-    latestUserMessageText: params.latestUserMessageText,
     trackedAsyncOperations: params.trackedAsyncOperations,
     sessionActivatedToolNames: params.sessionActivatedToolNames,
     workingMessages: params.workingMessages,

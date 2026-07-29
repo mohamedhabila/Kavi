@@ -2,7 +2,7 @@
 // Kavi — Delegation spawn gate fixtures (structural)
 // ---------------------------------------------------------------------------
 
-import { buildDelegationFixtureAgentRun } from '../../engine/graph/delegationFixtureSupport';
+import { buildDelegationFixtureAgentRun } from './delegationGraphFixtures';
 import type { DelegatedWorkerSpawnRequest } from '../../engine/graph/delegatedWorkerSpawn';
 import type { AgentGoal } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';

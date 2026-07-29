@@ -1,101 +1,35 @@
 import { resolveAgentExecutionTurnContract } from '../../src/engine/graph/agentExecutionTurnContract';
-import type { AgentGoal } from '../../src/engine/goals/types';
-
-const tools = [
-  { name: 'web_search', description: 'Search', contract: { capabilities: ['discover'] } },
-  { name: 'sessions_spawn', description: 'Spawn', contract: { capabilities: ['coordinate'] } },
-  { name: 'update_goals', description: 'Goals', contract: { capabilities: ['coordinate'] } },
-];
 
 describe('resolveAgentExecutionTurnContract', () => {
-  it('does not enable session coordination for bootstrap surfaces without session tools', () => {
+  it('does not enable session coordination without a grounded session tool', () => {
     const contract = resolveAgentExecutionTurnContract({
-      goals: [],
-      tools,
       groundedToolNames: ['update_goals', 'read_file'],
     });
 
     expect(contract.allowSessionCoordinationTools).toBe(false);
   });
 
-  it('does not enable session coordination for non-session goal capabilities', () => {
-    const goals: AgentGoal[] = [
-      {
-        id: 'goal-1',
-        title: 'Research',
-        status: 'active',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-        requiredCapabilities: ['discover'],
-      },
-    ];
-
+  it('does not classify the local elapsed-time wait as session coordination', () => {
     const contract = resolveAgentExecutionTurnContract({
-      goals,
-      tools,
-      groundedToolNames: ['web_search', 'read_file'],
+      groundedToolNames: ['wait'],
     });
 
     expect(contract.allowSessionCoordinationTools).toBe(false);
   });
 
-  it('enables session coordination when a graph-selected surface contains session tools', () => {
-    const goals: AgentGoal[] = [
-      {
-        id: 'goal-1',
-        title: 'Delegate',
-        status: 'active',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-        requiredCapabilities: ['coordinate'],
-      },
-    ];
-
+  it('enables session coordination when the grounded surface contains a session tool', () => {
     const contract = resolveAgentExecutionTurnContract({
-      goals,
-      tools,
       groundedToolNames: ['sessions_spawn', 'update_goals'],
     });
 
     expect(contract.allowSessionCoordinationTools).toBe(true);
   });
 
-  it('enables a grounded explicit delegation route despite an unrelated live goal', () => {
-    const goals: AgentGoal[] = [
-      {
-        id: 'goal-1',
-        title: 'Research',
-        status: 'active',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-        requiredCapabilities: ['discover'],
-      },
-    ];
-
+  it('admits a structurally activated follow-up tool without prompt-language hints', () => {
     const contract = resolveAgentExecutionTurnContract({
-      goals,
-      tools,
-      groundedToolNames: ['web_search', 'sessions_spawn'],
-      explicitToolSurfaceToolNames: ['sessions_spawn'],
+      groundedToolNames: ['web_search', 'sessions_send'],
     });
 
     expect(contract.allowSessionCoordinationTools).toBe(true);
-  });
-
-  it('does not let an explicit name bypass the grounded policy surface', () => {
-    const contract = resolveAgentExecutionTurnContract({
-      goals: [],
-      tools,
-      groundedToolNames: ['update_goals'],
-      explicitToolSurfaceToolNames: ['sessions_spawn'],
-    });
-
-    expect(contract.allowSessionCoordinationTools).toBe(false);
   });
 });

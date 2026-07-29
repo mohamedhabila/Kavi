@@ -12,52 +12,18 @@ function normalizeId(value: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
-export type AgentRunResumePreparation = {
-  kind: 'ready';
-  initialAgentControlGraphState?: AgentRunControlGraphState;
-  workflowScopeUserMessageId: string;
-  workflowTaskAnchor: WorkflowTaskAnchor;
-} | {
-  kind: 'unavailable';
-  reason: 'missing_request' | 'missing_existing_owner' | 'missing_user_response';
-  requestedSourceMessageId?: string;
-};
-
-export function prepareE2EOrchestratorTurnResume(
-  params:
-    | {
-        graphState?: undefined;
-        userMessageId: string;
-        messages: ReadonlyArray<Message>;
-        updatedAt?: number;
-      }
-    | {
-        graphState: AgentRunControlGraphState;
-        userMessageId: string;
-        workflowTaskAnchor: WorkflowTaskAnchor;
-        messages: ReadonlyArray<Message>;
-        updatedAt?: number;
-      },
-): AgentRunResumePreparation {
-  if (!params.graphState) {
-    return prepareAgentRunResumeForOrchestrator({
-      fallbackUserMessageId: params.userMessageId,
-      messages: params.messages,
-      updatedAt: params.updatedAt,
-    });
-  }
-
-  return prepareAgentRunResumeForOrchestrator({
-    existingRun: {
-      controlGraph: params.graphState,
-      userMessageId: params.userMessageId,
-      workflowTaskAnchor: params.workflowTaskAnchor,
-    },
-    fallbackUserMessageId: params.userMessageId,
-    messages: params.messages,
-    updatedAt: params.updatedAt,
-  });
-}
+export type AgentRunResumePreparation =
+  | {
+      kind: 'ready';
+      initialAgentControlGraphState?: AgentRunControlGraphState;
+      workflowScopeUserMessageId: string;
+      workflowTaskAnchor: WorkflowTaskAnchor;
+    }
+  | {
+      kind: 'unavailable';
+      reason: 'missing_request' | 'missing_existing_owner' | 'missing_user_response';
+      requestedSourceMessageId?: string;
+    };
 
 export function prepareAgentRunResumeForOrchestrator(params: {
   existingRun?: Pick<AgentRun, 'controlGraph' | 'userMessageId' | 'workflowTaskAnchor'>;
@@ -117,8 +83,7 @@ export function prepareAgentRunResumeForOrchestrator(params: {
     };
   }
 
-  const requestedScopeUserMessageId =
-    normalizeId(params.fallbackUserMessageId);
+  const requestedScopeUserMessageId = normalizeId(params.fallbackUserMessageId);
   const anchorResolution = resolveWorkflowTaskAnchor({
     messages: params.messages,
     sourceMessageId: requestedScopeUserMessageId,

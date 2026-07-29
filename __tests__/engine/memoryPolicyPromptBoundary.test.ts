@@ -118,7 +118,6 @@ describe('memory policy prompt boundary', () => {
       allTools: [memoryWriteTool, memoryErasureTool, deviceWriteTool],
       conversationMode: 'agentic',
       completedWorkflowToolNames: new Set(),
-      latestUserMessageText: '続けてください',
       explicitToolSurfaceToolNames: [
         memoryWriteTool.name,
         memoryErasureTool.name,

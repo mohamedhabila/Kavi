@@ -170,9 +170,7 @@ export interface ExecuteAgentControlGraphIterationParams {
   agentRunId?: string;
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
-  publishMobileControllerHandoff?: (
-    handoff: PersistedMobileControllerHandoff,
-  ) => Promise<void>;
+  publishMobileControllerHandoff?: (handoff: PersistedMobileControllerHandoff) => Promise<void>;
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   callbacks: IterationCallbacks;
   compactionEngine: AgentTurnCompactionEngine;
@@ -185,7 +183,6 @@ export interface ExecuteAgentControlGraphIterationParams {
   iteration: number;
   maxToolIterations: number;
   maxTokens: number;
-  latestUserMessageText: string;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   onFinalizationHeld?: (params: {
     iteration: number;

@@ -1,7 +1,4 @@
-import {
-  prepareAgentRunResumeForOrchestrator,
-  prepareE2EOrchestratorTurnResume,
-} from '../../src/engine/graph/runResumePreparation';
+import { prepareAgentRunResumeForOrchestrator } from '../../src/engine/graph/runResumePreparation';
 import { createInitialAgentRunControlGraphState } from '../../src/services/agents/agentControlGraphState';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Message } from '../../src/types/message';
@@ -15,7 +12,7 @@ function userMessage(id: string): Message {
   };
 }
 
-function resumableRun(): Pick<AgentRun, 'controlGraph' | 'userMessageId'> {
+function resumableRun(): Pick<AgentRun, 'controlGraph' | 'userMessageId' | 'workflowTaskAnchor'> {
   return {
     userMessageId: 'user-original',
     workflowTaskAnchor: {
@@ -305,7 +302,7 @@ describe('agent control graph run resume preparation', () => {
     );
   });
 
-  it('requires the explicit stored anchor when an E2E graph turn resumes', () => {
+  it('requires the explicit stored anchor when a persisted graph turn resumes', () => {
     const graphState = createInitialAgentRunControlGraphState({
       status: 'waiting_async',
       updatedAt: 50,
@@ -316,10 +313,13 @@ describe('agent control graph run resume preparation', () => {
       attachments: [],
     } as const;
 
-    const result = prepareE2EOrchestratorTurnResume({
-      graphState,
-      userMessageId: 'user-original',
-      workflowTaskAnchor,
+    const result = prepareAgentRunResumeForOrchestrator({
+      existingRun: {
+        controlGraph: graphState,
+        userMessageId: 'user-original',
+        workflowTaskAnchor,
+      },
+      fallbackUserMessageId: 'user-original',
       messages: [],
       updatedAt: 100,
     });

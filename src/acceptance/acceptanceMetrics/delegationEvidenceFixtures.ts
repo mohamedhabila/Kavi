@@ -2,7 +2,7 @@
 // Kavi — Delegation worker evidence → completion gate fixtures (structural)
 // ---------------------------------------------------------------------------
 
-import { buildGoalsAfterDelegationWorkerTerminal } from '../../engine/graph/delegationFixtureSupport';
+import { buildGoalsAfterDelegationWorkerTerminal } from './delegationGraphFixtures';
 import type { TrackedAsyncOperation } from '../../engine/pendingAsyncOperations';
 import type { AgentGoal } from '../../types/agentRun';
 import type { FalseFinalizeGateParams } from './falseFinalizeFixtures';

@@ -1,4 +1,5 @@
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
+import { WAIT_TOOL } from '../../src/engine/tools/builtin-definitions-utility';
 import type { ToolDefinition } from '../../src/types/tool';
 
 describe('prepareAgentTurn', () => {
@@ -73,6 +74,24 @@ describe('prepareAgentTurn', () => {
     ]);
     expect(preparedTurn.enrichedSystemPrompt).toContain('You are a test agent.');
     expect(preparedTurn.enrichedSystemPrompt).not.toContain('Workflow TODO Ledger');
+  });
+
+  it('keeps the local wait callable without enabling delegated-session coordination', () => {
+    const preparedTurn = prepareAgentTurn({
+      allowSessionCoordinationTools: false,
+      effectiveForceTextThisTurn: false,
+      groundedRequestScopedTools: [WAIT_TOOL],
+      promptBundleContext: {
+        groundedRequestScopedTools: [WAIT_TOOL],
+        iteration: 1,
+        maxToolIterations: 4,
+        resolvedPrompt: 'You are a test agent.',
+        skillPrompts: '',
+      },
+      toolingEnabledForProvider: true,
+    });
+
+    expect(preparedTurn.selectedTools.map((tool) => tool.name)).toEqual(['wait']);
   });
 
   it('forces text-only turns when graph directives require final text', () => {

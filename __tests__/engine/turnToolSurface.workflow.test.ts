@@ -1,41 +1,33 @@
 import { resolveDefaultGroundedRequestScopedTools } from '../../src/engine/graph/turnToolSurface';
 import { resolveTurnToolSurface } from '../../src/engine/goals/toolSurface';
+import { SESSION_SPAWN_TOOL } from '../../src/engine/tools/builtin-definitions-sessions';
 import { WAIT_TOOL } from '../../src/engine/tools/builtin-definitions-utility';
 import type { ToolDefinition } from '../../src/types/tool';
 import { resourceFlowTools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
 describe('resolveDefaultGroundedRequestScopedTools', () => {
-  it('keeps a completed wait available for the next sequential long-horizon wait', async () => {
+  it('keeps safe long-work primitives available without prompt-phrase routing', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
-      allTools: [WAIT_TOOL],
-      observedToolNames: new Set(['wait']),
-      workingMessages: [
-        userMessage('Wait twice in sequence.', 1),
-        {
-          id: 'assistant-wait-1',
-          role: 'assistant',
-          content: '',
-          timestamp: 2,
-          toolCalls: [
-            {
-              id: 'tc-wait-1',
-              name: 'wait',
-              arguments: '{"ms":60000}',
-              status: 'completed',
-            },
-          ],
-        },
-        {
-          id: 'tool-wait-1',
-          role: 'tool',
-          content: '{"status":"waited","waitedMs":60000}',
-          toolCallId: 'tc-wait-1',
-          timestamp: 3,
-        },
-      ],
+      allTools: [SESSION_SPAWN_TOOL, WAIT_TOOL],
+      conversationMode: 'agentic',
+      observedToolNames: new Set(),
+      workingMessages: [userMessage('Handle this task carefully.', 1)],
     });
 
     expect(selected.some((tool) => tool.name === 'wait')).toBe(true);
+    expect(selected.some((tool) => tool.name === 'sessions_spawn')).toBe(true);
+  });
+
+  it('keeps long-work primitives out of ordinary chat mode', async () => {
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: [SESSION_SPAWN_TOOL, WAIT_TOOL],
+      conversationMode: 'chitchat',
+      observedToolNames: new Set(),
+      workingMessages: [userMessage('Tell me about waiting politely.', 1)],
+    });
+
+    expect(selected.some((tool) => tool.name === 'wait')).toBe(false);
+    expect(selected.some((tool) => tool.name === 'sessions_spawn')).toBe(false);
   });
 
   it('defers required workflow consumers when an upstream producer is available but unobserved', () => {
