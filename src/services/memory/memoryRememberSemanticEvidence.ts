@@ -69,10 +69,6 @@ const NAMED_SUBJECT_TYPES = new Set<EntityType>([
 ]);
 const SUBJECT_SELF_FIELDS = new Set(['kind']);
 const SUBJECT_NAMED_FIELDS = new Set(['kind', 'label', 'type']);
-const EXPLICIT_IDENTIFIER_TOKEN_PATTERN =
-  /[\p{L}\p{N}]+(?:[_-][\p{L}\p{N}]+)+/gu;
-const EXPLICIT_PREDICATE_IDENTIFIER_PATTERN =
-  /^[\p{L}\p{N}]+(?:[_-][\p{L}\p{N}]+)+$/u;
 
 export interface BoundMemoryRememberSemanticEvidence {
   readonly kind: 'bound_memory_remember_semantic_evidence';
@@ -137,23 +133,14 @@ export function bindMemoryRememberSemanticEvidence(
     return { valid: false, code: 'invalid_contract' };
   }
   if (decoded.assertionClass === 'current_direct') {
-    const groundedProposal = {
-      ...decoded,
-      predicate: resolveExplicitCurrentUserPredicate({
-        predicate: decoded.predicate,
-        source: request.userMessageText,
-        subjectLabel: decoded.subjectRef.kind === 'named' ? decoded.subjectRef.label : undefined,
-        value: decoded.value,
-      }),
-    };
     const grounding = deriveExactEvidenceSpan(
-      groundedProposal.subjectRef,
-      groundedProposal.value,
+      decoded.subjectRef,
+      decoded.value,
       request.userMessageText,
     );
     if (grounding.valid) {
       return bindEvidence({
-        proposal: groundedProposal,
+        proposal: decoded,
         subjectType: subject.type,
         evidenceSpan: grounding.evidenceSpan,
         source: {
@@ -197,10 +184,7 @@ export function bindMemoryRememberSemanticEvidence(
     proposal: {
       ...decoded,
       sourceMessageId: candidate.source.sourceMessageId,
-      scope:
-        decoded.scope === 'global' || decoded.scope === 'persona'
-          ? 'project'
-          : decoded.scope,
+      scope: decoded.scope === 'global' || decoded.scope === 'persona' ? 'project' : decoded.scope,
       assertionClass: 'quoted',
     },
     subjectType: subject.type,
@@ -215,36 +199,6 @@ export function bindMemoryRememberSemanticEvidence(
       canonicalStaticContractDigest: candidate.source.canonicalStaticContractDigest,
     },
   });
-}
-
-function resolveExplicitCurrentUserPredicate(params: {
-  predicate: string;
-  source: string;
-  subjectLabel?: string;
-  value: string;
-}): string {
-  const normalizedPredicate = params.predicate.normalize('NFKC').toLowerCase();
-  const candidates = Array.from(params.source.matchAll(EXPLICIT_IDENTIFIER_TOKEN_PATTERN))
-    .map((match) => match[0]?.trim() ?? '')
-    .filter(
-      (candidate) =>
-        candidate.length > 0 &&
-        Array.from(candidate).length <= 80 &&
-        EXPLICIT_PREDICATE_IDENTIFIER_PATTERN.test(candidate) &&
-        !params.subjectLabel?.includes(candidate) &&
-        !params.value.includes(candidate),
-    );
-  const matches = Array.from(new Set(candidates)).filter((candidate) => {
-    const normalizedCandidate = candidate.normalize('NFKC').toLowerCase();
-    return (
-      normalizedPredicate === normalizedCandidate ||
-      normalizedPredicate.endsWith(` ${normalizedCandidate}`) ||
-      normalizedPredicate.endsWith(`_${normalizedCandidate}`) ||
-      normalizedPredicate.endsWith(`-${normalizedCandidate}`)
-    );
-  });
-
-  return matches.length === 1 ? matches[0]! : params.predicate;
 }
 
 function bindEvidence(

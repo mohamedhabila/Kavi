@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // Produces relevance-first query signals from the current turn. The cleanup is
 // structural: it detects code-like/action-signature density and repeated
-// machine tokens without matching English instructions or benchmark phrases.
+// machine tokens without matching task-language phrases.
 // ---------------------------------------------------------------------------
 
 export interface RetrievalQueryPlan {

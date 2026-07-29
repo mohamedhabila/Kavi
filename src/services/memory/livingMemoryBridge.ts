@@ -166,7 +166,7 @@ export interface LivingMemoryBridgeOutput {
   recalledFactCount: number;
   /** Number of recent episodes included. */
   recalledEpisodeCount: number;
-  /** Internal timing breakdown for product telemetry and benchmark diagnostics. */
+  /** Internal timing breakdown for product telemetry and performance diagnostics. */
   timings?: LivingMemoryBridgeTimings;
   /** Structured next-turn consistency state for graph observability. */
   consistencyBarrier?: NextTurnMemoryConsistencyResult;
@@ -541,9 +541,7 @@ export async function buildLivingMemorySections(
   );
   const applicableProcedureSections: string[] = [];
   const procedureFactIds = new Set(
-    assemblyVisibleFacts
-      .filter(isReceiptBackedProcedureLearningFact)
-      .map((fact) => fact.id),
+    assemblyVisibleFacts.filter(isReceiptBackedProcedureLearningFact).map((fact) => fact.id),
   );
   if (procedureFactIds.size > 0) {
     const validProcedureFactIds = new Set<string>();
