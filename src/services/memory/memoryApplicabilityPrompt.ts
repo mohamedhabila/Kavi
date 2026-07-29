@@ -92,7 +92,5 @@ export function selectDirectlyUsableMemoryFacts<T extends MemoryApplicabilityPro
 export function renderMemoryApplicabilityMetadata(
   applicability: MemoryApplicabilityAnnotation | undefined,
 ): string {
-  return applicability
-    ? ` policy=${applicability.action} reason=${applicability.reason}`
-    : '';
+  return applicability ? ` policy=${applicability.action} reason=${applicability.reason}` : '';
 }

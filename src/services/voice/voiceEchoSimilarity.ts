@@ -57,7 +57,10 @@ function tokenCoverage(shorter: string, longer: string): { count: number; ratio:
   };
 }
 
-function tokenBigramCoverage(shorter: string, longer: string): {
+function tokenBigramCoverage(
+  shorter: string,
+  longer: string,
+): {
   count: number;
   ratio: number;
 } {
@@ -94,18 +97,8 @@ export function isLikelyVoiceEcho(transcript: string, spokenResponse: string): b
   const responseCodePoints = compactCodePoints(normalizedResponse);
   const [shorterText, longerText, shorterCodePoints, longerCodePoints] =
     transcriptCodePoints.length <= responseCodePoints.length
-      ? [
-          normalizedTranscript,
-          normalizedResponse,
-          transcriptCodePoints,
-          responseCodePoints,
-        ]
-      : [
-          normalizedResponse,
-          normalizedTranscript,
-          responseCodePoints,
-          transcriptCodePoints,
-        ];
+      ? [normalizedTranscript, normalizedResponse, transcriptCodePoints, responseCodePoints]
+      : [normalizedResponse, normalizedTranscript, responseCodePoints, transcriptCodePoints];
 
   if (shorterCodePoints.length < 8) return false;
   const compactShorter = shorterCodePoints.join('');

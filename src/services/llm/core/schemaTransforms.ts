@@ -10,9 +10,7 @@ export function strictifyOpenAiSchema(schema: Record<string, any>): Record<strin
 
     for (const [key, value] of propertyEntries) {
       const child = strictifyOpenAiSchema(value as Record<string, any>);
-      nextProperties[key] = originalRequired.has(key)
-        ? child
-        : makeSchemaNullable(child);
+      nextProperties[key] = originalRequired.has(key) ? child : makeSchemaNullable(child);
     }
 
     result.properties = nextProperties;
@@ -49,11 +47,7 @@ function makeSchemaNullable(schema: Record<string, any>): Record<string, any> {
     if (!result.type.includes('null')) {
       result.type = [...result.type, 'null'];
     }
-  } else if (
-    typeof result.type === 'string' &&
-    result.type.length > 0 &&
-    result.type !== 'null'
-  ) {
+  } else if (typeof result.type === 'string' && result.type.length > 0 && result.type !== 'null') {
     result.type = [result.type, 'null'];
   }
 
@@ -69,8 +63,7 @@ export function normalizeSchemaTypeList(typeValue: unknown): string[] {
     return Array.from(
       new Set(
         typeValue.filter(
-          (entry): entry is string =>
-            typeof entry === 'string' && entry.trim().length > 0,
+          (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0,
         ),
       ),
     );
@@ -94,14 +87,10 @@ export function appendSchemaConstraintDescription(
   }
 
   schema.description =
-    currentDescription.length > 0
-      ? `${currentDescription} ${constraintText}`
-      : constraintText;
+    currentDescription.length > 0 ? `${currentDescription} ${constraintText}` : constraintText;
 }
 
-export function dedupeSchemaVariants(
-  variants: Record<string, any>[],
-): Record<string, any>[] {
+export function dedupeSchemaVariants(variants: Record<string, any>[]): Record<string, any>[] {
   const seen = new Set<string>();
   const deduped: Record<string, any>[] = [];
 
@@ -162,10 +151,7 @@ const UNSUPPORTED_STRICT_SCHEMA_KEYS = new Set([
   'else',
 ]);
 
-export function isStrictCompatibleSchema(
-  schema: Record<string, any>,
-  depth = 0,
-): boolean {
+export function isStrictCompatibleSchema(schema: Record<string, any>, depth = 0): boolean {
   if (!schema || typeof schema !== 'object') {
     return true;
   }

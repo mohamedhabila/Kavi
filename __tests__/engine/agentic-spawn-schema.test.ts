@@ -57,11 +57,11 @@ describe('SESSION_SPAWN_TOOL schema', () => {
     expect(SESSION_SPAWN_TOOL.input_schema.properties.workstreamId.description).toContain(
       'structured workstream',
     );
-    expect(
-      SESSION_SPAWN_TOOL.input_schema.properties.dependsOnWorkstreams.description,
-    ).toContain('prerequisite');
+    expect(SESSION_SPAWN_TOOL.input_schema.properties.dependsOnWorkstreams.description).toContain(
+      'prerequisite',
+    );
     expect(SESSION_SPAWN_TOOL.description).toContain(
-      "omit tools unless you need a narrower worker scope",
+      'omit tools unless you need a narrower worker scope',
     );
     expect(SESSION_SPAWN_TOOL.description).not.toContain('transcript or reasoning trace');
   });

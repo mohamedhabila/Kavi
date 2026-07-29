@@ -42,7 +42,9 @@ describe('GitHub workflows', () => {
     for (const fileName of ['ci.yml', 'agent-e2e-nightly.yml']) {
       const workflow = readWorkflow(fileName);
       const installIndex = workflow.indexOf('sudo apt-get install -y ripgrep');
-      const verifyIndex = workflow.indexOf(fileName === 'ci.yml' ? 'npm run verify' : 'npm run verify:strict');
+      const verifyIndex = workflow.indexOf(
+        fileName === 'ci.yml' ? 'npm run verify' : 'npm run verify:strict',
+      );
 
       expect(installIndex).toBeGreaterThan(-1);
       expect(verifyIndex).toBeGreaterThan(-1);
@@ -68,7 +70,9 @@ describe('GitHub workflows', () => {
       'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
     ]);
 
-    const actionRefs = readWorkflowFiles().flatMap((fileName) => workflowUses(readWorkflow(fileName)));
+    const actionRefs = readWorkflowFiles().flatMap((fileName) =>
+      workflowUses(readWorkflow(fileName)),
+    );
 
     for (const actionRef of actionRefs) {
       expect(actionRef).toMatch(actionShaPattern);

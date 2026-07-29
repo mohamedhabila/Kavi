@@ -217,10 +217,7 @@ describe('Usage Tracker', () => {
         (1000 * 2.5 + 500 * 15) / 1_000_000,
         10,
       );
-      expect(estimateCost('o4', 1000, 500)).toBeCloseTo(
-        (1000 * 1.1 + 500 * 4.4) / 1_000_000,
-        10,
-      );
+      expect(estimateCost('o4', 1000, 500)).toBeCloseTo((1000 * 1.1 + 500 * 4.4) / 1_000_000, 10);
       expect(estimateCost('anthropic/claude-sonnet-4-7', 1000, 500)).toBeCloseTo(
         (1000 * 3 + 500 * 15) / 1_000_000,
         10,

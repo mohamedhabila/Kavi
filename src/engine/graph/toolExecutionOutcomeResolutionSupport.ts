@@ -1,9 +1,6 @@
 import type { RequestClarificationToolResult } from '../../services/agents/requestClarification';
 import { resolveRequestDecision } from '../../services/agents/requestDecisionPolicy';
-import {
-  REQUEST_FRAME_VERSION,
-  type RequestFrame,
-} from '../../services/agents/requestFrame';
+import { REQUEST_FRAME_VERSION, type RequestFrame } from '../../services/agents/requestFrame';
 import {
   projectRequestUnderstanding,
   summarizeRequestUnderstanding,
@@ -16,11 +13,7 @@ import {
   parseEffectCompletionCriterion,
   parseToolEffectReceiptEvidence,
 } from '../goals/effectCompletionEvidence';
-import {
-  isBlockingGoal,
-  isCodeOwnedEffectCompletionGoal,
-  type AgentGoal,
-} from '../goals/types';
+import { isBlockingGoal, isCodeOwnedEffectCompletionGoal, type AgentGoal } from '../goals/types';
 import type { AgentControlGraphEvent } from './agentControlGraph';
 import type { CanonicalToolExecutionOutcome } from './toolExecutionOutcomeCanonicalization';
 

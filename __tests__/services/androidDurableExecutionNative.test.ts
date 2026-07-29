@@ -5,15 +5,10 @@ describe('Android durable execution native bridge', () => {
     jest.clearAllMocks();
   });
 
-  function loadBridge(options?: {
-    platform?: string;
-    nativeModule?: Record<string, unknown>;
-  }) {
+  function loadBridge(options?: { platform?: string; nativeModule?: Record<string, unknown> }) {
     jest.resetModules();
     jest.doMock('react-native', () => ({
-      NativeModules: options?.nativeModule
-        ? { KaviDurableExecution: options.nativeModule }
-        : {},
+      NativeModules: options?.nativeModule ? { KaviDurableExecution: options.nativeModule } : {},
       Platform: { OS: options?.platform ?? 'android' },
     }));
     return require('../../src/services/executionJournal/androidDurableExecutionNative') as typeof import('../../src/services/executionJournal/androidDurableExecutionNative');
@@ -43,9 +38,7 @@ describe('Android durable execution native bridge', () => {
     const bridge = loadBridge({ nativeModule: module });
     const request = durableRequest();
 
-    await expect(bridge.enqueueAndroidDurableExecution(request)).resolves.toEqual(
-      adapterResult(),
-    );
+    await expect(bridge.enqueueAndroidDurableExecution(request)).resolves.toEqual(adapterResult());
     expect(module.enqueue).toHaveBeenCalledWith(request);
     await expect(bridge.readAndroidDurableExecution('run-1')).resolves.toEqual({
       schema: 1,
@@ -84,12 +77,7 @@ describe('Android durable execution native bridge', () => {
     };
 
     await bridge.completeAndroidDurableExecution(attemptPointer, 'd'.repeat(64), 200);
-    await bridge.retryAndroidDurableExecution(
-      attemptPointer,
-      10_200,
-      'remote_still_pending',
-      200,
-    );
+    await bridge.retryAndroidDurableExecution(attemptPointer, 10_200, 'remote_still_pending', 200);
     await bridge.blockAndroidDurableExecution(attemptPointer, 'authority_changed', 200);
 
     expect(module.complete).toHaveBeenCalledWith(attemptPointer, 'd'.repeat(64), 200);

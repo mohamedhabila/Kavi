@@ -40,8 +40,7 @@ function hasRecordedOutcome(
     message.role === 'assistant'
       ? (message.toolCalls ?? [])
           .filter(
-            (call) =>
-              call.id === handoff.toolCallId && call.name === MOBILE_UI_ACTION_TOOL_NAME,
+            (call) => call.id === handoff.toolCallId && call.name === MOBILE_UI_ACTION_TOOL_NAME,
           )
           .map((call) => ({ message, call }))
       : [],
@@ -81,7 +80,9 @@ export async function prepareForegroundMobileControllerOutcome(params: {
   }
 
   const runId = params.options?.reuseAgentRunId?.trim();
-  const run = runId ? params.conversation?.agentRuns?.find((candidate) => candidate.id === runId) : undefined;
+  const run = runId
+    ? params.conversation?.agentRuns?.find((candidate) => candidate.id === runId)
+    : undefined;
   if (!runId || !run) {
     return { kind: 'rejected', reason: 'owner_missing' };
   }
@@ -176,7 +177,6 @@ export async function resolveForegroundMobileControllerOutcomeGate(params: {
   }
   return {
     kind: 'continue',
-    conversation:
-      preparation.kind === 'applied' ? preparation.conversation : params.conversation,
+    conversation: preparation.kind === 'applied' ? preparation.conversation : params.conversation,
   };
 }

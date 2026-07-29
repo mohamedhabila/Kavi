@@ -159,9 +159,7 @@ describe('localLlm runtime execution', () => {
   it('aborts a stalled local availability check before native inference starts', async () => {
     const provider = createDefaultLocalLlmProvider('local-provider');
     const installedProvider = await installLocalLlmModel(provider, provider.model);
-    mockGetNativeLocalLlmAvailability.mockImplementationOnce(
-      () => new Promise(() => undefined),
-    );
+    mockGetNativeLocalLlmAvailability.mockImplementationOnce(() => new Promise(() => undefined));
     const abortController = new AbortController();
     const abortError = new Error('availability deadline');
     abortError.name = 'AbortError';
@@ -189,9 +187,7 @@ describe('localLlm runtime execution', () => {
     mockStreamWithNativeLocalLlm.mockImplementationOnce(async function* () {
       return;
     });
-    mockCancelNativeLocalLlmRequest.mockImplementationOnce(
-      () => new Promise(() => undefined),
-    );
+    mockCancelNativeLocalLlmRequest.mockImplementationOnce(() => new Promise(() => undefined));
     const abortController = new AbortController();
     const abortError = new Error('cleanup deadline');
     abortError.name = 'AbortError';

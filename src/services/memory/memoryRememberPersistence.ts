@@ -367,9 +367,7 @@ export function persistMemoryRemember(
       replacementReplay ||
       replay?.payload.operation.kind === 'exact_replacement' ||
       (writeInput.scope === 'session' && requestEvidence.taskId === null) ||
-      proposedResolution.currentFacts.some(
-        (fact) => fact.objectText !== writeInput.value,
-      )
+      proposedResolution.currentFacts.some((fact) => fact.objectText !== writeInput.value)
     ) {
       return {
         status: 'grounding_required',
@@ -407,9 +405,7 @@ export function persistMemoryRemember(
         ? ('subjective_user' as const)
         : ('objective' as const),
     sourceAuthority:
-      source.kind === 'current_user'
-        ? ('grounded_user' as const)
-        : ('tool_observed' as const),
+      source.kind === 'current_user' ? ('grounded_user' as const) : ('tool_observed' as const),
     ...(writeInput.scope === 'persona' ? { personaId: context.personaId } : {}),
   };
   const contributionContext = {

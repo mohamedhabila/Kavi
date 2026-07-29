@@ -39,9 +39,7 @@ function makeEpisode(overrides: Partial<Parameters<typeof recordThreadLocalEpiso
   episodeSequence += 1;
   const providedMessageIds = overrides.messageIds;
   const sourceStartMessageId =
-    overrides.sourceStartMessageId ??
-    providedMessageIds?.[0] ??
-    `episode-${episodeSequence}-user`;
+    overrides.sourceStartMessageId ?? providedMessageIds?.[0] ?? `episode-${episodeSequence}-user`;
   const sourceEndMessageId =
     overrides.sourceEndMessageId ??
     providedMessageIds?.[providedMessageIds.length - 1] ??

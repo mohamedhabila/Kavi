@@ -4,7 +4,6 @@
 // Per-conversation agent configuration with optional persona routing.
 // Includes the SuperAgent (orchestrator) persona for agentic-first mode.
 
-
 export interface AgentPersona {
   id: string;
   name: string;

@@ -7,10 +7,7 @@ import {
   inferImageFormatFromMimeType,
   inferImageFormatFromUrl,
 } from './imageGenerationFormats';
-import {
-  decodeBase64Image,
-  deriveGeneratedImageFileName,
-} from './imageGenerationPersistence';
+import { decodeBase64Image, deriveGeneratedImageFileName } from './imageGenerationPersistence';
 
 export interface PreparedImageEditSource {
   uri: string;

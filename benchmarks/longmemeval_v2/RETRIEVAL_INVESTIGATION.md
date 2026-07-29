@@ -17,11 +17,11 @@ truncate memory context. The failure is retrieval quality.
 
 Official harness scores:
 
-| Domain | Questions | Score |
-| --- | ---: | ---: |
-| web | 4 | 0.0 |
-| enterprise | 4 | 0.0 |
-| combined sample | 8 | 0.0 |
+| Domain          | Questions | Score |
+| --------------- | --------: | ----: |
+| web             |         4 |   0.0 |
+| enterprise      |         4 |   0.0 |
+| combined sample |         8 |   0.0 |
 
 All memory contexts were non-truncated. The reader mostly answered `UNKNOWN`
 because retrieved memory was unrelated to the question.
@@ -48,13 +48,13 @@ because retrieved memory was unrelated to the question.
 
 Observed collapse:
 
-| Variant | Web top source | Enterprise top source |
-| --- | --- | --- |
-| current app recall | `2cfe4dab` for all 4 | `72e456ca` for all 4 |
-| app text, recency disabled | diversified but still polluted by generic conversation facts | diversified but still polluted by generic conversation facts |
-| app simple embedding, latest pool | diversified but limited by newest-pool cap | diversified but limited by newest-pool cap |
-| all-facts lexical | diversified and more topical | diversified and more topical |
-| all-facts simple embedding | diversified and more topical | diversified and more topical |
+| Variant                           | Web top source                                               | Enterprise top source                                        |
+| --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| current app recall                | `2cfe4dab` for all 4                                         | `72e456ca` for all 4                                         |
+| app text, recency disabled        | diversified but still polluted by generic conversation facts | diversified but still polluted by generic conversation facts |
+| app simple embedding, latest pool | diversified but limited by newest-pool cap                   | diversified but limited by newest-pool cap                   |
+| all-facts lexical                 | diversified and more topical                                 | diversified and more topical                                 |
+| all-facts simple embedding        | diversified and more topical                                 | diversified and more topical                                 |
 
 Experiment artifacts:
 
@@ -156,13 +156,13 @@ reader thinking enabled. Keep these defaults for official runs.
 
 Targeted experiments on `01f6e679` showed:
 
-| Variant | Result |
-| --- | --- |
-| official 20K reader cap | Stopped normally below cap; answer can vary because the retrieved context contains an incidental UI helper control. |
-| 32K reader cap | Also stopped normally, but still produced the wrong answer in one run; increasing the cap does not fix the semantic failure. |
-| 1K reader cap | Hit `length` before content because Qwen spent most of the budget in reasoning. |
-| low-temperature 20K | Provider returned an error-style completion with reasoning only. |
-| six retrieved memory items | Reproduced a true reader loop that hit the 20K cap by repeating an accessibility-tree label line. |
+| Variant                    | Result                                                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| official 20K reader cap    | Stopped normally below cap; answer can vary because the retrieved context contains an incidental UI helper control.          |
+| 32K reader cap             | Also stopped normally, but still produced the wrong answer in one run; increasing the cap does not fix the semantic failure. |
+| 1K reader cap              | Hit `length` before content because Qwen spent most of the budget in reasoning.                                              |
+| low-temperature 20K        | Provider returned an error-style completion with reasoning only.                                                             |
+| six retrieved memory items | Reproduced a true reader loop that hit the 20K cap by repeating an accessibility-tree label line.                            |
 
 Conclusion: the default reader is not globally capped too tightly. Low caps can
 cause reasoning-only outputs, and higher caps can prolong loops. For malformed or

@@ -69,10 +69,7 @@ export async function runAndroidDurableCandidateHeadlessTask(
   const payload = decodeAndroidDurableCandidateHeadlessPayload(rawPayload);
   let acknowledgement: 'completed' | 'retry' = 'retry';
   try {
-    const result = await dependencies.continueRun(
-      payload.runId,
-      payload.predecessorWorkId,
-    );
+    const result = await dependencies.continueRun(payload.runId, payload.predecessorWorkId);
     acknowledgement = result.kind === 'deferred' ? 'retry' : 'completed';
   } catch {
     acknowledgement = 'retry';

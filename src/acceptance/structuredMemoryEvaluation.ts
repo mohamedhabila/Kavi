@@ -1,7 +1,4 @@
-import {
-  clearStructuredMemoryDatabase,
-  ensureFactSchema,
-} from '../services/memory/schema';
+import { clearStructuredMemoryDatabase, ensureFactSchema } from '../services/memory/schema';
 import { getMemoryDb } from '../services/memory/database';
 import {
   CLEARED_STRUCTURED_MEMORY_TABLES,
@@ -35,7 +32,9 @@ function assertEmptyEvaluationDatabase(database: StructuredMemoryEvaluationDatab
       `SELECT COUNT(*) AS count FROM ${table}`,
     )?.count;
     if (count !== 0) {
-      throw new Error('Structured memory evaluation requires an isolated empty evaluation database.');
+      throw new Error(
+        'Structured memory evaluation requires an isolated empty evaluation database.',
+      );
     }
   }
 }

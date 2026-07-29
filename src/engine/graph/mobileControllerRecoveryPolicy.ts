@@ -84,11 +84,7 @@ function actionSignature(
   coordinateScale: number,
 ): ReadonlyArray<unknown> | null {
   if (action.kind === 'wait') return null;
-  if (
-    action.kind === 'activate' ||
-    action.kind === 'double_tap' ||
-    action.kind === 'long_press'
-  ) {
+  if (action.kind === 'activate' || action.kind === 'double_tap' || action.kind === 'long_press') {
     return [action.kind, ...targetSignature(action.target, coordinateScale)];
   }
   if (action.kind === 'drag') {
@@ -223,7 +219,10 @@ export function resolveMobileControllerRecoveryPreflight(params: {
     };
   }
 
-  if (state?.phase === 'tracking' && state.consecutiveStallCount >= MOBILE_CONTROLLER_STALL_THRESHOLD) {
+  if (
+    state?.phase === 'tracking' &&
+    state.consecutiveStallCount >= MOBILE_CONTROLLER_STALL_THRESHOLD
+  ) {
     const attemptCount = params.directives.automaticRecoveryAttemptCount ?? 0;
     if (attemptCount >= MAX_AGENT_RUN_AUTOMATIC_RECOVERY_ATTEMPTS) {
       return closeRecovery(state, 'recovery_exhausted');

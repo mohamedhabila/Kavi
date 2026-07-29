@@ -21,7 +21,7 @@ export function qualifyMobileControllerObservationImage(value: unknown): Attachm
   const base64 =
     candidate.base64 === undefined
       ? undefined
-      : boundedText(candidate.base64, MAX_BASE64_LENGTH) ?? null;
+      : (boundedText(candidate.base64, MAX_BASE64_LENGTH) ?? null);
   if (
     candidate.type !== 'image' ||
     !id ||

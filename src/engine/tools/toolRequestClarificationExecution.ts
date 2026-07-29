@@ -11,8 +11,7 @@ export function executeRequestClarification(args: unknown) {
       JSON.stringify({
         status: 'error',
         code: parsed.error,
-        error:
-          'Provide one question and one to twelve unique semantic missing_information fields.',
+        error: 'Provide one question and one to twelve unique semantic missing_information fields.',
       }),
     );
   }

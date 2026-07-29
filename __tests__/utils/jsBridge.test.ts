@@ -2,7 +2,11 @@
 // Tests — JS Bridge
 // ---------------------------------------------------------------------------
 
-import { buildFileCache, executeWithBridge, executeWorkspaceJavaScript } from '../../src/utils/jsBridgeExecution';
+import {
+  buildFileCache,
+  executeWithBridge,
+  executeWorkspaceJavaScript,
+} from '../../src/utils/jsBridgeExecution';
 
 describe('buildFileCache', () => {
   it('creates a Map from file array', () => {

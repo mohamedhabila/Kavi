@@ -101,7 +101,7 @@ tag candidate and run the release gate from a clean checkout.
   expansion code is not part of Kavi's bundled chat runtime, and Kavi does not
   pass user or model content to these build-tool glob patterns. The compatible
   modern dependency graph is already on `minimatch@10.2.6 ->
-  brace-expansion@5.0.8`. npm's forced remediation proposes an unsupported
+brace-expansion@5.0.8`. npm's forced remediation proposes an unsupported
   React Native or Expo major change, while overriding legacy callers directly
   to `brace-expansion@5` is API-incompatible. This remains a failing high-audit
   gate, requires explicit release-owner signoff, and must be reviewed whenever

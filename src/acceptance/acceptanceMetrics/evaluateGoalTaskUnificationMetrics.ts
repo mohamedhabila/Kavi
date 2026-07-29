@@ -2,7 +2,11 @@
 // Kavi — Goal ↔ task ↔ memory unification metrics
 // ---------------------------------------------------------------------------
 
-import { aggregateAcceptanceMetrics, buildPassRateSummary, isSummaryPassing } from './aggregateResults';
+import {
+  aggregateAcceptanceMetrics,
+  buildPassRateSummary,
+  isSummaryPassing,
+} from './aggregateResults';
 import { evaluateGoalTaskUnificationFixture } from './evaluateGoalTaskUnificationFixture';
 import { GOAL_TASK_UNIFICATION_FIXTURES } from './goalTaskUnificationFixtures';
 import type { AcceptanceMetricEvaluation } from './types';

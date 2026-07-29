@@ -48,11 +48,7 @@ function getCompletedFileToolPath(
   toolArguments: string,
 ): string | null {
   if (toolStatus !== 'completed') return null;
-  if (
-    toolName !== 'write_file' &&
-    toolName !== 'file_edit' &&
-    toolName !== 'read_file'
-  ) {
+  if (toolName !== 'write_file' && toolName !== 'file_edit' && toolName !== 'read_file') {
     return null;
   }
 
@@ -66,7 +62,9 @@ function getCompletedFileToolPath(
 
 function hasCompletedCanvasResult(toolName: string, toolStatus: ToolCall['status']): boolean {
   if (toolStatus !== 'completed') return false;
-  return ['canvas_create', 'canvas_update', 'canvas_navigate', 'canvas_snapshot'].includes(toolName);
+  return ['canvas_create', 'canvas_update', 'canvas_navigate', 'canvas_snapshot'].includes(
+    toolName,
+  );
 }
 
 const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({
@@ -210,12 +208,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({
       </View>
       {parsedPoll ? <ToolCallPoll poll={parsedPoll} styles={styles} /> : null}
       {expanded ? (
-        <ToolCallBody
-          toolCall={toolCall}
-          styles={styles}
-          iconColor={colors.textSecondary}
-          t={t}
-        />
+        <ToolCallBody toolCall={toolCall} styles={styles} iconColor={colors.textSecondary} t={t} />
       ) : null}
     </View>
   );

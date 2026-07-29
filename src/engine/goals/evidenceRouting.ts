@@ -48,8 +48,7 @@ function goalCriterionMatchesEvidence(goal: AgentGoal, evidence: string): boolea
   };
   return criteria.some(
     (criterion) =>
-      !isCountOnlySuccessCriterion(criterion) &&
-      isSuccessCriterionMet(hypotheticalGoal, criterion),
+      !isCountOnlySuccessCriterion(criterion) && isSuccessCriterionMet(hypotheticalGoal, criterion),
   );
 }
 
@@ -84,9 +83,7 @@ function goalMatchesToolContract(goal: AgentGoal, tool: Pick<ToolDefinition, 'co
 
 function shouldFallbackToSingleUnscopedGoal(goal: AgentGoal, activeGoalCount: number): boolean {
   return (
-    activeGoalCount === 1 &&
-    !hasGoalContractRequirements(goal) &&
-    !hasRoutableSuccessCriteria(goal)
+    activeGoalCount === 1 && !hasGoalContractRequirements(goal) && !hasRoutableSuccessCriteria(goal)
   );
 }
 

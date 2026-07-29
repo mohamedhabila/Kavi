@@ -52,17 +52,12 @@ export function listPendingForegroundModelExecutions(
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PENDING_FOREGROUND_MODEL_RUNS) {
     throw new Error('foreground_model_journal_invalid_limit');
   }
-  if (
-    input.after &&
-    (!validTimestamp(input.after.createdAt) || !validId(input.after.runId))
-  ) {
+  if (input.after && (!validTimestamp(input.after.createdAt) || !validId(input.after.runId))) {
     throw new Error('foreground_model_journal_invalid_cursor');
   }
   const database = (options.getDatabase ?? getExecutionJournalDb)();
   const placeholders = FOREGROUND_MODEL_ACTIVE_RUN_STATUSES.map(() => '?').join(', ');
-  const cursorClause = input.after
-    ? 'AND (created_at > ? OR (created_at = ? AND id > ?))'
-    : '';
+  const cursorClause = input.after ? 'AND (created_at > ? OR (created_at = ? AND id > ?))' : '';
   const cursorParams = input.after
     ? [input.after.createdAt, input.after.createdAt, input.after.runId]
     : [];

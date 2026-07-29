@@ -35,10 +35,7 @@ describe('voice echo similarity', () => {
 
   it('requires ordered textual identity in addition to shared words', () => {
     expect(
-      isLikelyVoiceEcho(
-        'gamma alpha delta beta epsilon',
-        'alpha beta gamma delta epsilon',
-      ),
+      isLikelyVoiceEcho('gamma alpha delta beta epsilon', 'alpha beta gamma delta epsilon'),
     ).toBe(false);
     expect(isLikelyVoiceEcho('gamma alpha beta', 'alpha beta gamma')).toBe(false);
   });

@@ -23,7 +23,9 @@ describe('android litertlm engine lifecycle hardening', () => {
 
   test('registers generate and streaming jobs before they can execute', () => {
     const source = readAndroidSource('LocalLlmRuntime.kt');
-    const generateRegister = source.indexOf('activeRequest = activeRequests.register(request.requestId, job)');
+    const generateRegister = source.indexOf(
+      'activeRequest = activeRequests.register(request.requestId, job)',
+    );
     const generateStart = source.indexOf('job.start()', generateRegister);
     const streamingRegister = source.indexOf(
       'activeRequest = activeRequests.register(request.requestId, job)',
@@ -58,7 +60,9 @@ describe('android litertlm engine lifecycle hardening', () => {
     expect(modelSource).toContain('data class ConversationState(');
     expect(modelSource).toContain('var activeRequestId: String? = null');
     expect(modelSource).toContain('class RuntimeMetrics');
-    expect(storeSource).toContain('require(acquiredConversation.engineState.activeRequestIds.isEmpty())');
+    expect(storeSource).toContain(
+      'require(acquiredConversation.engineState.activeRequestIds.isEmpty())',
+    );
     expect(storeSource).toContain('conversationState?.activeRequestId = requestId');
     expect(storeSource).toContain('require(state.activeRequestId == null)');
     expect(storeSource).toContain('require(state.activeRequestIds.isEmpty())');
@@ -80,11 +84,15 @@ describe('android litertlm engine lifecycle hardening', () => {
     const storeSource = readAndroidSource('LocalLlmEngineStore.kt');
 
     expect(storeSource).toContain('fun acquireConversationOrResetEngine(');
-    expect(storeSource).toContain('fun resetEngineAfterFailure(engineKey: EngineKey, error: Throwable)');
+    expect(storeSource).toContain(
+      'fun resetEngineAfterFailure(engineKey: EngineKey, error: Throwable)',
+    );
     expect(storeSource).toContain('if (error is CancellationException)');
     expect(storeSource).toContain('closeCachedEngine(engineKey)');
     expect(runtimeSource).toContain('engineStore.invalidateConversation(acquiredConversation)');
-    expect(runtimeSource).toContain('engineStore.resetEngineAfterFailure(acquiredConversation.engineState.key, error)');
+    expect(runtimeSource).toContain(
+      'engineStore.resetEngineAfterFailure(acquiredConversation.engineState.key, error)',
+    );
   });
 
   test('keeps active local inference alive with a bounded foreground short service', () => {
@@ -95,7 +103,9 @@ describe('android litertlm engine lifecycle hardening', () => {
 
     expect(manifestSource).toContain('android:name=".localllm.LocalLlmForegroundService"');
     expect(manifestSource).toContain('android:foregroundServiceType="shortService"');
-    expect(runtimeSource).toContain('private val foregroundCoordinator = LocalLlmForegroundCoordinator');
+    expect(runtimeSource).toContain(
+      'private val foregroundCoordinator = LocalLlmForegroundCoordinator',
+    );
     expect(runtimeSource).toContain('activeRequests.cancelAll()');
     expect(runtimeSource).toContain('foregroundCoordinator.onRequestStarted()');
     expect(runtimeSource).toContain('foregroundCoordinator.onRequestFinished()');

@@ -109,10 +109,8 @@ export async function fetchProviderModels(args: {
           const model = id.replace(/^models\//, '');
           return { model, capabilities: resolveDiscoveredModelCapabilities(entry, model) };
         })
-        .filter(
-          (
-            entry: DiscoveredModel | undefined,
-          ): entry is DiscoveredModel => Boolean(entry?.model),
+        .filter((entry: DiscoveredModel | undefined): entry is DiscoveredModel =>
+          Boolean(entry?.model),
         )
         .sort((left, right) => left.model.localeCompare(right.model));
 

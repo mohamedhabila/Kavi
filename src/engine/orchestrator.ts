@@ -69,9 +69,7 @@ export async function runOrchestrator(
     systemPrompt,
     toolFilter: options.toolFilter,
     agentRunId: options.agentRunId,
-    ...(options.mobileController
-      ? { mobileController: options.mobileController }
-      : {}),
+    ...(options.mobileController ? { mobileController: options.mobileController } : {}),
   });
 
   return runOrchestratorGraphSession({

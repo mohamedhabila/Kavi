@@ -72,12 +72,12 @@ within its documented boundary:
 
 | Surface                          | Boundary                                                                                                            |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Primary mobile graph             | Owns run lifecycle, control-graph state, and local persistence; it does not require a Kavi-operated server.          |
-| On-device model                  | Runs supported inference requests locally when selected; unsupported request paths may still need another provider.  |
-| Configured LLM provider          | Receives prompt/context needed for the user-requested turn; credentials should stay in secure-storage abstractions.  |
-| Built-in tools                   | Execute through declared tool contracts and permission-gated native adapters for sensitive device surfaces.          |
-| MCP, SSH, workspace, and browser | Use only user-configured external targets and send the content needed for the requested action.                      |
-| Background and sub-agent work    | Stays scoped to the parent conversation/run and must not expand permissions beyond the initiating workflow.          |
+| Primary mobile graph             | Owns run lifecycle, control-graph state, and local persistence; it does not require a Kavi-operated server.         |
+| On-device model                  | Runs supported inference requests locally when selected; unsupported request paths may still need another provider. |
+| Configured LLM provider          | Receives prompt/context needed for the user-requested turn; credentials should stay in secure-storage abstractions. |
+| Built-in tools                   | Execute through declared tool contracts and permission-gated native adapters for sensitive device surfaces.         |
+| MCP, SSH, workspace, and browser | Use only user-configured external targets and send the content needed for the requested action.                     |
+| Background and sub-agent work    | Stays scoped to the parent conversation/run and must not expand permissions beyond the initiating workflow.         |
 
 ## On-Device Model Behavior
 
@@ -87,15 +87,15 @@ it does not automatically cover every feature or attachment path.
 
 ## Permission Map
 
-| Permission area        | Why Kavi asks for it                                                        |
-| ---------------------- | --------------------------------------------------------------------------- |
-| Microphone             | Voice input, voice notes, and user-requested audio capture.                 |
-| Camera                 | Capturing an image or short video clip for a conversation or tool action.   |
-| System photo picker    | Selecting exact images for attachments or an approved photo-aware action.   |
-| Contacts               | User-requested contact selection or contact-aware actions.                  |
-| Calendar / reminders   | User-requested event or reminder lookup, creation, update, or deletion.      |
-| Location               | User-requested map or location-aware actions.                               |
-| Notifications          | Scheduled reminders, background workflow notifications, and status updates. |
+| Permission area      | Why Kavi asks for it                                                        |
+| -------------------- | --------------------------------------------------------------------------- |
+| Microphone           | Voice input, voice notes, and user-requested audio capture.                 |
+| Camera               | Capturing an image or short video clip for a conversation or tool action.   |
+| System photo picker  | Selecting exact images for attachments or an approved photo-aware action.   |
+| Contacts             | User-requested contact selection or contact-aware actions.                  |
+| Calendar / reminders | User-requested event or reminder lookup, creation, update, or deletion.     |
+| Location             | User-requested map or location-aware actions.                               |
+| Notifications        | Scheduled reminders, background workflow notifications, and status updates. |
 
 ## Contributor Expectations
 

@@ -1,7 +1,4 @@
-import {
-  estimateE2ETokenCostUsd,
-  resolveE2EPricing,
-} from '../../scripts/e2eReport/pricing';
+import { estimateE2ETokenCostUsd, resolveE2EPricing } from '../../scripts/e2eReport/pricing';
 
 const COMPLETE_ENV = {
   E2E_PRICING_INPUT_USD_PER_MILLION: '2',
@@ -17,9 +14,7 @@ describe('E2E pricing evidence', () => {
     const pricing = resolveE2EPricing({});
 
     expect(pricing).toEqual({ status: 'missing', snapshot: null });
-    expect(
-      estimateE2ETokenCostUsd({ inputTokens: 10, outputTokens: 5 }, pricing),
-    ).toBeNull();
+    expect(estimateE2ETokenCostUsd({ inputTokens: 10, outputTokens: 5 }, pricing)).toBeNull();
   });
 
   it('prices uncached, cache-read, cache-write, and output tokens separately', () => {
@@ -48,9 +43,9 @@ describe('E2E pricing evidence', () => {
   });
 
   it('rejects partial, malformed, or negative pricing evidence', () => {
-    expect(() =>
-      resolveE2EPricing({ E2E_PRICING_INPUT_USD_PER_MILLION: '1' }),
-    ).toThrow('configure every rate');
+    expect(() => resolveE2EPricing({ E2E_PRICING_INPUT_USD_PER_MILLION: '1' })).toThrow(
+      'configure every rate',
+    );
     expect(() =>
       resolveE2EPricing({
         ...COMPLETE_ENV,

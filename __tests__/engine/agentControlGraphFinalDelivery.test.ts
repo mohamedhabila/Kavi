@@ -23,9 +23,7 @@ describe('agent control graph final delivery helpers', () => {
 
   it('maps terminal outcomes to final report titles', () => {
     expect(getAgentControlGraphFinalReportTitle('completed')).toBe('Final response delivered');
-    expect(getAgentControlGraphFinalReportTitle('cancelled')).toBe(
-      'Cancellation report delivered',
-    );
+    expect(getAgentControlGraphFinalReportTitle('cancelled')).toBe('Cancellation report delivered');
     expect(getAgentControlGraphFinalReportTitle('failed')).toBe('Failure report delivered');
   });
 

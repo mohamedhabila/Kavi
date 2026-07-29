@@ -104,9 +104,7 @@ afterEach(() => closeMemoryDb());
 describe('structural checkpoint durability receipts', () => {
   it('survives a database reopen with its exact opaque source and write set', () => {
     const { jobId, claimToken } = enqueueAndClaim();
-    const receipt = commitIngestionStructuralCheckpointReceipt(
-      structuralInput(jobId, claimToken),
-    );
+    const receipt = commitIngestionStructuralCheckpointReceipt(structuralInput(jobId, claimToken));
 
     expect(receipt).toMatchObject({
       phase: 'structural_checkpoint',

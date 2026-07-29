@@ -1,10 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const localLlmSourceRoot = join(
-  __dirname,
-  '../../android/app/src/main/java/com/kavi/app/localllm',
-);
+const localLlmSourceRoot = join(__dirname, '../../android/app/src/main/java/com/kavi/app/localllm');
 
 function readSource(file: string): string {
   return readFileSync(join(localLlmSourceRoot, file), 'utf8');
@@ -21,8 +18,12 @@ describe('android litertlm experimental flag and capability policy', () => {
     expect(source).toContain('ExperimentalFlags.enableConversationConstrainedDecoding =');
     expect(source).toContain('ExperimentalFlags.enableSpeculativeDecoding =');
     expect(source).toContain('finally');
-    expect(source).toContain('ExperimentalFlags.enableConversationConstrainedDecoding = previousConstrainedDecoding');
-    expect(source).toContain('ExperimentalFlags.enableSpeculativeDecoding = previousSpeculativeDecoding');
+    expect(source).toContain(
+      'ExperimentalFlags.enableConversationConstrainedDecoding = previousConstrainedDecoding',
+    );
+    expect(source).toContain(
+      'ExperimentalFlags.enableSpeculativeDecoding = previousSpeculativeDecoding',
+    );
     expect(source).toContain('companion object');
     expect(source).toContain('private val lock = Any()');
   });
@@ -59,7 +60,9 @@ describe('android litertlm experimental flag and capability policy', () => {
     expect(modelSource).toContain('speculativeDecodingEnabledCount');
     expect(modelSource).toContain('capabilityCheckFailureCount');
     expect(modelSource).toContain('fun accelerationFeaturesToWritableMap()');
-    expect(deviceInfoSource).toContain('putMap("accelerationFeatures", metrics.accelerationFeaturesToWritableMap())');
+    expect(deviceInfoSource).toContain(
+      'putMap("accelerationFeatures", metrics.accelerationFeaturesToWritableMap())',
+    );
     expect(deviceInfoSource).toContain('putMap("runtimeMetrics", metrics.toWritableMap())');
   });
 });

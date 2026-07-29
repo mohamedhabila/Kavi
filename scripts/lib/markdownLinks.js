@@ -111,7 +111,10 @@ function resolveRelativeLink(projectRoot, sourceFilePath, target) {
   };
 }
 
-function findMarkdownLinkFailures(projectRoot, markdownFiles = listTrackedMarkdownFiles(projectRoot)) {
+function findMarkdownLinkFailures(
+  projectRoot,
+  markdownFiles = listTrackedMarkdownFiles(projectRoot),
+) {
   const failures = [];
 
   for (const filePath of markdownFiles) {

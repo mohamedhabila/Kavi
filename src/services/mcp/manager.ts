@@ -354,8 +354,7 @@ class McpConnectionManager {
           serverId,
           serverName: status.name,
           tool,
-          trustToolAnnotations:
-            this.serverConfigs.get(serverId)?.trustToolAnnotations === true,
+          trustToolAnnotations: this.serverConfigs.get(serverId)?.trustToolAnnotations === true,
         };
         definitions.push(mcpToolToDefinition(entry));
       }

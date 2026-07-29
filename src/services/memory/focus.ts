@@ -197,9 +197,10 @@ export function renderFocusBlock(input: FocusBlockInput): FocusBlockOutput {
 
   const activeFocus = (input.activeFocus ?? '').trim();
   if (activeFocus) {
-    const trimmed = activeFocus.length > ACTIVE_FOCUS_MAX_CHARS
-      ? `${activeFocus.slice(0, ACTIVE_FOCUS_MAX_CHARS - 1).trimEnd()}\u2026`
-      : activeFocus;
+    const trimmed =
+      activeFocus.length > ACTIVE_FOCUS_MAX_CHARS
+        ? `${activeFocus.slice(0, ACTIVE_FOCUS_MAX_CHARS - 1).trimEnd()}\u2026`
+        : activeFocus;
     lines.push(`Recently we were: ${trimmed}`);
   }
 

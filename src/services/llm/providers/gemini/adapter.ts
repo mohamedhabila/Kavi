@@ -1,7 +1,4 @@
-import type {
-  ChatCompletionMessage,
-  MessageRequestOptions,
-} from '../../support/contracts';
+import type { ChatCompletionMessage, MessageRequestOptions } from '../../support/contracts';
 import { buildDeclaredToolNameSet } from '../../core/toolNameFilter';
 
 type GeminiImplicitPromptCacheEvent = {
@@ -36,11 +33,7 @@ export async function sendGeminiNative(args: {
     options: MessageRequestOptions,
     structuredOutputSyntax?: 'responseFormat' | 'responseSchema',
   ) => Record<string, any>;
-  buildGeminiGenerateContentUrl: (
-    baseUrl: string,
-    model: string,
-    methodName: string,
-  ) => string;
+  buildGeminiGenerateContentUrl: (baseUrl: string, model: string, methodName: string) => string;
   shouldRetryGeminiStructuredOutputWithLegacySyntax: (
     status: number,
     body: Record<string, any>,
@@ -50,22 +43,14 @@ export async function sendGeminiNative(args: {
     options?: { declaredToolNames?: ReadonlySet<string> },
   ) => any;
   attachProviderResponse: (payload: any, provider: 'gemini', raw: any) => any;
-  splitCacheableSystemPromptSections: (
-    sections: MessageRequestOptions['systemPromptSections'],
-  ) => { cacheableText?: string; dynamicText?: string };
-  performFetch: (
-    url: string,
-    init: RequestInit,
-    preferStreaming?: boolean,
-  ) => Promise<Response>;
+  splitCacheableSystemPromptSections: (sections: MessageRequestOptions['systemPromptSections']) => {
+    cacheableText?: string;
+    dynamicText?: string;
+  };
+  performFetch: (url: string, init: RequestInit, preferStreaming?: boolean) => Promise<Response>;
 }): Promise<any> {
   const geminiModel = args.buildGeminiModelName(args.model);
-  const body = args.buildGeminiRequestBody(
-    args.baseUrl,
-    geminiModel,
-    args.messages,
-    args.options,
-  );
+  const body = args.buildGeminiRequestBody(args.baseUrl, geminiModel, args.messages, args.options);
   const declaredToolNames = buildDeclaredToolNameSet(args.options.tools);
   const { cacheableText } = args.splitCacheableSystemPromptSections(
     args.options.systemPromptSections,
@@ -83,9 +68,7 @@ export async function sendGeminiNative(args: {
     });
   }
 
-  const methodName = args.options.stream
-    ? 'streamGenerateContent?alt=sse'
-    : 'generateContent';
+  const methodName = args.options.stream ? 'streamGenerateContent?alt=sse' : 'generateContent';
   const requestHeaders = args.options.stream
     ? { ...args.headers, Accept: 'text/event-stream' }
     : args.headers;
@@ -105,10 +88,7 @@ export async function sendGeminiNative(args: {
     const errorText = await response.text().catch(() => response.statusText);
     if (
       !args.options.stream &&
-      args.shouldRetryGeminiStructuredOutputWithLegacySyntax(
-        response.status,
-        body,
-      )
+      args.shouldRetryGeminiStructuredOutputWithLegacySyntax(response.status, body)
     ) {
       const retryBody = args.buildGeminiRequestBody(
         args.baseUrl,

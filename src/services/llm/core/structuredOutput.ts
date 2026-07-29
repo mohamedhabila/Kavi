@@ -14,9 +14,7 @@ export function normalizeStructuredOutputOptions(
       ? value.mimeType.trim()
       : 'application/json';
   const name =
-    typeof value.name === 'string' && value.name.trim().length > 0
-      ? value.name.trim()
-      : undefined;
+    typeof value.name === 'string' && value.name.trim().length > 0 ? value.name.trim() : undefined;
 
   return {
     schema: normalizeToolInputSchema(value.schema),

@@ -105,7 +105,10 @@ function exactStringArray(
   return value;
 }
 
-function decodePersistedStep(value: unknown, expectedSequence: number): PersistedProcedureStep | null {
+function decodePersistedStep(
+  value: unknown,
+  expectedSequence: number,
+): PersistedProcedureStep | null {
   if (
     !isPlainRecord(value) ||
     !exactKeys(value, [
@@ -238,10 +241,7 @@ function decodePersistedLearning(fact: MemoryFact): PersistedProcedureLearning |
     (value) => Boolean(value.trim()) && value === value.trim() && value.length <= 120,
     24,
   );
-  const supportRunIds = exactStringArray(
-    fact.attributes.supportRunIds,
-    isExactMemoryProvenanceId,
-  );
+  const supportRunIds = exactStringArray(fact.attributes.supportRunIds, isExactMemoryProvenanceId);
   const supportFactIds = exactStringArray(
     fact.attributes.supportFactIds,
     isExactMemoryProvenanceId,

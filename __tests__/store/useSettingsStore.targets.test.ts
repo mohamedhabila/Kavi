@@ -179,9 +179,7 @@ describe('useSettingsStore Expo settings', () => {
 
   it('adds, updates, and removes an Expo project', () => {
     useSettingsStore.getState().addExpoProject(makeExpoProject());
-    useSettingsStore
-      .getState()
-      .updateExpoProject(makeExpoProject({ slug: 'openkavi-app-next' }));
+    useSettingsStore.getState().updateExpoProject(makeExpoProject({ slug: 'openkavi-app-next' }));
 
     expect(useSettingsStore.getState().expoProjects[0].slug).toBe('openkavi-app-next');
 

@@ -28,10 +28,7 @@ describe('MobileWorld graph-owned controller protocol', () => {
     expect(capability).toEqual(
       expect.objectContaining({
         environmentClass: 'sandbox',
-        allowedAppIds: [
-          'com.google.android.deskclock',
-          'com.google.android.documentsui',
-        ],
+        allowedAppIds: ['com.google.android.deskclock', 'com.google.android.documentsui'],
         observationEvidence: ['screenshot', 'window_identity'],
         outcomeDeliveryModes: ['deferred'],
         normalizedCoordinateScale: 1_000,
@@ -45,7 +42,10 @@ describe('MobileWorld graph-owned controller protocol', () => {
       { kind: 'activate', target: { kind: 'coordinate', observationId: 'screen-1', x: 10, y: 20 } },
       { action_type: 'click', coordinate: [10, 20] },
     ],
-    [{ kind: 'input_text', text: 'draft' }, { action_type: 'input_text', text: 'draft' }],
+    [
+      { kind: 'input_text', text: 'draft' },
+      { action_type: 'input_text', text: 'draft' },
+    ],
     [{ kind: 'keyboard_enter' }, { action_type: 'keyboard_enter' }],
     [{ kind: 'back' }, { action_type: 'navigate_back' }],
     [{ kind: 'home' }, { action_type: 'navigate_home' }],
@@ -53,11 +53,17 @@ describe('MobileWorld graph-owned controller protocol', () => {
       { kind: 'open_app', appId: 'com.google.android.documentsui' },
       { action_type: 'open_app', app_name: 'com.google.android.documentsui' },
     ],
-    [{ kind: 'scroll', direction: 'down' }, { action_type: 'scroll', direction: 'down' }],
+    [
+      { kind: 'scroll', direction: 'down' },
+      { action_type: 'scroll', direction: 'down' },
+    ],
     [{ kind: 'wait', durationMs: 500 }, { action_type: 'wait' }],
-  ] as const)('maps a product action into the unchanged upstream parser shape', (action, expected) => {
-    expect(mapMobileControllerActionToMobileWorld(action)).toEqual(expected);
-  });
+  ] as const)(
+    'maps a product action into the unchanged upstream parser shape',
+    (action, expected) => {
+      expect(mapMobileControllerActionToMobileWorld(action)).toEqual(expected);
+    },
+  );
 
   it('rejects semantic targets that a screenshot-only host cannot execute', () => {
     expect(() =>

@@ -1,7 +1,4 @@
-import type {
-  SubAgentResult,
-  SubAgentSnapshot,
-} from '../../../src/types/subAgent';
+import type { SubAgentResult, SubAgentSnapshot } from '../../../src/types/subAgent';
 import {
   createSubAgentLifecycleManager,
   waitForSubAgentResultPromise,
@@ -33,10 +30,7 @@ function createHarness(options?: { terminalizeDuringSubscription?: boolean }) {
     (snapshot: SubAgentSnapshot, event: SubAgentTerminalEvent) => void
   >();
 
-  const emitTerminal = (
-    snapshot: SubAgentSnapshot,
-    event: SubAgentTerminalEvent,
-  ): void => {
+  const emitTerminal = (snapshot: SubAgentSnapshot, event: SubAgentTerminalEvent): void => {
     for (const listener of terminalListeners) {
       listener({ ...snapshot }, event);
     }
@@ -170,10 +164,7 @@ describe('event-driven sub-agent completion waits', () => {
       harness.agent.sessionId,
       new Promise<SubAgentResult>(() => undefined),
     );
-    const waiting = harness.manager.waitForSubAgentCompletion(
-      harness.agent.sessionId,
-      10_000,
-    );
+    const waiting = harness.manager.waitForSubAgentCompletion(harness.agent.sessionId, 10_000);
 
     harness.manager.cancelSubAgent(harness.agent.sessionId, 'Provider did not settle.');
 

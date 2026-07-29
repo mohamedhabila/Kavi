@@ -119,11 +119,7 @@ describe('ALL_WORKSPACE_TOOL_DEFINITIONS', () => {
     expect(ALL_WORKSPACE_TOOL_DEFINITIONS).toHaveLength(3);
   });
 
-  const expectedNames = [
-    'workspace_status',
-    'workspace_launch_browser',
-    'workspace_delegate_task',
-  ];
+  const expectedNames = ['workspace_status', 'workspace_launch_browser', 'workspace_delegate_task'];
 
   it('contains all expected workspace tool names', () => {
     const names = ALL_WORKSPACE_TOOL_DEFINITIONS.map((t) => t.name);
@@ -152,9 +148,7 @@ describe('ALL_WORKSPACE_TOOL_DEFINITIONS', () => {
   });
 
   it('workspace_delegate_task requires prompt', () => {
-    const tool = ALL_WORKSPACE_TOOL_DEFINITIONS.find(
-      (t) => t.name === 'workspace_delegate_task',
-    )!;
+    const tool = ALL_WORKSPACE_TOOL_DEFINITIONS.find((t) => t.name === 'workspace_delegate_task')!;
     expect(tool.input_schema.required).toContain('prompt');
   });
 

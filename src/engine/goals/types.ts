@@ -186,9 +186,7 @@ export function isBlockingGoal(
   return resolveGoalCompletionPolicy(goal) === 'blocking';
 }
 
-export function isCodeOwnedEffectCompletionGoal(
-  goal: Pick<AgentGoal, 'owner'>,
-): boolean {
+export function isCodeOwnedEffectCompletionGoal(goal: Pick<AgentGoal, 'owner'>): boolean {
   return goal.owner === CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER;
 }
 
@@ -307,12 +305,8 @@ export function normalizeGoal(value: unknown): AgentGoal | null {
     ...(userConstraintState.state === 'canonical' && !hasUserConstraintConflict
       ? { userConstraints: userConstraintState.constraints }
       : {}),
-    ...(hasUserConstraintConflict
-      ? { userConstraintIntegrity: 'conflict' as const }
-      : {}),
-    ...(hasCompletedConstraintObligation
-      ? { userConstraintDeliveryPending: true as const }
-      : {}),
+    ...(hasUserConstraintConflict ? { userConstraintIntegrity: 'conflict' as const } : {}),
+    ...(hasCompletedConstraintObligation ? { userConstraintDeliveryPending: true as const } : {}),
     completionPolicy,
     ...(blockedReason ? { blockedReason } : {}),
   };

@@ -322,10 +322,10 @@ function hasUsageTokenDetails(
 ): details is UsageTokenDetails {
   return Boolean(
     details &&
-      ((details.inputTextTokens ?? 0) > 0 ||
-        (details.inputImageTokens ?? 0) > 0 ||
-        (details.outputTextTokens ?? 0) > 0 ||
-        (details.outputImageTokens ?? 0) > 0 ||
-        (details.outputThinkingTokens ?? 0) > 0),
+    ((details.inputTextTokens ?? 0) > 0 ||
+      (details.inputImageTokens ?? 0) > 0 ||
+      (details.outputTextTokens ?? 0) > 0 ||
+      (details.outputImageTokens ?? 0) > 0 ||
+      (details.outputThinkingTokens ?? 0) > 0),
   );
 }

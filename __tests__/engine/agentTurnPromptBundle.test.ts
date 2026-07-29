@@ -127,5 +127,4 @@ describe('buildAgentTurnPromptBundle', () => {
       splitCacheableSystemPromptSections(withoutTools.enrichedSystemPromptSections).dynamicText,
     ).toContain('Execution mode for this turn: no registered executable tools');
   });
-
 });

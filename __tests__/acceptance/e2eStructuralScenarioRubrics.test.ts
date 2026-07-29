@@ -324,10 +324,7 @@ describe('E2E benchmark structural completion criteria', () => {
       {
         kind: 'turn_clarification',
         turnIndex: 0,
-        requiredMissingInformation: [
-          { semanticRole: 'recipient' },
-          { semanticRole: 'content' },
-        ],
+        requiredMissingInformation: [{ semanticRole: 'recipient' }, { semanticRole: 'content' }],
       },
       { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
       { kind: 'turn_completion', turnIndex: 0, field: 'execution', expected: false },
@@ -548,9 +545,7 @@ describe('E2E structural mobile assistant scenarios', () => {
         }),
       ]),
     );
-    expect(
-      neutralRubrics.some((rubric) => rubric.kind === 'turn_tool_call_count'),
-    ).toBe(false);
+    expect(neutralRubrics.some((rubric) => rubric.kind === 'turn_tool_call_count')).toBe(false);
   });
 
   it('scoped goal-switch scenario satisfies task-scoped focus rubrics', async () => {

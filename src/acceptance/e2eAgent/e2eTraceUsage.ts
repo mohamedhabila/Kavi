@@ -278,7 +278,7 @@ function buildPromptCacheTrace(
 export function buildUsageTrace(usage: E2ETokenUsageSummary): E2ERedactedUsageTrace {
   const counter = (value: number, label: string) => requireNonNegativeSafeInteger(value, label);
   const tokenBuckets = usage.tokenBuckets
-    ? {
+    ? ({
         systemPromptTokens: counter(
           usage.tokenBuckets.systemPromptTokens,
           'usage.tokenBuckets.systemPromptTokens',
@@ -303,7 +303,7 @@ export function buildUsageTrace(usage: E2ETokenUsageSummary): E2ERedactedUsageTr
           usage.tokenBuckets.toolResultTokens,
           'usage.tokenBuckets.toolResultTokens',
         ),
-      } satisfies UsageTokenBuckets
+      } satisfies UsageTokenBuckets)
     : undefined;
   return {
     inputTokens: counter(usage.inputTokens, 'usage.inputTokens'),

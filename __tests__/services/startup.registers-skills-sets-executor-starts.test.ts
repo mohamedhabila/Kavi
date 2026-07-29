@@ -366,33 +366,29 @@ beforeEach(() => {
 });
 afterAll(() => restoreRequestIdleCallback(originalRequestIdleCallback));
 describe('initializeServices', () => {
-  it(
-    'registers skills, sets executor, and starts scheduler',
-    async () => {
-      const { initializeServices } = require('../../src/services/startup');
-      initializeServices();
-      expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
-      expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
-      expect(mockRemoveRetiredMemoryArtifacts).toHaveBeenCalledTimes(1);
-      expect(mockInitializeNotifications).toHaveBeenCalledTimes(1);
-      await waitFor(() =>
-        expect(mockConnectAll).toHaveBeenCalledWith([
-          {
-            id: 'mcp-1',
-            name: 'Petstore',
-            url: 'https://petstore.run.mcp.com.ai/mcp',
-            enabled: true,
-          },
-        ]),
-      );
-      expect(mockSetSchedulerExecutor).toHaveBeenCalledTimes(1);
-      expect(mockStartScheduler).toHaveBeenCalledTimes(1);
-      await waitFor(() =>
-        expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true }),
-      );
-    },
-    15_000,
-  );
+  it('registers skills, sets executor, and starts scheduler', async () => {
+    const { initializeServices } = require('../../src/services/startup');
+    initializeServices();
+    expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
+    expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
+    expect(mockRemoveRetiredMemoryArtifacts).toHaveBeenCalledTimes(1);
+    expect(mockInitializeNotifications).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(mockConnectAll).toHaveBeenCalledWith([
+        {
+          id: 'mcp-1',
+          name: 'Petstore',
+          url: 'https://petstore.run.mcp.com.ai/mcp',
+          enabled: true,
+        },
+      ]),
+    );
+    expect(mockSetSchedulerExecutor).toHaveBeenCalledTimes(1);
+    expect(mockStartScheduler).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true }),
+    );
+  }, 15_000);
   it('reconciles scheduled jobs when the app returns to foreground', async () => {
     const { handleAppBackground, handleAppForeground } = require('../../src/services/startup');
     handleAppForeground();

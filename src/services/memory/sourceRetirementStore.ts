@@ -306,11 +306,7 @@ export function loadPriorRetiredFactContributionsInTransaction(
     LOOKUP_CONTRIBUTION_LIMIT,
   );
   const rows: RetiredContributionRow[] = [];
-  for (
-    let offset = 0;
-    offset < contributionIds.length;
-    offset += LOOKUP_CONTRIBUTION_BATCH_SIZE
-  ) {
+  for (let offset = 0; offset < contributionIds.length; offset += LOOKUP_CONTRIBUTION_BATCH_SIZE) {
     const batch = contributionIds.slice(offset, offset + LOOKUP_CONTRIBUTION_BATCH_SIZE);
     rows.push(
       ...db.getAllSync<RetiredContributionRow>(

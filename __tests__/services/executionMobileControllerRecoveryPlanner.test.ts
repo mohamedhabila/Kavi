@@ -68,13 +68,15 @@ function foregroundOwner(
   };
 }
 
-function mobileRecoverySnapshot(input: {
-  run?: ExecutionRunRecord;
-  foregroundOwner?: ExecutionRecoveryForegroundOwner | null;
-  effects?: ExecutionEffectRecord[];
-  handles?: ExecutionExternalHandleRecord[];
-  checkpoints?: ReturnType<typeof waitingHistory>;
-} = {}) {
+function mobileRecoverySnapshot(
+  input: {
+    run?: ExecutionRunRecord;
+    foregroundOwner?: ExecutionRecoveryForegroundOwner | null;
+    effects?: ExecutionEffectRecord[];
+    handles?: ExecutionExternalHandleRecord[];
+    checkpoints?: ReturnType<typeof waitingHistory>;
+  } = {},
+) {
   const handles = input.handles ?? [mobileHandle()];
   return recoverySnapshot({
     run: input.run ?? recoveryRun({ status: 'waiting', taskId: 'execution-run-1' }),

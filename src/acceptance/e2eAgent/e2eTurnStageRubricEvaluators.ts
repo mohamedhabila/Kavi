@@ -259,10 +259,7 @@ export function evaluateE2ETurnStageRubric(
           detail:
             `turn ${rubric.turnIndex} clarification omitted information: ` +
             missingRequirements
-              .map(
-                (requirement) =>
-                  `${requirement.semanticRole}:${requirement.key ?? '*'}`,
-              )
+              .map((requirement) => `${requirement.semanticRole}:${requirement.key ?? '*'}`)
               .join(','),
         };
       }
@@ -280,10 +277,7 @@ export function evaluateE2ETurnStageRubric(
         detail:
           `turn ${rubric.turnIndex} clarification requested information: ` +
           requirements
-            .map(
-              (requirement) =>
-                `${requirement.semanticRole}:${requirement.key ?? '*'}`,
-            )
+            .map((requirement) => `${requirement.semanticRole}:${requirement.key ?? '*'}`)
             .join(','),
       };
     }

@@ -34,8 +34,12 @@ describe('SUPER_AGENT_PERSONA', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT.length).toBeGreaterThan(500);
     expect(SUPER_AGENT_SYSTEM_PROMPT.length).toBeLessThan(3000);
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('## Agent Contract');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('do not emit a formal workstream plan before the first tool call');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('start acting and keep any short pre-tool explanation concise');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'do not emit a formal workstream plan before the first tool call',
+    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'start acting and keep any short pre-tool explanation concise',
+    );
     expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('Workstreams:');
     expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain(['Phase', '1'].join(' '));
   });
@@ -71,17 +75,25 @@ describe('SUPER_AGENT_PERSONA', () => {
   it('reserves direct handling for trivial tasks only', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Trivial Q&A and one-shot lookups');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('answer directly');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('highest-leverage tool that directly fits the next work unit');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('launch the worker directly instead of preflighting with supervisor tools');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'highest-leverage tool that directly fits the next work unit',
+    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'launch the worker directly instead of preflighting with supervisor tools',
+    );
   });
 
   it('keeps delegation deliberate and gap-driven', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('delegate only for named gaps');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('workers only when they materially improve completion');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'workers only when they materially improve completion',
+    );
   });
 
   it('discourages repeated unchanged calls', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Do not repeat unchanged discovery, status, list, or search calls');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'Do not repeat unchanged discovery, status, list, or search calls',
+    );
   });
 
   it('requires current-time awareness for freshness-sensitive work', () => {
@@ -154,7 +166,9 @@ describe('ConversationMode type', () => {
 describe('SuperAgent prompt — sub-agent tool guidance', () => {
   it('instructs to pass a focused tools array in sessions_spawn', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('When using sessions_spawn');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain("omit tools unless you need to narrow the worker's scope");
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      "omit tools unless you need to narrow the worker's scope",
+    );
   });
 
   it('keeps workstream binding optional without forcing a formal plan', () => {
@@ -163,7 +177,9 @@ describe('SuperAgent prompt — sub-agent tool guidance', () => {
   });
 
   it('keeps tool discovery and capability bridging narrow', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Use python as a capability bridge only when first-class tools are insufficient');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'Use python as a capability bridge only when first-class tools are insufficient',
+    );
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
       'Use tool_catalog only when the exposed tool surface is insufficient for the next step',
     );

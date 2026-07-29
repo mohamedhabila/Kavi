@@ -161,7 +161,11 @@ function readPriorEventObservation(payload: JsonObject): PriorEventObservation |
   throw new Error('bridge_prior_event_kind_invalid');
 }
 
-function decodePng(payload: JsonObject): { base64: string; bytes: number; digest: `sha256:${string}` } {
+function decodePng(payload: JsonObject): {
+  base64: string;
+  bytes: number;
+  digest: `sha256:${string}`;
+} {
   const base64 = requirePayloadText(payload, 'screenshot_base64');
   const decoded = Buffer.from(base64, 'base64');
   if (

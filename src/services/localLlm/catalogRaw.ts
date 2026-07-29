@@ -47,7 +47,7 @@ export const RAW_LOCAL_MODEL_CATALOG: LocalLlmRawCatalogEntry[] = [
       },
     ],
     updateInfo:
-      "Updated Gemma 4 artifacts can enable built-in Multi Token Prediction for faster decode on supported workloads.",
+      'Updated Gemma 4 artifacts can enable built-in Multi Token Prediction for faster decode on supported workloads.',
     summary:
       'Balanced multimodal Gemma 4 model with the strongest agentic fit in the local catalog.',
   },
@@ -83,7 +83,7 @@ export const RAW_LOCAL_MODEL_CATALOG: LocalLlmRawCatalogEntry[] = [
       },
     ],
     updateInfo:
-      "Updated Gemma 4 artifacts can enable built-in Multi Token Prediction for faster decode on supported workloads.",
+      'Updated Gemma 4 artifacts can enable built-in Multi Token Prediction for faster decode on supported workloads.',
     summary: 'Higher-quality multimodal Gemma 4 option for larger Android devices.',
   },
   {

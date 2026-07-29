@@ -5,13 +5,7 @@ import type { GeneratedImagePayload, ImageEditRequest, ImageGenerationRequest } 
 
 type GeminiImageSizeValue = '512' | '1K' | '2K' | '4K';
 
-const GEMINI_IMAGE_ASPECT_RATIOS = new Set([
-  '1:1',
-  '3:4',
-  '4:3',
-  '9:16',
-  '16:9',
-]);
+const GEMINI_IMAGE_ASPECT_RATIOS = new Set(['1:1', '3:4', '4:3', '9:16', '16:9']);
 
 const GEMINI_IMAGE_SIZE_VALUES = new Set<GeminiImageSizeValue>(['512', '1K', '2K', '4K']);
 
@@ -83,12 +77,16 @@ function buildGeminiGenerateContentUrl(baseUrl: string, model: string): string {
   return `${baseUrl}/${modelPath}:generateContent`;
 }
 
-function buildGeminiImageRequestBody(options: Pick<ImageGenerationRequest, 'prompt' | 'size'>): Record<string, any> {
+function buildGeminiImageRequestBody(
+  options: Pick<ImageGenerationRequest, 'prompt' | 'size'>,
+): Record<string, any> {
   return {
-    contents: [{
-      role: 'user',
-      parts: [{ text: options.prompt }],
-    }],
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: options.prompt }],
+      },
+    ],
     generationConfig: buildGeminiImageGenerationConfig(options.size),
   };
 }
@@ -140,11 +138,12 @@ function buildGeminiImageGenerationConfig(size?: string): Record<string, any> {
 }
 
 function parseGeminiInlineDataUrl(value: unknown): { mimeType: string; data: string } | null {
-  const url = typeof value === 'string'
-    ? value
-    : value && typeof value === 'object' && typeof (value as { url?: unknown }).url === 'string'
-      ? (value as { url: string }).url
-      : '';
+  const url =
+    typeof value === 'string'
+      ? value
+      : value && typeof value === 'object' && typeof (value as { url?: unknown }).url === 'string'
+        ? (value as { url: string }).url
+        : '';
 
   if (!url) {
     return null;
@@ -301,7 +300,9 @@ function extractGeminiImagePayload(json: any, model: string): GeneratedImagePayl
   }
 
   const candidates = Array.isArray(json?.candidates)
-    ? json.candidates.filter((candidate: unknown): candidate is Record<string, any> => Boolean(candidate && typeof candidate === 'object'))
+    ? json.candidates.filter((candidate: unknown): candidate is Record<string, any> =>
+        Boolean(candidate && typeof candidate === 'object'),
+      )
     : [];
   if (candidates.length === 0) {
     throw new Error('Gemini image generation returned no candidates');
@@ -316,7 +317,9 @@ function extractGeminiImagePayload(json: any, model: string): GeneratedImagePayl
     }
 
     const parts = Array.isArray(candidate.content?.parts)
-      ? candidate.content.parts.filter((part: unknown): part is Record<string, any> => Boolean(part && typeof part === 'object'))
+      ? candidate.content.parts.filter((part: unknown): part is Record<string, any> =>
+          Boolean(part && typeof part === 'object'),
+        )
       : [];
 
     for (const part of parts) {

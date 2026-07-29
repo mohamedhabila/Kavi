@@ -74,10 +74,7 @@ export async function getEmbedding(text: string, config: EmbeddingConfig) {
   };
 }
 
-export async function getEmbeddingCached(
-  text: string,
-  config: EmbeddingConfig,
-): Promise<number[]> {
+export async function getEmbeddingCached(text: string, config: EmbeddingConfig): Promise<number[]> {
   return getLocalTextEmbedding(text, config.dimensions ?? DEFAULT_DIMENSIONS);
 }
 

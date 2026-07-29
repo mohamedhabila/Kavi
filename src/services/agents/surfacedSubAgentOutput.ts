@@ -82,8 +82,14 @@ function selectSurfacedOutputSlice(
   > &
     Pick<SessionSurfaceOutputOptions, 'startMarker' | 'endMarker'>,
 ): { result?: SurfaceSelectionResult; error?: string } {
-  const { startMarker, endMarker, includeStartMarker, includeEndMarker, fallbackToFullOutput, trim } =
-    options;
+  const {
+    startMarker,
+    endMarker,
+    includeStartMarker,
+    includeEndMarker,
+    fallbackToFullOutput,
+    trim,
+  } = options;
 
   if (!startMarker && !endMarker) {
     const selectedOutput = trim ? sourceOutput.trim() : sourceOutput;
@@ -155,7 +161,8 @@ function selectSurfacedOutputSlice(
           selectedOutput: trim ? sourceOutput.trim() : sourceOutput,
           selectionApplied: false,
           usedFullOutput: true,
-          selectionFallbackReason: 'Selected output bounds were invalid; using the full worker output instead.',
+          selectionFallbackReason:
+            'Selected output bounds were invalid; using the full worker output instead.',
         },
       };
     }
@@ -244,7 +251,9 @@ export function createSurfacedSubAgentOutputPayload(params: {
 
   const output = `${prefix}${selectedOutput}${suffix}`;
   if (!output.trim()) {
-    return { error: 'The surfaced worker output is empty after applying the requested boundaries.' };
+    return {
+      error: 'The surfaced worker output is empty after applying the requested boundaries.',
+    };
   }
 
   return {

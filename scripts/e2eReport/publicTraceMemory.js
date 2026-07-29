@@ -4,19 +4,12 @@ const {
   E2E_PUBLIC_INGESTION_PROVIDER_OUTCOMES,
   E2E_PUBLIC_INGESTION_RECEIPT_OUTCOME_CODES,
 } = require('../../src/acceptance/e2eAgent/e2eTraceMemoryPolicy.ts');
-const {
-  asRecord,
-  nonNegativeInteger,
-  projectArray,
-  safeEnum,
-} = require('./publicTracePrimitives');
+const { asRecord, nonNegativeInteger, projectArray, safeEnum } = require('./publicTracePrimitives');
 
 const INGESTION_JOB_STATUSES = new Set(E2E_PUBLIC_INGESTION_JOB_STATUSES);
 const INGESTION_PROVIDER_OUTCOMES = new Set(E2E_PUBLIC_INGESTION_PROVIDER_OUTCOMES);
 const INGESTION_OUTCOME_CODES = new Set(E2E_PUBLIC_INGESTION_OUTCOME_CODES);
-const INGESTION_RECEIPT_OUTCOME_CODES = new Set(
-  E2E_PUBLIC_INGESTION_RECEIPT_OUTCOME_CODES,
-);
+const INGESTION_RECEIPT_OUTCOME_CODES = new Set(E2E_PUBLIC_INGESTION_RECEIPT_OUTCOME_CODES);
 
 function projectEnumCount(value, allowed) {
   const source = asRecord(value);

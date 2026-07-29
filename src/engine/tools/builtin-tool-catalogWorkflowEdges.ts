@@ -61,7 +61,6 @@ export function buildToolCatalogWorkflowEdges(
 
   return Array.from(edges.values()).sort(
     (left, right) =>
-      left.producer.localeCompare(right.producer) ||
-      left.consumer.localeCompare(right.consumer),
+      left.producer.localeCompare(right.producer) || left.consumer.localeCompare(right.consumer),
   );
 }

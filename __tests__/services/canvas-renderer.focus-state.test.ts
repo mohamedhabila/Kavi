@@ -1,4 +1,11 @@
-import { closeCanvasSurface, processCanvasMessage, getFocusedCanvasSurfaceId, openCanvasSurface, clearAllSurfaces, setCanvasEventHandler } from '../../src/services/canvas/renderer';
+import {
+  closeCanvasSurface,
+  processCanvasMessage,
+  getFocusedCanvasSurfaceId,
+  openCanvasSurface,
+  clearAllSurfaces,
+  setCanvasEventHandler,
+} from '../../src/services/canvas/renderer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 describe('Canvas Renderer', () => {

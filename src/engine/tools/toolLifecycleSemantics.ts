@@ -40,9 +40,7 @@ export function descriptorContinuesExternalExecution(
   return descriptor.workflowStages.includes('continue_external_execution');
 }
 
-export function descriptorStartsExternalExecution(
-  descriptor: ToolCapabilityDescriptor,
-): boolean {
+export function descriptorStartsExternalExecution(descriptor: ToolCapabilityDescriptor): boolean {
   if (descriptor.workflowStages.includes('start_external_execution')) {
     return true;
   }
@@ -88,9 +86,7 @@ export function descriptorHasLocalArtifactProducerEffect(
   );
 }
 
-export function descriptorIsPassiveAsyncObserver(
-  descriptor: ToolCapabilityDescriptor,
-): boolean {
+export function descriptorIsPassiveAsyncObserver(descriptor: ToolCapabilityDescriptor): boolean {
   return (
     descriptor.sideEffects.every((sideEffect) => sideEffect === 'none') &&
     descriptor.capabilities.some(
@@ -130,9 +126,7 @@ export function descriptorHasObserverEffect(descriptor: ToolCapabilityDescriptor
   );
 }
 
-export function descriptorHasInspectionEffect(
-  descriptor: ToolCapabilityDescriptor,
-): boolean {
+export function descriptorHasInspectionEffect(descriptor: ToolCapabilityDescriptor): boolean {
   return (
     descriptor.sideEffects.every((sideEffect) => sideEffect === 'none') &&
     descriptor.workflowStages.some(

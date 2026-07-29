@@ -90,7 +90,11 @@ describe('correctMemoryFactForManagement', () => {
     });
     expect(history).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: old.id, objectText: 'Amsterdam', invalidAt: expect.any(Number) }),
+        expect.objectContaining({
+          id: old.id,
+          objectText: 'Amsterdam',
+          invalidAt: expect.any(Number),
+        }),
         expect.objectContaining({
           objectText: 'Utrecht',
           attributes: { preference: true },
@@ -149,14 +153,18 @@ describe('correctMemoryFactForManagement', () => {
       now: 300,
     });
 
-    expect(correctMemoryFactForManagement({ factId: expired.id, value: 'Rotterdam' })).toMatchObject({
+    expect(
+      correctMemoryFactForManagement({ factId: expired.id, value: 'Rotterdam' }),
+    ).toMatchObject({
       ok: false,
       code: 'not_found',
     });
-    expect(correctMemoryFactForManagement({ factId: internal.id, value: 'Changed' })).toMatchObject({
-      ok: false,
-      code: 'invalid_args',
-    });
+    expect(correctMemoryFactForManagement({ factId: internal.id, value: 'Changed' })).toMatchObject(
+      {
+        ok: false,
+        code: 'invalid_args',
+      },
+    );
     expect(getFactById(expired.id)?.objectText).toBe('Amsterdam');
     expect(getFactById(internal.id)?.objectText).toBe('Internal summary');
   });

@@ -6,7 +6,8 @@ export function createWeatherSkill(): Skill {
   return {
     id: 'weather',
     name: 'Weather',
-    description: 'Current weather and 5-day forecasts using geocoded location lookups or lat/lon coordinates',
+    description:
+      'Current weather and 5-day forecasts using geocoded location lookups or lat/lon coordinates',
     version: '2.0.0',
     tools: [
       createApiTool(

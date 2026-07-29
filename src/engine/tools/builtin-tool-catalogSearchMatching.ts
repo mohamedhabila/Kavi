@@ -52,10 +52,7 @@ export function scoreEntryQueryMatch(
   for (const queryToken of queryTokens) {
     let tokenScore = 0;
     for (const candidateToken of entry.searchTokens) {
-      tokenScore = Math.max(
-        tokenScore,
-        scoreStructuralIdentifierToken(queryToken, candidateToken),
-      );
+      tokenScore = Math.max(tokenScore, scoreStructuralIdentifierToken(queryToken, candidateToken));
     }
     score += tokenScore;
   }

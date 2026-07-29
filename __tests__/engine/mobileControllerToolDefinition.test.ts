@@ -62,9 +62,7 @@ describe('mobile controller tool definition', () => {
     expect(definition?.input_schema.properties).not.toHaveProperty('text');
     const target = definition?.input_schema.properties.target as Record<string, any>;
     expect(target.properties.x.maximum).toBe(999);
-    expect(definition?.description).toContain(
-      'normalized across the image from 0 to 999',
-    );
+    expect(definition?.description).toContain('normalized across the image from 0 to 999');
     expect(target.properties.kind.enum).toEqual(['coordinate']);
     expect(target.required).toEqual(['kind', 'observationId', 'x', 'y']);
     expect(target.properties).not.toHaveProperty('elementId');

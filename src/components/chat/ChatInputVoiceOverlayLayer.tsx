@@ -47,7 +47,9 @@ export const ChatInputVoiceOverlayLayer = React.memo(function ChatInputVoiceOver
             : props.t('chat.voiceReleaseToSend')
         }
         secondaryHint={props.isTranscribing ? undefined : props.t('chat.voiceSlideUpToCancel')}
-        pillLabel={props.isTranscribing ? props.t('voice.transcribing') : props.t('voice.listening')}
+        pillLabel={
+          props.isTranscribing ? props.t('voice.transcribing') : props.t('voice.listening')
+        }
       />
     </View>
   );

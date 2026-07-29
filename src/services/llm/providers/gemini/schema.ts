@@ -10,9 +10,7 @@ import {
  * Gemini function calling performs better when descriptions include purpose,
  * invocation conditions, and parameter semantics.
  */
-export function simplifyGeminiToolDescription(
-  description: string | undefined,
-): string {
+export function simplifyGeminiToolDescription(description: string | undefined): string {
   const trimmed = (description || '').trim();
   if (!trimmed) return '';
   if (trimmed.length <= 2000) return trimmed;
@@ -41,16 +39,10 @@ export function cleanGeminiSchema(
   normalizeGeminiNullableType(result);
 
   if (Array.isArray(result.enum)) {
-    const normalizedType =
-      typeof result.type === 'string' ? result.type.toLowerCase() : '';
-    const allStringEnumValues = result.enum.every(
-      (value: unknown) => typeof value === 'string',
-    );
+    const normalizedType = typeof result.type === 'string' ? result.type.toLowerCase() : '';
+    const allStringEnumValues = result.enum.every((value: unknown) => typeof value === 'string');
 
-    if (
-      !preserveJsonSchemaConstraints &&
-      (normalizedType !== 'string' || !allStringEnumValues)
-    ) {
+    if (!preserveJsonSchemaConstraints && (normalizedType !== 'string' || !allStringEnumValues)) {
       const allowedValues = result.enum
         .map((value: unknown) => {
           if (typeof value === 'string') {
@@ -62,16 +54,10 @@ export function cleanGeminiSchema(
             return String(value);
           }
         })
-        .filter(
-          (value: unknown): value is string =>
-            typeof value === 'string' && value.length > 0,
-        );
+        .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
 
       if (allowedValues.length > 0) {
-        appendSchemaConstraintDescription(
-          result,
-          `Allowed values: ${allowedValues.join(', ')}.`,
-        );
+        appendSchemaConstraintDescription(result, `Allowed values: ${allowedValues.join(', ')}.`);
       }
 
       delete result.enum;
@@ -117,9 +103,7 @@ export function cleanGeminiSchema(
 
   if (Array.isArray(result.anyOf)) {
     result.anyOf = dedupeSchemaVariants(
-      result.anyOf.map((entry: Record<string, any>) =>
-        cleanGeminiSchema(entry, options),
-      ),
+      result.anyOf.map((entry: Record<string, any>) => cleanGeminiSchema(entry, options)),
     );
   }
 

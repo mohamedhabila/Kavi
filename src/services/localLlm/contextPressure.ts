@@ -6,10 +6,7 @@ export type LocalLlmContextPressureReason =
   | 'system_prompt_exceeds_budget'
   | 'tool_payload_exceeds_budget';
 
-export type LocalLlmContextCompactionState =
-  | 'full'
-  | 'history_windowed'
-  | 'history_compacted';
+export type LocalLlmContextCompactionState = 'full' | 'history_windowed' | 'history_compacted';
 
 export interface LocalLlmContextTelemetry {
   contextWindowTokens: number | null;

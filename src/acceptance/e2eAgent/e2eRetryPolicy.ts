@@ -4,9 +4,7 @@
 
 export const E2E_MAX_SCENARIO_RETRIES_ENV = 'E2E_MAX_SCENARIO_RETRIES';
 
-export function resolveE2EScenarioMaxRetries(
-  env: NodeJS.ProcessEnv = process.env,
-): number {
+export function resolveE2EScenarioMaxRetries(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env[E2E_MAX_SCENARIO_RETRIES_ENV]?.trim();
   if (!raw) {
     return 0;

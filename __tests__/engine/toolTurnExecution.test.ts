@@ -427,10 +427,7 @@ describe('toolTurnExecution', () => {
   it('projects the three-stall recovery guard into tool preflight before dispatch', async () => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle: any) => {
-      const blocker = lifecycle.workflowToolCallBlocker(
-        lifecycle.tc.name,
-        lifecycle.tc.arguments,
-      );
+      const blocker = lifecycle.workflowToolCallBlocker(lifecycle.tc.name, lifecycle.tc.arguments);
       expect(blocker).toContain('equivalent_strategy_stalled');
       return {
         toolCallId: lifecycle.tc.id,

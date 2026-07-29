@@ -108,7 +108,10 @@ export async function transitionForegroundClarificationAdmission(params: {
 }): Promise<ForegroundClarificationAdmissionTransition> {
   const admissionResult = await resolveForegroundClarificationReplyAdmission(params);
   if (admissionResult.kind === 'superseded') {
-    return { kind: 'stopped', detail: 'The request was superseded during clarification admission.' };
+    return {
+      kind: 'stopped',
+      detail: 'The request was superseded during clarification admission.',
+    };
   }
   const admission = admissionResult.admission;
   let preparedBootstrap = params.preparedBootstrap;

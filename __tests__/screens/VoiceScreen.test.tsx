@@ -262,9 +262,7 @@ describe('VoiceScreen', () => {
     });
 
     expect(
-      getByText(
-        'Microphone access is off. Enable it in your device settings, then try again.',
-      ),
+      getByText('Microphone access is off. Enable it in your device settings, then try again.'),
     ).toBeTruthy();
     expect(queryByText('secret native recorder code 0xBAD')).toBeNull();
 

@@ -253,9 +253,7 @@ describe('CodeEditorScreen', () => {
     expect(getByTestId('code-editor-scratch-notice')).toBeTruthy();
     expect(getByText('codeEditor.scratchModeMessage')).toBeTruthy();
     expect(getByLabelText('codeEditor.filePathLabel').props.editable).toBe(false);
-    expect(getByTestId('code-editor-new-file').props.accessibilityLabel).toBe(
-      'codeEditor.newFile',
-    );
+    expect(getByTestId('code-editor-new-file').props.accessibilityLabel).toBe('codeEditor.newFile');
     expect(StyleSheet.flatten(getByTestId('code-editor-new-file').props.style).minHeight).toBe(48);
     expect(queryByLabelText('codeEditor.saveFile')).toBeNull();
 
@@ -350,7 +348,9 @@ describe('CodeEditorScreen', () => {
     expect(getByTestId('code-editor-target-ws-1').props.accessibilityState).toEqual({
       selected: true,
     });
-    expect(StyleSheet.flatten(getByTestId('code-editor-target-ws-1').props.style).minHeight).toBe(48);
+    expect(StyleSheet.flatten(getByTestId('code-editor-target-ws-1').props.style).minHeight).toBe(
+      48,
+    );
     expect(getByTestId('code-editor-browse-files').props.accessibilityLabel).toBe(
       'codeEditor.browseFiles',
     );

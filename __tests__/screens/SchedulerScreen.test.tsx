@@ -301,9 +301,7 @@ describe('SchedulerScreen', () => {
     expect(getByTestId('scheduler-schedule-type-group').props.accessibilityLabel).toBe(
       'When should it happen?',
     );
-    expect(getByTestId('scheduler-schedule-type-group').props.accessibilityRole).toBe(
-      'radiogroup',
-    );
+    expect(getByTestId('scheduler-schedule-type-group').props.accessibilityRole).toBe('radiogroup');
     const repeat = getByTestId('scheduler-schedule-repeat');
     expect(repeat.props.accessibilityLabel).toBe('Repeat');
     expect(repeat.props.accessibilityState).toEqual({ selected: true });
@@ -311,9 +309,7 @@ describe('SchedulerScreen', () => {
     expect(getByTestId('scheduler-schedule-advanced').props.accessibilityLabel).toBe(
       'Advanced schedule',
     );
-    expect(getByTestId('scheduler-interval-unit-group').props.accessibilityRole).toBe(
-      'radiogroup',
-    );
+    expect(getByTestId('scheduler-interval-unit-group').props.accessibilityRole).toBe('radiogroup');
     expect(getByTestId('scheduler-unit-days').props.accessibilityLabel).toBe('days');
     expect(getByTestId('scheduler-create-submit').props.accessibilityLabel).toBe('Create');
     fireEvent.press(getByTestId('scheduler-create-close'));

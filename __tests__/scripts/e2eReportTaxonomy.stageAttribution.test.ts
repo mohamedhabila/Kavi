@@ -47,11 +47,7 @@ describe('E2E report stage-attribution taxonomy', () => {
       'turn_native_invocation_count',
       'native_side_effect_failure',
     ],
-    [
-      'fixture:turn-0:all:turn_tool_call_count',
-      'turn_tool_call_count',
-      'wrong_tool',
-    ],
+    ['fixture:turn-0:all:turn_tool_call_count', 'turn_tool_call_count', 'wrong_tool'],
   ])('classifies %s from its current structural outcome id', (failureId, kind, category) => {
     expect(taxonomy.parseRubricKind(failureId)).toBe(kind);
     expect(taxonomy.inferFailureCategories(buildFailedEntry(failureId), 0.25)).toEqual([category]);

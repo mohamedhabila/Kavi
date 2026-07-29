@@ -12,7 +12,7 @@ describe('paired E2E run ID contract', () => {
     );
   });
 
-  it.each(['../escape', 'run/id', ' run-id', 'run-id ', '.', '..', 'UPPER']) (
+  it.each(['../escape', 'run/id', ' run-id', 'run-id ', '.', '..', 'UPPER'])(
     'rejects non-canonical identifier %p',
     (runId) => {
       expect(() => requireE2ePairedRunId(runId)).toThrow('bounded path-free identifier');

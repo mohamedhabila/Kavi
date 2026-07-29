@@ -1,7 +1,7 @@
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import {
-buildPendingAsyncOperationJoinNote,
-type TrackedAsyncOperation as PendingTrackedAsyncOperation,
+  buildPendingAsyncOperationJoinNote,
+  type TrackedAsyncOperation as PendingTrackedAsyncOperation,
 } from '../pendingAsyncOperations';
 import type { AgentControlGraphEvent } from './agentControlGraphTypes';
 
@@ -16,11 +16,9 @@ export type AgentControlGraphPendingAsyncFinalizationCommand =
     };
 
 export function buildAgentControlGraphAsyncFinalizationHoldNote(): string {
-  return [
-    '[SYSTEM ASYNC HOLD]',
-    'pending_async_state: active',
-    'finalization_ready: false',
-  ].join('\n');
+  return ['[SYSTEM ASYNC HOLD]', 'pending_async_state: active', 'finalization_ready: false'].join(
+    '\n',
+  );
 }
 
 export function buildAgentControlGraphPendingAsyncNoToolCorrectionNote(

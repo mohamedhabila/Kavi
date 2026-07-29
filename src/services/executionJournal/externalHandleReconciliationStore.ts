@@ -38,10 +38,7 @@ import {
   assessExternalHandleMonitorReadiness,
   recordExternalHandleMonitorObservation,
 } from './monitorRecords';
-import type {
-  ExecutionApprovalState,
-  ExecutionRunRecord,
-} from './types';
+import type { ExecutionApprovalState, ExecutionRunRecord } from './types';
 
 const RECEIPT_DIGEST_FORMAT = 'kavi.execution-recovery-receipt.v1';
 const DEFAULT_FENCE_LEASE_MS = 2 * 60 * 1_000;

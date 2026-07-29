@@ -1,4 +1,7 @@
-import { DELEGATION_E2E_SCENARIOS, E2E_AGENT_SCENARIOS } from '../../src/acceptance/e2eAgent/scenarios';
+import {
+  DELEGATION_E2E_SCENARIOS,
+  E2E_AGENT_SCENARIOS,
+} from '../../src/acceptance/e2eAgent/scenarios';
 import {
   E2E_ASSESSMENT_DIMENSIONS,
   type E2EAssessmentDimension,

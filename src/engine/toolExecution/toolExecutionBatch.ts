@@ -25,11 +25,7 @@ export interface ToolExecutionBatchParams<TToolCall, TOutcome> {
     outcomes: ReadonlyArray<TOutcome>;
     previewCompletedToolNames: ReadonlySet<string>;
   }) => boolean;
-  buildSkippedExecutionOutcome?: (
-    toolCall: TToolCall,
-    index: number,
-    reason: string,
-  ) => TOutcome;
+  buildSkippedExecutionOutcome?: (toolCall: TToolCall, index: number, reason: string) => TOutcome;
 }
 
 export async function executeToolExecutionBatch<TToolCall, TOutcome>(
@@ -59,11 +55,9 @@ export async function executeToolExecutionBatch<TToolCall, TOutcome>(
   let previewCompletedToolNames = new Set(params.initialCompletedToolNames);
 
   for (let index = 0; index < params.executableToolCalls.length; index += 1) {
-    const outcome = await params.executePendingToolCall(
-      params.executableToolCalls[index],
-      index,
-      { previewCompletedToolNames },
-    );
+    const outcome = await params.executePendingToolCall(params.executableToolCalls[index], index, {
+      previewCompletedToolNames,
+    });
     outcomes.push(outcome);
 
     if (params.shouldSuspendAfterOutcome?.(outcome) || params.getYieldedMessage(outcome)) {

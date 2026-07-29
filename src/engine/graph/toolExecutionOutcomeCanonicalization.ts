@@ -15,10 +15,7 @@ import {
 } from '../goals/types';
 import { serializeGoalMutationToolErrors } from '../goals/mutationErrors';
 import { validateGoalMutation, validateGoalReferences } from '../goals/validation';
-import {
-  parseUpdateGoalsArgs,
-  type UpdateGoalsArgumentError,
-} from '../tools/toolGoalExecution';
+import { parseUpdateGoalsArgs, type UpdateGoalsArgumentError } from '../tools/toolGoalExecution';
 import { syncGoalTasksFromMutation } from '../../services/memory/tasks';
 import type { AgentControlGraphEvent } from './agentControlGraph';
 import type { TerminalToolExecutionOutcome } from './toolExecutionOutcomeResolution';

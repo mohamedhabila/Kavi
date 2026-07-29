@@ -275,10 +275,7 @@ describe('remote config controllers', () => {
         accessTokenRef: target.accessTokenRef,
       }),
     ]);
-    expect(Alert.alert).toHaveBeenLastCalledWith(
-      'common.error',
-      'settings.secureKeyDeleteFailed',
-    );
+    expect(Alert.alert).toHaveBeenLastCalledWith('common.error', 'settings.secureKeyDeleteFailed');
   });
 
   it('deletes all SSH credentials before removing the target', async () => {
@@ -421,16 +418,14 @@ describe('remote config controllers', () => {
 
   it('saves an Expo account, stores its token, and syncs projects', async () => {
     mockSyncExpoAccountProjects.mockImplementation(async (accountId) => {
-      useSettingsStore
-        .getState()
-        .addExpoProject(
-          makeExpoProject({
-            id: 'synced-project',
-            accountId,
-            owner: 'kavi-team',
-            slug: 'synced-app',
-          }),
-        );
+      useSettingsStore.getState().addExpoProject(
+        makeExpoProject({
+          id: 'synced-project',
+          accountId,
+          owner: 'kavi-team',
+          slug: 'synced-app',
+        }),
+      );
       return { projectCount: 1 };
     });
 

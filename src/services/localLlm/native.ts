@@ -27,9 +27,7 @@ function getPlatformOs(): 'android' | 'ios' | string {
 }
 
 function getKaviLocalLlmModule(): KaviLocalLlmModuleShape | undefined {
-  return getReactNativeRuntime().NativeModules.KaviLocalLlm as
-    | KaviLocalLlmModuleShape
-    | undefined;
+  return getReactNativeRuntime().NativeModules.KaviLocalLlm as KaviLocalLlmModuleShape | undefined;
 }
 
 function getEventEmitter() {

@@ -248,14 +248,13 @@ export const ChatScreen: React.FC = () => {
   const handleOpenProviderSetup = useCallback(
     () =>
       navigation.navigate('Settings' as any, {
-        destination: 'advanced-ai', returnTo: { name: 'Chat' },
+        destination: 'advanced-ai',
+        returnTo: { name: 'Chat' },
       }),
     [navigation],
   );
   const handleOpenConversationSettings = useCallback(() => {
-    if (!activeConversationId) {
-      return;
-    }
+    if (!activeConversationId) return;
     navigation.navigate('ConversationSettings' as any, {
       conversationId: activeConversationId,
       returnTo: { name: 'Chat' },

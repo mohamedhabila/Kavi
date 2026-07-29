@@ -11,11 +11,7 @@ function currentCatalogDefinitions(): ToolDefinition[] {
       ? mcpManager.getAllToolDefinitions()
       : [];
   const definitions = new Map<string, ToolDefinition>();
-  for (const tool of [
-    ...TOOL_DEFINITIONS,
-    ...mcpDefinitions,
-    ...getSkillToolDefinitions(),
-  ]) {
+  for (const tool of [...TOOL_DEFINITIONS, ...mcpDefinitions, ...getSkillToolDefinitions()]) {
     definitions.set(tool.name, tool);
   }
   return Array.from(definitions.values());

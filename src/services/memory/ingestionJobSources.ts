@@ -62,10 +62,7 @@ function buildSources(
     taskId:
       scopeInput.taskId === null
         ? null
-        : requireExactMemoryScopeId(
-            scopeInput.taskId,
-            'memory_ingestion_job_source_task_invalid',
-          ),
+        : requireExactMemoryScopeId(scopeInput.taskId, 'memory_ingestion_job_source_task_invalid'),
   };
   const byKey = new Map<string, ExactMemorySourceIdentity>();
   const add = (sourceKind: ExactMemorySourceKind, sourceIdInput: string): void => {

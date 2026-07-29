@@ -25,9 +25,7 @@ let registeredHandler: VoiceConversationHandler | null = null;
  * Voice must never create its own hidden conversation runner: doing so would
  * bypass conversation history, tool approvals, persistence, and recovery.
  */
-export function registerVoiceConversationHandler(
-  handler: VoiceConversationHandler,
-): () => void {
+export function registerVoiceConversationHandler(handler: VoiceConversationHandler): () => void {
   registeredHandler = handler;
 
   return () => {

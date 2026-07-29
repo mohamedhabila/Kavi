@@ -80,15 +80,11 @@ export type E2ERedactedMemoryFinalEvidence = {
   ingestion: E2ERedactedMemoryIngestionEvidence;
 };
 
-const INGESTION_JOB_STATUSES = new Set<IngestionJobStatus>(
-  E2E_PUBLIC_INGESTION_JOB_STATUSES,
-);
+const INGESTION_JOB_STATUSES = new Set<IngestionJobStatus>(E2E_PUBLIC_INGESTION_JOB_STATUSES);
 const INGESTION_PROVIDER_OUTCOMES = new Set<IngestionProviderOutcome>(
   E2E_PUBLIC_INGESTION_PROVIDER_OUTCOMES,
 );
-const INGESTION_OUTCOME_CODES = new Set<IngestionOutcomeCode>(
-  E2E_PUBLIC_INGESTION_OUTCOME_CODES,
-);
+const INGESTION_OUTCOME_CODES = new Set<IngestionOutcomeCode>(E2E_PUBLIC_INGESTION_OUTCOME_CODES);
 const INGESTION_RECEIPT_OUTCOME_CODES = new Set<IngestionReceiptProviderOutcomeCode>(
   E2E_PUBLIC_INGESTION_RECEIPT_OUTCOME_CODES,
 );
@@ -173,9 +169,8 @@ function buildMemoryReceiptEvidence(
     structuralCheckpointReceiptCount: receipts.filter(
       (receipt) => receipt.phase === 'structural_checkpoint',
     ).length,
-    providerFinalReceiptCount: receipts.filter(
-      (receipt) => receipt.phase === 'provider_final',
-    ).length,
+    providerFinalReceiptCount: receipts.filter((receipt) => receipt.phase === 'provider_final')
+      .length,
     maxAttemptNumber: receipts.reduce(
       (maximum, receipt) => Math.max(maximum, receipt.attemptNumber),
       0,
@@ -271,7 +266,8 @@ export function buildMemoryFinalEvidence(
     activeEpisodeCount: state.episodes.filter((episode) => episode.deletedAt === null).length,
     deletedEpisodeCount: state.episodes.filter((episode) => episode.deletedAt !== null).length,
     workingBlockCount: state.workingBlocks.length,
-    populatedWorkingBlockCount: state.workingBlocks.filter((block) => block.content.length > 0).length,
+    populatedWorkingBlockCount: state.workingBlocks.filter((block) => block.content.length > 0)
+      .length,
     ingestion: buildIngestionEvidence(state.ingestionJobs),
   };
 }

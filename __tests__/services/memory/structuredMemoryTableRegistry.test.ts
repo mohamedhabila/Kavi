@@ -38,16 +38,13 @@ describe('structured memory reset table registry', () => {
     expect(CLEARED_STRUCTURED_MEMORY_TABLES).toEqual(
       expect.arrayContaining([...FULL_RESET_DROPPED_RETIREMENT_TABLES]),
     );
-    expect(intersection(CLEARED_STRUCTURED_MEMORY_TABLES, PRESERVED_STRUCTURED_MEMORY_TABLES)).toEqual(
-      [],
-    );
+    expect(
+      intersection(CLEARED_STRUCTURED_MEMORY_TABLES, PRESERVED_STRUCTURED_MEMORY_TABLES),
+    ).toEqual([]);
   });
 
   it('contains no retired withdrawal compatibility tables', () => {
-    const classified = [
-      ...CLEARED_STRUCTURED_MEMORY_TABLES,
-      ...PRESERVED_STRUCTURED_MEMORY_TABLES,
-    ];
+    const classified = [...CLEARED_STRUCTURED_MEMORY_TABLES, ...PRESERVED_STRUCTURED_MEMORY_TABLES];
     expect(classified.some((table) => table.includes('withdrawal'))).toBe(false);
   });
 });

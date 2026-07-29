@@ -251,14 +251,18 @@ offline-device         offline
     const modelPath = path.join(projectRoot, 'model.litertlm');
     fs.writeFileSync(modelPath, 'model-bytes', 'utf8');
 
-    expect(parseIosDriverArgs(['--plan', '/tmp/plan.json', '--report', '/tmp/report.json'])).toEqual({
+    expect(
+      parseIosDriverArgs(['--plan', '/tmp/plan.json', '--report', '/tmp/report.json']),
+    ).toEqual({
       planPath: '/tmp/plan.json',
       reportPath: '/tmp/report.json',
     });
     expect(resolveIosDeviceId({ device: { deviceId: 'simulator-id' } })).toBe('simulator-id');
     expect(assertUsableIosModelPath({ model: { modelPath } })).toBe(modelPath);
     expect(() =>
-      assertUsableIosModelPath({ model: { modelPath: path.join(projectRoot, 'missing.litertlm') } }),
+      assertUsableIosModelPath({
+        model: { modelPath: path.join(projectRoot, 'missing.litertlm') },
+      }),
     ).toThrow(/not readable/u);
   });
 });

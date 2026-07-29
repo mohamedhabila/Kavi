@@ -102,7 +102,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
     developerIntro: 'أدوات اختيارية للبرمجة والطرفيات ومساحات العمل المتصلة.',
     developerTools: 'أدوات المطور',
     terminalDescription: 'شغّل JavaScript أو صدفة محلية مباشرة على هذا الجهاز.',
-    codeEditorDescription: 'اكتب مسودة شيفرة مؤقتة محليًا، أو عدّل ملفات محفوظة من محادثة أو اتصال.',
+    codeEditorDescription:
+      'اكتب مسودة شيفرة مؤقتة محليًا، أو عدّل ملفات محفوظة من محادثة أو اتصال.',
     remoteWorkDescription: 'اتصل بمساحة عمل أو خادم أو متصفح مستضاف عند الحاجة.',
   },
   activity: {
@@ -2103,8 +2104,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     queueStepCountMany: '{count} خطوات مفوّضة',
     queueAttentionDescription:
       'تعذّر إكمال هذا العمل. راجعه في المحادثة الأصلية أو جهّز إعادة المحاولة.',
-    queueWorkingDescription:
-      'ينسّق المساعد هذا العمل. يمكنك مغادرة هذه الشاشة والعودة في أي وقت.',
+    queueWorkingDescription: 'ينسّق المساعد هذا العمل. يمكنك مغادرة هذه الشاشة والعودة في أي وقت.',
     queueDetails: 'عرض التفاصيل',
     queueRetryInChat: 'إعادة المحاولة في المحادثة',
     queueOpenChat: 'فتح المحادثة',

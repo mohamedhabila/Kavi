@@ -8,10 +8,7 @@ import {
 } from 'react';
 import { useChatStore } from '../store/useChatStore';
 import { SUB_AGENT_PROGRESS_REFRESH_INTERVAL_MS } from './chatScreenConstants';
-import {
-  PendingAgentRunProgressUpdate,
-  SubAgentSnapshot,
-} from './subAgentRunBridgeTypes';
+import { PendingAgentRunProgressUpdate, SubAgentSnapshot } from './subAgentRunBridgeTypes';
 
 function buildAgentRunProgressKey(conversationId: string, runId: string): string {
   return `${conversationId}:${runId}`;

@@ -10,21 +10,18 @@ describe('mobileTranslator bundled Python analysis', () => {
   });
 
   it('uses the referenced Python sidecar instead of every Python file in the bundle', () => {
-    const result = analyzeBundledPythonSkill(
-      'Run `uv run scripts/generate.py --prompt "hello"`.',
-      {
-        'scripts/generate.py': [
-          '# /// script',
-          '# dependencies = [',
-          '#   "httpx",',
-          '# ]',
-          '# ///',
-          'import httpx',
-          'print("ok")',
-        ].join('\n'),
-        'scripts/unused.py': 'print("skip")\n',
-      },
-    );
+    const result = analyzeBundledPythonSkill('Run `uv run scripts/generate.py --prompt "hello"`.', {
+      'scripts/generate.py': [
+        '# /// script',
+        '# dependencies = [',
+        '#   "httpx",',
+        '# ]',
+        '# ///',
+        'import httpx',
+        'print("ok")',
+      ].join('\n'),
+      'scripts/unused.py': 'print("skip")\n',
+    });
 
     expect(result).toEqual({
       scriptPaths: ['scripts/generate.py'],
@@ -63,16 +60,13 @@ describe('mobileTranslator bundled Python analysis', () => {
   });
 
   it('normalizes skill-scoped sidecar paths and keeps kavi.http bundles Pyodide-compatible', () => {
-    const result = analyzeBundledPythonSkill(
-      'Run `python3 skills/demo/scripts/fetch.py`.',
-      {
-        'scripts/fetch.py': [
-          'from kavi.http import get_json',
-          'data = await get_json("https://api.example.com/data")',
-          'print(data)',
-        ].join('\n'),
-      },
-    );
+    const result = analyzeBundledPythonSkill('Run `python3 skills/demo/scripts/fetch.py`.', {
+      'scripts/fetch.py': [
+        'from kavi.http import get_json',
+        'data = await get_json("https://api.example.com/data")',
+        'print(data)',
+      ].join('\n'),
+    });
 
     expect(result).toEqual({
       scriptPaths: ['scripts/fetch.py'],

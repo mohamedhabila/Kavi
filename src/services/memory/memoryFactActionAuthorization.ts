@@ -29,10 +29,7 @@ export function canManageMemoryFactFromScope(
     );
   }
 
-  if (
-    fact.personaId !== null ||
-    fact.originConversationId !== current.memoryConversationId
-  ) {
+  if (fact.personaId !== null || fact.originConversationId !== current.memoryConversationId) {
     return false;
   }
 

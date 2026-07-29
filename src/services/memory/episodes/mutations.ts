@@ -108,10 +108,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     throw new Error('episode_source_identity_conflict');
   }
   const priorSensitivity = existing
-    ? maxEpisodeSensitivity(
-        current!.sensitivity,
-        readPersistedPolicySensitivity(db, existing.id),
-      )
+    ? maxEpisodeSensitivity(current!.sensitivity, readPersistedPolicySensitivity(db, existing.id))
     : undefined;
   const sensitivity = deriveEpisodeSensitivity({
     summary: normalizedSummary,
@@ -138,10 +135,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     );
     if (
       !existingSourceIdentityManifest ||
-      !episodeSourceIdentityManifestsEqual(
-        existingSourceIdentityManifest,
-        sourceIdentityManifest,
-      )
+      !episodeSourceIdentityManifestsEqual(existingSourceIdentityManifest, sourceIdentityManifest)
     ) {
       throw new Error('episode_source_identity_conflict');
     }

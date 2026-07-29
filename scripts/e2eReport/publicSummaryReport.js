@@ -172,12 +172,7 @@ function assertIsoTimestamp(value, path) {
 }
 
 function assertRunMetadata(value) {
-  assertExactFields(
-    value,
-    'report.runMetadata',
-    RUN_METADATA_FIELDS,
-    OPTIONAL_RUN_METADATA_FIELDS,
-  );
+  assertExactFields(value, 'report.runMetadata', RUN_METADATA_FIELDS, OPTIONAL_RUN_METADATA_FIELDS);
   if (!GIT_SHA_PATTERN.test(value.gitSha)) {
     throw new Error('Invalid report.runMetadata.gitSha in public E2E summary input.');
   }
@@ -249,7 +244,9 @@ function assertScenario(value, index) {
   }
   assertBoolean(value.loopDiagnostics.passing, `${path}.loopDiagnostics.passing`);
   if (!Array.isArray(value.loopDiagnostics.repeatedToolCalls)) {
-    throw new Error(`Invalid ${path}.loopDiagnostics.repeatedToolCalls in public E2E summary input.`);
+    throw new Error(
+      `Invalid ${path}.loopDiagnostics.repeatedToolCalls in public E2E summary input.`,
+    );
   }
   assertCanonicalStringArray(
     value.benchmarkFamilies,
@@ -353,13 +350,9 @@ function parsePublicE2eReportSummaryInput(value) {
       dimensionsPassing: value.assessment.dimensionsPassing,
     },
     reliability: Object.fromEntries(
-      [
-        'k',
-        'scenarioCount',
-        'pass1PassedCount',
-        'passKPassedCount',
-        'retriedScenarioCount',
-      ].map((field) => [field, value.reliability[field]]),
+      ['k', 'scenarioCount', 'pass1PassedCount', 'passKPassedCount', 'retriedScenarioCount'].map(
+        (field) => [field, value.reliability[field]],
+      ),
     ),
     readiness: {
       passing: value.readiness.passing,

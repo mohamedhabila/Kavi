@@ -24,8 +24,7 @@ export const MEMORY_SOURCE_RETIREMENT_REASONS = [
   'ingestion_conflict',
 ] as const;
 
-export type MemorySourceRetirementReason =
-  (typeof MEMORY_SOURCE_RETIREMENT_REASONS)[number];
+export type MemorySourceRetirementReason = (typeof MEMORY_SOURCE_RETIREMENT_REASONS)[number];
 
 export interface SourceRetirementOperationInput {
   retirementGroupId: string;
@@ -201,7 +200,10 @@ export function requireCanonicalRetirementContributionIds(
 }
 
 function requireCanonicalRetirementFactIds(value: unknown): ReadonlyArray<string> {
-  if (!Array.isArray(value) || value.length > MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS.retiredFacts) {
+  if (
+    !Array.isArray(value) ||
+    value.length > MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS.retiredFacts
+  ) {
     fail('memory_source_retirement_fact_ids_invalid');
   }
   const seen = new Set<string>();

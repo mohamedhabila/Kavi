@@ -70,9 +70,7 @@ export async function relaunchForegroundScenarioApp(params: {
   const lastMessageId = conversation.messages[conversation.messages.length - 1]?.id ?? null;
 
   await cancelScheduledIngestionDrain();
-  const memoryStateAtClose = captureCompleteMemoryEvidenceForIsolatedEvaluation(
-    params.memoryScope,
-  );
+  const memoryStateAtClose = captureCompleteMemoryEvidenceForIsolatedEvaluation(params.memoryScope);
   await flushChatStorePersistenceNow();
   await discardInMemoryChatStateWithoutPersisting();
   if (

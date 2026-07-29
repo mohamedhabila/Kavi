@@ -391,10 +391,7 @@ describe('tool call presentation helpers', () => {
     );
     expect(getElapsedMs(makeToolCall({ status: 'running', startedAt: 3000 }), now)).toBe(7000);
     expect(
-      getElapsedMs(
-        makeToolCall({ status: 'completed', startedAt: 3000, completedAt: 8000 }),
-        now,
-      ),
+      getElapsedMs(makeToolCall({ status: 'completed', startedAt: 3000, completedAt: 8000 }), now),
     ).toBe(5000);
   });
 
@@ -492,7 +489,11 @@ describe('tool call presentation helpers', () => {
     ['canvas_read', {}, 'Reading a canvas'],
     ['canvas_snapshot', { surfaceId: 'surface-3' }, 'Capturing surface-3'],
     ['canvas_snapshot', {}, 'Capturing a canvas snapshot'],
-    ['web_fetch', { url: 'not a url that is intentionally long for display shortening' }, /^Fetching .+\.\.\.$/],
+    [
+      'web_fetch',
+      { url: 'not a url that is intentionally long for display shortening' },
+      /^Fetching .+\.\.\.$/,
+    ],
     ['web_fetch', {}, 'Fetching a page'],
     ['ssh_exec', { command: 'ls -la' }, 'Running ls -la'],
     ['ssh_exec', {}, 'Running a remote command'],

@@ -298,9 +298,9 @@ describe('foreground mobile controller binding', () => {
     expect(context.store.startAgentRun).not.toHaveBeenCalled();
     expect(context.store.applyMobileControllerOutcome).toHaveBeenCalledTimes(1);
     expect(context.durability.flushChatState).toHaveBeenCalled();
-    expect(JSON.stringify(context.durability.createModelExecution.mock.calls[0]?.[0])).not.toContain(
-      'iVBORw0KGgo=',
-    );
+    expect(
+      JSON.stringify(context.durability.createModelExecution.mock.calls[0]?.[0]),
+    ).not.toContain('iVBORw0KGgo=');
     expect(JSON.stringify(context.durability.createModelExecution.mock.calls[0]?.[0])).toContain(
       outcome.afterObservation.observationId,
     );
@@ -313,7 +313,9 @@ describe('foreground mobile controller binding', () => {
     ).toBe(false);
     const storedResults = context
       .getCurrentConversation()
-      .messages.filter((message) => message.role === 'tool' && message.toolCallId === handoff.toolCallId);
+      .messages.filter(
+        (message) => message.role === 'tool' && message.toolCallId === handoff.toolCallId,
+      );
     expect(storedResults).toHaveLength(1);
 
     mockedSettleMobileControllerOutcome.mockResolvedValueOnce({

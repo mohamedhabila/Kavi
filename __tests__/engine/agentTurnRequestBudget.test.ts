@@ -54,9 +54,7 @@ describe('prepareAgentTurnRequestBudget', () => {
       requestModel: 'gpt-5.4-mini',
       toolsForIteration: [],
       warn: jest.fn(),
-      workingMessages: [
-        { id: 'user-1', role: 'user', content: 'ابدأ.', timestamp: 1 },
-      ],
+      workingMessages: [{ id: 'user-1', role: 'user', content: 'ابدأ.', timestamp: 1 }],
     });
 
     expect(result.usageTokenBuckets.memoryContextTokens).toBe(estimateTokens(goalSection));

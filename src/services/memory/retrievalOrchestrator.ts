@@ -218,12 +218,8 @@ export async function orchestrateMemoryRetrieval(
   const selection = query
     ? await recallFactSelectionForQuery(
         query,
-        recallOptions(
-          readInput,
-          scope.memoryScope,
-          limit,
-          now,
-          (timing) => recallTimings.push(timing),
+        recallOptions(readInput, scope.memoryScope, limit, now, (timing) =>
+          recallTimings.push(timing),
         ),
       )
     : { facts: [], resolutionFacts: [], scoredFacts: [] };

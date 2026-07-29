@@ -73,10 +73,7 @@ export interface EditedImageResult extends ProducedImageResultBase {
 
 export type ProducedImageResult = GeneratedImageResult | EditedImageResult;
 
-export {
-  buildGeneratedImageAttachment,
-  parseGeneratedImageResult,
-} from './imageGenerationResults';
+export { buildGeneratedImageAttachment, parseGeneratedImageResult } from './imageGenerationResults';
 
 async function generateOpenAICompatibleImage(
   provider: LlmProviderConfig,

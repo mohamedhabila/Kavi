@@ -165,79 +165,81 @@ export function stopForegroundConversationRuns(params: {
   return fencedRuns
     .reduce<Promise<{ cancelledRunCount: number; cancelledWorkerCount: number }>>(
       async (countPromise, fencedRun) => {
-      const counts = await countPromise;
-      const { cancellationEffect, run, runWorkers } = fencedRun;
+        const counts = await countPromise;
+        const { cancellationEffect, run, runWorkers } = fencedRun;
 
-      let durableCancellation: CancelOwnedExternalRecoveriesResult;
-      try {
-        durableCancellation = await (params.cancelOwnedRecoveries ?? cancelOwnedExternalRecoveries)(
-          {
+        let durableCancellation: CancelOwnedExternalRecoveriesResult;
+        try {
+          durableCancellation = await (
+            params.cancelOwnedRecoveries ?? cancelOwnedExternalRecoveries
+          )({
             conversationId: params.conversationId,
             ownerRunId: run.id,
             reason: cancellationEffect.operationReason,
-          },
-        );
-      } catch {
-        durableCancellation = {
-          cancelledRunCount: 0,
-          settledRunCount: 0,
-          issues: [{ kind: 'deferred', reason: 'journal_unavailable', count: 1 }],
-        };
-      }
-      const attentionDetail = durableCancellationAttentionDetail(durableCancellation);
-      if (attentionDetail) {
-        params.actions.appendConversationLog(params.conversationId, {
-          kind: 'error',
-          level: 'warning',
-          title: 'Durable cancellation needs attention',
-          detail: attentionDetail,
-        });
-      }
-
-      params.actions.clearPendingRunState(params.conversationId, run.id);
-      const terminalized = applyConversationRunCompletionEffect({
-        actions: params.actions,
-        conversationId: params.conversationId,
-        effect: cancellationEffect,
-        getLatestConversation: () => params.actions.getLatestConversation(params.conversationId),
-        runId: run.id,
-      });
-      clearAgentRunCancellation(params.conversationId, run.id);
-      const latestRun = params.actions
-        .getLatestConversation(params.conversationId)
-        ?.agentRuns?.find((candidate) => candidate.id === run.id);
-      const cancellationSettled = terminalized || latestRun?.status === 'cancelled';
-      if (cancellationSettled) {
-        const workspaceTarget = resolveConversationWorkspaceTarget({
-          conversationId: params.conversationId,
-          conversations: params.conversation ? [params.conversation] : [],
-        });
-        void params.actions
-          .ensureAgentRunFinalResponse?.({
-            conversationId: params.conversationId,
-            runId: run.id,
-            status: 'cancelled',
-            memoryConversationId: workspaceTarget.workspaceConversationId,
-            timestamp: Date.now(),
-          })
-          .catch((error: unknown) => {
-            if (isAbortErrorLike(error)) {
-              return;
-            }
-            const detail = error instanceof Error ? error.message : String(error);
-            params.actions.appendConversationLog(params.conversationId, {
-              kind: 'error',
-              level: 'error',
-              title: 'Cancellation report failed',
-              detail,
-            });
           });
-      }
-      return {
-        cancelledRunCount: counts.cancelledRunCount + (cancellationSettled ? 1 : 0),
-        cancelledWorkerCount: counts.cancelledWorkerCount + runWorkers.length,
-      };
-    }, Promise.resolve({ cancelledRunCount: 0, cancelledWorkerCount: 0 }))
+        } catch {
+          durableCancellation = {
+            cancelledRunCount: 0,
+            settledRunCount: 0,
+            issues: [{ kind: 'deferred', reason: 'journal_unavailable', count: 1 }],
+          };
+        }
+        const attentionDetail = durableCancellationAttentionDetail(durableCancellation);
+        if (attentionDetail) {
+          params.actions.appendConversationLog(params.conversationId, {
+            kind: 'error',
+            level: 'warning',
+            title: 'Durable cancellation needs attention',
+            detail: attentionDetail,
+          });
+        }
+
+        params.actions.clearPendingRunState(params.conversationId, run.id);
+        const terminalized = applyConversationRunCompletionEffect({
+          actions: params.actions,
+          conversationId: params.conversationId,
+          effect: cancellationEffect,
+          getLatestConversation: () => params.actions.getLatestConversation(params.conversationId),
+          runId: run.id,
+        });
+        clearAgentRunCancellation(params.conversationId, run.id);
+        const latestRun = params.actions
+          .getLatestConversation(params.conversationId)
+          ?.agentRuns?.find((candidate) => candidate.id === run.id);
+        const cancellationSettled = terminalized || latestRun?.status === 'cancelled';
+        if (cancellationSettled) {
+          const workspaceTarget = resolveConversationWorkspaceTarget({
+            conversationId: params.conversationId,
+            conversations: params.conversation ? [params.conversation] : [],
+          });
+          void params.actions
+            .ensureAgentRunFinalResponse?.({
+              conversationId: params.conversationId,
+              runId: run.id,
+              status: 'cancelled',
+              memoryConversationId: workspaceTarget.workspaceConversationId,
+              timestamp: Date.now(),
+            })
+            .catch((error: unknown) => {
+              if (isAbortErrorLike(error)) {
+                return;
+              }
+              const detail = error instanceof Error ? error.message : String(error);
+              params.actions.appendConversationLog(params.conversationId, {
+                kind: 'error',
+                level: 'error',
+                title: 'Cancellation report failed',
+                detail,
+              });
+            });
+        }
+        return {
+          cancelledRunCount: counts.cancelledRunCount + (cancellationSettled ? 1 : 0),
+          cancelledWorkerCount: counts.cancelledWorkerCount + runWorkers.length,
+        };
+      },
+      Promise.resolve({ cancelledRunCount: 0, cancelledWorkerCount: 0 }),
+    )
     .then(({ cancelledRunCount, cancelledWorkerCount }) => {
       if (cancelledRunCount === 0 && !(runsToCancel.length === 0 && didAbortForegroundRequest)) {
         return;

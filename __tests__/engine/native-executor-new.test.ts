@@ -6,9 +6,7 @@
 
 const mockGetStringAsync = jest.fn();
 const mockSetStringAsync = jest.fn();
-const mockLaunchImageLibraryAsync = jest
-  .fn()
-  .mockResolvedValue({ canceled: true, assets: [] });
+const mockLaunchImageLibraryAsync = jest.fn().mockResolvedValue({ canceled: true, assets: [] });
 
 jest.mock('expo-clipboard', () => ({
   getStringAsync: (...args: any[]) => mockGetStringAsync(...args),

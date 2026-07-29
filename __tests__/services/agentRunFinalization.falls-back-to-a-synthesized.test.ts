@@ -67,9 +67,9 @@ describe('agentRunFinalization', () => {
   it('preserves multilingual structured evidence with no English-key requirement', () => {
     const preview = summarizeFinalizationToolResultPreview(
       JSON.stringify({
-        '状態': '完了',
-        'النتيجة': 'تم إنشاء التذكير',
-        '的地': { '名前': '東京' },
+        状態: '完了',
+        النتيجة: 'تم إنشاء التذكير',
+        的地: { 名前: '東京' },
       }),
     );
 

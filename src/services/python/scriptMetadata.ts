@@ -1,4 +1,6 @@
-function findPep723ScriptBlock(source: string): { lines: string[]; blockStart: number; blockEnd: number } | null {
+function findPep723ScriptBlock(
+  source: string,
+): { lines: string[]; blockStart: number; blockEnd: number } | null {
   if (!source) {
     return null;
   }
@@ -38,10 +40,9 @@ export function stripPep723MetadataBlock(source: string): string {
     return source;
   }
 
-  return [
-    ...block.lines.slice(0, block.blockStart),
-    ...block.lines.slice(block.blockEnd + 1),
-  ].join('\n');
+  return [...block.lines.slice(0, block.blockStart), ...block.lines.slice(block.blockEnd + 1)].join(
+    '\n',
+  );
 }
 
 export function extractPep723Dependencies(source: string): string[] {

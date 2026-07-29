@@ -51,10 +51,9 @@ function graph(
   });
 }
 
-function run(controlGraph: AgentRunControlGraphState): Pick<
-  AgentRun,
-  'controlGraph' | 'createdAt' | 'userMessageId'
-> {
+function run(
+  controlGraph: AgentRunControlGraphState,
+): Pick<AgentRun, 'controlGraph' | 'createdAt' | 'userMessageId'> {
   return {
     userMessageId: 'user-1',
     createdAt: 1,
@@ -73,9 +72,9 @@ describe('persisted final delivery graph boundary', () => {
   it('does not use an older final while a newer model turn is in flight', () => {
     const modelTurnGraph = graph('model_turn');
 
-    expect(
-      inspectPersistedAgentRunFinalDelivery({ messages, run: run(modelTurnGraph) }),
-    ).toEqual({ state: 'unsafe_boundary' });
+    expect(inspectPersistedAgentRunFinalDelivery({ messages, run: run(modelTurnGraph) })).toEqual({
+      state: 'unsafe_boundary',
+    });
     expect(reconcile(modelTurnGraph)).toBeUndefined();
   });
 

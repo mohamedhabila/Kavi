@@ -68,7 +68,17 @@ jest.mock('expo-file-system', () => ({
 }));
 import { resetRemoteStore } from '../../src/services/remote/store';
 import { connectSshTarget, resolveSshSecrets } from '../../src/services/ssh/connector';
-import { connectNativeSshWithKey, connectNativeSshWithPassword, connectNativeSshWithVerifiedKey, connectNativeSshWithVerifiedPassword, getNativeSshCapabilities, getNativeSshHostFingerprint, getSshAuthMode, getSshPtyType, supportsVerifiedSshConnections } from '../../src/services/ssh/native';
+import {
+  connectNativeSshWithKey,
+  connectNativeSshWithPassword,
+  connectNativeSshWithVerifiedKey,
+  connectNativeSshWithVerifiedPassword,
+  getNativeSshCapabilities,
+  getNativeSshHostFingerprint,
+  getSshAuthMode,
+  getSshPtyType,
+  supportsVerifiedSshConnections,
+} from '../../src/services/ssh/native';
 import type { SshTargetConfig } from '../../src/types/remote';
 function makeSshTarget(overrides: Partial<SshTargetConfig> = {}): SshTargetConfig {
   return {

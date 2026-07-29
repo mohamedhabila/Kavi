@@ -31,9 +31,8 @@ describe('privileged structured-memory database cleanup', () => {
 
     for (const table of CLEARED_STRUCTURED_MEMORY_TABLES) {
       expect(
-        getMemoryDb().getFirstSync<{ count: number }>(
-          `SELECT COUNT(*) AS count FROM ${table}`,
-        )?.count,
+        getMemoryDb().getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
+          ?.count,
       ).toBe(0);
     }
     expect(localOwnerId()).toBe(ownerId);

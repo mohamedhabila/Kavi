@@ -388,9 +388,7 @@ describe('agent control graph no-tool turn resolution', () => {
       { incompleteFinalTextRecoveryCount: 1 },
       'malformed_tool_call_retry',
     );
-    expect(params.workingMessages.at(-1)?.content).toContain(
-      '[SYSTEM INVALID TOOL CALL RETRY]',
-    );
+    expect(params.workingMessages.at(-1)?.content).toContain('[SYSTEM INVALID TOOL CALL RETRY]');
     expect(params.workingMessages.at(-1)?.content).toContain('sessions_send');
     expect(params.workingMessages.at(-1)?.content).toContain('native structured tool call');
     expect(params.workingMessages.at(-1)?.content).not.toContain('Tools are unavailable');

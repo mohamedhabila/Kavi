@@ -195,13 +195,7 @@ describe('exact ingestion job preemption', () => {
     const terminal = enqueueJob('terminal');
     const claimToken = claimIngestionJob(terminal.id, 100)!;
     expect(
-      completeIngestionJob(
-        terminal.id,
-        'completed_structural',
-        'structural_only',
-        101,
-        claimToken,
-      ),
+      completeIngestionJob(terminal.id, 'completed_structural', 'structural_only', 101, claimToken),
     ).toBe(true);
 
     await expect(preemptIngestionJobAndWait({ jobId: terminal.id })).resolves.toEqual({

@@ -114,16 +114,15 @@ export function withTimeout(signal: AbortSignal | undefined, timeoutMs: number):
 }
 
 export function isAbortLikeTransportError(error: unknown): boolean {
-  if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
+  if (
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    error.name === 'AbortError'
+  ) {
     return true;
   }
 
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : '';
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   return /\babort(ed|error)?\b/i.test(message) || /\btime(?:d)?\s*out\b/i.test(message);
 }
 

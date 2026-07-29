@@ -1,6 +1,24 @@
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
 import { createGoal } from '../../src/engine/goals/types';
-import { CRITICAL_THRESHOLD, ERROR_WARNING_THRESHOLD, GOAL_BOOTSTRAP_STALL_THRESHOLD, GOAL_MUTATION_STALL_THRESHOLD, STAGNANT_PROGRESS_THRESHOLD, TOOL_CALL_HISTORY_SIZE, WARNING_THRESHOLD, buildGoalProgressFingerprint, buildToolMultisetKey, detectConsecutiveBlockedPreflightCalls, detectLoops, PREFLIGHT_BLOCKED_LOOP_THRESHOLD, hashResult, recordIterationProgressSignature, recordToolCall, type IterationProgressSignature, type ToolCallRecord } from '../../src/engine/loopDetection';
+import {
+  CRITICAL_THRESHOLD,
+  ERROR_WARNING_THRESHOLD,
+  GOAL_BOOTSTRAP_STALL_THRESHOLD,
+  GOAL_MUTATION_STALL_THRESHOLD,
+  STAGNANT_PROGRESS_THRESHOLD,
+  TOOL_CALL_HISTORY_SIZE,
+  WARNING_THRESHOLD,
+  buildGoalProgressFingerprint,
+  buildToolMultisetKey,
+  detectConsecutiveBlockedPreflightCalls,
+  detectLoops,
+  PREFLIGHT_BLOCKED_LOOP_THRESHOLD,
+  hashResult,
+  recordIterationProgressSignature,
+  recordToolCall,
+  type IterationProgressSignature,
+  type ToolCallRecord,
+} from '../../src/engine/loopDetection';
 const rec = (
   name: string,
   args: string,
@@ -458,7 +476,11 @@ describe('detectLoops', () => {
 
   it('warns on repeated identical input at the warning threshold', () => {
     const history = Array.from({ length: WARNING_THRESHOLD }, () =>
-      rec('web_search', '{"queries":["official docs"]}', '{"provider":"brave","searches":[{"query":"official docs","results":[]}]}'),
+      rec(
+        'web_search',
+        '{"queries":["official docs"]}',
+        '{"provider":"brave","searches":[{"query":"official docs","results":[]}]}',
+      ),
     );
     expect(detectLoops(history)).toEqual(
       expect.objectContaining({
@@ -472,7 +494,11 @@ describe('detectLoops', () => {
 
   it('escalates to critical for longer identical-call streaks', () => {
     const history = Array.from({ length: CRITICAL_THRESHOLD }, () =>
-      rec('web_search', '{"queries":["official docs"]}', '{"provider":"brave","searches":[{"query":"official docs","results":[]}]}'),
+      rec(
+        'web_search',
+        '{"queries":["official docs"]}',
+        '{"provider":"brave","searches":[{"query":"official docs","results":[]}]}',
+      ),
     );
     expect(detectLoops(history)).toEqual(
       expect.objectContaining({

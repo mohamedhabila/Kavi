@@ -10,9 +10,7 @@ export type ExecutionLaneToolCapability =
   | 'unknown';
 
 export function normalizeExecutionLaneToolName(toolName: string | undefined): string {
-  return typeof toolName === 'string'
-    ? toolName.trim().toLowerCase()
-    : '';
+  return typeof toolName === 'string' ? toolName.trim().toLowerCase() : '';
 }
 
 export const EXECUTION_SUPER_AGENT_CORE_TOOL_NAMES = new Set<string>();
@@ -41,11 +39,7 @@ export function getExecutionLaneToolCapability(
     return 'meta';
   }
 
-  if (
-    descriptor.category === 'sessions' &&
-    sideEffects.has('none') &&
-    !capabilities.has('wait')
-  ) {
+  if (descriptor.category === 'sessions' && sideEffects.has('none') && !capabilities.has('wait')) {
     return 'meta';
   }
 
@@ -83,9 +77,7 @@ export function getExecutionLaneToolCapability(
     return 'read_only';
   }
 
-  if (
-    monitorsExternalProgress
-  ) {
+  if (monitorsExternalProgress) {
     return 'monitoring';
   }
 
@@ -100,9 +92,11 @@ export function isExecutionAdvancingToolName(toolName: string | undefined): bool
 export function isExecutionDefaultBlockedToolName(toolName: string | undefined): boolean {
   const normalized = normalizeExecutionLaneToolName(toolName);
   const capability = getExecutionLaneToolCapability(normalized);
-  return normalized.length > 0 &&
+  return (
+    normalized.length > 0 &&
     (capability === 'computation' ||
-      (capability === 'coordination' && !EXECUTION_SUPER_AGENT_CORE_TOOL_NAMES.has(normalized)));
+      (capability === 'coordination' && !EXECUTION_SUPER_AGENT_CORE_TOOL_NAMES.has(normalized)))
+  );
 }
 
 export function isExecutionDiscoveryOrMetaToolName(toolName: string | undefined): boolean {

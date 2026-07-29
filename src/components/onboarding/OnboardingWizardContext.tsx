@@ -16,7 +16,9 @@ export function OnboardingWizardProvider({
   );
 }
 
-export function useOnboardingWizardContext<T extends OnboardingWizardContextValue = OnboardingWizardContextValue>() {
+export function useOnboardingWizardContext<
+  T extends OnboardingWizardContextValue = OnboardingWizardContextValue,
+>() {
   const value = useContext(OnboardingWizardContext);
   if (!value) {
     throw new Error('Onboarding wizard context is missing.');

@@ -109,9 +109,7 @@ describe('renderFocusBlock', () => {
   });
 
   it('omits the wrapper when bare=true', () => {
-    const result = renderFocusBlock(
-      buildInput({ bare: true, activeFocus: 'short note' }),
-    );
+    const result = renderFocusBlock(buildInput({ bare: true, activeFocus: 'short note' }));
     expect(result.text.startsWith('<focus>')).toBe(false);
     expect(result.text).toContain('short note');
   });
@@ -130,16 +128,16 @@ describe('renderFocusBlock', () => {
 
   it('falls back to lastUserAt then threadCreatedAt when assistant timestamp missing', () => {
     const fromUser = renderFocusBlock(buildInput({ lastAssistantAt: null }));
-    const fromThread = renderFocusBlock(
-      buildInput({ lastAssistantAt: null, lastUserAt: null }),
-    );
+    const fromThread = renderFocusBlock(buildInput({ lastAssistantAt: null, lastUserAt: null }));
     expect(fromUser.gap.gapMs).toBe(25 * MIN);
     expect(fromThread.gap.gapMs).toBe(DAY);
   });
 
   it('produces byte-identical output for two turns inside the same bucket', () => {
     const a = renderFocusBlock(buildInput({ now: T0, lastAssistantAt: T0 - 5 * MIN }));
-    const b = renderFocusBlock(buildInput({ now: T0 + 60_000, lastAssistantAt: T0 - 5 * MIN + 60_000 }));
+    const b = renderFocusBlock(
+      buildInput({ now: T0 + 60_000, lastAssistantAt: T0 - 5 * MIN + 60_000 }),
+    );
     // Same gap, same phrase => same rendered text.
     expect(a.text).toBe(b.text);
   });

@@ -82,7 +82,11 @@ export const SettingsSurfacesSection: React.FC<SettingsSurfacesSectionProps> = (
     <View style={styles.sectionCard} onLayout={onLayout}>
       <View style={styles.sectionCardHeader}>
         <Text style={styles.sectionCardTitle}>
-          {t(isConnections ? 'settings.destinations.connections.title' : 'nav.developerAndRemoteWork')}
+          {t(
+            isConnections
+              ? 'settings.destinations.connections.title'
+              : 'nav.developerAndRemoteWork',
+          )}
         </Text>
         <Text style={styles.sectionCardHint}>
           {t(

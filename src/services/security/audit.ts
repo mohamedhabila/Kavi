@@ -5,10 +5,7 @@
 
 import { Paths, File, Directory } from 'expo-file-system';
 
-import {
-  describeToolInvocation,
-  type ToolTelemetryCategory,
-} from './toolPrivacy';
+import { describeToolInvocation, type ToolTelemetryCategory } from './toolPrivacy';
 
 export interface AuditEntry {
   timestamp: number;

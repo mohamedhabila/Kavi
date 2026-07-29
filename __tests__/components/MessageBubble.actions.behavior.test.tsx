@@ -1,5 +1,11 @@
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Clipboard, MessageBubble, installMessageBubbleTestHarness, makeMessage, shareTextExport } from '../helpers/messageBubbleHarness';
+import {
+  Clipboard,
+  MessageBubble,
+  installMessageBubbleTestHarness,
+  makeMessage,
+  shareTextExport,
+} from '../helpers/messageBubbleHarness';
 
 describe('MessageBubble actions', () => {
   installMessageBubbleTestHarness();

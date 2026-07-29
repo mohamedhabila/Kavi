@@ -722,21 +722,19 @@ export function recordAgentRunEvidenceMemory(
   ingestMessages(bundles, input.messages ?? [], input.sourceRunId);
   if (bundles.size === 0) return { factIds: [], consumedEvidence };
   requireAgentRunPersistenceIdentity(input);
-  const factIds = runMemoryTransaction(() =>
-    {
-      const sourceFactIds = Array.from(bundles.values()).flatMap((bundle) =>
-        persistBundle(bundle, input),
-      );
-      const learnedFactIds = promoteReceiptBackedProcedures({
-        sourceFactIds,
-        memoryConversationId: input.conversationId,
-        sourceThreadId: input.threadId,
-        taskId: input.taskId,
-        sourceTurnId: input.sourceTurnId,
-        now: input.now,
-      });
-      return [...sourceFactIds, ...learnedFactIds];
-    },
-  );
+  const factIds = runMemoryTransaction(() => {
+    const sourceFactIds = Array.from(bundles.values()).flatMap((bundle) =>
+      persistBundle(bundle, input),
+    );
+    const learnedFactIds = promoteReceiptBackedProcedures({
+      sourceFactIds,
+      memoryConversationId: input.conversationId,
+      sourceThreadId: input.threadId,
+      taskId: input.taskId,
+      sourceTurnId: input.sourceTurnId,
+      now: input.now,
+    });
+    return [...sourceFactIds, ...learnedFactIds];
+  });
   return { factIds, consumedEvidence };
 }

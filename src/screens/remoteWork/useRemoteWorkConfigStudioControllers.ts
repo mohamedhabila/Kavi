@@ -132,7 +132,8 @@ export function useRemoteWorkConfigStudioControllers({
       resolvedDefaultWorkspaceTargetId &&
       workspaceTargets.some((target) => target.id === resolvedDefaultWorkspaceTargetId)
         ? resolvedDefaultWorkspaceTargetId
-        : selectedWorkspaceId && workspaceTargets.some((target) => target.id === selectedWorkspaceId)
+        : selectedWorkspaceId &&
+            workspaceTargets.some((target) => target.id === selectedWorkspaceId)
           ? selectedWorkspaceId
           : workspaceTargets[0].id;
 

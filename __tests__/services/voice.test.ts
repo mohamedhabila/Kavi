@@ -666,13 +666,11 @@ describe('Voice — Recording state', () => {
   it('reports all recorder preparation failures with nested causes', async () => {
     mockAudioRecorderConstructor.mockImplementation(() => {
       const instance = {
-        prepareToRecordAsync: jest
-          .fn()
-          .mockRejectedValue(
-            new Error('prepare failed', {
-              cause: new Error('native recorder rejected preset'),
-            }),
-          ),
+        prepareToRecordAsync: jest.fn().mockRejectedValue(
+          new Error('prepare failed', {
+            cause: new Error('native recorder rejected preset'),
+          }),
+        ),
         record: jest.fn(),
         stop: jest.fn().mockResolvedValue(undefined),
         getStatus: jest.fn().mockReturnValue(null),

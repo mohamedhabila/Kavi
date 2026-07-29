@@ -256,9 +256,7 @@ describe('ModelSelector', () => {
   });
 
   it('filters models by name and supports clearing an empty search', async () => {
-    const { getByLabelText, getByText, queryByText } = render(
-      <ModelSelector {...defaultProps} />,
-    );
+    const { getByLabelText, getByText, queryByText } = render(<ModelSelector {...defaultProps} />);
 
     await act(async () => {
       fireEvent.press(getByText('gpt-5.4'));
@@ -467,11 +465,11 @@ describe('ModelSelector', () => {
   });
 
   it('keeps interactive model-selection controls at least 44 points tall', async () => {
-    const { getByLabelText, getByTestId, getByText } = render(
-      <ModelSelector {...defaultProps} />,
-    );
+    const { getByLabelText, getByTestId, getByText } = render(<ModelSelector {...defaultProps} />);
 
-    expect(StyleSheet.flatten(getByTestId('model-selector-trigger').props.style).minHeight).toBe(44);
+    expect(StyleSheet.flatten(getByTestId('model-selector-trigger').props.style).minHeight).toBe(
+      44,
+    );
 
     await act(async () => {
       fireEvent.press(getByText('gpt-5.4'));

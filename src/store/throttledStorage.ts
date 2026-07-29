@@ -257,9 +257,7 @@ export async function flushPendingStorageWrites(key?: string): Promise<void> {
   }
 
   while (pendingWrites.size > 0 || inFlightMutations.size > 0) {
-    const keys = Array.from(
-      new Set([...pendingWrites.keys(), ...inFlightMutations.keys()]),
-    );
+    const keys = Array.from(new Set([...pendingWrites.keys(), ...inFlightMutations.keys()]));
     await Promise.all(keys.map((pendingKey) => drainStorageKey(pendingKey)));
   }
 }

@@ -1,7 +1,12 @@
-import { useSettingsStore } from "../../store/useSettingsStore";
-import type { ExpoProjectListing } from "./contracts";
-import { getExpoAccounts, normalizeExpoProjectRef, normalizeRepo, trimToUndefined } from "./projectState";
-import { listExpoProjects } from "./projectSync";
+import { useSettingsStore } from '../../store/useSettingsStore';
+import type { ExpoProjectListing } from './contracts';
+import {
+  getExpoAccounts,
+  normalizeExpoProjectRef,
+  normalizeRepo,
+  trimToUndefined,
+} from './projectState';
+import { listExpoProjects } from './projectSync';
 export type ExpoProjectExecutionResolution =
   | {
       status: 'resolved';
@@ -57,7 +62,9 @@ function chooseExpoProjectExecutionCandidate(
   const enabledProjects = projects.filter((project) => project.readiness.reason !== 'disabled');
   const requestedRef = trimToUndefined(options?.projectRef);
   if (requestedRef) {
-    const matches = enabledProjects.filter((project) => matchesExpoProjectRef(project, requestedRef));
+    const matches = enabledProjects.filter((project) =>
+      matchesExpoProjectRef(project, requestedRef),
+    );
     if (matches.length === 1) {
       return {
         status: 'resolved',

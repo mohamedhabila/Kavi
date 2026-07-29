@@ -212,7 +212,15 @@ export const MemoryScreen: React.FC = () => {
     });
 
     return unsubscribe;
-  }, [loadDiagnostics, loadOverviewSnapshot, loadOverviewFacts, loadFacts, loadEpisodes, tab, overviewSearch]);
+  }, [
+    loadDiagnostics,
+    loadOverviewSnapshot,
+    loadOverviewFacts,
+    loadFacts,
+    loadEpisodes,
+    tab,
+    overviewSearch,
+  ]);
 
   const handleClearAll = useCallback(() => {
     Alert.alert(t('memory.clearTitle'), t('memory.clearConfirm'), [

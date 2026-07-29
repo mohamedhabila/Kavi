@@ -1,16 +1,12 @@
 import { useCallback, useRef, type MutableRefObject, type RefObject } from 'react';
 import { FlatList } from 'react-native';
-import {
-  AUTO_SCROLL_BOTTOM_THRESHOLD_PX,
-} from './chatScreenConstants';
+import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from './chatScreenConstants';
 
 type UseChatScrollControllerParams = {
   flatListRef: RefObject<FlatList<any> | null>;
 };
 
-export function useChatScrollController({
-  flatListRef,
-}: UseChatScrollControllerParams): {
+export function useChatScrollController({ flatListRef }: UseChatScrollControllerParams): {
   clearInteractionReleaseTimer: () => void;
   clearPendingScrollFrames: () => void;
   forceNextScrollRef: MutableRefObject<boolean>;

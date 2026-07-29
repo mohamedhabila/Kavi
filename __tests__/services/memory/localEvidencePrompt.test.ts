@@ -79,9 +79,9 @@ describe('local evidence prompt rendering', () => {
 
   it('omits zero evidence and rejects non-canonical or over-budget payloads', () => {
     expect(renderLocalEvidencePromptSection({ evidence: [], promptPayload: '[]' })).toBeNull();
-    expect(() =>
-      renderLocalEvidencePromptSection({ evidence: [], promptPayload: '[ ]' }),
-    ).toThrow('canonical empty payload');
+    expect(() => renderLocalEvidencePromptSection({ evidence: [], promptPayload: '[ ]' })).toThrow(
+      'canonical empty payload',
+    );
 
     const item = evidence('bounded');
     expect(() =>

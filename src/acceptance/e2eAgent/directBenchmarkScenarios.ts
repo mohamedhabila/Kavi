@@ -117,10 +117,7 @@ export const DIRECT_TAU_USER_COORDINATION_STATE: E2EScenario = {
     {
       kind: 'turn_clarification',
       turnIndex: 0,
-      requiredMissingInformation: [
-        { semanticRole: 'recipient' },
-        { semanticRole: 'content' },
-      ],
+      requiredMissingInformation: [{ semanticRole: 'recipient' }, { semanticRole: 'content' }],
     },
     { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
     { kind: 'turn_completion', turnIndex: 0, field: 'execution', expected: false },
@@ -433,12 +430,7 @@ export const DIRECT_BEAM_LONG_DIALOGUE_MULTI_PROBE: E2EScenario = {
       turnIndex: 7,
       answer: {
         kind: 'fact_values',
-        requiredValues: [
-          'BEAM-ROUTE-A',
-          'BEAM-MEAL-NEW',
-          'BEAM-WINDOW-9',
-          'BEAM-CHANNEL-7',
-        ],
+        requiredValues: ['BEAM-ROUTE-A', 'BEAM-MEAL-NEW', 'BEAM-WINDOW-9', 'BEAM-CHANNEL-7'],
         forbiddenValues: ['BEAM-MEAL-OLD'],
       },
     },

@@ -64,10 +64,21 @@ jest.mock('expo-file-system', () => ({
   Paths: { cache: '/tmp/cache', document: '/tmp/doc' },
 }));
 import { resetRemoteStore } from '../../src/services/remote/store';
-import { isValidBrowserProviderBaseUrl, applyBrowserProviderPreset, BROWSER_PROVIDER_PRESETS } from '../../src/services/browser/providers/registry';
-import { resolveBrowserProviderConnection, withBrowserProviderAuth } from '../../src/services/browser/providers/connection';
+import {
+  isValidBrowserProviderBaseUrl,
+  applyBrowserProviderPreset,
+  BROWSER_PROVIDER_PRESETS,
+} from '../../src/services/browser/providers/registry';
+import {
+  resolveBrowserProviderConnection,
+  withBrowserProviderAuth,
+} from '../../src/services/browser/providers/connection';
 import { getBrowserProviderReadiness } from '../../src/services/browser/providers/readiness';
-import { getBrowserProviderLabel, getBrowserProviderAuthLabel, getBrowserProviderAuthHint } from '../../src/services/browser/providers/labels';
+import {
+  getBrowserProviderLabel,
+  getBrowserProviderAuthLabel,
+  getBrowserProviderAuthHint,
+} from '../../src/services/browser/providers/labels';
 import type { BrowserProviderConfig } from '../../src/types/remote';
 function makeBrowserProvider(
   overrides: Partial<BrowserProviderConfig> = {},

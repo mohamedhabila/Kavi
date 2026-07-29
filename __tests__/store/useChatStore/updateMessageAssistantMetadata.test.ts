@@ -11,34 +11,34 @@ describe('useChatStore updateMessageAssistantMetadata', () => {
   ] as const)(
     'preserves code-owned memory attribution for the %s lifecycle rewrite',
     (finishReason, completionStatus) => {
-    const conversationId = useChatStore.getState().createConversation('p1', 's');
-    useChatStore.getState().addMessage(conversationId, {
-      id: 'assistant-1',
-      role: 'assistant',
-      content: 'Remembered answer',
-      assistantMetadata: {
+      const conversationId = useChatStore.getState().createConversation('p1', 's');
+      useChatStore.getState().addMessage(conversationId, {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Remembered answer',
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+          memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
+        },
+      });
+
+      useChatStore.getState().updateMessageAssistantMetadata(conversationId, 'assistant-1', {
         kind: 'final',
-        completionStatus: 'complete',
-        finishReason: 'stop',
+        completionStatus,
+        finishReason,
+      });
+
+      const message = useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === conversationId)?.messages[0];
+      expect(message?.assistantMetadata).toEqual({
+        kind: 'final',
+        completionStatus,
+        finishReason,
         memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
-      },
-    });
-
-    useChatStore.getState().updateMessageAssistantMetadata(conversationId, 'assistant-1', {
-      kind: 'final',
-      completionStatus,
-      finishReason,
-    });
-
-    const message = useChatStore
-      .getState()
-      .conversations.find((conversation) => conversation.id === conversationId)?.messages[0];
-    expect(message?.assistantMetadata).toEqual({
-      kind: 'final',
-      completionStatus,
-      finishReason,
-      memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
-    });
+      });
     },
   );
 

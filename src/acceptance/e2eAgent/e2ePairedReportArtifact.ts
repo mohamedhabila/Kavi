@@ -91,11 +91,7 @@ export function writeE2EPairedPublicReportArtifact(input: {
     const stagingDir = uniqueManagedPath(retentionRoot, runId, 'staging');
     mkdirSync(stagingDir, { recursive: false });
     try {
-      atomicWriteFileSync(
-        join(stagingDir, PAIRED_REPORT_FILE),
-        reportJson,
-        'utf8',
-      );
+      atomicWriteFileSync(join(stagingDir, PAIRED_REPORT_FILE), reportJson, 'utf8');
       atomicWriteFileSync(
         join(stagingDir, E2E_PAIRED_EVALUATION_RUN_FILE),
         JSON.stringify(manifest, null, 2),

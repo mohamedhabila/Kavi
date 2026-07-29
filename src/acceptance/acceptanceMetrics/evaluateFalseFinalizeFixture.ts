@@ -6,7 +6,9 @@ import { evaluateCompletionGate } from '../../engine/graph/completionGate';
 import type { FalseFinalizeFixture } from './falseFinalizeFixtures';
 import type { AcceptanceFixtureOutcome } from './types';
 
-export function evaluateFalseFinalizeFixture(fixture: FalseFinalizeFixture): AcceptanceFixtureOutcome {
+export function evaluateFalseFinalizeFixture(
+  fixture: FalseFinalizeFixture,
+): AcceptanceFixtureOutcome {
   const decision = evaluateCompletionGate(fixture.params);
   const isReady = decision.type === 'ready';
 

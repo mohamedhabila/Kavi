@@ -58,9 +58,7 @@ export async function resetAndVerifyE2EPairedConditionState(): Promise<void> {
   resetAndVerifyE2EScenarioSandboxes();
 }
 
-export async function withE2EPairedStoreIsolation<T>(
-  task: () => Promise<T>,
-): Promise<T> {
+export async function withE2EPairedStoreIsolation<T>(task: () => Promise<T>): Promise<T> {
   const chatSnapshot = useChatStore.getState();
   const settingsSnapshot = useSettingsStore.getState();
   let taskFailed = false;

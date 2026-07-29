@@ -7,8 +7,7 @@ function isLongTermMemoryTool(tool: ToolDefinition): boolean {
   const contract = tool.contract;
   return (
     contract?.resourceKinds?.includes('memory') === true ||
-    (typeof contract?.category === 'string' &&
-      MEMORY_CONTRACT_CATEGORIES.has(contract.category))
+    (typeof contract?.category === 'string' && MEMORY_CONTRACT_CATEGORIES.has(contract.category))
   );
 }
 
@@ -26,11 +25,7 @@ export function isToolAllowedForMemoryPolicy(
   tool: ToolDefinition,
   longTermMemoryEnabled = isLongTermMemoryEnabled(),
 ): boolean {
-  return (
-    longTermMemoryEnabled ||
-    !isLongTermMemoryTool(tool) ||
-    isExplicitMemoryErasureTool(tool)
-  );
+  return longTermMemoryEnabled || !isLongTermMemoryTool(tool) || isExplicitMemoryErasureTool(tool);
 }
 
 export function buildMemoryDisabledToolResult(): string {

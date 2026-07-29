@@ -5,11 +5,7 @@ import { exchangeAuthorization } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { McpServerConfig } from '../../types/remote';
 import { resolveClientInformation } from './oauthClientRegistration';
 import { createOAuthFetch, discoverServerInfo, getResourceUrl } from './oauthDiscovery';
-import {
-  appendProxyConfigurationHint,
-  McpOAuthError,
-  runOAuthOperation,
-} from './oauthErrors';
+import { appendProxyConfigurationHint, McpOAuthError, runOAuthOperation } from './oauthErrors';
 import { buildAuthorizationRequest, randomBase64Url } from './oauthPkce';
 import {
   getDirectRedirectUrl,
@@ -19,11 +15,7 @@ import {
   getStartUrl,
   shouldUseProxy,
 } from './oauthRedirects';
-import {
-  clearMcpOAuthState,
-  loadMcpOAuthState,
-  saveMcpOAuthState,
-} from './oauthState';
+import { clearMcpOAuthState, loadMcpOAuthState, saveMcpOAuthState } from './oauthState';
 import { isTokenExpired, refreshTokens } from './oauthTokens';
 
 export { McpOAuthError };

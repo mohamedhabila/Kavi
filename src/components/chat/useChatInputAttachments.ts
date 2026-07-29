@@ -100,14 +100,7 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
         style: 'cancel',
       },
     ]);
-  }, [
-    handlePickDocument,
-    handlePickImage,
-    isInputDisabled,
-    isVoiceActive,
-    supportsVision,
-    t,
-  ]);
+  }, [handlePickDocument, handlePickImage, isInputDisabled, isVoiceActive, supportsVision, t]);
 
   const removeAttachment = useCallback(
     (id: string) => {

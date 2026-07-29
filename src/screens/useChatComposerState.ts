@@ -122,7 +122,8 @@ export function useChatComposerState({
         attachments: activeComposerDraft.attachments,
         exactText,
       });
-    }, [activeComposerDraft, activeComposerDraftKey, updateComposerDraft],
+    },
+    [activeComposerDraft, activeComposerDraftKey, updateComposerDraft],
   );
 
   return {

@@ -81,9 +81,7 @@ export function buildPromptCachePrefixStability(
   const stableSystemPromptDigests = events.map(
     (event) => event.stableSystemPromptDigest?.trim() ?? '',
   );
-  const stableToolDigests = events.map(
-    (event) => event.stableToolDeclarationDigest?.trim() ?? '',
-  );
+  const stableToolDigests = events.map((event) => event.stableToolDeclarationDigest?.trim() ?? '');
   const prefixDigests = events.map((event) => event.cacheablePrefixDigest?.trim() ?? '');
   const toolDigests = events.map((event) => event.toolDeclarationDigest?.trim() ?? '');
   const nonEmptyStableSystemPromptDigests = stableSystemPromptDigests.filter(Boolean);

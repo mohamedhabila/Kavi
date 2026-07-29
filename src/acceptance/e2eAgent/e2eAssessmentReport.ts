@@ -222,9 +222,7 @@ export function formatE2EAssessmentReportSummary(report: E2EAssessmentReport): s
   return lines.join('\n');
 }
 
-export function summarizeAssessmentDimension(
-  dimensionId: E2EAssessmentDimension,
-): string {
+export function summarizeAssessmentDimension(dimensionId: E2EAssessmentDimension): string {
   return E2E_ASSESSMENT_DIMENSION_LABELS[dimensionId];
 }
 

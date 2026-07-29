@@ -2,7 +2,11 @@
 // Kavi — Session tool activation metrics
 // ---------------------------------------------------------------------------
 
-import { aggregateAcceptanceMetrics, buildPassRateSummary, isSummaryPassing } from './aggregateResults';
+import {
+  aggregateAcceptanceMetrics,
+  buildPassRateSummary,
+  isSummaryPassing,
+} from './aggregateResults';
 import { evaluateSessionToolActivationFixture } from './evaluateSessionToolActivationFixture';
 import { SESSION_TOOL_ACTIVATION_FIXTURES } from './sessionToolActivationFixtures';
 import type { AcceptanceMetricEvaluation } from './types';

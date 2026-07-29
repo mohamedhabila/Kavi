@@ -54,10 +54,7 @@ export function projectMobileControllerRecoveryToAgentRun(input: {
   if (input.run.status !== 'running') return rejected('run_not_active');
 
   const graph = input.run.controlGraph;
-  if (
-    !graph ||
-    !['awaiting_tool_results', 'recovering', 'waiting_async'].includes(graph.status)
-  ) {
+  if (!graph || !['awaiting_tool_results', 'recovering', 'waiting_async'].includes(graph.status)) {
     return rejected('graph_state_invalid');
   }
   const ownsExpectedToolCall = graph.expectedToolCalls.some(

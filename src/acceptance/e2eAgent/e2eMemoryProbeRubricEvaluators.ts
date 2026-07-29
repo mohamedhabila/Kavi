@@ -130,7 +130,11 @@ function parseMemoryRememberResult(content: string): MemoryRememberResult | null
   } catch {
     return null;
   }
-  if (!isRecord(parsed) || parsed.ok !== true || !MEMORY_REMEMBER_STATUSES.has(String(parsed.status))) {
+  if (
+    !isRecord(parsed) ||
+    parsed.ok !== true ||
+    !MEMORY_REMEMBER_STATUSES.has(String(parsed.status))
+  ) {
     return null;
   }
   const fact = parsed.fact;
@@ -384,7 +388,10 @@ function evaluateSelection(
     }
     for (const expectation of rubric.forbiddenFacts ?? []) {
       if (factIdsForExpectation(result, expectation).some((id) => selectedIds.has(id))) {
-        return invalidOutcome(fixtureId, `turn ${rubric.turnIndex} selected a forbidden memory fact`);
+        return invalidOutcome(
+          fixtureId,
+          `turn ${rubric.turnIndex} selected a forbidden memory fact`,
+        );
       }
     }
     return { fixtureId, passed: true };
@@ -402,7 +409,10 @@ function evaluateSelection(
   const supersededWrites = (rubric.supersededWrites ?? []).map((reference) =>
     resolveMemoryWrite(result, reference),
   );
-  if (requiredWrites.some((write) => write === null) || supersededWrites.some((write) => write === null)) {
+  if (
+    requiredWrites.some((write) => write === null) ||
+    supersededWrites.some((write) => write === null)
+  ) {
     return invalidOutcome(
       fixtureId,
       `turn ${rubric.turnIndex} memory write lineage evidence is unavailable`,
@@ -411,7 +421,8 @@ function evaluateSelection(
   const resolvedRequired = requiredWrites as ResolvedMemoryWrite[];
   const resolvedSuperseded = supersededWrites as ResolvedMemoryWrite[];
   if (
-    new Set([...resolvedRequired, ...resolvedSuperseded].map((write) => write.result.fact.id)).size !==
+    new Set([...resolvedRequired, ...resolvedSuperseded].map((write) => write.result.fact.id))
+      .size !==
     resolvedRequired.length + resolvedSuperseded.length
   ) {
     return invalidOutcome(

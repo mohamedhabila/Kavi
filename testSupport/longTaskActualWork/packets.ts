@@ -15,10 +15,7 @@ const SOURCE_PACKET_SPECS: SourcePacketSpec[] = [
   {
     title: 'Worker registry and lifecycle ownership',
     question: 'Trace process ownership, persistence boundaries, and terminal-state truth.',
-    sources: [
-      'src/services/agents/subAgent.ts',
-      'src/services/agents/lifecycle/runPhase.ts',
-    ],
+    sources: ['src/services/agents/subAgent.ts', 'src/services/agents/lifecycle/runPhase.ts'],
   },
   {
     title: 'Mobile spawn bounds and launch scaffolding',
@@ -38,7 +35,8 @@ const SOURCE_PACKET_SPECS: SourcePacketSpec[] = [
   },
   {
     title: 'Worker waiting and result evidence',
-    question: 'Check bounded waits, terminal evidence, output retrieval, and misleading status risks.',
+    question:
+      'Check bounded waits, terminal evidence, output retrieval, and misleading status risks.',
     sources: [
       'src/engine/tools/builtin-session-wait.ts',
       'src/engine/tools/builtin-session-resultSupport.ts',
@@ -120,7 +118,8 @@ const SOURCE_PACKET_SPECS: SourcePacketSpec[] = [
   },
   {
     title: 'Interrupted response and final preview recovery',
-    question: 'Assess whether verified work can be recovered without duplicate user-visible replies.',
+    question:
+      'Assess whether verified work can be recovered without duplicate user-visible replies.',
     sources: [
       'src/engine/graph/foregroundRun/interruptedResponseRecovery.ts',
       'src/engine/graph/foregroundRun/finalPreviewRecovery.ts',
@@ -141,7 +140,8 @@ const SOURCE_PACKET_SPECS: SourcePacketSpec[] = [
   },
   {
     title: 'Semantic memory write authority',
-    question: 'Audit evidence grounding, identifier preservation, replacement, and privacy boundaries.',
+    question:
+      'Audit evidence grounding, identifier preservation, replacement, and privacy boundaries.',
     sources: [
       'src/services/memory/memoryRememberSemanticEvidence.ts',
       'src/engine/tools/builtin-definitions-memory.ts',
@@ -149,7 +149,8 @@ const SOURCE_PACKET_SPECS: SourcePacketSpec[] = [
   },
   {
     title: 'Live foreground evaluation fidelity',
-    question: 'Identify where the harness matches production chat and where claims must stay narrow.',
+    question:
+      'Identify where the harness matches production chat and where claims must stay narrow.',
     sources: [
       'src/acceptance/e2eAgent/foregroundScenarioDriver.ts',
       'src/acceptance/e2eAgent/scenarioRunner.ts',
@@ -157,7 +158,8 @@ const SOURCE_PACKET_SPECS: SourcePacketSpec[] = [
   },
   {
     title: 'User-visible worker progress',
-    question: 'Assess whether long work remains understandable, interruptible, and recoverable in chat.',
+    question:
+      'Assess whether long work remains understandable, interruptible, and recoverable in chat.',
     sources: [
       'src/screens/ChatScreen.tsx',
       'src/screens/subAgentLifecyclePresentation.ts',

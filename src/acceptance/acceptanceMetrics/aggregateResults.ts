@@ -2,7 +2,11 @@
 // Kavi — Acceptance metric aggregation
 // ---------------------------------------------------------------------------
 
-import type { AcceptanceFixtureOutcome, AcceptanceMetricEvaluation, AcceptanceMetricSummary } from './types';
+import type {
+  AcceptanceFixtureOutcome,
+  AcceptanceMetricEvaluation,
+  AcceptanceMetricSummary,
+} from './types';
 
 export function buildPassRateSummary(params: {
   metricId: string;
@@ -33,7 +37,9 @@ export function isSummaryPassing(summary: AcceptanceMetricSummary): boolean {
     : summary.passRate <= summary.targetRate;
 }
 
-export function aggregateAcceptanceMetrics(summaries: AcceptanceMetricSummary[]): AcceptanceMetricEvaluation {
+export function aggregateAcceptanceMetrics(
+  summaries: AcceptanceMetricSummary[],
+): AcceptanceMetricEvaluation {
   return {
     passed: summaries.every(isSummaryPassing),
     summaries,

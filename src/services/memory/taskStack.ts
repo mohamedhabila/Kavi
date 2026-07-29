@@ -134,9 +134,7 @@ export function pauseTask(threadId: string, taskId: string, now: number = Date.n
   const trimmedId = taskId.trim();
   if (!threadId.trim() || !trimmedId) return;
   const entries = readBlock(threadId).map((entry) =>
-    entry.id === trimmedId
-      ? { ...entry, state: 'paused' as const, lastActiveAt: now }
-      : entry,
+    entry.id === trimmedId ? { ...entry, state: 'paused' as const, lastActiveAt: now } : entry,
   );
   writeBlock(threadId, entries);
 }
@@ -203,9 +201,7 @@ export function upsertGoalTaskEntry(
   }
 
   const updated = entries.map((entry) =>
-    entry.id === trimmedId
-      ? { ...entry, title: trimmedTitle, state, lastActiveAt: now }
-      : entry,
+    entry.id === trimmedId ? { ...entry, title: trimmedTitle, state, lastActiveAt: now } : entry,
   );
   writeBlock(trimmedThreadId, updated);
   return updated.find((entry) => entry.id === trimmedId)!;

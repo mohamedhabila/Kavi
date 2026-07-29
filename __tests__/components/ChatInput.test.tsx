@@ -190,7 +190,11 @@ describe('ChatInput', () => {
     expect(input.props.autoCapitalize).toBe('none');
     expect(input.props.autoCorrect).toBe(false);
     expect(input.props.keyboardType).toBe(
-      Platform.OS === 'ios' ? 'ascii-capable' : Platform.OS === 'android' ? 'visible-password' : 'default',
+      Platform.OS === 'ios'
+        ? 'ascii-capable'
+        : Platform.OS === 'android'
+          ? 'visible-password'
+          : 'default',
     );
     expect(input.props.spellCheck).toBe(false);
     expect(input.props.smartInsertDelete).toBe(false);

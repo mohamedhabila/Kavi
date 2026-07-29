@@ -348,9 +348,8 @@ export function collectCurrentRunCompletedToolResults(params: {
 
   const completed: CurrentRunCompletedToolResult[] = [];
   for (const message of params.workingMessages) {
-    const toolCall = message.role === 'tool' && message.toolCalls?.length === 1
-      ? message.toolCalls[0]
-      : undefined;
+    const toolCall =
+      message.role === 'tool' && message.toolCalls?.length === 1 ? message.toolCalls[0] : undefined;
     if (
       !toolCall ||
       !isExactMemoryProvenanceId(message.id) ||
@@ -475,7 +474,9 @@ function isUniqueSourceIdentity(
 function mintCapability(
   binding: ToolObservedMemoryEvidenceBinding,
 ): ToolObservedMemoryEvidenceCapability {
-  const capability = Object.freeze({ kind: CAPABILITY_KIND }) as ToolObservedMemoryEvidenceCapability;
+  const capability = Object.freeze({
+    kind: CAPABILITY_KIND,
+  }) as ToolObservedMemoryEvidenceCapability;
   CAPABILITY_BINDINGS.set(capability, binding);
   return capability;
 }
@@ -497,14 +498,15 @@ export function bindCurrentTurnToolObservedMemoryEvidence(
   if (!isExactMemoryProvenanceId(input.currentUserMessageId) || !currentRunCompletions) {
     return Object.freeze([]);
   }
-  const currentUserIndex = findCurrentUserIndex(
-    input.workingMessages,
-    input.currentUserMessageId,
-  );
+  const currentUserIndex = findCurrentUserIndex(input.workingMessages, input.currentUserMessageId);
   if (currentUserIndex < 0) return Object.freeze([]);
 
   const capabilities: ToolObservedMemoryEvidenceCapability[] = [];
-  for (let resultIndex = currentUserIndex + 1; resultIndex < input.workingMessages.length; resultIndex += 1) {
+  for (
+    let resultIndex = currentUserIndex + 1;
+    resultIndex < input.workingMessages.length;
+    resultIndex += 1
+  ) {
     const message = input.workingMessages[resultIndex]!;
     if (message.role !== 'tool' || message.toolCalls?.length !== 1) continue;
     const resultCall = message.toolCalls[0]!;
@@ -548,10 +550,7 @@ export function bindCurrentTurnToolObservedMemoryEvidence(
       continue;
     }
 
-    const canonical = resolveUniqueExecutedCanonicalTool(
-      input.executedToolDefinitions,
-      toolName,
-    );
+    const canonical = resolveUniqueExecutedCanonicalTool(input.executedToolDefinitions, toolName);
     if (!canonical || !isEligibleStaticEvidenceTool(canonical)) continue;
 
     const binding = Object.freeze({
@@ -650,12 +649,7 @@ export function deriveExactToolObservedMemoryEvidenceSpan(
   }
 
   const evidenceSpan = source.slice(best.evidenceSpanStart, best.evidenceSpanEnd);
-  if (
-    !codePointLengthAtMost(
-      evidenceSpan,
-      TOOL_OBSERVED_MEMORY_EVIDENCE_MAX_SPAN_CODE_POINTS,
-    )
-  ) {
+  if (!codePointLengthAtMost(evidenceSpan, TOOL_OBSERVED_MEMORY_EVIDENCE_MAX_SPAN_CODE_POINTS)) {
     return Object.freeze({ ok: false, reason: 'span_too_large' });
   }
   return Object.freeze({ ok: true, evidenceSpan, ...best });

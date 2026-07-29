@@ -50,17 +50,17 @@ function findOwnedToolCall(
 }
 
 function existingToolResults(messages: ReadonlyArray<Message>, toolCallId: string): Message[] {
-  return messages.filter(
-    (message) => message.role === 'tool' && message.toolCallId === toolCallId,
-  );
+  return messages.filter((message) => message.role === 'tool' && message.toolCallId === toolCallId);
 }
 
 function receiptReplayMatches(toolCall: ToolCall, receipt: ToolEffectReceipt): boolean {
   try {
-    return appendToolEffectReceipt(toolCall.effectReceipts, receipt, {
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-    }) === toolCall.effectReceipts;
+    return (
+      appendToolEffectReceipt(toolCall.effectReceipts, receipt, {
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+      }) === toolCall.effectReceipts
+    );
   } catch {
     return false;
   }

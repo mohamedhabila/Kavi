@@ -1,10 +1,7 @@
 import type { Conversation } from '../../../types/conversation';
 import type { RunChatOptions } from './contracts';
 import type { ForegroundConversationRunState } from './executionTypes';
-import {
-  resolveForegroundRunPreflight,
-  type ForegroundRunPreflightResult,
-} from './preflight';
+import { resolveForegroundRunPreflight, type ForegroundRunPreflightResult } from './preflight';
 
 type ReadyPreflight = Extract<ForegroundRunPreflightResult, { kind: 'ready' }>;
 

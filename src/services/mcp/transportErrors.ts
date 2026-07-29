@@ -22,7 +22,9 @@ export class McpTransportError extends Error {
 }
 
 export function hasConfiguredMcpAuth(headers: Record<string, string> | undefined): boolean {
-  return Object.keys(headers || {}).some((key) => /authorization|api[-_]key|token|cookie/i.test(key));
+  return Object.keys(headers || {}).some((key) =>
+    /authorization|api[-_]key|token|cookie/i.test(key),
+  );
 }
 
 function extractServerErrorMessage(bodyText: string): string | null {

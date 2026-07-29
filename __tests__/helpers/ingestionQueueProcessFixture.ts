@@ -36,10 +36,8 @@ export function commitMockedProviderFinalReceipt(
   const finalReceipt = receiptFromMockedIngestionResult(result);
   input.commitPersistenceReceipt?.({
     ...finalReceipt,
-    activeFocusUpdated:
-      finalReceipt.activeFocusUpdated || structural?.activeFocusUpdated === true,
-    openThreadsUpdated:
-      finalReceipt.openThreadsUpdated || structural?.openThreadsUpdated === true,
+    activeFocusUpdated: finalReceipt.activeFocusUpdated || structural?.activeFocusUpdated === true,
+    openThreadsUpdated: finalReceipt.openThreadsUpdated || structural?.openThreadsUpdated === true,
   });
 }
 

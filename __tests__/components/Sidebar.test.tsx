@@ -195,12 +195,7 @@ describe('Sidebar', () => {
   it('starts a new chat in one tap', () => {
     const { getByTestId } = render(<Sidebar {...defaultProps} />);
     fireEvent.press(getByTestId('sidebar-new-chat'));
-    expect(mockCreateConversation).toHaveBeenCalledWith(
-      'openai',
-      'You are helpful',
-      'gpt-5.4',
-      {},
-    );
+    expect(mockCreateConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4', {});
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
     expect(mockNavigation.closeDrawer).toHaveBeenCalled();
   });
@@ -209,12 +204,7 @@ describe('Sidebar', () => {
     mockActiveConversationId = null;
     const { getByTestId } = render(<Sidebar {...defaultProps} />);
     fireEvent.press(getByTestId('sidebar-new-chat'));
-    expect(mockCreateConversation).toHaveBeenCalledWith(
-      'openai',
-      'You are helpful',
-      'gpt-5.4',
-      {},
-    );
+    expect(mockCreateConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4', {});
   });
 
   it('should route users to settings instead of starting a chat without a provider', () => {

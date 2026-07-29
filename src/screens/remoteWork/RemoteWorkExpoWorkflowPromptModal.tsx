@@ -16,10 +16,7 @@ type RemoteWorkExpoWorkflowPromptModalProps = {
   colors: { textTertiary: string };
   expoWorkflowPrompt: ExpoWorkflowPromptState;
   setExpoWorkflowPrompt: React.Dispatch<React.SetStateAction<ExpoWorkflowPromptState>>;
-  getExpoActionLabel: (
-    action: ExpoActionType,
-    overrides?: ExpoActionOverrides,
-  ) => string;
+  getExpoActionLabel: (action: ExpoActionType, overrides?: ExpoActionOverrides) => string;
   handleConfirmExpoWorkflowPrompt: () => void;
 };
 

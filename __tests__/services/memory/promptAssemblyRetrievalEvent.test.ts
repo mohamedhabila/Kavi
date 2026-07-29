@@ -13,9 +13,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
-import {
-  initializeMemoryPolicyObservation,
-} from '../../../src/services/memory/policy';
+import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

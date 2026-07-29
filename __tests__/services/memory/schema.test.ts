@@ -665,5 +665,4 @@ describe('ensureFactSchema', () => {
     ).toBe(0);
     expect(getLocalMemoryVaultOwnerId(getMemoryDb())).toBe(ownerId);
   });
-
 });

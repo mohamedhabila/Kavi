@@ -1,13 +1,7 @@
-import {
-  buildAgentRunMobileControllerAsyncOperation,
-} from '../../src/services/agents/mobileControllerAsyncOperation';
+import { buildAgentRunMobileControllerAsyncOperation } from '../../src/services/agents/mobileControllerAsyncOperation';
 import type { MobileControllerRecoveryCommand } from '../../src/services/executionJournal/mobileControllerRecoveryCommand';
-import {
-  projectMobileControllerRecoveryToAgentRun,
-} from '../../src/engine/graph/mobileControllerRecoveryProjection';
-import {
-  reduceAgentControlGraph,
-} from '../../src/engine/graph/agentControlGraph';
+import { projectMobileControllerRecoveryToAgentRun } from '../../src/engine/graph/mobileControllerRecoveryProjection';
+import { reduceAgentControlGraph } from '../../src/engine/graph/agentControlGraph';
 import type { AgentRunControlGraphState } from '../../src/types/agentRun';
 import { makeTestAgentRun } from '../helpers/factories';
 

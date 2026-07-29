@@ -253,11 +253,7 @@ describe('executeToolInner — raw core tools routing', () => {
       { id: 'job-2', name: 'duplicate', enabled: false } as any,
     ]);
 
-    const result = await executeTool(
-      'cron',
-      '{"action":"disable","name":"duplicate"}',
-      CONV_ID,
-    );
+    const result = await executeTool('cron', '{"action":"disable","name":"duplicate"}', CONV_ID);
 
     expect(result.status).toBe('failed');
     expect(JSON.parse(result.content)).toMatchObject({

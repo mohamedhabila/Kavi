@@ -122,9 +122,7 @@ describe('foreground run assistant message lookup', () => {
         role: 'assistant',
         content: '',
         timestamp: 2,
-        toolCalls: [
-          { id: 'call-1', name: 'read_file', arguments: '{}', status: 'completed' },
-        ],
+        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: '{}', status: 'completed' }],
         assistantMetadata: {
           kind: 'intermediate',
           completionStatus: 'complete',

@@ -125,9 +125,7 @@ describe('resolvePreferredAgentRunFinalResponseMessageId', () => {
           completionStatus: 'complete',
           finishReason: 'tool_calls',
         },
-        toolCalls: [
-          { id: 'call-1', name: 'update_goals', arguments: '{}', status: 'completed' },
-        ],
+        toolCalls: [{ id: 'call-1', name: 'update_goals', arguments: '{}', status: 'completed' }],
       }),
     ];
 

@@ -15,7 +15,13 @@ jest.mock('../../src/services/voice/voice', () => ({
   speakText: jest.fn().mockResolvedValue(undefined),
   stopSpeaking: jest.fn().mockResolvedValue(undefined),
 }));
-import { TalkModeManager, type TalkModeState, type TalkModeConfig, type TalkModeEventHandler, type AgentHandler } from '../../src/services/voice/talkMode';
+import {
+  TalkModeManager,
+  type TalkModeState,
+  type TalkModeConfig,
+  type TalkModeEventHandler,
+  type AgentHandler,
+} from '../../src/services/voice/talkMode';
 
 describe('TalkModeManager', () => {
   const mockAgentHandler: AgentHandler = jest.fn().mockResolvedValue('AI response');

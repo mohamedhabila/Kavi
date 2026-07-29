@@ -35,11 +35,7 @@ export function ChatInputOptionsSheet(props: ChatInputOptionsSheetProps) {
           style={props.styles.optionsBackdrop}
           testID="chat-input-options-backdrop"
         />
-        <SafeAreaView
-          accessibilityViewIsModal
-          edges={['bottom']}
-          style={props.styles.optionsSheet}
-        >
+        <SafeAreaView accessibilityViewIsModal edges={['bottom']} style={props.styles.optionsSheet}>
           <View style={props.styles.optionsHandle} />
           <View style={props.styles.optionsHeader}>
             <Text style={props.styles.optionsTitle}>{props.t('chat.inputOptions')}</Text>

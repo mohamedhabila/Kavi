@@ -84,18 +84,14 @@ export function buildAnthropicToolChoice(
     return {
       type: 'tool',
       name: choice.name.trim(),
-      ...(choice.disableParallelToolUse === true
-        ? { disable_parallel_tool_use: true }
-        : {}),
+      ...(choice.disableParallelToolUse === true ? { disable_parallel_tool_use: true } : {}),
     };
   }
 
   if (choice === 'required' || isRequiredToolChoice(choice)) {
     return {
       type: 'any',
-      ...(shouldDisableParallelToolUse(choice)
-        ? { disable_parallel_tool_use: true }
-        : {}),
+      ...(shouldDisableParallelToolUse(choice) ? { disable_parallel_tool_use: true } : {}),
     };
   }
 

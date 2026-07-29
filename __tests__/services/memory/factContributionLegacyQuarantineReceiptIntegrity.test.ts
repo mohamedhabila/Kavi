@@ -82,7 +82,10 @@ it('deletes only receipts containing quarantined fact lineage without rewriting 
     },
     { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
   ).fact;
-  const row = getMemoryDb().getFirstSync<FactRow>('SELECT * FROM memory_facts WHERE id = ?', fact.id);
+  const row = getMemoryDb().getFirstSync<FactRow>(
+    'SELECT * FROM memory_facts WHERE id = ?',
+    fact.id,
+  );
   if (!row) throw new Error('legacy fact fixture missing');
 
   insertProviderReceipt('provider-affected', fact.id);
@@ -97,7 +100,5 @@ it('deletes only receipts containing quarantined fact lineage without rewriting 
   });
 
   expect(receiptJobIds('memory_ingestion_receipts')).toEqual(['provider-retained']);
-  expect(receiptJobIds('memory_ingestion_structural_receipts')).toEqual([
-    'structural-retained',
-  ]);
+  expect(receiptJobIds('memory_ingestion_structural_receipts')).toEqual(['structural-retained']);
 });

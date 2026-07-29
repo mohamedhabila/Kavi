@@ -84,10 +84,7 @@ export function buildWorkflowContinuationPrompt(params: {
       continuations.set(`${producerName}:${successorName}`, {
         producerName,
         successorName,
-        resourceKinds: collectContinuationResourceKinds(
-          producerContract,
-          successorContract,
-        ),
+        resourceKinds: collectContinuationResourceKinds(producerContract, successorContract),
       });
     }
   }
@@ -107,9 +104,7 @@ export function buildWorkflowContinuationPrompt(params: {
     ...ordered.map(
       (continuation) =>
         `- ${continuation.producerName} → ${continuation.successorName}${
-          continuation.resourceKinds.length > 0
-            ? ` (${continuation.resourceKinds.join(', ')})`
-            : ''
+          continuation.resourceKinds.length > 0 ? ` (${continuation.resourceKinds.join(', ')})` : ''
         }`,
     ),
     'These successor tools are available on this turn. If the current user request requires a listed continuation, execute it before final delivery and use exact identifiers from the preceding tool result. Do not report a listed successor as unavailable.',

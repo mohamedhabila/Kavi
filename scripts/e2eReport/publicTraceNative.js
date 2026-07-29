@@ -28,12 +28,8 @@ function projectStateFingerprints(value) {
 function projectNativeTurnEvidence(value) {
   const source = asRecord(value);
   const invocationCount = source ? nonNegativeInteger(source.invocationCount) : null;
-  const handledInvocationCount = source
-    ? nonNegativeInteger(source.handledInvocationCount)
-    : null;
-  const changedStateFieldCount = source
-    ? nonNegativeInteger(source.changedStateFieldCount)
-    : null;
+  const handledInvocationCount = source ? nonNegativeInteger(source.handledInvocationCount) : null;
+  const changedStateFieldCount = source ? nonNegativeInteger(source.changedStateFieldCount) : null;
   const toolInvocations = source
     ? projectArray(source.toolInvocations, projectNativeToolInvocation, 512)
     : null;

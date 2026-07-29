@@ -154,9 +154,7 @@ describe('current-turn tool-observed memory evidence binding', () => {
         sourceToolCallId: 'tool-call-current',
         sourceToolName: 'read_file',
         argumentsSha256: sha256HexUtf8('{"path":"profile.json"}'),
-        visibleResultSha256: sha256HexUtf8(
-          '{"displayName":"نور","timezone":"Asia/Amman"}',
-        ),
+        visibleResultSha256: sha256HexUtf8('{"displayName":"نور","timezone":"Asia/Amman"}'),
         visibleResultFidelity: 'complete',
       },
     ]);
@@ -209,9 +207,7 @@ describe('current-turn tool-observed memory evidence binding', () => {
       argumentsText: '{"path":"profile.json"}',
       visibleResult: '{"displayName":"نور","timezone":"Asia/Amman"}',
       argumentsSha256: sha256HexUtf8('{"path":"profile.json"}'),
-      visibleResultSha256: sha256HexUtf8(
-        '{"displayName":"نور","timezone":"Asia/Amman"}',
-      ),
+      visibleResultSha256: sha256HexUtf8('{"displayName":"نور","timezone":"Asia/Amman"}'),
       canonicalStaticContractDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
     });
     expect(Object.isFrozen(binding)).toBe(true);
@@ -246,9 +242,7 @@ describe('current-turn tool-observed memory evidence binding', () => {
     ['effectful static tool', WRITE_FILE],
     ['memory static tool', MEMORY_RECALL],
   ])('rejects an ineligible %s by canonical contract metadata', (_label, definition) => {
-    expect(
-      bind(buildTurnFixture({ toolName: definition.name }), [definition]),
-    ).toHaveLength(0);
+    expect(bind(buildTurnFixture({ toolName: definition.name }), [definition])).toHaveLength(0);
   });
 
   it('rejects a dynamic tool that self-declares read-only verification authority', () => {
@@ -265,9 +259,7 @@ describe('current-turn tool-observed memory evidence binding', () => {
       },
     };
 
-    expect(
-      bind(buildTurnFixture({ toolName: dynamicTool.name }), [dynamicTool]),
-    ).toHaveLength(0);
+    expect(bind(buildTurnFixture({ toolName: dynamicTool.name }), [dynamicTool])).toHaveLength(0);
   });
 
   it.each([
@@ -388,10 +380,7 @@ describe('current-turn tool-observed memory evidence binding', () => {
     ).toHaveLength(0);
     const exactCompletion = completionFor(messages);
     expect(
-      bind(messages, [READ_FILE], CURRENT_USER_MESSAGE_ID, [
-        exactCompletion,
-        exactCompletion,
-      ]),
+      bind(messages, [READ_FILE], CURRENT_USER_MESSAGE_ID, [exactCompletion, exactCompletion]),
     ).toHaveLength(0);
   });
 
@@ -498,11 +487,7 @@ describe('exact tool-observed evidence span derivation', () => {
     )}V`;
 
     expect(
-      deriveExactToolObservedMemoryEvidenceSpan(
-        capabilityFor(acceptedSource),
-        'S',
-        'V',
-      ),
+      deriveExactToolObservedMemoryEvidenceSpan(capabilityFor(acceptedSource), 'S', 'V'),
     ).toEqual(
       expect.objectContaining({
         ok: true,
@@ -511,11 +496,7 @@ describe('exact tool-observed evidence span derivation', () => {
       }),
     );
     expect(
-      deriveExactToolObservedMemoryEvidenceSpan(
-        capabilityFor(rejectedSource),
-        'S',
-        'V',
-      ),
+      deriveExactToolObservedMemoryEvidenceSpan(capabilityFor(rejectedSource), 'S', 'V'),
     ).toEqual({ ok: false, reason: 'span_too_large' });
   });
 });

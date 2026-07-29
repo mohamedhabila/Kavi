@@ -72,8 +72,7 @@ function readFirstEnvValue(env, envNames) {
 function resolveE2eProviderSpec(env = process.env) {
   const configured = (env.E2E_PROVIDER || env.E2E_PROVIDER_FAMILY || '').trim().toLowerCase();
   return (
-    E2E_PROVIDER_SPECS.find((spec) => spec.aliases.includes(configured)) ||
-    E2E_PROVIDER_SPECS[0]
+    E2E_PROVIDER_SPECS.find((spec) => spec.aliases.includes(configured)) || E2E_PROVIDER_SPECS[0]
   );
 }
 

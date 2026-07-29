@@ -638,5 +638,4 @@ describe('recordCompletedTurnForMemory', () => {
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(getConsolidationState('conv-structural-only')?.lastConsolidatedMessageId).toBe('a-1');
   });
-
 });

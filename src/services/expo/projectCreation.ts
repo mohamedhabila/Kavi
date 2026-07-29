@@ -1,5 +1,5 @@
-import { useSettingsStore } from "../../store/useSettingsStore";
-import type { ExpoProjectListing } from "./contracts";
+import { useSettingsStore } from '../../store/useSettingsStore';
+import type { ExpoProjectListing } from './contracts';
 import {
   getExpoAccounts,
   getExpoProjectDisplayOwner,
@@ -8,11 +8,15 @@ import {
   resolveExpoAccount,
   resolveExpoProject,
   slugifyExpoProjectName,
-} from "./projectState";
-import { getExpoProjectReadiness, getExpoProjectReadinessLabel } from "./projectAutomation";
-import { findExpoProjectByFullNameAsync, fetchExpoRemoteAccountAsync, createExpoRemoteProjectAsync } from "./projectRemote";
-import { resolveExpoAccountToken } from "./secrets";
-import { syncExpoAccountProjects } from "./projectSync";
+} from './projectState';
+import { getExpoProjectReadiness, getExpoProjectReadinessLabel } from './projectAutomation';
+import {
+  findExpoProjectByFullNameAsync,
+  fetchExpoRemoteAccountAsync,
+  createExpoRemoteProjectAsync,
+} from './projectRemote';
+import { resolveExpoAccountToken } from './secrets';
+import { syncExpoAccountProjects } from './projectSync';
 export async function createExpoProject(args: {
   accountId?: string;
   name: string;

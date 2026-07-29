@@ -11,10 +11,7 @@ function createProviderWithInstalledModel(downloadRevision: string): LlmProvider
   const catalogEntry = getLocalLlmCatalogEntry(modelId)!;
   const localPath = `file:///mock/documents/local-llm/models/${catalogEntry.fileName}`;
   new File(localPath).write('downloaded');
-  (jest.requireMock('expo-file-system') as any).__setFileSize?.(
-    localPath,
-    catalogEntry.sizeBytes,
-  );
+  (jest.requireMock('expo-file-system') as any).__setFileSize?.(localPath, catalogEntry.sizeBytes);
 
   return {
     id: 'local',

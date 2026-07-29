@@ -66,14 +66,12 @@ function isAuthorizedMemoryAuthorityContinuation(
   continuation: MemoryAuthoritySnapshot,
 ): boolean {
   return (
-    continuation.restrictiveRevision.memoryOwnerId ===
-      initial.restrictiveRevision.memoryOwnerId &&
+    continuation.restrictiveRevision.memoryOwnerId === initial.restrictiveRevision.memoryOwnerId &&
     continuation.restrictiveRevision.value === initial.restrictiveRevision.value &&
     continuation.policy.enabled === true &&
     continuation.policy.revision === initial.policy.revision &&
     continuation.processEpochs.restrictive === initial.processEpochs.restrictive &&
-    continuation.projectionRevision.memoryOwnerId ===
-      initial.projectionRevision.memoryOwnerId &&
+    continuation.projectionRevision.memoryOwnerId === initial.projectionRevision.memoryOwnerId &&
     continuation.projectionRevision.value >= initial.projectionRevision.value
   );
 }

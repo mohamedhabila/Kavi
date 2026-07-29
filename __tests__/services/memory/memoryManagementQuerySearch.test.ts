@@ -62,8 +62,8 @@ describe('memory management query search', () => {
   it('rejects ambiguous search and exact-filter combinations', () => {
     recordMemory('role', 'Reliability Engineer', 1);
 
-    expect(
-      queryMemoryFactsForManagement({ search: 'reliability', subject: 'user' }),
-    ).toMatchObject({ ok: false, code: 'invalid_args' });
+    expect(queryMemoryFactsForManagement({ search: 'reliability', subject: 'user' })).toMatchObject(
+      { ok: false, code: 'invalid_args' },
+    );
   });
 });

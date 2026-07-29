@@ -1,7 +1,9 @@
 import { fetchJson } from '../shared/http';
 
 export async function fetchCryptoPrice(args: Record<string, unknown>): Promise<string> {
-  const coinId = String(args.coinId || '').trim().toLowerCase();
+  const coinId = String(args.coinId || '')
+    .trim()
+    .toLowerCase();
   if (!coinId) {
     throw new Error('Crypto price requires a CoinGecko coinId such as bitcoin or ethereum');
   }

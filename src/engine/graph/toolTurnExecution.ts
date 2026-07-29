@@ -180,9 +180,7 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
   mobileController?: MobileControllerExecutionBinding;
-  publishMobileControllerHandoff?: (
-    handoff: PersistedMobileControllerHandoff,
-  ) => Promise<void>;
+  publishMobileControllerHandoff?: (handoff: PersistedMobileControllerHandoff) => Promise<void>;
   verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   warningInjectedThisRound: boolean;
   turnAssistantContent: string;
@@ -277,10 +275,9 @@ export async function executeAgentControlGraphToolTurn(
   const isMobileControllerTurn =
     executableToolCalls.length === 1 &&
     resolveRegisteredToolName(executableToolCalls[0]!.name) === MOBILE_UI_ACTION_TOOL_NAME;
-  const mobileControllerAdmissionBlock =
-    isMobileControllerTurn
-      ? buildMobileControllerGoalAdmissionBlock(projectedControlGraphGoals)
-      : undefined;
+  const mobileControllerAdmissionBlock = isMobileControllerTurn
+    ? buildMobileControllerGoalAdmissionBlock(projectedControlGraphGoals)
+    : undefined;
   const mobileControllerRecoveryDecision =
     isMobileControllerTurn && !mobileControllerAdmissionBlock
       ? resolveMobileControllerRecoveryPreflight({
@@ -386,9 +383,10 @@ export async function executeAgentControlGraphToolTurn(
     throw new MemoryPromptEpochExpiredError();
   }
 
-  const batchYieldedEarly = toolExecutionOutcomes.some((outcome) =>
-    'deferredHandoff' in outcome ||
-    ('yieldedMessage' in outcome && Boolean(outcome.yieldedMessage)),
+  const batchYieldedEarly = toolExecutionOutcomes.some(
+    (outcome) =>
+      'deferredHandoff' in outcome ||
+      ('yieldedMessage' in outcome && Boolean(outcome.yieldedMessage)),
   );
   if (
     !batchYieldedEarly &&

@@ -244,9 +244,7 @@ describe('foreground scenario memory settlement', () => {
           });
       },
     );
-    mockedGetIngestionJob
-      .mockImplementationOnce(() => pending)
-      .mockReturnValue(checkpointed);
+    mockedGetIngestionJob.mockImplementationOnce(() => pending).mockReturnValue(checkpointed);
     mockedDrainIngestionQueueWithWakeup.mockReturnValueOnce(draining);
 
     await expect(

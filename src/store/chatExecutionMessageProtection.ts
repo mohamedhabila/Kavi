@@ -68,9 +68,7 @@ export function preserveProtectedExecutionMessages(
     return changed ? normalizedCandidates : candidateMessages;
   }
 
-  const leadingSystemCount = normalizedCandidates.findIndex(
-    (message) => message.role !== 'system',
-  );
+  const leadingSystemCount = normalizedCandidates.findIndex((message) => message.role !== 'system');
   const requestInsertionIndex =
     leadingSystemCount < 0 ? normalizedCandidates.length : leadingSystemCount;
   const withRequests = [

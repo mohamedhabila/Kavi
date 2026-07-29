@@ -1,4 +1,14 @@
-import { processCanvasMessage, getSurface, getAllSurfaces, getActiveSurfaces, renderSurfaceToHtml, deleteSurface, clearAllSurfaces, hydrateCanvasSurfaces, setCanvasEventHandler } from '../../src/services/canvas/renderer';
+import {
+  processCanvasMessage,
+  getSurface,
+  getAllSurfaces,
+  getActiveSurfaces,
+  renderSurfaceToHtml,
+  deleteSurface,
+  clearAllSurfaces,
+  hydrateCanvasSurfaces,
+  setCanvasEventHandler,
+} from '../../src/services/canvas/renderer';
 import type { ServerToClientMessage } from '../../src/services/canvas/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

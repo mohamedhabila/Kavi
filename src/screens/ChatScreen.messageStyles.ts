@@ -1,56 +1,57 @@
 import { StyleSheet } from 'react-native';
 import type { AppPalette } from '../theme/useAppTheme';
 
-export const createChatMessageStyles = (colors: AppPalette) => ({
-  messageList: {
-    paddingVertical: 8,
-    paddingBottom: 16,
-  },
-  messageListEmpty: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  historyWindowHeader: {
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 8,
-  },
-  historyWindowButton: {
-    minHeight: 34,
-    maxWidth: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  historyWindowButtonText: {
-    maxWidth: '100%',
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  temporalMarkerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginVertical: 12,
-    gap: 8,
-  },
-  temporalMarkerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.subtleBorder ?? colors.border,
-  },
-  temporalMarkerText: {
-    fontSize: 11,
-    color: colors.textTertiary ?? colors.textSecondary,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-} as const);
+export const createChatMessageStyles = (colors: AppPalette) =>
+  ({
+    messageList: {
+      paddingVertical: 8,
+      paddingBottom: 16,
+    },
+    messageListEmpty: {
+      flexGrow: 1,
+      justifyContent: 'center',
+    },
+    historyWindowHeader: {
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 6,
+      paddingBottom: 8,
+    },
+    historyWindowButton: {
+      minHeight: 34,
+      maxWidth: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    historyWindowButtonText: {
+      maxWidth: '100%',
+      color: colors.primary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    temporalMarkerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      marginVertical: 12,
+      gap: 8,
+    },
+    temporalMarkerLine: {
+      flex: 1,
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.subtleBorder ?? colors.border,
+    },
+    temporalMarkerText: {
+      fontSize: 11,
+      color: colors.textTertiary ?? colors.textSecondary,
+      fontWeight: '500',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+  }) as const;

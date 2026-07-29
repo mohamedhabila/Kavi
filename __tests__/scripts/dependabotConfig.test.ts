@@ -1,27 +1,44 @@
 const { readFileSync } = require('fs');
-const { join } = require('path');
+const { dirname, join } = require('path');
+const yamlNodeEntrypoint = join(dirname(require.resolve('yaml/package.json')), 'dist/index.js');
+const { parse } = require(yamlNodeEntrypoint) as typeof import('yaml');
 
-function readDependabotConfig(): string {
+type DependabotGroup = {
+  'update-types': string[];
+};
+
+type DependabotUpdate = {
+  'package-ecosystem': string;
+  directory: string;
+  schedule: {
+    interval: string;
+    day: string;
+    time: string;
+    timezone: string;
+  };
+  'open-pull-requests-limit': number;
+  labels: string[];
+  'commit-message': {
+    prefix: string;
+    include: string;
+  };
+  groups: Record<string, DependabotGroup>;
+};
+
+type DependabotConfig = {
+  version: number;
+  updates: DependabotUpdate[];
+};
+
+function readDependabotConfig(): DependabotConfig {
   const configPath = join(__dirname, '../../.github/dependabot.yml');
-  return readFileSync(configPath, 'utf8');
+  return parse(readFileSync(configPath, 'utf8')) as DependabotConfig;
 }
 
-function extractUpdateBlock(config: string, ecosystem: string): string {
-  const marker = `  - package-ecosystem: ${ecosystem}`;
-  const start = config.indexOf(marker);
-  if (start === -1) {
-    throw new Error(`Missing Dependabot update for ${ecosystem}`);
-  }
-  const next = config.indexOf('\n  - package-ecosystem: ', start + marker.length);
-  return config.slice(start, next === -1 ? undefined : next);
-}
-
-function extractOpenPullRequestLimit(updateBlock: string): number {
-  const match = updateBlock.match(/open-pull-requests-limit:\s*(\d+)/);
-  if (!match) {
-    throw new Error('Missing open-pull-requests-limit');
-  }
-  return Number(match[1]);
+function requireUpdate(config: DependabotConfig, ecosystem: string): DependabotUpdate {
+  const update = config.updates.find((candidate) => candidate['package-ecosystem'] === ecosystem);
+  if (!update) throw new Error(`Missing Dependabot update for ${ecosystem}`);
+  return update;
 }
 
 type ExpectedUpdate = {
@@ -46,50 +63,39 @@ const expectedUpdates: ExpectedUpdate[] = [
   },
 ];
 
-function expectDependabotUpdateBlock(updateBlock: string, expected: ExpectedUpdate): void {
-  expect(updateBlock).toContain('directory: /');
-  expect(updateBlock).toContain('interval: weekly');
-  expect(updateBlock).toContain(`day: ${expected.day}`);
-  expect(updateBlock).toContain('time: "07:00"');
-  expect(updateBlock).toContain('timezone: Etc/UTC');
-  expect(extractOpenPullRequestLimit(updateBlock)).toBe(expected.pullRequestLimit);
-  expect(updateBlock).toContain('- dependencies');
-  expect(updateBlock).toContain('commit-message:');
-  expect(updateBlock).toContain('prefix: deps');
-  expect(updateBlock).toContain('include: scope');
-  expect(updateBlock).toContain(`${expected.groupName}:`);
-  expect(updateBlock).toContain('- minor');
-  expect(updateBlock).toContain('- patch');
+function expectDependabotUpdate(update: DependabotUpdate, expected: ExpectedUpdate): void {
+  expect(update).toMatchObject({
+    directory: '/',
+    schedule: {
+      interval: 'weekly',
+      day: expected.day,
+      time: '07:00',
+      timezone: 'Etc/UTC',
+    },
+    'open-pull-requests-limit': expected.pullRequestLimit,
+    labels: expect.arrayContaining(['dependencies']),
+    'commit-message': {
+      prefix: 'deps',
+      include: 'scope',
+    },
+  });
+
+  const updateTypes = update.groups[expected.groupName]?.['update-types'];
+  expect(updateTypes).toEqual(expect.arrayContaining(['minor', 'patch']));
+  expect(updateTypes).not.toContain('major');
 }
 
 describe('Dependabot config', () => {
   it('covers npm and GitHub Actions with exact weekly update policies', () => {
     const config = readDependabotConfig();
-    const ecosystems = Array.from(config.matchAll(/^\s+- package-ecosystem:\s*(\S+)$/gm)).map(
-      (match) => match[1],
+
+    expect(config.version).toBe(2);
+    expect(config.updates.map((update) => update['package-ecosystem']).sort()).toEqual(
+      expectedUpdates.map((update) => update.ecosystem).sort(),
     );
 
-    expect(config).toContain('version: 2');
-    expect(ecosystems.sort()).toEqual(expectedUpdates.map((update) => update.ecosystem).sort());
-
     for (const expected of expectedUpdates) {
-      const updateBlock = extractUpdateBlock(config, expected.ecosystem);
-      expectDependabotUpdateBlock(updateBlock, expected);
+      expectDependabotUpdate(requireUpdate(config, expected.ecosystem), expected);
     }
-  });
-
-  it('groups routine minor and patch updates while leaving majors explicit', () => {
-    const config = readDependabotConfig();
-    const npmUpdate = extractUpdateBlock(config, 'npm');
-    const actionsUpdate = extractUpdateBlock(config, 'github-actions');
-
-    expect(npmUpdate).toContain('npm-minor-and-patch:');
-    expect(npmUpdate).toContain('- minor');
-    expect(npmUpdate).toContain('- patch');
-    expect(npmUpdate).not.toContain('- major');
-    expect(actionsUpdate).toContain('github-actions-minor-and-patch:');
-    expect(actionsUpdate).toContain('- minor');
-    expect(actionsUpdate).toContain('- patch');
-    expect(actionsUpdate).not.toContain('- major');
   });
 });

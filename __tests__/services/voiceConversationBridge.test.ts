@@ -48,9 +48,7 @@ describe('voiceConversationBridge', () => {
   });
 
   it('only unregisters the handler associated with that registration', async () => {
-    const firstCleanup = registerVoiceConversationHandler(
-      jest.fn().mockResolvedValue('first'),
-    );
+    const firstCleanup = registerVoiceConversationHandler(jest.fn().mockResolvedValue('first'));
     registerVoiceConversationHandler(jest.fn().mockResolvedValue('second'));
 
     firstCleanup();

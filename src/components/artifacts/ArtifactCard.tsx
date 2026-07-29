@@ -120,10 +120,7 @@ export const ArtifactCard: React.FC<ArtifactCardProps> = ({
   const safeArtifact = useMemo(() => ({ ...artifact, name }), [artifact, name]);
 
   return (
-    <View
-      style={styles.card}
-      testID={`artifact-card-${artifact.id}`}
-    >
+    <View style={styles.card} testID={`artifact-card-${artifact.id}`}>
       <View style={styles.provenanceRow}>
         <Text style={styles.kindLabel}>{kindLabel}</Text>
         <Text style={styles.provenance} numberOfLines={1}>

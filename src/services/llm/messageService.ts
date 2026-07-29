@@ -5,10 +5,7 @@ import { isOnDeviceLlmProvider } from '../localLlm/provider';
 import { resolveProviderTransport } from './catalog/providerProtocols';
 import { buildProviderHeaders, resolveProviderBaseUrl } from './core/providerRequest';
 import { selectByteEquivalentSystemPromptSections } from './core/systemPromptSections';
-import {
-  bindLlmPerformFetchDispatchGuard,
-  type LlmPerformFetch,
-} from './core/fetchTransport';
+import { bindLlmPerformFetchDispatchGuard, type LlmPerformFetch } from './core/fetchTransport';
 import {
   buildLocalLlmRequestOptions,
   resolveLocalProviderForRequest,
@@ -56,10 +53,7 @@ export function sendLlmMessage(params: {
       ? { ...options, maxTokens: resolveModelOutputTokenBudget(model) }
       : options;
   const providerTransport = resolveProviderTransport(params.provider);
-  const performFetch = bindLlmPerformFetchDispatchGuard(
-    params.performFetch,
-    requestDispatchGuard,
-  );
+  const performFetch = bindLlmPerformFetchDispatchGuard(params.performFetch, requestDispatchGuard);
 
   switch (providerTransport) {
     case 'anthropic':

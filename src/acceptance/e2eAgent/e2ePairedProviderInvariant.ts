@@ -43,11 +43,7 @@ function requireHash(value: unknown, label: string): string {
   return value;
 }
 
-function requireExactKeys(
-  value: object,
-  expectedKeys: ReadonlyArray<string>,
-  label: string,
-): void {
+function requireExactKeys(value: object, expectedKeys: ReadonlyArray<string>, label: string): void {
   const actual = Object.keys(value).sort();
   const expected = [...expectedKeys].sort();
   if (stableStringify(actual) !== stableStringify(expected)) {
@@ -129,7 +125,11 @@ function canonicalLocalMetadataHash(local: LlmProviderConfig['local']): string |
         requireTrimmed(installed.modelId, `provider.local.installedModels[${index}].modelId`, 512),
       ),
       fileNameHash: stableHash(
-        requireTrimmed(installed.fileName, `provider.local.installedModels[${index}].fileName`, 512),
+        requireTrimmed(
+          installed.fileName,
+          `provider.local.installedModels[${index}].fileName`,
+          512,
+        ),
       ),
       localPathHash: privateLocatorHash(
         requireTrimmed(
@@ -186,9 +186,7 @@ export function buildE2EPairedProviderInvariant(
   return invariant;
 }
 
-export function validateE2EPairedProviderInvariant(
-  provider: E2EPairedProviderInvariant,
-): void {
+export function validateE2EPairedProviderInvariant(provider: E2EPairedProviderInvariant): void {
   if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
     throw new Error('invariantConfig.provider must be an object.');
   }
@@ -303,13 +301,9 @@ function validateCapabilityHints(hints: Readonly<LlmProviderCapabilityHints> | n
     }
     if (
       key === 'preferredProtocol' &&
-      ![
-        'openai-responses',
-        'openai-chat',
-        'anthropic-messages',
-        'gemini-native',
-        'local',
-      ].includes(String(value))
+      !['openai-responses', 'openai-chat', 'anthropic-messages', 'gemini-native', 'local'].includes(
+        String(value),
+      )
     ) {
       throw new Error('invariantConfig.provider.capabilityHints has an invalid protocol.');
     }

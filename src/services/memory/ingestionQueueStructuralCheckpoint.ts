@@ -92,9 +92,7 @@ function claimIngestionSourceSnapshot(
     const claimToken = newId('ingestion_claim');
     const claimProcessEpoch = getRuntimeProcessEpoch();
     const dependencyPredicate =
-      mode === 'full'
-        ? NO_ACTIVE_PRIOR_DEPENDENCY_SQL
-        : CAN_CLAIM_STRUCTURAL_CHECKPOINT_SQL;
+      mode === 'full' ? NO_ACTIVE_PRIOR_DEPENDENCY_SQL : CAN_CLAIM_STRUCTURAL_CHECKPOINT_SQL;
     const result = db.runSync(
       `UPDATE memory_ingestion_jobs AS candidate
          SET status = 'processing',
@@ -120,9 +118,7 @@ function claimIngestionSourceSnapshot(
       now,
       MAX_INGESTION_ATTEMPTS,
     );
-    return result.changes === 1
-      ? { job, claimToken, sourceSnapshot, mode }
-      : null;
+    return result.changes === 1 ? { job, claimToken, sourceSnapshot, mode } : null;
   });
 }
 

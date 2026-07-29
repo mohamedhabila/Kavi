@@ -36,8 +36,10 @@ export interface IngestionPersistenceReceipt {
   persistedAt: number;
 }
 
-export interface CommitIngestionPersistenceReceiptInput
-  extends Omit<IngestionPersistenceReceipt, 'attemptNumber'> {
+export interface CommitIngestionPersistenceReceiptInput extends Omit<
+  IngestionPersistenceReceipt,
+  'attemptNumber'
+> {
   claimToken: string;
 }
 
@@ -130,10 +132,7 @@ function normalizeReceipt(
       input.bridgedEvidenceFactIds,
       'bridgedEvidenceFactIds',
     ),
-    agentRunMemoryFactIds: normalizeFactIds(
-      input.agentRunMemoryFactIds,
-      'agentRunMemoryFactIds',
-    ),
+    agentRunMemoryFactIds: normalizeFactIds(input.agentRunMemoryFactIds, 'agentRunMemoryFactIds'),
     activeFocusUpdated: input.activeFocusUpdated,
     openThreadsUpdated: input.openThreadsUpdated,
     providerOutcome: input.providerOutcome,
@@ -158,10 +157,7 @@ function rowToReceipt(row: IngestionReceiptRow): IngestionPersistenceReceipt {
     jobId: row.job_id,
     attemptNumber: row.attempt_number,
     episodeId: row.episode_id,
-    deterministicFactIds: parseFactIds(
-      row.deterministic_fact_ids_json,
-      'deterministicFactIds',
-    ),
+    deterministicFactIds: parseFactIds(row.deterministic_fact_ids_json, 'deterministicFactIds'),
     providerFactIds: parseFactIds(row.provider_fact_ids_json, 'providerFactIds'),
     invalidatedFactIds: parseFactIds(row.invalidated_fact_ids_json, 'invalidatedFactIds'),
     bridgedEvidenceFactIds: parseFactIds(
@@ -288,9 +284,7 @@ export function getIngestionPersistenceReceipt(
   return row ? rowToReceipt(row) : null;
 }
 
-export function listIngestionPersistenceReceipts(
-  jobId: string,
-): IngestionPersistenceReceipt[] {
+export function listIngestionPersistenceReceipts(jobId: string): IngestionPersistenceReceipt[] {
   ensureFactSchema();
   const rows = getMemoryDb().getAllSync<IngestionReceiptRow>(
     `SELECT * FROM memory_ingestion_receipts

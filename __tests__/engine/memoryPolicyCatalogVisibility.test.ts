@@ -65,9 +65,8 @@ describe('memory-policy catalog visibility', () => {
 
     expect(
       Array.from(
-        resolveMemoryPolicyVisibleToolNames(
-          new Set(['記憶_حفظ', 'eliminar_datos', '日程_tool']),
-        ) ?? [],
+        resolveMemoryPolicyVisibleToolNames(new Set(['記憶_حفظ', 'eliminar_datos', '日程_tool'])) ??
+          [],
       ).sort(),
     ).toEqual(['eliminar_datos', '日程_tool'].sort());
   });

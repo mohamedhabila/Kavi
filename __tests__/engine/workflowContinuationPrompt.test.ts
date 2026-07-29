@@ -6,11 +6,7 @@ import {
 } from '../../src/engine/tools/native/notifications/definitions';
 
 describe('workflow continuation prompt', () => {
-  const allTools = [
-    NOTIFICATION_SEND_TOOL,
-    NOTIFICATION_SCHEDULE_TOOL,
-    NOTIFICATION_CANCEL_TOOL,
-  ];
+  const allTools = [NOTIFICATION_SEND_TOOL, NOTIFICATION_SCHEDULE_TOOL, NOTIFICATION_CANCEL_TOOL];
 
   it('surfaces selected successors and their structural resource handoff', () => {
     const prompt = buildWorkflowContinuationPrompt({

@@ -27,7 +27,13 @@ export type MemoryFactCorrectionResult =
   | {
       status: 'rejected' | 'failed_unknown';
       ok: false;
-      code: 'invalid_args' | 'not_found' | 'memory_disabled' | 'conflict' | 'restricted' | 'internal';
+      code:
+        | 'invalid_args'
+        | 'not_found'
+        | 'memory_disabled'
+        | 'conflict'
+        | 'restricted'
+        | 'internal';
       error: string;
     };
 
@@ -56,7 +62,12 @@ function exactCorrectionArgs(args: MemoryFactCorrectionArgs): {
   }
   const factId = typeof args.factId === 'string' ? args.factId.trim() : '';
   const value = typeof args.value === 'string' ? args.value.trim() : '';
-  if (!factId || factId.length > 64 || !value || value.length > MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH) {
+  if (
+    !factId ||
+    factId.length > 64 ||
+    !value ||
+    value.length > MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH
+  ) {
     return null;
   }
   return { factId, value };

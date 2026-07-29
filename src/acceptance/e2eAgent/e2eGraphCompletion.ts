@@ -8,5 +8,7 @@ const E2E_GRAPH_EXECUTION_COMPLETE_STATUSES = new Set<AgentRunControlGraphState[
 export function isE2EGraphExecutionComplete(
   status: AgentRunControlGraphState['status'] | null | undefined,
 ): boolean {
-  return status !== null && status !== undefined && E2E_GRAPH_EXECUTION_COMPLETE_STATUSES.has(status);
+  return (
+    status !== null && status !== undefined && E2E_GRAPH_EXECUTION_COMPLETE_STATUSES.has(status)
+  );
 }

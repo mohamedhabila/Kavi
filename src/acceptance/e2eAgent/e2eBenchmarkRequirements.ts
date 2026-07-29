@@ -510,7 +510,12 @@ export function listE2EBenchmarkRequirements(): E2EBenchmarkRequirement[] {
       coverageStatus: 'external_required',
       scenarioIds: [],
       environmentKinds: ['simulated_mobile_web', 'provider_matrix'],
-      requiredEvidence: ['graph_state', 'execution_state', 'workspace_artifact', 'token_accounting'],
+      requiredEvidence: [
+        'graph_state',
+        'execution_state',
+        'workspace_artifact',
+        'token_accounting',
+      ],
     },
     {
       id: 'mcpmark-verified-runner',
@@ -520,7 +525,12 @@ export function listE2EBenchmarkRequirements(): E2EBenchmarkRequirement[] {
       coverageStatus: 'external_required',
       scenarioIds: [],
       environmentKinds: ['provider_matrix', 'simulated_mobile_web'],
-      requiredEvidence: ['graph_state', 'workspace_artifact', 'execution_state', 'token_accounting'],
+      requiredEvidence: [
+        'graph_state',
+        'workspace_artifact',
+        'execution_state',
+        'token_accounting',
+      ],
     },
     {
       id: 'tau-knowledge-retrieval-action-runner',
@@ -540,7 +550,12 @@ export function listE2EBenchmarkRequirements(): E2EBenchmarkRequirement[] {
       coverageStatus: 'external_required',
       scenarioIds: [],
       environmentKinds: ['provider_matrix'],
-      requiredEvidence: ['assistant_response', 'workspace_artifact', 'graph_state', 'token_accounting'],
+      requiredEvidence: [
+        'assistant_response',
+        'workspace_artifact',
+        'graph_state',
+        'token_accounting',
+      ],
     },
     {
       id: 'agents-last-exam-long-horizon-runner',
@@ -550,7 +565,12 @@ export function listE2EBenchmarkRequirements(): E2EBenchmarkRequirement[] {
       coverageStatus: 'external_required',
       scenarioIds: [],
       environmentKinds: ['provider_matrix'],
-      requiredEvidence: ['workspace_artifact', 'artifact_hash', 'execution_state', 'token_accounting'],
+      requiredEvidence: [
+        'workspace_artifact',
+        'artifact_hash',
+        'execution_state',
+        'token_accounting',
+      ],
     },
     {
       id: 'assistantbench-hidden-test-runner',

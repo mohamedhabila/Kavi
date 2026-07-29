@@ -664,7 +664,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       },
     },
     home: {
-      intro: 'Encontre uma configuração ou escolha uma categoria. As opções avançadas ficam discretas até você precisar delas.',
+      intro:
+        'Encontre uma configuração ou escolha uma categoria. As opções avançadas ficam discretas até você precisar delas.',
       searchLabel: 'Pesquisar configurações',
       searchPlaceholder: 'Pesquisar configurações',
       clearSearch: 'Limpar pesquisa de configurações',

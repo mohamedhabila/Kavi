@@ -20,10 +20,7 @@ import {
   clearLocalLlmPartialDownloadArtifacts,
   clearLocalLlmPartialDownloadState,
 } from './downloadState';
-import {
-  getLocalLlmModelObservedSize,
-  isValidLocalLlmModelFile,
-} from './modelArtifacts';
+import { getLocalLlmModelObservedSize, isValidLocalLlmModelFile } from './modelArtifacts';
 import type { InstallLocalLlmModelOptions } from './types';
 
 export async function ensureLocalLlmModelArtifactReady(params: {

@@ -84,7 +84,9 @@ describe('BUILT_IN_PERSONAS', () => {
     expect(superAgent?.systemPrompt).toContain(
       "omit tools unless you need to narrow the worker's scope",
     );
-    expect(superAgent?.systemPrompt).toContain('Use python as a capability bridge only when first-class tools are insufficient');
+    expect(superAgent?.systemPrompt).toContain(
+      'Use python as a capability bridge only when first-class tools are insufficient',
+    );
     expect(superAgent?.systemPrompt).toContain(
       'Use tool_catalog only when the exposed tool surface is insufficient for the next step',
     );

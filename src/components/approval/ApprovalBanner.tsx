@@ -1,19 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  AccessibilityInfo,
-  Modal,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import {
-  CheckCheck,
-  Clock3,
-  ShieldAlert,
-  ShieldCheck,
-  ShieldX,
-} from 'lucide-react-native';
+import { AccessibilityInfo, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { CheckCheck, Clock3, ShieldAlert, ShieldCheck, ShieldX } from 'lucide-react-native';
 
 import { useTranslation } from '../../i18n/useTranslation';
 import { useApprovalStore } from '../../services/remote/approvalStore';
@@ -113,8 +100,7 @@ const ApprovalCard: React.FC<ApprovalCardProps> = ({
   const announcedRequestId = useRef<string | null>(null);
   const presentation = useMemo(() => buildApprovalPresentation(request), [request]);
   const action = presentation.action || t('approvalBanner.unknownAction');
-  const description =
-    presentation.description || t('approvalBanner.actionDetailsUnavailable');
+  const description = presentation.description || t('approvalBanner.actionDetailsUnavailable');
   const expiresAt =
     typeof request.expiresAt === 'number' && Number.isFinite(request.expiresAt)
       ? request.expiresAt
@@ -128,9 +114,7 @@ const ApprovalCard: React.FC<ApprovalCardProps> = ({
   useEffect(() => {
     if (announcedRequestId.current === request.id) return;
     announcedRequestId.current = request.id;
-    AccessibilityInfo.announceForAccessibility(
-      t('approvalBanner.announcement', { action }),
-    );
+    AccessibilityInfo.announceForAccessibility(t('approvalBanner.announcement', { action }));
   }, [action, request.id, t]);
 
   useEffect(() => {
@@ -259,9 +243,7 @@ const ApprovalCard: React.FC<ApprovalCardProps> = ({
             accessibilityHint={t('approvalBanner.persistentHint')}
           >
             <CheckCheck size={17} color={colors.primary} />
-            <Text style={styles.permissionButtonText}>
-              {t('approvalBanner.reviewPermission')}
-            </Text>
+            <Text style={styles.permissionButtonText}>{t('approvalBanner.reviewPermission')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -279,8 +261,7 @@ const PermissionReview: React.FC<{
   const { t } = useTranslation();
   const presentation = buildApprovalPresentation(request);
   const action = presentation.action || t('approvalBanner.unknownAction');
-  const description =
-    presentation.description || t('approvalBanner.actionDetailsUnavailable');
+  const description = presentation.description || t('approvalBanner.actionDetailsUnavailable');
 
   return (
     <View style={styles.card} testID="approval-permission-review">
@@ -295,11 +276,7 @@ const PermissionReview: React.FC<{
       </View>
 
       <View style={styles.detailPanel}>
-        <DecisionDetail
-          label={t('approvalBanner.savedAction')}
-          value={action}
-          styles={styles}
-        />
+        <DecisionDetail label={t('approvalBanner.savedAction')} value={action} styles={styles} />
         <DecisionDetail
           label={t('approvalBanner.savedActionDetails')}
           value={description}

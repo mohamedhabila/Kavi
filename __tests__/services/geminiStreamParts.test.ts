@@ -56,9 +56,7 @@ describe('finalizeGeminiStreamToolState', () => {
     });
 
     expect(finalized.replayParts[0]?.thoughtSignature).toBe('sig-trailing-carrier');
-    expect(finalized.replayParts[0]?.functionCall?.id).toMatch(
-      /^gemini-call-\d+-[0-9a-f]{8}$/,
-    );
+    expect(finalized.replayParts[0]?.functionCall?.id).toMatch(/^gemini-call-\d+-[0-9a-f]{8}$/);
     expect(finalized.toolCalls[0]?.raw?.thoughtSignature).toBe('sig-trailing-carrier');
   });
   it('dedupes duplicate streamed function calls and keeps the signed copy', () => {
@@ -84,9 +82,7 @@ describe('finalizeGeminiStreamToolState', () => {
 
     expect(finalized.toolCalls).toHaveLength(1);
     expect(finalized.replayParts).toHaveLength(1);
-    expect(finalized.replayParts[0]?.functionCall?.id).toMatch(
-      /^gemini-call-\d+-[0-9a-f]{8}$/,
-    );
+    expect(finalized.replayParts[0]?.functionCall?.id).toMatch(/^gemini-call-\d+-[0-9a-f]{8}$/);
     expect(finalized.replayParts[0]?.thoughtSignature).toBe('sig-primary');
     expect(finalized.toolCalls[0]?.raw?.thoughtSignature).toBe('sig-primary');
   });

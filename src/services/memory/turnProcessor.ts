@@ -338,7 +338,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
             sourceMessageId: user.id,
           })
         : false,
-      });
+    });
     providerResult = {
       ...mergedResult,
       newFacts: mergedResult.newFacts.slice(structural.facts.length),

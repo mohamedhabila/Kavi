@@ -153,9 +153,7 @@ jest.mock('../../src/components/chat/MessageBubble', () => {
     pushText(nodes, seen, snapshot?.activeToolName, 'snapshot-tool');
 
     if (agentRun) {
-      const goals = Array.isArray(agentRun?.controlGraph?.goals)
-        ? agentRun.controlGraph.goals
-        : [];
+      const goals = Array.isArray(agentRun?.controlGraph?.goals) ? agentRun.controlGraph.goals : [];
       const activeGoals = goals.filter((goal: any) => goal?.status === 'active');
       const compactPreview =
         activeGoals[0]?.title ?? (goals.length > 0 ? goals[0]?.title : undefined);
@@ -167,12 +165,8 @@ jest.mock('../../src/components/chat/MessageBubble', () => {
           goals.length === 0 && agentRun.status === 'running'
             ? React.createElement(Text, null, 'Goals pending bootstrap')
             : null,
-          goals.length > 0
-            ? React.createElement(Text, null, `Goals (${goals.length})`)
-            : null,
-          !detailsOpen && compactPreview
-            ? React.createElement(Text, null, compactPreview)
-            : null,
+          goals.length > 0 ? React.createElement(Text, null, `Goals (${goals.length})`) : null,
+          !detailsOpen && compactPreview ? React.createElement(Text, null, compactPreview) : null,
           goals.length > 0
             ? React.createElement(
                 TouchableOpacity,

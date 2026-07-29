@@ -629,9 +629,7 @@ async function executeE2ENativeMobileTool(
       });
     case 'photos_pick': {
       const requestedCount =
-        typeof args.count === 'number' && Number.isFinite(args.count)
-          ? Math.floor(args.count)
-          : 1;
+        typeof args.count === 'number' && Number.isFinite(args.count) ? Math.floor(args.count) : 1;
       const photos = [
         {
           assetId: 'e2e-photo-1',

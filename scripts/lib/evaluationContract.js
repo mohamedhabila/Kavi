@@ -144,7 +144,9 @@ function validateSchemaDefinition(value, schema, definitionName, root) {
       (error) => `${formatInstancePath(error.instancePath, root)}: ${error.message}`,
     );
   } catch (error) {
-    return [`schema.$defs.${definitionName}: ${error instanceof Error ? error.message : String(error)}`];
+    return [
+      `schema.$defs.${definitionName}: ${error instanceof Error ? error.message : String(error)}`,
+    ];
   }
 }
 

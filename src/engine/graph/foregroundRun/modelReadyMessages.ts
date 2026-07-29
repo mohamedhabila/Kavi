@@ -22,9 +22,7 @@ export function buildForegroundOrchestratorMessages(params: {
   modelMessages: Message[];
 } {
   const sourceMessages = params.excludedAssistantMessageId
-    ? params.persistedMessages.filter(
-        (message) => message.id !== params.excludedAssistantMessageId,
-      )
+    ? params.persistedMessages.filter((message) => message.id !== params.excludedAssistantMessageId)
     : params.persistedMessages;
   const modelReadyMessages = buildModelReadyMessages(sourceMessages);
   const internalPrompt = params.additionalInternalPrompt?.trim();

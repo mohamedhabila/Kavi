@@ -56,7 +56,9 @@ describeDiag('Gemini LlmService stream diag', () => {
     console.log('replay', JSON.stringify(providerReplay, null, 2));
 
     const rawSig = (pending[0]?.raw as Record<string, unknown> | undefined)?.thoughtSignature;
-    const replaySig = providerReplay?.geminiParts?.find((part) => part.functionCall)?.thoughtSignature;
+    const replaySig = providerReplay?.geminiParts?.find(
+      (part) => part.functionCall,
+    )?.thoughtSignature;
     expect(rawSig || replaySig).toBeTruthy();
   });
 });

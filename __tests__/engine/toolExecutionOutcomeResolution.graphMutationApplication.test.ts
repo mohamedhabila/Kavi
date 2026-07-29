@@ -657,5 +657,4 @@ describe('tool execution outcome resolution', () => {
     );
     expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
   });
-
 });

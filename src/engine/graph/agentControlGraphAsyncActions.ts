@@ -15,7 +15,7 @@ export const createRecordAsyncWaitingAction = () =>
     }
     const pendingOperations =
       event.pendingOperations !== undefined
-        ? normalizeAgentRunAsyncOperations(event.pendingOperations) ?? []
+        ? (normalizeAgentRunAsyncOperations(event.pendingOperations) ?? [])
         : context.asyncWork.pendingOperations;
     const pendingAsyncCount =
       event.pendingOperations !== undefined

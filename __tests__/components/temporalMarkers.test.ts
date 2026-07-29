@@ -17,10 +17,10 @@ describe('computeTemporalMarkers', () => {
   });
 
   it('emits a thread-start marker before the very first message', () => {
-    const markers = computeTemporalMarkers(
-      [msg('m1', 'user', ts('2026-05-01T09:30:00'))],
-      { now: ts('2026-05-01T09:30:01'), locale: 'en-US' },
-    );
+    const markers = computeTemporalMarkers([msg('m1', 'user', ts('2026-05-01T09:30:00'))], {
+      now: ts('2026-05-01T09:30:01'),
+      locale: 'en-US',
+    });
     expect(markers).toHaveLength(1);
     expect(markers[0].kind).toBe('thread-start');
     expect(markers[0].beforeMessageId).toBe('m1');
@@ -81,10 +81,7 @@ describe('computeTemporalMarkers', () => {
   it('emits a cold-start cue when `now` is far from the last message', () => {
     const lastTs = ts('2026-05-01T10:00:00');
     const markers = computeTemporalMarkers(
-      [
-        msg('m1', 'user', lastTs - 60_000),
-        msg('m2', 'assistant', lastTs),
-      ],
+      [msg('m1', 'user', lastTs - 60_000), msg('m2', 'assistant', lastTs)],
       { now: lastTs + 6 * 3_600_000, coldStartGapMs: 30 * 60_000 },
     );
     const cue = markers.find((m) => m.kind === 'cold-start-cue');
@@ -95,10 +92,10 @@ describe('computeTemporalMarkers', () => {
 
   it('does not emit a cold-start cue when within the gap threshold', () => {
     const lastTs = ts('2026-05-01T10:00:00');
-    const markers = computeTemporalMarkers(
-      [msg('m1', 'user', lastTs)],
-      { now: lastTs + 5 * 60_000, coldStartGapMs: 30 * 60_000 },
-    );
+    const markers = computeTemporalMarkers([msg('m1', 'user', lastTs)], {
+      now: lastTs + 5 * 60_000,
+      coldStartGapMs: 30 * 60_000,
+    });
     expect(markers.find((m) => m.kind === 'cold-start-cue')).toBeUndefined();
   });
 

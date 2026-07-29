@@ -113,10 +113,7 @@ function main() {
   }
 
   console.log(`[${label}] device=${deviceId} modelPath=${modelPath}`);
-  const envKeys = [
-    'LITERTLM_BENCHMARK_PLAN_PATH',
-    'LITERTLM_BENCHMARK_REPORT_PATH',
-  ];
+  const envKeys = ['LITERTLM_BENCHMARK_PLAN_PATH', 'LITERTLM_BENCHMARK_REPORT_PATH'];
   try {
     setSimulatorEnv(deviceId, 'LITERTLM_BENCHMARK_PLAN_PATH', path.resolve(args.planPath));
     setSimulatorEnv(deviceId, 'LITERTLM_BENCHMARK_REPORT_PATH', path.resolve(args.reportPath));
@@ -125,8 +122,7 @@ function main() {
     envKeys.forEach((key) => {
       try {
         unsetSimulatorEnv(deviceId, key);
-      } catch (_) {
-      }
+      } catch (_) {}
     });
   }
 

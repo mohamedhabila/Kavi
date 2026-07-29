@@ -1235,13 +1235,11 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     clearComplete: '終端機已清除。',
     androidOnlyShellUnavailable:
       '本機 shell 僅適用於 Android。在 iOS 上請使用 JavaScript 或 SSH 伺服器。',
-    termuxBridgeUnavailable:
-      '此版本不包含 Android 本機 shell 支援。請使用 JavaScript 或 SSH。',
+    termuxBridgeUnavailable: '此版本不包含 Android 本機 shell 支援。請使用 JavaScript 或 SSH。',
     termuxInstallRequired: '請安裝 Termux，以便在 Android 上執行本機 shell 指令。',
     termuxServiceUnavailable:
       'Termux 已安裝，但指令服務無法使用。請開啟 Termux，檢查外部指令設定，然後再試一次。',
-    detectShellRuntimeFailed:
-      '無法檢查本機 shell。請重試，或使用 JavaScript 或 SSH。',
+    detectShellRuntimeFailed: '無法檢查本機 shell。請重試，或使用 JavaScript 或 SSH。',
     shellUnavailable: '本機 shell 無法使用。請使用 JavaScript 或 SSH。',
     checkingShell: '正在檢查本機 shell...',
     sshNativeModuleUnavailable: '原生 SSH 模組無法使用。',
@@ -1930,8 +1928,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     noTargetMessage: '選擇 SSH 或工作區目標之後，你就能在手機上瀏覽並編輯真實檔案。',
     openRemoteWork: '開啟遠端工作',
     startEditingTitle: '選擇編輯方式',
-    startEditingMessage:
-      '在此編輯器中開始暫時草稿，或連接工作區或 SSH 伺服器以瀏覽和儲存檔案。',
+    startEditingMessage: '在此編輯器中開始暫時草稿，或連接工作區或 SSH 伺服器以瀏覽和儲存檔案。',
     startScratch: '開始暫時草稿',
     scratchModeMessage: '暫時草稿：變更只會保留到您離開此編輯器。',
     fileBrowserTitle: '檔案',

@@ -64,9 +64,7 @@ function extractStructuredStreamTextPart(part: unknown): StreamTextExtraction {
   return { content: text, reasoning: '' };
 }
 
-export function extractOpenAiCompatibleStreamText(
-  value: unknown,
-): StreamTextExtraction {
+export function extractOpenAiCompatibleStreamText(value: unknown): StreamTextExtraction {
   if (typeof value === 'string') {
     return { content: value, reasoning: '' };
   }
@@ -87,15 +85,10 @@ export function extractOpenAiCompatibleStreamText(
   return extractStructuredStreamTextPart(value);
 }
 
-export function trimGeminiCumulativeText(
-  fullContent: string,
-  incoming: string,
-): string {
+export function trimGeminiCumulativeText(fullContent: string, incoming: string): string {
   if (!incoming || !fullContent) {
     return incoming;
   }
 
-  return incoming.startsWith(fullContent)
-    ? incoming.slice(fullContent.length)
-    : incoming;
+  return incoming.startsWith(fullContent) ? incoming.slice(fullContent.length) : incoming;
 }

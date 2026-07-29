@@ -14,7 +14,6 @@ export function outputSatisfiesExpectedText(params: {
 
   const output = params.output ?? '';
   return (
-    output.includes(expectedText) ||
-    normalizeContractText(output)?.includes(expectedText) === true
+    output.includes(expectedText) || normalizeContractText(output)?.includes(expectedText) === true
   );
 }

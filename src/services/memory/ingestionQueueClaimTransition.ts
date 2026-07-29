@@ -197,9 +197,11 @@ export function retryOrCompleteIngestionJob(input: {
   });
 }
 
-export function recoverIngestionJobClaim(input: PersistedIngestionClaim & {
-  now: number;
-}): IngestionTransitionResult {
+export function recoverIngestionJobClaim(
+  input: PersistedIngestionClaim & {
+    now: number;
+  },
+): IngestionTransitionResult {
   const foreignProcess = input.claimProcessEpoch !== getRuntimeProcessEpoch();
   if (!foreignProcess && input.leaseExpiresAt > input.now) {
     return { status: currentIngestionStatus(input.jobId), applied: false };

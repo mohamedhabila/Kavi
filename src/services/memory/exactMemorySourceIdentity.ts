@@ -72,8 +72,7 @@ export function requireExactMemorySourceIdentity(
       errorCodes.conversationId,
     ),
     sourceThreadId: requireExactMemoryScopeId(source.sourceThreadId, errorCodes.threadId),
-    taskId:
-      taskId === null ? null : requireExactMemoryScopeId(taskId, errorCodes.taskId),
+    taskId: taskId === null ? null : requireExactMemoryScopeId(taskId, errorCodes.taskId),
     sourceKind: requireExactMemorySourceKind(source.sourceKind, errorCodes.sourceKind),
     sourceId: requireExactMemoryProvenanceId(source.sourceId, errorCodes.sourceId),
   };
@@ -113,9 +112,7 @@ export function hasAnyRetiredExactMemorySource(
     const scope = group[0];
     for (let offset = 0; offset < group.length; offset += 100) {
       const batch = group.slice(offset, offset + 100);
-      const sourcePredicate = batch
-        .map(() => '(source_kind = ? AND source_id = ?)')
-        .join(' OR ');
+      const sourcePredicate = batch.map(() => '(source_kind = ? AND source_id = ?)').join(' OR ');
       const sourceBindings = batch.flatMap((source) => [source.sourceKind, source.sourceId]);
       if (
         db.getFirstSync<{ present: number }>(

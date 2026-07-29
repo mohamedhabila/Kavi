@@ -9,10 +9,7 @@ import {
   resolveFilePath,
   resolveModulePath,
 } from './jsBridgeBindings';
-import type {
-  JavaScriptWorkspaceExecutionResult,
-  JsBridgeContext,
-} from './jsBridgeTypes';
+import type { JavaScriptWorkspaceExecutionResult, JsBridgeContext } from './jsBridgeTypes';
 
 type JsModuleRecord = {
   exports: unknown;

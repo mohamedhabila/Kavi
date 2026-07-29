@@ -227,7 +227,11 @@ export function resolveMobileWorldBridgeEvent(input: {
   if (finalAssistant?.assistantMetadata?.finishReason === 'request_clarification') {
     return { kind: 'ask_user', text: finalAssistant.content.trim() };
   }
-  if (run.status === 'failed' || run.status === 'cancelled' || run.controlGraph?.status === 'blocked') {
+  if (
+    run.status === 'failed' ||
+    run.status === 'cancelled' ||
+    run.controlGraph?.status === 'blocked'
+  ) {
     return { kind: 'status', goalStatus: 'infeasible' };
   }
   if (run.status !== 'completed' || !finalAssistant) {

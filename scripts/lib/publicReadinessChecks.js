@@ -37,10 +37,7 @@ const INTERNAL_BENCHMARK_FAMILY_REGEX = new RegExp(
   `\\b${INTERNAL_BENCHMARK_FAMILY_TOKEN}\\b`,
   'gi',
 );
-const INTERNAL_FAST_SUITE_REGEX = new RegExp(
-  `\\b${phrase(['internal', 'fast'])}\\b`,
-  'gi',
-);
+const INTERNAL_FAST_SUITE_REGEX = new RegExp(`\\b${phrase(['internal', 'fast'])}\\b`, 'gi');
 const INTERNAL_PROGRESS_DIARY_TERMS = [
   phrase(['investigation', 'update']),
   phrase(['implementation', 'handoff']),
@@ -147,9 +144,11 @@ const DEFAULT_CONFIG = {
   publicLanguageAllowlist: [
     {
       id: 'public-readiness-checker-fixtures',
-      pathRegex: /^(?:scripts\/lib\/publicReadinessChecks\.js|__tests__\/scripts\/publicReadinessChecks\.test\.ts)$/,
+      pathRegex:
+        /^(?:scripts\/lib\/publicReadinessChecks\.js|__tests__\/scripts\/publicReadinessChecks\.test\.ts)$/,
       status: 'permanent',
-      reason: 'the public readiness checker and its tests intentionally contain blocked terms as patterns and fixtures',
+      reason:
+        'the public readiness checker and its tests intentionally contain blocked terms as patterns and fixtures',
     },
   ],
 };

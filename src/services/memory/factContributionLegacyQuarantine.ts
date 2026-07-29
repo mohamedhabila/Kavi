@@ -208,9 +208,7 @@ function scrubReceipts(db: MemoryDb, factIds: ReadonlySet<string>): void {
   ] as const) {
     for (const row of db.getAllSync<ReceiptRow>(`SELECT * FROM ${table}`)) {
       if (
-        !RECEIPT_FACT_ID_COLUMNS.some(
-          (column) => withoutFactIds(row[column], factIds).references,
-        )
+        !RECEIPT_FACT_ID_COLUMNS.some((column) => withoutFactIds(row[column], factIds).references)
       ) {
         continue;
       }

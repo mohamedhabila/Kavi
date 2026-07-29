@@ -65,12 +65,8 @@ describe('release maintainer checklist', () => {
   });
 
   it('prepares the locked iOS pod graph before release compilation', () => {
-    expect(packageJson.scripts['prepare:ios-native']).toBe(
-      'cd ios && pod install --deployment',
-    );
-    expect(packageJson.scripts['prebuild:ios:release-sim']).toContain(
-      'npm run prepare:ios-native',
-    );
+    expect(packageJson.scripts['prepare:ios-native']).toBe('cd ios && pod install --deployment');
+    expect(packageJson.scripts['prebuild:ios:release-sim']).toContain('npm run prepare:ios-native');
     expect(packageJson.scripts['build:ios:release-sim']).toContain(
       "-destination 'generic/platform=iOS Simulator'",
     );

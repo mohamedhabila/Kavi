@@ -16,8 +16,7 @@ export const MEMORY_SOURCE_RETIREMENT_CHILD_SET_LIMITS = Object.freeze({
 
 const REQUESTED_SOURCES_DOMAIN = 'kavi.memory-source-retirement.requested-sources.v1';
 const RETIRED_SOURCES_DOMAIN = 'kavi.memory-source-retirement.retired-sources.v1';
-const RETIRED_CONTRIBUTIONS_DOMAIN =
-  'kavi.memory-source-retirement.retired-contributions.v1';
+const RETIRED_CONTRIBUTIONS_DOMAIN = 'kavi.memory-source-retirement.retired-contributions.v1';
 const RETIRED_FACTS_DOMAIN = 'kavi.memory-source-retirement.retired-facts.v1';
 const CONTRIBUTION_ID_PATTERN = /^mfc_[0-9a-f]{64}$/u;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -113,11 +112,7 @@ function requireSourceTuple(value: unknown, code: string): CanonicalSourceTuple 
   ];
 }
 
-function requireSources(
-  value: unknown,
-  limit: number,
-  code: string,
-): CanonicalSourceTuple[] {
+function requireSources(value: unknown, limit: number, code: string): CanonicalSourceTuple[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > limit) fail(code);
   const seen = new Set<string>();
   const sources = value.map((candidate) => {

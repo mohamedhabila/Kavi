@@ -94,7 +94,10 @@ export function readToolEffectDispatchSnapshot(
       effect.toolContractIdentityDigest === identity.toolContractIdentityDigest,
     ],
     ['effect_request_digest', effect.requestDigest === identity.requestDigest],
-    ['effect_idempotency_key_digest', effect.idempotencyKeyDigest === identity.idempotencyKeyDigest],
+    [
+      'effect_idempotency_key_digest',
+      effect.idempotencyKeyDigest === identity.idempotencyKeyDigest,
+    ],
     ['effect_attempt', effect.attempt === identity.attempt],
     ['authority_checkpoint_id', authorityCheckpoint.id === identity.authorityCheckpointId],
   ]);
@@ -154,10 +157,16 @@ function assertPlanMatchesExisting(
     ['plan_planning_checkpoint_boundary', planningCheckpoint.boundary === 'before_effect'],
     ['plan_planning_checkpoint_state_ref', planningCheckpoint.stateRefId === planningCheckpoint.id],
     ['plan_planning_state_digest', planningCheckpoint.stateDigest === plan.planningStateDigest],
-    ['plan_authority_checkpoint_id', authorityCheckpoint.id === plan.identity.authorityCheckpointId],
+    [
+      'plan_authority_checkpoint_id',
+      authorityCheckpoint.id === plan.identity.authorityCheckpointId,
+    ],
     ['plan_authority_checkpoint_sequence', authorityCheckpoint.sequence === 2],
     ['plan_authority_checkpoint_boundary', authorityCheckpoint.boundary === 'before_effect'],
-    ['plan_authority_checkpoint_state_ref', authorityCheckpoint.stateRefId === authorityCheckpoint.id],
+    [
+      'plan_authority_checkpoint_state_ref',
+      authorityCheckpoint.stateRefId === authorityCheckpoint.id,
+    ],
     ['plan_authority_state_digest', authorityCheckpoint.stateDigest === plan.authorityStateDigest],
   ]);
 }

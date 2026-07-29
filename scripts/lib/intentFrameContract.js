@@ -117,7 +117,9 @@ function validateFieldScore(field, index, cases, failures) {
       field.recall !== null ||
       field.f1 !== null
     ) {
-      failures.push(`${location}: no scorable evidence requires zero confusion counts and null rates`);
+      failures.push(
+        `${location}: no scorable evidence requires zero confusion counts and null rates`,
+      );
     }
     return;
   }
@@ -167,9 +169,7 @@ function validateCoverage(entries, location, cases, failures) {
 
 function validateIntentFrameReportSemantics(report, failures) {
   if (!report || typeof report !== 'object' || Array.isArray(report)) return;
-  const eligibility = Array.isArray(report.eligibilityFailures)
-    ? report.eligibilityFailures
-    : [];
+  const eligibility = Array.isArray(report.eligibilityFailures) ? report.eligibilityFailures : [];
   const canonicalEligibility = INTENT_FRAME_ELIGIBILITY_FAILURES.filter((failure) =>
     eligibility.includes(failure),
   );

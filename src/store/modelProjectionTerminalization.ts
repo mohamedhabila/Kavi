@@ -73,10 +73,9 @@ export function terminalizeModelProjectionReservationConversation(params: {
           timestamp: params.timestamp,
           level: wasCancelled ? ('info' as const) : ('warning' as const),
           kind: wasCancelled ? ('state' as const) : ('error' as const),
-          title:
-            wasCancelled
-              ? 'Response stopped before generation'
-              : params.finishReason === 'app_restarted_before_start'
+          title: wasCancelled
+            ? 'Response stopped before generation'
+            : params.finishReason === 'app_restarted_before_start'
               ? 'Response interrupted by app restart'
               : 'Response interrupted before generation',
           detail: params.detail,

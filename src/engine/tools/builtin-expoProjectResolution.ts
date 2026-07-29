@@ -1,6 +1,4 @@
-import {
-  listExpoProjects,
-} from '../../services/expo/projectSync';
+import { listExpoProjects } from '../../services/expo/projectSync';
 import { resolveExpoProjectForExecutionTask } from '../../services/expo/projectResolution';
 import { resolveExpoProject } from '../../services/expo/projectState';
 import { useSettingsStore } from '../../store/useSettingsStore';

@@ -47,9 +47,7 @@ function readRepairFields(repair: JsonRecord): string[] {
 }
 
 function readRepairTool(repair: JsonRecord): string | undefined {
-  return typeof repair.tool === 'string' && repair.tool.trim()
-    ? repair.tool.trim()
-    : undefined;
+  return typeof repair.tool === 'string' && repair.tool.trim() ? repair.tool.trim() : undefined;
 }
 
 export function extractRecentToolRepairHints(

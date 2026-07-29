@@ -12,7 +12,9 @@ type OpenWeatherGeoEntry = {
 };
 
 function normalizeWeatherUnits(value: unknown): WeatherUnits {
-  const normalized = String(value || 'metric').trim().toLowerCase();
+  const normalized = String(value || 'metric')
+    .trim()
+    .toLowerCase();
   if (normalized === 'standard' || normalized === 'metric' || normalized === 'imperial') {
     return normalized;
   }
@@ -53,7 +55,10 @@ async function resolveCoordinates(params: {
     return {
       lat,
       lon,
-      location: typeof params.location === 'string' && params.location.trim() ? params.location : `${lat}, ${lon}`,
+      location:
+        typeof params.location === 'string' && params.location.trim()
+          ? params.location
+          : `${lat}, ${lon}`,
     };
   }
 

@@ -8,9 +8,7 @@ import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
  * source. Passive enrichment may still summarize the turn, but it must not
  * create a second independently-shaped fact set for the same evidence.
  */
-export function hasSameSourceExplicitMemoryAuthority(input: {
-  sourceMessageId: string;
-}): boolean {
+export function hasSameSourceExplicitMemoryAuthority(input: { sourceMessageId: string }): boolean {
   if (!isExactMemoryProvenanceId(input.sourceMessageId)) {
     throw new Error('memory_same_source_authority_message_invalid');
   }

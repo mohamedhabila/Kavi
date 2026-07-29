@@ -97,22 +97,26 @@ export function ProviderKeyStep() {
 
         {selectedGuideIsOnDevice ? (
           <View style={styles.optionWrap}>
-            {localCatalog.map((entry: { id: string; name: string; sizeLabel: string; summary?: string }) => {
-              const active = customModel === entry.id;
-              return (
-                <TouchableOpacity
-                  key={entry.id}
-                  style={[styles.optionCard, active && styles.optionCardActive]}
-                  onPress={() => setCustomModel(entry.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('onboarding.selectModel', { name: entry.name })}
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text style={styles.optionTitle}>{entry.name}</Text>
-                  <Text style={styles.optionText}>{`${entry.sizeLabel} · ${entry.summary || ''}`}</Text>
-                </TouchableOpacity>
-              );
-            })}
+            {localCatalog.map(
+              (entry: { id: string; name: string; sizeLabel: string; summary?: string }) => {
+                const active = customModel === entry.id;
+                return (
+                  <TouchableOpacity
+                    key={entry.id}
+                    style={[styles.optionCard, active && styles.optionCardActive]}
+                    onPress={() => setCustomModel(entry.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('onboarding.selectModel', { name: entry.name })}
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={styles.optionTitle}>{entry.name}</Text>
+                    <Text
+                      style={styles.optionText}
+                    >{`${entry.sizeLabel} · ${entry.summary || ''}`}</Text>
+                  </TouchableOpacity>
+                );
+              },
+            )}
           </View>
         ) : (
           <TextInput

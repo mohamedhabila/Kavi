@@ -155,11 +155,7 @@ function validateUpdateGoalsRootShape(args: Record<string, unknown>): UpdateGoal
   for (const field of OPTIONAL_STRING_FIELDS) {
     if (args[field] !== undefined && typeof args[field] !== 'string') {
       return [
-        argumentError(
-          'invalid_field_type',
-          `${field} must be a string when supplied.`,
-          field,
-        ),
+        argumentError('invalid_field_type', `${field} must be a string when supplied.`, field),
       ];
     }
   }

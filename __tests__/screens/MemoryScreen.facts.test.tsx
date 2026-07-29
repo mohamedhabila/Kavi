@@ -120,8 +120,7 @@ jest.mock('../../src/store/useChatStore', () => ({
 
 jest.mock('../../src/services/memory/memoryTools', () => ({
   MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH: 2_000,
-  correctMemoryFactForManagement: (...args: any[]) =>
-    mockCorrectMemoryFactForManagement(...args),
+  correctMemoryFactForManagement: (...args: any[]) => mockCorrectMemoryFactForManagement(...args),
   executeMemoryRecall: (...args: any[]) => mockExecuteMemoryRecall(...args),
   queryMemoryFactsForManagement: (...args: any[]) => mockExecuteMemoryRecall(...args),
   executeMemoryRemember: jest.fn(),
@@ -264,10 +263,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
 
     fireEvent.press(getByTestId('memory-fact-pin-fact-1'));
 
-    expect(alertSpy).toHaveBeenLastCalledWith(
-      'Memory not updated',
-      'Reload memory and try again.',
-    );
+    expect(alertSpy).toHaveBeenLastCalledWith('Memory not updated', 'Reload memory and try again.');
     expect(JSON.stringify(alertSpy.mock.calls.at(-1))).not.toContain('private storage detail');
     alertSpy.mockRestore();
   });
@@ -336,9 +332,7 @@ describe('MemoryScreen — Facts & Episodes', () => {
     fireEvent.changeText(getByTestId('memory-correction-input'), 'Mohamed');
     fireEvent.press(getByTestId('memory-correction-save'));
 
-    expect(
-      getByText('This memory could not be updated. Close it and try again.'),
-    ).toBeTruthy();
+    expect(getByText('This memory could not be updated. Close it and try again.')).toBeTruthy();
     expect(queryByText('PRIVATE STORAGE DETAIL')).toBeNull();
     expect(getByTestId('memory-correction-modal')).toBeTruthy();
 

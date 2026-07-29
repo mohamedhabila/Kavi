@@ -17,6 +17,7 @@ ios/build/
 android/build/
 android/app/build/
 android/app/.cxx/
+modules/**/build/
 *.jks
 *.p8
 *.p12
@@ -38,4 +39,7 @@ android/keystore.properties
 Kavi-simulator.app
 assets/editor/
 android/app/src/main/assets/editor/
+assets/terminal/
+android/app/src/main/assets/terminal/
 patches/
+THIRD_PARTY_NOTICES.md

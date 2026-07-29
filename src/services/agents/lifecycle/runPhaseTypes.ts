@@ -11,10 +11,7 @@ import type {
   ProgressChanges,
   ProgressOptions,
 } from './phases';
-import type {
-  PersistRegistryBestEffortOutcome,
-  SessionContextStoreParams,
-} from './sessionContext';
+import type { PersistRegistryBestEffortOutcome, SessionContextStoreParams } from './sessionContext';
 
 export type RunPreparedSubAgentSessionParams<TAgent extends SubAgentSnapshot> = {
   prepared: PreparedSubAgentSession<TAgent>;

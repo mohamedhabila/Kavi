@@ -13,10 +13,14 @@ describe('android litertlm backend fallback hardening', () => {
     const parserSource = readSource('LocalLlmRequestParser.kt');
     const fallbackSource = readSource('LocalLlmFallbackPolicy.kt');
 
-    expect(parserSource).toContain('private fun normalizeRequestedBackend(backend: String): String');
+    expect(parserSource).toContain(
+      'private fun normalizeRequestedBackend(backend: String): String',
+    );
     expect(parserSource).not.toContain('isProbablyEmulator');
     expect(fallbackSource).not.toContain('isProbablyEmulator');
-    expect(fallbackSource).toContain('fun shouldFallbackToCpu(requestedBackend: String, error: Throwable): Boolean');
+    expect(fallbackSource).toContain(
+      'fun shouldFallbackToCpu(requestedBackend: String, error: Throwable): Boolean',
+    );
     expect(fallbackSource).toContain('error is LocalLlmAcceleratorInitializationException');
     expect(fallbackSource).toContain('return containsAcceleratorFallbackError(error)');
     expect(fallbackSource).toContain('"opencl"');
@@ -38,7 +42,9 @@ describe('android litertlm backend fallback hardening', () => {
     expect(readSource('LocalLlmRuntime.kt')).toContain(
       'withTimeout(ACCELERATOR_FIRST_STREAM_CHUNK_TIMEOUT_MS)',
     );
-    expect(readSource('LocalLlmFallbackPolicy.kt')).toContain('if (error is TimeoutCancellationException)');
+    expect(readSource('LocalLlmFallbackPolicy.kt')).toContain(
+      'if (error is TimeoutCancellationException)',
+    );
   });
 
   test('maps Android accelerators through LiteRT backends without prompt policy branches', () => {
@@ -48,7 +54,9 @@ describe('android litertlm backend fallback hardening', () => {
     const deviceInfoSource = readSource('LocalLlmDeviceInfo.kt');
 
     expect(acceleratorSource).toContain('listOf("cpu", "gpu", "npu", "tpu")');
-    expect(acceleratorSource).toContain('"npu", "tpu" -> Backend.NPU(nativeLibraryDir = nativeLibraryDir)');
+    expect(acceleratorSource).toContain(
+      '"npu", "tpu" -> Backend.NPU(nativeLibraryDir = nativeLibraryDir)',
+    );
     expect(factorySource).toContain('visionBackend = key.visionBackend?.let(::resolveBackend)');
     expect(factorySource).toContain('audioBackend = key.audioBackend?.let(::resolveBackend)');
     expect(messageSource).toContain('if (usesLiteRtNpuBackend(backend))');
@@ -69,8 +77,12 @@ describe('android litertlm backend fallback hardening', () => {
     const parserSource = readSource('LocalLlmRequestParser.kt');
     const factorySource = readSource('LocalLlmEngineFactory.kt');
 
-    expect(parserSource).toContain('contextWindowTokens = readInt(request, "contextWindowTokens") ?: maxTokens');
-    expect(parserSource).toContain('"contextWindowTokens must be greater than or equal to maxTokens."');
+    expect(parserSource).toContain(
+      'contextWindowTokens = readInt(request, "contextWindowTokens") ?: maxTokens',
+    );
+    expect(parserSource).toContain(
+      '"contextWindowTokens must be greater than or equal to maxTokens."',
+    );
     expect(factorySource).toContain('fun createInitializedEngine(');
     expect(factorySource).toContain('contextWindowTokens: Int');
     expect(factorySource).toContain('maxNumTokens = contextWindowTokens');

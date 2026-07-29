@@ -431,9 +431,7 @@ describe('slow provider structural consistency', () => {
     resetFactSchemaCacheForTests();
     ensureFactSchema();
 
-    expect(listIngestionStructuralCheckpointReceipts(job.id)).toEqual([
-      receiptBeforeInterruption,
-    ]);
+    expect(listIngestionStructuralCheckpointReceipts(job.id)).toEqual([receiptBeforeInterruption]);
     expect(scopedFacts(job).some((fact) => fact.predicate === 'file_operation')).toBe(true);
     expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
     const wait = jest.fn(async () => undefined);

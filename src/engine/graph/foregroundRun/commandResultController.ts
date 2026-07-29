@@ -17,10 +17,7 @@ type ForegroundCommandResultControllerAccessors = {
 
 type ForegroundCommandResultControllerActions = {
   appendConversationLog: (entry: ConversationLogEntry) => void;
-  startNewConversation: (options: {
-    mode?: ConversationMode;
-    personaId?: string;
-  }) => string;
+  startNewConversation: (options: { mode?: ConversationMode; personaId?: string }) => string;
   updateAssistantMessage: (messageId: string, content: string) => void;
 };
 

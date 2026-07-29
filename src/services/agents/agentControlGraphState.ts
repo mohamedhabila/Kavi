@@ -115,7 +115,11 @@ function normalizePositiveInteger(value: unknown): number | undefined {
 function normalizeMobileControllerRecoveryState(
   value: AgentRunMobileControllerRecoveryState | undefined,
 ): AgentRunMobileControllerRecoveryState | undefined {
-  if (!value || value.version !== 1 || !TOOL_EFFECT_DIGEST_PATTERN.test(value.strategyFingerprint)) {
+  if (
+    !value ||
+    value.version !== 1 ||
+    !TOOL_EFFECT_DIGEST_PATTERN.test(value.strategyFingerprint)
+  ) {
     return undefined;
   }
   const strategyFingerprint = value.strategyFingerprint;
@@ -134,7 +138,13 @@ function normalizeMobileControllerRecoveryState(
       : undefined;
 
   if (value.phase === 'action_in_flight' && toolCallId) {
-    return { version: 1, phase: value.phase, strategyFingerprint, consecutiveStallCount, toolCallId };
+    return {
+      version: 1,
+      phase: value.phase,
+      strategyFingerprint,
+      consecutiveStallCount,
+      toolCallId,
+    };
   }
   if (value.phase === 'tracking' && consecutiveStallCount > 0) {
     return { version: 1, phase: value.phase, strategyFingerprint, consecutiveStallCount };
@@ -405,12 +415,8 @@ export function normalizeAgentRunControlGraphGoals(
       ...(userConstraintState.state === 'canonical' && !hasUserConstraintConflict
         ? { userConstraints: userConstraintState.constraints }
         : {}),
-      ...(hasUserConstraintConflict
-        ? { userConstraintIntegrity: 'conflict' as const }
-        : {}),
-      ...(hasCompletedConstraintObligation
-        ? { userConstraintDeliveryPending: true as const }
-        : {}),
+      ...(hasUserConstraintConflict ? { userConstraintIntegrity: 'conflict' as const } : {}),
+      ...(hasCompletedConstraintObligation ? { userConstraintDeliveryPending: true as const } : {}),
       completionPolicy,
       ...(blockedReason ? { blockedReason } : {}),
     });
@@ -429,9 +435,7 @@ export function normalizeAgentRunControlGraphGoals(
     0,
   );
   const conflictingGoalIds = new Set(
-    normalized
-      .filter((goal) => goal.userConstraintIntegrity === 'conflict')
-      .map((goal) => goal.id),
+    normalized.filter((goal) => goal.userConstraintIntegrity === 'conflict').map((goal) => goal.id),
   );
   if (retainedStatementCount > MAX_AGENT_GOAL_USER_CONSTRAINTS) {
     for (const goal of constraintBearingGoals) conflictingGoalIds.add(goal.id);
@@ -622,8 +626,7 @@ export function prepareAgentRunControlGraphForResume(
     finalizationHoldReason: undefined,
     terminalReason: undefined,
     turnDirectives: normalizeAgentRunControlGraphTurnDirectives({
-      automaticRecoveryAttemptCount:
-        normalized.turnDirectives.automaticRecoveryAttemptCount,
+      automaticRecoveryAttemptCount: normalized.turnDirectives.automaticRecoveryAttemptCount,
     }),
     audit: appendControlGraphAuditEvent(normalized.audit, {
       type:

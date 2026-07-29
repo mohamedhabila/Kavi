@@ -27,9 +27,16 @@ jest.mock('../../src/services/skills/storage', () => ({
   saveManagedSkillBundle: (...args: any[]) => mockSaveManagedSkillBundle(...args),
 }));
 (global as any).fetch = mockFetch;
-import { listClawHubSkills, getFeaturedSkills, searchClawHub } from '../../src/services/clawhub/apiClient';
+import {
+  listClawHubSkills,
+  getFeaturedSkills,
+  searchClawHub,
+} from '../../src/services/clawhub/apiClient';
 import { __resetClawHubConvexDiscoveryForTests } from '../../src/services/clawhub/convexClient';
-import { installSkillFromHub, installSkillFromUrl } from '../../src/services/clawhub/installWorkflow';
+import {
+  installSkillFromHub,
+  installSkillFromUrl,
+} from '../../src/services/clawhub/installWorkflow';
 import { zipSync } from 'fflate';
 const TEST_CLAWHUB_CONVEX_URL = 'https://clawhub-convex.example.invalid';
 function mockClawHubBrowseDiscovery(): void {

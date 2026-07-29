@@ -2,7 +2,11 @@
 // Kavi — Goal capability discovery acceptance metrics
 // ---------------------------------------------------------------------------
 
-import { aggregateAcceptanceMetrics, buildPassRateSummary, isSummaryPassing } from './aggregateResults';
+import {
+  aggregateAcceptanceMetrics,
+  buildPassRateSummary,
+  isSummaryPassing,
+} from './aggregateResults';
 import { evaluateGoalCapabilityDiscoveryFixture } from './evaluateGoalCapabilityDiscoveryFixture';
 import { GOAL_CAPABILITY_DISCOVERY_FIXTURES } from './goalCapabilityDiscoveryFixtures';
 import type { AcceptanceMetricEvaluation } from './types';

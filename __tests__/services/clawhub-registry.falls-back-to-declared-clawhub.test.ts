@@ -28,7 +28,11 @@ jest.mock('../../src/services/skills/storage', () => ({
 }));
 (global as any).fetch = mockFetch;
 import { __resetClawHubConvexDiscoveryForTests } from '../../src/services/clawhub/convexClient';
-import { installSkillFromHub, installSkillFromUrl, updateSkillFromHub } from '../../src/services/clawhub/installWorkflow';
+import {
+  installSkillFromHub,
+  installSkillFromUrl,
+  updateSkillFromHub,
+} from '../../src/services/clawhub/installWorkflow';
 import { zipSync } from 'fflate';
 function toExactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;

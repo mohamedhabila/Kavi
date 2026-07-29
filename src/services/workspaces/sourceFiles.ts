@@ -90,7 +90,11 @@ export async function writeWorkspaceSourceTextFile(
   }
 
   if (source.kind === 'conversation') {
-    const result = await writeConversationWorkspaceTextFile(source.conversationId, safePath, content);
+    const result = await writeConversationWorkspaceTextFile(
+      source.conversationId,
+      safePath,
+      content,
+    );
     return {
       path: result.path,
       size: result.size,

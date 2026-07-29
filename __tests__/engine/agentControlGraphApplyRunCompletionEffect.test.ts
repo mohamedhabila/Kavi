@@ -202,9 +202,7 @@ describe('applyConversationRunCompletionEffect', () => {
         runId: 'run-1',
       }),
     ).toBe(false);
-    expect(prepareControlGraph).toHaveBeenCalledWith(
-      conversation.agentRuns?.[0].controlGraph,
-    );
+    expect(prepareControlGraph).toHaveBeenCalledWith(conversation.agentRuns?.[0].controlGraph);
     expect(updateAgentRunControlGraph).not.toHaveBeenCalled();
     expect(completeAgentRun).not.toHaveBeenCalled();
   });
@@ -280,16 +278,18 @@ describe('applyConversationRunCompletionEffect', () => {
       const updateAgentRunControlGraph = jest.fn();
       const completeAgentRun = jest.fn();
 
-      expect(applyConversationRunCompletionEffect({
-        actions: {
-          completeAgentRun,
-          updateAgentRunControlGraph,
-        },
-        conversationId: conversation.id,
-        effect: { status: 'completed' },
-        getLatestConversation: () => conversation,
-        runId: 'run-1',
-      })).toBe(true);
+      expect(
+        applyConversationRunCompletionEffect({
+          actions: {
+            completeAgentRun,
+            updateAgentRunControlGraph,
+          },
+          conversationId: conversation.id,
+          effect: { status: 'completed' },
+          getLatestConversation: () => conversation,
+          runId: 'run-1',
+        }),
+      ).toBe(true);
 
       const nextGraph = updateAgentRunControlGraph.mock.calls[0]?.[1];
       expect(nextGraph).toMatchObject({ status: 'finalized' });

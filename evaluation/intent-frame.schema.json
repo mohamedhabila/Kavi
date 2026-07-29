@@ -296,14 +296,7 @@
     "intentFrameCase": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "language",
-        "productArea",
-        "requestSha256",
-        "candidate",
-        "gold"
-      ],
+      "required": ["id", "language", "productArea", "requestSha256", "candidate", "gold"],
       "properties": {
         "id": {
           "$ref": "#/$defs/safeId"
@@ -368,12 +361,7 @@
         "evaluator": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "kind",
-            "implementationSha256",
-            "rubricSha256",
-            "minimumScorableCoverage"
-          ],
+          "required": ["kind", "implementationSha256", "rubricSha256", "minimumScorableCoverage"],
           "properties": {
             "kind": {
               "const": "deterministic_structural"
@@ -567,12 +555,7 @@
         "evaluator": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "kind",
-            "implementationSha256",
-            "rubricSha256",
-            "minimumScorableCoverage"
-          ],
+          "required": ["kind", "implementationSha256", "rubricSha256", "minimumScorableCoverage"],
           "properties": {
             "kind": {
               "const": "deterministic_structural"

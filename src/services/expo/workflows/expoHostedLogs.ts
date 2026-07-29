@@ -4,8 +4,8 @@ import type {
   ExpoWorkflowFailureLog,
   ExpoWorkflowJobStep,
   ExpoWorkflowJobStatus,
-} from "../contracts";
-import { expoGraphqlRequest } from "../providers/expoGraphql";
+} from '../contracts';
+import { expoGraphqlRequest } from '../providers/expoGraphql';
 import {
   extractFailureLogsFromErrorEntries,
   humanizeWorkflowPhase,
@@ -13,13 +13,13 @@ import {
   isFailureStatus,
   mergeFailureLogs,
   normalizeWorkflowConclusion,
-} from "../logs/workflowFailures";
+} from '../logs/workflowFailures';
 import {
   excerptWorkflowLogText,
   fetchDecompressedText,
   normalizeLogToken,
-} from "../logs/workflowText";
-import { trimToUndefined } from "../projectState";
+} from '../logs/workflowText';
+import { trimToUndefined } from '../projectState';
 
 const WORKFLOW_LOG_ERROR_PATTERNS = [
   /(^|\\s)(error|errors|fatal|exception|traceback)(\\s|:|$)/i,

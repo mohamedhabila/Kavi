@@ -233,13 +233,11 @@ describe('calendar effect verification', () => {
       alarms: [],
     };
     mockUpdateEventAsync.mockResolvedValue(undefined);
-    mockGetEventAsync
-      .mockResolvedValueOnce(existing)
-      .mockResolvedValueOnce({
-        ...existing,
-        startDate: new Date(newStart),
-        endDate: new Date(newEnd),
-      });
+    mockGetEventAsync.mockResolvedValueOnce(existing).mockResolvedValueOnce({
+      ...existing,
+      startDate: new Date(newStart),
+      endDate: new Date(newEnd),
+    });
 
     const result = parseCompletedToolOutcome(
       await executeCalendarUpdate(
@@ -324,10 +322,7 @@ describe('calendar effect verification', () => {
       .mockResolvedValueOnce({ ...existing, title: 'Restored title' });
 
     const result = parseCompletedToolOutcome(
-      await executeCalendarUpdate(
-        { id: 'event-1', title: 'Restored title' },
-        calendarRuntime,
-      ),
+      await executeCalendarUpdate({ id: 'event-1', title: 'Restored title' }, calendarRuntime),
     );
 
     expect(result).toMatchObject({ status: 'updated_verified', eventId: 'event-1' });

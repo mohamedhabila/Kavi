@@ -122,10 +122,7 @@ function requireTimestamp(value: unknown, label: string): number {
 }
 
 function requireSha256(value: unknown): string {
-  if (
-    typeof value !== 'string' ||
-    !/^[0-9a-f]{64}$/u.test(value)
-  ) {
+  if (typeof value !== 'string' || !/^[0-9a-f]{64}$/u.test(value)) {
     throw new Error('sourceSnapshotSha256 is invalid.');
   }
   return value;
@@ -149,10 +146,7 @@ function parseIds(value: string, label: string): string[] {
 
 function sourceFromRow(row: StructuralReceiptClaimRow): IngestionStructuralReceiptSource {
   return {
-    memoryConversationId: requireScopeIdentity(
-      row.memory_conversation_id,
-      'memoryConversationId',
-    ),
+    memoryConversationId: requireScopeIdentity(row.memory_conversation_id, 'memoryConversationId'),
     sourceThreadId: requireScopeIdentity(row.thread_id, 'sourceThreadId'),
     personaId: requireScopeIdentity(row.persona_id, 'personaId'),
     taskId: optionalScopeIdentity(row.task_id, 'taskId'),
@@ -174,19 +168,10 @@ function rowToReceipt(row: StructuralReceiptRow): IngestionStructuralCheckpointR
     attemptNumber: row.attempt_number,
     source: sourceFromRow(row),
     episodeId: optionalIdentity(row.episode_id, 'episodeId'),
-    deterministicFactIds: parseIds(
-      row.deterministic_fact_ids_json,
-      'deterministicFactIds',
-    ),
+    deterministicFactIds: parseIds(row.deterministic_fact_ids_json, 'deterministicFactIds'),
     invalidatedFactIds: parseIds(row.invalidated_fact_ids_json, 'invalidatedFactIds'),
-    bridgedEvidenceFactIds: parseIds(
-      row.bridged_evidence_fact_ids_json,
-      'bridgedEvidenceFactIds',
-    ),
-    agentRunMemoryFactIds: parseIds(
-      row.agent_run_memory_fact_ids_json,
-      'agentRunMemoryFactIds',
-    ),
+    bridgedEvidenceFactIds: parseIds(row.bridged_evidence_fact_ids_json, 'bridgedEvidenceFactIds'),
+    agentRunMemoryFactIds: parseIds(row.agent_run_memory_fact_ids_json, 'agentRunMemoryFactIds'),
     activeFocusUpdated: row.active_focus_updated !== 0,
     openThreadsUpdated: row.open_threads_updated !== 0,
     persistedAt: requireTimestamp(row.persisted_at, 'persistedAt'),
@@ -205,8 +190,7 @@ function receiptReplayMatches(
     existing.episodeId === candidate.episodeId &&
     JSON.stringify(existing.deterministicFactIds) ===
       JSON.stringify(candidate.deterministicFactIds) &&
-    JSON.stringify(existing.invalidatedFactIds) ===
-      JSON.stringify(candidate.invalidatedFactIds) &&
+    JSON.stringify(existing.invalidatedFactIds) === JSON.stringify(candidate.invalidatedFactIds) &&
     JSON.stringify(existing.bridgedEvidenceFactIds) ===
       JSON.stringify(candidate.bridgedEvidenceFactIds) &&
     JSON.stringify(existing.agentRunMemoryFactIds) ===
@@ -250,18 +234,11 @@ export function commitIngestionStructuralCheckpointReceipt(
       jobId,
       attemptNumber: claim.attempt_number,
       source: sourceFromRow(claim),
-      episodeId:
-        input.episodeId === null ? null : requireIdentity(input.episodeId, 'episodeId'),
+      episodeId: input.episodeId === null ? null : requireIdentity(input.episodeId, 'episodeId'),
       deterministicFactIds: normalizeIds(input.deterministicFactIds, 'deterministicFactIds'),
       invalidatedFactIds: normalizeIds(input.invalidatedFactIds, 'invalidatedFactIds'),
-      bridgedEvidenceFactIds: normalizeIds(
-        input.bridgedEvidenceFactIds,
-        'bridgedEvidenceFactIds',
-      ),
-      agentRunMemoryFactIds: normalizeIds(
-        input.agentRunMemoryFactIds,
-        'agentRunMemoryFactIds',
-      ),
+      bridgedEvidenceFactIds: normalizeIds(input.bridgedEvidenceFactIds, 'bridgedEvidenceFactIds'),
+      agentRunMemoryFactIds: normalizeIds(input.agentRunMemoryFactIds, 'agentRunMemoryFactIds'),
       activeFocusUpdated: input.activeFocusUpdated,
       openThreadsUpdated: input.openThreadsUpdated,
       persistedAt,
@@ -366,7 +343,6 @@ export function listIngestionDurabilityReceipts(jobId: string): IngestionDurabil
   );
   return [...structural, ...providerFinal].sort(
     (left, right) =>
-      left.attemptNumber - right.attemptNumber ||
-      (left.phase === 'structural_checkpoint' ? -1 : 1),
+      left.attemptNumber - right.attemptNumber || (left.phase === 'structural_checkpoint' ? -1 : 1),
   );
 }

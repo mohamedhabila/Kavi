@@ -13,10 +13,7 @@ export const EXACT_INGESTION_PREEMPTION_WAIT_MS = 5_000;
 
 type QueueOnlyIngestionStatus = 'pending' | 'retrying';
 type PreemptibleIngestionStatus = QueueOnlyIngestionStatus | 'processing';
-type TerminalIngestionStatus = Exclude<
-  IngestionJobStatus,
-  PreemptibleIngestionStatus
->;
+type TerminalIngestionStatus = Exclude<IngestionJobStatus, PreemptibleIngestionStatus>;
 
 export type ExactIngestionJobPreemptionResult =
   | { status: 'discarded'; previousStatus: QueueOnlyIngestionStatus }
@@ -38,11 +35,7 @@ export interface PreemptIngestionJobAndWaitInput {
 
 function requireWaitBudget(timeoutMs: number | undefined): number {
   const value = timeoutMs ?? EXACT_INGESTION_PREEMPTION_WAIT_MS;
-  if (
-    !Number.isSafeInteger(value) ||
-    value < 1 ||
-    value > MAX_EXACT_INGESTION_PREEMPTION_WAIT_MS
-  ) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_EXACT_INGESTION_PREEMPTION_WAIT_MS) {
     throw new Error('memory_ingestion_preemption_wait_invalid');
   }
   return value;

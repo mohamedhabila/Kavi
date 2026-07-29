@@ -120,8 +120,6 @@ describe('surfacedSubAgentOutput', () => {
         usedFullOutput: true,
         guidance: SURFACED_SUB_AGENT_OUTPUT_GUIDANCE,
       }),
-    ).toBe(
-      'Full worker output from worker-6 was surfaced to the user in the assistant response.',
-    );
+    ).toBe('Full worker output from worker-6 was surfaced to the user in the assistant response.');
   });
 });

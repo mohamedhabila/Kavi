@@ -51,8 +51,6 @@ describe('coverage gate documentation', () => {
       'Coverage instrumentation does not enforce timing budgets',
     );
     expect(readRepoFile('eslint.config.mjs')).toContain("'.tmp/**'");
-    expect(readNormalizedRepoFile('docs/release.md')).toContain(
-      'do not lower them for a release',
-    );
+    expect(readNormalizedRepoFile('docs/release.md')).toContain('do not lower them for a release');
   });
 });

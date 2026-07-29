@@ -5,12 +5,7 @@
 // heuristics — modes select provider tiers, not message content.
 // ---------------------------------------------------------------------------
 
-export type MemoryConsolidationMode =
-  | 'auto'
-  | 'local'
-  | 'active_provider'
-  | 'specific'
-  | 'off';
+export type MemoryConsolidationMode = 'auto' | 'local' | 'active_provider' | 'specific' | 'off';
 
 export interface MemoryConsolidationSettingsSlice {
   memoryConsolidationMode?: unknown;
@@ -26,7 +21,10 @@ const MEMORY_CONSOLIDATION_MODES = new Set<MemoryConsolidationMode>([
 ]);
 
 export function normalizeMemoryConsolidationMode(value: unknown): MemoryConsolidationMode {
-  if (typeof value === 'string' && MEMORY_CONSOLIDATION_MODES.has(value as MemoryConsolidationMode)) {
+  if (
+    typeof value === 'string' &&
+    MEMORY_CONSOLIDATION_MODES.has(value as MemoryConsolidationMode)
+  ) {
     return value as MemoryConsolidationMode;
   }
   return 'auto';

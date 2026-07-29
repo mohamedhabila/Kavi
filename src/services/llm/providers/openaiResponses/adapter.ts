@@ -11,17 +11,9 @@ export async function sendOpenAIResponses(args: {
     messages: ChatCompletionMessage[],
     options: MessageRequestOptions,
   ) => Record<string, any>;
-  performFetch: (
-    url: string,
-    init: RequestInit,
-    preferStreaming?: boolean,
-  ) => Promise<Response>;
+  performFetch: (url: string, init: RequestInit, preferStreaming?: boolean) => Promise<Response>;
   normalizeOpenAIResponsesResult: (json: any) => any;
-  attachProviderResponse: (
-    payload: any,
-    provider: 'openai-responses',
-    raw: any,
-  ) => any;
+  attachProviderResponse: (payload: any, provider: 'openai-responses', raw: any) => any;
 }): Promise<any> {
   const body = args.buildOpenAIResponsesBody(args.model, args.messages, args.options);
   const requestHeaders = args.options.stream

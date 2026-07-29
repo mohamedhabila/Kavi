@@ -73,11 +73,7 @@ export function MemoryCorrectionModal({
           style={styles.correctionDismissArea}
           testID="memory-correction-backdrop"
         />
-        <SafeAreaView
-          accessibilityViewIsModal
-          edges={['bottom']}
-          style={styles.correctionSheet}
-        >
+        <SafeAreaView accessibilityViewIsModal edges={['bottom']} style={styles.correctionSheet}>
           <Text accessibilityRole="header" style={styles.correctionTitle}>
             {t('memory.correctionTitle')}
           </Text>

@@ -10,9 +10,7 @@ function normalizeCategoryToken(value: string | undefined): string | undefined {
 
 const LEGACY_WEB_CATEGORY_ALIAS = ['web', 'research'].join('_');
 
-export function normalizeToolPlannerCategoryAlias(
-  value: string | undefined,
-): string | undefined {
+export function normalizeToolPlannerCategoryAlias(value: string | undefined): string | undefined {
   const normalized = normalizeCategoryToken(value);
   if (!normalized) {
     return undefined;

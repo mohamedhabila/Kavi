@@ -61,10 +61,7 @@ function parseOAuthSdkFailure(error: unknown): {
   };
 }
 
-export function appendProxyConfigurationHint(
-  message: string,
-  projectNameForProxy: string,
-): string {
+export function appendProxyConfigurationHint(message: string, projectNameForProxy: string): string {
   if (!projectNameForProxy.startsWith('@anonymous/')) {
     return message;
   }

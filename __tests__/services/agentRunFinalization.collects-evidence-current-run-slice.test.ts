@@ -1,6 +1,12 @@
 import type { Message } from '../../src/types/message';
 import { summarizeFinalizationToolResultPreview } from '../../src/services/agents/finalizationText';
-import { buildAgentRunCompletionFallbackOutput, canRecoverAgentRunFinalResponse, collectAgentRunFinalizationEvidence, hasVerifiedFinalizationEvidence, selectAgentRunDirectTerminalFinalOutput } from '../../src/services/agents/lifecycle/finalizePhase';
+import {
+  buildAgentRunCompletionFallbackOutput,
+  canRecoverAgentRunFinalResponse,
+  collectAgentRunFinalizationEvidence,
+  hasVerifiedFinalizationEvidence,
+  selectAgentRunDirectTerminalFinalOutput,
+} from '../../src/services/agents/lifecycle/finalizePhase';
 
 describe('agentRunFinalization', () => {
   it('collects evidence from the current run slice and summarizes tool results', () => {
@@ -407,9 +413,7 @@ describe('agentRunFinalization', () => {
     expect(preview).toContain('$["sessionCount"]=1');
     expect(preview).toContain('$["completedCount"]=1');
     expect(preview).toContain('$["outputChars"]=5200');
-    expect(preview).toContain(
-      '$["outputPreview"]="Patched the workflow and verified the fix."',
-    );
+    expect(preview).toContain('$["outputPreview"]="Patched the workflow and verified the fix."');
     expect(preview?.length).toBeLessThanOrEqual(320);
     expect(preview).not.toContain('Patched the workflow and verified the fix.'.repeat(10));
   });

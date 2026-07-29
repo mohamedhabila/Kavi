@@ -31,17 +31,12 @@ function buildGraphMutationErrorHoldPrompt(repairHints: ReadonlyArray<string>): 
   return lines.join('\n');
 }
 
-function hasLatestRetryableToolError(
-  history: ReadonlyArray<ToolCallRecord> | undefined,
-): boolean {
+function hasLatestRetryableToolError(history: ReadonlyArray<ToolCallRecord> | undefined): boolean {
   const latestEntry = history?.[history.length - 1];
   if (!latestEntry || latestEntry.name === GOAL_BOOTSTRAP_TOOL_NAME) {
     return false;
   }
-  return (
-    latestEntry.status === 'failed' &&
-    extractRecentToolRepairHints([latestEntry]).length > 0
-  );
+  return latestEntry.status === 'failed' && extractRecentToolRepairHints([latestEntry]).length > 0;
 }
 
 function buildToolErrorRepairHoldPrompt(repairHints: ReadonlyArray<string>): string {
@@ -56,8 +51,12 @@ function buildToolErrorRepairHoldPrompt(repairHints: ReadonlyArray<string>): str
   return lines.join('\n');
 }
 
-function buildNoToolProgressRetryPrompt(selectedToolNames: ReadonlySet<string> | undefined): string {
-  const toolNames = Array.from(selectedToolNames ?? []).filter(Boolean).sort();
+function buildNoToolProgressRetryPrompt(
+  selectedToolNames: ReadonlySet<string> | undefined,
+): string {
+  const toolNames = Array.from(selectedToolNames ?? [])
+    .filter(Boolean)
+    .sort();
   const canRequestClarification = toolNames.includes('request_clarification');
   const lines: string[] = ['[SYSTEM HOLD]'];
   lines.push(

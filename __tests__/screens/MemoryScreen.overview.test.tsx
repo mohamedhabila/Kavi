@@ -402,9 +402,7 @@ describe('MemoryScreen overview tab', () => {
     fireEvent.press(getByTestId('memory-diagnostics-toggle'));
 
     await waitFor(() => {
-      expect(
-        getByText('Diagnostics could not be loaded. Refresh and try again.'),
-      ).toBeTruthy();
+      expect(getByText('Diagnostics could not be loaded. Refresh and try again.')).toBeTruthy();
     });
 
     fireEvent.press(getByTestId('memory-overview-tab'));

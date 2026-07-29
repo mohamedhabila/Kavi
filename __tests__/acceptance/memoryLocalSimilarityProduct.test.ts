@@ -23,8 +23,7 @@ import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import type { Message } from '../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
-const COVERAGE_INSTRUMENTATION_ACTIVE =
-  process.env.KAVI_COVERAGE_INSTRUMENTATION === '1';
+const COVERAGE_INSTRUMENTATION_ACTIVE = process.env.KAVI_COVERAGE_INSTRUMENTATION === '1';
 const REQUIRE_WALL_CLOCK_LATENCY = process.env.KAVI_LOCAL_SIMILARITY_WALL_CLOCK_GATE === '1';
 const SHARED_HOST_RETRIEVAL_CPU_P95_BUDGET_MS = 200;
 const SHARED_HOST_VECTOR_CPU_P95_BUDGET_MS = LOCAL_SIMILARITY_VECTOR_P95_BUDGET_MS;

@@ -659,7 +659,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
       },
     },
     home: {
-      intro: '設定を検索するか、カテゴリを選択します。詳細オプションは必要になるまで表示を抑えます。',
+      intro:
+        '設定を検索するか、カテゴリを選択します。詳細オプションは必要になるまで表示を抑えます。',
       searchLabel: '設定を検索',
       searchPlaceholder: '設定を検索',
       clearSearch: '設定の検索をクリア',
@@ -908,8 +909,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     noModels: '利用可能なモデルがありません',
     noSearchResults: '検索に一致するモデルがありません',
     loadingModels: 'モデルを読み込み中…',
-    fetchFailed:
-      'モデルを更新できませんでした。プロバイダー接続を確認して再試行してください。',
+    fetchFailed: 'モデルを更新できませんでした。プロバイダー接続を確認して再試行してください。',
     searchModels: 'モデルを検索',
     searchModelsPlaceholder: 'モデル名で検索',
     clearModelSearch: 'モデル検索をクリア',
@@ -1285,7 +1285,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
       'ローカルシェルは Android でのみ利用できます。iOS では JavaScript または SSH サーバーを使用してください。',
     termuxBridgeUnavailable:
       'このビルドには Android のローカルシェル機能が含まれていません。JavaScript または SSH を使用してください。',
-    termuxInstallRequired: 'Android でローカルシェルコマンドを実行するには Termux をインストールしてください。',
+    termuxInstallRequired:
+      'Android でローカルシェルコマンドを実行するには Termux をインストールしてください。',
     termuxServiceUnavailable:
       'Termux はインストールされていますが、コマンドサービスを利用できません。Termux を開いて外部コマンド設定を確認し、もう一度お試しください。',
     detectShellRuntimeFailed:
@@ -2034,8 +2035,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     startEditingMessage:
       'このエディターで一時的な下書きを始めるか、ワークスペースまたは SSH サーバーに接続してファイルを参照・保存します。',
     startScratch: '一時的な下書きを開始',
-    scratchModeMessage:
-      '一時的な下書き: 変更内容はこのエディターを離れるまでのみ保持されます。',
+    scratchModeMessage: '一時的な下書き: 変更内容はこのエディターを離れるまでのみ保持されます。',
     fileBrowserTitle: 'ファイル',
     loadingFile: 'ファイルを開いています...',
     targetRequired: '保存する前に接続先を選択してください。',

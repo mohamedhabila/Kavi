@@ -292,9 +292,10 @@ describe('evaluateGroundedReplacement', () => {
     expect(
       decide(proposal({ evidenceMessageIds: ['assistant-current'] }), { currentFacts: [] }),
     ).toEqual({ accepted: false, reason: 'wrong_evidence_message' });
-    expect(
-      decide(proposal({ evidenceQuote: 'I moved to Paris.' }), { currentFacts: [] }),
-    ).toEqual({ accepted: false, reason: 'quote_not_in_current_user_message' });
+    expect(decide(proposal({ evidenceQuote: 'I moved to Paris.' }), { currentFacts: [] })).toEqual({
+      accepted: false,
+      reason: 'quote_not_in_current_user_message',
+    });
     expect(decide(proposal({ value: 'Paris' }), { currentFacts: [] })).toEqual({
       accepted: false,
       reason: 'value_not_in_current_user_message',

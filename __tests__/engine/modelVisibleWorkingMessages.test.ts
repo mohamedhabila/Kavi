@@ -190,14 +190,14 @@ tail`;
           id: 'tool-1',
           role: 'tool',
           toolCallId: 'web_search',
-        content: JSON.stringify({
-          provider: 'gemini',
-          searches: [
-            {
-              query: 'OpenAI Codex AGENTS.md',
-            },
-          ],
-        }),
+          content: JSON.stringify({
+            provider: 'gemini',
+            searches: [
+              {
+                query: 'OpenAI Codex AGENTS.md',
+              },
+            ],
+          }),
           timestamp: 2,
         },
         {

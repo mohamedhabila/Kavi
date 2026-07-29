@@ -28,19 +28,22 @@ export function parseToolCallPoll(toolName: string, result?: string): ParsedPoll
   try {
     const parsed = JSON.parse(result);
     const poll = parsed?.poll as ParsedPoll | undefined;
-    if (typeof poll?.question !== 'string' || !poll.question.trim() || !Array.isArray(poll.options)) {
+    if (
+      typeof poll?.question !== 'string' ||
+      !poll.question.trim() ||
+      !Array.isArray(poll.options)
+    ) {
       return null;
     }
     const options = poll.options
-      .filter(
-        (option): option is PollOption =>
-          Boolean(
-            option &&
-              typeof option.id === 'string' &&
-              typeof option.label === 'string' &&
-              typeof option.votes === 'number' &&
-              Number.isFinite(option.votes),
-          ),
+      .filter((option): option is PollOption =>
+        Boolean(
+          option &&
+          typeof option.id === 'string' &&
+          typeof option.label === 'string' &&
+          typeof option.votes === 'number' &&
+          Number.isFinite(option.votes),
+        ),
       )
       .map((option) => ({
         ...option,

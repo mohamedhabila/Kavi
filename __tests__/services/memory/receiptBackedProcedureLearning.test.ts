@@ -48,11 +48,7 @@ function receipt(params: {
   };
 }
 
-function rawRunFact(
-  runId: string,
-  goal: string,
-  overrides: Partial<MemoryFact> = {},
-): MemoryFact {
+function rawRunFact(runId: string, goal: string, overrides: Partial<MemoryFact> = {}): MemoryFact {
   const firstCall = `call-${runId}-1`;
   const secondCall = `call-${runId}-2`;
   return {
@@ -262,8 +258,11 @@ describe('receipt-backed procedure learning', () => {
         ...rawRunFact('run-3', 'Create a calendar event').attributes,
         effectReceipts: [
           {
-            ...(rawRunFact('run-3', 'Create a calendar event').attributes
-              .effectReceipts as Array<Record<string, unknown>>)[0],
+            ...(
+              rawRunFact('run-3', 'Create a calendar event').attributes.effectReceipts as Array<
+                Record<string, unknown>
+              >
+            )[0],
             contractIdentity: {
               kind: 'runtime_external',
               version: 1,
@@ -274,8 +273,11 @@ describe('receipt-backed procedure learning', () => {
               executionBindingDigest: DIGEST,
             },
           },
-          (rawRunFact('run-3', 'Create a calendar event').attributes
-            .effectReceipts as Array<Record<string, unknown>>)[1],
+          (
+            rawRunFact('run-3', 'Create a calendar event').attributes.effectReceipts as Array<
+              Record<string, unknown>
+            >
+          )[1],
         ],
       },
     });
@@ -283,8 +285,7 @@ describe('receipt-backed procedure learning', () => {
       attributes: {
         ...rawRunFact('run-4', 'Create a calendar event').attributes,
         terminalEvidence: {
-          ...(rawRunFact('run-4', 'Create a calendar event').attributes
-            .terminalEvidence as object),
+          ...(rawRunFact('run-4', 'Create a calendar event').attributes.terminalEvidence as object),
           observedToolCallIds: ['call-run-4-2', 'call-run-4-1'],
         },
       },

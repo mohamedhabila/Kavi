@@ -48,10 +48,7 @@ export async function loadMcpOAuthState(serverId: string): Promise<StoredOAuthSt
   return parseMaybeJson<StoredOAuthState>(await getMcpOAuthSecret(serverId)) || {};
 }
 
-export async function saveMcpOAuthState(
-  serverId: string,
-  state: StoredOAuthState,
-): Promise<void> {
+export async function saveMcpOAuthState(serverId: string, state: StoredOAuthState): Promise<void> {
   await saveMcpOAuthSecret(serverId, JSON.stringify(state));
 }
 

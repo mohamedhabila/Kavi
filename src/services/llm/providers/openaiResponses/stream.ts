@@ -17,10 +17,7 @@ import {
   readOpenAIResponsesStreamResponseId,
 } from './streamState';
 
-function readOpenAIStreamErrorMessage(
-  event: unknown,
-  fallback: string,
-): string {
+function readOpenAIStreamErrorMessage(event: unknown, fallback: string): string {
   if (!isPlainRecord(event)) return fallback;
   const direct = event.message;
   if (typeof direct === 'string' && direct.trim()) return direct;

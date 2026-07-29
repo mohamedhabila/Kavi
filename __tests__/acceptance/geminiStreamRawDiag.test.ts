@@ -97,8 +97,7 @@ describeDiag('Gemini stream raw diag', () => {
     const allParts = parsedChunks.flatMap((chunk) => chunk?.candidates?.[0]?.content?.parts ?? []);
     const hasFcSignature = allParts.some(
       (part: Record<string, unknown>) =>
-        Boolean(part.functionCall) &&
-        Boolean(part.thoughtSignature ?? part.thought_signature),
+        Boolean(part.functionCall) && Boolean(part.thoughtSignature ?? part.thought_signature),
     );
     const hasEmptyTextSignature = allParts.some(
       (part: Record<string, unknown>) =>

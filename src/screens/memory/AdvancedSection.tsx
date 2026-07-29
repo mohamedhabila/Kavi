@@ -115,9 +115,7 @@ export function AdvancedSection(props: AdvancedSectionProps) {
             testID="memory-clear-all"
           >
             <Trash2 size={18} color={props.colors.danger} />
-            <Text style={props.styles.clearMemoryButtonText}>
-              {props.t('memory.clearAction')}
-            </Text>
+            <Text style={props.styles.clearMemoryButtonText}>{props.t('memory.clearAction')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

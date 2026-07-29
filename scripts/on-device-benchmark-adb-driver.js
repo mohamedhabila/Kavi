@@ -105,13 +105,23 @@ function installDebugArtifacts(projectRoot, deviceId) {
     cwd: path.join(projectRoot, 'android'),
     stdio: 'inherit',
   });
-  run('adb', ['-s', deviceId, 'install', '-r', 'android/app/build/outputs/apk/debug/app-debug.apk'], {
-    cwd: projectRoot,
-    stdio: 'inherit',
-  });
   run(
     'adb',
-    ['-s', deviceId, 'install', '-r', 'android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'],
+    ['-s', deviceId, 'install', '-r', 'android/app/build/outputs/apk/debug/app-debug.apk'],
+    {
+      cwd: projectRoot,
+      stdio: 'inherit',
+    },
+  );
+  run(
+    'adb',
+    [
+      '-s',
+      deviceId,
+      'install',
+      '-r',
+      'android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk',
+    ],
     {
       cwd: projectRoot,
       stdio: 'inherit',

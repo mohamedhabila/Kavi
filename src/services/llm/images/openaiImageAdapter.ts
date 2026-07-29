@@ -1,6 +1,15 @@
 import { normalizeUsage } from '../../usage/tracker';
-import { PRIMARY_OPENAI_IMAGE_MODEL, isOpenAIImageModel, normalizeImageModelId } from './modelPolicy';
-import type { GeneratedImagePayload, ImageEditRequest, ImageEditPayloadSource, ImageGenerationRequest } from './types';
+import {
+  PRIMARY_OPENAI_IMAGE_MODEL,
+  isOpenAIImageModel,
+  normalizeImageModelId,
+} from './modelPolicy';
+import type {
+  GeneratedImagePayload,
+  ImageEditRequest,
+  ImageEditPayloadSource,
+  ImageGenerationRequest,
+} from './types';
 
 export async function generateOpenAICompatibleImage(args: {
   baseUrl: string;

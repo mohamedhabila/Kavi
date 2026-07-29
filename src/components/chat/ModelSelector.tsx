@@ -37,9 +37,7 @@ interface ModelSelectorProps {
 function uniqueModels(models: Array<string | null | undefined>): string[] {
   return Array.from(
     new Set(
-      models
-        .map((model) => model?.trim())
-        .filter((model): model is string => Boolean(model)),
+      models.map((model) => model?.trim()).filter((model): model is string => Boolean(model)),
     ),
   );
 }
@@ -268,12 +266,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
           <ChevronDown size={14} color={colors.textSecondary} />
         </TouchableOpacity>
 
-        <Modal
-          visible={visible}
-          transparent
-          animationType="slide"
-          onRequestClose={closeSelector}
-        >
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={closeSelector}>
           <View style={styles.modalOverlay}>
             <TouchableOpacity
               accessible={false}
@@ -281,11 +274,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
               style={styles.backdropDismiss}
               testID="model-selector-backdrop"
             />
-            <SafeAreaView
-              accessibilityViewIsModal
-              edges={['bottom']}
-              style={styles.modal}
-            >
+            <SafeAreaView accessibilityViewIsModal edges={['bottom']} style={styles.modal}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{t('model.title')}</Text>
                 <TouchableOpacity

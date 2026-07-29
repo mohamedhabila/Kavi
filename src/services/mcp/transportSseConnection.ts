@@ -30,8 +30,8 @@ export function connectMcpSseTransport(params: {
     const baseUrl = params.config.url.replace(/\/$/, '');
     const candidates = Array.from(
       new Set(
-        [params.config.sseUrl?.trim(), baseUrl, `${baseUrl}/sse`].filter(
-          (value): value is string => Boolean(value),
+        [params.config.sseUrl?.trim(), baseUrl, `${baseUrl}/sse`].filter((value): value is string =>
+          Boolean(value),
         ),
       ),
     );

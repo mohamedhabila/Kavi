@@ -1,6 +1,9 @@
 import type { RefObject } from 'react';
 
-import type { CodeEditorWebViewRef, EditorLanguage } from '../../components/editor/CodeEditorWebView';
+import type {
+  CodeEditorWebViewRef,
+  EditorLanguage,
+} from '../../components/editor/CodeEditorWebView';
 import type { FileEntry } from '../../components/files/FileBrowser';
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { SshTargetConfig, WorkspaceTargetConfig } from '../../types/remote';

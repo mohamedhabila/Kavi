@@ -8,7 +8,9 @@ function readRepoFile(relativePath: string): string {
 }
 
 function normalizeSourceText(relativePath: string): string {
-  return readRepoFile(relativePath).replace(/\/\/\s*/g, '').replace(/\s+/g, ' ');
+  return readRepoFile(relativePath)
+    .replace(/\/\/\s*/g, '')
+    .replace(/\s+/g, ' ');
 }
 
 describe('dynamic execution documentation', () => {

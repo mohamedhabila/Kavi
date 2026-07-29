@@ -330,8 +330,7 @@ export async function executeAgentControlGraphToolBatch(params: {
         isError: true,
       },
     }),
-    getYieldedMessage: (outcome) =>
-      'toolMessage' in outcome ? outcome.yieldedMessage : undefined,
+    getYieldedMessage: (outcome) => ('toolMessage' in outcome ? outcome.yieldedMessage : undefined),
     shouldSuspendAfterOutcome: (outcome) => 'deferredHandoff' in outcome,
     initialCompletedToolNames: params.completedWorkflowToolNames,
   });

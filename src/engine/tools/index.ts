@@ -184,7 +184,9 @@ export async function executeTool(
   if (!permissions.isAllowed(normalizedName)) {
     logToolCall(normalizedName, argsString, 'denied', 0, conversationId);
     return withPreDispatchObservation(
-      failedToolOutcome(`Error: tool "${normalizedName}" is not allowed by your permission settings`),
+      failedToolOutcome(
+        `Error: tool "${normalizedName}" is not allowed by your permission settings`,
+      ),
       effectFreeInvocation,
       'tool_permission_denied',
     );
@@ -425,8 +427,8 @@ export async function executeTool(
         runtimeExternalBinding
           ? await runtimeExternalBinding.execute(argsString, conversationId, executorContext)
           : normalizedName === MOBILE_UI_ACTION_TOOL_NAME
-            ? preparedMobileControllerExecution ??
-              (await executeMobileControllerTool(argsString, executorContext?.mobileController))
+            ? (preparedMobileControllerExecution ??
+              (await executeMobileControllerTool(argsString, executorContext?.mobileController)))
             : await executeToolInner(
                 normalizedName,
                 argsString,
@@ -437,13 +439,7 @@ export async function executeTool(
     });
     finalizeEffectReceiptCapture(context);
     if (dispatched.kind === 'deferred') {
-      logToolCall(
-        normalizedName,
-        argsString,
-        'success',
-        Date.now() - startTime,
-        conversationId,
-      );
+      logToolCall(normalizedName, argsString, 'success', Date.now() - startTime, conversationId);
       return Object.freeze({
         status: 'deferred' as const,
         deferredHandoff: dispatched.handoff,

@@ -1,7 +1,4 @@
-import {
-  flattenMessageContent,
-  parseJsonLikeLocalValue,
-} from './promptContent';
+import { flattenMessageContent, parseJsonLikeLocalValue } from './promptContent';
 import type {
   LocalChatMessage,
   LocalStructuredMessage,

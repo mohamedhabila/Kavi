@@ -23,20 +23,18 @@ export async function executePhotosPick(args: { count?: number }): Promise<ToolR
     }
 
     return completedToolOutcome(
-      JSON.stringify(
-        {
-          status: 'selected',
-          assets: result.assets.slice(0, count).map((asset) => ({
-            assetId: asset.assetId || null,
-            uri: asset.uri,
-            fileName: asset.fileName || null,
-            fileSize: asset.fileSize || null,
-            width: asset.width,
-            height: asset.height,
-            mimeType: asset.mimeType || null,
-          })),
-        },
-      ),
+      JSON.stringify({
+        status: 'selected',
+        assets: result.assets.slice(0, count).map((asset) => ({
+          assetId: asset.assetId || null,
+          uri: asset.uri,
+          fileName: asset.fileName || null,
+          fileSize: asset.fileSize || null,
+          width: asset.width,
+          height: asset.height,
+          mimeType: asset.mimeType || null,
+        })),
+      }),
     );
   } catch (err: unknown) {
     return failedToolOutcome(

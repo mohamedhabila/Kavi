@@ -17,12 +17,7 @@ interface ToolCallBodyProps {
   t: TranslateFn;
 }
 
-export const ToolCallBody: React.FC<ToolCallBodyProps> = ({
-  toolCall,
-  styles,
-  iconColor,
-  t,
-}) => {
+export const ToolCallBody: React.FC<ToolCallBodyProps> = ({ toolCall, styles, iconColor, t }) => {
   const [technicalExpanded, setTechnicalExpanded] = useState(false);
   const argumentsDetail = useMemo(
     () => (technicalExpanded ? formatRedactedToolDetail(toolCall.arguments) : null),
@@ -39,10 +34,7 @@ export const ToolCallBody: React.FC<ToolCallBodyProps> = ({
     () => (technicalExpanded ? formatRedactedToolDetail(toolCall.error) : null),
     [technicalExpanded, toolCall.error],
   );
-  const resultPreview = useMemo(
-    () => limitRedactedToolDetail(resultDetail, 900),
-    [resultDetail],
-  );
+  const resultPreview = useMemo(() => limitRedactedToolDetail(resultDetail, 900), [resultDetail]);
   const failurePresentation = getToolCallFailurePresentation(toolCall);
 
   return (

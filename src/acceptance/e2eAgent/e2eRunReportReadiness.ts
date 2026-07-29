@@ -102,7 +102,9 @@ export function buildReadinessReport(params: {
     .filter(
       (entry) =>
         !entry.passed &&
-        entry.assessmentDimensions.some((dimension) => CRITICAL_READINESS_DIMENSIONS.has(dimension)),
+        entry.assessmentDimensions.some((dimension) =>
+          CRITICAL_READINESS_DIMENSIONS.has(dimension),
+        ),
     )
     .map((entry) => entry.fixtureId)
     .sort();

@@ -119,8 +119,7 @@ describe('agentRuns lifecycle', () => {
       expect.objectContaining({
         id: 'tc-web-search',
         status: 'failed',
-        error:
-          'Tool call was interrupted because the run was superseded by a newer user turn.',
+        error: 'Tool call was interrupted because the run was superseded by a newer user turn.',
         completedAt: 3000,
       }),
     );

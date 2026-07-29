@@ -149,7 +149,5 @@ export function qualifyMobileControllerActionReview(
   if (Object.keys(record).sort().join(',') !== 'description,kind,title') return null;
   const title = reviewText(record.title, 120);
   const description = reviewText(record.description, 500);
-  return title && description
-    ? Object.freeze({ kind: record.kind, title, description })
-    : null;
+  return title && description ? Object.freeze({ kind: record.kind, title, description }) : null;
 }

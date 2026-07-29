@@ -96,10 +96,7 @@ export function buildNativeTurnEvidence(
     invocationCount: evidence.invocations.length,
     handledInvocationCount: evidence.invocations.filter((invocation) => invocation.handled).length,
     toolInvocations: buildToolInvocationCounts(evidence),
-    changedStateFieldCount: countChangedFields(
-      stateBeforeFingerprints,
-      stateAfterFingerprints,
-    ),
+    changedStateFieldCount: countChangedFields(stateBeforeFingerprints, stateAfterFingerprints),
     stateBeforeFingerprints,
     stateAfterFingerprints,
   };

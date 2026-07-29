@@ -221,10 +221,7 @@ function resolveRuntimeExternalEffectClass(
   toolName: string,
   evidence: RuntimeExternalToolEvidence,
 ): RuntimeExternalToolEffectClass {
-  if (
-    evidence.provenance.source !== 'mcp' ||
-    evidence.provenance.toolAnnotationsTrusted !== true
-  ) {
+  if (evidence.provenance.source !== 'mcp' || evidence.provenance.toolAnnotationsTrusted !== true) {
     return 'unknown';
   }
   const policy = resolveRuntimeExternalToolEffectPolicy(toolName, evidence.declaration, true);

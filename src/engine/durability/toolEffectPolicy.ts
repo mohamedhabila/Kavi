@@ -114,9 +114,9 @@ export function resolveRuntimeExternalToolEffectPolicy(
 export function isEffectFreeToolPolicy(policy: ToolEffectPolicy | undefined): boolean {
   return Boolean(
     policy &&
-      policy.source !== 'unknown' &&
-      policy.effects.length > 0 &&
-      policy.effects.every((effect) => effect === 'none'),
+    policy.source !== 'unknown' &&
+    policy.effects.length > 0 &&
+    policy.effects.every((effect) => effect === 'none'),
   );
 }
 

@@ -95,14 +95,12 @@ const translations: Record<string, string> = {
     'It can cause destructive or hard-to-reverse changes.',
   'approvalBanner.reviewReason.destructive':
     'This action may delete, overwrite, or irreversibly change data.',
-  'approvalBanner.reviewReason.sensitiveData':
-    'This action may reach sensitive or private data.',
+  'approvalBanner.reviewReason.sensitiveData': 'This action may reach sensitive or private data.',
   'approvalBanner.reviewReason.systemAccess':
     'This action can operate on a system outside this conversation.',
   'approvalBanner.reviewReason.compoundAction':
     'This request combines multiple operations or command steps.',
-  'approvalBanner.reviewReason.unverified':
-    'The impact could not be fully verified in advance.',
+  'approvalBanner.reviewReason.unverified': 'The impact could not be fully verified in advance.',
   'common.cancel': 'Cancel',
 };
 
@@ -237,9 +235,13 @@ describe('ApprovalBanner', () => {
     const rendered = JSON.stringify(result.toJSON());
 
     expect(result.getByText('Access and affected data')).toBeTruthy();
-    expect(result.getByText('Files, processes, and services on the selected remote host.')).toBeTruthy();
+    expect(
+      result.getByText('Files, processes, and services on the selected remote host.'),
+    ).toBeTruthy();
     expect(result.getByText('This action may reach sensitive or private data.')).toBeTruthy();
-    expect(result.getByText('If time runs out, this request is denied. Nothing will run.')).toBeTruthy();
+    expect(
+      result.getByText('If time runs out, this request is denied. Nothing will run.'),
+    ).toBeTruthy();
     expect(rendered).toContain('[REDACTED]');
     expect(rendered).not.toContain(apiKey);
     expect(rendered).not.toContain('/etc/shadow');

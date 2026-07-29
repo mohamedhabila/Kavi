@@ -7,10 +7,7 @@ import type {
   LlmProviderConfig,
 } from '../../types/provider';
 import type { ModelCapabilities } from '../../types/tool';
-import {
-  RAW_LOCAL_MODEL_CATALOG,
-  type LocalLlmRawCatalogEntry,
-} from './catalogRaw';
+import { RAW_LOCAL_MODEL_CATALOG, type LocalLlmRawCatalogEntry } from './catalogRaw';
 
 export {
   DEFAULT_LITERT_LM_TEMPERATURE,

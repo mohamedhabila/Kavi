@@ -7,9 +7,9 @@ import {
 
 describe('graphScenario helper', () => {
   it('builds a lean snapshot without workflow fields', () => {
-    const snapshot = buildGraphScenarioSnapshot(seedGraphGoals([
-      createGoal({ id: 'g1', title: 'Plan trip' }),
-    ]));
+    const snapshot = buildGraphScenarioSnapshot(
+      seedGraphGoals([createGoal({ id: 'g1', title: 'Plan trip' })]),
+    );
     expect(snapshot.goals).toHaveLength(1);
     expect(snapshot).not.toHaveProperty('workflowRoute');
     expect(snapshot).not.toHaveProperty('workflowProgress');

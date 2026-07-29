@@ -42,9 +42,7 @@ export function getToolCallFailurePresentation(
     };
   }
 
-  if (
-    /permission denied|\bunauthorized\b|\bforbidden\b|\b401\b|\b403\b/.test(evidence)
-  ) {
+  if (/permission denied|\bunauthorized\b|\bforbidden\b|\b401\b|\b403\b/.test(evidence)) {
     return {
       tone: 'danger',
       titleKey: 'toolCall.outcomes.accessTitle',

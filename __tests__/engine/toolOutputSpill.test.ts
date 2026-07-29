@@ -47,11 +47,7 @@ describe('toolOutputSpill', () => {
     });
 
     expect(spilled.spilled).toBe(true);
-    expect(mockedWrite).toHaveBeenCalledWith(
-      'conv-1',
-      '.kavi/spill/read_file-42.txt',
-      result,
-    );
+    expect(mockedWrite).toHaveBeenCalledWith('conv-1', '.kavi/spill/read_file-42.txt', result);
     expect(spilled.preview.length).toBeLessThanOrEqual(TOOL_OUTPUT_SPILL_PREVIEW_CHARS + 1);
     expect(JSON.parse(spilled.payload)).toEqual(
       expect.objectContaining({
@@ -102,10 +98,6 @@ describe('toolOutputSpill', () => {
     });
 
     expect(spilled.spilled).toBe(true);
-    expect(mockedWrite).toHaveBeenCalledWith(
-      'conv-1',
-      '.kavi/spill/tool_catalog-42.txt',
-      result,
-    );
+    expect(mockedWrite).toHaveBeenCalledWith('conv-1', '.kavi/spill/tool_catalog-42.txt', result);
   });
 });

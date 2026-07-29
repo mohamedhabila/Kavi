@@ -11,14 +11,13 @@ function trimString(value: unknown, maxChars: number): string | undefined {
 
 function dropEmptyRecord(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null && entry !== ''),
+    Object.entries(value).filter(
+      ([, entry]) => entry !== undefined && entry !== null && entry !== '',
+    ),
   );
 }
 
-function matchedQueryUnitSet(
-  value: string,
-  queryUnits: ReadonlySet<string> | null,
-): Set<string> {
+function matchedQueryUnitSet(value: string, queryUnits: ReadonlySet<string> | null): Set<string> {
   if (!queryUnits || queryUnits.size === 0) return new Set();
   const valueUnits = tokenizeLexicalUnits(value);
   const hits = new Set<string>();
@@ -50,8 +49,9 @@ export function compactObservedAffordanceComplementForPrompt(params: {
   const selected = observedAffordances
     .map((entry, index) => {
       const hits = matchedQueryUnitSet(JSON.stringify(entry), queryUnits);
-      const complementaryHitCount = Array.from(hits).filter((unit) => !controlHits.has(unit))
-        .length;
+      const complementaryHitCount = Array.from(hits).filter(
+        (unit) => !controlHits.has(unit),
+      ).length;
       return {
         index,
         value: entry,

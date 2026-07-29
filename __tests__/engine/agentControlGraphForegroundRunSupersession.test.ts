@@ -30,8 +30,9 @@ const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runO
 const mockedResolveForegroundRunPreflight = resolveForegroundRunPreflight as jest.MockedFunction<
   typeof resolveForegroundRunPreflight
 >;
-const mockedAdmitPendingClarificationReply =
-  admitPendingClarificationReply as jest.MockedFunction<typeof admitPendingClarificationReply>;
+const mockedAdmitPendingClarificationReply = admitPendingClarificationReply as jest.MockedFunction<
+  typeof admitPendingClarificationReply
+>;
 
 function useRealRequestRegistry(context: ReturnType<typeof createExecutionContext>): void {
   const registry = createForegroundRequestRegistry();

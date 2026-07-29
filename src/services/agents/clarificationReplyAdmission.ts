@@ -92,10 +92,7 @@ export function buildPendingClarificationReplyContext(
     (message) => message.role === 'user',
   );
   const latestUserMessage = conversation.messages[latestUserMessageIndex];
-  if (
-    !latestUserMessage ||
-    latestUserMessage.id === pendingUserInput.requestedAfterUserMessageId
-  ) {
+  if (!latestUserMessage || latestUserMessage.id === pendingUserInput.requestedAfterUserMessageId) {
     return undefined;
   }
 
@@ -118,9 +115,12 @@ export function buildPendingClarificationReplyContext(
     requiredInformation: pendingUserInput.requiredInformation.map((entry) => ({ ...entry })),
     reply: {
       text: boundedText(latestUserMessage.enrichedContent ?? latestUserMessage.content),
-      attachments: (latestUserMessage.attachments ?? []).map(
-        ({ type, name, mimeType, size }) => ({ type, name, mimeType, size }),
-      ),
+      attachments: (latestUserMessage.attachments ?? []).map(({ type, name, mimeType, size }) => ({
+        type,
+        name,
+        mimeType,
+        size,
+      })),
     },
   };
 }
@@ -164,9 +164,7 @@ function parseAdmissionOutput(
   const disposition = record.disposition;
   const resolvedInformationKeys = record.resolvedInformationKeys;
   if (
-    (disposition !== 'answer' &&
-      disposition !== 'new_request' &&
-      disposition !== 'ambiguous') ||
+    (disposition !== 'answer' && disposition !== 'new_request' && disposition !== 'ambiguous') ||
     !Array.isArray(resolvedInformationKeys) ||
     resolvedInformationKeys.some((key) => typeof key !== 'string')
   ) {

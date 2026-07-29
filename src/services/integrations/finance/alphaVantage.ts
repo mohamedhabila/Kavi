@@ -42,7 +42,9 @@ export async function fetchLatestStockQuote(args: Record<string, unknown>): Prom
     throw new Error('Stock quote requires a symbol');
   }
 
-  const entitlement = String(args.entitlement || '').trim().toLowerCase();
+  const entitlement = String(args.entitlement || '')
+    .trim()
+    .toLowerCase();
   const url = await buildAlphaVantageUrl({
     function: 'GLOBAL_QUOTE',
     symbol,
@@ -67,8 +69,12 @@ export async function fetchLatestStockQuote(args: Record<string, unknown>): Prom
 }
 
 export async function fetchExchangeRate(args: Record<string, unknown>): Promise<string> {
-  const fromCurrency = String(args.fromCurrency || '').trim().toUpperCase();
-  const toCurrency = String(args.toCurrency || '').trim().toUpperCase();
+  const fromCurrency = String(args.fromCurrency || '')
+    .trim()
+    .toUpperCase();
+  const toCurrency = String(args.toCurrency || '')
+    .trim()
+    .toUpperCase();
   if (!fromCurrency || !toCurrency) {
     throw new Error('Exchange rate requires both fromCurrency and toCurrency');
   }

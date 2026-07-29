@@ -38,7 +38,9 @@ describe('agent control graph sessions-yield helpers', () => {
     expect(parseAgentControlGraphSessionsYieldResult('sessions_yield', 'not-json')).toEqual({
       yielded: false,
     });
-    expect(parseAgentControlGraphSessionsYieldResult('read_file', '{}')).toEqual({ yielded: false });
+    expect(parseAgentControlGraphSessionsYieldResult('read_file', '{}')).toEqual({
+      yielded: false,
+    });
   });
 
   it('trims tool calls after the first sessions_yield', () => {

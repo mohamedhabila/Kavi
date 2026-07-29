@@ -1,7 +1,4 @@
-import type {
-  RequiredInformationPurpose,
-  RequiredRequestInformation,
-} from './requestFrame';
+import type { RequiredInformationPurpose, RequiredRequestInformation } from './requestFrame';
 import type { AgentRunControlGraphUserInformationSemanticRole } from '../../types/agentRun';
 
 export const REQUEST_CLARIFICATION_TOOL_NAME = 'request_clarification';
@@ -10,8 +7,7 @@ export const MAX_REQUEST_CLARIFICATION_FIELDS = 12;
 export const MAX_REQUEST_CLARIFICATION_QUESTION_CHARACTERS = 1_200;
 export const REQUEST_INFORMATION_KEY_PATTERN = /^[a-z][a-z0-9_.-]{0,63}$/u;
 
-export type RequestClarificationSemanticRole =
-  AgentRunControlGraphUserInformationSemanticRole;
+export type RequestClarificationSemanticRole = AgentRunControlGraphUserInformationSemanticRole;
 
 const REQUEST_CLARIFICATION_SEMANTIC_ROLES = new Set<RequestClarificationSemanticRole>([
   'authorization',
@@ -75,19 +71,14 @@ export function isRequestInformationKey(value: unknown): value is string {
 export function isRequestClarificationSemanticRole(
   value: unknown,
 ): value is RequestClarificationSemanticRole {
-  return REQUEST_CLARIFICATION_SEMANTIC_ROLES.has(
-    value as RequestClarificationSemanticRole,
-  );
+  return REQUEST_CLARIFICATION_SEMANTIC_ROLES.has(value as RequestClarificationSemanticRole);
 }
 
 function normalizeQuestion(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.replace(/\s+/gu, ' ').trim();
   const characterCount = Array.from(normalized).length;
-  if (
-    characterCount === 0 ||
-    characterCount > MAX_REQUEST_CLARIFICATION_QUESTION_CHARACTERS
-  ) {
+  if (characterCount === 0 || characterCount > MAX_REQUEST_CLARIFICATION_QUESTION_CHARACTERS) {
     return undefined;
   }
   return normalized;
@@ -95,10 +86,7 @@ function normalizeQuestion(value: unknown): string | undefined {
 
 function parseField(value: unknown): RequestClarificationField | undefined {
   const record = recordValue(value);
-  if (
-    !record ||
-    !exactKeys(record, new Set(['key', 'required_for', 'semantic_role']))
-  ) {
+  if (!record || !exactKeys(record, new Set(['key', 'required_for', 'semantic_role']))) {
     return undefined;
   }
   if (!isRequestInformationKey(record.key)) {
@@ -182,10 +170,7 @@ export function parseRequestClarificationToolResult(
   const record = recordValue(parsed);
   if (
     !record ||
-    !exactKeys(
-      record,
-      new Set(['schemaVersion', 'status', 'question', 'requiredInformation']),
-    ) ||
+    !exactKeys(record, new Set(['schemaVersion', 'status', 'question', 'requiredInformation'])) ||
     record.schemaVersion !== REQUEST_CLARIFICATION_RESULT_VERSION ||
     record.status !== 'clarification_requested'
   ) {
@@ -205,8 +190,7 @@ export function parseRequestClarificationToolResult(
       ) ||
       !isRequestInformationKey(information.key) ||
       information.authority !== 'user' ||
-      (information.requiredFor !== 'understanding' &&
-        information.requiredFor !== 'execution') ||
+      (information.requiredFor !== 'understanding' && information.requiredFor !== 'execution') ||
       information.resolution !== 'unresolved' ||
       !isRequestClarificationSemanticRole(information.semanticRole)
     ) {

@@ -63,7 +63,9 @@ export function pickWaitingPhrase(elapsedMs: number | null): string {
   );
 }
 
-export function getWaitingPresentation(toolCall: ToolCall): { title: string; detail?: string } | null {
+export function getWaitingPresentation(
+  toolCall: ToolCall,
+): { title: string; detail?: string } | null {
   let args: Record<string, unknown>;
   try {
     args = JSON.parse(toolCall.arguments || '{}');

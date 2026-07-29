@@ -308,9 +308,7 @@ describe('turn stage-attribution rubrics', () => {
   it('counts model-requested tools on the exact turn and classifies producer effects fail-closed', () => {
     const passiveTurn = buildTurn({
       turnIndex: 0,
-      toolCalls: [
-        { id: 'read-1', name: 'read_file', arguments: '{"path":"notes.txt"}' },
-      ],
+      toolCalls: [{ id: 'read-1', name: 'read_file', arguments: '{"path":"notes.txt"}' }],
     });
     const result = {
       ...buildResult(),
@@ -351,9 +349,7 @@ describe('turn stage-attribution rubrics', () => {
       const effectful = buildResult(
         buildTurn({
           toolCalls: [{ id: toolCallId, name, arguments: '{}' }],
-          toolResults: [
-            { toolCallId, name, content: '{"status":"completed"}', isError: false },
-          ],
+          toolResults: [{ toolCallId, name, content: '{"status":"completed"}', isError: false }],
         }),
       );
       expect(

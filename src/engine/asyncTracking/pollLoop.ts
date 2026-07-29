@@ -43,10 +43,7 @@ export async function runAsyncPollLoop<T>(options: {
     await sleep(Math.min(nextIntervalMs, remainingMs));
     if (now() >= options.deadlineMs) break;
     value = await options.poll();
-    nextIntervalMs = Math.min(
-      maxPollIntervalMs,
-      Math.ceil(nextIntervalMs * backoffFactor),
-    );
+    nextIntervalMs = Math.min(maxPollIntervalMs, Math.ceil(nextIntervalMs * backoffFactor));
   }
 
   return value;

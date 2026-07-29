@@ -79,17 +79,13 @@ export function evaluateGoalEvidenceIncompleteHold(params: {
   const requiredEffectGaps = evaluateRequiredEffectEvidenceGaps(blockingGoals);
   if (
     requiredEffectGaps.length === 0 &&
-    (!params.toolingEnabledForProvider ||
-      params.selectedToolCount <= 0 ||
-      params.forceTextThisTurn)
+    (!params.toolingEnabledForProvider || params.selectedToolCount <= 0 || params.forceTextThisTurn)
   ) {
     return null;
   }
 
   const gaps =
-    requiredEffectGaps.length > 0
-      ? requiredEffectGaps
-      : evaluateGoalEvidenceGaps(blockingGoals);
+    requiredEffectGaps.length > 0 ? requiredEffectGaps : evaluateGoalEvidenceGaps(blockingGoals);
   if (gaps.length === 0) {
     return null;
   }

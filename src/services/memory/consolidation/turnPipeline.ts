@@ -17,11 +17,7 @@ type ResolveConsolidationPath = (
   options?: ConsolidationPathOptions,
 ) => Promise<ResolvedConsolidationPath>;
 
-export type ConsolidationExecutionResource =
-  | 'deterministic'
-  | 'on_device'
-  | 'remote'
-  | 'unknown';
+export type ConsolidationExecutionResource = 'deterministic' | 'on_device' | 'remote' | 'unknown';
 
 export interface ResolveConsolidationExtractorInput {
   activeChatProvider?: LlmProviderConfig;

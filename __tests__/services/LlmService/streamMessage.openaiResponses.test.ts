@@ -336,9 +336,7 @@ describe('LlmService', () => {
 
       await expect(
         (async () => {
-          for await (const _event of service.streamMessage([
-            { role: 'user', content: 'Hello' },
-          ])) {
+          for await (const _event of service.streamMessage([{ role: 'user', content: 'Hello' }])) {
             // Drain the stream so the provider error is observed.
           }
         })(),

@@ -241,9 +241,7 @@ export function isSuccessCriterionMet(goal: AgentGoal, criterion: string): boole
   if (effectCriterion) {
     return goal.evidence.some((entry) => {
       const receipt = parseToolEffectReceiptEvidence(entry);
-      return receipt
-        ? effectReceiptEvidenceSatisfiesCriterion(receipt, effectCriterion)
-        : false;
+      return receipt ? effectReceiptEvidenceSatisfiesCriterion(receipt, effectCriterion) : false;
     });
   }
 
@@ -316,9 +314,7 @@ export function areGoalSuccessCriteriaSatisfied(
   return criteria.every((criterion) => isSuccessCriterionMet(hypotheticalGoal, criterion));
 }
 
-export function areBlockingGoalsStructurallyComplete(
-  goals: ReadonlyArray<AgentGoal>,
-): boolean {
+export function areBlockingGoalsStructurallyComplete(goals: ReadonlyArray<AgentGoal>): boolean {
   return goals.every(
     (goal) =>
       !isBlockingGoal(goal) ||
@@ -356,10 +352,7 @@ export function evaluateRequiredEffectEvidenceGaps(
       continue;
     }
     for (const criterion of goal.successCriteria ?? []) {
-      if (
-        parseEffectCompletionCriterion(criterion) &&
-        !isSuccessCriterionMet(goal, criterion)
-      ) {
+      if (parseEffectCompletionCriterion(criterion) && !isSuccessCriterionMet(goal, criterion)) {
         gaps.push({ goalId: goal.id, criterionId: criterion });
       }
     }

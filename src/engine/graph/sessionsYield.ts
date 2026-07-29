@@ -26,7 +26,9 @@ export function parseAgentControlGraphSessionsYieldResult(
 
     const status = typeof parsed.status === 'string' ? parsed.status.trim().toLowerCase() : '';
     const message =
-      typeof parsed.message === 'string' && parsed.message.trim() ? parsed.message.trim() : undefined;
+      typeof parsed.message === 'string' && parsed.message.trim()
+        ? parsed.message.trim()
+        : undefined;
 
     if (status === 'completed' && parsed.finalizeSupervisor === true) {
       return {
@@ -57,9 +59,7 @@ export function trimAgentControlGraphPendingToolCallsAfterYield<
   T extends {
     name: string;
   },
->(
-  pendingToolCalls: ReadonlyArray<T>,
-): T[] {
+>(pendingToolCalls: ReadonlyArray<T>): T[] {
   const firstYieldIndex = pendingToolCalls.findIndex(
     (toolCall) => normalizeToolName(toolCall.name) === 'sessions_yield',
   );

@@ -68,9 +68,7 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(result.consumedEvidence).toHaveLength(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
     expect(result.factIds).toHaveLength(facts.length);
-    expect(facts.map((fact) => fact.objectText).join('\n')).not.toContain(
-      'superseded-contact',
-    );
+    expect(facts.map((fact) => fact.objectText).join('\n')).not.toContain('superseded-contact');
     expect(facts.map((fact) => fact.objectText).join('\n')).toContain('current-contact');
   });
 

@@ -43,8 +43,7 @@ describe('public E2E report privacy boundaries', () => {
     const rawReport = buildRawReport() as any;
     expect(rawReport.readinessDashboard.runMetadata).toEqual(rawReport.runMetadata);
 
-    rawReport.readinessDashboard.runMetadata.modelLocator =
-      'PRIVATE_MODEL_LOCATOR_SENTINEL';
+    rawReport.readinessDashboard.runMetadata.modelLocator = 'PRIVATE_MODEL_LOCATOR_SENTINEL';
     const publicReport = projectPublicRunReport(rawReport) as any;
 
     expect(publicReport.readinessDashboard.runMetadata).toEqual(publicReport.runMetadata);
@@ -114,23 +113,23 @@ describe('public E2E report privacy boundaries', () => {
     const publicReport = projectPublicRunReport(rawReport) as any;
     expect(JSON.stringify(publicReport)).not.toContain('PRIVATE_');
     expect(
-      publicReport.assessment.dimensions.find((axis: { id: string }) =>
-        axis.id === 'task_completion',
+      publicReport.assessment.dimensions.find(
+        (axis: { id: string }) => axis.id === 'task_completion',
       ),
     ).toMatchObject({
       label: 'Task completion (artifacts, goals, terminal graph)',
     });
     expect(
-      publicReport.assessment.benchmarkFamilies.find((axis: { id: string }) =>
-        axis.id === 'kavi-core',
+      publicReport.assessment.benchmarkFamilies.find(
+        (axis: { id: string }) => axis.id === 'kavi-core',
       ),
     ).toMatchObject({
       label: 'Kavi core scenarios',
       externalReference: 'Kavi core mobile-assistant scenario suite',
     });
     expect(
-      publicReport.readinessDashboard.familyReadiness.find((axis: { id: string }) =>
-        axis.id === 'kavi-core',
+      publicReport.readinessDashboard.familyReadiness.find(
+        (axis: { id: string }) => axis.id === 'kavi-core',
       ),
     ).toMatchObject({ label: 'Kavi core scenarios' });
 

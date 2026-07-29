@@ -11,9 +11,7 @@ const broadPhotoPermissions = [
 
 describe('Android photo picker permission hardening', () => {
   it('blocks broad photo access in Expo configuration', () => {
-    const appConfig = JSON.parse(
-      fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf8'),
-    ) as {
+    const appConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf8')) as {
       expo: { android: { blockedPermissions: string[]; permissions: string[] } };
     };
 

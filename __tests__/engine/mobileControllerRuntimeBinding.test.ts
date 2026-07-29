@@ -29,7 +29,9 @@ const OBSERVATION = Object.freeze({
   windowId: 'editor',
 });
 
-function provider(capabilities = { vision: true, tools: true, fileInput: true }): LlmProviderConfig {
+function provider(
+  capabilities = { vision: true, tools: true, fileInput: true },
+): LlmProviderConfig {
   return {
     id: 'provider-1',
     name: 'Provider',
@@ -112,7 +114,11 @@ describe('mobile controller runtime binding', () => {
           : { vision: true, tools: true, fileInput: true };
 
     expect(
-      admitMobileControllerRuntime({ port: candidate, provider: provider(capabilities), model: 'model-1' }),
+      admitMobileControllerRuntime({
+        port: candidate,
+        provider: provider(capabilities),
+        model: 'model-1',
+      }),
     ).toEqual({ kind: 'rejected', reason });
   });
 
@@ -296,10 +302,13 @@ describe('mobile controller runtime binding', () => {
     expect(Object.isFrozen(publication)).toBe(true);
     expect(Object.isFrozen(publication?.action)).toBe(true);
     expect(
-      buildMobileControllerPublishedHandoff({
-        ...persisted,
-        handle: { ...persisted.handle, status: 'running' },
-      }, owner),
+      buildMobileControllerPublishedHandoff(
+        {
+          ...persisted,
+          handle: { ...persisted.handle, status: 'running' },
+        },
+        owner,
+      ),
     ).toBeNull();
   });
 });

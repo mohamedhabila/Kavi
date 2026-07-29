@@ -264,11 +264,7 @@ export function recallScopedEpisodesForQuery(
     now: options.now,
     query,
   });
-  const merged = mergeCurrentAndCrossThreadEpisodes(
-    current.selections,
-    crossThread,
-    resultLimit,
-  );
+  const merged = mergeCurrentAndCrossThreadEpisodes(current.selections, crossThread, resultLimit);
   options.onTiming?.({
     queryUnitCount: current.timing.queryUnitCount,
     candidateLimit:

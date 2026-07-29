@@ -17,12 +17,7 @@ import {
   readStoredEffectReceipt,
 } from './effectReceiptStore';
 import { appendToolEffectDispatchTerminalCheckpoint } from './toolEffectDispatchJournalState';
-import {
-  readEffect,
-  readHandle,
-  readRun,
-  withImmediateTransaction,
-} from './mutationStore';
+import { readEffect, readHandle, readRun, withImmediateTransaction } from './mutationStore';
 import { advanceExternalHandleMonitor, readExternalHandleMonitor } from './monitorRecords';
 import type {
   ExecutionEffectStatus,
@@ -204,8 +199,7 @@ export async function settleMobileControllerOutcome(
       run.controlEpoch !== handoff.controlEpoch ||
       effect.toolCallId !== handoff.toolCallId ||
       effect.requestDigest !== handoff.actionDigest.slice('sha256:'.length) ||
-      effect.toolContractIdentityDigest !==
-        contractIdentityDigest.slice('sha256:'.length) ||
+      effect.toolContractIdentityDigest !== contractIdentityDigest.slice('sha256:'.length) ||
       handle.effectId !== handoff.effectId ||
       !locatorMatchesHandoff(handle.locator, handoff)
     ) {
@@ -294,7 +288,10 @@ export async function settleMobileControllerOutcome(
       occurredAt: settledAt,
     });
 
-    const updateEffect = (expectedStatus: ExecutionEffectStatus, nextStatus: ExecutionEffectStatus) =>
+    const updateEffect = (
+      expectedStatus: ExecutionEffectStatus,
+      nextStatus: ExecutionEffectStatus,
+    ) =>
       database.runSync(
         `UPDATE execution_effects
          SET status = ?, outcome_digest = ?, completed_at = ?, updated_at = ?

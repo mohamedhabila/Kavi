@@ -165,8 +165,6 @@ describe('on-device benchmark assessment', () => {
     });
 
     expect(report.status).toBe('passed');
-    expect(report.assessment.missingCoverage).toContain(
-      'ios_true_background_foreground_lifecycle',
-    );
+    expect(report.assessment.missingCoverage).toContain('ios_true_background_foreground_lifecycle');
   });
 });

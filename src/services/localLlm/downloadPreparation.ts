@@ -50,7 +50,10 @@ export async function prepareLocalLlmModelArtifactDestination(params: {
 
   const partialState = await getFreshLocalLlmPartialDownloadState(params);
 
-  if (!destination.exists && isValidLocalLlmModelFile(modelId, tempDestination, expectedSizeBytes)) {
+  if (
+    !destination.exists &&
+    isValidLocalLlmModelFile(modelId, tempDestination, expectedSizeBytes)
+  ) {
     tempDestination.move(destination);
     clearLocalLlmPartialDownloadState(modelId);
   }

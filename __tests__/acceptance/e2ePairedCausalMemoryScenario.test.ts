@@ -147,13 +147,10 @@ describe('paired causal-memory scenario and contract', () => {
         },
       ]),
     );
-    expect(
-      neutralRubrics.some((rubric) => rubric.kind === 'turn_tool_call_count'),
-    ).toBe(false);
+    expect(neutralRubrics.some((rubric) => rubric.kind === 'turn_tool_call_count')).toBe(false);
     expect(
       neutralRubrics.some(
-        (rubric) =>
-          rubric.kind === 'turn_native_invocation_count' && rubric.turnIndex === 3,
+        (rubric) => rubric.kind === 'turn_native_invocation_count' && rubric.turnIndex === 3,
       ),
     ).toBe(false);
     const causalRubrics = scenario.pairedEvaluation!.causalRubricIndexes.map(

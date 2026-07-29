@@ -7,10 +7,7 @@ const {
   projectRouteEvidence,
   projectUserEvidence,
 } = require('./publicTraceExecution');
-const {
-  projectMemoryDeltaEvidence,
-  projectMemoryFinalEvidence,
-} = require('./publicTraceMemory');
+const { projectMemoryDeltaEvidence, projectMemoryFinalEvidence } = require('./publicTraceMemory');
 const { projectNativeTurnEvidence, projectStateFingerprints } = require('./publicTraceNative');
 const { isPublicEvaluationId } = require('./publicProjectionPolicy');
 const {

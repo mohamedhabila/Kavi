@@ -1,10 +1,7 @@
 import { createDownloadResumable } from 'expo-file-system/legacy';
 import type { File } from 'expo-file-system';
 import { emitLocalLlmInstallProgress } from './downloadProgress';
-import {
-  getLocalLlmResumeOffsetBytes,
-  writeLocalLlmPartialDownloadState,
-} from './downloadState';
+import { getLocalLlmResumeOffsetBytes, writeLocalLlmPartialDownloadState } from './downloadState';
 import {
   getLocalLlmModelObservedSize,
   getMinimumExpectedLocalLlmModelSize,
@@ -27,14 +24,8 @@ export function createLocalLlmDownloadAttempt(params: {
   partialState: LocalLlmPartialDownloadState | null;
   onProgress?: InstallLocalLlmModelOptions['onProgress'];
 }): LocalLlmDownloadAttempt {
-  const {
-    modelId,
-    sourceUrl,
-    tempDestination,
-    expectedSizeBytes,
-    partialState,
-    onProgress,
-  } = params;
+  const { modelId, sourceUrl, tempDestination, expectedSizeBytes, partialState, onProgress } =
+    params;
   const resumeOffsetBytes = getLocalLlmResumeOffsetBytes({
     modelId,
     tempFile: tempDestination,

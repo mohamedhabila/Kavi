@@ -149,9 +149,7 @@ const CONTRACT_KEYS = new Set([
   'workflowContractDigest',
 ]);
 
-function decodeCodeOwnedContractIdentity(
-  value: unknown,
-): CodeOwnedToolContractIdentity | null {
+function decodeCodeOwnedContractIdentity(value: unknown): CodeOwnedToolContractIdentity | null {
   if (!isPlainRecord(value) || !hasExactKeys(value, CONTRACT_KEYS)) return null;
   if (
     value.kind !== 'code_owned' ||
@@ -223,7 +221,9 @@ function decodeProcedureStep(
   value: unknown,
   sequence: number,
   runId: string,
-): (ReceiptBackedProcedureStep & { receiptId: string; toolCallId: string; recordedAt: number }) | null {
+):
+  | (ReceiptBackedProcedureStep & { receiptId: string; toolCallId: string; recordedAt: number })
+  | null {
   if (!isPlainRecord(value) || !hasOnlyKeys(value, RECEIPT_KEYS)) return null;
   const contractIdentity = decodeCodeOwnedContractIdentity(value.contractIdentity);
   const settlement = settlementForReceipt(value);
@@ -271,10 +271,7 @@ function domainForSteps(steps: ReadonlyArray<ReceiptBackedProcedureStep>): strin
   return domains.length === 1 ? domains[0]! : 'cross-domain';
 }
 
-function preconditionIds(
-  platform: 'android' | 'ios',
-  toolNames: ReadonlyArray<string>,
-): string[] {
+function preconditionIds(platform: 'android' | 'ios', toolNames: ReadonlyArray<string>): string[] {
   const ids = [`platform:${platform}`];
   for (const toolName of toolNames) {
     const identity = sha256HexUtf8(toolName).slice(0, 32);
@@ -413,7 +410,9 @@ function observationGroupKey(observation: ReceiptBackedProcedureObservation): st
   ]);
 }
 
-function commonQueryTerms(observations: ReadonlyArray<ReceiptBackedProcedureObservation>): string[] {
+function commonQueryTerms(
+  observations: ReadonlyArray<ReceiptBackedProcedureObservation>,
+): string[] {
   const counts = new Map<string, number>();
   for (const observation of observations) {
     for (const term of new Set(goalTerms(observation.goal, observation.contract.orderedSteps))) {
@@ -556,8 +555,7 @@ export function renderReceiptBackedProcedureLearning(
 ): string {
   const steps = record.contract.orderedSteps
     .map(
-      (step) =>
-        `${step.sequence + 1}. ${step.toolName} (${step.effectKind}; ${step.settlement})`,
+      (step) => `${step.sequence + 1}. ${step.toolName} (${step.effectKind}; ${step.settlement})`,
     )
     .join('\n');
   const examples = record.taskExamples.map((example) => `- ${example}`).join('\n');

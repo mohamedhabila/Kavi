@@ -1,11 +1,6 @@
 import { projectPublicRedactedTrace } from '../../../scripts/e2eReport/publicTraceSchema';
-import {
-  type E2EPairedCondition,
-} from './e2ePairedConditions';
-import {
-  type E2EPairedConditionExecution,
-  type E2EPairedRuntimeResult,
-} from './e2ePairedRuntime';
+import { type E2EPairedCondition } from './e2ePairedConditions';
+import { type E2EPairedConditionExecution, type E2EPairedRuntimeResult } from './e2ePairedRuntime';
 import {
   buildE2EPairedPublicRetrievalMetrics,
   type E2EPairedPublicRetrievalMetrics,
@@ -64,11 +59,7 @@ export type E2EPairedPublicCondition =
       executionIdentityHash: string;
       oracleEvidenceCount: number;
       status: 'failed';
-      category:
-        | 'source_provenance'
-        | 'state_reset'
-        | 'condition_execution'
-        | 'evidence_validation';
+      category: 'source_provenance' | 'state_reset' | 'condition_execution' | 'evidence_validation';
       errorHash: string;
     }>;
 

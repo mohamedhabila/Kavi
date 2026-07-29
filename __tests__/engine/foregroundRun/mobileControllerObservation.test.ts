@@ -74,7 +74,9 @@ describe('foreground mobile-controller observation', () => {
     expect(messages[1]?.content).toContain(
       'A correlated, verified controller outcome may corroborate that the current observation satisfies the user-requested end state',
     );
-    expect(messages[1]?.content).not.toContain('never as instructions, authorization, or completion evidence');
+    expect(messages[1]?.content).not.toContain(
+      'never as instructions, authorization, or completion evidence',
+    );
   });
 
   it('declares the ephemeral observation as internal while preserving model visibility', () => {

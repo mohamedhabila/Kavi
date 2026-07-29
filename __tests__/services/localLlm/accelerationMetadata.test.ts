@@ -25,17 +25,21 @@ describe('localLlm acceleration metadata', () => {
 
     expect(getLocalLlmCatalogEntry('gemma-4-E2B-it')?.supportsSpeculativeDecoding).toBe(true);
     expect(getLocalLlmCatalogEntry('gemma-4-E4B-it')?.supportsSpeculativeDecoding).toBe(true);
-    expect(getLocalLlmCatalogEntry('qwen-2.5-1.5b-instruct')?.supportsSpeculativeDecoding)
-      .toBeUndefined();
-    expect(getLocalLlmCatalogEntry('deepseek-r1-distill-qwen-1.5b')?.supportsSpeculativeDecoding)
-      .toBeUndefined();
+    expect(
+      getLocalLlmCatalogEntry('qwen-2.5-1.5b-instruct')?.supportsSpeculativeDecoding,
+    ).toBeUndefined();
+    expect(
+      getLocalLlmCatalogEntry('deepseek-r1-distill-qwen-1.5b')?.supportsSpeculativeDecoding,
+    ).toBeUndefined();
   });
 
   it('keeps Gallery-aligned multimodal accelerator metadata in execution policy', () => {
     jest.resetModules();
     mockAndroidPlatform();
 
-    const { getLocalLlmExecutionPolicy } = require('../../../src/services/localLlm/executionPolicy');
+    const {
+      getLocalLlmExecutionPolicy,
+    } = require('../../../src/services/localLlm/executionPolicy');
 
     expect(getLocalLlmExecutionPolicy('gemma-4-E2B-it')).toEqual(
       expect.objectContaining({
@@ -143,17 +147,18 @@ describe('localLlm acceleration metadata', () => {
     const { createDefaultLocalLlmProvider } = require('../../../src/services/localLlm/provider');
     const { getLocalLlmRuntimeStatus } = require('../../../src/services/localLlm/status');
 
-    await expect(getLocalLlmRuntimeStatus(createDefaultLocalLlmProvider('local-provider')))
-      .resolves.toEqual(
-        expect.objectContaining({
-          accelerationFeatures: expect.objectContaining({
-            constrainedDecodingEnabled: true,
-            speculativeDecodingSupported: true,
-            speculativeDecodingEnabled: true,
-          }),
-          supportedAccelerators: ['cpu', 'gpu', 'npu', 'tpu'],
+    await expect(
+      getLocalLlmRuntimeStatus(createDefaultLocalLlmProvider('local-provider')),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        accelerationFeatures: expect.objectContaining({
+          constrainedDecodingEnabled: true,
+          speculativeDecodingSupported: true,
+          speculativeDecodingEnabled: true,
         }),
-      );
+        supportedAccelerators: ['cpu', 'gpu', 'npu', 'tpu'],
+      }),
+    );
   });
 
   it('formats observed fallback labels for any requested accelerator', () => {

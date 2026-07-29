@@ -21,11 +21,7 @@
 import { findEntityByName } from './entities';
 import { markFactsRecalled } from './facts/factAccessMutations';
 import { listFacts, listFactsForRecallEligibleScan } from './facts/queries';
-import {
-  requireMemoryFactScope,
-  type MemoryFactKind,
-  type MemoryFactScope,
-} from './facts/types';
+import { requireMemoryFactScope, type MemoryFactKind, type MemoryFactScope } from './facts/types';
 import { searchMemoryFactsForManagement } from './facts/managementSearch';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
@@ -95,10 +91,7 @@ export {
   correctMemoryFactForManagement,
   MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH,
 } from './memoryFactCorrection';
-export type {
-  MemoryFactCorrectionArgs,
-  MemoryFactCorrectionResult,
-} from './memoryFactCorrection';
+export type { MemoryFactCorrectionArgs, MemoryFactCorrectionResult } from './memoryFactCorrection';
 
 function serializeSupersessionReceipt(fact: {
   id: string;

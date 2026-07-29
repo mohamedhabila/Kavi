@@ -15,7 +15,11 @@ jest.mock('../../src/services/voice/voice', () => ({
   speakText: jest.fn().mockResolvedValue(undefined),
   stopSpeaking: jest.fn().mockResolvedValue(undefined),
 }));
-import { TalkModeManager, type TalkModeState, type AgentHandler } from '../../src/services/voice/talkMode';
+import {
+  TalkModeManager,
+  type TalkModeState,
+  type AgentHandler,
+} from '../../src/services/voice/talkMode';
 
 describe('TalkModeManager', () => {
   const mockAgentHandler: AgentHandler = jest.fn().mockResolvedValue('AI response');
@@ -553,13 +557,17 @@ describe('TalkModeManager', () => {
         url: 'file://mock-audio.m4a',
       }));
       const agent = jest.fn().mockResolvedValue('should not run');
-      const mgr = new TalkModeManager(agent, {}, {
-        autoListen: true,
-        silenceTimeoutMs: 50,
-        minSpeechDurationMs: 50,
-        recorderStatusPollIntervalMs: 25,
-        maxRecordingMs: 60000,
-      });
+      const mgr = new TalkModeManager(
+        agent,
+        {},
+        {
+          autoListen: true,
+          silenceTimeoutMs: 50,
+          minSpeechDurationMs: 50,
+          recorderStatusPollIntervalMs: 25,
+          maxRecordingMs: 60000,
+        },
+      );
 
       await mgr.start();
       jest.advanceTimersByTime(100);

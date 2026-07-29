@@ -6,11 +6,11 @@
 // for computing structured diffs, then renders them as styled React Native views.
 
 import * as Diff from 'diff';
-import { createTwoFilesPatch,type Change } from 'diff';
-import React,{ useMemo } from 'react';
-import { ScrollView,StyleSheet,Text,View } from 'react-native';
+import { createTwoFilesPatch, type Change } from 'diff';
+import React, { useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from '../../i18n/useTranslation';
-import { useAppTheme,type AppPalette } from '../../theme/useAppTheme';
+import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 
 // ── Types ────────────────────────────────────────────────────────────────
 

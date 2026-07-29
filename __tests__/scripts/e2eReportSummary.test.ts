@@ -146,13 +146,15 @@ describe('e2e report summary', () => {
   it('rejects malformed or private values instead of publishing them into Markdown', () => {
     const report = createReport();
     const cases = [
-      ['provider', (candidate: any) => (candidate.runMetadata.provider = 'PRIVATE_PROVIDER_SENTINEL')],
+      [
+        'provider',
+        (candidate: any) => (candidate.runMetadata.provider = 'PRIVATE_PROVIDER_SENTINEL'),
+      ],
       ['model', (candidate: any) => (candidate.runMetadata.model = '/private/model/sentinel')],
       ['fixture', (candidate: any) => (candidate.scenarios[0].fixtureId = '/private/fixture')],
       [
         'criterion',
-        (candidate: any) =>
-          (candidate.readiness.failedCriteria = ['PRIVATE_CRITERION_SENTINEL']),
+        (candidate: any) => (candidate.readiness.failedCriteria = ['PRIVATE_CRITERION_SENTINEL']),
       ],
       ['content class', (candidate: any) => (candidate.scenarios[0].contentClass = 'private-ish')],
       ['unknown field', (candidate: any) => (candidate.privatePayload = 'PRIVATE_SENTINEL')],

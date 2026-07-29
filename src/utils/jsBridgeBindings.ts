@@ -141,10 +141,7 @@ function validateTextEncoding(encoding: unknown): void {
   }
 }
 
-function listDirectoryEntries(
-  cache: Map<string, string>,
-  directoryPath: string,
-): string[] {
+function listDirectoryEntries(cache: Map<string, string>, directoryPath: string): string[] {
   const prefix = directoryPath ? `${directoryPath}/` : '';
   const entries = new Set<string>();
 

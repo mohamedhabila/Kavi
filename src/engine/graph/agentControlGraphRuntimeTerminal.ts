@@ -127,10 +127,7 @@ export function createAgentControlGraphRuntimeTerminal(params: {
     async finishWithGraphTerminalEvent(args: {
       graphEvent: Extract<
         AgentControlGraphEvent,
-        | { type: 'BLOCKED' }
-        | { type: 'FINALIZED' }
-        | { type: 'YIELDED' }
-        | { type: 'CANCELLED' }
+        { type: 'BLOCKED' } | { type: 'FINALIZED' } | { type: 'YIELDED' } | { type: 'CANCELLED' }
       >;
       content: string;
       toolCalls?: ToolCall[];

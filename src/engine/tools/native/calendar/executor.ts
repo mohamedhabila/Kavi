@@ -87,11 +87,14 @@ export async function executeCalendarList(): Promise<ToolRuntimeOutcome> {
   );
 }
 
-export async function executeCalendarEvents(args: {
-  startDate: string;
-  endDate: string;
-  calendarId?: string;
-}, runtime?: CalendarMutationRuntime): Promise<ToolRuntimeOutcome> {
+export async function executeCalendarEvents(
+  args: {
+    startDate: string;
+    endDate: string;
+    calendarId?: string;
+  },
+  runtime?: CalendarMutationRuntime,
+): Promise<ToolRuntimeOutcome> {
   const Calendar = runtime ?? (await loadCalendarModule());
   if (!Calendar)
     return failedCalendarOutcome({
@@ -401,12 +404,9 @@ export async function executeCalendarUpdate(
         string,
         unknown
       >;
-      const preservedFields = [
-        'calendarId',
-        'timeZone',
-        'url',
-        'recurrenceRule',
-      ].reduce<Record<string, unknown>>((fields, field) => {
+      const preservedFields = ['calendarId', 'timeZone', 'url', 'recurrenceRule'].reduce<
+        Record<string, unknown>
+      >((fields, field) => {
         if (existing[field] !== undefined) fields[field] = existing[field];
         return fields;
       }, {});

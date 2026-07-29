@@ -128,10 +128,7 @@ function currentProtectedSensitivity(row: FactRow): MemoryFactSensitivity {
   if (contributionIds.length === 0) {
     return maxMemoryFactSensitivity(stored, classifiedSensitivity(row));
   }
-  const loaded = loadVerifiedFactContributionAggregatesForReplayInTransaction(
-    db,
-    contributionIds,
-  );
+  const loaded = loadVerifiedFactContributionAggregatesForReplayInTransaction(db, contributionIds);
   if (
     loaded.missingContributionIds.length > 0 ||
     loaded.aggregates.length !== contributionIds.length ||

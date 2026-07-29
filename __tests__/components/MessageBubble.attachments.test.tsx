@@ -1,6 +1,11 @@
 import { render, fireEvent } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
-import { Clipboard, MessageBubble, installMessageBubbleTestHarness, makeMessage } from '../helpers/messageBubbleHarness';
+import {
+  Clipboard,
+  MessageBubble,
+  installMessageBubbleTestHarness,
+  makeMessage,
+} from '../helpers/messageBubbleHarness';
 
 describe('MessageBubble attachments', () => {
   installMessageBubbleTestHarness();
@@ -157,11 +162,7 @@ describe('MessageBubble attachments', () => {
     });
 
     const { getByText, queryByText, toJSON } = render(
-      <MessageBubble
-        message={msg}
-        onViewFile={jest.fn()}
-        onShareWorkspaceFile={jest.fn()}
-      />,
+      <MessageBubble message={msg} onViewFile={jest.fn()} onShareWorkspaceFile={jest.fn()} />,
     );
 
     expect(getByText('PDF')).toBeTruthy();

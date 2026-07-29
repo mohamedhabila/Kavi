@@ -16,9 +16,7 @@ const seedConversationWithMessage = (personaId?: string) => {
   const convId = useChatStore.getState().createConversation('p1', 'sys');
   if (personaId) {
     useChatStore.setState((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === convId ? { ...c, personaId } : c,
-      ),
+      conversations: state.conversations.map((c) => (c.id === convId ? { ...c, personaId } : c)),
     }));
   }
   useChatStore.getState().addMessage(convId, {

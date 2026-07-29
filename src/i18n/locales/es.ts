@@ -670,7 +670,8 @@ export const es: TranslationMap = mergeTranslations(en, {
       },
     },
     home: {
-      intro: 'Busca un ajuste o elige una categoría. Las opciones avanzadas no estorban hasta que las necesites.',
+      intro:
+        'Busca un ajuste o elige una categoría. Las opciones avanzadas no estorban hasta que las necesites.',
       searchLabel: 'Buscar ajustes',
       searchPlaceholder: 'Buscar ajustes',
       clearSearch: 'Borrar búsqueda de ajustes',
@@ -1330,7 +1331,8 @@ export const es: TranslationMap = mergeTranslations(en, {
     sshSelectTarget: 'Selecciona un servidor SSH para conectarte.',
     localShellBanner: 'Shell local de Kavi',
     javascriptBanner: 'Consola JavaScript de Kavi',
-    javascriptHint: 'Escribe expresiones o instrucciones. Usa console.log() para mostrar resultados.',
+    javascriptHint:
+      'Escribe expresiones o instrucciones. Usa console.log() para mostrar resultados.',
     writeErrorWithReason: 'Error de escritura: {reason}',
     modeJavascript: 'JavaScript',
     modeShell: 'Shell local',

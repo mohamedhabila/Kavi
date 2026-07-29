@@ -79,9 +79,7 @@ function validateInputSemantics(input) {
     for (const field of ATOM_FIELDS) {
       if (!hasExclusiveNone(caseEntry?.candidate?.[field])) {
         invalidNoneAtom = true;
-        failures.push(
-          `input.cases[${caseIndex}].candidate.${field}: none must be the only atom`,
-        );
+        failures.push(`input.cases[${caseIndex}].candidate.${field}: none must be the only atom`);
       }
       const goldField = caseEntry?.gold?.[field];
       if (goldField?.status === 'scorable' && !hasExclusiveNone(goldField.values)) {
@@ -175,14 +173,8 @@ function scoreField(cases, field) {
   }
   score.coverageRate = cases.length > 0 ? score.scorable / cases.length : null;
   if (score.scorable > 0) {
-    score.precision = canonicalRate(
-      score.truePositive,
-      score.truePositive + score.falsePositive,
-    );
-    score.recall = canonicalRate(
-      score.truePositive,
-      score.truePositive + score.falseNegative,
-    );
+    score.precision = canonicalRate(score.truePositive, score.truePositive + score.falsePositive);
+    score.recall = canonicalRate(score.truePositive, score.truePositive + score.falseNegative);
     score.f1 = canonicalRate(
       2 * score.truePositive,
       2 * score.truePositive + score.falsePositive + score.falseNegative,
@@ -306,11 +298,7 @@ function aggregateIntentFrameEvaluation(input, options) {
 }
 
 function aggregatePrivateIntentFrameFile(projectRoot, requestedPath, options = {}) {
-  const input = readPrivateJsonFile(
-    projectRoot,
-    requestedPath,
-    'intent-frame.input',
-  );
+  const input = readPrivateJsonFile(projectRoot, requestedPath, 'intent-frame.input');
   return aggregateIntentFrameEvaluation(input.value, {
     generatedAt: options.generatedAt,
     inputSha256: input.sha256,

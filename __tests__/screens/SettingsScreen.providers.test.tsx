@@ -181,14 +181,12 @@ describe('SettingsScreen providers', () => {
   it('opens immediately while loading a saved key and preserves newer typing', async () => {
     const { getProviderApiKey } = require('../../src/services/storage/SecureStorage');
     let resolveEditorKey: ((value: string) => void) | undefined;
-    getProviderApiKey
-      .mockResolvedValueOnce('sk-test')
-      .mockImplementationOnce(
-        () =>
-          new Promise<string>((resolve) => {
-            resolveEditorKey = resolve;
-          }),
-      );
+    getProviderApiKey.mockResolvedValueOnce('sk-test').mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveEditorKey = resolve;
+        }),
+    );
     const { getByDisplayValue, getByPlaceholderText, getByText } = renderSettingsScreen();
 
     await waitFor(() => expect(getProviderApiKey).toHaveBeenCalledTimes(1));

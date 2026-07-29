@@ -139,9 +139,7 @@ function groupAxisOutcomes(entries, axisKey, publicMeta) {
       return {
         id: axisId,
         label:
-          typeof publicMeta[axisId] === 'string'
-            ? publicMeta[axisId]
-            : publicMeta[axisId].label,
+          typeof publicMeta[axisId] === 'string' ? publicMeta[axisId] : publicMeta[axisId].label,
         passed,
         total,
         passRate,
@@ -195,7 +193,9 @@ function buildReadiness(entries, assessment, cache, graderAudit, reliability) {
       (entry) =>
         !entry.passed &&
         Array.isArray(entry.assessmentDimensions) &&
-        entry.assessmentDimensions.some((dimension) => CRITICAL_READINESS_DIMENSIONS.has(dimension)),
+        entry.assessmentDimensions.some((dimension) =>
+          CRITICAL_READINESS_DIMENSIONS.has(dimension),
+        ),
     )
     .map((entry) => entry.fixtureId)
     .sort();
@@ -213,10 +213,14 @@ function buildReadiness(entries, assessment, cache, graderAudit, reliability) {
   if (assessment.dimensions.length === 0 || assessment.benchmarkFamilies.length === 0) {
     failedCriteria.push('assessment_axis_coverage');
   }
-  if (assessment.dimensions.some((dimension) => dimension.passRate < READINESS_MIN_AXIS_PASS_RATE)) {
+  if (
+    assessment.dimensions.some((dimension) => dimension.passRate < READINESS_MIN_AXIS_PASS_RATE)
+  ) {
     failedCriteria.push('dimension_pass_rates');
   }
-  if (assessment.benchmarkFamilies.some((family) => family.passRate < READINESS_MIN_AXIS_PASS_RATE)) {
+  if (
+    assessment.benchmarkFamilies.some((family) => family.passRate < READINESS_MIN_AXIS_PASS_RATE)
+  ) {
     failedCriteria.push('benchmark_family_pass_rates');
   }
   if (criticalFailedScenarioIds.length > 0) {

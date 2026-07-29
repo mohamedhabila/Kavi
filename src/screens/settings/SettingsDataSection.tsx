@@ -81,9 +81,7 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
         <Text style={styles.sectionCardTitle}>
           {t('settings.destinations.memoryPrivacy.title')}
         </Text>
-        <Text style={styles.sectionCardHint}>
-          {t('settings.destinations.memoryPrivacy.hint')}
-        </Text>
+        <Text style={styles.sectionCardHint}>{t('settings.destinations.memoryPrivacy.hint')}</Text>
       </View>
 
       <View style={styles.featureRow}>

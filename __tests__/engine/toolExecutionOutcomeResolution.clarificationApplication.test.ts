@@ -8,10 +8,7 @@ import {
   projectRequestUnderstanding,
   summarizeRequestUnderstanding,
 } from '../../src/services/agents/requestUnderstandingProjection';
-import {
-  buildBaseParams,
-  createToolMessage,
-} from '../helpers/toolExecutionOutcomeHarness';
+import { buildBaseParams, createToolMessage } from '../helpers/toolExecutionOutcomeHarness';
 
 describe('tool execution clarification outcome resolution', () => {
   it('records structured missing information and waits for the user with the registered question', async () => {

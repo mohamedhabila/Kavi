@@ -29,16 +29,14 @@ describe('maintainability checks', () => {
     const aboveBudget = 'line\n'.repeat(706);
 
     expect(
-      findMaintainabilityFailures(
-        [{ filePath: 'src/services/legacy.ts', content: atBudget }],
-        { lineBudgets: { 'src/services/legacy.ts': 705 } },
-      ),
+      findMaintainabilityFailures([{ filePath: 'src/services/legacy.ts', content: atBudget }], {
+        lineBudgets: { 'src/services/legacy.ts': 705 },
+      }),
     ).toEqual([]);
     expect(
-      findMaintainabilityFailures(
-        [{ filePath: 'src/services/legacy.ts', content: aboveBudget }],
-        { lineBudgets: { 'src/services/legacy.ts': 705 } },
-      ),
+      findMaintainabilityFailures([{ filePath: 'src/services/legacy.ts', content: aboveBudget }], {
+        lineBudgets: { 'src/services/legacy.ts': 705 },
+      }),
     ).toEqual([
       expect.objectContaining({
         type: 'line-count',

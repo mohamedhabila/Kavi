@@ -17,9 +17,7 @@ export type GraphObservabilityAuditType =
 
 const MAX_TOOL_SURFACE_NAMES = 12;
 
-export function buildCompletionGateObservabilityDetail(
-  decision: CompletionGateDecision,
-): string {
+export function buildCompletionGateObservabilityDetail(decision: CompletionGateDecision): string {
   if (decision.type === 'ready') {
     return 'decision:ready';
   }
@@ -36,7 +34,9 @@ export function buildToolSurfaceObservabilityDetail(params: {
   toolNames: ReadonlyArray<string>;
   tokenEstimate: number;
 }): string {
-  const uniqueToolNames = Array.from(new Set(params.toolNames.map((name) => name.trim()).filter(Boolean)));
+  const uniqueToolNames = Array.from(
+    new Set(params.toolNames.map((name) => name.trim()).filter(Boolean)),
+  );
   const listedNames = uniqueToolNames.slice(0, MAX_TOOL_SURFACE_NAMES).join(',');
   const overflow =
     uniqueToolNames.length > MAX_TOOL_SURFACE_NAMES

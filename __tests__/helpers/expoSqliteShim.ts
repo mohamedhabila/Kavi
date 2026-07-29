@@ -45,11 +45,11 @@ function adapt(db: Database.Database, databasePath: string): ControlledShimDb {
         lastInsertRowId: Number(result.lastInsertRowid),
       };
     },
-    getFirstSync: <T,>(sql: string, ...params: Param[]) => {
+    getFirstSync: <T>(sql: string, ...params: Param[]) => {
       requireOpen();
       return (db.prepare(sql).get(...params) as T | undefined) ?? null;
     },
-    getAllSync: <T,>(sql: string, ...params: Param[]) => {
+    getAllSync: <T>(sql: string, ...params: Param[]) => {
       requireOpen();
       return db.prepare(sql).all(...params) as T[];
     },

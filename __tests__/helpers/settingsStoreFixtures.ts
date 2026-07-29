@@ -10,9 +10,7 @@ import type {
 } from '../../src/types/remote';
 import type { LlmProviderConfig } from '../../src/types/provider';
 
-export const makeProvider = (
-  overrides: Partial<LlmProviderConfig> = {},
-): LlmProviderConfig => ({
+export const makeProvider = (overrides: Partial<LlmProviderConfig> = {}): LlmProviderConfig => ({
   id: 'test-provider',
   name: 'Test Provider',
   baseUrl: 'https://api.test.com/v1',
@@ -22,9 +20,7 @@ export const makeProvider = (
   ...overrides,
 });
 
-export const makeMcpServer = (
-  overrides: Partial<McpServerConfig> = {},
-): McpServerConfig => ({
+export const makeMcpServer = (overrides: Partial<McpServerConfig> = {}): McpServerConfig => ({
   id: 'test-mcp',
   name: 'Test MCP',
   url: 'https://mcp.test.com',
@@ -34,9 +30,7 @@ export const makeMcpServer = (
   ...overrides,
 });
 
-export const makeSshTarget = (
-  overrides: Partial<SshTargetConfig> = {},
-): SshTargetConfig => ({
+export const makeSshTarget = (overrides: Partial<SshTargetConfig> = {}): SshTargetConfig => ({
   id: 'ssh-1',
   name: 'Build box',
   host: 'ssh.example.com',
@@ -70,9 +64,7 @@ export const makeBrowserProvider = (
   ...overrides,
 });
 
-export const makeExpoAccount = (
-  overrides: Partial<ExpoAccountConfig> = {},
-): ExpoAccountConfig => ({
+export const makeExpoAccount = (overrides: Partial<ExpoAccountConfig> = {}): ExpoAccountConfig => ({
   id: 'expo-account-1',
   name: 'Expo Production',
   owner: 'kavi',
@@ -81,9 +73,7 @@ export const makeExpoAccount = (
   ...overrides,
 });
 
-export const makeExpoProject = (
-  overrides: Partial<ExpoProjectConfig> = {},
-): ExpoProjectConfig => ({
+export const makeExpoProject = (overrides: Partial<ExpoProjectConfig> = {}): ExpoProjectConfig => ({
   id: 'expo-project-1',
   name: 'Kavi Mobile',
   accountId: 'expo-account-1',

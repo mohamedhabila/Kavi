@@ -9,10 +9,7 @@ import {
   type EnforcedExecutionWorkerOutput,
   type SubAgentToolResultPreview,
 } from '../subAgentOutputContract';
-import {
-  buildSubAgentFinalizationPrompt,
-  buildToolResultFallback,
-} from './terminalOutputFallback';
+import { buildSubAgentFinalizationPrompt, buildToolResultFallback } from './terminalOutputFallback';
 
 export async function resolveSubAgentRunOutput(params: {
   status: SubAgentResult['status'];

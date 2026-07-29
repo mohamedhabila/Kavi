@@ -3,7 +3,10 @@ import {
   reduceAgentControlGraph,
 } from '../../../src/engine/graph/agentControlGraph';
 import { assertLeanGraphSnapshot } from '../../../src/engine/graph/graphContract';
-import type { AgentControlGraphEvent, AgentControlGraphSnapshot } from '../../../src/engine/graph/agentControlGraphTypes';
+import type {
+  AgentControlGraphEvent,
+  AgentControlGraphSnapshot,
+} from '../../../src/engine/graph/agentControlGraphTypes';
 import type { AgentGoal } from '../../../src/engine/goals/types';
 
 export function buildGraphScenarioSnapshot(
@@ -19,6 +22,8 @@ export function applyGraphScenarioEvents(
   return assertLeanGraphSnapshot(reduceAgentControlGraph(snapshot, events));
 }
 
-export function seedGraphGoals(goals: ReadonlyArray<AgentGoal>): Partial<AgentControlGraphSnapshot> {
+export function seedGraphGoals(
+  goals: ReadonlyArray<AgentGoal>,
+): Partial<AgentControlGraphSnapshot> {
   return { goals: goals.map((goal) => ({ ...goal })) };
 }

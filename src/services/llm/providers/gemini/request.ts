@@ -1,9 +1,6 @@
 import { normalizeToolInputSchema } from '../../../../utils/toolSchema';
 import { resolveModelOutputTokenBudget } from '../../../context/outputTokenBudget';
-import {
-  isGemini3Model,
-  isGeminiProModel,
-} from '../../catalog/providerCapabilities';
+import { isGemini3Model, isGeminiProModel } from '../../catalog/providerCapabilities';
 import { resolveProviderStructuredOutputDeliberationControls } from '../../support/providerStructuredOutputDeliberation';
 import type {
   ChatCompletionMessage,
@@ -32,9 +29,7 @@ export function resolveGeminiStructuredOutputSyntax(
     isVertexNativeGeminiBaseUrl: (baseUrl: string) => boolean;
   },
 ): GeminiStructuredOutputSyntax {
-  return helpers.isVertexNativeGeminiBaseUrl(baseUrl)
-    ? 'responseSchema'
-    : 'responseFormat';
+  return helpers.isVertexNativeGeminiBaseUrl(baseUrl) ? 'responseSchema' : 'responseFormat';
 }
 
 export function buildGeminiModelName(model: string): string {
@@ -107,9 +102,7 @@ function normalizeGeminiThinkingConfig(
   options: MessageRequestOptions,
   structuredOutputEnabled: boolean,
 ): Record<string, unknown> | undefined {
-  const requestedThinking = isPlainRecord(options.thinking)
-    ? { ...options.thinking }
-    : undefined;
+  const requestedThinking = isPlainRecord(options.thinking) ? { ...options.thinking } : undefined;
 
   if (requestedThinking) {
     const normalized: Record<string, unknown> = {};
@@ -182,13 +175,9 @@ export function buildGeminiRequestBody(args: {
     tools: NonNullable<MessageRequestOptions['tools']>,
   ) => NonNullable<MessageRequestOptions['tools']>;
 }): Record<string, any> {
-  const body: Record<string, any> = buildGeminiConversation(
-    args.model,
-    args.messages,
-    {
-      includeFunctionCallIds: !args.isVertexNativeGeminiBaseUrl(args.baseUrl),
-    },
-  );
+  const body: Record<string, any> = buildGeminiConversation(args.model, args.messages, {
+    includeFunctionCallIds: !args.isVertexNativeGeminiBaseUrl(args.baseUrl),
+  });
 
   const appendDynamicSystemTail = (dynamicText?: string) => {
     const text = dynamicText?.trim();
@@ -220,13 +209,10 @@ export function buildGeminiRequestBody(args: {
     }
   }
   const generationConfig: Record<string, any> = {};
-  const structuredOutput = normalizeStructuredOutputOptions(
-    args.options.structuredOutput,
-  );
+  const structuredOutput = normalizeStructuredOutputOptions(args.options.structuredOutput);
   const canApplyStructuredOutput =
     structuredOutput &&
-    (!args.options.tools?.length ||
-      args.supportsGeminiStructuredOutputWithTools(args.model));
+    (!args.options.tools?.length || args.supportsGeminiStructuredOutputWithTools(args.model));
   const requestTools =
     args.options.tools?.length && args.options.enablePromptCaching
       ? args.reorderToolsForPromptCaching(args.options.tools)
@@ -235,10 +221,7 @@ export function buildGeminiRequestBody(args: {
   generationConfig.maxOutputTokens =
     args.options.maxTokens ?? resolveModelOutputTokenBudget(args.model);
 
-  if (
-    args.options.temperature !== undefined &&
-    args.supportsTemperature(args.model)
-  ) {
+  if (args.options.temperature !== undefined && args.supportsTemperature(args.model)) {
     generationConfig.temperature = args.options.temperature;
   }
 
@@ -278,19 +261,19 @@ export function buildGeminiRequestBody(args: {
   }
 
   if (requestTools?.length) {
-    body.tools = [{
-      functionDeclarations: requestTools.map((tool) => ({
-        name: tool.name,
-        description: simplifyGeminiToolDescription(tool.description),
-        parameters: buildGeminiFunctionDeclarationSchema(
-          normalizeToolInputSchema(tool.input_schema),
-        ),
-      })),
-    }];
+    body.tools = [
+      {
+        functionDeclarations: requestTools.map((tool) => ({
+          name: tool.name,
+          description: simplifyGeminiToolDescription(tool.description),
+          parameters: buildGeminiFunctionDeclarationSchema(
+            normalizeToolInputSchema(tool.input_schema),
+          ),
+        })),
+      },
+    ];
 
-    const functionCallingConfig = buildGeminiFunctionCallingConfig(
-      args.options.toolChoice,
-    );
+    const functionCallingConfig = buildGeminiFunctionCallingConfig(args.options.toolChoice);
     if (functionCallingConfig) {
       body.toolConfig = {
         functionCallingConfig,

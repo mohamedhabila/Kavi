@@ -1,7 +1,4 @@
-export function truncateLogDetail(
-  value?: string,
-  maxLength = 280,
-): string | undefined {
+export function truncateLogDetail(value?: string, maxLength = 280): string | undefined {
   if (!value) {
     return undefined;
   }
@@ -11,7 +8,5 @@ export function truncateLogDetail(
     return undefined;
   }
 
-  return normalized.length <= maxLength
-    ? normalized
-    : `${normalized.slice(0, maxLength - 1)}…`;
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 1)}…`;
 }

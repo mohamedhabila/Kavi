@@ -170,9 +170,7 @@ export function useSettingsProviderFlow({
           });
       setEditingProvider(newProvider);
       setTempApiKey('');
-      setEditingCredentialStatus(
-        providerRequiresApiKey(newProvider) ? 'missing' : 'not-required',
-      );
+      setEditingCredentialStatus(providerRequiresApiKey(newProvider) ? 'missing' : 'not-required');
       setShowApiKey(false);
       setSection('provider-edit');
     },
@@ -374,12 +372,7 @@ export function useSettingsProviderFlow({
         ? isLocalLlmModelInstalled(editingProvider, editingProvider.model)
         : undefined,
     });
-  }, [
-    activeProviderId,
-    editingCredentialStatus,
-    editingProvider,
-    editingProviderIsOnDevice,
-  ]);
+  }, [activeProviderId, editingCredentialStatus, editingProvider, editingProviderIsOnDevice]);
   const canSaveProvider = Boolean(
     editingProviderReadiness?.canSave && !editingLocalModelDownloadInProgress,
   );

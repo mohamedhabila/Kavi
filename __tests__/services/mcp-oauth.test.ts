@@ -498,15 +498,17 @@ describe('MCP OAuth service', () => {
 
   it('adds the proxy project hint when an anonymous direct callback reports a redirect error', async () => {
     expoConstants.expoConfig.owner = undefined;
-    (WebBrowser.openAuthSessionAsync as jest.Mock).mockImplementationOnce(async (browserUrl: string) => {
-      const state = new URL(browserUrl).searchParams.get('state') || '';
-      return {
-        type: 'success',
-        url: `kavi://mcp-auth/server-1?error=invalid_request&error_description=${encodeURIComponent(
-          'redirect_uri blocked',
-        )}&state=${encodeURIComponent(state)}`,
-      };
-    });
+    (WebBrowser.openAuthSessionAsync as jest.Mock).mockImplementationOnce(
+      async (browserUrl: string) => {
+        const state = new URL(browserUrl).searchParams.get('state') || '';
+        return {
+          type: 'success',
+          url: `kavi://mcp-auth/server-1?error=invalid_request&error_description=${encodeURIComponent(
+            'redirect_uri blocked',
+          )}&state=${encodeURIComponent(state)}`,
+        };
+      },
+    );
 
     await authenticateMcpServer({
       id: 'server-1',

@@ -1,7 +1,4 @@
-import {
-  applyGoalMutation,
-  buildInitialGoalState,
-} from '../../../src/engine/goals/graphState';
+import { applyGoalMutation, buildInitialGoalState } from '../../../src/engine/goals/graphState';
 import { createGoal } from '../../../src/engine/goals/types';
 import { renderGoalPromptSection } from '../../../src/engine/goals/promptSection';
 import { buildToolDefinitions } from '../../../src/engine/tools/definitions';

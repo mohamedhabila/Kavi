@@ -44,13 +44,15 @@ function waitingGraph(recoveryState?: AgentRunMobileControllerRecoveryState) {
     : graph;
 }
 
-async function settlement(overrides: {
-  effectState?: 'applied' | 'failed' | 'cancelled' | 'unknown';
-  executionState?: 'completed' | 'failed' | 'timed_out' | 'cancelled' | 'unknown';
-  status?: ToolMessageOutcome['status'];
-  verificationState?: 'unverified' | 'acknowledged' | 'verified';
-  observableDelta?: 'changed' | 'unchanged' | 'unknown';
-} = {}) {
+async function settlement(
+  overrides: {
+    effectState?: 'applied' | 'failed' | 'cancelled' | 'unknown';
+    executionState?: 'completed' | 'failed' | 'timed_out' | 'cancelled' | 'unknown';
+    status?: ToolMessageOutcome['status'];
+    verificationState?: 'unverified' | 'acknowledged' | 'verified';
+    observableDelta?: 'changed' | 'unchanged' | 'unknown';
+  } = {},
+) {
   const executionState = overrides.executionState ?? 'completed';
   const effectState = overrides.effectState ?? 'applied';
   const verificationState = overrides.verificationState ?? 'verified';

@@ -26,9 +26,7 @@ function resolveConfiguredTimeoutMs(env: NodeJS.ProcessEnv): number | undefined 
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-export function resolveE2ETurnTimeoutMs(
-  env: NodeJS.ProcessEnv = process.env,
-): number {
+export function resolveE2ETurnTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env[E2E_TURN_TIMEOUT_MS_ENV]?.trim();
   if (!raw) {
     return E2E_PER_USER_TURN_TIMEOUT_MS;

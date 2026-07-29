@@ -3,14 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Linking,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import {
@@ -198,10 +191,7 @@ export const VoiceScreen: React.FC = () => {
       setTurns((currentTurns) => {
         const lastTurn = currentTurns[currentTurns.length - 1];
         if (!lastTurn || lastTurn.response) {
-          return [
-            ...currentTurns,
-            { id: nextTurnIdRef.current++, transcript: '', response },
-          ];
+          return [...currentTurns, { id: nextTurnIdRef.current++, transcript: '', response }];
         }
         return [
           ...currentTurns.slice(0, -1),
@@ -225,20 +215,17 @@ export const VoiceScreen: React.FC = () => {
   }, [manager]);
 
   useFocusEffect(
-    useCallback(
-      () => {
-        isScreenFocusedRef.current = true;
-        isPreparingRef.current = false;
-        setIsPreparing(false);
+    useCallback(() => {
+      isScreenFocusedRef.current = true;
+      isPreparingRef.current = false;
+      setIsPreparing(false);
 
-        return () => {
-          isScreenFocusedRef.current = false;
-          cancelPendingStart();
-          void manager.stop();
-        };
-      },
-      [cancelPendingStart, manager],
-    ),
+      return () => {
+        isScreenFocusedRef.current = false;
+        cancelPendingStart();
+        void manager.stop();
+      };
+    }, [cancelPendingStart, manager]),
   );
 
   const handleStart = useCallback(async () => {
@@ -340,9 +327,7 @@ export const VoiceScreen: React.FC = () => {
       try {
         await Linking.openSettings();
       } catch {
-        setVoiceError(
-          new VoiceOperationError('unexpected', 'Device settings could not be opened'),
-        );
+        setVoiceError(new VoiceOperationError('unexpected', 'Device settings could not be opened'));
         setState('error');
         void emitVoiceEvent('error');
       }
@@ -356,8 +341,7 @@ export const VoiceScreen: React.FC = () => {
   }, [cancelPendingStart, failureKind, manager, navigation]);
 
   const isSessionActive = state !== 'idle' && state !== 'error';
-  const isPrimaryDisabled =
-    isPreparing || state === 'transcribing' || state === 'processing';
+  const isPrimaryDisabled = isPreparing || state === 'transcribing' || state === 'processing';
   const semanticState = isPreparing ? 'processing' : state;
   const statusColors = useMemo(() => stateColors(colors), [colors]);
   const statusLabel = isPreparing ? t('voice.preparing') : t(stateLabelsMap[state]);

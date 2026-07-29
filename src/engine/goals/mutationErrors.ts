@@ -31,9 +31,7 @@ export function parseGoalMutationToolResultCodes(
       return [];
     }
 
-    const structuredErrors = Array.isArray(record.structuredErrors)
-      ? record.structuredErrors
-      : [];
+    const structuredErrors = Array.isArray(record.structuredErrors) ? record.structuredErrors : [];
     const codes = structuredErrors
       .filter(
         (entry): entry is Record<string, unknown> =>

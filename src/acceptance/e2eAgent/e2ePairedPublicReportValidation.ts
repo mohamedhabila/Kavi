@@ -1,7 +1,4 @@
-import {
-  E2E_MAX_ORACLE_FACTS,
-  E2E_PAIRED_CONDITIONS,
-} from './e2ePairedConditions';
+import { E2E_MAX_ORACLE_FACTS, E2E_PAIRED_CONDITIONS } from './e2ePairedConditions';
 import {
   buildE2EPairedExecutionIdentityHash,
   E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
@@ -9,10 +6,7 @@ import {
   type E2EPairedConditionExecution,
   type E2EPairedRuntimeResult,
 } from './e2ePairedRuntime';
-import {
-  sameE2EAppSourceRevision,
-  validateE2EAppSourceRevision,
-} from './e2eAppSourceProvenance';
+import { sameE2EAppSourceRevision, validateE2EAppSourceRevision } from './e2eAppSourceProvenance';
 import { validateE2EEstimatedCostSummary } from './e2ePairedEstimatedCost';
 import { stableStringify } from './e2eTraceRedaction';
 
@@ -45,9 +39,7 @@ function validateCompletedCondition(
   }
 }
 
-export function validateE2EPairedRuntimeForPublicProjection(
-  runtime: E2EPairedRuntimeResult,
-): void {
+export function validateE2EPairedRuntimeForPublicProjection(runtime: E2EPairedRuntimeResult): void {
   if (runtime.schemaVersion !== E2E_PAIRED_RUNTIME_SCHEMA_VERSION) {
     throw new Error('Paired runtime evidence uses an unsupported schema version.');
   }

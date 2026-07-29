@@ -7,10 +7,7 @@ import { handleTerminalBackgroundReview } from '../../src/screens/terminalBackgr
 import { completeTerminalBackgroundReviewRun } from '../../src/screens/terminalBackgroundCompletion';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { setDurableMemoryPolicyEnabled } from '../../src/services/memory/memoryAuthority';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-} from '../../src/services/memory/schema';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { AgentRun } from '../../src/types/agentRun';

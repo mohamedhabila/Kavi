@@ -62,9 +62,7 @@ describe('graphObservability', () => {
         sessionPinnedCount: 1,
         turnPinnedCount: 2,
       }),
-    ).toBe(
-      'count:3,tokens:900,sessionPinned:1,turnPinned:2,evicted:extra_tool,skill__demo__run',
-    );
+    ).toBe('count:3,tokens:900,sessionPinned:1,turnPinned:2,evicted:extra_tool,skill__demo__run');
 
     expect(
       buildLoopDetectedObservabilityDetail({

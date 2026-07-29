@@ -53,11 +53,7 @@ describe('localLlm runtime catalog and warmup', () => {
       ]),
     );
     expect(catalogEntries.map((entry) => entry.id)).not.toEqual(
-      expect.arrayContaining([
-        'gemma-3n-E2B-it',
-        'gemma-3n-E4B-it',
-        'gemma-3-1b-it-litert',
-      ]),
+      expect.arrayContaining(['gemma-3n-E2B-it', 'gemma-3n-E4B-it', 'gemma-3-1b-it-litert']),
     );
     expect(catalogEntries).toHaveLength(4);
     expect(catalogEntries.every((entry) => entry.downloadUrl.startsWith('https://'))).toBe(true);

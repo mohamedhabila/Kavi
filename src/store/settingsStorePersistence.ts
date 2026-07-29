@@ -16,10 +16,7 @@ export const SETTINGS_STORE_VERSION = 15;
 
 type MigratableSettingsState = Record<string, any>;
 
-export function migrateSettingsState(
-  persistedState: unknown,
-  version: number,
-): AppSettings {
+export function migrateSettingsState(persistedState: unknown, version: number): AppSettings {
   if (!persistedState || typeof persistedState !== 'object') {
     return persistedState as AppSettings;
   }

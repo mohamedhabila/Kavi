@@ -62,15 +62,11 @@ export interface PrepareAgentControlGraphToolTurnParams {
 export function prepareAgentControlGraphToolTurn(
   params: PrepareAgentControlGraphToolTurnParams,
 ): PrepareAgentControlGraphToolTurnResult {
-  const yieldedToolCalls = trimAgentControlGraphPendingToolCallsAfterYield(
-    params.pendingToolCalls,
-  );
+  const yieldedToolCalls = trimAgentControlGraphPendingToolCallsAfterYield(params.pendingToolCalls);
   const clarificationToolCall = yieldedToolCalls.find(
     (toolCall) => normalizeToolName(toolCall.name) === REQUEST_CLARIFICATION_TOOL_NAME,
   );
-  const executableToolCalls = clarificationToolCall
-    ? [clarificationToolCall]
-    : yieldedToolCalls;
+  const executableToolCalls = clarificationToolCall ? [clarificationToolCall] : yieldedToolCalls;
   const loopCheck = detectLoops(params.toolCallHistory, params.stagnationSignatures, {
     goals: params.goals,
   });

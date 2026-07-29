@@ -53,7 +53,7 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'gpt-5.4': 1000000,
   'gpt-5.4-mini': 400000,
   'gpt-5-mini': 400000,
-  'o3': 200000,
+  o3: 200000,
   'o4-mini': 200000,
   'claude-opus-4-7': 1000000,
   'claude-sonnet-4-6': 1000000,
@@ -65,11 +65,11 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'gemini-2.5-pro': 1000000,
   'gemini-2.5-flash': 1000000,
   'gemini-2.5-flash-lite': 1000000,
-  'llama4': 256000,
-  'qwen3': 128000,
+  llama4: 256000,
+  qwen3: 128000,
   'mistral-large-3': 128000,
-  'gemma3': 128000,
-  'phi4': 16384,
+  gemma3: 128000,
+  phi4: 16384,
 };
 
 const MODEL_CONTEXT_WINDOW_ENTRIES_BY_SPECIFICITY = Object.entries(MODEL_CONTEXT_WINDOWS).sort(

@@ -82,7 +82,8 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
     const canOpen = !!workspacePath && !!onOpenWorkspaceFile;
     const canShare = !!workspacePath && !!onShareWorkspaceFile;
     const canPreview =
-      attachment.type === 'image' || attachment.mimeType?.toLowerCase().startsWith('image/') === true;
+      attachment.type === 'image' ||
+      attachment.mimeType?.toLowerCase().startsWith('image/') === true;
 
     return (
       <ArtifactCard

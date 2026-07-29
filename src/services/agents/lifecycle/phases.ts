@@ -1,4 +1,8 @@
-import type { SubAgentActivityEntry, SubAgentResult, SubAgentSnapshot } from '../../../types/subAgent';
+import type {
+  SubAgentActivityEntry,
+  SubAgentResult,
+  SubAgentSnapshot,
+} from '../../../types/subAgent';
 
 export type SubAgentAbortReason = 'cancelled' | 'timeout' | 'max-iterations';
 

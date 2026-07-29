@@ -1,11 +1,29 @@
 import { normalizeOpenAIPromptCacheRetention } from '../../src/services/llm/providers/openaiResponses/helpers';
 import { buildOpenAIResponsesInput } from '../../src/services/llm/providers/openaiResponses/conversation';
-import { toOpenAIResponsesMessageContent, toOpenAIResponsesText } from '../../src/services/llm/providers/openaiResponses/content';
-import { extractOpenAIReasoningText, getOpenAIReasoningItemsFromToolCalls, getOpenAIReasoningTextParts } from '../../src/services/llm/core/reasoningExtraction';
-import { isAnthropicClaude4Model, isAnthropicClaude4OpusModel, isGemini3Model, isGeminiProModel, isOpenAIReasoningModel, supportsAnthropicAdaptiveThinking, supportsTemperature } from '../../src/services/llm/catalog/providerCapabilities';
+import {
+  toOpenAIResponsesMessageContent,
+  toOpenAIResponsesText,
+} from '../../src/services/llm/providers/openaiResponses/content';
+import {
+  extractOpenAIReasoningText,
+  getOpenAIReasoningItemsFromToolCalls,
+  getOpenAIReasoningTextParts,
+} from '../../src/services/llm/core/reasoningExtraction';
+import {
+  isAnthropicClaude4Model,
+  isAnthropicClaude4OpusModel,
+  isGemini3Model,
+  isGeminiProModel,
+  isOpenAIReasoningModel,
+  supportsAnthropicAdaptiveThinking,
+  supportsTemperature,
+} from '../../src/services/llm/catalog/providerCapabilities';
 import { isGeminiModelName } from '../../src/services/llm/catalog/providerFamilies';
 import { resolveProviderTransport } from '../../src/services/llm/catalog/providerProtocols';
-import { buildProviderHeaders, resolveProviderBaseUrl } from '../../src/services/llm/core/providerRequest';
+import {
+  buildProviderHeaders,
+  resolveProviderBaseUrl,
+} from '../../src/services/llm/core/providerRequest';
 import { LlmProviderConfig } from '../../src/types/provider';
 const makeConfig = (overrides: Partial<LlmProviderConfig> = {}): LlmProviderConfig => ({
   id: 'test',

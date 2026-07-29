@@ -66,10 +66,7 @@ function receipt(index: number, recordedAt: number, runId = 'run-receipts'): Too
   };
 }
 
-function terminal(
-  sourceRunId = 'run-receipts',
-  goal = 'Create a calendar event',
-): string {
+function terminal(sourceRunId = 'run-receipts', goal = 'Create a calendar event'): string {
   const evidence: AgentRunTerminalEvidence = {
     version: 1,
     sourceRunId,
@@ -262,13 +259,15 @@ describe('agent-run effect receipt memory', () => {
       isToolAllowed: () => true,
       isToolAvailable: () => true,
     };
-    const persistedSteps = (learned[0]!.attributes.contract as {
-      orderedSteps: Array<{ toolName: string; contractIdentityDigest: string }>;
-    }).orderedSteps;
-    expect(
-      persistedSteps.map((step) => step.contractIdentityDigest),
-    ).toEqual(
-      persistedSteps.map((step) => digestReceiptBackedToolContractIdentity(contract(step.toolName))),
+    const persistedSteps = (
+      learned[0]!.attributes.contract as {
+        orderedSteps: Array<{ toolName: string; contractIdentityDigest: string }>;
+      }
+    ).orderedSteps;
+    expect(persistedSteps.map((step) => step.contractIdentityDigest)).toEqual(
+      persistedSteps.map((step) =>
+        digestReceiptBackedToolContractIdentity(contract(step.toolName)),
+      ),
     );
     let rejection: string | undefined;
     const applicable = await resolveApplicableReceiptBackedProcedure({

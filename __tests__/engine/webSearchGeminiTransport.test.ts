@@ -5,8 +5,9 @@ jest.mock('../../src/engine/tools/toolProviderContext', () => ({
   resolveToolProviderContext: jest.fn(),
 }));
 
-const mockResolveToolProviderContext =
-  resolveToolProviderContext as jest.MockedFunction<typeof resolveToolProviderContext>;
+const mockResolveToolProviderContext = resolveToolProviderContext as jest.MockedFunction<
+  typeof resolveToolProviderContext
+>;
 
 describe('resolveGeminiSearchTransport', () => {
   beforeEach(() => {

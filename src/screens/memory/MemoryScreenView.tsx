@@ -148,10 +148,7 @@ export function MemoryScreenView({
           accessibilityState={{ selected: tab === 'advanced' }}
           testID="memory-advanced-tab"
         >
-          <Settings2
-            size={16}
-            color={tab === 'advanced' ? colors.primary : colors.textSecondary}
-          />
+          <Settings2 size={16} color={tab === 'advanced' ? colors.primary : colors.textSecondary} />
           <Text style={[styles.tabText, tab === 'advanced' && styles.tabTextActive]}>
             {t('memory.advancedTab')}
           </Text>

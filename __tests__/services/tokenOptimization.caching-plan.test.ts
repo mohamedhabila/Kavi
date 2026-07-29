@@ -1,4 +1,11 @@
-import { buildPromptCachingPlan, buildPromptCacheKey, OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH, planIterationModel, resolveFinalizationMaxTokens, resolveSubAgentMaxTokens } from '../../src/services/context/tokenOptimization';
+import {
+  buildPromptCachingPlan,
+  buildPromptCacheKey,
+  OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH,
+  planIterationModel,
+  resolveFinalizationMaxTokens,
+  resolveSubAgentMaxTokens,
+} from '../../src/services/context/tokenOptimization';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import type { ToolDefinition } from '../../src/types/tool';
 function makeProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProviderConfig {
@@ -254,9 +261,7 @@ describe('buildPromptCachingPlan', () => {
       second.telemetry.stableToolDeclarationDigest,
     );
     expect(first.telemetry.cacheablePrefixDigest).toBe(second.telemetry.cacheablePrefixDigest);
-    expect(first.telemetry.toolDeclarationDigest).not.toBe(
-      second.telemetry.toolDeclarationDigest,
-    );
+    expect(first.telemetry.toolDeclarationDigest).not.toBe(second.telemetry.toolDeclarationDigest);
     expect(first.telemetry.prefixDivergenceReason).toBe('stable_prefix_with_dynamic_suffix');
   });
 

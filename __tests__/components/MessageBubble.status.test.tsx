@@ -1,5 +1,9 @@
 import { render, within } from '@testing-library/react-native';
-import { MessageBubble, installMessageBubbleTestHarness, makeMessage } from '../helpers/messageBubbleHarness';
+import {
+  MessageBubble,
+  installMessageBubbleTestHarness,
+  makeMessage,
+} from '../helpers/messageBubbleHarness';
 
 describe('MessageBubble status and tool states', () => {
   installMessageBubbleTestHarness();

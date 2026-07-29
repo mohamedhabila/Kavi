@@ -36,10 +36,7 @@ import {
 } from './memoryScopeIdentity';
 import { encodeIngestionSourceSnapshot } from './ingestionSourceSnapshot';
 import { collectAgentRunMemoryEvidence } from './agentRunTerminalEvidence';
-import {
-  resolveClosedTurnEndingAt,
-  type ExactClosedTurnFailureReason,
-} from './closedTurn';
+import { resolveClosedTurnEndingAt, type ExactClosedTurnFailureReason } from './closedTurn';
 import { runMemoryTransaction } from './access/transaction';
 import { getMemoryPolicyEpoch, isMemoryPolicyEpochCurrent } from './policy';
 

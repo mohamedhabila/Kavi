@@ -54,13 +54,16 @@ describe('getSkillSystemPrompts', () => {
     expect(prompt).toContain('- Prompt Skill: skills/prompt-skill-sp-1/SKILL.md');
     expect(prompt).not.toContain('Always be helpful.');
     expect(
-      getMockFileSystemStore()['file:///mock/documents/workspace/conv-1/skills/prompt-skill-sp-1/SKILL.md'],
+      getMockFileSystemStore()[
+        'file:///mock/documents/workspace/conv-1/skills/prompt-skill-sp-1/SKILL.md'
+      ],
     ).toContain('Always be helpful.');
   });
 
   it('keeps bundled Python skills minimal in the prompt while materializing scripts', async () => {
-    getMockFileSystemStore()['file:///mock/documents/.managed-skills/ontology-skill-ontology/SKILL.md'] =
-      '# Ontology\n\nUse scripts/ontology.py';
+    getMockFileSystemStore()[
+      'file:///mock/documents/.managed-skills/ontology-skill-ontology/SKILL.md'
+    ] = '# Ontology\n\nUse scripts/ontology.py';
     getMockFileSystemStore()[
       'file:///mock/documents/.managed-skills/ontology-skill-ontology/scripts/ontology.py'
     ] = 'print("ok")\n';
@@ -104,8 +107,9 @@ describe('getSkillSystemPrompts', () => {
     const iconBytes = new Uint8Array([1, 2, 3, 4]);
     getMockFileSystemStore()['file:///mock/documents/.managed-skills/image-skill-image/SKILL.md'] =
       '# Image Skill\n';
-    getMockFileSystemStore()['file:///mock/documents/.managed-skills/image-skill-image/assets/icon.png'] =
-      iconBytes;
+    getMockFileSystemStore()[
+      'file:///mock/documents/.managed-skills/image-skill-image/assets/icon.png'
+    ] = iconBytes;
 
     useSkillsStore.getState().addEntry(
       makeEntry({

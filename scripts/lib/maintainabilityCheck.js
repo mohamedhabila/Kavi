@@ -58,7 +58,9 @@ function isPassThroughBarrel(filePath, content) {
     true,
     filePath.endsWith('.tsx') || filePath.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
-  const statements = sourceFile.statements.filter((statement) => !ts.isImportDeclaration(statement));
+  const statements = sourceFile.statements.filter(
+    (statement) => !ts.isImportDeclaration(statement),
+  );
 
   if (statements.length === 0) {
     return false;
@@ -104,15 +106,11 @@ function findMaintainabilityFailures(entries, options = {}) {
 }
 
 function listGitVisibleFiles(projectRoot) {
-  const output = execFileSync(
-    'git',
-    ['ls-files', '--cached', '--others', '--exclude-standard'],
-    {
-      cwd: projectRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
+  const output = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   return output
     .split('\n')
     .map((filePath) => filePath.trim())
@@ -142,7 +140,9 @@ function runMaintainabilityCli(projectRoot = path.resolve(__dirname, '../..')) {
     return;
   }
 
-  console.log('[check-maintainability] Contribution-scale file limits and no-barrel guardrails passed.');
+  console.log(
+    '[check-maintainability] Contribution-scale file limits and no-barrel guardrails passed.',
+  );
 }
 
 module.exports = {

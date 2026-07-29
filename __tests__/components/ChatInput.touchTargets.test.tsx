@@ -73,7 +73,9 @@ describe('ChatInput touch targets', () => {
 
     const attachButtonStyle = StyleSheet.flatten(getByLabelText('Attach file').props.style);
     const voiceButtonStyle = StyleSheet.flatten(getByTestId('chat-voice-button').props.style);
-    const inputOptionsStyle = StyleSheet.flatten(getByTestId('chat-open-input-options').props.style);
+    const inputOptionsStyle = StyleSheet.flatten(
+      getByTestId('chat-open-input-options').props.style,
+    );
     const sendButtonStyle = StyleSheet.flatten(getByLabelText('Send message').props.style);
 
     expect(attachButtonStyle).toEqual(expect.objectContaining({ minWidth: 44, minHeight: 44 }));

@@ -72,8 +72,7 @@ function stripUnpairedAnthropicThinkingBlocks(blocks: any[]): any[] {
 
   return blocks.filter(
     (block) =>
-      !isPlainRecord(block) ||
-      (block.type !== 'thinking' && block.type !== 'redacted_thinking'),
+      !isPlainRecord(block) || (block.type !== 'thinking' && block.type !== 'redacted_thinking'),
   );
 }
 

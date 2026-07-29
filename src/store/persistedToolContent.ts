@@ -50,11 +50,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function compactJsonValue(
-  value: unknown,
-  profile: CompactionProfile,
-  depth = 0,
-): JsonValue {
+function compactJsonValue(value: unknown, profile: CompactionProfile, depth = 0): JsonValue {
   if (value === null) {
     return null;
   }
@@ -72,7 +68,9 @@ function compactJsonValue(
 
   if (Array.isArray(value)) {
     const maxItems = depth === 0 ? profile.maxArrayItemsRoot : profile.maxArrayItemsNested;
-    const items = value.slice(0, maxItems).map((entry) => compactJsonValue(entry, profile, depth + 1));
+    const items = value
+      .slice(0, maxItems)
+      .map((entry) => compactJsonValue(entry, profile, depth + 1));
     if (value.length <= maxItems) {
       return items;
     }
@@ -85,8 +83,7 @@ function compactJsonValue(
   }
 
   if (isRecord(value)) {
-    const maxEntries =
-      depth === 0 ? profile.maxObjectEntriesRoot : profile.maxObjectEntriesNested;
+    const maxEntries = depth === 0 ? profile.maxObjectEntriesRoot : profile.maxObjectEntriesNested;
     const entries = Object.entries(value);
     const compactedEntries = entries
       .slice(0, maxEntries)

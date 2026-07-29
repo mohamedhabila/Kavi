@@ -136,9 +136,7 @@ export function createAgentRunStoreActions(
               : conversation;
           },
         );
-        return outcomeRef.current.status === 'applied' && conversations
-          ? { conversations }
-          : state;
+        return outcomeRef.current.status === 'applied' && conversations ? { conversations } : state;
       });
       const outcome = outcomeRef.current;
       if (outcome.status === 'applied') {

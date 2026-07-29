@@ -1,8 +1,5 @@
 import type { Message } from '../../types/message';
-import type {
-  RequestContinuation,
-  RequestFrame,
-} from '../../services/agents/requestFrame';
+import type { RequestContinuation, RequestFrame } from '../../services/agents/requestFrame';
 import { filterModelVisibleAttachments } from '../../utils/messageAttachments';
 import { getUserMessagePromptContent } from '../prompts/orchestratorPromptSections';
 import { selectAgentControlGraphModelContextMessages } from './modelContext';

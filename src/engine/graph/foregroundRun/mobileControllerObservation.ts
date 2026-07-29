@@ -13,12 +13,8 @@ export function appendEphemeralMobileControllerObservation(params: {
   createId: () => string;
   timestamp: number;
 }): Message[] {
-  const observation = qualifyMobileControllerObservationRef(
-    params.controller?.currentObservation,
-  );
-  const image = qualifyMobileControllerObservationImage(
-    params.controller?.currentObservationImage,
-  );
+  const observation = qualifyMobileControllerObservationRef(params.controller?.currentObservation);
+  const image = qualifyMobileControllerObservationImage(params.controller?.currentObservationImage);
   if (!observation || !image) return params.messages;
   const recoverySignal = resolveMobileControllerRecoverySignal(params.recoveryState);
   return [

@@ -71,20 +71,19 @@ export function buildForegroundRunBootstrapSelection(params: {
   const explicitlyReusedAgentRunId = normalizeId(params.reuseAgentRunId);
   const latestUserMessage = findLatestUserMessage(params.conversation);
   const awaitingUserRun =
-    !explicitlyReusedAgentRunId &&
-    params.clarificationReplyAdmission?.disposition !== 'new_request'
-    ? params.conversation?.agentRuns?.find(
-        (run) =>
-          (!params.clarificationReplyAdmission ||
-            run.id === params.clarificationReplyAdmission.runId) &&
-          run.id === params.conversation?.activeAgentRunId &&
-          run.status === 'running' &&
-          run.controlGraph?.status === 'awaiting_user' &&
-          run.controlGraph.pendingUserInput !== undefined &&
-          latestUserMessage !== undefined &&
-          latestUserMessage?.id !== run.controlGraph.pendingUserInput.requestedAfterUserMessageId,
-      )
-    : undefined;
+    !explicitlyReusedAgentRunId && params.clarificationReplyAdmission?.disposition !== 'new_request'
+      ? params.conversation?.agentRuns?.find(
+          (run) =>
+            (!params.clarificationReplyAdmission ||
+              run.id === params.clarificationReplyAdmission.runId) &&
+            run.id === params.conversation?.activeAgentRunId &&
+            run.status === 'running' &&
+            run.controlGraph?.status === 'awaiting_user' &&
+            run.controlGraph.pendingUserInput !== undefined &&
+            latestUserMessage !== undefined &&
+            latestUserMessage?.id !== run.controlGraph.pendingUserInput.requestedAfterUserMessageId,
+        )
+      : undefined;
   const normalizedReuseAgentRunId = explicitlyReusedAgentRunId ?? awaitingUserRun?.id;
   const shouldTrackAgentRun = shouldTrackForegroundAgentRun({
     conversationMode: params.conversation?.mode,

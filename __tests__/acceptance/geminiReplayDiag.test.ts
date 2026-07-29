@@ -11,7 +11,10 @@ import {
   buildGeminiRequestBody,
   resolveGeminiStructuredOutputSyntax,
 } from '../../src/services/llm/providers/gemini/request';
-import { supportsGeminiStructuredOutputWithTools, supportsTemperature } from '../../src/services/llm/catalog/providerCapabilities';
+import {
+  supportsGeminiStructuredOutputWithTools,
+  supportsTemperature,
+} from '../../src/services/llm/catalog/providerCapabilities';
 import { reorderToolsForPromptCaching } from '../../src/services/llm/core/toolCaching';
 
 const describeDiag = shouldRunE2EProviderDiagnostics('gemini') ? describe : describe.skip;
@@ -86,7 +89,10 @@ describeDiag('Gemini replay diag', () => {
     const turn1Sig =
       (turn1.pending[0]?.raw as any)?.thoughtSignature ||
       turn1.providerReplay?.geminiParts?.find((part) => part.functionCall)?.thoughtSignature;
-    console.log('turn1 tools', turn1.pending.map((call) => call.name));
+    console.log(
+      'turn1 tools',
+      turn1.pending.map((call) => call.name),
+    );
     console.log('turn1 sig', Boolean(turn1Sig));
 
     const assistant = {
@@ -121,13 +127,16 @@ describeDiag('Gemini replay diag', () => {
     const turn2Sig =
       (turn2.pending[0]?.raw as any)?.thoughtSignature ||
       turn2.providerReplay?.geminiParts?.find((part) => part.functionCall)?.thoughtSignature;
-    console.log('turn2 tools', turn2.pending.map((call) => call.name));
+    console.log(
+      'turn2 tools',
+      turn2.pending.map((call) => call.name),
+    );
     console.log('turn2 sig', Boolean(turn2Sig));
 
     const replayBody = buildGeminiRequestBody({
       baseUrl: provider.baseUrl,
       model: provider.model,
-      messages: [{ role: 'user', content: userPrompt }, assistant as any, ...toolMessages as any],
+      messages: [{ role: 'user', content: userPrompt }, assistant as any, ...(toolMessages as any)],
       options: {
         model: provider.model,
         maxTokens: 4096,
@@ -147,7 +156,7 @@ describeDiag('Gemini replay diag', () => {
     const nativeConversation = buildGeminiConversation(provider.model, [
       { role: 'user', content: userPrompt },
       assistant as any,
-      ...toolMessages as any,
+      ...(toolMessages as any),
     ]);
     console.log(
       'native replay model parts',

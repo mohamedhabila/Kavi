@@ -7,9 +7,9 @@ import {
 describe('Android durable recovery headless task', () => {
   it('decodes only the exact native payload contract', () => {
     expect(decodeAndroidDurableHeadlessPayload(payload())).toEqual(payload());
-    expect(() =>
-      decodeAndroidDurableHeadlessPayload({ ...payload(), unexpected: true }),
-    ).toThrow('android-durable-headless-payload-invalid');
+    expect(() => decodeAndroidDurableHeadlessPayload({ ...payload(), unexpected: true })).toThrow(
+      'android-durable-headless-payload-invalid',
+    );
     expect(() => decodeAndroidDurableHeadlessPayload({ ...payload(), attempt: 0 })).toThrow(
       'android-durable-headless-payload-invalid',
     );
@@ -28,11 +28,7 @@ describe('Android durable recovery headless task', () => {
         snapshotDigest: 'a'.repeat(64),
       },
     });
-    expect(dependencies.complete).toHaveBeenCalledWith(
-      attemptPointer(),
-      'd'.repeat(64),
-      200,
-    );
+    expect(dependencies.complete).toHaveBeenCalledWith(attemptPointer(), 'd'.repeat(64), 200);
     expect(dependencies.retry).not.toHaveBeenCalled();
   });
 
@@ -44,11 +40,7 @@ describe('Android durable recovery headless task', () => {
       retryAt: 60_000,
     });
     await runAndroidDurableRecoveryHeadlessTask(payload(), remoteRetry);
-    expect(remoteRetry.complete).toHaveBeenCalledWith(
-      attemptPointer(),
-      'd'.repeat(64),
-      200,
-    );
+    expect(remoteRetry.complete).toHaveBeenCalledWith(attemptPointer(), 'd'.repeat(64), 200);
     expect(remoteRetry.retry).not.toHaveBeenCalled();
   });
 
@@ -129,11 +121,7 @@ describe('Android durable recovery headless task', () => {
     await runAndroidDurableRecoveryHeadlessTask(payload(), dependencies);
     expect(dependencies.complete).not.toHaveBeenCalled();
     expect(dependencies.retry).not.toHaveBeenCalled();
-    expect(dependencies.block).toHaveBeenCalledWith(
-      attemptPointer(),
-      'generation_changed',
-      200,
-    );
+    expect(dependencies.block).toHaveBeenCalledWith(attemptPointer(), 'generation_changed', 200);
   });
 
   it('registers the Android headless entrypoint under the exact native key', () => {
@@ -146,14 +134,13 @@ describe('Android durable recovery headless task', () => {
       registerAndroidDurableRecoveryHeadlessTask();
     });
 
-    expect(registerHeadlessTask).toHaveBeenCalledWith(
-      'KaviDurableRecovery',
-      expect.any(Function),
-    );
+    expect(registerHeadlessTask).toHaveBeenCalledWith('KaviDurableRecovery', expect.any(Function));
     jest.unmock('react-native');
   });
 
-  function dependencyHarness(outcome: ReturnType<typeof completedOutcome> | Record<string, unknown>) {
+  function dependencyHarness(
+    outcome: ReturnType<typeof completedOutcome> | Record<string, unknown>,
+  ) {
     const read = jest.fn().mockResolvedValue({
       schema: 1 as const,
       status: 'found' as const,

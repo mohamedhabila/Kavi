@@ -2,10 +2,7 @@ import type { AgentRunWorkstream } from '../../../types/agentRun';
 import type { SubAgentSnapshot, SubAgentStatus } from '../../../types/subAgent';
 import { outputSatisfiesExpectedText } from '../../../utils/outputContract';
 import { resolveWorkflowWorkstreamReference } from '../workflowSchedulingReferences';
-import type {
-  WorkflowExecutionState,
-  WorkflowExecutionStatus,
-} from '../workflowSchedulingTypes';
+import type { WorkflowExecutionState, WorkflowExecutionStatus } from '../workflowSchedulingTypes';
 
 function summarizeExecutionStatus(
   snapshotStatus: SubAgentStatus,

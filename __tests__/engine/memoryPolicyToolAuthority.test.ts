@@ -2,10 +2,7 @@ import { filterToolsForMemoryPolicy } from '../../src/engine/tools/memoryPolicyT
 import { BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS } from '../../src/engine/tools/builtin-definitions-memory';
 import type { ToolDefinition } from '../../src/types/tool';
 
-function tool(
-  name: string,
-  contract: NonNullable<ToolDefinition['contract']>,
-): ToolDefinition {
+function tool(name: string, contract: NonNullable<ToolDefinition['contract']>): ToolDefinition {
   return {
     name,
     description: name,
@@ -16,9 +13,9 @@ function tool(
 
 describe('memory-policy tool authority', () => {
   it('preserves the complete tool inventory while long-term memory is enabled', () => {
-    expect(
-      filterToolsForMemoryPolicy(BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS, true),
-    ).toEqual(BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS);
+    expect(filterToolsForMemoryPolicy(BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS, true)).toEqual(
+      BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS,
+    );
   });
 
   it('removes non-erasure memory capabilities while preserving unrelated tools', () => {

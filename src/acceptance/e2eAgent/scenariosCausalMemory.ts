@@ -43,22 +43,14 @@ const CAUSAL_RUBRICS: ReadonlyArray<E2ERubric> = [
   {
     kind: 'turn_memory_selection',
     turnIndex: 2,
-    requiredWrites: [
-      { turnIndex: 1, subject: 'user', value: '45 minutes', status: 'created' },
-    ],
-    supersededWrites: [
-      { turnIndex: 0, subject: 'user', value: '30 minutes', status: 'created' },
-    ],
+    requiredWrites: [{ turnIndex: 1, subject: 'user', value: '45 minutes', status: 'created' }],
+    supersededWrites: [{ turnIndex: 0, subject: 'user', value: '30 minutes', status: 'created' }],
   },
   {
     kind: 'turn_memory_selection',
     turnIndex: 3,
-    requiredWrites: [
-      { turnIndex: 1, subject: 'user', value: '45 minutes', status: 'created' },
-    ],
-    supersededWrites: [
-      { turnIndex: 0, subject: 'user', value: '30 minutes', status: 'created' },
-    ],
+    requiredWrites: [{ turnIndex: 1, subject: 'user', value: '45 minutes', status: 'created' }],
+    supersededWrites: [{ turnIndex: 0, subject: 'user', value: '30 minutes', status: 'created' }],
   },
   {
     kind: 'turn_memory_answer',

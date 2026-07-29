@@ -41,7 +41,10 @@ function resolveE2EPricing(env = process.env) {
     throw new Error(`Invalid evaluation pricing snapshot date: ${PRICING_ENV.snapshotDate}`);
   }
   const parsedDate = new Date(`${snapshotDate}T00:00:00.000Z`);
-  if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== snapshotDate) {
+  if (
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.toISOString().slice(0, 10) !== snapshotDate
+  ) {
     throw new Error(`Invalid evaluation pricing snapshot date: ${PRICING_ENV.snapshotDate}`);
   }
   if (!sourceSha256 || !SHA256_PATTERN.test(sourceSha256)) {

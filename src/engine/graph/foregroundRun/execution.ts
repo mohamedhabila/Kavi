@@ -21,9 +21,7 @@ import type { ForegroundModelExecutionLease } from '../../../services/executionJ
 import type { ModelProjectionOwner } from '../../../types/conversation';
 import { modelProjectionOwnersEqual } from '../../../utils/modelProjectionOwner';
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
-import {
-  terminalizeAndReleaseForegroundProjectionReservation,
-} from './projectionReservation';
+import { terminalizeAndReleaseForegroundProjectionReservation } from './projectionReservation';
 import {
   commitPendingVerifiedProcedureObservation,
   type PendingVerifiedProcedureObservation,
@@ -345,16 +343,16 @@ async function executeReservedForegroundConversationRun(
     internalUserMessageCount,
     modelMessages: orchestratorMessages,
   } = buildForegroundOrchestratorMessages({
-      persistedMessages: persistedProjectionMessages,
-      ...(bootstrap.shouldInsertPlaceholderAssistant
-        ? { excludedAssistantMessageId: bootstrap.assistantMessageId }
-        : {}),
-      additionalInternalPrompt: options?.additionalUserPrompt,
-      mobileController: options?.mobileController,
-      ...(mobileControllerRecoveryState ? { mobileControllerRecoveryState } : {}),
-      createId: context.helpers.createId,
-      timestamp: Date.now(),
-    });
+    persistedMessages: persistedProjectionMessages,
+    ...(bootstrap.shouldInsertPlaceholderAssistant
+      ? { excludedAssistantMessageId: bootstrap.assistantMessageId }
+      : {}),
+    additionalInternalPrompt: options?.additionalUserPrompt,
+    mobileController: options?.mobileController,
+    ...(mobileControllerRecoveryState ? { mobileControllerRecoveryState } : {}),
+    createId: context.helpers.createId,
+    timestamp: Date.now(),
+  });
   const allowedToolNames = options?.allowedToolNames
     ? new Set(options.allowedToolNames)
     : undefined;

@@ -243,13 +243,14 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   }
   activeProvider = bindProviderToModel(await hydrateProviderApiKey(activeProvider), activeModel);
 
-  const mobileControllerAdmission = params.mobileController && params.agentRunId?.trim()
-    ? admitMobileControllerRuntime({
-        port: params.mobileController,
-        provider: activeProvider,
-        model: activeModel,
-      })
-    : null;
+  const mobileControllerAdmission =
+    params.mobileController && params.agentRunId?.trim()
+      ? admitMobileControllerRuntime({
+          port: params.mobileController,
+          provider: activeProvider,
+          model: activeModel,
+        })
+      : null;
   if (params.mobileController && !params.agentRunId?.trim()) {
     params.logger.devWarn('Mobile controller unavailable without an active agent run.');
   }

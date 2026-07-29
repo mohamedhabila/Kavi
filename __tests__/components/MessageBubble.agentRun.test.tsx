@@ -1,6 +1,11 @@
 import { render, fireEvent } from '@testing-library/react-native';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
-import { MessageBubble, installMessageBubbleTestHarness, makeAgentRun, makeMessage } from '../helpers/messageBubbleHarness';
+import {
+  MessageBubble,
+  installMessageBubbleTestHarness,
+  makeAgentRun,
+  makeMessage,
+} from '../helpers/messageBubbleHarness';
 
 describe('MessageBubble agent run widgets', () => {
   installMessageBubbleTestHarness();

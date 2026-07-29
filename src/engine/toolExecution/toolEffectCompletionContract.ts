@@ -45,10 +45,7 @@ function parseArguments(argumentsText: string): Record<string, unknown> | null {
   }
 }
 
-function readPath(
-  root: Record<string, unknown>,
-  path: readonly string[],
-): unknown {
+function readPath(root: Record<string, unknown>, path: readonly string[]): unknown {
   let current: unknown = root;
   for (const segment of path) {
     if (!isPlainRecord(current) || !Object.prototype.hasOwnProperty.call(current, segment)) {
@@ -93,8 +90,7 @@ function completionContractCanVerifyEffect(
   contract: NonNullable<ReturnType<typeof getCodeOwnedToolEffectContract>>,
 ): boolean {
   return Object.values(contract.result?.outcomes ?? {}).some(
-    (outcome) =>
-      outcome.effectState === 'applied' && outcome.verificationState === 'verified',
+    (outcome) => outcome.effectState === 'applied' && outcome.verificationState === 'verified',
   );
 }
 
@@ -136,10 +132,7 @@ export async function resolveToolEffectCompletionRequirement(params: {
   }
 
   const contract = getCodeOwnedToolEffectContract(toolName);
-  if (
-    policy.effects.includes('unknown') ||
-    !contract
-  ) {
+  if (policy.effects.includes('unknown') || !contract) {
     return { kind: 'unsupported', toolName, code: 'effect_contract_unavailable' };
   }
   if (contract.completionMode === 'operational') {
@@ -188,9 +181,7 @@ export function findGoalForEffectCompletionRequirement(
       isBlockingGoal(goal) &&
       (goal.successCriteria ?? []).some((value) => {
         const criterion = parseEffectCompletionCriterion(value);
-        return criterion
-          ? effectCompletionCriteriaEqual(criterion, requirement.criterion)
-          : false;
+        return criterion ? effectCompletionCriteriaEqual(criterion, requirement.criterion) : false;
       }),
   );
 }

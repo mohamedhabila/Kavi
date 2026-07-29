@@ -67,11 +67,7 @@ function buildCompactJsonArrayEvidenceString(toolName: string, content: string):
 }
 
 function isScalarEvidenceValue(value: unknown): value is string | number | boolean {
-  return (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  );
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }
 
 function normalizeScalarEvidenceValue(value: string | number | boolean): string | number | boolean {
@@ -165,7 +161,11 @@ function collectScalarPathEvidenceStrings(
   }
 
   if (Array.isArray(value)) {
-    const lengthEvidence = buildScalarPathEvidenceString(toolName, [...path, 'length'], value.length);
+    const lengthEvidence = buildScalarPathEvidenceString(
+      toolName,
+      [...path, 'length'],
+      value.length,
+    );
     if (lengthEvidence) {
       output.push(lengthEvidence);
     }

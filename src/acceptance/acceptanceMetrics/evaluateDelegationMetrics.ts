@@ -2,7 +2,11 @@
 // Kavi — Delegation acceptance metrics
 // ---------------------------------------------------------------------------
 
-import { aggregateAcceptanceMetrics, buildPassRateSummary, isSummaryPassing } from './aggregateResults';
+import {
+  aggregateAcceptanceMetrics,
+  buildPassRateSummary,
+  isSummaryPassing,
+} from './aggregateResults';
 import { evaluateDelegationEvidenceFixture } from './evaluateDelegationEvidenceFixture';
 import { evaluateDelegationSpawnFixture } from './evaluateDelegationSpawnFixture';
 import { DELEGATION_EVIDENCE_FIXTURES } from './delegationEvidenceFixtures';

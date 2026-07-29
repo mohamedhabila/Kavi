@@ -8,12 +8,13 @@ import type { AcceptanceFixtureOutcome } from './types';
 
 function hasLiveGoal(fixture: AgentBootstrapFixture, turn: 'turn1Goals' | 'turn2Goals'): boolean {
   return fixture[turn].some(
-    (goal) =>
-      goal.status === 'active' || goal.status === 'pending' || goal.status === 'blocked',
+    (goal) => goal.status === 'active' || goal.status === 'pending' || goal.status === 'blocked',
   );
 }
 
-export function evaluateAgentBootstrapFixture(fixture: AgentBootstrapFixture): AcceptanceFixtureOutcome {
+export function evaluateAgentBootstrapFixture(
+  fixture: AgentBootstrapFixture,
+): AcceptanceFixtureOutcome {
   const turn1Bootstrap = resolveGoalBootstrapState(fixture.turn1Goals);
   const turn2Bootstrap = resolveGoalBootstrapState(fixture.turn2Goals);
   const bootstrappedByTurn2 = hasLiveGoal(fixture, 'turn2Goals');
@@ -41,9 +42,7 @@ export function evaluateAgentBootstrapFixture(fixture: AgentBootstrapFixture): A
     return {
       fixtureId: fixture.id,
       passed: false,
-      detail: hasLiveGoal(fixture, 'turn1Goals')
-        ? 'no live goals at turn 2'
-        : 'no goals at turn 2',
+      detail: hasLiveGoal(fixture, 'turn1Goals') ? 'no live goals at turn 2' : 'no goals at turn 2',
     };
   }
 

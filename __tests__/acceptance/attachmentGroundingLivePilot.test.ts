@@ -61,7 +61,8 @@ describeLivePilot('attachment grounding — exact foreground chat', () => {
       provider,
       conversationId: `attachment-grounding-${Date.now()}`,
       conversationTitle: 'Attachment grounding',
-      systemPrompt: 'You are a careful general mobile assistant. Ground answers in current evidence.',
+      systemPrompt:
+        'You are a careful general mobile assistant. Ground answers in current evidence.',
       defaultMode: 'chitchat',
       scenarioTimeoutMs: 4 * 60 * 1_000,
       disableLongTermMemory: true,

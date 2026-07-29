@@ -167,15 +167,12 @@ export async function runPilotProcess(params: {
 
   return await new Promise<MobileWorldPilotProcessResult>((resolve, reject) => {
     let settled = false;
-    const timeout = setTimeout(
-      () => {
-        if (settled) return;
-        settled = true;
-        child.kill('SIGTERM');
-        reject(new Error('MobileWorld pilot exceeded its 20 minute deadline.'));
-      },
-      PILOT_PROCESS_TIMEOUT_MS,
-    );
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGTERM');
+      reject(new Error('MobileWorld pilot exceeded its 20 minute deadline.'));
+    }, PILOT_PROCESS_TIMEOUT_MS);
     child.once('error', (error) => {
       if (settled) return;
       settled = true;

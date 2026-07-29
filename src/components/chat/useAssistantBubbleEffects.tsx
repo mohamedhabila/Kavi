@@ -103,11 +103,7 @@ export function useAssistantBubbleEffects(params: UseAssistantBubbleEffectsParam
               styles.effectBalloon,
               {
                 backgroundColor:
-                  index === 0
-                    ? colors.primary
-                    : index === 1
-                      ? colors.link
-                      : colors.textSecondary,
+                  index === 0 ? colors.primary : index === 1 ? colors.link : colors.textSecondary,
                 right: 12 + index * 24,
                 transform: [{ translateY }],
                 opacity: effectProgress.interpolate({

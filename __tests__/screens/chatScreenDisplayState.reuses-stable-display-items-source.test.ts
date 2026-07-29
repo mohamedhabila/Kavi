@@ -1,4 +1,11 @@
-import { buildStreamingDraftSignature, createChatDisplayStateCache, getStableDisplayMessages, getVisibleSourceMessageWindow, normalizeStreamingDraft, resolveDisplayMessages } from '../../src/screens/chatScreenDisplayState';
+import {
+  buildStreamingDraftSignature,
+  createChatDisplayStateCache,
+  getStableDisplayMessages,
+  getVisibleSourceMessageWindow,
+  normalizeStreamingDraft,
+  resolveDisplayMessages,
+} from '../../src/screens/chatScreenDisplayState';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Message } from '../../src/types/message';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';

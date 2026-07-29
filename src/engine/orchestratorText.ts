@@ -9,10 +9,7 @@ function findAssistantContinuationOverlap(existingText: string, incomingText: st
   return 0;
 }
 
-export function mergeAssistantContinuationText(
-  existingText: string,
-  incomingText: string,
-): string {
+export function mergeAssistantContinuationText(existingText: string, incomingText: string): string {
   if (!existingText) {
     return incomingText;
   }

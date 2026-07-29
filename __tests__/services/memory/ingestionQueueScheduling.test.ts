@@ -332,10 +332,7 @@ describe('ingestion queue scheduling and job context', () => {
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
       markFirstAttemptStarted?.();
       await firstAttemptHeld;
-      return commitMockedIngestionTurnReceipts(
-        input,
-        processResult({ status: 'not_requested' }),
-      );
+      return commitMockedIngestionTurnReceipts(input, processResult({ status: 'not_requested' }));
     });
     const firstJob = enqueueIngestionJob({
       personaId: 'default',

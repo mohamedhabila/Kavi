@@ -142,9 +142,9 @@ describe('source retirement child commitments', () => {
       sources: [source()],
     });
 
-    expect(
-      new Set([requested.sha256, closed.sha256, contribution.sha256, fact.sha256]).size,
-    ).toBe(4);
+    expect(new Set([requested.sha256, closed.sha256, contribution.sha256, fact.sha256]).size).toBe(
+      4,
+    );
     expect(otherGroup.sha256).not.toBe(requested.sha256);
     expect(() => assertSourceRetirementChildCommitment(requested, closed)).toThrow(
       'memory_source_retirement_child_commitment_mismatch',

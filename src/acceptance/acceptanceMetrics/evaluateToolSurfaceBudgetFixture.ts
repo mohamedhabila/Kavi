@@ -2,7 +2,10 @@
 // Kavi — Tool surface budget fixture evaluator
 // ---------------------------------------------------------------------------
 
-import { computeContextBudget, MAX_TOOL_DEFINITION_TOKENS } from '../../services/context/budgetManager';
+import {
+  computeContextBudget,
+  MAX_TOOL_DEFINITION_TOKENS,
+} from '../../services/context/budgetManager';
 import { ALL_BUILTIN_TOOL_DEFINITIONS } from '../../engine/tools/builtin-definitions';
 import {
   resolveGoalCapabilityToolNames,

@@ -477,12 +477,14 @@ describe('mobile controller outcome settlement', () => {
     const parked = persistClaimedMobileControllerHandoff(await prepareClaimedHandoff());
     const database = getExecutionJournalDb();
     const runSync = database.runSync.bind(database);
-    const handleUpdateFault = jest.spyOn(database, 'runSync').mockImplementation((sql, ...params) => {
-      if (sql.includes('UPDATE execution_external_handles')) {
-        throw new Error('test_mobile_outcome_handle_failure');
-      }
-      return runSync(sql, ...params);
-    });
+    const handleUpdateFault = jest
+      .spyOn(database, 'runSync')
+      .mockImplementation((sql, ...params) => {
+        if (sql.includes('UPDATE execution_external_handles')) {
+          throw new Error('test_mobile_outcome_handle_failure');
+        }
+        return runSync(sql, ...params);
+      });
 
     try {
       await expect(

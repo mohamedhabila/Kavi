@@ -99,8 +99,7 @@ describe('configDrafts helpers', () => {
 
     expect(updateMcpServerEndpoint(trusted, 'url', trusted.url).trustToolAnnotations).toBe(true);
     expect(
-      updateMcpServerEndpoint(trusted, 'url', 'https://other.example.com/mcp')
-        .trustToolAnnotations,
+      updateMcpServerEndpoint(trusted, 'url', 'https://other.example.com/mcp').trustToolAnnotations,
     ).toBe(false);
     expect(
       updateMcpServerEndpoint(trusted, 'sseUrl', 'https://other.example.com/sse')

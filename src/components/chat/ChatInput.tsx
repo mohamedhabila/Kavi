@@ -3,14 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Send, Square, Paperclip, X, Mic, MoreHorizontal } from 'lucide-react-native';
 import { Attachment } from '../../types/attachment';
 import { useAppTheme } from '../../theme/useAppTheme';
@@ -23,10 +16,7 @@ import { createChatInputStyles } from './ChatInput.styles';
 import { ChatInputCommandSuggestions } from './ChatInputCommandSuggestions';
 import { ChatInputVoiceOverlayLayer } from './ChatInputVoiceOverlayLayer';
 import { useChatInputAttachments } from './useChatInputAttachments';
-import {
-  ChatInputExactTextIndicator,
-  ChatInputOptionsSheet,
-} from './ChatInputOptionsSheet';
+import { ChatInputExactTextIndicator, ChatInputOptionsSheet } from './ChatInputOptionsSheet';
 
 interface ChatInputProps {
   onSend: (text: string, attachments?: Attachment[]) => void | Promise<void>;

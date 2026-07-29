@@ -246,11 +246,7 @@ describe('completionGate', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
       goals: [],
-      selectedToolNames: new Set([
-        'request_clarification',
-        'tool_catalog',
-        'calendar_events',
-      ]),
+      selectedToolNames: new Set(['request_clarification', 'tool_catalog', 'calendar_events']),
       toolCallHistory: [],
       requiresAgenticProgressValidation: true,
       fullContent:

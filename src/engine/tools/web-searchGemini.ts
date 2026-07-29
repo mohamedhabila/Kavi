@@ -47,9 +47,7 @@ export async function searchGemini(params: {
   if (!response.ok) {
     const bodyText = await response.text().catch(() => '');
     const detail = describeGeminiErrorBody(bodyText);
-    throw new Error(
-      `Gemini search failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
-    );
+    throw new Error(`Gemini search failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
   }
 
   const data = await response.json();

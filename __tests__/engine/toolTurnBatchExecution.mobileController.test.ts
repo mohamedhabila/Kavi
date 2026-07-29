@@ -148,9 +148,9 @@ describe('mobile controller tool batch execution', () => {
 
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(2);
     expect(outcomes).toHaveLength(2);
-    expect(outcomes.every((outcome) => 'toolMessage' in outcome && outcome.toolMessage.isError)).toBe(
-      true,
-    );
+    expect(
+      outcomes.every((outcome) => 'toolMessage' in outcome && outcome.toolMessage.isError),
+    ).toBe(true);
   });
 
   it('blocks an unanchored raw action before the tool lifecycle can claim it', async () => {

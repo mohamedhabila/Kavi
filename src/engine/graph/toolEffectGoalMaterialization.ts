@@ -9,10 +9,7 @@ import {
   type EffectCompletionCriterion,
 } from '../goals/effectCompletionEvidence';
 import { applyGoalMutation } from '../goals/graphState';
-import {
-  CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
-  isBlockingGoal,
-} from '../goals/types';
+import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER, isBlockingGoal } from '../goals/types';
 import {
   findGoalForEffectCompletionRequirement,
   resolveToolEffectCompletionRequirement,

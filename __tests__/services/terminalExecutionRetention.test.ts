@@ -11,9 +11,7 @@ import {
   createExecutionRun,
   transitionExecutionRun,
 } from '../../src/services/executionJournal/mutations';
-import {
-  maintainTerminalExecutionRetention,
-} from '../../src/services/executionJournal/terminalExecutionRetention';
+import { maintainTerminalExecutionRetention } from '../../src/services/executionJournal/terminalExecutionRetention';
 import {
   executionCheckpointRecord,
   executionRunRecord,

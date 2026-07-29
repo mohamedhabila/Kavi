@@ -1,5 +1,12 @@
 import { render, fireEvent } from '@testing-library/react-native';
-import { MessageBubble, getMarkdownCalls, installMessageBubbleTestHarness, joinMarkdownCalls, makeAgentRun, makeMessage } from '../helpers/messageBubbleHarness';
+import {
+  MessageBubble,
+  getMarkdownCalls,
+  installMessageBubbleTestHarness,
+  joinMarkdownCalls,
+  makeAgentRun,
+  makeMessage,
+} from '../helpers/messageBubbleHarness';
 
 describe('MessageBubble long content stability', () => {
   installMessageBubbleTestHarness();

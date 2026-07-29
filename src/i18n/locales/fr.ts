@@ -674,7 +674,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
       },
     },
     home: {
-      intro: 'Recherchez un réglage ou choisissez une catégorie. Les options avancées restent discrètes jusqu’à leur utilisation.',
+      intro:
+        'Recherchez un réglage ou choisissez une catégorie. Les options avancées restent discrètes jusqu’à leur utilisation.',
       searchLabel: 'Rechercher dans les réglages',
       searchPlaceholder: 'Rechercher dans les réglages',
       clearSearch: 'Effacer la recherche de réglages',
@@ -693,7 +694,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
       noResultsHint: 'Essayez un terme plus général ou effacez la recherche.',
     },
     notificationsVoice: {
-      voiceHint: 'Démarrez une conversation vocale et vérifiez le microphone ou la configuration vocale.',
+      voiceHint:
+        'Démarrez une conversation vocale et vérifiez le microphone ou la configuration vocale.',
       automationHint: 'Gérez les rappels, automatisations et leurs notifications.',
     },
     defaultConversationMode: 'Default Conversation Mode',
@@ -1318,7 +1320,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
       'Le shell local est disponible uniquement sur Android. Sur iOS, utilisez JavaScript ou un serveur SSH.',
     termuxBridgeUnavailable:
       'Cette version n’inclut pas le shell local Android. Utilisez JavaScript ou SSH.',
-    termuxInstallRequired: 'Installez Termux pour exécuter des commandes shell locales sur Android.',
+    termuxInstallRequired:
+      'Installez Termux pour exécuter des commandes shell locales sur Android.',
     termuxServiceUnavailable:
       'Termux est installé, mais son service de commandes est indisponible. Ouvrez Termux, vérifiez le réglage des commandes externes et réessayez.',
     detectShellRuntimeFailed:

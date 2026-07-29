@@ -661,7 +661,8 @@ export const en: TranslationMap = {
       },
     },
     home: {
-      intro: 'Find a setting or choose a category. Advanced options stay out of the way until you need them.',
+      intro:
+        'Find a setting or choose a category. Advanced options stay out of the way until you need them.',
       searchLabel: 'Search settings',
       searchPlaceholder: 'Search settings',
       clearSearch: 'Clear settings search',
@@ -2070,8 +2071,7 @@ export const en: TranslationMap = {
     startEditingMessage:
       'Start a temporary scratch in this editor, or connect a workspace or SSH server to browse and save files.',
     startScratch: 'Start temporary scratch',
-    scratchModeMessage:
-      'Temporary scratch: changes remain only until you leave this editor.',
+    scratchModeMessage: 'Temporary scratch: changes remain only until you leave this editor.',
     fileBrowserTitle: 'Files',
     loadingFile: 'Opening file...',
     targetRequired: 'Select a target before saving.',

@@ -99,8 +99,5 @@ export function buildAgentControlGraphPostToolFinalTextDirectiveEvent(params: {
 export function hasAgentControlGraphOneShotTurnDirectives(
   directives: AgentControlTurnDirectives,
 ): boolean {
-  return (
-    directives.forceFinalText ||
-    directives.maxTokensOverride !== undefined
-  );
+  return directives.forceFinalText || directives.maxTokensOverride !== undefined;
 }

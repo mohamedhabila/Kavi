@@ -60,10 +60,7 @@ export function buildApprovalPresentation(request: RemoteApprovalRequest): Appro
   const riskLevel = RISK_LEVELS.has(request.riskLevel as ApprovalRiskLevel)
     ? (request.riskLevel as ApprovalRiskLevel)
     : 'low';
-  const target = safeSingleLine(
-    request.targetId ?? request.grantCandidate?.targetId,
-    160,
-  );
+  const target = safeSingleLine(request.targetId ?? request.grantCandidate?.targetId, 160);
 
   return {
     action: safeSingleLine(request.title, 120),

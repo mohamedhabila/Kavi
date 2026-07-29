@@ -250,9 +250,7 @@ describe('grounded passive memory corrections', () => {
 
     expect(result.providerFactIds).toEqual([]);
     expect(
-      listFacts({ includeInvalidated: true }).filter(
-        (fact) => fact.memoryKind === 'semantic_fact',
-      ),
+      listFacts({ includeInvalidated: true }).filter((fact) => fact.memoryKind === 'semantic_fact'),
     ).toEqual([
       expect.objectContaining({
         predicate: 'design-review meeting duration',

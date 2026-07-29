@@ -2,14 +2,19 @@
 // Kavi — Agent acceptance metric evaluation entry point
 // ---------------------------------------------------------------------------
 
-import { aggregateAcceptanceMetrics, buildPassRateSummary, isSummaryPassing } from './aggregateResults';
+import {
+  aggregateAcceptanceMetrics,
+  buildPassRateSummary,
+  isSummaryPassing,
+} from './aggregateResults';
 import { computeFalseFinalizeRate } from './evaluateFalseFinalizeFixture';
 import type { FalseFinalizeFixture } from './falseFinalizeFixtures';
-import type { AcceptanceFixtureOutcome, AcceptanceMetricEvaluation, AcceptanceMetricSummary } from './types';
-import {
-  AGENT_BOOTSTRAP_MIN_PASS_RATE,
-  FALSE_FINALIZE_MAX_RATE,
-} from './thresholds';
+import type {
+  AcceptanceFixtureOutcome,
+  AcceptanceMetricEvaluation,
+  AcceptanceMetricSummary,
+} from './types';
+import { AGENT_BOOTSTRAP_MIN_PASS_RATE, FALSE_FINALIZE_MAX_RATE } from './thresholds';
 
 export function evaluateAgentBootstrapOutcomes(
   outcomes: ReadonlyArray<AcceptanceFixtureOutcome>,
@@ -28,8 +33,9 @@ export function evaluateFalseFinalizeOutcomes(params: {
   fixtures: ReadonlyArray<FalseFinalizeFixture>;
 }): AcceptanceMetricSummary {
   const falseFinalizeRate = computeFalseFinalizeRate(params.outcomes, params.fixtures);
-  const mustHoldCount = params.fixtures.filter((fixture) => fixture.expectation === 'must_hold')
-    .length;
+  const mustHoldCount = params.fixtures.filter(
+    (fixture) => fixture.expectation === 'must_hold',
+  ).length;
   const falseFinalizeCount = Math.round(falseFinalizeRate * mustHoldCount);
 
   return {

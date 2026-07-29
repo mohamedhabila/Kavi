@@ -151,10 +151,7 @@ const HANDLE_RECOVERY_CLASS = {
 } as const satisfies Record<ExecutionExternalHandleStatus, 'unresolved' | 'terminal'>;
 
 type UnresolvedMobileControllerHandle = ExecutionExternalHandleRecord & {
-  locator: Extract<
-    ExecutionExternalHandleRecord['locator'],
-    { kind: 'mobile_controller_handoff' }
-  >;
+  locator: Extract<ExecutionExternalHandleRecord['locator'], { kind: 'mobile_controller_handoff' }>;
   status: Extract<ExecutionExternalHandleStatus, 'unknown' | 'pending' | 'running'>;
 };
 
@@ -563,7 +560,13 @@ export function planExecutionRecovery(
     const handles = handlesByEffect.get(effect.id) ?? [];
     if (handles.length > 0) {
       if (handles.some((handle) => handle.locator.kind === 'mobile_controller_handoff')) {
-        return block(snapshot, 'snapshot_invalid', latest, [effect.id], handles.map(({ id }) => id));
+        return block(
+          snapshot,
+          'snapshot_invalid',
+          latest,
+          [effect.id],
+          handles.map(({ id }) => id),
+        );
       }
       reconcileEffectIds.add(effect.id);
       for (const handle of handles) reconcileHandleIds.add(handle.id);

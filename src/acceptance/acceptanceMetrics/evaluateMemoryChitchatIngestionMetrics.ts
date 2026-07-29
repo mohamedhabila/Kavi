@@ -2,7 +2,11 @@
 // Kavi — Chitchat memory ingestion metrics
 // ---------------------------------------------------------------------------
 
-import { aggregateAcceptanceMetrics, buildPassRateSummary, isSummaryPassing } from './aggregateResults';
+import {
+  aggregateAcceptanceMetrics,
+  buildPassRateSummary,
+  isSummaryPassing,
+} from './aggregateResults';
 import { evaluateMemoryChitchatIngestionFixture } from './evaluateMemoryChitchatIngestionFixture';
 import { MEMORY_CHITCHAT_INGESTION_FIXTURES } from './memoryChitchatIngestionFixtures';
 import type { AcceptanceMetricEvaluation } from './types';

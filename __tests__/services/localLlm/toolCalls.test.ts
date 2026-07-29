@@ -2,9 +2,7 @@ import * as ExpoFileSystem from 'expo-file-system';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { clearObservedLocalLlmBackends } from '../../../src/services/localLlm/backendStatus';
-import {
-  getLocalLlmCatalogEntry,
-} from '../../../src/services/localLlm/catalog';
+import { getLocalLlmCatalogEntry } from '../../../src/services/localLlm/catalog';
 import { sendLocalLlmMessage } from '../../../src/services/localLlm/generateSession';
 import { installLocalLlmModel } from '../../../src/services/localLlm/install';
 import { createDefaultLocalLlmProvider } from '../../../src/services/localLlm/provider';

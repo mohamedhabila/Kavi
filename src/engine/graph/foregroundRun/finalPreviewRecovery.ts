@@ -48,10 +48,7 @@ export async function recoverForegroundAgentRunFinalPreview(params: {
     messages: latestConversation.messages,
     run: targetRun,
   });
-  if (
-    existingPreview &&
-    (params.status !== 'completed' || existingDelivery.state === 'settled')
-  ) {
+  if (existingPreview && (params.status !== 'completed' || existingDelivery.state === 'settled')) {
     return {
       preview: truncateLogDetail(existingPreview) || existingPreview,
       recovered: false,
@@ -105,8 +102,7 @@ export async function recoverForegroundAgentRunFinalPreview(params: {
     run: settledRun,
   });
   const delivered =
-    !!settledPreview &&
-    (params.status !== 'completed' || settledDelivery.state === 'settled');
+    !!settledPreview && (params.status !== 'completed' || settledDelivery.state === 'settled');
   return {
     ...(delivered ? { preview: truncateLogDetail(settledPreview) || settledPreview } : {}),
     recovered: delivered,

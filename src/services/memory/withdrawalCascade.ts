@@ -5,10 +5,7 @@ import type { MemoryWithdrawalLineage } from './withdrawalLineage';
 import { normalizeWithdrawalOpaqueId } from './withdrawalLineage';
 import { assertMemoryWithdrawalHasNoResiduals } from './withdrawalResidualProbe';
 import type { MemoryWithdrawalResidualPlan } from './withdrawalResidualProbe';
-import {
-  EMPTY_MEMORY_WITHDRAWAL_COUNTS,
-  type MemoryWithdrawalCounts,
-} from './withdrawalTypes';
+import { EMPTY_MEMORY_WITHDRAWAL_COUNTS, type MemoryWithdrawalCounts } from './withdrawalTypes';
 import { hashVerifiedProcedureProvenanceSync } from './verifiedProcedure/provenanceHash';
 import { decodeVerifiedProcedureEvidenceManifest } from './verifiedProcedure/evidenceManifest';
 import { fenceVerifiedProcedureExecutionRunHashes } from './verifiedProcedure/invalidation';
@@ -374,8 +371,7 @@ export function cleanupRetiredMemoryArtifactsInTransaction(
         'memory_ingestion_structural_receipts',
         'job_id',
         lineage.receiptDeletionJobIds,
-      ) +
-      deleteIds(db, 'memory_ingestion_receipts', 'job_id', lineage.receiptDeletionJobIds),
+      ) + deleteIds(db, 'memory_ingestion_receipts', 'job_id', lineage.receiptDeletionJobIds),
     ingestionSourceSnapshots: ingestionSourceSnapshotCount,
     ingestionJobs: deleteIds(db, 'memory_ingestion_jobs', 'id', lineage.jobIds),
     retrievalEvents: scrubRetrievalEvents(db, factIds, episodeIds),

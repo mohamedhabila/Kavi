@@ -69,9 +69,7 @@ export function buildGeminiSearchUrl(baseUrl: string, model: string): string {
 }
 
 export function buildGeminiSearchTools(baseUrl: string): Array<Record<string, unknown>> {
-  return isVertexNativeGeminiBaseUrl(baseUrl)
-    ? [{ googleSearch: {} }]
-    : [{ google_search: {} }];
+  return isVertexNativeGeminiBaseUrl(baseUrl) ? [{ googleSearch: {} }] : [{ google_search: {} }];
 }
 
 export function describeGeminiErrorBody(bodyText: string): string {
@@ -97,8 +95,7 @@ export function describeGeminiErrorBody(bodyText: string): string {
         : typeof parsed?.message === 'string'
           ? parsed.message.trim()
           : '';
-    const status =
-      typeof parsed?.error?.status === 'string' ? parsed.error.status.trim() : '';
+    const status = typeof parsed?.error?.status === 'string' ? parsed.error.status.trim() : '';
     if (message && status) {
       return `${status}: ${message}`;
     }

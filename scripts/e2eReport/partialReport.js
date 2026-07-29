@@ -96,9 +96,7 @@ function assertFiniteNumber(value, fieldPath, { integer = false, minimum = 0 } =
 function assertStringArray(value, fieldPath, allowedValues) {
   if (
     !Array.isArray(value) ||
-    value.some(
-      (entry) => typeof entry !== 'string' || (allowedValues && !allowedValues.has(entry)),
-    )
+    value.some((entry) => typeof entry !== 'string' || (allowedValues && !allowedValues.has(entry)))
   ) {
     throw new Error(`Invalid ${fieldPath} in current evaluation partial report.`);
   }

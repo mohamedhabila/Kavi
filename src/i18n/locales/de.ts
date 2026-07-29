@@ -668,7 +668,8 @@ export const de: TranslationMap = mergeTranslations(en, {
       },
     },
     home: {
-      intro: 'Suche eine Einstellung oder wähle eine Kategorie. Erweiterte Optionen bleiben im Hintergrund, bis du sie brauchst.',
+      intro:
+        'Suche eine Einstellung oder wähle eine Kategorie. Erweiterte Optionen bleiben im Hintergrund, bis du sie brauchst.',
       searchLabel: 'Einstellungen durchsuchen',
       searchPlaceholder: 'Einstellungen durchsuchen',
       clearSearch: 'Einstellungssuche löschen',

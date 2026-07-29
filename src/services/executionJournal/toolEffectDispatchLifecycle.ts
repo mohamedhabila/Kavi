@@ -20,10 +20,7 @@ import {
   digestToolContractIdentity,
   type RuntimeExternalToolEvidence,
 } from '../../engine/toolExecution/toolContractIdentity';
-import {
-  dispatchEffectExactlyOnce,
-  type EffectDispatchResult,
-} from './effectDispatchCoordinator';
+import { dispatchEffectExactlyOnce, type EffectDispatchResult } from './effectDispatchCoordinator';
 import type { EffectDispatchIdentity } from './effectDispatchPolicy';
 import {
   prepareToolEffectDispatchJournal,
@@ -377,9 +374,7 @@ async function buildDispatchIdentity(input: {
     idempotencyClassFor(input.policy),
     retryPolicyFor(input.policy),
   ].join('\u0000');
-  const modelEffectAuthority = buildDurableModelEffectAuthority(
-    input.modelTurnMemoryPolicyBinding,
-  );
+  const modelEffectAuthority = buildDurableModelEffectAuthority(input.modelTurnMemoryPolicyBinding);
   const durableAuthorityIdentity = serializeDurableModelEffectAuthority(modelEffectAuthority);
   const [initialStateDigest, planningStateDigest, authorityStateDigest] = await Promise.all([
     digestToolEffectText(
@@ -433,10 +428,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
   input: AuthorizedToolEffectDispatchInput,
   options: AuthorizedToolEffectDispatchOptions = {},
 ): Promise<AuthorizedToolEffectDispatchResult> {
-  const policy = resolveDispatchToolEffectPolicy(
-    input.toolName,
-    input.runtimeExternalEffectPolicy,
-  );
+  const policy = resolveDispatchToolEffectPolicy(input.toolName, input.runtimeExternalEffectPolicy);
   const effectClass = effectClassFor(policy);
   if (effectClass === 'none') {
     throw new Error('effect_dispatch_effect_free_tool');
@@ -630,10 +622,7 @@ export async function dispatchAuthorizedToolEffect(
   input: AuthorizedToolEffectDispatchInput,
   options: AuthorizedToolEffectDispatchOptions = {},
 ): Promise<AuthorizedToolEffectDispatchResult> {
-  const policy = resolveDispatchToolEffectPolicy(
-    input.toolName,
-    input.runtimeExternalEffectPolicy,
-  );
+  const policy = resolveDispatchToolEffectPolicy(input.toolName, input.runtimeExternalEffectPolicy);
   if (effectClassFor(policy) === 'none') {
     throw new Error('effect_dispatch_effect_free_tool');
   }

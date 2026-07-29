@@ -72,7 +72,16 @@ function normalizeWorkflowTextEncoding(
   if (['utf-16', 'utf16', 'utf-16le', 'utf16le'].includes(normalized)) return 'utf-16le';
   if (['utf-16be', 'utf16be'].includes(normalized)) return 'utf-16be';
   if (
-    ['ascii', 'cp1252', 'iso-8859-1', 'iso8859-1', 'latin1', 'latin-1', 'us-ascii', 'windows-1252'].includes(normalized)
+    [
+      'ascii',
+      'cp1252',
+      'iso-8859-1',
+      'iso8859-1',
+      'latin1',
+      'latin-1',
+      'us-ascii',
+      'windows-1252',
+    ].includes(normalized)
   ) {
     return 'windows-1252';
   }
@@ -179,7 +188,11 @@ function decodeWorkflowTextBytes(bytes: Uint8Array, contentType?: string): strin
     case 'utf-8':
     default: {
       const utf8Text = decodeUtf8WorkflowText(bytes);
-      if (!bomEncoding && !extractCharsetFromContentType(contentType) && utf8Text.includes('\uFFFD')) {
+      if (
+        !bomEncoding &&
+        !extractCharsetFromContentType(contentType) &&
+        utf8Text.includes('\uFFFD')
+      ) {
         return decodeWindows1252WorkflowText(bytes);
       }
       return utf8Text;
@@ -270,7 +283,12 @@ function shouldAttemptWorkflowLogDecompression(
 }
 
 function normalizeLogToken(value: string | undefined | null): string {
-  return trimToUndefined(value)?.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() || '';
+  return (
+    trimToUndefined(value)
+      ?.toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim() || ''
+  );
 }
 
 export function stripAnsiAndControlChars(text: string): string {
@@ -294,7 +312,9 @@ export function excerptWorkflowLogText(text: string, maxChars = 5000): string {
     return '';
   }
   const lines = sanitized.split(/\r?\n/);
-  const focusIndex = lines.findIndex((line) => WORKFLOW_LOG_ERROR_PATTERNS.some((pattern) => pattern.test(line)));
+  const focusIndex = lines.findIndex((line) =>
+    WORKFLOW_LOG_ERROR_PATTERNS.some((pattern) => pattern.test(line)),
+  );
   const excerpt =
     focusIndex >= 0
       ? lines.slice(Math.max(0, focusIndex - 4), Math.min(lines.length, focusIndex + 5)).join('\n')
@@ -308,7 +328,8 @@ export function excerptWorkflowLogText(text: string, maxChars = 5000): string {
 export function looksCompressed(bytes: Uint8Array): boolean {
   if (bytes.length < 2) return false;
   if (bytes[0] === 0x1f && bytes[1] === 0x8b) return true;
-  if (bytes[0] === 0x78 && (bytes[1] === 0x01 || bytes[1] === 0x9c || bytes[1] === 0xda)) return true;
+  if (bytes[0] === 0x78 && (bytes[1] === 0x01 || bytes[1] === 0x9c || bytes[1] === 0xda))
+    return true;
   return false;
 }
 

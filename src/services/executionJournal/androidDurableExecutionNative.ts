@@ -142,7 +142,10 @@ function validNullableDigest(value: unknown): value is string | null {
   return value === null || validDigest(value);
 }
 
-function includes<const T extends readonly string[]>(values: T, value: unknown): value is T[number] {
+function includes<const T extends readonly string[]>(
+  values: T,
+  value: unknown,
+): value is T[number] {
   return typeof value === 'string' && values.includes(value as T[number]);
 }
 
@@ -191,11 +194,7 @@ function decodeRequest(value: unknown): AndroidExternalDurableExecutionRequest {
     value.constraints.requiresDeviceIdle !== false ||
     !validInteger(value.constraints.earliestStartAtMillis) ||
     !isRecord(value.retryPolicy) ||
-    !hasExactKeys(value.retryPolicy, [
-      'maxAttempts',
-      'backoffPolicy',
-      'initialBackoffMillis',
-    ]) ||
+    !hasExactKeys(value.retryPolicy, ['maxAttempts', 'backoffPolicy', 'initialBackoffMillis']) ||
     !validInteger(value.retryPolicy.maxAttempts) ||
     value.retryPolicy.backoffPolicy !== 'exponential' ||
     !validInteger(value.retryPolicy.initialBackoffMillis)
@@ -258,7 +257,9 @@ function decodeAdapterResult(value: unknown): AndroidDurableAdapterResult {
     };
   }
   if (
-    (value.status === 'unsupported' || value.status === 'rejected' || value.status === 'deferred') &&
+    (value.status === 'unsupported' ||
+      value.status === 'rejected' ||
+      value.status === 'deferred') &&
     includes(ADAPTER_FAILURE_REASONS, value.reason) &&
     value.record === null
   ) {
