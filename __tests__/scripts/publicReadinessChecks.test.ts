@@ -36,6 +36,7 @@ describe('public readiness checks', () => {
   it('requires docs to be public allowlist entries or planned cleanup targets', () => {
     const result = evaluateTrackedDocs(
       [
+        'docs/android-long-horizon-testing.md',
         'docs/dynamic-code-execution.md',
         'docs/evaluation.md',
         'docs/memory-hybrid-retrieval.md',

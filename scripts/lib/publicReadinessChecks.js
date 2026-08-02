@@ -128,6 +128,7 @@ const DEFAULT_CONFIG = {
     },
   ],
   publicDocAllowlist: new Set([
+    'docs/android-long-horizon-testing.md',
     'docs/dynamic-code-execution.md',
     'docs/evaluation.md',
     'docs/feature-matrix.md',
