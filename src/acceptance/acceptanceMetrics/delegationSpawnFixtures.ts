@@ -4,6 +4,11 @@
 
 import { buildDelegationFixtureAgentRun } from './delegationGraphFixtures';
 import type { DelegatedWorkerSpawnRequest } from '../../engine/graph/delegatedWorkerSpawn';
+import {
+  DELEGATED_WORKER_EVIDENCE_CRITERION,
+  DELEGATED_WORKER_GOAL_OWNER,
+  DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
+} from '../../engine/goals/delegation';
 import type { AgentGoal } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
@@ -26,8 +31,12 @@ function goal(overrides: Partial<AgentGoal> = {}): AgentGoal {
     id: 'worker-goal',
     title: 'Delegated work',
     status: 'pending',
+    completionPolicy: 'blocking',
+    owner: DELEGATED_WORKER_GOAL_OWNER,
     dependencies: [],
     evidence: [],
+    requiredCapabilities: ['coordinate'],
+    successCriteria: [DELEGATED_WORKER_EVIDENCE_CRITERION, DELEGATED_WORKER_MIN_EVIDENCE_CRITERION],
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,

@@ -7,6 +7,7 @@ import type { AgentGoal, AgentRun } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
 import { reduceAgentControlGraph } from '../../engine/graph/agentControlGraph';
+import { DELEGATED_WORKER_GOAL_OWNER } from '../../engine/goals/delegation';
 import { updateAgentRunControlGraphInConversation } from '../../store/agentRuns/graph';
 import { startAgentRunInConversation } from '../../store/agentRuns/lifecycle';
 
@@ -96,6 +97,7 @@ export function buildGoalsAfterDelegationWorkerTerminal(
       id: 'worker-goal',
       title: 'Delegated work',
       status: 'active',
+      owner: DELEGATED_WORKER_GOAL_OWNER,
       dependencies: [],
       evidence: [],
       successCriteria: ['evidence.prefix:worker', 'evidence.min:1'],

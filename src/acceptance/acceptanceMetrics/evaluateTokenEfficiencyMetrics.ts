@@ -2,7 +2,7 @@
 // Kavi — Token efficiency acceptance metrics
 // ---------------------------------------------------------------------------
 
-import { ALL_BUILTIN_TOOL_DEFINITIONS } from '../../engine/tools/builtin-definitions';
+import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
 import { resolveTurnToolSurface } from '../../engine/goals/toolSurface';
 import {
   compactToolDefinitionForPrompt,
@@ -47,7 +47,7 @@ function estimateLegacyPromptFacingToolTokens(tools: ReadonlyArray<ToolDefinitio
 
 export function evaluateToolDefinitionTokenReductionBenchmark(): AcceptanceFixtureOutcome {
   const surface = resolveTurnToolSurface({
-    allTools: ALL_BUILTIN_TOOL_DEFINITIONS,
+    allTools: TOOL_DEFINITIONS,
     goals: [
       {
         id: 'benchmark-goal',
@@ -73,7 +73,11 @@ export function evaluateToolDefinitionTokenReductionBenchmark(): AcceptanceFixtu
     compressToolDefinitions(surface, { pinnedToolNames }),
     { pinnedToolNames },
   );
-  const legacyTokens = estimateLegacyPromptFacingToolTokens(surface);
+  // Compare the production turn surface with the legacy eager-registry shape.
+  // This captures the user-visible cost of both structural selection and
+  // prompt-facing definition compaction rather than measuring descriptions in
+  // isolation after irrelevant tools have already been removed.
+  const legacyTokens = estimateLegacyPromptFacingToolTokens(TOOL_DEFINITIONS);
 
   if (legacyTokens <= 0) {
     return {
@@ -133,7 +137,7 @@ export function evaluateTokenEfficiencyMetricOutcomes(): AcceptanceMetricEvaluat
     evaluateCompactionRecallOutcomes(compactionOutcomes),
     buildPassRateSummary({
       metricId: 'tool-definition-token-reduction',
-      label: 'Median tool-definition token reduction benchmark',
+      label: 'Turn tool-surface and definition token reduction benchmark',
       outcomes: [reductionOutcome],
       targetRate: 1,
       comparator: 'min',
