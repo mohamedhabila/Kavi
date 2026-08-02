@@ -159,7 +159,8 @@ export type ForegroundRequestRegistry = ReturnType<typeof createForegroundReques
 /**
  * Process-local authority for foreground model requests.
  *
- * Chat owns its lifecycle; other mounted surfaces may subscribe read-only so
- * they agree on whether a conversation is actually active.
+ * The app process owns its lifecycle so user-started work can survive Chat
+ * screen recreation. Mounted surfaces may subscribe read-only so they agree
+ * on whether a conversation is actually active.
  */
 export const appForegroundRequestRegistry = createForegroundRequestRegistry();

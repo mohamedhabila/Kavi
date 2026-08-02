@@ -25,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
           add(KaviTermuxPackage())
           add(KaviLocalLlmPackage())
           add(KaviDurableExecutionPackage())
+          add(KaviLongHorizonExecutionPackage())
         }
     )
   }

@@ -115,14 +115,6 @@ export function useForegroundRequest({ setLoading }: UseForegroundRequestParams)
     [registry],
   );
 
-  useEffect(
-    () => () => {
-      registry.dispose('Foreground request owner was disposed.');
-      setLoading(false);
-    },
-    [registry, setLoading],
-  );
-
   return {
     activeForegroundConversationIds,
     abortForegroundRequestForConversation,

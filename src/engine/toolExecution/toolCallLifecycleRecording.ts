@@ -6,11 +6,10 @@ import {
 } from '../loopDetection';
 import type { ToolExecutionLifecycleMetricsRecorder } from './toolCallLifecycleTypes';
 import type { ToolMessageOutcomeStatus } from './toolMessageOutcome';
+import { waitForAppStateAwareDelay } from '../../utils/appStateAwareDelay';
 
 export async function yieldToUiFrame(): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 16);
-  });
+  await waitForAppStateAwareDelay(16);
 }
 
 export function recordLifecycleToolCall(
@@ -21,11 +20,13 @@ export function recordLifecycleToolCall(
   result: string | undefined,
   status: ToolMessageOutcomeStatus,
   preflightBlockedKind?: PreflightBlockedKind,
+  modelTurnIteration?: number,
 ): void {
   recordToolCall(history, {
     ...(id ? { id } : {}),
     name: toolName,
     arguments: argumentsText,
+    ...(modelTurnIteration === undefined ? {} : { modelTurnIteration }),
     timestamp: Date.now(),
     status,
     result,

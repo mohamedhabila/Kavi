@@ -7,6 +7,7 @@ import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+import com.kavi.mobile.longhorizon.AndroidLongHorizonExecutionRuntime
 
 import expo.modules.ReactActivityDelegateWrapper
 
@@ -17,6 +18,19 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    AndroidLongHorizonExecutionRuntime.get(this).coordinator.onHostForegrounded()
+  }
+
+  override fun onPause() {
+    // Acquire the user-visible execution owner while this activity is still eligible to start a
+    // foreground service. Once acquired, it remains alive until the last task lease is released;
+    // stopping and reacquiring it on every foreground transition creates an Android timing race.
+    AndroidLongHorizonExecutionRuntime.get(this).coordinator.onHostBackgrounded()
+    super.onPause()
   }
 
   /**

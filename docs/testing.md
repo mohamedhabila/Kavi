@@ -182,6 +182,14 @@ remains alive. It does not prove that iOS or Android will let arbitrary model wo
 continue after suspension, force-quit, or process death; use the physical-device
 matrix above for that claim.
 
+### Android background-execution validation
+
+Use the dedicated [Android long-horizon testing guide](android-long-horizon-testing.md)
+for the architecture boundary, resource-isolated release/emulator procedure, Chat and
+OpenRouter scenario, notification Stop trial, force-stop recovery expectations, and
+physical-device matrix. The procedure is generic and must never route production
+behavior on prompt text, benchmark identity, target duration, or expected output.
+
 Run the opt-in OpenRouter substantive-work pilot:
 
 ```bash

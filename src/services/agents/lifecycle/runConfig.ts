@@ -7,7 +7,7 @@ import {
   normalizeFinalizationOutputText,
 } from '../finalizationText';
 import { MAX_SPAWN_DEPTH } from '../mobileSpawnPolicy';
-import { PYTHON_EXTENSION_WHEN_NEEDED } from '../../python/guidance';
+import { PYTHON_EXTENSION_POLICY, PYTHON_EXTENSION_WHEN_NEEDED } from '../../python/guidance';
 import {
   cloneStoredMessages,
   hasSeedUserInstruction,
@@ -22,9 +22,14 @@ import {
 export { MAX_SPAWN_DEPTH };
 export const OUTPUT_TRUNCATION = FINALIZATION_OUTPUT_TRUNCATION;
 
-export const DEFAULT_SUB_AGENT_MAX_ITERATIONS = 25;
+export const DEFAULT_SUB_AGENT_MAX_ITERATIONS = 32;
+export const MAX_SUB_AGENT_MAX_ITERATIONS = 96;
 const MIN_SUB_AGENT_MAX_ITERATIONS = DEFAULT_SUB_AGENT_MAX_ITERATIONS;
 const MIN_TIMEOUT_MS = 1_000;
+
+export function hasExplicitSubAgentMaxIterations(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
 
 export function normalizeSubAgentTimeoutMs(value?: number): number | undefined {
   if (!Number.isFinite(value)) {
@@ -49,7 +54,15 @@ export function normalizeSubAgentMaxIterations(value?: number): number {
     return DEFAULT_SUB_AGENT_MAX_ITERATIONS;
   }
 
-  return Math.max(MIN_SUB_AGENT_MAX_ITERATIONS, normalized);
+  return Math.min(MAX_SUB_AGENT_MAX_ITERATIONS, Math.max(MIN_SUB_AGENT_MAX_ITERATIONS, normalized));
+}
+
+/**
+ * A graph turn may prepare a model response or settle its tools. Reserve enough
+ * graph turns for every permitted worker action plus a final answer turn.
+ */
+export function resolveSubAgentGraphIterationBudget(maxIterations: number): number {
+  return maxIterations * 2 + 1;
 }
 
 export function isValidSubAgentToolConfiguration(tools: unknown): tools is string[] | undefined {
@@ -146,6 +159,7 @@ export function buildSubAgentSystemPrompt(
 - Time-dependent work, verification, side effects, and artifacts remain incomplete unless successful tool results prove them. Never fabricate execution evidence or claim completion when required operations did not succeed; report the blocker.
 - Briefly state major tool phases only when it helps coordination.
 - ${PYTHON_EXTENSION_WHEN_NEEDED}
+- ${PYTHON_EXTENSION_POLICY}
 - If the prompt or Expected output asks for an exact answer, return that exact answer and skip the report.
 - Otherwise finish with a concise report: outcome, key verified findings, artifacts/actions, and any blocker.
 - If interrupted, timed out, or cancelled, preserve the most useful verified findings in visible text.`;

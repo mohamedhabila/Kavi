@@ -1,5 +1,5 @@
 import { cleanup } from '@testing-library/react-native';
-import { __resetAgentRunCancellationRegistryForTests } from '../../src/services/agents/agentRunCancellation';
+import { resetChatScreenGlobalRegistries } from './globalRegistryReset';
 import {
   buildMockPilotEvaluation,
   createAgentRunControlGraphState,
@@ -76,6 +76,7 @@ import {
 
 export function cleanupChatScreenTestEnvironment() {
   cleanup();
+  resetChatScreenGlobalRegistries();
 
   try {
     jest.useRealTimers();
@@ -152,7 +153,6 @@ export function resetChatScreenTestEnvironment() {
   });
   mockChatRoute.params = {};
 
-  __resetAgentRunCancellationRegistryForTests();
   resetMockChatScreenState();
   mockCreateConversation.mockReturnValue('new-conv');
   mockGetOrCreateCanonicalThread.mockImplementation(

@@ -4,4 +4,11 @@
   <string name="local_llm_notification_channel_name">On-device AI</string>
   <string name="local_llm_notification_title">Kavi is thinking on this device</string>
   <string name="local_llm_notification_body">On-device model generation is running.</string>
+  <string name="long_horizon_notification_channel_name">Assistant tasks</string>
+  <string name="long_horizon_notification_title">Kavi is working in the background</string>
+  <string name="long_horizon_notification_stop">Stop tasks</string>
+  <plurals name="long_horizon_notification_body">
+    <item quantity="one">%d assistant task is still running.</item>
+    <item quantity="other">%d assistant tasks are still running.</item>
+  </plurals>
 </resources>

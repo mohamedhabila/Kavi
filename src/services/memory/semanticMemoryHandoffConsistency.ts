@@ -6,6 +6,7 @@ import {
 } from './ingestionQueueStore';
 import { canReadLongTermMemory, captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 import { normalizeSemanticMemoryHandoff } from './semanticMemoryHandoff';
+import { waitForAppStateAwareDelay } from '../../utils/appStateAwareDelay';
 
 export const SEMANTIC_MEMORY_HANDOFF_BUDGET_MS = 35_000;
 export const SEMANTIC_MEMORY_HANDOFF_ENQUEUE_GRACE_MS = 500;
@@ -53,7 +54,7 @@ export interface WaitForSemanticMemoryHandoffInput {
 
 const DEFAULT_CLOCK: SemanticMemoryHandoffClock = {
   now: () => Date.now(),
-  wait: (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+  wait: waitForAppStateAwareDelay,
 };
 
 type JobDisposition = 'ready' | 'unavailable' | 'wait';
@@ -99,7 +100,10 @@ export async function waitForSemanticMemoryHandoff(
   let greatestElapsedMs = 0;
 
   const elapsedMs = () => {
-    greatestElapsedMs = Math.max(greatestElapsedMs, Math.max(0, clock.now() - startedAt));
+    // A background microtask represents the requested logical delay even when
+    // React Native's render timer is paused. This keeps the bounded poll finite
+    // without a CPU spin or an indefinitely blocked assistant turn.
+    greatestElapsedMs = Math.max(greatestElapsedMs, waitedMs, Math.max(0, clock.now() - startedAt));
     return greatestElapsedMs;
   };
 

@@ -1,4 +1,16 @@
 pluginManagement {
+  // React Native currently supplies AGP 8.12.0, whose bundled shrinker predates Kotlin 2.3
+  // metadata. Android's compatibility table requires R8 8.13.19 or newer for Kotlin 2.3.
+  buildscript {
+    repositories {
+      mavenCentral()
+      maven { url uri('https://storage.googleapis.com/r8-releases/raw') }
+    }
+    dependencies {
+      classpath 'com.android.tools:r8:8.13.19'
+    }
+  }
+
   def reactNativeGradlePlugin = new File(
     providers.exec {
       workingDir(rootDir)

@@ -34,6 +34,7 @@ import { buildForegroundOrchestratorMessages } from './modelReadyMessages';
 import { transitionForegroundClarificationAdmission } from './clarificationReplyAdmissionFlow';
 import { resolveForegroundRequestProviderReadiness } from './requestProviderReadiness';
 import { reserveForegroundRunRequest } from './requestReservation';
+import { withAndroidLongHorizonExecutionLease } from '../../../services/androidLongHorizonExecution';
 
 export async function executeForegroundConversationRun(
   params: ExecuteForegroundConversationRunParams,
@@ -54,7 +55,13 @@ export async function executeForegroundConversationRun(
     requestClaim.foregroundRequestId,
   );
   try {
-    await executeReservedForegroundConversationRun(params, requestClaim);
+    await withAndroidLongHorizonExecutionLease(
+      {
+        leaseId: `chat:${requestClaim.foregroundRequestId}`,
+        taskKind: 'chat',
+      },
+      () => executeReservedForegroundConversationRun(params, requestClaim),
+    );
   } finally {
     projectionIntent.release();
   }

@@ -55,6 +55,7 @@ import {
 import { abortAllScheduledJobExecutions } from './scheduler/executionLifecycle';
 import { abortAllHookExecutions, registerHookExecution } from './hooks/executionLifecycle';
 import { generateId } from '../utils/id';
+import { initializeAndroidLongHorizonCancellationHandler } from './androidLongHorizonExecution';
 
 let initialized = false;
 let hookRegistrationPromise: Promise<void> | null = null;
@@ -255,6 +256,7 @@ export function initializeServices(): void {
   if (initialized) return;
   initialized = true;
 
+  initializeAndroidLongHorizonCancellationHandler();
   initializeDurableRecoveryLifecycle();
 
   if (!initializeMemoryPolicyObservation()) {

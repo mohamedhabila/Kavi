@@ -1,6 +1,7 @@
 import { getIngestionJobForSourceTurn } from './ingestionQueueStore';
 import type { IngestionJob, IngestionJobStatus } from './ingestionQueueStore';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
+import { waitForAppStateAwareDelay } from '../../utils/appStateAwareDelay';
 
 export const NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS = 120;
 export const NEXT_TURN_MEMORY_CONSISTENCY_INITIAL_BACKOFF_MS = 8;
@@ -40,7 +41,7 @@ export type NextTurnMemoryConsistencyInput = Readonly<{
 
 const DEFAULT_CLOCK: NextTurnMemoryConsistencyClock = {
   now: () => Date.now(),
-  wait: (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+  wait: waitForAppStateAwareDelay,
 };
 
 type JobDisposition = 'completed' | 'degraded' | 'wait';

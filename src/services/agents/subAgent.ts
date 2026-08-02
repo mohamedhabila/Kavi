@@ -33,6 +33,7 @@ import {
   DEFAULT_SUB_AGENT_MAX_ITERATIONS,
   cloneSubAgentConfig,
   MAX_SPAWN_DEPTH,
+  hasExplicitSubAgentMaxIterations,
   normalizeSubAgentMaxIterations,
   normalizeSubAgentTimeoutMs,
 } from './lifecycle/runConfig';
@@ -54,6 +55,7 @@ import {
   hydrateProviderForRequest,
 } from '../llm/support/providerSupport';
 import { buildSubAgentRestartRecoveryPlan } from './subAgentRestartRecovery';
+import { withAndroidLongHorizonExecutionLease } from '../androidLongHorizonExecution';
 
 export { waitForSubAgentResultPromise };
 export { MAX_SPAWN_DEPTH } from './lifecycle/runConfig';
@@ -145,6 +147,11 @@ scheduleRegistryPersistRef = () => registryPersistenceManager.scheduleRegistryPe
 
 function cloneAgent(agent: ActiveSubAgent): ActiveSubAgent {
   return cloneSubAgentSnapshot(agent);
+}
+
+/** Flushes worker state without relying on timers that Android may suspend in the background. */
+export async function flushSubAgentRegistryPersistence(): Promise<void> {
+  await registryPersistenceManager.persistRegistryNow();
 }
 
 // ── Announce system ──────────────────────────────────────────────────────
@@ -314,7 +321,10 @@ function schedulePreparedSubAgentRun(
   provider: LlmProviderConfig,
   allProviders?: LlmProviderConfig[],
 ): Promise<SubAgentResult> {
-  return scheduleLaunchRun<ActiveSubAgent>({
+  // Schedule on the current JS turn before crossing the native bridge. React Native can defer
+  // bridge Promise callbacks after the host activity backgrounds, while microtasks already queued
+  // on the JS thread can still begin the worker under the parent chat's existing service lease.
+  const scheduledRun = scheduleLaunchRun<ActiveSubAgent>({
     prepared,
     announceFailure: config.announce !== false,
     scheduledSubAgentLaunches,
@@ -322,6 +332,13 @@ function schedulePreparedSubAgentRun(
     buildResultFromSnapshot,
     runPreparedSubAgent: () => runPreparedSubAgent(prepared, config, provider, allProviders),
   });
+  return withAndroidLongHorizonExecutionLease(
+    {
+      leaseId: `sub-agent:${prepared.sessionId}`,
+      taskKind: 'sub_agent',
+    },
+    () => scheduledRun,
+  );
 }
 
 async function recoverInterruptedSubAgentAfterRestart(agent: ActiveSubAgent): Promise<boolean> {
@@ -345,7 +362,12 @@ async function recoverInterruptedSubAgentAfterRestart(agent: ActiveSubAgent): Pr
       )
     : undefined;
   const maxIterations = normalizeSubAgentMaxIterations(plan.config.maxIterations);
-  if ((agent.iterations ?? 0) >= maxIterations) return false;
+  if (
+    hasExplicitSubAgentMaxIterations(plan.config.maxIterations) &&
+    (agent.iterations ?? 0) >= maxIterations
+  ) {
+    return false;
+  }
   const resumedAt = Date.now();
   const remainingTimeoutMs =
     agent.deadlineAt === undefined ? undefined : Math.floor(agent.deadlineAt - resumedAt);
