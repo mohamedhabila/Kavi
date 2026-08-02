@@ -567,6 +567,7 @@ describe('executeToolCallLifecycle', () => {
           status: 'timed_out',
           isError: true,
           failureKind: 'timed_out',
+          executionEffectState: 'none_observed',
           error: 'Python execution timed out after 1000ms',
         }),
       ),
@@ -579,7 +580,7 @@ describe('executeToolCallLifecycle', () => {
       expect.objectContaining({
         transportState: 'returned',
         executionState: 'timed_out',
-        effectState: 'unknown',
+        effectState: 'failed',
         verificationState: 'unverified',
       }),
     );

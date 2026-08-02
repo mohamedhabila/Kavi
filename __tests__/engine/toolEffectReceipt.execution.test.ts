@@ -3,6 +3,7 @@ import {
   verifyToolEffectReceiptIntegrity,
 } from '../../src/engine/toolExecution/toolEffectReceipt';
 import { getCodeOwnedToolEffectContract } from '../../src/engine/toolExecution/toolEffectReceiptContracts';
+import { classifyEffectDispatchReceipt } from '../../src/services/executionJournal/effectDispatchCoordinator';
 import {
   appendToolEffectReceipt,
   decodeToolEffectReceipt,
@@ -117,7 +118,7 @@ describe('ToolEffectReceipt code execution truth', () => {
     expect(receipt.operationHandle).toBeUndefined();
   });
 
-  it('keeps JavaScript workspace mutations unverified', async () => {
+  it('acknowledges a persisted JavaScript workspace mutation without verifying its contents', async () => {
     const receipt = await buildToolEffectReceipt({
       toolCallId: 'tc-javascript-workspace-mutation',
       toolName: 'javascript',
@@ -135,10 +136,15 @@ describe('ToolEffectReceipt code execution truth', () => {
       expect.objectContaining({
         executionState: 'completed',
         effectKind: 'compute.execute',
-        effectState: 'unknown',
-        verificationState: 'unverified',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
       }),
     );
+    expect(classifyEffectDispatchReceipt('local_artifact', receipt)).toEqual({
+      disposition: 'returned_unverified',
+      nextEffectStatus: 'returned',
+      requiresReconciliation: false,
+    });
   });
 
   it('keeps Python completion separate from unverified arbitrary side effects', async () => {
@@ -193,6 +199,73 @@ describe('ToolEffectReceipt code execution truth', () => {
         verificationState: 'verified',
       }),
     );
+  });
+
+  it('acknowledges persisted local Python files when no network mutation was observed', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-workspace-mutation',
+      toolName: 'python',
+      argumentsText: '{"code":"write_report()","allowNetwork":false}',
+      resultText: JSON.stringify({
+        status: 'completed',
+        workspaceMutationState: 'applied',
+        networkAccessState: 'blocked',
+        networkMutationState: 'none_observed',
+        networkRequestCount: 0,
+        executionEffectState: 'unknown',
+        files: [{ path: 'report.md', size: 128 }],
+      }),
+      transportState: 'returned',
+      recordedAt: 10,
+    });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        transportState: 'returned',
+        executionState: 'completed',
+        effectKind: 'compute.execute',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
+      }),
+    );
+    expect(classifyEffectDispatchReceipt('remote_mutation', receipt)).toEqual({
+      disposition: 'returned_unverified',
+      nextEffectStatus: 'returned',
+      requiresReconciliation: false,
+    });
+  });
+
+  it('keeps completed mutation-capable Python execution reconciliation-required', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-possible-network-mutation',
+      toolName: 'python',
+      argumentsText: '{"code":"await post_and_write()","allowNetwork":true}',
+      resultText: JSON.stringify({
+        status: 'completed',
+        workspaceMutationState: 'applied',
+        networkAccessState: 'used',
+        networkMutationState: 'possible',
+        networkRequestCount: 1,
+        executionEffectState: 'unknown',
+        files: [{ path: 'report.md', size: 128 }],
+      }),
+      transportState: 'returned',
+      recordedAt: 10,
+    });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        executionState: 'completed',
+        effectKind: 'compute.execute',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      }),
+    );
+    expect(classifyEffectDispatchReceipt('remote_mutation', receipt)).toEqual({
+      disposition: 'uncertain',
+      nextEffectStatus: 'ambiguous',
+      requiresReconciliation: true,
+    });
   });
 
   it('settles a failed Python execution when code-owned evidence proves no effect', async () => {

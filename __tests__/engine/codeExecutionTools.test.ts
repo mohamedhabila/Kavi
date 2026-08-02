@@ -55,7 +55,7 @@ describe('code execution tools', () => {
       expect.objectContaining({
         status: 'failed',
         isError: true,
-        workspaceMutationState: 'unknown',
+        workspaceMutationState: 'none_observed',
         error: expect.stringContaining('boom'),
       }),
     );
@@ -224,7 +224,7 @@ describe('code execution tools', () => {
       expect.objectContaining({
         status: 'failed',
         isError: true,
-        workspaceMutationState: 'unknown',
+        workspaceMutationState: 'none_observed',
         output: 'started',
         error: 'ValueError: boom',
         failureKind: 'execution_failed',
@@ -250,7 +250,10 @@ describe('code execution tools', () => {
         status: 'timed_out',
         isError: true,
         failureKind: 'timed_out',
-        workspaceMutationState: 'unknown',
+        workspaceMutationState: 'none_observed',
+        networkAccessState: 'blocked',
+        networkMutationState: 'none_observed',
+        executionEffectState: 'none_observed',
       }),
     );
   });
@@ -264,7 +267,10 @@ describe('code execution tools', () => {
       expect.objectContaining({
         status: 'failed',
         isError: true,
-        workspaceMutationState: 'unknown',
+        workspaceMutationState: 'none_observed',
+        networkAccessState: 'blocked',
+        networkMutationState: 'none_observed',
+        executionEffectState: 'none_observed',
         error: 'bridge crashed',
         failureKind: 'runtime_failed',
       }),

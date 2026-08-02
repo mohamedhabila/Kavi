@@ -31,6 +31,7 @@ import {
   codeOwnedToolContractIdentitiesEqual,
   type RuntimeExternalToolEvidence,
 } from './toolContractIdentity';
+import { toolEffectResultConditionsMatch } from './toolEffectResultConditions';
 
 const PATH_SEGMENT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
@@ -362,6 +363,14 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
     outcome.effectState === 'unknown' &&
     typeof executionEffectFreeValue === 'string' &&
     executionEffectFreeWhen?.values.includes(executionEffectFreeValue) === true;
+  const executionIsAcknowledged =
+    effectKind === 'compute.execute' &&
+    outcome.executionState === 'completed' &&
+    outcome.effectState === 'unknown' &&
+    toolEffectResultConditionsMatch(
+      resultValue,
+      codeOwnedContract.completion?.executionEffectAcknowledgedWhen,
+    );
   if (params.resultIsError) {
     if (outcome.effectState === 'failed' || outcome.effectState === 'cancelled') {
       return {
@@ -369,7 +378,10 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
         ...outcome,
       };
     }
-    if (outcome.executionState === 'failed' && executionIsEffectFree) {
+    if (
+      (outcome.executionState === 'failed' || outcome.executionState === 'timed_out') &&
+      executionIsEffectFree
+    ) {
       return {
         effectKind: outcome.effectKind ?? effectKind,
         ...outcome,
@@ -398,7 +410,13 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
           effectState: 'applied' as const,
           verificationState: 'verified' as const,
         }
-      : outcome),
+      : executionIsAcknowledged
+        ? {
+            ...outcome,
+            effectState: 'applied' as const,
+            verificationState: 'acknowledged' as const,
+          }
+        : outcome),
     ...(resource ? { resource } : {}),
     ...(operationHandle ? { operationHandle } : {}),
   };

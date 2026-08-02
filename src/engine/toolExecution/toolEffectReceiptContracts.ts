@@ -9,12 +9,13 @@ import type {
   ToolExecutionState,
 } from '../../types/toolEffectReceipt';
 import { CODE_OWNED_EFFECT_FREE_SERVICE_TOOL_NAMES } from '../../services/integrations/codeOwnedServiceTools';
+import type { ToolEffectResultCondition } from './toolEffectResultConditions';
 
 export interface CodeOwnedToolEffectContract {
   readonly effectMode: 'none' | 'effectful';
   readonly effectKind: ToolEffectKind;
   readonly completionMode?: 'operational';
-  readonly receiptSettlementMode?: 'returned_unverified';
+  readonly receiptSettlementMode?: 'returned_unverified' | 'acknowledged_returned_unverified';
   readonly tracksExecution?: true;
   readonly result?: ToolEffectResultContract;
   readonly completion?: {
@@ -24,6 +25,7 @@ export interface CodeOwnedToolEffectContract {
       readonly resultPath: readonly string[];
       readonly values: readonly string[];
     };
+    readonly executionEffectAcknowledgedWhen?: readonly ToolEffectResultCondition[];
     readonly effectFreeWhen?: {
       readonly argumentPath: readonly string[];
       readonly values: readonly string[];
@@ -130,6 +132,18 @@ function effectful(
                   }),
                 }
               : {}),
+            ...(options.completion.executionEffectAcknowledgedWhen
+              ? {
+                  executionEffectAcknowledgedWhen: Object.freeze(
+                    options.completion.executionEffectAcknowledgedWhen.map((condition) =>
+                      Object.freeze({
+                        resultPath: Object.freeze([...condition.resultPath]),
+                        values: Object.freeze([...condition.values]),
+                      }),
+                    ),
+                  ),
+                }
+              : {}),
             ...(options.completion.effectFreeWhen
               ? {
                   effectFreeWhen: Object.freeze({
@@ -208,8 +222,8 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
   Object.freeze({
     // JavaScript has no network or native bridge access. A successful run with
     // no observed workspace mutation therefore verifies the requested compute
-    // execution. Workspace-changing runs remain unverified until their exact
-    // artifacts can be reconciled independently.
+    // execution. A code-owned acknowledgement can settle a persisted workspace
+    // change without claiming that its contents satisfy the user's goal.
     javascript: Object.freeze({
       ...effectful(
         'compute.execute',
@@ -225,16 +239,24 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
               resultPath: ['workspaceMutationState'],
               values: ['none_observed'],
             },
+            executionEffectAcknowledgedWhen: [
+              {
+                resultPath: ['workspaceMutationState'],
+                values: ['applied'],
+              },
+            ],
           },
         },
       ),
       completionMode: 'operational' as const,
+      receiptSettlementMode: 'acknowledged_returned_unverified' as const,
     }),
     // Python blocks worker network primitives unless the invocation explicitly
     // enables network access. The runtime may therefore verify a successful
     // computation with no observed workspace mutation and no mutation-capable
-    // HTTP method. Workspace-changing or mutation-capable runs remain
-    // unverified.
+    // HTTP method. A completed local workspace change is acknowledged only
+    // when the code-owned runtime also observed no network mutation; its
+    // contents remain unverified until a later readback.
     python: Object.freeze({
       ...effectful(
         'compute.execute',
@@ -251,10 +273,21 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
               resultPath: ['executionEffectState'],
               values: ['none_observed'],
             },
+            executionEffectAcknowledgedWhen: [
+              {
+                resultPath: ['workspaceMutationState'],
+                values: ['applied'],
+              },
+              {
+                resultPath: ['networkMutationState'],
+                values: ['none_observed'],
+              },
+            ],
           },
         },
       ),
       completionMode: 'operational' as const,
+      receiptSettlementMode: 'acknowledged_returned_unverified' as const,
     }),
     // Workspace writes read the exact resource back after mutation. A result
     // is verified only when that readback matches the requested content.

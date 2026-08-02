@@ -21,16 +21,22 @@ function pythonFailure(
   error: string,
   failureKind: PythonExecutionFailureKind,
   output?: string,
+  network?: {
+    accessState: 'blocked' | 'enabled' | 'unknown';
+    mutationState: 'none_observed' | 'possible' | 'unknown';
+    requestCount?: number;
+  },
 ): ToolRuntimeOutcome {
+  const didNotStart = failureKind === 'invalid_request';
   return failedToolOutcome(
     normalizePythonToolResult({
       success: false,
       error,
       failureKind,
       output,
-      networkAccessState: 'unknown',
-      networkMutationState: 'unknown',
-      networkRequestCount: 0,
+      networkAccessState: didNotStart ? 'blocked' : (network?.accessState ?? 'unknown'),
+      networkMutationState: didNotStart ? 'none_observed' : (network?.mutationState ?? 'unknown'),
+      networkRequestCount: network?.requestCount ?? 0,
     }),
   );
 }
@@ -181,6 +187,7 @@ export async function executePythonTool(
   workspaceConversationId: string,
   context?: ToolExecutionContext,
 ): Promise<ToolRuntimeOutcome> {
+  let networkAccessAuthorized = false;
   try {
     const rawArgs = args as Record<string, unknown>;
     const codeArg = getOptionalToolStringArg(rawArgs, 'code', 'python');
@@ -239,6 +246,7 @@ export async function executePythonTool(
     if (allowNetworkArg.error) {
       return pythonFailure(allowNetworkArg.error, 'invalid_request');
     }
+    networkAccessAuthorized = allowNetworkArg.allowNetwork;
 
     if (codeArg.value && argvArg.argv?.length) {
       return pythonFailure('"argv" for python can only be used with "path".', 'invalid_request');
@@ -288,13 +296,28 @@ export async function executePythonTool(
       });
     }
 
+    // When network access was not authorized, the native bridge is the
+    // enforcement boundary. Even if the WebView times out before reporting
+    // telemetry, it could not have issued a network mutation.
+    if (!result.success && !allowNetworkArg.allowNetwork) {
+      result = {
+        ...result,
+        networkAccessState: 'blocked' as const,
+        networkMutationState: 'none_observed' as const,
+      };
+    }
+
     if (result.files?.length) {
       try {
         await persistPythonWorkspaceFiles(workspaceConversationId, result.files);
       } catch (err: unknown) {
         if (result.success) {
           const message = err instanceof Error ? err.message : String(err);
-          return pythonFailure(message, 'workspace_persistence_failed', result.output);
+          return pythonFailure(message, 'workspace_persistence_failed', result.output, {
+            accessState: result.networkAccessState,
+            mutationState: result.networkMutationState,
+            requestCount: result.networkRequestCount,
+          });
         }
         throw err;
       }
@@ -304,6 +327,9 @@ export async function executePythonTool(
     return result.success ? completedToolOutcome(content) : failedToolOutcome(content);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return pythonFailure(message, 'runtime_failed');
+    return pythonFailure(message, 'runtime_failed', undefined, {
+      accessState: networkAccessAuthorized ? 'unknown' : 'blocked',
+      mutationState: networkAccessAuthorized ? 'unknown' : 'none_observed',
+    });
   }
 }
