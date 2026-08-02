@@ -93,21 +93,13 @@ tag candidate and run the release gate from a clean checkout.
   disposition must be reviewed whenever Expo, `xcode`, or `uuid` changes; it
   stops being acceptable if the call sites or reachability change, severity
   increases, or an SDK-compatible upstream fix becomes available.
-- The SDK 55 / React Native 0.83.10 build graph currently retains the high
-  advisory
+- The lockfile selects patched `brace-expansion@1.1.18` for legacy
+  `glob@7 -> minimatch@3` build-tool callers and patched modern releases for
+  newer callers, resolving
   [GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg)
-  through legacy `glob@7 -> minimatch@3 -> brace-expansion@1` copies used by
-  React Native codegen, the Expo CLI, and Jest coverage tooling. The affected
-  expansion code is not part of Kavi's bundled chat runtime, and Kavi does not
-  pass user or model content to these build-tool glob patterns. The compatible
-  modern dependency graph is already on `minimatch@10.2.6 ->
-brace-expansion@5.0.8`. npm's forced remediation proposes an unsupported
-  React Native or Expo major change, while overriding legacy callers directly
-  to `brace-expansion@5` is API-incompatible. This remains a failing high-audit
-  gate, requires explicit release-owner signoff, and must be reviewed whenever
-  Expo, React Native, Jest, `glob`, `minimatch`, or `brace-expansion` changes.
-  Treat it as a release blocker if untrusted patterns can reach the affected
-  tooling or a compatible upstream fix becomes available and is not adopted.
+  without an unsupported Expo or React Native upgrade. Keep both high-severity
+  audit commands green whenever Expo, React Native, Jest, `glob`, `minimatch`,
+  or `brace-expansion` changes.
 - Run the Android release environment check with
   `npm run check:android:release-env`.
 - Run iOS simulator release validation with `npm run build:ios:release-sim`
@@ -115,7 +107,9 @@ brace-expansion@5.0.8`. npm's forced remediation proposes an unsupported
   command prepares the locked pods in deployment mode before compiling. It
   builds an arm64 simulator app because the pinned LiteRT-LM binary supports
   only the arm64 simulator architecture. This command-line override does not
-  change iOS device archive architectures.
+  change iOS device archive architectures. The installed iOS Simulator runtime
+  must also be compatible with Xcode's selected platform SDK; a mismatched or
+  missing runtime can reject the destination before source compilation begins.
 - Review [THIRD_PARTY_PROVENANCE.md](../THIRD_PARTY_PROVENANCE.md) when dependency patches, generated assets, or attribution-sensitive files change.
 - Confirm Android signing material is configured only in maintainer-local
   storage. Use local `android/keystore.properties` or the

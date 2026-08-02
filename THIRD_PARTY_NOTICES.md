@@ -417,7 +417,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | boolbase | 1.0.0 | transitive | ISC |
 | bplist-creator | 0.1.0 | transitive | MIT |
 | bplist-parser | 0.3.1 | transitive | MIT |
-| brace-expansion | 1.1.16 | transitive | MIT |
+| brace-expansion | 1.1.18 | transitive | MIT |
 | brace-expansion | 5.0.8 | transitive | MIT |
 | braces | 3.0.3 | transitive | MIT |
 | brotli-js | 1.0.2 | runtime | MIT |
