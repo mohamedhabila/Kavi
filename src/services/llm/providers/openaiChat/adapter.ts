@@ -9,6 +9,7 @@ import type {
   StructuredOutputOptions,
   ToolChoiceMode,
 } from '../../support/contracts';
+import { normalizeOpenAICompatibleToolCallMessages } from '../../support/toolArgumentReplay';
 import { applyCompatibleReasoningControl } from './reasoning';
 
 export async function sendOpenAICompatibleChat(args: {
@@ -112,7 +113,7 @@ export async function sendOpenAICompatibleChat(args: {
 
   const body: Record<string, any> = {
     model: args.model,
-    messages: buildCacheStableMessages(),
+    messages: normalizeOpenAICompatibleToolCallMessages(buildCacheStableMessages()),
     stream: args.options.stream ?? false,
   };
   const requestTools =

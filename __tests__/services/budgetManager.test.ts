@@ -12,6 +12,7 @@ import {
   MAX_SYSTEM_PROMPT_TOKENS,
   MAX_TOOL_DEFINITION_TOKENS,
 } from '../../src/services/context/budgetManager';
+import { estimateTokens } from '../../src/services/context/tokenCounter';
 import { ToolDefinition } from '../../src/types/tool';
 
 function makeTool(name: string, description = 'Test tool.'): ToolDefinition {
@@ -469,8 +470,35 @@ describe('enforceContextBudget', () => {
     );
   });
 
+  it('lets a protected task anchor borrow from message budget when the fixed prompt share is too small', () => {
+    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(720)}`;
+    const prompt = `${'baseline '.repeat(2_000)}\n\n${protectedSection}\n\n${'goals '.repeat(500)}`;
+    const fixedPromptBudget = computeContextBudget('qwen/qwen3.5-9b', 24_000).systemPromptBudget;
+
+    expect(estimateTokens(protectedSection)).toBeGreaterThan(fixedPromptBudget);
+
+    const result = enforceContextBudget(
+      'qwen/qwen3.5-9b',
+      prompt,
+      [],
+      [makeMessage('user', 'Continue the delegated task from the latest tool result.')],
+      24_000,
+      {
+        protectedSystemPromptSection: protectedSection,
+      },
+    );
+
+    expect(result.systemPrompt.endsWith(protectedSection)).toBe(true);
+    expect(result.systemPrompt.match(/## Workflow Task Anchor/g)).toHaveLength(1);
+    expect(result.result.budget.systemPromptBudget).toBeGreaterThan(fixedPromptBudget);
+    expect(result.result.systemPromptTokens).toBeLessThanOrEqual(
+      result.result.budget.systemPromptBudget,
+    );
+    expect(result.result.withinBudget).toBe(true);
+  });
+
   it('fails explicitly instead of truncating an anchor that cannot fit its prompt budget', () => {
-    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(2_000)}`;
+    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(3_000)}`;
     const prompt = `System instructions.\n\n${protectedSection}`;
 
     expect(() =>

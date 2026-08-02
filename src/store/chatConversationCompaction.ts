@@ -1,5 +1,6 @@
 import type { Conversation } from '../types/conversation';
 import type { Message } from '../types/message';
+import { repairReadFileContinuationSummary } from '../services/context/compactionSummary';
 
 function isCodeOwnedCompactionSummary(message: Message): boolean {
   return (
@@ -16,7 +17,14 @@ export function selectDurableCompactionMessages(
   candidateMessages: Message[],
 ): Message[] {
   const durableMessageIds = new Set(conversation.messages.map((message) => message.id));
-  return candidateMessages.filter(
-    (message) => durableMessageIds.has(message.id) || isCodeOwnedCompactionSummary(message),
-  );
+  return candidateMessages
+    .filter((message) => durableMessageIds.has(message.id) || isCodeOwnedCompactionSummary(message))
+    .map((message) =>
+      isCodeOwnedCompactionSummary(message)
+        ? {
+            ...message,
+            content: repairReadFileContinuationSummary(message.content, conversation.messages),
+          }
+        : message,
+    );
 }

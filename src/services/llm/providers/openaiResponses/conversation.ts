@@ -6,6 +6,7 @@ import {
   readReasoningReplayKey,
 } from '../../core/reasoningExtraction';
 import { readTrimmedString } from '../../core/toolCallNormalization';
+import { normalizeToolArgumentsForProviderReplay } from '../../support/toolArgumentReplay';
 import { toOpenAIResponsesMessageContent, toOpenAIResponsesText } from './content';
 
 function extractOpenAIReplayFunctionCallIds(output: Record<string, any>[]): Set<string> {
@@ -47,6 +48,10 @@ function sanitizeOpenAIReplayInputItem(item: Record<string, any>): Record<string
 
   if (item.type === 'function_call' && !readTrimmedString(item.call_id) && itemId) {
     sanitized.call_id = itemId;
+  }
+
+  if (item.type === 'function_call') {
+    sanitized.arguments = normalizeToolArgumentsForProviderReplay(item.arguments);
   }
 
   delete sanitized.id;
@@ -135,10 +140,7 @@ export function buildOpenAIResponseFunctionCallItem(
     return null;
   }
 
-  const argumentsText =
-    typeof functionCall?.arguments === 'string'
-      ? functionCall.arguments
-      : JSON.stringify(functionCall?.arguments ?? {});
+  const argumentsText = normalizeToolArgumentsForProviderReplay(functionCall?.arguments);
 
   const item: Record<string, any> = {
     type: 'function_call',

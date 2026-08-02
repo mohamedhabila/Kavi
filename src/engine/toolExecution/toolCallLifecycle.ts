@@ -4,7 +4,10 @@ import { executeTool } from '../tools/index';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { maybeSpillToolOutput } from '../tools/toolOutputSpill';
 import { enforceToolResultBudget } from '../toolResultGuard';
-import { applyTrackedAsyncToolResult } from '../pendingAsyncOperations';
+import {
+  applyTrackedAsyncToolResult,
+  getPendingTrackedAsyncOperations,
+} from '../pendingAsyncOperations';
 import {
   buildToolResultMessage,
   completeRunningToolCall,
@@ -138,6 +141,7 @@ async function completeUnstartedMemoryPolicyRevocation(params: {
     result,
     'failed',
     'authority_revoked',
+    params.lifecycle.iteration,
   );
   return {
     toolCallId: params.effectiveToolCall.id,
@@ -226,6 +230,7 @@ export async function executeToolCallLifecycle(
       result,
       'failed',
       'authority_revoked',
+      params.iteration,
     );
     await emitBalancedToolEnd();
     return {
@@ -354,6 +359,9 @@ export async function executeToolCallLifecycle(
         },
         currentUserMessage: params.currentUserMessage,
         toolObservedMemoryEvidence: params.toolObservedMemoryEvidence,
+        pendingSessionIds: getPendingTrackedAsyncOperations(params.trackedAsyncOperations)
+          .filter((operation) => operation.kind === 'session')
+          .map((operation) => operation.resourceId),
         ...(params.mobileController ? { mobileController: params.mobileController } : {}),
       },
     );
@@ -506,6 +514,8 @@ export async function executeToolCallLifecycle(
       effectiveToolCall.arguments,
       result,
       toolResultIsError ? 'failed' : 'completed',
+      undefined,
+      params.iteration,
     );
     params.onPendingAsyncOperationsChange?.();
     params.callbacks.onToolCallComplete(toolCall);
@@ -585,6 +595,8 @@ export async function executeToolCallLifecycle(
       effectiveToolCall.arguments,
       errorResult,
       'failed',
+      undefined,
+      params.iteration,
     );
     params.onPendingAsyncOperationsChange?.();
     params.callbacks.onToolCallComplete(toolCall);

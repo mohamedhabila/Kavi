@@ -75,6 +75,12 @@ export interface OrchestratorOptions {
   messages: Message[];
   tools?: ToolDefinition[];
   maxTokens?: number;
+  /**
+   * Code-owned graph-turn budget. This is intentionally not part of any model-facing
+   * tool schema; callers may raise it for bounded worker runtimes whose own action
+   * guardrail is larger than the persona default.
+   */
+  maxToolIterations?: number;
   temperature?: number;
   signal?: AbortController;
   thinkingLevel?: ThinkingLevel;

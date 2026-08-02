@@ -262,7 +262,7 @@ describe('chat memory publication mutation fences', () => {
     ).toThrow(SOURCE_LOCKED_ERROR);
   });
 
-  it('compacts away an old enqueued turn but rejects a retained partial source', () => {
+  it('compacts away an old enqueued turn and normalizes a retained partial source', () => {
     const compactedConversationId = addLockedTurn('enqueued');
     addNewerTail(compactedConversationId);
     const newerTail = conversation(compactedConversationId).messages.filter(
@@ -294,6 +294,22 @@ describe('chat memory publication mutation fences', () => {
     );
     expect(() =>
       useChatStore.getState().applyConversationCompaction(partialConversationId, partialSource),
+    ).not.toThrow();
+    expect(conversation(partialConversationId).messages.map((message) => message.id)).toEqual([
+      'user-2',
+      'final-2',
+    ]);
+  });
+
+  it('still rejects a partial source whose publication has not been enqueued', () => {
+    const conversationId = addLockedTurn(null);
+    addNewerTail(conversationId);
+    const partialSource = conversation(conversationId).messages.filter((message) =>
+      ['user-1', 'final-1', 'user-2', 'final-2'].includes(message.id),
+    );
+
+    expect(() =>
+      useChatStore.getState().applyConversationCompaction(conversationId, partialSource),
     ).toThrow(SOURCE_LOCKED_ERROR);
   });
 

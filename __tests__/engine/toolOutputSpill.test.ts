@@ -58,6 +58,49 @@ describe('toolOutputSpill', () => {
     );
   });
 
+  it('keeps compact delegation terminal metadata beside an oversized spill pointer', async () => {
+    const result = JSON.stringify({
+      status: 'completed',
+      sessions: [
+        {
+          sessionId: 'sub-worker',
+          status: 'completed',
+          completionState: 'verified_success',
+          workstreamId: 'worker-goal',
+          output: `Verified worker report ${'x'.repeat(TOOL_OUTPUT_SPILL_BYTE_THRESHOLD)}`,
+          toolsUsed: ['read_file'],
+          iterations: 12,
+          depth: 1,
+        },
+      ],
+    });
+
+    const spilled = await maybeSpillToolOutput({
+      result,
+      conversationId: 'conv-1',
+      toolName: 'sessions_wait',
+      timestamp: 42,
+    });
+    const payload = JSON.parse(spilled.payload) as Record<string, any>;
+
+    expect(spilled.spilled).toBe(true);
+    expect(payload.structuralResult).toMatchObject({
+      version: 1,
+      kind: 'delegation_sessions',
+      sessions: [
+        {
+          sessionId: 'sub-worker',
+          status: 'completed',
+          completionState: 'verified_success',
+          workstreamId: 'worker-goal',
+          toolsUsed: ['read_file'],
+          iterations: 12,
+        },
+      ],
+    });
+    expect(payload.structuralResult.sessions[0].outputPreview.length).toBeLessThanOrEqual(600);
+  });
+
   it('keeps bounded discovery metadata inline so agents can discover tools', async () => {
     const result = JSON.stringify({
       mode: 'search',

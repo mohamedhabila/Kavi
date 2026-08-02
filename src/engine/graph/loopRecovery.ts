@@ -93,7 +93,8 @@ function buildLoopRecoveryHint(
     return [
       'Goal mutations did not advance.',
       'For new goals, call update_goals with {"action":"add","id":"stable-id","name":"visible name","completionPolicy":"blocking|persistent","status":"active|pending"}.',
-      'For existing goals, call update_goals with {"action":"activate|complete|block|remove|update","id":"existing-id","name":"visible name"}.',
+      'For existing goals, call update_goals with {"action":"activate|complete|block|remove|update","id":"existing-id"}; name is optional.',
+      'For workspace-file deliverables use evidence.artifact:<exact-workspace-relative-path>, never evidence.prefix:artifact. evidence.min and evidence.count cannot be the only blocking criteria.',
       validationHint,
       'Avoid completing goals without evidence, or switch to non-goal tools.',
     ]

@@ -273,7 +273,8 @@ describe('LlmService', () => {
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       const parameters = body.tools[0].functionDeclarations[0].parameters;
 
-      expect(parameters.required).toEqual(expect.arrayContaining(['action', 'id', 'name']));
+      expect(parameters.required).toEqual(expect.arrayContaining(['action', 'id']));
+      expect(parameters.required).not.toContain('name');
       expect(parameters.properties.goals).toBeUndefined();
       expect(parameters.properties.id).toEqual(expect.objectContaining({ type: 'string' }));
       expect(parameters.properties.name).toEqual(expect.objectContaining({ type: 'string' }));

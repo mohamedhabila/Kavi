@@ -23,6 +23,12 @@ import {
   MemoryPromptEpochExpiredError,
   type ModelTurnMemoryPolicyBinding,
 } from '../authority/modelTurnMemoryPolicyBinding';
+import {
+  createModelTurnActivityGuard,
+  normalizeModelTurnActivityError,
+  waitForPromiseOrAbort,
+} from './modelTurnActivityGuard';
+export { MODEL_TURN_INACTIVITY_TIMEOUT_MS } from './modelTurnActivityGuard';
 
 const MODEL_PROJECTION_BATCH_MAX_LATENCY_MS = 48;
 const MODEL_PROJECTION_BATCH_MAX_EVENTS = 24;
@@ -66,11 +72,13 @@ function observeIteratorNext<T>(next: Promise<IteratorResult<T>>): ObservedItera
 async function waitForIteratorOrDeadline<T>(
   observed: ObservedIteratorNext<T>,
   deadline: number | undefined,
+  signal?: AbortSignal,
 ): Promise<{ kind: 'iterator'; value: IteratorResult<T> } | { kind: 'deadline' }> {
   const readSettled = (): IteratorResult<T> | undefined => {
     if (observed.state === 'rejected') throw observed.error;
     return observed.state === 'fulfilled' ? observed.value : undefined;
   };
+  if (signal?.aborted) throw createAgentRunAbortError('Request cancelled');
   if (deadline !== undefined && deadline <= Date.now()) return { kind: 'deadline' };
   const settled = readSettled();
   if (settled) return { kind: 'iterator', value: settled };
@@ -80,6 +88,11 @@ async function waitForIteratorOrDeadline<T>(
     const cleanup = () => {
       observed.waiters.delete(onSettled);
       if (timer !== undefined) clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(createAgentRunAbortError('Request cancelled'));
     };
     const onSettled = () => {
       cleanup();
@@ -95,6 +108,11 @@ async function waitForIteratorOrDeadline<T>(
       }
     };
     observed.waiters.add(onSettled);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
     if (deadline !== undefined) {
       timer = setTimeout(
         () => {
@@ -364,6 +382,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
       pendingToolCalls.splice(0);
     },
   });
+  const activityGuard = createModelTurnActivityGuard(params.signal?.signal);
   let streamIterator: AsyncIterator<any> | undefined;
 
   try {
@@ -376,7 +395,10 @@ export async function executeAgentControlGraphModelTurnStreaming(
     ]);
     const modelStreamStartedAt = Date.now();
     let firstModelOutputAt: number | undefined;
-    const stream = params.llm.streamMessage(params.requestMessages, params.streamOptions);
+    const stream = params.llm.streamMessage(params.requestMessages, {
+      ...params.streamOptions,
+      signal: activityGuard.signal,
+    });
     const iterator = stream[Symbol.asyncIterator]();
     streamIterator = iterator;
     let observedNext = observeIteratorNext(Promise.resolve(iterator.next()));
@@ -387,6 +409,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
       const next = await waitForIteratorOrDeadline(
         observedNext,
         projectionPublisher.nextDeadline(),
+        activityGuard.signal,
       );
       if (next.kind === 'deadline') {
         projectionPublisher.onDeadline();
@@ -397,6 +420,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
         break;
       }
       const event = next.value.value;
+      activityGuard.markActivity();
       observedNext = observeIteratorNext(Promise.resolve(iterator.next()));
       if (params.signal?.signal.aborted) {
         throw createAgentRunAbortError('Request cancelled');
@@ -483,8 +507,9 @@ export async function executeAgentControlGraphModelTurnStreaming(
       reasoning,
     };
   } catch (streamError: unknown) {
+    const effectiveError = normalizeModelTurnActivityError(streamError, activityGuard);
     closeModelStreamIterator(streamIterator);
-    if (streamError instanceof MemoryPromptEpochExpiredError) {
+    if (effectiveError instanceof MemoryPromptEpochExpiredError) {
       projectionPublisher.invalidate();
     }
     usageTracker.flush({
@@ -498,7 +523,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
       },
       'model_turn_failed',
     );
-    const streamErrorMsg = streamError instanceof Error ? streamError.message : String(streamError);
+    const streamErrorMsg = effectiveError.message;
     params.applyGraphEvents([
       {
         type: 'MODEL_TURN_FAILED',
@@ -506,7 +531,9 @@ export async function executeAgentControlGraphModelTurnStreaming(
         reason: streamErrorMsg,
       },
     ]);
-    throw streamError instanceof Error ? streamError : new Error(String(streamError));
+    throw effectiveError;
+  } finally {
+    activityGuard.dispose();
   }
 }
 
@@ -546,6 +573,7 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
     memoryPolicyBinding: params.memoryPolicyBinding,
     onInvalidated: () => undefined,
   });
+  const activityGuard = createModelTurnActivityGuard(params.signal?.signal);
 
   params.applyGraphEvents([
     {
@@ -557,10 +585,15 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
 
   const modelTurnStartedAt = Date.now();
   try {
-    const response = await params.llm.sendMessage(params.requestMessages, {
-      ...params.streamOptions,
-      stream: false,
-    });
+    const response = await waitForPromiseOrAbort(
+      params.llm.sendMessage(params.requestMessages, {
+        ...params.streamOptions,
+        signal: activityGuard.signal,
+        stream: false,
+      }),
+      activityGuard.signal,
+    );
+    activityGuard.markActivity();
     const usage = isPlainRecord(response?.usage) ? response.usage : undefined;
     if (usage) {
       usageTracker.mergeSnapshot({
@@ -629,7 +662,8 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
       reasoning,
     };
   } catch (error: unknown) {
-    if (error instanceof MemoryPromptEpochExpiredError) {
+    const effectiveError = normalizeModelTurnActivityError(error, activityGuard);
+    if (effectiveError instanceof MemoryPromptEpochExpiredError) {
       projectionPublisher.invalidate();
     }
     usageTracker.flush({
@@ -638,7 +672,7 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
       budgetTools: params.budgetTools,
     });
     params.recordPerformanceMetrics({ modelTurnCount: 1 }, 'model_turn_failed');
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = effectiveError.message;
     params.applyGraphEvents([
       {
         type: 'MODEL_TURN_FAILED',
@@ -646,6 +680,8 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
         reason,
       },
     ]);
-    throw error instanceof Error ? error : new Error(reason);
+    throw effectiveError;
+  } finally {
+    activityGuard.dispose();
   }
 }

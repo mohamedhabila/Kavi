@@ -110,6 +110,13 @@ export const MIN_OUTPUT_RESERVE = 4096;
 /** Absolute max for system prompt (tokens) to prevent runaway */
 export const MAX_SYSTEM_PROMPT_TOKENS = 8192;
 
+/**
+ * Minimum budget retained for code-owned instructions around an immutable task
+ * anchor. The anchor preserves the request, but it is intentionally untrusted
+ * data and cannot replace the agent's behavioral or safety instructions.
+ */
+export const MIN_PROTECTED_PROMPT_INSTRUCTION_TOKENS = 512;
+
 /** Absolute max for tool definitions (tokens) */
 export const MAX_TOOL_DEFINITION_TOKENS = 12000;
 
@@ -302,6 +309,27 @@ function truncateSystemPromptPreservingSection(
   return adjusted;
 }
 
+function resolveProtectedSystemPromptBudget(params: {
+  budget: ContextBudget;
+  messagesTokens: number;
+  protectedSection: string;
+  toolsTokens: number;
+  totalAvailable: number;
+}): number {
+  const protectedTokens = estimateTokens(params.protectedSection);
+  const requiredPromptTokens = protectedTokens + MIN_PROTECTED_PROMPT_INSTRUCTION_TOKENS;
+  const retainedMessageTokens = Math.min(params.messagesTokens, 4096);
+  const availableAfterToolsAndMessages =
+    params.totalAvailable - params.toolsTokens - retainedMessageTokens;
+  const flexiblePromptCeiling = Math.min(MAX_SYSTEM_PROMPT_TOKENS, availableAfterToolsAndMessages);
+
+  if (requiredPromptTokens > flexiblePromptCeiling) {
+    throw new Error('protected_system_prompt_section_exceeds_budget');
+  }
+
+  return Math.max(params.budget.systemPromptBudget, requiredPromptTokens);
+}
+
 // ── Message windowing ────────────────────────────────────────────────────
 
 /**
@@ -466,6 +494,7 @@ export function enforceContextBudget(
   let messagesTokens = estimateBudgetMessageTokens(adjustedMessages);
 
   const totalAvailable = budget.contextWindow - budget.outputReserve;
+  let effectiveSystemPromptBudget = budget.systemPromptBudget;
 
   // 2. Compress tool descriptions if tools exceed budget
   if (toolsTokens > budget.toolsBudget) {
@@ -480,15 +509,30 @@ export function enforceContextBudget(
     }
   }
 
+  if (options?.protectedSystemPromptSection) {
+    effectiveSystemPromptBudget = resolveProtectedSystemPromptBudget({
+      budget,
+      messagesTokens,
+      protectedSection: options.protectedSystemPromptSection,
+      toolsTokens,
+      totalAvailable,
+    });
+    if (effectiveSystemPromptBudget > budget.systemPromptBudget) {
+      adjustments.push(
+        `expanded protected system prompt budget to ${effectiveSystemPromptBudget} tokens`,
+      );
+    }
+  }
+
   // 3. Truncate system prompt if it exceeds budget
-  if (promptTokens > budget.systemPromptBudget) {
+  if (promptTokens > effectiveSystemPromptBudget) {
     adjustedPrompt = options?.protectedSystemPromptSection
       ? truncateSystemPromptPreservingSection(
           adjustedPrompt,
-          budget.systemPromptBudget,
+          effectiveSystemPromptBudget,
           options.protectedSystemPromptSection,
         )
-      : truncateSystemPrompt(adjustedPrompt, budget.systemPromptBudget);
+      : truncateSystemPrompt(adjustedPrompt, effectiveSystemPromptBudget);
     promptTokens = estimateTokens(adjustedPrompt);
     adjustments.push(`truncated system prompt to ${promptTokens} tokens`);
   }
@@ -552,7 +596,17 @@ export function enforceContextBudget(
       toolsTokens,
       messagesTokens,
       totalTokens,
-      budget,
+      budget:
+        effectiveSystemPromptBudget === budget.systemPromptBudget
+          ? budget
+          : {
+              ...budget,
+              systemPromptBudget: effectiveSystemPromptBudget,
+              messagesBudget: Math.max(
+                0,
+                budget.messagesBudget - (effectiveSystemPromptBudget - budget.systemPromptBudget),
+              ),
+            },
       adjustments,
     },
   };

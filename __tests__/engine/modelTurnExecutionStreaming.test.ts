@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 import {
   executeAgentControlGraphModelTurnStreaming,
   executeAgentControlGraphModelTurnViaSendMessage,
+  MODEL_TURN_INACTIVITY_TIMEOUT_MS,
 } from '../../src/engine/graph/modelTurnExecutionStreaming';
 import { hasGeminiToolTurnThoughtSignatureCoverage } from '../../src/services/llm/providers/gemini/thoughtSignatureCoverage';
 import {
@@ -22,6 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.useRealTimers();
   useSettingsStore.setState({ disableLongTermMemory: false });
 });
 
@@ -82,6 +84,140 @@ async function* duplicateSyntheticToolIdStream() {
 }
 
 describe('executeAgentControlGraphModelTurnStreaming', () => {
+  it('cancels a stalled provider iterator even when the iterator ignores the request signal', async () => {
+    const abortController = new AbortController();
+    const iterator = {
+      next: jest.fn(() => new Promise<IteratorResult<unknown>>(() => undefined)),
+      return: jest.fn(() => Promise.resolve({ done: true, value: undefined })),
+    };
+    const stream = {
+      [Symbol.asyncIterator]: () => iterator,
+    };
+
+    const execution = executeAgentControlGraphModelTurnStreaming({
+      allowQueuedToolCalls: true,
+      applyGraphEvents: jest.fn(),
+      budgetTools: [],
+      callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
+      iteration: 1,
+      llm: { streamMessage: jest.fn(() => stream) },
+      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMessages: [{ role: 'user', content: 'Continue' }],
+      requestModel: 'gpt-5-mini',
+      signal: abortController,
+      streamOptions: {},
+    });
+
+    await Promise.resolve();
+    abortController.abort();
+
+    await expect(execution).rejects.toThrow('Request cancelled');
+    expect(iterator.return).toHaveBeenCalledTimes(1);
+  });
+
+  it('terminates a stream after a full provider-inactivity window', async () => {
+    jest.useFakeTimers();
+    let requestSignal: AbortSignal | undefined;
+    const iterator = {
+      next: jest.fn(() => new Promise<IteratorResult<unknown>>(() => undefined)),
+      return: jest.fn(() => Promise.resolve({ done: true, value: undefined })),
+    };
+    const stream = {
+      [Symbol.asyncIterator]: () => iterator,
+    };
+    const execution = executeAgentControlGraphModelTurnStreaming({
+      allowQueuedToolCalls: true,
+      applyGraphEvents: jest.fn(),
+      budgetTools: [],
+      callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
+      iteration: 1,
+      llm: {
+        streamMessage: jest.fn((_messages: unknown, options: { signal?: AbortSignal }) => {
+          requestSignal = options.signal;
+          return stream;
+        }),
+      },
+      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMessages: [{ role: 'user', content: 'Continue' }],
+      requestModel: 'gpt-5-mini',
+      signal: undefined,
+      streamOptions: {},
+    });
+
+    await Promise.resolve();
+    jest.advanceTimersByTime(MODEL_TURN_INACTIVITY_TIMEOUT_MS);
+
+    await expect(execution).rejects.toThrow('without provider activity');
+    expect(requestSignal?.aborted).toBe(true);
+    expect(iterator.return).toHaveBeenCalledTimes(1);
+  });
+
+  it('extends the inactivity window whenever the provider emits real stream activity', async () => {
+    jest.useFakeTimers();
+    const abortController = new AbortController();
+    let resolveNext: ((value: IteratorResult<any>) => void) | undefined;
+    let requestSignal: AbortSignal | undefined;
+    const iterator = {
+      next: jest.fn(
+        () =>
+          new Promise<IteratorResult<any>>((resolve) => {
+            resolveNext = resolve;
+          }),
+      ),
+      return: jest.fn(() => Promise.resolve({ done: true, value: undefined })),
+    };
+    const stream = {
+      [Symbol.asyncIterator]: () => iterator,
+    };
+    const execution = executeAgentControlGraphModelTurnStreaming({
+      allowQueuedToolCalls: true,
+      applyGraphEvents: jest.fn(),
+      budgetTools: [],
+      callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
+      iteration: 1,
+      llm: {
+        streamMessage: jest.fn((_messages: unknown, options: { signal?: AbortSignal }) => {
+          requestSignal = options.signal;
+          return stream;
+        }),
+      },
+      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMessages: [{ role: 'user', content: 'Continue' }],
+      requestModel: 'gpt-5-mini',
+      signal: abortController,
+      streamOptions: {},
+    });
+
+    let completed = false;
+    try {
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(MODEL_TURN_INACTIVITY_TIMEOUT_MS - 60_000);
+      resolveNext?.({ done: false, value: { type: 'token', content: 'still working' } });
+      for (let index = 0; index < 6; index += 1) await Promise.resolve();
+      expect(iterator.next).toHaveBeenCalledTimes(2);
+
+      await jest.advanceTimersByTimeAsync(MODEL_TURN_INACTIVITY_TIMEOUT_MS - 60_000);
+      expect(requestSignal?.aborted).toBe(false);
+      resolveNext?.({ done: true, value: undefined });
+
+      await expect(execution).resolves.toEqual(
+        expect.objectContaining({ fullContent: 'still working' }),
+      );
+      completed = true;
+    } finally {
+      if (!completed) {
+        abortController.abort();
+        await execution.catch(() => undefined);
+      }
+    }
+  });
+
   it('forwards the streaming dispatch guard to the provider boundary exactly once', async () => {
     let transportStarted = false;
     const streamMessage = jest.fn(
@@ -254,6 +390,37 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
 });
 
 describe('executeAgentControlGraphModelTurnViaSendMessage', () => {
+  it('terminates a non-streaming request after a full provider-inactivity window', async () => {
+    jest.useFakeTimers();
+    let requestSignal: AbortSignal | undefined;
+    const execution = executeAgentControlGraphModelTurnViaSendMessage({
+      applyGraphEvents: jest.fn(),
+      budgetTools: [],
+      callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
+      geminiNative: true,
+      iteration: 1,
+      llm: {
+        sendMessage: jest.fn((_messages: unknown, options: { signal?: AbortSignal }) => {
+          requestSignal = options.signal;
+          return new Promise<never>(() => undefined);
+        }),
+      },
+      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMessages: [{ role: 'user', content: 'Continue' }],
+      requestModel: 'gemini-3-flash-preview',
+      signal: undefined,
+      streamOptions: {},
+    });
+
+    await Promise.resolve();
+    jest.advanceTimersByTime(MODEL_TURN_INACTIVITY_TIMEOUT_MS);
+
+    await expect(execution).rejects.toThrow('without provider activity');
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   it('forwards the non-streaming dispatch guard to the provider boundary exactly once', async () => {
     let transportStarted = false;
     const sendMessage = jest.fn(

@@ -13,8 +13,6 @@ const SESSION_CONTEXT_COMPACT_TOOL_NAMES = new Set([
 
 const SESSION_CONTEXT_OMIT_KEYS = new Set(['guidance', 'recentActivity', 'artifacts']);
 const SESSION_CONTEXT_TERMINAL_OMIT_KEYS = new Set([
-  'sessionId',
-  'workstreamId',
   'depth',
   'iterations',
   'lastToolResultPreview',

@@ -2,7 +2,7 @@ import { LlmService } from '../../services/llm/LlmService';
 import { bindProviderToModel } from '../../services/llm/support/providerSupport';
 import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../types/message';
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
-import { getNextAvailableModel, recordFailure, recordSuccess } from '../failover';
+import { getFailureCount, getNextAvailableModel, recordFailure, recordSuccess } from '../failover';
 import { hydrateProviderApiKey, shouldFailoverOnError } from '../orchestratorProviderRuntime';
 import { isAbortErrorLike } from '../../services/agents/agentRunCancellation';
 import { executePreparedAgentControlGraphPendingToolTurn } from './iterationPendingToolExecution';
@@ -175,6 +175,11 @@ export async function executePreparedAgentControlGraphTurn(params: {
         runtime.activeProvider.id,
         params.modelTurnPreparation.requestModel,
       );
+      const currentFailureCount = getFailureCount(
+        iterationParams.failoverState,
+        runtime.activeProvider.id,
+        params.modelTurnPreparation.requestModel,
+      );
       const next = getNextAvailableModel(iterationParams.failoverState);
       if (next && iterationParams.allProviders) {
         const nextProvider = iterationParams.allProviders.find(
@@ -189,6 +194,15 @@ export async function executePreparedAgentControlGraphTurn(params: {
           runtime.llm = new LlmService(runtime.activeProvider);
           return buildResult(runtime, 'continued');
         }
+      }
+      const hasDistinctAlternative = iterationParams.failoverState.chain.some(
+        (entry) =>
+          entry.providerId !== runtime.activeProvider.id ||
+          entry.model !== params.modelTurnPreparation.requestModel,
+      );
+      if (!hasDistinctAlternative && currentFailureCount === 1) {
+        await iterationParams.yieldToUiFrame();
+        return buildResult(runtime, 'continued');
       }
     }
     throw streamError instanceof Error ? streamError : new Error(String(streamError));

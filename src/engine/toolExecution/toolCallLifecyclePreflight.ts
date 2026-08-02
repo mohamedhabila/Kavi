@@ -63,6 +63,7 @@ function completePreflightFailure(params: {
     params.content,
     'failed',
     params.preflightBlockedKind,
+    params.lifecycle.iteration,
   );
   return {
     toolCallId: params.lifecycle.tc.id,

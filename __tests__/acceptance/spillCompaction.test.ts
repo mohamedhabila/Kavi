@@ -51,4 +51,35 @@ describe('tool spill + compaction cooperation', () => {
     expect(cleared.cleared).toBe(1);
     expect(cleared.messages[0]?.content).toContain('.kavi/spill/read_file-42.txt');
   });
+
+  it('preserves structural read continuation metadata when old chunk text is cleared', () => {
+    const partial = makeToolMessage(
+      JSON.stringify({
+        status: 'read_chunk',
+        path: 'attachments/large-report.txt',
+        sha256: 'a'.repeat(64),
+        content: 'x'.repeat(7_000),
+        offset: 7_000,
+        nextOffset: 14_000,
+        totalChars: 28_000,
+        complete: false,
+      }),
+    );
+    const recent = Array.from({ length: 3 }, (_, index) => makeToolMessage(`recent-${index}`));
+
+    const cleared = clearOldToolResults([partial, ...recent], 3);
+    const compacted = JSON.parse(cleared.messages[0]!.content) as Record<string, unknown>;
+
+    expect(compacted).toMatchObject({
+      status: 'read_chunk',
+      path: 'attachments/large-report.txt',
+      sha256: 'a'.repeat(64),
+      offset: 7_000,
+      nextOffset: 14_000,
+      totalChars: 28_000,
+      complete: false,
+      compactionPlaceholder: { version: 1, kind: 'cleared' },
+    });
+    expect(cleared.messages[0]!.content).not.toContain('x'.repeat(100));
+  });
 });

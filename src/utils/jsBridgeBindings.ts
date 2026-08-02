@@ -141,6 +141,15 @@ function validateTextEncoding(encoding: unknown): void {
   }
 }
 
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+  }
+  return bytes;
+}
+
 function listDirectoryEntries(cache: Map<string, string>, directoryPath: string): string[] {
   const prefix = directoryPath ? `${directoryPath}/` : '';
   const entries = new Set<string>();
@@ -192,6 +201,31 @@ export function createFsApi(cache: Map<string, string>, getBaseDirectory: () => 
     return cache.delete(resolvedPath);
   };
 
+  const statSync = (path: string) => {
+    const resolvedPath = normalizeWorkspacePath(path, getBaseDirectory());
+    const content = cache.get(resolvedPath);
+    if (content !== undefined) {
+      return {
+        size: utf8ByteLength(content),
+        isFile: (): boolean => true,
+        isDirectory: (): boolean => false,
+      };
+    }
+
+    const prefix = resolvedPath ? `${resolvedPath}/` : '';
+    const isDirectory =
+      !resolvedPath || Array.from(cache.keys()).some((key) => key.startsWith(prefix));
+    if (!isDirectory) {
+      throw new Error(`Path not found in bridge cache: ${resolvedPath}.`);
+    }
+
+    return {
+      size: 0,
+      isFile: (): boolean => false,
+      isDirectory: (): boolean => true,
+    };
+  };
+
   return {
     readFile,
     readFileSync: (path: string, encoding?: string): string => {
@@ -204,6 +238,7 @@ export function createFsApi(cache: Map<string, string>, getBaseDirectory: () => 
     },
     exists,
     existsSync: (path: string): boolean => exists(path),
+    statSync,
     listFiles: (): string[] =>
       Array.from(cache.keys()).sort((left, right) => left.localeCompare(right)),
     readdirSync: (path = '.'): string[] =>

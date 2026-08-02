@@ -7,6 +7,7 @@
 
 import { writeConversationWorkspaceTextFile } from '../../services/conversationWorkspace/files';
 import { normalizeToolName } from './toolNameNormalization';
+import { extractToolOutputStructuralMetadata } from './toolOutputStructuralMetadata';
 
 export const TOOL_OUTPUT_SPILL_BYTE_THRESHOLD = 8 * 1024;
 export const TOOL_OUTPUT_DISCOVERY_SPILL_BYTE_THRESHOLD = 64 * 1024;
@@ -58,12 +59,17 @@ export async function maybeSpillToolOutput(params: {
   const timestamp = params.timestamp ?? Date.now();
   const path = buildSpillPath(params.toolName, timestamp);
   await writeConversationWorkspaceTextFile(params.conversationId, path, params.result);
+  const structuralResult = extractToolOutputStructuralMetadata({
+    toolName: params.toolName,
+    result: params.result,
+  });
 
   const payload = JSON.stringify({
     status: 'spilled',
     path,
     byteLength,
     preview,
+    ...(structuralResult ? { structuralResult } : {}),
     notice:
       'Tool output exceeded the inline context budget and was saved to the conversation workspace.',
   });

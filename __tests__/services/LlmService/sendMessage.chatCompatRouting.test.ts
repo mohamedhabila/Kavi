@@ -11,6 +11,50 @@ import {
 
 describe('LlmService', () => {
   describe('sendMessage chat-compatible routing and provider options', () => {
+    it('keeps malformed historical tool arguments from poisoning an OpenRouter retry', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ choices: [{ message: { content: 'Recovered.' } }] }),
+      });
+      const malformedArguments = '{"path":"notes.txt"';
+      const messages = [
+        { role: 'user', content: 'Read notes.txt' },
+        {
+          role: 'assistant',
+          content: '',
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'read_file', arguments: malformedArguments },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_1',
+          content: 'Invalid tool arguments. Retry with valid JSON.',
+        },
+      ] as any;
+      const service = new LlmService(
+        makeConfig({
+          id: 'openrouter',
+          name: 'OpenRouter',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          apiKey: 'sk-openrouter',
+          model: 'qwen/qwen3.5-9b',
+        }),
+      );
+
+      await service.sendMessage(messages);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.messages[1].tool_calls[0].function.arguments).toBe('{}');
+      expect(JSON.parse(body.messages[1].tool_calls[0].function.arguments)).toEqual({});
+      expect(body.messages[2].content).toContain('Retry with valid JSON');
+      expect(messages[1].tool_calls[0].function.arguments).toBe(malformedArguments);
+    });
+
     it('adds structured output via native compatible response_format for OpenRouter-style providers', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

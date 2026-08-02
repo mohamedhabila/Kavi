@@ -28,6 +28,7 @@ import {
 import {
   assertConversationCompactionMemoryPublicationSourcesSafe,
   assertMemoryPublicationLockedSourcesUnchanged,
+  dropPartiallyRetainedEnqueuedPublicationSources,
   preserveCodeOwnedMessageMemoryPublications,
 } from './chatMessageMemoryPublicationMutationFence';
 import {
@@ -125,7 +126,7 @@ export function createMessageStoreActions(
           conversationId,
           (conversation) => {
             const protectedMessageIds = getProtectedExecutionMessageIds(conversation);
-            const nextMessages = capMessages(
+            let nextMessages = capMessages(
               preserveProtectedExecutionMessages(
                 conversation,
                 preserveCodeOwnedMessageMemoryPublications(
@@ -134,6 +135,10 @@ export function createMessageStoreActions(
                 ),
               ),
               protectedMessageIds,
+            );
+            nextMessages = dropPartiallyRetainedEnqueuedPublicationSources(
+              conversation.messages,
+              nextMessages,
             );
             if (nextMessages.length === 0) {
               return conversation;

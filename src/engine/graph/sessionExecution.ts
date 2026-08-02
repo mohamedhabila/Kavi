@@ -23,11 +23,14 @@ import {
   isMemoryPromptEpochExpiredError,
 } from '../authority/modelTurnMemoryPolicyBinding';
 import { attachModelTurnMemoryAttribution } from './modelTurnMemoryAttribution';
+import { resolveNextLongHorizonIterationLimit } from './longHorizonIterationBudget';
+import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
 
 export interface ExecuteAgentControlGraphSessionParams extends Omit<
   ExecuteAgentControlGraphIterationParams,
   'iteration' | 'runtime'
 > {
+  allowLongHorizonIterationExtensions?: boolean;
   initialRuntime: AgentControlGraphIterationRuntimeState;
   refreshSessionMemoryContext: (params: {
     activeModel: string;
@@ -59,6 +62,8 @@ export async function executeAgentControlGraphSession(
 ): Promise<void> {
   let iteration = 1;
   let authorityRepreparationCount = 0;
+  const iterationExtensionSize = params.maxToolIterations;
+  let iterationLimit = params.maxToolIterations;
   let restrictiveRefreshRequested = false;
   let runtime: AgentControlGraphIterationRuntimeState = {
     ...params.initialRuntime,
@@ -95,7 +100,7 @@ export async function executeAgentControlGraphSession(
   });
 
   try {
-    while (iteration <= params.maxToolIterations) {
+    while (iteration <= iterationLimit) {
       const initialRuntimeCommand = selectAgentControlGraphRuntimeCommand(
         params.graph.getGraphSnapshot(),
       );
@@ -148,6 +153,11 @@ export async function executeAgentControlGraphSession(
 
       const iterationExecution = await executeAgentControlGraphIteration({
         ...params,
+        maxToolIterations: iterationLimit,
+        promptContextSupport: {
+          ...params.promptContextSupport,
+          maxToolIterations: iterationLimit,
+        },
         iteration,
         runtime,
       });
@@ -162,7 +172,24 @@ export async function executeAgentControlGraphSession(
       if (iterationExecution.status === 'waiting') {
         return;
       }
-      if (iteration === params.maxToolIterations) {
+      const extensionCheckpoint = Math.max(1, iterationLimit - 1);
+      if (iteration === extensionCheckpoint) {
+        const nextIterationLimit = resolveNextLongHorizonIterationLimit({
+          enabled: params.allowLongHorizonIterationExtensions === true,
+          currentLimit: iterationLimit,
+          extensionSize: iterationExtensionSize,
+          toolCallHistory: params.toolRuntime.toolCallHistory,
+        });
+        if (nextIterationLimit !== null) {
+          params.graph.recordObservability({
+            observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.LONG_HORIZON_BUDGET_EXTENDED,
+            iteration,
+            detail: `from:${iterationLimit},to:${nextIterationLimit}`,
+          });
+          iterationLimit = nextIterationLimit;
+        }
+      }
+      if (iteration === iterationLimit) {
         try {
           assertModelTurnMemoryPolicyBindingDurablyCurrent(
             runtime.lastModelTurnMemoryPolicyBinding,

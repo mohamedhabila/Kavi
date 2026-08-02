@@ -145,3 +145,32 @@ export function assertConversationCompactionMemoryPublicationSourcesSafe(
     failIfSourceWindowChanged(current, proposedByFinalId.get(current.finalId));
   }
 }
+
+/**
+ * Once an immutable source snapshot is enqueued, compaction may remove that
+ * source window in full. If a model-context compaction retained only a tail of
+ * the window, drop the entire enqueued window instead of either persisting a
+ * misleading partial turn or failing the user's next request.
+ */
+export function dropPartiallyRetainedEnqueuedPublicationSources(
+  currentMessages: readonly Message[],
+  proposedMessages: Message[],
+): Message[] {
+  const currentWindows = getPublicationSourceWindows(currentMessages).filter(
+    (window) => window.disposition === 'enqueued',
+  );
+  if (currentWindows.length === 0) return proposedMessages;
+
+  let nextMessages = proposedMessages;
+  for (const current of currentWindows) {
+    const proposedWindow = getPublicationSourceWindows(nextMessages).find(
+      (window) => window.finalId === current.finalId,
+    );
+    if (arePublicationSourceWindowsExact(current, proposedWindow)) continue;
+
+    const sourceIds = new Set(current.messages.map((message) => message.id));
+    if (!nextMessages.some((message) => sourceIds.has(message.id))) continue;
+    nextMessages = nextMessages.filter((message) => !sourceIds.has(message.id));
+  }
+  return nextMessages;
+}

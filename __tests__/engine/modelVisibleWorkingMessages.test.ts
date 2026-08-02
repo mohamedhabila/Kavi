@@ -413,9 +413,11 @@ tail`;
 
     const completed = JSON.parse(sanitized[1]!.content);
     expect(completed).toEqual({
+      sessionId: 'sub-123',
       status: 'completed',
       hasOutput: true,
       output: 'Worker summary',
+      workstreamId: 'worker-a',
       toolsUsed: ['list_files', 'glob_search'],
     });
 

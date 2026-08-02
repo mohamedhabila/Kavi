@@ -19,6 +19,8 @@ import { normalizeSemanticMemoryHandoff } from '../services/memory/semanticMemor
 import { isEligibleMessageMemoryPublicationSource } from '../utils/messageMemoryPublication';
 import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
 
+const persistedConversationProjectionCache = new WeakMap<Conversation, Conversation>();
+
 function projectValidPublicationSources(conversation: Conversation): Conversation['messages'] {
   return (conversation.messages ?? []).map((message) => {
     if (!message.memoryPublication || isEligibleMessageMemoryPublicationSource(message)) {
@@ -86,9 +88,14 @@ export function partializeChatPersistState<
   },
 >(state: T): Pick<T, 'conversations' | 'activeConversationId'> {
   return {
-    conversations: state.conversations.map((conversation) =>
-      sanitizeConversationForPersistence(conversation),
-    ),
+    conversations: state.conversations.map((conversation) => {
+      const cached = persistedConversationProjectionCache.get(conversation);
+      if (cached) return cached;
+
+      const sanitized = sanitizeConversationForPersistence(conversation);
+      persistedConversationProjectionCache.set(conversation, sanitized);
+      return sanitized;
+    }),
     activeConversationId: state.activeConversationId,
   };
 }

@@ -9,9 +9,11 @@ import type { Message } from '../../types/message';
 import { createTimeoutSignal } from '../../utils/runtime';
 import { LlmService } from '../llm/LlmService';
 import {
+  buildReadFileContinuationSummarySection,
   buildStructuredSummary,
   COMPACTION_SUMMARY_MARKER,
   getMessageContentForContext,
+  normalizePriorCompactionContext,
   type StructuredSummaryMemoryHints,
 } from './compactionSummary';
 import type { CompactionSummarizerConfig } from './compactionModelResolver';
@@ -118,10 +120,20 @@ export async function buildCompactionSummary(params: {
     if (!normalized) {
       return deterministic();
     }
-    if (params.priorContext?.trim()) {
-      return `${normalized}\n\n## Prior Context\n${params.priorContext.trim()}`;
+    const sections = [normalized];
+    const normalizedPriorContext = normalizePriorCompactionContext(
+      params.priorContext,
+      params.tier,
+    );
+    if (normalizedPriorContext) {
+      sections.push(`## Prior Context\n${normalizedPriorContext}`);
     }
-    return normalized;
+    const continuationSection = buildReadFileContinuationSummarySection(
+      params.messages,
+      params.priorContext,
+    );
+    if (continuationSection) sections.push(continuationSection);
+    return sections.join('\n\n');
   } catch {
     return deterministic();
   }

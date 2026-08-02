@@ -2,6 +2,7 @@ import type { Message } from '../types/message';
 import { clearOldToolResults } from '../services/context/compaction';
 import type { CompactResult, CompactionTier } from '../services/context/types';
 import { estimateMessageTokens } from '../services/context/tokenCounter';
+import { repairReadFileContinuationSummary } from '../services/context/compactionSummary';
 
 export interface OrchestratorCompactionEvent {
   notice: string;
@@ -69,11 +70,12 @@ export function applyCompactionResultToWorkingMessages(
   const firstKeptId = compactResult.result.firstKeptEntryId;
   const keptIdx = firstKeptId ? messages.findIndex((message) => message.id === firstKeptId) : -1;
   const kept = keptIdx >= 0 ? messages.slice(keptIdx) : messages.slice(-4);
-  const systemContent = summary.trim();
+  const systemContent = repairReadFileContinuationSummary(summary, messages);
 
   return {
     notice:
-      summary || (tier === 'aggressive' ? 'Context compacted aggressively' : 'Context compacted'),
+      systemContent ||
+      (tier === 'aggressive' ? 'Context compacted aggressively' : 'Context compacted'),
     messages: [
       {
         id: `compact_${Date.now()}`,
@@ -90,6 +92,6 @@ export function applyCompactionResultToWorkingMessages(
     tier,
     tokensBefore: compactResult.result.tokensBefore,
     tokensAfter: compactResult.result.tokensAfter,
-    summary,
+    summary: systemContent,
   };
 }

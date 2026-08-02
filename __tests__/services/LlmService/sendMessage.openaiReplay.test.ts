@@ -12,6 +12,57 @@ import {
 
 describe('LlmService', () => {
   describe('sendMessage OpenAI Responses replay', () => {
+    it('sanitizes malformed historical function arguments while preserving the tool error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(makeOpenAIResponsesPayload()),
+      });
+      const malformedArguments = '{"path":"notes.txt"';
+      const messages = [
+        { role: 'user', content: 'Read notes.txt' },
+        {
+          role: 'assistant',
+          content: '',
+          tool_calls: [
+            {
+              id: 'call_bad',
+              type: 'function',
+              function: { name: 'read_file', arguments: malformedArguments },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_bad',
+          content: 'Invalid tool arguments. Retry with valid JSON.',
+        },
+      ] as any;
+      const service = new LlmService(
+        makeConfig({
+          id: 'openai',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-openai',
+          model: 'gpt-5.4',
+        }),
+      );
+
+      await service.sendMessage(messages);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const functionCall = body.input.find(
+        (item: { type?: string }) => item.type === 'function_call',
+      );
+      expect(functionCall.arguments).toBe('{}');
+      expect(JSON.parse(functionCall.arguments)).toEqual({});
+      expect(body.input).toContainEqual({
+        type: 'function_call_output',
+        call_id: 'call_bad',
+        output: 'Invalid tool arguments. Retry with valid JSON.',
+      });
+      expect(messages[1].tool_calls[0].function.arguments).toBe(malformedArguments);
+    });
+
     it('replays OpenAI tool history as Responses input items', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

@@ -39,7 +39,11 @@ import {
   getRuntimeToolAvailabilityContext,
   type RuntimeToolAvailabilityContext,
 } from '../tools/runtimeAvailability';
-import { MAX_TOOL_ITERATIONS, MAX_TOOL_ITERATIONS_SUPERAGENT } from './constants';
+import {
+  MAX_TOOL_ITERATIONS,
+  MAX_TOOL_ITERATIONS_SUPERAGENT,
+  resolveToolIterationBudget,
+} from './constants';
 import type { OrchestratorCallbacks } from './types';
 import {
   admitMobileControllerRuntime,
@@ -160,6 +164,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     devWarn: (message: string) => void;
   };
   messages: Message[];
+  maxToolIterations?: number;
   model: string;
   personaId?: string;
   provider: LlmProviderConfig;
@@ -177,6 +182,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   emitPendingAsyncOperationsChange: () => void;
   failoverState: FailoverState | null;
   isSuperAgent: boolean;
+  allowLongHorizonIterationExtensions: boolean;
   lastPendingAsyncSignature: string;
   llm: LlmService;
   maxToolIterations: number;
@@ -200,7 +206,13 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   const personaRegistryId = persona?.id;
   const isSuperAgent =
     typeof personaRegistryId === 'string' && personaRegistryId === SUPER_AGENT_PERSONA_ID;
-  const maxToolIterations = isSuperAgent ? MAX_TOOL_ITERATIONS_SUPERAGENT : MAX_TOOL_ITERATIONS;
+  const personaIterationBudget = isSuperAgent
+    ? MAX_TOOL_ITERATIONS_SUPERAGENT
+    : MAX_TOOL_ITERATIONS;
+  const maxToolIterations = resolveToolIterationBudget(
+    params.maxToolIterations,
+    personaIterationBudget,
+  );
   params.logger.debug(
     `conversationId=${params.conversationId}, persona=${persona?.name || 'none'} (superAgent=${isSuperAgent}), maxIterations=${maxToolIterations}`,
   );
@@ -323,6 +335,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     emitPendingAsyncOperationsChange,
     failoverState,
     isSuperAgent,
+    allowLongHorizonIterationExtensions: isSuperAgent && params.maxToolIterations === undefined,
     lastPendingAsyncSignature,
     llm,
     maxToolIterations,

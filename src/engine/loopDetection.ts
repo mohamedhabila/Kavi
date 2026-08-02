@@ -2,11 +2,28 @@ import { GOAL_BOOTSTRAP_TOOL_NAME } from './goals/bootstrap';
 import { areGoalSuccessCriteriaSatisfied } from './goals/completionEvidence';
 import { isBlockingGoal, type AgentGoal } from './goals/types';
 import type { ToolMessageOutcomeStatus } from './toolExecution/toolMessageOutcome';
+import {
+  buildRawToolArgsKey,
+  buildRawToolResultKey,
+  hashResult,
+  hashToolCall,
+  normalizeToolNameKey,
+  simpleLoopDetectionHash,
+} from './loopDetectionKeys';
+import {
+  countTrailingIdenticalInformationResults,
+  isCompletedDistinctInformationProgressWindow,
+  isDistinctInformationOnlyToolMultiset,
+} from './loopDetectionSemanticProgress';
+export { hashResult, hashToolCall } from './loopDetectionKeys';
+export { buildIterationSemanticProgressFingerprint } from './loopDetectionSemanticProgress';
+export type { IterationToolProgressRecord } from './loopDetectionSemanticProgress';
 
 export interface ToolCallRecord {
   id?: string;
   name: string;
   arguments: string;
+  modelTurnIteration?: number;
   timestamp: number;
   status: ToolMessageOutcomeStatus;
   result?: string;
@@ -39,6 +56,7 @@ export type IterationProgressSignature = {
   toolMultisetKey: string;
   goalProgressFingerprint: string;
   activeGoalId: string | null;
+  semanticProgressFingerprint?: string;
 };
 
 export const GOAL_FOCUS_THRASH_THRESHOLD = 4;
@@ -64,10 +82,6 @@ const DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
 // intentionally unchanged. Failed-repeat detection and the global iteration
 // cap still protect against broken or unbounded wait loops.
 const ELAPSED_PROGRESS_TOOL_NAMES = new Set(['wait', 'sessions_wait']);
-// Reading new, successful content is real information gain for audit/research
-// tasks even before a graph goal acquires completion evidence. Keep this list
-// narrow: generic discovery scans retain the existing stagnant-progress guard.
-const DISTINCT_INFORMATION_PROGRESS_TOOL_NAMES = new Set(['read_file']);
 
 function hasIncompleteBlockingGoal(goals: ReadonlyArray<AgentGoal> | undefined): boolean {
   return (goals ?? []).some(
@@ -98,14 +112,6 @@ function isDiscoveryOnlyToolMultiset(multisetKey: string | undefined): boolean {
   return toolNames.length > 0 && toolNames.every((toolName) => DISCOVERY_TOOL_NAMES.has(toolName));
 }
 
-function isDistinctInformationOnlyToolMultiset(multisetKey: string | undefined): boolean {
-  const toolNames = (multisetKey ?? '').split('|').filter(Boolean);
-  return (
-    toolNames.length > 0 &&
-    toolNames.every((toolName) => DISTINCT_INFORMATION_PROGRESS_TOOL_NAMES.has(toolName))
-  );
-}
-
 function countTrailingStagnantSignatures(
   signatures: ReadonlyArray<IterationProgressSignature>,
 ): number {
@@ -117,7 +123,8 @@ function countTrailingStagnantSignatures(
     const entry = signatures[index];
     if (
       entry?.toolMultisetKey !== latest.toolMultisetKey ||
-      entry.goalProgressFingerprint !== latest.goalProgressFingerprint
+      entry.goalProgressFingerprint !== latest.goalProgressFingerprint ||
+      (entry.semanticProgressFingerprint ?? '') !== (latest.semanticProgressFingerprint ?? '')
     ) {
       break;
     }
@@ -159,89 +166,6 @@ function isCompletedElapsedProgress(entry: ToolCallRecord): boolean {
     entry.status === 'completed' &&
     ELAPSED_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name))
   );
-}
-
-function isCompletedDistinctInformationProgressWindow(params: {
-  history: ReadonlyArray<ToolCallRecord>;
-  multisetKey: string | undefined;
-  count: number | undefined;
-}): boolean {
-  const toolNames = (params.multisetKey ?? '').split('|').filter(Boolean);
-  if (
-    toolNames.length === 0 ||
-    !toolNames.every((toolName) => DISTINCT_INFORMATION_PROGRESS_TOOL_NAMES.has(toolName))
-  ) {
-    return false;
-  }
-
-  const count = params.count ?? STAGNANT_PROGRESS_THRESHOLD;
-  const recent = params.history.slice(-count);
-  if (
-    recent.length !== count ||
-    recent.some(
-      (entry) =>
-        entry.status !== 'completed' ||
-        entry.result === undefined ||
-        !DISTINCT_INFORMATION_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name)),
-    )
-  ) {
-    return false;
-  }
-
-  const argumentFingerprints = recent.map(
-    (entry) => entry.argsHash ?? hashToolCall(entry.name, entry.arguments),
-  );
-  const resultFingerprints = recent.map((entry) => entry.resultHash ?? hashResult(entry.result));
-  return (
-    new Set(argumentFingerprints).size === recent.length &&
-    new Set(resultFingerprints).size === recent.length
-  );
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || value === undefined) return String(value);
-  if (typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
-}
-
-function simpleHash(s: string): string {
-  let hash = 5381;
-  for (let i = 0; i < s.length; i++) {
-    hash = ((hash << 5) + hash + s.charCodeAt(i)) | 0;
-  }
-  return hash.toString(36);
-}
-
-function normalizeToolNameKey(toolName: string): string {
-  return toolName.trim().toLowerCase();
-}
-
-function buildRawToolArgsKey(entry: Pick<ToolCallRecord, 'name' | 'arguments'>): string {
-  return `${normalizeToolNameKey(entry.name)}::${entry.arguments}`;
-}
-
-function buildRawToolResultKey(
-  entry: Pick<ToolCallRecord, 'result' | 'resultHash'>,
-): string | undefined {
-  return entry.resultHash ?? hashResult(entry.result);
-}
-
-export function hashToolCall(toolName: string, params: unknown): string {
-  try {
-    return `${toolName}:${simpleHash(stableStringify(params))}`;
-  } catch {
-    return `${toolName}:${simpleHash(String(params))}`;
-  }
-}
-
-export function hashResult(result: string | undefined): string | undefined {
-  if (result === undefined) {
-    return undefined;
-  }
-  return simpleHash(result);
 }
 
 export function detectGenericRepeat(
@@ -324,7 +248,7 @@ export function buildGoalProgressFingerprint(
   const goalStateFingerprint = goals
     .map(
       (goal) =>
-        `${goal.id}:${goal.status}:${goal.evidence.length}:${simpleHash(goal.evidence.join('\n'))}:constraints:${goal.userConstraints?.length ?? 0}`,
+        `${goal.id}:${goal.status}:${goal.evidence.length}:${simpleLoopDetectionHash(goal.evidence.join('\n'))}:constraints:${goal.userConstraints?.length ?? 0}`,
     )
     .sort()
     .join(';');
@@ -358,7 +282,9 @@ export function detectStagnantProgress(
 
   const repeatedMultiset = window.every((entry) => entry.toolMultisetKey === first.toolMultisetKey);
   const unchangedProgress = window.every(
-    (entry) => entry.goalProgressFingerprint === first.goalProgressFingerprint,
+    (entry) =>
+      entry.goalProgressFingerprint === first.goalProgressFingerprint &&
+      (entry.semanticProgressFingerprint ?? '') === (first.semanticProgressFingerprint ?? ''),
   );
 
   if (repeatedMultiset && unchangedProgress) {
@@ -380,15 +306,46 @@ export function detectConsecutiveBlockedPreflightCalls(
     return { detected: false };
   }
 
-  const window = history.slice(-threshold);
-  const firstKind = window[0]?.preflightBlockedKind;
+  const trailingTurns: Array<{
+    key: string;
+    entries: ToolCallRecord[];
+  }> = [];
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index]!;
+    const turnKey =
+      entry.modelTurnIteration === undefined
+        ? `legacy-record:${index}`
+        : `model-turn:${entry.modelTurnIteration}`;
+    const currentTurn = trailingTurns.at(-1);
+    if (currentTurn?.key === turnKey) {
+      currentTurn.entries.push(entry);
+    } else {
+      trailingTurns.push({ key: turnKey, entries: [entry] });
+    }
+  }
+
+  if (trailingTurns.length < threshold) {
+    return { detected: false };
+  }
+
+  const window = trailingTurns.slice(0, threshold);
+  const firstKind = window[0]?.entries[0]?.preflightBlockedKind;
   if (!firstKind) {
     return { detected: false };
   }
 
-  const allMatch = window.every((entry) => entry.preflightBlockedKind === firstKind);
-  if (!allMatch) {
-    return { detected: false };
+  let repeatedCallKeys = new Set(window[0]!.entries.map(buildRawToolArgsKey));
+  for (const turn of window) {
+    if (!turn.entries.every((entry) => entry.preflightBlockedKind === firstKind)) {
+      return { detected: false };
+    }
+    const turnCallKeys = new Set(turn.entries.map(buildRawToolArgsKey));
+    repeatedCallKeys = new Set(
+      [...repeatedCallKeys].filter((callKey) => turnCallKeys.has(callKey)),
+    );
+    if (repeatedCallKeys.size === 0) {
+      return { detected: false };
+    }
   }
 
   return {
@@ -569,8 +526,8 @@ export function detectLoops(
         type: 'tool_filter_loop',
         count: blockedPreflight.count,
         details:
-          `${level.toUpperCase()}: ${blockedPreflight.count} consecutive ${blockedPreflight.kind} ` +
-          'preflight blocks without graph progress.',
+          `${level.toUpperCase()}: ${blockedPreflight.count} consecutive model turns repeated ` +
+          `the same ${blockedPreflight.kind} preflight-blocked tool call without graph progress.`,
       };
     }
     const goalMutationErrorLoop = detectGoalMutationErrorLoop(history);
@@ -650,37 +607,49 @@ export function detectLoops(
 
   const stagnantProgress = detectStagnantProgress(stagnationSignatures);
   if (stagnantProgress.detected) {
+    const distinctInformationOnly = isDistinctInformationOnlyToolMultiset(
+      stagnantProgress.multisetKey,
+    );
+    const trailingInformationStagnationCount = distinctInformationOnly
+      ? countTrailingIdenticalInformationResults({
+          history,
+          multisetKey: stagnantProgress.multisetKey,
+        })
+      : undefined;
     if (
       isCompletedElapsedProgressWindow({
         history,
         multisetKey: stagnantProgress.multisetKey,
         count: stagnantProgress.count,
       }) ||
-      isCompletedDistinctInformationProgressWindow({
-        history,
-        multisetKey: stagnantProgress.multisetKey,
-        count: stagnantProgress.count,
-      })
+      isCompletedDistinctInformationProgressWindow(
+        {
+          history,
+          multisetKey: stagnantProgress.multisetKey,
+          count: stagnantProgress.count,
+        },
+        STAGNANT_PROGRESS_THRESHOLD,
+      ) ||
+      (trailingInformationStagnationCount !== undefined &&
+        trailingInformationStagnationCount < STAGNANT_PROGRESS_THRESHOLD)
     ) {
       return { loopDetected: false };
     }
     const discoveryOnly = isDiscoveryOnlyToolMultiset(stagnantProgress.multisetKey);
-    const distinctInformationOnly = isDistinctInformationOnlyToolMultiset(
-      stagnantProgress.multisetKey,
-    );
     const trailingStagnantCount = countTrailingStagnantSignatures(stagnationSignatures);
+    const reportedStagnantCount = trailingInformationStagnationCount ?? trailingStagnantCount;
     const level: LoopSeverity =
-      discoveryOnly || (distinctInformationOnly && trailingStagnantCount < CRITICAL_THRESHOLD)
+      discoveryOnly || (distinctInformationOnly && reportedStagnantCount < CRITICAL_THRESHOLD)
         ? 'warning'
         : resolveBlockingWorkLoopSeverity(options?.goals);
     return {
       loopDetected: true,
       level,
       type: discoveryOnly ? 'discovery_stall' : 'stagnant_progress',
-      count: distinctInformationOnly ? trailingStagnantCount : stagnantProgress.count,
+      count: distinctInformationOnly ? reportedStagnantCount : stagnantProgress.count,
       details:
         `${level.toUpperCase()}: tool multiset ${stagnantProgress.multisetKey} repeated ` +
-        `${distinctInformationOnly ? trailingStagnantCount : stagnantProgress.count} iterations without goal progress.`,
+        `${distinctInformationOnly ? reportedStagnantCount : stagnantProgress.count} iterations without semantic progress.`,
     };
   }
 

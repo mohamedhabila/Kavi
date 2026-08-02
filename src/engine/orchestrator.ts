@@ -63,6 +63,7 @@ export async function runOrchestrator(
     internalUserMessageCount,
     logger,
     messages,
+    maxToolIterations: options.maxToolIterations,
     model,
     personaId,
     provider,

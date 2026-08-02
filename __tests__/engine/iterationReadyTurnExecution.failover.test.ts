@@ -272,4 +272,45 @@ describe('prepared graph turn directive consumption', () => {
     expect(fixture.params.runtime.activeProvider.id).toBe(primaryProvider.id);
     expect(fixture.consumeOneShotTurnDirectives).not.toHaveBeenCalled();
   });
+
+  it('retries one transient transport failure when only one provider is configured', async () => {
+    mockExecuteAgentControlGraphModelTurn.mockRejectedValueOnce(
+      new Error('Software caused connection abort'),
+    );
+    const fixture = buildParams();
+    fixture.params.iterationParams.allProviders = [primaryProvider];
+    fixture.params.iterationParams.failoverState = createFailoverState(
+      [{ providerId: primaryProvider.id, model: primaryProvider.model, priority: 0 }],
+      { providerId: primaryProvider.id, model: primaryProvider.model },
+    );
+
+    const result = await executePreparedAgentControlGraphTurn(fixture.params);
+
+    expect(result.status).toBe('continued');
+    expect(result.runtime.activeProvider.id).toBe(primaryProvider.id);
+    expect(fixture.params.iterationParams.yieldToUiFrame).toHaveBeenCalledTimes(1);
+    expect(fixture.consumeOneShotTurnDirectives).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a second consecutive transient failure from the only provider', async () => {
+    const firstFailure = new Error('Software caused connection abort');
+    const secondFailure = new Error('connection reset');
+    mockExecuteAgentControlGraphModelTurn
+      .mockRejectedValueOnce(firstFailure)
+      .mockRejectedValueOnce(secondFailure);
+    const fixture = buildParams();
+    fixture.params.iterationParams.allProviders = [primaryProvider];
+    fixture.params.iterationParams.failoverState = createFailoverState(
+      [{ providerId: primaryProvider.id, model: primaryProvider.model, priority: 0 }],
+      { providerId: primaryProvider.id, model: primaryProvider.model },
+    );
+
+    await expect(executePreparedAgentControlGraphTurn(fixture.params)).resolves.toMatchObject({
+      status: 'continued',
+    });
+    await expect(executePreparedAgentControlGraphTurn(fixture.params)).rejects.toBe(secondFailure);
+
+    expect(mockExecuteAgentControlGraphModelTurn).toHaveBeenCalledTimes(2);
+    expect(fixture.consumeOneShotTurnDirectives).not.toHaveBeenCalled();
+  });
 });

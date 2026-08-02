@@ -28,7 +28,7 @@ export function shouldFailoverOnError(error: unknown): boolean {
     return status === 408 || status === 409 || status === 429 || status >= 500;
   }
 
-  return /network request failed|failed to fetch|fetch failed|timeout|timed out|econn|enotfound/i.test(
+  return /network request failed|failed to fetch|fetch failed|timeout|timed out|econn|enotfound|software caused connection abort|connection (?:aborted|reset|closed|lost)|socket hang up|broken pipe|network connection (?:was )?lost/i.test(
     message,
   );
 }

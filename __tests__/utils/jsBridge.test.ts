@@ -86,6 +86,16 @@ describe('executeWithBridge', () => {
       expect(result).toBe('hello world');
     });
 
+    it('reports Node-style file and directory stats from the workspace cache', () => {
+      const cache = buildFileCache([{ path: 'data/test.txt', content: 'hello 🌍' }]);
+      const result = executeWithBridge(
+        'const fs = require("fs"); const file = fs.statSync("data/test.txt"); const directory = fs.statSync("data"); return [file.size, file.isFile(), file.isDirectory(), directory.isFile(), directory.isDirectory()];',
+        { fileCache: cache },
+      );
+
+      expect(result).toEqual([10, true, false, false, true]);
+    });
+
     it('exposes bridge globals through global/globalThis for runtime introspection', () => {
       const cache = buildFileCache([{ path: 'test.txt', content: 'hello world' }]);
       const result = executeWithBridge(

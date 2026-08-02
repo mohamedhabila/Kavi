@@ -54,4 +54,39 @@ describe('orchestrator compaction', () => {
     );
     expect(event.messages[1]?.id).toBe('assistant-tail');
   });
+
+  it('does not let a stale compaction result move an unchanged file revision behind EOF', () => {
+    const completedState =
+      '- {"version":1,"tool":"read_file","path":"attachments/source.txt","sha256":"' +
+      `${'a'.repeat(64)}","offset":90,"nextOffset":null,"totalChars":100,"complete":true}`;
+    const staleState =
+      '- {"version":1,"tool":"read_file","path":"attachments/source.txt","sha256":"' +
+      `${'a'.repeat(64)}","offset":10,"nextOffset":20,"totalChars":100,"complete":false}`;
+    const messages: Message[] = [
+      {
+        id: 'compact-prior',
+        role: 'system',
+        content: `[Conversation Summary]\n\n## Tool Continuation State (code-owned)\n${completedState}`,
+        timestamp: 1,
+        compactionProvenance: { version: 1, dependency: 'transcript_only' },
+      },
+      { id: 'assistant-tail', role: 'assistant', content: 'Still working', timestamp: 2 },
+    ];
+
+    const event = applyCompactionResultToWorkingMessages(messages, {
+      ok: true,
+      compacted: true,
+      tier: 'selective',
+      result: {
+        summary: `[Conversation Summary]\n\n## Tool Continuation State (code-owned)\n${staleState}`,
+        firstKeptEntryId: 'assistant-tail',
+        tokensBefore: 2_000,
+        tokensAfter: 200,
+      },
+    });
+
+    expect(event.messages[0]?.content).toContain('"complete":true');
+    expect(event.messages[0]?.content).not.toContain('"nextOffset":20');
+    expect(event.summary).toBe(event.messages[0]?.content);
+  });
 });
