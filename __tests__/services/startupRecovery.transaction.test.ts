@@ -184,6 +184,63 @@ describe('startup recovery transaction', () => {
     expect(mockMaintainTerminalExecutionRetention).not.toHaveBeenCalled();
   });
 
+  it('retries post-recovery settlement without revoking live execution ownership again', async () => {
+    mockSettleOpenMessageMemoryPublications
+      .mockRejectedValueOnce(new Error('transient settlement failure'))
+      .mockResolvedValueOnce([]);
+    const {
+      triggerForegroundPersistedAgentRecovery,
+      triggerPersistedAgentRecovery,
+    } = require('../../src/services/startupRecovery');
+
+    await expect(triggerPersistedAgentRecovery()).rejects.toThrow('transient settlement failure');
+
+    expect(mockInitSubAgentRegistry).toHaveBeenCalledTimes(1);
+    expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1);
+    expect(mockChatState.recoverInterruptedAgentRuns).toHaveBeenCalledTimes(1);
+    expect(mockRepairTerminalAgentRunsMissingFinalResponses).toHaveBeenCalledTimes(1);
+    expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenLastCalledWith('startup');
+
+    await triggerForegroundPersistedAgentRecovery();
+
+    expect(mockInitSubAgentRegistry).toHaveBeenCalledTimes(1);
+    expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1);
+    expect(mockChatState.recoverInterruptedAgentRuns).toHaveBeenCalledTimes(1);
+    expect(mockRepairTerminalAgentRunsMissingFinalResponses).toHaveBeenCalledTimes(1);
+    expect(mockReconcileDurableRecoveryLifecycle.mock.calls.map((call) => call[0])).toEqual([
+      'startup',
+      'foreground',
+    ]);
+    expect(mockSettleOpenMessageMemoryPublications).toHaveBeenCalledTimes(2);
+    expect(mockFlushChatStorePersistenceNow).toHaveBeenCalledTimes(1);
+    expect(mockMaintainTerminalExecutionRetention).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries terminal run repair without repeating startup ownership reconciliation', async () => {
+    mockRepairTerminalAgentRunsMissingFinalResponses
+      .mockRejectedValueOnce(new Error('transient terminal repair failure'))
+      .mockResolvedValueOnce([]);
+    const {
+      triggerForegroundPersistedAgentRecovery,
+      triggerPersistedAgentRecovery,
+    } = require('../../src/services/startupRecovery');
+
+    await expect(triggerPersistedAgentRecovery()).rejects.toThrow(
+      'transient terminal repair failure',
+    );
+    await triggerForegroundPersistedAgentRecovery();
+
+    expect(mockInitSubAgentRegistry).toHaveBeenCalledTimes(1);
+    expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1);
+    expect(mockChatState.recoverInterruptedAgentRuns).toHaveBeenCalledTimes(1);
+    expect(mockRepairTerminalAgentRunsMissingFinalResponses).toHaveBeenCalledTimes(2);
+    expect(mockReconcileDurableRecoveryLifecycle.mock.calls.map((call) => call[0])).toEqual([
+      'startup',
+      'foreground',
+    ]);
+    expect(mockFlushChatStorePersistenceNow).toHaveBeenCalledTimes(1);
+  });
+
   it('fails closed before any other recovery mutation when scheduler projection cleanup fails', async () => {
     mockReleaseStaleScheduledProjectionOwners.mockRejectedValueOnce(
       new Error('scheduler projection cleanup failed'),

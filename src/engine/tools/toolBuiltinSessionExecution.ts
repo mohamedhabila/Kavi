@@ -37,8 +37,17 @@ export async function executeBuiltinSessionTool(
       return executeSessionSurfaceOutput(args);
     case 'sessions_status':
       return executeSessionStatus(args);
-    case 'sessions_wait':
-      return executeSessionWait(args, conversationId, params.context?.executionSignal);
+    case 'sessions_wait': {
+      const pendingSessionIds = params.context?.pendingSessionIds;
+      return pendingSessionIds?.length
+        ? executeSessionWait(
+            args,
+            conversationId,
+            params.context?.executionSignal,
+            pendingSessionIds,
+          )
+        : executeSessionWait(args, conversationId, params.context?.executionSignal);
+    }
     case 'sessions_cancel':
       return executeSessionCancel(args);
     case 'sessions_yield':

@@ -73,7 +73,7 @@ function argumentError(
 function omitAdapterNullOptionals(args: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...args };
   for (const field of ALLOWED_UPDATE_GOALS_ROOT_FIELDS) {
-    if (field !== 'action' && field !== 'id' && field !== 'name' && normalized[field] === null) {
+    if (field !== 'action' && field !== 'id' && normalized[field] === null) {
       delete normalized[field];
     }
   }
@@ -121,7 +121,10 @@ function normalizeParsedGoal(
   };
 }
 
-function validateUpdateGoalsRootShape(args: Record<string, unknown>): UpdateGoalsArgumentError[] {
+function validateUpdateGoalsRootShape(
+  args: Record<string, unknown>,
+  action: AgentGoalMutation['action'],
+): UpdateGoalsArgumentError[] {
   const unknownFields = Object.keys(args).filter(
     (field) => !ALLOWED_UPDATE_GOALS_ROOT_FIELDS.has(field),
   );
@@ -143,13 +146,18 @@ function validateUpdateGoalsRootShape(args: Record<string, unknown>): UpdateGoal
       ),
     ];
   }
-  if (typeof args.name !== 'string' || !args.name.trim()) {
+  if (action === 'add' && (typeof args.name !== 'string' || !args.name.trim())) {
     return [
       argumentError(
         'missing_title',
-        'name is required for update_goals and must be a non-empty string.',
+        'name is required when adding a goal and must be a non-empty string.',
         'name',
       ),
+    ];
+  }
+  if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+    return [
+      argumentError('invalid_field_type', 'name must be a non-empty string when supplied.', 'name'),
     ];
   }
   for (const field of OPTIONAL_STRING_FIELDS) {
@@ -373,7 +381,7 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   if (constraints.errors.length > 0) {
     return { mutation: { action, goals: [] }, errors: constraints.errors };
   }
-  const shapeErrors = validateUpdateGoalsRootShape(normalizedArgs);
+  const shapeErrors = validateUpdateGoalsRootShape(normalizedArgs, action);
   if (shapeErrors.length > 0) {
     return { mutation: { action, goals: [] }, errors: shapeErrors };
   }

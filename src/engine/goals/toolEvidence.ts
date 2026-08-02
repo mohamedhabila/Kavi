@@ -28,6 +28,26 @@ function buildPythonGoalEvidenceStrings(content: string): string[] {
   }
 }
 
+function buildReadFileGoalEvidenceStrings(content: string): string[] | undefined {
+  const continuation = parseReadFileContinuationResult(content);
+  if (!continuation) return undefined;
+
+  return [
+    `read_file:${JSON.stringify({
+      status: 'read_chunk',
+      path: continuation.path,
+      ...(continuation.sha256 ? { sha256: continuation.sha256 } : {}),
+      offset: continuation.offset,
+      nextOffset: continuation.nextOffset,
+      totalChars: continuation.totalChars,
+      complete: continuation.complete,
+      ...(continuation.rereadOffset !== undefined
+        ? { rereadOffset: continuation.rereadOffset }
+        : {}),
+    })}`,
+  ];
+}
+
 function buildCompactJsonObjectEvidenceString(toolName: string, content: string): string | null {
   try {
     const parsed = JSON.parse(content) as unknown;
@@ -204,6 +224,10 @@ export function buildToolGoalEvidenceStrings(params: {
   if (params.toolName === 'python') {
     return buildPythonGoalEvidenceStrings(params.content);
   }
+  if (params.toolName === 'read_file') {
+    const readFileEvidence = buildReadFileGoalEvidenceStrings(params.content);
+    if (readFileEvidence) return readFileEvidence;
+  }
 
   return Array.from(
     new Set(
@@ -216,3 +240,4 @@ export function buildToolGoalEvidenceStrings(params: {
     ),
   );
 }
+import { parseReadFileContinuationResult } from '../../utils/readFileContinuation';

@@ -199,3 +199,23 @@ export function hasOperationalEvidenceFromSources(params: {
         isOperationalEvidenceSourceName(entry.sourceName)),
   );
 }
+
+export function hasVerificationEvidenceFromSources(params: {
+  resultPreviewEntries?: ReadonlyArray<{ sourceName?: string; preview?: string }>;
+}): boolean {
+  return (params.resultPreviewEntries ?? []).some((entry) => {
+    const normalized = normalizeSourceName(entry.sourceName);
+    if (!normalized || !isApprovalGradeSourceName(normalized) || !hasResultPreview(entry.preview)) {
+      return false;
+    }
+
+    const descriptor = inferToolCapabilityDescriptor({
+      name: normalized,
+      description: normalized,
+    });
+    return (
+      descriptor.providesEvidence.includes('verification') ||
+      descriptor.workflowStages.includes('verify_evidence')
+    );
+  });
+}

@@ -23,6 +23,7 @@ import {
   getAgentRunMessageSlice,
   hasNewerRunningAgentRun,
   hasDeliveredFinalAssistantResponse,
+  isHistoricalRunMissingExactRequestAnchor,
 } from './lifecycle/agentRunStateMachine';
 import { readPendingGoalUserConstraintDelivery } from '../../engine/goals/userConstraintFinalDelivery';
 import { buildAgentControlGraphAfterPersistedFinalDelivery } from '../../engine/graph/persistedFinalDelivery';
@@ -327,6 +328,9 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
             conversationId: conversation.id,
             runId: terminalRun.id,
           }) || repairedConstraintDelivery;
+        continue;
+      }
+      if (isHistoricalRunMissingExactRequestAnchor(conversation, terminalRun)) {
         continue;
       }
 

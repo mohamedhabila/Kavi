@@ -95,6 +95,30 @@ describe('pendingAsyncOperations', () => {
     ]);
   });
 
+  it('terminalizes every tracked session that a multi-session wait reports missing', () => {
+    for (const sessionId of ['sub-missing-a', 'sub-missing-b']) {
+      applyTrackedAsyncToolResult(
+        trackedOperations,
+        'sessions_spawn',
+        '{"prompt":"research"}',
+        JSON.stringify({ status: 'running', sessionId }),
+      );
+    }
+
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_wait',
+      '{"sessionIds":["sub-missing-a","sub-missing-b"]}',
+      JSON.stringify({
+        status: 'error',
+        code: 'session_not_found',
+        missingSessionIds: ['sub-missing-a', 'sub-missing-b'],
+      }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
+  });
+
   it('clears stale tracked session workers when sessions_yield confirms none remain', () => {
     applyTrackedAsyncToolResult(
       trackedOperations,
@@ -120,11 +144,29 @@ describe('pendingAsyncOperations', () => {
     expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
   });
 
-  it('does not treat detached background sessions as pending foreground async work', () => {
+  it('joins a spawned worker to the current request when waitForCompletion is omitted', () => {
     applyTrackedAsyncToolResult(
       trackedOperations,
       'sessions_spawn',
       '{"prompt":"research"}',
+      JSON.stringify({ status: 'running', sessionId: 'sub-joined-1' }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toEqual([
+      expect.objectContaining({
+        kind: 'session',
+        resourceId: 'sub-joined-1',
+        status: 'running',
+        blocksFinalization: true,
+      }),
+    ]);
+  });
+
+  it('does not treat explicitly detached sessions as pending foreground async work', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_spawn',
+      '{"prompt":"research","waitForCompletion":false}',
       JSON.stringify({ status: 'running', sessionId: 'sub-detached-1' }),
     );
 

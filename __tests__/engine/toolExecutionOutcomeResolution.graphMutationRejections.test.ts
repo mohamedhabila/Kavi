@@ -346,7 +346,8 @@ describe('tool execution outcome resolution', () => {
         toolMessage: createToolMessage({
           id: 'tc-goals',
           name: 'update_goals',
-          content: '{"status":"ok"}',
+          content: '{"status":"error"}',
+          isError: true,
         }),
       },
     ];
@@ -372,7 +373,7 @@ describe('tool execution outcome resolution', () => {
         fieldPlacement: expect.stringContaining('root'),
         missingFields: expect.arrayContaining(['name']),
         missingFieldLocations: [{ goalId: 'scope-b', field: 'name', path: 'name' }],
-        retryArguments: { id: 'scope-b', name: '<visible-goal-name>' },
+        retryTemplate: { action: 'add', id: 'scope-b', name: '<visible-goal-name>' },
       }),
     );
     expect(parsed.repair.expectedShape).toEqual(
@@ -427,7 +428,70 @@ describe('tool execution outcome resolution', () => {
       ]),
     );
     expect(parsed.repair).toEqual(
-      expect.objectContaining({ retryable: true, code: 'goal_not_found' }),
+      expect.objectContaining({
+        retryable: true,
+        code: 'goal_not_found',
+        sideEffectApplied: false,
+        goalNotFoundRepair: expect.objectContaining({
+          instruction: expect.stringContaining('earlier add failed'),
+          addShape: expect.objectContaining({ action: 'add' }),
+        }),
+      }),
+    );
+  });
+
+  it('returns actionable structural guidance for invalid workspace artifact criteria', async () => {
+    const params = buildBaseParams();
+    params.getGraphSnapshot = jest.fn().mockReturnValue({ goals: [] });
+    params.executableToolCalls = [
+      {
+        name: 'update_goals',
+        arguments: JSON.stringify({
+          action: 'add',
+          id: 'workspace-report',
+          name: 'Write workspace report',
+          status: 'active',
+          completionPolicy: 'blocking',
+          successCriteria: ['evidence.prefix:artifact', 'evidence.min:1'],
+        }),
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-goals',
+        toolMessage: createToolMessage({
+          id: 'tc-goals',
+          name: 'update_goals',
+          content: '{"status":"ok"}',
+        }),
+      },
+    ];
+
+    await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    const parsed = JSON.parse(params.workingMessages[0].content);
+    expect(parsed.status).toBe('error');
+    expect(parsed.repair).toEqual(
+      expect.objectContaining({
+        retryable: true,
+        code: 'invalid_success_criteria',
+        sideEffectApplied: false,
+        invalidFields: ['successCriteria'],
+        attemptedSuccessCriteria: ['evidence.prefix:artifact', 'evidence.min:1'],
+        successCriteriaContract: expect.objectContaining({
+          workspaceArtifactRule: expect.stringContaining(
+            'evidence.artifact:<exact-workspace-relative-path>',
+          ),
+          specificityRule: expect.stringContaining('cannot stand alone'),
+        }),
+      }),
+    );
+    expect(parsed.structuredErrors).toContainEqual(
+      expect.objectContaining({
+        code: 'invalid_success_criteria',
+        field: 'successCriteria',
+      }),
     );
   });
 

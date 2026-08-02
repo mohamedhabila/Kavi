@@ -42,6 +42,7 @@ type PythonToolResult =
       output?: string;
       error: string;
       failureKind: PythonExecutionFailureKind;
+      files?: Array<{ path: string; contentBase64?: string }>;
       networkAccessState: PythonNetworkAccessState;
       networkMutationState: PythonNetworkMutationState;
       networkRequestCount: number;
@@ -49,6 +50,16 @@ type PythonToolResult =
 
 export function normalizePythonToolResult(result: PythonToolResult): string {
   const output = result.output || '';
+  const normalizedFiles = (result.files ?? []).map((file) => ({
+    path: file.path,
+    ...(typeof file.contentBase64 === 'string'
+      ? { size: approxBinaryBytes(file.contentBase64) }
+      : {}),
+  }));
+  const { items: files, omitted: omittedFiles } = limitArray(
+    normalizedFiles,
+    Math.min(MAX_LIST_ENTRIES, 20),
+  );
 
   if (!result.success) {
     const error = result.error;
@@ -69,28 +80,31 @@ export function normalizePythonToolResult(result: PythonToolResult): string {
             : 'Python execution failed.',
       error,
       failureKind: result.failureKind,
-      workspaceMutationState: 'unknown',
+      workspaceMutationState:
+        result.failureKind === 'workspace_persistence_failed'
+          ? 'unknown'
+          : normalizedFiles.length > 0
+            ? 'applied'
+            : 'none_observed',
       networkAccessState: result.networkAccessState,
       networkMutationState: result.networkMutationState,
       networkRequestCount: result.networkRequestCount,
       executionEffectState:
-        status === 'failed' && result.networkMutationState === 'none_observed'
+        result.failureKind !== 'workspace_persistence_failed' &&
+        normalizedFiles.length === 0 &&
+        result.networkMutationState === 'none_observed'
           ? 'none_observed'
           : 'unknown',
       ...buildExecutionOutputFields(output),
+      ...(normalizedFiles.length > 0
+        ? {
+            fileCount: normalizedFiles.length,
+            files,
+            ...(omittedFiles > 0 ? { omittedFiles } : {}),
+          }
+        : {}),
     });
   }
-
-  const normalizedFiles = (result.files ?? []).map((file) => ({
-    path: file.path,
-    ...(typeof file.contentBase64 === 'string'
-      ? { size: approxBinaryBytes(file.contentBase64) }
-      : {}),
-  }));
-  const { items: files, omitted: omittedFiles } = limitArray(
-    normalizedFiles,
-    Math.min(MAX_LIST_ENTRIES, 20),
-  );
 
   const summary =
     normalizedFiles.length > 0
@@ -132,8 +146,8 @@ export function normalizeJavaScriptToolResult(result: {
   const output = result.output || '';
 
   if (!result.success) {
-    const status =
-      result.failureKind === 'workspace_persistence_failed' ? 'effect_failed' : 'failed';
+    const failureKind = result.failureKind ?? 'execution_failed';
+    const status = failureKind === 'workspace_persistence_failed' ? 'effect_failed' : 'failed';
     return JSON.stringify({
       status,
       isError: true,
@@ -142,8 +156,9 @@ export function normalizeJavaScriptToolResult(result: {
           ? 'JavaScript execution completed but workspace persistence failed.'
           : 'JavaScript execution failed.',
       error: result.error || 'JavaScript execution failed.',
-      failureKind: result.failureKind ?? 'execution_failed',
-      workspaceMutationState: 'unknown',
+      failureKind,
+      workspaceMutationState:
+        failureKind === 'workspace_persistence_failed' ? 'unknown' : 'none_observed',
       ...buildExecutionOutputFields(output),
     });
   }

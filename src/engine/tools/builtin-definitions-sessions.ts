@@ -3,7 +3,7 @@ import { ToolDefinition } from '../../types/tool';
 export const SESSION_SPAWN_TOOL: ToolDefinition = {
   name: 'sessions_spawn',
   description:
-    'Launch a delegated worker for a self-contained task. Use waitForCompletion=true when the current turn needs the worker result; otherwise let it run in the background and return control to the user immediately. Pass a focused prompt and omit tools unless you need a narrower worker scope.',
+    'Launch a delegated worker for a self-contained task. The current run must first add a separate blocking goal owned by "delegated-worker" with requiredCapabilities including "coordinate" and successCriteria including "evidence.prefix:worker" plus "evidence.min:1"; do not repurpose a parent deliverable goal. Retry this tool with that goal id as workstreamId. By default the worker is joined to the current user request: the launch returns promptly, the supervisor should continue independent non-overlapping work, and it must obtain the terminal worker result before finalizing. Use waitForCompletion=true to also wait inside the launch call, or explicitly set false only when the worker should remain detached and control should return to the user immediately. Pass a focused prompt. The tools field is a strict security allowlist, not a task plan: usually omit it so the worker receives the code-owned default surface.',
   input_schema: {
     type: 'object',
     properties: {
@@ -15,7 +15,7 @@ export const SESSION_SPAWN_TOOL: ToolDefinition = {
       workstreamId: {
         type: 'string',
         description:
-          'Optional stable workstream id for this worker. Use it only when you want to link the worker to a specific structured workstream.',
+          'Stable structured workstream id of the dedicated delegated-worker goal. In a current agent run, create that separate goal before spawning and pass its exact id here.',
       },
       goalScope: {
         type: 'object',
@@ -26,7 +26,7 @@ export const SESSION_SPAWN_TOOL: ToolDefinition = {
             type: 'array',
             items: { type: 'string' },
             description:
-              'Goal ids from the parent run graph that this worker should focus on. When omitted, the active or pending goal is used.',
+              'Goal ids from the parent run graph that this worker should focus on. When omitted, the sole eligible delegated-worker goal is used; multiple eligible goals require an exact workstreamId.',
           },
         },
       },
@@ -45,12 +45,12 @@ export const SESSION_SPAWN_TOOL: ToolDefinition = {
         type: 'array',
         items: { type: 'string' },
         description:
-          'Optional worker-tool restriction. Omit this unless you need a narrower worker scope than the default available tool surface.',
+          'Optional strict worker-tool security allowlist. Every omitted tool becomes unavailable. Usually omit this field; set it only when intentionally forbidding all other tools, after including every capability the complete task requires.',
       },
       waitForCompletion: {
         type: 'boolean',
         description:
-          'When true, wait for the worker result in this tool call instead of returning immediately with a running session id.',
+          'Omit to launch promptly while keeping the worker joined to this request. Set true to wait for its result inside this tool call. Set false only to detach it and allow the supervisor turn to finish while it is still running.',
       },
     },
     required: ['prompt'],
@@ -268,7 +268,7 @@ export const SESSION_STATUS_TOOL: ToolDefinition = {
 export const SESSION_WAIT_TOOL: ToolDefinition = {
   name: 'sessions_wait',
   description:
-    'Block until one or more sub-agent sessions reach terminal states and return their outputs. Provide sessionId for one worker, sessionIds for several workers, or omit both to wait for all currently running child sessions in the current conversation.',
+    'Block until one or more sub-agent sessions reach terminal states and return their outputs. Provide sessionId for one worker, sessionIds for several workers, or omit both to wait for all currently running child sessions in the current conversation. Code-tracked workers joined to the current request are preferred when available. Otherwise copy IDs exactly from tool results; never reconstruct them.',
   input_schema: {
     type: 'object',
     properties: {
@@ -277,7 +277,7 @@ export const SESSION_WAIT_TOOL: ToolDefinition = {
         type: 'array',
         items: { type: 'string' },
         description:
-          'Optional list of session IDs to wait for together. Omit to wait for all currently running child sessions in the current conversation.',
+          'Optional list of exact session IDs to wait for together. Omit to wait for all workers joined to the current request, falling back to currently running child sessions when no joined worker is tracked.',
       },
       waitTimeoutMs: {
         type: 'number',

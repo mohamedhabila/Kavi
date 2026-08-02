@@ -48,7 +48,13 @@ export async function waitForStartedSubAgentResult(
 export function collectRequestedSessionIds(
   args: { sessionId?: unknown; sessionIds?: unknown },
   conversationId: string,
-): { sessionIds: string[]; waitsForConversationSessions: boolean; error?: string } {
+  pendingSessionIds?: ReadonlyArray<string>,
+): {
+  sessionIds: string[];
+  waitsForConversationSessions: boolean;
+  selectedTrackedSessions?: boolean;
+  error?: string;
+} {
   const explicitIds = new Set<string>();
 
   if (typeof args.sessionId === 'string' && args.sessionId.trim()) {
@@ -73,6 +79,21 @@ export function collectRequestedSessionIds(
 
   if (explicitIds.size > 0) {
     return { sessionIds: [...explicitIds], waitsForConversationSessions: false };
+  }
+
+  const trackedIds = Array.from(
+    new Set(
+      (pendingSessionIds ?? [])
+        .map((sessionId) => (typeof sessionId === 'string' ? sessionId.trim() : ''))
+        .filter(Boolean),
+    ),
+  );
+  if (trackedIds.length > 0) {
+    return {
+      sessionIds: trackedIds,
+      waitsForConversationSessions: true,
+      selectedTrackedSessions: true,
+    };
   }
 
   return {

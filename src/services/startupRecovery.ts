@@ -47,6 +47,9 @@ async function waitForSchedulerHydration(): Promise<void> {
 
 let recoveryPromise: Promise<void> | null = null;
 let hasCompletedInitialRecovery = false;
+let hasInitializedSubAgentRegistryForProcess = false;
+let hasReconciledStartupExecutionOwnership = false;
+let hasRepairedStartupAgentRuns = false;
 
 function collectForegroundExecutionOwners(
   conversations: ReadonlyArray<Conversation>,
@@ -106,46 +109,58 @@ async function recoverPersistedAgentStateForSource(
   ]);
   await releaseStaleScheduledProjectionOwners();
 
-  if (initializeSubAgents) {
+  if (initializeSubAgents && !hasInitializedSubAgentRegistryForProcess) {
     await initSubAgentRegistry(useChatStore.getState().conversations);
+    hasInitializedSubAgentRegistryForProcess = true;
   }
-  await reconcileDurableRecoveryLifecycle(source);
+  // A retry in the same JavaScript process is a foreground reconciliation, not another process
+  // restart. Repeating startup ownership revocation can interrupt model turns and workers that
+  // the first sweep already resumed before a later persistence/settlement stage failed.
+  const lifecycleSource =
+    source === 'startup' && !hasReconciledStartupExecutionOwnership ? 'startup' : 'foreground';
+  await reconcileDurableRecoveryLifecycle(lifecycleSource);
   if (source === 'startup') {
-    const activeSubAgents = listActiveSubAgents();
-    const executionRunIdByConversationAndAgentRun = collectForegroundExecutionOwners(
-      useChatStore.getState().conversations,
-    );
-    // Only a fresh process startup revokes in-process foreground ownership.
-    // A same-process foreground transition must not race a live model or tool.
-    await recoverForegroundJournalState();
-    const recoveredChatState = useChatStore.getState();
-    const resolveToolEffect = await buildToolEffectRestartDispositionResolver(
-      recoveredChatState.conversations.flatMap((conversation) =>
-        (conversation.agentRuns ?? [])
-          .filter((run) => run.status === 'running')
-          .flatMap((run) => {
-            const executionRunId = executionRunIdByConversationAndAgentRun
-              .get(conversation.id)
-              ?.get(run.id);
-            return executionRunId
-              ? listActiveToolEffectRestartInputs({
-                  conversationId: conversation.id,
-                  executionRunId,
-                  messages: conversation.messages,
-                  run,
-                })
-              : [];
-          }),
-      ),
-    );
-    recoveredChatState.recoverInterruptedAgentRuns(activeSubAgents, {
-      timestamp: Date.now(),
-      resolveToolEffect,
-      executionRunIdByConversationAndAgentRun,
-    });
-    await repairTerminalAgentRunsMissingFinalResponses({
-      activeSubAgents,
-    });
+    if (!hasReconciledStartupExecutionOwnership) {
+      const activeSubAgents = listActiveSubAgents();
+      const executionRunIdByConversationAndAgentRun = collectForegroundExecutionOwners(
+        useChatStore.getState().conversations,
+      );
+      // Only a fresh process startup revokes in-process foreground ownership.
+      // A same-process foreground transition or retry must not race a live model or tool.
+      await recoverForegroundJournalState();
+      const recoveredChatState = useChatStore.getState();
+      const resolveToolEffect = await buildToolEffectRestartDispositionResolver(
+        recoveredChatState.conversations.flatMap((conversation) =>
+          (conversation.agentRuns ?? [])
+            .filter((run) => run.status === 'running')
+            .flatMap((run) => {
+              const executionRunId = executionRunIdByConversationAndAgentRun
+                .get(conversation.id)
+                ?.get(run.id);
+              return executionRunId
+                ? listActiveToolEffectRestartInputs({
+                    conversationId: conversation.id,
+                    executionRunId,
+                    messages: conversation.messages,
+                    run,
+                  })
+                : [];
+            }),
+        ),
+      );
+      recoveredChatState.recoverInterruptedAgentRuns(activeSubAgents, {
+        timestamp: Date.now(),
+        resolveToolEffect,
+        executionRunIdByConversationAndAgentRun,
+      });
+      hasReconciledStartupExecutionOwnership = true;
+    }
+    if (!hasRepairedStartupAgentRuns) {
+      await repairTerminalAgentRunsMissingFinalResponses({
+        activeSubAgents: listActiveSubAgents(),
+      });
+      hasRepairedStartupAgentRuns = true;
+    }
   }
   await settleOpenMessageMemoryPublications();
   await flushChatStorePersistenceNow();

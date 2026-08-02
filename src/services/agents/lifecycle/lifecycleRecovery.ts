@@ -72,6 +72,21 @@ export function applyRecoveredTerminalSnapshot<TAgent extends SubAgentSnapshot>(
   agent.activityLog = snapshot.activityLog
     ? snapshot.activityLog.map((entry) => ({ ...entry }))
     : agent.activityLog;
+
+  // A terminal conversation event is authoritative even if an already-issued tool callback
+  // published a newer-looking active-phase field during cancellation. Never resurrect transient
+  // execution ownership from that race when rebuilding the worker registry after a restart.
+  if (isTerminalSubAgentStatus(agent.status)) {
+    agent.launchState = 'terminal';
+    agent.deadlineAt = undefined;
+    agent.modelResponsePendingSince = undefined;
+    agent.activeToolName = undefined;
+    agent.activeToolStartedAt = undefined;
+    if (agent.status === 'cancelled') {
+      agent.currentActivity =
+        normalizeFinalizationOutputText(agent.output) || agent.currentActivity;
+    }
+  }
 }
 
 export function interruptRecoveredRunningAgent<TAgent extends SubAgentSnapshot>(

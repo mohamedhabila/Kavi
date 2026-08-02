@@ -175,6 +175,40 @@ describe('agent control graph no-tool finalization', () => {
     expect(params.onContinueThinking).toHaveBeenCalledWith('goals_incomplete');
   });
 
+  it('terminally blocks an incomplete blocking goal when its tool surface is empty', async () => {
+    const params = buildBaseParams();
+    params.controlGraph = createControlGraphWithGoals([
+      {
+        id: 'g1',
+        title: 'Coordinate audit',
+        status: 'active',
+        completionPolicy: 'blocking',
+        dependencies: [],
+        evidence: [],
+        successCriteria: ['evidence.prefix:worker'],
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+    ]);
+    params.selectedToolNames = new Set();
+    params.selectedToolCount = 0;
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({ status: 'finalized' });
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graphEvent: {
+          type: 'BLOCKED',
+          reason: 'goals_incomplete_without_tool_path',
+        },
+        assistantMetadata: expect.objectContaining({ completionStatus: 'incomplete' }),
+        sessionEndReason: 'goals_incomplete_without_tool_path',
+      }),
+    );
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+  });
+
   it('finalizes after successful read-only evidence when no goal is required', async () => {
     const params = buildBaseParams();
     params.selectedToolNames = new Set([
@@ -205,6 +239,45 @@ describe('agent control graph no-tool finalization', () => {
     expect(result).toEqual({ status: 'finalized' });
     expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalledTimes(1);
     expect(params.onContinueThinking).not.toHaveBeenCalled();
+  });
+
+  it('continues an exact partial read before accepting a worker-style final answer', async () => {
+    const params = buildBaseParams();
+    params.selectedToolNames = new Set(['read_file']);
+    params.selectedToolCount = 1;
+    params.turnAssistantContent = 'The source is truncated, so I am blocked.';
+    params.modelTurnAssistantContent = params.turnAssistantContent;
+    params.toolCallHistory = [
+      {
+        id: 'tc-read',
+        name: 'read_file',
+        arguments: '{"path":"attachments/report.txt"}',
+        timestamp: 1,
+        status: 'completed',
+        result: JSON.stringify({
+          status: 'read_chunk',
+          path: 'attachments/report.txt',
+          content: 'partial',
+          offset: 0,
+          nextOffset: 7_000,
+          totalChars: 21_000,
+          complete: false,
+        }),
+      },
+    ];
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    expect(params.applyGraphEvents).toHaveBeenCalledWith([
+      { type: 'FINALIZATION_HELD', reason: 'incomplete_tool_continuation' },
+    ]);
+    expect(params.workingMessages.at(-1)?.content).toContain('offset 7000');
+    expect(params.onContinueThinking).toHaveBeenCalledWith('incomplete_tool_continuation');
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
   });
 
   it('does not infer an unrequested downstream action from tool compatibility alone', async () => {

@@ -19,12 +19,16 @@ function runningAgent(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapsh
   };
 }
 
-function context(messages: Message[], transcriptRetainedFromStart = true): SubAgentSessionContext {
+function context(
+  messages: Message[],
+  transcriptRetainedFromStart = true,
+  tools = ['wait'],
+): SubAgentSessionContext {
   return {
     config: {
       parentConversationId: 'conversation-1',
       prompt: ORIGINAL_TASK,
-      tools: ['wait'],
+      tools,
       sandboxPolicy: 'safe-only',
     },
     provider: {
@@ -136,12 +140,189 @@ describe('sub-agent restart recovery', () => {
     expect(plan).toBeNull();
   });
 
-  it('fails closed when persistence reports that earlier evidence was truncated', () => {
+  it('resumes a pending built-in read from its exact retained call boundary', () => {
+    const plan = buildSubAgentRestartRecoveryPlan({
+      agent: runningAgent({
+        iterations: 12,
+        toolsUsed: ['read_file'],
+        activeToolName: 'read_file',
+      }),
+      context: context(
+        [
+          { id: 'user-1', role: 'user', content: ORIGINAL_TASK, timestamp: 1_000 },
+          pendingToolMessage(
+            'read_file',
+            '{"path":"attachments/runtime.txt","offset":4096,"maxChars":8192}',
+            'call-read',
+          ),
+        ],
+        true,
+        ['read_file'],
+      ),
+      now: NOW,
+    });
+
+    expect(plan).toMatchObject({
+      interruptedToolCallId: 'call-read',
+      interruptedToolName: 'read_file',
+      recoveredAt: NOW,
+      config: { prompt: ORIGINAL_TASK, depth: 0 },
+    });
+    const recoveryMessages = plan!.config.initialMessages!;
+    expect(JSON.parse(recoveryMessages.at(-2)!.content)).toMatchObject({
+      status: 'interrupted',
+      code: 'app_restart',
+      successful: false,
+      retryable: true,
+      toolName: 'read_file',
+      requested: {
+        path: 'attachments/runtime.txt',
+        offset: 4096,
+        maxChars: 8192,
+      },
+    });
+    expect(recoveryMessages.at(-1)?.content).toContain(
+      'immediately preceding effect-free read_file call was interrupted',
+    );
+  });
+
+  it.each(['completed', 'failed'] as const)(
+    'pairs an unpaired locally %s effect-free call before provider replay',
+    (status) => {
+      const unpairedRead = pendingToolMessage(
+        'read_file',
+        '{"path":"attachments/runtime.txt","offset":12288,"maxChars":4096}',
+        `call-read-${status}`,
+      );
+      unpairedRead.toolCalls![0]!.status = status;
+
+      const plan = buildSubAgentRestartRecoveryPlan({
+        agent: runningAgent({ iterations: 13, toolsUsed: ['read_file'] }),
+        context: context(
+          [{ id: 'user-1', role: 'user', content: ORIGINAL_TASK, timestamp: 1_000 }, unpairedRead],
+          true,
+          ['read_file'],
+        ),
+        now: NOW,
+      });
+
+      expect(plan).toMatchObject({
+        recoveryBoundary: 'interrupted_effect_free_call',
+        interruptedToolCallId: `call-read-${status}`,
+        interruptedToolName: 'read_file',
+      });
+      const recoveryMessages = plan!.config.initialMessages!;
+      expect(recoveryMessages.at(-2)).toMatchObject({
+        role: 'tool',
+        toolCallId: `call-read-${status}`,
+        isError: true,
+        toolCalls: [expect.objectContaining({ status: 'failed' })],
+      });
+    },
+  );
+
+  it('pairs one interrupted effect-free call after completed siblings in the same batch', () => {
+    const batch: Message = {
+      id: 'assistant-read-batch',
+      role: 'assistant',
+      content: '',
+      timestamp: 9_000,
+      toolCalls: [
+        {
+          id: 'call-read-complete',
+          name: 'read_file',
+          arguments: '{"path":"attachments/one.txt","offset":0}',
+          status: 'completed',
+        },
+        {
+          id: 'call-read-interrupted',
+          name: 'read_file',
+          arguments: '{"path":"attachments/two.txt","offset":4096}',
+          status: 'running',
+        },
+      ],
+    };
+    const completedSibling: Message = {
+      id: 'tool-read-complete',
+      role: 'tool',
+      content: '{"status":"read_chunk","path":"attachments/one.txt","complete":true}',
+      toolCallId: 'call-read-complete',
+      timestamp: 9_100,
+    };
+
+    const plan = buildSubAgentRestartRecoveryPlan({
+      agent: runningAgent({ iterations: 14, toolsUsed: ['read_file'] }),
+      context: context(
+        [
+          { id: 'user-1', role: 'user', content: ORIGINAL_TASK, timestamp: 1_000 },
+          batch,
+          completedSibling,
+        ],
+        true,
+        ['read_file'],
+      ),
+      now: NOW,
+    });
+
+    expect(plan).toMatchObject({
+      recoveryBoundary: 'interrupted_effect_free_call',
+      interruptedToolCallId: 'call-read-interrupted',
+    });
+    expect(plan!.config.initialMessages!.slice(-3)).toEqual([
+      expect.objectContaining({ id: 'tool-read-complete', role: 'tool' }),
+      expect.objectContaining({
+        role: 'tool',
+        toolCallId: 'call-read-interrupted',
+        isError: true,
+      }),
+      expect.objectContaining({ role: 'user' }),
+    ]);
+  });
+
+  it('fails closed when an unpaired call precedes a later model turn', () => {
+    expect(
+      buildSubAgentRestartRecoveryPlan({
+        agent: runningAgent(),
+        context: context(
+          [
+            pendingToolMessage('read_file', '{"path":"attachments/one.txt"}', 'call-old'),
+            {
+              id: 'assistant-later',
+              role: 'assistant',
+              content: 'Continuing despite the missing result.',
+              timestamp: 9_500,
+            },
+          ],
+          true,
+          ['read_file'],
+        ),
+        now: NOW,
+      }),
+    ).toBeNull();
+  });
+
+  it('fails closed for an unpaired locally completed side-effecting call', () => {
+    const unpairedWrite = pendingToolMessage(
+      'write_file',
+      '{"path":"result.txt","content":"done"}',
+      'call-write-completed',
+    );
+    unpairedWrite.toolCalls![0]!.status = 'completed';
+
+    expect(
+      buildSubAgentRestartRecoveryPlan({
+        agent: runningAgent(),
+        context: context([unpairedWrite], true, ['write_file']),
+        now: NOW,
+      }),
+    ).toBeNull();
+  });
+
+  it('recovers a compacted transcript when the entire explicit surface is effect-free', () => {
     const plan = buildSubAgentRestartRecoveryPlan({
       agent: runningAgent(),
       context: context(
         [
-          { id: 'user-1', role: 'user', content: ORIGINAL_TASK, timestamp: 1_000 },
           {
             id: 'tool-old',
             role: 'tool',
@@ -153,6 +334,98 @@ describe('sub-agent restart recovery', () => {
         ],
         false,
       ),
+      now: NOW,
+    });
+
+    expect(plan).toMatchObject({
+      recoveryBoundary: 'interrupted_effect_free_call',
+      interruptedToolName: 'wait',
+    });
+    expect(plan!.config.initialMessages?.[0]).toMatchObject({
+      role: 'user',
+      content: ORIGINAL_TASK,
+    });
+    expect(plan!.config.initialMessages?.some((message) => message.id === 'tool-old')).toBe(false);
+    expect(plan!.config.initialMessages?.at(-1)?.content).toContain(
+      'Earlier transcript content was compacted',
+    );
+  });
+
+  it('resumes a compacted quiescent read checkpoint without trusting its summary as proof', () => {
+    const completedBatch: Message[] = [
+      {
+        id: 'orphan-tool',
+        role: 'tool',
+        content: '{}',
+        toolCallId: 'orphan-call',
+        timestamp: 7_000,
+      },
+      {
+        id: 'assistant-read-batch',
+        role: 'assistant',
+        content: '',
+        timestamp: 8_000,
+        toolCalls: [
+          {
+            id: 'read-1',
+            name: 'read_file',
+            arguments: '{"path":"one.txt","offset":4096}',
+            status: 'pending',
+          },
+          {
+            id: 'read-2',
+            name: 'read_file',
+            arguments: '{"path":"two.txt","offset":8192}',
+            status: 'pending',
+          },
+        ],
+      },
+      {
+        id: 'tool-read-1',
+        role: 'tool',
+        content:
+          '{"status":"read_chunk","path":"one.txt","offset":4096,"totalChars":10000,"complete":false}',
+        toolCallId: 'read-1',
+        timestamp: 8_100,
+      },
+      {
+        id: 'tool-read-2',
+        role: 'tool',
+        content:
+          '{"status":"read_chunk","path":"two.txt","offset":8192,"totalChars":12000,"complete":false}',
+        toolCallId: 'read-2',
+        timestamp: 8_200,
+      },
+    ];
+    const compactedContext = context(completedBatch, false, ['read_file']);
+    compactedContext.conversationSummary = 'Two sources were partially inspected.';
+
+    const plan = buildSubAgentRestartRecoveryPlan({
+      agent: runningAgent({ iterations: 67, toolsUsed: ['read_file'] }),
+      context: compactedContext,
+      now: NOW,
+    });
+
+    expect(plan).toMatchObject({
+      recoveryBoundary: 'effect_free_checkpoint',
+      recoveredAt: NOW,
+    });
+    const recoveryMessages = plan!.config.initialMessages!;
+    expect(recoveryMessages[0]).toMatchObject({ role: 'user', content: ORIGINAL_TASK });
+    expect(recoveryMessages.some((message) => message.id === 'orphan-tool')).toBe(false);
+    expect(recoveryMessages.at(-1)?.content).toContain(
+      'retained summary and durable read checkpoints as orientation only, not as proof',
+    );
+    expect(recoveryMessages.at(-1)?.content).toContain('Two sources were partially inspected.');
+  });
+
+  it('fails closed for compacted state when any allowed tool can cause effects', () => {
+    const plan = buildSubAgentRestartRecoveryPlan({
+      agent: runningAgent(),
+      context: context([pendingToolMessage('wait', '{"ms":60000,"reason":"checkpoint"}')], false, [
+        'wait',
+        'write_file',
+      ]),
       now: NOW,
     });
 

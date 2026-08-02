@@ -84,6 +84,35 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(scopedToolNames.has('write_file')).toBe(true);
   });
 
+  it('does not broaden an unscoped write goal into unrelated resource domains', () => {
+    const selected = resolveTurnToolSurface({
+      allTools: tools,
+      goals: [
+        {
+          id: 'unscoped-artifact',
+          title: 'Create a local artifact',
+          status: 'active',
+          dependencies: [],
+          evidence: [],
+          createdAt: 1,
+          updatedAt: 1,
+          requiredCapabilities: ['write'],
+          successCriteria: ['evidence.tool:write_file'],
+        },
+      ],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(),
+      includeToolCatalog: false,
+    });
+
+    const names = new Set(selected.map((tool) => tool.name));
+    expect(names.has('write_file')).toBe(true);
+    expect(names.has('browser_navigate')).toBe(false);
+    expect(names.has('workspace_note_write')).toBe(false);
+  });
+
   it('does not add latest-user selected side-effect tools without matching graph scope', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,

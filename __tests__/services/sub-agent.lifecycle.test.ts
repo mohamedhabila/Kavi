@@ -14,29 +14,39 @@ describe('Sub-Agent Service', () => {
   installSubAgentTestHarness();
 
   describe('spawnSubAgent', () => {
-    it('launchSubAgent returns before worker bootstrap begins', async () => {
+    it('starts worker bootstrap without depending on a zero-delay timer', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      jest.useFakeTimers();
-      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
-        callbacks.onDone?.();
-        return Promise.resolve({ terminalDisposition: 'final_candidate' });
-      });
-
-      const launched = await launchSubAgent(
-        { parentConversationId: 'p', prompt: 'background task' },
-        mockProvider,
+      jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+      let releaseRun: (() => void) | undefined;
+      runOrchestrator.mockImplementationOnce(
+        (_opts: any, callbacks: any) =>
+          new Promise((resolve) => {
+            releaseRun = () => {
+              callbacks.onDone?.();
+              resolve({ terminalDisposition: 'final_candidate' });
+            };
+          }),
       );
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
 
-      expect(launched.status).toBe('running');
-      expect(getSubAgent(launched.sessionId)?.launchState).toBe('queued');
-      expect(runOrchestrator).not.toHaveBeenCalled();
+      try {
+        const started = await startSubAgent(
+          { parentConversationId: 'p', prompt: 'background task' },
+          mockProvider,
+        );
 
-      await jest.runOnlyPendingTimersAsync();
+        expect(started.status).toBe('running');
+        expect(runOrchestrator).toHaveBeenCalledTimes(1);
+        expect(setTimeoutSpy.mock.calls.some((call) => call[1] === 0)).toBe(false);
 
-      expect(runOrchestrator).toHaveBeenCalledTimes(1);
+        releaseRun?.();
+        await started.resultPromise;
+      } finally {
+        setTimeoutSpy.mockRestore();
+      }
     });
 
-    it('startSubAgent keeps a waitable resultPromise while deferring worker bootstrap', async () => {
+    it('startSubAgent keeps a waitable resultPromise while worker bootstrap is scheduled', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       jest.useFakeTimers();
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
@@ -128,20 +138,12 @@ describe('Sub-Agent Service', () => {
       await started.resultPromise;
     });
 
-    it('fails a deferred worker that never bootstraps and preserves launch diagnostics', async () => {
+    it('fails a queued worker when even its microtask launch boundary never executes', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       jest.useFakeTimers();
-      const originalSetTimeout = global.setTimeout;
-      const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((
-        handler: TimerHandler,
-        timeout?: number,
-        ...args: any[]
-      ) => {
-        if ((timeout ?? 0) === 0) {
-          return 999999 as any;
-        }
-        return originalSetTimeout(handler as any, timeout as any, ...args) as any;
-      }) as typeof setTimeout);
+      const queueMicrotaskSpy = jest
+        .spyOn(global, 'queueMicrotask')
+        .mockImplementation(() => undefined);
 
       try {
         const started = await startSubAgent(
@@ -167,7 +169,7 @@ describe('Sub-Agent Service', () => {
         expect(getSubAgent(started.sessionId)?.launchState).toBe('terminal');
         expect(runOrchestrator).not.toHaveBeenCalled();
       } finally {
-        setTimeoutSpy.mockRestore();
+        queueMicrotaskSpy.mockRestore();
       }
     });
 

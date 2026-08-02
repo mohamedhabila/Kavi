@@ -1,6 +1,10 @@
 import type { Message, ToolCall } from '../../../types/message';
 import { generateId } from '../../../utils/id';
 import { stripAttachmentPayloads } from '../../../utils/messageAttachments';
+import {
+  parseReadFileContinuationResult,
+  READ_FILE_CONTINUATION_TOOL,
+} from '../../../utils/readFileContinuation';
 import { normalizeFinalizationOutputText } from '../finalizationText';
 
 type TranscriptSanitizationOptions = {
@@ -46,6 +50,52 @@ export function truncateTranscriptText(
     : `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
+function buildDurableReadFileCheckpoint(content: string): string | undefined {
+  const continuation = parseReadFileContinuationResult(content);
+  if (!continuation) {
+    return undefined;
+  }
+
+  return JSON.stringify({
+    status: 'read_chunk',
+    path: continuation.path,
+    ...(continuation.sha256 ? { sha256: continuation.sha256 } : {}),
+    content:
+      '[Chunk content omitted from the durable worker checkpoint. Reread this exact chunk before relying on it.]',
+    offset: continuation.offset,
+    nextOffset: continuation.nextOffset,
+    totalChars: continuation.totalChars,
+    complete: continuation.complete,
+    durableCheckpoint: {
+      version: 1,
+      contentRetained: false,
+      rereadOffset: continuation.offset,
+    },
+    guidance:
+      `Call read_file again with path ${JSON.stringify(continuation.path)} and offset ` +
+      `${continuation.offset} to restore the omitted chunk before continuing.`,
+  });
+}
+
+function sanitizeToolResultText(
+  toolName: string | undefined,
+  value: string | undefined,
+  maxLength: number,
+): string | undefined {
+  if (
+    toolName === READ_FILE_CONTINUATION_TOOL &&
+    typeof value === 'string' &&
+    value.length >= maxLength
+  ) {
+    const checkpoint = buildDurableReadFileCheckpoint(value);
+    if (checkpoint) {
+      return checkpoint;
+    }
+  }
+
+  return truncateTranscriptText(value, maxLength);
+}
+
 export function hasSeedUserInstruction(message: Message): boolean {
   return (
     message.role === 'user' &&
@@ -77,18 +127,28 @@ function sanitizeTranscriptToolCall(toolCall: ToolCall): ToolCall {
     updatedAt: toolCall.updatedAt,
     completedAt: toolCall.completedAt,
     progressText: truncateTranscriptText(toolCall.progressText, 400),
-    result: truncateTranscriptText(toolCall.result, 1800),
+    result: sanitizeToolResultText(toolCall.name, toolCall.result, 1800),
     error: truncateTranscriptText(toolCall.error, 800),
   };
 }
 
 function buildSanitizedContextMessage(message: Message, contentLimit: number): Message {
   const sanitizedAttachments = stripAttachmentPayloads(message.attachments);
+  const matchingToolCall =
+    message.role === 'tool'
+      ? message.toolCalls?.find(
+          (toolCall) => !message.toolCallId || toolCall.id === message.toolCallId,
+        )
+      : undefined;
+  const sanitizedContent =
+    message.role === 'tool'
+      ? sanitizeToolResultText(matchingToolCall?.name, message.content, contentLimit)
+      : truncateTranscriptText(message.content, contentLimit);
 
   return {
     id: message.id,
     role: message.role,
-    content: truncateTranscriptText(message.content, contentLimit) || '',
+    content: sanitizedContent || '',
     timestamp: message.timestamp,
     ...(message.enrichedContent
       ? { enrichedContent: truncateTranscriptText(message.enrichedContent, contentLimit) }
@@ -219,10 +279,31 @@ export function buildStoredSessionTranscript(
     });
   }
 
+  const retainedFromStart = sanitized.length <= options.sessionContextMaxMessages;
+  if (retainedFromStart) {
+    return {
+      messages: sanitized.map((message) => cloneStoredMessage(message)),
+      retainedFromStart: true,
+    };
+  }
+
+  const seedInstruction = sanitized.find(hasSeedUserInstruction);
+  const tailCapacity = Math.max(0, options.sessionContextMaxMessages - (seedInstruction ? 1 : 0));
+  const coherentTail = tailCapacity > 0 ? sanitized.slice(-tailCapacity) : [];
+  // A bounded tail can begin in the middle of an assistant tool batch. Leading tool results no
+  // longer have their declaring assistant message and cannot be replayed to providers safely.
+  // Drop only that orphaned prefix; every later tool result remains paired because the tail is
+  // otherwise contiguous.
+  while (coherentTail[0]?.role === 'tool') {
+    coherentTail.shift();
+  }
+  const retainedMessages =
+    seedInstruction && !coherentTail.some((message) => message.id === seedInstruction.id)
+      ? [seedInstruction, ...coherentTail]
+      : coherentTail;
+
   return {
-    messages: sanitized
-      .slice(-options.sessionContextMaxMessages)
-      .map((message) => cloneStoredMessage(message)),
-    retainedFromStart: sanitized.length <= options.sessionContextMaxMessages,
+    messages: retainedMessages.map((message) => cloneStoredMessage(message)),
+    retainedFromStart: false,
   };
 }

@@ -23,8 +23,11 @@ describe('renderGoalPromptSection', () => {
       goals: [],
       selectedToolNames: new Set(['update_goals']),
     });
-    expect(result).toContain('## Optional Goal Tracking');
+    expect(result).toContain('## Goal Tracking for Multi-Step Work');
     expect(result).toContain('completionPolicy');
+    expect(result).toContain('update and reuse its exact id');
+    expect(result).toContain('Keep the parent out of worker-owned scope');
+    expect(result).toContain('every domain capability');
   });
 
   it('renders bootstrap when only completed goals remain live-inactive', () => {
@@ -33,7 +36,7 @@ describe('renderGoalPromptSection', () => {
       goals: [completed],
       selectedToolNames: new Set(['update_goals']),
     });
-    expect(result).toContain('## Optional Goal Tracking');
+    expect(result).toContain('## Goal Tracking for Multi-Step Work');
     expect(result).toContain('No live graph goals are active.');
   });
 
@@ -63,6 +66,46 @@ describe('renderGoalPromptSection', () => {
     const result = renderGoalPromptSection([g]);
     expect(result).toContain('### Pending');
     expect(result).toContain('[g1] Plan next');
+  });
+
+  it('renders pending goal ownership and completion criteria', () => {
+    const goal = createGoal({
+      id: 'worker-goal',
+      title: 'Read assigned sources',
+      status: 'pending',
+      owner: 'delegated-worker',
+      requiredCapabilities: ['read', 'coordinate'],
+      successCriteria: ['evidence.prefix:worker', 'evidence.min:1'],
+    });
+
+    const result = renderGoalPromptSection([goal], {
+      selectedToolNames: new Set(['sessions_spawn', 'update_goals']),
+    });
+
+    expect(result).toContain('owner="delegated-worker"');
+    expect(result).toContain('criteria: evidence.prefix:worker, evidence.min:1');
+    expect(result).toContain('### Delegated Goal Ownership');
+    expect(result).toContain('sessions_spawn with workstreamId equal to the exact goal id');
+    expect(result).toContain('Do not launch a duplicate or replacement');
+    expect(result).toContain('Reuse and repair the exact existing delegated goal');
+    expect(result).toContain('parent/worker source and action boundaries');
+  });
+
+  it('does not advertise unavailable session coordination tools', () => {
+    const goal = createGoal({
+      id: 'worker-goal',
+      title: 'Read assigned sources',
+      status: 'pending',
+      owner: 'delegated-worker',
+      successCriteria: ['evidence.prefix:worker'],
+    });
+
+    const result = renderGoalPromptSection([goal], {
+      selectedToolNames: new Set(['read_file', 'update_goals']),
+    });
+
+    expect(result).toContain('owner="delegated-worker"');
+    expect(result).not.toContain('call sessions_spawn');
   });
 
   it('renders blocked goals', () => {

@@ -17,8 +17,9 @@ describe('toolGoalExecution', () => {
   describe('update_goals schema contract', () => {
     it('exposes one strict root mutation with boolean-only retention intent', () => {
       expect(UPDATE_GOALS_TOOL.input_schema.required).toEqual(
-        expect.arrayContaining(['action', 'id', 'name']),
+        expect.arrayContaining(['action', 'id']),
       );
+      expect(UPDATE_GOALS_TOOL.input_schema.required).not.toContain('name');
       expect(UPDATE_GOALS_TOOL.input_schema.additionalProperties).toBe(false);
       expect(UPDATE_GOALS_TOOL.input_schema.properties.goals).toBeUndefined();
       expect(UPDATE_GOALS_TOOL.input_schema.properties.retainCurrentUserConstraint).toEqual(
@@ -130,12 +131,12 @@ describe('toolGoalExecution', () => {
         parseUpdateGoalsArgs({
           action: 'update',
           id: 'g1',
-          name: 'Build feature',
+          name: null,
           ...optionalNulls,
         }),
       ).toEqual({
         errors: [],
-        mutation: { action: 'update', goals: [{ id: 'g1', title: 'Build feature' }] },
+        mutation: { action: 'update', goals: [{ id: 'g1' }] },
       });
       expect(
         parseUpdateGoalsArgs({
@@ -236,11 +237,28 @@ describe('toolGoalExecution', () => {
       expect(result.errors).not.toHaveLength(0);
     });
 
-    it.each(['id', 'name'])('requires non-empty %s', (field) => {
-      const args = { action: 'update', id: 'g1', name: 'Build feature', [field]: ' ' };
+    it('requires a non-empty id for every action', () => {
+      const args = { action: 'update', id: ' ', name: 'Build feature' };
       const result = parseUpdateGoalsArgs(args);
       expect(result.mutation.goals).toEqual([]);
-      expect(errorMessages(result.errors).join(' ')).toContain(`${field} is required`);
+      expect(errorMessages(result.errors).join(' ')).toContain('id is required');
+    });
+
+    it('requires a non-empty name only when adding a goal', () => {
+      const missingAddName = parseUpdateGoalsArgs({
+        action: 'add',
+        id: 'g1',
+        completionPolicy: 'persistent',
+      });
+      expect(missingAddName.mutation.goals).toEqual([]);
+      expect(errorMessages(missingAddName.errors).join(' ')).toContain(
+        'name is required when adding',
+      );
+
+      expect(parseUpdateGoalsArgs({ action: 'update', id: 'g1' })).toEqual({
+        errors: [],
+        mutation: { action: 'update', goals: [{ id: 'g1' }] },
+      });
     });
   });
 
@@ -267,9 +285,7 @@ describe('toolGoalExecution', () => {
           .status,
       ).toBe('error');
       expect(
-        parseCompletedToolOutcome(
-          executeUpdateGoals({ action: 'complete', id: 'g1', name: 'Build' }),
-        ),
+        parseCompletedToolOutcome(executeUpdateGoals({ action: 'complete', id: 'g1' })),
       ).toMatchObject({ status: 'ok', action: 'complete' });
     });
   });

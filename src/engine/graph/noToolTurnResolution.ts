@@ -418,6 +418,21 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
     ]);
   }
 
+  if (gateDecision.type === 'block') {
+    params.commitModelTurn();
+    await params.finishWithGraphTerminalEvent({
+      graphEvent: gateDecision.graphEvent,
+      content: gateDecision.content,
+      providerReplay: params.providerReplay,
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'incomplete',
+        finishReason: gateDecision.reason,
+      }),
+      sessionEndReason: gateDecision.reason,
+    });
+    return { status: 'finalized' };
+  }
+
   if (gateDecision.type === 'hold') {
     return continueNoToolTurn({
       commandReason: gateDecision.reason,

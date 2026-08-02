@@ -34,7 +34,7 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
       name: {
         type: 'string',
         description:
-          'Human-readable goal name. Required for every call; repeat the visible goal name for existing-goal mutations.',
+          'Human-readable goal name. Required for add; optional for mutations of an existing goal.',
       },
       description: {
         type: 'string',
@@ -76,9 +76,9 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
         items: {
           type: 'string',
           description:
-            'Structural completion criterion. evidence.prefix tokens must reference registered evidence sources such as tool names or worker.',
+            'Structural completion criterion. For a workspace deliverable use evidence.artifact:<exact-workspace-relative-path>, never evidence.prefix:artifact. evidence.prefix tokens must reference registered evidence sources such as tool names or worker.',
         },
-        description: `Blocking deliverables only. Omit for persistent focus goals. Structural completion tokens for this goal. Supported forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
+        description: `Blocking deliverables only. Omit for persistent focus goals. Include at least one specific criterion; evidence.min and evidence.count cannot stand alone. For workspace files, use one evidence.artifact:<exact-workspace-relative-path> criterion per required file. Supported forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
       },
       retainCurrentUserConstraint: {
         type: 'boolean',
@@ -91,7 +91,7 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
         description: 'Optional blocker reason when status is blocked.',
       },
     },
-    required: ['action', 'id', 'name'],
+    required: ['action', 'id'],
   },
   strict: true,
   contract: {

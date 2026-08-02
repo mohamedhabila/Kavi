@@ -13,6 +13,7 @@ import type { ToolDefinition } from '../../types/tool';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
 import {
   buildGoalProgressFingerprint,
+  buildIterationSemanticProgressFingerprint,
   buildToolMultisetKey,
   recordIterationProgressSignature,
   type IterationProgressSignature,
@@ -472,6 +473,21 @@ export async function executeAgentControlGraphToolTurn(
       toolMultisetKey: buildToolMultisetKey(executableToolCalls.map((toolCall) => toolCall.name)),
       goalProgressFingerprint: buildGoalProgressFingerprint(goals),
       activeGoalId: getActiveGoalId(goals),
+      semanticProgressFingerprint: buildIterationSemanticProgressFingerprint(
+        toolExecutionOutcomes.flatMap((outcome) => {
+          if ('deferredHandoff' in outcome) return [];
+          const toolCall = executableToolCalls[outcome.index];
+          if (!toolCall) return [];
+          return [
+            {
+              name: toolCall.name,
+              arguments: toolCall.arguments,
+              status: outcome.toolMessage.isError === true ? 'failed' : 'completed',
+              result: outcome.toolMessage.content,
+            } as const,
+          ];
+        }),
+      ),
     });
   }
 

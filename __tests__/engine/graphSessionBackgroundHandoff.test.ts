@@ -25,6 +25,11 @@ describe('background session handoff detection', () => {
     {
       toolName: 'sessions_spawn',
       toolArguments: '{"prompt":"audit"}',
+      toolResult: runningResult,
+    },
+    {
+      toolName: 'sessions_spawn',
+      toolArguments: '{"prompt":"audit"}',
       toolResult: '{"status":"completed","sessionId":"worker-1"}',
     },
     {

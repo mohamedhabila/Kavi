@@ -61,10 +61,15 @@ export function serializeTerminalSessionResult(
   const includeGuidance = options?.includeGuidance !== false;
   const terminalSnapshot = getSubAgent(result.sessionId);
   const recentActivity = selectRecentSubAgentEvidenceActivity(terminalSnapshot);
+  const reportedStatus =
+    result.status === 'completed' &&
+    (result.completionState === 'blocked' || result.completionState === 'incomplete')
+      ? result.completionState
+      : result.status;
 
   return {
     sessionId: result.sessionId,
-    status: result.status,
+    status: reportedStatus,
     terminationCause: result.terminationCause,
     completionState: result.completionState,
     ...outputPayload,

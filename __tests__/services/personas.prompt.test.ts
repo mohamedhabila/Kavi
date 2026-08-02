@@ -10,8 +10,10 @@ describe('agent persona prompts', () => {
       'start acting and keep any short pre-tool explanation concise',
     );
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      "omit tools unless you need to narrow the worker's scope",
+      'tools field is a strict security allowlist, not a task plan',
     );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('use update_goals before effectful work');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('inspect user-designated files or attachments');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_wait');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('one focused sessions_send continuation');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Verify worker status and deliverables');

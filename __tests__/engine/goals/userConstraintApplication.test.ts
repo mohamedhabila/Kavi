@@ -20,6 +20,37 @@ function blockingGoal(
 }
 
 describe('goal user constraint application', () => {
+  it('automatically retains the initial blocking task contract', () => {
+    const text = [
+      'Create and verify the release pack. Use exactly one worker and keep all results local.',
+      ...Array.from(
+        { length: 48 },
+        (_, index) => `Requirement ${index + 1}: preserve this exact acceptance condition.`,
+      ),
+    ].join('\n');
+    expect(Array.from(text).length).toBeGreaterThan(512);
+    const result = applyGoalMutation(
+      [],
+      {
+        action: 'add',
+        goals: [
+          {
+            id: 'release-pack',
+            title: 'Create release pack',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: SUCCESS_CRITERIA,
+          },
+        ],
+      },
+      2,
+      { currentUserMessage: { id: 'user-current', text } },
+    );
+
+    expect(result.errors).toEqual([]);
+    expect(result.goals[0]?.userConstraints).toEqual([{ text, sourceMessageId: 'user-current' }]);
+  });
+
   it('grounds an add to the code-owned current message without granting evidence or authority', () => {
     const result = applyGoalMutation(
       [],

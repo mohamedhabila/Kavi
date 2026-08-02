@@ -127,6 +127,14 @@ describe('agent control graph turn directives boundary', () => {
         hasBackgroundLaunchWithoutWait: true,
       }),
     ).toBeUndefined();
+
+    expect(
+      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
+        pendingAsyncCount: 0,
+        hasBackgroundLaunchWithoutWait: true,
+        hasIncompleteBlockingGoal: true,
+      }),
+    ).toBeUndefined();
   });
 
   it('forces final text when persistent context is settled after tools', () => {

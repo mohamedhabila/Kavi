@@ -26,6 +26,10 @@ import {
   normalizeDelegatedWorkerPrompt,
   findLatestUserMessageWithAttachments,
 } from './builtin-session-prompt';
+import {
+  discoverDelegatedWorkspaceInputs,
+  type DelegatedWorkspaceInput,
+} from './builtin-session-workspace-inputs';
 import { resolveSpawnWorkerModel } from './builtin-session-provider';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import {
@@ -202,10 +206,21 @@ export async function executeSessionSpawn(
     const workerTools = effectiveConfiguredWorkerTools
       ? [...effectiveConfiguredWorkerTools]
       : undefined;
+    const anchoredWorkspaceInputs: DelegatedWorkspaceInput[] = (
+      activeRun?.workflowTaskAnchor?.attachments ?? []
+    ).flatMap((attachment) => {
+      const path = attachment.workspacePath?.trim();
+      return path ? [{ name: attachment.name, path }] : [];
+    });
+    const discoveredWorkspaceInputs = await discoverDelegatedWorkspaceInputs({
+      workspaceConversationId: workspaceTarget.workspaceConversationId,
+      workspaceReadFallbackConversationId: workspaceTarget.workspaceReadFallbackConversationId,
+    });
     const initialMessages = buildDelegatedInitialMessages(
       workerPrompt,
       findLatestUserMessageWithAttachments(currentSessionContext?.messages) ??
         findLatestUserMessageWithAttachments(activeConversation?.messages),
+      [...anchoredWorkspaceInputs, ...discoveredWorkspaceInputs],
     );
 
     const config = buildSpawnSubAgentConfig({
@@ -266,6 +281,7 @@ export async function executeSessionSpawn(
     }
 
     const launched = await launchSubAgent(config, provider, allProviders);
+    const isExplicitlyDetached = args.waitForCompletion === false;
     return completedToolOutcome(
       JSON.stringify({
         status: launched.status,
@@ -274,8 +290,9 @@ export async function executeSessionSpawn(
         name: sanitizedName,
         ...(spawnGate.workstreamId ? { workstreamId: spawnGate.workstreamId } : {}),
         model: config.model || provider.model,
-        guidance:
-          'The worker is detached from this turn. Mobile operating systems may suspend background execution; inspect its status after returning to the app. Use sessions_wait when this turn needs the final output.',
+        guidance: isExplicitlyDetached
+          ? 'The worker is detached from this turn. Mobile operating systems may suspend background execution; inspect its status after returning to the app.'
+          : 'The worker is joined to this request and is still running. Continue independent non-overlapping supervisor work first. Mobile operating systems may suspend background execution. Call sessions_wait when the worker result is required or after independent work is exhausted, and do not answer before the worker reaches a terminal state.',
       }),
     );
   } catch (err: unknown) {

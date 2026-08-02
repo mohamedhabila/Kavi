@@ -437,6 +437,35 @@ describe('goal graph state', () => {
       expect(goals.find((g) => g.id === 'work-1')?.status).toBe('active');
     });
 
+    it('keeps supervisor work active while activating a delegated-worker lane', () => {
+      const supervisor = createGoal({
+        id: 'parent-work',
+        title: 'Parent work',
+        status: 'active',
+        completionPolicy: 'blocking',
+        owner: 'supervisor',
+        successCriteria: ['evidence.tool:write_file'],
+      });
+      const worker = createGoal({
+        id: 'worker-work',
+        title: 'Worker work',
+        status: 'pending',
+        completionPolicy: 'blocking',
+        owner: 'delegated-worker',
+        successCriteria: ['evidence.prefix:worker'],
+      });
+
+      const { goals, errors } = applyGoalMutation(
+        [supervisor, worker],
+        { action: 'activate', goals: [{ id: 'worker-work' }] },
+        now,
+      );
+
+      expect(errors).toHaveLength(0);
+      expect(goals.find((goal) => goal.id === 'parent-work')?.status).toBe('active');
+      expect(goals.find((goal) => goal.id === 'worker-work')?.status).toBe('active');
+    });
+
     it('refuses to activate a goal with uncompleted dependencies', () => {
       const dep = createGoal({ id: 'd1', title: 'Dep', status: 'pending' });
       const g = createGoal({ id: 'g1', title: 'Main', dependencies: ['d1'] });

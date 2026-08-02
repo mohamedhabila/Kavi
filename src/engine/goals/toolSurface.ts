@@ -116,33 +116,6 @@ function isRuntimeExternalToolName(toolName: string): boolean {
   return toolName.startsWith('mcp__') || toolName.startsWith('skill__');
 }
 
-function isDefaultMobileDiscoveryTool(
-  tool: Pick<ToolDefinition, 'contract' | 'input_schema'> | undefined,
-): boolean {
-  const contract = tool?.contract;
-  const workflowContract = normalizeToolWorkflowContract(contract);
-  if ((tool?.input_schema.required?.length ?? 0) > 0) {
-    return false;
-  }
-  if (!normalizeTagList(contract?.resourceKinds).includes('device')) {
-    return false;
-  }
-  const sideEffects = normalizeTagList(contract?.sideEffects);
-  if (sideEffects.length > 0 && !sideEffects.every((sideEffect) => sideEffect === 'none')) {
-    return false;
-  }
-  if (workflowContract.consumes.some((consumption) => consumption.required !== false)) {
-    return false;
-  }
-  const capabilities = normalizeTagList(contract?.capabilities);
-  const workflowStages = normalizeTagList(contract?.workflowStages);
-  return (
-    capabilities.includes('discover') ||
-    workflowStages.includes('discover_resource') ||
-    (capabilities.includes('read') && workflowContract.produces.length > 0)
-  );
-}
-
 function collectCompletedGoalEvidenceToolNames(
   goals: ReadonlyArray<AgentGoal>,
   toolByName: ReadonlyMap<string, ToolDefinition>,
@@ -444,7 +417,12 @@ function resolveGoalCapabilityToolNamesForGoals(
 
         const requiredResourceKinds = normalizeTagList(goal.requiredResourceKinds);
         if (requiredResourceKinds.length === 0) {
-          return true;
+          // Broad verbs such as "read" and "write" do not identify a resource
+          // domain. Keep those goals on the core workbench and catalog instead
+          // of activating every matching device or integration tool. Compute is
+          // the narrow exception because code execution is already isolated as
+          // its own category and explicitly gated above.
+          return isCodeExecutionTool(tool) && requiredCapabilities.includes('compute');
         }
         return resourceKinds.some((resourceKind) => requiredResourceKinds.includes(resourceKind));
       });
@@ -490,15 +468,6 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
   for (const toolName of defaultCoreToolNames) {
     selectedNames.add(toolName);
     stablePrefixToolNames.add(toolName);
-  }
-
-  if (params.conversationMode !== 'chitchat') {
-    for (const [toolName, tool] of toolByName) {
-      if (isDefaultMobileDiscoveryTool(tool)) {
-        selectedNames.add(toolName);
-        stablePrefixToolNames.add(toolName);
-      }
-    }
   }
 
   for (const toolName of params.pendingAsyncMonitorToolNames) {

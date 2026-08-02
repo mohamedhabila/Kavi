@@ -10,6 +10,7 @@ export const GRAPH_OBSERVABILITY_AUDIT_TYPES = {
   MEMORY_RETRIEVAL: 'MEMORY_RETRIEVAL',
   LOOP_DETECTED: 'LOOP_DETECTED',
   TOOL_BATCH_INCOMPLETE: 'TOOL_BATCH_INCOMPLETE',
+  LONG_HORIZON_BUDGET_EXTENDED: 'LONG_HORIZON_BUDGET_EXTENDED',
 } as const;
 
 export type GraphObservabilityAuditType =
@@ -24,6 +25,10 @@ export function buildCompletionGateObservabilityDetail(decision: CompletionGateD
 
   if (decision.type === 'auto_complete_goals') {
     return `decision:auto_complete_goals,reason:${decision.reason}`;
+  }
+
+  if (decision.type === 'block') {
+    return `decision:block,reason:${decision.reason}`;
   }
 
   return `decision:hold,reason:${decision.reason}`;

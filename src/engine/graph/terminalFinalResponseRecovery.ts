@@ -8,6 +8,7 @@ import {
   buildAgentRunMessageScope,
   hasNewerRunningAgentRun,
   hasDeliveredFinalAssistantResponse,
+  isHistoricalRunMissingExactRequestAnchor,
 } from '../../services/agents/lifecycle/agentRunStateMachine';
 
 export interface TerminalFinalResponseRecoveryCandidate {
@@ -25,6 +26,7 @@ export function selectTerminalConversationsWithFinalResponseGaps(
       (run) =>
         run.status !== 'running' &&
         !hasNewerRunningAgentRun(conversation, run) &&
+        !isHistoricalRunMissingExactRequestAnchor(conversation, run) &&
         !hasDeliveredFinalAssistantResponse(conversation.messages, buildAgentRunMessageScope(run)),
     ),
   );
@@ -41,6 +43,9 @@ export function selectTerminalFinalResponseRecoveryCandidates(params: {
       continue;
     }
     if (hasNewerRunningAgentRun(params.conversation, run)) {
+      continue;
+    }
+    if (isHistoricalRunMissingExactRequestAnchor(params.conversation, run)) {
       continue;
     }
     const runMessageScope = buildAgentRunMessageScope(run);

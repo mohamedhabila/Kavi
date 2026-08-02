@@ -91,9 +91,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selectedToolNames.has('web_search')).toBe(false);
   });
 
-  it('exposes safe mobile discovery tools without exposing mobile side-effect consumers', () => {
+  it('keeps unrequested mobile domains behind the compact catalog surface', () => {
     const selected = resolveTurnToolSurface({
-      allTools: resourceFlowTools,
+      allTools: [...tools, ...resourceFlowTools],
       goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
@@ -103,30 +103,33 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     });
 
     const names = new Set(selected.map((tool) => tool.name));
-    expect(names.has('contacts_search')).toBe(true);
+    expect(names.has('tool_catalog')).toBe(true);
+    expect(names.has('tool_describe')).toBe(true);
+    expect(names.has('contacts_search')).toBe(false);
     expect(names.has('sms_compose')).toBe(false);
     expect(names.has('contacts_get')).toBe(false);
   });
 
-  it('exposes the canonical read-only device query with its safe status default', () => {
+  it('admits the canonical read-only device query after exact catalog activation', () => {
     const selected = resolveTurnToolSurface({
       allTools: [DEVICE_QUERY_TOOL],
       goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(['device_query']),
       includeToolCatalog: false,
     });
 
     expect(selected.map((tool) => tool.name)).toEqual(['device_query']);
   });
 
-  it('keeps stable mobile discovery tools ahead of dynamically activated consumers', () => {
+  it('keeps explicitly pinned mobile discovery ahead of dynamically activated consumers', () => {
     const selected = resolveTurnToolSurface({
       allTools: [CALENDAR_EVENTS_TOOL, CALENDAR_LIST_TOOL],
       goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
+      explicitToolSurfaceToolNames: ['calendar_list'],
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
       activatedCatalogToolNames: new Set<string>(['calendar_events']),

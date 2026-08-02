@@ -16,7 +16,7 @@ const sampleGoal: AgentGoal = {
 };
 
 describe('goals/bootstrap', () => {
-  it('offers optional goal bootstrap when goals are empty', () => {
+  it('offers goal bootstrap when goals are empty', () => {
     expect(resolveGoalBootstrapState([]).shouldOfferGoalBootstrap).toBe(true);
   });
 
@@ -36,11 +36,18 @@ describe('goals/bootstrap', () => {
     expect(section).toContain('add');
   });
 
-  it('renders bootstrap as optional rather than mandatory graph setup', () => {
+  it('requires structural setup for multi-step work without burdening single-step answers', () => {
     const section = renderGoalBootstrapPromptSection();
-    expect(section).toContain('## Optional Goal Tracking');
-    expect(section).toContain('delegated workstreams');
-    expect(section).toContain('declared goals with criteria/capabilities');
+    expect(section).toContain('## Goal Tracking for Multi-Step Work');
+    expect(section).toContain('multiple tool steps');
+    expect(section).toContain('multiple deliverables');
+    expect(section).toContain('explicit success conditions');
+    expect(section).toContain('MUST establish the task');
+    expect(section).toContain('genuinely single-step answer or observation');
+    expect(section).toContain('initial incomplete blocking goal');
+    expect(section).toContain('retainCurrentUserConstraint:true');
+    expect(section).toContain('automatically retains');
+    expect(section).toContain('survive compaction and recovery');
   });
 
   it('renders the required add contract during bootstrap', () => {
@@ -50,6 +57,8 @@ describe('goals/bootstrap', () => {
     expect(section).toContain('evidence.min:<n>');
     expect(section).toContain('"id":"stable-id"');
     expect(section).toContain('"name":"Visible name"');
+    expect(section).toContain('evidence.artifact:<exact-workspace-relative-path>');
+    expect(section).toContain('evidence.prefix:artifact is invalid');
     expect(section).not.toContain('"goals"');
     expect(section).toContain('natural-language labels');
   });

@@ -2,6 +2,7 @@ import { runOrchestrator } from '../../src/engine/orchestrator';
 import { executeForegroundConversationRun } from '../../src/engine/graph/foregroundRun/execution';
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
 import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
+import * as androidLongHorizonExecution from '../../src/services/androidLongHorizonExecution';
 import {
   createConversation,
   createExecutionContext,
@@ -24,6 +25,55 @@ const mockedResolveForegroundRunPreflight = resolveForegroundRunPreflight as jes
 describe('foreground run projection reservation', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+  });
+
+  it('holds the chat continuity lease for the complete deferred request', async () => {
+    const events: string[] = [];
+    const leaseSpy = jest
+      .spyOn(androidLongHorizonExecution, 'withAndroidLongHorizonExecutionLease')
+      .mockImplementation(async (input, operation) => {
+        events.push(`acquire:${input.taskKind}`);
+        try {
+          return await operation();
+        } finally {
+          events.push(`release:${input.taskKind}`);
+        }
+      });
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    let resolvePreflight:
+      | ((result: Awaited<ReturnType<typeof resolveForegroundRunPreflight>>) => void)
+      | undefined;
+    mockedResolveForegroundRunPreflight.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePreflight = resolve;
+        }),
+    );
+
+    const execution = executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+    });
+    while (!resolvePreflight) await Promise.resolve();
+
+    expect(events).toEqual(['acquire:chat']);
+    expect(leaseSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ taskKind: 'chat' }),
+      expect.any(Function),
+    );
+
+    resolvePreflight({ kind: 'missing_provider' });
+    await execution;
+
+    expect(events).toEqual(['acquire:chat', 'release:chat']);
+    leaseSpy.mockRestore();
   });
 
   it('durably terminalizes and releases the reserved placeholder when preflight rejects', async () => {

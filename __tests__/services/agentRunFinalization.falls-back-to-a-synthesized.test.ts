@@ -134,6 +134,10 @@ describe('agentRunFinalization', () => {
     );
     expect(prompt).not.toContain('Detailed result excerpt:');
     expect(prompt).toContain('Tool result - tc-1:\nAll tests passed and the fix was verified.');
+    expect(prompt).toContain('No session tool call or worker update exists in this run.');
+    expect(prompt).toContain(
+      'Do not claim that a worker was spawned, ran, timed out, completed, or was reviewed.',
+    );
   });
   it('includes terminal deliverables in finalization prompts without status narration', () => {
     const prompt = buildAgentRunFinalizationPrompt({
@@ -149,6 +153,8 @@ describe('agentRunFinalization', () => {
     });
 
     expect(prompt).toContain('Terminal deliverables:\n- worker-1: TOKEN42');
+    expect(prompt).toContain('Session tools observed: sessions_wait');
+    expect(prompt).toContain('Worker updates observed: 0');
     expect(prompt).toContain(
       'If one terminal deliverable is itself the requested final answer, output that value without status narration.',
     );

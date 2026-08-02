@@ -9,6 +9,7 @@ import {
   startSubAgent,
   useChatStore,
 } from '../helpers/subAgentHarness';
+import { DEFAULT_SUB_AGENT_MAX_ITERATIONS } from '../../src/services/agents/lifecycle/runConfig';
 
 describe('Sub-Agent Service', () => {
   installSubAgentTestHarness();
@@ -477,10 +478,12 @@ describe('Sub-Agent Service', () => {
       expect(capturedOptions.systemPrompt).not.toContain('## Execution Evidence Contract');
     });
 
-    it('uses the mobile-bounded default iteration cap for delegated workers', async () => {
+    it('lets the graph own the adaptive default horizon while recording worker actions', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
-        for (let index = 0; index < 25; index += 1) {
+      let capturedOptions: any = null;
+      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
+        capturedOptions = opts;
+        for (let index = 0; index < DEFAULT_SUB_AGENT_MAX_ITERATIONS; index += 1) {
           callbacks.onToolCallStart?.({
             id: `tc-${index}`,
             name: 'read_file',
@@ -505,7 +508,8 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(result.status).toBe('completed');
-      expect(result.iterations).toBe(25);
+      expect(result.iterations).toBe(DEFAULT_SUB_AGENT_MAX_ITERATIONS);
+      expect(capturedOptions).not.toHaveProperty('maxToolIterations');
     });
 
     it('with allProviders parameter', async () => {
@@ -537,7 +541,7 @@ describe('Sub-Agent Service', () => {
     it('treats maxIterations aborts as guardrail errors, not timeouts', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
-        for (let index = 0; index < 25; index += 1) {
+        for (let index = 0; index <= DEFAULT_SUB_AGENT_MAX_ITERATIONS; index += 1) {
           callbacks.onToolCallStart?.({
             id: `tc-${index}`,
             name: 'read_file',
@@ -557,6 +561,7 @@ describe('Sub-Agent Service', () => {
 
       expect(result.status).toBe('error');
       expect(result.error).toContain('maxIterations');
+      expect(result.iterations).toBe(DEFAULT_SUB_AGENT_MAX_ITERATIONS + 1);
     });
   });
 });

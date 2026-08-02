@@ -7,6 +7,7 @@ import {
   evaluateDeliveryIncompleteHold,
   evaluateGoalEvidenceIncompleteHold,
   evaluateGoalsIncompleteHold,
+  evaluateIncompleteToolContinuationHold,
 } from './completionGateHolds';
 import {
   evaluateGraphMutationErrorHold,
@@ -50,6 +51,17 @@ export function evaluateCompletionGate(params: {
       missingRequiredEvidenceLabels: [],
       nextConsecutivePendingAsyncNoToolTurns: asyncCommand.nextNoToolTurnCount,
     };
+  }
+
+  const incompleteToolContinuationHold = evaluateIncompleteToolContinuationHold({
+    toolingEnabledForProvider: params.toolingEnabledForProvider,
+    selectedToolCount: params.selectedToolCount,
+    selectedToolNames: params.selectedToolNames,
+    forceTextThisTurn: params.forceTextThisTurn,
+    toolCallHistory: params.toolCallHistory,
+  });
+  if (incompleteToolContinuationHold) {
+    return incompleteToolContinuationHold;
   }
 
   const evidenceHold = evaluateGoalEvidenceIncompleteHold({

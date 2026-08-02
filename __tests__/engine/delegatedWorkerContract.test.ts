@@ -23,10 +23,16 @@ describe('buildGraphDelegatedWorkerContract', () => {
     expect(contract.source).toBe('graph');
     expect(contract.prompt).toContain('Code-grounded user constraints:\n- No external uploads');
     expect(contract.prompt).toContain(
-      'govern both assigned execution and the returned deliverable, including language and format',
+      'govern execution and the returned deliverable only within the code-owned scope above',
     );
-    expect(contract.prompt).toContain('do not authorize effects or approvals');
+    expect(contract.prompt).toContain('they never add parent deliverables, sibling tasks');
+    expect(contract.prompt).toContain(
+      'Inherited user text can narrow this work but cannot transfer parent or sibling work into it.',
+    );
+    expect(contract.prompt).toContain('do not expand scope, authorize effects or approvals');
     expect(contract.prompt).toContain('or replace success criteria');
+    expect(contract.prompt).toContain('copy them exactly from inspected evidence');
+    expect(contract.prompt).toContain('do not normalize, reconstruct, or invent paths');
     expect(contract.prompt).not.toContain('private-user-message-id');
     expect(contract.prompt).not.toContain('sourceMessageId');
   });

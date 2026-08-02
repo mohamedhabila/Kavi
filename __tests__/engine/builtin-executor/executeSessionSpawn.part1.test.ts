@@ -29,6 +29,8 @@ describe('Builtin Tool Executor', () => {
       const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
       expect(parsed.sessionId).toContain('sub-');
+      expect(parsed.guidance).toContain('Continue independent non-overlapping supervisor work');
+      expect(parsed.guidance).toContain('do not answer before');
     });
 
     it('leaves exact-response worker prompts on the default text-only lane when tools are omitted', async () => {

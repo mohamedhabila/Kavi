@@ -16,13 +16,17 @@ function expectCompletedExecution(result: ToolRuntimeOutcome, output: string): v
   );
 }
 
-function expectFailedExecution(result: ToolRuntimeOutcome, errorFragment: string): void {
+function expectFailedExecution(
+  result: ToolRuntimeOutcome,
+  errorFragment: string,
+  workspaceMutationState: 'unknown' | 'none_observed' = 'unknown',
+): void {
   expect(result.status).toBe('failed');
   expect(JSON.parse(result.content)).toEqual(
     expect.objectContaining({
       status: 'failed',
       isError: true,
-      workspaceMutationState: 'unknown',
+      workspaceMutationState,
       error: expect.stringContaining(errorFragment),
     }),
   );
@@ -66,7 +70,7 @@ describe('executeToolInner raw runtime routing', () => {
         JSON.stringify({ code: 'throw new Error("test error");' }),
         CONV_ID,
       );
-      expectFailedExecution(result, 'test error');
+      expectFailedExecution(result, 'test error', 'none_observed');
     });
 
     it('should handle string return values', async () => {
@@ -85,7 +89,7 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expectFailedExecution(result, 'code');
+      expectFailedExecution(result, 'code', 'none_observed');
     });
 
     it('should accept fenced JavaScript code', async () => {
@@ -140,6 +144,24 @@ describe('executeToolInner raw runtime routing', () => {
       );
 
       expectCompletedExecution(result, '42');
+    });
+
+    it('should support Node-style statSync for workspace files', async () => {
+      await executeTool(
+        'write_file',
+        JSON.stringify({ path: 'data/value.txt', content: 'twenty-one' }),
+        CONV_ID,
+      );
+
+      const result = await executeTool(
+        'javascript',
+        JSON.stringify({
+          code: 'const fs = require("fs"); const stat = fs.statSync("data/value.txt"); return [stat.size, stat.isFile(), stat.isDirectory()].join(":");',
+        }),
+        CONV_ID,
+      );
+
+      expectCompletedExecution(result, '10:true:false');
     });
 
     it('should execute workspace JavaScript files by path and sync written files back', async () => {
@@ -252,14 +274,14 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expectFailedExecution(result, 'timeoutMs');
+      expectFailedExecution(result, 'timeoutMs', 'none_observed');
       expect(executePython).not.toHaveBeenCalled();
     });
 
     it('should return a friendly error when code is missing', async () => {
       const result = await executeTool('python', JSON.stringify({ script: 'print(42)' }), CONV_ID);
 
-      expectFailedExecution(result, 'code');
+      expectFailedExecution(result, 'code', 'none_observed');
     });
 
     it('should reject non-string package entries', async () => {
@@ -269,7 +291,7 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expectFailedExecution(result, 'packages');
+      expectFailedExecution(result, 'packages', 'none_observed');
       expect(executePython).not.toHaveBeenCalled();
     });
 
@@ -303,7 +325,7 @@ describe('executeToolInner raw runtime routing', () => {
         CONV_ID,
       );
 
-      expectFailedExecution(result, 'indexUrls');
+      expectFailedExecution(result, 'indexUrls', 'none_observed');
       expect(executePython).not.toHaveBeenCalled();
     });
 
@@ -517,7 +539,7 @@ describe('executeToolInner raw runtime routing', () => {
 
       const result = await executeTool('python', JSON.stringify({ code: 'print(42)' }), CONV_ID);
 
-      expectFailedExecution(result, 'Python runtime unavailable');
+      expectFailedExecution(result, 'Python runtime unavailable', 'none_observed');
     });
 
     it('should preserve a code-owned hard timeout status', async () => {
@@ -538,7 +560,10 @@ describe('executeToolInner raw runtime routing', () => {
         expect.objectContaining({
           status: 'timed_out',
           isError: true,
-          workspaceMutationState: 'unknown',
+          workspaceMutationState: 'none_observed',
+          networkAccessState: 'blocked',
+          networkMutationState: 'none_observed',
+          executionEffectState: 'none_observed',
           failureKind: 'timed_out',
           error: 'Python execution timed out after 1000ms',
         }),

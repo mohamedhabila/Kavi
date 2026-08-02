@@ -143,7 +143,7 @@ describe('Sub-Agent Service', () => {
       expect(result.output).toBe('Final answer: all checks passed.');
     });
 
-    it('marks terminal worker prose incomplete when execution-backed work omits completion_state', async () => {
+    it('classifies terminal worker prose conservatively when execution-backed work omits completion_state', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAssistantMessage?.('Plan: update the artifact.', [
@@ -175,7 +175,7 @@ describe('Sub-Agent Service', () => {
       expect(result.completionState).toBe('incomplete');
       expect(result.output).toContain('Final answer: artifact updated.');
       expect(result.output).not.toContain('completion_state:');
-      expect(sendMessageSpy).not.toHaveBeenCalled();
+      expect(sendMessageSpy).toHaveBeenCalledTimes(1);
     });
 
     it('blocks success claims for execution tasks when no commit/push/deploy evidence exists', async () => {

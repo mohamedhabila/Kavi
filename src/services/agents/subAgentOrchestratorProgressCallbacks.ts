@@ -67,6 +67,7 @@ export function createSubAgentOrchestratorProgressCallbacks<TAgent extends SubAg
         params.updateAgentProgress(params.subAgent, {
           currentActivity: responsePreview,
           launchState: 'active',
+          ...(state === 'responding' ? { modelResponsePendingSince: Date.now() } : {}),
         } as ProgressChanges<TAgent>);
         return;
       }

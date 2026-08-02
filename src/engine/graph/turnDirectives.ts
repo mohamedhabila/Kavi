@@ -55,7 +55,11 @@ export function buildAgentControlGraphPostToolFinalTextDirectiveEvent(params: {
     );
   }
 
-  if (params.pendingAsyncCount === 0 && params.hasBackgroundLaunchWithoutWait === true) {
+  if (
+    params.pendingAsyncCount === 0 &&
+    params.hasBackgroundLaunchWithoutWait === true &&
+    params.hasIncompleteBlockingGoal !== true
+  ) {
     return buildAgentControlGraphTurnDirectivesRecordedEvent(
       {
         forceFinalText: true,

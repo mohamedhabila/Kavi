@@ -409,6 +409,70 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
     expect(mockAppendAgentRunCheckpoint).not.toHaveBeenCalled();
   });
 
+  it('does not append a cross-turn final for a compacted historical run after a newer terminal run', async () => {
+    mockChatStoreState.conversations = [
+      {
+        id: 'conv-compacted-history',
+        title: 'Compacted recovery history',
+        providerId: 'openai',
+        systemPrompt: 'You are helpful.',
+        createdAt: 1,
+        updatedAt: 30,
+        messages: [
+          {
+            id: 'compact-10',
+            role: 'system',
+            content: '[Conversation Summary] The earlier request was compacted.',
+            timestamp: 10,
+          },
+          {
+            id: 'user-newer',
+            role: 'user',
+            content: 'Complete the newer task.',
+            timestamp: 20,
+          },
+          {
+            id: 'final-newer',
+            role: 'assistant',
+            content: 'The newer run failed before completion.',
+            timestamp: 30,
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'fallback_from_evidence',
+            },
+            memoryPublication: { version: 1, disposition: 'enqueued' },
+          },
+        ],
+        agentRuns: [
+          createTerminalRun({
+            id: 'run-compacted',
+            userMessageId: 'user-compacted-away',
+            createdAt: 1,
+            updatedAt: 15,
+          }),
+          createTerminalRun({
+            id: 'run-newer',
+            userMessageId: 'user-newer',
+            status: 'failed',
+            createdAt: 20,
+            updatedAt: 30,
+          }),
+        ],
+      },
+    ];
+
+    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
+      activeSubAgents: [],
+      synthesisSweepBudgetMs: 0,
+    });
+
+    expect(repairedRunIds).toEqual([]);
+    expect(mockAddMessage).not.toHaveBeenCalled();
+    expect(mockTransitionMessageMemoryPublication).not.toHaveBeenCalled();
+    expect(mockChatStoreState.conversations[0].messages.at(-1)?.id).toBe('final-newer');
+  });
+
   it('uses deterministic fallbacks for every remaining run after the shared synthesis budget expires', async () => {
     mockChatStoreState.conversations = ['1', '2'].map((suffix) => ({
       id: `conv-${suffix}`,

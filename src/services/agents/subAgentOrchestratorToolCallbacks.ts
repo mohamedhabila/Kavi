@@ -18,6 +18,7 @@ import type {
   SubAgentOrchestratorCallbackParams,
 } from './subAgentOrchestratorCallbackTypes';
 import { resolveAgentControlGraphTerminalFailure } from '../../engine/graph/terminalOutcome';
+import { hasExplicitSubAgentMaxIterations } from './lifecycle/runConfig';
 
 export function createSubAgentOrchestratorToolCallbacks<TAgent extends SubAgentSnapshot>(
   params: SubAgentOrchestratorCallbackParams<TAgent>,
@@ -60,8 +61,12 @@ export function createSubAgentOrchestratorToolCallbacks<TAgent extends SubAgentS
           activityText,
         },
       );
-      if (params.runtimeState.iterations >= params.maxIterations) {
+      if (
+        hasExplicitSubAgentMaxIterations(params.config.maxIterations) &&
+        params.runtimeState.iterations > params.maxIterations
+      ) {
         params.runControl.abortReason = 'max-iterations';
+        params.reject(new Error(`Worker reached maxIterations (${params.maxIterations}).`));
         params.abortController.abort();
       }
     },
@@ -90,7 +95,11 @@ export function createSubAgentOrchestratorToolCallbacks<TAgent extends SubAgentS
         'tool';
       const preview = summarizeFinalizationToolResultPreview(toolCall?.result);
       if (preview) {
-        params.runtimeState.toolResultPreviews.push({ toolName: completedToolName, preview });
+        params.runtimeState.toolResultPreviews.push({
+          toolName: completedToolName,
+          preview,
+          status: toolCall?.status === 'failed' ? 'failed' : 'completed',
+        });
       }
 
       if (toolCall?.result && toolCall.status !== 'failed') {

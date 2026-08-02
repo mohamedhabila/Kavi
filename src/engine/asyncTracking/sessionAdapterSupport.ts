@@ -70,9 +70,16 @@ function shouldBlockFinalizationForSessionTool(toolName: string, toolArguments: 
 
   try {
     const parsed = JSON.parse(toolArguments) as Record<string, unknown>;
-    return parsed?.waitForCompletion === true;
+    // A new worker belongs to the current user request unless the caller
+    // explicitly detaches it. This keeps an omitted optional boolean from
+    // allowing a supervisor to finalize while required delegated work is
+    // still running. Follow-up sends retain their established opt-in join
+    // behavior because they may intentionally enqueue substantial work.
+    return toolName === 'sessions_spawn'
+      ? parsed?.waitForCompletion !== false
+      : parsed?.waitForCompletion === true;
   } catch {
-    return false;
+    return toolName === 'sessions_spawn';
   }
 }
 
@@ -117,31 +124,43 @@ export function upsertTrackedSession(
   );
 }
 
-export function markMissingTrackedSessionFailed(
+export function markMissingTrackedSessionsFailed(
   trackedOperations: Map<string, TrackedAsyncOperation>,
   toolName: string,
   toolArguments: string,
   resultCode: unknown,
+  reportedMissingSessionIds?: unknown,
 ): void {
   if (resultCode !== 'session_not_found') {
     return;
   }
 
-  const sessionId = extractStringArg(toolArguments, 'sessionId');
-  if (!sessionId) {
-    return;
+  const sessionIds = new Set<string>();
+  const fallbackSessionId = extractStringArg(toolArguments, 'sessionId');
+  if (fallbackSessionId) {
+    sessionIds.add(fallbackSessionId);
   }
 
-  upsertTrackedSession(
-    trackedOperations,
-    {
-      sessionId,
-      status: 'failed',
-      toolName,
-      toolArguments,
-    },
-    { onlyUpdateExisting: true },
-  );
+  if (Array.isArray(reportedMissingSessionIds)) {
+    for (const value of reportedMissingSessionIds) {
+      if (typeof value === 'string' && value.trim()) {
+        sessionIds.add(value.trim());
+      }
+    }
+  }
+
+  for (const sessionId of sessionIds) {
+    upsertTrackedSession(
+      trackedOperations,
+      {
+        sessionId,
+        status: 'failed',
+        toolName,
+        toolArguments,
+      },
+      { onlyUpdateExisting: true },
+    );
+  }
 }
 
 export function updateTrackedSessionsFromCollection(

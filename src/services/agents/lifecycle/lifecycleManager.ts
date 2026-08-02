@@ -9,6 +9,25 @@ import {
 } from './lifecycleRecovery';
 import type { SubAgentLifecycleManagerParams } from './lifecycleManagerTypes';
 import { decodeSubAgentTerminationCause } from '../../../utils/subAgentTermination';
+import { isTerminalSubAgentStatus } from './stateMachine';
+
+function hasTerminalExecutionResidue(agent: SubAgentSnapshot): boolean {
+  if (!isTerminalSubAgentStatus(agent.status)) {
+    return false;
+  }
+
+  const normalizedOutput = normalizeFinalizationOutputText(agent.output);
+  return (
+    agent.launchState !== 'terminal' ||
+    agent.deadlineAt !== undefined ||
+    agent.modelResponsePendingSince !== undefined ||
+    agent.activeToolName !== undefined ||
+    agent.activeToolStartedAt !== undefined ||
+    (agent.status === 'cancelled' &&
+      !!normalizedOutput &&
+      agent.currentActivity !== normalizedOutput)
+  );
+}
 
 export function buildResultFromSnapshot(agent: SubAgentSnapshot): SubAgentResult {
   const output = agent.output || '';
@@ -412,7 +431,8 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
           agent.updatedAt < recoveredSnapshot.updatedAt ||
           (!agent.output && !!recoveredSnapshot.output) ||
           (agent.toolsUsed?.length ?? 0) < (recoveredSnapshot.toolsUsed?.length ?? 0) ||
-          (agent.activityLog?.length ?? 0) < (recoveredSnapshot.activityLog?.length ?? 0);
+          (agent.activityLog?.length ?? 0) < (recoveredSnapshot.activityLog?.length ?? 0) ||
+          hasTerminalExecutionResidue(agent);
 
         if (shouldAdoptRecoveredSnapshot) {
           applyRecoveredTerminalSnapshot(agent, recoveredSnapshot);
@@ -423,6 +443,17 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
       }
 
       if (agent.status === 'running') {
+        // `initSubAgentRegistry` can be retried later in the same process when a downstream
+        // startup-recovery stage (for example chat persistence) fails. A worker that this
+        // process already owns is not an orphan: replaying restart recovery against it can
+        // schedule a duplicate runner or terminalize a healthy resumed worker. These maps are
+        // intentionally process-local, so they are empty after a genuine app restart.
+        if (
+          params.activeRunControls.has(agent.sessionId) ||
+          params.activeResultPromises.has(agent.sessionId)
+        ) {
+          continue;
+        }
         try {
           if (await params.recoverInterruptedAgent?.(agent)) {
             continue;

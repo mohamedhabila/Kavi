@@ -41,6 +41,35 @@ describe('toolEvidence', () => {
     expect(evidence).toEqual(['read_file:file body']);
   });
 
+  it('keeps long read chunks as one structural checkpoint without source text', () => {
+    const evidence = buildToolGoalEvidenceStrings({
+      toolName: 'read_file',
+      content: JSON.stringify({
+        status: 'read_chunk',
+        path: 'attachments/source.txt',
+        sha256: 'a'.repeat(64),
+        content: 'private source text '.repeat(500),
+        offset: 7000,
+        nextOffset: 14000,
+        totalChars: 28000,
+        complete: false,
+      }),
+    });
+
+    expect(evidence).toEqual([
+      `read_file:${JSON.stringify({
+        status: 'read_chunk',
+        path: 'attachments/source.txt',
+        sha256: 'a'.repeat(64),
+        offset: 7000,
+        nextOffset: 14000,
+        totalChars: 28000,
+        complete: false,
+      })}`,
+    ]);
+    expect(evidence[0]).not.toContain('private source text');
+  });
+
   it('adds compact top-level JSON evidence for long generic tool results', () => {
     const evidence = buildToolGoalEvidenceStrings({
       toolName: 'calendar_create_event',
@@ -148,5 +177,29 @@ describe('toolEvidence', () => {
         evidence: 'contacts_search:[{"id":"e2e-contact-avery"}]',
       },
     ]);
+  });
+
+  it('does not credit supervisor tool calls to a delegated-worker goal', () => {
+    const routed = routeToolEvidenceToActiveGoals({
+      toolName: 'read_file',
+      toolDefinitions: [{ name: 'read_file' }],
+      goals: [
+        {
+          id: 'worker-goal',
+          title: 'Delegated source review',
+          status: 'active',
+          owner: 'delegated-worker',
+          dependencies: [],
+          evidence: ['delegation_launch:sub-worker'],
+          createdAt: 1,
+          updatedAt: 1,
+          completionPolicy: 'blocking',
+          successCriteria: ['evidence.prefix:worker', 'evidence.tool:read_file'],
+        },
+      ],
+      evidenceStrings: ['read_file:supervisor-source-chunk'],
+    });
+
+    expect(routed).toEqual([]);
   });
 });

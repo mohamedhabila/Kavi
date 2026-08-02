@@ -18,7 +18,9 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
   {
     name: 'read_file',
     description:
-      'Read the contents of a file from the current workspace. Returns the full text content. ' +
+      'Read text from a file in the current workspace. Small files return their full contents. ' +
+      'Large files return a bounded JSON chunk with a nextOffset; continue by calling read_file on the same original path with that offset until complete is true. ' +
+      'Do not read generated .kavi/spill paths to continue a chunked read. ' +
       'Do not use workspace files for session canvas creation or editing unless the user explicitly asks to persist or export files.',
     input_schema: {
       type: 'object',
@@ -26,6 +28,12 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
         path: {
           type: 'string',
           description: 'File path relative to the workspace root',
+        },
+        offset: {
+          type: 'integer',
+          minimum: 0,
+          description:
+            'Optional continuation offset returned as nextOffset by a previous read_file result',
         },
       },
       required: ['path'],
@@ -102,7 +110,7 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
     name: 'javascript',
     description:
       'Execute synchronous JavaScript inline or from a workspace entry file and return the result. ' +
-      'The runtime provides standard JS built-ins, `console`, a workspace-aware `fs` bridge both as the global `fs` object and `require("fs")` / `require("node:fs")` (including `readFile`, `readFileSync`, `writeFile`, `writeFileSync`, `exists`, `existsSync`, `listFiles`, and `deleteFile` / `unlinkSync`), `data` helpers for JSON/CSV/YAML, `env`, and `process.argv`/`process.cwd()` plus `__dirname`/`__filename` for file-based runs. ' +
+      'The runtime provides standard JS built-ins, `console`, a workspace-aware `fs` bridge both as the global `fs` object and `require("fs")` / `require("node:fs")` (including `readFile`, `readFileSync`, `writeFile`, `writeFileSync`, `exists`, `existsSync`, `statSync`, `readdirSync`, `listFiles`, and `deleteFile` / `unlinkSync`), `data` helpers for JSON/CSV/YAML, `env`, and `process.argv`/`process.cwd()` plus `__dirname`/`__filename` for file-based runs. ' +
       'Workspace modules can be loaded with CommonJS `require()` using relative paths or workspace-root paths, and changed workspace files are synced back automatically after successful execution. ' +
       'Provide either `code` for inline execution or `path` for a workspace entry script. ' +
       'Limitations: synchronous only, NO async/await, NO Promises, NO setTimeout, NO fetch, NO DOM APIs, and NO real Node built-ins or npm package resolution beyond the workspace bridge helpers. Use CommonJS `require()`, not ESM `import`.',

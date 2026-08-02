@@ -5,6 +5,7 @@ import { executeAgentControlGraphSession } from '../../src/engine/graph/sessionE
 import { emitSessionEvent } from '../../src/services/events/bus';
 import { getMemoryPolicyEpoch } from '../../src/services/memory/policy';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
+import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
 
 jest.mock('../../src/services/events/bus', () => ({
   emitSessionEvent: jest.fn().mockResolvedValue(undefined),
@@ -47,6 +48,7 @@ function createParams(
       getGraphSnapshot: jest.fn().mockReturnValue(undefined),
       publishWorkflowToolResultProgressToAgentControlGraph: jest.fn(),
       recordPerformanceMetrics: jest.fn(),
+      recordObservability: jest.fn(),
       recordPostToolFinalTextDirective: jest.fn().mockReturnValue(false),
       recordTurnDirectives: jest.fn(),
       resetIncompleteFinalTextRecovery: jest.fn(),
@@ -164,6 +166,52 @@ describe('agentControlGraphSessionExecution', () => {
         sessionEndReason: 'max_iterations',
       }),
     );
+  });
+
+  it('extends a progressing default long-horizon run before its final-text-only turn', async () => {
+    const params = createParams({
+      allowLongHorizonIterationExtensions: true,
+      maxToolIterations: 2,
+    });
+    params.toolRuntime.toolCallHistory.push(
+      {
+        name: 'read_file',
+        arguments: '{"path":"input-a.txt"}',
+        timestamp: 1,
+        status: 'completed',
+      },
+      {
+        name: 'read_file',
+        arguments: '{"path":"input-b.txt"}',
+        timestamp: 2,
+        status: 'completed',
+      },
+    );
+    mockedExecuteAgentControlGraphIteration
+      .mockResolvedValueOnce({ status: 'continued', runtime: params.initialRuntime })
+      .mockResolvedValueOnce({ status: 'continued', runtime: params.initialRuntime })
+      .mockResolvedValueOnce({ status: 'finalized', runtime: params.initialRuntime });
+
+    await executeAgentControlGraphSession(params);
+
+    expect(mockedExecuteAgentControlGraphIteration).toHaveBeenCalledTimes(3);
+    expect(
+      mockedExecuteAgentControlGraphIteration.mock.calls.map(([input]) => ({
+        iteration: input.iteration,
+        maxToolIterations: input.maxToolIterations,
+        promptMaxToolIterations: input.promptContextSupport.maxToolIterations,
+      })),
+    ).toEqual([
+      { iteration: 1, maxToolIterations: 2, promptMaxToolIterations: 2 },
+      { iteration: 2, maxToolIterations: 4, promptMaxToolIterations: 4 },
+      { iteration: 3, maxToolIterations: 4, promptMaxToolIterations: 4 },
+    ]);
+    expect(params.graph.recordObservability).toHaveBeenCalledWith({
+      observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.LONG_HORIZON_BUDGET_EXTENDED,
+      iteration: 1,
+      detail: 'from:2,to:4',
+    });
+    expect(params.graph.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
   });
 
   it('retries an invalidated model turn without consuming the iteration budget', async () => {

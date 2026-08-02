@@ -192,7 +192,27 @@ export function schedulePreparedSubAgentRun<
   params.scheduleQueuedLaunchWatch(params.prepared.subAgent, params.announceFailure);
 
   return new Promise<SubAgentResult>((resolve, reject) => {
-    const launchHandle = setTimeout(() => {
+    let cancelled = false;
+    const scheduledLaunch: ScheduledSubAgentLaunchControl = {
+      cancel: () => {
+        cancelled = true;
+      },
+      resolve,
+      reject,
+    };
+    params.scheduledSubAgentLaunches.set(params.prepared.sessionId, scheduledLaunch);
+
+    // React Native may suspend ordinary timers as soon as the activity backgrounds,
+    // even while an Android foreground service keeps the process alive. Queue the
+    // launch on the current JavaScript turn so user-started work cannot remain stuck
+    // behind a frozen setTimeout(0) boundary.
+    queueMicrotask(() => {
+      if (
+        cancelled ||
+        params.scheduledSubAgentLaunches.get(params.prepared.sessionId) !== scheduledLaunch
+      ) {
+        return;
+      }
       params.scheduledSubAgentLaunches.delete(params.prepared.sessionId);
 
       if (params.prepared.subAgent.status !== 'running') {
@@ -200,14 +220,7 @@ export function schedulePreparedSubAgentRun<
         return;
       }
 
-      void params.runPreparedSubAgent().then(resolve, reject);
-    }, 0);
-    (launchHandle as any)?.unref?.();
-
-    params.scheduledSubAgentLaunches.set(params.prepared.sessionId, {
-      handle: launchHandle,
-      resolve,
-      reject,
+      void Promise.resolve().then(params.runPreparedSubAgent).then(resolve, reject);
     });
   });
 }

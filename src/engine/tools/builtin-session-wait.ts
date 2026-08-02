@@ -28,10 +28,11 @@ export async function executeSessionWait(
   },
   conversationId: string,
   executionSignal?: AbortSignal,
+  pendingSessionIds?: ReadonlyArray<string>,
 ): Promise<ToolRuntimeOutcome> {
   pruneStaleCommandPolls(sessionStatusPollState);
 
-  const selection = collectRequestedSessionIds(args, conversationId);
+  const selection = collectRequestedSessionIds(args, conversationId, pendingSessionIds);
   if (selection.error) {
     return failedToolOutcome(JSON.stringify({ status: 'error', error: selection.error }));
   }
@@ -53,8 +54,48 @@ export async function executeSessionWait(
     );
   }
 
-  const missingSessionIds = selection.sessionIds.filter((sessionId) => !getSubAgent(sessionId));
+  const requestedSessionIds = selection.sessionIds;
+  let resolvedSessionIds = requestedSessionIds;
+  let identityResolution:
+    | {
+        kind: 'single_pending_session';
+        requestedSessionId: string;
+        resolvedSessionId: string;
+      }
+    | undefined;
+  let missingSessionIds = resolvedSessionIds.filter((sessionId) => !getSubAgent(sessionId));
+
+  if (
+    !selection.waitsForConversationSessions &&
+    resolvedSessionIds.length === 1 &&
+    missingSessionIds.length === 1
+  ) {
+    const exactPendingSessionIds = Array.from(
+      new Set(
+        (pendingSessionIds ?? [])
+          .map((sessionId) => (typeof sessionId === 'string' ? sessionId.trim() : ''))
+          .filter((sessionId) => Boolean(sessionId) && Boolean(getSubAgent(sessionId))),
+      ),
+    );
+    if (exactPendingSessionIds.length === 1) {
+      identityResolution = {
+        kind: 'single_pending_session',
+        requestedSessionId: resolvedSessionIds[0],
+        resolvedSessionId: exactPendingSessionIds[0],
+      };
+      resolvedSessionIds = exactPendingSessionIds;
+      missingSessionIds = [];
+    }
+  }
+
   if (missingSessionIds.length > 0) {
+    const availablePendingSessionIds = Array.from(
+      new Set(
+        (pendingSessionIds ?? [])
+          .map((sessionId) => (typeof sessionId === 'string' ? sessionId.trim() : ''))
+          .filter(Boolean),
+      ),
+    );
     return failedToolOutcome(
       JSON.stringify({
         status: 'error',
@@ -64,6 +105,11 @@ export async function executeSessionWait(
             ? `session not found: ${missingSessionIds[0]}`
             : `sessions not found: ${missingSessionIds.join(', ')}`,
         missingSessionIds,
+        ...(availablePendingSessionIds.length > 0 ? { availablePendingSessionIds } : {}),
+        guidance:
+          availablePendingSessionIds.length > 0
+            ? 'Use an availablePendingSessionIds value exactly as returned, or omit sessionId/sessionIds to wait for every joined worker in this request.'
+            : 'Use a session id exactly as returned by sessions_spawn or sessions_list.',
       }),
     );
   }
@@ -74,7 +120,7 @@ export async function executeSessionWait(
   );
   const waitTimeoutMs = waitWindow.waitTimeoutMs;
   const waitedResults = await Promise.all(
-    selection.sessionIds.map((sessionId) =>
+    resolvedSessionIds.map((sessionId) =>
       executionSignal
         ? waitForSubAgentCompletion(sessionId, waitTimeoutMs, executionSignal)
         : waitForSubAgentCompletion(sessionId, waitTimeoutMs),
@@ -85,8 +131,8 @@ export async function executeSessionWait(
   const pendingSessions: Record<string, unknown>[] = [];
   let completedCount = 0;
 
-  for (let index = 0; index < selection.sessionIds.length; index += 1) {
-    const sessionId = selection.sessionIds[index];
+  for (let index = 0; index < resolvedSessionIds.length; index += 1) {
+    const sessionId = resolvedSessionIds[index];
     const waitResult = waitedResults[index];
 
     if (waitResult) {
@@ -129,11 +175,18 @@ export async function executeSessionWait(
   return completedToolOutcome(
     JSON.stringify({
       status: completedAll ? 'completed' : 'running',
-      sessionIds: selection.sessionIds,
-      sessionCount: selection.sessionIds.length,
+      sessionIds: resolvedSessionIds,
+      sessionCount: resolvedSessionIds.length,
       completedCount,
       pendingCount,
       waitedForConversationSessions: selection.waitsForConversationSessions,
+      ...(selection.selectedTrackedSessions ? { selectedTrackedSessions: true } : {}),
+      ...(identityResolution
+        ? {
+            requestedSessionIds,
+            identityResolution,
+          }
+        : {}),
       ...(!completedAll ? { waitTimeoutMs } : {}),
       ...(!completedAll ? { waitTimedOut: true } : {}),
       ...(!completedAll && waitWindow.usedDefault ? { usedDefaultWaitTimeout: true } : {}),

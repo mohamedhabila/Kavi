@@ -2,7 +2,7 @@ import { extractStringArg } from './support';
 import { deleteTrackedAsyncOperationsByKind } from './trackerStore';
 import type { TrackedAsyncOperation } from './types';
 import {
-  markMissingTrackedSessionFailed,
+  markMissingTrackedSessionsFailed,
   readSessionStatus,
   updateTrackedSessionsFromCollection,
   upsertTrackedSession,
@@ -38,11 +38,12 @@ export function applyTrackedSessionToolResult(
       if (sessionId && status) {
         upsertTrackedSession(trackedOperations, { sessionId, status, toolName, toolArguments });
       }
-      markMissingTrackedSessionFailed(
+      markMissingTrackedSessionsFailed(
         trackedOperations,
         toolName,
         toolArguments,
         parsedResult?.code,
+        parsedResult?.missingSessionIds,
       );
       return true;
     }
@@ -60,21 +61,23 @@ export function applyTrackedSessionToolResult(
       if (sessionId && status) {
         upsertTrackedSession(trackedOperations, { sessionId, status, toolName, toolArguments });
       }
-      markMissingTrackedSessionFailed(
+      markMissingTrackedSessionsFailed(
         trackedOperations,
         toolName,
         toolArguments,
         parsedResult?.code,
+        parsedResult?.missingSessionIds,
       );
       return true;
     }
 
     case 'sessions_wait': {
-      markMissingTrackedSessionFailed(
+      markMissingTrackedSessionsFailed(
         trackedOperations,
         toolName,
         toolArguments,
         parsedResult?.code,
+        parsedResult?.missingSessionIds,
       );
       const sessionCount =
         typeof parsedResult?.sessionCount === 'number' ? parsedResult.sessionCount : undefined;

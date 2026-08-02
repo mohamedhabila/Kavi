@@ -10,8 +10,10 @@ import {
   getSubAgentsByParent,
   initSubAgentRegistry,
   installSubAgentDurabilityHarness,
+  launchSubAgent,
   listActiveSubAgents,
   mockProvider,
+  readPersistedJson,
   REGISTRY_CONTEXTS_KEY,
   REGISTRY_KEY,
   runOrchestrator,
@@ -216,6 +218,38 @@ describe('detectOrphans', () => {
     });
   });
 
+  it('does not recover or orphan a worker already owned by this process on a repeated sweep', async () => {
+    (runOrchestrator as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+
+    const launched = await launchSubAgent(
+      {
+        parentConversationId: 'conv-live-retry',
+        prompt: 'Continue reading the assigned source.',
+        tools: ['read_file'],
+      },
+      mockProvider,
+    );
+    for (
+      let attempt = 0;
+      attempt < 20 && !(runOrchestrator as jest.Mock).mock.calls.length;
+      attempt++
+    ) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 2));
+    }
+
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
+    expect(getSubAgent(launched.sessionId)).toMatchObject({ status: 'running' });
+
+    const orphanCount = await detectOrphans();
+
+    expect(orphanCount).toBe(0);
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
+    expect(getSubAgent(launched.sessionId)).toMatchObject({
+      status: 'running',
+      terminationCause: 'unknown',
+    });
+  });
+
   it('restores persisted session context for interrupted workers so follow-up runs can resume with prior context', async () => {
     const now = Date.now();
     const runningAgent: ActiveSubAgent = {
@@ -378,6 +412,92 @@ describe('detectOrphans', () => {
     const agent = getSubAgent('recovered-1');
     expect(agent?.status).toBe('completed');
     expect(agent?.output).toBe('Recovered final worker output.');
+  });
+
+  it('durably removes stale execution fields from a newer cancelled registry record', async () => {
+    const now = Date.now();
+    const cancellationOutput = 'Cancelled because the supervising turn was stopped by the user.';
+    const cancelledSnapshot: ActiveSubAgent = {
+      sessionId: 'recovered-cancelled-1',
+      parentConversationId: 'conv-recovered-cancelled',
+      depth: 0,
+      startedAt: now - 60_000,
+      updatedAt: now - 2_000,
+      status: 'cancelled',
+      terminationCause: 'cancelled',
+      sandboxPolicy: 'inherit',
+      launchState: 'terminal',
+      output: cancellationOutput,
+      currentActivity: cancellationOutput,
+      activityLog: [{ timestamp: now - 2_000, kind: 'status', text: cancellationOutput }],
+    };
+    const staleRegistryRecord: ActiveSubAgent = {
+      ...cancelledSnapshot,
+      updatedAt: now - 1_000,
+      launchState: 'active',
+      deadlineAt: now + 60_000,
+      modelResponsePendingSince: now - 1_500,
+      currentActivity: 'Tool read_file failed',
+      activeToolName: 'read_file',
+      activeToolStartedAt: now - 1_500,
+      activityLog: [
+        ...(cancelledSnapshot.activityLog ?? []),
+        { timestamp: now - 1_000, kind: 'status', text: 'Tool read_file failed' },
+      ],
+    };
+
+    await writePersistedJson(REGISTRY_KEY, [staleRegistryRecord]);
+
+    await initSubAgentRegistry([
+      {
+        id: 'conv-recovered-cancelled',
+        title: 'Recovered cancelled conversation',
+        messages: [
+          {
+            id: 'msg-worker-cancelled',
+            role: 'assistant',
+            content: cancellationOutput,
+            timestamp: cancelledSnapshot.updatedAt,
+            subAgentEvent: {
+              type: 'sub-agent',
+              event: 'cancelled',
+              snapshot: cancelledSnapshot,
+            },
+          },
+        ],
+        providerId: 'test',
+        systemPrompt: 'system',
+        createdAt: now - 120_000,
+        updatedAt: cancelledSnapshot.updatedAt,
+      } as any,
+    ]);
+
+    const expectedTerminalState = expect.objectContaining({
+      status: 'cancelled',
+      terminationCause: 'cancelled',
+      launchState: 'terminal',
+      output: cancellationOutput,
+      currentActivity: cancellationOutput,
+      deadlineAt: undefined,
+      modelResponsePendingSince: undefined,
+      activeToolName: undefined,
+      activeToolStartedAt: undefined,
+    });
+    expect(getSubAgent('recovered-cancelled-1')).toEqual(expectedTerminalState);
+    const persistedRecord = readPersistedJson<ActiveSubAgent[]>(REGISTRY_KEY)?.[0];
+    expect(persistedRecord).toEqual(
+      expect.objectContaining({
+        status: 'cancelled',
+        terminationCause: 'cancelled',
+        launchState: 'terminal',
+        output: cancellationOutput,
+        currentActivity: cancellationOutput,
+      }),
+    );
+    expect(persistedRecord).not.toHaveProperty('deadlineAt');
+    expect(persistedRecord).not.toHaveProperty('modelResponsePendingSince');
+    expect(persistedRecord).not.toHaveProperty('activeToolName');
+    expect(persistedRecord).not.toHaveProperty('activeToolStartedAt');
   });
 });
 

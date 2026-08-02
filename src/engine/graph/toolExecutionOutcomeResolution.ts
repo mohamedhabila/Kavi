@@ -45,7 +45,6 @@ import {
 import {
   buildAppliedUnverifiedEffectGoalBlockEvent,
   buildClarificationRequestUnderstanding,
-  buildDeferredAfterGraphMutationOutcome,
   buildTerminalFailedEffectGuardRemovalEvent,
   collectCompletedBlockingGoalIds,
   hasNewlyCompletedBlockingGoal,
@@ -160,7 +159,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   let yieldCompletionNoteMessage: string | undefined;
   let workingMessages = params.workingMessages;
   const canonicalToolExecutionOutcomes: CanonicalToolExecutionOutcome[] = [];
-  let graphMutationBoundaryReached = false;
   let clarificationRequest: RequestClarificationToolResult | undefined;
   let deferredHandoff: PersistedMobileControllerHandoff | undefined;
 
@@ -231,26 +229,22 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     const rawToolName = resolveRegisteredToolName(
       rawGraphToolCall?.name || executableToolCall?.name || outcome.toolCallId,
     );
-    let canonicalOutcome: CanonicalToolExecutionOutcome;
-    if (graphMutationBoundaryReached && rawToolName === 'update_goals') {
-      canonicalOutcome = buildDeferredAfterGraphMutationOutcome({
-        ...outcome,
-        canonicalized: false,
-        graphApplied: false,
-      });
-    } else {
-      canonicalOutcome = canonicalizeToolExecutionOutcome({
-        outcome,
-        toolName: rawToolName,
-        executableToolCalls: params.executableToolCalls,
-        toolCallHistory: params.toolCallHistory,
-        getGraphSnapshot: params.getGraphSnapshot,
-        applyGraphEvents: params.applyGraphEvents,
-        conversationId: params.conversationId,
-        currentUserMessage: params.currentUserMessage,
-        warn: params.warn,
-      });
-    }
+    // Goal mutations are code-owned and effect-free. Resolve them in model order
+    // against the latest graph snapshot so a turn can establish multiple
+    // independent workstreams without silently dropping every mutation after
+    // the first one. Effectful tools remain separated from goal mutations by
+    // the execution boundary enforced before dispatch.
+    const canonicalOutcome = canonicalizeToolExecutionOutcome({
+      outcome,
+      toolName: rawToolName,
+      executableToolCalls: params.executableToolCalls,
+      toolCallHistory: params.toolCallHistory,
+      getGraphSnapshot: params.getGraphSnapshot,
+      applyGraphEvents: params.applyGraphEvents,
+      conversationId: params.conversationId,
+      currentUserMessage: params.currentUserMessage,
+      warn: params.warn,
+    });
     const toolName = resolveRegisteredToolName(
       canonicalOutcome.toolMessage.toolCalls?.[0]?.name ||
         executableToolCall?.name ||
@@ -438,9 +432,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       forceFinalTextFromYieldThisTurn = true;
       yieldCompletionNoteMessage =
         canonicalOutcome.yieldCompletionNoteMessage || yieldCompletionNoteMessage;
-    }
-    if (toolName === 'update_goals' && canonicalOutcome.graphApplied) {
-      graphMutationBoundaryReached = true;
     }
   }
 

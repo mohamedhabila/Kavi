@@ -9,12 +9,16 @@ export function didSessionToolStartBackgroundWork(params: {
   toolResult: string;
   isError?: boolean;
 }): boolean {
-  if (params.isError || !BACKGROUND_SESSION_TOOL_NAMES.has(normalizeToolName(params.toolName))) {
+  const toolName = normalizeToolName(params.toolName);
+  if (params.isError || !BACKGROUND_SESSION_TOOL_NAMES.has(toolName)) {
     return false;
   }
 
   const toolArguments = parseJsonRecord(params.toolArguments);
-  if (toolArguments?.waitForCompletion === true) {
+  if (
+    (toolName === 'sessions_spawn' && toolArguments?.waitForCompletion !== false) ||
+    (toolName === 'sessions_send' && toolArguments?.waitForCompletion === true)
+  ) {
     return false;
   }
 

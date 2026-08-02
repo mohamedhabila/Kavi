@@ -41,6 +41,27 @@ export function buildAgentRunMessageScope(
   };
 }
 
+/**
+ * A compacted historical run no longer has an exact transcript insertion point.
+ * Timestamp fallback may resolve to a summary row before a newer run, so repairing
+ * that historical run would attach its final response to the wrong user turn.
+ */
+export function isHistoricalRunMissingExactRequestAnchor(
+  conversation: Pick<Conversation, 'agentRuns' | 'messages'>,
+  run: Pick<AgentRun, 'createdAt' | 'id' | 'userMessageId'>,
+): boolean {
+  if (conversation.messages.some((message) => message.id === run.userMessageId)) {
+    return false;
+  }
+
+  return (conversation.agentRuns ?? []).some(
+    (candidate) =>
+      candidate.id !== run.id &&
+      Number.isFinite(candidate.createdAt) &&
+      candidate.createdAt >= run.createdAt,
+  );
+}
+
 function resolveAgentRunMessageSliceStartIndex(
   messages: Message[],
   scope: string | AgentRunMessageScope,

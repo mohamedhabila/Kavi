@@ -68,5 +68,80 @@ describe('runSubAgentOrchestratorLoop', () => {
       }),
       expect.objectContaining({ onDone: expect.any(Function) }),
     );
+    expect(mockRunOrchestrator.mock.calls[0][0]).not.toHaveProperty('maxToolIterations');
+  });
+
+  it('keeps explicit code-owned worker limits fixed instead of enabling adaptive defaults', async () => {
+    mockRunOrchestrator.mockResolvedValue({ terminalDisposition: 'final_candidate' });
+
+    await runSubAgentOrchestratorLoop({
+      provider: { id: 'provider-1' },
+      model: 'model-1',
+      sessionId: 'worker-session-explicit-budget',
+      usageConversationId: 'parent-thread-1',
+      workspaceConversationId: 'workspace-1',
+      systemPrompt: 'system',
+      messages: [],
+      disableTooling: false,
+      subAgent: {},
+      config: { maxIterations: 64 },
+      runtimeState: {},
+      maxIterations: 64,
+      maxToolResultPreviewChars: 320,
+      runControl: {},
+      abortController: new AbortController(),
+      transcriptMessages: [],
+      transcriptToolCalls: new Map(),
+      trackToolCall: jest.fn(),
+      persistSessionContextNow: jest.fn(),
+      checkpointSessionContext: jest.fn(),
+      markModelResponseObserved: jest.fn(),
+      refreshSubAgentArtifacts: jest.fn(),
+      appendTranscriptMessage: jest.fn(),
+      appendActivity: jest.fn(),
+      updateAgentProgress: jest.fn(),
+      recordUsage: jest.fn(),
+    } as any);
+
+    expect(mockRunOrchestrator.mock.calls[0][0]).toMatchObject({ maxToolIterations: 129 });
+  });
+
+  it('settles promptly when cancellation aborts an otherwise unresolved orchestrator', async () => {
+    mockCreateSubAgentOrchestratorCallbacks.mockImplementation(() => ({}));
+    mockRunOrchestrator.mockImplementation(() => new Promise(() => undefined));
+    const abortController = new AbortController();
+
+    const pending = runSubAgentOrchestratorLoop({
+      provider: { id: 'provider-1' },
+      model: 'model-1',
+      sessionId: 'worker-session-cancelled',
+      usageConversationId: 'parent-thread-1',
+      workspaceConversationId: 'workspace-1',
+      systemPrompt: 'system',
+      messages: [],
+      disableTooling: false,
+      subAgent: {},
+      config: {},
+      runtimeState: {},
+      maxIterations: 32,
+      maxToolResultPreviewChars: 320,
+      runControl: { abortReason: 'cancelled' },
+      abortController,
+      transcriptMessages: [],
+      transcriptToolCalls: new Map(),
+      trackToolCall: jest.fn(),
+      persistSessionContextNow: jest.fn(),
+      checkpointSessionContext: jest.fn(),
+      markModelResponseObserved: jest.fn(),
+      refreshSubAgentArtifacts: jest.fn(),
+      appendTranscriptMessage: jest.fn(),
+      appendActivity: jest.fn(),
+      updateAgentProgress: jest.fn(),
+      recordUsage: jest.fn(),
+    } as any);
+
+    abortController.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

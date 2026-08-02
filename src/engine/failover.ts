@@ -141,6 +141,10 @@ export function recordFailure(state: FailoverState, providerId: string, model: s
   state.currentIndex = (state.currentIndex + 1) % state.chain.length;
 }
 
+export function getFailureCount(state: FailoverState, providerId: string, model: string): number {
+  return state.failures.get(`${providerId}:${model}`)?.count ?? 0;
+}
+
 export function recordSuccess(state: FailoverState, providerId: string, model: string): void {
   const key = `${providerId}:${model}`;
   state.failures.delete(key);

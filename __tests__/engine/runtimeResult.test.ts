@@ -54,7 +54,7 @@ describe('code execution result normalization', () => {
       summary: 'JavaScript execution failed.',
       error: 'Error: boom',
       failureKind: 'execution_failed',
-      workspaceMutationState: 'unknown',
+      workspaceMutationState: 'none_observed',
       output: 'started',
     });
   });
@@ -99,7 +99,7 @@ describe('code execution result normalization', () => {
       expect.objectContaining({
         status: 'failed',
         isError: true,
-        workspaceMutationState: 'unknown',
+        workspaceMutationState: 'none_observed',
         networkAccessState: 'enabled',
         networkMutationState: 'none_observed',
         networkRequestCount: 1,
@@ -197,9 +197,30 @@ describe('code execution result normalization', () => {
       expect.objectContaining({
         status: 'timed_out',
         isError: true,
-        workspaceMutationState: 'unknown',
+        workspaceMutationState: 'none_observed',
         error,
         failureKind: 'timed_out',
+      }),
+    );
+  });
+
+  it('records a timeout as effect-free when no workspace file or network mutation persisted', () => {
+    expect(
+      parseResult(
+        normalizePythonToolResult({
+          success: false,
+          error: 'execution budget exhausted',
+          failureKind: 'timed_out',
+          networkAccessState: 'blocked',
+          networkMutationState: 'none_observed',
+          networkRequestCount: 0,
+        }),
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        status: 'timed_out',
+        workspaceMutationState: 'none_observed',
+        executionEffectState: 'none_observed',
       }),
     );
   });

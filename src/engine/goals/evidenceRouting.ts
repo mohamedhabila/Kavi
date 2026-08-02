@@ -6,6 +6,7 @@ import {
   parseEffectCompletionCriterion,
   parseToolEffectReceiptEvidence,
 } from './effectCompletionEvidence';
+import { DELEGATED_WORKER_GOAL_OWNER } from './delegation';
 import type { AgentGoal } from './types';
 
 export type RoutedGoalEvidence = {
@@ -116,7 +117,9 @@ export function routeToolEvidenceToActiveGoals(params: {
     (tool) => normalizeToolName(tool.name) === normalizedToolName,
   );
   const activeGoals = params.goals.filter(
-    (goal) => goal.status === 'active' || goal.status === 'blocked',
+    (goal) =>
+      (goal.status === 'active' || goal.status === 'blocked') &&
+      goal.owner !== DELEGATED_WORKER_GOAL_OWNER,
   );
   const routed: RoutedGoalEvidence[] = [];
   const seen = new Set<string>();

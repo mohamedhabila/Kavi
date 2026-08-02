@@ -9,6 +9,10 @@ import {
   type SubAgentExecutionRuntimeState,
 } from './subAgentOrchestratorCallbacks';
 import { SUPER_AGENT_PERSONA_ID } from './personas';
+import {
+  hasExplicitSubAgentMaxIterations,
+  resolveSubAgentGraphIterationBudget,
+} from './lifecycle/runConfig';
 
 type ProgressChanges<TAgent extends SubAgentSnapshot> = Partial<
   Pick<
@@ -123,6 +127,7 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
     resolve: resolveCallbacks,
   });
 
+  const hasExplicitIterationBudget = hasExplicitSubAgentMaxIterations(params.config.maxIterations);
   const orchestratorResult = runOrchestrator(
     {
       provider: params.provider,
@@ -138,6 +143,9 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
         params.workspaceReadFallbackConversationId ?? params.sessionId,
       systemPrompt: params.systemPrompt,
       messages: params.messages,
+      ...(hasExplicitIterationBudget
+        ? { maxToolIterations: resolveSubAgentGraphIterationBudget(params.maxIterations) }
+        : {}),
       maxTokens: resolveSubAgentMaxTokens(params.model),
       signal: params.abortController,
       enableCompaction: true,
@@ -151,6 +159,26 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
     },
     callbacks,
   );
-  const [result] = await Promise.all([orchestratorResult, callbacksCompletion]);
-  return result;
+  let removeAbortListener: () => void = () => undefined;
+  const abortCompletion = new Promise<never>((_resolve, reject) => {
+    const handleAbort = () => {
+      const error = new Error('Sub-agent aborted');
+      error.name = 'AbortError';
+      reject(error);
+    };
+    params.abortController.signal.addEventListener('abort', handleAbort, { once: true });
+    removeAbortListener = () =>
+      params.abortController.signal.removeEventListener('abort', handleAbort);
+    if (params.abortController.signal.aborted) handleAbort();
+  });
+
+  try {
+    const [result] = await Promise.race([
+      Promise.all([orchestratorResult, callbacksCompletion]),
+      abortCompletion,
+    ]);
+    return result;
+  } finally {
+    removeAbortListener();
+  }
 }

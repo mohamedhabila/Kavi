@@ -6,10 +6,15 @@ export function formatGoalValidationErrorMessage(error: GoalValidationError): st
 
 export function serializeGoalMutationToolErrors(
   errors: ReadonlyArray<GoalValidationError>,
-): Array<{ goalId?: string; code: string; message: string }> {
+): Array<{ goalId?: string; code: string; field?: string; message: string }> {
   return errors.map((error) => ({
     ...(error.goalId ? { goalId: error.goalId } : {}),
     code: error.code,
+    ...(['missing_success_criteria', 'weak_success_criteria', 'invalid_success_criteria'].includes(
+      error.code,
+    )
+      ? { field: 'successCriteria' }
+      : {}),
     message: error.message,
   }));
 }

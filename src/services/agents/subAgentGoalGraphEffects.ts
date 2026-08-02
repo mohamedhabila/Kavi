@@ -7,10 +7,18 @@ import type { SubAgentLifecycleEvent, SubAgentSnapshot } from '../../types/subAg
 import { reduceAgentControlGraph } from '../../engine/graph/agentControlGraph';
 import type { AgentControlGraphEvent } from '../../engine/graph/agentControlGraphTypes';
 import { createGoal, getActiveGoal, getGoalById } from '../../engine/goals/types';
+import {
+  DELEGATED_WORKER_EVIDENCE_CRITERION,
+  DELEGATED_WORKER_GOAL_OWNER,
+  DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
+} from '../../engine/goals/delegation';
 import { buildAutomaticSubAgentEvidenceEntries } from './automaticEvidence';
 
 const MAX_GOAL_EVIDENCE_CHARS = 480;
-const DELEGATION_WORKER_SUCCESS_CRITERIA = ['evidence.prefix:worker', 'evidence.min:1'];
+const DELEGATION_WORKER_SUCCESS_CRITERIA = [
+  DELEGATED_WORKER_EVIDENCE_CRITERION,
+  DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
+];
 
 function truncateEvidence(value: string): string {
   if (value.length <= MAX_GOAL_EVIDENCE_CHARS) {
@@ -35,6 +43,24 @@ function buildWorkerGoalEvidence(
   return truncateEvidence(`worker:${workerLabel}:${primaryEntry.content}`);
 }
 
+function buildWorkerGoalEvidenceEntries(
+  agent: SubAgentSnapshot,
+  event: SubAgentLifecycleEvent,
+): string[] {
+  const summaryEvidence = buildWorkerGoalEvidence(agent, event);
+  if (!summaryEvidence) return [];
+
+  const toolEvidence = Array.from(
+    new Set(
+      (agent.toolsUsed ?? [])
+        .map((toolName) => toolName.trim())
+        .filter(Boolean)
+        .map((toolName) => `${toolName}:worker:${agent.sessionId}`),
+    ),
+  );
+  return [summaryEvidence, ...toolEvidence];
+}
+
 function removeTerminalSessionOperations(
   operations: ReadonlyArray<AgentRunAsyncOperation> | undefined,
   sessionId: string,
@@ -56,15 +82,16 @@ export function buildSubAgentTerminalControlGraphEvents(params: {
   const events: AgentControlGraphEvent[] = [];
   const goals = params.run.controlGraph?.goals ?? [];
   const goalId = params.agent.workstreamId?.trim() || getActiveGoal(goals)?.id;
-  const evidence = buildWorkerGoalEvidence(params.agent, params.event);
+  const evidenceEntries = buildWorkerGoalEvidenceEntries(params.agent, params.event);
 
-  if (goalId && evidence) {
+  if (goalId && evidenceEntries.length > 0) {
     const existingGoal = getGoalById(goals, goalId);
     if (!existingGoal) {
       const materializedGoal = createGoal({
         id: goalId,
         title: params.agent.name?.trim() || goalId,
         status: 'active',
+        owner: DELEGATED_WORKER_GOAL_OWNER,
         requiredCapabilities: ['coordinate'],
         successCriteria: DELEGATION_WORKER_SUCCESS_CRITERIA,
         completionPolicy: 'blocking',
@@ -77,12 +104,14 @@ export function buildSubAgentTerminalControlGraphEvents(params: {
         timestamp,
       });
     }
-    events.push({
-      type: 'GOAL_EVIDENCE_ADDED',
-      goalId,
-      evidence,
-      timestamp,
-    });
+    for (const evidence of evidenceEntries) {
+      events.push({
+        type: 'GOAL_EVIDENCE_ADDED',
+        goalId,
+        evidence,
+        timestamp,
+      });
+    }
   }
 
   const currentGraph = params.run.controlGraph;

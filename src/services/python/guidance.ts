@@ -9,4 +9,4 @@ export const PYTHON_EXTENSION_EXAMPLES =
   'Python can bridge gaps with Pyodide-compatible scripts for custom exports or conversions such as DOCX/XLSX/HTML/SVG/CSV generation, structured report assembly, batch transforms, and bespoke parsing or validation.';
 
 export const PYTHON_EXTENSION_POLICY =
-  'Prefer dedicated first-class tools when they directly fit, but use python as the capability bridge when no direct tool exactly matches the task.';
+  'Prefer dedicated first-class tools when they directly fit, but use python as the capability bridge when no direct tool exactly matches the task. Keep each Python run bounded to the scoped inputs, persist useful checkpoints between phases, and split large scans or transformations across calls instead of relying on one monolithic execution.';

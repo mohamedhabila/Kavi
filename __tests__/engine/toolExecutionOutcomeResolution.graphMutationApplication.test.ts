@@ -557,7 +557,7 @@ describe('tool execution outcome resolution', () => {
     );
   });
 
-  it('defers repeated goal mutations after one graph mutation in a batch', async () => {
+  it('serializes repeated goal mutations against the latest graph snapshot', async () => {
     const params = buildBaseParams();
     let graph = { goals: [] as AgentGoal[] };
     params.getGraphSnapshot = jest.fn(() => graph);
@@ -582,7 +582,7 @@ describe('tool execution outcome resolution', () => {
           action: 'add',
           id: 'second-goal',
           name: 'second-goal',
-          status: 'active',
+          status: 'pending',
           completionPolicy: 'blocking',
           successCriteria: ['evidence.json_field:status:done'],
         }),
@@ -611,16 +611,32 @@ describe('tool execution outcome resolution', () => {
 
     await resolveAgentControlGraphToolExecutionOutcomes(params);
 
-    expect(graph.goals.map((goal) => goal.id)).toEqual(['first-goal']);
-    expect(JSON.parse(params.workingMessages[1].content)).toEqual({
-      status: 'deferred',
-      reason: 'graph_mutation_boundary',
-      tool: 'update_goals',
-    });
+    expect(graph.goals.map((goal) => goal.id)).toEqual(['first-goal', 'second-goal']);
+    expect(graph.goals.map((goal) => [goal.id, goal.status])).toEqual([
+      ['first-goal', 'active'],
+      ['second-goal', 'pending'],
+    ]);
+    expect(JSON.parse(params.workingMessages[0].content)).toEqual(
+      expect.objectContaining({
+        status: 'ok',
+        action: 'add',
+        goals: [expect.objectContaining({ id: 'first-goal' })],
+      }),
+    );
+    expect(JSON.parse(params.workingMessages[1].content)).toEqual(
+      expect.objectContaining({
+        status: 'ok',
+        action: 'add',
+        goals: [
+          expect.objectContaining({ id: 'first-goal' }),
+          expect.objectContaining({ id: 'second-goal' }),
+        ],
+      }),
+    );
     const goalsUpdatedCalls = params.applyGraphEvents.mock.calls.filter(([events]) =>
       events.some((event) => event.type === 'GOALS_UPDATED'),
     );
-    expect(goalsUpdatedCalls).toHaveLength(1);
+    expect(goalsUpdatedCalls).toHaveLength(2);
   });
 
   it('finalizes yielded tool turns through the graph terminal event', async () => {

@@ -146,7 +146,7 @@ describe('clarification reply admission', () => {
       runId: 'run-1',
       disposition: 'answer',
       resolvedInformationKeys: ['message.recipient', 'message.content'],
-      usage: expect.objectContaining({ model: 'test-model', totalTokens: 50 }),
+      usages: [expect.objectContaining({ model: 'test-model', totalTokens: 50 })],
     });
     expect(sendMessage).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -186,6 +186,59 @@ describe('clarification reply admission', () => {
       runId: 'run-1',
       disposition: 'new_request',
       resolvedInformationKeys: [],
+    });
+  });
+
+  it('preserves the paused task when an independent pass identifies a factual reply', async () => {
+    const context = buildPendingClarificationReplyContext(
+      conversationWithReply('The files are now available in the workspace root.'),
+    );
+    if (!context) throw new Error('Expected pending clarification context');
+    const sendMessage = jest
+      .fn()
+      .mockResolvedValueOnce({
+        output_parsed: { disposition: 'new_request', resolvedInformationKeys: [] },
+      })
+      .mockResolvedValueOnce({
+        output_parsed: {
+          disposition: 'answer',
+          resolvedInformationKeys: ['message.content'],
+        },
+      });
+
+    await expect(
+      admitPendingClarificationReply({ context, provider, model: 'test-model', sendMessage }),
+    ).resolves.toEqual({
+      runId: 'run-1',
+      disposition: 'answer',
+      resolvedInformationKeys: ['message.content'],
+    });
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage.mock.calls[1]?.[1]?.structuredOutput).toEqual(
+      expect.objectContaining({ name: 'clarification_reply_supersession_confirmation' }),
+    );
+  });
+
+  it('treats an exact resolved-field selection as an answer despite a hedged relation', async () => {
+    const context = buildPendingClarificationReplyContext(conversationWithReply());
+    if (!context) throw new Error('Expected pending clarification context');
+
+    await expect(
+      admitPendingClarificationReply({
+        context,
+        provider,
+        model: 'test-model',
+        sendMessage: jest.fn().mockResolvedValue({
+          output_parsed: {
+            disposition: 'ambiguous',
+            resolvedInformationKeys: ['message.recipient'],
+          },
+        }),
+      }),
+    ).resolves.toEqual({
+      runId: 'run-1',
+      disposition: 'answer',
+      resolvedInformationKeys: ['message.recipient'],
     });
   });
 

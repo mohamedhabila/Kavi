@@ -3,11 +3,15 @@ import {
   FINALIZATION_OUTPUT_TRUNCATION,
   normalizeFinalizationOutputText,
 } from './finalizationText';
-import { hasOperationalEvidenceFromSources } from './approvalSignals';
+import {
+  hasOperationalEvidenceFromSources,
+  hasVerificationEvidenceFromSources,
+} from './approvalSignals';
 
 export type SubAgentToolResultPreview = {
   toolName: string;
   preview: string;
+  status?: 'completed' | 'failed';
 };
 
 export type EnforcedExecutionWorkerOutput = {
@@ -24,7 +28,7 @@ const WORKER_COMPLETION_STATE_PRECEDENCE: SubAgentCompletionState[] = [
   'verified_success',
 ];
 
-function extractWorkerCompletionState(output: string): SubAgentCompletionState | undefined {
+export function extractWorkerCompletionState(output: string): SubAgentCompletionState | undefined {
   const observed = new Set<SubAgentCompletionState>();
   for (const match of output.matchAll(/^completion_state\s*:\s*([a-z_]+)\s*$/gim)) {
     const value = match[1]?.trim();
@@ -103,15 +107,20 @@ export function enforceExecutionWorkerOutputContract(params: {
     };
   }
 
-  const hasExecutionEvidence = hasOperationalEvidenceFromSources({
-    toolsUsed: params.toolsUsed,
-    resultPreviewEntries: params.toolResultPreviews.map((entry) => ({
+  const successfulResultPreviews = params.toolResultPreviews
+    .filter((entry) => entry.status !== 'failed')
+    .map((entry) => ({
       sourceName: entry.toolName,
       preview: entry.preview,
-    })),
-    resultPreviewSourceNames: params.toolResultPreviews.map((entry) => entry.toolName),
-    includeOpaqueDynamicToolResults: true,
-  });
+    }));
+  const hasExecutionEvidence =
+    hasOperationalEvidenceFromSources({
+      resultPreviewEntries: successfulResultPreviews,
+      includeOpaqueDynamicToolResults: true,
+    }) ||
+    hasVerificationEvidenceFromSources({
+      resultPreviewEntries: successfulResultPreviews,
+    });
 
   if (params.terminalStatus !== 'completed') {
     return {

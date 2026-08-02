@@ -2,6 +2,7 @@ import type { AgentGoal, AgentRunControlGraphState } from '../../types/agentRun'
 import type { Message } from '../../types/message';
 import {
   areGoalSuccessCriteriaSatisfied,
+  formatModelAuthoredSuccessCriteriaFormsDescription,
   isCountOnlySuccessCriterion,
   isSuccessCriterionMet,
 } from '../goals/completionEvidence';
@@ -75,6 +76,7 @@ function buildCanonicalUpdateGoalsContent(params: {
   goals?: ReadonlyArray<AgentGoal>;
   errors?: ReadonlyArray<string>;
   structuredErrors?: ReadonlyArray<Record<string, unknown>>;
+  attemptedArguments?: unknown;
 }): string {
   const repair = buildUpdateGoalsRepair(params);
   return JSON.stringify(
@@ -111,6 +113,7 @@ function buildUpdateGoalsRepair(params: {
   status: 'ok' | 'error';
   action?: string;
   structuredErrors?: ReadonlyArray<Record<string, unknown>>;
+  attemptedArguments?: unknown;
 }): Record<string, unknown> | undefined {
   if (params.status !== 'error') {
     return undefined;
@@ -122,28 +125,90 @@ function buildUpdateGoalsRepair(params: {
       .filter(Boolean),
   );
   const code = Array.from(codes)[0];
+  const attemptedArguments =
+    params.attemptedArguments &&
+    typeof params.attemptedArguments === 'object' &&
+    !Array.isArray(params.attemptedArguments)
+      ? (params.attemptedArguments as Record<string, unknown>)
+      : undefined;
+  const attemptedSuccessCriteria = Array.isArray(attemptedArguments?.successCriteria)
+    ? attemptedArguments.successCriteria.filter(
+        (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0,
+      )
+    : [];
+  const hasSuccessCriteriaError =
+    codes.has('missing_success_criteria') ||
+    codes.has('weak_success_criteria') ||
+    codes.has('invalid_success_criteria');
+  const goalWasNotFound = codes.has('goal_not_found');
   const missingFields = [
     ...(codes.has('missing_title') ? ['name'] : []),
     ...(codes.has('missing_completion_policy') ? ['completionPolicy'] : []),
     ...(codes.has('missing_success_criteria') ? ['successCriteria'] : []),
   ];
+  const invalidFields = hasSuccessCriteriaError ? ['successCriteria'] : [];
   const missingFieldLocations = buildGoalMissingFieldLocations(params.structuredErrors);
+  const action = params.action ?? 'add';
+  const expectedShape =
+    action === 'add'
+      ? {
+          action: 'add',
+          id: '<stable-goal-id>',
+          name: '<visible-goal-name>',
+          completionPolicy: 'blocking|persistent',
+          status: 'pending|active',
+          ...(hasSuccessCriteriaError
+            ? { successCriteria: ['<specific-structural-success-criterion>'] }
+            : {}),
+        }
+      : {
+          action,
+          id: '<existing-goal-id>',
+        };
 
   return {
     retryable: true,
     ...(code ? { code } : {}),
-    expectedShape: {
-      action: params.action ?? 'add',
-      id: '<stable-goal-id>',
-      name: '<visible-goal-name>',
-      completionPolicy: 'blocking|persistent',
-      status: 'pending|active',
-    },
+    sideEffectApplied: false,
+    expectedShape,
     fieldPlacement: 'Put goal fields at the root of the update_goals arguments object.',
+    valueSource:
+      'Replace angle-bracket templates with exact values from the user request, current goals, or prior tool results; never send template text literally.',
     ...(missingFields.length > 0 ? { missingFields } : {}),
+    ...(invalidFields.length > 0 ? { invalidFields } : {}),
     ...(missingFieldLocations.length > 0 ? { missingFieldLocations } : {}),
     ...(missingFieldLocations.length > 0
-      ? { retryArguments: buildGoalRetrySkeleton(missingFieldLocations) }
+      ? { retryTemplate: buildGoalRetrySkeleton(action, missingFieldLocations) }
+      : {}),
+    ...(hasSuccessCriteriaError
+      ? {
+          successCriteriaContract: {
+            acceptedForms: formatModelAuthoredSuccessCriteriaFormsDescription(),
+            specificityRule:
+              'A blocking goal needs at least one specific criterion; evidence.min and evidence.count may supplement it but cannot stand alone.',
+            workspaceArtifactRule:
+              'For each required workspace file use evidence.artifact:<exact-workspace-relative-path>. Never use evidence.prefix:artifact.',
+            prefixRule:
+              'evidence.prefix:<token> accepts only a registered tool evidence source or the registered worker prefix.',
+          },
+          ...(attemptedSuccessCriteria.length > 0 ? { attemptedSuccessCriteria } : {}),
+        }
+      : {}),
+    ...(goalWasNotFound
+      ? {
+          goalNotFoundRepair: {
+            instruction:
+              'This mutation was not applied. If this id belongs to a new goal or an earlier add failed, retry with action add and the full add fields. Otherwise retry the intended action with an id from the current goal graph.',
+            addShape: {
+              action: 'add',
+              id: '<stable-goal-id>',
+              name: '<visible-goal-name>',
+              completionPolicy: 'blocking|persistent',
+              status: 'pending|active',
+              successCriteria: ['<required-for-blocking-only>'],
+            },
+          },
+        }
       : {}),
   };
 }
@@ -180,9 +245,10 @@ function buildGoalMissingFieldLocations(
 }
 
 function buildGoalRetrySkeleton(
+  action: string,
   locations: ReadonlyArray<{ goalId: string; field: string }>,
 ): Record<string, unknown> {
-  const skeleton: Record<string, unknown> = {};
+  const skeleton: Record<string, unknown> = { action };
   for (const location of locations) {
     if (!skeleton.id) {
       skeleton.id = location.goalId;
@@ -384,7 +450,7 @@ export function canonicalizeToolExecutionOutcome(params: {
   currentUserMessage?: CodeOwnedCurrentUserMessage;
   warn: (message: string, error: unknown) => void;
 }): CanonicalToolExecutionOutcome {
-  if (params.toolName !== 'update_goals' || params.outcome.toolMessage.isError) {
+  if (params.toolName !== 'update_goals') {
     return {
       ...params.outcome,
       canonicalized: false,
@@ -410,10 +476,22 @@ export function canonicalizeToolExecutionOutcome(params: {
         action: parsed.mutation.action,
         errors: parsed.errors.map((error) => error.message),
         structuredErrors: serializeParsedUpdateGoalsErrors(parsed.errors, args),
+        attemptedArguments: args,
       });
       return {
         ...cloneToolExecutionOutcomeWithContent(params.outcome, content),
         canonicalized: true,
+        graphApplied: false,
+      };
+    }
+
+    // Argument-level update_goals failures are canonicalized above so the model receives the
+    // graph-specific repair contract. Never apply an otherwise-valid mutation when execution
+    // itself failed for another reason.
+    if (params.outcome.toolMessage.isError) {
+      return {
+        ...params.outcome,
+        canonicalized: false,
         graphApplied: false,
       };
     }
@@ -466,6 +544,7 @@ export function canonicalizeToolExecutionOutcome(params: {
         action: mutation.action,
         errors,
         structuredErrors: serializeGoalMutationToolErrors(validation.errors),
+        attemptedArguments: args,
       });
       return {
         ...cloneToolExecutionOutcomeWithContent(params.outcome, content),
@@ -484,6 +563,7 @@ export function canonicalizeToolExecutionOutcome(params: {
           entry.goalId ? `[${entry.goalId}] ${entry.message}` : entry.message,
         ),
         structuredErrors: serializeGoalMutationToolErrors(referenceValidation.errors),
+        attemptedArguments: args,
       });
       return {
         ...cloneToolExecutionOutcomeWithContent(params.outcome, content),

@@ -105,7 +105,7 @@ export function createSubAgentManagementApi<
     params.runtimeSignals.clearTransientState();
 
     for (const scheduledLaunch of Array.from(params.scheduledSubAgentLaunches.values())) {
-      clearTimeout(scheduledLaunch.handle);
+      scheduledLaunch.cancel();
     }
 
     params.sessionContextManager.reset();

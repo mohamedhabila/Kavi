@@ -15,7 +15,6 @@ import {
 } from '../goals/effectCompletionEvidence';
 import { isBlockingGoal, isCodeOwnedEffectCompletionGoal, type AgentGoal } from '../goals/types';
 import type { AgentControlGraphEvent } from './agentControlGraph';
-import type { CanonicalToolExecutionOutcome } from './toolExecutionOutcomeCanonicalization';
 
 export function updateToolCallHistoryResult(params: {
   history: ToolCallRecord[] | undefined;
@@ -43,36 +42,6 @@ export function updateToolCallHistoryResult(params: {
     };
     return;
   }
-}
-
-export function buildDeferredAfterGraphMutationOutcome(
-  outcome: CanonicalToolExecutionOutcome,
-): CanonicalToolExecutionOutcome {
-  const toolName = outcome.toolMessage.toolCalls?.[0]?.name || outcome.toolCallId;
-  const content = JSON.stringify(
-    {
-      status: 'deferred',
-      reason: 'graph_mutation_boundary',
-      tool: toolName,
-    },
-    null,
-    2,
-  );
-
-  return {
-    ...outcome,
-    skipWorkflowProgress: true,
-    toolMessage: {
-      ...outcome.toolMessage,
-      content,
-      isError: false,
-      toolCalls: outcome.toolMessage.toolCalls?.map((toolCall) =>
-        toolCall.id === outcome.toolCallId
-          ? { ...toolCall, result: content, status: 'completed' as const, error: undefined }
-          : { ...toolCall },
-      ),
-    },
-  };
 }
 
 export function collectCompletedBlockingGoalIds(

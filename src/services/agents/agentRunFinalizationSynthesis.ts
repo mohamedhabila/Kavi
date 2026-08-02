@@ -17,6 +17,7 @@ import {
 } from '../llm/support/completionRecovery';
 import type { AgentRunFinalizationEvidence } from './lifecycle/finalizePhaseTypes';
 import { getAgentRunFinalizationToolNameForMessage } from './agentRunFinalizationMessages';
+import { isSessionToolSourceName } from './approvalSignals';
 
 const MAX_TRANSCRIPT_MESSAGES = 18;
 const MAX_MESSAGE_CHARS = 1_800;
@@ -25,6 +26,30 @@ const MAX_TERMINAL_DELIVERABLE_LINES = 8;
 // Recovery synthesis is secondary work and must leave time for the deterministic
 // fallback/resume path within a foreground request deadline.
 export const AGENT_RUN_FINALIZATION_SYNTHESIS_TIMEOUT_MS = 30_000;
+
+function buildCurrentRunWorkerEvidenceSection(evidence: AgentRunFinalizationEvidence): string {
+  const sessionToolNames = Array.from(
+    new Set(evidence.toolsUsed.filter((toolName) => isSessionToolSourceName(toolName))),
+  );
+  const workerUpdateCount = evidence.transcriptMessages.filter(
+    (message) => message.role === 'assistant' && message.subAgentEvent !== undefined,
+  ).length;
+
+  if (sessionToolNames.length === 0 && workerUpdateCount === 0) {
+    return [
+      'Current-run worker evidence (code-grounded):',
+      '- No session tool call or worker update exists in this run.',
+      '- Do not claim that a worker was spawned, ran, timed out, completed, or was reviewed.',
+    ].join('\n');
+  }
+
+  return [
+    'Current-run worker evidence (code-grounded):',
+    `- Session tools observed: ${sessionToolNames.join(', ') || 'none'}`,
+    `- Worker updates observed: ${workerUpdateCount}`,
+    '- A tool name proves only that call occurred; describe launch, status, or output only when its result or a worker update proves it.',
+  ].join('\n');
+}
 
 function createFinalizationSynthesisDeadline(params: {
   parentSignal?: AbortSignal;
@@ -121,6 +146,7 @@ export function buildAgentRunFinalizationPrompt(
     evidence.toolsUsed.length > 0
       ? `Tool activity summary:\n- Iterations: ${evidence.iterations}\n- Tools used: ${[...new Set(evidence.toolsUsed)].join(', ')}`
       : undefined;
+  const workerEvidenceSection = buildCurrentRunWorkerEvidenceSection(evidence);
   const constraintSection =
     pendingUserConstraints.length > 0
       ? [
@@ -139,6 +165,7 @@ export function buildAgentRunFinalizationPrompt(
     constraintSection,
     transcript ? `Execution transcript:\n${transcript}` : undefined,
     toolSummary,
+    workerEvidenceSection,
     terminalDeliverables ? `Terminal deliverables:\n${terminalDeliverables}` : undefined,
     [
       'Write the final assistant answer.',

@@ -69,10 +69,10 @@ export async function resolveForegroundClarificationReplyAdmission(params: {
     lease.release();
   }
 
-  if (admission.usage) {
+  for (const usage of admission.usages ?? []) {
     recordConversationUsageEvent({
       conversationId: params.conversationId,
-      usage: admission.usage,
+      usage,
       providerId: params.preflight.provider.id,
       source: 'primary',
       agentRunId: admission.runId,

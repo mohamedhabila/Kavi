@@ -74,6 +74,104 @@ describe('completionGate', () => {
       }),
     );
   });
+  it('holds finalization on a structural partial read_file result with the exact next offset', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      selectedToolNames: new Set(['read_file']),
+      toolCallHistory: [
+        {
+          id: 'read-1',
+          name: 'read_file',
+          arguments: '{"path":"attachments/report.txt","offset":7000}',
+          timestamp: 1,
+          status: 'completed',
+          result: JSON.stringify({
+            status: 'read_chunk',
+            path: 'attachments/report.txt',
+            content: 'partial',
+            offset: 7_000,
+            nextOffset: 14_000,
+            totalChars: 21_000,
+            complete: false,
+          }),
+        },
+      ],
+    });
+
+    expect(decision).toMatchObject({
+      type: 'hold',
+      reason: 'incomplete_tool_continuation',
+      graphEvent: { type: 'FINALIZATION_HELD', reason: 'incomplete_tool_continuation' },
+    });
+    if (decision.type === 'hold') {
+      expect(decision.systemPrompts.join('\n')).toContain('attachments/report.txt');
+      expect(decision.systemPrompts.join('\n')).toContain('offset 14000');
+    }
+  });
+  it('allows finalization after the structural read_file result reaches end of file', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      selectedToolNames: new Set(['read_file']),
+      toolCallHistory: [
+        {
+          id: 'read-2',
+          name: 'read_file',
+          arguments: '{"path":"attachments/report.txt","offset":14000}',
+          timestamp: 2,
+          status: 'completed',
+          result: JSON.stringify({
+            status: 'read_chunk',
+            path: 'attachments/report.txt',
+            content: 'final',
+            offset: 14_000,
+            nextOffset: null,
+            totalChars: 21_000,
+            complete: true,
+          }),
+        },
+      ],
+    });
+
+    expect(decision).toEqual({ type: 'ready' });
+  });
+  it('holds finalization when a durable checkpoint omitted even a final chunk body', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      selectedToolNames: new Set(['read_file']),
+      toolCallHistory: [
+        {
+          id: 'read-checkpoint-1',
+          name: 'read_file',
+          arguments: '{"path":"attachments/report.txt","offset":14000}',
+          timestamp: 3,
+          status: 'completed',
+          result: JSON.stringify({
+            status: 'read_chunk',
+            path: 'attachments/report.txt',
+            content: '[omitted]',
+            offset: 14_000,
+            nextOffset: null,
+            totalChars: 21_000,
+            complete: true,
+            durableCheckpoint: {
+              version: 1,
+              contentRetained: false,
+              rereadOffset: 14_000,
+            },
+          }),
+        },
+      ],
+    });
+
+    expect(decision).toMatchObject({
+      type: 'hold',
+      reason: 'incomplete_tool_continuation',
+    });
+    if (decision.type === 'hold') {
+      expect(decision.systemPrompts.join('\n')).toContain('offset 14000');
+      expect(decision.systemPrompts.join('\n')).toContain('omitted the chunk body');
+    }
+  });
   it('auto-completes active blocking goals when required evidence is satisfied', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
@@ -303,6 +401,30 @@ describe('completionGate', () => {
     expect(decision.type === 'hold' ? decision.systemPrompts.join('\n') : '').toContain(
       '- [g1] Build feature',
     );
+  });
+  it('blocks instead of claiming completion when a blocking goal has no tool path', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      selectedToolCount: 0,
+      selectedToolNames: new Set(),
+      goals: [
+        createGoal({
+          status: 'active',
+          completionPolicy: 'blocking',
+          successCriteria: ['evidence.prefix:worker'],
+        }),
+      ],
+    });
+
+    expect(decision).toEqual({
+      type: 'block',
+      reason: 'goals_incomplete_without_tool_path',
+      graphEvent: {
+        type: 'BLOCKED',
+        reason: 'goals_incomplete_without_tool_path',
+      },
+      content: expect.stringContaining('without claiming completion'),
+    });
   });
   it('does not expose pending goal criteria in hold prompts before activation', () => {
     const decision = evaluateCompletionGate({

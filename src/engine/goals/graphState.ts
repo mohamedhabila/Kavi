@@ -35,6 +35,7 @@ function activateGoalInList(
     return { goals, errors: [] };
   }
   const targetCompletionPolicy = resolveGoalCompletionPolicy(target);
+  const targetOwnerLane = target.owner?.trim() || 'supervisor';
 
   const depsCompleted = target.dependencies.every((depId) => {
     const dep = getGoalById(goals, depId);
@@ -54,7 +55,8 @@ function activateGoalInList(
       }
       if (
         existing.status === 'active' &&
-        resolveGoalCompletionPolicy(existing) === targetCompletionPolicy
+        resolveGoalCompletionPolicy(existing) === targetCompletionPolicy &&
+        (existing.owner?.trim() || 'supervisor') === targetOwnerLane
       ) {
         return { ...existing, status: 'pending' as AgentGoalStatus, updatedAt: now };
       }
@@ -239,7 +241,11 @@ export function applyGoalMutation(
   now: number = Date.now(),
   context: GoalMutationValidationContext = {},
 ): { goals: AgentGoal[]; errors: string[] } {
-  const normalizedMutation = normalizeGoalMutationForApplication(currentGoals, mutation);
+  const normalizedMutation = retainInitialBlockingGoalConstraint(
+    currentGoals,
+    normalizeGoalMutationForApplication(currentGoals, mutation),
+    context,
+  );
   const validation = validateGoalMutation(normalizedMutation, currentGoals, context);
   if (!validation.valid) {
     return {
@@ -423,6 +429,48 @@ export function applyGoalMutation(
   }
 
   return { goals, errors: [] };
+}
+
+function retainInitialBlockingGoalConstraint(
+  currentGoals: ReadonlyArray<AgentGoal>,
+  mutation: AgentGoalMutation,
+  context: GoalMutationValidationContext,
+): AgentGoalMutation {
+  if (
+    mutation.action !== 'add' ||
+    mutation.goals.some((goal) => goal.retainCurrentUserConstraint === true) ||
+    currentGoals.some(
+      (goal) =>
+        (goal.userConstraints?.length ?? 0) > 0 || goal.userConstraintIntegrity === 'conflict',
+    )
+  ) {
+    return mutation;
+  }
+
+  const captured = captureCurrentUserGoalConstraint({
+    currentUserMessage: context.currentUserMessage,
+  });
+  if (!captured.captured) {
+    return mutation;
+  }
+
+  const activeBlockingIndex = mutation.goals.findIndex(
+    (goal) => goal.completionPolicy === 'blocking' && goal.status === 'active',
+  );
+  const blockingIndex =
+    activeBlockingIndex >= 0
+      ? activeBlockingIndex
+      : mutation.goals.findIndex((goal) => goal.completionPolicy === 'blocking');
+  if (blockingIndex < 0) {
+    return mutation;
+  }
+
+  return {
+    ...mutation,
+    goals: mutation.goals.map((goal, index) =>
+      index === blockingIndex ? { ...goal, retainCurrentUserConstraint: true } : goal,
+    ),
+  };
 }
 
 function capturedUserConstraint(

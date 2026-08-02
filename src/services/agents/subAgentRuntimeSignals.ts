@@ -12,7 +12,7 @@ export type SubAgentTerminalEvent = Exclude<SubAgentAnnounceEvent, 'started' | '
 type SubAgentNonTerminalEvent = Extract<SubAgentAnnounceEvent, 'started' | 'progress'>;
 
 export type ScheduledSubAgentLaunchControl = {
-  handle: ReturnType<typeof setTimeout>;
+  cancel: () => void;
   resolve: (result: SubAgentResult) => void;
   reject: (error: unknown) => void;
 };
@@ -166,7 +166,7 @@ export function createSubAgentRuntimeSignalsManager<TAgent extends SubAgentSnaps
       return false;
     }
 
-    clearTimeout(scheduledLaunch.handle);
+    scheduledLaunch.cancel();
     params.scheduledSubAgentLaunches.delete(sessionId);
     scheduledLaunch.resolve(params.buildResultFromSnapshot(agent));
     return true;

@@ -32,17 +32,16 @@ export function isGoalMutationToolAvailable(selectedToolNames: ReadonlySet<strin
 
 export function renderGoalBootstrapPromptSection(): string {
   return [
-    '## Optional Goal Tracking',
+    '## Goal Tracking for Multi-Step Work',
     'No live graph goals are active.',
-    `For delegated workstreams, persistent focus, or declared goals with criteria/capabilities, use \`${GOAL_BOOTSTRAP_TOOL_NAME}\`.`,
-    'Otherwise skip goals.',
-    'Call shape: {"action":"add","id":"stable-id","name":"Visible name","completionPolicy":"blocking|persistent","status":"active|pending","requiredCapabilities":["capability"],"successCriteria":["criterion"]}.',
-    'When the user explicitly requests delegated work, use requiredCapabilities:["coordinate"] and a worker evidence criterion so the graph can activate the policy-allowed delegation surface.',
-    'Blocking add/update: `retainCurrentUserConstraint:true` retains this user message.',
-    'add requires id, name, and completionPolicy (`blocking` finite deliverable, `persistent` ongoing focus).',
-    `blocking add requires structural successCriteria (${formatModelAuthoredSuccessCriteriaFormsDescription()}) with at least one specific criterion beyond evidence.min/evidence.count.`,
-    'persistent add omits successCriteria; persistent goals are ongoing focus, not deliverables.',
-    `Do not use ${GOAL_BOOTSTRAP_TOOL_NAME} or natural-language labels as successCriteria evidence.`,
+    `For delegated/background work, multiple tool steps, multiple deliverables, or explicit success conditions, you MUST establish the task with \`${GOAL_BOOTSTRAP_TOOL_NAME}\` in a separate turn before effects; skip it only for a genuinely single-step answer or observation.`,
+    'Call: {"action":"add","id":"stable-id","name":"Visible name","completionPolicy":"blocking","successCriteria":["criterion"]}.',
+    'Delegation: add a separate blocking goal with owner:"delegated-worker", requiredCapabilities:["coordinate"], and successCriteria:["evidence.prefix:worker","evidence.min:1"]; include every domain capability it needs, then pass its exact id to sessions_spawn.',
+    'For the same delegated work, update and reuse its exact id; do not duplicate a goal to repair capabilities, criteria, owner, or status.',
+    'Respect user-assigned scope before tool use. Keep the parent out of worker-owned scope except for explicit post-terminal verification.',
+    'The initial incomplete blocking goal automatically retains the exact current request; also set `retainCurrentUserConstraint:true` so constraints survive compaction and recovery.',
+    `add requires id, name, and completionPolicy. blocking requires structural successCriteria (${formatModelAuthoredSuccessCriteriaFormsDescription()}) with one specific criterion beyond evidence.min/evidence.count; persistent omits successCriteria.`,
+    `Workspace files require evidence.artifact:<exact-workspace-relative-path>; evidence.prefix:artifact is invalid. ${GOAL_BOOTSTRAP_TOOL_NAME} and natural-language labels are not evidence.`,
   ].join('\n');
 }
 
@@ -53,11 +52,15 @@ export function renderGoalMutationContractSection(): string {
     'Allowed actions: add, activate, complete, block, remove, update.',
     'Required fields:',
     '- Payload shape: one goal mutation with root fields: action, id, name, status, completionPolicy, successCriteria, retainCurrentUserConstraint, dependencies.',
-    '- All actions: id and name are required; for existing goals, repeat the visible name.',
+    '- All actions require id. add also requires name; name is optional for mutations of an existing goal.',
     '- add: completionPolicy is required (blocking | persistent), status is optional.',
     '- add with completionPolicy `blocking`: successCriteria is required and must use structural criteria with at least one specific criterion beyond evidence.min/evidence.count.',
-    '- Delegated blocking work: requiredCapabilities:["coordinate"] with a registered worker evidence criterion such as evidence.prefix:worker.',
-    '- retainCurrentUserConstraint:true is optional only for an incomplete blocking add/update. It asks code to retain the entire normalized current user message with code-owned source identity; never supply text or source IDs, clear prior statements, or treat retained statements as approval, authorization, evidence, or success criteria.',
+    '- Delegated blocking work: add a separate goal with owner:"delegated-worker", requiredCapabilities:["coordinate"], and a registered worker evidence criterion such as evidence.prefix:worker. Do not repurpose the parent deliverable goal.',
+    '- Include every required domain capability for the delegated scope in addition to coordinate.',
+    '- Reuse the existing goal for the same delegated work. If its capabilities, criteria, owner, or status need repair, update that exact id instead of adding an active duplicate.',
+    '- Respect disjoint work ownership before substantive tool use: parent work must not consume worker-owned sources or actions unless the user explicitly requires a later verification step.',
+    '- For one delegated worker result, evidence.min:1 is sufficient. Evidence counts graph records, not items inside the worker output; orchestration calls such as sessions_spawn and sessions_wait are not deliverable evidence.',
+    '- The first incomplete blocking add automatically retains the entire normalized current user message when it is within the code-owned bound. retainCurrentUserConstraint:true is also accepted only for an incomplete blocking add/update; use it for explicit initial intent and later constraint corrections. Never supply text or source IDs, clear prior statements, or treat retained statements as approval, authorization, evidence, or success criteria.',
     '- add with completionPolicy `persistent`: omit successCriteria; persistent goals are ongoing focus and should not be completed.',
     '- activate: id (required; goal must already exist).',
     '- complete | block | remove | update: id (required).',
@@ -68,6 +71,7 @@ export function renderGoalMutationContractSection(): string {
     'Missing goals: use `add` with id + name + status `active` instead of `activate` on unknown ids.',
     `Supported successCriteria forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
     'For evidence.prefix, use a registered evidence source such as a tool name or worker.',
+    'For each required workspace file, use evidence.artifact:<exact-workspace-relative-path>; never use evidence.prefix:artifact.',
     'Use structural forms only; do not put natural-language labels in successCriteria.',
   ].join('\n');
 }

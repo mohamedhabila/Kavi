@@ -27,6 +27,18 @@ describe('graphObservability', () => {
 
     expect(
       buildCompletionGateObservabilityDetail({
+        type: 'block',
+        reason: 'goals_incomplete_without_tool_path',
+        graphEvent: {
+          type: 'BLOCKED',
+          reason: 'goals_incomplete_without_tool_path',
+        },
+        content: 'blocked',
+      }),
+    ).toBe('decision:block,reason:goals_incomplete_without_tool_path');
+
+    expect(
+      buildCompletionGateObservabilityDetail({
         type: 'auto_complete_goals',
         reason: 'goal_evidence_satisfied',
         graphEvent: {

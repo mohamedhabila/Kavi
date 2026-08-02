@@ -31,6 +31,11 @@ const INTERNAL_DELIVERABLE_TOOL_NAMES = new Set([
   GOAL_BOOTSTRAP_TOOL_NAME,
   'tool_catalog',
   'tool_describe',
+  'sessions_spawn',
+  'sessions_send',
+  'sessions_wait',
+  'sessions_output',
+  'sessions_history',
 ]);
 const REGISTERED_NON_TOOL_EVIDENCE_PREFIXES = new Set(['worker']);
 const CODE_OWNED_EVIDENCE_PREFIXES = [EFFECT_RECEIPT_EVIDENCE_PREFIX] as const;
@@ -413,7 +418,7 @@ export function validateGoalMutation(
           goalId: g.id,
           code: 'weak_success_criteria',
           message:
-            'Blocking goals require at least one specific structural successCriteria; evidence.min and evidence.count can supplement but cannot be the only criteria.',
+            'Blocking goals require at least one specific structural successCriteria; evidence.min and evidence.count can supplement but cannot be the only criteria. For workspace deliverables use evidence.artifact:<exact-workspace-relative-path>.',
         });
       }
       if (g.id?.trim() && existingIds.has(g.id.trim())) {
@@ -476,7 +481,7 @@ export function validateGoalMutation(
           code: 'invalid_success_criteria',
           message:
             'evidence.prefix criteria must reference a registered tool evidence source or registered graph evidence prefix: ' +
-            `${unknownEvidencePrefixCriteria.join(', ')}.`,
+            `${unknownEvidencePrefixCriteria.join(', ')}. For workspace deliverables use evidence.artifact:<exact-workspace-relative-path>; evidence.prefix:artifact is invalid.`,
         });
       }
     }

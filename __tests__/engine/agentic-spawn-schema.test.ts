@@ -29,7 +29,8 @@ describe('SESSION_SPAWN_TOOL schema', () => {
     expect(schema.properties.tools).toBeDefined();
     expect(schema.properties.tools.type).toBe('array');
     expect(schema.properties.tools.items.type).toBe('string');
-    expect(schema.properties.tools.description).toContain('Optional worker-tool restriction');
+    expect(schema.properties.tools.description).toContain('strict worker-tool security allowlist');
+    expect(schema.properties.tools.description).toContain('Every omitted tool becomes unavailable');
   });
 
   it('keeps the compact worker-launch properties', () => {
@@ -60,9 +61,12 @@ describe('SESSION_SPAWN_TOOL schema', () => {
     expect(SESSION_SPAWN_TOOL.input_schema.properties.dependsOnWorkstreams.description).toContain(
       'prerequisite',
     );
-    expect(SESSION_SPAWN_TOOL.description).toContain(
-      'omit tools unless you need a narrower worker scope',
-    );
+    expect(SESSION_SPAWN_TOOL.description).toContain('separate blocking goal');
+    expect(SESSION_SPAWN_TOOL.description).toContain('owned by "delegated-worker"');
+    expect(SESSION_SPAWN_TOOL.description).toContain('do not repurpose a parent deliverable goal');
+    expect(SESSION_SPAWN_TOOL.description).toContain('that goal id as workstreamId');
+    expect(SESSION_SPAWN_TOOL.description).toContain('continue independent non-overlapping work');
+    expect(SESSION_SPAWN_TOOL.description).toContain('strict security allowlist, not a task plan');
     expect(SESSION_SPAWN_TOOL.description).not.toContain('transcript or reasoning trace');
   });
 });

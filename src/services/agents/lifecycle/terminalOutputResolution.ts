@@ -6,6 +6,7 @@ import { normalizeFinalizationOutputText } from '../finalizationText';
 import { synthesizeSubAgentFinalAnswer } from '../subAgentFinalization';
 import {
   enforceExecutionWorkerOutputContract,
+  extractWorkerCompletionState,
   type EnforcedExecutionWorkerOutput,
   type SubAgentToolResultPreview,
 } from '../subAgentOutputContract';
@@ -54,8 +55,57 @@ export async function resolveSubAgentRunOutput(params: {
       outputTruncation: params.outputTruncation,
     });
 
+  const attemptStructuredFinalization = async () => {
+    const remainingBudgetMs =
+      params.timeoutMs == null
+        ? params.finalizationTimeoutCapMs
+        : Math.max(0, params.timeoutMs - (Date.now() - params.startedAt) - 250);
+    params.onFinalizationStart();
+    return synthesizeSubAgentFinalAnswer({
+      provider: params.provider,
+      model: params.model,
+      systemPrompt: params.systemPrompt,
+      userPrompt: buildSubAgentFinalizationPrompt({
+        originalPrompt: params.currentTaskPrompt,
+        transcriptMessages: params.transcriptMessages,
+        toolsUsed: params.toolsUsed,
+        iterations: params.iterations,
+        finalizationMaxTranscriptMessages: params.finalizationMaxTranscriptMessages,
+        finalizationMessageCharLimit: params.finalizationMessageCharLimit,
+        finalizationToolContentCharLimit: params.finalizationToolContentCharLimit,
+      }),
+      remainingBudgetMs,
+      finalizationMinRemainingMs: params.finalizationMinRemainingMs,
+      finalizationTimeoutCapMs: params.finalizationTimeoutCapMs,
+      outputTruncation: params.outputTruncation,
+      reportUsage: params.reportUsage,
+    });
+  };
+
   if (params.finalNonEmptyContent) {
-    return enforceOutputContract(params.finalNonEmptyContent, params.status);
+    const contractOutput = enforceOutputContract(params.finalNonEmptyContent, params.status);
+    const hasExplicitCompletionState = Boolean(
+      extractWorkerCompletionState(params.finalNonEmptyContent),
+    );
+    const shouldClassifyPreservedOutput =
+      params.status === 'completed' &&
+      params.requireStructuredExecutionEvidence &&
+      params.toolsUsed.length > 0 &&
+      !hasExplicitCompletionState &&
+      contractOutput.completionState === 'incomplete';
+
+    if (shouldClassifyPreservedOutput) {
+      const finalizedOutput = await attemptStructuredFinalization();
+      if (finalizedOutput) {
+        return enforceOutputContract(
+          params.finalNonEmptyContent,
+          params.status,
+          finalizedOutput.completionState,
+        );
+      }
+    }
+
+    return contractOutput;
   }
 
   const directOutput =
@@ -78,30 +128,7 @@ export async function resolveSubAgentRunOutput(params: {
       ? params.toolsUsed.length > 0
       : params.status !== 'cancelled' && params.toolsUsed.length > 0 && hasToolEvidence;
   if (shouldAttemptFinalization) {
-    const remainingBudgetMs =
-      params.timeoutMs == null
-        ? params.finalizationTimeoutCapMs
-        : Math.max(0, params.timeoutMs - (Date.now() - params.startedAt) - 250);
-    params.onFinalizationStart();
-    const finalizedOutput = await synthesizeSubAgentFinalAnswer({
-      provider: params.provider,
-      model: params.model,
-      systemPrompt: params.systemPrompt,
-      userPrompt: buildSubAgentFinalizationPrompt({
-        originalPrompt: params.currentTaskPrompt,
-        transcriptMessages: params.transcriptMessages,
-        toolsUsed: params.toolsUsed,
-        iterations: params.iterations,
-        finalizationMaxTranscriptMessages: params.finalizationMaxTranscriptMessages,
-        finalizationMessageCharLimit: params.finalizationMessageCharLimit,
-        finalizationToolContentCharLimit: params.finalizationToolContentCharLimit,
-      }),
-      remainingBudgetMs,
-      finalizationMinRemainingMs: params.finalizationMinRemainingMs,
-      finalizationTimeoutCapMs: params.finalizationTimeoutCapMs,
-      outputTruncation: params.outputTruncation,
-      reportUsage: params.reportUsage,
-    });
+    const finalizedOutput = await attemptStructuredFinalization();
 
     if (finalizedOutput) {
       const contractSafeOutput = enforceOutputContract(

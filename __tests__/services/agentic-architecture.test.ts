@@ -167,8 +167,9 @@ describe('SuperAgent prompt — sub-agent tool guidance', () => {
   it('instructs to pass a focused tools array in sessions_spawn', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('When using sessions_spawn');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      "omit tools unless you need to narrow the worker's scope",
+      'tools field is a strict security allowlist, not a task plan',
     );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('incomplete blocking goal exists');
   });
 
   it('keeps workstream binding optional without forcing a formal plan', () => {

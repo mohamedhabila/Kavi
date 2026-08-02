@@ -1,5 +1,8 @@
 export const MAX_AGENT_GOAL_USER_CONSTRAINTS = 8;
-export const MAX_AGENT_GOAL_USER_CONSTRAINT_CHARACTERS = 512;
+// Long-running tasks commonly carry a detailed acceptance contract in the
+// opening turn. Keep that exact code-owned request intact without allowing an
+// unbounded graph prompt.
+export const MAX_AGENT_GOAL_USER_CONSTRAINT_CHARACTERS = 8192;
 
 export type AgentGoalUserConstraint = Readonly<{
   text: string;

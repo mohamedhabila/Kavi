@@ -39,6 +39,9 @@ export function renderGoalPromptSection(
   const deliveryPendingCompleted = completed.filter(
     (goal) => goal.userConstraintDeliveryPending === true,
   );
+  const liveDelegatedWorkerGoals = [...active, ...pending, ...blocked].filter(
+    (goal) => goal.owner === 'delegated-worker',
+  );
 
   const lines: string[] = [];
   lines.push('## Current Goals');
@@ -60,15 +63,7 @@ export function renderGoalPromptSection(
     }
     for (const g of active) {
       lines.push(renderGoalLine(g));
-      if (g.dependencies.length > 0) {
-        lines.push(`  deps: ${g.dependencies.join(', ')}`);
-      }
-      if (g.evidence.length > 0) {
-        lines.push(`  evidence: ${g.evidence.length}`);
-      }
-      if (g.successCriteria?.length) {
-        lines.push(`  criteria: ${g.successCriteria.join(', ')}`);
-      }
+      renderGoalDetails(lines, g);
     }
   }
 
@@ -77,6 +72,7 @@ export function renderGoalPromptSection(
     lines.push('### Pending');
     for (const g of pending) {
       lines.push(renderGoalLine(g));
+      renderGoalDetails(lines, g);
     }
   }
 
@@ -85,9 +81,29 @@ export function renderGoalPromptSection(
     lines.push('### Blocked');
     for (const g of blocked) {
       lines.push(renderGoalLine(g));
+      renderGoalDetails(lines, g);
       if (g.blockedReason) {
         lines.push(`  blocked: ${g.blockedReason}`);
       }
+    }
+  }
+
+  if (liveDelegatedWorkerGoals.length > 0) {
+    lines.push('');
+    lines.push('### Delegated Goal Ownership');
+    lines.push(
+      '- A live goal owned by "delegated-worker" is assigned work, not implicit parent work. Do not silently perform or claim its work in the parent; any permitted takeover requires an explicit ownership update.',
+    );
+    lines.push(
+      '- Reuse and repair the exact existing delegated goal for that work; do not add a second goal merely to change capabilities, criteria, owner, or status. Respect user-defined parent/worker source and action boundaries until any explicitly requested post-terminal verification step.',
+    );
+    if (
+      options?.selectedToolNames === undefined ||
+      options.selectedToolNames.has('sessions_spawn')
+    ) {
+      lines.push(
+        '- If no worker has been launched for that goal, call sessions_spawn with workstreamId equal to the exact goal id. Do not launch a duplicate or replacement when its worker is already running or terminal; use the observed worker outcome.',
+      );
     }
   }
 
@@ -179,5 +195,20 @@ function renderGoalLine(goal: AgentGoal): string {
   if (goal.requiredResourceKinds?.length) {
     parts.push(` {${goal.requiredResourceKinds.join(', ')}}`);
   }
+  if (goal.owner) {
+    parts.push(` owner=${JSON.stringify(goal.owner)}`);
+  }
   return parts.join('');
+}
+
+function renderGoalDetails(lines: string[], goal: AgentGoal): void {
+  if (goal.dependencies.length > 0) {
+    lines.push(`  deps: ${goal.dependencies.join(', ')}`);
+  }
+  if (goal.evidence.length > 0) {
+    lines.push(`  evidence: ${goal.evidence.length}`);
+  }
+  if (goal.successCriteria?.length) {
+    lines.push(`  criteria: ${goal.successCriteria.join(', ')}`);
+  }
 }

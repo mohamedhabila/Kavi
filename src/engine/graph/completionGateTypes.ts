@@ -9,12 +9,19 @@ export type CompletionGateHoldReason =
   | 'empty_response_retry'
   | 'empty_tool_call_retry'
   | 'incomplete_delivery_continuation'
+  | 'incomplete_tool_continuation'
   | 'malformed_tool_call_retry'
   | 'no_tool_progress_retry'
   | 'unsettled_tool_results';
 
 export type CompletionGateDecision =
   | { type: 'ready' }
+  | {
+      type: 'block';
+      reason: 'goals_incomplete_without_tool_path';
+      graphEvent: Extract<AgentControlGraphEvent, { type: 'BLOCKED' }>;
+      content: string;
+    }
   | {
       type: 'auto_complete_goals';
       reason: 'goal_evidence_satisfied' | 'delegation_evidence_satisfied';

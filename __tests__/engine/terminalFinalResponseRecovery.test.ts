@@ -176,4 +176,96 @@ describe('terminal final response recovery selectors', () => {
       }),
     ).toEqual([]);
   });
+
+  it('does not append a final across turns when a historical request anchor was compacted', () => {
+    const olderCompactedRun = run({
+      id: 'run-old',
+      status: 'cancelled',
+      createdAt: 1,
+      updatedAt: 10,
+      userMessageId: 'user-compacted-away',
+    });
+    const newerTerminalRun = run({
+      id: 'run-new',
+      status: 'failed',
+      createdAt: 20,
+      updatedAt: 30,
+      userMessageId: 'user-new',
+    });
+    const compactedHistory = conversation({
+      messages: [
+        message({
+          id: 'summary-old',
+          role: 'system',
+          content: '[Conversation Summary] Earlier work was compacted.',
+          timestamp: 10,
+        }),
+        message({ id: 'user-new', role: 'user', content: 'New work', timestamp: 20 }),
+        message({
+          id: 'final-new',
+          role: 'assistant',
+          content: 'The newer run stopped.',
+          timestamp: 30,
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            finishReason: 'fallback_from_evidence',
+          },
+        }),
+      ],
+      agentRuns: [olderCompactedRun, newerTerminalRun],
+    });
+
+    expect(selectTerminalConversationsWithFinalResponseGaps([compactedHistory])).toEqual([]);
+    expect(
+      selectTerminalFinalResponseRecoveryCandidates({
+        conversation: compactedHistory,
+        hasProviderContext: true,
+      }),
+    ).toEqual([]);
+  });
+
+  it('keeps timestamp recovery available for the sole compacted terminal run', () => {
+    const soleCompactedRun = run({
+      id: 'run-compacted',
+      status: 'failed',
+      createdAt: 1,
+      updatedAt: 10,
+      userMessageId: 'user-compacted-away',
+    });
+    const compactedConversation = conversation({
+      messages: [
+        message({
+          id: 'summary-old',
+          role: 'system',
+          content: '[Conversation Summary] Earlier work was compacted.',
+          timestamp: 2,
+        }),
+        message({
+          id: 'assistant-draft',
+          role: 'assistant',
+          content: 'Partial result',
+          timestamp: 3,
+        }),
+      ],
+      agentRuns: [soleCompactedRun],
+    });
+
+    expect(selectTerminalConversationsWithFinalResponseGaps([compactedConversation])).toEqual([
+      compactedConversation,
+    ]);
+    expect(
+      selectTerminalFinalResponseRecoveryCandidates({
+        conversation: compactedConversation,
+        hasProviderContext: false,
+      }),
+    ).toEqual([
+      {
+        conversationId: 'conv-1',
+        runId: 'run-compacted',
+        status: 'failed',
+        timestamp: 10,
+      },
+    ]);
+  });
 });

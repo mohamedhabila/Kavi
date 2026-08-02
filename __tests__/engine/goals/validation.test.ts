@@ -137,6 +137,27 @@ describe('goal validation', () => {
       );
     });
 
+    it('reports error when blocking criteria use worker orchestration as deliverable evidence', () => {
+      const result = validateGoalMutation(
+        {
+          action: 'add',
+          goals: [
+            {
+              title: 'Delegated review',
+              completionPolicy: 'blocking',
+              successCriteria: ['evidence.tool:sessions_spawn', 'evidence.min:10'],
+            },
+          ],
+        },
+        [],
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: 'invalid_success_criteria' }),
+      );
+    });
+
     it('reports error when blocking criteria reference unregistered tool evidence', () => {
       const result = validateGoalMutation(
         {

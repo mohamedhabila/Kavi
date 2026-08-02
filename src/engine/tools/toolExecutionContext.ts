@@ -44,6 +44,8 @@ export interface ToolExecutionContext {
   currentUserMessage?: CodeOwnedCurrentUserMessage;
   /** Opaque authorities minted from successful code-owned reads in this execution run. */
   toolObservedMemoryEvidence?: ReadonlyArray<ToolObservedMemoryEvidenceCapability>;
+  /** Exact joined worker identities tracked by product code for this execution run. */
+  pendingSessionIds?: ReadonlyArray<string>;
   /** Validated code-owned mobile capability and exact observation for this model turn. */
   mobileController?: MobileControllerExecutionBinding;
 }
