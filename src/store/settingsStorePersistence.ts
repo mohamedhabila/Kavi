@@ -1,4 +1,5 @@
 import type { AppSettings } from '../types/settings';
+import { i18n } from '../i18n/manager';
 import {
   deriveMemoryConsolidationModeFromSettings,
   normalizeMemoryConsolidationMode,
@@ -12,9 +13,25 @@ import {
   sanitizeWorkspaceTargetsForState,
 } from './settingsStoreNormalization';
 
-export const SETTINGS_STORE_VERSION = 15;
+export const SETTINGS_STORE_VERSION = 16;
 
 type MigratableSettingsState = Record<string, any>;
+
+/**
+ * Values that used to be written as the shipped default system prompt. Locales load
+ * lazily, so this checks the English original plus whatever the active locale renders;
+ * an unmatched translation simply survives as a harmless customization the user can
+ * clear in Settings.
+ */
+function isLegacyShippedSystemPrompt(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim();
+  if (!normalized) return false;
+  return (
+    normalized === 'You are a helpful personal AI assistant with access to tools.' ||
+    normalized === i18n.t('settings.defaultSystemPrompt').trim()
+  );
+}
 
 export function migrateSettingsState(persistedState: unknown, version: number): AppSettings {
   if (!persistedState || typeof persistedState !== 'object') {
@@ -113,13 +130,31 @@ export function migrateSettingsState(persistedState: unknown, version: number): 
       compactionModel: nextState.compactionModel ?? null,
     };
   }
-  if (version < SETTINGS_STORE_VERSION) {
+  if (version < 15) {
     nextState = {
       ...nextState,
       memoryConsolidationMode: deriveMemoryConsolidationModeFromSettings({
         memoryConsolidationMode: nextState.memoryConsolidationMode,
         consolidationProvider: nextState.consolidationProvider ?? null,
       }),
+    };
+  }
+  if (version < SETTINGS_STORE_VERSION && nextState.compactionSummarizer === undefined) {
+    // Model-authored compaction is the new default. The previous "off" chip only
+    // meant "no cheaper override provider", never an explicit opt-out, so an
+    // existing install is migrated to auto and can switch back in Settings.
+    nextState = {
+      ...nextState,
+      compactionSummarizer: 'auto',
+    };
+  }
+  if (version < SETTINGS_STORE_VERSION && isLegacyShippedSystemPrompt(nextState.systemPrompt)) {
+    // The generic one-liner used to be the shipped default, so a persisted copy is
+    // almost never a deliberate customization. Clearing it lets the active persona
+    // own the operating instructions instead of competing with a second identity.
+    nextState = {
+      ...nextState,
+      systemPrompt: '',
     };
   }
 
@@ -150,6 +185,7 @@ export function partializeSettingsState(state: SettingsDataState): AppSettings {
     defaultConversationMode: state.defaultConversationMode,
     consolidationProvider: state.consolidationProvider,
     memoryConsolidationMode: normalizeMemoryConsolidationMode(state.memoryConsolidationMode),
+    compactionSummarizer: state.compactionSummarizer,
     compactionProvider: state.compactionProvider,
     compactionModel: state.compactionModel,
     disableLongTermMemory: state.disableLongTermMemory,

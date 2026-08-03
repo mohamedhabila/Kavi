@@ -994,6 +994,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     consolidationModeOff: '仅结构化',
     compactionProvider: '上下文压缩提供方',
     compactionProviderHint: '用于第2/3级压缩摘要的可选低成本模型。关闭时使用确定性结构压缩。',
+    compactionSummarizerAuto: '自动',
     compactionProviderOff: '关闭',
     compactionModelPlaceholder: '可选模型覆盖（如 gpt-5-mini）',
     consolidationTierConfigured: '专用提供方：{name}',

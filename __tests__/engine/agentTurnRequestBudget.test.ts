@@ -74,7 +74,9 @@ describe('prepareAgentTurnRequestBudget', () => {
       conversationId: 'conv-memory-authority',
       enrichedSystemPrompt: 'Stable assistant instructions.',
       requestMaxTokens: 8192,
-      requestModel: 'gpt-5.4-mini',
+      // A small-window model guarantees budget pressure so compaction actually runs;
+      // the working window is now a large share of the model's real context.
+      requestModel: 'phi4',
       toolsForIteration: [],
       warn: jest.fn(),
       workingMessages: messages,
@@ -96,6 +98,61 @@ describe('prepareAgentTurnRequestBudget', () => {
       expect(request).not.toHaveProperty('openThreads');
       expect(request).not.toHaveProperty('idleSinceLastTurnMs');
       expect(JSON.stringify(request)).not.toContain('PRIVATE_');
+    }
+  });
+
+  it('forwards code-owned open threads so a compaction summary keeps unfinished work', async () => {
+    const compact = jest.fn().mockResolvedValue({
+      ok: true,
+      compacted: false,
+      tier: 'selective',
+      reason: 'test did not compact',
+    });
+    const messages = Array.from({ length: 100 }, (_, index) => makeMessage(index));
+
+    await prepareAgentTurnRequestBudget({
+      compactionEngine: { compact },
+      conversationId: 'conv-open-threads',
+      enrichedSystemPrompt: 'Stable assistant instructions.',
+      requestMaxTokens: 8192,
+      requestModel: 'phi4',
+      toolsForIteration: [],
+      warn: jest.fn(),
+      workingMessages: messages,
+      compactionContext: {
+        openThreads: ['[active] Book the flight — criteria: evidence.min:1'],
+      },
+    });
+
+    expect(compact).toHaveBeenCalled();
+    const forwarded = compact.mock.calls.map(([request]) => request.compactionContext);
+    expect(forwarded.some((context) => context?.openThreads?.length > 0)).toBe(true);
+  });
+
+  it('marks an on-device turn so compaction never spends a second local inference pass', async () => {
+    const compact = jest.fn().mockResolvedValue({
+      ok: true,
+      compacted: false,
+      tier: 'selective',
+      reason: 'test did not compact',
+    });
+    const messages = Array.from({ length: 100 }, (_, index) => makeMessage(index));
+
+    await prepareAgentTurnRequestBudget({
+      compactionEngine: { compact },
+      conversationId: 'conv-on-device',
+      enrichedSystemPrompt: 'Stable assistant instructions.',
+      onDeviceProvider: true,
+      requestMaxTokens: 8192,
+      requestModel: 'gemma3',
+      toolsForIteration: [],
+      warn: jest.fn(),
+      workingMessages: messages,
+    });
+
+    expect(compact).toHaveBeenCalled();
+    for (const [request] of compact.mock.calls) {
+      expect(request.compactionContext?.onDeviceProvider).toBe(true);
     }
   });
 });

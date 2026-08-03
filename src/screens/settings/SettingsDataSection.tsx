@@ -4,6 +4,7 @@ import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'rea
 
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { LlmProviderConfig } from '../../types/provider';
+import type { CompactionSummarizerMode } from '../../types/settings';
 import type { ConsolidationStatusSnapshot } from '../../services/memory/consolidationStatus';
 import type { MemoryConsolidationMode } from '../../services/memory/memoryConsolidationMode';
 import { consolidationTierLabel } from '../memory/consolidationStatusLabel';
@@ -19,10 +20,12 @@ type SettingsDataSectionProps = {
   disableLongTermMemory: boolean;
   memoryConsolidationMode: MemoryConsolidationMode;
   consolidationProviderId: string | null;
+  compactionSummarizer: CompactionSummarizerMode;
   compactionProviderId: string | null;
   compactionModel: string | null;
   setDisableLongTermMemory: (value: boolean) => void;
   setMemoryConsolidationMode: (mode: MemoryConsolidationMode, providerId?: string | null) => void;
+  setCompactionSummarizer: (mode: CompactionSummarizerMode) => void;
   setCompactionProvider: (providerId: string | null) => void;
   setCompactionModel: (model: string | null) => void;
   consolidationStatus: ConsolidationStatusSnapshot;
@@ -67,6 +70,8 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
   compactionModel,
   setDisableLongTermMemory,
   setMemoryConsolidationMode,
+  compactionSummarizer,
+  setCompactionSummarizer,
   setCompactionProvider,
   setCompactionModel,
   consolidationStatus,
@@ -75,6 +80,8 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
   onManageApprovals,
   onClearAllConversations,
 }) => {
+  const compactionSummarizerOff = compactionSummarizer === 'off';
+  const compactionAutoSelected = !compactionSummarizerOff && compactionProviderId === null;
   return (
     <View style={styles.sectionCard} onLayout={onLayout}>
       <View style={styles.sectionCardHeader}>
@@ -169,18 +176,36 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
           style={[styles.presetRow, { flexGrow: 0, flexShrink: 0 }]}
         >
           <TouchableOpacity
+            key="__compaction-auto__"
+            style={[styles.presetChip, compactionAutoSelected && styles.presetChipActive]}
+            onPress={() => {
+              setCompactionSummarizer('auto');
+              setCompactionProvider(null);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t('memory.compactionSummarizerAuto')}
+            accessibilityState={{ selected: compactionAutoSelected }}
+            testID="compaction-provider-chip-auto"
+          >
+            <Text
+              style={[styles.presetChipText, compactionAutoSelected && styles.presetChipTextActive]}
+            >
+              {t('memory.compactionSummarizerAuto')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             key="__compaction-off__"
-            style={[styles.presetChip, compactionProviderId === null && styles.presetChipActive]}
-            onPress={() => setCompactionProvider(null)}
+            style={[styles.presetChip, compactionSummarizerOff && styles.presetChipActive]}
+            onPress={() => setCompactionSummarizer('off')}
             accessibilityRole="button"
             accessibilityLabel={t('memory.compactionProviderOff')}
-            accessibilityState={{ selected: compactionProviderId === null }}
+            accessibilityState={{ selected: compactionSummarizerOff }}
             testID="compaction-provider-chip-off"
           >
             <Text
               style={[
                 styles.presetChipText,
-                compactionProviderId === null && styles.presetChipTextActive,
+                compactionSummarizerOff && styles.presetChipTextActive,
               ]}
             >
               {t('memory.compactionProviderOff')}
@@ -189,12 +214,15 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
           {providers
             .filter((provider) => provider.enabled)
             .map((provider) => {
-              const selected = compactionProviderId === provider.id;
+              const selected = !compactionSummarizerOff && compactionProviderId === provider.id;
               return (
                 <TouchableOpacity
                   key={`compaction-${provider.id}`}
                   style={[styles.presetChip, selected && styles.presetChipActive]}
-                  onPress={() => setCompactionProvider(provider.id)}
+                  onPress={() => {
+                    setCompactionSummarizer('auto');
+                    setCompactionProvider(provider.id);
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={provider.name}
                   accessibilityState={{ selected }}
@@ -207,7 +235,7 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
               );
             })}
         </ScrollView>
-        {compactionProviderId ? (
+        {!compactionSummarizerOff && compactionProviderId ? (
           <TextInput
             accessibilityLabel={t('memory.compactionModelPlaceholder')}
             style={[styles.input, { marginTop: 8 }]}

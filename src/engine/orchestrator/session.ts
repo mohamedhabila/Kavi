@@ -18,6 +18,7 @@ import {
   resolveCodeOwnedMemoryConversationId,
   resolveCodeOwnedMemoryPersonaId,
 } from '../../services/memory/memoryScopeIdentity';
+import { persistConversationModeEscalation } from '../graph/conversation/persistModeEscalation';
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
 import {
   createVerifiedProcedureExecutionSession,
@@ -252,6 +253,7 @@ export async function runOrchestratorGraphSession(params: {
       maxToolIterations,
       maxTokens,
       onCompaction: callbacks.onCompaction,
+      onConversationModeEscalated: persistConversationModeEscalation,
       personaThinkingLevel: persona?.thinkingLevel,
       promptContextSupport: {
         graphGoals: graph.getGraphSnapshot().goals ?? [],

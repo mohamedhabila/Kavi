@@ -40,8 +40,11 @@ describe('Orchestrator — toolFilter', () => {
       model: 'gpt-test',
       conversationId: 'conv-filter-tools',
       systemPrompt: 'Test',
-      messages: [makeMsg('user', 'Search the documentation and fetch the page')],
-      toolFilter: (name) => name === 'web_search' || name === 'web_fetch',
+      messages: [makeMsg('user', 'Open the staging site and run the migration')],
+      // Deliberately non-default tools: authorization alone must not ground a tool
+      // onto the surface. web_search/web_fetch are part of the everyday default core,
+      // so they cannot demonstrate this property.
+      toolFilter: (name) => name === 'browser_navigate' || name === 'ssh_exec',
     };
 
     await runOrchestrator(options, callbacks);

@@ -226,7 +226,7 @@ export function getToolManagerCategoryForToolName(toolName: string): string {
   return 'other';
 }
 
-function mapDeferredCategoryToToolCatalogCategory(category: string): string | null {
+export function mapDeferredCategoryToToolCatalogCategory(category: string): string | null {
   const legacyWebCategory = ['web', 'research'].join('_');
   const mapping: Record<string, string> = {
     workspace_search: 'files',

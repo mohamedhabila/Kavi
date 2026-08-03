@@ -1010,6 +1010,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     compactionProvider: 'مزوّد ضغط السياق',
     compactionProviderHint:
       'نموذج اختياري أقل تكلفة لملخصات الضغط من المستوى 2/3. عند الإيقاف يستخدم Kavi ضغطًا هيكليًا حتميًا.',
+    compactionSummarizerAuto: 'تلقائي',
     compactionProviderOff: 'إيقاف',
     compactionModelPlaceholder: 'تجاوز النموذج (مثل gpt-5-mini)',
     consolidationTierConfigured: 'مزوّد مخصص: {name}',

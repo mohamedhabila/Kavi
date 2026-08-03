@@ -20,6 +20,13 @@ import { resolveSuccessCriterionSurfaceHints } from './completionEvidence';
 import type { AgentGoal } from './types';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
+/**
+ * Turn-1 surface for a general mobile assistant. Discovery still gates the long tail,
+ * but the everyday read paths a phone assistant needs most — web lookup plus read-only
+ * calendar, contacts, location, and device state — are present from the first turn so
+ * an ordinary request does not cost a `tool_catalog` round-trip before it can start.
+ * Every promoted native tool is read-only; mutations stay behind discovery and approval.
+ */
 export const DEFAULT_CORE_TOOL_ORDER = [
   REQUEST_CLARIFICATION_TOOL_NAME,
   GOAL_BOOTSTRAP_TOOL_NAME,
@@ -33,6 +40,12 @@ export const DEFAULT_CORE_TOOL_ORDER = [
   'sessions_spawn',
   'wait',
   'cron',
+  'web_search',
+  'web_fetch',
+  'calendar_events',
+  'contacts_search',
+  'location_current',
+  'device_query',
 ] as const;
 
 const STABLE_TOOL_SURFACE_ORDER_VALUES = [
@@ -54,6 +67,10 @@ const STABLE_TOOL_SURFACE_ORDER_VALUES = [
   'text_search',
   'web_search',
   'web_fetch',
+  'calendar_events',
+  'contacts_search',
+  'location_current',
+  'device_query',
 ] as const;
 
 export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
@@ -65,6 +82,12 @@ const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'memory_remember',
   'memory_preserve_source',
   'memory_forget',
+  'web_search',
+  'web_fetch',
+  'calendar_events',
+  'contacts_search',
+  'location_current',
+  'device_query',
 ]);
 const STABLE_TOOL_SURFACE_ORDER = new Map(
   [...STABLE_TOOL_SURFACE_ORDER_VALUES, 'tool_catalog', 'tool_describe'].map((name, index) => [

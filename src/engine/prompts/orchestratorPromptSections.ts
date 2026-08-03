@@ -2,6 +2,7 @@ import type { Message } from '../../types/message';
 
 export type SystemPromptSectionPurpose =
   | 'base_prompt'
+  | 'capability_index'
   | 'execution_mode'
   | 'forced_text'
   | 'goals'

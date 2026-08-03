@@ -5,6 +5,41 @@ All notable changes to Kavi will be documented in this file.
 The format is based on Keep a Changelog, and this project follows semantic
 versioning where practical for tagged releases.
 
+## [Unreleased]
+
+### Changed
+
+- Long-horizon runs keep far more raw context before summarizing. The working
+  context window is now 75% of the model's real window (previously 25%), so a
+  128K model retains roughly 67K message tokens instead of ~30K. On-device
+  runtimes keep a separate phone-sized cap.
+- Compaction summaries are model-authored by default instead of opt-in. The
+  previous "Off" chip under Memory & privacy is now an explicit
+  **Automatic / Off** control; an existing install migrates to Automatic and can
+  switch back. On-device providers always use the deterministic summarizer.
+- Compaction summaries now carry code-owned open threads — live goals and
+  in-flight external work — so unfinished work survives a summary.
+- The turn-1 tool surface includes everyday read-only capabilities
+  (`web_search`, `web_fetch`, `calendar_events`, `contacts_search`,
+  `location_current`, `device_query`). Mutating tools still require discovery and
+  approval.
+- A new code-owned Capability Index tells the model which capability domains
+  exist in the current run but are not on this turn's surface, so a listed
+  capability is never reported as unavailable without discovery.
+- Tool eviction under budget pressure follows the default surface and live goal
+  capabilities instead of a fixed list of file tools.
+- Personas own their operating instructions. The Assistant persona's prompt is
+  now actually used — editing it in the agent roster previously had no effect —
+  and the user system prompt is an additive customization rather than a
+  replacement. The shipped default system prompt is empty; an existing install
+  carrying the old generic one-liner is migrated to empty (settings schema v16).
+- Long-horizon iteration extensions apply to every persona-driven run without an
+  explicit caller budget, not only the SuperAgent persona. Extensions still
+  require code-owned evidence of recent completed tool progress.
+- A chitchat conversation that reaches for a capability only an agentic run may
+  use now escalates to agentic mode with a visible transcript marker, instead of
+  silently dropping the tool.
+
 ## [1.0.0] - 2026-06-20
 
 ### Added

@@ -14,6 +14,11 @@ const userMessage: Message = {
 };
 
 describe('full-registry turn tool surface', () => {
+  // The turn-1 surface is deliberately small — progressive disclosure is what keeps
+  // the tool budget affordable on mobile. It is not, however, file-only: a general
+  // assistant that cannot see web or read-only device state on the first turn pays a
+  // discovery round-trip for the most common requests it receives, and often answers
+  // from parametric knowledge instead. The budget below is the real constraint.
   it('keeps a new agentic turn on a compact core plus discovery surface', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: TOOL_DEFINITIONS,
@@ -26,13 +31,39 @@ describe('full-registry turn tool surface', () => {
 
     expect(names.has('tool_catalog')).toBe(true);
     expect(names.has('tool_describe')).toBe(true);
-    expect(names.has('calendar_list')).toBe(false);
-    expect(names.has('device_query')).toBe(false);
-    expect(selected.length).toBeLessThanOrEqual(16);
-    expect(tokenEstimate).toBeLessThanOrEqual(3_500);
+
+    // Everyday read paths are present from turn 1.
+    expect(names.has('web_search')).toBe(true);
+    expect(names.has('web_fetch')).toBe(true);
+    expect(names.has('calendar_events')).toBe(true);
+    expect(names.has('device_query')).toBe(true);
+
+    // Mutations stay behind discovery and approval.
+    expect(names.has('calendar_create_event')).toBe(false);
+    expect(names.has('contacts_create')).toBe(false);
+    expect(names.has('sms_compose')).toBe(false);
+    expect(names.has('notification_send')).toBe(false);
+
+    expect(selected.length).toBeLessThanOrEqual(22);
+    expect(tokenEstimate).toBeLessThanOrEqual(5_000);
   });
 
-  it('keeps an unscoped artifact goal out of unrelated mobile domains', async () => {
+  it('gives chitchat the same read-only everyday surface without graph or delegation tools', async () => {
+    const selected = await resolveDefaultGroundedRequestScopedTools({
+      allTools: TOOL_DEFINITIONS,
+      conversationMode: 'chitchat',
+      observedToolNames: new Set<string>(),
+      workingMessages: [userMessage],
+    });
+    const names = new Set(selected.map((tool) => tool.name));
+
+    expect(names.has('web_search')).toBe(true);
+    expect(names.has('calendar_events')).toBe(true);
+    expect(names.has('update_goals')).toBe(false);
+    expect(names.has('sessions_spawn')).toBe(false);
+  });
+
+  it('keeps an unscoped artifact goal out of unrelated mobile mutation domains', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: TOOL_DEFINITIONS,
       conversationMode: 'agentic',
@@ -60,7 +91,7 @@ describe('full-registry turn tool surface', () => {
     expect(names.has('calendar_create_event')).toBe(false);
     expect(names.has('contacts_create')).toBe(false);
     expect(names.has('notification_send')).toBe(false);
-    expect(selected.length).toBeLessThanOrEqual(24);
-    expect(tokenEstimate).toBeLessThanOrEqual(4_500);
+    expect(selected.length).toBeLessThanOrEqual(30);
+    expect(tokenEstimate).toBeLessThanOrEqual(6_000);
   });
 });

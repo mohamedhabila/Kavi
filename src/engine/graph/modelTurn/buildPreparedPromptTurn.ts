@@ -20,6 +20,8 @@ import {
 
 export function buildPreparedModelTurnPrompt(params: {
   actionablePromptTurn: boolean;
+  /** Full registry for this run; indexes capabilities that are not on the turn surface. */
+  allTools?: ReadonlyArray<ToolDefinition>;
   allowSessionCoordinationTools: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlTurnDirectives['forcedTextReason'];
   effectiveForceTextThisTurn: boolean;
@@ -108,6 +110,7 @@ export function buildPreparedModelTurnPrompt(params: {
       groundedRequestScopedTools: options.groundedTools,
       pinnedToolNames: options.pinnedTools,
       promptBundleContext: {
+        allTools: params.allTools,
         effectiveForceTextReasonThisTurn: params.effectiveForceTextReasonThisTurn,
         graphGoals: turnGraphGoals,
         goalsPromptSection: params.actionablePromptTurn

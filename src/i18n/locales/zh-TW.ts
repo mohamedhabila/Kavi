@@ -993,6 +993,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     consolidationModeOff: '僅結構化',
     compactionProvider: '上下文壓縮提供方',
     compactionProviderHint: '用於第2/3級壓縮摘要的可選低成本模型。關閉時使用決定性結構壓縮。',
+    compactionSummarizerAuto: '自動',
     compactionProviderOff: '關閉',
     compactionModelPlaceholder: '可選模型覆寫（如 gpt-5-mini）',
     consolidationTierConfigured: '專用提供方：{name}',

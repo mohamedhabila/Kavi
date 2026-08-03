@@ -57,29 +57,44 @@ function normalizeToolCallNames(toolCalls: ReadonlyArray<{ name?: string }> | un
     .filter(Boolean);
 }
 
+/**
+ * Tools already on the default surface are excluded from continuation *signals*:
+ * they are selected anyway, and counting them would suppress the discovery surface.
+ * They are still returned separately because a default-core tool can legitimately
+ * start a workflow chain — a contacts lookup that should make messaging eligible —
+ * and dropping it from the workflow seed would silently break that edge.
+ */
 function extractRecentContinuationToolNames(
   messagesSinceLatestUserMessage: ReadonlyArray<Message>,
-): Set<string> {
-  const recentToolNames = new Set<string>();
+): {
+  signals: Set<string>;
+  workflowSeeds: Set<string>;
+} {
+  const signals = new Set<string>();
+  const workflowSeeds = new Set<string>();
 
   for (const message of messagesSinceLatestUserMessage) {
     for (const toolName of normalizeToolCallNames(message.toolCalls)) {
-      if (
-        !toolName ||
-        DEFAULT_CORE_TOOL_NAMES.has(toolName) ||
-        DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)
-      ) {
+      if (!toolName || DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)) {
         continue;
       }
-      recentToolNames.add(toolName);
+      workflowSeeds.add(toolName);
+      if (DEFAULT_CORE_TOOL_NAMES.has(toolName)) {
+        continue;
+      }
+      signals.add(toolName);
     }
   }
 
-  return recentToolNames;
+  return { signals, workflowSeeds };
 }
 
-function extractCompletedContinuationToolNames(messages: ReadonlyArray<Message>): Set<string> {
-  const completedToolNames = new Set<string>();
+function extractCompletedContinuationToolNames(messages: ReadonlyArray<Message>): {
+  signals: Set<string>;
+  workflowSeeds: Set<string>;
+} {
+  const signals = new Set<string>();
+  const workflowSeeds = new Set<string>();
 
   for (const message of messages) {
     for (const toolCall of message.toolCalls ?? []) {
@@ -87,18 +102,18 @@ function extractCompletedContinuationToolNames(messages: ReadonlyArray<Message>)
         continue;
       }
       const toolName = normalizeToolName(toolCall.name);
-      if (
-        !toolName ||
-        DEFAULT_CORE_TOOL_NAMES.has(toolName) ||
-        DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)
-      ) {
+      if (!toolName || DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)) {
         continue;
       }
-      completedToolNames.add(toolName);
+      workflowSeeds.add(toolName);
+      if (DEFAULT_CORE_TOOL_NAMES.has(toolName)) {
+        continue;
+      }
+      signals.add(toolName);
     }
   }
 
-  return completedToolNames;
+  return { signals, workflowSeeds };
 }
 
 function resolveWorkflowContinuationToolNames(
@@ -198,21 +213,20 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   };
   const goals = params.goals ?? [];
   const pendingAsyncMonitorToolNames = params.pendingAsyncMonitorToolNames ?? new Set<string>();
-  const recentContinuationToolNames = extractRecentContinuationToolNames(
-    messagesSinceLatestUserMessage,
-  );
-  const previousTurnToolNames = extractCompletedContinuationToolNames(previousTurnMessages);
+  const recentContinuation = extractRecentContinuationToolNames(messagesSinceLatestUserMessage);
+  const recentContinuationToolNames = recentContinuation.signals;
+  const previousTurnContinuation = extractCompletedContinuationToolNames(previousTurnMessages);
   const observedToolNames = Array.from(params.observedToolNames)
     .map((toolName) => normalizeToolName(toolName))
     .filter(Boolean);
   const workflowContinuationToolNames = resolveWorkflowContinuationToolNames(params.allTools, [
-    ...recentContinuationToolNames,
-    ...previousTurnToolNames,
+    ...recentContinuation.workflowSeeds,
+    ...previousTurnContinuation.workflowSeeds,
     ...observedToolNames,
   ]);
   const conversationalWorkflowContinuationToolNames = resolveWorkflowContinuationToolNames(
     params.allTools,
-    [...recentContinuationToolNames, ...previousTurnToolNames],
+    [...recentContinuation.workflowSeeds, ...previousTurnContinuation.workflowSeeds],
   );
   const turnContinuationToolNames = new Set([
     ...recentContinuationToolNames,

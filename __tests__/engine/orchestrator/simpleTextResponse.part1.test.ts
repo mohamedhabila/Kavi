@@ -108,6 +108,9 @@ describe('Orchestrator', () => {
           },
         ],
         toolFilter: allowTools(['read_file', 'list_files']),
+        // An explicit caller budget is fixed by design: it opts out of long-horizon
+        // extensions so this test measures closeout at the cap, not budget growth.
+        maxToolIterations: MAX_TOOL_ITERATIONS,
       };
 
       await runOrchestrator(options, callbacks);

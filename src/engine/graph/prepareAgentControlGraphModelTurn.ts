@@ -33,7 +33,9 @@ export async function prepareAgentControlGraphModelTurn(
 
   const toolSurface = await resolveModelTurnGroundedToolSurface({
     allTools: params.allTools,
-    conversationMode: params.isSuperAgent ? 'agentic' : 'chitchat',
+    // A run that has already escalated keeps agentic authority for its remaining
+    // iterations; the persisted conversation mode carries it into later turns.
+    conversationMode: params.isSuperAgent || params.escalatedToAgentic ? 'agentic' : 'chitchat',
     completedWorkflowToolNames: params.completedWorkflowToolNames,
     goals: params.goals,
     explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
@@ -44,6 +46,7 @@ export async function prepareAgentControlGraphModelTurn(
 
   const basePreparedTurn = buildPreparedModelTurnPrompt({
     actionablePromptTurn: !iterationRequest.effectiveForceTextThisTurn,
+    allTools: params.allTools,
     allowSessionCoordinationTools: toolSurface.allowSessionCoordinationTools,
     effectiveForceTextReasonThisTurn: iterationRequest.effectiveForceTextReasonThisTurn,
     effectiveForceTextThisTurn: iterationRequest.effectiveForceTextThisTurn,
@@ -65,6 +68,7 @@ export async function prepareAgentControlGraphModelTurn(
   );
 
   return {
+    modeEscalation: toolSurface.modeEscalation,
     effectiveForceTextThisTurn: iterationRequest.effectiveForceTextThisTurn,
     effectiveForceTextReasonThisTurn: iterationRequest.effectiveForceTextReasonThisTurn,
     iterationThinkingLevel: iterationRequest.iterationThinkingLevel,

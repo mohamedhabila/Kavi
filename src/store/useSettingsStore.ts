@@ -322,6 +322,9 @@ export const useSettingsStore = create<SettingsState>()(
           };
         }),
 
+      setCompactionSummarizer: (mode) =>
+        set({ compactionSummarizer: mode === 'off' ? 'off' : 'auto' }),
+
       setCompactionProvider: (providerId) =>
         set({
           compactionProvider:
@@ -436,6 +439,12 @@ export const useSettingsStore = create<SettingsState>()(
             memoryConsolidationMode: hasOwnSetting(settings, 'memoryConsolidationMode')
               ? normalizeMemoryConsolidationMode(settings.memoryConsolidationMode)
               : state.memoryConsolidationMode,
+            compactionSummarizer:
+              settings.compactionSummarizer === 'off'
+                ? 'off'
+                : settings.compactionSummarizer === 'auto'
+                  ? 'auto'
+                  : state.compactionSummarizer,
             compactionProvider: hasOwnSetting(settings, 'compactionProvider')
               ? (settings.compactionProvider ?? null)
               : state.compactionProvider,

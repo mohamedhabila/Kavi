@@ -1,17 +1,15 @@
 import { ToolDefinition } from '../../types/tool';
 import { estimateTokens } from '../../services/context/tokenCounter';
+import { DEFAULT_CORE_TOOL_NAMES } from '../goals/toolSurface';
 
-const CORE_TOOL_TOKEN_BUDGET_NAMES = new Set([
-  'read_file',
-  'write_file',
-  'sessions_spawn',
-  'list_files',
-  'file_edit',
-  'glob_search',
-  'text_search',
-  'web_search',
-  'web_fetch',
-]);
+/**
+ * Never-evicted tools. This deliberately mirrors the default turn-1 surface rather
+ * than a fixed list of file tools: on a general mobile assistant, evicting the
+ * calendar or contacts tool that the current request needs is the same failure as
+ * evicting `read_file` during a file task. Task-relevant tools are additionally
+ * protected via `pinnedToolNames`, which the caller derives from live goals.
+ */
+const CORE_TOOL_TOKEN_BUDGET_NAMES: ReadonlySet<string> = DEFAULT_CORE_TOOL_NAMES;
 const MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT = 60;
 
 export interface CompactToolDefinitionOptions {

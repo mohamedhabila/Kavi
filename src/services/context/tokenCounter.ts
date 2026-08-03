@@ -8,11 +8,18 @@ import { resolveModelHostedFamily } from '../llm/catalog/providerFamilies';
 // Kavi uses chars/4 with a 1.2× safety margin for estimateTokens inaccuracy.
 export const CHARS_PER_TOKEN = 4;
 export const SAFETY_MARGIN = 1.2;
-export const LARGE_MODEL_WORKING_CONTEXT_SHARE = 0.25;
+export const LARGE_MODEL_WORKING_CONTEXT_SHARE = 0.75;
 export const MIN_LARGE_MODEL_WORKING_CONTEXT = 48_000;
-export const MAX_LARGE_MODEL_WORKING_CONTEXT = 200_000;
+export const MAX_LARGE_MODEL_WORKING_CONTEXT = 400_000;
 export const LARGE_MODEL_WORKING_CONTEXT_THRESHOLD = 64_000;
-export const MAX_ROUTINE_COMPACTION_WORKING_CONTEXT = 96_000;
+export const MAX_ROUTINE_COMPACTION_WORKING_CONTEXT = 256_000;
+
+/**
+ * On-device runtimes are bounded by phone RAM, not by the model's nominal window.
+ * A hosted-scale working window would stall or terminate local inference, so local
+ * models keep a small, explicitly capped window regardless of their advertised size.
+ */
+export const ON_DEVICE_MAX_WORKING_CONTEXT = 8_000;
 
 // ── Tiered compaction thresholds ─────────────────────────────────────────
 // Based on Anthropic's context engineering guidance: graduated response is
@@ -118,13 +125,24 @@ export function getContextWindow(model: string): number {
   return 128000;
 }
 
-export function getWorkingContextWindow(model: string): number {
+export interface WorkingContextWindowOptions {
+  /** Set when the turn runs against an on-device runtime rather than a hosted provider. */
+  onDeviceProvider?: boolean;
+}
+
+export function getWorkingContextWindow(
+  model: string,
+  options?: WorkingContextWindowOptions,
+): number {
   const hardWindow = getContextWindow(model);
 
-  // Avoid routinely filling very large context windows with low-value history.
-  // Long-context research consistently shows weaker utilization in the middle
-  // of oversized prompts, so we keep a smaller working target and rely on
-  // compaction/pruning to preserve the high-salience parts.
+  if (options?.onDeviceProvider) {
+    return Math.min(hardWindow, ON_DEVICE_MAX_WORKING_CONTEXT);
+  }
+
+  // Keep raw context available for as long as the model can actually hold it, and
+  // reach for lossy summarization only when the window is genuinely under pressure.
+  // The graduated tiers below still protect the high-salience parts.
   if (hardWindow <= LARGE_MODEL_WORKING_CONTEXT_THRESHOLD) {
     return hardWindow;
   }
@@ -139,13 +157,19 @@ export function getWorkingContextWindow(model: string): number {
   );
 }
 
-export function getCompactionWorkingContextWindow(model: string): number {
-  return Math.min(getWorkingContextWindow(model), MAX_ROUTINE_COMPACTION_WORKING_CONTEXT);
+export function getCompactionWorkingContextWindow(
+  model: string,
+  options?: WorkingContextWindowOptions,
+): number {
+  return Math.min(getWorkingContextWindow(model, options), MAX_ROUTINE_COMPACTION_WORKING_CONTEXT);
 }
 
-export function getCompactionThreshold(model: string): number {
+export function getCompactionThreshold(
+  model: string,
+  options?: WorkingContextWindowOptions,
+): number {
   return Math.floor(
-    getCompactionWorkingContextWindow(model) * SELECTIVE_COMPACTION_THRESHOLD_SHARE,
+    getCompactionWorkingContextWindow(model, options) * SELECTIVE_COMPACTION_THRESHOLD_SHARE,
   );
 }
 
@@ -153,12 +177,15 @@ export function getCompactionThreshold(model: string): number {
  * Returns tiered compaction thresholds (in tokens) for graduated context management.
  * Based on Anthropic's context engineering guidance.
  */
-export function getCompactionThresholds(model: string): {
+export function getCompactionThresholds(
+  model: string,
+  options?: WorkingContextWindowOptions,
+): {
   toolClearing: number;
   selective: number;
   aggressive: number;
 } {
-  const working = getCompactionWorkingContextWindow(model);
+  const working = getCompactionWorkingContextWindow(model, options);
   return {
     toolClearing: Math.floor(working * TOOL_CLEARING_THRESHOLD_SHARE),
     selective: Math.floor(working * SELECTIVE_COMPACTION_THRESHOLD_SHARE),

@@ -308,8 +308,8 @@ describe('Orchestrator', () => {
             toolCalls: [
               {
                 id: 'tc1',
-                name: 'web_fetch',
-                arguments: '{"urls":["https://ai.google.dev/gemini-api/docs/function-calling"]}',
+                name: 'browser_navigate',
+                arguments: '{"url":"https://ai.google.dev/gemini-api/docs/function-calling"}',
                 status: 'completed',
               },
             ],
@@ -328,8 +328,10 @@ describe('Orchestrator', () => {
       const streamOptions = mockStreamMessage.mock.calls[0][1];
       const selectedToolNames = new Set((streamOptions.tools || []).map((tool: any) => tool.name));
 
-      expect(selectedToolNames.has('web_fetch')).toBe(false);
-      expect(selectedToolNames.has('web_search')).toBe(false);
+      // A stale transcript tool must not survive a vague follow-up on its own. web
+      // tools cannot demonstrate this any more — they are part of the everyday default
+      // core — so the transcript uses a tool that only graph grounding could ground.
+      expect(selectedToolNames.has('browser_navigate')).toBe(false);
     });
 
     it('keeps web_search and web_fetch available after a successful search returns candidate urls', async () => {

@@ -18,6 +18,7 @@
 
 import type { Message } from '../../types/message';
 import type {
+  CompactionContext,
   ContextEngine,
   ContextEngineInfo,
   AssembleResult,
@@ -232,6 +233,7 @@ export class DefaultContextEngine implements ContextEngine {
     idleSinceLastTurnMs?: number;
     focusBlock?: string;
     openThreads?: string[];
+    compactionContext?: CompactionContext;
   }): Promise<CompactResult> {
     const tokenCount =
       params.currentTokenCount ??
@@ -255,7 +257,19 @@ export class DefaultContextEngine implements ContextEngine {
     }
 
     // ── Tier 2 & 3: Summarization ────────────────────────────────────
-    return this.applySummarizationCompaction(params, tokenCount, tier);
+    // An explicit compactionContext wins over the legacy top-level fields so a
+    // caller only has to supply pending-work state in one place.
+    return this.applySummarizationCompaction(
+      {
+        ...params,
+        focusBlock: params.compactionContext?.focusBlock ?? params.focusBlock,
+        openThreads: params.compactionContext?.openThreads ?? params.openThreads,
+        idleSinceLastTurnMs:
+          params.compactionContext?.idleSinceLastTurnMs ?? params.idleSinceLastTurnMs,
+      },
+      tokenCount,
+      tier,
+    );
   }
 
   private async applyToolClearing(
@@ -305,6 +319,7 @@ export class DefaultContextEngine implements ContextEngine {
       idleSinceLastTurnMs?: number;
       focusBlock?: string;
       openThreads?: string[];
+      compactionContext?: CompactionContext;
     },
     tokenCount: number,
     tier: 'selective' | 'aggressive',
@@ -355,7 +370,10 @@ export class DefaultContextEngine implements ContextEngine {
       return { ok: true, compacted: false, tier, reason: 'Nothing to compact' };
     }
 
-    const summarizer = await resolveCompactionSummarizerConfig();
+    const summarizer = await resolveCompactionSummarizerConfig({
+      requestModel: params.compactionContext?.requestModel,
+      onDeviceProvider: params.compactionContext?.onDeviceProvider === true,
+    });
     const summary = await buildCompactionSummary({
       messages: toSummarize,
       tier,

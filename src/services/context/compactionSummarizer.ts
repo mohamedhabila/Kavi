@@ -56,18 +56,32 @@ function extractAssistantText(response: unknown): string {
 function buildCompactionLlmPrompt(
   messages: ReadonlyArray<Message>,
   tier: 'selective' | 'aggressive',
+  hints?: StructuredSummaryMemoryHints,
 ): string {
   const transcript = messages
     .map((message) => `${message.role}: ${getMessageContentForContext(message)}`)
     .join('\n');
+  const openThreads = (hints?.openThreads ?? []).map((thread) => thread.trim()).filter(Boolean);
 
   return [
     'Summarize the conversation excerpt for mobile agent context compaction.',
+    'The summary replaces the excerpt, so unfinished work must survive it. Record exact',
+    'identifiers, paths, values, and user-stated constraints verbatim; never invent progress',
+    'or describe an action as completed unless the excerpt shows its result.',
     'Return markdown with these sections when applicable:',
     '## Task Overview',
     '## Current State',
     '## Important Discoveries',
     '## Context to Preserve',
+    '## Constraints to Respect',
+    '## Open Threads / Next Steps',
+    ...(openThreads.length > 0
+      ? [
+          'These code-owned open threads are still live and must appear under',
+          '"## Open Threads / Next Steps":',
+          ...openThreads.map((thread) => `- ${thread}`),
+        ]
+      : []),
     `Compaction tier: ${tier}`,
     '---',
     transcript,
@@ -106,7 +120,12 @@ export async function buildCompactionSummary(params: {
         : params.summarizer.provider,
     );
     const response = await llm.sendMessage(
-      [{ role: 'user', content: buildCompactionLlmPrompt(params.messages, params.tier) }] as never,
+      [
+        {
+          role: 'user',
+          content: buildCompactionLlmPrompt(params.messages, params.tier, params.hints),
+        },
+      ] as never,
       {
         model: params.summarizer.model,
         maxTokens:
@@ -121,6 +140,18 @@ export async function buildCompactionSummary(params: {
       return deterministic();
     }
     const sections = [normalized];
+    // Code-owned pending work is appended rather than trusted to the summarizer:
+    // a dropped open thread is exactly the failure this section exists to prevent.
+    const focusText = (params.hints?.focusBlock ?? '').trim();
+    if (focusText) {
+      sections.push(`## Active Focus\n${focusText}`);
+    }
+    const openThreads = (params.hints?.openThreads ?? [])
+      .map((thread) => thread.trim())
+      .filter(Boolean);
+    if (openThreads.length > 0) {
+      sections.push(`## Open Threads (code-owned)\n- ${openThreads.join('\n- ')}`);
+    }
     const normalizedPriorContext = normalizePriorCompactionContext(
       params.priorContext,
       params.tier,

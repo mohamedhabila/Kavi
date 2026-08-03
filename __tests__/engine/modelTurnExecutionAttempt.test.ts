@@ -120,10 +120,10 @@ describe('executeAgentControlGraphModelTurnAttempt replay retries', () => {
 
   it('drops original cache sections when the final budget truncates the approved prompt', async () => {
     const streamMessage = jest.fn().mockImplementation(() => usageOnlyTurnStream());
-    const originalSystemPrompt = `Stable prefix.\n\n${'Unbudgeted dynamic context. '.repeat(2_000)}`;
+    const originalSystemPrompt = `Stable prefix.\n\n${'Unbudgeted dynamic context. '.repeat(6_000)}`;
     const originalSections = [
       { text: 'Stable prefix.', cacheable: true },
-      { text: 'Unbudgeted dynamic context. '.repeat(2_000) },
+      { text: 'Unbudgeted dynamic context. '.repeat(6_000) },
     ];
 
     const result = await executeAgentControlGraphModelTurnAttempt({

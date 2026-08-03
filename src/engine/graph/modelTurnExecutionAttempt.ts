@@ -4,6 +4,7 @@ import {
   splitCacheableSystemPromptSections,
 } from '../../services/llm/core/systemPromptSections';
 import { resolveModelHostedFamily } from '../../services/llm/catalog/providerFamilies';
+import { isOnDeviceLlmProvider } from '../../services/localLlm/provider';
 import { resolveProviderTransport } from '../../services/llm/catalog/providerProtocols';
 import type { ToolChoiceMode } from '../../services/llm/support/contracts';
 import { isContextOverflowProviderError } from '../../services/llm/support/requestErrors';
@@ -96,8 +97,11 @@ export async function executeAgentControlGraphModelTurnAttempt(
     for (const event of stagedCompactionEvents.splice(0)) params.onCompaction?.(event);
   };
 
+  const onDeviceProvider = isOnDeviceLlmProvider(params.activeProvider);
   const preparedRequestBudget = await prepareAgentTurnRequestBudget({
     compactionEngine: params.compactionEngine,
+    ...(params.compactionContext ? { compactionContext: params.compactionContext } : {}),
+    onDeviceProvider,
     conversationId: params.conversationId,
     enrichedSystemPrompt: params.preparedTurn.enrichedSystemPrompt,
     enrichedSystemPromptSections: params.preparedTurn.enrichedSystemPromptSections,

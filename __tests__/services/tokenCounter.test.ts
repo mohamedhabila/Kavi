@@ -101,15 +101,24 @@ describe('getWorkingContextWindow', () => {
     expect(getWorkingContextWindow('phi4')).toBe(16384);
   });
 
-  it('caps large context windows to a smaller working target', () => {
-    // MAX raised to 200K — gpt-5.4 (1M) → min(200000, max(48000, 250000)) = 200000
-    expect(getWorkingContextWindow('gpt-5.4')).toBe(200000);
-    // gpt-5-mini (400K) → min(200000, max(48000, 100000)) = 100000
-    expect(getWorkingContextWindow('gpt-5-mini')).toBe(100000);
-    // claude-haiku-4-5 (200K) → min(200000, max(48000, 50000)) = 50000
-    expect(getWorkingContextWindow('claude-haiku-4-5')).toBe(50000);
-    // llama4 (256K) → min(200000, max(48000, 64000)) = 64000
-    expect(getWorkingContextWindow('llama4')).toBe(64000);
+  it('keeps most of a large context window available as working context', () => {
+    // Raw context first: the share is 0.75 and the absolute cap is 400K, so long runs
+    // reach lossy summarization only when the window is genuinely under pressure.
+    // gpt-5.4 (1M) → min(1M, 400000, max(48000, 750000)) = 400000
+    expect(getWorkingContextWindow('gpt-5.4')).toBe(400000);
+    // gpt-5-mini (400K) → min(400000, 400000, max(48000, 300000)) = 300000
+    expect(getWorkingContextWindow('gpt-5-mini')).toBe(300000);
+    // claude-haiku-4-5 (200K) → min(200000, 400000, max(48000, 150000)) = 150000
+    expect(getWorkingContextWindow('claude-haiku-4-5')).toBe(150000);
+    // llama4 (256K) → min(256000, 400000, max(48000, 192000)) = 192000
+    expect(getWorkingContextWindow('llama4')).toBe(192000);
+  });
+
+  it('caps an on-device runtime to a phone-sized window regardless of nominal size', () => {
+    // gemma3 advertises 128K, but a hosted-scale prompt would stall local inference.
+    expect(getWorkingContextWindow('gemma3', { onDeviceProvider: true })).toBe(8000);
+    // A model whose real window is already smaller than the cap keeps its own size.
+    expect(getWorkingContextWindow('phi4', { onDeviceProvider: true })).toBe(8000);
   });
 });
 
@@ -138,7 +147,8 @@ describe('getCompactionWorkingContextWindow', () => {
   });
 
   it('leaves smaller working windows unchanged', () => {
-    expect(getCompactionWorkingContextWindow('claude-haiku-4-5')).toBe(50000);
+    // Below the routine-compaction cap, the working window passes through untouched.
+    expect(getCompactionWorkingContextWindow('claude-haiku-4-5')).toBe(150000);
     expect(getCompactionWorkingContextWindow('phi4')).toBe(16384);
   });
 });

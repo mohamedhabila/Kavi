@@ -21,6 +21,9 @@ export interface AgentPersona {
 /** Canonical persona ID for the SuperAgent. Use this instead of hardcoded 'super-agent' strings. */
 export const SUPER_AGENT_PERSONA_ID = 'super-agent';
 
+/** Canonical persona ID for the general-purpose assistant used outside agentic mode. */
+export const DEFAULT_PERSONA_ID = 'default';
+
 // ── SuperAgent system prompt ─────────────────────────────────────────────
 // The orchestrator prompt that makes multi-agent decomposition the default.
 
@@ -58,11 +61,11 @@ export const SUPER_AGENT_PERSONA: AgentPersona = {
 export const BUILT_IN_PERSONAS: AgentPersona[] = [
   SUPER_AGENT_PERSONA,
   {
-    id: 'default',
+    id: DEFAULT_PERSONA_ID,
     name: 'Assistant',
     description: 'General-purpose helpful AI assistant (chitchat mode)',
     systemPrompt:
-      "You are a helpful personal AI assistant running on a mobile device. You have access to tools for files, canvas surfaces, web search, device features, and more. Use tools when they materially help accomplish the user's request. For normal Q&A, explanations, or summaries, answer directly instead of creating files or canvases. Reserve files and canvases for coding tasks, concrete artifacts, previews, persistence, or explicit export requests. Always provide a clear, concise final response.",
+      "You are a personal AI assistant running on the user's phone. Everyday work is your primary job: messages, calendar, reminders, contacts, places, web lookups, media, files, and device actions, alongside ordinary questions, writing, and analysis. Use a tool when the request needs live state or a real-world change; answer directly when it does not. Prefer the tool that acts on the request over a preparatory one. Never claim an action succeeded without a result that shows it did. Reserve files and canvases for concrete artifacts, previews, or an explicit export request. Finish with a clear, concise answer stating what you did or what is blocking.",
     icon: '🤖',
   },
   {
@@ -110,12 +113,26 @@ export function getPersona(id: string): AgentPersona | undefined {
   return BUILT_IN_PERSONAS.find((persona) => persona.id === id);
 }
 
+/**
+ * A persona owns the assistant's operating instructions; the user setting is an
+ * additive customization layer, not a replacement. `default` is resolved the same
+ * way as every other persona so that editing it in the agent roster actually takes
+ * effect. An empty or duplicated customization is dropped so a persona never ends
+ * up carrying two competing identity statements.
+ */
 export function resolvePersonaSystemPrompt(
   persona: AgentPersona | undefined,
   userSystemPrompt: string,
 ): string {
-  if (!persona || persona.id === 'default') return userSystemPrompt;
-  return persona.systemPrompt + (userSystemPrompt ? `\n\n${userSystemPrompt}` : '');
+  const customization = typeof userSystemPrompt === 'string' ? userSystemPrompt.trim() : '';
+  const personaPrompt = (
+    persona?.systemPrompt ??
+    BUILT_IN_PERSONAS.find((entry) => entry.id === DEFAULT_PERSONA_ID)?.systemPrompt ??
+    ''
+  ).trim();
+  if (!personaPrompt) return customization;
+  if (!customization || personaPrompt.includes(customization)) return personaPrompt;
+  return `${personaPrompt}\n\n${customization}`;
 }
 
 export function resolvePersonaModel(

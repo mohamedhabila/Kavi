@@ -1042,6 +1042,7 @@ export const en: TranslationMap = {
     compactionProvider: 'Context compaction provider',
     compactionProviderHint:
       'Optional cheaper model for tier-2/tier-3 compaction summaries. When Off, Kavi uses deterministic structural compaction.',
+    compactionSummarizerAuto: 'Automatic',
     compactionProviderOff: 'Off',
     compactionModelPlaceholder: 'Optional model override (e.g. gpt-5-mini)',
     consolidationTierConfigured: 'Dedicated provider: {name}',

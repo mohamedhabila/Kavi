@@ -23,6 +23,8 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
       'write_file',
       'sessions_spawn',
       'list_files',
+      'web_search',
+      'web_fetch',
       'tool_catalog',
       'tool_describe',
     ]);
@@ -43,6 +45,8 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
       'write_file',
       'sessions_spawn',
       'list_files',
+      'web_search',
+      'web_fetch',
       'tool_catalog',
       'tool_describe',
     ]);
@@ -88,7 +92,10 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const selectedToolNames = new Set(selected.map((tool) => tool.name));
     expect(selectedToolNames.has('tool_catalog')).toBe(true);
     expect(selectedToolNames.has('tool_describe')).toBe(true);
-    expect(selectedToolNames.has('web_search')).toBe(false);
+    // web_search is now part of the default everyday surface; discovery still gates
+    // everything outside it.
+    expect(selectedToolNames.has('web_search')).toBe(true);
+    expect(selectedToolNames.has('browser_navigate')).toBe(false);
   });
 
   it('keeps unrequested mobile domains behind the compact catalog surface', () => {
@@ -105,7 +112,8 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const names = new Set(selected.map((tool) => tool.name));
     expect(names.has('tool_catalog')).toBe(true);
     expect(names.has('tool_describe')).toBe(true);
-    expect(names.has('contacts_search')).toBe(false);
+    // Everyday read-only lookup is default; mutations and the long tail stay gated.
+    expect(names.has('contacts_search')).toBe(true);
     expect(names.has('sms_compose')).toBe(false);
     expect(names.has('contacts_get')).toBe(false);
   });
@@ -142,8 +150,10 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
         placement: tool.promptCache?.placement,
       })),
     ).toEqual([
+      // calendar_events is part of the default read-only core, so it now shares the
+      // stable cache prefix with the explicit pin instead of trailing it.
+      { name: 'calendar_events', placement: 'stable_prefix' },
       { name: 'calendar_list', placement: 'stable_prefix' },
-      { name: 'calendar_events', placement: 'dynamic_suffix' },
     ]);
   });
 
@@ -159,9 +169,14 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
       includeToolCatalog: true,
     });
 
+    // Chitchat stays closed over external *mutation*, but an everyday read-only
+    // lookup is exactly what this mode is used for and no longer costs a round-trip.
     expect(selected.map((tool) => tool.name)).toEqual([
       'memory_recall',
       'memory_remember',
+      'web_search',
+      'web_fetch',
+      'contacts_search',
       'tool_catalog',
       'tool_describe',
     ]);

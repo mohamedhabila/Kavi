@@ -57,6 +57,8 @@ export interface AgentControlGraphIterationRuntimeState {
   activeProvider: LlmProviderConfig;
   admittedMemoryContext: AdmittedSessionMemoryContext;
   consecutivePendingAsyncNoToolTurns: number;
+  /** Set once this run escalated out of chitchat; later iterations keep agentic authority. */
+  escalatedToAgentic?: boolean;
   lastPendingAsyncSignature: string;
   llm: LlmService;
   lastModelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
@@ -184,6 +186,12 @@ export interface ExecuteAgentControlGraphIterationParams {
   maxToolIterations: number;
   maxTokens: number;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
+  /** Persists the conversation's escalation out of chitchat so later turns start agentic. */
+  onConversationModeEscalated?: (params: {
+    conversationId: string;
+    reason: string;
+    blockedToolNames: ReadonlyArray<string>;
+  }) => void;
   onFinalizationHeld?: (params: {
     iteration: number;
     holdReason: string;

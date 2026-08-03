@@ -335,7 +335,11 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     emitPendingAsyncOperationsChange,
     failoverState,
     isSuperAgent,
-    allowLongHorizonIterationExtensions: isSuperAgent && params.maxToolIterations === undefined,
+    // Every persona-driven run without an explicit caller budget may earn bounded
+    // extensions. The extension itself still requires code-owned evidence of recent
+    // completed tool progress, and the repeat/stagnation detectors plus the hard
+    // ceiling remain in force, so this does not weaken loop protection.
+    allowLongHorizonIterationExtensions: params.maxToolIterations === undefined,
     lastPendingAsyncSignature,
     llm,
     maxToolIterations,

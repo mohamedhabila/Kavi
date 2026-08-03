@@ -1,6 +1,5 @@
 import type { Locale } from '../i18n/types';
-import { i18n } from '../i18n/manager';
-import type { AppSettings } from '../types/settings';
+import type { AppSettings, CompactionSummarizerMode } from '../types/settings';
 import type {
   BrowserProviderConfig,
   ExpoAccountConfig,
@@ -39,6 +38,7 @@ export interface SettingsDataState extends AppSettings {
   defaultConversationMode: ConversationMode;
   memoryConsolidationMode: MemoryConsolidationMode;
   consolidationProvider: string | null;
+  compactionSummarizer: CompactionSummarizerMode;
   compactionProvider: string | null;
   compactionModel: string | null;
   disableLongTermMemory: boolean;
@@ -88,6 +88,7 @@ export interface SettingsState extends SettingsDataState {
   setDefaultWorkspaceTargetId: (targetId: string | null) => void;
   setConsolidationProvider: (providerId: string | null) => void;
   setMemoryConsolidationMode: (mode: MemoryConsolidationMode, providerId?: string | null) => void;
+  setCompactionSummarizer: (mode: CompactionSummarizerMode) => void;
   setCompactionProvider: (providerId: string | null) => void;
   setCompactionModel: (model: string | null) => void;
   setDisableLongTermMemory: (disabled: boolean) => void;
@@ -106,7 +107,9 @@ export function createDefaultSettingsDataState(): SettingsDataState {
     activeProviderId: null,
     activeModel: null,
     theme: 'dark',
-    systemPrompt: i18n.t('settings.defaultSystemPrompt'),
+    // Empty means "no user customization": the active persona owns the operating
+    // instructions and this value is appended only when the user writes one.
+    systemPrompt: '',
     lastUsedModel: null,
     thinkingLevel: 'medium',
     locale: 'en',
@@ -118,6 +121,7 @@ export function createDefaultSettingsDataState(): SettingsDataState {
     defaultWorkspaceTargetId: null,
     consolidationProvider: null,
     memoryConsolidationMode: 'auto',
+    compactionSummarizer: 'auto',
     compactionProvider: null,
     compactionModel: null,
     disableLongTermMemory: false,

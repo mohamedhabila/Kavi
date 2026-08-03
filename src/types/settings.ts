@@ -16,6 +16,9 @@ import type {
   ExpoProjectConfig,
 } from './remote';
 
+/** How tier-2/tier-3 compaction summaries are produced. */
+export type CompactionSummarizerMode = 'auto' | 'off';
+
 export interface AppSettings {
   providers: LlmProviderConfig[];
   mcpServers: McpServerConfig[];
@@ -50,6 +53,8 @@ export interface AppSettings {
    * Optional provider for tier-2/tier-3 LLM compaction summaries.
    * When unset, compaction uses deterministic structural summaries.
    */
+  /** 'auto' lets compaction summaries be model-authored; 'off' forces the deterministic path. */
+  compactionSummarizer?: CompactionSummarizerMode;
   compactionProvider?: string | null;
   /** Optional cheaper model override on `compactionProvider`. */
   compactionModel?: string | null;

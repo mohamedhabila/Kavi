@@ -471,7 +471,7 @@ describe('enforceContextBudget', () => {
   });
 
   it('lets a protected task anchor borrow from message budget when the fixed prompt share is too small', () => {
-    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(720)}`;
+    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(2_400)}`;
     const prompt = `${'baseline '.repeat(2_000)}\n\n${protectedSection}\n\n${'goals '.repeat(500)}`;
     const fixedPromptBudget = computeContextBudget('qwen/qwen3.5-9b', 24_000).systemPromptBudget;
 
@@ -498,7 +498,7 @@ describe('enforceContextBudget', () => {
   });
 
   it('fails explicitly instead of truncating an anchor that cannot fit its prompt budget', () => {
-    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(3_000)}`;
+    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(4_000)}`;
     const prompt = `System instructions.\n\n${protectedSection}`;
 
     expect(() =>

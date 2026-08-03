@@ -9,6 +9,7 @@ import type { AgentControlTurnDirectives } from './agentControlGraph';
 import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
+import type { ConversationModeEscalation } from './conversation/modeEscalation';
 import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
 
 export type LivingMemorySection = {
@@ -31,6 +32,8 @@ export type PromptContextSupport = {
 };
 
 export type PreparedAgentControlGraphModelTurnReady = {
+  /** Reported when a chitchat turn reached for capability only agentic runs may use. */
+  modeEscalation: ConversationModeEscalation;
   effectiveForceTextThisTurn: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlTurnDirectives['forcedTextReason'];
   iterationThinkingLevel: ThinkingLevel;
@@ -54,6 +57,8 @@ export interface PrepareAgentControlGraphModelTurnParams {
   goals?: ReadonlyArray<AgentGoal>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   isSuperAgent: boolean;
+  /** True once this run escalated out of chitchat; keeps agentic authority for later iterations. */
+  escalatedToAgentic?: boolean;
   iteration: number;
   maxTokens: number;
   personaThinkingLevel?: ThinkingLevel;

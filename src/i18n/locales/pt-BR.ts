@@ -1040,6 +1040,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     compactionProvider: 'Provedor de compactação de contexto',
     compactionProviderHint:
       'Modelo opcional mais barato para resumos de compactação níveis 2/3. Desligado = compactação estrutural determinística.',
+    compactionSummarizerAuto: 'Automático',
     compactionProviderOff: 'Desligado',
     compactionModelPlaceholder: 'Modelo opcional (ex.: gpt-5-mini)',
     consolidationTierConfigured: 'Provedor dedicado: {name}',

@@ -2,7 +2,11 @@ import { recordBudgetAuditEntry } from '../../services/context/budgetAudit';
 import { enforceContextBudget, inspectContextBudget } from '../../services/context/budgetManager';
 import { compressToolDefinitions } from '../tools/toolManagerTokenBudget';
 import { buildToolSurfaceTokenAudit, type ToolSurfaceTokenAudit } from './toolSurfaceTokenAudit';
-import type { ContextEngine, ForcedCompactionTier } from '../../services/context/types';
+import type {
+  CompactionContext,
+  ContextEngine,
+  ForcedCompactionTier,
+} from '../../services/context/types';
 import { estimateTokens, getWorkingContextWindow } from '../../services/context/tokenCounter';
 import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { Message } from '../../types/message';
@@ -29,6 +33,10 @@ export interface PrepareAgentTurnRequestBudgetParams {
   iteration?: number;
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
+  /** True when the turn runs on an on-device runtime, which needs a phone-sized window. */
+  onDeviceProvider?: boolean;
+  /** Pending-work state forwarded to the context engine so summaries stay actionable. */
+  compactionContext?: CompactionContext;
   pinnedToolNames?: ReadonlyArray<string>;
   sessionPinnedCount?: number;
   turnPinnedCount?: number;
@@ -56,6 +64,7 @@ export interface CompactAgentTurnWorkingMessagesParams {
   tokenBudget?: number;
   forceTier?: ForcedCompactionTier;
   failureLabel: string;
+  compactionContext?: CompactionContext;
   warn: (message: string, error: unknown) => void;
 }
 
@@ -89,6 +98,7 @@ export async function compactAgentTurnWorkingMessages(
       ...(params.currentTokenCount != null ? { currentTokenCount: params.currentTokenCount } : {}),
       ...(params.tokenBudget != null ? { tokenBudget: params.tokenBudget } : {}),
       ...(params.forceTier ? { forceTier: params.forceTier } : {}),
+      ...(params.compactionContext ? { compactionContext: params.compactionContext } : {}),
     });
     if (!compactResult.compacted || !compactResult.result) {
       return { messages: params.currentMessages, compacted: false };
@@ -106,6 +116,7 @@ export async function compactAgentTurnWorkingMessages(
 async function previewRequestBudget(params: {
   enrichedSystemPrompt: string;
   candidateMessages: Message[];
+  onDeviceProvider?: boolean;
   requestMaxTokens: number;
   requestModel: string;
   toolsForIteration: ToolDefinition[];
@@ -127,6 +138,7 @@ async function previewRequestBudget(params: {
       params.toolsForIteration,
       nonSystemCandidateApiMessages,
       params.requestMaxTokens,
+      { onDeviceProvider: params.onDeviceProvider === true },
     ),
   };
 }
@@ -203,7 +215,15 @@ function buildUsageTokenBuckets(params: {
 export async function prepareAgentTurnRequestBudget(
   params: PrepareAgentTurnRequestBudgetParams,
 ): Promise<PreparedAgentTurnRequestBudget> {
-  const contextWindow = getWorkingContextWindow(params.requestModel);
+  const workingContextOptions = { onDeviceProvider: params.onDeviceProvider === true };
+  const compactionContext: CompactionContext | undefined = params.compactionContext
+    ? {
+        ...params.compactionContext,
+        requestModel: params.requestModel,
+        onDeviceProvider: params.onDeviceProvider === true,
+      }
+    : { requestModel: params.requestModel, onDeviceProvider: params.onDeviceProvider === true };
+  const contextWindow = getWorkingContextWindow(params.requestModel, workingContextOptions);
   let workingMessages = repairModelVisibleToolResultTranscript(params.workingMessages);
   const toolsForIteration = [...(params.toolsForIteration ?? [])];
   const currentGoalsPromptSection = extractGoalsPromptSection(params.enrichedSystemPromptSections);
@@ -216,6 +236,7 @@ export async function prepareAgentTurnRequestBudget(
   let budgetPreview = await previewRequestBudget({
     enrichedSystemPrompt: params.enrichedSystemPrompt,
     candidateMessages: modelVisibleMessages,
+    onDeviceProvider: params.onDeviceProvider === true,
     requestMaxTokens: params.requestMaxTokens,
     requestModel: params.requestModel,
     toolsForIteration,
@@ -238,6 +259,7 @@ export async function prepareAgentTurnRequestBudget(
         currentTokenCount: estimateWorkingMessageTokens(workingMessages),
         forceTier,
         failureLabel: 'Pre-flight compaction failed, continuing without compaction',
+        ...(compactionContext ? { compactionContext } : {}),
         warn: params.warn,
       });
       if (!budgetCompaction.compacted) {
@@ -250,6 +272,7 @@ export async function prepareAgentTurnRequestBudget(
       budgetPreview = await previewRequestBudget({
         enrichedSystemPrompt: params.enrichedSystemPrompt,
         candidateMessages: modelVisibleMessages,
+        onDeviceProvider: params.onDeviceProvider === true,
         requestMaxTokens: params.requestMaxTokens,
         requestModel: params.requestModel,
         toolsForIteration,
@@ -267,6 +290,7 @@ export async function prepareAgentTurnRequestBudget(
     const placeholderCompactionPreview = await previewRequestBudget({
       enrichedSystemPrompt: params.enrichedSystemPrompt,
       candidateMessages: placeholderCompactedModelVisibleMessages,
+      onDeviceProvider: params.onDeviceProvider === true,
       requestMaxTokens: params.requestMaxTokens,
       requestModel: params.requestModel,
       toolsForIteration,
@@ -294,6 +318,7 @@ export async function prepareAgentTurnRequestBudget(
     budgetPreview.nonSystemApiMessages,
     params.requestMaxTokens,
     {
+      ...workingContextOptions,
       pinnedToolNames,
       protectedSystemPromptSection: workflowTaskAnchorPromptSection,
     },

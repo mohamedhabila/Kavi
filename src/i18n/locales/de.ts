@@ -1050,6 +1050,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     compactionProvider: 'Anbieter für Kontextverdichtung',
     compactionProviderHint:
       'Optional günstigeres Modell für Stufe-2/3-Zusammenfassungen. Aus = deterministische strukturelle Verdichtung.',
+    compactionSummarizerAuto: 'Automatisch',
     compactionProviderOff: 'Aus',
     compactionModelPlaceholder: 'Optionales Modell (z. B. gpt-5-mini)',
     consolidationTierConfigured: 'Dedizierter Anbieter: {name}',

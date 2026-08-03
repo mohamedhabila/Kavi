@@ -2,6 +2,7 @@ import { LlmService } from '../../services/llm/LlmService';
 import { bindProviderToModel } from '../../services/llm/support/providerSupport';
 import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../types/message';
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
+import { buildCompactionOpenThreads } from './compactionContext';
 import { getFailureCount, getNextAvailableModel, recordFailure, recordSuccess } from '../failover';
 import { hydrateProviderApiKey, shouldFailoverOnError } from '../orchestratorProviderRuntime';
 import { isAbortErrorLike } from '../../services/agents/agentRunCancellation';
@@ -119,6 +120,12 @@ export async function executePreparedAgentControlGraphTurn(params: {
         onToolCallQueued: iterationParams.callbacks.onToolCallQueued,
       },
       compactionEngine: iterationParams.compactionEngine,
+      compactionContext: {
+        openThreads: buildCompactionOpenThreads({
+          goals: iterationParams.graph.getGraphSnapshot().goals ?? [],
+          trackedAsyncOperations: iterationParams.trackedAsyncOperations,
+        }),
+      },
       conversationId: iterationParams.conversationId,
       effectiveForceTextReasonThisTurn:
         params.modelTurnPreparation.effectiveForceTextReasonThisTurn,

@@ -120,6 +120,8 @@ export const SettingsScreen: React.FC = () => {
   const consolidationProviderId = useSettingsStore((s) => s.consolidationProvider ?? null);
   const memoryConsolidationMode = useSettingsStore((s) => s.memoryConsolidationMode ?? 'auto');
   const setMemoryConsolidationMode = useSettingsStore((s) => s.setMemoryConsolidationMode);
+  const compactionSummarizer = useSettingsStore((s) => s.compactionSummarizer ?? 'auto');
+  const setCompactionSummarizer = useSettingsStore((s) => s.setCompactionSummarizer);
   const compactionProviderId = useSettingsStore((s) => s.compactionProvider ?? null);
   const compactionModel = useSettingsStore((s) => s.compactionModel ?? null);
   const setCompactionProvider = useSettingsStore((s) => s.setCompactionProvider);
@@ -564,6 +566,8 @@ export const SettingsScreen: React.FC = () => {
                 compactionModel={compactionModel}
                 setDisableLongTermMemory={setDisableLongTermMemory}
                 setMemoryConsolidationMode={setMemoryConsolidationMode}
+                compactionSummarizer={compactionSummarizer}
+                setCompactionSummarizer={setCompactionSummarizer}
                 setCompactionProvider={setCompactionProvider}
                 setCompactionModel={setCompactionModel}
                 consolidationStatus={consolidationStatus}

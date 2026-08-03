@@ -87,7 +87,10 @@ describe('Orchestrator', () => {
       expect(requestMessages[0].content).toContain(
         "Safety: no independent goals beyond the user's request.",
       );
-      expect(requestMessages[0].content.length).toBeLessThan(5000);
+      // The ceiling covers the code-owned capability index (~850 chars). It sits in the
+      // cacheable prefix and exists so a direct answer cannot claim a device capability
+      // is unavailable without checking. Orchestration sections stay excluded above.
+      expect(requestMessages[0].content.length).toBeLessThan(6000);
       const recoveryMessages = mockStreamMessage.mock.calls[1][0] as Array<{
         role: string;
         content: string;

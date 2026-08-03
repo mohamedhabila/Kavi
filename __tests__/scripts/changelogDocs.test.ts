@@ -21,9 +21,18 @@ describe('public changelog', () => {
   });
 
   it('uses the expected public release-note sections', () => {
-    const sectionHeadings = Array.from(changelog.matchAll(/^### (.+)$/gm), (match) => match[1]);
+    // Sections are asserted per release. An [Unreleased] block is allowed to carry
+    // pending notes, but a tagged release keeps the exact public section set so a
+    // published changelog cannot drift into ad-hoc headings.
+    const releaseBody = changelog.slice(changelog.search(/^## \[[^\]]+\] - \d{4}-\d{2}-\d{2}$/m));
+    const releaseSections = Array.from(releaseBody.matchAll(/^### (.+)$/gm), (match) => match[1]);
 
-    expect(sectionHeadings).toEqual(['Added', 'Changed', 'Security', 'Tests']);
+    expect(releaseSections).toEqual(['Added', 'Changed', 'Security', 'Tests']);
+
+    const unreleasedBody = changelog.slice(0, changelog.search(/^## \[[^\]]+\] - \d{4}-\d{2}-\d{2}$/m));
+    for (const heading of Array.from(unreleasedBody.matchAll(/^### (.+)$/gm), (m) => m[1])) {
+      expect(['Added', 'Changed', 'Fixed', 'Removed', 'Security', 'Tests']).toContain(heading);
+    }
   });
 
   it('summarizes contributor-visible capability and maintenance areas', () => {

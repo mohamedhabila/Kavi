@@ -13,6 +13,7 @@ import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphForcedTextReason } from './forcedTextTurn';
 import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
+import type { CompactionContext } from '../../services/context/types';
 import type { ThinkingLevel } from '../thinking';
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 
@@ -36,6 +37,8 @@ export interface ExecuteAgentControlGraphModelTurnParams {
   applyGraphEvents: (events: AgentControlGraphEvent[]) => void;
   callbacks: AgentModelTurnCallbacks;
   compactionEngine: AgentTurnCompactionEngine;
+  /** Code-owned pending-work state so compaction summaries stay actionable. */
+  compactionContext?: CompactionContext;
   conversationId: string;
   effectiveForceTextReasonThisTurn?: AgentControlGraphForcedTextReason;
   hasPendingAsyncOperations: boolean;

@@ -22,6 +22,7 @@ import {
 } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
 import { EXECUTION_JOURNAL_BUSY_TIMEOUT_MS } from '../../src/services/executionJournal/schema';
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
+import { setDurableMemoryPolicyEnabled } from '../../src/services/memory/memoryAuthority';
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
@@ -79,6 +80,12 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   useSettingsStore.setState({ disableLongTermMemory: false });
   initializeMemoryPolicyObservation();
+  // Establish the durable policy explicitly rather than relying on a fresh schema
+  // defaulting to enabled. Both `isDurableMemoryPolicyEnabled` and
+  // `captureMemoryAuthoritySnapshot` swallow database errors and report "disabled",
+  // so an unavailable database used to surface here as seven confusing assertion
+  // failures in the fence helper instead of a real cause.
+  setDurableMemoryPolicyEnabled(true);
   mockInvalidateVerifiedProcedureObservationsForExecutionRun.mockReturnValue({
     status: 'invalidated',
     deletedCount: 0,

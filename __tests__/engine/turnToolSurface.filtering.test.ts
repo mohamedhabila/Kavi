@@ -39,7 +39,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const unscopedToolNames = new Set(unscoped.map((tool) => tool.name));
     const scopedToolNames = new Set(scoped.map((tool) => tool.name));
     expect(unscopedToolNames.has('python')).toBe(false);
-    expect(unscopedToolNames.has('web_search')).toBe(false);
+    // web_search is default everyday surface now; code execution still requires a
+    // resource-scoped graph capability, which is what this test guards.
+    expect(unscopedToolNames.has('web_search')).toBe(true);
     expect(scopedToolNames.has('python')).toBe(true);
   });
 

@@ -1052,6 +1052,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
     compactionProvider: 'Fournisseur de compaction du contexte',
     compactionProviderHint:
       'Modèle optionnel moins cher pour les résumés de compaction niveaux 2/3. Désactivé = compaction structurelle déterministe.',
+    compactionSummarizerAuto: 'Automatique',
     compactionProviderOff: 'Désactivé',
     compactionModelPlaceholder: 'Modèle optionnel (ex. gpt-5-mini)',
     consolidationTierConfigured: 'Fournisseur dédié : {name}',

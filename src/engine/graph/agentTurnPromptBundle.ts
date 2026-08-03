@@ -1,4 +1,6 @@
 import type { ToolDefinition } from '../../types/tool';
+import { buildCapabilityIndexPromptSection } from '../prompts/capabilityIndex';
+import { normalizeToolName } from '../tools/toolNameNormalization';
 import {
   appendSystemPromptSection,
   buildSystemPromptSections,
@@ -19,6 +21,8 @@ type LivingMemorySection = {
 };
 
 export interface AgentTurnPromptBundleParams {
+  /** Full tool registry for this run, used to index capabilities not on the surface. */
+  allTools?: ReadonlyArray<ToolDefinition>;
   effectiveForceTextThisTurn: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlGraphForcedTextReason;
   goalsPromptSection?: string | null;
@@ -59,6 +63,18 @@ export function buildAgentTurnPromptBundle(
     params.workflowRuntimePrompt ?? '',
     params.toolingEnabledForProvider,
     textOnlyPrompt,
+  );
+  appendSystemPromptSection(
+    baseSystemPromptSections,
+    params.toolingEnabledForProvider && !textOnlyPrompt && params.allTools?.length
+      ? buildCapabilityIndexPromptSection({
+          allTools: params.allTools,
+          selectedToolNames: new Set(
+            params.selectedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
+          ),
+        })
+      : '',
+    { cacheable: true, purpose: 'capability_index' },
   );
   appendSystemPromptSection(baseSystemPromptSections, params.runtimePolicyPrompt, {
     purpose: 'memory_policy',

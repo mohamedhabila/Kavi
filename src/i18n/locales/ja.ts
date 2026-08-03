@@ -1028,6 +1028,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     compactionProvider: 'コンテキスト圧縮プロバイダー',
     compactionProviderHint:
       'ティア2/3圧縮要約用の低コストモデル（任意）。オフの場合は決定論的な構造圧縮を使用します。',
+    compactionSummarizerAuto: '自動',
     compactionProviderOff: 'オフ',
     compactionModelPlaceholder: 'モデル上書き（例: gpt-5-mini）',
     consolidationTierConfigured: '専用プロバイダー: {name}',

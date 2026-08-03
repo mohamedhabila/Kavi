@@ -21,6 +21,7 @@ import {
   estimateTokens,
   estimateMessageTokens,
   getWorkingContextWindow,
+  type WorkingContextWindowOptions,
 } from './tokenCounter';
 import {
   compressToolDefinitions,
@@ -107,8 +108,13 @@ export const TOOL_DEFINITIONS_SHARE = 0.15;
 /** Minimum tokens to reserve for output completion */
 export const MIN_OUTPUT_RESERVE = 4096;
 
-/** Absolute max for system prompt (tokens) to prevent runaway */
-export const MAX_SYSTEM_PROMPT_TOKENS = 8192;
+/**
+ * Absolute max for system prompt (tokens) to prevent runaway. Calibrated against the
+ * working context window: the system prompt now carries the capability index, goals,
+ * living memory, skills, and the protected task anchor, and an 8k cap sat so close to
+ * the 10% share that a protected anchor had no room left to borrow.
+ */
+export const MAX_SYSTEM_PROMPT_TOKENS = 16384;
 
 /**
  * Minimum budget retained for code-owned instructions around an immutable task
@@ -161,7 +167,7 @@ export interface AdjustedPayload {
   result: BudgetCheckResult;
 }
 
-export interface ContextBudgetEnforcementOptions {
+export interface ContextBudgetEnforcementOptions extends WorkingContextWindowOptions {
   pinnedToolNames?: Iterable<string>;
   protectedSystemPromptSection?: string;
 }
@@ -195,8 +201,9 @@ function serializeBudgetMessageContent(message: {
 export function computeContextBudget(
   model: string,
   maxTokens: number = resolveModelOutputTokenBudget(model),
+  options?: WorkingContextWindowOptions,
 ): ContextBudget {
-  const contextWindow = getWorkingContextWindow(model);
+  const contextWindow = getWorkingContextWindow(model, options);
   const outputReserve = Math.max(MIN_OUTPUT_RESERVE, maxTokens);
 
   const available = contextWindow - outputReserve;
@@ -225,8 +232,9 @@ export function inspectContextBudget(
   tools: ToolDefinition[],
   messages: Array<{ role: string; content: string | any[]; [key: string]: any }>,
   maxTokens: number = resolveModelOutputTokenBudget(model),
+  options?: WorkingContextWindowOptions,
 ): ContextBudgetPressure {
-  const budget = computeContextBudget(model, maxTokens);
+  const budget = computeContextBudget(model, maxTokens, options);
   const normalizedMessages = removeOrphanedToolResults(messages);
   const systemPromptTokens = estimateTokens(systemPrompt);
   const toolsTokens = estimateAllToolTokens(tools);
@@ -474,7 +482,7 @@ export function enforceContextBudget(
   maxTokens: number = resolveModelOutputTokenBudget(model),
   options?: ContextBudgetEnforcementOptions,
 ): AdjustedPayload {
-  const budget = computeContextBudget(model, maxTokens);
+  const budget = computeContextBudget(model, maxTokens, options);
   const adjustments: string[] = [];
 
   const pinnedToolNames = new Set(Array.from(options?.pinnedToolNames ?? []).filter(Boolean));

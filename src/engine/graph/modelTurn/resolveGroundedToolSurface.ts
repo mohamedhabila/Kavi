@@ -10,6 +10,10 @@ import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOper
 import { extractDiscoveryActivatedToolNames } from '../discoveryToolActivation';
 import { resolveDefaultGroundedRequestScopedTools } from '../turnToolSurface';
 import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
+import {
+  detectChitchatModeEscalation,
+  type ConversationModeEscalation,
+} from '../conversation/modeEscalation';
 
 export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
@@ -22,6 +26,8 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   workingMessages: ReadonlyArray<Message>;
 }): Promise<{
   allowSessionCoordinationTools: boolean;
+  /** Set when a chitchat turn reached for a capability only an agentic run may use. */
+  modeEscalation: ConversationModeEscalation;
   groundedRequestScopedTools: ToolDefinition[];
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   pinnedToolNames: string[];
@@ -87,6 +93,14 @@ export async function resolveModelTurnGroundedToolSurface(params: {
 
   return {
     allowSessionCoordinationTools: turnContract.allowSessionCoordinationTools,
+    modeEscalation: detectChitchatModeEscalation({
+      conversationMode: params.conversationMode,
+      allTools: policyAuthorizedTools,
+      activatedCatalogToolNames: new Set([
+        ...turnActivatedCatalogToolNames,
+        ...sessionActivatedToolNames,
+      ]),
+    }),
     groundedRequestScopedTools,
     pendingAsyncMonitorToolNames,
     pinnedToolNames,
