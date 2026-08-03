@@ -144,7 +144,10 @@ function collectAppMetadata(projectRoot = path.resolve(__dirname, '../..')) {
       version: tsStringExport(appMetadataSource, 'APP_VERSION'),
     },
     changelog: {
-      latestVersion: matchString(changelog, /^## \[([^\]]+)\]/m),
+      // Version parity is asserted against the latest *tagged* release. A leading
+      // [Unreleased] block carries pending notes between releases and is skipped
+      // so app version parity does not depend on unreleased entries.
+      latestVersion: matchString(changelog, /^## \[([^\]]+)\] - \d{4}-\d{2}-\d{2}$/m),
     },
   };
 }

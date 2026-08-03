@@ -116,7 +116,14 @@ function createMetadataFixture(overrides: Record<string, string> = {}): string {
       '\n',
     ),
   );
-  writeFixture(projectRoot, 'CHANGELOG.md', `# Changelog\n\n## [${version}] - 2026-06-18\n`);
+  const unreleasedBlock = overrides.changelogUnreleased
+    ? `## [Unreleased]\n\n### Changed\n\n- ${overrides.changelogUnreleased}\n\n`
+    : '';
+  writeFixture(
+    projectRoot,
+    'CHANGELOG.md',
+    `# Changelog\n\n${unreleasedBlock}## [${version}] - 2026-06-18\n`,
+  );
 
   return projectRoot;
 }
@@ -166,6 +173,15 @@ describe('app metadata checks', () => {
   it('passes when public package, Expo, native, and runtime metadata are aligned', () => {
     const metadata = collectAppMetadata(createMetadataFixture());
 
+    expect(findAppMetadataFailures(metadata)).toEqual([]);
+  });
+
+  it('keeps version parity when the changelog carries a pending [Unreleased] block', () => {
+    const metadata = collectAppMetadata(
+      createMetadataFixture({ changelogUnreleased: 'pending note' }),
+    );
+
+    expect(metadata.changelog.latestVersion).toBe('1.0.0');
     expect(findAppMetadataFailures(metadata)).toEqual([]);
   });
 
