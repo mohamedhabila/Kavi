@@ -132,3 +132,60 @@ describe('stagnant progress loop recovery', () => {
     expect(decision.type).toBe('block');
   });
 });
+
+describe('goal mutation stall loop recovery', () => {
+  const mutationStall = {
+    loopDetected: true,
+    level: 'critical',
+    type: 'goal_mutation_stall',
+    details: 'CRITICAL: 3 consecutive update_goals iterations without goal progress.',
+  } as LoopDetectionResult;
+
+  function mutationWarning(historyTool: string, result?: string): string {
+    const decision = buildAgentControlGraphLoopRecoveryDecision({
+      loopCheck: { ...mutationStall, level: 'warning' } as LoopDetectionResult,
+      warningAlreadyInjected: false,
+      iteration: 12,
+      maxIterations: 40,
+      goals: [goal()],
+      toolCallHistory: Array.from({ length: 3 }, (_, index) => ({
+        name: historyTool,
+        arguments: '{}',
+        status: 'completed' as const,
+        timestamp: index,
+        ...(result ? { result } : {}),
+      })),
+    });
+    if (decision.type !== 'warning') throw new Error(`expected warning, got ${decision.type}`);
+    return decision.warningMessage;
+  }
+
+  it('does not teach update_goals schemas while the model loops on update_goals', () => {
+    const message = mutationWarning('update_goals');
+
+    expect(message).not.toContain('"action":"add"');
+    expect(message).not.toContain('"action":"activate|complete|block|remove|update"');
+  });
+
+  it('prohibits the repeated tool and names the evidence action instead', () => {
+    const message = mutationWarning('update_goals');
+
+    expect(message).toContain('Do not call update_goals again this turn');
+    expect(message).toContain('write europe-transport-brief.md with write_file');
+    expect(message).toContain('Goal bookkeeping does not record evidence');
+  });
+
+  it('states that goal state is not the blocker when arguments were accepted', () => {
+    expect(mutationWarning('update_goals')).toContain('the goal state is not the blocker');
+  });
+
+  it('still supplies schemas when a call was actually malformed', () => {
+    const message = mutationWarning(
+      'update_goals',
+      JSON.stringify({ status: 'error', structuredErrors: [{ code: 'missing_title' }] }),
+    );
+
+    expect(message).toContain('"action":"add"');
+    expect(message).toContain('then switch to non-goal tools');
+  });
+});

@@ -125,18 +125,34 @@ function buildLoopRecoveryHint(
   }
 
   if (loopType === 'goal_mutation_stall') {
-    const validationHint =
-      validationCodes.length > 0 ? `Last validation codes: ${validationCodes.join(', ')}.` : '';
+    // The schema guidance below teaches the model how to call update_goals, which is
+    // the wrong response when update_goals is the tool being repeated: it steers
+    // straight back into the loop. Schemas are only useful when a call was actually
+    // malformed, so they are gated on validation codes. Otherwise the mutation was
+    // well-formed and rejected on substance, and the model needs the missing
+    // evidence recorded instead.
+    const malformedCall = validationCodes.length > 0;
+    if (!malformedCall) {
+      const stalledToolHint = stalledToolName
+        ? ` Do not call ${stalledToolName} again this turn.`
+        : '';
+      const evidenceActions = buildCriterionSatisfactionActions(
+        goals.filter((goal) => isBlockingGoal(goal) && goal.status === 'active'),
+      );
+      const evidenceHint =
+        evidenceActions.length > 0
+          ? ` Record the missing goal evidence instead: ${evidenceActions.join('; ')}.`
+          : ' Produce the deliverable with a non-goal tool instead of restating goal state.';
+      return `Goal mutations did not advance and the arguments were accepted, so the goal state is not the blocker.${stalledToolHint}${evidenceHint} Goal bookkeeping does not record evidence.`;
+    }
+
     return [
-      'Goal mutations did not advance.',
+      `Goal mutations did not advance. Last validation codes: ${validationCodes.join(', ')}.`,
       'For new goals, call update_goals with {"action":"add","id":"stable-id","name":"visible name","completionPolicy":"blocking|persistent","status":"active|pending"}.',
       'For existing goals, call update_goals with {"action":"activate|complete|block|remove|update","id":"existing-id"}; name is optional.',
       'For workspace-file deliverables use evidence.artifact:<exact-workspace-relative-path>, never evidence.prefix:artifact. evidence.min and evidence.count cannot be the only blocking criteria.',
-      validationHint,
-      'Avoid completing goals without evidence, or switch to non-goal tools.',
-    ]
-      .filter(Boolean)
-      .join(' ');
+      'Correct the arguments once, then switch to non-goal tools.',
+    ].join(' ');
   }
 
   return 'Do not repeat the same tool call with the same input. Reuse the result you already have or take a different next step.';
