@@ -86,6 +86,74 @@ export function isCountOnlySuccessCriterion(criterion: string): boolean {
   return EVIDENCE_MIN_PATTERN.test(criterion) || EVIDENCE_COUNT_PATTERN.test(criterion);
 }
 
+/**
+ * Renders the concrete action that records evidence for an unmet criterion.
+ *
+ * Loop-recovery and completion-hold prompts are read by the model, so naming the
+ * criterion alone leaves it guessing which action closes the gap — and guessing is
+ * what produces repeated goal bookkeeping instead of progress. Only actions backed
+ * by default core tools are named, so a hint never points at an unavailable tool.
+ *
+ * Returns null for criteria that no single action satisfies (bare counts), where a
+ * specific instruction would be misleading.
+ */
+export function describeCriterionSatisfactionAction(criterion: string): string | null {
+  const trimmed = criterion.trim();
+  if (!trimmed || isCountOnlySuccessCriterion(trimmed)) {
+    return null;
+  }
+
+  const toolMatch = trimmed.match(EVIDENCE_TOOL_PATTERN);
+  if (toolMatch) {
+    return `call ${toolMatch[1].trim()} and keep its result`;
+  }
+
+  const artifactMatch = trimmed.match(EVIDENCE_ARTIFACT_PATTERN);
+  if (artifactMatch) {
+    return `write ${artifactMatch[1].trim()} with write_file`;
+  }
+
+  const jsonFieldMatch = trimmed.match(EVIDENCE_JSON_FIELD_PATTERN);
+  if (jsonFieldMatch) {
+    return `write ${jsonFieldMatch[1].trim()} with write_file so it contains ${jsonFieldMatch[2].trim()}`;
+  }
+
+  const fileHashMatch = trimmed.match(EVIDENCE_FILE_HASH_PATTERN);
+  if (fileHashMatch) {
+    return `write ${fileHashMatch[1].trim()} with write_file`;
+  }
+
+  const exitCodeMatch = trimmed.match(EVIDENCE_EXIT_CODE_PATTERN);
+  if (exitCodeMatch) {
+    return `run the command until it exits ${exitCodeMatch[1]}`;
+  }
+
+  const prefixMatch = trimmed.match(EVIDENCE_PREFIX_PATTERN);
+  if (prefixMatch) {
+    return `produce a ${prefixMatch[1].trim()} result`;
+  }
+
+  return null;
+}
+
+/** Actionable directives for the unmet criteria of the supplied goals, deduped. */
+export function buildCriterionSatisfactionActions(
+  goals: ReadonlyArray<AgentGoal>,
+): string[] {
+  const actions: string[] = [];
+  const seen = new Set<string>();
+  for (const goal of goals) {
+    for (const criterion of goal.successCriteria ?? []) {
+      if (isSuccessCriterionMet(goal, criterion)) continue;
+      const action = describeCriterionSatisfactionAction(criterion);
+      if (!action || seen.has(action)) continue;
+      seen.add(action);
+      actions.push(action);
+    }
+  }
+  return actions;
+}
+
 export function resolveSuccessCriterionSurfaceHints(
   criterion: string,
 ): SuccessCriterionSurfaceHints {

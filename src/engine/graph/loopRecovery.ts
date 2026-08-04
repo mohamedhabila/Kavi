@@ -4,6 +4,7 @@ import type { LoopDetectionResult, ToolCallRecord } from '../loopDetection';
 import type { AgentControlGraphEvent } from './agentControlGraph';
 import type { AgentGoal } from '../../types/agentRun';
 import { isBlockingGoal } from '../goals/types';
+import { buildCriterionSatisfactionActions } from '../goals/completionEvidence';
 import { renderGoalFocusInline } from './goalFocusPrompt';
 import { extractRecentToolRepairHints } from './toolRepairHints';
 
@@ -53,11 +54,34 @@ export type AgentControlGraphLoopRecoveryDecision =
       details: string;
     };
 
+/** The tool the model repeated most in recent history, used to prohibit it by name. */
+function resolveStalledToolName(
+  history: ReadonlyArray<ToolCallRecord> | undefined,
+): string | undefined {
+  if (!history || history.length === 0) return undefined;
+  const counts = new Map<string, number>();
+  for (const record of history) {
+    const name = record.name?.trim();
+    if (!name) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  let stalledName: string | undefined;
+  let stalledCount = 0;
+  for (const [name, count] of counts) {
+    if (count > stalledCount) {
+      stalledName = name;
+      stalledCount = count;
+    }
+  }
+  return stalledCount > 1 ? stalledName : undefined;
+}
+
 function buildLoopRecoveryHint(
   loopType: LoopDetectionResult['type'],
   validationCodes: ReadonlyArray<string>,
   repairHints: ReadonlyArray<string>,
   goals: ReadonlyArray<AgentGoal>,
+  stalledToolName: string | undefined,
 ): string {
   const activeGoalFocus = renderGoalFocusInline(
     goals.filter((goal) => isBlockingGoal(goal) && goal.status === 'active'),
@@ -72,7 +96,20 @@ function buildLoopRecoveryHint(
   }
 
   if (loopType === 'stagnant_progress') {
-    return `Goal state did not advance.${goalFocusHint} Complete or update goals, or change tool selection before repeating the same tool pattern.`;
+    // The stalled tool must be prohibited by name. Advising "complete or update
+    // goals" here previously invited more update_goals calls, which is the exact
+    // pattern that trips this detector, so the recovery hint reinforced the loop.
+    const stalledToolHint = stalledToolName
+      ? ` Do not call ${stalledToolName} again this turn.`
+      : '';
+    const evidenceActions = buildCriterionSatisfactionActions(
+      goals.filter((goal) => isBlockingGoal(goal) && goal.status === 'active'),
+    );
+    const evidenceHint =
+      evidenceActions.length > 0
+        ? ` Record the missing goal evidence instead: ${evidenceActions.join('; ')}.`
+        : ' Take a concrete step toward the deliverable instead of restating goal state.';
+    return `Goal state did not advance.${goalFocusHint}${stalledToolHint}${evidenceHint} Goal bookkeeping does not record evidence.`;
   }
 
   if (loopType === 'discovery_stall') {
@@ -144,7 +181,13 @@ export function buildAgentControlGraphLoopRecoveryDecision(params: {
     : `[SYSTEM WARNING - Iteration ${params.iteration}/${params.maxIterations}]`;
   return {
     type: 'warning',
-    warningMessage: `${warningPrefix} ${params.loopCheck.details ?? 'Loop detected.'}\n\n${buildLoopRecoveryHint(params.loopCheck.type, validationCodes, repairHints, params.goals ?? [])}`,
+    warningMessage: `${warningPrefix} ${params.loopCheck.details ?? 'Loop detected.'}\n\n${buildLoopRecoveryHint(
+      params.loopCheck.type,
+      validationCodes,
+      repairHints,
+      params.goals ?? [],
+      resolveStalledToolName(params.toolCallHistory),
+    )}`,
     shouldResetWarningState: false,
     nextWarningState: true,
   };

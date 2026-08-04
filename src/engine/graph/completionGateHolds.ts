@@ -5,6 +5,7 @@ import {
   shouldResumeIncompleteFinalTextTurn,
 } from '../../services/llm/support/completionRecovery';
 import {
+  buildCriterionSatisfactionActions,
   buildMissingRequiredEvidenceLabels,
   evaluateGoalEvidenceGaps,
   evaluateRequiredEffectEvidenceGaps,
@@ -119,6 +120,12 @@ function buildGoalEvidenceHoldPrompt(
     lines.push(...renderGoalFocusLines(active));
   }
   lines.push(`Missing evidence criteria: ${missingLabels.join(', ')}.`);
+  // Naming the criterion alone leaves the model to infer which action records it,
+  // which surfaces as repeated goal bookkeeping rather than progress.
+  const evidenceActions = buildCriterionSatisfactionActions(active);
+  if (evidenceActions.length > 0) {
+    lines.push(`To record it: ${evidenceActions.join('; ')}.`);
+  }
   if (repairHints.length > 0) {
     lines.push(`Recent tool repair hints: ${repairHints.join('; ')}.`);
     lines.push(
