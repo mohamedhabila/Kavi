@@ -24,6 +24,7 @@ import {
   type GoalMutationValidationContext,
 } from './goalUserConstraintValidation';
 import { validateBlockingGoalUpdate } from './blockingGoalUpdateValidation';
+import { buildUnmetCompletionRequirementMessage } from './completionRefusalMessage';
 import { assessGoalInfeasibilityClaim } from './infeasibility';
 
 export type { GoalMutationValidationContext } from './goalUserConstraintValidation';
@@ -360,7 +361,7 @@ function validateGoalLifecycleTransition(
       errors.push({
         goalId: normalizedId,
         code: 'evidence_required',
-        message: 'Cannot complete a goal before structural evidence requirements are met.',
+        message: buildUnmetCompletionRequirementMessage(existing, extraEvidence),
       });
     }
   }
@@ -547,7 +548,7 @@ export function validateGoalMutation(
         errors.push({
           goalId: g.id,
           code: 'goal_not_found',
-          message: `Goal ID "${g.id}" does not exist.`,
+          message: `Goal ID "${g.id}" does not exist. Use action add to create it, or reference an existing goal ID from the current goal list.`,
         });
       }
     }
