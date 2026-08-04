@@ -12,9 +12,20 @@ export const E2E_READINESS_MIN_FAST_SUITE_SCENARIO_COUNT = 39;
 
 export const E2E_DEFAULT_MAX_TOKENS = 32_000;
 
-export const E2E_DEFAULT_SCENARIO_TIMEOUT_MS = 180_000;
+/**
+ * Floor for a scenario deadline. Must stay at or above {@link E2E_PER_USER_TURN_TIMEOUT_MS}
+ * so a single-turn scenario is never given less wall clock than the turn it contains.
+ */
+export const E2E_DEFAULT_SCENARIO_TIMEOUT_MS = 600_000;
 
-export const E2E_PER_USER_TURN_TIMEOUT_MS = 90_000;
+/**
+ * The product imposes no per-turn wall-clock cap: a foreground run keeps iterating
+ * until the graph terminates or the user stops it. This bound exists only so a wedged
+ * acceptance turn cannot hang a suite, so it must stay well above a realistic
+ * long-horizon turn. At 90s it was truncating multi-tool research turns that the app
+ * completes normally, which surfaced as scenario failures rather than product defects.
+ */
+export const E2E_PER_USER_TURN_TIMEOUT_MS = 300_000;
 
 export const E2E_DEFAULT_MEMORY_TIMEOUT_MS = 45_000;
 

@@ -48,6 +48,13 @@ describe('resolveE2EScenarioTimeoutMs', () => {
     expect(resolveE2EScenarioTimeoutMs(scenario)).toBe(9 * E2E_PER_USER_TURN_TIMEOUT_MS);
   });
 
+  it('keeps the scenario floor at or above a single turn', () => {
+    // A single-turn scenario must never be given less wall clock than the turn it
+    // contains, otherwise the default stops being reachable.
+    expect(E2E_DEFAULT_SCENARIO_TIMEOUT_MS).toBeGreaterThanOrEqual(E2E_PER_USER_TURN_TIMEOUT_MS);
+    expect(E2E_MAX_SCENARIO_TIMEOUT_MS).toBeGreaterThanOrEqual(E2E_DEFAULT_SCENARIO_TIMEOUT_MS);
+  });
+
   it('caps very long scenarios at the maximum timeout', () => {
     const scenario = makeScenario({
       userTurns: Array.from({ length: 20 }, (_, index) => ({
@@ -105,7 +112,8 @@ describe('resolveE2EScenarioTimeoutMs', () => {
   it('caps configured timeouts at the maximum timeout', () => {
     expect(
       resolveE2EScenarioTimeoutMs(makeScenario(), {
-        [E2E_SCENARIO_TIMEOUT_MS_ENV]: '3000000',
+        // Derived so raising the turn/max thresholds cannot silently stop exercising the cap.
+        [E2E_SCENARIO_TIMEOUT_MS_ENV]: String(E2E_MAX_SCENARIO_TIMEOUT_MS + 1_000),
       } as NodeJS.ProcessEnv),
     ).toBe(E2E_MAX_SCENARIO_TIMEOUT_MS);
   });
