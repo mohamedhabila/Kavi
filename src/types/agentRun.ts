@@ -52,7 +52,14 @@ export type AgentRunTerminalReason =
   | 'user_cancelled'
   | 'missing_required_side_effect'
   | 'terminal_review_unavailable'
-  | 'route_blocked';
+  | 'route_blocked'
+  /**
+   * The run ended because a required goal was proven unreachable: every available
+   * path was tried and failed, and the agent reported that instead of stalling.
+   * Distinct from the breakdown reasons above — the turn concluded correctly even
+   * though the objective was not met, so it must not be counted as a malfunction.
+   */
+  | 'goal_infeasible';
 
 export type AgentRunPhaseKey = 'assess' | 'plan' | 'work' | 'review' | 'pilot' | 'deliver';
 

@@ -81,6 +81,7 @@ export const E2E_PUBLIC_TERMINAL_REASONS = completeEnum<AgentRunTerminalReason>(
   'missing_required_side_effect',
   'terminal_review_unavailable',
   'route_blocked',
+  'goal_infeasible',
 ]);
 
 export const E2E_PUBLIC_FINISH_REASONS = [

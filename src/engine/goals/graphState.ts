@@ -16,6 +16,7 @@ import {
 import {
   createGoal,
   getGoalById,
+  isBlockingGoal,
   normalizeGoalCompletionPolicy,
   normalizeGoals,
   resolveGoalCompletionPolicy,
@@ -345,6 +346,10 @@ export function applyGoalMutation(
                 ...existing,
                 status: 'blocked' as AgentGoalStatus,
                 ...(g.blockedReason?.trim() ? { blockedReason: g.blockedReason.trim() } : {}),
+                // Validation already admitted this block, which for a blocking goal
+                // means the exhaustion gate accepted it. Stamp that here, in code, so
+                // an earned abandonment stays distinguishable from a code-driven block.
+                ...(isBlockingGoal(existing) ? { abandonedAfterExhaustionAt: now } : {}),
                 updatedAt: now,
               }
             : existing,

@@ -45,6 +45,14 @@ export interface AgentGoal {
   userConstraintDeliveryPending?: true;
   completionPolicy?: AgentGoalCompletionPolicy;
   blockedReason?: string;
+  /**
+   * Code-owned stamp recording that this goal was abandoned through the
+   * exhaustion gate: every available path was tried and failed. Set only when a
+   * validated block mutation is applied, never from a model-supplied patch, so it
+   * distinguishes an earned abandonment from a code-driven block such as an
+   * unverified effect — which remains a genuine failure.
+   */
+  abandonedAfterExhaustionAt?: number;
 }
 
 export interface AgentGoalMutation {
@@ -198,6 +206,23 @@ export function hasResumableBlockingGoals(goals: ReadonlyArray<AgentGoal>): bool
 
 export function hasBlockedBlockingGoals(goals: ReadonlyArray<AgentGoal>): boolean {
   return goals.some((goal) => isBlockingGoal(goal) && goal.status === 'blocked');
+}
+
+/**
+ * True when the goal was abandoned through the exhaustion gate rather than blocked
+ * by a code-owned failure. An earned abandonment is a correct conclusion — the turn
+ * ended honestly — so it must not be reported as a malfunction.
+ */
+export function isAbandonedAfterExhaustionGoal(goal: AgentGoal): boolean {
+  return goal.status === 'blocked' && typeof goal.abandonedAfterExhaustionAt === 'number';
+}
+
+/** Blocking goals blocked by a code-owned failure rather than an earned abandonment. */
+export function hasUnearnedBlockedBlockingGoals(goals: ReadonlyArray<AgentGoal>): boolean {
+  return goals.some(
+    (goal) =>
+      isBlockingGoal(goal) && goal.status === 'blocked' && !isAbandonedAfterExhaustionGoal(goal),
+  );
 }
 
 export function hasIncompleteBlockingGoals(goals: ReadonlyArray<AgentGoal>): boolean {

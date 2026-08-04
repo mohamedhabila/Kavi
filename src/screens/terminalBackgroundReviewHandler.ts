@@ -15,7 +15,10 @@ import {
 } from '../engine/graph/foregroundRun/contracts';
 import { completeTerminalBackgroundReviewRun } from './terminalBackgroundCompletion';
 import type { RecordConversationTurnMemory } from '../services/memory/turnPublication';
-import { hasIncompleteBlockingGoals, hasResumableBlockingGoals } from '../engine/goals/types';
+import {
+  hasResumableBlockingGoals,
+  hasUnearnedBlockedBlockingGoals,
+} from '../engine/goals/types';
 import { canWriteLongTermMemory } from '../services/memory/policy';
 import { fingerprintForegroundTerminalMemorySource } from '../engine/graph/foregroundRun/terminalMemorySource';
 import {
@@ -179,8 +182,17 @@ export async function handleTerminalBackgroundReview(params: {
     return;
   }
 
+  // A goal abandoned through the exhaustion gate is an earned outcome: every
+  // available path was tried and failed, so the turn concluded honestly even though
+  // the objective was not met. Run status records whether the turn ended properly;
+  // the goal's own status records whether it was achieved. Goals blocked by a
+  // code-owned failure, such as an unverified effect, remain genuine failures.
   const status =
-    candidateStatus === 'completed' && !hasIncompleteBlockingGoals(goals) ? 'completed' : 'failed';
+    candidateStatus === 'completed' &&
+    !hasResumableBlockingGoals(goals) &&
+    !hasUnearnedBlockedBlockingGoals(goals)
+      ? 'completed'
+      : 'failed';
   const checkpointTitle =
     status === 'completed' ? 'Background workers finished' : 'Background worker review failed';
   const runMessageScope = buildAgentRunMessageScope(targetRun);
