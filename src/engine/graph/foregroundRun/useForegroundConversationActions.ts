@@ -1,8 +1,5 @@
-import { useCallback, useRef, type MutableRefObject } from 'react';
-import { SUPER_AGENT_PERSONA_ID } from '../../../services/agents/personas';
-import { importConversationWorkspaceAttachment } from '../../../services/conversationWorkspace/attachments';
+import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { createAgentRunIdentityKey } from '../../../services/agents/agentRunIdentity';
-import { getComposerDraftKey } from '../../../screens/chatComposerDrafts';
 import { waitForPersistedAgentRecoveryReadiness } from '../../../services/startupRecovery';
 import { retireConversationSourcesForRewind } from '../../../services/memory/conversationSourceRetirement';
 import { waitForModelProjectionAvailability } from '../../../store/modelProjectionOwnership';
@@ -10,7 +7,6 @@ import { beginModelProjectionIntent } from '../../../store/modelProjectionIntent
 import { useChatStore } from '../../../store/useChatStore';
 import type { Attachment } from '../../../types/attachment';
 import type { Conversation } from '../../../types/conversation';
-import type { Message } from '../../../types/message';
 import {
   rewindForegroundConversationRun,
   stopForegroundConversationRuns,
@@ -19,6 +15,10 @@ import {
   applyForegroundEditedResend,
   applyForegroundRetryResend,
 } from '../foregroundConversationReplay';
+import {
+  executeForegroundConversationSend,
+  type ForegroundConversationSendContext,
+} from './sendExecution';
 import type { EnsureAgentRunFinalResponse, RunChatOptions } from './contracts';
 import type {
   ForegroundConversationRunHelpers,
@@ -172,76 +172,25 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     [abortForegroundRequestForConversation, setChatError],
   );
 
-  const handleSend = useCallback(
-    async (text: string, attachments?: Attachment[], runOptions?: RunChatOptions) => {
-      setChatError(null);
-
-      let conversationId = getLiveActiveConversationId();
-      if (!conversationId) {
-        conversationId = ensureCanonicalConversation({
-          personaId: isAgenticMode ? SUPER_AGENT_PERSONA_ID : undefined,
-          mode: defaultConversationMode,
-          reportMissingProvider: true,
-        });
-        if (!conversationId) {
-          return;
-        }
-      }
-      if (!reserveConversationWrite(conversationId)) return;
-
-      let writeIntent: ReturnType<typeof beginModelProjectionIntent> | undefined;
-      try {
-        let preparedAttachments = attachments;
-        if (attachments?.length) {
-          try {
-            preparedAttachments = await Promise.all(
-              attachments.map(
-                async (attachment) =>
-                  (await importConversationWorkspaceAttachment(conversationId, attachment))
-                    .attachment,
-              ),
-            );
-          } catch (error) {
-            console.warn(
-              'Failed to import chat attachments into the conversation workspace.',
-              error,
-            );
-            setChatError(attachmentWorkspaceImportFailedMessage);
-            return;
-          }
-        }
-
-        if (
-          !(await waitForConversationWriteAvailability(
-            conversationId,
-            'Superseded by a new user turn.',
-          ))
-        ) {
-          return;
-        }
-
-        writeIntent = beginModelProjectionIntent(conversationId, 'conversation-write');
+  const sendContext = useMemo<ForegroundConversationSendContext>(
+    () => ({
+      addMessage,
+      attachmentWorkspaceImportFailedMessage,
+      clearComposerDraft,
+      defaultConversationMode,
+      ensureCanonicalConversation,
+      generateId,
+      getLiveActiveConversationId,
+      isAgenticMode,
+      markNextScrollForced: () => {
         forceNextScrollRef.current = true;
-        addMessage(conversationId, {
-          id: generateId(),
-          role: 'user',
-          content: text,
-          attachments: preparedAttachments,
-        } as Partial<Message> & Pick<Message, 'content' | 'id' | 'role'>);
-
-        clearComposerDraft(getComposerDraftKey(conversationId));
-        const execution = runOptions
-          ? runChat(conversationId, runOptions)
-          : runChat(conversationId);
-        writeIntent.release();
-        writeIntent = undefined;
-        releaseConversationWrite(conversationId);
-        await execution;
-      } finally {
-        writeIntent?.release();
-        releaseConversationWrite(conversationId);
-      }
-    },
+      },
+      releaseConversationWrite,
+      reserveConversationWrite,
+      runChat,
+      setChatError,
+      waitForConversationWriteAvailability,
+    }),
     [
       addMessage,
       attachmentWorkspaceImportFailedMessage,
@@ -258,6 +207,20 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       setChatError,
       waitForConversationWriteAvailability,
     ],
+  );
+  const sendContextRef = useRef(sendContext);
+  sendContextRef.current = sendContext;
+
+  const handleSend = useCallback(
+    async (text: string, attachments?: Attachment[], runOptions?: RunChatOptions) => {
+      await executeForegroundConversationSend({
+        attachments,
+        context: sendContextRef.current,
+        runOptions,
+        text,
+      });
+    },
+    [],
   );
 
   const handleStop = useCallback(() => {

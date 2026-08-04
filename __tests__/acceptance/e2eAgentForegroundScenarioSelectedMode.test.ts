@@ -208,11 +208,19 @@ describe('foreground scenario selected mode and outer deadline', () => {
     const providerUserMessage = mockedRunOrchestrator.mock.calls[0][0].messages.find(
       (message) => message.role === 'user',
     );
-    expect(providerUserMessage?.attachments).toEqual([attachment]);
+    // The chat entry point imports attachments into the conversation workspace before
+    // the turn runs, so the provider sees the workspace-backed copy rather than the
+    // raw composer attachment.
+    const importedAttachment = {
+      ...attachment,
+      uri: expect.stringContaining('attachments/images/'),
+      workspacePath: expect.stringContaining('attachments/images/'),
+    };
+    expect(providerUserMessage?.attachments).toEqual([importedAttachment]);
     expect(providerUserMessage?.attachments?.[0]).not.toBe(attachment);
     expect(
       result.turns[0].messages.find((message) => message.role === 'user')?.attachments,
-    ).toEqual([attachment]);
+    ).toEqual([importedAttachment]);
     expect(Object.isFrozen(result.turns[0].messages[0]?.attachments)).toBe(true);
     expect(attachment).toEqual(expect.objectContaining({ base64: 'AQIDBA==' }));
   });

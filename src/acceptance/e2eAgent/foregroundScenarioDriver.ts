@@ -1,4 +1,4 @@
-import { executeForegroundConversationRun } from '../../engine/graph/foregroundRun/execution';
+import { executeForegroundConversationSend } from '../../engine/graph/foregroundRun/sendExecution';
 import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
 import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
 import { cancelScheduledIngestionDrain } from '../../services/memory/ingestionQueue';
@@ -348,16 +348,6 @@ async function runScenarioIsolated(
       const usageBefore = before.usage;
       const memoryRecordStart = memoryRecords.length;
       const userMessageId = generateId();
-      useChatStore.getState().addMessage(currentConversationId, {
-        id: userMessageId,
-        role: 'user',
-        content: turn.content.trim(),
-        ...(turn.attachments?.length
-          ? { attachments: turn.attachments.map((attachment) => ({ ...attachment })) }
-          : {}),
-        timestamp: turn.timestamp,
-      });
-
       runtime.resetChatError();
       runtime.setActiveTurnMaxTokens(turn.maxTokens ?? input.maxTokens);
       let timedOut = false;
@@ -376,10 +366,22 @@ async function runScenarioIsolated(
         input.allowedToolNames,
         turn.allowedToolNames,
       );
-      const execution = executeForegroundConversationRun({
-        conversationId: currentConversationId,
-        context: runtime.context,
-        options: {
+      // Enter through the chat screen's composer path so the scenario exercises
+      // conversation resolution, write reservation, attachment import, and the
+      // user-message append exactly as the app does.
+      const execution = executeForegroundConversationSend({
+        text: turn.content.trim(),
+        ...(turn.attachments?.length
+          ? { attachments: turn.attachments.map((attachment) => ({ ...attachment })) }
+          : {}),
+        context: runtime.buildSendContext(currentConversationId, {
+          generateId: () => userMessageId,
+          addMessage: (conversationId, message) =>
+            useChatStore
+              .getState()
+              .addMessage(conversationId, { ...message, timestamp: turn.timestamp }),
+        }),
+        runOptions: {
           maxTokens: turn.maxTokens ?? input.maxTokens,
           disableTools: input.disableTools,
           ...(allowedToolNames ? { allowedToolNames } : {}),

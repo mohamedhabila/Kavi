@@ -7,6 +7,8 @@ import type {
 } from '../../engine/graph/foregroundRun/executionTypes';
 import type { ResumeAgentRun } from '../../engine/graph/foregroundRun/contracts';
 import { createForegroundRequestRegistry } from '../../engine/graph/foregroundRun/requestRegistry';
+import type { ForegroundConversationSendContext } from '../../engine/graph/foregroundRun/sendExecution';
+import { createForegroundScenarioSendContextFactory } from './foregroundScenarioSendContext';
 import { clearAgentRunCancellation } from '../../services/agents/agentRunCancellation';
 import { createAgentRunIdentityKey } from '../../services/agents/agentRunIdentity';
 import {
@@ -68,6 +70,14 @@ const MEMORY_JOB_MAX_POLL_MS = 500;
 export type ForegroundScenarioRequestRegistry = ReturnType<typeof createRequestRegistry>;
 
 export type ForegroundScenarioRuntime = {
+  /**
+   * Builds the composer send context for `executeForegroundConversationSend`, so
+   * scenario turns enter through the same path as the chat screen.
+   */
+  buildSendContext: (
+    activeConversationId: string,
+    overrides?: Partial<ForegroundConversationSendContext>,
+  ) => ForegroundConversationSendContext;
   context: ExecuteForegroundConversationRunParams['context'];
   getChatError: () => string | null;
   requests: ForegroundScenarioRequestRegistry;
@@ -637,7 +647,21 @@ export function createForegroundScenarioRuntime(
     streaming,
   };
 
+  // The scenario driver submits turns through the same composer entry point the chat
+  // screen uses, so acceptance runs exercise conversation resolution, write
+  // reservation, attachment import, and user-message append rather than
+  // re-implementing them.
+  const buildSendContext = createForegroundScenarioSendContextFactory({
+    abortForegroundRequestForConversation: requests.abortForegroundRequestForConversation,
+    context,
+    defaultMode: input.defaultMode,
+    setChatError: (message) => {
+      chatError = message;
+    },
+  });
+
   return {
+    buildSendContext,
     context,
     getChatError: () => chatError,
     requests,
