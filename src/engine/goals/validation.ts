@@ -24,6 +24,7 @@ import {
   type GoalMutationValidationContext,
 } from './goalUserConstraintValidation';
 import { validateBlockingGoalUpdate } from './blockingGoalUpdateValidation';
+import { assessGoalInfeasibilityClaim } from './infeasibility';
 
 export type { GoalMutationValidationContext } from './goalUserConstraintValidation';
 
@@ -226,6 +227,7 @@ function validateGoalBlockTransition(
   goalId: string | undefined,
   existingGoals: ReadonlyArray<AgentGoal>,
   errors: GoalValidationError[],
+  context: GoalMutationValidationContext,
 ): void {
   const normalizedId = goalId?.trim();
   if (!normalizedId) {
@@ -251,13 +253,34 @@ function validateGoalBlockTransition(
       existing.status === 'active' &&
       (existing.successCriteria?.length ?? 0) > 0 &&
       evaluateGoalEvidenceGaps([existing]).length === 0;
-    errors.push({
-      goalId: normalizedId,
-      code: evidenceSatisfied ? 'evidence_satisfied' : 'evidence_required',
-      message: evidenceSatisfied
-        ? 'Cannot block a goal whose structural evidence requirements are already satisfied.'
-        : 'Cannot block a blocking goal before structural evidence requirements are met. Continue execution or let the graph terminal blocker handle unrecoverable conditions.',
+    if (evidenceSatisfied) {
+      errors.push({
+        goalId: normalizedId,
+        code: 'evidence_satisfied',
+        message:
+          'Cannot block a goal whose structural evidence requirements are already satisfied. Complete it instead.',
+      });
+      return;
+    }
+
+    // Blocking a blocking goal was previously refused unconditionally, which left
+    // an agent that had genuinely run out of options with no sanctioned move: it
+    // could not finalize, complete, or abandon. The observable result was repeated
+    // update_goals calls until loop detection terminated the run as a hard failure.
+    // Abandonment is now reachable, but only once every available path has actually
+    // been tried; an unearned claim is refused with the concrete step that remains.
+    const assessment = assessGoalInfeasibilityClaim({
+      toolCallHistory: context.toolCallHistory ?? [],
+      capabilityToolNames: context.capabilityToolNames ?? [],
+      clarificationToolName: context.clarificationToolName,
     });
+    if (!assessment.accepted) {
+      errors.push({
+        goalId: normalizedId,
+        code: 'evidence_required',
+        message: assessment.message,
+      });
+    }
     return;
   }
 
@@ -504,7 +527,7 @@ export function validateGoalMutation(
     }
 
     if (mutation.action === 'block' && g.id?.trim()) {
-      validateGoalBlockTransition(g.id, existingGoals, errors);
+      validateGoalBlockTransition(g.id, existingGoals, errors, context);
     }
 
     if (mutation.action === 'add' && g.status === 'blocked') {
@@ -516,7 +539,7 @@ export function validateGoalMutation(
     }
 
     if (mutation.action === 'update' && g.status === 'blocked' && g.id?.trim()) {
-      validateGoalBlockTransition(g.id, existingGoals, errors);
+      validateGoalBlockTransition(g.id, existingGoals, errors, context);
     }
 
     if (mutation.action !== 'add' && g.id?.trim()) {

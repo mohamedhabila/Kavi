@@ -121,7 +121,8 @@ describe('goal system integration', () => {
       goals: [{ id: 'a', blockedReason: 'gate:a:evidence.prefix:write_file' }],
     });
     goals = blockResult.goals;
-    expect(blockResult.errors[0]).toContain('Cannot block a blocking goal');
+    // Unearned abandonment is refused: no alternatives were attempted.
+    expect(blockResult.errors[0]).toContain('cannot be declared infeasible');
     expect(goals.find((g) => g.id === 'a')?.status).toBe('active');
 
     const completeA = applyGoalMutation(goals, {

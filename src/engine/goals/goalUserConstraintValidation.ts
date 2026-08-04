@@ -5,8 +5,20 @@ import {
   MAX_AGENT_GOAL_USER_CONSTRAINTS,
 } from './userConstraints';
 
+import type { ToolCallRecord } from '../loopDetection';
+
 export interface GoalMutationValidationContext {
   currentUserMessage?: Readonly<{ id: string; text: string }>;
+  /**
+   * Recent tool calls for this run, used to assess whether an infeasibility claim
+   * is earned. Abandoning a blocking goal requires evidence of exhausted
+   * alternatives in the same way completing one requires evidence of work.
+   */
+  toolCallHistory?: ReadonlyArray<ToolCallRecord>;
+  /** Tools on the active surface able to serve the goal's declared capabilities. */
+  capabilityToolNames?: ReadonlyArray<string>;
+  /** Clarification tool name when the active surface exposes one. */
+  clarificationToolName?: string;
 }
 
 export type GoalUserConstraintValidationError = Readonly<{

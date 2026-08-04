@@ -503,7 +503,9 @@ describe('goal graph state', () => {
         { action: 'block', goals: [{ id: 'g1', blockedReason: 'gate:g1:evidence.min:1' }] },
         now,
       );
-      expect(errors[0]).toContain('Cannot block a blocking goal');
+      // Abandonment is gated on exhausted alternatives; with no attempts recorded
+      // the claim is unearned and the goal must stay active.
+      expect(errors[0]).toContain('cannot be declared infeasible');
       expect(goals[0].status).toBe('active');
     });
 
@@ -572,7 +574,9 @@ describe('goal graph state', () => {
         },
         now,
       );
-      expect(errors[0]).toContain('Cannot block a blocking goal');
+      // Abandonment is gated on exhausted alternatives; with no attempts recorded
+      // the claim is unearned and the goal must stay active.
+      expect(errors[0]).toContain('cannot be declared infeasible');
       expect(goals[0].status).toBe('active');
     });
 

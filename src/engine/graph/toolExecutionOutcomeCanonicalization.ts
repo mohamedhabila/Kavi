@@ -22,6 +22,9 @@ import type { AgentControlGraphEvent } from './agentControlGraph';
 import type { TerminalToolExecutionOutcome } from './toolExecutionOutcomeResolution';
 import type { ToolCallRecord } from '../loopDetection';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
+import { resolveGoalCapabilityToolNames } from '../goals/toolSurface';
+import { TOOL_DEFINITIONS } from '../tools/definitions';
+import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
 export type CanonicalToolExecutionOutcome = TerminalToolExecutionOutcome & {
   canonicalized: boolean;
@@ -530,7 +533,25 @@ export function canonicalizeToolExecutionOutcome(params: {
       };
     }
 
-    const validationContext = { currentUserMessage: params.currentUserMessage };
+    // Abandoning a blocking goal is gated on evidence that every available path was
+    // tried, so the validator needs this run's attempts and the capability tools the
+    // active surface still exposes.
+    const activeBlockingGoals = (snapshot.goals ?? []).filter(
+      (goal) => goal.status === 'active' && isBlockingGoal(goal),
+    );
+    const activatedToolNames = new Set(snapshot.sessionActivatedToolNames ?? []);
+    const capabilityToolNames = resolveGoalCapabilityToolNames(
+      activeBlockingGoals,
+      TOOL_DEFINITIONS,
+    ).filter((toolName) => activatedToolNames.size === 0 || activatedToolNames.has(toolName));
+    const validationContext = {
+      currentUserMessage: params.currentUserMessage,
+      toolCallHistory: params.toolCallHistory,
+      capabilityToolNames,
+      clarificationToolName: activatedToolNames.has(REQUEST_CLARIFICATION_TOOL_NAME)
+        ? REQUEST_CLARIFICATION_TOOL_NAME
+        : undefined,
+    };
     const { goals: nextGoals, errors } = applyGoalMutation(
       snapshot.goals ?? [],
       mutation,
