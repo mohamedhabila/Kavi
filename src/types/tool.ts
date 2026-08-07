@@ -39,11 +39,26 @@ export interface ToolDefinition {
   contract?: {
     category?: string;
     capabilities?: string[];
+    /**
+     * Declares that the caller can bound this tool's result size through its own
+     * arguments, so the result never grows unbounded. Spilling such a result to the
+     * workspace does not save context — the model still needs the content and reads
+     * the file straight back, paying an extra tool call and an extra prompt re-send
+     * for bytes it explicitly asked for.
+     */
+    boundedOutput?: boolean;
     resourceKinds?: string[];
     sideEffects?: string[];
     riskHints?: string[];
     riskLevel?: 'low' | 'medium' | 'high' | 'critical';
     prerequisites?: string[];
+    /**
+     * Runtime conditions that must hold for this tool to be able to work at all, such
+     * as a configured provider or a reachable target. Availability is evaluated from
+     * these declarations, so a tool that cannot function is never advertised on the
+     * turn surface and never costs a model round-trip on a call that can only fail.
+     */
+    runtimeRequirements?: string[];
     permissionPrerequisites?: string[];
     recoverableErrors?: string[];
     providesEvidence?: string[];
