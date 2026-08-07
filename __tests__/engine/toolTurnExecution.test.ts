@@ -1,24 +1,14 @@
-import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
-import type { PendingAgentToolCall } from '../../src/engine/graph/modelTurnExecutionTypes';
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
   return makeExpoSqliteMock();
 });
 
-import {
-  executeAgentControlGraphToolTurn,
-  type ExecuteAgentControlGraphToolTurnParams,
-} from '../../src/engine/graph/toolTurnExecution';
-import type { Message } from '../../src/types/message';
-import type { ToolDefinition } from '../../src/types/tool';
+import { executeAgentControlGraphToolTurn } from '../../src/engine/graph/toolTurnExecution';
 import { detectLoops } from '../../src/engine/loopDetection';
 import { executeToolExecutionBatch } from '../../src/engine/toolExecution/toolExecutionBatch';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
-import {
-  buildModelTurnMemoryPolicyBinding,
-  POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-} from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
+import { buildModelTurnMemoryPolicyBinding } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
@@ -26,6 +16,11 @@ import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileControl
 import { createMobileControllerCapabilityFixture } from '../helpers/mobileControllerHandoffFixture';
 import { resolveMobileControllerRecoveryPreflight } from '../../src/engine/graph/mobileControllerRecoveryPolicy';
 import { createGoal } from '../../src/engine/goals/types';
+import {
+  createPendingToolCall,
+  createToolMessage,
+  createToolTurnExecutionParams as createParams,
+} from '../helpers/toolTurnExecutionFixtures';
 
 jest.mock('../../src/engine/loopDetection', () => {
   const actual = jest.requireActual('../../src/engine/loopDetection');
@@ -57,124 +52,6 @@ const mockedExecuteToolCallLifecycle = jest.mocked(executeToolCallLifecycle);
 const mockedResolveToolExecutionOutcomes = jest.mocked(
   resolveAgentControlGraphToolExecutionOutcomes,
 );
-
-const tools: ToolDefinition[] = [
-  {
-    name: 'write_file',
-    description: 'Write a local file',
-    inputSchema: { type: 'object', properties: {} },
-  },
-];
-
-function createPendingToolCall(
-  overrides: Partial<PendingAgentToolCall> = {},
-): PendingAgentToolCall {
-  return {
-    id: 'tc-1',
-    name: 'write_file',
-    arguments: '{"path":"draft.txt"}',
-    ...overrides,
-  };
-}
-
-function createToolMessage(): Message {
-  return {
-    id: 'msg_tool_1',
-    role: 'tool',
-    content: 'done',
-    toolCallId: 'tc-1',
-    toolCalls: [
-      {
-        id: 'tc-1',
-        name: 'write_file',
-        arguments: '{"path":"draft.txt"}',
-        status: 'completed',
-      },
-    ],
-    timestamp: 1000,
-  };
-}
-
-function createParams(
-  overrides: Partial<ExecuteAgentControlGraphToolTurnParams> = {},
-): ExecuteAgentControlGraphToolTurnParams {
-  return {
-    iteration: 4,
-    maxToolIterations: 20,
-    conversationId: 'conv-1',
-    activeProvider: {
-      id: 'provider-1',
-      name: 'OpenAI',
-      apiKey: 'test-key',
-      baseUrl: 'https://api.openai.com/v1',
-      enabled: true,
-    } as any,
-    allProviders: undefined,
-    activeModel: 'gpt-5-mini',
-    workspaceConversationId: undefined,
-    workspaceReadFallbackConversationId: undefined,
-    availableToolNames: new Set(['write_file', 'sessions_yield']),
-    runtimeToolAvailability: {
-      hasWorkspaceTargets: false,
-      hasBrowserControllableWorkspaceTargets: false,
-      hasDelegableWorkspaceTargets: false,
-      hasMobileController: false,
-    },
-    toolCallHistory: [],
-    stagnationSignatures: [],
-    getGraphSnapshot: () => ({ goals: [] }) as any,
-    trackedAsyncOperations: new Map<string, TrackedAsyncOperation>(),
-    signal: undefined,
-    callbacks: {
-      onAssistantMessage: jest.fn(),
-      onToolCallStart: jest.fn(),
-      onToolCallComplete: jest.fn(),
-      onToolMessage: jest.fn().mockResolvedValue(undefined),
-      onStateChange: jest.fn(),
-    },
-    toolFilter: undefined,
-    pendingAsyncMonitorToolNames: new Set<string>(['sessions_wait']),
-    groundedRequestScopedTools: tools,
-    activation: undefined,
-    completedWorkflowToolNames: new Set<string>(),
-    lastPendingAsyncSignature: '',
-    contextWindow: 24000,
-    compactionEngine: null,
-    livingMemory: null,
-    onCompaction: undefined,
-    warn: jest.fn(),
-    yieldToUiFrame: jest.fn().mockResolvedValue(undefined),
-    applyGraphEvents: jest.fn(),
-    publishWorkflowToolResultProgress: jest.fn(({ toolMessage }) => ({
-      observedToolName: toolMessage.toolCalls?.[0]?.name,
-      nextCompletedToolNames: ['write_file'],
-    })),
-    syncPendingAsyncOperationsToGraph: jest.fn(),
-    recordTurnDirectives: jest.fn(),
-    recordPostToolFinalTextDirective: jest.fn(() => false),
-    getModelTurnBlocker: jest.fn(() => undefined),
-    finishWithGraphTerminalEvent: jest.fn().mockResolvedValue(undefined),
-    recordPerformanceMetrics: jest.fn(),
-    emitPendingAsyncOperationsChange: jest.fn(),
-    executionRunId: 'execution-run-1',
-    warningInjectedThisRound: false,
-    turnAssistantContent: 'Working on it',
-    reasoning: 'reasoning',
-    providerReplay: undefined,
-    completion: undefined,
-    pendingToolCalls: [createPendingToolCall()],
-    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-    workingMessages: [
-      {
-        id: 'msg_user_1',
-        role: 'user',
-        content: 'Create a file',
-        timestamp: 1,
-      },
-    ],
-    ...overrides,
-  };
-}
 
 describe('toolTurnExecution', () => {
   beforeEach(() => {
@@ -237,7 +114,7 @@ describe('toolTurnExecution', () => {
       loopDetected: true,
       level: 'critical',
       type: 'generic_repeat',
-      details: 'Repeated tool calls',
+      details: 'CRITICAL: 3 consecutive update_goals calls without goal state change',
     });
     mockedExecuteToolExecutionBatch.mockResolvedValue([]);
 
@@ -255,12 +132,42 @@ describe('toolTurnExecution', () => {
       }),
     );
     expect(mockedExecuteToolExecutionBatch).not.toHaveBeenCalled();
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      {
-        type: 'BLOCKED',
-        reason: 'loop_detected',
-      },
-    ]);
+
+    const blockedEvents = (params.applyGraphEvents as jest.Mock).mock.calls.flatMap(
+      ([events]) => events,
+    );
+    expect(blockedEvents).toContainEqual({ type: 'BLOCKED', reason: 'loop_detected' });
+    // The diagnostic belongs on the observability channel, not in the conversation.
+    expect(
+      blockedEvents.some(
+        (event: { type: string; detail?: string }) =>
+          event.type === 'GRAPH_OBSERVABILITY_RECORDED' &&
+          event.detail ===
+            'CRITICAL: 3 consecutive update_goals calls without goal state change',
+      ),
+    ).toBe(true);
+  });
+
+  it('gives the user a plain terminal message instead of the loop diagnostic', async () => {
+    // The loop detail is written for the run journal. Passing it through as the
+    // assistant's final response leaked internal vocabulary into the chat and told
+    // the user nothing about their own request.
+    mockedDetectLoops.mockReturnValue({
+      loopDetected: true,
+      level: 'critical',
+      type: 'goal_mutation_stall',
+      details: 'CRITICAL: 3 consecutive update_goals calls without goal state change',
+    });
+    mockedExecuteToolExecutionBatch.mockResolvedValue([]);
+
+    const params = createParams();
+    await executeAgentControlGraphToolTurn(params);
+
+    const [terminalCall] = (params.finishWithGraphTerminalEvent as jest.Mock).mock.calls;
+    const content = terminalCall[0].content as string;
+    expect(content).not.toContain('CRITICAL');
+    expect(content).not.toContain('update_goals');
+    expect(content).toContain('repeating the same step without making progress');
   });
 
   it('trims queued tool calls after sessions_yield before assistant staging and execution', async () => {

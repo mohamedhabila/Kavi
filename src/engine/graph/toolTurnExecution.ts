@@ -234,7 +234,16 @@ export async function executeAgentControlGraphToolTurn(
 
   if (toolTurnPreparation.status === 'blocked') {
     assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
+    // The loop diagnostic is retained here, on the observability channel, because it
+    // is the only place that carries the repeat count and the offending tool. It is
+    // deliberately not the terminal content: the conversation gets a plain-language
+    // message instead.
     params.applyGraphEvents([
+      buildGraphObservabilityRecordedEvent({
+        observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.LOOP_DETECTED,
+        iteration: params.iteration,
+        detail: toolTurnPreparation.blockDetails,
+      }),
       {
         type: 'BLOCKED',
         reason: 'loop_detected',
@@ -245,7 +254,7 @@ export async function executeAgentControlGraphToolTurn(
         type: 'BLOCKED',
         reason: 'loop_detected',
       },
-      content: toolTurnPreparation.blockDetails,
+      content: toolTurnPreparation.blockedUserMessage,
       assistantMetadata: buildAssistantMessageMetadata('final', {
         completionStatus: 'complete',
         finishReason: 'loop_detected',
