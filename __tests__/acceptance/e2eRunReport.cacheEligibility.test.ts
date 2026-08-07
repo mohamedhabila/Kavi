@@ -2,6 +2,7 @@ import {
   buildE2ERunReport,
   buildE2ERunReportScenarioEntry,
 } from '../../src/acceptance/e2eAgent/e2eRunReport';
+import { buildReadinessReport } from '../../src/acceptance/e2eAgent/e2eRunReportReadiness';
 import { E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS } from '../../src/acceptance/e2eAgent/thresholds';
 
 import {
@@ -280,5 +281,76 @@ describe('e2eRunReport cache eligibility', () => {
     expect(report.cache.eligibleInputTokens).toBe(4096);
     expect(report.cache.providerManagedReadinessTokens).toBe(4096);
     expect(report.cache.eligibleCacheReadRate).toBe(0.5);
+  });
+});
+
+describe('cache-create telemetry criterion across provider cache modes', () => {
+  function readinessFor(counts: {
+    createEventCount: number;
+    reuseEventCount: number;
+    providerManagedEventCount: number;
+  }) {
+    return buildReadinessReport({
+      entries: [],
+      assessment: {
+        dimensions: [{ dimension: 'tool_use', passRate: 1, scenarioCount: 1 }],
+        benchmarkFamilies: [{ family: 'core', passRate: 1, scenarioCount: 1 }],
+        overallScenarioPassRate: 1,
+      } as never,
+      cache: {
+        eligibleInputTokens: 500_000,
+        cacheCreateTelemetryAvailable: false,
+        passing: true,
+        promptCacheTelemetry: { ...counts },
+      } as never,
+      graderAudit: { passing: true } as never,
+      reliability: { pass1Rate: 1, passKRate: 1 } as never,
+    });
+  }
+
+  it('does not demand cache-create telemetry from an implicit-cache provider', () => {
+    // DeepSeek and OpenRouter passthrough reuse a stable prefix without ever creating
+    // a cache explicitly, so there is no create event to observe. Requiring one made
+    // this criterion permanently unsatisfiable and masked the criteria that genuinely
+    // failed.
+    const readiness = readinessFor({
+      createEventCount: 0,
+      reuseEventCount: 3,
+      providerManagedEventCount: 4,
+    });
+
+    expect(readiness.failedCriteria).not.toContain('cache_create_telemetry');
+  });
+
+  it('still demands cache-create telemetry when the provider creates caches explicitly', () => {
+    const readiness = readinessFor({
+      createEventCount: 2,
+      reuseEventCount: 5,
+      providerManagedEventCount: 0,
+    });
+
+    expect(readiness.failedCriteria).toContain('cache_create_telemetry');
+  });
+
+  it('demands it from a mixed provider that does create caches', () => {
+    const readiness = readinessFor({
+      createEventCount: 1,
+      reuseEventCount: 0,
+      providerManagedEventCount: 3,
+    });
+
+    expect(readiness.failedCriteria).toContain('cache_create_telemetry');
+  });
+
+  it('fails loudly when no prompt-cache activity was observed at all', () => {
+    // Absent telemetry must not be mistaken for implicit caching, or a genuinely
+    // broken cache pipeline would report as healthy.
+    const readiness = readinessFor({
+      createEventCount: 0,
+      reuseEventCount: 0,
+      providerManagedEventCount: 0,
+    });
+
+    expect(readiness.failedCriteria).toContain('cache_create_telemetry');
   });
 });

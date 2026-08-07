@@ -230,6 +230,14 @@ export function createForegroundRunOrchestratorCallbacks(params: {
           cacheWriteTokens: usage.cacheWriteTokens ?? 0,
           totalTokens: usage.totalTokens,
           model: usage.model || params.model,
+          // Rebuilding this object field by field silently dropped every
+          // diagnostic the engine computes: which part of the prompt the tokens
+          // went to, and whether the cacheable prefix held from turn to turn.
+          // The recorder forwards all three; only this caller failed to pass
+          // them, so token attribution read as all-zero everywhere downstream.
+          ...(usage.tokenDetails ? { tokenDetails: usage.tokenDetails } : {}),
+          ...(usage.tokenBuckets ? { tokenBuckets: usage.tokenBuckets } : {}),
+          ...(usage.promptCache ? { promptCache: usage.promptCache } : {}),
         },
         providerId: params.providerId,
         source: 'primary',

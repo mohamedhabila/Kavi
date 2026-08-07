@@ -145,7 +145,27 @@ export function buildReadinessReport(params: {
   if (!params.cache.passing) {
     failedCriteria.push('cache_readiness');
   }
-  if (params.cache.eligibleInputTokens > 0 && !params.cache.cacheCreateTelemetryAvailable) {
+  // Cache-create telemetry only exists for providers that create caches explicitly.
+  // Implicit-cache providers — DeepSeek, OpenRouter passthrough, OpenAI automatic —
+  // report reuse against a stable prefix and never emit a create event, so demanding
+  // create telemetry from them makes this criterion permanently unsatisfiable and
+  // hides whichever criteria genuinely failed. A run whose cache activity is entirely
+  // provider-managed is judged on read rate instead, which `cache_readiness` covers.
+  // Absence of any prompt-cache event is not treated as implicit: with nothing
+  // observed the criterion still applies, so missing telemetry fails loudly.
+  const cacheEventsObserved =
+    params.cache.promptCacheTelemetry.createEventCount +
+    params.cache.promptCacheTelemetry.reuseEventCount +
+    params.cache.promptCacheTelemetry.providerManagedEventCount;
+  const cacheCreationIsProviderManaged =
+    cacheEventsObserved > 0 &&
+    params.cache.promptCacheTelemetry.createEventCount === 0 &&
+    params.cache.promptCacheTelemetry.providerManagedEventCount > 0;
+  if (
+    params.cache.eligibleInputTokens > 0 &&
+    !cacheCreationIsProviderManaged &&
+    !params.cache.cacheCreateTelemetryAvailable
+  ) {
     failedCriteria.push('cache_create_telemetry');
   }
   if (!params.graderAudit.passing) {

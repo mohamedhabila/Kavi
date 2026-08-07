@@ -169,6 +169,71 @@ describe('foreground run orchestrator callbacks', () => {
     );
   });
 
+  it('forwards token attribution and prompt-cache telemetry to the usage recorder', () => {
+    // This callback rebuilds the usage object field by field. Every diagnostic the
+    // engine computes — where the tokens went, and whether the cacheable prefix
+    // survived the turn — was dropped here, so token attribution read as all-zero
+    // in every downstream report and the cache could not be measured at all.
+    const usageSpy = jest
+      .spyOn(conversationUsage, 'recordConversationUsageEvent')
+      .mockImplementation(() => undefined);
+    const harness = createHarness();
+    const tokenBuckets = {
+      systemPromptTokens: 900,
+      toolDeclarationTokens: 1200,
+      memoryContextTokens: 300,
+      conversationHistoryTokens: 4000,
+      userTurnTokens: 60,
+      toolResultTokens: 2500,
+    };
+    const promptCache = {
+      eligible: true,
+      enabled: true,
+      mode: 'openrouter_compatible',
+      cacheablePrefixDigest: 'prompt-prefix-fnv1a32:deadbeef',
+    };
+    const tokenDetails = { reasoningTokens: 42 };
+
+    harness.callbacks.onUsage?.({
+      model: 'gemini-3.5-flash',
+      inputTokens: 8960,
+      outputTokens: 120,
+      cacheReadTokens: 7000,
+      cacheWriteTokens: 0,
+      totalTokens: 9080,
+      tokenBuckets,
+      promptCache,
+      tokenDetails,
+    } as never);
+
+    expect(usageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usage: expect.objectContaining({ tokenBuckets, promptCache, tokenDetails }),
+      }),
+    );
+  });
+
+  it('omits attribution fields entirely when the engine reported none', () => {
+    const usageSpy = jest
+      .spyOn(conversationUsage, 'recordConversationUsageEvent')
+      .mockImplementation(() => undefined);
+    const harness = createHarness();
+
+    harness.callbacks.onUsage?.({
+      model: 'gemini-3.5-flash',
+      inputTokens: 11,
+      outputTokens: 7,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 18,
+    });
+
+    const recorded = usageSpy.mock.calls[0][0].usage as Record<string, unknown>;
+    expect('tokenBuckets' in recorded).toBe(false);
+    expect('promptCache' in recorded).toBe(false);
+    expect('tokenDetails' in recorded).toBe(false);
+  });
+
   it('suppresses streamed tokens while surfaced worker output is locked', () => {
     const harness = createHarness({ isSurfacedWorkerOutputLocked: () => true });
 

@@ -20,6 +20,7 @@ import {
 } from '../orchestratorCompaction';
 import { repairModelVisibleToolResultTranscript } from '../orchestratorToolTranscript';
 import { sanitizeModelVisibleWorkingMessages } from './modelVisibleWorkingMessages';
+import { stampPromptCachePlacement } from './promptCacheToolPlacement';
 import type { SystemPromptSection } from '../prompts/orchestratorPromptSections';
 
 type BudgetCompactionEngine = Pick<ContextEngine, 'compact'> | null;
@@ -225,7 +226,7 @@ export async function prepareAgentTurnRequestBudget(
     : { requestModel: params.requestModel, onDeviceProvider: params.onDeviceProvider === true };
   const contextWindow = getWorkingContextWindow(params.requestModel, workingContextOptions);
   let workingMessages = repairModelVisibleToolResultTranscript(params.workingMessages);
-  const toolsForIteration = [...(params.toolsForIteration ?? [])];
+  const toolsForIteration = stampPromptCachePlacement(params.toolsForIteration ?? []);
   const currentGoalsPromptSection = extractGoalsPromptSection(params.enrichedSystemPromptSections);
   const workflowTaskAnchorPromptSection = extractWorkflowTaskAnchorPromptSection(
     params.enrichedSystemPromptSections,

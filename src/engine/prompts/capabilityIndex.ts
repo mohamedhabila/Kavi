@@ -5,7 +5,10 @@
 // what the device can do. Without an index the model cannot distinguish "no such
 // capability" from "not exposed this turn", and answers from parametric knowledge
 // instead of reaching for discovery. This renders a bounded, code-owned index of
-// the domains that exist in this run but are not currently on the surface.
+// the capability domains that exist in this run.
+//
+// The index is run-constant by design: it heads the cacheable prompt prefix, so it
+// must not vary with the current turn's tool surface.
 //
 // Derived from the run's own tool list, so it can never advertise a capability the
 // user has not configured.
@@ -26,15 +29,26 @@ export const MAX_CAPABILITY_INDEX_TOOLS_PER_CATEGORY = 2;
 const EXCLUDED_CATEGORIES = new Set(['other', 'tools']);
 const DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
 
-function collectUnexposedToolsByCategory(
+/**
+ * Deliberately independent of the current turn's surface.
+ *
+ * This section is the first thing in the system prompt and is declared cacheable, so
+ * its bytes are the head of the prompt cache prefix. Subtracting the exposed tools
+ * made it change on every activation, which invalidated the cache from byte zero of
+ * every request — the index meant to save discovery round-trips was costing a full
+ * uncached prompt each time discovery succeeded. The set of capabilities available in
+ * a run does not change, so listing all of them keeps the prefix byte-identical for
+ * the whole run. The few already-exposed names it now repeats are far cheaper than
+ * the re-billed prompt they replace.
+ */
+function collectAvailableToolsByCategory(
   allTools: ReadonlyArray<ToolDefinition>,
-  selectedToolNames: ReadonlySet<string>,
 ): Map<string, string[]> {
   const byCategory = new Map<string, string[]>();
 
   for (const tool of allTools) {
     const toolName = normalizeToolName(tool.name);
-    if (!toolName || DISCOVERY_TOOL_NAMES.has(toolName) || selectedToolNames.has(toolName)) {
+    if (!toolName || DISCOVERY_TOOL_NAMES.has(toolName)) {
       continue;
     }
 
@@ -66,14 +80,13 @@ function renderCategoryLine(catalogCategory: string, toolNames: ReadonlyArray<st
 }
 
 /**
- * Returns an empty string when nothing is hidden, so a fully exposed surface does
- * not spend tokens restating what the model can already see.
+ * Returns an empty string when the run exposes no categorized capability, so a bare
+ * surface does not spend tokens on an empty heading.
  */
 export function buildCapabilityIndexPromptSection(params: {
   allTools: ReadonlyArray<ToolDefinition>;
-  selectedToolNames: ReadonlySet<string>;
 }): string {
-  const byCategory = collectUnexposedToolsByCategory(params.allTools, params.selectedToolNames);
+  const byCategory = collectAvailableToolsByCategory(params.allTools);
   if (byCategory.size === 0) {
     return '';
   }
@@ -84,8 +97,8 @@ export function buildCapabilityIndexPromptSection(params: {
 
   const lines = [
     '## Capability Index',
-    'Available this run but not on this turn’s surface. Expose one with tool_catalog using the',
-    'category shown, then call it. Never call a listed capability unavailable without trying that.',
+    'Available this run. If one is not on this turn’s surface, expose it with tool_catalog using',
+    'the category shown, then call it. Never call a listed capability unavailable without trying that.',
     ...shownCategories.map((category) =>
       renderCategoryLine(category, byCategory.get(category) ?? []),
     ),

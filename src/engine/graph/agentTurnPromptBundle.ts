@@ -1,6 +1,5 @@
 import type { ToolDefinition } from '../../types/tool';
 import { buildCapabilityIndexPromptSection } from '../prompts/capabilityIndex';
-import { normalizeToolName } from '../tools/toolNameNormalization';
 import {
   appendSystemPromptSection,
   buildSystemPromptSections,
@@ -67,12 +66,7 @@ export function buildAgentTurnPromptBundle(
   appendSystemPromptSection(
     baseSystemPromptSections,
     params.toolingEnabledForProvider && !textOnlyPrompt && params.allTools?.length
-      ? buildCapabilityIndexPromptSection({
-          allTools: params.allTools,
-          selectedToolNames: new Set(
-            params.selectedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
-          ),
-        })
+      ? buildCapabilityIndexPromptSection({ allTools: params.allTools })
       : '',
     { cacheable: true, purpose: 'capability_index' },
   );
