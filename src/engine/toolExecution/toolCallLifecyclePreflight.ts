@@ -9,6 +9,7 @@ import {
   createFailedToolCall,
   type RuntimeToolCallInput,
 } from './toolExecutionMessages';
+import { buildOffSurfaceToolResult } from './offSurfaceToolResult';
 import { recordLifecycleToolCall } from './toolCallLifecycleRecording';
 import { validateToolArgumentsAgainstSchema } from './toolArgumentSchemaValidation';
 import type {
@@ -146,7 +147,7 @@ export function resolveToolCallPreflight(
       lifecycle: params,
       effectiveToolCall: canonicalToolCall,
       idPrefix: params.idPrefixes.filtered,
-      content: `Tool "${canonicalToolCall.name}" is not allowed in this context.`,
+      content: buildOffSurfaceToolResult(canonicalToolCall.name),
       failureKind: 'tool_filter',
       preflightBlockedKind: 'tool_filter',
       notifyBlocked: true,
@@ -176,7 +177,7 @@ export function resolveToolCallPreflight(
       lifecycle: params,
       effectiveToolCall: canonicalToolCall,
       idPrefix: params.idPrefixes.filtered,
-      content: `Tool "${canonicalToolCall.name}" is not allowed in this context.`,
+      content: buildOffSurfaceToolResult(canonicalToolCall.name),
       failureKind: 'tool_filter',
       preflightBlockedKind: 'tool_filter',
       notifyBlocked: true,

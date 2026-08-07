@@ -21,6 +21,7 @@ import {
   yieldToUiFrame,
 } from './toolCallLifecycleRecording';
 import { resolveToolCallPreflight } from './toolCallLifecyclePreflight';
+import { buildRepeatedToolCallNotice } from './repeatedToolCallNotice';
 import { enrichToolResultWithSchemaRepair } from './toolResultRepair';
 import { buildToolEffectReceipt } from './toolEffectReceipt';
 import { appendToolEffectReceipt } from '../../utils/toolEffectReceipt';
@@ -507,6 +508,16 @@ export async function executeToolCallLifecycle(
       reason: 'tool_execution_completed',
     });
 
+    // Computed before this call joins the history, so the ordinal counts prior calls.
+    // Only the model-facing message carries the notice: the raw `result` continues to
+    // flow to receipts, evidence and the journal unchanged.
+    const repeatedCallNotice = buildRepeatedToolCallNotice({
+      toolName: effectiveToolCall.name,
+      argumentsText: effectiveToolCall.arguments,
+      resultText: result,
+      history: params.toolCallHistory,
+    });
+
     recordLifecycleToolCall(
       params.toolCallHistory,
       effectiveToolCall.id,
@@ -527,7 +538,7 @@ export async function executeToolCallLifecycle(
       toolMessage: buildToolResultMessage({
         idPrefix: params.idPrefixes.success,
         toolCallId: effectiveToolCall.id,
-        content: result,
+        content: repeatedCallNotice ? `${result}\n\n${repeatedCallNotice}` : result,
         toolCall,
         isError: toolResultIsError,
       }),

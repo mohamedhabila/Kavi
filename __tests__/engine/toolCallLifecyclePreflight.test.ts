@@ -123,7 +123,7 @@ describe('resolveToolCallPreflight', () => {
       arguments: '{}',
     });
 
-    expect(result?.toolMessage.content).toContain('not allowed');
+    expect(result?.toolMessage.content).toContain('not on the current turn');
     expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('tool_filter');
     expect(lifecycle.callbacks.onToolCallStart).not.toHaveBeenCalled();
     expect(lifecycle.callbacks.onToolCallComplete).not.toHaveBeenCalled();
@@ -142,7 +142,7 @@ describe('resolveToolCallPreflight', () => {
       });
 
       expect(result?.effectiveToolName).toBe('update_goals');
-      expect(result?.toolMessage.content).toContain('not allowed');
+      expect(result?.toolMessage.content).toContain('not on the current turn');
       expect(result?.toolMessage.isError).toBe(true);
       expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('tool_filter');
       expect(lifecycle.callbacks.onToolCallStart).not.toHaveBeenCalled();

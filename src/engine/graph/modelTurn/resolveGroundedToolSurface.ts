@@ -77,8 +77,23 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   const groundedToolNames = new Set(
     groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
   );
+  // A tool this run has already invoked is the strongest relevance signal available:
+  // the model chose it, it ran, and the run's state now depends on what it returned.
+  // Evicting it under budget pressure does not save a round-trip, it spends one — the
+  // next call is rejected as "not allowed in this context" and the model has to
+  // re-discover the tool before it can continue. Traced live: `clipboard` and
+  // `clipboard_read` each succeeded, were evicted, then failed on identical arguments
+  // four more times until a `tool_catalog` call put them back on the surface. The set
+  // is bounded twice over — by what the run actually invoked, and by the grounded
+  // surface filter below — so this cannot grow without limit on a long run.
+  const invokedToolNames = Array.from(params.completedWorkflowToolNames)
+    .map((toolName) => normalizeToolName(toolName))
+    .filter(Boolean);
   const pinnedToolNames = Array.from(
-    new Set(resolveGoalCapabilityToolNames(goals, currentPolicyAuthorizedTools)),
+    new Set([
+      ...resolveGoalCapabilityToolNames(goals, currentPolicyAuthorizedTools),
+      ...invokedToolNames,
+    ]),
   ).filter((name) => groundedToolNames.has(name));
   const turnContract = resolveAgentExecutionTurnContract({
     groundedToolNames: groundedRequestScopedTools.map((tool) => tool.name),
