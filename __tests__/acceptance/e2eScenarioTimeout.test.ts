@@ -9,6 +9,7 @@ import {
   E2E_MAX_SCENARIO_TIMEOUT_MS,
   E2E_PER_USER_TURN_TIMEOUT_MS,
 } from '../../src/acceptance/e2eAgent/thresholds';
+import { DEFAULT_SESSIONS_WAIT_TIMEOUT_MS } from '../../src/engine/tools/builtin-session-waitSupport';
 import type { E2EScenario } from '../../src/acceptance/e2eAgent/types';
 
 function makeScenario(overrides: Partial<E2EScenario> = {}): E2EScenario {
@@ -66,11 +67,28 @@ describe('resolveE2EScenarioTimeoutMs', () => {
   });
 
   it('allows a configured timeout for slower live providers', () => {
+    const configured = E2E_PER_USER_TURN_TIMEOUT_MS + 60_000;
     expect(
       resolveE2EScenarioTimeoutMs(makeScenario(), {
-        [E2E_SCENARIO_TIMEOUT_MS_ENV]: '300000',
+        [E2E_SCENARIO_TIMEOUT_MS_ENV]: String(configured),
       } as NodeJS.ProcessEnv),
-    ).toBe(300_000);
+    ).toBe(configured);
+  });
+
+  it('never gives a single-turn scenario less wall clock than the turn it contains', () => {
+    // A configured deadline below the per-turn floor would cut the turn off mid-flight,
+    // which is how a legitimately slow turn gets reported as a product failure.
+    expect(
+      resolveE2EScenarioTimeoutMs(makeScenario(), {
+        [E2E_SCENARIO_TIMEOUT_MS_ENV]: String(E2E_PER_USER_TURN_TIMEOUT_MS - 60_000),
+      } as NodeJS.ProcessEnv),
+    ).toBe(E2E_PER_USER_TURN_TIMEOUT_MS);
+  });
+
+  it('gives a delegating turn room for the blocking wait it must accommodate', () => {
+    // A turn that delegates blocks for up to the product's `sessions_wait` window while a
+    // nested agent run completes, and still needs its own model round-trips either side.
+    expect(E2E_PER_USER_TURN_TIMEOUT_MS).toBeGreaterThan(DEFAULT_SESSIONS_WAIT_TIMEOUT_MS);
   });
 
   it('allows an explicit diagnostic per-turn timeout and scales the scenario deadline', () => {

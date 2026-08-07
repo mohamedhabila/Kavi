@@ -141,8 +141,17 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
         content: 'Write `artifacts/e2e-follow-gate.txt` with exact content `E2E-GATE-FU-42`.',
       },
       {
+        // The control graph is run-scoped: every user turn starts a new run with an
+        // empty goal list, so nothing carried over from turn 1 can "still need"
+        // completion here. This turn was previously phrased as a conditional on that
+        // state, which made its antecedent false by construction — a model that read
+        // the condition correctly did the right thing (verify, then answer) and the
+        // rubric failed it for that. The named-goal capability under test is the same
+        // one `bench-bootstrap-first-turn-goals` and `bench-goal-json-field-criterion`
+        // assert, so it is stated the same way: as an instruction, not a condition.
         content:
-          'If goal `gate-followup` still needs completion, mark it completed after verifying the artifact.',
+          'Verify `artifacts/e2e-follow-gate.txt` holds `E2E-GATE-FU-42`, then record that ' +
+          'verification against goal `gate-followup` and complete it.',
       },
     ],
     rubrics: [

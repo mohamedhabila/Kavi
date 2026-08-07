@@ -2,6 +2,7 @@
 // Kavi — E2E agent eval thresholds
 // ---------------------------------------------------------------------------
 
+import { DEFAULT_SESSIONS_WAIT_TIMEOUT_MS } from '../../engine/tools/builtin-session-waitSupport';
 export const E2E_SCENARIO_MIN_PASS_RATE = 0.9;
 
 export const E2E_READINESS_MIN_PASS_RATE = 0.95;
@@ -24,8 +25,18 @@ export const E2E_DEFAULT_SCENARIO_TIMEOUT_MS = 600_000;
  * acceptance turn cannot hang a suite, so it must stay well above a realistic
  * long-horizon turn. At 90s it was truncating multi-tool research turns that the app
  * completes normally, which surfaced as scenario failures rather than product defects.
+ *
+ * The same truncation reappeared one level up at 300s. A turn that delegates blocks for
+ * up to the product's own `sessions_wait` window while a nested agent run completes, and
+ * still needs room for the supervisor's model round-trips before and after it — so the
+ * wait alone consumed the majority of the budget and delegation turns were killed
+ * mid-wait, every time, in every recorded run. The floor is derived from the wait window
+ * it has to accommodate rather than picked, so the two cannot drift apart again.
  */
-export const E2E_PER_USER_TURN_TIMEOUT_MS = 300_000;
+export const E2E_PER_USER_TURN_TIMEOUT_MS = Math.max(
+  300_000,
+  DEFAULT_SESSIONS_WAIT_TIMEOUT_MS * 2,
+);
 
 export const E2E_DEFAULT_MEMORY_TIMEOUT_MS = 45_000;
 
