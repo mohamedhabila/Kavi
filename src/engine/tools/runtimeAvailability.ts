@@ -8,12 +8,56 @@ import {
   supportsWorkspaceBrowserAutomation,
 } from '../../services/workspaces/connector';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import {
+  isSearchProviderConfiguredSnapshot,
+  refreshSearchProviderReadiness,
+} from '../../services/browser/core/searchProviderReadiness';
+import { resolveToolRuntimeRequirements } from './toolRuntimeRequirements';
 
 export interface RuntimeToolAvailabilityContext {
   hasWorkspaceTargets: boolean;
   hasBrowserControllableWorkspaceTargets: boolean;
   hasDelegableWorkspaceTargets: boolean;
   hasMobileController: boolean;
+  hasWebSearchProvider: boolean;
+}
+
+/**
+ * Requirement keys a tool may declare in `contract.runtimeRequirements`.
+ *
+ * Availability used to be a hardcoded chain of tool-name comparisons, so any tool not
+ * named in it was advertised unconditionally — `web_search` was offered on every turn
+ * with no provider configured, spending a model round-trip on a call that could only
+ * fail. Declaring the condition on the tool and evaluating it here means a new tool is
+ * gated by describing itself, with no edit to this module.
+ */
+export const RUNTIME_TOOL_REQUIREMENTS = {
+  WORKSPACE_TARGETS: 'workspace_targets',
+  BROWSER_CONTROLLABLE_WORKSPACE_TARGETS: 'browser_controllable_workspace_targets',
+  DELEGABLE_WORKSPACE_TARGETS: 'delegable_workspace_targets',
+  MOBILE_CONTROLLER: 'mobile_controller',
+  WEB_SEARCH_PROVIDER: 'web_search_provider',
+} as const;
+
+function isRequirementSatisfied(
+  requirement: string,
+  context: RuntimeToolAvailabilityContext,
+): boolean {
+  switch (requirement) {
+    case RUNTIME_TOOL_REQUIREMENTS.WORKSPACE_TARGETS:
+      return context.hasWorkspaceTargets;
+    case RUNTIME_TOOL_REQUIREMENTS.BROWSER_CONTROLLABLE_WORKSPACE_TARGETS:
+      return context.hasBrowserControllableWorkspaceTargets;
+    case RUNTIME_TOOL_REQUIREMENTS.DELEGABLE_WORKSPACE_TARGETS:
+      return context.hasDelegableWorkspaceTargets;
+    case RUNTIME_TOOL_REQUIREMENTS.MOBILE_CONTROLLER:
+      return context.hasMobileController;
+    case RUNTIME_TOOL_REQUIREMENTS.WEB_SEARCH_PROVIDER:
+      return context.hasWebSearchProvider;
+    default:
+      // An unrecognized requirement must not silently hide a working tool.
+      return true;
+  }
 }
 
 function normalizeWorkspaceTargets(targets?: WorkspaceTargetConfig[]): WorkspaceTargetConfig[] {
@@ -70,11 +114,14 @@ export function getRuntimeToolAvailabilityContext(
   targets?: WorkspaceTargetConfig[],
 ): RuntimeToolAvailabilityContext {
   const resolvedTargets = targets ?? useSettingsStore.getState().workspaceTargets ?? [];
+  // Keeps the synchronous snapshot honest without blocking surface selection.
+  void refreshSearchProviderReadiness();
   return {
     hasWorkspaceTargets: resolvedTargets.length > 0,
     hasBrowserControllableWorkspaceTargets: hasBrowserControllableWorkspaceTargets(resolvedTargets),
     hasDelegableWorkspaceTargets: hasDelegableWorkspaceTargets(resolvedTargets),
     hasMobileController: false,
+    hasWebSearchProvider: isSearchProviderConfiguredSnapshot(),
   };
 }
 
@@ -91,19 +138,8 @@ export function isToolRuntimeAvailable(
   context?: RuntimeToolAvailabilityContext,
 ): boolean {
   const resolvedContext = context ?? getRuntimeToolAvailabilityContext();
-  if (toolName === 'workspace_status') {
-    return resolvedContext.hasWorkspaceTargets;
-  }
-  if (toolName === 'workspace_launch_browser') {
-    return resolvedContext.hasBrowserControllableWorkspaceTargets;
-  }
-  if (toolName === 'workspace_delegate_task') {
-    return resolvedContext.hasDelegableWorkspaceTargets;
-  }
-  if (toolName === 'mobile_ui_action') {
-    return resolvedContext.hasMobileController;
-  }
-  return true;
+  const requirements = resolveToolRuntimeRequirements(toolName);
+  return requirements.every((requirement) => isRequirementSatisfied(requirement, resolvedContext));
 }
 
 export function filterRuntimeAvailableToolNames(

@@ -3,8 +3,15 @@ import {
   hasDelegableWorkspaceTargets,
   filterRuntimeAvailableToolNames,
   filterToolsByRuntimeAvailability,
+  isToolRuntimeAvailable,
   resolveRuntimeExplicitToolSurfaceToolNames,
+  type RuntimeToolAvailabilityContext,
 } from '../../src/engine/tools/runtimeAvailability';
+import { resolveToolRuntimeRequirements } from '../../src/engine/tools/toolRuntimeRequirements';
+import {
+  isSearchProviderConfiguredSnapshot,
+  setSearchProviderReadinessSnapshot,
+} from '../../src/services/browser/core/searchProviderReadiness';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { ToolDefinition } from '../../src/types/tool';
 import type { WorkspaceTargetConfig } from '../../src/types/remote';
@@ -197,5 +204,68 @@ describe('runtimeAvailability', () => {
     });
 
     expect(resolved).toBeUndefined();
+  });
+});
+
+describe('contract-declared runtime requirements', () => {
+  // Availability used to be a hardcoded chain of tool-name comparisons, so any tool it
+  // did not name was advertised unconditionally. web_search was offered on every turn
+  // with no provider configured, spending a model round-trip on a call that could only
+  // fail. Gating is now derived from what each tool declares about itself.
+  const SATISFIED: RuntimeToolAvailabilityContext = {
+    hasWorkspaceTargets: true,
+    hasBrowserControllableWorkspaceTargets: true,
+    hasDelegableWorkspaceTargets: true,
+    hasMobileController: true,
+    hasWebSearchProvider: true,
+  };
+  const UNSATISFIED: RuntimeToolAvailabilityContext = {
+    hasWorkspaceTargets: false,
+    hasBrowserControllableWorkspaceTargets: false,
+    hasDelegableWorkspaceTargets: false,
+    hasMobileController: false,
+    hasWebSearchProvider: false,
+  };
+
+  it('hides web_search when no provider is configured', () => {
+    expect(isToolRuntimeAvailable('web_search', UNSATISFIED)).toBe(false);
+  });
+
+  it('offers web_search once a provider is configured', () => {
+    expect(isToolRuntimeAvailable('web_search', SATISFIED)).toBe(true);
+  });
+
+  it('gates every tool that declares a requirement', () => {
+    const gated = ['workspace_status', 'workspace_launch_browser', 'workspace_delegate_task'];
+    for (const toolName of gated) {
+      expect(resolveToolRuntimeRequirements(toolName).length).toBeGreaterThan(0);
+      expect(isToolRuntimeAvailable(toolName, UNSATISFIED)).toBe(false);
+      expect(isToolRuntimeAvailable(toolName, SATISFIED)).toBe(true);
+    }
+  });
+
+  it('leaves a tool that declares nothing unconditionally available', () => {
+    expect(resolveToolRuntimeRequirements('write_file')).toEqual([]);
+    expect(isToolRuntimeAvailable('write_file', UNSATISFIED)).toBe(true);
+  });
+
+  it('does not hide a tool whose requirement key is unrecognized', () => {
+    // A declaration this resolver does not understand must fail open: silently hiding
+    // a working capability is worse than one wasted call.
+    expect(isToolRuntimeAvailable('write_file', { ...UNSATISFIED } as never)).toBe(true);
+  });
+});
+
+describe('search provider readiness snapshot', () => {
+  afterEach(() => setSearchProviderReadinessSnapshot(true));
+
+  it('starts optimistic so a working capability is never hidden before it is checked', () => {
+    setSearchProviderReadinessSnapshot(true);
+    expect(isSearchProviderConfiguredSnapshot()).toBe(true);
+  });
+
+  it('reflects an unconfigured provider once probed', () => {
+    setSearchProviderReadinessSnapshot(false);
+    expect(isSearchProviderConfiguredSnapshot()).toBe(false);
   });
 });
