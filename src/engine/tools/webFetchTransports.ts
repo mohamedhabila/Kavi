@@ -5,7 +5,7 @@ import {
   extractFetchedLinksFromMarkdown,
   type WebFetchLink,
 } from '../../services/browser/core/linkExtractor';
-import { htmlToMarkdown, truncateText } from './web-fetch-utils';
+import { htmlToMarkdown, selectMatchingRegions, sliceTextWindow } from './web-fetch-utils';
 import { readResponseText } from './web-shared';
 
 const DEFAULT_FETCH_MAX_RESPONSE_BYTES = 2_000_000;
@@ -96,6 +96,8 @@ export async function directFetch(params: {
   url: string;
   extractMode: 'markdown' | 'text';
   maxChars: number;
+  offset?: number;
+  find?: string;
   signal?: AbortSignal;
 }): Promise<{
   content: string;
@@ -103,8 +105,27 @@ export async function directFetch(params: {
   links?: WebFetchLink[];
   truncated: boolean;
   charCount: number;
+  offset: number;
+  nextOffset?: number;
+  matchCount?: number;
   resolvedUrl?: string;
 }> {
+  const requestedOffset = params.offset ?? 0;
+  const findTerm = params.find?.trim() ?? '';
+  const project = (text: string) => {
+    if (!findTerm) {
+      return { ...sliceTextWindow(text, requestedOffset, params.maxChars), matchCount: undefined };
+    }
+    const matched = selectMatchingRegions(text, findTerm, params.maxChars);
+    return {
+      text: matched.text,
+      truncated: false,
+      totalChars: matched.totalChars,
+      offset: 0,
+      nextOffset: undefined,
+      matchCount: matched.matchCount,
+    };
+  };
   const headerProfiles = [
     {
       'User-Agent': DEFAULT_USER_AGENT,
@@ -143,22 +164,22 @@ export async function directFetch(params: {
         maxBytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
       });
 
-      if (contentType.includes('application/json')) {
-        const { text, truncated } = truncateText(rawText, params.maxChars);
+      // Structured and plain payloads are returned as a contiguous window. A
+      // head-and-tail excerpt would corrupt JSON and hide the middle of a document,
+      // which is exactly where a requested field tends to sit.
+      if (
+        contentType.includes('application/json') ||
+        contentType.includes('text/plain') ||
+        contentType.includes('text/csv')
+      ) {
+        const window = project(rawText);
         return {
-          content: text,
-          truncated,
-          charCount: rawText.length,
-          resolvedUrl: typeof res.url === 'string' && res.url.trim() ? res.url : undefined,
-        };
-      }
-
-      if (contentType.includes('text/plain') || contentType.includes('text/csv')) {
-        const { text, truncated } = truncateText(rawText, params.maxChars);
-        return {
-          content: text,
-          truncated,
-          charCount: rawText.length,
+          content: window.text,
+          truncated: window.truncated,
+          charCount: window.totalChars,
+          offset: window.offset,
+          ...(window.nextOffset !== undefined ? { nextOffset: window.nextOffset } : {}),
+          ...(window.matchCount !== undefined ? { matchCount: window.matchCount } : {}),
           resolvedUrl: typeof res.url === 'string' && res.url.trim() ? res.url : undefined,
         };
       }
@@ -172,13 +193,16 @@ export async function directFetch(params: {
         rawText,
         typeof res.url === 'string' && res.url.trim() ? res.url : params.url,
       );
-      const { text: truncatedText, truncated } = truncateText(extractedText, params.maxChars);
+      const window = project(extractedText);
       return {
-        content: truncatedText,
+        content: window.text,
         title,
         ...(links ? { links } : {}),
-        truncated,
-        charCount: extractedText.length,
+        truncated: window.truncated,
+        charCount: window.totalChars,
+        offset: window.offset,
+        ...(window.nextOffset !== undefined ? { nextOffset: window.nextOffset } : {}),
+        ...(window.matchCount !== undefined ? { matchCount: window.matchCount } : {}),
         resolvedUrl: typeof res.url === 'string' && res.url.trim() ? res.url : undefined,
       };
     } catch (error: unknown) {
@@ -194,6 +218,7 @@ export async function firecrawlFetch(params: {
   url: string;
   apiKey: string;
   maxChars: number;
+  offset?: number;
   signal?: AbortSignal;
 }): Promise<{
   content: string;
@@ -201,6 +226,8 @@ export async function firecrawlFetch(params: {
   links?: WebFetchLink[];
   truncated: boolean;
   charCount: number;
+  offset: number;
+  nextOffset?: number;
 }> {
   const res = await expoFetch(`${DEFAULT_FIRECRAWL_BASE_URL}/v1/scrape`, {
     method: 'POST',
@@ -223,12 +250,14 @@ export async function firecrawlFetch(params: {
   const markdown = data?.data?.markdown || '';
   const title = data?.data?.metadata?.title;
   const links = extractFetchedLinksFromMarkdown(markdown);
-  const { text, truncated } = truncateText(markdown, params.maxChars);
+  const window = sliceTextWindow(markdown, params.offset ?? 0, params.maxChars);
   return {
-    content: text,
+    content: window.text,
     title,
     ...(links ? { links } : {}),
-    truncated,
-    charCount: markdown.length,
+    truncated: window.truncated,
+    charCount: window.totalChars,
+    offset: window.offset,
+    ...(window.nextOffset !== undefined ? { nextOffset: window.nextOffset } : {}),
   };
 }

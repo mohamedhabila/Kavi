@@ -170,3 +170,100 @@ export function truncateText(
     truncated: true,
   };
 }
+
+/**
+ * Returns a bounded window of a document plus the coordinates needed to ask for the
+ * next one.
+ *
+ * A page longer than the budget used to come back as a head-and-tail excerpt with no
+ * way to reach the middle. A model that needed a field which fell in the gap could
+ * only re-fetch — the same URL, a different URL, a different API — and each attempt
+ * cost a full model turn while returning the same excerpt. Traced on device as a run
+ * that fetched three times and still could not read one infobox field.
+ *
+ * A window plus `nextOffset` makes continuation a first-class operation, which is the
+ * offset/limit contract agent fetch tools converge on.
+ */
+/**
+ * Returns the regions of a document that mention what the caller is looking for.
+ *
+ * A positional window is the wrong primitive for a targeted lookup. A model that needs
+ * one field from a long page cannot know whether it sits at offset 20,000 or 120,000,
+ * so guessing another URL is cheaper than guessing an offset — traced on device as
+ * eight fetches across five sources hunting a single diameter, none of which read past
+ * the first window of any page.
+ *
+ * Matching regions keep the surrounding text so the value stays interpretable, and are
+ * merged when they overlap so the result reads as prose rather than fragments. An
+ * empty result is meaningful: it says the term is absent from this document, which is
+ * what tells the model to try a different source instead of guessing again.
+ */
+export function selectMatchingRegions(
+  value: string,
+  query: string,
+  maxChars: number,
+  contextChars = 600,
+): { text: string; matchCount: number; totalChars: number } {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return { text: '', matchCount: 0, totalChars: value.length };
+  }
+
+  const haystack = value.toLowerCase();
+  const ranges: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  while (ranges.length < 50) {
+    const index = haystack.indexOf(needle, cursor);
+    if (index < 0) break;
+    const start = Math.max(0, index - contextChars);
+    const end = Math.min(value.length, index + needle.length + contextChars);
+    const previous = ranges[ranges.length - 1];
+    if (previous && start <= previous.end) {
+      previous.end = Math.max(previous.end, end);
+    } else {
+      ranges.push({ start, end });
+    }
+    cursor = index + needle.length;
+  }
+
+  if (ranges.length === 0) {
+    return { text: '', matchCount: 0, totalChars: value.length };
+  }
+
+  const segments: string[] = [];
+  let used = 0;
+  for (const range of ranges) {
+    const segment = value.slice(range.start, range.end);
+    if (used + segment.length > maxChars) {
+      segments.push(segment.slice(0, Math.max(0, maxChars - used)));
+      break;
+    }
+    segments.push(segment);
+    used += segment.length;
+  }
+
+  return {
+    text: segments.join('\n…\n'),
+    matchCount: ranges.length,
+    totalChars: value.length,
+  };
+}
+
+export function sliceTextWindow(
+  value: string,
+  offset: number,
+  maxChars: number,
+): { text: string; truncated: boolean; totalChars: number; offset: number; nextOffset?: number } {
+  const totalChars = value.length;
+  const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.min(Math.floor(offset), totalChars)) : 0;
+  const end = Math.min(totalChars, safeOffset + maxChars);
+  const text = value.slice(safeOffset, end);
+  const truncated = end < totalChars;
+  return {
+    text,
+    truncated,
+    totalChars,
+    offset: safeOffset,
+    ...(truncated ? { nextOffset: end } : {}),
+  };
+}

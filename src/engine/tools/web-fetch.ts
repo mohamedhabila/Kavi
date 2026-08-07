@@ -30,7 +30,7 @@ import {
   type WebFetchEntry,
 } from './webFetchTransports';
 
-const DEFAULT_FETCH_MAX_CHARS = 20_000;
+export const DEFAULT_FETCH_MAX_CHARS = 20_000;
 
 const FETCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
 
@@ -42,6 +42,8 @@ async function executeSingleWebFetch(args: {
   url: string;
   extractMode?: string;
   maxChars?: number;
+  offset?: number;
+  find?: string;
   signal?: AbortSignal;
 }): Promise<WebFetchEntry> {
   const urlString = args.url?.trim();
@@ -70,9 +72,11 @@ async function executeSingleWebFetch(args: {
 
   const extractMode = (args.extractMode === 'text' ? 'text' : 'markdown') as 'markdown' | 'text';
   const maxChars = Math.max(100, args.maxChars || DEFAULT_FETCH_MAX_CHARS);
+  const offset = Math.max(0, Math.floor(Number(args.offset) || 0));
+  const find = typeof args.find === 'string' ? args.find.trim() : '';
 
   const cacheTtlMs = resolveCacheTtlMs(DEFAULT_CACHE_TTL_MINUTES, DEFAULT_CACHE_TTL_MINUTES);
-  const cacheKey = normalizeCacheKey(`${resolvedInputUrl}:${extractMode}:${maxChars}`);
+  const cacheKey = normalizeCacheKey(`${resolvedInputUrl}:${extractMode}:${maxChars}:${offset}:${find}`);
   const cached = readCache(FETCH_CACHE, cacheKey);
   if (cached) {
     return cached.value as WebFetchEntry;
@@ -87,6 +91,8 @@ async function executeSingleWebFetch(args: {
       url: resolvedInputUrl,
       extractMode,
       maxChars,
+      offset,
+      ...(find ? { find } : {}),
       signal: directTimeout.signal,
     });
     const finalUrl = result.resolvedUrl || resolvedInputUrl;
@@ -97,6 +103,9 @@ async function executeSingleWebFetch(args: {
       ...(result.links ? { links: result.links } : {}),
       truncated: result.truncated,
       charCount: result.charCount,
+      offset: result.offset,
+      ...(result.nextOffset !== undefined ? { nextOffset: result.nextOffset } : {}),
+      ...(result.matchCount !== undefined ? { matchCount: result.matchCount } : {}),
     };
     if (requestedUrl !== finalUrl) {
       output.requestedUrl = requestedUrl;
@@ -115,6 +124,7 @@ async function executeSingleWebFetch(args: {
           url: resolvedInputUrl,
           apiKey: firecrawlKey,
           maxChars,
+          offset,
           signal: firecrawlTimeout.signal,
         });
         const finalUrl = resolvedInputUrl;
@@ -125,6 +135,8 @@ async function executeSingleWebFetch(args: {
           ...(result.links ? { links: result.links } : {}),
           truncated: result.truncated,
           charCount: result.charCount,
+          offset: result.offset,
+          ...(result.nextOffset !== undefined ? { nextOffset: result.nextOffset } : {}),
           source: 'firecrawl',
         };
         if (requestedUrl !== finalUrl) {
@@ -162,6 +174,8 @@ export async function executeWebFetch(
     urls: string[];
     extractMode?: string;
     maxChars?: number;
+    offset?: number;
+    find?: string;
   },
   signal?: AbortSignal,
 ): Promise<ToolRuntimeOutcome> {
@@ -178,6 +192,8 @@ export async function executeWebFetch(
         url,
         extractMode: args.extractMode,
         maxChars: args.maxChars,
+        offset: args.offset,
+        find: args.find,
         signal,
       }),
     ),
@@ -197,7 +213,12 @@ export const WEB_FETCH_TOOL: ToolDefinition = {
     'Fetch one or more web pages and extract their content as markdown or plain text. ' +
     'Use this for any plausible HTTP or HTTPS pages you want to read, whether the URLs came from web_search, the user, or direct reasoning. ' +
     'When multiple independent pages need to be read, pass them together in urls so they are fetched in parallel in one tool call. ' +
-    'Each page response is truncated to maxChars (default: 20,000). Increase maxChars only when more page content is necessary.',
+    'Each page returns a contiguous window of maxChars characters (default: 20,000) starting at offset. ' +
+    'When the response has truncated:true it also returns charCount (the full length) and nextOffset. ' +
+    'To read further into the same page, call web_fetch again with the same url and offset set to nextOffset — ' +
+    'do not re-fetch the same window or hunt for an alternative URL. ' +
+    'When you need one specific value rather than the whole page, pass find with the text to look for; ' +
+    'the response then contains only the matching regions and matchCount tells you whether the page has it at all.',
   input_schema: {
     type: 'object',
     properties: {
@@ -210,7 +231,17 @@ export const WEB_FETCH_TOOL: ToolDefinition = {
       extractMode: { type: 'string', description: '"markdown" (default) or "text"' },
       maxChars: {
         type: 'number',
-        description: 'Maximum characters to return per fetched page (default: 20000)',
+        description: 'Characters to return per fetched page window (default: 20000)',
+      },
+      find: {
+        type: 'string',
+        description:
+          'Return only the parts of the page that mention this text, with surrounding context, instead of a positional window. Use this when looking for a specific value; matchCount:0 means the page does not contain it, so try a different source rather than another window.',
+      },
+      offset: {
+        type: 'number',
+        description:
+          'Character offset to start the window at (default: 0). Pass the nextOffset from a truncated response to continue reading the same page.',
       },
     },
     required: ['urls'],
@@ -218,6 +249,7 @@ export const WEB_FETCH_TOOL: ToolDefinition = {
   contract: {
     category: 'web',
     capabilities: ['read', 'verify'],
+    boundedOutput: true,
     resourceKinds: ['unknown'],
     sideEffects: ['none'],
     riskHints: ['read_only', 'open_world'],

@@ -10,6 +10,7 @@ import { qualifyMobileControllerCapability } from './validation';
 const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 
 const MOBILE_UI_ACTION_CONTRACT: NonNullable<ToolDefinition['contract']> = Object.freeze({
+  runtimeRequirements: ['mobile_controller'],
   category: 'mobile_controller',
   capabilities: ['write', 'coordinate'],
   resourceKinds: ['device'],

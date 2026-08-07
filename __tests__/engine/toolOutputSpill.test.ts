@@ -1,5 +1,7 @@
+import { DEFAULT_FETCH_MAX_CHARS } from '../../src/engine/tools/web-fetch';
 import {
   maybeSpillToolOutput,
+  resolveToolOutputSpillByteThreshold,
   TOOL_OUTPUT_DISCOVERY_SPILL_BYTE_THRESHOLD,
   TOOL_OUTPUT_SPILL_BYTE_THRESHOLD,
   TOOL_OUTPUT_SPILL_PREVIEW_CHARS,
@@ -142,5 +144,88 @@ describe('toolOutputSpill', () => {
 
     expect(spilled.spilled).toBe(true);
     expect(mockedWrite).toHaveBeenCalledWith('conv-1', '.kavi/spill/tool_catalog-42.txt', result);
+  });
+});
+
+describe('spill threshold for caller-bounded content tools', () => {
+  it('keeps a default-sized web_fetch window inline', () => {
+    // Spilling a result the caller already bounded costs a read_file round-trip and an
+    // extra model turn without saving any tokens — the model needs the content either
+    // way. Traced on device: two fetches produced two spill files and two extra reads.
+    expect(resolveToolOutputSpillByteThreshold('web_fetch')).toBeGreaterThanOrEqual(
+      DEFAULT_FETCH_MAX_CHARS,
+    );
+  });
+
+  it('keeps web_fetch above the general threshold', () => {
+    expect(resolveToolOutputSpillByteThreshold('web_fetch')).toBeGreaterThan(
+      TOOL_OUTPUT_SPILL_BYTE_THRESHOLD,
+    );
+  });
+
+  it('still spills a genuinely oversized multi-page fetch', () => {
+    expect(resolveToolOutputSpillByteThreshold('web_fetch')).toBeLessThan(Number.MAX_SAFE_INTEGER);
+    expect(Number.isFinite(resolveToolOutputSpillByteThreshold('web_fetch'))).toBe(true);
+  });
+
+  it('leaves unbounded tools on the general threshold', () => {
+    expect(resolveToolOutputSpillByteThreshold('python')).toBe(TOOL_OUTPUT_SPILL_BYTE_THRESHOLD);
+    expect(resolveToolOutputSpillByteThreshold('ssh_exec')).toBe(TOOL_OUTPUT_SPILL_BYTE_THRESHOLD);
+  });
+});
+
+describe('spill preview content selection', () => {
+  const CONVERSATION_ID = 'conv-preview';
+
+  async function spill(result: string) {
+    return maybeSpillToolOutput({
+      result,
+      conversationId: CONVERSATION_ID,
+      toolName: 'python',
+      timestamp: 1,
+    });
+  }
+
+  it('previews the payload content instead of the JSON envelope', async () => {
+    // A head slice of the raw JSON spends the whole budget on the wrapper and the top
+    // of the page, which is navigation chrome. The model then learns nothing and reads
+    // the spill file back every time, so the offload costs a turn instead of saving one.
+    const article = `Titan has a mean radius of 2,574.73 km. ${'body '.repeat(4000)}`;
+    const payload = JSON.stringify({
+      fetches: [{ url: 'https://en.wikipedia.org/wiki/Titan_(moon)', content: article }],
+    });
+
+    const spilled = await spill(payload);
+
+    expect(spilled.spilled).toBe(true);
+    expect(spilled.preview).toContain('mean radius of 2,574.73 km');
+    expect(spilled.preview).not.toContain('"fetches"');
+  });
+
+  it('falls back to the raw payload when the meaning is structural', async () => {
+    // Many short fields and no long string: the shape is the information, so the
+    // envelope is the more useful preview.
+    const payload = JSON.stringify({
+      rows: Array.from({ length: 3000 }, (_, index) => ({ id: index, ok: true })),
+    });
+
+    const spilled = await spill(payload);
+
+    expect(spilled.spilled).toBe(true);
+    expect(spilled.preview.startsWith('{"rows"')).toBe(true);
+  });
+
+  it('leaves non-JSON output untouched', async () => {
+    const plain = `ERROR at line 1\n${'trace line\n'.repeat(3000)}`;
+
+    const spilled = await spill(plain);
+
+    expect(spilled.preview.startsWith('ERROR at line 1')).toBe(true);
+  });
+
+  it('tells the model the preview may already answer the question', async () => {
+    const spilled = await spill(JSON.stringify({ content: 'x'.repeat(20_000) }));
+
+    expect(spilled.payload).toContain('only if the preview does not already answer');
   });
 });

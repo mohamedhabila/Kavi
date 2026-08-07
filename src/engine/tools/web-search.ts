@@ -224,6 +224,7 @@ export const WEB_SEARCH_TOOL: ToolDefinition = {
     required: ['queries'],
   },
   contract: {
+    runtimeRequirements: ['web_search_provider'],
     category: 'web',
     capabilities: ['discover'],
     resourceKinds: ['unknown'],
