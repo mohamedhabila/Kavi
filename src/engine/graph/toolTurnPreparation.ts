@@ -15,6 +15,7 @@ import {
 import { resolveAssistantToolTurnContent } from './assistantToolTurnContent';
 import { buildAgentControlGraphLoopRecoveryDecision } from './loopRecovery';
 import { buildLoopDetectedObservabilityDetail } from './graphObservability';
+import { buildLoopDetectedUserMessage } from './loopTerminalMessage';
 import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
 import { trimAgentControlGraphPendingToolCallsAfterYield } from './sessionsYield';
 import { normalizeToolName } from '../tools/toolNameNormalization';
@@ -30,7 +31,10 @@ export type PrepareAgentControlGraphToolTurnResult =
       status: 'blocked';
       warningInjectedThisRound: boolean;
       workingMessages: Message[];
+      /** Engineering diagnostic for the run journal. Never shown to the user. */
       blockDetails: string;
+      /** Plain-language terminal response for the conversation. */
+      blockedUserMessage: string;
       loopObservabilityDetail?: string;
     }
   | {
@@ -110,6 +114,7 @@ export function prepareAgentControlGraphToolTurn(
       warningInjectedThisRound: params.warningInjectedThisRound,
       workingMessages,
       blockDetails: loopRecoveryDecision.details,
+      blockedUserMessage: buildLoopDetectedUserMessage(params.goals ?? []),
       ...(loopObservabilityDetail ? { loopObservabilityDetail } : {}),
     };
   }

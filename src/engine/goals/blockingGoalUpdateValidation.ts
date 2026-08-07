@@ -58,8 +58,18 @@ export function validateBlockingGoalUpdate(
 
   if (isBlockingGoal(existing) && patch.successCriteria !== undefined) {
     const proposedCriteria = new Set(patch.successCriteria);
+    // Structural criteria are monotonic because dropping one discards proof of a
+    // deliverable. A count carries no such proof: the engine already refuses to accept
+    // `evidence.min:N` as a blocking goal's deliverable and refuses to let one be
+    // appended below, so locking it permanently guards nothing while making a goal
+    // unwinnable the moment the declared number exceeds what the work yields. Traced
+    // live: a goal declared `evidence.min:2` for work producing one evidence entry, and
+    // could neither reach two nor revise down — twelve identical refusals, run blocked,
+    // with the deliverable correct on disk the whole time. Revising a count stays legal;
+    // dropping a criterion that names a deliverable does not.
     const removedCriteria = (existing.successCriteria ?? []).filter(
-      (criterion) => !proposedCriteria.has(criterion),
+      (criterion) =>
+        !proposedCriteria.has(criterion) && !isCountOnlySuccessCriterion(criterion),
     );
     const existingCriteria = new Set(existing.successCriteria ?? []);
     const unsupportedAdditions = patch.successCriteria.filter(

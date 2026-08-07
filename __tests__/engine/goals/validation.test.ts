@@ -200,9 +200,17 @@ describe('goal validation', () => {
       expect(result.errors).toContainEqual(
         expect.objectContaining({ code: 'invalid_success_criteria' }),
       );
-      expect(result.errors.map((error) => error.message).join('\n')).toContain(
-        'registered tool evidence source',
-      );
+      // `evidence.prefix:E2E-GOAL-42` is the misuse this rejection actually meets: the
+      // operand reads as text the evidence should contain, when it names the source that
+      // produced it. Six of eight recorded runs made exactly this mistake and spent a
+      // call recovering, so the message has to name the domain and the criteria that do
+      // assert content — not merely restate that the token was unregistered.
+      const message = result.errors.map((error) => error.message).join('\n');
+      expect(message).toContain('names the source that produced the evidence');
+      expect(message).toContain('not text the evidence should contain');
+      expect(message).toContain('evidence.artifact:');
+      expect(message).toContain('evidence.file_hash:');
+      expect(message).toContain('evidence.tool:');
     });
 
     it('accepts registered tool and worker evidence prefixes', () => {

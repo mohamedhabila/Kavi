@@ -49,7 +49,7 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
         type: 'string',
         enum: ['blocking', 'persistent'],
         description:
-          'Required for add. Use blocking for finite deliverables that must be completed before finalization; use persistent for ongoing focus or memory scopes that should remain active.',
+          'Optional. Use blocking for finite deliverables that must be completed before finalization; use persistent for ongoing focus or memory scopes that should remain active. When omitted it is derived from successCriteria: blocking when a specific structural criterion is present, otherwise persistent.',
       },
       dependencies: {
         type: 'array',

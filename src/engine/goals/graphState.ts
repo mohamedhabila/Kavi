@@ -22,6 +22,7 @@ import {
   resolveGoalCompletionPolicy,
 } from './types';
 import { formatGoalValidationErrorMessage } from './mutationErrors';
+import { backfillGoalEvidenceFromExistingGoals } from './evidenceRouting';
 import { validateGoalMutation } from './validation';
 import type { GoalMutationValidationContext } from './validation';
 import { captureCurrentUserGoalConstraint } from './userConstraints';
@@ -49,10 +50,28 @@ function activateGoalInList(
     };
   }
 
+  // Only the one active goal in a lane receives routed evidence, and activating a goal
+  // demotes the previously active one — so running an effectful tool, which materializes
+  // a code-owned verification goal, moved the model's own goal to pending exactly when
+  // its evidence arrived. The goal could then never complete and the model repeated the
+  // side effect trying to re-earn what the run had already proved. A goal still only
+  // inherits evidence its own success criteria ask for.
+  const inheritedEvidence = backfillGoalEvidenceFromExistingGoals({
+    goal: target,
+    existingGoals: goals,
+  });
+
   return {
     goals: goals.map((existing) => {
       if (existing.id === goalId) {
-        return { ...existing, status: 'active' as AgentGoalStatus, updatedAt: now };
+        return {
+          ...existing,
+          status: 'active' as AgentGoalStatus,
+          updatedAt: now,
+          ...(inheritedEvidence.length
+            ? { evidence: Array.from(new Set([...existing.evidence, ...inheritedEvidence])) }
+            : {}),
+        };
       }
       if (
         existing.status === 'active' &&
@@ -85,10 +104,19 @@ function normalizeAddGoalPatch(
   const hasSpecificRecognizedCriteria = recognizedCriteria.some(
     (criterion) => !isCountOnlySuccessCriterion(criterion),
   );
-  const completionPolicy = patch.completionPolicy ?? options.defaultCompletionPolicy;
-  if (!completionPolicy) {
-    return patch;
-  }
+  // The engine's own rule is that a blocking goal must carry a specific structural
+  // criterion, so when the caller omits the policy the criteria already determine the
+  // only legal value — there is nothing to guess. Demanding it be restated made a
+  // schema-conformant call fail: `completionPolicy` is absent from the tool schema's
+  // `required` list, so a model that follows the schema is rejected at runtime, and the
+  // obvious retry ("a goal gets completed, so it is blocking") hits a second wall for
+  // missing criteria. Traced live: two rejections plus a third attempt tripped the
+  // goal-mutation stall threshold, loop detection killed the run, and the next user turn
+  // restarted the same dead end — 95 tool calls across four turns, none of the work done.
+  const completionPolicy =
+    patch.completionPolicy ??
+    options.defaultCompletionPolicy ??
+    (hasSpecificRecognizedCriteria ? 'blocking' : 'persistent');
 
   const shouldStoreAsPersistentFocus =
     completionPolicy === 'persistent' ||
@@ -311,7 +339,10 @@ export function applyGoalMutation(
             status: 'completed' as AgentGoalStatus,
             evidence,
             updatedAt: now,
-            completedAt: now,
+            // Completing an already-completed goal must not move its completion time:
+            // the engine auto-completes a goal as soon as its criteria are satisfied, so
+            // a model that then says "complete" is re-running a terminal transition.
+            completedAt: existing.completedAt ?? now,
             blockedReason: undefined,
             ...((existing.userConstraints?.length ?? 0) > 0
               ? { userConstraintDeliveryPending: true as const }

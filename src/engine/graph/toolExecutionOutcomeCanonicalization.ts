@@ -7,6 +7,7 @@ import {
   isSuccessCriterionMet,
 } from '../goals/completionEvidence';
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
+import { findUnmetCompletionCriteria } from '../goals/completionRefusalMessage';
 import { applyGoalMutation, normalizeGoalMutationForApplication } from '../goals/graphState';
 import {
   getGoalById,
@@ -25,6 +26,7 @@ import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext'
 import { resolveGoalCapabilityToolNames } from '../goals/toolSurface';
 import { TOOL_DEFINITIONS } from '../tools/definitions';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
+import { buildCanonicalGoalResult } from './canonicalGoalResult';
 
 export type CanonicalToolExecutionOutcome = TerminalToolExecutionOutcome & {
   canonicalized: boolean;
@@ -51,25 +53,24 @@ function cloneToolExecutionOutcomeWithContent(
   };
 }
 
-function buildCanonicalGoalResult(goal: AgentGoal): Record<string, unknown> {
+/**
+ * Compact goal state for a rejected mutation.
+ *
+ * A rejection needs to tell the model what is actually true so it can adapt instead of
+ * retrying against a stale picture — but it does not need the evidence itself. Evidence
+ * entries are effect receipts, roughly a kilobyte of digests each, and echoing the full
+ * array back on every rejection inflated error responses enough to dominate a run's
+ * token cost. Status and the criteria still outstanding are what the model can act on.
+ */
+function buildRejectedMutationGoalState(goal: AgentGoal): Record<string, unknown> {
+  const unmetCriteria = findUnmetCompletionCriteria(goal);
   return {
     id: goal.id,
-    title: goal.title,
     status: goal.status,
     completionPolicy: goal.completionPolicy,
-    dependencies: goal.dependencies,
-    evidence: goal.evidence,
-    ...(goal.successCriteria?.length ? { successCriteria: goal.successCriteria } : {}),
-    ...(goal.userConstraints?.length ? { userConstraintCount: goal.userConstraints.length } : {}),
-    ...(goal.requiredCapabilities?.length
-      ? { requiredCapabilities: goal.requiredCapabilities }
-      : {}),
-    ...(goal.requiredResourceKinds?.length
-      ? { requiredResourceKinds: goal.requiredResourceKinds }
-      : {}),
-    ...(goal.owner ? { owner: goal.owner } : {}),
+    evidenceCount: goal.evidence.length,
+    ...(unmetCriteria.length ? { unmetCriteria } : {}),
     ...(goal.blockedReason ? { blockedReason: goal.blockedReason } : {}),
-    ...(goal.completedAt ? { completedAt: goal.completedAt } : {}),
   };
 }
 
@@ -86,7 +87,13 @@ function buildCanonicalUpdateGoalsContent(params: {
     {
       status: params.status,
       ...(params.action ? { action: params.action } : {}),
-      ...(params.goals ? { goals: params.goals.map(buildCanonicalGoalResult) } : {}),
+      ...(params.goals
+        ? {
+            goals: params.goals.map(
+              params.status === 'error' ? buildRejectedMutationGoalState : buildCanonicalGoalResult,
+            ),
+          }
+        : {}),
       ...(params.errors ? { errors: params.errors } : {}),
       ...(params.structuredErrors ? { structuredErrors: params.structuredErrors } : {}),
       ...(repair ? { repair } : {}),
@@ -473,10 +480,16 @@ export function canonicalizeToolExecutionOutcome(params: {
   try {
     const args = JSON.parse(originalCall.arguments || '{}');
     const parsed = parseUpdateGoalsArgs(args);
+    const currentGoals = params.getGraphSnapshot().goals ?? [];
     if (parsed.errors.length > 0) {
       const content = buildCanonicalUpdateGoalsContent({
         status: 'error',
         action: parsed.mutation.action,
+        // A rejected mutation reports what went wrong but used to omit what is
+        // actually true, so the model retried against its own stale picture of the
+        // goal list — one rejection became a loop. Returning current state with every
+        // error lets it see reality and adapt instead of guessing.
+        goals: currentGoals,
         errors: parsed.errors.map((error) => error.message),
         structuredErrors: serializeParsedUpdateGoalsErrors(parsed.errors, args),
         attemptedArguments: args,
@@ -563,6 +576,7 @@ export function canonicalizeToolExecutionOutcome(params: {
       const content = buildCanonicalUpdateGoalsContent({
         status: 'error',
         action: mutation.action,
+        goals: snapshot.goals ?? currentGoals,
         errors,
         structuredErrors: serializeGoalMutationToolErrors(validation.errors),
         attemptedArguments: args,
@@ -580,6 +594,7 @@ export function canonicalizeToolExecutionOutcome(params: {
       const content = buildCanonicalUpdateGoalsContent({
         status: 'error',
         action: parsed.mutation.action,
+        goals: finalGoals,
         errors: referenceValidation.errors.map((entry) =>
           entry.goalId ? `[${entry.goalId}] ${entry.message}` : entry.message,
         ),

@@ -6,8 +6,8 @@ import {
   parseEffectCompletionCriterion,
   parseToolEffectReceiptEvidence,
 } from './effectCompletionEvidence';
-import { DELEGATED_WORKER_GOAL_OWNER } from './delegation';
-import type { AgentGoal } from './types';
+import { isDelegationOwnedGoal } from './delegation';
+import { isCodeOwnedEffectCompletionGoal, type AgentGoal } from './types';
 
 export type RoutedGoalEvidence = {
   goalId: string;
@@ -82,6 +82,17 @@ function goalMatchesToolContract(goal: AgentGoal, tool: Pick<ToolDefinition, 'co
   return capabilitiesMatch && resourcesMatch;
 }
 
+/**
+ * `activeGoalCount` counts only goals the model actually declared.
+ *
+ * Executing an effectful tool materializes a code-owned "Verify <tool> effect" goal
+ * alongside the model's own. That pushed the active count to two and silently
+ * disqualified the model's goal from this fallback, so a run with a single objective
+ * and an unscoped criterion collected no evidence at all — the receipt landed on the
+ * bookkeeping goal and nothing else. The model's only recourse was to repeat the side
+ * effect to try to earn evidence it had already earned. Bookkeeping goals still
+ * receive evidence; they just no longer make the run look multi-objective.
+ */
 function shouldFallbackToSingleUnscopedGoal(goal: AgentGoal, activeGoalCount: number): boolean {
   return (
     activeGoalCount === 1 && !hasGoalContractRequirements(goal) && !hasRoutableSuccessCriteria(goal)
@@ -106,6 +117,55 @@ function routeEvidenceToGoal(params: {
   return shouldFallbackToSingleUnscopedGoal(params.goal, params.activeGoalCount);
 }
 
+/**
+ * Evidence is routed exactly once, at the moment a tool result arrives. A goal
+ * declared after that moment therefore starts empty even when evidence proving its
+ * criteria is already sitting on another goal in the same run — which is what happens
+ * whenever the model writes a file first and states the goal second. The model's only
+ * recovery is to repeat the tool call. That is merely wasteful for a workspace write,
+ * but for a non-idempotent effect — sending a message, creating a calendar event — it
+ * means doing the real-world action twice.
+ *
+ * Back-fill replays evidence the run already holds against a newly declared goal. It
+ * deliberately reuses only the criterion predicates: a goal receives evidence it
+ * explicitly asserts it needs, never evidence it merely happens to be adjacent to. The
+ * single-active-goal fallback is excluded for the same reason — that rule exists to
+ * catch evidence for an unscoped goal at routing time, and applying it here would let
+ * an unrelated receipt land on a goal that never asked for it.
+ */
+export function backfillGoalEvidenceFromExistingGoals(params: {
+  goal: AgentGoal;
+  existingGoals: ReadonlyArray<AgentGoal>;
+}): string[] {
+  if ((params.goal.successCriteria ?? []).length === 0) {
+    return [];
+  }
+
+  const alreadyHeld = new Set(params.goal.evidence);
+  const backfilled: string[] = [];
+
+  for (const source of params.existingGoals) {
+    if (source.id === params.goal.id || isDelegationOwnedGoal(source)) {
+      continue;
+    }
+    for (const evidence of source.evidence) {
+      if (alreadyHeld.has(evidence)) {
+        continue;
+      }
+      if (
+        !goalCriterionMatchesEvidence(params.goal, evidence) &&
+        !goalEffectCriterionTargetsEvidence(params.goal, evidence)
+      ) {
+        continue;
+      }
+      alreadyHeld.add(evidence);
+      backfilled.push(evidence);
+    }
+  }
+
+  return backfilled;
+}
+
 export function routeToolEvidenceToActiveGoals(params: {
   toolName: string;
   toolDefinitions: ReadonlyArray<Pick<ToolDefinition, 'name' | 'contract'>>;
@@ -118,9 +178,11 @@ export function routeToolEvidenceToActiveGoals(params: {
   );
   const activeGoals = params.goals.filter(
     (goal) =>
-      (goal.status === 'active' || goal.status === 'blocked') &&
-      goal.owner !== DELEGATED_WORKER_GOAL_OWNER,
+      (goal.status === 'active' || goal.status === 'blocked') && !isDelegationOwnedGoal(goal),
   );
+  const modelDeclaredGoalCount = activeGoals.filter(
+    (goal) => !isCodeOwnedEffectCompletionGoal(goal),
+  ).length;
   const routed: RoutedGoalEvidence[] = [];
   const seen = new Set<string>();
 
@@ -129,7 +191,7 @@ export function routeToolEvidenceToActiveGoals(params: {
       if (
         !routeEvidenceToGoal({
           goal,
-          activeGoalCount: activeGoals.length,
+          activeGoalCount: modelDeclaredGoalCount,
           toolDefinition,
           evidence,
         })

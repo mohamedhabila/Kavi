@@ -72,7 +72,13 @@ describe('completionEvidence', () => {
     expect(formatSuccessCriteriaFormsDescription()).toContain('evidence.tool:<name>');
     expect(formatSuccessCriteriaFormsDescription()).toContain('evidence.artifact:<path>');
     expect(formatSuccessCriteriaFormsDescription()).toContain('evidence.count:<n>');
-    expect(formatSuccessCriteriaFormsDescription()).toContain('evidence.json_field:<path>:<value>');
+    // Deliberately not `<path>`: that operand is a dotted field path inside a JSON
+    // payload, while every sibling form takes a workspace file path in the same
+    // position. Traced live, a goal named the file there instead of the field, matched
+    // nothing, and — criteria being monotonic — could never be withdrawn.
+    expect(formatSuccessCriteriaFormsDescription()).toContain(
+      'evidence.json_field:<json.field.path>:<value>',
+    );
     expect(formatSuccessCriteriaFormsDescription()).toContain(
       'evidence.file_hash:<path>:<algo>[:<hex>]',
     );
@@ -372,5 +378,238 @@ describe('completionEvidence', () => {
     ]);
 
     expect(labels).toEqual(['g1:evidence.min:2', 'g2:evidence.prefix:worker']);
+  });
+});
+
+describe('workspace resource identity in evidence criteria', () => {
+  // The receipt always carries the path the workspace actually wrote, which every
+  // write normalizes through sanitizeWorkspaceRelativePath. The criterion token is
+  // typed by the model and is not normalized. Raw string equality between the two
+  // made a goal permanently uncompletable whenever the spellings differed only in
+  // form, even though the write succeeded and the evidence was routed.
+  // Criterion tokens are raw model text, so every one of these spellings can arrive.
+  const EQUIVALENT_CRITERION_SPELLINGS = [
+    './saturn-moons.md',
+    '/saturn-moons.md',
+    'saturn-moons.md',
+    '\\saturn-moons.md',
+    '  saturn-moons.md  ',
+  ];
+
+  // Receipt ids are narrower: the evidence encoding rejects untrimmed ids outright
+  // (see the invariant pinned below), so padding can never reach this side.
+  const EQUIVALENT_RECEIPT_SPELLINGS = [
+    './saturn-moons.md',
+    '/saturn-moons.md',
+    'saturn-moons.md',
+    '\\saturn-moons.md',
+  ];
+
+  it.each(EQUIVALENT_CRITERION_SPELLINGS)(
+    'satisfies evidence.artifact when the criterion is written as %s',
+    (criterionPath) => {
+      const goal = createGoal({
+        id: 'g1',
+        title: 'Research',
+        status: 'active',
+        successCriteria: [`evidence.artifact:${criterionPath}`],
+        evidence: [verifiedArtifactEvidence('saturn-moons.md')],
+      });
+
+      expect(isSuccessCriterionMet(goal, `evidence.artifact:${criterionPath}`)).toBe(true);
+    },
+  );
+
+  it.each(EQUIVALENT_RECEIPT_SPELLINGS)(
+    'satisfies evidence.artifact when the receipt records the path as %s',
+    (receiptPath) => {
+      const goal = createGoal({
+        id: 'g1',
+        title: 'Research',
+        status: 'active',
+        successCriteria: ['evidence.artifact:saturn-moons.md'],
+        evidence: [verifiedArtifactEvidence(receiptPath)],
+      });
+
+      expect(isSuccessCriterionMet(goal, 'evidence.artifact:saturn-moons.md')).toBe(true);
+    },
+  );
+
+  it('still rejects a receipt for a genuinely different workspace file', () => {
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.artifact:saturn-moons.md'],
+      evidence: [verifiedArtifactEvidence('jupiter-moons.md')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.artifact:saturn-moons.md')).toBe(false);
+  });
+
+  it('still rejects a nested path that shares only its file name', () => {
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.artifact:saturn-moons.md'],
+      evidence: [verifiedArtifactEvidence('reports/saturn-moons.md')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.artifact:saturn-moons.md')).toBe(false);
+  });
+
+  it('rejects a receipt whose resource id is not already trimmed', () => {
+    // Pinned because the criterion side deliberately tolerates padding while this
+    // side must not: if the encoding ever started accepting untrimmed ids, two
+    // different receipts could claim the same file.
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.artifact:saturn-moons.md'],
+      evidence: [verifiedArtifactEvidence('  saturn-moons.md  ')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.artifact:saturn-moons.md')).toBe(false);
+  });
+
+  it('agrees with the workspace on traversal segments being stripped, not resolved', () => {
+    // The workspace sanitizer removes `../` rather than popping the preceding
+    // segment, so `notes/../x.md` genuinely writes to `notes/x.md`. Both sides run
+    // the same sanitizer, so the criterion agrees with where the file actually went
+    // instead of where the spelling suggests it went.
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.artifact:notes/../saturn-moons.md'],
+      evidence: [verifiedArtifactEvidence('notes/saturn-moons.md')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.artifact:notes/../saturn-moons.md')).toBe(true);
+    expect(isSuccessCriterionMet(goal, 'evidence.artifact:saturn-moons.md')).toBe(false);
+  });
+
+  it('rejects an artifact criterion whose token normalizes to nothing', () => {
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.artifact:./'],
+      evidence: [verifiedArtifactEvidence('saturn-moons.md')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.artifact:./')).toBe(false);
+  });
+
+  it('applies the same normalization to evidence.file_hash', () => {
+    const digest = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: [`evidence.file_hash:./saturn-moons.md:sha256:${digest}`],
+      evidence: [verifiedArtifactEvidence('saturn-moons.md', `sha256:${digest}`)],
+    });
+
+    expect(
+      isSuccessCriterionMet(goal, `evidence.file_hash:./saturn-moons.md:sha256:${digest}`),
+    ).toBe(true);
+  });
+});
+
+describe('tool identity in evidence criteria', () => {
+  // Effect-free tools contribute a plain `<toolName>:<summary>` evidence string;
+  // effectful tools contribute only a structured receipt. Matching by string prefix
+  // alone recognised the first kind and silently missed the second, so no effectful
+  // tool in any family could satisfy evidence.tool — the goal stayed open however
+  // many times the model did exactly what the criterion asked for.
+  it('satisfies evidence.tool from an effectful tool receipt', () => {
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.tool:write_file'],
+      evidence: [verifiedArtifactEvidence('saturn-moons.md')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.tool:write_file')).toBe(true);
+  });
+
+  it('satisfies evidence.prefix from an effectful tool receipt', () => {
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.prefix:write_file'],
+      evidence: [verifiedArtifactEvidence('saturn-moons.md')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.prefix:write_file')).toBe(true);
+  });
+
+  it('still satisfies evidence.tool from a plain effect-free evidence string', () => {
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.tool:web_search'],
+      evidence: ['web_search:found 3 sources'],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.tool:web_search')).toBe(true);
+  });
+
+  it('does not credit a receipt from a different tool', () => {
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.tool:file_edit'],
+      evidence: [verifiedArtifactEvidence('saturn-moons.md')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.tool:file_edit')).toBe(false);
+  });
+
+  it('does not credit a tool name that is merely a prefix of the receipt tool', () => {
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.tool:write'],
+      evidence: [verifiedArtifactEvidence('saturn-moons.md')],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.tool:write')).toBe(false);
+  });
+
+  it('does not credit a failed effect', () => {
+    const failedReceipt = buildToolEffectReceiptEvidence({
+      version: 2,
+      receiptId: `ter_${'c'.repeat(32)}`,
+      toolCallId: 'call-write',
+      toolName: 'write_file',
+      executionRunId: 'execution-run-1',
+      contractIdentity: contractIdentity('write_file'),
+      transportState: 'returned',
+      effectKind: 'artifact.write',
+      effectState: 'failed',
+      verificationState: 'unverified',
+      requestDigest: `sha256:${'1'.repeat(64)}`,
+      resultDigest: `sha256:${'2'.repeat(64)}`,
+      resource: { kind: 'workspace_file', id: 'saturn-moons.md' },
+      recordedAt: 1,
+    } satisfies ToolEffectReceipt);
+    const goal = createGoal({
+      id: 'g1',
+      title: 'Research',
+      status: 'active',
+      successCriteria: ['evidence.tool:write_file'],
+      evidence: [failedReceipt],
+    });
+
+    expect(isSuccessCriterionMet(goal, 'evidence.tool:write_file')).toBe(false);
   });
 });

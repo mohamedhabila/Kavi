@@ -9,6 +9,37 @@ import {
   parseEffectCompletionCriterion,
   parseToolEffectReceiptEvidence,
 } from './effectCompletionEvidence';
+import { sanitizeWorkspaceRelativePath } from '../../services/workspaces/paths';
+
+/**
+ * A workspace resource identity has two independent authors. The receipt carries the
+ * path the workspace actually wrote, which every write goes through
+ * `sanitizeWorkspaceRelativePath` to produce. The criterion token is typed by the
+ * model, unnormalized. Comparing those two strings raw makes a goal permanently
+ * uncompletable whenever the spellings differ only in form: `./notes.md`,
+ * `/notes.md`, `a/../notes.md` and `notes.md` all name the same file, but only the
+ * last one ever matched a receipt. The write succeeded, the evidence was routed, and
+ * the goal still could not close — with no diagnosable signal, because every
+ * individual step reported success.
+ *
+ * Canonicalizing both sides through the workspace's own sanitizer makes the
+ * comparison test the resource rather than the spelling. This is shared by every
+ * criterion that identifies a `workspace_file`, so `write_file`, `file_edit`,
+ * `image_generate` and `image_edit` are all covered by one rule.
+ */
+function workspaceResourceIdentityMatches(
+  resource: { readonly kind: string; readonly id: string },
+  pathToken: string,
+): boolean {
+  if (resource.kind !== 'workspace_file') {
+    return false;
+  }
+  const canonicalToken = sanitizeWorkspaceRelativePath(pathToken);
+  if (!canonicalToken) {
+    return false;
+  }
+  return sanitizeWorkspaceRelativePath(resource.id) === canonicalToken;
+}
 
 export interface GoalEvidenceGap {
   goalId: string;
@@ -28,7 +59,7 @@ export const SUCCESS_CRITERION_FORMS = [
   'evidence.prefix:<token>',
   'evidence.tool:<name>',
   'evidence.artifact:<path>',
-  'evidence.json_field:<path>:<value>',
+  'evidence.json_field:<json.field.path>:<value>',
   'evidence.file_hash:<path>:<algo>[:<hex>]',
   'evidence.exit_code:<n>',
   'evidence.effect:<closed-json-contract>',
@@ -201,9 +232,41 @@ function meetsEvidenceCountCriterion(goal: AgentGoal, minimum: number): boolean 
   return goal.evidence.length >= minimum;
 }
 
+/**
+ * Evidence for a tool call arrives in one of two shapes, and which one depends on
+ * whether the tool has an effect. Effect-free tools contribute a plain
+ * `<toolName>:<summary>` string; effectful tools contribute only a structured effect
+ * receipt, which is JSON behind its own prefix.
+ *
+ * Matching `<toolName>:` by string prefix therefore recognised read-only tools and
+ * silently missed every effectful one — `write_file`, `file_edit`, `memory_remember`,
+ * `image_generate`, messaging, calendar, all of them. A goal asserting
+ * `evidence.tool:write_file` could not be satisfied by calling `write_file`, so it
+ * stayed open no matter how many times the model did the right thing.
+ *
+ * The receipt already carries the tool identity, so it is consulted directly. Exact
+ * equality matches the plain-string semantics, where the token is the whole segment
+ * before the colon rather than an arbitrary substring. Failed effects are excluded:
+ * the plain-string path never records an errored call either.
+ */
+function evidenceEntryAttributedToTool(entry: string, toolName: string): boolean {
+  if (entry.startsWith(`${toolName}:`)) {
+    return true;
+  }
+  const receipt = parseToolEffectReceiptEvidence(entry);
+  return (
+    receipt?.toolName === toolName &&
+    receipt.transportState === 'returned' &&
+    receipt.effectState !== 'failed'
+  );
+}
+
 function meetsEvidencePrefixCriterion(goal: AgentGoal, token: string): boolean {
-  const prefix = `${token}:`;
-  return goal.evidence.some((entry) => entry.startsWith(prefix));
+  const normalized = token.trim();
+  if (!normalized) {
+    return false;
+  }
+  return goal.evidence.some((entry) => evidenceEntryAttributedToTool(entry, normalized));
 }
 
 function meetsEvidenceToolCriterion(goal: AgentGoal, toolName: string): boolean {
@@ -211,8 +274,7 @@ function meetsEvidenceToolCriterion(goal: AgentGoal, toolName: string): boolean 
   if (!normalized) {
     return false;
   }
-  const prefix = `${normalized}:`;
-  return goal.evidence.some((entry) => entry.startsWith(prefix));
+  return goal.evidence.some((entry) => evidenceEntryAttributedToTool(entry, normalized));
 }
 
 function meetsEvidenceArtifactCriterion(goal: AgentGoal, pathToken: string): boolean {
@@ -227,8 +289,7 @@ function meetsEvidenceArtifactCriterion(goal: AgentGoal, pathToken: string): boo
       receipt.effectKind === 'artifact.write' &&
       receipt.effectState === 'applied' &&
       receipt.verificationState === 'verified' &&
-      receipt.resource.kind === 'workspace_file' &&
-      receipt.resource.id === normalized
+      workspaceResourceIdentityMatches(receipt.resource, normalized)
     );
   });
 }
@@ -278,8 +339,7 @@ function meetsEvidenceFileHashCriterion(
       receipt.effectKind === 'artifact.write' &&
       receipt.effectState === 'applied' &&
       receipt.verificationState === 'verified' &&
-      receipt.resource.kind === 'workspace_file' &&
-      receipt.resource.id === normalizedPath &&
+      workspaceResourceIdentityMatches(receipt.resource, normalizedPath) &&
       /^[0-9a-f]{64}$/u.test(digest) &&
       (!normalizedExpectedDigest || digest === normalizedExpectedDigest)
     );

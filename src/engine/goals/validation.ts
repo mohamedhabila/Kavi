@@ -6,17 +6,9 @@
 // integrity.
 // ---------------------------------------------------------------------------
 
-import { GOAL_BOOTSTRAP_TOOL_NAME } from './bootstrap';
-import {
-  evaluateGoalEvidenceGaps,
-  isCountOnlySuccessCriterion,
-  isRecognizedSuccessCriterionForm,
-  isSuccessCriterionMet,
-} from './completionEvidence';
+import { evaluateGoalEvidenceGaps, isSuccessCriterionMet } from './completionEvidence';
 import type { AgentGoal, AgentGoalMutation, AgentGoalStatus } from './types';
 import { createGoal, isBlockingGoal } from './types';
-import { isRegisteredToolName } from '../tools/toolNameNormalization';
-import { EFFECT_RECEIPT_EVIDENCE_PREFIX } from './effectCompletionEvidence';
 import {
   validateGoalConstraintMutationCapacity,
   validateGoalConstraintRemoval,
@@ -26,21 +18,20 @@ import {
 import { validateBlockingGoalUpdate } from './blockingGoalUpdateValidation';
 import { buildUnmetCompletionRequirementMessage } from './completionRefusalMessage';
 import { assessGoalInfeasibilityClaim } from './infeasibility';
+import {
+  findCodeOwnedEvidence,
+  findInternalGraphEvidenceCriteria,
+  findInvalidSuccessCriteria,
+  findUnknownEvidencePrefixCriteria,
+  findMisdirectedJsonFieldCriteria,
+  findUnsatisfiableStructuralCriteria,
+  findUnknownToolEvidenceCriteria,
+  hasSpecificSuccessCriteria,
+  hasStructuralSuccessCriteria,
+  shouldValidateSuccessCriteria,
+} from './successCriteriaInspection';
 
 export type { GoalMutationValidationContext } from './goalUserConstraintValidation';
-
-const INTERNAL_DELIVERABLE_TOOL_NAMES = new Set([
-  GOAL_BOOTSTRAP_TOOL_NAME,
-  'tool_catalog',
-  'tool_describe',
-  'sessions_spawn',
-  'sessions_send',
-  'sessions_wait',
-  'sessions_output',
-  'sessions_history',
-]);
-const REGISTERED_NON_TOOL_EVIDENCE_PREFIXES = new Set(['worker']);
-const CODE_OWNED_EVIDENCE_PREFIXES = [EFFECT_RECEIPT_EVIDENCE_PREFIX] as const;
 
 export type GoalValidationErrorCode =
   | 'missing_title'
@@ -99,129 +90,6 @@ function goalMeetsCompletionRequirements(
 
 function hasExplicitCompletionPolicy(patch: AgentGoalMutation['goals'][number]): boolean {
   return patch.completionPolicy === 'blocking' || patch.completionPolicy === 'persistent';
-}
-
-function resolvePatchCompletionPolicy(
-  patch: AgentGoalMutation['goals'][number],
-  existingGoals: ReadonlyArray<AgentGoal>,
-): AgentGoal['completionPolicy'] | undefined {
-  if (patch.completionPolicy === 'blocking' || patch.completionPolicy === 'persistent') {
-    return patch.completionPolicy;
-  }
-  const goalId = patch.id?.trim();
-  if (!goalId) {
-    return undefined;
-  }
-  return existingGoals.find((goal) => goal.id === goalId)?.completionPolicy;
-}
-
-function shouldValidateSuccessCriteria(
-  patch: AgentGoalMutation['goals'][number],
-  existingGoals: ReadonlyArray<AgentGoal>,
-): boolean {
-  return resolvePatchCompletionPolicy(patch, existingGoals) !== 'persistent';
-}
-
-function hasStructuralSuccessCriteria(patch: AgentGoalMutation['goals'][number]): boolean {
-  return (patch.successCriteria ?? []).some((criterion) =>
-    isRecognizedSuccessCriterionForm(criterion),
-  );
-}
-
-function hasSpecificSuccessCriteria(patch: AgentGoalMutation['goals'][number]): boolean {
-  return (patch.successCriteria ?? []).some(
-    (criterion) =>
-      isRecognizedSuccessCriterionForm(criterion) && !isCountOnlySuccessCriterion(criterion),
-  );
-}
-
-function findInvalidSuccessCriteria(
-  patch: AgentGoalMutation['goals'][number],
-): ReadonlyArray<string> {
-  return (patch.successCriteria ?? [])
-    .map((criterion) => criterion.trim())
-    .filter((criterion) => criterion.length > 0 && !isRecognizedSuccessCriterionForm(criterion));
-}
-
-function findInternalGraphEvidenceCriteria(
-  patch: AgentGoalMutation['goals'][number],
-): ReadonlyArray<string> {
-  return (patch.successCriteria ?? [])
-    .map((criterion) => criterion.trim())
-    .filter((criterion) => referencesInternalGraphToolCriterion(criterion));
-}
-
-function findUnknownToolEvidenceCriteria(
-  patch: AgentGoalMutation['goals'][number],
-): ReadonlyArray<string> {
-  return (patch.successCriteria ?? [])
-    .map((criterion) => criterion.trim())
-    .filter((criterion) => {
-      const toolToken = readEvidenceToolCriterionToken(criterion);
-      return Boolean(toolToken && !isRegisteredToolName(toolToken));
-    });
-}
-
-function findUnknownEvidencePrefixCriteria(
-  patch: AgentGoalMutation['goals'][number],
-): ReadonlyArray<string> {
-  return (patch.successCriteria ?? [])
-    .map((criterion) => criterion.trim())
-    .filter((criterion) => {
-      const prefixToken = readEvidencePrefixCriterionToken(criterion);
-      return Boolean(
-        prefixToken &&
-        !REGISTERED_NON_TOOL_EVIDENCE_PREFIXES.has(prefixToken) &&
-        !isRegisteredToolName(prefixToken),
-      );
-    });
-}
-
-function findCodeOwnedEvidence(patch: AgentGoalMutation['goals'][number]): ReadonlyArray<string> {
-  return (patch.evidence ?? []).filter((evidence) =>
-    CODE_OWNED_EVIDENCE_PREFIXES.some((prefix) => evidence.startsWith(prefix)),
-  );
-}
-
-function readEvidenceToolCriterionToken(criterion: string): string | null {
-  const prefix = 'evidence.tool:';
-  if (!criterion.startsWith(prefix)) {
-    return null;
-  }
-  const toolToken = criterion.slice(prefix.length).trim();
-  return toolToken.length > 0 ? toolToken : null;
-}
-
-function readEvidencePrefixCriterionToken(criterion: string): string | null {
-  const prefix = 'evidence.prefix:';
-  if (!criterion.startsWith(prefix)) {
-    return null;
-  }
-  const prefixToken = criterion.slice(prefix.length).trim();
-  return prefixToken.length > 0 ? prefixToken : null;
-}
-
-function referencesInternalGraphToolCriterion(criterion: string): boolean {
-  for (const prefix of ['evidence.tool:', 'evidence.prefix:'] as const) {
-    if (!criterion.startsWith(prefix)) {
-      continue;
-    }
-
-    const toolToken = criterion.slice(prefix.length).trim();
-    if (!toolToken) {
-      continue;
-    }
-
-    const segments = toolToken
-      .split(':')
-      .map((segment) => segment.trim())
-      .filter(Boolean);
-    if (segments.some((segment) => INTERNAL_DELIVERABLE_TOOL_NAMES.has(segment))) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 function validateGoalBlockTransition(
@@ -327,6 +195,17 @@ function validateGoalLifecycleTransition(
   if (action === 'complete' || (action === 'update' && nextStatus === 'completed')) {
     const extraEvidence = action === 'complete' ? (patchEvidence ?? []) : [];
 
+    // Completing an already-completed goal is the state the caller asked for, so it
+    // succeeds rather than erroring. Rejecting it left no legal move: the engine
+    // auto-completes a goal the moment its criteria are satisfied, so a model that
+    // then said "complete" was told to activate first, and activating was refused
+    // because completed goals cannot be reactivated. Traced on device and in the
+    // evaluation suite as a run that ground through five update_goals calls against
+    // that contradiction. Any tool whose result satisfies a goal can reach it.
+    if (existing.status === 'completed') {
+      return;
+    }
+
     if (existing.status === 'blocked') {
       if (!goalMeetsCompletionRequirements(existing, extraEvidence)) {
         errors.push({
@@ -335,6 +214,26 @@ function validateGoalLifecycleTransition(
           message: 'Cannot complete a goal before structural evidence requirements are met.',
         });
       }
+      return;
+    }
+
+    // A goal that has already proven everything it declared can be completed straight
+    // from pending. The `update_goals` schema does not require `status`, so a goal
+    // added without one is created pending, and refusing to complete it forced a
+    // rejected call plus an activate call for a transition the engine can make itself.
+    //
+    // Declared criteria are what makes this safe. A goal carrying none meets
+    // "completion requirements" on any evidence at all — an incidental catalog lookup
+    // or memory recall is enough — and criteria are stripped whenever they fail
+    // recognition, so criteria-less goals occur in real runs. Skipping activation for
+    // one would let unrelated activity close a blocking goal and release the run
+    // before its work was done. Requiring explicit activation there keeps the model's
+    // deliberate act of focusing the goal in the loop.
+    if (
+      existing.status === 'pending' &&
+      (existing.successCriteria?.length ?? 0) > 0 &&
+      goalMeetsCompletionRequirements(existing, extraEvidence)
+    ) {
       return;
     }
 
@@ -430,7 +329,15 @@ export function validateGoalMutation(
         errors.push({
           goalId: g.id,
           code: 'missing_success_criteria',
-          message: 'Blocking goals require recognized structural successCriteria when adding.',
+          // Naming only the rule left no legal move for a goal that has no verifiable
+          // deliverable — the caller cannot invent a structural criterion for "track this
+          // topic", and retrying the same shape is then the only option it can see. Both
+          // ways out are stated so a single rejection is recoverable.
+          message:
+            'Blocking goals require recognized structural successCriteria when adding. ' +
+            'Either declare a structural criterion describing the deliverable, or use ' +
+            'completionPolicy "persistent" if this goal is an ongoing focus with nothing ' +
+            'to verify. Re-sending this goal unchanged will be rejected the same way.',
         });
       }
       if (
@@ -498,14 +405,54 @@ export function validateGoalMutation(
         });
       }
 
+      const unsatisfiableStructuralCriteria = findUnsatisfiableStructuralCriteria(g);
+      if (unsatisfiableStructuralCriteria.length > 0) {
+        errors.push({
+          goalId: g.id,
+          code: 'invalid_success_criteria',
+          message:
+            'Structural criteria name a resource, not a description, and their operand ' +
+            'must be a single workspace path or field reference: ' +
+            `${unsatisfiableStructuralCriteria.join(', ')}. A criterion that cannot match ` +
+            'any evidence would gate this goal permanently, because criteria on a blocking ' +
+            'goal cannot be removed once accepted.',
+        });
+      }
+
+      const misdirectedJsonFieldCriteria = findMisdirectedJsonFieldCriteria(g);
+      if (misdirectedJsonFieldCriteria.length > 0) {
+        errors.push({
+          goalId: g.id,
+          code: 'invalid_success_criteria',
+          message:
+            'evidence.json_field reads a field out of a JSON payload, so its first ' +
+            'operand is a dotted field path such as `calendar.allowsModifications`, not ' +
+            'a file path: ' +
+            `${misdirectedJsonFieldCriteria.join(', ')}. To assert a workspace file ` +
+            'exists use evidence.artifact:<path>, or evidence.file_hash:<path>:<algo> to ' +
+            'pin its contents. A field path naming a file matches nothing and could not ' +
+            'be withdrawn once accepted.',
+        });
+      }
+
       const unknownEvidencePrefixCriteria = findUnknownEvidencePrefixCriteria(g);
       if (unknownEvidencePrefixCriteria.length > 0) {
         errors.push({
           goalId: g.id,
           code: 'invalid_success_criteria',
           message:
-            'evidence.prefix criteria must reference a registered tool evidence source or registered graph evidence prefix: ' +
-            `${unknownEvidencePrefixCriteria.join(', ')}. For workspace deliverables use evidence.artifact:<exact-workspace-relative-path>; evidence.prefix:artifact is invalid.`,
+            // The operand names the *source* of the evidence — the tool that produced
+            // it — not text the evidence should contain. "prefix" reads naturally as the
+            // latter, and that is the misuse actually observed: six runs in eight passed
+            // the expected file content here, were refused, and spent a call recovering.
+            // Naming both the domain and the criterion that does assert content ends it
+            // in one exchange instead of by trial.
+            'evidence.prefix names the source that produced the evidence — a registered ' +
+            'tool name, or a registered graph evidence prefix — not text the evidence ' +
+            `should contain: ${unknownEvidencePrefixCriteria.join(', ')}. To assert that a ` +
+            'workspace file exists use evidence.artifact:<exact-workspace-relative-path>; ' +
+            'to assert its exact contents use evidence.file_hash:<path>:<algo>[:<hex>]; to ' +
+            'require that a particular tool produced evidence use evidence.tool:<name>.',
         });
       }
     }

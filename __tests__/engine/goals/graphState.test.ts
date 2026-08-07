@@ -365,7 +365,16 @@ describe('goal graph state', () => {
       expect(goals).toEqual([goal]);
     });
 
-    it('rejects add without an explicit completion policy', () => {
+    it('derives the completion policy for an add that omits it', () => {
+      // Previously rejected. Three facts made that rejection wrong rather than strict:
+      // `completionPolicy` is not in the tool schema's `required` list, so a
+      // schema-conformant call was refused at runtime; a goal with no structural
+      // criterion cannot legally be blocking, so persistent is the only value the engine
+      // would ever accept; and the sibling case directly below already derives persistent
+      // for `activate` on a missing goal, so `add` was the odd one out. Traced live, the
+      // rejection was unrecoverable: the retry a model naturally reaches for — declaring
+      // the goal blocking — hits a second wall for missing criteria, and the third attempt
+      // trips the goal-mutation stall threshold, ending the run with none of the work done.
       const g1 = createGoal({ id: 'scope-a', title: 'scope-a-planning', status: 'active' });
       const { goals, errors } = applyGoalMutation(
         [g1],
@@ -375,9 +384,9 @@ describe('goal graph state', () => {
         },
         now,
       );
-      expect(errors).toHaveLength(1);
-      expect(errors[0]).toContain('completionPolicy');
-      expect(goals).toEqual([g1]);
+      expect(errors).toEqual([]);
+      const added = goals.find((goal) => goal.id === 'scope-b');
+      expect(added?.completionPolicy).toBe('persistent');
     });
 
     it('treats activate on a named missing goal as active persistent add', () => {
