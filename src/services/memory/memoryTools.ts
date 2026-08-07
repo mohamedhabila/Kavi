@@ -27,6 +27,10 @@ import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 import { ensureFactSchema } from './schema';
 import {
+  buildPredicateIdentityCorrection,
+  findUserSuppliedPredicateIdentity,
+} from './predicateIdentityPreservation';
+import {
   canReadLongTermMemory,
   canWriteLongTermMemory,
   captureMemoryReadEpoch,
@@ -565,6 +569,29 @@ export function executeMemoryRemember(
   if (args.pinned !== undefined && typeof args.pinned !== 'boolean') {
     return err('invalid_args', 'pinned must be a boolean');
   }
+  // Subject and value are already required to be copied exactly from the current user
+  // message. The predicate — the name the fact is filed and later recalled under — had
+  // no such grounding, so a caller could decorate an identifier the user wrote and store
+  // the fact where that name would never find it. The write reported success and the
+  // loss only surfaced at recall.
+  const suppliedPredicate = (args.semanticEvidence as { predicate?: unknown } | undefined)
+    ?.predicate;
+  if (typeof suppliedPredicate === 'string') {
+    const userSuppliedPredicateIdentity = findUserSuppliedPredicateIdentity({
+      predicate: suppliedPredicate,
+      userMessageText: context.requestEvidence.userMessageText,
+    });
+    if (userSuppliedPredicateIdentity) {
+      return err(
+        'grounding_required',
+        buildPredicateIdentityCorrection({
+          predicate: suppliedPredicate,
+          userSuppliedIdentity: userSuppliedPredicateIdentity,
+        }),
+      );
+    }
+  }
+
   const semantic = bindMemoryRememberSemanticEvidence(
     args.semanticEvidence,
     context.requestEvidence,
