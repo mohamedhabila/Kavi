@@ -10,6 +10,7 @@ import {
 } from '../goals/effectCompletionEvidence';
 import { applyGoalMutation } from '../goals/graphState';
 import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER, isBlockingGoal } from '../goals/types';
+import { isDelegationOwnedGoal } from '../goals/delegation';
 import {
   findGoalForEffectCompletionRequirement,
   resolveToolEffectCompletionRequirement,
@@ -257,8 +258,13 @@ export async function materializeToolEffectCompletionGoals(params: {
       errors: ['effect_completion_verification_blocked'],
     };
   }
+  // A delegation goal's contract belongs to the worker, so this run's own side effects
+  // must not add criteria to it — the same rule evidence routing already applies when it
+  // decides where tool output may land. Skipping it here falls through to the branch that
+  // creates a dedicated code-owned verification goal, which is what happens whenever
+  // there is no active blocking deliverable of this run's own.
   const activeBlockingGoal = workingGoals.find(
-    (goal) => goal.status === 'active' && isBlockingGoal(goal),
+    (goal) => goal.status === 'active' && isBlockingGoal(goal) && !isDelegationOwnedGoal(goal),
   );
   if (activeBlockingGoal) {
     return applyMaterialization({

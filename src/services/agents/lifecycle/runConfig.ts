@@ -148,7 +148,10 @@ export function buildInitialSubAgentMessages(config: SubAgentConfig): Message[] 
 }
 
 export function buildSubAgentSystemPrompt(
-  config: Pick<SubAgentConfig, 'systemPrompt' | 'memoryBundle' | 'agentRunId' | 'workstreamId'>,
+  config: Pick<
+    SubAgentConfig,
+    'systemPrompt' | 'memoryBundle' | 'agentRunId' | 'workstreamId' | 'deliverableKind'
+  >,
   depth: number,
 ): string {
   const workerContract = `## Worker Contract
@@ -163,11 +166,23 @@ export function buildSubAgentSystemPrompt(
 - If the prompt or Expected output asks for an exact answer, return that exact answer and skip the report.
 - Otherwise finish with a concise report: outcome, key verified findings, artifacts/actions, and any blocker.
 - If interrupted, timed out, or cancelled, preserve the most useful verified findings in visible text.`;
+  // The evidence clause is stated for the kind of deliverable this worker was given.
+  // Held unconditionally it contradicted the Worker Contract above, which tells a worker
+  // whose task needs no tools to answer directly: the worker did that, correctly, and was
+  // then forbidden from reporting success because it had no tool results to point at. It
+  // therefore never claimed verified_success, its goal never received worker evidence,
+  // and the supervisor re-delegated until the run hit its ceiling. Proof is still demanded
+  // wherever there is something to prove — the scoping goal decides which case this is.
+  const requiresExecutionProof = config.deliverableKind !== 'information';
   const structuredExecutionContract = config.workstreamId?.trim()
     ? `## Execution Evidence Contract
 - This is graph-owned or run-owned execution work. Do not infer success from priors or typical project structure.
 - If the task required inspection, verification, or side effects, use the available tools before concluding the work is complete.
-- Use verified_success only when completed tool results or structured workflow records directly verify the requested work.
+${
+  requiresExecutionProof
+    ? '- Use verified_success only when completed tool results or structured workflow records directly verify the requested work.'
+    : '- This task asks for an answer rather than a change to anything. Use verified_success when you have actually produced the requested answer, and only then. If any part of it did require inspection, verification, or a side effect, that part still needs completed tool results.'
+}
 - If you could not inspect, verify, or complete the requested work, say so plainly instead of guessing.
 - The runtime tracks completion state separately from the visible report; focus on the report itself.`
     : undefined;

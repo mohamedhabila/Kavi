@@ -29,6 +29,7 @@ jest.mock('../../src/utils/id', () => ({
 }));
 
 import { spawnSubAgent, getSubAgent } from '../../src/services/agents/subAgent';
+import { setSearchProviderReadinessSnapshot } from '../../src/services/browser/core/searchProviderReadiness';
 
 const mockProvider = {
   id: 'test',
@@ -40,6 +41,9 @@ const mockProvider = {
 };
 
 beforeEach(() => {
+  // Search availability is credential-backed; seed it so this suite tests whitelist
+  // logic rather than whatever keys happen to exist in the environment.
+  setSearchProviderReadinessSnapshot(true);
   jest.clearAllMocks();
   mockAsyncStorageData = {};
   capturedOrchestratorOptions = null;

@@ -9,6 +9,7 @@ import {
   spawnSubAgent,
   startSubAgent,
 } from '../helpers/subAgentDurabilityHarness';
+import { setSearchProviderReadinessSnapshot } from '../../src/services/browser/core/searchProviderReadiness';
 
 installSubAgentDurabilityHarness();
 
@@ -410,6 +411,9 @@ describe('sub-agent toolFilter pass-through', () => {
   });
 
   it('uses config.tools to build the worker tool surface passed to runOrchestrator', async () => {
+    // Search availability is credential-backed; seed it so this asserts tool-surface
+    // construction rather than whatever keys happen to exist in the environment.
+    setSearchProviderReadinessSnapshot(true);
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
       return Promise.resolve({ terminalDisposition: 'final_candidate' });

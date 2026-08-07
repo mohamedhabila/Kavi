@@ -51,6 +51,7 @@ export function buildSpawnSubAgentConfig(args: {
   workerModel: string;
   agentRunId?: string;
   workstreamId?: string;
+  deliverableKind?: SubAgentConfig['deliverableKind'];
   sanitizedName?: string;
   workerTools?: string[];
   memorySelectionScope?: SubAgentConfig['memorySelectionScope'];
@@ -73,6 +74,7 @@ export function buildSpawnSubAgentConfig(args: {
     model: args.workerModel,
     ...(args.agentRunId ? { agentRunId: args.agentRunId } : {}),
     ...(args.workstreamId ? { workstreamId: args.workstreamId } : {}),
+    ...(args.deliverableKind ? { deliverableKind: args.deliverableKind } : {}),
     name: args.sanitizedName,
     tools: args.workerTools,
     memorySelectionScope: args.memorySelectionScope,

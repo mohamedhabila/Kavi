@@ -3,6 +3,28 @@ export const DELEGATED_WORKER_EVIDENCE_CRITERION = 'evidence.prefix:worker' as c
 export const DELEGATED_WORKER_MIN_EVIDENCE_CRITERION = 'evidence.min:1' as const;
 export const DELEGATED_WORKER_LAUNCH_EVIDENCE_PREFIX = 'delegation_launch:' as const;
 
+/**
+ * Whether a goal's success contract belongs to a delegated worker rather than to the run
+ * holding it.
+ *
+ * A delegation goal states "a worker delivered": `sessions_spawn` requires the supervisor
+ * to create it as a separate goal owned by `delegated-worker`, and says in as many words
+ * not to repurpose a parent deliverable. It is therefore not a container for whatever the
+ * supervisor happens to do while the worker runs — neither its tool output nor the
+ * criteria that output would imply.
+ *
+ * Evidence routing has always honoured this. Effect-completion materialization did not,
+ * and grafted its criterion onto whichever goal was active and blocking — in a delegation
+ * run, always the delegation goal. Because blocking criteria are monotonic, the grafted
+ * criterion could never be removed and the goal could never complete. Traced live on
+ * `delegation-worker-evidence-chain`: criteria ended as the two the supervisor declared
+ * plus a 319-character code-owned effect criterion, with every evidence entry an effect
+ * receipt and none from the worker, scoring 0/4 in every recorded run.
+ */
+export function isDelegationOwnedGoal(goal: { owner?: string }): boolean {
+  return goal.owner?.trim() === DELEGATED_WORKER_GOAL_OWNER;
+}
+
 export function buildDelegatedWorkerLaunchEvidence(sessionId: string): string {
   return `${DELEGATED_WORKER_LAUNCH_EVIDENCE_PREFIX}${sessionId.trim()}`;
 }

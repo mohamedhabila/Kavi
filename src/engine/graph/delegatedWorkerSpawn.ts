@@ -10,6 +10,7 @@ import { arePersistedAgentGoalUserConstraintsCanonical } from '../goals/userCons
 import {
   DELEGATED_WORKER_EVIDENCE_CRITERION,
   DELEGATED_WORKER_GOAL_OWNER,
+  isDelegationOwnedGoal,
   DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
   readDelegatedWorkerLaunchSessionId,
 } from '../goals/delegation';
@@ -59,7 +60,7 @@ function isIncompleteDedicatedWorkerGoal(goal: AgentGoal): boolean {
   return (
     goal.status !== 'completed' &&
     isBlockingGoal(goal) &&
-    goal.owner === DELEGATED_WORKER_GOAL_OWNER &&
+    isDelegationOwnedGoal(goal) &&
     hasCoordinateCapability(goal)
   );
 }
@@ -252,7 +253,7 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   const nonDedicatedDelegationGoal = scopedGoals.find(
     (goal) =>
       isBlockingGoal(goal) &&
-      (goal.owner !== DELEGATED_WORKER_GOAL_OWNER || !hasCoordinateCapability(goal)),
+      (!isDelegationOwnedGoal(goal) || !hasCoordinateCapability(goal)),
   );
   if (hasStructuredGoalGraph && nonDedicatedDelegationGoal) {
     const error = `Goal "${nonDedicatedDelegationGoal.id}" is not a dedicated delegated-worker goal.`;

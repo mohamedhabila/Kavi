@@ -26,6 +26,8 @@ import {
   normalizeDelegatedWorkerPrompt,
   findLatestUserMessageWithAttachments,
 } from './builtin-session-prompt';
+import { resolveDelegatedDeliverableKind } from '../goals/delegationDeliverable';
+import { getGoalById } from '../goals/types';
 import {
   discoverDelegatedWorkspaceInputs,
   type DelegatedWorkspaceInput,
@@ -234,6 +236,18 @@ export async function executeSessionSpawn(
       workerModel,
       agentRunId: activeRun?.id ?? agentRunId,
       workstreamId: workerContract.workstreamId,
+      // A worker may itself delegate. It holds no supervisor graph, so the scoping goal
+      // is unreachable from there and the kind cannot be derived a second time — the
+      // nested worker would silently fall back to the strict bar while serving the very
+      // same contract. Traced live: every depth-0 spawn resolved `information`, while the
+      // depth-1 child of one of them carried no kind at all and was held to execution
+      // evidence it had no way to produce. Inherit the parent's answer when the graph
+      // cannot supply one; with neither, the strict bar still stands.
+      deliverableKind:
+        resolveDelegatedDeliverableKind(
+          getGoalById(goals, workerContract.workstreamId ?? '') ?? undefined,
+          { inherited: currentSessionContext?.config.deliverableKind },
+        ),
       sanitizedName,
       workerTools,
       memorySelectionScope,

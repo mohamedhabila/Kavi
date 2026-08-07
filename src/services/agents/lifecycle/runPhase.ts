@@ -127,7 +127,12 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
     SubAgentTerminationCause,
     'tool_failure' | 'internal_failure' | 'unknown'
   > = workerToolSelectionRejectedMessage ? 'tool_failure' : 'unknown';
-  const requireStructuredExecutionEvidence = Boolean(params.config.workstreamId?.trim());
+  // Keyed on what the scoping goal asks for, not on whether a workstream exists.
+  // `sessions_spawn` requires a workstreamId, so keying on its presence held every
+  // delegated worker to the execution-evidence bar — including one asked only to return
+  // an answer, which makes no state-changing calls and so can never clear it.
+  const requireStructuredExecutionEvidence =
+    Boolean(params.config.workstreamId?.trim()) && params.config.deliverableKind !== 'information';
   const systemPrompt = buildSubAgentSystemPrompt(params.config, depth);
   const { transcriptToolCalls, checkpointSessionContext, persistSessionContextNow, trackToolCall } =
     createSubAgentExecutionSession({
