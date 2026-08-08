@@ -464,7 +464,7 @@ export function applyGoalMutation(
     }
   }
 
-  return { goals, errors: [] };
+  return { goals: reconcileGoalEvidence(goals), errors: [] };
 }
 
 function retainInitialBlockingGoalConstraint(
@@ -535,6 +535,42 @@ export function addGoalEvidence(
         }
       : g,
   );
+}
+
+
+/**
+ * Gives every goal the evidence its own criteria name, wherever in the run it landed.
+ *
+ * Evidence is routed once, when a tool result arrives. A workspace write, though, is not
+ * provable at that instant: `evidence.artifact` requires a receipt whose
+ * `verificationState` is `verified`, and verification is exactly what the code-owned
+ * `effect-*` goal is materialized to establish. The receipt therefore settles onto that
+ * verification goal after routing has already run, and the model's own goal — which named
+ * the very same path — is left holding nothing.
+ *
+ * Traced on-device. `moon-facts` declared `evidence.artifact:artifacts/moon-facts.md`,
+ * `write_file` wrote exactly that path, and the goal still showed `evidence: 0`.
+ * Completing it was refused for unmet criteria the run had in fact satisfied, and only
+ * `activate` repaired it, because activation was the one place that replayed evidence
+ * between goals. Every occurrence of the redundant `complete`-then-`activate` pair came
+ * from this.
+ *
+ * Reconciling after each mutation makes that replay unconditional instead of a side
+ * effect of one lifecycle transition. It reuses the activation predicate exactly, so a
+ * goal still receives only evidence it explicitly asserts it needs, never evidence it
+ * merely sits beside — and it is idempotent, so repeating it changes nothing.
+ */
+function reconcileGoalEvidence(goals: AgentGoal[]): AgentGoal[] {
+  let changed = false;
+  const reconciled = goals.map((goal) => {
+    const inherited = backfillGoalEvidenceFromExistingGoals({ goal, existingGoals: goals });
+    if (inherited.length === 0) {
+      return goal;
+    }
+    changed = true;
+    return { ...goal, evidence: Array.from(new Set([...goal.evidence, ...inherited])) };
+  });
+  return changed ? reconciled : goals;
 }
 
 export function computeGoalStateFromSnapshot(
