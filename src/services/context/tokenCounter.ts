@@ -1,3 +1,4 @@
+import { getProviderContextWindow } from './providerContextWindows';
 // ---------------------------------------------------------------------------
 // Kavi — Token Counter (approximate)
 // ---------------------------------------------------------------------------
@@ -84,6 +85,10 @@ const MODEL_CONTEXT_WINDOW_ENTRIES_BY_SPECIFICITY = Object.entries(MODEL_CONTEXT
 );
 
 export function getContextWindow(model: string): number {
+  // What the provider says about its own model beats anything guessed here.
+  const advertised = getProviderContextWindow(model);
+  if (advertised !== undefined) return advertised;
+
   // Check exact match
   if (MODEL_CONTEXT_WINDOWS[model]) return MODEL_CONTEXT_WINDOWS[model];
 

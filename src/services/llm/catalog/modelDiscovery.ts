@@ -6,6 +6,11 @@ import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import type { ModelsWithCapabilities } from '../support/contracts';
 import type { ProviderTransport } from './providerProtocols';
 
+import {
+  readAdvertisedContextWindow,
+  recordProviderContextWindow,
+} from '../../context/providerContextWindows';
+
 type DiscoveredModel = Readonly<{ model: string; capabilities: ModelCapabilities }>;
 
 function declaredStringArray(value: unknown): string[] | null {
@@ -107,6 +112,12 @@ export async function fetchProviderModels(args: {
                 : undefined;
           if (typeof id !== 'string') return undefined;
           const model = id.replace(/^models\//, '');
+          // The provider's own figure beats the static table getContextWindow falls back
+          // to, which silently defaults unlisted models to 128k.
+          const advertisedContextWindow = readAdvertisedContextWindow(entry);
+          if (advertisedContextWindow !== undefined) {
+            recordProviderContextWindow(model, advertisedContextWindow);
+          }
           return { model, capabilities: resolveDiscoveredModelCapabilities(entry, model) };
         })
         .filter((entry: DiscoveredModel | undefined): entry is DiscoveredModel =>
