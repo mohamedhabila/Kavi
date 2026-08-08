@@ -91,3 +91,52 @@ describe('a second window over the same page reuses the extracted document', () 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('a definitive answer is not re-asked with another User-Agent', () => {
+  // Traced on-device over a twelve-source research run: 19 primary attempts drew 18
+  // fallback retries, nearly all a second request for a 404 the site had already
+  // answered — doubling the cost of every dead URL.
+  const statusResponse = (status: number) => ({
+    ok: false,
+    status,
+    statusText: 'x',
+    url: URL,
+    headers: { get: () => 'text/html' },
+    text: async () => 'nope',
+    body: null,
+  });
+
+  const attempts = async (status: number) => {
+    fetchMock.mockImplementation(async () => statusResponse(status));
+    await expect(directFetch({ url: URL, extractMode: 'markdown', maxChars: 200 })).rejects.toThrow();
+    return fetchMock.mock.calls.length;
+  };
+
+  it('asks once for a 404', async () => {
+    expect(await attempts(404)).toBe(1);
+  });
+
+  it('asks once for a 410', async () => {
+    expect(await attempts(410)).toBe(1);
+  });
+
+  it('still retries a bot wall, where client identity can matter', async () => {
+    expect(await attempts(403)).toBe(2);
+  });
+
+  it('still retries a rate limit', async () => {
+    expect(await attempts(429)).toBe(2);
+  });
+
+  it('still retries a server error, which is a failure not a refusal', async () => {
+    expect(await attempts(500)).toBe(2);
+  });
+
+  it('still retries a transport failure, which is not an answer at all', async () => {
+    fetchMock.mockImplementation(async () => {
+      throw new Error('fetch failed: stream was reset: INTERNAL_ERROR');
+    });
+    await expect(directFetch({ url: URL, extractMode: 'markdown', maxChars: 200 })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});

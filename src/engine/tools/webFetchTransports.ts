@@ -52,6 +52,25 @@ export function clearWebFetchDocumentCache(): void {
   DOCUMENT_CACHE.clear();
 }
 
+/** 4xx statuses where a different client identity can plausibly change the answer. */
+const USER_AGENT_SENSITIVE_STATUSES = new Set([401, 403, 405, 406, 429]);
+
+/**
+ * Whether re-asking with the other User-Agent could change this answer.
+ *
+ * A 5xx is the server failing rather than refusing, so a second attempt is worth making,
+ * as is a bot wall or a rate limit. A 404 or 410 is a definitive answer about the
+ * resource and no client identity changes it.
+ *
+ * Traced on-device across a twelve-source research run: 19 primary attempts drew 18
+ * fallback retries, nearly all of them a second request for a 404 the site had already
+ * answered — doubling the cost of every dead URL, and dead URLs are common because with
+ * no search provider configured the model reaches pages by guessing plausible addresses.
+ */
+function statusCouldChangeWithAnotherUserAgent(status: number): boolean {
+  return status >= 500 || USER_AGENT_SENSITIVE_STATUSES.has(status);
+}
+
 const DEFAULT_FETCH_MAX_RESPONSE_BYTES = 2_000_000;
 const DEFAULT_FIRECRAWL_BASE_URL = 'https://api.firecrawl.dev';
 const DEFAULT_USER_AGENT =
@@ -201,6 +220,7 @@ export async function directFetch(params: {
   ];
 
   let lastError: Error | null = null;
+  let definitiveStatusFailure = false;
 
   for (const headers of headerProfiles) {
     try {
@@ -212,6 +232,9 @@ export async function directFetch(params: {
       });
 
       if (!res.ok) {
+        if (!statusCouldChangeWithAnotherUserAgent(res.status)) {
+          definitiveStatusFailure = true;
+        }
         const detail = typeof res.text === 'function' ? await res.text().catch(() => '') : '';
         const summarizedDetail = summarizeFetchErrorBody(
           detail,
@@ -287,6 +310,9 @@ export async function directFetch(params: {
     } catch (error: unknown) {
       if (params.signal?.aborted) throw error;
       lastError = error instanceof Error ? error : new Error(describeFetchError(error));
+      if (definitiveStatusFailure) {
+        break;
+      }
     }
   }
 

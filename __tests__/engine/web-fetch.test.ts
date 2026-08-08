@@ -207,7 +207,8 @@ describe('executeWebFetch', () => {
       headers: { get: () => null },
       text: () => Promise.resolve('Not found'),
     };
-    mockFetch.mockResolvedValueOnce(notFoundResponse);
+    // One response only: a 404 is a definitive answer, so the alternate User-Agent is
+    // not tried. Queueing two here previously left a spare that the next test consumed.
     mockFetch.mockResolvedValueOnce(notFoundResponse);
 
     const parsed = firstFetch(
@@ -215,6 +216,7 @@ describe('executeWebFetch', () => {
       'failed',
     );
     expect(parsed.error).toContain('404');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('summarizes HTML error pages instead of surfacing raw markup', async () => {
@@ -230,7 +232,6 @@ describe('executeWebFetch', () => {
           '<!DOCTYPE html><html><head><title>Example Missing Page</title></head><body><header>Site Nav</header><main><h1>Page not found</h1><p>The page you requested does not exist.</p></main><footer>Footer</footer></body></html>',
         ),
     };
-    mockFetch.mockResolvedValueOnce(notFoundResponse);
     mockFetch.mockResolvedValueOnce(notFoundResponse);
 
     const parsed = firstFetch(
