@@ -104,12 +104,20 @@ function routeEvidenceToGoal(params: {
   activeGoalCount: number;
   toolDefinition?: Pick<ToolDefinition, 'contract'>;
   evidence: string;
+  /**
+   * Whether this goal may also receive evidence it did not name — by tool contract, or
+   * as the run's single unscoped goal. Reserved for goals the run has focused.
+   */
+  allowUnnamedEvidence: boolean;
 }): boolean {
   if (goalCriterionMatchesEvidence(params.goal, params.evidence)) {
     return true;
   }
   if (goalEffectCriterionTargetsEvidence(params.goal, params.evidence)) {
     return true;
+  }
+  if (!params.allowUnnamedEvidence) {
+    return false;
   }
   if (params.toolDefinition && goalMatchesToolContract(params.goal, params.toolDefinition)) {
     return true;
@@ -176,17 +184,44 @@ export function routeToolEvidenceToActiveGoals(params: {
   const toolDefinition = params.toolDefinitions.find(
     (tool) => normalizeToolName(tool.name) === normalizedToolName,
   );
-  const activeGoals = params.goals.filter(
+  const focusedGoals = params.goals.filter(
     (goal) =>
       (goal.status === 'active' || goal.status === 'blocked') && !isDelegationOwnedGoal(goal),
   );
-  const modelDeclaredGoalCount = activeGoals.filter(
+  /**
+   * A goal the model has declared but not yet focused still earns the evidence it named.
+   *
+   * `createGoal` defaults an unspecified status to `pending`, and the `update_goals`
+   * schema does not require one — so the ordinary shape, declare the objective and then
+   * do the work, produces a pending goal. Routing to focused goals alone meant every
+   * result of that work landed nowhere: completion was then refused for unmet criteria
+   * the run had in fact already satisfied, and the recovery cost an activate call plus a
+   * repeat of whatever the activation back-fill could not reconstruct.
+   *
+   * Traced on-device: `add research-brief` → write the brief → remember the status → read
+   * it back → complete, refused; activate, which back-filled the write and the memory fact
+   * but not the read; then "Need to re-read the file to register the read_file evidence
+   * for the goal system", and the file was read a second time purely as bookkeeping.
+   *
+   * This routes evidence, never focus. `findEvidenceSatisfiedGoals` still requires an
+   * active or blocked goal, so a pending goal is not auto-completed and enforcement
+   * timing is unchanged — the distinction that the discovery scenario regressed on when
+   * a goal was auto-activated instead. And a pending goal receives only evidence its own
+   * criteria name: the tool-contract match and the single-unscoped-goal fallback both
+   * stay with focused goals, because those hand a goal evidence it never asked for, and
+   * a criteria-less goal absorbing an incidental result is exactly what would let
+   * unrelated activity close a blocking goal.
+   */
+  const declaredPendingGoals = params.goals.filter(
+    (goal) => goal.status === 'pending' && !isDelegationOwnedGoal(goal),
+  );
+  const modelDeclaredGoalCount = focusedGoals.filter(
     (goal) => !isCodeOwnedEffectCompletionGoal(goal),
   ).length;
   const routed: RoutedGoalEvidence[] = [];
   const seen = new Set<string>();
 
-  for (const goal of activeGoals) {
+  for (const goal of [...focusedGoals, ...declaredPendingGoals]) {
     for (const evidence of params.evidenceStrings) {
       if (
         !routeEvidenceToGoal({
@@ -194,6 +229,7 @@ export function routeToolEvidenceToActiveGoals(params: {
           activeGoalCount: modelDeclaredGoalCount,
           toolDefinition,
           evidence,
+          allowUnnamedEvidence: goal.status !== 'pending',
         })
       ) {
         continue;
