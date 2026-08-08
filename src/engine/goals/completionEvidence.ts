@@ -10,6 +10,7 @@ import {
   parseToolEffectReceiptEvidence,
 } from './effectCompletionEvidence';
 import { sanitizeWorkspaceRelativePath } from '../../services/workspaces/paths';
+import { readDelegatedArtifactEvidencePath } from './delegation';
 
 /**
  * A workspace resource identity has two independent authors. The receipt carries the
@@ -284,12 +285,27 @@ function meetsEvidenceArtifactCriterion(goal: AgentGoal, pathToken: string): boo
   }
   return goal.evidence.some((entry) => {
     const receipt = parseToolEffectReceiptEvidence(entry);
-    return (
+    if (
       receipt?.transportState === 'returned' &&
       receipt.effectKind === 'artifact.write' &&
       receipt.effectState === 'applied' &&
       receipt.verificationState === 'verified' &&
       workspaceResourceIdentityMatches(receipt.resource, normalized)
+    ) {
+      return true;
+    }
+    /**
+     * A receipt only lands on the graph of the run that performed the write, so a
+     * deliverable produced by a delegated worker could never satisfy the supervisor's own
+     * artifact criterion. The criterion states that the artifact exists at this path; who
+     * typed it is not what it asserts. Delegated-artifact evidence is code-derived from
+     * the worker's terminal result, so accepting it here keeps the criterion honest while
+     * ending the duplicate re-write it otherwise forced.
+     */
+    const delegatedPath = readDelegatedArtifactEvidencePath(entry);
+    return (
+      delegatedPath !== undefined &&
+      sanitizeWorkspaceRelativePath(delegatedPath) === sanitizeWorkspaceRelativePath(normalized)
     );
   });
 }

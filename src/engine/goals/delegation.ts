@@ -4,6 +4,41 @@ export const DELEGATED_WORKER_MIN_EVIDENCE_CRITERION = 'evidence.min:1' as const
 export const DELEGATED_WORKER_LAUNCH_EVIDENCE_PREFIX = 'delegation_launch:' as const;
 
 /**
+ * Evidence that a delegated worker produced a workspace artifact.
+ *
+ * An `evidence.artifact:<path>` criterion is met by a verified `artifact.write` receipt,
+ * and a receipt only ever lands on the graph of the run that performed the write. When a
+ * worker writes the deliverable, the supervisor's own goal therefore stays unsatisfied
+ * however plainly the file exists.
+ *
+ * Traced on-device: a worker computed a study and wrote `artifacts/wind/verdict.md`; the
+ * supervisor read it back, confirmed it, then could not close its goal. It issued four
+ * `update_goals` calls, concluded "the goal system requires the artifact to be written
+ * from this session", and re-wrote the correct file purely as bookkeeping.
+ *
+ * This is a separate evidence form rather than a synthesized receipt. A receipt attests
+ * that *this* run performed an effect, derived from the tool's real result under a
+ * code-owned contract; minting one for work another run did would forge exactly what it
+ * exists to prove. This records the true statement instead — a delegated worker produced
+ * this path — and the artifact criterion accepts it as satisfying the deliverable. It
+ * stays code-owned: the paths come from the worker's actual tool results, never prose.
+ */
+export const DELEGATED_ARTIFACT_EVIDENCE_PREFIX = 'delegated_artifact:' as const;
+
+export function buildDelegatedArtifactEvidence(workspacePath: string): string {
+  return `${DELEGATED_ARTIFACT_EVIDENCE_PREFIX}${workspacePath.trim()}`;
+}
+
+export function readDelegatedArtifactEvidencePath(evidence: string): string | undefined {
+  const trimmed = evidence.trim();
+  if (!trimmed.startsWith(DELEGATED_ARTIFACT_EVIDENCE_PREFIX)) {
+    return undefined;
+  }
+  const path = trimmed.slice(DELEGATED_ARTIFACT_EVIDENCE_PREFIX.length).trim();
+  return path || undefined;
+}
+
+/**
  * Whether a goal's success contract belongs to a delegated worker rather than to the run
  * holding it.
  *

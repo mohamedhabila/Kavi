@@ -19,6 +19,7 @@ import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
 import { buildToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
 import { isBlockingGoal } from '../goals/types';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
+import { collectDelegatedArtifactEvidence } from './delegatedToolEvidence';
 import {
   buildDelegationEvidenceAutoCompleteEvent,
   buildEvidenceSatisfiedGoalAutoCompleteEvent,
@@ -307,9 +308,21 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     const effectReceiptEvidenceStrings = canonicalOutcome.effectReceipt
       ? [buildToolEffectReceiptEvidence(canonicalOutcome.effectReceipt)]
       : [];
+    /**
+     * A worker's write leaves its receipt on the worker's graph, so the supervisor's
+     * artifact criterion never saw the deliverable it named. These carry the paths the
+     * worker actually produced, so a supervisor goal can close on the file that exists
+     * instead of re-writing it to manufacture provenance.
+     */
+    const delegatedArtifactEvidenceStrings = collectDelegatedArtifactEvidence({
+      hostToolName: toolName,
+      result: canonicalOutcome.toolMessage.content,
+      isError: canonicalOutcome.toolMessage.isError,
+    });
     const toolGoalEvidenceStrings = [
       ...structuralGoalEvidenceStrings,
       ...effectReceiptEvidenceStrings,
+      ...delegatedArtifactEvidenceStrings,
     ];
     params.applyGraphEvents([
       {
@@ -368,8 +381,11 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       const evidenceRoutableGoals = (params.getGraphSnapshot().goals ?? []).filter(
         (goal) => goal.status === 'active' || goal.status === 'blocked',
       );
+      // Delegated artifacts route on both paths: the delegation branch is exactly the
+      // case that produces them, so excluding them there would drop the only evidence a
+      // supervisor goal can close its artifact criterion on.
       const routableEvidenceStrings = delegationEvidenceApplied
-        ? effectReceiptEvidenceStrings
+        ? [...effectReceiptEvidenceStrings, ...delegatedArtifactEvidenceStrings]
         : toolGoalEvidenceStrings;
       if (routableEvidenceStrings.length > 0 && evidenceRoutableGoals.length > 0) {
         const routedEvidence = routeToolEvidenceToActiveGoals({
