@@ -13,11 +13,17 @@ import {
   workflowProductionSatisfiesConsumption,
 } from '../tools/toolWorkflowContracts';
 import { normalizeToolName } from '../tools/toolNameNormalization';
-import { inferToolCapabilityDescriptor } from '../tools/capabilityRegistry';
-import { descriptorIsPassiveAsyncObserver } from '../tools/toolLifecycleSemantics';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from './bootstrap';
 import { resolveSuccessCriterionSurfaceHints } from './completionEvidence';
 import type { AgentGoal } from './types';
+import {
+  collectCompletedGoalEvidenceToolNames,
+  isCodeExecutionTool,
+  isMemoryResourceTool,
+  isRepeatableActivatedTool,
+  isSideEffectfulTool,
+  shouldAcceptContinuationTool,
+} from './toolSurfaceRetention';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
 /**
@@ -122,46 +128,6 @@ function hasRequiredResourceKinds(goal: AgentGoal): boolean {
   return normalizeTagList(goal.requiredResourceKinds).length > 0;
 }
 
-function isCodeExecutionTool(tool: Pick<ToolDefinition, 'contract'> | undefined): boolean {
-  return tool?.contract?.category === 'code';
-}
-
-function isSideEffectfulTool(tool: Pick<ToolDefinition, 'contract'> | undefined): boolean {
-  const sideEffects = tool?.contract?.sideEffects ?? [];
-  return sideEffects.some((sideEffect) => sideEffect !== 'none');
-}
-
-function isMemoryResourceTool(tool: Pick<ToolDefinition, 'contract'> | undefined): boolean {
-  return (tool?.contract?.resourceKinds ?? []).includes('memory');
-}
-
-function isRuntimeExternalToolName(toolName: string): boolean {
-  return toolName.startsWith('mcp__') || toolName.startsWith('skill__');
-}
-
-function collectCompletedGoalEvidenceToolNames(
-  goals: ReadonlyArray<AgentGoal>,
-  toolByName: ReadonlyMap<string, ToolDefinition>,
-): string[] {
-  const toolNames = new Set<string>();
-  for (const goal of goals) {
-    if (goal.status !== 'completed') {
-      continue;
-    }
-    for (const evidence of goal.evidence) {
-      const separatorIndex = evidence.indexOf(':');
-      if (separatorIndex <= 0) {
-        continue;
-      }
-      const toolName = normalizeToolName(evidence.slice(0, separatorIndex));
-      if (toolName && toolByName.has(toolName)) {
-        toolNames.add(toolName);
-      }
-    }
-  }
-  return Array.from(toolNames);
-}
-
 function withPromptCachePlacement(
   tool: ToolDefinition,
   placement: PromptCachePlacement,
@@ -220,49 +186,6 @@ function prunePrematureWorkflowConsumers(params: {
       params.selectedNames.delete(toolName);
     }
   }
-}
-
-function shouldAcceptContinuationTool(params: {
-  toolName: string;
-  toolByName: ReadonlyMap<string, ToolDefinition>;
-  resourceScopedGoalCapabilityToolNames: ReadonlySet<string>;
-  completedResourceScopedGoalCapabilityToolNames: ReadonlySet<string>;
-  completedGoalEvidenceToolNames: ReadonlySet<string>;
-  completedWorkflowToolNames: ReadonlySet<string>;
-  allowUnownedSideEffectfulTool?: boolean;
-  allowCompletedTool?: boolean;
-}): boolean {
-  const tool = params.toolByName.get(params.toolName);
-  // Completed producers normally leave the hot surface so the model cannot
-  // accidentally replay a mutation. Passive async observers are different:
-  // long-running work legitimately needs consecutive wait/monitor calls, and
-  // each successful observation advances wall-clock or external state.
-  const isRepeatablePassiveObserver =
-    tool !== undefined && descriptorIsPassiveAsyncObserver(inferToolCapabilityDescriptor(tool));
-  if (
-    params.allowCompletedTool !== true &&
-    !isRepeatablePassiveObserver &&
-    !isMemoryResourceTool(tool) &&
-    !params.resourceScopedGoalCapabilityToolNames.has(params.toolName) &&
-    params.completedWorkflowToolNames.has(params.toolName)
-  ) {
-    return false;
-  }
-
-  if (
-    isSideEffectfulTool(tool) &&
-    !isMemoryResourceTool(tool) &&
-    !params.resourceScopedGoalCapabilityToolNames.has(params.toolName)
-  ) {
-    return (
-      params.allowUnownedSideEffectfulTool === true &&
-      !params.completedResourceScopedGoalCapabilityToolNames.has(params.toolName) &&
-      !params.completedGoalEvidenceToolNames.has(params.toolName) &&
-      (params.allowCompletedTool === true ||
-        !params.completedWorkflowToolNames.has(params.toolName))
-    );
-  }
-  return true;
 }
 
 export function resolveOrderedGoalCapabilities(capabilities: ReadonlyArray<string>): string[] {
@@ -461,6 +384,70 @@ function resolveGoalCapabilityToolNamesForGoals(
   );
 }
 
+/**
+ * The tools a run may execute, as distinct from the tools a turn advertises.
+ *
+ * `resolveTurnToolSurface` answers "what is worth showing the model next" — it narrows by
+ * progressive disclosure, token budget, and workflow staging. That is a guess about the
+ * near future, and a guess is not grounds for refusing a call: which capability a task
+ * needs only becomes knowable once the work is under way. Treating the advertised list as
+ * a permission list made every unpredicted need a hard error, and the error told the run
+ * to route through `tool_catalog` — a step that is pure overhead at best, and was
+ * traced on-device failing to return at all, stranding a capability the run already held.
+ *
+ * Authority is a genuinely different question with a genuinely different answer, and it is
+ * the one execution must consult. In an agentic run every registered, policy-authorized
+ * tool is authorized; disclosure only decides the order the model meets them. Chitchat is
+ * a real restriction rather than a presentation choice — the mode exists so a casual
+ * conversation cannot mutate state — so there the permitted set is the answer, and a turn
+ * needing more escalates rather than quietly proceeding.
+ */
+export function resolveAuthorizedToolNames(params: {
+  allTools: ReadonlyArray<ToolDefinition>;
+  conversationMode?: ConversationMode;
+  activatedCatalogToolNames?: ReadonlySet<string>;
+  explicitToolSurfaceToolNames?: ReadonlyArray<string>;
+}): Set<string> {
+  /**
+   * An empty set means "no mode restriction applies", not "nothing is permitted".
+   *
+   * An agentic run's authority is already stated completely by the run allowlist and the
+   * memory policy, both enforced before this is consulted. Enumerating a second set here
+   * could only disagree with them, and would do so silently: tools reach the surface from
+   * registries this list does not see — `tool_catalog` among them — so an enumeration
+   * built from `allTools` would quietly refuse capabilities the run genuinely holds.
+   */
+  if (params.conversationMode !== 'chitchat') {
+    return new Set<string>();
+  }
+
+  const toolByName = new Map(
+    params.allTools.map((tool): [string, ToolDefinition] => [normalizeToolName(tool.name), tool]),
+  );
+  // Discovery is always permitted: learning what exists mutates nothing, and chitchat
+  // needs it to recognise when a request has outgrown the mode.
+  const authorized = new Set<string>([
+    ...CHITCHAT_DEFAULT_CORE_TOOL_NAMES,
+    'tool_catalog',
+    'tool_describe',
+  ]);
+  for (const toolName of params.explicitToolSurfaceToolNames ?? []) {
+    const normalized = normalizeToolName(toolName);
+    if (normalized) {
+      authorized.add(normalized);
+    }
+  }
+  for (const toolName of params.activatedCatalogToolNames ?? []) {
+    const tool = toolByName.get(toolName);
+    // Same rule the surface applies: discovery proves a capability exists, never that
+    // chat may mutate non-memory state with it.
+    if (tool && !(isSideEffectfulTool(tool) && !isMemoryResourceTool(tool))) {
+      authorized.add(toolName);
+    }
+  }
+  return authorized;
+}
+
 export interface ResolveTurnToolSurfaceParams {
   allTools: ReadonlyArray<ToolDefinition>;
   conversationMode?: ConversationMode;
@@ -560,6 +547,28 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
     }
   }
 
+  /**
+   * An explicit catalog activation of a repeatable capability is durable for the run.
+   *
+   * Activation used to be re-litigated every turn against the same completion sets that
+   * govern incidental continuation, waived only for `mcp__`/`skill__` names. Every other
+   * discovered tool was therefore evicted by its own first success — and because the
+   * eviction keys off having been observed, re-running `tool_catalog` could not restore
+   * it. The off-surface refusal names `tool_catalog` as the recovery, so the run was told
+   * to take a step that provably could not work.
+   *
+   * Traced on-device: a feasibility study needing Monte Carlo activated `python`, ran it
+   * once, and could never call it again. It alternated rejected `python` calls and
+   * useless `tool_catalog` calls until the iteration budget ran out. The run failed with
+   * no legal move available to it.
+   *
+   * Eviction still holds for a pure mutator, where a second call means a second effect
+   * and the tool has nothing further to contribute once its write has landed. It is
+   * lifted for tools whose contract declares a repeatable capability, because computing
+   * another scenario or reading another source is the work itself. Authority is
+   * unchanged: the chitchat mutation gate below still holds, and side-effectful tools
+   * still run the approval path on every call.
+   */
   for (const toolName of params.activatedCatalogToolNames) {
     const tool = toolByName.get(toolName);
     // Catalog discovery proves availability, not authority to mutate non-memory state in chat.
@@ -578,7 +587,7 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
         completedGoalEvidenceToolNames,
         completedWorkflowToolNames,
         allowUnownedSideEffectfulTool: true,
-        allowCompletedTool: isRuntimeExternalToolName(toolName),
+        allowCompletedTool: isRepeatableActivatedTool(toolName, tool),
       })
     ) {
       selectedNames.add(toolName);
