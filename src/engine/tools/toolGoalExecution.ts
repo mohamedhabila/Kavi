@@ -397,18 +397,6 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
       ],
     };
   }
-  if ((action === 'add' || action === 'update') && normalizedArgs.status === 'completed') {
-    return {
-      mutation: { action, goals: [] },
-      errors: [
-        argumentError(
-          'invalid_lifecycle',
-          'Use action "complete" for the canonical goal completion transition.',
-          'status',
-        ),
-      ],
-    };
-  }
   const parsedGoal = normalizeParsedGoal(normalizedArgs, constraints.retain);
 
   const mutation: AgentGoalMutation = {

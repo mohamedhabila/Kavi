@@ -131,7 +131,25 @@ function normalizeAddGoalPatch(
     return next;
   }
 
-  return { ...patch, completionPolicy };
+  /**
+   * A goal cannot be born completed, but asking for that is not an error either.
+   *
+   * A run whose work is already done reasonably declares the goal with
+   * `status: "completed"`, and that used to be rejected — costing a round-trip to restate
+   * the same intent as two calls. Accepting it verbatim would be worse: it would mint a
+   * closed blocking goal without the evidence gate `complete` exists to run, which is the
+   * one thing that keeps a declared deliverable honest.
+   *
+   * So the goal is created open. If the work really is done, the evidence the run already
+   * holds satisfies its criteria and the completion gate closes it on the spot; if it is
+   * not, the goal stays open, which is the truth. Either way the model spends one call and
+   * the gate keeps its meaning.
+   */
+  const next = { ...patch, completionPolicy };
+  if (next.status === 'completed') {
+    delete next.status;
+  }
+  return next;
 }
 
 function everyMutationGoal(
@@ -239,6 +257,36 @@ export function normalizeGoalMutationForApplication(
     return {
       action: 'activate',
       goals: mutation.goals,
+    };
+  }
+
+  /**
+   * Asking to complete a goal is a request to complete it, whichever verb carries it.
+   *
+   * `update` and `add` carrying `status: "completed"` used to be refused outright with
+   * "Use action \"complete\" for the canonical goal completion transition." — a rejection
+   * that names the exact transition it declines to perform, and costs a round-trip to say
+   * the same thing twice. Traced on-device as a failed `update_goals` immediately followed
+   * by the corrected one, the duplicate-call pattern seen across runs.
+   *
+   * Routing an `update` to the canonical action is a rewrite, not a bypass: `complete`
+   * still runs the evidence gate, so a goal whose criteria are unmet is still refused —
+   * for the real reason, rather than for the verb used to ask.
+   */
+  if (
+    mutation.action === 'update' &&
+    everyMutationGoal(mutation.goals, (patch) => {
+      const goalId = patch.id?.trim();
+      return patch.status === 'completed' && Boolean(goalId && getGoalById(currentGoals, goalId));
+    })
+  ) {
+    return {
+      action: 'complete',
+      goals: mutation.goals.map((patch) => {
+        const next = { ...patch };
+        delete next.status;
+        return next;
+      }),
     };
   }
 

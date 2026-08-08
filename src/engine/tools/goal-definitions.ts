@@ -43,7 +43,10 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
       status: {
         type: 'string',
         enum: ['pending', 'active', 'completed', 'blocked'],
-        description: 'Goal status. Used for add and update.',
+        description:
+          'Goal status. Used for add and update. Set "active" on the add itself when you ' +
+          'are starting the work now — a separate activate call is not needed. A goal is ' +
+          'always created open; it closes when its success criteria are met.',
       },
       completionPolicy: {
         type: 'string',

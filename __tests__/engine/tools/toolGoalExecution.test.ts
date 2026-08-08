@@ -221,8 +221,6 @@ describe('toolGoalExecution', () => {
         { action: 'add', completionPolicy: 'persistent', retainCurrentUserConstraint: true },
       ],
       ['terminal retention', { action: 'complete', retainCurrentUserConstraint: true }],
-      ['completed add', { action: 'add', completionPolicy: 'blocking', status: 'completed' }],
-      ['completed update', { action: 'update', status: 'completed' }],
       [
         'persistent criteria',
         { action: 'add', completionPolicy: 'persistent', successCriteria: ['evidence.min:1'] },
@@ -235,6 +233,26 @@ describe('toolGoalExecution', () => {
       });
       expect(result.mutation.goals).toEqual([]);
       expect(result.errors).not.toHaveLength(0);
+    });
+
+    // A completed status used to be refused here with "Use action \"complete\" for the
+    // canonical goal completion transition." — a rejection naming the exact transition it
+    // declined to perform, which cost a round-trip to restate the same intent. Traced live
+    // as a failed update_goals immediately followed by the corrected one. The lifecycle
+    // invariant is kept where it means something: `add` still creates the goal open, and
+    // `update` is routed to the canonical `complete`, which still runs the evidence gate.
+    it.each([
+      ['completed add', { action: 'add', completionPolicy: 'blocking', status: 'completed' }],
+      ['completed update', { action: 'update', status: 'completed' }],
+    ])('accepts a completion expressed through %s', (_label, fields) => {
+      const result = parseUpdateGoalsArgs({
+        id: 'g1',
+        name: 'Build feature',
+        successCriteria: ['evidence.artifact:artifacts/out.md'],
+        ...fields,
+      });
+
+      expect(result.errors).toEqual([]);
     });
 
     it('requires a non-empty id for every action', () => {
