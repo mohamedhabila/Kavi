@@ -28,7 +28,9 @@ export type ToolCallFailureKind =
   | 'tool_filter'
   | 'unknown_tool'
   | 'tool_error'
-  | 'runtime_error';
+  | 'runtime_error'
+  /** Still in flight when the run finished; never started failing. */
+  | 'not_awaited';
 
 export interface MessageProviderReplay {
   /** OpenAI Responses response ID retained for traceability and diagnostics. */

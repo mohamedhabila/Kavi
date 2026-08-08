@@ -1642,6 +1642,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       connectionDetail: 'Confira a conexão e a configuração do serviço e tente novamente.',
       stoppedTitle: 'Esta ação foi interrompida com segurança',
       stoppedDetail: 'Revise a solicitação mais recente e tente novamente quando estiver pronto.',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: 'Não foi possível concluir esta ação',
       failedDetail: 'Revise os detalhes técnicos ou peça ao assistente uma abordagem diferente.',
     },

@@ -1597,6 +1597,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
       connectionDetail: 'تحقق من الاتصال وإعداد الخدمة، ثم حاول مرة أخرى.',
       stoppedTitle: 'توقف هذا الإجراء بأمان',
       stoppedDetail: 'راجع أحدث طلب وحاول مرة أخرى عندما تكون مستعدًا.',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: 'تعذر إكمال هذا الإجراء',
       failedDetail: 'راجع التفاصيل التقنية أو اطلب من المساعد اتباع نهج مختلف.',
     },

@@ -1654,6 +1654,8 @@ export const en: TranslationMap = {
       connectionDetail: 'Check your connection and service setup, then try again.',
       stoppedTitle: 'This action stopped safely',
       stoppedDetail: 'Review the latest request and try again when you are ready.',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: 'This action could not be completed',
       failedDetail: 'Review the technical details or ask the assistant for a different approach.',
     },

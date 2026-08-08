@@ -1560,6 +1560,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       connectionDetail: '请检查网络连接和服务设置，然后重试。',
       stoppedTitle: '此操作已安全停止',
       stoppedDetail: '请检查最新请求，准备好后再试。',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: '无法完成此操作',
       failedDetail: '请查看技术详情，或让助手采用其他方法。',
     },

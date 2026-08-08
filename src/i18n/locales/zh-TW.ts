@@ -1558,6 +1558,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       connectionDetail: '請檢查網路連線和服務設定，然後重試。',
       stoppedTitle: '此操作已安全停止',
       stoppedDetail: '請檢查最新要求，準備好後再試。',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: '無法完成此操作',
       failedDetail: '請查看技術詳細資料，或請助理採用其他方法。',
     },

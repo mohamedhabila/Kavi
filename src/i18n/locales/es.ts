@@ -1658,6 +1658,8 @@ export const es: TranslationMap = mergeTranslations(en, {
         'Comprueba la conexión y la configuración del servicio y vuelve a intentarlo.',
       stoppedTitle: 'Esta acción se detuvo de forma segura',
       stoppedDetail: 'Revisa la solicitud más reciente y vuelve a intentarlo cuando quieras.',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: 'No se pudo completar esta acción',
       failedDetail: 'Revisa los detalles técnicos o pide al asistente un enfoque diferente.',
     },

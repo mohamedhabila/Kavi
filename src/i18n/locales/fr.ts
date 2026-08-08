@@ -1664,6 +1664,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
       connectionDetail: 'Vérifiez la connexion et la configuration du service, puis réessayez.',
       stoppedTitle: "L'action a été arrêtée en toute sécurité",
       stoppedDetail: 'Vérifiez la demande la plus récente, puis réessayez lorsque vous êtes prêt.',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: "Cette action n'a pas pu être effectuée",
       failedDetail:
         "Consultez les détails techniques ou demandez une autre approche à l'assistant.",

@@ -71,6 +71,16 @@ export function getToolCallFailurePresentation(
     };
   }
 
+  // Not a failure: the run finished without waiting for this call. Rendering it in red
+  // told the reader something had gone wrong in a run that had in fact succeeded.
+  if (toolCall.failureKind === 'not_awaited') {
+    return {
+      tone: 'warning',
+      titleKey: 'toolCall.outcomes.notAwaitedTitle',
+      detailKey: 'toolCall.outcomes.notAwaitedDetail',
+    };
+  }
+
   if (toolCall.failureKind === 'authority_revoked' || toolCall.failureKind === 'workflow_guard') {
     return {
       tone: 'warning',

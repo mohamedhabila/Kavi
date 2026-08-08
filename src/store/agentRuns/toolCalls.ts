@@ -46,6 +46,7 @@ export function settleActiveToolCallsInAgentRunMessages(params: {
   run: Pick<AgentRun, 'userMessageId' | 'createdAt'>;
   timestamp: number;
   errorMessage: string;
+  failureKind?: ToolCall['failureKind'];
 }): { messages: Message[]; settledCount: number } {
   const runScope = buildAgentRunMessageScope(params.run);
   const runMessages = getAgentRunMessageSlice(params.messages, runScope);
@@ -82,6 +83,7 @@ export function settleActiveToolCallsInAgentRunMessages(params: {
       return {
         ...toolCall,
         status: 'failed' as const,
+        ...(params.failureKind ? { failureKind: params.failureKind } : {}),
         updatedAt: params.timestamp,
         startedAt: toolCall.startedAt ?? params.timestamp,
         completedAt: toolCall.completedAt ?? params.timestamp,

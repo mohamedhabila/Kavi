@@ -1622,6 +1622,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
       connectionDetail: '接続とサービス設定を確認してから、もう一度お試しください。',
       stoppedTitle: 'この操作は安全に停止しました',
       stoppedDetail: '最新の依頼を確認し、準備ができたらもう一度お試しください。',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: 'この操作を完了できませんでした',
       failedDetail: '技術的な詳細を確認するか、アシスタントに別の方法を依頼してください。',
     },

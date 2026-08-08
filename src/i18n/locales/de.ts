@@ -1662,6 +1662,8 @@ export const de: TranslationMap = mergeTranslations(en, {
       connectionDetail: 'Prüfe die Verbindung und die Diensteinstellungen und versuche es erneut.',
       stoppedTitle: 'Diese Aktion wurde sicher beendet',
       stoppedDetail: 'Prüfe die neueste Anfrage und versuche es erneut, wenn du bereit bist.',
+      notAwaitedTitle: 'Not needed by the time the run finished',
+      notAwaitedDetail: 'The run completed without waiting for this call. Nothing failed.',
       failedTitle: 'Diese Aktion konnte nicht abgeschlossen werden',
       failedDetail:
         'Prüfe die technischen Details oder bitte den Assistenten um einen anderen Ansatz.',

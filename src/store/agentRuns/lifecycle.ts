@@ -335,6 +335,11 @@ export function completeAgentRunInConversation(
       run,
       timestamp,
       errorMessage: buildTerminalRunToolCallError(finalStatus),
+      // A run that ended cancelled or failed drags its calls down with it. A run that
+      // simply finished without waiting did not fail, and neither did the call.
+      ...(finalStatus === 'cancelled' || finalStatus === 'failed'
+        ? {}
+        : { failureKind: 'not_awaited' as const }),
     });
     if (settledToolCalls.settledCount > 0) {
       nextMessages = settledToolCalls.messages;
