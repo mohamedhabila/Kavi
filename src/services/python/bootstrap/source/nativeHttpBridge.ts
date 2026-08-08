@@ -1,4 +1,36 @@
 export const NATIVE_HTTP_BRIDGE_WORKER_SOURCE = [
+  /**
+   * Pyodide downloads its own wheels with `fetch`, and `installControlledNetworkPrimitives`
+   * replaces `self.fetch` with the user-space native bridge. From that point the package
+   * loader is talking to a bridge built for Python's HTTP helpers — it cannot deliver a
+   * binary wheel — so every package resolution fails, including the automatic one
+   * `loadPackagesFromImports` performs for a bare `import numpy`.
+   *
+   * Traced on-device: five delegated workers in one run each died after three attempts at
+   * `ModuleNotFoundError: No module named 'numpy'`, having tried a direct import, micropip
+   * and the `packages` argument in turn. The tool description promises numpy, pandas,
+   * scipy and micropip; none of them could ever load.
+   *
+   * Keeping the untouched `fetch` for the loader's own use fixes it. This widens nothing
+   * for Python code: the escape is only open while the runtime is resolving packages,
+   * before any user statement executes, and every primitive Python itself can reach still
+   * goes through the bridge and its allowNetwork gate.
+   */
+  'var pyodidePackageLoaderFetch = null;',
+  'var pyodidePackageResolutionDepth = 0;',
+  '',
+  'function beginPyodidePackageResolution() {',
+  '  pyodidePackageResolutionDepth += 1;',
+  '}',
+  '',
+  'function endPyodidePackageResolution() {',
+  '  pyodidePackageResolutionDepth = Math.max(0, pyodidePackageResolutionDepth - 1);',
+  '}',
+  '',
+  'function isResolvingPyodidePackages() {',
+  '  return pyodidePackageResolutionDepth > 0 && typeof pyodidePackageLoaderFetch === "function";',
+  '}',
+  '',
   'function setPythonNetworkAccessAllowed(allowed) {',
   '  activePythonNetworkAccessAllowed = allowed === true;',
   '}',
@@ -84,6 +116,10 @@ export const NATIVE_HTTP_BRIDGE_WORKER_SOURCE = [
   '}',
   '',
   'async function bridgeNativeHttpRequest(requestInput, options) {',
+  '  // The runtime resolving its own wheels is not a Python network call.',
+  '  if (isResolvingPyodidePackages()) {',
+  '    return pyodidePackageLoaderFetch(requestInput, options);',
+  '  }',
   '  requirePythonNetworkAccess();',
   '  if (activePythonNetworkObservation) {',
   '    activePythonNetworkObservation.requestCount += 1;',
@@ -191,6 +227,7 @@ export const NATIVE_HTTP_BRIDGE_WORKER_SOURCE = [
   '    return;',
   '  }',
   '  controlledNetworkPrimitivesInstalled = true;',
+  '  pyodidePackageLoaderFetch = typeof self.fetch === "function" ? self.fetch.bind(self) : null;',
   '  self.fetch = bridgeNativeHttpRequest;',
   '',
   '  ["XMLHttpRequest", "WebSocket", "EventSource", "WebTransport", "Worker", "SharedWorker", "RTCPeerConnection", "webkitRTCPeerConnection"].forEach(function(name) {',

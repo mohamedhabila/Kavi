@@ -162,7 +162,8 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
     description:
       'Execute Python code or a workspace Python script in a sandboxed Pyodide (CPython on WASM) environment and return the result. ' +
       `${PYTHON_EXTENSION_WHEN_NEEDED} ${PYTHON_EXTENSION_EXAMPLES} ${PYTHON_EXTENSION_POLICY} ` +
-      'Supports most of the Python standard library, auto-loads official Pyodide packages from imports when possible, and installs additional PyPI or wheel-based packages through micropip. ' +
+      'Supports most of the Python standard library. Third-party packages install themselves: writing `import numpy` is enough for numpy, pandas, scipy, and any other Pyodide-compatible distribution to be fetched and loaded before the code runs. ' +
+      'Package loading needs no arguments — `packages` is only for pinning a version or naming a wheel URL, and `allowNetwork` does not gate it. ' +
       'Execution runs on a dedicated worker-backed runtime inside a hidden WebView, is serialized on a shared session, and uses bounded reload-and-retry recovery instead of hanging indefinitely. ' +
       'Captures stdout, stderr, tracebacks, and the return value of the last expression for inline code. Top-level `await` is supported for inline code and script files. ' +
       'For both inline code and script files, the conversation workspace is mounted into the runtime, workspace-root imports are available on `sys.path`, and any changed output files are synced back into the conversation workspace. ' +
@@ -200,8 +201,8 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
           type: 'array',
           items: { type: 'string' },
           description:
-            'Optional list of package requirements or wheel URLs to install via micropip before execution. ' +
-            'Example: ["requests", "beautifulsoup4"] or ["https://example.com/pkg-1.0.0-py3-none-any.whl"]',
+            'Rarely needed: imports install themselves, so list a package here only to pin a version or point at a specific wheel. ' +
+            'Example: ["pandas==2.2.2"] or ["https://example.com/pkg-1.0.0-py3-none-any.whl"]',
         },
         indexUrls: {
           type: 'array',
@@ -219,8 +220,8 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
         allowNetwork: {
           type: 'boolean',
           description:
-            'Explicitly enable remote network access for this invocation. Defaults to false. ' +
-            'Leave false for local computation and workspace-only work; set true before using kavi.http or pyodide.http.pyfetch.',
+            'Explicitly enable remote network access for code you write. Defaults to false, and does not affect package installation — imports load their packages either way. ' +
+            'Leave false for local computation and workspace-only work; set true only before using kavi.http or pyodide.http.pyfetch.',
         },
         timeoutMs: {
           type: 'number',
