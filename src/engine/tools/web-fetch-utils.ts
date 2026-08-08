@@ -30,6 +30,32 @@ function normalizeWhitespace(value: string): string {
     .trim();
 }
 
+/**
+ * Removes markup that renders no text and carries no navigable link, before anything
+ * walks the document.
+ *
+ * A fetched page is traversed twice: `htmlToMarkdown` extracts the text, and
+ * `extractFetchedLinksFromHtml` collects links. Both scan the whole payload, and the
+ * link pass received the raw response — stripping nothing. Measured on-device against
+ * `en.wikipedia.org/wiki/Jupiter` (1,415,879 chars): 10,186 ms to build the markdown and
+ * 11,154 ms to find eight links, against 186 ms of network. Parsing cost a hundred times
+ * what fetching did.
+ *
+ * `htmlToMarkdown` already discards exactly these elements, so doing it once up front
+ * leaves its output identical while shrinking the input both passes walk. The link pass
+ * additionally stops reporting anchors buried in scripts, templates and inline SVG,
+ * which were never navigable results in the first place.
+ *
+ * Deliberately narrower than `stripStructuralChrome`: that one also drops nav, header
+ * and footer, which is right for prose extraction and wrong for links.
+ */
+export function stripNonRenderedHtml(html: string): string {
+  return stripHtmlComments(html).replace(
+    /<(script|style|template|svg|canvas)\b[^>]*>[\s\S]*?<\/\1>/gi,
+    '',
+  );
+}
+
 function stripHtmlComments(value: string): string {
   return value.replace(/<!--[\s\S]*?-->/g, '');
 }

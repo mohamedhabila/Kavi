@@ -5,7 +5,12 @@ import {
   extractFetchedLinksFromMarkdown,
   type WebFetchLink,
 } from '../../services/browser/core/linkExtractor';
-import { htmlToMarkdown, selectMatchingRegions, sliceTextWindow } from './web-fetch-utils';
+import {
+  htmlToMarkdown,
+  selectMatchingRegions,
+  sliceTextWindow,
+  stripNonRenderedHtml,
+} from './web-fetch-utils';
 import { readResponseText } from './web-shared';
 
 const DEFAULT_FETCH_MAX_RESPONSE_BYTES = 2_000_000;
@@ -184,13 +189,16 @@ export async function directFetch(params: {
         };
       }
 
+      // Both passes below walk the whole document, so the markup that renders no text
+      // and holds no navigable link is removed once rather than scanned twice.
+      const renderableHtml = stripNonRenderedHtml(rawText);
       const { text: extractedText, title } = htmlToMarkdown(
-        rawText,
+        renderableHtml,
         params.extractMode,
         typeof res.url === 'string' && res.url.trim() ? res.url : params.url,
       );
       const links = extractFetchedLinksFromHtml(
-        rawText,
+        renderableHtml,
         typeof res.url === 'string' && res.url.trim() ? res.url : params.url,
       );
       const window = project(extractedText);
