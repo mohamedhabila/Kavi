@@ -8,16 +8,22 @@ import { detectSearchProvider } from './providerDispatch';
  * `web_search` was advertised on every turn even with no provider configured. Each
  * such turn spent a model round-trip on a call that could only fail.
  *
- * The snapshot starts optimistic so a working capability is never hidden before it has
- * been checked, and a refresh is kicked off whenever the surface is built. The first
- * turn of a fresh process may still offer the tool; every turn after the probe settles
- * reflects reality, and adding a key restores the tool without a restart.
+ * The snapshot is unknown until a probe settles, and unknown counts as unavailable.
+ *
+ * It used to start optimistic, so that a working capability was never hidden before it
+ * had been checked. Observed on-device, that traded the wrong way: `web_search` was
+ * offered and failed on runs with no provider configured, which is the wasted round-trip
+ * this gate exists to prevent. The asymmetry is what decides it — advertising a tool that
+ * cannot work costs a guaranteed failed call every time, while withholding a working one
+ * costs at most the turns before the probe settles, and the refresh fired on every
+ * surface build makes that self-healing. A probe error is likewise not a claim that a
+ * provider exists, so it leaves the state unknown rather than asserting availability.
  */
-let configuredSnapshot = true;
+let configuredSnapshot: boolean | null = null;
 let probeInFlight: Promise<void> | null = null;
 
 export function isSearchProviderConfiguredSnapshot(): boolean {
-  return configuredSnapshot;
+  return configuredSnapshot === true;
 }
 
 export function refreshSearchProviderReadiness(): Promise<void> {
@@ -29,8 +35,8 @@ export function refreshSearchProviderReadiness(): Promise<void> {
       configuredSnapshot = resolved !== null;
     })
     .catch(() => {
-      // A probe failure is not evidence of an unconfigured provider, so the previous
-      // snapshot stands rather than hiding a capability on a transient error.
+      // A probe failure is not evidence either way, so a settled snapshot stands and an
+      // unsettled one stays unknown. It must never be read as "a provider is configured".
     })
     .finally(() => {
       probeInFlight = null;
@@ -43,9 +49,7 @@ export function setSearchProviderReadinessSnapshot(configured: boolean): void {
   configuredSnapshot = configured;
 }
 
-// Primed at import rather than waiting for the first tool-surface build. The probe is
-// a single secure-storage read and this module loads during startup, so the snapshot
-// settles long before the first turn. Without this the first turn of every fresh
-// process still advertised a tool that could only fail — the wasted call the gate
-// exists to prevent.
+// Primed at import rather than waiting for the first tool-surface build, so the single
+// secure-storage read settles as early as possible and the tool is withheld for as few
+// turns as possible.
 void refreshSearchProviderReadiness();

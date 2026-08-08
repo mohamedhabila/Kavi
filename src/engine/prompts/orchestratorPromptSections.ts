@@ -1,4 +1,5 @@
 import type { Message } from '../../types/message';
+import { isToolRuntimeAvailable } from '../tools/runtimeAvailability';
 
 export type SystemPromptSectionPurpose =
   | 'base_prompt'
@@ -29,6 +30,8 @@ export const DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT =
 export const MEMORY_MINIMAL_DISCLOSURE_CONTRACT =
   'Treat recalled memory as context, not a disclosure checklist. Include only remembered details needed for the current request; do not volunteer superseded values or unrelated remembered context.';
 
+const WEB_SEARCH_TOOL_NAME = 'web_search';
+
 export function formatUtcOffset(offsetMinutesWestOfUtc: number): string {
   const totalMinutes = -offsetMinutesWestOfUtc;
   const sign = totalMinutes >= 0 ? '+' : '-';
@@ -40,7 +43,23 @@ export function formatUtcOffset(offsetMinutesWestOfUtc: number): string {
   return `UTC${sign}${hours}:${minutes}`;
 }
 
-export function buildRuntimePromptSection(options: { toolExecutionAvailable: boolean }): string {
+export function buildRuntimePromptSection(options: {
+  toolExecutionAvailable: boolean;
+  /**
+   * Whether a search tool is actually on this run's surface.
+   *
+   * Guidance naming a tool is an advertisement for it. `web_search` is gated on a
+   * configured provider and is correctly dropped from the surface when there is none —
+   * but this line named it unconditionally, so the model was told to search, called a
+   * tool it had never been given, and the call failed. Traced on-device: every research
+   * request opened with a failed `web_search` followed by a `tool_catalog` round-trip
+   * before falling back to `web_fetch`, which had been the only usable path all along.
+   *
+   * Naming the fallback instead of the missing tool costs the same tokens and starts the
+   * run on the path that works.
+   */
+  webSearchAvailable?: boolean;
+}): string {
   const universalGuidance = [
     'Runtime: mobile (React Native / Expo), channel mobile-app.',
     'Use the runtime_context block for request time and timezone.',
@@ -66,7 +85,9 @@ export function buildRuntimePromptSection(options: { toolExecutionAvailable: boo
     'Reading, search, recall, or verification is not completion when the request also requires action; continue to the action tool.',
     'A successful tool call proves only the exact result it returned. Before final delivery, compare result fields and verified effects with every explicit requested outcome and constraint; if any remains unsatisfied, continue with a corrected action or report the concrete blocker.',
     'When the user provides exact file paths, read those paths directly; do not list parent directories merely to confirm that the named files exist.',
-    'For web research, web_search discovers and web_fetch reads. Fetch known URLs directly, batch independent fetches, compare sources, and re-search only if needed.',
+    options.webSearchAvailable === false
+      ? 'For web research, no search provider is configured, so web_search is unavailable: reach pages directly with web_fetch. Batch independent fetches and compare sources.'
+      : 'For web research, web_search discovers and web_fetch reads. Fetch known URLs directly, batch independent fetches, compare sources, and re-search only if needed.',
   ].join('\n');
 }
 
@@ -205,10 +226,17 @@ export function buildSystemPromptSections(
   const toolExecutionAvailable = toolingEnabled && !textOnlyTurn;
 
   appendSystemPromptSection(sections, prompt, { cacheable: true, purpose: 'base_prompt' });
-  appendSystemPromptSection(sections, buildRuntimePromptSection({ toolExecutionAvailable }), {
-    cacheable: true,
-    purpose: 'runtime_guidance',
-  });
+  appendSystemPromptSection(
+    sections,
+    buildRuntimePromptSection({
+      toolExecutionAvailable,
+      webSearchAvailable: isToolRuntimeAvailable(WEB_SEARCH_TOOL_NAME),
+    }),
+    {
+      cacheable: true,
+      purpose: 'runtime_guidance',
+    },
+  );
   appendSystemPromptSection(sections, safetySection, { cacheable: true, purpose: 'safety' });
   appendSystemPromptSection(sections, runtimeContextSection, { purpose: 'runtime_context' });
   appendSystemPromptSection(
