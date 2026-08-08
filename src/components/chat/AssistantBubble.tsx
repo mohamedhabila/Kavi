@@ -10,6 +10,8 @@ import { SubAgentActivityCard } from '../agents/SubAgentActivityCard';
 import { AgentWorkflowSummary } from './AgentWorkflowSummary';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallDisplay, humanizeToolName, summarizeToolCall } from './ToolCallDisplay';
+import { FetchBatchProgress } from './FetchBatchProgress';
+import { groupAssistantToolCalls } from './fetchBatchGrouping';
 import TypingIndicator from './TypingIndicator';
 import { MessageAttachments } from './MessageAttachments';
 import { MessageContentRenderer } from './MessageContentRenderer';
@@ -161,15 +163,27 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
       }
     };
 
+    const renderToolCall = (toolCall: NonNullable<Message['toolCalls']>[number]) => (
+      <ToolCallDisplay
+        key={toolCall.id}
+        toolCall={toolCall}
+        onViewCanvas={onViewCanvas}
+        onViewFile={onViewFile}
+      />
+    );
+
+    // A research turn issues a dozen fetches; one row each buries the rest of the
+    // transcript and shows the reader the least useful thing about them.
     const renderToolCalls = (toolCalls?: NonNullable<Message['toolCalls']>) =>
-      toolCalls?.map((toolCall) => (
-        <ToolCallDisplay
-          key={toolCall.id}
-          toolCall={toolCall}
-          onViewCanvas={onViewCanvas}
-          onViewFile={onViewFile}
-        />
-      ));
+      groupAssistantToolCalls(toolCalls).map((group) =>
+        group.kind === 'single' ? (
+          renderToolCall(group.toolCall)
+        ) : (
+          <FetchBatchProgress key={group.toolCalls[0]!.id} targets={group.targets}>
+            {group.toolCalls.map(renderToolCall)}
+          </FetchBatchProgress>
+        ),
+      );
 
     const renderContentSegment = (segment: AssistantBubbleSegment) => {
       if (segment.subAgentEvent) {
