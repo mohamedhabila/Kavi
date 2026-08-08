@@ -42,6 +42,7 @@ import {
   GRAPH_OBSERVABILITY_AUDIT_TYPES,
 } from './graphObservability';
 import { materializeToolEffectCompletionGoals } from './toolEffectGoalMaterialization';
+import { materializeDelegatedWorkerGoal } from './delegatedWorkerGoalMaterialization';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
@@ -132,6 +133,8 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   toolFilter?: (toolName: string) => boolean;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   groundedRequestScopedTools: ToolDefinition[];
+  /** What the run may execute, as opposed to what this turn advertises. */
+  authorizedToolNames?: ReadonlySet<string>;
   memoryEvidenceToolDefinitions: ReadonlyArray<ToolDefinition>;
   getGraphSnapshot: () => AgentRunControlGraphState;
   completedWorkflowToolNames: Set<string>;
@@ -278,10 +281,17 @@ export async function executeAgentControlGraphToolTurn(
     tools: params.groundedRequestScopedTools,
   });
   assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-  const projectedControlGraphGoals =
+  const goalsAfterEffectMaterialization =
     effectGoalMaterialization.status === 'materialized'
       ? effectGoalMaterialization.goals
-      : params.getGraphSnapshot().goals;
+      : (params.getGraphSnapshot().goals ?? []);
+  // A spawn gate that can serialize the goal it wants does not need the model to type it
+  // back. Reconcile it here so the launch succeeds on its first attempt.
+  const delegationGoalMaterialization = materializeDelegatedWorkerGoal({
+    toolCalls: executableToolCalls,
+    goals: goalsAfterEffectMaterialization,
+  });
+  const projectedControlGraphGoals = delegationGoalMaterialization.goals;
   const isMobileControllerTurn =
     executableToolCalls.length === 1 &&
     resolveRegisteredToolName(executableToolCalls[0]!.name) === MOBILE_UI_ACTION_TOOL_NAME;
@@ -335,6 +345,7 @@ export async function executeAgentControlGraphToolTurn(
     toolFilter: params.toolFilter,
     pendingAsyncMonitorToolNames: params.pendingAsyncMonitorToolNames,
     groundedRequestScopedTools: params.groundedRequestScopedTools,
+    authorizedToolNames: params.authorizedToolNames,
     memoryEvidenceToolDefinitions: params.memoryEvidenceToolDefinitions,
     workingMessages,
     completedWorkflowToolNames: params.completedWorkflowToolNames,
@@ -368,6 +379,14 @@ export async function executeAgentControlGraphToolTurn(
           reason: effectGoalMaterialization.reason,
           projectToMemoryTasks: false,
           timestamp: effectGoalMaterialization.timestamp,
+        });
+      }
+      if (delegationGoalMaterialization.status === 'materialized') {
+        graphEvents.push({
+          type: 'GOALS_UPDATED',
+          goals: delegationGoalMaterialization.goals,
+          reason: delegationGoalMaterialization.reason,
+          projectToMemoryTasks: false,
         });
       }
       graphEvents.push({
