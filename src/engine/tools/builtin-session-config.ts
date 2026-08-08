@@ -10,21 +10,48 @@ function normalizeSessionDepthValue(value: unknown): number | undefined {
   return Math.max(0, Math.floor(value));
 }
 
+/** The depth a session is already running at, from the snapshot or its stored config. */
+function resolveSessionDepth(
+  session: { depth?: unknown } | undefined,
+  context: { config?: { depth?: unknown } } | undefined,
+): number | undefined {
+  return (
+    normalizeSessionDepthValue(session?.depth) ??
+    normalizeSessionDepthValue(context?.config?.depth)
+  );
+}
+
+/** Depth for a worker spawned *by* this session: one level further from the user. */
 export function resolveChildSessionDepth(
   session: { depth?: unknown } | undefined,
   context: { config?: { depth?: unknown } } | undefined,
 ): number | undefined {
-  const sessionDepth = normalizeSessionDepthValue(session?.depth);
-  if (sessionDepth != null) {
-    return sessionDepth + 1;
-  }
+  const depth = resolveSessionDepth(session, context);
+  return depth == null ? undefined : depth + 1;
+}
 
-  const contextDepth = normalizeSessionDepthValue(context?.config?.depth);
-  if (contextDepth != null) {
-    return contextDepth + 1;
-  }
-
-  return undefined;
+/**
+ * Depth for a follow-up *to* an existing session: unchanged, because nothing nested.
+ *
+ * `sessions_send` continues a worker that already exists — same session, same place in the
+ * hierarchy — but it used to reuse the child-depth rule and count every follow-up as one
+ * level deeper. With MAX_SPAWN_DEPTH at 2 that gave a worker exactly one follow-up before
+ * the ceiling refused it, and the refusal blamed spawn depth for a call that spawns
+ * nothing.
+ *
+ * Traced on-device: a worker launched at depth 1, the first sessions_send ran at depth 2,
+ * and the second was rejected with "Max spawn depth 2 exceeded" — while the supervisor was
+ * simply asking the same worker to finish writing its report. Nothing was ever nested; the
+ * counter only ratcheted.
+ *
+ * The ceiling still binds where it means something: `resolveChildSessionDepth` above keeps
+ * incrementing, so a worker that spawns its own worker is still stopped at the same limit.
+ */
+export function resolveFollowUpSessionDepth(
+  session: { depth?: unknown } | undefined,
+  context: { config?: { depth?: unknown } } | undefined,
+): number | undefined {
+  return resolveSessionDepth(session, context);
 }
 
 export function sanitizeWorkerName(name?: unknown): string | undefined {

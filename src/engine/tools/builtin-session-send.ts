@@ -28,7 +28,7 @@ import {
   buildFollowUpMessages,
   buildFollowUpPrompt,
   buildFollowUpSubAgentConfig,
-  resolveChildSessionDepth,
+  resolveFollowUpSessionDepth,
 } from './builtin-session-config';
 import {
   mergeWorkerProviderIntoCatalog,
@@ -158,7 +158,7 @@ export async function executeSessionSend(
       previousContext?.config.model,
       inheritedModel,
     );
-    const followUpDepth = resolveChildSessionDepth(agent, previousContext);
+    const followUpDepth = resolveFollowUpSessionDepth(agent, previousContext);
     const workstreamId = previousContext?.config.workstreamId ?? agent.workstreamId;
     const storedMemorySelectionScope = sanitizeSubAgentMemorySelectionScope(
       previousContext?.config.memorySelectionScope,
