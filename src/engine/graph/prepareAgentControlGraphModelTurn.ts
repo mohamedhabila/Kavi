@@ -73,6 +73,7 @@ export async function prepareAgentControlGraphModelTurn(
     effectiveForceTextReasonThisTurn: iterationRequest.effectiveForceTextReasonThisTurn,
     iterationThinkingLevel: iterationRequest.iterationThinkingLevel,
     pendingAsyncMonitorToolNames: toolSurface.pendingAsyncMonitorToolNames,
+    authorizedToolNames: toolSurface.authorizedToolNames,
     preparedTurn,
     requestMaxTokens: iterationRequest.requestMaxTokens,
     requestModel: iterationRequest.requestModel,

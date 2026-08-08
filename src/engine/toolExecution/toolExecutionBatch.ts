@@ -28,6 +28,26 @@ export interface ToolExecutionBatchParams<TToolCall, TOutcome> {
   buildSkippedExecutionOutcome?: (toolCall: TToolCall, index: number, reason: string) => TOutcome;
 }
 
+/** Closes out calls a stopped batch never reached, so no rendered call is left pending. */
+function settleUnreachedToolCalls<TToolCall, TOutcome>(input: {
+  params: ToolExecutionBatchParams<TToolCall, TOutcome>;
+  outcomes: TOutcome[];
+  fromIndex: number;
+  reason: string;
+}): void {
+  const build = input.params.buildSkippedExecutionOutcome;
+  if (!build) {
+    return;
+  }
+  for (
+    let index = input.fromIndex;
+    index < input.params.executableToolCalls.length;
+    index += 1
+  ) {
+    input.outcomes.push(build(input.params.executableToolCalls[index], index, input.reason));
+  }
+}
+
 export async function executeToolExecutionBatch<TToolCall, TOutcome>(
   params: ToolExecutionBatchParams<TToolCall, TOutcome>,
 ): Promise<TOutcome[]> {
@@ -61,6 +81,24 @@ export async function executeToolExecutionBatch<TToolCall, TOutcome>(
     outcomes.push(outcome);
 
     if (params.shouldSuspendAfterOutcome?.(outcome) || params.getYieldedMessage(outcome)) {
+      /**
+       * Every call the model made has to end somewhere, including the ones this batch
+       * never reaches.
+       *
+       * Suspending or yielding stops the loop, and the trailing calls used to be simply
+       * abandoned — no outcome, no result message, nothing to settle the row the model had
+       * already been shown. The loop-detection path below has always closed them out; this
+       * path did not, so the difference was invisible until a live run hit it.
+       *
+       * Traced on-device: a batch yielded on a blocking `sessions_send`, and the
+       * `tool_catalog` call behind it sat at "Waiting" for the rest of the run — nearly
+       * four minutes and climbing — while the model, never receiving a result, gave up on
+       * the capability it had been trying to discover. The run then failed with the call
+       * still open, and finalization could only report it after the fact as never having
+       * completed. Closing them here means the model learns immediately that the call did
+       * not run, and can reissue it on the next turn instead of waiting on it forever.
+       */
+      settleUnreachedToolCalls({ params, outcomes, fromIndex: index + 1, reason: 'batch_suspended' });
       break;
     }
 
@@ -77,21 +115,12 @@ export async function executeToolExecutionBatch<TToolCall, TOutcome>(
         previewCompletedToolNames,
       })
     ) {
-      if (params.buildSkippedExecutionOutcome) {
-        for (
-          let skippedIndex = index + 1;
-          skippedIndex < params.executableToolCalls.length;
-          skippedIndex += 1
-        ) {
-          outcomes.push(
-            params.buildSkippedExecutionOutcome(
-              params.executableToolCalls[skippedIndex],
-              skippedIndex,
-              'critical_loop_detected',
-            ),
-          );
-        }
-      }
+      settleUnreachedToolCalls({
+        params,
+        outcomes,
+        fromIndex: index + 1,
+        reason: 'critical_loop_detected',
+      });
       break;
     }
   }

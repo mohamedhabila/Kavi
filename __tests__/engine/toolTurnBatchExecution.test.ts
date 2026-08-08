@@ -255,11 +255,17 @@ describe('toolTurnBatchExecution', () => {
     );
   });
 
-  it('passes a grounded-surface execution filter into tool lifecycle preflight', async () => {
+  // The execution filter carries permission only. It used to AND the advertised surface,
+  // which made a turn's guess about what would be useful an enforcement boundary at
+  // dispatch — the point where the over-planning was actually applied. Traced on-device, a
+  // run that needed `python` mid-task could not call it and was sent to `tool_catalog`,
+  // whose result never arrived.
+  it('filters execution by permission, not by what this turn advertised', async () => {
     mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
       expect(params.groundedRequestScopedTools).toEqual(tools.slice(0, 1));
       expect(params.toolFilter('web_search')).toBe(true);
-      expect(params.toolFilter('web_fetch')).toBe(false);
+      // Registered and permitted, merely unadvertised this turn: still callable.
+      expect(params.toolFilter('web_fetch')).toBe(true);
       return {
         toolCallId: params.tc.id,
         effectiveToolName: params.tc.name,

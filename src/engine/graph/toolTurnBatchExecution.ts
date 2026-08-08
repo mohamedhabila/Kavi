@@ -42,6 +42,24 @@ import { buildMobileControllerGoalAdmissionBlock } from '../mobileController/goa
 const MOBILE_CONTROLLER_ISOLATED_TURN_BLOCK =
   'Blocked: mobile_ui_action must be the only tool call in its model turn because the external action suspends execution and changes the current observation.';
 
+/**
+ * Why a call in this batch never ran, phrased so the next turn knows what to do.
+ *
+ * A suspended batch is not a rejection: the call was simply behind one that yielded, and
+ * reissuing it is the correct move. Reporting it with the loop-detection wording told the
+ * model the opposite — that something about the call itself was wrong — so the message is
+ * chosen from the reason rather than shared.
+ */
+function describeSkippedToolExecution(reason: string): string {
+  if (reason === 'batch_suspended') {
+    return (
+      'Not run: an earlier tool call in this batch suspended the turn before this one ' +
+      'started. Nothing about this call was rejected — issue it again if you still need it.'
+    );
+  }
+  return `Blocked: Tool execution skipped because the graph detected ${reason}.`;
+}
+
 export async function executeAgentControlGraphToolBatch(params: {
   executableToolCalls: ReadonlyArray<PendingAgentToolCall>;
   memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
@@ -67,6 +85,7 @@ export async function executeAgentControlGraphToolBatch(params: {
   toolFilter?: (toolName: string) => boolean;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   groundedRequestScopedTools: ToolDefinition[];
+  authorizedToolNames?: ReadonlySet<string>;
   memoryEvidenceToolDefinitions?: ReadonlyArray<ToolDefinition>;
   workingMessages?: ReadonlyArray<Message>;
   completedWorkflowToolNames: Set<string>;
@@ -82,14 +101,18 @@ export async function executeAgentControlGraphToolBatch(params: {
   onBatchCommitted: () => void;
 }): Promise<ToolExecutionOutcome[]> {
   assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-  const groundedToolNames = new Set(
-    params.groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
-  );
-  const isToolAllowedByGroundedSurface = (toolName: string): boolean =>
-    groundedToolNames.has(normalizeToolName(toolName));
+  /**
+   * Execution is filtered by permission alone, never by what this turn advertised.
+   *
+   * This filter used to AND the grounded surface into the run allowlist, which made the
+   * advertised list an enforcement boundary at the point of dispatch — the same
+   * over-planning the preflight now rejects, and the place it was actually applied. A
+   * capability the run holds stayed unreachable whenever the previous turn had not
+   * predicted the need for it, and the model was told to fix that with a `tool_catalog`
+   * round-trip it should never have had to make.
+   */
   const executionToolFilter = (toolName: string): boolean =>
-    isToolAllowedByGroundedSurface(toolName) &&
-    (params.toolFilter ? params.toolFilter(toolName) : true);
+    params.toolFilter ? params.toolFilter(toolName) : true;
   const hasGoalMutation = params.executableToolCalls.some(
     (toolCall) => normalizeToolName(toolCall.name) === GOAL_BOOTSTRAP_TOOL_NAME,
   );
@@ -191,6 +214,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       runtimeToolAvailability: params.runtimeToolAvailability,
       toolCallHistory: params.toolCallHistory,
       groundedRequestScopedTools: params.groundedRequestScopedTools,
+      authorizedToolNames: params.authorizedToolNames,
       trackedAsyncOperations: params.trackedAsyncOperations,
       signal: params.signal,
       callbacks: {
@@ -315,7 +339,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       toolMessage: {
         id: `msg_${Date.now()}_tool_skipped_${index}_${toolCall.id}`,
         role: 'tool' as const,
-        content: `Blocked: Tool execution skipped because the graph detected ${reason}.`,
+        content: describeSkippedToolExecution(reason),
         toolCallId: toolCall.id,
         toolCalls: [
           {

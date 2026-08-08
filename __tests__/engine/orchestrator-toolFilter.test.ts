@@ -311,7 +311,10 @@ describe('Orchestrator — toolFilter', () => {
     expect(callbacks.calls.onToolCallStart).toHaveLength(0);
     expect(callbacks.calls.onToolCallComplete).toHaveLength(0);
     expect(callbacks.calls.onToolMessage).toHaveLength(1);
-    expect(callbacks.calls.onToolMessage[0]?.content).toContain('not on the current turn');
+    // A permission boundary, stated as fixed and without pointing at discovery, which
+      // cannot widen a permission set.
+      expect(callbacks.calls.onToolMessage[0]?.content).toContain('is not permitted in this run');
+      expect(callbacks.calls.onToolMessage[0]?.content).not.toContain('tool_catalog');
     expect(callbacks.calls.onToolMessage[0]?.status).toBe('failed');
   });
 
@@ -535,7 +538,10 @@ describe('Orchestrator — toolFilter', () => {
         'read_file',
       );
       expect(mockExecuteTool).not.toHaveBeenCalled();
-      expect(callbacks.calls.onToolMessage[0]?.content).toContain('not on the current turn');
+      // A permission boundary, stated as fixed and without pointing at discovery, which
+      // cannot widen a permission set.
+      expect(callbacks.calls.onToolMessage[0]?.content).toContain('is not permitted in this run');
+      expect(callbacks.calls.onToolMessage[0]?.content).not.toContain('tool_catalog');
       expect(callbacks.calls.onToolMessage[0]?.status).toBe('failed');
       expect(callbacks.calls.onDone).toHaveLength(1);
     },

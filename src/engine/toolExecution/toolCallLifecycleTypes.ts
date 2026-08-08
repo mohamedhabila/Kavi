@@ -52,6 +52,11 @@ export type ToolExecutionLifecycleParams = {
   runtimeToolAvailability: RuntimeToolAvailabilityContext;
   toolCallHistory: ToolCallRecord[];
   groundedRequestScopedTools?: ReadonlyArray<ToolDefinition>;
+  /**
+   * Tools the run is permitted to execute. Distinct from `groundedRequestScopedTools`,
+   * which is only what this turn chose to advertise.
+   */
+  authorizedToolNames?: ReadonlySet<string>;
   trackedAsyncOperations: Map<string, TrackedAsyncOperation>;
   signal?: AbortController;
   callbacks: ToolExecutionLifecycleCallbacks;

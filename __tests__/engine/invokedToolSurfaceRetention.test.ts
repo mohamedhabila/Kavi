@@ -4,7 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { resolveModelTurnGroundedToolSurface } from '../../src/engine/graph/modelTurn/resolveGroundedToolSurface';
-import { buildOffSurfaceToolResult } from '../../src/engine/toolExecution/offSurfaceToolResult';
+import { buildUnauthorizedToolResult } from '../../src/engine/toolExecution/unauthorizedToolResult';
 import { TOOL_CATALOG_TOOL } from '../../src/engine/tools/builtin-definitions-coordination';
 import type { ToolDefinition } from '../../src/types/tool';
 
@@ -77,31 +77,34 @@ describe('tool surface retains tools the run already invoked', () => {
   });
 });
 
-describe('off-surface tool rejection states a recovery', () => {
-  it('tells the model the tool exists and how to bring it back', () => {
-    const content = buildOffSurfaceToolResult('clipboard_read');
+describe('a refusal now means permission, and says so honestly', () => {
+  // The advertised surface no longer refuses anything: a registered, permitted tool runs
+  // whenever it is called, because which capability a task needs only becomes clear while
+  // doing the task. What remains here is a genuine permission boundary.
+  it('names the tool and states the boundary as fixed', () => {
+    const content = buildUnauthorizedToolResult('clipboard_read');
 
     expect(content).toContain('clipboard_read');
-    expect(content).toContain('registered for this run');
-    expect(content).toContain(TOOL_CATALOG_TOOL.name);
+    expect(content).toContain('is not permitted in this run');
+    expect(content).toContain('permission boundary');
   });
 
-  it('says plainly that repeating the identical call will fail the same way', () => {
-    // This sentence is the whole point: without it the cheapest next move the model
-    // has is another identical call, which is exactly what the live trace showed.
-    expect(buildOffSurfaceToolResult('clipboard_read')).toContain(
-      'Repeating this call unchanged',
-    );
+  it('does not send the model to discovery, which cannot widen a permission set', () => {
+    // Traced live: naming `tool_catalog` here produced alternating rejected calls and
+    // useless discovery calls until the run's iteration budget was gone.
+    const content = buildUnauthorizedToolResult('clipboard_read');
+
+    expect(content).not.toContain(TOOL_CATALOG_TOOL.name);
+    expect(content).toContain('say what you cannot do and why');
   });
 
-  it('is the content both off-surface preflight branches return', () => {
-    // The filter branch and the grounded-surface branch describe the same situation,
-    // so neither may drift back to a dead-end message.
+  it('is the only refusal preflight raises for tool permission', () => {
     const preflight = require('fs').readFileSync(
       'src/engine/toolExecution/toolCallLifecyclePreflight.ts',
       'utf8',
     );
     expect(preflight).not.toContain('is not allowed in this context');
-    expect(preflight.match(/buildOffSurfaceToolResult\(/g)).toHaveLength(2);
+    // One branch for the run allowlist, one for a conversation-mode restriction.
+    expect(preflight.match(/buildUnauthorizedToolResult\(/g)).toHaveLength(2);
   });
 });

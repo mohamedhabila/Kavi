@@ -123,14 +123,19 @@ describe('resolveToolCallPreflight', () => {
       arguments: '{}',
     });
 
-    expect(result?.toolMessage.content).toContain('not on the current turn');
+    expect(result?.toolMessage.content).toContain('is not permitted in this run');
     expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('tool_filter');
     expect(lifecycle.callbacks.onToolCallStart).not.toHaveBeenCalled();
     expect(lifecycle.callbacks.onToolCallComplete).not.toHaveBeenCalled();
   });
 
+  // Traced on-device. A turn's advertised surface is a guess about what will be useful
+  // next, not knowledge of what the task will need — that only becomes clear while doing
+  // the work. Refusing on it turned every unforeseen need into a hard error whose stated
+  // recovery was a `tool_catalog` round-trip, and in one run that discovery call never
+  // returned, stranding a capability the run held throughout and failing the whole run.
   it.each(['update_goals', 'system:update_goals'])(
-    'blocks registered tool %s when it was not exposed on the active grounded surface',
+    'runs registered tool %s even when this turn did not advertise it',
     (toolName) => {
       const lifecycle = buildLifecycle({
         groundedRequestScopedTools: [],
@@ -141,14 +146,46 @@ describe('resolveToolCallPreflight', () => {
         arguments: '{}',
       });
 
-      expect(result?.effectiveToolName).toBe('update_goals');
-      expect(result?.toolMessage.content).toContain('not on the current turn');
-      expect(result?.toolMessage.isError).toBe(true);
-      expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('tool_filter');
-      expect(lifecycle.callbacks.onToolCallStart).not.toHaveBeenCalled();
-      expect(lifecycle.callbacks.onToolCallComplete).not.toHaveBeenCalled();
+      // Admitted past authority: either it runs, or it fails its own contract check —
+      // never refused for the turn simply not having advertised it.
+      expect(result?.toolMessage.content ?? '').not.toContain('is not permitted in this run');
+      expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).not.toBe('tool_filter');
     },
   );
+
+  it('still refuses a tool the run is not permitted to use', () => {
+    // Permission is a separate question from advertisement, and it still refuses. Chitchat
+    // supplies such a set so a casual conversation cannot mutate state.
+    const lifecycle = buildLifecycle({
+      groundedRequestScopedTools: [],
+      authorizedToolNames: new Set(['memory_recall']),
+    });
+    const result = resolveToolCallPreflight(lifecycle, {
+      id: 'tc-unpermitted',
+      name: 'update_goals',
+      arguments: '{}',
+    });
+
+    expect(result?.toolMessage.content).toContain('is not permitted in this run');
+    // Discovery cannot widen a permission set, so it must not be offered as a way out.
+    expect(result?.toolMessage.content).not.toContain('tool_catalog');
+    expect(result?.toolMessage.isError).toBe(true);
+    expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('tool_filter');
+  });
+
+  it('still contract-checks a call this turn did not advertise', () => {
+    // Admitting an unadvertised call must not also mean admitting a malformed one, so the
+    // registered contract is supplied when the grounded list lacks the tool.
+    const lifecycle = buildLifecycle({ groundedRequestScopedTools: [] });
+    const result = resolveToolCallPreflight(lifecycle, {
+      id: 'tc-bad-args',
+      name: 'write_file',
+      arguments: '{"path":42}',
+    });
+
+    expect(result?.toolMessage.isError).toBe(true);
+    expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('schema_validation');
+  });
 
   it('applies filters to registered provider-prefixed aliases by canonical name', () => {
     const toolFilter = jest.fn((name: string) => name === 'update_goals');

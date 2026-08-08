@@ -38,6 +38,8 @@ export type PreparedAgentControlGraphModelTurnReady = {
   effectiveForceTextReasonThisTurn?: AgentControlTurnDirectives['forcedTextReason'];
   iterationThinkingLevel: ThinkingLevel;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
+  /** What the run may execute, as opposed to what this turn advertises. */
+  authorizedToolNames: ReadonlySet<string>;
   preparedTurn: PreparedAgentTurn;
   requestMaxTokens: number;
   requestModel: string;

@@ -3,7 +3,10 @@ import type { Message } from '../../../types/message';
 import type { ToolDefinition } from '../../../types/tool';
 import type { ConversationMode } from '../../../types/conversation';
 import type { TrackedAsyncOperation } from '../../pendingAsyncOperations';
-import { resolveGoalCapabilityToolNames } from '../../goals/toolSurface';
+import {
+  resolveAuthorizedToolNames,
+  resolveGoalCapabilityToolNames,
+} from '../../goals/toolSurface';
 import { normalizeToolName } from '../../tools/toolNameNormalization';
 import { resolveAgentExecutionTurnContract } from '../agentExecutionTurnContract';
 import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOperations';
@@ -29,6 +32,11 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   /** Set when a chitchat turn reached for a capability only an agentic run may use. */
   modeEscalation: ConversationModeEscalation;
   groundedRequestScopedTools: ToolDefinition[];
+  /**
+   * What the run may execute, as opposed to what this turn advertises. Execution consults
+   * this; `groundedRequestScopedTools` only shapes what the model is shown.
+   */
+  authorizedToolNames: ReadonlySet<string>;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   pinnedToolNames: string[];
   toolSurfacePinTelemetry: {
@@ -117,6 +125,15 @@ export async function resolveModelTurnGroundedToolSurface(params: {
       ]),
     }),
     groundedRequestScopedTools,
+    authorizedToolNames: resolveAuthorizedToolNames({
+      allTools: currentPolicyAuthorizedTools,
+      conversationMode: params.conversationMode,
+      activatedCatalogToolNames: new Set([
+        ...turnActivatedCatalogToolNames,
+        ...sessionActivatedToolNames,
+      ]),
+      explicitToolSurfaceToolNames,
+    }),
     pendingAsyncMonitorToolNames,
     pinnedToolNames,
     toolSurfacePinTelemetry: {
