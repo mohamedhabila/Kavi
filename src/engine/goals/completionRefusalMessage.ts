@@ -10,7 +10,11 @@
 // matching the convention every other refusal in this package already follows.
 // ---------------------------------------------------------------------------
 
-import { describeCriterionSatisfactionAction, isSuccessCriterionMet } from './completionEvidence';
+import {
+  describeCriterionSatisfactionAction,
+  isSuccessCriterionMet,
+  resolveGatingSuccessCriteria,
+} from './completionEvidence';
 import { createGoal, type AgentGoal } from './types';
 
 const NO_CRITERIA_MESSAGE =
@@ -18,12 +22,21 @@ const NO_CRITERIA_MESSAGE =
 
 const GENERIC_MESSAGE = 'Cannot complete a goal before structural evidence requirements are met.';
 
-/** Success criteria of `goal` that the supplied evidence does not satisfy. */
+/**
+ * Success criteria of `goal` that the supplied evidence does not satisfy and that
+ * actually hold completion.
+ *
+ * Only gating criteria belong here. A bare count names no action that satisfies it —
+ * `describeCriterionSatisfactionAction` returns null — so listing one fell through to
+ * "Record a tool result that satisfies it before completing", which is an instruction to
+ * run more tools with nothing to say about which. That is how a goal whose real work was
+ * finished came to rewrite its artifact and invent a second one to raise a number.
+ */
 export function findUnmetCompletionCriteria(
   goal: Pick<AgentGoal, 'id' | 'title' | 'evidence' | 'successCriteria'>,
   extraEvidence: ReadonlyArray<string> = [],
 ): string[] {
-  const criteria = goal.successCriteria ?? [];
+  const criteria = resolveGatingSuccessCriteria(goal.successCriteria ?? []);
   if (criteria.length === 0) return [];
 
   const evidence = extraEvidence.length
@@ -34,7 +47,7 @@ export function findUnmetCompletionCriteria(
     title: goal.title,
     status: 'completed',
     evidence,
-    successCriteria: criteria,
+    successCriteria: [...criteria],
   });
   return criteria.filter((criterion) => !isSuccessCriterionMet(hypothetical, criterion));
 }

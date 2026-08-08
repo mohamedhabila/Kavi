@@ -421,6 +421,47 @@ export function isSuccessCriterionMet(goal: AgentGoal, criterion: string): boole
   return false;
 }
 
+/**
+ * The criteria that actually gate completion, which is not always every criterion.
+ *
+ * A bare count asserts that N evidence records exist. Evidence only lands on a goal
+ * when it satisfies one of that goal's *specific* criteria or matches its tool
+ * contract — `hasRoutableSuccessCriteria` excludes counts from routing precisely
+ * because a count names no evidence to route. So the reachable count is bounded by
+ * how many distinct qualifying actions the declared work involves, and the model
+ * choosing N has no way to see that bound: it counts the steps it plans, most of
+ * which route nothing.
+ *
+ * Traced live on-device. A goal declared `evidence.artifact:artifacts/brief.md` plus
+ * `evidence.min:3` for "write the brief, read it back, remember the status". The write
+ * routed; the read-back, the directory listing and a web fetch all routed nothing. With
+ * the artifact criterion already met the goal still would not close, and the only move
+ * the count left was more qualifying writes — so the run rewrote the brief twice and
+ * invented a second file whose entire purpose was to reach three. The user asked for one
+ * file and got two plus an unrelated fetch, and the goal then closed on the counter
+ * rather than on the work.
+ *
+ * Every other subsystem already treats a count as proving nothing: it does not make a
+ * goal specific (`hasSpecificSuccessCriteria`), it routes no evidence
+ * (`hasRoutableSuccessCriteria`), it yields no satisfying action
+ * (`describeCriterionSatisfactionAction`), it cannot be a blocking goal's only criterion
+ * (`goalAdmission`), and it alone may be revised away from a blocking goal
+ * (`blockingGoalUpdateValidation`). Letting it gate anyway was the last place a count
+ * still spoke, and the only thing it could say was "do more".
+ *
+ * So a count stops gating a goal that carries a real criterion — that criterion is the
+ * gate, and the count adds only an incentive to manufacture work. A goal whose criteria
+ * are *all* counts keeps them: it has no other gate, it is `persistent` rather than
+ * blocking by `normalizeAddGoalPatch`, and dropping them there would weaken a floor
+ * rather than remove a perverse incentive.
+ */
+export function resolveGatingSuccessCriteria(
+  criteria: ReadonlyArray<string>,
+): ReadonlyArray<string> {
+  const specific = criteria.filter((criterion) => !isCountOnlySuccessCriterion(criterion));
+  return specific.length > 0 ? specific : criteria;
+}
+
 export function areGoalSuccessCriteriaSatisfied(
   goal: Pick<AgentGoal, 'evidence' | 'successCriteria'>,
 ): boolean {
@@ -439,7 +480,9 @@ export function areGoalSuccessCriteriaSatisfied(
     createdAt: 0,
     updatedAt: 0,
   };
-  return criteria.every((criterion) => isSuccessCriterionMet(hypotheticalGoal, criterion));
+  return resolveGatingSuccessCriteria(criteria).every((criterion) =>
+    isSuccessCriterionMet(hypotheticalGoal, criterion),
+  );
 }
 
 export function areBlockingGoalsStructurallyComplete(goals: ReadonlyArray<AgentGoal>): boolean {
@@ -460,7 +503,11 @@ export function evaluateGoalEvidenceGaps(goals: ReadonlyArray<AgentGoal>): GoalE
       continue;
     }
 
-    for (const criterion of goal.successCriteria) {
+    // A non-gating count must not be reported as a gap either. The gap list is what the
+    // completion hold and the loop-recovery prompt read back to the model, and a bare
+    // count carries no satisfying action to name — so reporting it says only "this is
+    // unmet" about a number, which reads as an instruction to run more tools.
+    for (const criterion of resolveGatingSuccessCriteria(goal.successCriteria)) {
       if (!isSuccessCriterionMet(goal, criterion)) {
         gaps.push({ goalId: goal.id, criterionId: criterion });
       }
