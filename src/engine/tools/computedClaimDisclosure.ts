@@ -1,4 +1,5 @@
 import { parseToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
+import { isDelegationOwnedGoal } from '../goals/delegation';
 import type { AgentGoal } from '../goals/types';
 
 /**
@@ -57,23 +58,33 @@ export function disclosesTheComputationDidNotRun(content: string): boolean {
   return Boolean(content) && DISCLOSURE_PATTERN.test(content);
 }
 
-/** Whether this run actually executed code, per its own effect receipts. */
-export function runHasComputeEvidence(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-): boolean {
+/**
+ * Whether this run executed code, or delegated to a worker that may have.
+ *
+ * A receipt proves the run computed. Delegation is the case the receipt cannot speak to:
+ * the worker's effects land on the worker's own graph, so a supervisor transcribing a
+ * worker's figures holds no `compute.execute` receipt of its own and never can. Refusing
+ * there blocks a legitimate write with no move available — the supervisor cannot produce
+ * evidence it was never given. The guard exists to catch a run inventing results it never
+ * asked anyone to compute, so it yields wherever a worker is carrying the computation.
+ */
+export function runHasComputeEvidence(goals: ReadonlyArray<AgentGoal> | undefined): boolean {
   if (!goals?.length) {
     return false;
   }
-  return goals.some((goal) =>
-    goal.evidence.some((entry) => {
+  return goals.some((goal) => {
+    if (isDelegationOwnedGoal(goal)) {
+      return true;
+    }
+    return goal.evidence.some((entry) => {
       const receipt = parseToolEffectReceiptEvidence(entry);
       return (
         receipt?.effectKind === 'compute.execute' &&
         receipt.transportState === 'returned' &&
         receipt.executionState === 'completed'
       );
-    }),
-  );
+    });
+  });
 }
 
 /**
