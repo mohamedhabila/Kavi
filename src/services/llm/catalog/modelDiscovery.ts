@@ -11,7 +11,11 @@ import {
   recordProviderContextWindow,
 } from '../../context/providerContextWindows';
 
-type DiscoveredModel = Readonly<{ model: string; capabilities: ModelCapabilities }>;
+type DiscoveredModel = Readonly<{
+  model: string;
+  capabilities: ModelCapabilities;
+  contextWindow?: number;
+}>;
 
 function declaredStringArray(value: unknown): string[] | null {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
@@ -67,17 +71,18 @@ export async function fetchProviderModels(args: {
         args.provider.modelCapabilities?.[model] || inferModelCapabilities(model),
       ]),
     );
-    return { models, capabilities };
+    return { models, capabilities, contextWindows: {} };
   }
 
   const capabilities: Record<string, ModelCapabilities> = {};
+  const contextWindows: Record<string, number> = {};
 
   if (args.transport === 'anthropic') {
     const models = ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'];
     for (const model of models) {
       capabilities[model] = { vision: true, tools: true, fileInput: true };
     }
-    return { models, capabilities };
+    return { models, capabilities, contextWindows };
   }
 
   const urls =
@@ -118,7 +123,13 @@ export async function fetchProviderModels(args: {
           if (advertisedContextWindow !== undefined) {
             recordProviderContextWindow(model, advertisedContextWindow);
           }
-          return { model, capabilities: resolveDiscoveredModelCapabilities(entry, model) };
+          return {
+            model,
+            capabilities: resolveDiscoveredModelCapabilities(entry, model),
+            ...(advertisedContextWindow !== undefined
+              ? { contextWindow: advertisedContextWindow }
+              : {}),
+          };
         })
         .filter((entry: DiscoveredModel | undefined): entry is DiscoveredModel =>
           Boolean(entry?.model),
@@ -127,13 +138,20 @@ export async function fetchProviderModels(args: {
 
       for (const entry of discoveredModels) {
         capabilities[entry.model] = entry.capabilities;
+        if (entry.contextWindow !== undefined) {
+          contextWindows[entry.model] = entry.contextWindow;
+        }
       }
 
-      return { models: discoveredModels.map((entry) => entry.model), capabilities };
+      return {
+        models: discoveredModels.map((entry) => entry.model),
+        capabilities,
+        contextWindows,
+      };
     } catch {
       continue;
     }
   }
 
-  return { models: [], capabilities };
+  return { models: [], capabilities, contextWindows };
 }

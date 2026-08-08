@@ -81,3 +81,15 @@ export function getProviderContextWindow(model: string): number | undefined {
 export function clearProviderContextWindowsForTests(): void {
   providerContextWindows.clear();
 }
+
+/** Replays windows persisted with a provider config into the in-memory registry. */
+export function hydrateProviderContextWindows(
+  windowsByModel: Readonly<Record<string, number>> | undefined,
+): void {
+  if (!windowsByModel) {
+    return;
+  }
+  for (const [model, contextWindow] of Object.entries(windowsByModel)) {
+    recordProviderContextWindow(model, contextWindow);
+  }
+}

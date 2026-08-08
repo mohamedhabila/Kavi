@@ -135,6 +135,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
                   ...(provider.modelCapabilities ?? {}),
                   ...result.capabilities,
                 },
+                // Persisted so the window survives a relaunch: discovery only runs when
+                // this picker is opened, and getContextWindow otherwise falls back to a
+                // static table that defaults unlisted models to 128k.
+                modelContextWindows: {
+                  ...(provider.modelContextWindows ?? {}),
+                  ...result.contextWindows,
+                },
               });
             });
           } else {

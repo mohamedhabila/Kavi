@@ -3,6 +3,7 @@ import {
   getProviderContextWindow,
   readAdvertisedContextWindow,
   recordProviderContextWindow,
+  hydrateProviderContextWindows,
 } from '../../../src/services/context/providerContextWindows';
 import { getContextWindow, getWorkingContextWindow } from '../../../src/services/context/tokenCounter';
 
@@ -70,6 +71,30 @@ describe('reading the figure out of a catalogue entry', () => {
 
   it('never lets a junk figure displace the table', () => {
     recordProviderContextWindow(DEEPSEEK, 12);
+
+    expect(getContextWindow(DEEPSEEK)).toBe(128_000);
+  });
+});
+
+describe('windows persisted with a provider survive a relaunch', () => {
+  // Discovery has exactly one caller — the model picker — so on an ordinary launch the
+  // in-memory registry is empty and every model resolves through the static table. That
+  // is why the on-device trace still read {"source":"table"} after the registry landed.
+  it('replays persisted windows into the registry', () => {
+    expect(getContextWindow(DEEPSEEK)).toBe(128_000);
+
+    hydrateProviderContextWindows({ [DEEPSEEK]: 1_050_000 });
+
+    expect(getContextWindow(DEEPSEEK)).toBe(1_050_000);
+  });
+
+  it('tolerates a provider that has none', () => {
+    expect(() => hydrateProviderContextWindows(undefined)).not.toThrow();
+    expect(() => hydrateProviderContextWindows({})).not.toThrow();
+  });
+
+  it('ignores persisted junk rather than trusting it', () => {
+    hydrateProviderContextWindows({ [DEEPSEEK]: 3 });
 
     expect(getContextWindow(DEEPSEEK)).toBe(128_000);
   });

@@ -10,6 +10,8 @@ export type SystemPromptSection = {
 export interface ModelsWithCapabilities {
   models: string[];
   capabilities: Record<string, ModelCapabilities>;
+  /** Context windows the provider advertises, by model id, when it publishes them. */
+  contextWindows: Record<string, number>;
 }
 
 export interface StreamCallbacks {

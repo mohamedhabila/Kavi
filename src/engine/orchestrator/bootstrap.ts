@@ -34,6 +34,7 @@ import {
 import { buildToolDefinitions } from '../tools/definitions';
 import { filterToolsForConversationMode } from '../tools/conversationModeToolAuthority';
 import { filterToolsForMemoryPolicy } from '../tools/memoryPolicyToolAuthority';
+import { hydrateProviderContextWindows } from '../../services/context/providerContextWindows';
 import {
   filterToolsByRuntimeAvailability,
   getRuntimeToolAvailabilityContext,
@@ -298,6 +299,12 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     runtimeToolAvailability,
   );
   const catalogVisibleToolNames = new Set(allTools.map((tool) => tool.name));
+
+  // Discovery only runs when the model picker is opened, so the in-memory registry is
+  // empty on an ordinary launch and every model resolves through the static table. The
+  // figures persisted with the provider are replayed here, before anything sizes a
+  // request against them.
+  hydrateProviderContextWindows(activeProvider.modelContextWindows);
 
   const llm = new LlmService(activeProvider);
   const toolCallHistory: ToolCallRecord[] = [];

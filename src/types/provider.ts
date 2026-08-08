@@ -117,6 +117,8 @@ export interface LlmProviderConfig {
   model: string;
   availableModels?: string[];
   modelCapabilities?: Record<string, ModelCapabilities>;
+  /** Context windows advertised by the provider, by model id. */
+  modelContextWindows?: Record<string, number>;
   hiddenModels?: string[];
   local?: LocalLlmProviderMetadata;
   enabled: boolean;
