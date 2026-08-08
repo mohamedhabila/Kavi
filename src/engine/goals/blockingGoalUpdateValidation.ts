@@ -72,11 +72,36 @@ export function validateBlockingGoalUpdate(
         !proposedCriteria.has(criterion) && !isCountOnlySuccessCriterion(criterion),
     );
     const existingCriteria = new Set(existing.successCriteria ?? []);
-    const unsupportedAdditions = patch.successCriteria.filter(
+    /**
+     * A count may join a goal that keeps a specific criterion, but never become its gate.
+     *
+     * Refusing every added count made the delegation contract impossible to satisfy by
+     * update. `sessions_spawn` requires `evidence.prefix:worker` *and* `evidence.min:1`,
+     * and its own repair payload tells the model to send both — so a model that followed
+     * the instruction exactly had the call rejected here, retried, and was rejected
+     * again. Traced live as repeated failing `update_goals` calls around a spawn that
+     * never launched.
+     *
+     * The hazard the refusal guards against is a count becoming the thing that holds a
+     * goal open, which is how a goal turns unwinnable. That cannot happen beside a
+     * specific criterion: `resolveGatingSuccessCriteria` drops counts from gating
+     * whenever one is present, so the added count is inert for completion and serves
+     * only to record how many results the goal expects. A count added to a goal with no
+     * specific criterion is still refused, because there it would be the gate.
+     */
+    const retainsSpecificCriterion = patch.successCriteria.some(
       (criterion) =>
-        !existingCriteria.has(criterion) &&
-        (!isRecognizedSuccessCriterionForm(criterion) || isCountOnlySuccessCriterion(criterion)),
+        isRecognizedSuccessCriterionForm(criterion) && !isCountOnlySuccessCriterion(criterion),
     );
+    const unsupportedAdditions = patch.successCriteria.filter((criterion) => {
+      if (existingCriteria.has(criterion)) {
+        return false;
+      }
+      if (!isRecognizedSuccessCriterionForm(criterion)) {
+        return true;
+      }
+      return isCountOnlySuccessCriterion(criterion) && !retainsSpecificCriterion;
+    });
     if (removedCriteria.length > 0 || unsupportedAdditions.length > 0) {
       errors.push({
         goalId,
