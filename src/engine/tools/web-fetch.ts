@@ -28,6 +28,7 @@ import {
   directFetch,
   firecrawlFetch,
   type WebFetchEntry,
+  clearWebFetchDocumentCache,
 } from './webFetchTransports';
 
 export const DEFAULT_FETCH_MAX_CHARS = 20_000;
@@ -36,6 +37,7 @@ const FETCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
 
 export function clearWebFetchCaches(): void {
   FETCH_CACHE.clear();
+  clearWebFetchDocumentCache();
 }
 
 async function executeSingleWebFetch(args: {

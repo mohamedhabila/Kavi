@@ -11,7 +11,46 @@ import {
   sliceTextWindow,
   stripNonRenderedHtml,
 } from './web-fetch-utils';
-import { readResponseText } from './web-shared';
+import {
+  DEFAULT_CACHE_TTL_MINUTES,
+  readCache,
+  readResponseText,
+  resolveCacheTtlMs,
+  writeCache,
+  type CacheEntry,
+} from './web-shared';
+
+/**
+ * The extracted document, cached apart from the window projected out of it.
+ *
+ * Downloading and extracting a page depends only on its URL and the extraction mode.
+ * `maxChars`, `offset` and `find` merely select a window of the text that extraction
+ * already produced. The response cache keyed on all five therefore missed whenever any
+ * of them changed, and a miss repeated the whole expensive half: measured on-device
+ * against en.wikipedia.org/wiki/Jupiter, 1,415,879 chars costing ~9.8s to convert and
+ * ~10.8s to scan for links, against ~0.2s of network. A single traced run fetched and
+ * re-parsed the same URL twice.
+ *
+ * That hit the documented paging flow hardest — `web_fetch` tells callers to "pass the
+ * nextOffset from a truncated response to continue reading the same page", and every
+ * such continuation paid for a fresh download and a fresh parse of a document the run
+ * already held.
+ *
+ * Caching the extracted text keyed on url and mode makes a second window over the same
+ * page a string slice.
+ */
+type ExtractedDocument = {
+  text: string;
+  title?: string;
+  links?: WebFetchLink[];
+  resolvedUrl?: string;
+};
+
+const DOCUMENT_CACHE = new Map<string, CacheEntry<ExtractedDocument>>();
+
+export function clearWebFetchDocumentCache(): void {
+  DOCUMENT_CACHE.clear();
+}
 
 const DEFAULT_FETCH_MAX_RESPONSE_BYTES = 2_000_000;
 const DEFAULT_FIRECRAWL_BASE_URL = 'https://api.firecrawl.dev';
@@ -131,6 +170,25 @@ export async function directFetch(params: {
       matchCount: matched.matchCount,
     };
   };
+  const documentCacheKey = `${params.url}\u0000${params.extractMode}`;
+  const cachedDocument = readCache(DOCUMENT_CACHE, documentCacheKey);
+  if (cachedDocument) {
+    const window = project(cachedDocument.value.text);
+    return {
+      content: window.text,
+      ...(cachedDocument.value.title ? { title: cachedDocument.value.title } : {}),
+      ...(cachedDocument.value.links ? { links: cachedDocument.value.links } : {}),
+      truncated: window.truncated,
+      charCount: window.totalChars,
+      offset: window.offset,
+      ...(window.nextOffset !== undefined ? { nextOffset: window.nextOffset } : {}),
+      ...(window.matchCount !== undefined ? { matchCount: window.matchCount } : {}),
+      ...(cachedDocument.value.resolvedUrl
+        ? { resolvedUrl: cachedDocument.value.resolvedUrl }
+        : {}),
+    };
+  }
+
   const headerProfiles = [
     {
       'User-Agent': DEFAULT_USER_AGENT,
@@ -200,6 +258,19 @@ export async function directFetch(params: {
       const links = extractFetchedLinksFromHtml(
         renderableHtml,
         typeof res.url === 'string' && res.url.trim() ? res.url : params.url,
+      );
+      const resolvedUrl =
+        typeof res.url === 'string' && res.url.trim() ? res.url : undefined;
+      writeCache(
+        DOCUMENT_CACHE,
+        documentCacheKey,
+        {
+          text: extractedText,
+          ...(title ? { title } : {}),
+          ...(links ? { links } : {}),
+          ...(resolvedUrl ? { resolvedUrl } : {}),
+        },
+        resolveCacheTtlMs(DEFAULT_CACHE_TTL_MINUTES, DEFAULT_CACHE_TTL_MINUTES),
       );
       const window = project(extractedText);
       return {
