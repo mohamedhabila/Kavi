@@ -70,8 +70,8 @@ export function renderGoalMutationContractSection(): string {
     'Compound bootstrap: action `add` with status `active` creates and activates in one call.',
     'Missing goals: use `add` with id + name + status `active` instead of `activate` on unknown ids.',
     `Supported successCriteria forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
-    'For evidence.prefix, use a registered evidence source such as a tool name or worker.',
-    'For each required workspace file, use evidence.artifact:<exact-workspace-relative-path>; never use evidence.prefix:artifact.',
+    'evidence.prefix is reserved for delegated worker results: the only token it accepts is worker. To require that a tool produced evidence, name the tool with evidence.tool:<registered-tool-name>, such as evidence.tool:memory_remember.',
+    'For each required workspace file, use evidence.artifact:<exact-workspace-relative-path>.',
     'Use structural forms only; do not put natural-language labels in successCriteria.',
   ].join('\n');
 }

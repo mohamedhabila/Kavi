@@ -10,6 +10,10 @@ import {
 } from '../../../src/engine/goals/completionRefusalMessage';
 import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
 import { createGoal } from '../../../src/engine/goals/types';
+import {
+  renderGoalBootstrapPromptSection,
+  renderGoalMutationContractSection,
+} from '../../../src/engine/goals/bootstrap';
 import { DELEGATED_WORKER_MIN_EVIDENCE_CRITERION } from '../../../src/engine/goals/delegation';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 
@@ -192,5 +196,22 @@ describe('resolveGatingSuccessCriteria', () => {
     const goal = researchBrief([verifiedWrite(BRIEF, 'a')]);
     expect(isSuccessCriterionMet(goal, 'evidence.min:3')).toBe(false);
     expect(isSuccessCriterionMet(goal, `evidence.artifact:${BRIEF}`)).toBe(true);
+  });
+});
+
+describe('the goal guidance names the one token evidence.prefix accepts', () => {
+  // Traced on-device across runs, consistently: the model opened every goal-bearing task
+  // by declaring `evidence.prefix:memory`, was refused, and corrected on the next call.
+  // It was not guessing — the guidance offered `worker` as the sole worked example of a
+  // prefix and warned against exactly one bad token, which reads as an invitation to
+  // generalise the pattern to other domains.
+  it('reserves evidence.prefix for worker and points tools at evidence.tool', () => {
+    const text = `${renderGoalBootstrapPromptSection()}\n${renderGoalMutationContractSection()}`;
+
+    expect(text).toContain('evidence.prefix is reserved for delegated worker results');
+    expect(text).toContain('the only token it accepts is worker');
+    expect(text).toContain('evidence.tool:<registered-tool-name>');
+    // The old line invited the generalisation that produced the wasted call.
+    expect(text).not.toContain('such as a tool name or worker');
   });
 });
