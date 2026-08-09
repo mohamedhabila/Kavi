@@ -26,7 +26,14 @@ const INTERNAL_DELIVERABLE_TOOL_NAMES = new Set([
   'sessions_output',
   'sessions_history',
 ]);
-const REGISTERED_NON_TOOL_EVIDENCE_PREFIXES = new Set(['worker']);
+export const REGISTERED_NON_TOOL_EVIDENCE_PREFIXES = new Set(['worker']);
+
+/** The non-tool prefixes, for error messages that would otherwise ask the model to guess. */
+export function formatRegisteredNonToolEvidencePrefixes(): string {
+  return Array.from(REGISTERED_NON_TOOL_EVIDENCE_PREFIXES)
+    .map((prefix) => `evidence.prefix:${prefix}`)
+    .join(', ');
+}
 const CODE_OWNED_EVIDENCE_PREFIXES = [EFFECT_RECEIPT_EVIDENCE_PREFIX] as const;
 
 export function resolvePatchCompletionPolicy(

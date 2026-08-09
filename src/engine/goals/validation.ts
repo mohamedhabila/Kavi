@@ -26,6 +26,7 @@ import {
   findMisdirectedJsonFieldCriteria,
   findUnsatisfiableStructuralCriteria,
   findUnknownToolEvidenceCriteria,
+  formatRegisteredNonToolEvidencePrefixes,
   hasSpecificSuccessCriteria,
   hasStructuralSuccessCriteria,
   shouldValidateSuccessCriteria,
@@ -447,9 +448,13 @@ export function validateGoalMutation(
             // the expected file content here, were refused, and spent a call recovering.
             // Naming both the domain and the criterion that does assert content ends it
             // in one exchange instead of by trial.
+            // Naming the category was not enough to place the token: traced on-device,
+            // runs guessed `evidence.prefix:output` and `evidence.prefix:edit`, were
+            // refused, and spent a second call each recovering. There is exactly one
+            // non-tool prefix, so the set is enumerated rather than described.
             'evidence.prefix names the source that produced the evidence — a registered ' +
-            'tool name, or a registered graph evidence prefix — not text the evidence ' +
-            `should contain: ${unknownEvidencePrefixCriteria.join(', ')}. To assert that a ` +
+            `tool name, or one of: ${formatRegisteredNonToolEvidencePrefixes()} — not text ` +
+            `the evidence should contain: ${unknownEvidencePrefixCriteria.join(', ')}. To assert that a ` +
             'workspace file exists use evidence.artifact:<exact-workspace-relative-path>; ' +
             'to assert its exact contents use evidence.file_hash:<path>:<algo>[:<hex>]; to ' +
             'require that a particular tool produced evidence use evidence.tool:<name>.',
