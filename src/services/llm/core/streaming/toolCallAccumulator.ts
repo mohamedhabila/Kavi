@@ -12,13 +12,40 @@ function getSharedPrefixLength(left: string, right: string): number {
   return index;
 }
 
+/**
+ * Drops prose that arrived before a tool call's arguments began.
+ *
+ * Traced live on an Android emulator. A `write_file` call arrived with arguments of
+ * `% |{"path": "artifacts/tl3/report.md", …}` and was rejected as invalid_argument_shape;
+ * the model then rewrote the whole file on the next iteration. The `% |` is markdown table
+ * debris — the turn had just printed IRR figures like `13.39%` — delivered as the first
+ * `function.arguments` delta, so the accumulator started the buffer with it and appended
+ * the real JSON behind it.
+ *
+ * Function-call arguments are always a JSON object, so nothing can legitimately precede
+ * the opening brace. Anything there is stream debris and is dropped rather than
+ * concatenated. A buffer that has not reached a brace yet is left alone, since it may
+ * still be a partial first chunk.
+ */
+function dropDebrisBeforeArgumentsJson(text: string): string {
+  const objectStart = text.indexOf('{');
+  const arrayStart = text.indexOf('[');
+  const candidates = [objectStart, arrayStart].filter((index) => index >= 0);
+  if (candidates.length === 0) {
+    return text;
+  }
+
+  const start = Math.min(...candidates);
+  return start === 0 || text.slice(0, start).trim().length === 0 ? text : text.slice(start);
+}
+
 export function mergeStreamedArgumentText(existing: string, incoming: string): string {
   if (!incoming) {
     return existing;
   }
 
   if (!existing) {
-    return incoming;
+    return dropDebrisBeforeArgumentsJson(incoming);
   }
 
   if (incoming === existing || existing.startsWith(incoming)) {
@@ -42,7 +69,9 @@ export function mergeStreamedArgumentText(existing: string, incoming: string): s
     }
   }
 
-  return incoming.startsWith(existing) ? incoming : `${existing}${incoming}`;
+  return dropDebrisBeforeArgumentsJson(
+    incoming.startsWith(existing) ? incoming : `${existing}${incoming}`,
+  );
 }
 
 export function mergeStreamToolCallChunk(
