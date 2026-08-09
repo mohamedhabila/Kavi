@@ -1,4 +1,3 @@
-import { checkComputedClaimDisclosure } from './computedClaimDisclosure';
 // ---------------------------------------------------------------------------
 // Kavi — Tool Dispatch Router
 // ---------------------------------------------------------------------------
@@ -224,20 +223,8 @@ export async function executeToolInner(
   switch (name) {
     case 'read_file':
       return executeReadFile(args, workspaceConversationId, workspaceReadFallbackConversationId);
-    case 'write_file': {
-      const uncomputedClaim = checkComputedClaimDisclosure({
-        path: String((args as { path?: unknown }).path ?? ''),
-        content:
-          typeof (args as { content?: unknown }).content === 'string'
-            ? (args as { content: string }).content
-            : '',
-        goals: context?.controlGraphGoals,
-      });
-      if (uncomputedClaim) {
-        return { status: 'failed', content: uncomputedClaim };
-      }
+    case 'write_file':
       return executeWriteFile(args, workspaceConversationId);
-    }
     case 'list_files':
       return executeListFiles(args, workspaceConversationId);
     case 'javascript':
