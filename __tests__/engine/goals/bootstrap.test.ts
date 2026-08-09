@@ -56,16 +56,10 @@ describe('goals/bootstrap', () => {
     expect(section).toContain('successCriteria');
     expect(section).toContain('evidence.min:<n>');
     expect(section).toContain('"id":"stable-id"');
-    expect(section).toContain('"name":"Name"');
+    expect(section).toContain('"name":"Visible name"');
     expect(section).toContain('evidence.artifact:<exact-workspace-relative-path>');
     expect(section).toContain('evidence.prefix:artifact is invalid');
-    // The batched form is now what bootstrap teaches. Traced live: the provider's strict
-    // mode rewrites every property into `required` with a nullable type, so the schema
-    // carries no signal that `goals` is an alternative to the flat fields — the prompt and
-    // the tool description are the only channels that survive intact, and the prompt
-    // previously said "one goal mutation", which is what the model kept doing.
-    expect(section).toContain('"goals"');
-    expect(section).toContain('ONE call');
+    expect(section).not.toContain('"goals"');
     expect(section).toContain('natural-language labels');
   });
 });
