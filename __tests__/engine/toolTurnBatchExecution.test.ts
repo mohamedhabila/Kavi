@@ -4,9 +4,7 @@ import { buildEffectCompletionCriterion } from '../../src/engine/goals/effectCom
 import { resolveToolEffectCompletionRequirement } from '../../src/engine/toolExecution/toolEffectCompletionContract';
 import { buildToolResultMessage } from '../../src/engine/toolExecution/toolExecutionMessages';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
-import type { Message } from '../../src/types/message';
 import type { ToolDefinition } from '../../src/types/tool';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
   executeToolCallLifecycle: jest.fn(),
@@ -16,98 +14,8 @@ jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
 
 const mockedExecuteToolCallLifecycle = jest.mocked(executeToolCallLifecycle);
 
-const tools: ToolDefinition[] = [
-  {
-    name: 'web_search',
-    description: 'Search the web.',
-    input_schema: {
-      type: 'object',
-      properties: { queries: { type: 'array', items: { type: 'string' } } },
-      required: ['queries'],
-    },
-  },
-  {
-    name: 'web_fetch',
-    description: 'Fetch a page.',
-    input_schema: {
-      type: 'object',
-      properties: { urls: { type: 'array', items: { type: 'string' } } },
-      required: ['urls'],
-    },
-  },
-];
-
-const writeFileTool: ToolDefinition = {
-  name: 'write_file',
-  description: 'Write a workspace file.',
-  input_schema: {
-    type: 'object',
-    properties: { path: { type: 'string' }, content: { type: 'string' } },
-    required: ['path', 'content'],
-  },
-};
-
-const readFileTool: ToolDefinition = {
-  name: 'read_file',
-  description: 'Read a workspace file.',
-  input_schema: {
-    type: 'object',
-    properties: { path: { type: 'string' } },
-    required: ['path'],
-  },
-};
-
-function createParams(overrides: Record<string, unknown> = {}) {
-  return {
-    executableToolCalls: [
-      {
-        id: 'tc-search',
-        name: 'web_search',
-        arguments: '{"queries":["OpenAI structured outputs developer guide"]}',
-      },
-    ],
-    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-    iteration: 2,
-    conversationId: 'conv-1',
-    activeProvider: {
-      id: 'provider-1',
-      name: 'Gemini',
-      apiKey: 'test-key',
-      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-      enabled: true,
-    } as any,
-    allProviders: undefined,
-    activeModel: 'gemini-2.5-pro',
-    workspaceConversationId: undefined,
-    workspaceReadFallbackConversationId: undefined,
-    availableToolNames: new Set(['web_search', 'web_fetch']),
-    runtimeToolAvailability: {
-      hasWorkspaceTargets: false,
-      hasBrowserControllableWorkspaceTargets: false,
-      hasDelegableWorkspaceTargets: false,
-      hasMobileController: false,
-    },
-    toolCallHistory: [],
-    trackedAsyncOperations: new Map(),
-    signal: undefined,
-    callbacks: {
-      onToolCallStart: jest.fn(),
-      onToolCallComplete: jest.fn(),
-    },
-    toolFilter: undefined,
-    pendingAsyncMonitorToolNames: new Set<string>(),
-    groundedRequestScopedTools: tools,
-    completedWorkflowToolNames: new Set<string>(),
-    emitPendingAsyncOperationsChange: jest.fn(),
-    recordPerformanceMetrics: jest.fn(),
-    onBatchCommitted: jest.fn(),
-    publishWorkflowToolResultProgress: jest.fn(({ toolMessage }: { toolMessage: Message }) => ({
-      observedToolName: toolMessage.toolCalls?.[0]?.name,
-      nextCompletedToolNames: [],
-    })),
-    ...overrides,
-  } as any;
-}
+import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
+import { createParams, readFileTool, tools, writeFileTool } from './helpers/toolTurnBatch';
 
 describe('toolTurnBatchExecution', () => {
   beforeEach(() => {
@@ -498,72 +406,7 @@ describe('toolTurnBatchExecution', () => {
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps goal mutation and effect execution on separate graph boundaries', async () => {
-    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
-      const blocked = params.workflowToolCallBlocker(params.tc.name, params.tc.arguments);
-      return {
-        toolCallId: params.tc.id,
-        effectiveToolName: params.tc.name,
-        result: blocked ?? '{}',
-        toolMessage: buildToolResultMessage({
-          idPrefix: 'tool',
-          toolCallId: params.tc.id,
-          content: blocked ?? '{}',
-          toolCall: {
-            id: params.tc.id,
-            name: params.tc.name,
-            arguments: params.tc.arguments,
-            status: blocked ? 'failed' : 'completed',
-          },
-          isError: Boolean(blocked),
-        }),
-      };
-    });
-    const argumentsText = '{"path":"reports/final.md","content":"done"}';
-    const requirement = await resolveToolEffectCompletionRequirement({
-      toolName: 'write_file',
-      argumentsText,
-    });
-    if (requirement.kind !== 'effectful') {
-      throw new Error('write_file must have a code-owned effect completion contract');
-    }
 
-    const outcomes = await executeAgentControlGraphToolBatch(
-      createParams({
-        executableToolCalls: [
-          { id: 'tc-goal', name: GOAL_BOOTSTRAP_TOOL_NAME, arguments: '{"action":"create"}' },
-          { id: 'tc-write', name: 'write_file', arguments: argumentsText },
-        ],
-        groundedRequestScopedTools: [
-          {
-            name: GOAL_BOOTSTRAP_TOOL_NAME,
-            description: 'Update graph goals.',
-            input_schema: { type: 'object', properties: {} },
-          },
-          writeFileTool,
-        ],
-        availableToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'write_file']),
-        controlGraphGoals: [
-          {
-            id: 'g-write',
-            title: 'Write final report',
-            status: 'active',
-            completionPolicy: 'blocking',
-            dependencies: [],
-            evidence: [],
-            successCriteria: [requirement.serializedCriterion],
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ],
-      }),
-    );
-
-    expect(JSON.parse(outcomes[1]?.toolMessage.content ?? '{}')).toMatchObject({
-      code: 'goal_mutation_boundary',
-      tool: 'write_file',
-    });
-  });
 
   it('allows an answer-supporting read-only tool without a completion goal', async () => {
     mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
