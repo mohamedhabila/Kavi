@@ -15,6 +15,11 @@ import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailabilit
 import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
 import {
+  isEffectAdmittedByBatchGoalMutation,
+  projectInBatchGoalMutations,
+  resolveLastGoalMutationIndex,
+} from './goalMutationBatchAdmission';
+import {
   buildEffectCompletionContractBlock,
   buildGoalMutationBoundaryBlock,
   findGoalForEffectCompletionRequirement,
@@ -116,6 +121,10 @@ export async function executeAgentControlGraphToolBatch(params: {
   const hasGoalMutation = params.executableToolCalls.some(
     (toolCall) => normalizeToolName(toolCall.name) === GOAL_BOOTSTRAP_TOOL_NAME,
   );
+  const lastGoalMutationIndex = resolveLastGoalMutationIndex(params.executableToolCalls);
+  const projectedGoals = hasGoalMutation
+    ? projectInBatchGoalMutations(params.executableToolCalls, params.controlGraphGoals)
+    : (params.controlGraphGoals ?? []);
   const toolEvidenceWorkingMessages = [...(params.workingMessages ?? [])];
   const completionRequirements = await Promise.all(
     params.executableToolCalls.map((toolCall) =>
@@ -126,6 +135,8 @@ export async function executeAgentControlGraphToolBatch(params: {
     ),
   );
   const workflowBlockerByCallId = new Map<string, string>();
+  /** Set when an effect runs beside its admitting mutation, which pins batch ordering. */
+  let admittedEffectAlongsideGoalMutation = false;
   const hasMixedMobileControllerBoundary =
     params.executableToolCalls.length > 1 &&
     params.executableToolCalls.some(
@@ -159,10 +170,21 @@ export async function executeAgentControlGraphToolBatch(params: {
       hasGoalMutation &&
       (requirement.kind === 'effectful' || requirement.kind === 'operational')
     ) {
-      workflowBlockerByCallId.set(
-        toolCall.id,
-        buildGoalMutationBoundaryBlock(requirement.toolName),
-      );
+      const admittedByThisBatch = isEffectAdmittedByBatchGoalMutation({
+        index,
+        lastGoalMutationIndex,
+        requirement,
+        projectedGoals,
+      });
+
+      if (admittedByThisBatch) {
+        admittedEffectAlongsideGoalMutation = true;
+      } else {
+        workflowBlockerByCallId.set(
+          toolCall.id,
+          buildGoalMutationBoundaryBlock(requirement.toolName),
+        );
+      }
       continue;
     }
     if (requirement.kind === 'operational') {
@@ -274,11 +296,15 @@ export async function executeAgentControlGraphToolBatch(params: {
     return resolvedOutcome;
   };
 
-  const executeBatchInParallel = shouldExecuteToolBatchInParallel(
-    params.executableToolCalls,
-    params.controlGraphGoals,
-    params.groundedRequestScopedTools,
-  );
+  // Running an effect beside its admitting mutation only holds if the mutation resolves
+  // first, so such a batch is executed in order rather than concurrently.
+  const executeBatchInParallel =
+    !admittedEffectAlongsideGoalMutation &&
+    shouldExecuteToolBatchInParallel(
+      params.executableToolCalls,
+      params.controlGraphGoals,
+      params.groundedRequestScopedTools,
+    );
   assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
   await params.verifiedProcedureSession?.observePlannedBatch({
     iteration: params.iteration,
