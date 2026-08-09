@@ -33,12 +33,43 @@ export type CanonicalToolExecutionOutcome = TerminalToolExecutionOutcome & {
   graphApplied: boolean;
 };
 
+/**
+ * Whether canonical content records a rejected mutation.
+ *
+ * The executor returns `completed` for any call whose arguments parsed, and rejection
+ * happens later here, against the graph. Only `result` was rewritten, so a refused
+ * mutation stayed a completed tool call everywhere its status is read.
+ *
+ * Traced on-device: two of the first four update_goals calls in a run were rejected for
+ * an unregistered evidence.prefix token, and both were displayed — and tallied — as
+ * completed. The corrections that followed then read as gratuitous duplicate calls
+ * rather than as repairs, which is the wrong diagnosis of a healthy recovery.
+ */
+function recordsRejectedMutation(content: string): boolean {
+  if (!content.includes('"status"')) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(content);
+    return (
+      typeof parsed === 'object' && parsed !== null && (parsed as { status?: unknown }).status === 'error'
+    );
+  } catch {
+    return false;
+  }
+}
+
 function cloneToolMessageWithContent(message: Message, content: string): Message {
+  const status = recordsRejectedMutation(content) ? ('failed' as const) : undefined;
+
   return {
     ...message,
     content,
     toolCalls: message.toolCalls?.map((toolCall) =>
-      toolCall.id === message.toolCallId ? { ...toolCall, result: content } : { ...toolCall },
+      toolCall.id === message.toolCallId
+        ? { ...toolCall, result: content, ...(status ? { status } : {}) }
+        : { ...toolCall },
     ),
   };
 }
