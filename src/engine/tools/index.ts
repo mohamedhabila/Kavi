@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 // Central dispatcher: routes tool calls to the correct executor.
 
+import { parseToolArgumentsJson } from '../toolExecution/toolArgumentJsonRecovery';
 import { logToolCall } from '../../services/security/audit';
 import { useToolPermissionsStore } from '../../services/security/permissions';
 import {
@@ -207,7 +208,7 @@ export async function executeTool(
 
   let parsedArgs: any;
   try {
-    parsedArgs = argsString ? JSON.parse(argsString) : {};
+    parsedArgs = parseToolArgumentsJson(argsString);
   } catch {
     parsedArgs = {};
   }

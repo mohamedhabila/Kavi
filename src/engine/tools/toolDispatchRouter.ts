@@ -25,6 +25,7 @@ import { executeBuiltinTool, BUILTIN_TOOL_NAMES } from './toolBuiltinExecution';
 import { executeWorkspaceTool } from './workspaceToolExecutor';
 import { resolveRegisteredToolName } from './toolNameNormalization';
 import { executeProviderAwareTool } from './providerAwareToolExecution';
+import { parseToolArgumentsJson } from '../toolExecution/toolArgumentJsonRecovery';
 import { resolveToolWorkspaceContext, type ToolExecutionContext } from './toolExecutionContext';
 import { executePythonTool } from './toolPythonExecution';
 import { executeUpdateGoals } from './toolGoalExecution';
@@ -136,7 +137,7 @@ export async function executeToolInner(
 
   let args: any;
   try {
-    args = argsString ? JSON.parse(argsString) : {};
+    args = parseToolArgumentsJson(argsString);
   } catch {
     const preview = argsString.length > 300 ? argsString.slice(0, 300) + '…' : argsString;
     return failedToolOutcome(
