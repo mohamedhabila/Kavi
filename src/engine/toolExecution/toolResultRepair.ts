@@ -104,6 +104,9 @@ function findToolDefinition(
   return tools?.find((tool) => tool.name.trim() === normalizedName);
 }
 
+/** The field path used when the arguments blob itself could not be parsed. */
+const ARGUMENTS_ROOT_FIELD = '$';
+
 function buildExpectedArgumentsSchema(params: {
   tool: ToolDefinition;
   fields: ReadonlyArray<string>;
@@ -112,6 +115,25 @@ function buildExpectedArgumentsSchema(params: {
   const schema = readSchemaObject(params.tool.input_schema);
   const properties = readSchemaObject(schema?.properties);
   const required = readStringArray(schema?.required);
+
+  /**
+   * A root-level failure means the whole call was unparseable, so every property is what
+   * the model needs back — not a property literally named `$`.
+   *
+   * Looking `$` up in `properties` found nothing and produced `expectedShape: {"$": {}}`:
+   * a repair contract that names no field and shows no example. Traced on-device, that is
+   * exactly as useless as it reads — the model sent `file_edit` with
+   * `"edits": ["op": "replace", …]` instead of `[{…}]`, got back an empty shape, had
+   * nothing to correct against, and re-sent the identical call. Two failures, no progress,
+   * and it then rewrote the whole file instead of editing it.
+   */
+  if (params.fields.includes(ARGUMENTS_ROOT_FIELD)) {
+    return Object.keys(properties ?? {}).reduce<JsonRecord>((acc, field) => {
+      acc[field] = compactSchemaProperty(properties?.[field]);
+      return acc;
+    }, {});
+  }
+
   const fields = Array.from(
     new Set([...(params.includeRequiredFields ? required : []), ...params.fields]),
   );
