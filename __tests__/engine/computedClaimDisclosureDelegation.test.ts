@@ -36,8 +36,16 @@ describe('a supervisor may write up a delegated computation', () => {
 });
 
 describe('the guard still catches a run that computed nothing at all', () => {
-  it('refuses when no goal delegated and no receipt exists', () => {
-    const solo = createGoal({ id: 'study', title: 'Study', status: 'active' });
+  it('refuses when the run records evidence but none of it is a computation', () => {
+    // Only meaningful where evidence is actually tracked: a goal holding unrelated
+    // evidence proves the run records receipts, so a missing compute receipt is a real
+    // absence rather than an untracked one.
+    const solo = createGoal({
+      id: 'study',
+      title: 'Study',
+      status: 'active',
+      evidence: ['read_file:notes.md (2 lines)'],
+    });
 
     expect(runHasComputeEvidence([solo])).toBe(false);
     expect(
@@ -45,8 +53,24 @@ describe('the guard still catches a run that computed nothing at all', () => {
     ).toContain('uncomputed_results');
   });
 
+  it('does not fire where the run tracks no evidence at all, such as inside a worker', () => {
+    // A delegated worker keeps no graph of its own, so there is never a receipt to find.
+    // Traced live: a worker computed with numpy, wrote its report, was refused, and the
+    // refusal blocked its control graph — the launch was then reported as a failed spawn.
+    expect(runHasComputeEvidence([])).toBe(true);
+    expect(runHasComputeEvidence(undefined)).toBe(true);
+    expect(runHasComputeEvidence([createGoal({ id: 'w', title: 'Worker', status: 'active' })])).toBe(
+      true,
+    );
+  });
+
   it('still allows a document that says the computation did not run', () => {
-    const solo = createGoal({ id: 'study', title: 'Study', status: 'active' });
+    const solo = createGoal({
+      id: 'study',
+      title: 'Study',
+      status: 'active',
+      evidence: ['read_file:notes.md'],
+    });
 
     expect(
       checkComputedClaimDisclosure({

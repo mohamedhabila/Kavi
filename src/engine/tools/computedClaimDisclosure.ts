@@ -69,8 +69,30 @@ export function disclosesTheComputationDidNotRun(content: string): boolean {
  * asked anyone to compute, so it yields wherever a worker is carrying the computation.
  */
 export function runHasComputeEvidence(goals: ReadonlyArray<AgentGoal> | undefined): boolean {
+  /**
+   * A run with no goal evidence at all cannot answer this question, so it is not asked.
+   *
+   * The guard reads compute receipts off the run's goals. A delegated worker does not keep
+   * its own graph — the goals belong to the supervisor that launched it — so inside a
+   * worker there is never a receipt to find, and "did not compute" is indistinguishable
+   * from "nothing is recorded here". Refusing on that is a dead end: the worker cannot
+   * produce evidence the run does not track.
+   *
+   * Traced on-device, and worse than a wasted call. A worker computed with numpy, wrote
+   * its report, and was refused; the refusal was then read as an unverified side effect
+   * (`tool_effect_reconciliation_required`), which blocked the worker's control graph
+   * outright. It terminated incomplete, its launch was reported as a failed spawn, and the
+   * supervisor spent the rest of the run recovering from a computation that had in fact
+   * succeeded.
+   *
+   * The guard keeps its purpose. It exists to catch a run inventing figures nobody
+   * computed, which is a claim only observable where evidence is actually recorded.
+   */
   if (!goals?.length) {
-    return false;
+    return true;
+  }
+  if (!goals.some((goal) => goal.evidence.length > 0)) {
+    return true;
   }
   return goals.some((goal) => {
     if (isDelegationOwnedGoal(goal)) {

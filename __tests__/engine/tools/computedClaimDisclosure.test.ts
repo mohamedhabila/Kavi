@@ -100,7 +100,13 @@ describe('compute evidence is read from the run, not claimed by the caller', () 
 
   it('does not accept an unrelated tool result as compute', () => {
     expect(runHasComputeEvidence(goalsWithoutCompute)).toBe(false);
-    expect(runHasComputeEvidence(undefined)).toBe(false);
-    expect(runHasComputeEvidence([])).toBe(false);
+  });
+
+  it('does not answer for a run that tracks no evidence at all', () => {
+    // A delegated worker keeps no graph of its own, so a missing compute receipt there
+    // means "nothing is recorded here", not "nothing was computed". Traced live: a worker
+    // computed with numpy, was refused its write, and the refusal blocked its graph.
+    expect(runHasComputeEvidence(undefined)).toBe(true);
+    expect(runHasComputeEvidence([])).toBe(true);
   });
 });
