@@ -34,10 +34,24 @@ const RAW_PROVIDER_FUNCTION_BLOCK_DETECTION_RE = new RegExp(
  * prose out — text discussing these tags does not carry a closed invocation.
  */
 const SPECIAL_TOKEN_NAMESPACE = '[A-Za-z0-9_.:-]+';
+/**
+ * The delimiter, in both the ASCII and fullwidth forms models actually emit.
+ *
+ * Traced on-device: a run closed its work by emitting `<｜DSML｜tool_calls>` built from
+ * U+FF5C FULLWIDTH VERTICAL LINE rather than `|`. The pattern matched only the ASCII pipe,
+ * so the block was neither stripped nor recognized — the markup rendered verbatim in chat,
+ * and, worse, the turn looked like ordinary prose carrying no tool call. Detection here is
+ * what holds finalization and retries, so the run finalized instead: two goal completions
+ * never executed and the task's remaining step was silently abandoned mid-plan.
+ *
+ * Only the delimiter varies between these dialects, so widening it covers the family
+ * rather than the one instance that was observed.
+ */
+const SPECIAL_TOKEN_DELIMITER = '[|\\uFF5C]';
 const SPECIAL_TOKEN_TOOL_CALL_INNER_PATTERN =
-  `<\\|${SPECIAL_TOKEN_NAMESPACE}\\|tool_calls>` +
-  `[\\s\\S]*?<\\|${SPECIAL_TOKEN_NAMESPACE}\\|invoke\\b[\\s\\S]*?` +
-  `<\\/\\|${SPECIAL_TOKEN_NAMESPACE}\\|tool_calls>`;
+  `<${SPECIAL_TOKEN_DELIMITER}${SPECIAL_TOKEN_NAMESPACE}${SPECIAL_TOKEN_DELIMITER}tool_calls>` +
+  `[\\s\\S]*?<${SPECIAL_TOKEN_DELIMITER}${SPECIAL_TOKEN_NAMESPACE}${SPECIAL_TOKEN_DELIMITER}invoke\\b[\\s\\S]*?` +
+  `<\\/${SPECIAL_TOKEN_DELIMITER}${SPECIAL_TOKEN_NAMESPACE}${SPECIAL_TOKEN_DELIMITER}tool_calls>`;
 const SPECIAL_TOKEN_TOOL_CALL_BLOCK_RE = new RegExp(
   SPECIAL_TOKEN_TOOL_CALL_INNER_PATTERN,
   'giu',
