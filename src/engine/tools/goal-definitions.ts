@@ -14,6 +14,18 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
   description:
     'Add, complete, activate, block, update, or remove goals from the active goal set. ' +
     "Goals are high-level intentions that guide the agent's work. " +
+    'Pass a `goals` array to change several goals in ONE call — declaring a plan or closing ' +
+    'it is a single call, never one call per goal. Set `status` on each entry so a separate ' +
+    'activate is never needed. Example: ' +
+    '{"action":"add","goals":[{"id":"study","name":"Study","status":"active",' +
+    '"completionPolicy":"blocking","successCriteria":["evidence.artifact:artifacts/out.md"]},' +
+    '{"id":"worker","name":"Worker","status":"active","completionPolicy":"blocking",' +
+    '"owner":"delegated-worker","requiredCapabilities":["coordinate"],' +
+    '"successCriteria":["evidence.prefix:worker","evidence.min:1"]}]} — then close both with ' +
+    '{"action":"complete","goals":[{"id":"worker"},{"id":"study"}]}. ' +
+    'A single-goal change may instead use the flat root fields. ' +
+    'Note that every field is listed as required by the provider schema: send null for any ' +
+    'field you are not using, and send `goals` as null when using the flat root form. ' +
     'Use this tool to track progress, mark blockers, or replan when conditions change. ' +
     'Dependencies must be completed before a goal can be activated. ' +
     'Removing a goal automatically removes any goals that depend on it.',
