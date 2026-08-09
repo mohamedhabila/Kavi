@@ -233,7 +233,7 @@ export async function executeToolInner(
     case 'python':
       return executePythonTool(args, conversationId, workspaceConversationId, context);
     case 'update_goals':
-      return executeUpdateGoals(args);
+      return executeUpdateGoals(args, context?.controlGraphGoals);
     case 'request_clarification':
       return executeRequestClarification(args);
 

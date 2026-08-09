@@ -10,9 +10,16 @@
 import {
   CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
   normalizeGoalCompletionPolicy,
+  type AgentGoal,
   type AgentGoalMutation,
   type AgentGoalStatus,
 } from '../goals/types';
+import {
+  areGoalSuccessCriteriaSatisfied,
+  describeCriterionSatisfactionAction,
+  isSuccessCriterionMet,
+  resolveGatingSuccessCriteria,
+} from '../goals/completionEvidence';
 import {
   completedToolOutcome,
   failedToolOutcome,
@@ -303,9 +310,58 @@ function parseUserConstraintRetention(params: {
   return { retain: true, errors: [] };
 }
 
+/**
+ * What a `complete` request will actually do, reported back to the model.
+ *
+ * Traced live on an Android emulator. `complete` answered `{"status":"ok"}` whether or
+ * not the goal closed, because the result echoed the requested mutation and nothing else.
+ * A goal whose success criteria were unmet stayed open, the model read "ok", saw the goal
+ * still active, and asked again — six times across one run, interleaved with `activate`
+ * calls trying to shake it loose. The loop detector eventually ended the run for
+ * "update_goals calls without goal state change".
+ *
+ * Nothing was refused and nothing was broken; the model was simply told the wrong thing.
+ * So the result now states whether the goal closes and, when it does not, which criteria
+ * are outstanding and the action that satisfies each — a move, not just a verdict.
+ */
+function describeCompletionOutcome(
+  goalId: string,
+  graphGoals: ReadonlyArray<AgentGoal>,
+): Record<string, unknown> | null {
+  const goal = graphGoals.find((entry) => entry.id === goalId);
+  if (!goal) {
+    return null;
+  }
+
+  if (areGoalSuccessCriteriaSatisfied(goal)) {
+    return { closes: true };
+  }
+
+  const criteria = goal.successCriteria ?? [];
+  const unmet = (criteria.length > 0 ? resolveGatingSuccessCriteria(criteria) : []).filter(
+    (criterion) => !isSuccessCriterionMet(goal, criterion),
+  );
+
+  return {
+    closes: false,
+    reason:
+      criteria.length === 0
+        ? 'This goal has recorded no evidence yet, so completing it has no effect.'
+        : 'Success criteria are not satisfied, so this goal stays open.',
+    unmetCriteria: unmet.map((criterion) => {
+      const action = describeCriterionSatisfactionAction(criterion);
+      return action ? { criterion, satisfyBy: action } : { criterion };
+    }),
+    nextStep:
+      'Produce the missing evidence with the relevant tool, or call update_goals with ' +
+      'action "update" to correct successCriteria. Repeating this complete call changes nothing.',
+  };
+}
+
 export function buildUpdateGoalsResult(params: {
   mutation: AgentGoalMutation;
   validationErrors: ReadonlyArray<UpdateGoalsArgumentError>;
+  graphGoals?: ReadonlyArray<AgentGoal>;
 }): string {
   if (params.validationErrors.length > 0) {
     return JSON.stringify(
@@ -324,12 +380,20 @@ export function buildUpdateGoalsResult(params: {
     {
       status: 'ok',
       action: params.mutation.action,
-      goals: params.mutation.goals.map((g) => ({
-        ...(g.id ? { id: g.id } : {}),
-        ...(g.title ? { title: g.title } : {}),
-        ...(g.status ? { status: g.status } : {}),
-        ...(g.completionPolicy ? { completionPolicy: g.completionPolicy } : {}),
-      })),
+      goals: params.mutation.goals.map((g) => {
+        const completion =
+          params.mutation.action === 'complete' && g.id && params.graphGoals
+            ? describeCompletionOutcome(g.id, params.graphGoals)
+            : null;
+
+        return {
+          ...(g.id ? { id: g.id } : {}),
+          ...(g.title ? { title: g.title } : {}),
+          ...(g.status ? { status: g.status } : {}),
+          ...(g.completionPolicy ? { completionPolicy: g.completionPolicy } : {}),
+          ...(completion ?? {}),
+        };
+      }),
     },
     null,
     2,
@@ -454,11 +518,15 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   return { mutation, errors: [] };
 }
 
-export function executeUpdateGoals(args: Record<string, unknown>): ToolRuntimeOutcome {
+export function executeUpdateGoals(
+  args: Record<string, unknown>,
+  graphGoals?: ReadonlyArray<AgentGoal>,
+): ToolRuntimeOutcome {
   const parsed = parseUpdateGoalsArgs(args);
   const content = buildUpdateGoalsResult({
     mutation: parsed.mutation,
     validationErrors: parsed.errors,
+    ...(graphGoals ? { graphGoals } : {}),
   });
   return parsed.errors.length > 0 ? failedToolOutcome(content) : completedToolOutcome(content);
 }
