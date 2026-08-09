@@ -16,12 +16,19 @@ const errorMessages = (errors: ReadonlyArray<{ message: string }>) =>
 describe('toolGoalExecution', () => {
   describe('update_goals schema contract', () => {
     it('exposes one strict root mutation with boolean-only retention intent', () => {
+      // `id` moved off the root required list because a batched call carries it per goal
+      // instead. A single-goal call still needs one, enforced by the parser.
       expect(UPDATE_GOALS_TOOL.input_schema.required).toEqual(
-        expect.arrayContaining(['action', 'id']),
+        expect.arrayContaining(['action']),
       );
       expect(UPDATE_GOALS_TOOL.input_schema.required).not.toContain('name');
       expect(UPDATE_GOALS_TOOL.input_schema.additionalProperties).toBe(false);
-      expect(UPDATE_GOALS_TOOL.input_schema.properties.goals).toBeUndefined();
+      // A batch of goals under one action is supported: the graph has always applied
+      // `AgentGoalMutation.goals` as an array, and only these arguments were flat, so a
+      // two-goal plan cost three calls to open and six to close.
+      expect(UPDATE_GOALS_TOOL.input_schema.properties.goals).toEqual(
+        expect.objectContaining({ type: 'array' }),
+      );
       expect(UPDATE_GOALS_TOOL.input_schema.properties.retainCurrentUserConstraint).toEqual(
         expect.objectContaining({ type: 'boolean', enum: [true] }),
       );
@@ -151,7 +158,6 @@ describe('toolGoalExecution', () => {
 
     it.each([
       ['unknown authority field', { approval: true }],
-      ['nested legacy contract', { goals: [{ id: 'nested' }] }],
       ['invalid status', { status: 'unknown' }],
       ['invalid completion policy', { completionPolicy: 'temporary' }],
       ['mixed dependency list', { dependencies: ['a', 1] }],

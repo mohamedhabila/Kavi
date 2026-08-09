@@ -273,9 +273,12 @@ describe('LlmService', () => {
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       const parameters = body.tools[0].functionDeclarations[0].parameters;
 
-      expect(parameters.required).toEqual(expect.arrayContaining(['action', 'id']));
+      // `id` moved off the root required list when update_goals gained batching: a batched
+      // call carries an id per goal instead. A single-goal call still needs one, enforced
+      // by the parser rather than the schema.
+      expect(parameters.required).toEqual(expect.arrayContaining(['action']));
       expect(parameters.required).not.toContain('name');
-      expect(parameters.properties.goals).toBeUndefined();
+      expect(parameters.properties.goals).toEqual(expect.objectContaining({ type: 'array' }));
       expect(parameters.properties.id).toEqual(expect.objectContaining({ type: 'string' }));
       expect(parameters.properties.name).toEqual(expect.objectContaining({ type: 'string' }));
       expect(parameters.properties.completionPolicy.enum).toEqual(['blocking', 'persistent']);

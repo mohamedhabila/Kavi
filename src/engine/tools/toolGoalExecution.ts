@@ -25,6 +25,8 @@ const ALLOWED_UPDATE_GOALS_ROOT_FIELDS = new Set([
   'completionPolicy',
   'dependencies',
   'description',
+  // Present on a batched call; an empty array falls through to the single-goal path.
+  'goals',
   'id',
   'name',
   'owner',
@@ -334,10 +336,54 @@ export function buildUpdateGoalsResult(params: {
   );
 }
 
+/**
+ * Whether this call declares several goals at once under one shared action.
+ *
+ * The graph has always applied `AgentGoalMutation.goals` as an array; only this tool's
+ * arguments were flat, so one call could carry exactly one goal. Every additional goal,
+ * and every lifecycle transition, therefore cost its own round-trip — traced on-device as
+ * three calls to open a two-goal plan (add, activate, add) and six more to close it.
+ * Batching removes the calls without changing what the graph does with them.
+ */
+function readBatchedGoalEntries(args: Record<string, unknown>): Record<string, unknown>[] | null {
+  const entries = args.goals;
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return null;
+  }
+  return entries.filter(
+    (entry): entry is Record<string, unknown> =>
+      Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
+  );
+}
+
 export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   mutation: AgentGoalMutation;
   errors: UpdateGoalsArgumentError[];
 } {
+  const batchedEntries = readBatchedGoalEntries(args);
+  if (batchedEntries) {
+    const sharedAction = args.action;
+    const parsedEntries = batchedEntries.map((entry) =>
+      parseUpdateGoalsArgs({
+        // A per-goal action wins, so one call can still be uniform without repeating it.
+        ...(sharedAction === undefined ? {} : { action: sharedAction }),
+        ...entry,
+      }),
+    );
+    const errors = parsedEntries.flatMap((entry) => entry.errors);
+    const resolvedAction = parsedEntries[0]?.mutation.action ?? 'add';
+    if (errors.length > 0) {
+      return { mutation: { action: resolvedAction, goals: [] }, errors };
+    }
+    return {
+      mutation: {
+        action: resolvedAction,
+        goals: parsedEntries.flatMap((entry) => entry.mutation.goals),
+      },
+      errors: [],
+    };
+  }
+
   const normalizedArgs = omitAdapterNullOptionals(args);
   const action = normalizedArgs.action;
   if (

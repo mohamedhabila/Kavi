@@ -93,8 +93,52 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
         type: 'string',
         description: 'Optional blocker reason when status is blocked.',
       },
+      goals: {
+        type: 'array',
+        description:
+          'Optional batch: several goals under one action, each entry taking the same ' +
+          'fields as a single call. Declare a whole plan in one call — for example add ' +
+          'the deliverable goal as "active" alongside its worker goal — and close a plan ' +
+          'with one complete. Omit this when mutating a single goal.',
+        items: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['add', 'complete', 'activate', 'block', 'remove', 'update'],
+              description: 'Optional per-goal action. Defaults to the top-level action.',
+            },
+            id: { type: 'string', description: 'Stable goal ID.' },
+            name: { type: 'string', description: 'Human-readable goal name. Required for add.' },
+            description: { type: 'string', description: 'Optional detailed description.' },
+            status: {
+              type: 'string',
+              enum: ['pending', 'active', 'completed', 'blocked'],
+              description: 'Goal status. Set "active" on the add itself to start it now.',
+            },
+            completionPolicy: {
+              type: 'string',
+              enum: ['blocking', 'persistent'],
+              description: 'Whether the goal gates completion or tracks ongoing focus.',
+            },
+            successCriteria: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Structural criteria that close the goal.',
+            },
+            owner: { type: 'string', description: 'Optional goal owner.' },
+            requiredCapabilities: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional capabilities the goal needs.',
+            },
+            blockedReason: { type: 'string', description: 'Why the goal is blocked.' },
+          },
+          required: ['id'],
+        },
+      },
     },
-    required: ['action', 'id'],
+    required: ['action'],
   },
   strict: true,
   contract: {
