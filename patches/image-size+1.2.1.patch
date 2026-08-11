@@ -1,0 +1,52 @@
+diff --git a/node_modules/image-size/dist/types/icns.js b/node_modules/image-size/dist/types/icns.js
+index f2bfafe..f2077a7 100644
+--- a/node_modules/image-size/dist/types/icns.js
++++ b/node_modules/image-size/dist/types/icns.js
+@@ -21,6 +21,7 @@ const FILE_LENGTH_OFFSET = 4; // MSB => BIG ENDIAN
+  * | 8      | n    | Icon data                                                        |
+  */
+ const ENTRY_LENGTH_OFFSET = 4; // MSB => BIG ENDIAN
++const ENTRY_HEADER_SIZE = 4 + 4; // 8, counted by an entry's own length field
+ const ICON_TYPE_SIZE = {
+     ICON: 32,
+     'ICN#': 32,
+@@ -92,6 +93,12 @@ exports.ICNS = {
+         };
+         while (imageOffset < fileLength && imageOffset < inputLength) {
+             imageHeader = readImageHeader(input, imageOffset);
++            // An entry's length counts its own 8-byte header, so anything below
++            // that cannot move `imageOffset` forward and would leave this loop
++            // re-reading the same entry forever. Treat it as a truncated file.
++            if (imageHeader[1] < ENTRY_HEADER_SIZE) {
++                break;
++            }
+             imageSize = getImageSize(imageHeader[0]);
+             imageOffset += imageHeader[1];
+             result.images.push(imageSize);
+diff --git a/node_modules/image-size/dist/types/jxl.js b/node_modules/image-size/dist/types/jxl.js
+index f557b0a..faf15fe 100644
+--- a/node_modules/image-size/dist/types/jxl.js
++++ b/node_modules/image-size/dist/types/jxl.js
+@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.JXL = void 0;
+ const utils_1 = require("./utils");
+ const jxl_stream_1 = require("./jxl-stream");
++/** Size of an ISO base media file format box header (4-byte size + 4-byte type) */
++const BOX_HEADER_SIZE = 8;
+ /** Extracts the codestream from a containerized JPEG XL image */
+ function extractCodestream(input) {
+     const jxlcBox = (0, utils_1.findBox)(input, 'jxlc', 0);
+@@ -24,7 +26,12 @@ function extractPartialStreams(input) {
+         if (!jxlpBox)
+             break;
+         partialStreams.push(input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size));
+-        offset = jxlpBox.offset + jxlpBox.size;
++        // A box that declares a size of 0 leaves `offset` exactly where it was,
++        // so `findBox` keeps returning that same box and the walk never ends.
++        // `findBox` already steps over such a box by the 8-byte box header;
++        // match it here so this loop is always guaranteed to make progress.
++        const nextOffset = jxlpBox.offset + jxlpBox.size;
++        offset = nextOffset > offset ? nextOffset : offset + BOX_HEADER_SIZE;
+     }
+     return partialStreams;
+ }
