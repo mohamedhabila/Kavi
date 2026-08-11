@@ -15,13 +15,17 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
     'Add, complete, activate, block, update, or remove goals from the active goal set. ' +
     "Goals are high-level intentions that guide the agent's work. " +
     'Pass a `goals` array to change several goals in ONE call — declaring a plan or closing ' +
-    'it is a single call, never one call per goal. Set `status` on each entry so a separate ' +
-    'activate is never needed. Example: ' +
+    'it is a single call, never one call per goal. Only one goal is active at a time, so mark ' +
+    'the step you are starting now as "active" and leave the rest "pending"; activating any ' +
+    'goal moves the previously active one back to pending. Work through the plan by ' +
+    'completing the active goal and activating the next, both in one call. Example: ' +
     '{"action":"add","goals":[{"id":"study","name":"Study","status":"active",' +
     '"completionPolicy":"blocking","successCriteria":["evidence.artifact:artifacts/out.md"]},' +
-    '{"id":"worker","name":"Worker","status":"active","completionPolicy":"blocking",' +
+    '{"id":"worker","name":"Worker","status":"pending","completionPolicy":"blocking",' +
     '"owner":"delegated-worker","requiredCapabilities":["coordinate"],' +
-    '"successCriteria":["evidence.prefix:worker","evidence.min:1"]}]} — then close both with ' +
+    '"successCriteria":["evidence.prefix:worker","evidence.min:1"]}]} — advance with ' +
+    '{"action":"update","goals":[{"id":"study","status":"completed"},' +
+    '{"id":"worker","status":"active"}]}, and close several at once with ' +
     '{"action":"complete","goals":[{"id":"worker"},{"id":"study"}]}. ' +
     'A single-goal change may instead use the flat root fields. ' +
     'Each entry is a JSON object, so `goals` is an array of objects: ' +
@@ -58,9 +62,11 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
         type: 'string',
         enum: ['pending', 'active', 'completed', 'blocked'],
         description:
-          'Goal status. Used for add and update. Set "active" on the add itself when you ' +
-          'are starting the work now — a separate activate call is not needed. A goal is ' +
-          'always created open; it closes when its success criteria are met.',
+          'Goal status. Used for add and update. Set "active" on the add itself for the one ' +
+          'step you are starting now — a separate activate call is not needed. Later steps ' +
+          'belong as "pending": only one goal is active at a time, so marking several active ' +
+          'leaves just the last one active. A goal is always created open; it closes when ' +
+          'its success criteria are met.',
       },
       completionPolicy: {
         type: 'string',
@@ -111,9 +117,9 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
         type: 'array',
         description:
           'Optional batch: several goals under one action, each entry taking the same ' +
-          'fields as a single call. Declare a whole plan in one call — for example add ' +
-          'the deliverable goal as "active" alongside its worker goal — and close a plan ' +
-          'with one complete. Omit this when mutating a single goal.',
+          'fields as a single call. Declare a whole plan in one call — the step starting ' +
+          'now as "active" and the rest "pending" — and advance or close several goals ' +
+          'with one call. Omit this when mutating a single goal.',
         items: {
           type: 'object',
           properties: {
@@ -128,7 +134,9 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
             status: {
               type: 'string',
               enum: ['pending', 'active', 'completed', 'blocked'],
-              description: 'Goal status. Set "active" on the add itself to start it now.',
+              description:
+                'Goal status. Mark the one step starting now as "active" and later steps '
+                + '"pending"; only one goal is active at a time.',
             },
             completionPolicy: {
               type: 'string',

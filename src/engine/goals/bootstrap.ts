@@ -35,7 +35,7 @@ export function renderGoalBootstrapPromptSection(): string {
     '## Goal Tracking for Multi-Step Work',
     'No live graph goals are active.',
     `For delegated/background work, multiple tool steps, multiple deliverables, or explicit success conditions, you MUST establish the task with \`${GOAL_BOOTSTRAP_TOOL_NAME}\` in a separate turn before effects; skip it only for a genuinely single-step answer or observation.`,
-    'Declare every goal in ONE call, never one per goal; set status so no separate activate is needed.',
+    'Declare every goal in ONE call, never one per goal; one goal is active, later steps pending.',
     'Call: {"action":"add","goals":[{"id":"stable-id","name":"Name","status":"active","completionPolicy":"blocking","successCriteria":["criterion"]}]}. Close: {"action":"complete","goals":[{"id":"stable-id"}]}.',
     'Delegation: add a separate blocking goal with owner:"delegated-worker", requiredCapabilities:["coordinate"], and successCriteria:["evidence.prefix:worker","evidence.min:1"]; include every domain capability it needs, then pass its exact id to sessions_spawn.',
     'For the same delegated work, update and reuse its exact id; do not duplicate a goal to repair capabilities, criteria, owner, or status.',
