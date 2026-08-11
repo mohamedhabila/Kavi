@@ -1,5 +1,6 @@
 import type { StreamEvent, StreamedToolCall } from '../../support/contracts';
 import { isPlainRecord } from '../json';
+import { recoverDroppedObjectBraces } from '../../../../engine/toolExecution/toolArgumentJsonRecovery';
 
 function getSharedPrefixLength(left: string, right: string): number {
   const limit = Math.min(left.length, right.length);
@@ -134,6 +135,43 @@ function getStreamedToolCallSignature(toolCall: StreamedToolCall): string {
   ].join('\u0001');
 }
 
+/**
+ * Repairs a finished tool call's arguments once, where every consumer reads them.
+ *
+ * Arguments are re-parsed independently in at least three places — schema preflight,
+ * the dispatch router, and goal mutation canonicalization — so repairing at each parse
+ * site is whack-a-mole, and it was: the recovery was wired into the router and
+ * canonicalization, and a traced run still died because the schema preflight rejected
+ * `"goals": ["id": ...]` before either could run, answering invalid_argument_shape for
+ * field `$`. Repairing at the boundary fixes it for consumers that do not exist yet, and
+ * leaves the stored arguments parseable for anything that reads them later.
+ *
+ * Recovery only acts on text that does not already parse, so a well-formed call is
+ * returned untouched.
+ */
+function withRecoveredArguments(toolCall: StreamedToolCall): StreamedToolCall {
+  const args = toolCall.arguments;
+  if (typeof args !== 'string' || args.length === 0) {
+    return toolCall;
+  }
+
+  try {
+    JSON.parse(args);
+    return toolCall;
+  } catch {
+    const recovered = recoverDroppedObjectBraces(args);
+    if (recovered === args) {
+      return toolCall;
+    }
+    try {
+      JSON.parse(recovered);
+    } catch {
+      return toolCall;
+    }
+    return { ...toolCall, arguments: recovered };
+  }
+}
+
 export function getEmittableStreamedToolCall(
   toolCalls: Record<number, StreamedToolCall>,
   emittedToolCallSignatures: Map<number, string>,
@@ -150,7 +188,7 @@ export function getEmittableStreamedToolCall(
   }
 
   emittedToolCallSignatures.set(index, signature);
-  return toolCall;
+  return withRecoveredArguments(toolCall);
 }
 
 export function collectPendingToolCallEvents(

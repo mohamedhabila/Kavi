@@ -174,6 +174,22 @@ export function recoverDroppedObjectBraces(text: string): string {
     }
 
     if (char === ',') {
+      /**
+       * A separator with nothing before it, or nothing after it, separates nothing.
+       *
+       * Traced on-device alongside the dropped braces: a run opened a call with
+       * `{, "goals": [...]` and was answered "Expect a string key in JSON object". Both
+       * malformations come from the same cause — constrained decoding is off, so the
+       * model writes JSON freehand — and both have exactly one reading.
+       */
+      const previous = out.trimEnd().slice(-1);
+      const nextChar = text[skipWhitespace(text, index + 1)];
+      if (previous === '{' || previous === '[' || nextChar === '}' || nextChar === ']') {
+        repaired = true;
+        index += 1;
+        continue;
+      }
+
       const frame = topArrayFrame();
       if (frame?.syntheticOpen) {
         const nextKey = peekBareKey(text, index + 1);

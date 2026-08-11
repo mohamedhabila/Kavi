@@ -115,3 +115,30 @@ describe('well-formed and unrecoverable input', () => {
     expect(() => recoverDroppedObjectBraces('{"edits": ["op": "unclosed')).not.toThrow();
   });
 });
+
+describe('separators that separate nothing', () => {
+  it('recovers the traced call that opened with a stray comma', () => {
+    // `{, "goals": [...]` was answered "Expect a string key in JSON object" on device,
+    // in the same run that produced the dropped braces below it.
+    const parsed = parseToolArgumentsJson(
+      '{, "goals": ["id": "geo-feasibility-study", "status": "active"]}',
+    ) as { goals: Array<{ id: string; status: string }> };
+
+    expect(parsed.goals).toEqual([{ id: 'geo-feasibility-study', status: 'active' }]);
+  });
+
+  it('drops a trailing comma before a close', () => {
+    expect(parseToolArgumentsJson('{"a": 1,}')).toEqual({ a: 1 });
+    expect(parseToolArgumentsJson('{"a": [1, 2,]}')).toEqual({ a: [1, 2] });
+  });
+
+  it('keeps commas inside string values', () => {
+    const parsed = parseToolArgumentsJson('{, "content": "a, b, c"}') as { content: string };
+    expect(parsed.content).toBe('a, b, c');
+  });
+
+  it('leaves ordinary separators alone', () => {
+    const valid = '{"a": 1, "b": [2, 3]}';
+    expect(recoverDroppedObjectBraces(valid)).toBe(valid);
+  });
+});

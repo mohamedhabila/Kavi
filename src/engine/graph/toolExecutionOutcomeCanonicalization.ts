@@ -9,6 +9,7 @@ import {
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
 import { findUnmetCompletionCriteria } from '../goals/completionRefusalMessage';
 import { applyGoalMutation, normalizeGoalMutationForApplication } from '../goals/graphState';
+import { parseToolArgumentsJson } from '../toolExecution/toolArgumentJsonRecovery';
 import {
   getGoalById,
   isBlockingGoal,
@@ -509,7 +510,18 @@ export function canonicalizeToolExecutionOutcome(params: {
   }
 
   try {
-    const args = JSON.parse(originalCall.arguments || '{}');
+    /**
+     * This is the authoritative parse for a goal mutation, so the dropped-brace recovery
+     * has to run here too. Wiring it only into the tool executors left this path on plain
+     * JSON.parse, and a traced run died here: two update_goals calls carrying
+     * `"goals": ["id": ...]` were answered "JSON Parse error: Unexpected character: :"
+     * and the run stopped for repeating a step without progress. The recovery existed and
+     * simply was not reached.
+     */
+    const args = parseToolArgumentsJson(originalCall.arguments || '{}') as Record<
+      string,
+      unknown
+    >;
     const parsed = parseUpdateGoalsArgs(args);
     const currentGoals = params.getGraphSnapshot().goals ?? [];
     if (parsed.errors.length > 0) {

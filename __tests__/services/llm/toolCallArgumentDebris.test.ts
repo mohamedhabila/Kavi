@@ -1,4 +1,7 @@
-import { mergeStreamedArgumentText } from '../../../src/services/llm/core/streaming/toolCallAccumulator';
+import {
+  collectPendingToolCallEvents,
+  mergeStreamedArgumentText,
+} from '../../../src/services/llm/core/streaming/toolCallAccumulator';
 
 // Traced live on an Android emulator. A write_file call reached the executor with
 // arguments of:
@@ -58,5 +61,49 @@ describe('healthy streams are untouched', () => {
     expect(mergeStreamedArgumentText('{"path": "a.md"}', '{"path": "a.md"}')).toBe(
       '{"path": "a.md"}',
     );
+  });
+});
+
+describe('a finished tool call is emitted with parseable arguments', () => {
+  it('repairs dropped braces once, where every consumer reads them', () => {
+    // Arguments are re-parsed independently by the schema preflight, the dispatch
+    // router, and goal mutation canonicalization. A traced run died because the
+    // preflight rejected "goals": ["id": ...] before the two repaired parse sites could
+    // run, answering invalid_argument_shape for field `$`.
+    const toolCalls = {
+      0: {
+        id: 'tc-1',
+        name: 'update_goals',
+        arguments: '{"action": "add", "goals": ["id": "geo-mc-model", "status": "active"]}',
+      },
+    };
+
+    const [event] = collectPendingToolCallEvents(toolCalls as never, new Map());
+    const emitted = (event as { toolCall: { arguments: string } }).toolCall;
+
+    expect(JSON.parse(emitted.arguments)).toEqual({
+      action: 'add',
+      goals: [{ id: 'geo-mc-model', status: 'active' }],
+    });
+  });
+
+  it('leaves a well-formed call byte-identical', () => {
+    const args = '{"action": "add", "goals": [{"id": "a"}]}';
+    const [event] = collectPendingToolCallEvents(
+      { 0: { id: 'tc-1', name: 'update_goals', arguments: args } } as never,
+      new Map(),
+    );
+
+    expect((event as { toolCall: { arguments: string } }).toolCall.arguments).toBe(args);
+  });
+
+  it('leaves arguments it cannot repair untouched, so the error still surfaces', () => {
+    const args = '{"action": "add", "goals": [';
+    const [event] = collectPendingToolCallEvents(
+      { 0: { id: 'tc-1', name: 'update_goals', arguments: args } } as never,
+      new Map(),
+    );
+
+    expect((event as { toolCall: { arguments: string } }).toolCall.arguments).toBe(args);
   });
 });
