@@ -69,3 +69,32 @@ export function readDelegatedWorkerLaunchSessionId(evidence: string): string | u
   const sessionId = evidence.slice(DELEGATED_WORKER_LAUNCH_EVIDENCE_PREFIX.length).trim();
   return sessionId || undefined;
 }
+
+/**
+ * Whether a success criterion can only be satisfied by the supervisor that delegated.
+ *
+ * `evidence.prefix:worker` asserts that a worker produced the result. On the supervisor's
+ * graph that is exactly right. Handed to the worker it is unsatisfiable: inside the worker
+ * there is no worker-result evidence, because the worker is the worker.
+ *
+ * Traced live on an Android emulator. The supervisor's goal criteria were passed verbatim
+ * into the worker prompt, the worker copied them onto its own goal, wrote its deliverable
+ * (risks.md, 2673 chars), read it back, and was refused on completion with "Unmet criteria:
+ * evidence.prefix:worker. To record it: produce a worker result" — the thing it had just
+ * done. It stalled there and was later terminalized, and the parent run ended at step four
+ * of five with a spawn that never returned.
+ */
+export function isSupervisorOnlySuccessCriterion(criterion: string): boolean {
+  return criterion.trim() === DELEGATED_WORKER_EVIDENCE_CRITERION;
+}
+
+/** The delegating goal's criteria, less the ones only the supervisor can satisfy. */
+export function resolveWorkerVisibleSuccessCriteria(
+  criteria: ReadonlyArray<string> | undefined,
+): string[] | undefined {
+  if (!criteria?.length) {
+    return undefined;
+  }
+  const visible = criteria.filter((criterion) => !isSupervisorOnlySuccessCriterion(criterion));
+  return visible.length > 0 ? visible : undefined;
+}
