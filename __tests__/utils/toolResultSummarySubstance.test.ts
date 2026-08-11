@@ -92,3 +92,37 @@ describe('inputs the ordering must not damage', () => {
     expect(summary).toContain('ModuleNotFoundError');
   });
 });
+
+describe('tool shapes that were never traced', () => {
+  // Ranking by value length rather than by field name is the point: a registry of
+  // substantive keys would cover only the tools already seen and would quietly degrade
+  // for every tool and MCP server added later.
+  it('keeps the payload of a tool whose field names are unknown here', () => {
+    const summary = extractToolResultSummary(
+      JSON.stringify({
+        ok: true,
+        latencyMs: 42,
+        cursor: 'abc123',
+        rowsAffected: 3,
+        queryPlan: 'Seq Scan on invoices, filter: due_date < now(), 1284 rows removed by filter',
+      }),
+    );
+
+    expect(summary).toContain('Seq Scan on invoices');
+  });
+
+  it('prefers the longer of two content fields', () => {
+    const summary = extractToolResultSummary(
+      JSON.stringify({ note: 'short', transcript: 'the full transcript of the call, at length' }),
+      60,
+    );
+
+    expect(summary).toContain('the full transcript');
+  });
+
+  it('still reports a short error when it is all there is', () => {
+    expect(extractToolResultSummary(JSON.stringify({ ok: false, err: 'ENOENT' }))).toContain(
+      'ENOENT',
+    );
+  });
+});
