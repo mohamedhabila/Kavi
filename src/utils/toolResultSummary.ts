@@ -25,6 +25,77 @@ function truncateText(value: string, maxChars: number): string {
   return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
 }
 
+/**
+ * Result fields that carry what the run actually produced, most substantive first.
+ *
+ * A tool result is a JSON object whose key order is written for machines, not for
+ * truncation. Summarising it by serialising and cutting at a character budget therefore
+ * keeps whichever fields happen to be declared first — which is metadata.
+ *
+ * Traced live on an Android emulator. Compaction cleared 52 tool results across two
+ * passes; the python result was 1652 chars with `"output"` starting at index 236, so a
+ * 180-char summary retained only:
+ *
+ *   {"summary":"Python execution completed.","status":"completed",
+ *    "workspaceMutationState":"none_observed","networkAccessState":"blocked",...
+ *
+ * Every Monte Carlo figure was dropped. The model came out of compaction knowing a
+ * computation had succeeded but not what it produced, re-planned from scratch with fresh
+ * goal ids, and the run ended in critical_loop_detected and then a 900s provider timeout.
+ *
+ * Ordering by substance keeps the same budget spent on the part worth keeping.
+ */
+const SUBSTANTIVE_TOOL_RESULT_KEYS = [
+  'output',
+  'stdout',
+  'content',
+  'text',
+  'error',
+  'message',
+  'path',
+  'summary',
+  'status',
+] as const;
+
+function readSummaryFieldValue(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.trim() ? collapseWhitespace(value) : undefined;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return undefined;
+}
+
+/**
+ * Summary built from the substantive fields, or undefined when none are present so the
+ * caller falls back to plain truncation.
+ */
+function summarizeToolResultRecord(parsed: unknown, maxChars: number): string | undefined {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const segments: string[] = [];
+  let used = 0;
+
+  for (const key of SUBSTANTIVE_TOOL_RESULT_KEYS) {
+    if (used >= maxChars) {
+      break;
+    }
+    const value = readSummaryFieldValue(record[key]);
+    if (!value) {
+      continue;
+    }
+    const segment = `${key}: ${truncateText(value, Math.max(24, maxChars - used))}`;
+    segments.push(segment);
+    used += segment.length + 2;
+  }
+
+  return segments.length > 0 ? truncateText(segments.join('; '), maxChars) : undefined;
+}
+
 export function extractToolResultSummary(
   content: string,
   maxChars = TOOL_RESULT_SUMMARY_MAX_CHARS,
@@ -40,6 +111,10 @@ export function extractToolResultSummary(
 
   try {
     const parsed = JSON.parse(trimmed) as unknown;
+    const substantive = summarizeToolResultRecord(parsed, maxChars);
+    if (substantive) {
+      return substantive;
+    }
     const serialized = JSON.stringify(parsed);
     return truncateText(collapseWhitespace(serialized ?? trimmed), maxChars);
   } catch {
