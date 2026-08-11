@@ -175,6 +175,7 @@ export async function executeAgentControlGraphToolBatch(params: {
         lastGoalMutationIndex,
         requirement,
         projectedGoals,
+        committedGoals: params.controlGraphGoals ?? [],
       });
 
       if (admittedByThisBatch) {

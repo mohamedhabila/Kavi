@@ -174,3 +174,41 @@ describe('locating the last mutation in a batch', () => {
     expect(resolveLastGoalMutationIndex([mutation, mutation, writeCall(REPORT_PATH)])).toBe(1);
   });
 });
+
+describe('an effect the committed graph already admits', () => {
+  it('runs even when declared before the batch mutation', async () => {
+    // Traced on device: the write was declared first and the mutation second, so the
+    // ordering rule refused it — but its admitting goal was already committed, meaning
+    // the write never depended on that mutation at all.
+    //   10:06:19  write_file, update_goals ok  -> goal_mutation_boundary
+    //   10:06:34  write_file alone             -> written
+    const requirement = await writeRequirement(REPORT_PATH);
+    const committed = projectInBatchGoalMutations([await admittingMutationFor(REPORT_PATH)], []);
+    const calls = [writeCall(REPORT_PATH), goalMutationCall({ action: 'complete', id: 'g1' })];
+
+    expect(
+      isEffectAdmittedByBatchGoalMutation({
+        index: 0,
+        lastGoalMutationIndex: resolveLastGoalMutationIndex(calls),
+        requirement,
+        projectedGoals: committed,
+        committedGoals: committed,
+      }),
+    ).toBe(true);
+  });
+
+  it('still refuses an effect no committed goal admits, declared before the mutation', async () => {
+    const requirement = await writeRequirement(REPORT_PATH);
+    const calls = [writeCall(REPORT_PATH), await admittingMutationFor(REPORT_PATH)];
+
+    expect(
+      isEffectAdmittedByBatchGoalMutation({
+        index: 0,
+        lastGoalMutationIndex: resolveLastGoalMutationIndex(calls),
+        requirement,
+        projectedGoals: projectInBatchGoalMutations(calls, []),
+        committedGoals: [],
+      }),
+    ).toBe(false);
+  });
+});

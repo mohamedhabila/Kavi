@@ -95,10 +95,27 @@ export function isEffectAdmittedByBatchGoalMutation(params: {
   lastGoalMutationIndex: number;
   requirement: ToolEffectCompletionRequirement;
   projectedGoals: ReadonlyArray<AgentGoal>;
+  committedGoals?: ReadonlyArray<AgentGoal>;
 }): boolean {
   if (params.requirement.kind !== 'effectful') {
     return false;
   }
+
+  /**
+   * An effect the committed graph already admits does not depend on the batch's mutation
+   * at all, so its position in the batch is irrelevant. Requiring it to come after the
+   * mutation refused a write that was declared first and would have run on its own —
+   * traced on device as a second goal_mutation_boundary in the same run.
+   */
+  if (
+    params.committedGoals &&
+    findGoalForEffectCompletionRequirement(params.committedGoals, params.requirement)
+  ) {
+    return true;
+  }
+
+  // Otherwise admission comes from this batch's own mutation, which must therefore be
+  // declared earlier so it resolves — and commits — before this effect's outcome.
   if (params.index <= params.lastGoalMutationIndex) {
     return false;
   }

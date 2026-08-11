@@ -1,6 +1,5 @@
 import type { AgentGoal } from '../../types/agentRun';
 import type { ToolDefinition } from '../../types/tool';
-import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
 import {
   effectCompletionCriteriaEqual,
   effectReceiptEvidenceTargetsCriterion,
@@ -196,14 +195,28 @@ export async function materializeToolEffectCompletionGoals(params: {
   now?: number;
 }): Promise<ToolEffectGoalMaterialization> {
   const goals = [...(params.goals ?? [])];
-  if (
-    params.toolCalls.some(
-      (toolCall) => normalizeToolName(toolCall.name) === GOAL_BOOTSTRAP_TOOL_NAME,
-    )
-  ) {
-    return { status: 'unchanged', goals };
-  }
 
+  /**
+   * A batch that also mutates goals used to skip materialization entirely, which turned
+   * one refused effect into a loop the model could only escape by accident.
+   *
+   * Traced live on an Android emulator. The model batched `update_goals` with the
+   * `write_file` that mutation was setting up. The batch boundary refused the write, and
+   * this skip meant the effect-completion goal that would have admitted it was never
+   * created — so the retry, batched the same way, was refused for the same reason. Only
+   * when the model happened to send the write alone did materialization run and the write
+   * succeed on the first attempt:
+   *
+   *   10:05:36  update_goals ok, write_file  -> goal_mutation_boundary
+   *   10:06:19  write_file, update_goals ok  -> goal_mutation_boundary
+   *   10:06:34  write_file alone             -> written
+   *
+   * The skip was guarding against clobbering the model's pending mutation. It cannot:
+   * the goals materialized here carry code-owned `effect-<tool>-<digest>` ids that no
+   * model mutation addresses, this runs and commits before the batch executes, and the
+   * goal-mutation canonicalization that applies the model's own mutation afterwards reads
+   * a fresh graph snapshot rather than the one captured here.
+   */
   const materializableToolCalls = params.tools
     ? params.toolCalls.filter(
         (toolCall) =>

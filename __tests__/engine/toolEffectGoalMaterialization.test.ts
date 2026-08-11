@@ -137,23 +137,41 @@ describe('code-owned effect completion goal materialization', () => {
     ).resolves.toEqual({ status: 'unchanged', goals: [] });
   });
 
-  it('leaves mixed model-authored goal mutations on the existing iteration boundary', async () => {
-    await expect(
-      materializeToolEffectCompletionGoals({
-        toolCalls: [
-          {
-            name: 'update_goals',
-            arguments: JSON.stringify({ action: 'add', id: 'g1', name: 'Goal' }),
-          },
-          {
-            name: 'write_file',
-            arguments: JSON.stringify({ path: 'reports/final.md', content: 'done' }),
-          },
-        ],
-        goals: [],
-        now: 100,
-      }),
-    ).resolves.toEqual({ status: 'unchanged', goals: [] });
+  // This batch used to be skipped entirely, deferring materialization to the next
+  // iteration. Traced live on an Android emulator, that deferral never arrived: the batch
+  // boundary refused the write, and skipping materialization meant the goal that would
+  // have admitted it was never created, so the retry failed identically. The model
+  // escaped only by happening to send the write alone.
+  //
+  //   10:05:36  update_goals ok, write_file  -> goal_mutation_boundary
+  //   10:06:19  write_file, update_goals ok  -> goal_mutation_boundary
+  //   10:06:34  write_file alone             -> written
+  //
+  // The skip guarded against clobbering the model's pending mutation. It cannot: this
+  // commits before the batch executes, and the canonicalization that applies the model's
+  // mutation reads a fresh graph snapshot afterwards, so the mutation lands on top of the
+  // materialized goal rather than replacing it.
+  it('materializes the admitting goal even when the batch also mutates goals', async () => {
+    const result = await materializeToolEffectCompletionGoals({
+      toolCalls: [
+        {
+          name: 'update_goals',
+          arguments: JSON.stringify({ action: 'add', id: 'g1', name: 'Goal' }),
+        },
+        {
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'reports/final.md', content: 'done' }),
+        },
+      ],
+      goals: [],
+      now: 100,
+    });
+
+    expect(result.status).toBe('materialized');
+    expect(result.goals).toHaveLength(1);
+    // A code-owned id, which no model-authored mutation addresses.
+    expect(result.goals[0].id).toMatch(/^effect-write-file-/);
+    expect(result.goals[0].owner).toBe('system:effect-completion');
   });
 
   it('never rematerializes a blocked applied-but-unverified effect contract', async () => {
