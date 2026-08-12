@@ -2,6 +2,7 @@ import {
   backfillGoalEvidenceFromExistingGoals,
   routeToolEvidenceToActiveGoals,
 } from '../../../src/engine/goals/evidenceRouting';
+import { areBlockingGoalsStructurallyComplete } from '../../../src/engine/goals/completionEvidence';
 import { applyGoalMutation } from '../../../src/engine/goals/graphState';
 import {
   CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
@@ -426,13 +427,18 @@ describe('completing a goal straight from pending', () => {
     expect(goals.find((goal) => goal.id === 'saturn-moons')?.status).toBe('completed');
   });
 
-  it('still refuses a pending goal that has earned nothing', () => {
-    const { errors } = applyGoalMutation([pendingGoal([])], {
+  // The invariant these guarded — nothing unproven releases the run — still holds, but it
+  // is enforced where it belongs: areBlockingGoalsStructurallyComplete evaluates the
+  // criteria itself. Closing a goal is the model's bookkeeping and is no longer refused,
+  // because refusing it produced the loop it was meant to prevent.
+  it('closes a pending goal that has earned nothing, and finalization still refuses', () => {
+    const { errors, goals } = applyGoalMutation([pendingGoal([])], {
       action: 'complete',
       goals: [{ id: 'saturn-moons' }],
     });
 
-    expect(errors.length).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+    expect(areBlockingGoalsStructurallyComplete(goals)).toBe(false);
   });
 
   it('leaves a newly added goal pending, so enforcement timing is unchanged', () => {
@@ -489,7 +495,7 @@ describe('completing a goal the engine already completed', () => {
     expect(goals.find((goal) => goal.id === 'done-already')?.status).toBe('completed');
   });
 
-  it('still refuses to complete a pending goal that has earned nothing', () => {
+  it('closes a pending goal that has earned nothing, and finalization still refuses', () => {
     const pending = createGoal({
       id: 'not-started',
       title: 'Later work',
@@ -498,12 +504,13 @@ describe('completing a goal the engine already completed', () => {
       successCriteria: ['evidence.artifact:later.md'],
     });
 
-    const { errors } = applyGoalMutation([pending], {
+    const { errors, goals } = applyGoalMutation([pending], {
       action: 'complete',
       goals: [{ id: 'not-started' }],
     });
 
-    expect(errors.length).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+    expect(areBlockingGoalsStructurallyComplete(goals)).toBe(false);
   });
 });
 
@@ -512,23 +519,23 @@ describe('a rejected goal mutation reports current state', () => {
   // retried against its own stale picture of the goal list and one rejection became a
   // loop. Every goal error now carries the current goals, which is what lets the model
   // see reality and adapt. This holds for any rejection reason, not one scenario.
-  it('completing a pending goal reports the goal and its real status', () => {
+  it('reactivating a completed goal reports the goal and its real status', () => {
     const pending = createGoal({
       id: 'not-started',
       title: 'Later work',
-      status: 'pending',
+      status: 'completed',
       completionPolicy: 'blocking',
       successCriteria: ['evidence.artifact:later.md'],
     });
 
     const { goals, errors } = applyGoalMutation([pending], {
-      action: 'complete',
+      action: 'activate',
       goals: [{ id: 'not-started' }],
     });
 
     expect(errors.length).toBeGreaterThan(0);
     // The mutation is refused, so state is unchanged and still visible to the caller.
-    expect(goals.find((goal) => goal.id === 'not-started')?.status).toBe('pending');
+    expect(goals.find((goal) => goal.id === 'not-started')?.status).toBe('completed');
   });
 });
 
@@ -542,14 +549,14 @@ describe('rejected mutation payload size', () => {
     const goal = createGoal({
       id: 'heavy',
       title: 'Heavy goal',
-      status: 'pending',
+      status: 'completed',
       completionPolicy: 'blocking',
       successCriteria: ['evidence.artifact:missing.md'],
       evidence: Array.from({ length: 12 }, () => verifiedWrite('saturn-moons.md')),
     });
 
     const { errors } = applyGoalMutation([goal], {
-      action: 'complete',
+      action: 'activate',
       goals: [{ id: 'heavy' }],
     });
 
@@ -568,7 +575,7 @@ describe('the pending completion shortcut cannot release a goal that proved noth
   // incidental catalog lookup or memory recall to close a blocking goal and release the
   // run before its work was done: a gate scenario collapsed from 11 tool calls to 2 and
   // never wrote its artifact.
-  it('refuses a criteria-less pending goal even when unrelated evidence exists', () => {
+  it('closes a criteria-less pending goal, and finalization still refuses', () => {
     const goal = createGoal({
       id: 'gate-followup',
       title: 'Persist the gate artifact',
@@ -582,8 +589,9 @@ describe('the pending completion shortcut cannot release a goal that proved noth
       goals: [{ id: 'gate-followup' }],
     });
 
-    expect(errors.length).toBeGreaterThan(0);
-    expect(goals.find((g) => g.id === 'gate-followup')?.status).toBe('pending');
+    expect(errors).toEqual([]);
+    expect(goals.find((g) => g.id === 'gate-followup')?.status).toBe('completed');
+    expect(areBlockingGoalsStructurallyComplete(goals)).toBe(false);
   });
 
   it('still completes a pending goal that satisfied a criterion it declared', () => {
@@ -605,7 +613,7 @@ describe('the pending completion shortcut cannot release a goal that proved noth
     expect(goals.find((g) => g.id === 'gate-followup')?.status).toBe('completed');
   });
 
-  it('refuses a pending goal whose declared criterion is unmet', () => {
+  it('closes a pending goal whose criterion is unmet, and finalization still refuses', () => {
     const goal = createGoal({
       id: 'gate-followup',
       title: 'Persist the gate artifact',
@@ -615,12 +623,13 @@ describe('the pending completion shortcut cannot release a goal that proved noth
       evidence: [verifiedWrite('saturn-moons.md')],
     });
 
-    const { errors } = applyGoalMutation([goal], {
+    const { errors, goals } = applyGoalMutation([goal], {
       action: 'complete',
       goals: [{ id: 'gate-followup' }],
     });
 
-    expect(errors.length).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+    expect(areBlockingGoalsStructurallyComplete(goals)).toBe(false);
   });
 });
 

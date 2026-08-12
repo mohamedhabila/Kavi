@@ -536,7 +536,14 @@ describe('goal validation', () => {
       expect(result.errors[0].message).toContain('pending goal');
     });
 
-    it('rejects complete before evidence requirements are met', () => {
+    // Closing a goal is the model's own bookkeeping and is no longer refused: not for
+    // unmet evidence, not for a goal that was never activated, and not for a persistent
+    // one. Traced live, those refusals produced the loop they existed to prevent — four
+    // consecutive completes, a forced reactivation, and re-run python and rewritten files
+    // as the model tried to manufacture evidence the gate would accept, ending in
+    // loop_detected. Finalization is unaffected: it evaluates the criteria itself, so a
+    // goal closed without evidence still cannot carry a run to a successful finish.
+    it('completes an active goal whose evidence requirements are unmet', () => {
       const active = createGoal({
         id: 'scope-b',
         title: 'scope-b-planning',
@@ -546,11 +553,10 @@ describe('goal validation', () => {
       const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'scope-b' }] }, [
         active,
       ]);
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].message).toContain('evidence requirements');
+      expect(result.valid).toBe(true);
     });
 
-    it('rejects complete on persistent context goals even when context evidence exists', () => {
+    it('completes a persistent context goal', () => {
       const active = createGoal({
         id: 'scope-b',
         title: 'scope-b-planning',
@@ -560,17 +566,15 @@ describe('goal validation', () => {
       const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'scope-b' }] }, [
         active,
       ]);
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].message).toContain('persistent');
+      expect(result.valid).toBe(true);
     });
 
-    it('rejects complete on a goal that is not active', () => {
+    it('completes a goal that was never activated', () => {
       const pending = createGoal({ id: 'scope-b', title: 'scope-b-planning', status: 'pending' });
       const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'scope-b' }] }, [
         pending,
       ]);
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].message).toContain('not active');
+      expect(result.valid).toBe(true);
     });
 
     it('rejects model-supplied code-owned effect receipt evidence', () => {

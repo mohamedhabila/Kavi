@@ -85,16 +85,24 @@ describe('update with a completed status routes to the canonical transition', ()
       successCriteria: [`evidence.artifact:${BRIEF}`],
     });
 
-  it('is a rewrite, not a bypass: an unmet goal is still refused', () => {
-    const result = applyGoalMutation([open()], {
+  // The invariant is that the update verb is rewritten to the complete transition rather
+  // than taking a path of its own, so the two are compared directly instead of through a
+  // refusal they happened to share. Stated this way it holds whatever `complete` does:
+  // it used to refuse an unmet goal and now closes it, and the equivalence is unchanged.
+  it('is a rewrite, not a bypass: it lands exactly where complete lands', () => {
+    const viaUpdate = applyGoalMutation([open()], {
       action: 'update',
       goals: [{ id: 'desal-study', status: 'completed' }],
     } as never);
+    const viaComplete = applyGoalMutation([open()], {
+      action: 'complete',
+      goals: [{ id: 'desal-study' }],
+    } as never);
 
-    // Refused for the real reason — missing evidence — rather than for the verb.
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors.join(' ')).not.toContain('canonical goal completion transition');
-    expect(result.goals[0]?.status).toBe('active');
+    expect(viaUpdate.errors).toEqual(viaComplete.errors);
+    expect(viaUpdate.goals[0]?.status).toBe(viaComplete.goals[0]?.status);
+    // Never refused for the verb itself.
+    expect(viaUpdate.errors.join(' ')).not.toContain('canonical goal completion transition');
   });
 
   it('leaves an ordinary update alone', () => {

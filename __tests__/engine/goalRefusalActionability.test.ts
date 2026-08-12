@@ -58,16 +58,6 @@ const REFUSAL_CASES: ReadonlyArray<{
   existing: AgentGoal[];
 }> = [
   {
-    name: 'complete without evidence',
-    mutation: { action: 'complete', goals: [{ id: 'goal-1' }] } as AgentGoalMutation,
-    existing: [goal()],
-  },
-  {
-    name: 'complete a pending goal',
-    mutation: { action: 'complete', goals: [{ id: 'goal-1' }] } as AgentGoalMutation,
-    existing: [goal({ status: 'pending' })],
-  },
-  {
     name: 'block a pending goal',
     mutation: { action: 'block', goals: [{ id: 'goal-1' }] } as AgentGoalMutation,
     existing: [goal({ status: 'pending' })],
@@ -118,36 +108,9 @@ describe('goal refusal actionability', () => {
     });
   }
 
-  it('names the unmet criterion and its recording action when completion is refused', () => {
-    const result = validateGoalMutation(
-      { action: 'complete', goals: [{ id: 'goal-1' }] } as AgentGoalMutation,
-      [goal()],
-    );
-
-    const message = result.errors.map((error) => error.message).join(' ');
-    expect(message).toContain('evidence.artifact:brief.md');
-    expect(message).toContain('write brief.md with write_file');
-  });
-
-  it('states that goal bookkeeping is not evidence when completion is refused', () => {
-    const result = validateGoalMutation(
-      { action: 'complete', goals: [{ id: 'goal-1' }] } as AgentGoalMutation,
-      [goal()],
-    );
-
-    expect(result.errors.map((error) => error.message).join(' ')).toContain(
-      'Repeating update_goals does not record evidence',
-    );
-  });
-
-  it('guides a goal that has no criteria and no evidence', () => {
-    const result = validateGoalMutation(
-      { action: 'complete', goals: [{ id: 'goal-1' }] } as AgentGoalMutation,
-      [goal({ successCriteria: [] })],
-    );
-
-    const message = result.errors.map((error) => error.message).join(' ');
-    expect(isActionable(message)).toBe(true);
-    expect(message).toContain('successCriteria');
-  });
+  // Completion is no longer refused at all — not for unmet evidence, not for a goal that
+  // was never activated. The three cases that lived here asserted the wording of that
+  // refusal, and there is no longer a refusal to word. The invariant they belonged to is
+  // unchanged and still enforced across every refusal that remains; what completion now
+  // returns is reported as information, covered by relaxedGoalCompletion.test.ts.
 });

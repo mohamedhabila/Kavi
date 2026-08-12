@@ -16,7 +16,6 @@ import {
   type GoalMutationValidationContext,
 } from './goalUserConstraintValidation';
 import { validateBlockingGoalUpdate } from './blockingGoalUpdateValidation';
-import { buildUnmetCompletionRequirementMessage } from './completionRefusalMessage';
 import { assessGoalInfeasibilityClaim } from './infeasibility';
 import {
   findCodeOwnedEvidence,
@@ -218,52 +217,34 @@ function validateGoalLifecycleTransition(
       return;
     }
 
-    // A goal that has already proven everything it declared can be completed straight
-    // from pending. The `update_goals` schema does not require `status`, so a goal
-    // added without one is created pending, and refusing to complete it forced a
-    // rejected call plus an activate call for a transition the engine can make itself.
-    //
-    // Declared criteria are what makes this safe. A goal carrying none meets
-    // "completion requirements" on any evidence at all — an incidental catalog lookup
-    // or memory recall is enough — and criteria are stripped whenever they fail
-    // recognition, so criteria-less goals occur in real runs. Skipping activation for
-    // one would let unrelated activity close a blocking goal and release the run
-    // before its work was done. Requiring explicit activation there keeps the model's
-    // deliberate act of focusing the goal in the loop.
-    if (
-      existing.status === 'pending' &&
-      (existing.successCriteria?.length ?? 0) > 0 &&
-      goalMeetsCompletionRequirements(existing, extraEvidence)
-    ) {
-      return;
-    }
-
-    if (existing.status !== 'active') {
-      errors.push({
-        goalId: normalizedId,
-        code: 'invalid_lifecycle',
-        message: 'Cannot complete a goal that is not active. Use activate first.',
-      });
-      return;
-    }
-
-    if (!isBlockingGoal(existing)) {
-      errors.push({
-        goalId: normalizedId,
-        code: 'invalid_lifecycle',
-        message:
-          'Cannot complete a persistent goal. Persistent goals are ongoing context; remove them or convert them to blocking deliverables with structural success criteria before completion.',
-      });
-      return;
-    }
-
-    if (!goalMeetsCompletionRequirements(existing, extraEvidence)) {
-      errors.push({
-        goalId: normalizedId,
-        code: 'evidence_required',
-        message: buildUnmetCompletionRequirementMessage(existing, extraEvidence),
-      });
-    }
+    /**
+     * Closing a goal is the model's bookkeeping, not its claim of proof, so it is not
+     * refused for want of evidence or for the goal not being focused first.
+     *
+     * Both refusals used to live here — "Use activate first" for a pending goal, and an
+     * evidence veto for an active one — and together they produced the loop they were
+     * meant to prevent. Traced live on an Android emulator across a 24-call run:
+     *
+     *   complete mc-npv                     x4 consecutively
+     *   complete [report, sensitivity, ...] x4
+     *   activate mc-npv -> complete mc-npv  (the reactivation the refusal forced)
+     *
+     * The completes did not stick, so the model re-ran python and rewrote files trying
+     * to manufacture evidence the gate would accept, and the run ended in
+     * loop_detected. Nothing in that sequence was the model reasoning badly; it was
+     * responding to a control plane that would not let it record its own progress.
+     *
+     * Refusing here never protected finalization, which evaluates the criteria itself:
+     * areBlockingGoalsStructurallyComplete requires `areGoalSuccessCriteriaSatisfied`
+     * alongside the completed status, so a goal closed without evidence still cannot
+     * carry a run to a successful finish. The veto was redundant, and its only
+     * observable effect was the churn above.
+     *
+     * The result still reports which criteria are outstanding, so the model can see
+     * exactly what remains — as information it acts on, rather than a refusal it has to
+     * fight.
+     */
+    return;
   }
 
   if (action === 'remove' && existing.status === 'active') {
