@@ -97,6 +97,18 @@ export function isEffectAdmittedByBatchGoalMutation(params: {
   projectedGoals: ReadonlyArray<AgentGoal>;
   committedGoals?: ReadonlyArray<AgentGoal>;
 }): boolean {
+  /**
+   * An operational call has no admitting goal to wait for, so the boundary protects
+   * nothing by holding it back — the surrounding code lets it through unconditionally
+   * whenever the batch happens to contain no goal mutation.
+   *
+   * Traced live on an Android emulator: python declares completionMode "operational", was
+   * batched with an update_goals, and was refused with goal_mutation_boundary. Nothing
+   * about that mutation had any bearing on whether the computation could run.
+   */
+  if (params.requirement.kind === 'operational') {
+    return true;
+  }
   if (params.requirement.kind !== 'effectful') {
     return false;
   }

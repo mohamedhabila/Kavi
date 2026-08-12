@@ -212,3 +212,46 @@ describe('an effect the committed graph already admits', () => {
     ).toBe(false);
   });
 });
+
+describe('operational calls have no admitting goal', () => {
+  // Traced live: python declares completionMode "operational" and was refused with
+  // goal_mutation_boundary purely for sharing a batch with update_goals. The surrounding
+  // code lets an operational call through unconditionally when no mutation is present, so
+  // the boundary was protecting nothing.
+  it('admits an operational call batched with a goal mutation', () => {
+    expect(
+      isEffectAdmittedByBatchGoalMutation({
+        index: 1,
+        lastGoalMutationIndex: 0,
+        requirement: { kind: 'operational', toolName: 'python' },
+        projectedGoals: [],
+        committedGoals: [],
+      }),
+    ).toBe(true);
+  });
+
+  it('admits it regardless of its position in the batch', () => {
+    expect(
+      isEffectAdmittedByBatchGoalMutation({
+        index: 0,
+        lastGoalMutationIndex: 1,
+        requirement: { kind: 'operational', toolName: 'python' },
+        projectedGoals: [],
+        committedGoals: [],
+      }),
+    ).toBe(true);
+  });
+
+  it('still refuses an effectful call no goal admits', async () => {
+    const requirement = await writeRequirement(REPORT_PATH);
+    expect(
+      isEffectAdmittedByBatchGoalMutation({
+        index: 1,
+        lastGoalMutationIndex: 0,
+        requirement,
+        projectedGoals: [],
+        committedGoals: [],
+      }),
+    ).toBe(false);
+  });
+});
