@@ -7,6 +7,50 @@ function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Whether a root field the schema requires is already supplied by every entry of a batch.
+ *
+ * A tool that accepts a batch declares an array property whose items may carry the same
+ * field, so a caller can either set it once at the root or state it per entry. When every
+ * entry states it, the root copy is redundant — refusing the call for its absence rejects
+ * a payload that is complete and unambiguous.
+ *
+ * Traced live on an Android emulator: update_goals was sent as
+ * {"goals":[{"action":"complete","id":"report"}, ...]} with an action on all five entries
+ * and none at the root, and was answered missing_required_argument. The executor already
+ * derives the action from the entries, so only the preflight disagreed.
+ *
+ * The rule reads the schema rather than any tool: find array properties whose item schema
+ * declares this field, and accept when at least one such array is present and every one of
+ * its entries supplies it.
+ */
+function isFieldSuppliedByEveryBatchEntry(
+  tool: ToolDefinition,
+  args: Record<string, unknown>,
+  field: string,
+): boolean {
+  const properties = readSchemaProperties(tool.input_schema);
+
+  return Object.entries(properties).some(([property, schema]) => {
+    if (!isJsonRecord(schema) || schema.type !== 'array') {
+      return false;
+    }
+    const itemProperties = isJsonRecord(schema.items)
+      ? readSchemaProperties(schema.items)
+      : undefined;
+    if (!itemProperties || !(field in itemProperties)) {
+      return false;
+    }
+
+    const entries = args[property];
+    return (
+      Array.isArray(entries) &&
+      entries.length > 0 &&
+      entries.every((entry) => isJsonRecord(entry) && !isMissingRequiredValue(entry[field]))
+    );
+  });
+}
+
 function parseArgumentsRecord(argumentsText: string): Record<string, unknown> | undefined {
   try {
     const parsed = argumentsText ? JSON.parse(argumentsText) : {};
@@ -289,7 +333,9 @@ export function validateToolArgumentsAgainstSchema(params: {
   }
 
   const requiredFields = readRequiredFields(tool.input_schema);
-  const missing = requiredFields.filter((field) => isMissingRequiredValue(args[field]));
+  const missing = requiredFields.filter(
+    (field) => isMissingRequiredValue(args[field]) && !isFieldSuppliedByEveryBatchEntry(tool, args, field),
+  );
   if (missing.length > 0) {
     return enrichToolResultWithSchemaRepair({
       toolName: tool.name,
