@@ -5,6 +5,7 @@ import {
   collectResolvedAttachments,
   stripAttachmentPayloads,
 } from '../../utils/messageAttachments';
+import { collectDelegatedWorkspaceWrites } from '../../engine/graph/delegatedWorkspaceWrites';
 import { OUTPUT_TRUNCATION } from './lifecycle/runConfig';
 import { normalizePreviewText } from './lifecycle/runText';
 import { truncateTranscriptText } from './lifecycle/sessionContextMessages';
@@ -99,8 +100,19 @@ export function createSubAgentStateRuntime<TAgent extends SubAgentSnapshot>(para
   }
 
   function refreshSubAgentArtifacts(agent: TAgent, messages: Message[]): void {
-    const artifacts = collectResolvedAttachments(messages);
-    agent.artifacts = artifacts?.length ? cloneAttachments(artifacts) : undefined;
+    /**
+     * A file the worker wrote is an artifact it produced, even though nothing attached it.
+     *
+     * collectResolvedAttachments reads message attachments, so a worker whose whole job is
+     * to write a document reported artifactCount: 0. Traced on-device, that left the
+     * supervisor's evidence.artifact criterion unsatisfiable by delegation, and the model
+     * rewrote the file the worker had already produced rather than accept it.
+     */
+    const attached = collectResolvedAttachments(messages) ?? [];
+    const written = collectDelegatedWorkspaceWrites(messages);
+    const known = new Set(attached.map((entry) => entry.workspacePath).filter(Boolean));
+    const artifacts = [...attached, ...written.filter((entry) => !known.has(entry.workspacePath))];
+    agent.artifacts = artifacts.length ? cloneAttachments(artifacts) : undefined;
   }
 
   function appendTranscriptMessage(messages: Message[], message: Message): void {
