@@ -103,3 +103,32 @@ describe('the supervisor can now count a delegated deliverable', () => {
     expect(evidence).toEqual([]);
   });
 });
+
+describe('tools this module never names', () => {
+  // Which tools write, which statuses mean the file landed, and where the path sits are
+  // all read from the code-owned effect contracts. image_generate proves it: a different
+  // status word ("generated") and a different path key ("workspacePath") than write_file,
+  // handled without naming the tool here.
+  it('credits an image tool with its own status word and path key', () => {
+    const generated = JSON.stringify({
+      status: 'generated',
+      workspacePath: 'artifacts/tl4/diagram.png',
+    });
+
+    expect(collectDelegatedWorkspaceWrites([toolResult('image_generate', generated)])).toEqual([
+      expect.objectContaining({ workspacePath: 'artifacts/tl4/diagram.png' }),
+    ]);
+  });
+
+  it('ignores an artifact.write whose resource is not a workspace file', () => {
+    // canvas_create declares artifact.write, but its resource is a canvas surface
+    // identified by surfaceId — not a path an evidence.artifact criterion can match.
+    const created = JSON.stringify({ status: 'created', surfaceId: 'surface-1' });
+    expect(collectDelegatedWorkspaceWrites([toolResult('canvas_create', created)])).toEqual([]);
+  });
+
+  it('ignores a tool with no effect contract at all', () => {
+    const done = JSON.stringify({ status: 'written', path: 'artifacts/tl4/x.md' });
+    expect(collectDelegatedWorkspaceWrites([toolResult('mcp__acme__save', done)])).toEqual([]);
+  });
+});

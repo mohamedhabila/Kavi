@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
 // Kavi — Delegated Workspace Writes
 // ---------------------------------------------------------------------------
-// Workspace files a delegated worker wrote, read back out of its own transcript.
+// Workspace files a delegated worker produced, read back out of its transcript.
 //
 // A worker's `artifacts` are collected with `collectResolvedAttachments`, which
 // reads message attachments — images and files attached to a message. A file
-// written with `write_file` produces no attachment, so a worker whose entire job
-// is to write a document reports `artifactCount: 0`.
+// written by a tool produces no attachment, so a worker whose entire job is to
+// write a document reports `artifactCount: 0`.
 //
 // Traced live on an Android emulator. The worker wrote artifacts/tl4/risks.md and
 // terminated `verified_success`, and its result still carried `artifacts: null`.
@@ -19,48 +19,99 @@
 //    parent write_file. Let me write risks.md with the verified worker content
 //    to register that evidence."
 //
-// It then rewrote the file the worker had already produced. Delegation doubled
-// the work instead of saving it.
+// It then rewrote the file the worker had already produced.
 //
-// The write receipts are already in the worker's transcript: every successful
-// `write_file` result names the path it verified. Reading them back is what makes
-// a delegated deliverable count as delivered.
+// Which tools write, which results mean the file exists, and where the path sits
+// in a result are all read from the code-owned effect contracts rather than named
+// here. A tool earns its way in by declaring `artifact.write`, so tools added
+// later — including ones this file has never heard of — are covered without edits,
+// and no result text is pattern matched.
 // ---------------------------------------------------------------------------
 
 import type { Attachment } from '../../types/attachment';
 import type { Message } from '../../types/message';
+import { getCodeOwnedToolEffectContract } from '../toolExecution/toolEffectReceiptContracts';
 
-/** Tools whose successful result names a workspace path they persisted. */
-const WORKSPACE_WRITE_TOOL_NAMES = new Set(['write_file', 'file_edit']);
+const WORKSPACE_ARTIFACT_EFFECT_KIND = 'artifact.write';
+/** Resource kind the contracts use for a file addressable by workspace-relative path. */
+const WORKSPACE_FILE_RESOURCE_KIND = 'workspace_file';
 
 function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function readWrittenPath(content: string | undefined): string | undefined {
-  if (!content || !content.includes('"path"')) {
+function readPath(source: unknown, path: ReadonlyArray<string>): unknown {
+  return path.reduce<unknown>(
+    (value, key) => (isJsonRecord(value) ? value[key] : undefined),
+    source,
+  );
+}
+
+function parseResult(content: string | undefined): Record<string, unknown> | undefined {
+  if (!content) {
     return undefined;
   }
-
+  const trimmed = content.trim();
+  if (!trimmed.startsWith('{')) {
+    return undefined;
+  }
   try {
-    const parsed: unknown = JSON.parse(content);
-    if (!isJsonRecord(parsed)) {
-      return undefined;
-    }
-    // Only a result that reports a persisted write counts. A read, a refusal, or a
-    // failed attempt names a path too, and none of them prove the file exists.
-    if (parsed.status !== 'written' && parsed.status !== 'edited') {
-      return undefined;
-    }
-    const path = parsed.path;
-    return typeof path === 'string' && path.trim() ? path.trim() : undefined;
+    const parsed: unknown = JSON.parse(trimmed);
+    return isJsonRecord(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }
 }
 
 /**
- * Workspace paths the transcript shows were written, in first-seen order.
+ * The workspace path a result proves exists, or undefined.
+ *
+ * The contract supplies every judgement: whether the tool writes artifacts at all, which
+ * of its result statuses mean the write landed, and where the path lives in the payload.
+ * A status the contract does not map — a refusal, a read, a failure — yields nothing,
+ * because only an outcome that reports the effect applied proves a file is there.
+ */
+function readWrittenWorkspacePath(
+  toolName: string | undefined,
+  resultText: string | undefined,
+): string | undefined {
+  const contract = getCodeOwnedToolEffectContract(toolName?.trim() || '');
+  if (!contract || contract.effectKind !== WORKSPACE_ARTIFACT_EFFECT_KIND) {
+    return undefined;
+  }
+
+  const resultContract = contract.result;
+  const selector = resultContract?.resource;
+  if (!resultContract || !selector || selector.source !== 'result') {
+    return undefined;
+  }
+
+  /**
+   * `artifact.write` covers more than files: canvas_create declares it too, and its
+   * resource is a `canvas_surface` identified by surfaceId. Only a resource the contract
+   * calls a workspace file names a path an evidence.artifact criterion can match.
+   */
+  if (selector.kind !== WORKSPACE_FILE_RESOURCE_KIND) {
+    return undefined;
+  }
+
+  const result = parseResult(resultText);
+  if (!result) {
+    return undefined;
+  }
+
+  const status = readPath(result, resultContract.statusPath);
+  const outcome = typeof status === 'string' ? resultContract.outcomes[status] : undefined;
+  if (!outcome || outcome.effectState !== 'applied') {
+    return undefined;
+  }
+
+  const path = readPath(result, selector.path);
+  return typeof path === 'string' && path.trim() ? path.trim() : undefined;
+}
+
+/**
+ * Workspace paths the transcript shows were produced, in first-seen order.
  *
  * Shaped like the attachment list the delegated-evidence collector already reads, so a
  * written file and an attached file are credited the same way.
@@ -72,20 +123,16 @@ export function collectDelegatedWorkspaceWrites(
 
   for (const message of messages) {
     for (const toolCall of message.toolCalls ?? []) {
-      const name = toolCall.name?.trim();
-      if (!name || !WORKSPACE_WRITE_TOOL_NAMES.has(name)) {
-        continue;
-      }
-      const path = readWrittenPath(toolCall.result ?? undefined);
+      const path = readWrittenWorkspacePath(toolCall.name, toolCall.result ?? undefined);
       if (path) {
         paths.add(path);
       }
-    }
-
-    if (message.role === 'tool') {
-      const path = readWrittenPath(message.content);
-      if (path) {
-        paths.add(path);
+      // A tool message carries the result beside the call that produced it.
+      if (message.role === 'tool') {
+        const fromMessage = readWrittenWorkspacePath(toolCall.name, message.content);
+        if (fromMessage) {
+          paths.add(fromMessage);
+        }
       }
     }
   }
