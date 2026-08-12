@@ -101,7 +101,7 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
           description:
             'Structural completion criterion. For a workspace deliverable use evidence.artifact:<exact-workspace-relative-path>, never evidence.prefix:artifact. evidence.prefix tokens must reference registered evidence sources such as tool names or worker.',
         },
-        description: `Blocking deliverables only. Omit for persistent focus goals. Include at least one specific criterion; evidence.min and evidence.count cannot stand alone. For workspace files, use one evidence.artifact:<exact-workspace-relative-path> criterion per required file. Supported forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
+        description: `Blocking deliverables only. Omit for persistent focus goals. Include at least one specific criterion; evidence.min and evidence.count cannot stand alone. A step with no concrete deliverable — a review, a verification, a summary — has nothing specific to assert, so give it completionPolicy "persistent" and omit successCriteria rather than inventing a criterion for it. For workspace files, use one evidence.artifact:<exact-workspace-relative-path> criterion per required file. A file written by a delegated worker satisfies the same evidence.artifact criterion, so do not rewrite it yourself to record evidence. Supported forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
       },
       retainCurrentUserConstraint: {
         type: 'boolean',

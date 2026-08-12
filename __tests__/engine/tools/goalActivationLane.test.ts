@@ -121,3 +121,25 @@ describe('the guidance matches the rule', () => {
     );
   });
 });
+
+describe('steps that have no deliverable', () => {
+  // Traced live: the model authored a `verify` goal as blocking with only
+  // evidence.min/evidence.count, which is refused — and the refusal discarded the four
+  // valid goals declared alongside it, forcing a full re-send. A verification step has
+  // nothing specific to assert, so the contract now says to make it persistent.
+  it('tells the model to make a review or verification persistent', () => {
+    const criteria = (UPDATE_GOALS_TOOL.input_schema as { properties: Record<string, { description: string }> })
+      .properties.successCriteria.description;
+
+    expect(criteria).toContain('no concrete deliverable');
+    expect(criteria).toContain('persistent');
+  });
+
+  it('tells the model a delegated write satisfies the same criterion', () => {
+    const criteria = (UPDATE_GOALS_TOOL.input_schema as { properties: Record<string, { description: string }> })
+      .properties.successCriteria.description;
+
+    expect(criteria).toContain('delegated worker satisfies the same evidence.artifact');
+    expect(criteria).toContain('do not rewrite it yourself');
+  });
+});
