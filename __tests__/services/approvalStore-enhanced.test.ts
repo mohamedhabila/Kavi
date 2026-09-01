@@ -95,6 +95,68 @@ describe('assessToolRisk', () => {
     const result = assessToolRisk('ssh_list_directory', {});
     expect(result.level).toBe('medium');
   });
+
+  it('flags every javascript call as high risk, ineligible for a persistent grant', () => {
+    const result = assessToolRisk('javascript', { code: 'return 1 + 1;' });
+    expect(result.level).toBe('high');
+    expect(result.reasons).toContain('Runs model-written code in the app runtime');
+
+    const grantCandidate = buildApprovalGrantCandidate({
+      toolName: 'javascript',
+      args: { code: 'return 1 + 1;' },
+      riskLevel: result.level,
+      destructive: result.destructive,
+    });
+    expect(grantCandidate).toBeUndefined();
+  });
+
+  it('flags python as high risk when allowNetwork is true', () => {
+    const result = assessToolRisk('python', { code: 'print(1)', allowNetwork: true });
+    expect(result.level).toBe('high');
+    expect(result.reasons).toContain('Network access requested via allowNetwork');
+  });
+
+  it('flags python as high risk when indexUrls is present', () => {
+    const result = assessToolRisk('python', {
+      code: 'print(1)',
+      indexUrls: ['https://example.com/simple'],
+    });
+    expect(result.level).toBe('high');
+    expect(result.reasons).toContain('Custom package index requested via indexUrls');
+  });
+
+  it('flags python as high risk when a package entry is URL-shaped', () => {
+    const result = assessToolRisk('python', {
+      code: 'print(1)',
+      packages: ['https://example.com/pkg-1.0.0-py3-none-any.whl'],
+    });
+    expect(result.level).toBe('high');
+    expect(result.reasons).toEqual([
+      'URL-shaped package spec requested: https://example.com/pkg-1.0.0-py3-none-any.whl',
+    ]);
+  });
+
+  it('flags python as high risk when a package entry names a URL via " @ http"', () => {
+    const result = assessToolRisk('python', {
+      code: 'print(1)',
+      packages: ['mypkg @ http://example.com/mypkg.whl'],
+    });
+    expect(result.level).toBe('high');
+  });
+
+  it('leaves plain sandboxed python calls unchanged', () => {
+    const result = assessToolRisk('python', { code: 'print(1)' });
+    expect(result.level).toBe('low');
+    expect(result.reasons).toEqual([]);
+
+    const grantCandidate = buildApprovalGrantCandidate({
+      toolName: 'python',
+      args: { code: 'print(1)' },
+      riskLevel: result.level,
+      destructive: result.destructive,
+    });
+    expect(grantCandidate).toBeDefined();
+  });
 });
 
 describe('allowlist management', () => {

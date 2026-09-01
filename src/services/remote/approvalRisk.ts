@@ -1,6 +1,7 @@
 import { parse as shellParse } from 'shell-quote';
 
 import type { RemoteApprovalRequest } from '../../types/remote';
+import { extractPackageSpecUrl } from '../python/requestNormalization';
 
 export type ApprovalScope = NonNullable<RemoteApprovalRequest['scope']>;
 
@@ -222,6 +223,16 @@ export function getApprovalScope(toolName: string): ApprovalScope {
   return 'other';
 }
 
+/**
+ * Lowest risk level the approval-grant matcher treats as ineligible for a
+ * persistent ("always allow") grant — see `REUSABLE_RISK_LEVELS` in
+ * approvalGrants.ts and the `riskLevel !== 'high' && riskLevel !== 'critical'`
+ * check in approvalStore.ts's grantCandidateMatchesRequest. Assigning this
+ * level forces per-call confirmation without escalating all the way to
+ * 'critical'.
+ */
+const PER_CALL_CONFIRMATION_LEVEL: RiskLevel = 'high';
+
 export function assessToolRisk(
   toolName: string,
   args?: Record<string, unknown>,
@@ -237,6 +248,49 @@ export function assessToolRisk(
       executable: '',
       destructive: false,
     };
+  }
+
+  if (toolName === 'javascript') {
+    return {
+      level: PER_CALL_CONFIRMATION_LEVEL,
+      reasons: ['Runs model-written code in the app runtime'],
+      executable: '',
+      destructive: false,
+    };
+  }
+
+  if (toolName === 'python') {
+    const indexUrls = Array.isArray(args?.indexUrls) ? args.indexUrls : [];
+    const packages = Array.isArray(args?.packages) ? args.packages : [];
+    const urlShapedPackage = packages.find(
+      (entry): entry is string =>
+        typeof entry === 'string' && extractPackageSpecUrl(entry) !== undefined,
+    );
+
+    if (args?.allowNetwork === true) {
+      return {
+        level: PER_CALL_CONFIRMATION_LEVEL,
+        reasons: ['Network access requested via allowNetwork'],
+        executable: '',
+        destructive: false,
+      };
+    }
+    if (indexUrls.some((entry) => typeof entry === 'string' && entry.length > 0)) {
+      return {
+        level: PER_CALL_CONFIRMATION_LEVEL,
+        reasons: ['Custom package index requested via indexUrls'],
+        executable: '',
+        destructive: false,
+      };
+    }
+    if (urlShapedPackage) {
+      return {
+        level: PER_CALL_CONFIRMATION_LEVEL,
+        reasons: [`URL-shaped package spec requested: ${urlShapedPackage}`],
+        executable: '',
+        destructive: false,
+      };
+    }
   }
 
   const scope = getApprovalScope(toolName);

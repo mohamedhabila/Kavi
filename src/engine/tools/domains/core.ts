@@ -113,7 +113,9 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
       'The runtime provides standard JS built-ins, `console`, a workspace-aware `fs` bridge both as the global `fs` object and `require("fs")` / `require("node:fs")` (including `readFile`, `readFileSync`, `writeFile`, `writeFileSync`, `exists`, `existsSync`, `statSync`, `readdirSync`, `listFiles`, and `deleteFile` / `unlinkSync`), `data` helpers for JSON/CSV/YAML, `env`, and `process.argv`/`process.cwd()` plus `__dirname`/`__filename` for file-based runs. ' +
       'Workspace modules can be loaded with CommonJS `require()` using relative paths or workspace-root paths, and changed workspace files are synced back automatically after successful execution. ' +
       'Provide either `code` for inline execution or `path` for a workspace entry script. ' +
-      'Limitations: synchronous only, NO async/await, NO Promises, NO setTimeout, NO fetch, NO DOM APIs, and NO real Node built-ins or npm package resolution beyond the workspace bridge helpers. Use CommonJS `require()`, not ESM `import`.',
+      'Limitations: synchronous only, NO async/await, NO Promises, NO DOM APIs, and NO real Node built-ins or npm package resolution beyond the workspace bridge helpers. ' +
+      "The snippet runs in the app's own JavaScript runtime, not an isolated sandbox — fetch, setTimeout, and other ambient globals remain reachable — so every call requires approval. " +
+      'Use CommonJS `require()`, not ESM `import`.',
     input_schema: {
       type: 'object',
       properties: {
