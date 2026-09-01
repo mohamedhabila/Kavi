@@ -65,12 +65,19 @@ function nameSimilarity(candidate: string, requested: string): number {
 /** Below this a "did you mean" is noise rather than help. */
 const SUGGESTION_THRESHOLD = 0.45;
 
+/**
+ * A name this long is not a near-miss of anything registered — the longest registered
+ * name is a fraction of it — so scoring it against every tool would spend O(len × name)
+ * per tool on a string the model produced by accident, for a suggestion that cannot exist.
+ */
+const NEAR_MISS_NAME_MAX_LENGTH = 128;
+
 export function findNearestRegisteredTool(
   requestedName: string,
   availableToolNames?: ReadonlySet<string>,
 ): ToolDefinition | undefined {
   const requested = normalizeToolName(requestedName);
-  if (!requested) {
+  if (!requested || requested.length > NEAR_MISS_NAME_MAX_LENGTH) {
     return undefined;
   }
 
