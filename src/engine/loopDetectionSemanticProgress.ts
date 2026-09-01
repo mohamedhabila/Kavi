@@ -32,7 +32,28 @@ export function isDistinctInformationOnlyToolMultiset(multisetKey: string | unde
   return toolNames.length > 0 && toolNames.every(isInformationInspectionTool);
 }
 
-export function isCompletedDistinctInformationProgressWindow(
+/**
+ * Whether a window of repeated tool calls did distinct work rather than spinning.
+ *
+ * Goal state is the graph's measure of progress, and it is deliberately unchanged while a
+ * model debugs: isolating a wrong number produces no artifact and closes no goal. Tool
+ * names are no better a measure, because iterating on one problem means calling one tool.
+ * What separates iteration from a loop is whether each call asked something new and got
+ * something new back — every argument distinct and every result distinct across the whole
+ * window. The moment a result repeats, the window stops qualifying and detection resumes.
+ *
+ * Traced live on an Android emulator. The model ran a Monte Carlo NPV in `python`, read
+ * ~-4400M where ~+130M was expected, said "let me debug the calculation", then "there's a
+ * discrepancy between the vectorized and manual NPV, let me isolate the bug" — three
+ * different programs, three different outputs, a real defect correctly diagnosed. The run
+ * was killed `loop_detected` on the third call.
+ *
+ * The gate was `isInformationInspectionTool`, so only reads could ever demonstrate
+ * progress; a compute tool had no way to show it had done anything, no matter what it
+ * computed. Distinct-in, distinct-out is what the check always meant, and it is a property
+ * of the call, not of the tool's category — so it is asked of every tool.
+ */
+export function isCompletedDistinctProgressWindow(
   params: {
     history: ReadonlyArray<InformationToolCallRecord>;
     multisetKey: string | undefined;
@@ -41,7 +62,7 @@ export function isCompletedDistinctInformationProgressWindow(
   defaultCount: number,
 ): boolean {
   const toolNames = (params.multisetKey ?? '').split('|').filter(Boolean);
-  if (toolNames.length === 0 || !toolNames.every(isInformationInspectionTool)) {
+  if (toolNames.length === 0) {
     return false;
   }
 
@@ -49,12 +70,7 @@ export function isCompletedDistinctInformationProgressWindow(
   const recent = params.history.slice(-count);
   if (
     recent.length !== count ||
-    recent.some(
-      (entry) =>
-        entry.status !== 'completed' ||
-        entry.result === undefined ||
-        !isInformationInspectionTool(normalizeToolNameKey(entry.name)),
-    )
+    recent.some((entry) => entry.status !== 'completed' || entry.result === undefined)
   ) {
     return false;
   }

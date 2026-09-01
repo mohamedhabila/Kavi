@@ -12,7 +12,7 @@ import {
 } from './loopDetectionKeys';
 import {
   countTrailingIdenticalInformationResults,
-  isCompletedDistinctInformationProgressWindow,
+  isCompletedDistinctProgressWindow,
   isDistinctInformationOnlyToolMultiset,
 } from './loopDetectionSemanticProgress';
 export { hashResult, hashToolCall } from './loopDetectionKeys';
@@ -622,7 +622,7 @@ export function detectLoops(
         multisetKey: stagnantProgress.multisetKey,
         count: stagnantProgress.count,
       }) ||
-      isCompletedDistinctInformationProgressWindow(
+      isCompletedDistinctProgressWindow(
         {
           history,
           multisetKey: stagnantProgress.multisetKey,
