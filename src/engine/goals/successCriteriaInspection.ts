@@ -8,10 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { GOAL_BOOTSTRAP_TOOL_NAME } from './bootstrap';
-import {
-  isCountOnlySuccessCriterion,
-  isRecognizedSuccessCriterionForm,
-} from './completionEvidence';
+import { isRecognizedSuccessCriterionForm } from './completionEvidence';
 import type { AgentGoal, AgentGoalMutation } from './types';
 import { isRegisteredToolName } from '../tools/toolNameNormalization';
 import { EFFECT_RECEIPT_EVIDENCE_PREFIX } from './effectCompletionEvidence';
@@ -60,13 +57,6 @@ export function shouldValidateSuccessCriteria(
 export function hasStructuralSuccessCriteria(patch: AgentGoalMutation['goals'][number]): boolean {
   return (patch.successCriteria ?? []).some((criterion) =>
     isRecognizedSuccessCriterionForm(criterion),
-  );
-}
-
-export function hasSpecificSuccessCriteria(patch: AgentGoalMutation['goals'][number]): boolean {
-  return (patch.successCriteria ?? []).some(
-    (criterion) =>
-      isRecognizedSuccessCriterionForm(criterion) && !isCountOnlySuccessCriterion(criterion),
   );
 }
 

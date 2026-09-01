@@ -100,7 +100,6 @@ function normalizeAddGoalPatch(
     .map((criterion) => criterion.trim())
     .filter(Boolean);
   const recognizedCriteria = criteria.filter(isRecognizedSuccessCriterionForm);
-  const hasUnrecognizedCriteria = recognizedCriteria.length !== criteria.length;
   const hasSpecificRecognizedCriteria = recognizedCriteria.some(
     (criterion) => !isCountOnlySuccessCriterion(criterion),
   );
@@ -118,12 +117,26 @@ function normalizeAddGoalPatch(
     options.defaultCompletionPolicy ??
     (hasSpecificRecognizedCriteria ? 'blocking' : 'persistent');
 
+  /**
+   * How strong a blocking goal's criteria must be is the model's call, not the graph's.
+   * `evidence.min:1` is a weaker gate than `evidence.artifact:<path>`, but it is a gate:
+   * finalization evaluates it and refuses a run that never recorded the evidence. Refusing
+   * to *record* such a goal protects nothing and costs everything — the whole batch is
+   * discarded, including the goals that were well formed, and the run proceeds with no
+   * graph at all.
+   *
+   * Traced live on an Android emulator: a five-goal opening batch rejected whole over
+   * "[verify] Blocking goals require at least one specific structural successCriteria".
+   *
+   * What cannot be admitted as stated is a blocking goal with no recognized criterion at
+   * all. `areBlockingGoalsStructurallyComplete` requires a non-empty criteria list, so
+   * such a goal is not a weak gate but an unsatisfiable one: nothing the run does can ever
+   * close it, and the run can never finalize. Holding it as the ongoing focus it describes
+   * is the remedy the rejection message already named, and it is the only reading under
+   * which the goal remains reachable.
+   */
   const shouldStoreAsPersistentFocus =
-    completionPolicy === 'persistent' ||
-    (patch.status === 'active' &&
-      completionPolicy === 'blocking' &&
-      hasUnrecognizedCriteria &&
-      !hasSpecificRecognizedCriteria);
+    completionPolicy === 'persistent' || recognizedCriteria.length === 0;
 
   if (shouldStoreAsPersistentFocus) {
     const next = { ...patch, completionPolicy: 'persistent' as const };

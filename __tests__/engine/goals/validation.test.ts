@@ -51,7 +51,11 @@ describe('goal validation', () => {
       );
     });
 
-    it('reports error for blocking add mutation with only count criteria', () => {
+    it('accepts a blocking add whose only criterion is a count', () => {
+      // How strong to make a gate is the model's judgement. A count is a weaker gate than
+      // an artifact path, but finalization evaluates it and refuses a run that recorded no
+      // evidence, so the goal still gates. Refusing it here discarded the whole batch —
+      // traced live on a five-goal opening mutation that left the run with no graph at all.
       const result = validateGoalMutation(
         {
           action: 'add',
@@ -65,10 +69,8 @@ describe('goal validation', () => {
         },
         [],
       );
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContainEqual(
-        expect.objectContaining({ code: 'weak_success_criteria' }),
-      );
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
     });
 
     it('reports error when blocking criteria use update_goals as work evidence', () => {

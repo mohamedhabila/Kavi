@@ -457,13 +457,17 @@ export function isSuccessCriterionMet(goal: AgentGoal, criterion: string): boole
  * file and got two plus an unrelated fetch, and the goal then closed on the counter
  * rather than on the work.
  *
- * Every other subsystem already treats a count as proving nothing: it does not make a
- * goal specific (`hasSpecificSuccessCriteria`), it routes no evidence
- * (`hasRoutableSuccessCriteria`), it yields no satisfying action
- * (`describeCriterionSatisfactionAction`), it cannot be a blocking goal's only criterion
- * (`goalAdmission`), and it alone may be revised away from a blocking goal
- * (`blockingGoalUpdateValidation`). Letting it gate anyway was the last place a count
- * still spoke, and the only thing it could say was "do more".
+ * Every other subsystem already treats a count as proving nothing *alongside* specific
+ * criteria: it does not make a goal specific enough to derive `blocking` from
+ * (`normalizeAddGoalPatch`), it routes no evidence (`hasRoutableSuccessCriteria`), it
+ * yields no satisfying action (`describeCriterionSatisfactionAction`), and it alone may be
+ * revised away from a blocking goal (`blockingGoalUpdateValidation`). Letting it gate
+ * alongside them was the last place a count still spoke, and the only thing it could say
+ * was "do more".
+ *
+ * A count declared on its own is not that case: the fallback below keeps it, because a
+ * goal whose author chose only a count still means to gate on something, and the
+ * alternative — an empty gating set — would close the goal on nothing at all.
  *
  * So a count stops gating a goal that carries a real criterion — that criterion is the
  * gate, and the count adds only an incentive to manufacture work. A goal whose criteria

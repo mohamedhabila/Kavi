@@ -26,7 +26,6 @@ import {
   findUnsatisfiableStructuralCriteria,
   findUnknownToolEvidenceCriteria,
   formatRegisteredNonToolEvidencePrefixes,
-  hasSpecificSuccessCriteria,
   hasStructuralSuccessCriteria,
   shouldValidateSuccessCriteria,
 } from './successCriteriaInspection';
@@ -307,6 +306,23 @@ export function validateGoalMutation(
             'Goal completionPolicy is required when adding. Use blocking for finite deliverables or persistent for ongoing focus.',
         });
       }
+      /**
+       * There is deliberately no companion rule demanding that the criterion be a
+       * *specific* one. How strong to make a gate is the model's judgement: `evidence.min:1`
+       * is weaker than `evidence.artifact:<path>`, but `resolveGatingSuccessCriteria` falls
+       * back to a count when nothing specific is declared, so finalization still evaluates
+       * it and still refuses a run that recorded no evidence. Rejecting the weaker form
+       * discarded the entire batch — every well-formed goal alongside the weak one — and
+       * left the run with no graph at all, which is the outcome the rule meant to prevent.
+       * Traced live on an Android emulator over a five-goal opening batch:
+       * "[verify] Blocking goals require at least one specific structural successCriteria".
+       *
+       * A goal with no recognized criterion at all is the different case this rule keeps:
+       * `areBlockingGoalsStructurallyComplete` requires a non-empty criteria list, so such
+       * a goal is not a weak gate but one nothing can ever open. Normalization admits it as
+       * the ongoing focus it describes before validation sees it, so this message is
+       * reached only by a caller that validates without normalizing first.
+       */
       if (g.completionPolicy === 'blocking' && !hasStructuralSuccessCriteria(g)) {
         errors.push({
           goalId: g.id,
@@ -320,18 +336,6 @@ export function validateGoalMutation(
             'Either declare a structural criterion describing the deliverable, or use ' +
             'completionPolicy "persistent" if this goal is an ongoing focus with nothing ' +
             'to verify. Re-sending this goal unchanged will be rejected the same way.',
-        });
-      }
-      if (
-        g.completionPolicy === 'blocking' &&
-        hasStructuralSuccessCriteria(g) &&
-        !hasSpecificSuccessCriteria(g)
-      ) {
-        errors.push({
-          goalId: g.id,
-          code: 'weak_success_criteria',
-          message:
-            'Blocking goals require at least one specific structural successCriteria; evidence.min and evidence.count can supplement but cannot be the only criteria. For workspace deliverables use evidence.artifact:<exact-workspace-relative-path>.',
         });
       }
       if (g.id?.trim() && existingIds.has(g.id.trim())) {

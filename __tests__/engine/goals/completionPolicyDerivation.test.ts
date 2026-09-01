@@ -46,8 +46,8 @@ describe('completionPolicy is derived when the caller omits it', () => {
   });
 
   it('does not derive blocking from a count-only criterion', () => {
-    // `evidence.min:N` is recognized but not specific, and the validator does not accept
-    // it as a blocking deliverable. Deriving blocking here would recreate the dead end.
+    // Derivation stays conservative when the caller said nothing: a count is a thin basis
+    // on which to infer an intent to gate. A caller that states `blocking` is believed.
     expect(addGoal({ status: 'active', successCriteria: ['evidence.min:2'] }).goals[0]
       ?.completionPolicy).toBe('persistent');
   });
@@ -61,16 +61,35 @@ describe('completionPolicy is derived when the caller omits it', () => {
     ).toBe('blocking');
   });
 
-  it('still refuses an explicit blocking goal that declares no deliverable', () => {
-    // Derivation must not silently downgrade a stated intent into a non-gating goal.
+  it('admits an explicit blocking goal that declares no deliverable, as a focus', () => {
+    // This once refused the call to protect the stated intent to gate. It protected
+    // nothing: areBlockingGoalsStructurallyComplete requires a non-empty criteria list, so
+    // a blocking goal with no criteria is a gate nothing can open, and refusing it threw
+    // away every other goal in the batch. Holding it as the focus it describes is the
+    // remedy the rejection message itself named.
     const { errors, goals } = addGoal({ status: 'active', completionPolicy: 'blocking' });
 
-    expect(goals).toHaveLength(0);
-    expect(errors.join(' ')).toContain('persistent');
+    expect(errors).toEqual([]);
+    expect(goals[0]?.id).toBe('trip-plan');
+    expect(goals[0]?.completionPolicy).toBe('persistent');
+  });
+
+  it('believes a stated blocking intent wherever a criterion can carry it', () => {
+    const { errors, goals } = addGoal({
+      status: 'active',
+      completionPolicy: 'blocking',
+      successCriteria: ['evidence.min:1'],
+    });
+
+    expect(errors).toEqual([]);
+    expect(goals[0]?.completionPolicy).toBe('blocking');
   });
 });
 
 describe('the blocking-without-criteria rejection is recoverable', () => {
+  // Normalization admits this shape before the validator sees it, so the message is now
+  // reached only by a caller that validates without normalizing. It must still name both
+  // ways out, because a rule stated without a legal move is what stalled the run.
   it('names both ways out rather than only restating the rule', () => {
     const { errors } = validateGoalMutation(
       {
