@@ -67,3 +67,14 @@ The following are usually out of scope unless they create a direct security impa
 - Avoid sharing sensitive logs or payloads in public issues and pull requests.
 - Prefer minimal proof-of-concept material over broad dumps of personal or
   production data.
+
+## Known Limitations
+
+- The `javascript` tool executes model-supplied code in the app's own
+  JavaScript runtime, not an isolated sandbox. Every invocation requires
+  approval.
+- Outbound network policy for tools is enforced by hostname/IP-literal
+  allowlisting and does not resolve DNS before connecting, so DNS-rebinding
+  style bypasses are not currently prevented.
+- Reports showing that either of these enables a concrete impact beyond what
+  is described here are welcome through the disclosure process above.
