@@ -163,7 +163,7 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
       'Execute Python code or a workspace Python script in a sandboxed Pyodide (CPython on WASM) environment and return the result. ' +
       `${PYTHON_EXTENSION_WHEN_NEEDED} ${PYTHON_EXTENSION_EXAMPLES} ${PYTHON_EXTENSION_POLICY} ` +
       'Supports most of the Python standard library. Third-party packages install themselves: writing `import numpy` is enough for numpy, pandas, scipy, and any other Pyodide-compatible distribution to be fetched and loaded before the code runs. ' +
-      'Package loading needs no arguments — `packages` is only for pinning a version or naming a wheel URL, and `allowNetwork` does not gate it. ' +
+      'Package loading needs no arguments — `packages` is only for pinning a version or naming a wheel URL: names and version pins install from the runtime\'s package index without `allowNetwork`, while wheel and index URLs must pass the app\'s network allowlist. ' +
       'Execution runs on a dedicated worker-backed runtime inside a hidden WebView, is serialized on a shared session, and uses bounded reload-and-retry recovery instead of hanging indefinitely. ' +
       'Captures stdout, stderr, tracebacks, and the return value of the last expression for inline code. Top-level `await` is supported for inline code and script files. ' +
       'For both inline code and script files, the conversation workspace is mounted into the runtime, workspace-root imports are available on `sys.path`, and any changed output files are synced back into the conversation workspace. ' +

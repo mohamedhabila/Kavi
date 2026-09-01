@@ -1,3 +1,4 @@
+import { isAllowedUrl } from '../security/ssrf';
 import {
   DEFAULT_PYODIDE_DISPATCH_ACK_TIMEOUT_MS,
   DEFAULT_PYTHON_EXECUTION_TIMEOUT_MS,
@@ -10,6 +11,10 @@ import type {
 } from './types';
 
 const HTTP_URL_PATTERN = /^https?:\/\/\S+$/i;
+// Matches the URL half of a PEP 508 direct reference, e.g. "pkg @ https://host/pkg.whl" or
+// "pkg @ https://host/pkg.whl ; python_version >= '3.8'". Stops at the first whitespace or
+// `;` so a trailing environment marker cannot hide inside the captured URL.
+const PACKAGE_DIRECT_REFERENCE_URL_PATTERN = /@\s*(https?:\/\/[^\s;]+)/i;
 
 export function normalizeWorkspaceRelativePath(path: unknown): string | undefined {
   if (typeof path !== 'string') {
@@ -91,6 +96,44 @@ export function normalizeIndexUrls(indexUrls: unknown): string[] {
   return Array.from(normalized);
 }
 
+/**
+ * The URL a `packages` entry would fetch, or undefined for a plain name or version pin
+ * ("numpy", "numpy==1.26.0"), which resolve through Pyodide's own package index and are
+ * never fetched from a model-chosen host. Shared with approval-risk assessment so the
+ * network gate and the confirmation tier agree on what counts as a URL.
+ */
+export function extractPackageSpecUrl(spec: string): string | undefined {
+  if (HTTP_URL_PATTERN.test(spec)) {
+    return spec;
+  }
+  const directReference = spec.match(PACKAGE_DIRECT_REFERENCE_URL_PATTERN);
+  return directReference ? directReference[1] : undefined;
+}
+
+// `packages` wheel URLs and `indexUrls` are fetched by Pyodide's package
+// loader on the WebView's raw `fetch`, not the native HTTP bridge — the same
+// path used to resolve `import numpy` automatically. That path runs before
+// `allowNetwork` is ever evaluated, so it is not gated by it, and it never
+// passes through the native SSRF check that guards `kavi.http` requests.
+// This is the last point before the execute message reaches the worker, so
+// every model-supplied URL is checked here against the same allowlist.
+function findDisallowedPackageUrl(packages: string[], indexUrls: string[]): string | undefined {
+  for (const indexUrl of indexUrls) {
+    if (!isAllowedUrl(indexUrl)) {
+      return indexUrl;
+    }
+  }
+
+  for (const spec of packages) {
+    const url = extractPackageSpecUrl(spec);
+    if (url && !isAllowedUrl(url)) {
+      return url;
+    }
+  }
+
+  return undefined;
+}
+
 export function normalizePythonEnv(env: unknown): Record<string, string> {
   if (!env || typeof env !== 'object' || Array.isArray(env)) {
     return {};
@@ -155,6 +198,16 @@ export function normalizePythonExecutionRequest(request: PythonExecutionRequest)
       ? request.timeoutMs
       : DEFAULT_PYTHON_EXECUTION_TIMEOUT_MS;
 
+  const packages = normalizePackageSpecs(request.packages);
+  const indexUrls = normalizeIndexUrls(request.indexUrls);
+
+  const disallowedUrl = findDisallowedPackageUrl(packages, indexUrls);
+  if (disallowedUrl) {
+    return {
+      error: `Python execution rejected the package URL "${disallowedUrl}": it is outside the permitted network policy.`,
+    };
+  }
+
   return {
     request: {
       code: typeof request.code === 'string' ? request.code : '',
@@ -162,8 +215,8 @@ export function normalizePythonExecutionRequest(request: PythonExecutionRequest)
       argv: normalizePythonArgv(request.argv),
       files: normalizeWorkspaceFiles(request.files),
       workingDirectory: normalizedWorkingDirectory || '',
-      packages: normalizePackageSpecs(request.packages),
-      indexUrls: normalizeIndexUrls(request.indexUrls),
+      packages,
+      indexUrls,
       env: normalizePythonEnv(request.env),
       allowNetwork: request.allowNetwork === true,
       timeoutMs,

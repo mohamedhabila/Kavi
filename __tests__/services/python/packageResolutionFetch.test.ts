@@ -84,7 +84,11 @@ const pythonDescription = CORE_DOMAIN_TOOLS.find((t) => t.name === 'python')?.de
 describe('the tool description matches what the runtime does', () => {
   it('tells the model imports install themselves and no flag is needed', () => {
     expect(pythonDescription).toContain('Third-party packages install themselves');
-    expect(pythonDescription).toContain('`allowNetwork` does not gate it');
+    expect(pythonDescription).toContain("install from the runtime's package index without `allowNetwork`");
+  });
+
+  it('tells the model wheel and index URLs go through the network allowlist', () => {
+    expect(pythonDescription).toContain("wheel and index URLs must pass the app's network allowlist");
   });
 
   it('no longer implies micropip is the route a caller must take', () => {
