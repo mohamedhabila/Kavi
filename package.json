@@ -2,6 +2,14 @@
   "name": "kavi",
   "version": "1.0.0",
   "description": "Kavi is a mobile-first AI assistant for iOS and Android with agentic workflows, on-device models, and remote work tooling.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamedhabila/Kavi.git"
+  },
+  "homepage": "https://github.com/mohamedhabila/Kavi#readme",
+  "bugs": {
+    "url": "https://github.com/mohamedhabila/Kavi/issues"
+  },
   "private": true,
   "license": "MIT",
   "keywords": [
