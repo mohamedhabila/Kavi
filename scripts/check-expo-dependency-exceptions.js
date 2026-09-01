@@ -2,7 +2,7 @@ const packageManifest = require('../package.json');
 
 const GESTURE_HANDLER_PACKAGE = 'react-native-gesture-handler';
 const validatedDependencyTuple = Object.freeze({
-  expo: '~55.0.28',
+  expo: '~55.0.31',
   reactNative: '0.83.10',
   gestureHandler: '~2.31.2',
 });
