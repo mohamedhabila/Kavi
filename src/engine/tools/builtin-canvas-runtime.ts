@@ -13,6 +13,7 @@ import {
   pickFirstCanvasString,
   resolveCanvasSurfaceTarget,
 } from './builtin-canvas-helpers';
+import { isAllowedUrl } from '../../services/security/ssrf';
 import {
   completedToolOutcome,
   failedToolOutcome,
@@ -58,6 +59,12 @@ export async function executeCanvasNavigate(args: {
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
     return failedToolOutcome(
       'Error: canvas_navigate only supports remote http or https URLs. Use canvas_create or canvas_update for session canvas content instead of local files or generated HTML.',
+    );
+  }
+
+  if (!isAllowedUrl(parsedUrl.toString())) {
+    return failedToolOutcome(
+      'Error: canvas_navigate URL blocked by security policy (private/internal address).',
     );
   }
 

@@ -60,6 +60,40 @@ describe('builtin executor canvas runtime', () => {
       expect(processCanvasMessage).not.toHaveBeenCalled();
     });
 
+    it('rejects private/internal addresses via the shared SSRF gate', async () => {
+      const { getSurface, processCanvasMessage } = require('../../src/services/canvas/renderer');
+      getSurface.mockImplementation((id: string) =>
+        id === 'surf-1' ? { id: 'surf-1', state: 'active' } : undefined,
+      );
+
+      const result = await executeCanvasNavigate({
+        surfaceId: 'surf-1',
+        url: 'http://169.254.169.254/latest/meta-data/',
+      });
+
+      const content = failedToolContent(result);
+      expect(content).toContain('Error');
+      expect(content).toContain('blocked by security policy');
+      expect(processCanvasMessage).not.toHaveBeenCalled();
+    });
+
+    it('rejects localhost addresses via the shared SSRF gate', async () => {
+      const { getSurface, processCanvasMessage } = require('../../src/services/canvas/renderer');
+      getSurface.mockImplementation((id: string) =>
+        id === 'surf-1' ? { id: 'surf-1', state: 'active' } : undefined,
+      );
+
+      const result = await executeCanvasNavigate({
+        surfaceId: 'surf-1',
+        url: 'http://localhost:8080/admin',
+      });
+
+      const content = failedToolContent(result);
+      expect(content).toContain('Error');
+      expect(content).toContain('blocked by security policy');
+      expect(processCanvasMessage).not.toHaveBeenCalled();
+    });
+
     it('falls back to the focused surface when alias id is wrong', async () => {
       const {
         getAllSurfaces,

@@ -405,10 +405,16 @@ export const CanvasSurfacePresenter: React.FC = () => {
                 javaScriptEnabled={true}
                 domStorageEnabled
                 setSupportMultipleWindows={false}
+                // allowFileAccess is what lets a persisted bundle's entry file load, along
+                // with the sibling scripts, styles and images it references by tag. The two
+                // JavaScript-side grants are deliberately absent: allowFileAccessFromFileURLs
+                // would let a model-authored page fetch() any file:// path the app can read —
+                // the conversation store and memory database among them, which no tool
+                // exposes — and allowUniversalAccessFromFileURLs would let it reach remote
+                // origins from that document. Nothing the canvas ships does either;
+                // canvas_navigate only accepts http(s), and navigating clears the bundle.
                 allowFileAccess
-                allowFileAccessFromFileURLs={true}
-                allowUniversalAccessFromFileURLs={true}
-                allowingReadAccessToURL={focusedSurface?.sourceBundle?.bundleRootUri || 'file:///'}
+                allowingReadAccessToURL={focusedSurface?.sourceBundle?.bundleRootUri}
                 onLoadEnd={() => {
                   loadedSurfaceIdRef.current = focusedSurface.id;
                   flushPendingCanvasWork(focusedSurface.id);

@@ -119,11 +119,31 @@ describe('CanvasSurfacePresenter', () => {
     });
     expect(webview.props.javaScriptEnabled).toBe(true);
     expect(webview.props.allowFileAccess).toBe(true);
-    expect(webview.props.allowFileAccessFromFileURLs).toBe(true);
-    expect(webview.props.allowUniversalAccessFromFileURLs).toBe(true);
+    // The JavaScript-side file grants are intentionally absent. Tag-referenced sibling
+    // assets load under allowFileAccess alone; allowFileAccessFromFileURLs would let a
+    // model-authored page fetch() any file:// path the app can read, and
+    // allowUniversalAccessFromFileURLs would let it reach remote origins from there.
+    expect(webview.props.allowFileAccessFromFileURLs).toBeUndefined();
+    expect(webview.props.allowUniversalAccessFromFileURLs).toBeUndefined();
     expect(webview.props.allowingReadAccessToURL).toBe(
       'file:///mock/documents/canvas-bundles-v1/bundle-surface',
     );
+  });
+
+  it('does not grant filesystem read access when there is no persisted source bundle', () => {
+    mockGetSurface.mockReturnValue({ ...mockSurface, sourceBundle: undefined });
+    mockGetActiveSurfaces.mockReturnValue([{ ...mockSurface, sourceBundle: undefined }]);
+    const bundlesModule = require('../../../src/services/canvas/bundles');
+    bundlesModule.hasCanvasSourceBundle.mockReturnValueOnce(false);
+
+    const { getByTestId } = render(<CanvasSurfacePresenter />);
+
+    const webview = getByTestId('global-canvas-webview');
+    // Inline `{ html }` sources are not file:// URIs, so there is no directory to scope reads
+    // to; the prop must be omitted rather than falling back to the whole filesystem ('file:///').
+    expect(webview.props.allowingReadAccessToURL).toBeUndefined();
+    expect(webview.props.allowFileAccessFromFileURLs).toBeUndefined();
+    expect(webview.props.allowUniversalAccessFromFileURLs).toBeUndefined();
   });
 
   it('registers the global canvas event handler', () => {
