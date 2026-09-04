@@ -2,7 +2,13 @@
 // Kavi — Thinking Level Control
 // ---------------------------------------------------------------------------
 
-import { isOpenAIReasoningModel } from '../services/llm/catalog/providerCapabilities';
+import type { AnthropicEffortLevel } from '../services/llm/catalog/providerCapabilities';
+import {
+  isOpenAIReasoningModel,
+  rejectsThinkingParam,
+  supportedEffortLevels,
+  supportsAdaptiveThinking,
+} from '../services/llm/catalog/providerCapabilities';
 import { resolveModelHostedFamily } from '../services/llm/catalog/providerFamilies';
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -15,9 +21,10 @@ export interface ThinkingParamsOptions {
   maxTokens?: number;
 }
 
-type AnthropicEffort = 'low' | 'medium' | 'high' | 'max';
-
 type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+
+/** Anthropic's `output_config.effort` tiers, in ascending order of intensity. */
+const ANTHROPIC_EFFORT_ORDER: AnthropicEffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 const ANTHROPIC_THINKING_BUDGETS: Record<Exclude<ThinkingLevel, 'off'>, number> = {
   minimal: 1024,
@@ -41,20 +48,6 @@ function normalizeModel(model: string): string {
 
 function isGemini3Model(model: string): boolean {
   return /(?:^|\/)gemini[- ]?3(?:[.-]|$)/i.test(model);
-}
-
-function supportsAnthropicAdaptiveThinking(model: string): boolean {
-  const lower = normalizeModel(model);
-  return (
-    lower.includes('claude-opus-4-7') ||
-    lower.includes('claude-opus-4-6') ||
-    lower.includes('claude-sonnet-4-6')
-  );
-}
-
-function supportsAnthropicMaxEffort(model: string): boolean {
-  const lower = normalizeModel(model);
-  return lower.includes('claude-opus-4-7') || lower.includes('claude-opus-4-6');
 }
 
 function resolveAnthropicThinkingBudget(level: ThinkingLevel, maxTokens?: number): number | null {
@@ -86,21 +79,61 @@ function resolveAnthropicThinkingBudget(level: ThinkingLevel, maxTokens?: number
   return resolvedBudget;
 }
 
-function resolveAnthropicAdaptiveEffort(level: ThinkingLevel, model: string): AnthropicEffort {
-  const supportsMaxEffort = supportsAnthropicMaxEffort(model);
-
-  switch (level) {
-    case 'minimal':
-    case 'low':
-      return 'low';
-    case 'medium':
-      return 'medium';
-    case 'xhigh':
-      return supportsMaxEffort ? 'max' : 'high';
-    case 'high':
-    default:
-      return 'high';
+/**
+ * Maps a UI thinking-level chip to the `output_config.effort` tier to send for `model`,
+ * degrading to the nearest tier the model actually supports rather than dropping or
+ * rejecting an unsupported request. `undefined` means the model doesn't take an effort
+ * value at all (`supportedEffortLevels` returned an empty set — e.g. a pre-4.6 model).
+ *
+ * The 'xhigh' chip — the strongest level the UI offers — always requests the model's
+ * actual ceiling tier (the last entry of `supportedEffortLevels`), which is 'max' for
+ * every current Anthropic generation. That preserves "top chip = strongest available
+ * effort" regardless of whether a given model's range stops at 'max' (4.6) or has the
+ * newer 'xhigh' tier in between 'high' and 'max' (4.7+, including every 5.x, and Fable) —
+ * there is no separate UI chip for that in-between tier.
+ */
+function resolveAnthropicEffortForLevel(
+  level: Exclude<ThinkingLevel, 'off'>,
+  model: string,
+): AnthropicEffortLevel | undefined {
+  const supported = supportedEffortLevels(model);
+  if (supported.length === 0) {
+    return undefined;
   }
+
+  const requestedTier: AnthropicEffortLevel =
+    level === 'minimal' || level === 'low'
+      ? 'low'
+      : level === 'medium'
+        ? 'medium'
+        : level === 'high'
+          ? 'high'
+          : 'xhigh';
+
+  if (supported.includes(requestedTier)) {
+    return requestedTier;
+  }
+
+  // The 'xhigh' chip means "the strongest reasoning this model offers". A generation that
+  // predates the 'xhigh' tier (4.6) still exposes 'max', so honor the intent there rather
+  // than degrading to 'high'. 'max' is never chosen when the model supports 'xhigh'
+  // itself, so a user's selection does not silently escalate to the costliest tier.
+  if (requestedTier === 'xhigh' && supported.includes('max')) {
+    return 'max';
+  }
+
+  // Degrade to the nearest supported tier at or below the requested one.
+  const requestedRank = ANTHROPIC_EFFORT_ORDER.indexOf(requestedTier);
+  for (let rank = requestedRank - 1; rank >= 0; rank -= 1) {
+    const candidate = ANTHROPIC_EFFORT_ORDER[rank];
+    if (supported.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Nothing at or below the requested rank is supported — use the model's lowest tier
+  // rather than sending nothing.
+  return supported[0];
 }
 
 function resolveGeminiThinkingLevel(level: ThinkingLevel, model: string): GeminiThinkingLevel {
@@ -180,21 +213,27 @@ export function getThinkingParams(
     return {};
   }
 
-  // Claude 4.6 models: adaptive thinking + effort.
-  // Older Claude models: manual budget_tokens mode.
+  // Fable: thinking is always on server-side and takes no `thinking` param at all —
+  // only `output_config.effort` is a valid lever.
+  // Opus/Sonnet 4.6+ (including every 5.x): adaptive thinking + effort.
+  // Everything older: manual budget_tokens mode (no effort concept).
   if (hostedFamily === 'anthropic') {
     if (level === 'minimal') {
       return {};
     }
 
-    if (supportsAnthropicAdaptiveThinking(lower)) {
+    if (rejectsThinkingParam(model)) {
+      const effort = resolveAnthropicEffortForLevel(level, model);
+      return effort ? { output_config: { effort } } : {};
+    }
+
+    if (supportsAdaptiveThinking(model)) {
+      const effort = resolveAnthropicEffortForLevel(level, model);
       return {
         thinking: {
           type: 'adaptive',
         },
-        output_config: {
-          effort: resolveAnthropicAdaptiveEffort(level, lower),
-        },
+        ...(effort ? { output_config: { effort } } : {}),
       };
     }
 

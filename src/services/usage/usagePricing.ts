@@ -34,9 +34,17 @@ const COST_TABLE: Record<string, ModelCostRates> = {
   o1: { input: 15, output: 60 },
   o3: { input: 2, output: 8 },
   'o4-mini': { input: 1.1, output: 4.4 },
-  'claude-opus-4-7': { input: 5, output: 25 },
-  'claude-sonnet-4-6': { input: 3, output: 15 },
-  'claude-haiku-4-5': { input: 1, output: 5 },
+  // Cache write ≈1.25x input, cache read ≈0.1x input for every Claude model below
+  // except Fable 5.1, whose cache read is a flat $0.25/1M regardless of input rate.
+  'claude-fable-5-1': { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 0.25 },
+  'claude-fable-5': { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 1 },
+  'claude-opus-5': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  'claude-opus-4-8': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  'claude-opus-4-7': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  'claude-opus-4-6': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  'claude-sonnet-5': { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
+  'claude-sonnet-4-6': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+  'claude-haiku-4-5': { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 },
   'gemini-3.5-flash': { input: 1.5, output: 9, cacheRead: 0.15 },
   'gemini-3.1-pro-preview': {
     promptThreshold: 200_000,

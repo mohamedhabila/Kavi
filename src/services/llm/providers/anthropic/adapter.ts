@@ -38,6 +38,31 @@ function appendAnthropicDynamicSystemTail(args: {
   return [...messages, { role: 'user', content: dynamicText }];
 }
 
+/**
+ * Appends a forced-tool-choice fallback instruction to the assembled system prompt,
+ * regardless of whether it came back as a plain string or as cacheable prompt sections
+ * (an array of content blocks). Appending after the last block keeps any existing
+ * cache_control breakpoints on earlier blocks intact.
+ */
+function appendAnthropicForcedToolChoiceInstruction(
+  content: string | Array<Record<string, any>> | undefined,
+  instruction: string | undefined,
+): string | Array<Record<string, any>> | undefined {
+  if (!instruction) {
+    return content;
+  }
+
+  if (content === undefined) {
+    return instruction;
+  }
+
+  if (typeof content === 'string') {
+    return content.trim().length > 0 ? `${content}\n\n${instruction}` : instruction;
+  }
+
+  return [...content, { type: 'text', text: instruction }];
+}
+
 function contentHasCacheControl(content: string | any[]): boolean {
   return Array.isArray(content) && content.some((block) => isPlainRecord(block.cache_control));
 }
@@ -161,6 +186,13 @@ export async function sendAnthropicMessages(args: {
   buildAnthropicToolRaw: (id: string, name: string, argumentsText: string) => Record<string, any>;
   extractAnthropicReasoningText: (assistantBlocks: any[]) => string | undefined;
   buildAnthropicToolChoice: (choice: ToolChoiceMode | undefined) => Record<string, any> | undefined;
+  /** True when `model` 400s on a forced `tool_choice` (`any`/`tool`) — e.g. Fable 5.1. */
+  rejectsForcedToolChoice: (model: string) => boolean;
+  /** Downgrades a forced `tool_choice` to `auto` plus a system instruction naming the tool. */
+  resolveForcedToolChoiceFallback: (
+    choice: ToolChoiceMode | undefined,
+    tools: ReadonlyArray<{ name: string }> | undefined,
+  ) => { toolChoice: 'auto'; instruction: string } | undefined;
   shouldIncludeAnthropicInterleavedThinkingBeta: (
     model: string,
     options: MessageRequestOptions,
@@ -296,11 +328,24 @@ export async function sendAnthropicMessages(args: {
     stream: args.options.stream ?? false,
   };
 
-  const anthropicSystemContent = args.buildAnthropicSystemPromptContent({
-    systemContent,
-    sections: args.options.systemPromptSections,
-    enablePromptCaching: args.options.enablePromptCaching,
-  });
+  // Some models (e.g. Fable 5.1) 400 on a forced tool_choice. Rather than let the
+  // request fail, downgrade it to `auto` and tell the model which tool to use via the
+  // system prompt — computed here, before the system prompt is assembled, so the
+  // instruction can be appended to it below regardless of whether the caller used a
+  // plain system string or cacheable system prompt sections.
+  const forcedToolChoiceFallback =
+    args.options.tools?.length && args.rejectsForcedToolChoice(args.model)
+      ? args.resolveForcedToolChoiceFallback(args.options.toolChoice, args.options.tools)
+      : undefined;
+
+  const anthropicSystemContent = appendAnthropicForcedToolChoiceInstruction(
+    args.buildAnthropicSystemPromptContent({
+      systemContent,
+      sections: args.options.systemPromptSections,
+      enablePromptCaching: args.options.enablePromptCaching,
+    }),
+    forcedToolChoiceFallback?.instruction,
+  );
 
   if (anthropicSystemContent) body.system = anthropicSystemContent;
   if (anthropicOptions.temperature !== undefined) {
@@ -340,7 +385,9 @@ export async function sendAnthropicMessages(args: {
       if (useStrict) base.strict = true;
       return base;
     });
-    const toolChoice = args.buildAnthropicToolChoice(args.options.toolChoice);
+    const toolChoice = args.buildAnthropicToolChoice(
+      forcedToolChoiceFallback ? forcedToolChoiceFallback.toolChoice : args.options.toolChoice,
+    );
     if (toolChoice) {
       body.tool_choice = toolChoice;
     }

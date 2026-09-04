@@ -63,7 +63,13 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'gpt-5-mini': 400000,
   o3: 200000,
   'o4-mini': 200000,
+  'claude-opus-5': 1000000,
+  'claude-fable-5-1': 1000000,
+  'claude-fable-5': 1000000,
+  'claude-sonnet-5': 1000000,
+  'claude-opus-4-8': 1000000,
   'claude-opus-4-7': 1000000,
+  'claude-opus-4-6': 1000000,
   'claude-sonnet-4-6': 1000000,
   'claude-haiku-4-5': 200000,
   'gemini-3.5-flash': 1000000,
@@ -84,7 +90,25 @@ const MODEL_CONTEXT_WINDOW_ENTRIES_BY_SPECIFICITY = Object.entries(MODEL_CONTEXT
   (left, right) => right[0].length - left[0].length,
 );
 
-export function getContextWindow(model: string): number {
+export interface GetContextWindowOptions {
+  /**
+   * A context window the caller already has in hand for this exact call — e.g. a
+   * `max_input_tokens` value freshly returned by a discovery request that hasn't
+   * been (or shouldn't be) written into the global provider-context-window
+   * registry. Wins over every other source, including the registry.
+   */
+  maxInputTokens?: number;
+}
+
+export function getContextWindow(model: string, options?: GetContextWindowOptions): number {
+  if (
+    typeof options?.maxInputTokens === 'number' &&
+    Number.isFinite(options.maxInputTokens) &&
+    options.maxInputTokens > 0
+  ) {
+    return Math.floor(options.maxInputTokens);
+  }
+
   // What the provider says about its own model beats anything guessed here.
   const advertised = getProviderContextWindow(model);
   if (advertised !== undefined) return advertised;
@@ -108,15 +132,24 @@ export function getContextWindow(model: string): number {
     return 200000;
   }
 
+  // Haiku is the one current Anthropic family with a smaller window; check it first
+  // so the broader generation fallback below doesn't shadow it.
+  if (hostedFamily === 'anthropic' && /claude-haiku-[4-9](?:$|[^0-9])/.test(lower)) {
+    return 200000;
+  }
+
   if (
     hostedFamily === 'anthropic' &&
-    (lower.includes('claude-opus-4') || lower.includes('claude-sonnet-4'))
+    /claude-(?:opus|sonnet|fable|mythos)-[4-9](?:$|[^0-9])/.test(lower)
   ) {
     return 1000000;
   }
 
-  if (hostedFamily === 'anthropic' && lower.includes('claude-haiku-4')) {
-    return 200000;
+  // Any other current-generation Anthropic model (an id encoding generation digit
+  // 4-9 that isn't Haiku) inherits the 1M window the rest of the lineup ships
+  // with, instead of silently falling through to the generic 128k default below.
+  if (hostedFamily === 'anthropic' && /claude-[a-z]+-[4-9](?:$|[^0-9])/.test(lower)) {
+    return 1000000;
   }
 
   if (

@@ -15,7 +15,7 @@ import {
   isGemini3Model,
   isGeminiProModel,
   isOpenAIReasoningModel,
-  supportsAnthropicAdaptiveThinking,
+  supportsAdaptiveThinking as supportsAnthropicAdaptiveThinking,
   supportsTemperature,
 } from '../../src/services/llm/catalog/providerCapabilities';
 import { isGeminiModelName } from '../../src/services/llm/catalog/providerFamilies';

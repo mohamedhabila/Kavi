@@ -29,7 +29,7 @@ export interface PromptCachingOptions {
 }
 
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-export type AnthropicEffort = 'low' | 'medium' | 'high' | 'max';
+export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type AnthropicOutputConfig = {
   effort?: AnthropicEffort;

@@ -208,6 +208,32 @@ describe('Usage Tracker', () => {
       expect(anthropicCost).toBeGreaterThan(0);
     });
 
+    it('prices every current Claude 5.x / 4.x id from its explicit table row', () => {
+      expect(estimateCost('claude-opus-5', 1_000_000, 1_000_000)).toBeCloseTo(5 + 25, 10);
+      expect(estimateCost('claude-fable-5-1', 1_000_000, 1_000_000)).toBeCloseTo(10 + 50, 10);
+      expect(estimateCost('claude-fable-5', 1_000_000, 1_000_000)).toBeCloseTo(10 + 50, 10);
+      expect(estimateCost('claude-sonnet-5', 1_000_000, 1_000_000)).toBeCloseTo(2 + 10, 10);
+      expect(estimateCost('claude-opus-4-8', 1_000_000, 1_000_000)).toBeCloseTo(5 + 25, 10);
+    });
+
+    it('discounts Fable 5.1 cache reads at its flat $0.25/1M rate, not the usual 0.1x input formula', () => {
+      // Fable 5.1 input is $10/1M, so the generic 0.1x-input cache-read formula used by
+      // every other Claude model would price a cache read at $1/1M — Fable 5.1 is the
+      // one documented exception, at a flat $0.25/1M regardless of its input rate.
+      const cost = estimateCost('claude-fable-5-1', 1_000_000, 0, { cacheReadTokens: 1_000_000 });
+      expect(cost).toBeCloseTo(0.25, 10);
+    });
+
+    it('prices a Fable 5 (non-5.1) cache read at the standard 0.1x-input rate', () => {
+      const cost = estimateCost('claude-fable-5', 1_000_000, 0, { cacheReadTokens: 1_000_000 });
+      expect(cost).toBeCloseTo(1, 10);
+    });
+
+    it('prices Claude cache writes at 1.25x the input rate', () => {
+      const cost = estimateCost('claude-opus-5', 1_000_000, 0, { cacheWriteTokens: 1_000_000 });
+      expect(cost).toBeCloseTo(6.25, 10);
+    });
+
     it('uses family fallback pricing for unseen text model revisions', () => {
       expect(estimateCost('openai/gpt-5.6-nano', 1000, 500)).toBeCloseTo(
         (1000 * 0.75 + 500 * 4.5) / 1_000_000,

@@ -94,6 +94,37 @@ describe('getContextWindow', () => {
   it('returns default 128000 for unknown model', () => {
     expect(getContextWindow('totally-unknown-model')).toBe(128000);
   });
+
+  it('resolves 1M windows for every current Claude 5.x / 4.x id via exact table entries', () => {
+    expect(getContextWindow('claude-opus-5')).toBe(1000000);
+    expect(getContextWindow('claude-fable-5-1')).toBe(1000000);
+    expect(getContextWindow('claude-fable-5')).toBe(1000000);
+    expect(getContextWindow('claude-sonnet-5')).toBe(1000000);
+    expect(getContextWindow('claude-opus-4-8')).toBe(1000000);
+    expect(getContextWindow('claude-opus-4-7')).toBe(1000000);
+    expect(getContextWindow('claude-haiku-4-5')).toBe(200000);
+  });
+
+  it('falls back an unrecognized-but-current-generation Anthropic id to 1M rather than 128k', () => {
+    // Not in the static table and not a Haiku id — should inherit the 1M window the
+    // rest of the current Anthropic lineup ships with, not the generic 128k default.
+    expect(getContextWindow('claude-zeta-7')).toBe(1000000);
+  });
+
+  it('still gives an unrecognized Haiku-generation id the smaller Haiku window', () => {
+    expect(getContextWindow('claude-haiku-7')).toBe(200000);
+  });
+
+  it('prefers an explicit maxInputTokens override over every other source', () => {
+    expect(getContextWindow('claude-haiku-4-5', { maxInputTokens: 42000 })).toBe(42000);
+    expect(getContextWindow('totally-unknown-model', { maxInputTokens: 777000 })).toBe(777000);
+  });
+
+  it('ignores a non-positive or non-finite maxInputTokens override', () => {
+    expect(getContextWindow('claude-haiku-4-5', { maxInputTokens: 0 })).toBe(200000);
+    expect(getContextWindow('claude-haiku-4-5', { maxInputTokens: -5 })).toBe(200000);
+    expect(getContextWindow('claude-haiku-4-5', { maxInputTokens: NaN })).toBe(200000);
+  });
 });
 
 describe('getWorkingContextWindow', () => {

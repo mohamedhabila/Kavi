@@ -171,7 +171,10 @@ describe('LlmService', () => {
       expect(body.temperature).toBeUndefined();
     });
 
-    it('omits non-1 direct Anthropic temperature for Claude Sonnet 4.6 requests', async () => {
+    it('forwards direct Anthropic temperature for Claude Sonnet 4.6 when thinking is off', async () => {
+      // The 4.6 generation still accepts sampling parameters; only adaptive thinking
+      // (covered above) removes them. Dropping a caller's temperature here would silently
+      // change output on a model that honors it.
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -189,6 +192,35 @@ describe('LlmService', () => {
           baseUrl: 'https://api.anthropic.com/v1',
           apiKey: 'anthropic-key',
           model: 'claude-sonnet-4-6',
+        }),
+      );
+
+      await service.sendMessage([{ role: 'user', content: 'Return a structured review.' }], {
+        temperature: 0,
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.temperature).toBe(0);
+    });
+
+    it('omits direct Anthropic temperature for Claude Opus 5, which rejects sampling parameters', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 5, output_tokens: 2 },
+          }),
+      });
+
+      const service = new LlmService(
+        makeConfig({
+          id: 'anthropic',
+          name: 'Anthropic',
+          baseUrl: 'https://api.anthropic.com/v1',
+          apiKey: 'anthropic-key',
+          model: 'claude-opus-5',
         }),
       );
 

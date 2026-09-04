@@ -1,8 +1,9 @@
 import type { LlmProviderConfig } from '../../../../types/provider';
+import { rejectsForcedToolChoice } from '../../catalog/providerCapabilities';
 import { isPlainRecord } from '../../core/json';
 import { attachProviderResponse } from '../../core/providerResponse';
 import { isStrictCompatibleSchema } from '../../core/schemaTransforms';
-import { buildAnthropicToolChoice } from '../../core/toolChoice';
+import { buildAnthropicToolChoice, resolveForcedToolChoiceFallback } from '../../core/toolChoice';
 import type { LlmPerformFetch } from '../../core/fetchTransport';
 import type { ChatCompletionMessage, MessageRequestOptions } from '../../support/contracts';
 import { sendAnthropicMessages } from './adapter';
@@ -56,11 +57,15 @@ export function sendAnthropicMessage(params: {
         model: candidateModel,
         messages: requestMessages,
         options: requestOptions,
-        buildAnthropicOutputConfig: (resolvedOptions) =>
-          buildAnthropicOutputConfig(resolvedOptions, {
-            simplifyAnthropicSchema,
-            strictifySchema,
-          }),
+        buildAnthropicOutputConfig: (resolvedOptions, resolvedModel) =>
+          buildAnthropicOutputConfig(
+            resolvedOptions,
+            {
+              simplifyAnthropicSchema,
+              strictifySchema,
+            },
+            resolvedModel,
+          ),
       }),
     normalizeAnthropicAssistantBlocks,
     mergeAnthropicContent,
@@ -72,6 +77,8 @@ export function sendAnthropicMessage(params: {
     buildAnthropicToolRaw,
     extractAnthropicReasoningText,
     buildAnthropicToolChoice,
+    rejectsForcedToolChoice,
+    resolveForcedToolChoiceFallback,
     shouldIncludeAnthropicInterleavedThinkingBeta: (candidateModel, requestOptions, thinking) =>
       shouldIncludeAnthropicInterleavedThinkingBeta({
         model: candidateModel,
