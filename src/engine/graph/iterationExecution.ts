@@ -9,6 +9,7 @@ import {
 } from '../../services/agents/requestUnderstandingProjection';
 import { prepareAgentControlGraphModelTurn } from './prepareAgentControlGraphModelTurn';
 import { buildConversationModeEscalationDetail } from './conversation/modeEscalation';
+import { resolveConversationStartsAgentic } from './conversation/resolveConversationRuntimeMode';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
 import { executePreparedAgentControlGraphTurn } from './iterationReadyTurnExecution';
 import type {
@@ -67,7 +68,15 @@ export async function executeAgentControlGraphIteration(
     completedWorkflowToolNames: params.graph.completedWorkflowToolNames,
     goals: currentGoals,
     explicitToolSurfaceToolNames: params.toolRuntime.explicitToolSurfaceToolNames,
-    isSuperAgent: params.isSuperAgent,
+    // Downstream this flag only decides the turn's starting conversation mode
+    // ('agentic' vs 'chitchat'); mode is a conversation property, not a persona flag,
+    // so read the conversation's own persisted mode here instead of re-deriving it
+    // from the persona. `escalatedToAgentic` still carries a same-run escalation
+    // forward even before the persisted write below is visible to a re-read.
+    startsAgentic: resolveConversationStartsAgentic({
+      conversationId: params.conversationId,
+      personaIsSuperAgent: params.isSuperAgent,
+    }),
     escalatedToAgentic: runtime.escalatedToAgentic === true,
     iteration: params.iteration,
     maxTokens: params.maxTokens,

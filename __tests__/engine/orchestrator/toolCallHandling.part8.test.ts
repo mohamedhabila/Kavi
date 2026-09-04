@@ -13,9 +13,14 @@ import {
   useSuperAgentPersona,
   type OrchestratorOptions,
 } from '../../helpers/orchestratorHarness';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
 describe('Orchestrator', () => {
   describe('Tool call handling part 8', () => {
+    afterEach(() => {
+      useSettingsStore.setState({ developerModeEnabled: false });
+    });
+
     it('restricts pending expo workflows to workflow monitoring tools until the run is terminal', async () => {
       (executeTool as jest.Mock)
         .mockResolvedValueOnce({
@@ -113,6 +118,10 @@ describe('Orchestrator', () => {
     });
 
     it('keeps agentic catalog and browser tools available after catalog browse', async () => {
+      // browser_* tools are gated behind developer mode, like the other device/workspace
+      // control tools; this test exercises catalog-driven browser tool discovery itself,
+      // so it opts in explicitly rather than exercising the (separately tested) default gate.
+      useSettingsStore.setState({ developerModeEnabled: true });
       useSuperAgentPersona();
       (executeTool as jest.Mock).mockResolvedValueOnce({
         status: 'completed',

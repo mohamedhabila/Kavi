@@ -19,11 +19,10 @@ import type { AgentGoal } from './types';
 import {
   collectCompletedGoalEvidenceToolNames,
   isCodeExecutionTool,
-  isMemoryResourceTool,
   isRepeatableActivatedTool,
-  isSideEffectfulTool,
   shouldAcceptContinuationTool,
 } from './toolSurfaceRetention';
+import { isChitchatAuthorizedTool } from './toolSurfaceAuthority';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
 /**
@@ -46,6 +45,7 @@ export const DEFAULT_CORE_TOOL_ORDER = [
   'sessions_spawn',
   'wait',
   'cron',
+  'reminder',
   'web_search',
   'web_fetch',
   'calendar_events',
@@ -68,20 +68,42 @@ const STABLE_TOOL_SURFACE_ORDER_VALUES = [
   'wait',
   'list_files',
   'cron',
+  'reminder',
   'file_edit',
   'glob_search',
   'text_search',
   'web_search',
   'web_fetch',
   'calendar_events',
+  'calendar_create_event',
   'contacts_search',
+  'contacts_pick',
+  'email_compose',
+  'sms_compose',
+  'phone_call',
+  'maps_open',
+  'share',
+  'clipboard',
+  'photos_pick',
   'location_current',
   'device_query',
+  'notification_send',
 ] as const;
 
 export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
   DEFAULT_CORE_TOOL_ORDER,
 );
+/**
+ * Turn-1 *disclosure* order for chitchat, not authority — whether one of these names
+ * can actually be called is decided entirely by `resolveAuthorizedToolNames` below.
+ * This is the everyday-action set a general mobile assistant reaches for on an
+ * ordinary first turn: clarification, grounded memory, web lookup, and the native
+ * capabilities a phone assistant is asked for most (calendar, contacts, messaging,
+ * maps, sharing, device state) — present immediately so none of them costs a
+ * `tool_catalog` round-trip before the turn can start. A name not registered at
+ * runtime (`reminder`, until it ships) is simply never matched when the surface is
+ * built from `allTools`, so listing it here ahead of its registration is inert.
+ */
 const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   REQUEST_CLARIFICATION_TOOL_NAME,
   'memory_recall',
@@ -90,10 +112,21 @@ const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'memory_forget',
   'web_search',
   'web_fetch',
+  'reminder',
   'calendar_events',
+  'calendar_create_event',
   'contacts_search',
+  'contacts_pick',
+  'email_compose',
+  'sms_compose',
+  'phone_call',
+  'maps_open',
+  'share',
+  'clipboard',
+  'photos_pick',
   'location_current',
   'device_query',
+  'notification_send',
 ]);
 const STABLE_TOOL_SURFACE_ORDER = new Map(
   [...STABLE_TOOL_SURFACE_ORDER_VALUES, 'tool_catalog', 'tool_describe'].map((name, index) => [
@@ -384,70 +417,6 @@ function resolveGoalCapabilityToolNamesForGoals(
   );
 }
 
-/**
- * The tools a run may execute, as distinct from the tools a turn advertises.
- *
- * `resolveTurnToolSurface` answers "what is worth showing the model next" — it narrows by
- * progressive disclosure, token budget, and workflow staging. That is a guess about the
- * near future, and a guess is not grounds for refusing a call: which capability a task
- * needs only becomes knowable once the work is under way. Treating the advertised list as
- * a permission list made every unpredicted need a hard error, and the error told the run
- * to route through `tool_catalog` — a step that is pure overhead at best, and was
- * traced on-device failing to return at all, stranding a capability the run already held.
- *
- * Authority is a genuinely different question with a genuinely different answer, and it is
- * the one execution must consult. In an agentic run every registered, policy-authorized
- * tool is authorized; disclosure only decides the order the model meets them. Chitchat is
- * a real restriction rather than a presentation choice — the mode exists so a casual
- * conversation cannot mutate state — so there the permitted set is the answer, and a turn
- * needing more escalates rather than quietly proceeding.
- */
-export function resolveAuthorizedToolNames(params: {
-  allTools: ReadonlyArray<ToolDefinition>;
-  conversationMode?: ConversationMode;
-  activatedCatalogToolNames?: ReadonlySet<string>;
-  explicitToolSurfaceToolNames?: ReadonlyArray<string>;
-}): Set<string> {
-  /**
-   * An empty set means "no mode restriction applies", not "nothing is permitted".
-   *
-   * An agentic run's authority is already stated completely by the run allowlist and the
-   * memory policy, both enforced before this is consulted. Enumerating a second set here
-   * could only disagree with them, and would do so silently: tools reach the surface from
-   * registries this list does not see — `tool_catalog` among them — so an enumeration
-   * built from `allTools` would quietly refuse capabilities the run genuinely holds.
-   */
-  if (params.conversationMode !== 'chitchat') {
-    return new Set<string>();
-  }
-
-  const toolByName = new Map(
-    params.allTools.map((tool): [string, ToolDefinition] => [normalizeToolName(tool.name), tool]),
-  );
-  // Discovery is always permitted: learning what exists mutates nothing, and chitchat
-  // needs it to recognise when a request has outgrown the mode.
-  const authorized = new Set<string>([
-    ...CHITCHAT_DEFAULT_CORE_TOOL_NAMES,
-    'tool_catalog',
-    'tool_describe',
-  ]);
-  for (const toolName of params.explicitToolSurfaceToolNames ?? []) {
-    const normalized = normalizeToolName(toolName);
-    if (normalized) {
-      authorized.add(normalized);
-    }
-  }
-  for (const toolName of params.activatedCatalogToolNames ?? []) {
-    const tool = toolByName.get(toolName);
-    // Same rule the surface applies: discovery proves a capability exists, never that
-    // chat may mutate non-memory state with it.
-    if (tool && !(isSideEffectfulTool(tool) && !isMemoryResourceTool(tool))) {
-      authorized.add(toolName);
-    }
-  }
-  return authorized;
-}
-
 export interface ResolveTurnToolSurfaceParams {
   allTools: ReadonlyArray<ToolDefinition>;
   conversationMode?: ConversationMode;
@@ -566,19 +535,19 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
    * and the tool has nothing further to contribute once its write has landed. It is
    * lifted for tools whose contract declares a repeatable capability, because computing
    * another scenario or reading another source is the work itself. Authority is
-   * unchanged: the chitchat mutation gate below still holds, and side-effectful tools
+   * unchanged: the chitchat authority gate below still holds, and side-effectful tools
    * still run the approval path on every call.
    */
   for (const toolName of params.activatedCatalogToolNames) {
     const tool = toolByName.get(toolName);
-    // Catalog discovery proves availability, not authority to mutate non-memory state in chat.
-    // A code-owned explicit pin remains the deliberate escape hatch above.
-    const catalogActivationMayMutateNonMemoryState =
-      params.conversationMode === 'chitchat' &&
-      isSideEffectfulTool(tool) &&
-      !isMemoryResourceTool(tool);
+    // Catalog discovery proves availability, not authority to call it in chitchat. Mirrors
+    // `resolveAuthorizedToolNames` exactly (via `isChitchatAuthorizedTool`) so a tool that
+    // reaches the surface here is never one execution would then refuse. A code-owned
+    // explicit pin remains the deliberate escape hatch above.
+    const chitchatAuthorizesThisTool =
+      params.conversationMode !== 'chitchat' || !tool || isChitchatAuthorizedTool(tool);
     if (
-      !catalogActivationMayMutateNonMemoryState &&
+      chitchatAuthorizesThisTool &&
       shouldAcceptContinuationTool({
         toolName,
         toolByName,

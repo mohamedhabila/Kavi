@@ -7,7 +7,7 @@ export const tools: ToolDefinition[] = [
     description: 'Update graph goals.',
     input_schema: { type: 'object', properties: {}, required: [] },
     contract: {
-      category: 'tools',
+      category: 'goal',
       capabilities: ['coordinate'],
       resourceKinds: ['conversation_workspace'],
     },

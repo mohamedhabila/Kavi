@@ -58,7 +58,8 @@ export interface PrepareAgentControlGraphModelTurnParams {
   completedWorkflowToolNames: ReadonlySet<string>;
   goals?: ReadonlyArray<AgentGoal>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
-  isSuperAgent: boolean;
+  /** Whether the conversation this turn belongs to starts in agentic mode. */
+  startsAgentic: boolean;
   /** True once this run escalated out of chitchat; keeps agentic authority for later iterations. */
   escalatedToAgentic?: boolean;
   iteration: number;

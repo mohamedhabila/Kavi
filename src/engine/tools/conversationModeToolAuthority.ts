@@ -1,7 +1,30 @@
 import type { ConversationMode } from '../../types/conversation';
 import type { ToolDefinition } from '../../types/tool';
-import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
-import { normalizeToolName } from './toolNameNormalization';
+
+/**
+ * Categories chitchat may never reach, even through discovery. Every one of these
+ * exists to control multi-step delegated work, an external development
+ * environment, or arbitrary code execution — capabilities a casual conversation has
+ * no use for and that "no persona swap" depends on staying behind escalation:
+ * spawning or coordinating sub-agent sessions (`sessions`), mutating the goal graph
+ * directly (`goal`), a remote shell (`ssh`), native build tooling (`expo`,
+ * `expo_manual_actions`), source control (`github`), full browser automation
+ * (`browser`), and arbitrary code execution (`code`). Everyday actions — calendar,
+ * contacts, messaging, web lookup, device state — live in every other category and
+ * stay reachable. This is deliberately a category set, not a tool-name list: a
+ * newly registered tool is classified by what it *is*, not by matching its name
+ * against a maintained roster.
+ */
+const AGENTIC_ONLY_TOOL_CATEGORIES: ReadonlySet<string> = new Set([
+  'sessions',
+  'goal',
+  'ssh',
+  'expo',
+  'expo_manual_actions',
+  'github',
+  'browser',
+  'code',
+]);
 
 /**
  * Chitchat can use ordinary assistant tools and grounded local memory writes.
@@ -16,12 +39,8 @@ export function isToolAllowedForConversationMode(
     return true;
   }
 
-  const toolName = normalizeToolName(tool.name);
-  return (
-    toolName !== GOAL_BOOTSTRAP_TOOL_NAME &&
-    !toolName.startsWith('sessions_') &&
-    tool.contract?.category !== 'sessions'
-  );
+  const category = tool.contract?.category?.trim();
+  return !category || !AGENTIC_ONLY_TOOL_CATEGORIES.has(category);
 }
 
 export function filterToolsForConversationMode(

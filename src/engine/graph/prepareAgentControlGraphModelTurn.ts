@@ -35,7 +35,7 @@ export async function prepareAgentControlGraphModelTurn(
     allTools: params.allTools,
     // A run that has already escalated keeps agentic authority for its remaining
     // iterations; the persisted conversation mode carries it into later turns.
-    conversationMode: params.isSuperAgent || params.escalatedToAgentic ? 'agentic' : 'chitchat',
+    conversationMode: params.startsAgentic || params.escalatedToAgentic ? 'agentic' : 'chitchat',
     completedWorkflowToolNames: params.completedWorkflowToolNames,
     goals: params.goals,
     explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,

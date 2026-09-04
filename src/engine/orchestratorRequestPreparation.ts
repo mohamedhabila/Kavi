@@ -51,7 +51,8 @@ export type OrchestratorMemoryAccessInput = Readonly<{
   asyncWork?: AgentRunControlGraphState['asyncWork'];
   goals?: AgentRunControlGraphState['goals'];
   internalUserMessageCount: number;
-  isSuperAgent: boolean;
+  /** Whether this conversation starts in agentic mode; see resolveConversationStartsAgentic. */
+  startsAgentic: boolean;
   logger: LoggerLike;
   memoryContextStrategy?: MemoryContextStrategy;
   memoryConversationId: string;
@@ -158,7 +159,7 @@ export async function loadOrchestratorMemoryAccessContext(
       sourceThreadId: params.sourceThreadId,
       personaId: params.personaId,
       taskId: params.taskId,
-      mode: params.isSuperAgent ? 'agentic' : 'chat',
+      mode: params.startsAgentic ? 'agentic' : 'chat',
       internalUserMessageCount: params.internalUserMessageCount,
       ...(params.taskId ? { activeTaskId: params.taskId } : {}),
       ...(params.goals?.length ? { goals: params.goals } : {}),
@@ -182,7 +183,7 @@ export async function loadOrchestratorMemoryAccessContext(
       ...buildScopedFallbackMemoryAccessContext({
         messages: params.messages,
         personaId: params.personaId,
-        mode: params.isSuperAgent ? 'agentic' : 'chat',
+        mode: params.startsAgentic ? 'agentic' : 'chat',
         internalUserMessageCount: params.internalUserMessageCount,
       }),
       consistencyBarrier: {
@@ -206,7 +207,6 @@ export async function prepareOrchestratorRequestBundle(params: {
   conversationId: string;
   graphOwnedRun: boolean;
   internalUserMessageCount: number;
-  isSuperAgent: boolean;
   linkUnderstandingEnabled: boolean;
   logger: LoggerLike;
   memoryConversationId: string;
@@ -253,7 +253,10 @@ export async function prepareOrchestratorRequestBundle(params: {
     ...(params.graphSnapshot?.asyncWork ? { asyncWork: params.graphSnapshot.asyncWork } : {}),
     ...(graphGoals?.length ? { goals: graphGoals } : {}),
     internalUserMessageCount: params.internalUserMessageCount,
-    isSuperAgent: params.isSuperAgent,
+    // `graphOwnedRun` already carries "does this conversation start agentic"
+    // (resolved once in bootstrap.ts); memory access follows the same signal
+    // rather than re-deriving it from a persona flag.
+    startsAgentic: params.graphOwnedRun,
     logger: params.logger,
     memoryContextStrategy: params.memoryContextStrategy,
     memoryConversationId: params.memoryConversationId,

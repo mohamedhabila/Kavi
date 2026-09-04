@@ -51,6 +51,7 @@ export async function runOrchestratorGraphSession(params: {
     emitPendingAsyncOperationsChange,
     failoverState,
     isSuperAgent,
+    startsAgentic,
     allowLongHorizonIterationExtensions,
     lastPendingAsyncSignature,
     llm,
@@ -133,9 +134,14 @@ export async function runOrchestratorGraphSession(params: {
     activeProvider,
     callbacks,
     conversationId,
-    graphOwnedRun: isSuperAgent,
+    // Mode is a conversation property, not a persona flag: `startsAgentic` is the
+    // conversation's own persisted mode (resolved once in bootstrap.ts, falling back
+    // to the persona signal only for worker sessions that are never registered as a
+    // UI conversation) instead of re-deriving it from `isSuperAgent`.
+    // `RequestUnderstandingRouting.mode` and every other per-turn consumer of
+    // `requestFrame.mode` inherit this through `requestContext.ts`.
+    graphOwnedRun: startsAgentic,
     internalUserMessageCount,
-    isSuperAgent,
     linkUnderstandingEnabled,
     logger,
     maxLinks,
@@ -249,6 +255,8 @@ export async function runOrchestratorGraphSession(params: {
         workingMessages,
       },
       isSuperAgent,
+      isForegroundRun: options.isForegroundRun,
+      runStartedAtMs: Date.now(),
       allowLongHorizonIterationExtensions,
       maxToolIterations,
       maxTokens,
@@ -278,7 +286,7 @@ export async function runOrchestratorGraphSession(params: {
           asyncWork: graphSnapshot.asyncWork,
           goals: graphSnapshot.goals,
           internalUserMessageCount: memoryRefreshInternalUserMessages.length,
-          isSuperAgent,
+          startsAgentic,
           logger,
           memoryContextStrategy: options.memoryContextStrategy,
           memoryConversationId: sharedConversationId,

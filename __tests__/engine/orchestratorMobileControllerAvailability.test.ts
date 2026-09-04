@@ -5,6 +5,7 @@ import {
   mockStreamMessage,
   provider,
   resetOrchestratorToolFilterHarness,
+  setMockDeveloperModeEnabled,
 } from './helpers/orchestratorToolFilterHarness';
 import { runOrchestrator } from '../../src/engine/orchestrator';
 
@@ -47,6 +48,10 @@ beforeEach(() => {
 
 describe('orchestrator mobile controller availability', () => {
   it('exposes the narrowed action tool only for an admitted runtime capability', async () => {
+    // mobile_ui_action is gated behind developer mode, like the other device/workspace
+    // control tools; this test exercises the mobile controller's own admission behavior,
+    // so it opts in explicitly rather than exercising the (separately tested) default gate.
+    setMockDeveloperModeEnabled(true);
     mockStreamMessage.mockReturnValueOnce(
       makeStream(
         [

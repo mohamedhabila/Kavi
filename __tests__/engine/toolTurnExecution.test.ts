@@ -20,6 +20,7 @@ import {
   createPendingToolCall,
   createToolMessage,
   createToolTurnExecutionParams as createParams,
+  toolTurnExecutionTools,
 } from '../helpers/toolTurnExecutionFixtures';
 
 jest.mock('../../src/engine/loopDetection', () => {
@@ -445,15 +446,25 @@ describe('toolTurnExecution', () => {
   });
 
   it('does not arm controller recovery when graph admission rejects the action', async () => {
+    // A mobile_ui_action call sharing a turn with another tool call is always
+    // rejected (an isolated-turn boundary), independent of goal state: since
+    // materializeMobileControllerGoal auto-admits the first-ever call by opening
+    // its own bookkeeping goal (see mobileController/goalAdmission.ts), a bare
+    // missing-goal scenario no longer represents a rejected admission on its own.
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolExecutionBatch.mockResolvedValue([
       {
         index: 0,
+        toolCallId: 'tc-write',
+        toolMessage: createToolMessage(),
+      },
+      {
+        index: 1,
         toolCallId: 'mobile-before-goal',
         toolMessage: {
-          id: 'blocked-mobile-admission',
+          id: 'blocked-mobile-isolated-turn',
           role: 'tool',
-          content: '{"code":"mobile_controller_goal_required"}',
+          content: '{"code":"mobile_controller_isolated_turn_required"}',
           toolCallId: 'mobile-before-goal',
           timestamp: 1001,
           isError: true,
@@ -466,8 +477,10 @@ describe('toolTurnExecution', () => {
       digest: `sha256:${'a'.repeat(64)}` as const,
     };
     const params = createParams({
-      groundedRequestScopedTools: [MOBILE_UI_ACTION_TOOL_DEFINITION],
+      availableToolNames: new Set(['write_file', 'sessions_yield', 'mobile_ui_action']),
+      groundedRequestScopedTools: [...toolTurnExecutionTools, MOBILE_UI_ACTION_TOOL_DEFINITION],
       pendingToolCalls: [
+        createPendingToolCall({ id: 'tc-write', name: 'write_file' }),
         {
           id: 'mobile-before-goal',
           name: 'mobile_ui_action',

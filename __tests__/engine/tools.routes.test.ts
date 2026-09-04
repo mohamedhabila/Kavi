@@ -274,6 +274,74 @@ describe('executeToolInner raw additional routes', () => {
       expect(parsed.status).toBe('task_created');
       expect(parsed.id).toBe('job-1');
     });
+
+    it('accepts a structured cron schedule object', async () => {
+      const result = await executeTool(
+        'cron',
+        JSON.stringify({
+          schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'Europe/Berlin' },
+          prompt: 'Structured schedule',
+        }),
+        CONV_ID,
+      );
+      const parsed = JSON.parse(result.content);
+      expect(parsed.status).toBe('task_created');
+      expect(parsed.schedule).toEqual({ kind: 'cron', expr: '0 9 * * *', tz: 'Europe/Berlin' });
+    });
+
+    it('rejects a structured schedule with an unknown kind', async () => {
+      const result = await executeTool(
+        'cron',
+        JSON.stringify({ schedule: { kind: 'nonsense' }, prompt: 'Bad schedule' }),
+        CONV_ID,
+      );
+      expect(result.status).toBe('failed');
+      expect(JSON.parse(result.content).code).toBe('invalid_scheduled_job');
+    });
+  });
+
+  describe('reminder tool', () => {
+    it('lists reminders (empty)', async () => {
+      const result = await executeTool('reminder', JSON.stringify({ action: 'list' }), CONV_ID);
+      expect(result.status).toBe('completed');
+      const parsed = JSON.parse(result.content);
+      expect(parsed.status).toBe('listed');
+      expect(parsed.reminders).toEqual([]);
+    });
+
+    it('rejects create with a missing title', async () => {
+      const result = await executeTool(
+        'reminder',
+        JSON.stringify({ action: 'create', when: { kind: 'daily', time: '09:00' } }),
+        CONV_ID,
+      );
+      expect(result.status).toBe('failed');
+      expect(JSON.parse(result.content).code).toBe('reminder_title_required');
+    });
+
+    it('rejects create with an invalid "when"', async () => {
+      const result = await executeTool(
+        'reminder',
+        JSON.stringify({ action: 'create', title: 'Take out trash', when: { kind: 'weekly', time: '09:00' } }),
+        CONV_ID,
+      );
+      expect(result.status).toBe('failed');
+      expect(JSON.parse(result.content).code).toBe('reminder_when_invalid');
+    });
+
+    it('rejects update and cancel without an id', async () => {
+      const update = await executeTool('reminder', JSON.stringify({ action: 'update' }), CONV_ID);
+      expect(JSON.parse(update.content).code).toBe('reminder_id_required');
+
+      const cancel = await executeTool('reminder', JSON.stringify({ action: 'cancel' }), CONV_ID);
+      expect(JSON.parse(cancel.content).code).toBe('reminder_id_required');
+    });
+
+    it('rejects an unknown action', async () => {
+      const result = await executeTool('reminder', JSON.stringify({ action: 'explode' }), CONV_ID);
+      expect(result.status).toBe('failed');
+      expect(JSON.parse(result.content).code).toBe('reminder_action_unknown');
+    });
   });
 
   describe('native tool routing', () => {

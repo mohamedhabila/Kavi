@@ -27,7 +27,7 @@ describe('conversation-mode tool authority', () => {
     tool('calendar_create_event', 'calendar'),
   ];
   const orchestrationTools = [
-    tool('update_goals', 'goals'),
+    tool('update_goals', 'goal'),
     tool('sessions_spawn', 'sessions'),
     tool('sessions_history', 'sessions'),
     tool('custom_worker_control', 'sessions'),
@@ -48,8 +48,16 @@ describe('conversation-mode tool authority', () => {
     expect(filterToolsForConversationMode(tools, 'agentic')).toEqual(tools);
   });
 
-  it('uses the sessions namespace boundary even when metadata is absent', () => {
-    expect(isToolAllowedForConversationMode(tool('sessions_wait'), 'chitchat')).toBe(false);
+  it('classifies purely by contract category, so a tool with no contract at all is not excluded', () => {
+    // Every registered tool carries a contract in production (see
+    // `builtin-definitions-sessions.ts`'s real `sessions_wait`, which declares
+    // `category: 'sessions'`). This checks the deliberate fail-open default for the
+    // hypothetical case a tool ships without one: classification never falls back to
+    // sniffing the name.
+    expect(isToolAllowedForConversationMode(tool('sessions_wait'), 'chitchat')).toBe(true);
+    expect(isToolAllowedForConversationMode(tool('sessions_wait', 'sessions'), 'chitchat')).toBe(
+      false,
+    );
   });
 
   it('keeps generic asynchronous waiting available in chitchat', () => {

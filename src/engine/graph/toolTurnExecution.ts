@@ -55,7 +55,10 @@ import {
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import { resolveMobileControllerRecoveryPreflight } from './mobileControllerRecoveryPolicy';
-import { buildMobileControllerGoalAdmissionBlock } from '../mobileController/goalAdmission';
+import {
+  buildMobileControllerGoalAdmissionBlock,
+  materializeMobileControllerGoal,
+} from '../mobileController/goalAdmission';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { buildClarificationReviewBlock } from './clarificationReviewPolicy';
@@ -291,7 +294,14 @@ export async function executeAgentControlGraphToolTurn(
     toolCalls: executableToolCalls,
     goals: goalsAfterEffectMaterialization,
   });
-  const projectedControlGraphGoals = delegationGoalMaterialization.goals;
+  // A mobile_ui_action call that can serialize the goal it wants does not need the
+  // model to type it back either; reconcile it here the same way, chained after
+  // delegation so a turn that does both admits on the very first attempt.
+  const mobileControllerGoalMaterialization = materializeMobileControllerGoal({
+    toolCalls: executableToolCalls,
+    goals: delegationGoalMaterialization.goals,
+  });
+  const projectedControlGraphGoals = mobileControllerGoalMaterialization.goals;
   const isMobileControllerTurn =
     executableToolCalls.length === 1 &&
     resolveRegisteredToolName(executableToolCalls[0]!.name) === MOBILE_UI_ACTION_TOOL_NAME;
@@ -386,6 +396,14 @@ export async function executeAgentControlGraphToolTurn(
           type: 'GOALS_UPDATED',
           goals: delegationGoalMaterialization.goals,
           reason: delegationGoalMaterialization.reason,
+          projectToMemoryTasks: false,
+        });
+      }
+      if (mobileControllerGoalMaterialization.status === 'materialized') {
+        graphEvents.push({
+          type: 'GOALS_UPDATED',
+          goals: mobileControllerGoalMaterialization.goals,
+          reason: mobileControllerGoalMaterialization.reason,
           projectToMemoryTasks: false,
         });
       }

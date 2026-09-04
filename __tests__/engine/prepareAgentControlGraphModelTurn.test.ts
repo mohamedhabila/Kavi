@@ -149,7 +149,7 @@ function createBaseParams() {
     allTools: [writeTool],
     completedWorkflowToolNames: new Set<string>(),
     goals: [],
-    isSuperAgent: true,
+    startsAgentic: true,
     iteration: 3,
     maxTokens: 4096,
     promptContextSupport: {

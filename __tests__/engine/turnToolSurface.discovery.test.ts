@@ -169,20 +169,23 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
       includeToolCatalog: true,
     });
 
-    // Chitchat stays closed over external *mutation*, but an everyday read-only
-    // lookup is exactly what this mode is used for and no longer costs a round-trip.
+    // Chitchat stays closed over agentic-only categories and open-world mutation, but
+    // an everyday action — web lookup, calendar, contacts, messaging — is exactly what
+    // this mode is used for and none of it costs a round-trip to become reachable.
     expect(selected.map((tool) => tool.name)).toEqual([
       'memory_recall',
       'memory_remember',
       'web_search',
       'web_fetch',
+      'calendar_create_event',
       'contacts_search',
+      'sms_compose',
       'tool_catalog',
       'tool_describe',
     ]);
   });
 
-  it('admits an exact catalog-activated device read into chitchat', () => {
+  it('keeps an unrequested tool off the surface until activation, even one chitchat is authorized to call', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,
       conversationMode: 'chitchat',
@@ -196,11 +199,12 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
 
     const names = new Set(selected.map((tool) => tool.name));
     expect(names.has('contacts_search')).toBe(true);
+    // contacts_get is chitchat-authorized (category `contacts`) but was never activated
+    // and is not part of the default core, so discovery still gates it.
     expect(names.has('contacts_get')).toBe(false);
-    expect(names.has('sms_compose')).toBe(false);
   });
 
-  it('keeps catalog discovery read-only over non-memory resources in chitchat', () => {
+  it('keeps browser automation off the chitchat surface even after catalog activation', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
       conversationMode: 'chitchat',
@@ -219,11 +223,15 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     });
 
     const names = new Set(selected.map((tool) => tool.name));
+    // workspace_files is not an agentic-only category, so a local read or write both
+    // stay authorized and, once activated, stay on the surface.
     expect(names.has('read_file')).toBe(true);
-    expect(names.has('browser_snapshot')).toBe(true);
+    expect(names.has('write_file')).toBe(true);
     expect(names.has('memory_remember')).toBe(true);
-    expect(names.has('write_file')).toBe(false);
+    // browser is an agentic-only category regardless of the individual tool's own
+    // side effects — even a read-only snapshot call stays behind escalation.
     expect(names.has('browser_navigate')).toBe(false);
+    expect(names.has('browser_snapshot')).toBe(false);
   });
 
   it('honors deliberate chitchat pins without broadening catalog mutation authority', () => {

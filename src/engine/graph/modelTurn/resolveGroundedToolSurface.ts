@@ -3,10 +3,8 @@ import type { Message } from '../../../types/message';
 import type { ToolDefinition } from '../../../types/tool';
 import type { ConversationMode } from '../../../types/conversation';
 import type { TrackedAsyncOperation } from '../../pendingAsyncOperations';
-import {
-  resolveAuthorizedToolNames,
-  resolveGoalCapabilityToolNames,
-} from '../../goals/toolSurface';
+import { resolveGoalCapabilityToolNames } from '../../goals/toolSurface';
+import { resolveAuthorizedToolNames } from '../../goals/toolSurfaceAuthority';
 import { normalizeToolName } from '../../tools/toolNameNormalization';
 import { resolveAgentExecutionTurnContract } from '../agentExecutionTurnContract';
 import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOperations';
@@ -128,10 +126,6 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     authorizedToolNames: resolveAuthorizedToolNames({
       allTools: currentPolicyAuthorizedTools,
       conversationMode: params.conversationMode,
-      activatedCatalogToolNames: new Set([
-        ...turnActivatedCatalogToolNames,
-        ...sessionActivatedToolNames,
-      ]),
       explicitToolSurfaceToolNames,
     }),
     pendingAsyncMonitorToolNames,

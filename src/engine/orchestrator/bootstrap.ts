@@ -33,6 +33,7 @@ import {
 } from '../pendingAsyncOperations';
 import { buildToolDefinitions } from '../tools/definitions';
 import { filterToolsForConversationMode } from '../tools/conversationModeToolAuthority';
+import { resolveConversationStartsAgentic } from '../graph/conversation/resolveConversationRuntimeMode';
 import { filterToolsForMemoryPolicy } from '../tools/memoryPolicyToolAuthority';
 import { hydrateProviderContextWindows } from '../../services/context/providerContextWindows';
 import {
@@ -183,6 +184,8 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   emitPendingAsyncOperationsChange: () => void;
   failoverState: FailoverState | null;
   isSuperAgent: boolean;
+  /** Whether this conversation starts in agentic mode; see resolveConversationStartsAgentic. */
+  startsAgentic: boolean;
   allowLongHorizonIterationExtensions: boolean;
   lastPendingAsyncSignature: string;
   llm: LlmService;
@@ -279,7 +282,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   const skillTools = getSkillToolDefinitions();
   const modeAuthorizedTools = filterToolsForConversationMode(
     filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
-    isSuperAgent ? 'agentic' : 'chitchat',
+    startsAgentic ? 'agentic' : 'chitchat',
   );
   const policyAuthorizedTools = filterToolsForMemoryPolicy(modeAuthorizedTools);
   const catalogVisibleTools = params.toolFilter
@@ -342,6 +345,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     emitPendingAsyncOperationsChange,
     failoverState,
     isSuperAgent,
+    startsAgentic,
     // Every persona-driven run without an explicit caller budget may earn bounded
     // extensions. The extension itself still requires code-owned evidence of recent
     // completed tool progress, and the repeat/stagnation detectors plus the hard

@@ -1,4 +1,4 @@
-import { resolveAuthorizedToolNames } from '../../src/engine/goals/toolSurface';
+import { resolveAuthorizedToolNames } from '../../src/engine/goals/toolSurfaceAuthority';
 import { buildUnknownToolResult } from '../../src/engine/toolExecution/unknownToolSuggestion';
 import { buildUnauthorizedToolResult } from '../../src/engine/toolExecution/unauthorizedToolResult';
 import { tools } from '../helpers/turnToolSurfaceHarness';
@@ -12,19 +12,75 @@ import type { ToolDefinition } from '../../src/types/tool';
 // run failed. Which capability a task needs is not knowable before the work is under way,
 // so a guess about it must not be able to refuse a call.
 
-const sideEffectfulTool: ToolDefinition = {
-  name: 'sms_compose',
-  description: 'Send a text message.',
+const calendarCreateEvent: ToolDefinition = {
+  name: 'calendar_create_event',
+  description: 'Create a calendar event.',
   input_schema: { type: 'object', properties: {} },
   contract: {
-    category: 'messaging',
-    capabilities: ['write'],
-    resourceKinds: ['unknown'],
+    category: 'calendar',
+    capabilities: ['write', 'verify'],
+    resourceKinds: ['device'],
     sideEffects: ['remote_mutation'],
   },
 };
 
-const allTools: ToolDefinition[] = [...tools, sideEffectfulTool];
+const smsCompose: ToolDefinition = {
+  name: 'sms_compose',
+  description: 'Compose a text message.',
+  input_schema: { type: 'object', properties: {} },
+  contract: {
+    category: 'communication',
+    capabilities: ['write'],
+    resourceKinds: ['device'],
+    sideEffects: ['remote_mutation'],
+  },
+};
+
+const reminderCreate: ToolDefinition = {
+  name: 'reminder',
+  description: 'Create a reminder.',
+  input_schema: { type: 'object', properties: {} },
+  contract: {
+    category: 'reminders',
+    capabilities: ['write'],
+    resourceKinds: ['device'],
+    sideEffects: ['local_artifact'],
+  },
+};
+
+const sshExec: ToolDefinition = {
+  name: 'ssh_exec',
+  description: 'Run a command over SSH.',
+  input_schema: { type: 'object', properties: {} },
+  contract: {
+    category: 'ssh',
+    capabilities: ['compute'],
+    resourceKinds: ['unknown'],
+    sideEffects: ['external_run'],
+  },
+};
+
+const openWorldMutatingTool: ToolDefinition = {
+  name: 'mcp__web__automate',
+  description: 'Drive an arbitrary web session on the caller\'s behalf.',
+  input_schema: { type: 'object', properties: {} },
+  contract: {
+    category: 'automation',
+    capabilities: ['write'],
+    resourceKinds: ['unknown'],
+    sideEffects: ['external_run'],
+    riskHints: ['open_world'],
+  },
+};
+
+const allTools: ToolDefinition[] = [
+  ...tools,
+  calendarCreateEvent,
+  smsCompose,
+  reminderCreate,
+  sshExec,
+  openWorldMutatingTool,
+];
 
 describe('an agentic run states its authority through permission, not presentation', () => {
   it('imposes no separate mode restriction', () => {
@@ -37,35 +93,37 @@ describe('an agentic run states its authority through permission, not presentati
   });
 });
 
-describe('chitchat is a real restriction, and keeps restricting', () => {
-  const chitchat = (activated?: string[]) =>
-    resolveAuthorizedToolNames({
-      allTools,
-      conversationMode: 'chitchat',
-      ...(activated ? { activatedCatalogToolNames: new Set(activated) } : {}),
-    });
+describe('chitchat authority is decided by contract, not a maintained tool-name list', () => {
+  const chitchat = () => resolveAuthorizedToolNames({ allTools, conversationMode: 'chitchat' });
 
-  it('permits conversational memory but not goal mutation or delegation', () => {
+  it('authorizes everyday actions outside any agentic-only category', () => {
     const authorized = chitchat();
 
+    expect(authorized.has('calendar_create_event')).toBe(true);
+    expect(authorized.has('sms_compose')).toBe(true);
+    expect(authorized.has('reminder')).toBe(true);
     expect(authorized.has('memory_recall')).toBe(true);
     expect(authorized.has('memory_remember')).toBe(true);
-    expect(authorized.has('update_goals')).toBe(false);
+  });
+
+  it('refuses every agentic-only category regardless of the tool name', () => {
+    const authorized = chitchat();
+
     expect(authorized.has('sessions_spawn')).toBe(false);
+    expect(authorized.has('update_goals')).toBe(false);
+    expect(authorized.has('ssh_exec')).toBe(false);
+    expect(authorized.has('python')).toBe(false);
+  });
+
+  it('refuses an open-world tool that can also mutate what it reaches', () => {
+    // Not a category exclusion — riskHints alone gates this one, and it carries no
+    // `read_only` hint to carve it back in the way `web_search`/`web_fetch` are.
+    expect(chitchat().has('mcp__web__automate')).toBe(false);
   });
 
   it('permits discovery, which mutates nothing and lets the mode notice it was outgrown', () => {
     expect(chitchat().has('tool_catalog')).toBe(true);
     expect(chitchat().has('tool_describe')).toBe(true);
-  });
-
-  it('refuses a side-effectful tool even after discovery activated it', () => {
-    // Discovery proves a capability exists, never that chat may mutate state with it.
-    expect(chitchat(['sms_compose']).has('sms_compose')).toBe(false);
-  });
-
-  it('accepts an activated tool that cannot mutate non-memory state', () => {
-    expect(chitchat(['read_file']).has('read_file')).toBe(true);
   });
 
   it('honours a code-owned explicit pin', () => {
