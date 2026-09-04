@@ -137,7 +137,7 @@ export function ChatScreenTelemetryPanel(props: ChatScreenTelemetryPanelProps) {
                     <View style={props.styles.logMetaRow}>
                       <View style={[props.styles.logKindBadge, { borderColor: accentColor }]}>
                         <Text style={[props.styles.logKindText, { color: accentColor }]}>
-                          {formatLogKindLabel(entry.kind)}
+                          {formatLogKindLabel(entry.kind, props.t)}
                         </Text>
                       </View>
                       <Text style={props.styles.logTimestamp}>

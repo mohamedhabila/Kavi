@@ -18,32 +18,34 @@ function buildAssistantResponseFileStamp(timestamp: number): string {
     .replace(/[:]/g, '-');
 }
 
-function formatAttachmentLine(attachment: Attachment): string {
+function formatAttachmentLine(attachment: Attachment, t: TranslateFn): string {
   const details = [
     attachment.type,
     attachment.mimeType?.trim() || undefined,
     Number.isFinite(attachment.size) && attachment.size > 0
-      ? `${Math.round(attachment.size)} bytes`
+      ? t('assistantExport.attachmentSizeBytes', { size: Math.round(attachment.size) })
       : undefined,
-    attachment.workspacePath?.trim() ? `workspace: ${attachment.workspacePath.trim()}` : undefined,
+    attachment.workspacePath?.trim()
+      ? t('assistantExport.attachmentWorkspacePath', { path: attachment.workspacePath.trim() })
+      : undefined,
   ].filter(Boolean);
 
-  return `- ${attachment.name || 'Attachment'}${details.length ? ` (${details.join(' | ')})` : ''}`;
+  return `- ${attachment.name || t('chat.attachmentFallbackName')}${details.length ? ` (${details.join(' | ')})` : ''}`;
 }
 
 function pushToolCallSection(lines: string[], toolCall: ToolCall, t: TranslateFn): void {
   lines.push(`#### ${toolCall.name}`);
   lines.push('');
-  lines.push(`- Status: ${toolCall.status}`);
+  lines.push(`- ${t('assistantExport.statusLine', { status: toolCall.status })}`);
 
   const summary = summarizeToolCall(toolCall, t);
   if (summary) {
-    lines.push(`- Summary: ${summary}`);
+    lines.push(`- ${t('assistantExport.summaryLine', { summary })}`);
   }
 
   if (toolCall.arguments?.trim()) {
     lines.push('');
-    lines.push('Arguments:');
+    lines.push(t('assistantExport.argumentsHeading'));
     lines.push('```json');
     lines.push(toolCall.arguments.trim());
     lines.push('```');
@@ -52,7 +54,9 @@ function pushToolCallSection(lines: string[], toolCall: ToolCall, t: TranslateFn
   const toolOutput = toolCall.error?.trim() || toolCall.result?.trim();
   if (toolOutput) {
     lines.push('');
-    lines.push(toolCall.error ? 'Error output:' : 'Result:');
+    lines.push(
+      toolCall.error ? t('assistantExport.errorOutputLabel') : t('assistantExport.resultLabel'),
+    );
     lines.push('```text');
     lines.push(toolOutput);
     lines.push('```');
@@ -64,26 +68,27 @@ function pushToolCallSection(lines: string[], toolCall: ToolCall, t: TranslateFn
 function pushSubAgentSection(
   lines: string[],
   segment: NonNullable<ReturnType<typeof buildAssistantBubbleViewModel>['contentSegments']>[number],
+  t: TranslateFn,
 ): void {
   const snapshot = segment.subAgentEvent?.snapshot;
   if (!snapshot) {
     return;
   }
 
-  lines.push('### Worker update');
+  lines.push(`### ${t('assistantExport.workerUpdateHeading')}`);
   lines.push('');
-  lines.push(`- Session: ${snapshot.sessionId}`);
-  lines.push(`- Status: ${snapshot.status}`);
-  lines.push(`- Depth: ${snapshot.depth}`);
+  lines.push(`- ${t('assistantExport.sessionLine', { id: snapshot.sessionId })}`);
+  lines.push(`- ${t('assistantExport.statusLine', { status: snapshot.status })}`);
+  lines.push(`- ${t('assistantExport.depthLine', { depth: snapshot.depth })}`);
   if (snapshot.name?.trim()) {
-    lines.push(`- Name: ${snapshot.name.trim()}`);
+    lines.push(`- ${t('assistantExport.nameLine', { name: snapshot.name.trim() })}`);
   }
   if (snapshot.currentActivity?.trim()) {
-    lines.push(`- Activity: ${snapshot.currentActivity.trim()}`);
+    lines.push(`- ${t('assistantExport.activityLine', { activity: snapshot.currentActivity.trim() })}`);
   }
   if (snapshot.output?.trim()) {
     lines.push('');
-    lines.push('Worker output:');
+    lines.push(t('assistantExport.workerOutputLabel'));
     lines.push(snapshot.output.trim());
   }
 }
@@ -108,52 +113,54 @@ export function buildAssistantBubbleTranscriptMarkdown(params: {
   });
 
   const lines: string[] = [
-    `# ${params.assistantLabel} response`,
+    `# ${params.t('assistantExport.responseHeading', { label: params.assistantLabel })}`,
     '',
-    `_Generated: ${formatTimestamp(params.message.timestamp)}_`,
+    `_${params.t('assistantExport.generated', { timestamp: formatTimestamp(params.message.timestamp) })}_`,
   ];
 
   if (!bubbleModel.contentSegments.length) {
-    lines.push('', 'No shareable response content was available.');
+    lines.push('', params.t('assistantExport.noContent'));
     return `${lines.join('\n').trim()}\n`;
   }
 
   bubbleModel.contentSegments.forEach((segment, index) => {
     lines.push('');
-    lines.push(`## Segment ${index + 1}`);
+    lines.push(`## ${params.t('assistantExport.segmentHeading', { index: index + 1 })}`);
     lines.push('');
-    lines.push(`- Timestamp: ${formatTimestamp(segment.timestamp)}`);
+    lines.push(
+      `- ${params.t('assistantExport.timestampLine', { timestamp: formatTimestamp(segment.timestamp) })}`,
+    );
 
     const reasoning = getRenderableThinkingText(segment.reasoning);
     if (reasoning) {
       lines.push('');
-      lines.push('### Thinking');
+      lines.push(`### ${params.t('assistantExport.thinkingHeading')}`);
       lines.push('');
       lines.push(reasoning);
     }
 
     if (segment.subAgentEvent) {
       lines.push('');
-      pushSubAgentSection(lines, segment);
+      pushSubAgentSection(lines, segment, params.t);
     } else if (segment.content.trim()) {
       lines.push('');
-      lines.push('### Content');
+      lines.push(`### ${params.t('assistantExport.contentHeading')}`);
       lines.push('');
       lines.push(segment.content.trim());
     }
 
     if (segment.attachments?.length) {
       lines.push('');
-      lines.push('### Attachments');
+      lines.push(`### ${params.t('assistantExport.attachmentsHeading')}`);
       lines.push('');
       segment.attachments.forEach((attachment) => {
-        lines.push(formatAttachmentLine(attachment));
+        lines.push(formatAttachmentLine(attachment, params.t));
       });
     }
 
     if (segment.toolCalls?.length) {
       lines.push('');
-      lines.push('### Tool calls');
+      lines.push(`### ${params.t('assistantExport.toolCallsHeading')}`);
       lines.push('');
       segment.toolCalls.forEach((toolCall) => {
         pushToolCallSection(lines, toolCall, params.t);
@@ -165,7 +172,7 @@ export function buildAssistantBubbleTranscriptMarkdown(params: {
 
     if (segment.isError) {
       lines.push('');
-      lines.push('> This segment is marked as an error.');
+      lines.push(`> ${params.t('assistantExport.segmentErrorNotice')}`);
     }
   });
 

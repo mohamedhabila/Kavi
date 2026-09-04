@@ -106,7 +106,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({
   const elapsedMs = getElapsedMs(toolCall, now);
   const unsafeWaitingPresentation =
     toolCall.status === 'pending' || toolCall.status === 'running'
-      ? getWaitingPresentation(toolCall)
+      ? getWaitingPresentation(toolCall, t)
       : null;
   const waitingPresentation = unsafeWaitingPresentation
     ? {
@@ -156,7 +156,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({
             {waitingPresentation ? (
               <View style={styles.waitingBanner} testID="tool-call-waiting-banner">
                 <Text style={styles.waitingDetail} numberOfLines={2}>
-                  {[pickWaitingPhrase(elapsedMs), runningDetailText, waitingPresentation.detail]
+                  {[pickWaitingPhrase(elapsedMs, t), runningDetailText, waitingPresentation.detail]
                     .filter(Boolean)
                     .join(' • ')}
                 </Text>

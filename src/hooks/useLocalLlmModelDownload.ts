@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LlmProviderConfig } from '../types/provider';
+import { i18n } from '../i18n/manager';
 import { getLocalLlmAvailability } from '../services/localLlm/availability';
 import { installLocalLlmModel } from '../services/localLlm/install';
 import type {
@@ -204,9 +205,7 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
           source: null,
           progress: null,
           errorMessage:
-            error instanceof Error
-              ? error.message
-              : 'The model could not be downloaded. Check your connection and try again.',
+            error instanceof Error ? error.message : i18n.t('localModels.downloadFailedBody'),
           availability,
         });
         return null;

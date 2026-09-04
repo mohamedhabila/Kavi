@@ -2,11 +2,11 @@ import type { ToolCall } from '../../types/message';
 
 export type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
-const WAITING_PHRASES = [
-  'Monitoring progress',
-  'Waiting for the next update',
-  'Holding for completion',
-  'Checking again soon',
+const WAITING_PHRASE_KEYS = [
+  'toolCall.waitingPhrases.monitoringProgress',
+  'toolCall.waitingPhrases.waitingForNextUpdate',
+  'toolCall.waitingPhrases.holdingForCompletion',
+  'toolCall.waitingPhrases.checkingAgainSoon',
 ];
 
 function parseNumericValue(value: unknown): number | null {
@@ -54,17 +54,19 @@ export function getElapsedMs(toolCall: ToolCall, now: number): number | null {
   return Math.max(0, endTime - startedAt);
 }
 
-export function pickWaitingPhrase(elapsedMs: number | null): string {
+export function pickWaitingPhrase(elapsedMs: number | null, t: TranslateFn): string {
   if (elapsedMs === null) {
-    return WAITING_PHRASES[0];
+    return t(WAITING_PHRASE_KEYS[0]);
   }
-  return (
-    WAITING_PHRASES[Math.floor(elapsedMs / 10000) % WAITING_PHRASES.length] || WAITING_PHRASES[0]
-  );
+  const key =
+    WAITING_PHRASE_KEYS[Math.floor(elapsedMs / 10000) % WAITING_PHRASE_KEYS.length] ||
+    WAITING_PHRASE_KEYS[0];
+  return t(key);
 }
 
 export function getWaitingPresentation(
   toolCall: ToolCall,
+  t: TranslateFn,
 ): { title: string; detail?: string } | null {
   let args: Record<string, unknown>;
   try {
@@ -79,7 +81,9 @@ export function getWaitingPresentation(
       const reason =
         typeof args.reason === 'string' && args.reason.trim() ? args.reason.trim() : undefined;
       return {
-        title: ms ? `Waiting ${formatHumanDuration(ms)}` : 'Waiting',
+        title: ms
+          ? t('toolCall.waiting.duration', { duration: formatHumanDuration(ms) })
+          : t('toolCall.waiting.generic'),
         detail: reason,
       };
     }
@@ -91,13 +95,15 @@ export function getWaitingPresentation(
           : undefined;
       const timeMs = parseNumericValue(args.timeMs);
       if (text) {
-        return { title: `Waiting for "${text}"` };
+        return { title: t('toolCall.waiting.forText', { text }) };
       }
       if (selector) {
-        return { title: `Waiting for ${selector}` };
+        return { title: t('toolCall.waiting.forSelector', { selector }) };
       }
       return {
-        title: timeMs ? `Waiting ${formatHumanDuration(timeMs)}` : 'Waiting for browser state',
+        title: timeMs
+          ? t('toolCall.waiting.duration', { duration: formatHumanDuration(timeMs) })
+          : t('toolCall.waiting.browserState'),
       };
     }
     case 'expo_eas_workflow_wait': {
@@ -106,7 +112,9 @@ export function getWaitingPresentation(
           ? args.workflowRunId.trim()
           : undefined;
       return {
-        title: workflowRunId ? `Waiting on workflow ${workflowRunId}` : 'Waiting on Expo workflow',
+        title: workflowRunId
+          ? t('toolCall.waiting.onWorkflow', { id: workflowRunId })
+          : t('toolCall.waiting.onExpoWorkflow'),
       };
     }
     case 'sessions_wait': {
@@ -120,22 +128,27 @@ export function getWaitingPresentation(
           )
         : [];
       const waitTimeoutMs = parseNumericValue(args.waitTimeoutMs);
-      const detail = waitTimeoutMs ? `Up to ${formatHumanDuration(waitTimeoutMs)}` : undefined;
+      const detail = waitTimeoutMs
+        ? t('toolCall.waiting.upTo', { duration: formatHumanDuration(waitTimeoutMs) })
+        : undefined;
 
       if (sessionId) {
-        return { title: `Waiting on agent ${sessionId.slice(0, 12)}...`, detail };
+        return { title: t('toolCall.waiting.onAgent', { id: sessionId.slice(0, 12) }), detail };
       }
       if (sessionIds.length === 1) {
-        return { title: `Waiting on agent ${sessionIds[0].slice(0, 12)}...`, detail };
+        return {
+          title: t('toolCall.waiting.onAgent', { id: sessionIds[0].slice(0, 12) }),
+          detail,
+        };
       }
       if (sessionIds.length > 1) {
-        return { title: `Waiting on ${sessionIds.length} agents`, detail };
+        return { title: t('toolCall.waiting.onAgentsCount', { count: sessionIds.length }), detail };
       }
-      return { title: 'Waiting on active agents', detail };
+      return { title: t('toolCall.waiting.onActiveAgents'), detail };
     }
     default:
       return toolCall.name.endsWith('_wait')
-        ? { title: `Waiting on ${humanizeToolName(toolCall.name)}` }
+        ? { title: t('toolCall.waiting.onTool', { tool: humanizeToolName(toolCall.name, t) }) }
         : null;
   }
 }
@@ -189,7 +202,13 @@ export function summarizeToolCall(toolCall: ToolCall, t?: TranslateFn): string |
     switch (toolCall.name) {
       case 'wait': {
         const ms = parseNumericValue(args.ms);
-        return ms ? `Waiting ${formatHumanDuration(ms)}` : 'Waiting';
+        return t
+          ? ms
+            ? t('toolCall.waiting.duration', { duration: formatHumanDuration(ms) })
+            : t('toolCall.waiting.generic')
+          : ms
+            ? `Waiting ${formatHumanDuration(ms)}`
+            : 'Waiting';
       }
       case 'write_file':
         return t
@@ -296,36 +315,73 @@ export function summarizeToolCall(toolCall: ToolCall, t?: TranslateFn): string |
             ? `Listing ${args.path}`
             : 'Listing a remote directory';
       case 'sessions_spawn': {
+        if (t) {
+          return args.name
+            ? args.waitForCompletion
+              ? t('toolCall.summaries.sessionsSpawnNamedBlocking', { name: args.name })
+              : t('toolCall.summaries.sessionsSpawnNamed', { name: args.name })
+            : args.waitForCompletion
+              ? t('toolCall.summaries.sessionsSpawnBlocking')
+              : t('toolCall.summaries.sessionsSpawn');
+        }
         const label = args.name ? `🧠 Spawning agent: ${args.name}` : '🧠 Spawning sub-agent';
         return args.waitForCompletion ? `${label} (blocking)` : label;
       }
       case 'sessions_status':
-        return args.sessionId
-          ? `Checking agent ${args.sessionId.slice(0, 12)}…`
-          : 'Checking agent status';
+        return t
+          ? args.sessionId
+            ? t('toolCall.summaries.sessionsStatus', { id: args.sessionId.slice(0, 12) })
+            : t('toolCall.summaries.sessionsStatusGeneric')
+          : args.sessionId
+            ? `Checking agent ${args.sessionId.slice(0, 12)}…`
+            : 'Checking agent status';
       case 'sessions_list':
-        return 'Listing active agents';
+        return t ? t('toolCall.summaries.sessionsList') : 'Listing active agents';
       case 'sessions_send': {
+        if (t) {
+          return args.sessionId
+            ? args.waitForCompletion
+              ? t('toolCall.summaries.sessionsSendNamedBlocking', {
+                  id: args.sessionId.slice(0, 12),
+                })
+              : t('toolCall.summaries.sessionsSendNamed', { id: args.sessionId.slice(0, 12) })
+            : args.waitForCompletion
+              ? t('toolCall.summaries.sessionsSendBlocking')
+              : t('toolCall.summaries.sessionsSend');
+        }
         const label = args.sessionId
           ? `Messaging agent ${args.sessionId.slice(0, 12)}…`
           : 'Messaging a sub-agent';
         return args.waitForCompletion ? `${label} (blocking)` : label;
       }
       case 'sessions_history':
-        return args.sessionId
-          ? `Reading agent ${args.sessionId.slice(0, 12)}… history`
-          : 'Reading agent history';
+        return t
+          ? args.sessionId
+            ? t('toolCall.summaries.sessionsHistory', { id: args.sessionId.slice(0, 12) })
+            : t('toolCall.summaries.sessionsHistoryGeneric')
+          : args.sessionId
+            ? `Reading agent ${args.sessionId.slice(0, 12)}… history`
+            : 'Reading agent history';
       case 'sessions_output':
-        return args.sessionId
-          ? `Reading final output from agent ${args.sessionId.slice(0, 12)}…`
-          : 'Reading agent final output';
+        return t
+          ? args.sessionId
+            ? t('toolCall.summaries.sessionsOutput', { id: args.sessionId.slice(0, 12) })
+            : t('toolCall.summaries.sessionsOutputGeneric')
+          : args.sessionId
+            ? `Reading final output from agent ${args.sessionId.slice(0, 12)}…`
+            : 'Reading agent final output';
       case 'sessions_surface_output':
-        return args.sessionId
-          ? `Surfacing output from agent ${args.sessionId.slice(0, 12)}…`
-          : 'Surfacing agent output';
+        return t
+          ? args.sessionId
+            ? t('toolCall.summaries.sessionsSurfaceOutput', { id: args.sessionId.slice(0, 12) })
+            : t('toolCall.summaries.sessionsSurfaceOutputGeneric')
+          : args.sessionId
+            ? `Surfacing output from agent ${args.sessionId.slice(0, 12)}…`
+            : 'Surfacing agent output';
       case 'sessions_wait': {
         if (typeof args.sessionId === 'string' && args.sessionId.trim()) {
-          return `Waiting on agent ${args.sessionId.trim().slice(0, 12)}…`;
+          const id = args.sessionId.trim().slice(0, 12);
+          return t ? t('toolCall.summaries.sessionsWaitAgent', { id }) : `Waiting on agent ${id}…`;
         }
         if (Array.isArray(args.sessionIds)) {
           const sessionIds = args.sessionIds.filter(
@@ -333,20 +389,29 @@ export function summarizeToolCall(toolCall: ToolCall, t?: TranslateFn): string |
               typeof value === 'string' && value.trim().length > 0,
           );
           if (sessionIds.length === 1) {
-            return `Waiting on agent ${sessionIds[0].slice(0, 12)}…`;
+            const id = sessionIds[0].slice(0, 12);
+            return t
+              ? t('toolCall.summaries.sessionsWaitAgent', { id })
+              : `Waiting on agent ${id}…`;
           }
           if (sessionIds.length > 1) {
-            return `Waiting on ${sessionIds.length} agents`;
+            return t
+              ? t('toolCall.waiting.onAgentsCount', { count: sessionIds.length })
+              : `Waiting on ${sessionIds.length} agents`;
           }
         }
-        return 'Waiting on active agents';
+        return t ? t('toolCall.waiting.onActiveAgents') : 'Waiting on active agents';
       }
       case 'sessions_cancel':
-        return args.sessionId
-          ? `Stopping agent ${args.sessionId.slice(0, 12)}…`
-          : 'Stopping a sub-agent';
+        return t
+          ? args.sessionId
+            ? t('toolCall.summaries.sessionsCancel', { id: args.sessionId.slice(0, 12) })
+            : t('toolCall.summaries.sessionsCancelGeneric')
+          : args.sessionId
+            ? `Stopping agent ${args.sessionId.slice(0, 12)}…`
+            : 'Stopping a sub-agent';
       case 'sessions_yield':
-        return '⏸ Recording agent checkpoint';
+        return t ? t('toolCall.summaries.sessionsYield') : '⏸ Recording agent checkpoint';
       default:
         return null;
     }

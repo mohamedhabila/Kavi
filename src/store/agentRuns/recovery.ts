@@ -1,6 +1,7 @@
 import type { AgentRun } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
+import { i18n } from '../../i18n/manager';
 import { getSubAgentsForAgentRun } from '../../services/agents/lifecycle/stateMachine';
 import {
   getAgentRunPendingAsyncOperations,
@@ -27,11 +28,15 @@ import { buildAgentControlGraphAfterPersistedFinalDelivery } from '../../engine/
 import { reduceAgentControlGraph } from '../../engine/graph/agentControlGraph';
 import { buildAgentControlGraphTerminalEventForCompletion } from '../../engine/graph/runCompletion';
 
-const INTERRUPTED_TOOL_CALL_ERROR =
-  'Tool call was interrupted because the app restarted before completion.';
-const EFFECT_RECONCILIATION_PENDING_SUMMARY =
-  'Waiting for durable tool-effect reconciliation after app restart. No tool or model execution will be replayed.';
-const EFFECT_RECONCILIATION_PENDING_TITLE = 'Tool effect reconciliation pending';
+function interruptedToolCallError(): string {
+  return i18n.t('toolCall.errors.interruptedByAppRestart');
+}
+function effectReconciliationPendingSummary(): string {
+  return i18n.t('toolCall.errors.reconciliationPendingSummary');
+}
+function effectReconciliationPendingTitle(): string {
+  return i18n.t('toolCall.errors.reconciliationPendingTitle');
+}
 
 function controlGraphMatchesRecoveredTerminalStatus(
   controlGraph: AgentRun['controlGraph'],
@@ -99,7 +104,7 @@ export function recoverInterruptedAgentRunsInConversation(
             messages: nextMessages,
             run,
             timestamp,
-            errorMessage: INTERRUPTED_TOOL_CALL_ERROR,
+            errorMessage: interruptedToolCallError(),
           });
           return {
             messages: settled.messages,
@@ -116,7 +121,7 @@ export function recoverInterruptedAgentRunsInConversation(
           messages: nextMessages,
           run,
           timestamp,
-          interruptedErrorMessage: INTERRUPTED_TOOL_CALL_ERROR,
+          interruptedErrorMessage: interruptedToolCallError(),
           resolveToolEffect: params?.resolveToolEffect ?? (() => ({ kind: 'not_dispatched' })),
         });
     const recoveredCompletedToolCount = interruptedToolUpdate.completedCount;
@@ -145,7 +150,7 @@ export function recoverInterruptedAgentRunsInConversation(
 
     if (interruptedToolUpdate.reconciliationPendingCount > 0) {
       const alreadyPending =
-        run.latestSummary === EFFECT_RECONCILIATION_PENDING_SUMMARY &&
+        run.latestSummary === effectReconciliationPendingSummary() &&
         run.controlGraph?.status === 'recovering';
       if (alreadyPending) return run;
 
@@ -163,7 +168,7 @@ export function recoverInterruptedAgentRunsInConversation(
           controlGraph: { ...nextControlGraph, status: 'recovering' },
           currentPhase: reviewPhase,
           updatedAt: Math.max(run.updatedAt, timestamp),
-          latestSummary: EFFECT_RECONCILIATION_PENDING_SUMMARY,
+          latestSummary: effectReconciliationPendingSummary(),
           summary: mergeAgentRunSummary(run.summary, {
             durationMs: Math.max(0, timestamp - run.createdAt),
           }),
@@ -172,14 +177,14 @@ export function recoverInterruptedAgentRunsInConversation(
             reviewPhase,
             'active',
             timestamp,
-            EFFECT_RECONCILIATION_PENDING_SUMMARY,
+            effectReconciliationPendingSummary(),
           ),
         },
         {
           timestamp,
           kind: 'run',
-          title: EFFECT_RECONCILIATION_PENDING_TITLE,
-          detail: EFFECT_RECONCILIATION_PENDING_SUMMARY,
+          title: effectReconciliationPendingTitle(),
+          detail: effectReconciliationPendingSummary(),
         },
       );
     }

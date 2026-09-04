@@ -4,15 +4,43 @@ import {
 } from '../../src/components/chat/assistantBubbleTranscript';
 import { Message } from '../../src/types/message';
 
+const TRANSLATION_TEMPLATES: Record<string, string> = {
+  'toolCall.summaries.readFilePath': 'Reading {path}',
+  'toolCall.summaries.readFile': 'Reading a file',
+  'chat.attachmentFallbackName': 'attachment',
+  'assistantExport.responseHeading': '{label} response',
+  'assistantExport.generated': 'Generated: {timestamp}',
+  'assistantExport.noContent': 'No shareable response content was available.',
+  'assistantExport.segmentHeading': 'Segment {index}',
+  'assistantExport.timestampLine': 'Timestamp: {timestamp}',
+  'assistantExport.thinkingHeading': 'Thinking',
+  'assistantExport.contentHeading': 'Content',
+  'assistantExport.attachmentsHeading': 'Attachments',
+  'assistantExport.toolCallsHeading': 'Tool calls',
+  'assistantExport.segmentErrorNotice': 'This segment is marked as an error.',
+  'assistantExport.statusLine': 'Status: {status}',
+  'assistantExport.summaryLine': 'Summary: {summary}',
+  'assistantExport.argumentsHeading': 'Arguments:',
+  'assistantExport.errorOutputLabel': 'Error output:',
+  'assistantExport.resultLabel': 'Result:',
+  'assistantExport.workerUpdateHeading': 'Worker update',
+  'assistantExport.sessionLine': 'Session: {id}',
+  'assistantExport.depthLine': 'Depth: {depth}',
+  'assistantExport.nameLine': 'Name: {name}',
+  'assistantExport.activityLine': 'Activity: {activity}',
+  'assistantExport.workerOutputLabel': 'Worker output:',
+  'assistantExport.attachmentSizeBytes': '{size} bytes',
+  'assistantExport.attachmentWorkspacePath': 'workspace: {path}',
+};
+
 const translate = (key: string, params?: Record<string, string | number>) => {
-  switch (key) {
-    case 'toolCall.summaries.readFilePath':
-      return `Reading ${params?.path}`;
-    case 'toolCall.summaries.readFile':
-      return 'Reading a file';
-    default:
-      return key;
-  }
+  const template = TRANSLATION_TEMPLATES[key];
+  if (!template) return key;
+  if (!params) return template;
+  return Object.entries(params).reduce(
+    (acc, [paramKey, value]) => acc.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(value)),
+    template,
+  );
 };
 
 const makeAssistantMessage = (overrides: Partial<Message> = {}): Message => ({

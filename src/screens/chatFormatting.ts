@@ -1,6 +1,7 @@
 import type { AgentRun } from '../types/agentRun';
 import type { ConversationLogEntry } from '../types/conversation';
 import type { LocalLlmRuntimeStatus } from '../services/localLlm/types';
+import type { TranslateFn } from '../components/chat/toolCallPresentation';
 import { formatCompactElapsed } from '../services/agents/lifecycle/presentPhase';
 import { MAX_LOG_DETAIL_CHARS } from './chatScreenConstants';
 import { truncateLogDetail as truncateLogDetailWithDefaultLimit } from '../utils/logDetail';
@@ -34,22 +35,22 @@ export function formatConversationLogTime(timestamp: number): string {
   });
 }
 
-export function formatLogKindLabel(kind: ConversationLogEntry['kind']): string {
+export function formatLogKindLabel(kind: ConversationLogEntry['kind'], t: TranslateFn): string {
   switch (kind) {
     case 'state':
-      return 'State';
+      return t('chat.logKind.state');
     case 'tool':
-      return 'Tool';
+      return t('chat.logKind.tool');
     case 'usage':
-      return 'Usage';
+      return t('chat.logKind.usage');
     case 'compaction':
-      return 'Compact';
+      return t('chat.logKind.compaction');
     case 'command':
-      return 'Command';
+      return t('chat.logKind.command');
     case 'error':
-      return 'Error';
+      return t('common.error');
     default:
-      return 'System';
+      return t('chat.logKind.system');
   }
 }
 

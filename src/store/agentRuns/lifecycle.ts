@@ -9,6 +9,7 @@ import type {
 } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
 import type { WorkflowTaskAnchor } from '../../types/workflowTaskAnchor';
+import { i18n } from '../../i18n/manager';
 import { generateId } from '../../utils/id';
 import {
   areAgentRunPhasesEqual,
@@ -28,19 +29,21 @@ import { appendAgentCheckpoint, isTargetAgentRun, resolveTargetAgentRunId } from
 import { settleActiveToolCallsInAgentRunMessages } from './toolCalls';
 
 const MAX_AGENT_RUNS = 24;
-const SUPERSEDED_RUN_TOOL_CALL_ERROR =
-  'Tool call was interrupted because the run was superseded by a newer user turn.';
+
+function supersededRunToolCallError(): string {
+  return i18n.t('toolCall.errors.interruptedBySupersededRun');
+}
 
 function buildTerminalRunToolCallError(status: Exclude<AgentRunStatus, 'running'>): string {
   if (status === 'cancelled') {
-    return 'Tool call was interrupted because the run was cancelled before completion.';
+    return i18n.t('toolCall.errors.interruptedByCancelledRun');
   }
 
   if (status === 'failed') {
-    return 'Tool call was interrupted because the run failed before completion.';
+    return i18n.t('toolCall.errors.interruptedByFailedRun');
   }
 
-  return 'Tool call did not complete before the run reached a terminal state.';
+  return i18n.t('toolCall.errors.notCompletedBeforeTerminal');
 }
 
 type StartAgentRunParams = {
@@ -66,7 +69,7 @@ export function startAgentRunInConversation(
       messages: nextMessages,
       run,
       timestamp: params.timestamp,
-      errorMessage: SUPERSEDED_RUN_TOOL_CALL_ERROR,
+      errorMessage: supersededRunToolCallError(),
     });
     if (settledToolCalls.settledCount > 0) {
       nextMessages = settledToolCalls.messages;

@@ -17,13 +17,16 @@
 //   • ≥ 30 minutes, < 4 hours, same day      → soft inline timestamp
 //   • Cold-start cue (first msg after gap >= 30 min)
 //     when caller passes `coldStartGapMs`    → "Continuing — last spoke
-//                                                ~Nh ago"
+//                                                N hours ago" (via
+//                                                Intl.RelativeTimeFormat)
 //   • Otherwise                              → no marker
 //
-// This module is intentionally side-effect-free; rendering is the caller's job.
+// All rendered text is localized through the active i18n locale; only the
+// Intl date/time formatting honors the `locale` option below.
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
+import { i18n } from '../../i18n/manager';
 
 export type TemporalMarkerKind =
   | 'thread-start'
@@ -74,8 +77,8 @@ function daysBetween(prevTs: number, currTs: number): number {
 
 function formatDay(ts: number, now: number, locale: string): string {
   const days = daysBetween(now, ts);
-  if (days === 0) return 'Today';
-  if (days === -1) return 'Yesterday';
+  if (days === 0) return i18n.t('chat.temporal.today');
+  if (days === -1) return i18n.t('chat.temporal.yesterday');
   if (days < 0 && days >= -6) {
     return new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(new Date(ts));
   }
@@ -93,15 +96,17 @@ function formatTime(ts: number, locale: string): string {
   }).format(new Date(ts));
 }
 
-function bucketGapPhrase(gapMs: number): string {
+/** Localized "N units ago" phrase for the gap, via Intl.RelativeTimeFormat. */
+function formatRelativeGapPhrase(gapMs: number, locale: string): string {
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'always', style: 'long' });
   const hours = Math.round(gapMs / 3_600_000);
   if (hours < 1) {
     const minutes = Math.max(1, Math.round(gapMs / 60_000));
-    return `~${minutes}m ago`;
+    return rtf.format(-minutes, 'minute');
   }
-  if (hours < 24) return `~${hours}h ago`;
+  if (hours < 24) return rtf.format(-hours, 'hour');
   const days = Math.max(1, Math.round(gapMs / 86_400_000));
-  return `~${days}d ago`;
+  return rtf.format(-days, 'day');
 }
 
 export function computeTemporalMarkers(
@@ -121,11 +126,13 @@ export function computeTemporalMarkers(
   markers.push({
     kind: 'thread-start',
     beforeMessageId: first.id,
-    text: `Conversation began ${new Intl.DateTimeFormat(locale, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(new Date(first.timestamp))}`,
+    text: i18n.t('chat.temporal.conversationBegan', {
+      date: new Intl.DateTimeFormat(locale, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(new Date(first.timestamp)),
+    }),
     meta: { timestamp: first.timestamp },
   });
 
@@ -156,7 +163,9 @@ export function computeTemporalMarkers(
       markers.push({
         kind: 'later-that-day',
         beforeMessageId: curr.id,
-        text: `Later that day · ${formatTime(curr.timestamp, locale)}`,
+        text: i18n.t('chat.temporal.laterThatDay', {
+          time: formatTime(curr.timestamp, locale),
+        }),
         meta: { timestamp: curr.timestamp, gapMs: gap },
       });
       continue;
@@ -183,7 +192,9 @@ export function computeTemporalMarkers(
       markers.push({
         kind: 'cold-start-cue',
         beforeMessageId: last.id,
-        text: `Continuing — last spoke ${bucketGapPhrase(gapToNow)}`,
+        text: i18n.t('chat.temporal.continuingLastSpoke', {
+          phrase: formatRelativeGapPhrase(gapToNow, locale),
+        }),
         meta: { timestamp: now, gapMs: gapToNow },
       });
     }

@@ -2,6 +2,7 @@ import {
   computeTemporalMarkers,
   type TemporalMarker,
 } from '../../src/components/chat/temporalMarkers';
+import { i18n } from '../../src/i18n/manager';
 
 const ts = (iso: string) => new Date(iso).getTime();
 
@@ -87,7 +88,7 @@ describe('computeTemporalMarkers', () => {
     const cue = markers.find((m) => m.kind === 'cold-start-cue');
     expect(cue).toBeDefined();
     expect(cue?.beforeMessageId).toBe('m2');
-    expect(cue?.text).toMatch(/Continuing — last spoke ~6h ago/);
+    expect(cue?.text).toMatch(/Continuing — last spoke 6 hours ago/);
   });
 
   it('does not emit a cold-start cue when within the gap threshold', () => {
@@ -111,6 +112,32 @@ describe('computeTemporalMarkers', () => {
     expect(sep?.kind).toBe('day-separator');
     // Wednesday is 1 day before "now" (Thursday Apr 30) → "Yesterday".
     expect(sep?.text).toBe('Yesterday');
+  });
+
+  it('renders localized (non-English) marker text once the locale is switched to Arabic', async () => {
+    await i18n.setLocale('ar');
+    try {
+      const markers = computeTemporalMarkers(
+        [msg('m1', 'user', ts('2026-05-01T09:30:00'))],
+        { now: ts('2026-05-01T09:30:01'), locale: 'ar' },
+      );
+      expect(markers).toHaveLength(1);
+      expect(markers[0].text).not.toMatch(/Conversation began/);
+      expect(markers[0].text).toContain('بدأت المحادثة');
+
+      const dayMarkers = computeTemporalMarkers(
+        [
+          msg('m1', 'user', ts('2026-05-01T23:50:00')),
+          msg('m2', 'assistant', ts('2026-05-02T00:10:00')),
+        ],
+        { now: ts('2026-05-02T00:10:01'), locale: 'ar' },
+      );
+      const sep = dayMarkers.find((m) => m.beforeMessageId === 'm2');
+      expect(sep?.text).toBe('اليوم');
+      expect(sep?.text).not.toBe('Today');
+    } finally {
+      await i18n.setLocale('en');
+    }
   });
 
   it('skips markers for malformed adjacent timestamps but still emits thread-start', () => {

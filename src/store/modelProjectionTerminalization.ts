@@ -1,14 +1,19 @@
 import type { Conversation, ModelProjectionOwner } from '../types/conversation';
+import { i18n } from '../i18n/manager';
 import {
   buildAssistantMessageMetadata,
   hasSettledFinalAssistantMetadata,
 } from '../utils/assistantMessageMetadata';
 
-const INTERRUPTED_BEFORE_START_TEXT =
-  'Response interrupted before generation could start. Please retry when you are ready.';
-const APP_RESTARTED_BEFORE_START_TEXT =
-  'Response interrupted when the app restarted before generation could start. Please retry when you are ready.';
-const CANCELLED_BEFORE_START_TEXT = 'Stopped before a response was generated.';
+function interruptedBeforeStartText(): string {
+  return i18n.t('chat.responseInterruptedBeforeStart');
+}
+function appRestartedBeforeStartText(): string {
+  return i18n.t('chat.responseInterruptedByAppRestartBeforeStart');
+}
+function cancelledBeforeStartText(): string {
+  return i18n.t('chat.responseStoppedBeforeGenerated');
+}
 
 export type ProjectionReservationFinishReason =
   | 'app_restarted_before_start'
@@ -48,10 +53,10 @@ export function terminalizeModelProjectionReservationConversation(params: {
     content:
       assistant.content.trim() ||
       (wasCancelled
-        ? CANCELLED_BEFORE_START_TEXT
+        ? cancelledBeforeStartText()
         : params.finishReason === 'app_restarted_before_start'
-          ? APP_RESTARTED_BEFORE_START_TEXT
-          : INTERRUPTED_BEFORE_START_TEXT),
+          ? appRestartedBeforeStartText()
+          : interruptedBeforeStartText()),
     isError: !wasCancelled,
     assistantMetadata: buildAssistantMessageMetadata('final', {
       completionStatus: 'incomplete',
@@ -74,10 +79,10 @@ export function terminalizeModelProjectionReservationConversation(params: {
           level: wasCancelled ? ('info' as const) : ('warning' as const),
           kind: wasCancelled ? ('state' as const) : ('error' as const),
           title: wasCancelled
-            ? 'Response stopped before generation'
+            ? i18n.t('chat.responseStoppedBeforeGenerationTitle')
             : params.finishReason === 'app_restarted_before_start'
-              ? 'Response interrupted by app restart'
-              : 'Response interrupted before generation',
+              ? i18n.t('chat.responseInterruptedByAppRestartTitle')
+              : i18n.t('chat.responseInterruptedBeforeGenerationTitle'),
           detail: params.detail,
         },
       ].slice(-250),

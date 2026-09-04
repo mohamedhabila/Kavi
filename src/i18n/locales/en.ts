@@ -156,6 +156,28 @@ export const en: TranslationMap = {
 
   // ── Chat Screen ────────────────────────────────────────────────────────
   chat: {
+    responseInterruptedBeforeStart: 'Response interrupted before generation could start. Please retry when you are ready.',
+    responseInterruptedByAppRestartBeforeStart:
+      'Response interrupted when the app restarted before generation could start. Please retry when you are ready.',
+    responseStoppedBeforeGenerated: 'Stopped before a response was generated.',
+    responseStoppedBeforeGenerationTitle: 'Response stopped before generation',
+    responseInterruptedByAppRestartTitle: 'Response interrupted by app restart',
+    responseInterruptedBeforeGenerationTitle: 'Response interrupted before generation',
+    temporal: {
+      today: 'Today',
+      yesterday: 'Yesterday',
+      laterThatDay: 'Later that day · {time}',
+      conversationBegan: 'Conversation began {date}',
+      continuingLastSpoke: 'Continuing — last spoke {phrase}',
+    },
+    logKind: {
+      state: 'State',
+      tool: 'Tool',
+      usage: 'Usage',
+      compaction: 'Compact',
+      command: 'Command',
+      system: 'System',
+    },
     title: 'Chat',
     newConversation: 'New Conversation',
     placeholder: 'Message...',
@@ -361,6 +383,7 @@ export const en: TranslationMap = {
 
   // ── Settings Screen ────────────────────────────────────────────────────
   settings: {
+    languageFollowSystem: 'Follow system language',
     title: 'Settings',
     appearance: 'Appearance',
     light: 'Light',
@@ -1620,6 +1643,39 @@ export const en: TranslationMap = {
 
   // ── Tool Call Display ─────────────────────────────────────────────────
   toolCall: {
+    errors: {
+      interruptedByAppRestart: 'Tool call was interrupted because the app restarted before completion.',
+      reconciliationPendingSummary:
+        'Waiting for durable tool-effect reconciliation after app restart. No tool or model execution will be replayed.',
+      reconciliationPendingTitle: 'Tool effect reconciliation pending',
+      interruptedBySupersededRun:
+        'Tool call was interrupted because the run was superseded by a newer user turn.',
+      interruptedByCancelledRun:
+        'Tool call was interrupted because the run was cancelled before completion.',
+      interruptedByFailedRun: 'Tool call was interrupted because the run failed before completion.',
+      notCompletedBeforeTerminal:
+        'Tool call did not complete before the run reached a terminal state.',
+    },
+    waitingPhrases: {
+      monitoringProgress: 'Monitoring progress',
+      waitingForNextUpdate: 'Waiting for the next update',
+      holdingForCompletion: 'Holding for completion',
+      checkingAgainSoon: 'Checking again soon',
+    },
+    waiting: {
+      duration: 'Waiting {duration}',
+      generic: 'Waiting',
+      forText: 'Waiting for "{text}"',
+      forSelector: 'Waiting for {selector}',
+      browserState: 'Waiting for browser state',
+      onWorkflow: 'Waiting on workflow {id}',
+      onExpoWorkflow: 'Waiting on Expo workflow',
+      onAgent: 'Waiting on agent {id}...',
+      onAgentsCount: 'Waiting on {count} agents',
+      onActiveAgents: 'Waiting on active agents',
+      onTool: 'Waiting on {tool}',
+      upTo: 'Up to {duration}',
+    },
     accessibilityLabel: '{name} tool call, status: {status}',
     viewFile: 'View {path}',
     viewFileHint: 'Opens this result without changing the details view',
@@ -1695,6 +1751,27 @@ export const en: TranslationMap = {
       message_effect: 'Message Effect',
     },
     summaries: {
+      sessionsSpawnNamed: '🧠 Spawning agent: {name}',
+      sessionsSpawn: '🧠 Spawning sub-agent',
+      sessionsSpawnNamedBlocking: '🧠 Spawning agent: {name} (blocking)',
+      sessionsSpawnBlocking: '🧠 Spawning sub-agent (blocking)',
+      sessionsStatus: 'Checking agent {id}…',
+      sessionsStatusGeneric: 'Checking agent status',
+      sessionsList: 'Listing active agents',
+      sessionsSendNamed: 'Messaging agent {id}…',
+      sessionsSend: 'Messaging a sub-agent',
+      sessionsSendNamedBlocking: 'Messaging agent {id}… (blocking)',
+      sessionsSendBlocking: 'Messaging a sub-agent (blocking)',
+      sessionsHistory: 'Reading agent {id}… history',
+      sessionsHistoryGeneric: 'Reading agent history',
+      sessionsOutput: 'Reading final output from agent {id}…',
+      sessionsOutputGeneric: 'Reading agent final output',
+      sessionsSurfaceOutput: 'Surfacing output from agent {id}…',
+      sessionsSurfaceOutputGeneric: 'Surfacing agent output',
+      sessionsWaitAgent: 'Waiting on agent {id}…',
+      sessionsCancel: 'Stopping agent {id}…',
+      sessionsCancelGeneric: 'Stopping a sub-agent',
+      sessionsYield: '⏸ Recording agent checkpoint',
       writeFilePath: 'Creating {path}',
       writeFile: 'Creating a file',
       editFilePath: 'Editing {path}',
@@ -2445,5 +2522,31 @@ export const en: TranslationMap = {
       accessReview: 'limited-access review',
       providedArguments: 'redacted arguments included',
     },
+  },
+
+  assistantExport: {
+    responseHeading: '{label} response',
+    generated: 'Generated: {timestamp}',
+    noContent: 'No shareable response content was available.',
+    segmentHeading: 'Segment {index}',
+    timestampLine: 'Timestamp: {timestamp}',
+    thinkingHeading: 'Thinking',
+    contentHeading: 'Content',
+    attachmentsHeading: 'Attachments',
+    toolCallsHeading: 'Tool calls',
+    segmentErrorNotice: 'This segment is marked as an error.',
+    statusLine: 'Status: {status}',
+    argumentsHeading: 'Arguments:',
+    errorOutputLabel: 'Error output:',
+    resultLabel: 'Result:',
+    summaryLine: 'Summary: {summary}',
+    workerUpdateHeading: 'Worker update',
+    sessionLine: 'Session: {id}',
+    depthLine: 'Depth: {depth}',
+    nameLine: 'Name: {name}',
+    activityLine: 'Activity: {activity}',
+    workerOutputLabel: 'Worker output:',
+    attachmentSizeBytes: '{size} bytes',
+    attachmentWorkspacePath: 'workspace: {path}',
   },
 };
