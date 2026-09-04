@@ -8,7 +8,10 @@ import {
   resetSettingsStore,
 } from '../helpers/settingsStoreFixtures';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { migrateSettingsState } from '../../src/store/settingsStorePersistence';
+import {
+  migrateSettingsState,
+  SETTINGS_STORE_VERSION,
+} from '../../src/store/settingsStorePersistence';
 
 beforeEach(() => {
   resetSettingsStore();
@@ -312,7 +315,10 @@ describe('useSettingsStore persistence settings', () => {
         browserProviders: [],
         expoAccounts: [],
         expoProjects: [],
-        defaultConversationMode: 'agentic',
+        // The v6 migration seeded the old 'agentic' default; the v17 migration
+        // carries every pre-existing install over to the new 'chitchat' default.
+        defaultConversationMode: 'chitchat',
+        developerModeEnabled: false,
       }),
     );
   });
@@ -370,6 +376,7 @@ describe('useSettingsStore persistence settings', () => {
       expoAccounts: [makeExpoAccount()],
       expoProjects: [makeExpoProject()],
       defaultConversationMode: 'chitchat',
+      developerModeEnabled: true,
     });
 
     expect(partialized).toEqual(
@@ -379,7 +386,65 @@ describe('useSettingsStore persistence settings', () => {
         expoAccounts: [expect.objectContaining({ id: 'expo-account-1' })],
         expoProjects: [expect.objectContaining({ id: 'expo-project-1' })],
         defaultConversationMode: 'chitchat',
+        developerModeEnabled: true,
       }),
     );
+  });
+
+  describe('version 17 migration: developer mode gate + chitchat default', () => {
+    it('defaults developerModeEnabled to false for a pre-existing install', async () => {
+      const persistOptions = (useSettingsStore as any).persist.getOptions();
+      const migrated = await persistOptions.migrate({ providers: [makeProvider()] }, 16);
+
+      expect(migrated.developerModeEnabled).toBe(false);
+    });
+
+    it('preserves an already-persisted developerModeEnabled value', async () => {
+      const persistOptions = (useSettingsStore as any).persist.getOptions();
+      const migrated = await persistOptions.migrate(
+        { providers: [makeProvider()], developerModeEnabled: true },
+        16,
+      );
+
+      expect(migrated.developerModeEnabled).toBe(true);
+    });
+
+    it("migrates a stored 'agentic' default conversation mode to 'chitchat'", async () => {
+      const persistOptions = (useSettingsStore as any).persist.getOptions();
+      const migrated = await persistOptions.migrate(
+        { providers: [makeProvider()], defaultConversationMode: 'agentic' },
+        16,
+      );
+
+      expect(migrated.defaultConversationMode).toBe('chitchat');
+    });
+
+    it('leaves an already-chitchat default conversation mode untouched', async () => {
+      const persistOptions = (useSettingsStore as any).persist.getOptions();
+      const migrated = await persistOptions.migrate(
+        { providers: [makeProvider()], defaultConversationMode: 'chitchat' },
+        16,
+      );
+
+      expect(migrated.defaultConversationMode).toBe('chitchat');
+    });
+
+    it('does not reintroduce the agentic default for an install already migrated', async () => {
+      const persistOptions = (useSettingsStore as any).persist.getOptions();
+      const migrated = await persistOptions.migrate(
+        {
+          providers: [makeProvider()],
+          defaultConversationMode: 'agentic',
+          developerModeEnabled: true,
+        },
+        SETTINGS_STORE_VERSION,
+      );
+
+      // Already at the current version: no migration block runs, so an explicit
+      // in-conversation choice of 'agentic' survives even though the shipped
+      // default changed.
+      expect(migrated.defaultConversationMode).toBe('agentic');
+      expect(migrated.developerModeEnabled).toBe(true);
+    });
   });
 });

@@ -250,6 +250,7 @@ export function exportSettings(): ExportedSettings {
       mediaUnderstandingEnabled: state.mediaUnderstandingEnabled,
       maxLinks: state.maxLinks,
       defaultConversationMode: state.defaultConversationMode,
+      developerModeEnabled: state.developerModeEnabled,
     },
     ...(omittedSensitiveData.length > 0 ? { omittedSensitiveData } : {}),
     hooks: hooks.map((h) => ({ ...h })),
@@ -381,6 +382,8 @@ export function importSettings(data: string | ExportedSettings): ImportResult {
       const importedConversationMode = normalizeConversationMode(settings.defaultConversationMode);
       if (importedConversationMode)
         settingsUpdate.defaultConversationMode = importedConversationMode;
+      if (typeof settings.developerModeEnabled === 'boolean')
+        settingsUpdate.developerModeEnabled = settings.developerModeEnabled;
 
       if (
         Array.isArray(settings.sshTargets) &&

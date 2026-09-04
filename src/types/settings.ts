@@ -59,4 +59,11 @@ export interface AppSettings {
   /** Optional cheaper model override on `compactionProvider`. */
   compactionModel?: string | null;
   disableLongTermMemory?: boolean;
+  /**
+   * Gates developer-surface tools (SSH, Expo/EAS, remote browser automation,
+   * external workspace targets, the javascript/python code tools, mobile UI
+   * control, and the GitHub service skill) out of the model-facing tool
+   * surface until explicitly turned on. Defaults to off.
+   */
+  developerModeEnabled?: boolean;
 }

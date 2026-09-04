@@ -20,6 +20,7 @@ export interface RuntimeToolAvailabilityContext {
   hasDelegableWorkspaceTargets: boolean;
   hasMobileController: boolean;
   hasWebSearchProvider: boolean;
+  hasDeveloperModeEnabled: boolean;
 }
 
 /**
@@ -37,6 +38,7 @@ export const RUNTIME_TOOL_REQUIREMENTS = {
   DELEGABLE_WORKSPACE_TARGETS: 'delegable_workspace_targets',
   MOBILE_CONTROLLER: 'mobile_controller',
   WEB_SEARCH_PROVIDER: 'web_search_provider',
+  DEVELOPER_MODE: 'developer_mode',
 } as const;
 
 function isRequirementSatisfied(
@@ -54,6 +56,8 @@ function isRequirementSatisfied(
       return context.hasMobileController;
     case RUNTIME_TOOL_REQUIREMENTS.WEB_SEARCH_PROVIDER:
       return context.hasWebSearchProvider;
+    case RUNTIME_TOOL_REQUIREMENTS.DEVELOPER_MODE:
+      return context.hasDeveloperModeEnabled;
     default:
       // An unrecognized requirement must not silently hide a working tool.
       return true;
@@ -122,6 +126,7 @@ export function getRuntimeToolAvailabilityContext(
     hasDelegableWorkspaceTargets: hasDelegableWorkspaceTargets(resolvedTargets),
     hasMobileController: false,
     hasWebSearchProvider: isSearchProviderConfiguredSnapshot(),
+    hasDeveloperModeEnabled: useSettingsStore.getState().developerModeEnabled === true,
   };
 }
 

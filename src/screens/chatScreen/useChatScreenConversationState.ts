@@ -49,7 +49,7 @@ export function useChatScreenConversationState(
   });
 
   const effectiveMode =
-    params.activeConversation?.mode ?? params.defaultConversationMode ?? 'agentic';
+    params.activeConversation?.mode ?? params.defaultConversationMode ?? 'chitchat';
   const isAgenticMode = effectiveMode === 'agentic';
   const executionState = useMemo(
     () =>

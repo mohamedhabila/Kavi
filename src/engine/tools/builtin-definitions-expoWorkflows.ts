@@ -7,6 +7,7 @@ function expoContract(
     Pick<ToolContract, 'capabilities' | 'resourceKinds' | 'sideEffects'>,
 ): ToolContract {
   return {
+    runtimeRequirements: ['developer_mode'],
     category: 'expo',
     capabilities: [],
     resourceKinds: ['unknown'],

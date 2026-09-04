@@ -149,6 +149,7 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
       required: [],
     },
     contract: {
+      runtimeRequirements: ['developer_mode'],
       category: 'code',
       capabilities: ['compute', 'read', 'write'],
       resourceKinds: ['conversation_workspace'],
@@ -234,6 +235,7 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
       oneOf: [{ required: ['code'] }, { required: ['path'] }],
     },
     contract: {
+      runtimeRequirements: ['developer_mode'],
       category: 'code',
       capabilities: ['compute', 'read', 'write'],
       resourceKinds: ['conversation_workspace', 'unknown'],

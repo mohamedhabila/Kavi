@@ -24,7 +24,7 @@ export const WORKSPACE_STATUS_TOOL: ToolDefinition = {
     required: [],
   },
   contract: {
-    runtimeRequirements: ['workspace_targets'],
+    runtimeRequirements: ['workspace_targets', 'developer_mode'],
     category: 'workspace_files',
     capabilities: ['read', 'verify'],
     resourceKinds: ['conversation_workspace'],
@@ -53,7 +53,7 @@ export const WORKSPACE_LAUNCH_BROWSER_TOOL: ToolDefinition = {
     required: ['targetId'],
   },
   contract: {
-    runtimeRequirements: ['browser_controllable_workspace_targets'],
+    runtimeRequirements: ['browser_controllable_workspace_targets', 'developer_mode'],
     category: 'browser',
     capabilities: ['write', 'verify'],
     resourceKinds: ['conversation_workspace', 'browser'],
@@ -85,7 +85,7 @@ export const WORKSPACE_DELEGATE_TASK_TOOL: ToolDefinition = {
     required: ['targetId', 'prompt'],
   },
   contract: {
-    runtimeRequirements: ['delegable_workspace_targets'],
+    runtimeRequirements: ['delegable_workspace_targets', 'developer_mode'],
     category: 'sessions',
     capabilities: ['coordinate', 'write'],
     resourceKinds: ['conversation_workspace'],

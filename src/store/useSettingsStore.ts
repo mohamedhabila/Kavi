@@ -359,6 +359,8 @@ export const useSettingsStore = create<SettingsState>()(
         set({ disableLongTermMemory: nextDisabled });
       },
 
+      setDeveloperModeEnabled: (enabled) => set({ developerModeEnabled: Boolean(enabled) }),
+
       replaceAllSettings: (settings) => {
         if (hasOwnSetting(settings, 'disableLongTermMemory')) {
           const nextDisabled = Boolean(settings.disableLongTermMemory);
@@ -454,6 +456,9 @@ export const useSettingsStore = create<SettingsState>()(
             disableLongTermMemory: hasOwnSetting(settings, 'disableLongTermMemory')
               ? Boolean(settings.disableLongTermMemory)
               : state.disableLongTermMemory,
+            developerModeEnabled: hasOwnSetting(settings, 'developerModeEnabled')
+              ? Boolean(settings.developerModeEnabled)
+              : state.developerModeEnabled,
           };
         });
       },

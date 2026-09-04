@@ -27,6 +27,7 @@ export const SSH_EXEC_TOOL: ToolDefinition = {
     required: ['command'],
   },
   contract: {
+    runtimeRequirements: ['developer_mode'],
     category: 'ssh',
     capabilities: ['write', 'verify'],
     resourceKinds: ['ssh_host'],
@@ -47,6 +48,7 @@ export const SSH_BACKGROUND_JOB_STATUS_TOOL: ToolDefinition = {
     required: ['jobId'],
   },
   contract: {
+    runtimeRequirements: ['developer_mode'],
     category: 'ssh',
     capabilities: ['monitor', 'verify'],
     resourceKinds: ['ssh_host'],
@@ -78,6 +80,7 @@ export const SSH_BACKGROUND_JOB_WAIT_TOOL: ToolDefinition = {
     required: ['jobId'],
   },
   contract: {
+    runtimeRequirements: ['developer_mode'],
     category: 'ssh',
     capabilities: ['monitor', 'wait', 'verify'],
     resourceKinds: ['ssh_host'],
@@ -132,6 +135,7 @@ export const SSH_FS_TOOL: ToolDefinition = {
     required: ['action'],
   },
   contract: {
+    runtimeRequirements: ['developer_mode'],
     category: 'ssh',
     capabilities: ['discover', 'read', 'write', 'verify'],
     resourceKinds: ['ssh_host'],

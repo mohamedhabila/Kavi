@@ -94,6 +94,7 @@ const mockSettingsState = {
   mediaUnderstandingEnabled: false,
   maxLinks: 5,
   defaultConversationMode: 'agentic',
+  developerModeEnabled: true,
   replaceAllSettings: mockReplaceAllSettings,
 };
 
@@ -511,6 +512,7 @@ describe('Settings Import/Export', () => {
       expect(s.mediaUnderstandingEnabled).toBe(false);
       expect(s.maxLinks).toBe(5);
       expect(s.defaultConversationMode).toBe('agentic');
+      expect(s.developerModeEnabled).toBe(true);
     });
 
     it('importSettings forwards preference fields to replaceAllSettings', () => {
@@ -526,6 +528,7 @@ describe('Settings Import/Export', () => {
           mediaUnderstandingEnabled: true,
           maxLinks: 10,
           defaultConversationMode: 'direct',
+          developerModeEnabled: false,
         },
       } as any);
       expect(result.success).toBe(true);
@@ -540,7 +543,23 @@ describe('Settings Import/Export', () => {
       expect(arg.maxLinks).toBe(10);
       // Legacy 'direct' import is normalized to canonical 'chitchat'.
       expect(arg.defaultConversationMode).toBe('chitchat');
+      expect(arg.developerModeEnabled).toBe(false);
       expect(mockSetLocale).toHaveBeenCalledWith('ja');
+    });
+
+    it('round-trips developerModeEnabled through export and import', () => {
+      const exported = exportSettings();
+      expect((exported.settings as any).developerModeEnabled).toBe(true);
+
+      const result = importSettings({
+        version: 1,
+        exportedAt: Date.now(),
+        settings: { developerModeEnabled: true },
+      } as any);
+
+      expect(result.success).toBe(true);
+      const arg = mockReplaceAllSettings.mock.calls.at(-1)?.[0];
+      expect(arg.developerModeEnabled).toBe(true);
     });
 
     it('importSettings preserves gemini as a supported web search provider', () => {
@@ -588,6 +607,7 @@ describe('Settings Import/Export', () => {
       expect(arg).not.toHaveProperty('lastUsedModel');
       expect(arg).not.toHaveProperty('thinkingLevel');
       expect(arg).not.toHaveProperty('defaultConversationMode');
+      expect(arg).not.toHaveProperty('developerModeEnabled');
     });
   });
 });

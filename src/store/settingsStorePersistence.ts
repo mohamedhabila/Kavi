@@ -13,7 +13,7 @@ import {
   sanitizeWorkspaceTargetsForState,
 } from './settingsStoreNormalization';
 
-export const SETTINGS_STORE_VERSION = 16;
+export const SETTINGS_STORE_VERSION = 17;
 
 type MigratableSettingsState = Record<string, any>;
 
@@ -139,6 +139,24 @@ export function migrateSettingsState(persistedState: unknown, version: number): 
       }),
     };
   }
+  if (version < 17) {
+    nextState = {
+      ...nextState,
+      developerModeEnabled:
+        typeof nextState.developerModeEnabled === 'boolean'
+          ? nextState.developerModeEnabled
+          : false,
+      // The shipped default flipped from 'agentic' to 'chitchat'. A persisted
+      // 'agentic' value cannot be distinguished from "never touched, took the
+      // old default", so every existing install is carried over to the new
+      // default; the mode stays user-switchable per conversation and in
+      // Settings afterward.
+      defaultConversationMode:
+        nextState.defaultConversationMode === 'agentic'
+          ? 'chitchat'
+          : nextState.defaultConversationMode,
+    };
+  }
   if (version < SETTINGS_STORE_VERSION && nextState.compactionSummarizer === undefined) {
     // Model-authored compaction is the new default. The previous "off" chip only
     // meant "no cheaper override provider", never an explicit opt-out, so an
@@ -189,5 +207,6 @@ export function partializeSettingsState(state: SettingsDataState): AppSettings {
     compactionProvider: state.compactionProvider,
     compactionModel: state.compactionModel,
     disableLongTermMemory: state.disableLongTermMemory,
+    developerModeEnabled: state.developerModeEnabled,
   };
 }

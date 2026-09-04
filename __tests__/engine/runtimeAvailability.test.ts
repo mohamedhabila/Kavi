@@ -105,6 +105,8 @@ describe('runtimeAvailability', () => {
       hasBrowserControllableWorkspaceTargets: false,
       hasDelegableWorkspaceTargets: false,
       hasMobileController: false,
+      hasWebSearchProvider: false,
+      hasDeveloperModeEnabled: true,
     });
     const filteredNames = new Set(filtered.map((tool) => tool.name));
 
@@ -127,6 +129,8 @@ describe('runtimeAvailability', () => {
       hasBrowserControllableWorkspaceTargets: true,
       hasDelegableWorkspaceTargets: false,
       hasMobileController: false,
+      hasWebSearchProvider: false,
+      hasDeveloperModeEnabled: true,
     });
 
     expect(filtered.map((tool) => tool.name)).toEqual([
@@ -147,6 +151,8 @@ describe('runtimeAvailability', () => {
       hasBrowserControllableWorkspaceTargets: true,
       hasDelegableWorkspaceTargets: true,
       hasMobileController: false,
+      hasWebSearchProvider: false,
+      hasDeveloperModeEnabled: true,
     });
 
     expect(filtered.map((tool) => tool.name)).toEqual([
@@ -154,6 +160,25 @@ describe('runtimeAvailability', () => {
       'workspace_launch_browser',
       'workspace_delegate_task',
     ]);
+  });
+
+  it('hides the workspace control tools when developer mode is off even with targets configured', () => {
+    const tools = [
+      makeTool('workspace_status'),
+      makeTool('workspace_launch_browser'),
+      makeTool('workspace_delegate_task'),
+    ];
+
+    const filtered = filterToolsByRuntimeAvailability(tools, {
+      hasWorkspaceTargets: true,
+      hasBrowserControllableWorkspaceTargets: true,
+      hasDelegableWorkspaceTargets: true,
+      hasMobileController: false,
+      hasWebSearchProvider: false,
+      hasDeveloperModeEnabled: false,
+    });
+
+    expect(filtered).toEqual([]);
   });
 
   it('filters unavailable external workspace tools out of explicit tool selections', () => {
@@ -164,6 +189,8 @@ describe('runtimeAvailability', () => {
         hasBrowserControllableWorkspaceTargets: false,
         hasDelegableWorkspaceTargets: false,
         hasMobileController: false,
+        hasWebSearchProvider: false,
+        hasDeveloperModeEnabled: true,
       },
     );
 
@@ -178,6 +205,8 @@ describe('runtimeAvailability', () => {
         hasBrowserControllableWorkspaceTargets: true,
         hasDelegableWorkspaceTargets: true,
         hasMobileController: false,
+        hasWebSearchProvider: false,
+        hasDeveloperModeEnabled: true,
       },
     );
 
@@ -190,6 +219,8 @@ describe('runtimeAvailability', () => {
       hasBrowserControllableWorkspaceTargets: false,
       hasDelegableWorkspaceTargets: false,
       hasMobileController: true,
+      hasWebSearchProvider: false,
+      hasDeveloperModeEnabled: true,
     });
 
     expect(resolved).toEqual(['request_clarification', 'mobile_ui_action']);
@@ -201,6 +232,8 @@ describe('runtimeAvailability', () => {
       hasBrowserControllableWorkspaceTargets: false,
       hasDelegableWorkspaceTargets: false,
       hasMobileController: false,
+      hasWebSearchProvider: false,
+      hasDeveloperModeEnabled: true,
     });
 
     expect(resolved).toBeUndefined();
@@ -218,6 +251,7 @@ describe('contract-declared runtime requirements', () => {
     hasDelegableWorkspaceTargets: true,
     hasMobileController: true,
     hasWebSearchProvider: true,
+    hasDeveloperModeEnabled: true,
   };
   const UNSATISFIED: RuntimeToolAvailabilityContext = {
     hasWorkspaceTargets: false,
@@ -225,6 +259,7 @@ describe('contract-declared runtime requirements', () => {
     hasDelegableWorkspaceTargets: false,
     hasMobileController: false,
     hasWebSearchProvider: false,
+    hasDeveloperModeEnabled: false,
   };
 
   it('hides web_search when no provider is configured', () => {
@@ -253,6 +288,54 @@ describe('contract-declared runtime requirements', () => {
     // A declaration this resolver does not understand must fail open: silently hiding
     // a working capability is worse than one wasted call.
     expect(isToolRuntimeAvailable('write_file', { ...UNSATISFIED } as never)).toBe(true);
+  });
+
+  it('gates every developer-surface tool behind developer_mode', () => {
+    const developerGated = [
+      'ssh_exec',
+      'ssh_background_job_status',
+      'ssh_background_job_wait',
+      'ssh_fs',
+      'expo_eas_create_project',
+      'expo_eas_list_projects',
+      'expo_eas_status',
+      'expo_eas_probe',
+      'expo_eas_build',
+      'expo_eas_update',
+      'expo_eas_submit',
+      'expo_eas_deploy_web',
+      'expo_eas_workflow_runs',
+      'expo_eas_workflow_status',
+      'expo_eas_workflow_wait',
+      'expo_eas_graphql',
+      'browser_launch',
+      'browser_navigate',
+      'browser_click',
+      'javascript',
+      'python',
+      'mobile_ui_action',
+      'skill__github__repos',
+      'skill__github__commit_files',
+    ];
+    for (const toolName of developerGated) {
+      expect(resolveToolRuntimeRequirements(toolName)).toContain('developer_mode');
+      expect(
+        isToolRuntimeAvailable(toolName, { ...SATISFIED, hasDeveloperModeEnabled: false }),
+      ).toBe(false);
+      expect(
+        isToolRuntimeAvailable(toolName, { ...SATISFIED, hasDeveloperModeEnabled: true }),
+      ).toBe(true);
+    }
+  });
+
+  it('leaves core file and workflow tools available regardless of developer mode', () => {
+    const undisturbed = ['read_file', 'write_file', 'list_files'];
+    for (const toolName of undisturbed) {
+      expect(resolveToolRuntimeRequirements(toolName)).not.toContain('developer_mode');
+      expect(
+        isToolRuntimeAvailable(toolName, { ...UNSATISFIED, hasDeveloperModeEnabled: false }),
+      ).toBe(true);
+    }
   });
 });
 
