@@ -66,6 +66,18 @@ describe('tool invocation privacy presentation', () => {
         forbidden: [],
         expected: { format: 'jpeg' },
       },
+      {
+        toolName: 'reminder',
+        args: {
+          action: 'create',
+          title: 'Take chemo medication',
+          notes: 'Pharmacy refill code 99182',
+          when: { kind: 'daily', time: '09:00' },
+          timezone: 'UTC',
+        },
+        forbidden: ['Take chemo medication', 'Pharmacy refill code', '99182'],
+        expected: { action: 'create', hasTitle: true, hasNotes: true, hasWhen: true },
+      },
     ];
 
     for (const entry of cases) {
@@ -99,5 +111,33 @@ describe('tool invocation privacy presentation', () => {
     ).toEqual({
       camera: 'front',
     });
+  });
+
+  it('titles the reminder approval dialog per action', () => {
+    expect(
+      describeToolInvocation('reminder', { action: 'create', title: 'x', when: { kind: 'daily', time: '09:00' } })
+        .title,
+    ).toBe('Set a reminder');
+    expect(describeToolInvocation('reminder', { action: 'update', id: 'r1' }).title).toBe(
+      'Update reminder',
+    );
+    expect(describeToolInvocation('reminder', { action: 'cancel', id: 'r1' }).title).toBe(
+      'Cancel reminder',
+    );
+    expect(describeToolInvocation('reminder', { action: 'list' }).title).toBe('List reminders');
+  });
+
+  it('previews the reminder next-fire time without validating it', () => {
+    const presentation = describeToolInvocation('reminder', {
+      action: 'create',
+      title: 'Take out trash',
+      when: { kind: 'daily', time: '09:00' },
+      timezone: 'UTC',
+    });
+    expect(presentation.description).toMatch(/fires \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}/);
+
+    // An unparsable "when" never throws — the executor is the source of truth for validation.
+    const invalid = describeToolInvocation('reminder', { action: 'create', title: 'x', when: 'not an object' });
+    expect(invalid.title).toBe('Set a reminder');
   });
 });

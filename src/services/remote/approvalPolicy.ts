@@ -133,6 +133,15 @@ export function requiresActionApproval(toolName: string, args?: Record<string, u
       const scheme = match?.[1]?.toLowerCase();
       return scheme !== 'http' && scheme !== 'https';
     }
+    case 'reminder':
+      // Never gate any reminder action (create/list/update/cancel) behind approval.
+      // A reminder is user-requested, fully reversible (cancel/update at any time),
+      // and always visible via the tool's own list action — unlike a cron job it
+      // never resumes a conversation or reaches outside the device. This is a
+      // deliberate exemption, not the absence of one: without this explicit case,
+      // a later generic rule (e.g. gating every 'write'-capability native tool)
+      // could silently start requiring approval for reminders again.
+      return false;
     default:
       return false;
   }

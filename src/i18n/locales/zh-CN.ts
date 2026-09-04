@@ -2345,6 +2345,10 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       sshExecTitle: 'Run SSH command',
       browserNavigateTitle: 'Open browser destination',
       expoBuildTitle: 'Start Expo build',
+      reminderCreateTitle: '设置提醒',
+      reminderUpdateTitle: '更新提醒',
+      reminderCancelTitle: '取消提醒',
+      reminderListTitle: '列出提醒',
     },
     details: {
       recipientCount: '{count} recipient(s)',
@@ -2373,6 +2377,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       defaultCountry: 'default country {code}',
       accessReview: 'limited-access review',
       providedArguments: 'redacted arguments included',
+      reminderFires: '将于{when}提醒',
+      notesIncluded: '包含备注',
+      reminderReference: '包含提醒引用',
     },
   },
 

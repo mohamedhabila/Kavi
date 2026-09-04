@@ -2516,6 +2516,10 @@ export const fr: TranslationMap = mergeTranslations(en, {
       sshExecTitle: 'Run SSH command',
       browserNavigateTitle: 'Open browser destination',
       expoBuildTitle: 'Start Expo build',
+      reminderCreateTitle: 'Définir un rappel',
+      reminderUpdateTitle: 'Modifier le rappel',
+      reminderCancelTitle: 'Annuler le rappel',
+      reminderListTitle: 'Lister les rappels',
     },
     details: {
       recipientCount: '{count} recipient(s)',
@@ -2544,6 +2548,9 @@ export const fr: TranslationMap = mergeTranslations(en, {
       defaultCountry: 'default country {code}',
       accessReview: 'limited-access review',
       providedArguments: 'redacted arguments included',
+      reminderFires: 'se déclenche {when}',
+      notesIncluded: 'notes incluses',
+      reminderReference: 'référence du rappel incluse',
     },
   },
 

@@ -2493,6 +2493,10 @@ export const en: TranslationMap = {
       sshExecTitle: 'Run SSH command',
       browserNavigateTitle: 'Open browser destination',
       expoBuildTitle: 'Start Expo build',
+      reminderCreateTitle: 'Set a reminder',
+      reminderUpdateTitle: 'Update reminder',
+      reminderCancelTitle: 'Cancel reminder',
+      reminderListTitle: 'List reminders',
     },
     details: {
       recipientCount: '{count} recipient(s)',
@@ -2521,6 +2525,9 @@ export const en: TranslationMap = {
       defaultCountry: 'default country {code}',
       accessReview: 'limited-access review',
       providedArguments: 'redacted arguments included',
+      reminderFires: 'fires {when}',
+      notesIncluded: 'notes included',
+      reminderReference: 'reminder reference included',
     },
   },
 

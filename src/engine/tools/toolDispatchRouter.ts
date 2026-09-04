@@ -34,9 +34,11 @@ import { createConversationFileContext } from './toolWorkspaceFiles';
 import { executeListFiles, executeReadFile, executeWriteFile } from './toolWorkspaceCoreExecution';
 import {
   executeCreateTask,
+  normalizeCronScheduleArg,
   rejectedScheduledJobOutcome,
   resolveScheduledJobTarget,
 } from './toolScheduledJobExecution';
+import { executeReminderTool } from './native/reminders/executor';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
 import {
   completedToolOutcome,
@@ -335,15 +337,21 @@ export async function executeToolInner(
           if (typeof args.newName === 'string' && args.newName.trim()) {
             updates.name = args.newName.trim();
           }
-          if (typeof args.schedule === 'string' && args.schedule.trim()) {
-            const timezone =
-              requestedTimezone ??
-              (existingJob.schedule.kind === 'cron' ? existingJob.schedule.tz : undefined);
-            updates.schedule = {
-              kind: 'cron',
-              expr: args.schedule.trim(),
-              ...(timezone ? { tz: timezone } : {}),
-            };
+          const scheduleProvided =
+            args.schedule !== undefined &&
+            args.schedule !== null &&
+            (typeof args.schedule !== 'string' || args.schedule.trim().length > 0);
+          if (scheduleProvided) {
+            const existingTz = existingJob.schedule.kind === 'cron' ? existingJob.schedule.tz : undefined;
+            const normalized = normalizeCronScheduleArg(args.schedule, requestedTimezone ?? existingTz ?? '');
+            if (!normalized.ok) {
+              return rejectedScheduledJobOutcome({
+                code: 'invalid_scheduled_job',
+                error: normalized.error,
+                repair: { retryable: true, code: 'invalid_scheduled_job', invalidFields: ['schedule'] },
+              });
+            }
+            updates.schedule = normalized.schedule;
           } else if (requestedTimezone) {
             if (existingJob.schedule.kind !== 'cron') {
               return rejectedScheduledJobOutcome({
@@ -579,6 +587,11 @@ export async function executeToolInner(
       }
     }
 
+    // Reminder tool — OS-delivered personal reminders, separate from cron's
+    // conversation-resuming scheduled jobs.
+    case 'reminder':
+      return executeReminderTool(args);
+
     // Image generation — uses configured provider or reports inability
     case 'image_generate':
       return executeImageGenerate(args, workspaceConversationId);
@@ -589,7 +602,7 @@ export async function executeToolInner(
 
     default:
       return failedToolOutcome(
-        `Error: unknown tool "${name}". Available tools include: read_file, write_file, list_files, update_goals, javascript, python, web_search, web_fetch, file_edit, glob_search, text_search, cron, canvas_list, canvas_read, canvas_create, canvas_update, canvas_eval, canvas_snapshot, image_generate, image_edit. Tool names are case-sensitive.`,
+        `Error: unknown tool "${name}". Available tools include: read_file, write_file, list_files, update_goals, javascript, python, web_search, web_fetch, file_edit, glob_search, text_search, cron, reminder, canvas_list, canvas_read, canvas_create, canvas_update, canvas_eval, canvas_snapshot, image_generate, image_edit. Tool names are case-sensitive.`,
       );
   }
 }

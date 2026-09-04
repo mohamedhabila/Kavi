@@ -401,6 +401,22 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       },
       { completion: { effectFreeWhen: { argumentPath: ['action'], values: ['list'] } } },
     ),
+    // Reminder mutations return only after the code-owned store in
+    // services/scheduler/reminders/commands.ts has durably persisted the new
+    // schedule (or cancelled it), so the acknowledged durable state is the
+    // mutation verifier; list remains explicitly effect-free.
+    reminder: effectful(
+      'reminder.schedule',
+      {
+        reminder_created: VERIFIED,
+        reminder_updated: VERIFIED,
+        reminder_cancelled: outcome('applied', 'verified', 'reminder.cancel'),
+        listed: outcome('none', 'not_applicable', 'observation.read'),
+        rejected: FAILED,
+        error: FAILED,
+      },
+      { completion: { effectFreeWhen: { argumentPath: ['action'], values: ['list'] } } },
+    ),
     canvas_eval: operational('compute.execute'),
     ssh_exec: operational('remote.mutate'),
     ssh_fs: operational('remote.mutate'),

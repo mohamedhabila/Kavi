@@ -103,42 +103,9 @@ describe('Productivity Skill', () => {
 describe('Communication Skill', () => {
   const skill = createCommunicationSkill();
 
-  it('has correct id and tools', () => {
+  it('has correct id and no legacy stub tools', () => {
     expect(skill.id).toBe('communication');
-    const toolNames = skill.tools.map((t) => t.name);
-    expect(toolNames).toContain('draft_email');
-    expect(toolNames).toContain('translate');
-  });
-
-  it('has a system prompt', () => {
-    expect(skill.systemPrompt).toBeDefined();
-    expect(skill.systemPrompt!.length).toBeGreaterThan(0);
-  });
-
-  describe('draft_email tool', () => {
-    it('returns draft context', async () => {
-      const draft = skill.tools.find((t) => t.name === 'draft_email')!;
-      const result = await draft.handler!({
-        to: 'John',
-        subject: 'Meeting',
-        context: 'Reschedule to Friday',
-        tone: 'casual',
-      });
-      const parsed = parseCompletedToolOutcome(result);
-      expect(parsed.status).toBe('draft_generated');
-      expect(parsed.subject).toBe('Meeting');
-      expect(parsed.tone).toBe('casual');
-    });
-  });
-
-  describe('translate tool', () => {
-    it('returns translation request', async () => {
-      const translate = skill.tools.find((t) => t.name === 'translate')!;
-      const result = await translate.handler!({ text: 'Hello', to: 'Spanish' });
-      const parsed = parseCompletedToolOutcome(result);
-      expect(parsed.status).toBe('translate_request');
-      expect(parsed.to).toBe('Spanish');
-    });
+    expect(skill.tools).toHaveLength(0);
   });
 });
 
@@ -148,9 +115,8 @@ describe('Media Skill', () => {
   it('has correct id and tools', () => {
     expect(skill.id).toBe('media');
     const toolNames = skill.tools.map((t) => t.name);
-    expect(toolNames).toContain('describe_image');
     expect(toolNames).toContain('generate_qr');
-    expect(toolNames).toContain('color_palette');
+    expect(toolNames).toHaveLength(1);
   });
 
   describe('generate_qr tool', () => {
@@ -276,62 +242,6 @@ describe('Knowledge Skill', () => {
       const define = skill.tools.find((t) => t.name === 'define_word')!;
       const result = await define.handler!({ word: 'test' });
       expect(failedToolContent(result)).toContain('Network failed');
-    });
-  });
-});
-
-describe('Media Skill — additional tests', () => {
-  const skill = createMediaSkill();
-
-  describe('describe_image tool', () => {
-    it('returns describe request with default detail', async () => {
-      const describe = skill.tools.find((t) => t.name === 'describe_image')!;
-      const result = await describe.handler!({ url: 'https://example.com/img.png' });
-      const parsed = parseCompletedToolOutcome(result);
-      expect(parsed.status).toBe('describe_request');
-      expect(parsed.detail).toBe('brief');
-    });
-  });
-
-  describe('color_palette tool', () => {
-    it('returns palette request with defaults', async () => {
-      const palette = skill.tools.find((t) => t.name === 'color_palette')!;
-      const result = await palette.handler!({});
-      const parsed = parseCompletedToolOutcome(result);
-      expect(parsed.status).toBe('palette_request');
-      expect(parsed.count).toBe(5);
-      expect(parsed.theme).toBe('harmonious');
-    });
-
-    it('accepts custom count and theme', async () => {
-      const palette = skill.tools.find((t) => t.name === 'color_palette')!;
-      const result = await palette.handler!({ count: 8, theme: 'ocean' });
-      const parsed = parseCompletedToolOutcome(result);
-      expect(parsed.count).toBe(8);
-      expect(parsed.theme).toBe('ocean');
-    });
-  });
-});
-
-describe('Communication Skill — additional tests', () => {
-  const skill = createCommunicationSkill();
-
-  describe('draft_email tool', () => {
-    it('uses default tone when not specified', async () => {
-      const draft = skill.tools.find((t) => t.name === 'draft_email')!;
-      const result = await draft.handler!({ subject: 'Hi', context: 'Greetings' });
-      const parsed = parseCompletedToolOutcome(result);
-      expect(parsed.tone).toBe('formal');
-      expect(parsed.to).toBe('(recipient)');
-    });
-  });
-
-  describe('translate tool', () => {
-    it('auto-detects source language by default', async () => {
-      const translate = skill.tools.find((t) => t.name === 'translate')!;
-      const result = await translate.handler!({ text: 'Bonjour', to: 'English' });
-      const parsed = parseCompletedToolOutcome(result);
-      expect(parsed.from).toBe('auto');
     });
   });
 });

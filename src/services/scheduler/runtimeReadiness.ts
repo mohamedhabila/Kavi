@@ -8,6 +8,7 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { waitForPersistedAgentRecoveryReadiness } from '../startupRecovery';
 import { useExecutionTraceStore } from './traceStore';
 import { drainSchedulerTerminalReports } from './terminalReportProcessor';
+import { reconcilePendingReminders } from './reminders/rearm';
 
 let readinessPromise: Promise<void> | undefined;
 let schedulerStateReadinessPromise: Promise<void> | undefined;
@@ -51,6 +52,13 @@ async function initializeSchedulerRuntime(): Promise<void> {
       { name: 'settings state', timeoutMs: REQUIRED_HYDRATION_TIMEOUT_MS },
     ),
   ]);
+  // Best-effort and non-blocking: re-arm any elapsed once/monthly reminder
+  // notifications on every foreground activation, mirroring the background
+  // task's reminders/rearm.ts call in maintenance.ts. Never gate scheduler
+  // runtime readiness on this.
+  void reconcilePendingReminders().catch((error) => {
+    console.warn('[scheduler] Reminder reconciliation failed:', error);
+  });
 }
 
 export function setSchedulerExecutionReadinessBarrier(

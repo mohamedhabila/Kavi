@@ -1,4 +1,5 @@
 import { createScheduledJob, listScheduledJobs } from '../../services/scheduler/commands';
+import type { CronSchedule } from '../../services/cron/types';
 import {
   completedToolOutcome,
   failedToolOutcome,
@@ -122,6 +123,58 @@ export async function resolveScheduledJobTarget(params: {
   };
 }
 
+export type CronScheduleNormalization =
+  | { ok: true; schedule: CronSchedule; echo: unknown }
+  | { ok: false; error: string };
+
+/**
+ * Accepts either the current structured schedule object —
+ * `{kind:'cron',expr,tz?}` | `{kind:'at',at}` | `{kind:'every',seconds}` —
+ * or, for one more release, a bare cron-expression string for backward
+ * compatibility. A bare string is treated as `{kind:'cron', expr: <string>}`
+ * and echoed back verbatim in tool output so existing callers see no change.
+ */
+export function normalizeCronScheduleArg(raw: unknown, timezone: string): CronScheduleNormalization {
+  if (typeof raw === 'string') {
+    const expr = raw.trim();
+    if (!expr) return { ok: false, error: 'schedule is required.' };
+    return {
+      ok: true,
+      schedule: { kind: 'cron', expr, ...(timezone ? { tz: timezone } : {}) },
+      echo: raw,
+    };
+  }
+
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const record = raw as Record<string, unknown>;
+    if (record.kind === 'cron') {
+      const expr = typeof record.expr === 'string' ? record.expr.trim() : '';
+      if (!expr) return { ok: false, error: 'schedule.expr is required for kind "cron".' };
+      const tz = typeof record.tz === 'string' && record.tz.trim() ? record.tz.trim() : timezone || undefined;
+      const schedule: CronSchedule = { kind: 'cron', expr, ...(tz ? { tz } : {}) };
+      return { ok: true, schedule, echo: schedule };
+    }
+    if (record.kind === 'at') {
+      const at = typeof record.at === 'string' ? record.at.trim() : '';
+      if (!at) return { ok: false, error: 'schedule.at is required for kind "at".' };
+      const schedule: CronSchedule = { kind: 'at', at };
+      return { ok: true, schedule, echo: schedule };
+    }
+    if (record.kind === 'every') {
+      const seconds =
+        typeof record.seconds === 'number' && Number.isFinite(record.seconds) ? record.seconds : NaN;
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        return { ok: false, error: 'schedule.seconds must be a positive number for kind "every".' };
+      }
+      const schedule: CronSchedule = { kind: 'every', everyMs: Math.round(seconds * 1000) };
+      return { ok: true, schedule, echo: schedule };
+    }
+    return { ok: false, error: 'schedule.kind must be one of cron, at, every.' };
+  }
+
+  return { ok: false, error: 'schedule is required.' };
+}
+
 export async function executeCreateTask(args: {
   schedule?: unknown;
   prompt?: unknown;
@@ -129,7 +182,6 @@ export async function executeCreateTask(args: {
   timezone?: unknown;
   mode?: unknown;
 }): Promise<ToolRuntimeOutcome> {
-  const schedule = typeof args.schedule === 'string' ? args.schedule.trim() : '';
   const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
   const name = typeof args.name === 'string' ? args.name.trim() : '';
   const timezone = typeof args.timezone === 'string' ? args.timezone.trim() : '';
@@ -145,8 +197,10 @@ export async function executeCreateTask(args: {
     });
   }
   const mode = args.mode === 'chitchat' ? 'chitchat' : 'agentic';
-  if (!schedule || !prompt) {
-    const missingFields = [!schedule ? 'schedule' : '', !prompt ? 'prompt' : ''].filter(Boolean);
+  const hasSchedule =
+    typeof args.schedule === 'string' ? args.schedule.trim().length > 0 : args.schedule != null;
+  if (!hasSchedule || !prompt) {
+    const missingFields = [!hasSchedule ? 'schedule' : '', !prompt ? 'prompt' : ''].filter(Boolean);
     return rejectedScheduledJobOutcome({
       code: 'invalid_scheduled_job',
       error: 'Both schedule and prompt are required to create a scheduled job.',
@@ -157,10 +211,20 @@ export async function executeCreateTask(args: {
       },
     });
   }
+
+  const normalized = normalizeCronScheduleArg(args.schedule, timezone);
+  if (!normalized.ok) {
+    return rejectedScheduledJobOutcome({
+      code: 'invalid_scheduled_job',
+      error: normalized.error,
+      repair: { retryable: true, code: 'invalid_scheduled_job', invalidFields: ['schedule'] },
+    });
+  }
+
   try {
     const created = await createScheduledJob({
       name: name || prompt.slice(0, 60),
-      schedule: { kind: 'cron', expr: schedule, ...(timezone ? { tz: timezone } : {}) },
+      schedule: normalized.schedule,
       prompt,
       mode,
     });
@@ -168,7 +232,7 @@ export async function executeCreateTask(args: {
       JSON.stringify({
         status: 'task_created',
         id: created.id,
-        schedule,
+        schedule: normalized.echo,
         prompt,
         ...(timezone ? { timezone } : {}),
         ...(created.warning ? { warning: created.warning } : {}),

@@ -1,6 +1,9 @@
 import { parse as shellParse } from 'shell-quote';
 
 import { i18n } from '../../i18n/manager';
+import { formatZonedIso } from '../scheduler/reminders/format';
+import { computeReminderNextFireAtMs } from '../scheduler/reminders/recurrence';
+import { parseReminderWhen, resolveReminderTimezone } from '../scheduler/reminders/input';
 
 export type ToolTelemetryCategory = 'native' | 'ssh' | 'workspace' | 'browser' | 'expo' | 'other';
 
@@ -58,6 +61,36 @@ function getUrlScheme(value: unknown): string | undefined {
   return match?.[1]?.toLowerCase();
 }
 
+/**
+ * Best-effort human-readable next-fire preview for the reminder approval
+ * dialog, built from the same structured-input parsing the reminder tool
+ * executor uses. Never throws: an unparsable `when` simply omits the detail,
+ * since the executor is the source of truth for actual validation.
+ */
+function describeReminderWhen(when: unknown, timezone: unknown): string | undefined {
+  const whenResult = parseReminderWhen(when);
+  if (!whenResult.ok) return undefined;
+  const tzResult = resolveReminderTimezone(timezone);
+  if (!tzResult.ok) return undefined;
+  const nextFireAtMs = computeReminderNextFireAtMs(whenResult.recurrence, tzResult.timezone, Date.now());
+  if (nextFireAtMs === undefined) return undefined;
+  return formatZonedIso(nextFireAtMs, tzResult.timezone);
+}
+
+function getReminderTitle(args: Record<string, unknown>): string {
+  const action = hasNonEmptyString(args.action) ? String(args.action).toLowerCase() : '';
+  switch (action) {
+    case 'update':
+      return i18n.t('toolApproval.actions.reminderUpdateTitle');
+    case 'cancel':
+      return i18n.t('toolApproval.actions.reminderCancelTitle');
+    case 'list':
+      return i18n.t('toolApproval.actions.reminderListTitle');
+    default:
+      return i18n.t('toolApproval.actions.reminderCreateTitle');
+  }
+}
+
 function humanizeToolName(toolName: string): string {
   return toolName
     .split('_')
@@ -93,7 +126,8 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName === 'open_url' ||
     toolName === 'share' ||
     toolName.startsWith('share_') ||
-    toolName.startsWith('notification_')
+    toolName.startsWith('notification_') ||
+    toolName === 'reminder'
   ) {
     return 'native';
   }
@@ -458,6 +492,26 @@ function summarizeNativeTool(
       };
       break;
     }
+    case 'reminder': {
+      const action = hasNonEmptyString(args.action) ? String(args.action).toLowerCase() : '';
+      if (hasNonEmptyString(args.title)) pushDetail(details, 'toolApproval.details.titleIncluded');
+      if (hasNonEmptyString(args.notes)) pushDetail(details, 'toolApproval.details.notesIncluded');
+      if (action !== 'list') {
+        const when = describeReminderWhen(args.when, args.timezone);
+        if (when) pushDetail(details, 'toolApproval.details.reminderFires', { when });
+      }
+      if ((action === 'update' || action === 'cancel') && hasNonEmptyString(args.id)) {
+        pushDetail(details, 'toolApproval.details.reminderReference');
+      }
+      redactedArguments = {
+        action: action || undefined,
+        hasId: hasNonEmptyString(args.id),
+        hasTitle: hasNonEmptyString(args.title),
+        hasNotes: hasNonEmptyString(args.notes),
+        hasWhen: args.when !== undefined && args.when !== null,
+      };
+      break;
+    }
     case 'device_status':
     case 'device_info':
     case 'device_permissions':
@@ -508,7 +562,7 @@ function summarizeNativeTool(
   }
 
   return {
-    title: getToolTitle(toolName),
+    title: toolName === 'reminder' ? getReminderTitle(args) : getToolTitle(toolName),
     description:
       details.length > 0
         ? `${details.join(' · ')}. ${i18n.t('toolApproval.redactedNotice')}`

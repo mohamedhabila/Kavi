@@ -2483,6 +2483,10 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       sshExecTitle: 'Run SSH command',
       browserNavigateTitle: 'Open browser destination',
       expoBuildTitle: 'Start Expo build',
+      reminderCreateTitle: 'Definir lembrete',
+      reminderUpdateTitle: 'Atualizar lembrete',
+      reminderCancelTitle: 'Cancelar lembrete',
+      reminderListTitle: 'Listar lembretes',
     },
     details: {
       recipientCount: '{count} recipient(s)',
@@ -2511,6 +2515,9 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       defaultCountry: 'default country {code}',
       accessReview: 'limited-access review',
       providedArguments: 'redacted arguments included',
+      reminderFires: 'dispara {when}',
+      notesIncluded: 'notas incluídas',
+      reminderReference: 'referência do lembrete incluída',
     },
   },
 

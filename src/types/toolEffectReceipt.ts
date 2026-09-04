@@ -55,6 +55,8 @@ export const TOOL_EFFECT_KINDS = [
   'notification.send',
   'notification.schedule',
   'notification.cancel',
+  'reminder.schedule',
+  'reminder.cancel',
   'media.capture',
   'device.haptic',
   'workflow.start',

@@ -2456,6 +2456,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
       sshExecTitle: 'Run SSH command',
       browserNavigateTitle: 'Open browser destination',
       expoBuildTitle: 'Start Expo build',
+      reminderCreateTitle: 'リマインダーを設定',
+      reminderUpdateTitle: 'リマインダーを更新',
+      reminderCancelTitle: 'リマインダーをキャンセル',
+      reminderListTitle: 'リマインダーを一覧表示',
     },
     details: {
       recipientCount: '{count} recipient(s)',
@@ -2484,6 +2488,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
       defaultCountry: 'default country {code}',
       accessReview: 'limited-access review',
       providedArguments: 'redacted arguments included',
+      reminderFires: '{when}に通知',
+      notesIncluded: 'メモを含む',
+      reminderReference: 'リマインダーの参照を含む',
     },
   },
 

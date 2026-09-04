@@ -11,10 +11,11 @@ export type NotificationPermissionReadiness =
 
 export interface NotificationRouteData extends Record<string, unknown> {
   notificationId?: string;
-  screen?: 'Chat' | 'Scheduler';
+  screen?: 'Chat' | 'Scheduler' | 'Reminders';
   conversationId?: string;
   jobId?: string;
-  source?: 'scheduled_task' | 'scheduled_task_wake';
+  reminderId?: string;
+  source?: 'scheduled_task' | 'scheduled_task_wake' | 'reminder';
 }
 
 let lastHandledNotificationKey: string | null = null;
@@ -120,15 +121,16 @@ function extractNotificationRouteData(
   }
 
   const route = contentData as NotificationRouteData;
-  if (!route.conversationId && !route.jobId) {
+  if (!route.conversationId && !route.jobId && !route.reminderId) {
     return null;
   }
 
   return {
     notificationId: response.notification.request.identifier,
-    screen: route.screen || (route.jobId ? 'Scheduler' : 'Chat'),
+    screen: route.screen || (route.jobId ? 'Scheduler' : route.reminderId ? 'Reminders' : 'Chat'),
     conversationId: route.conversationId,
     jobId: route.jobId,
+    reminderId: route.reminderId,
     source: route.source,
   };
 }
@@ -210,6 +212,41 @@ export async function sendLocalNotification(args: {
   });
 
   return { id, scheduled: seconds > 0 };
+}
+
+/**
+ * Schedule a notification with an explicit typed trigger (date, daily, weekly, …)
+ * instead of the fixed delay-seconds shape `sendLocalNotification` supports.
+ * Used by primitives — such as reminders — that need calendar-style repeats the
+ * OS delivers on its own, without the app running in the foreground.
+ */
+export async function scheduleTypedLocalNotification(args: {
+  identifier: string;
+  title: string;
+  body: string;
+  data?: NotificationRouteData;
+  trigger: Notifications.SchedulableNotificationTriggerInput;
+}): Promise<{ id: string }> {
+  ensureNotificationHandlerConfigured();
+  await ensurePermissions();
+  await ensureChannelConfigured();
+
+  const id = await Notifications.scheduleNotificationAsync({
+    identifier: args.identifier,
+    content: {
+      title: args.title,
+      body: args.body,
+      // See the comment in sendLocalNotification: keep the boolean sound form.
+      sound: true,
+      data: args.data,
+    },
+    trigger:
+      'channelId' in args.trigger
+        ? args.trigger
+        : { ...args.trigger, channelId: DEFAULT_CHANNEL_ID },
+  });
+
+  return { id };
 }
 
 export async function cancelLocalNotification(

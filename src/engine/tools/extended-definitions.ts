@@ -113,7 +113,11 @@ export const TEXT_SEARCH_TOOL: ToolDefinition = {
 export const CRON_TOOL: ToolDefinition = {
   name: 'cron',
   description:
-    'Manage scheduled tasks (cron jobs). Create, list, update, delete, or run tasks. ' +
+    'Manage scheduled automation tasks (cron jobs) that resume a conversation and run a prompt. ' +
+    'Create, list, update, delete, or run tasks. ' +
+    'For a person\'s reminder (e.g. "remind me to call mom at 6pm") use the reminder tool instead — ' +
+    'it delivers a real OS notification even while the app is closed, rather than resuming a ' +
+    'conversation. Use cron for an automated assistant task that should run a prompt on a schedule. ' +
     'Existing tasks can be selected by ID or exact name; a name is accepted only when it uniquely identifies one task. Request clarification when no unique match remains. ' +
     'When the app is not active, tasks use a tap-to-wake notification and run after foreground activation.',
   input_schema: {
@@ -121,7 +125,8 @@ export const CRON_TOOL: ToolDefinition = {
     properties: {
       action: {
         type: 'string',
-        description: 'Action: create, list, update, delete, run, enable, disable',
+        enum: ['create', 'list', 'update', 'delete', 'run', 'enable', 'disable'],
+        description: 'Action to perform.',
       },
       id: {
         type: 'string',
@@ -134,7 +139,29 @@ export const CRON_TOOL: ToolDefinition = {
           'Task name for create, or exact existing task name selector for update/delete/run/enable/disable.',
       },
       newName: { type: 'string', description: 'Replacement task name for update.' },
-      schedule: { type: 'string', description: 'Cron expression (for create/update)' },
+      schedule: {
+        description:
+          'Schedule for create/update: a structured object — {"kind":"cron","expr":"<5-field cron ' +
+          'expression>","tz":"<IANA timezone>"} for recurring cron expressions, ' +
+          '{"kind":"at","at":"<ISO-8601 date-time>"} for a one-time run (the task is disabled ' +
+          'automatically after it fires), or {"kind":"every","seconds":<number>} for a fixed interval. ' +
+          'Deprecated: a bare cron-expression string is still accepted for one more release, treated as ' +
+          '{"kind":"cron","expr":<string>} — prefer the structured object.',
+        anyOf: [
+          { type: 'string' },
+          {
+            type: 'object',
+            properties: {
+              kind: { type: 'string', enum: ['cron', 'at', 'every'] },
+              expr: { type: 'string', description: '5-field cron expression. Required for kind "cron".' },
+              at: { type: 'string', description: 'ISO-8601 date-time. Required for kind "at".' },
+              seconds: { type: 'number', description: 'Interval in seconds. Required for kind "every".' },
+              tz: { type: 'string', description: 'IANA time zone for a "cron" schedule.' },
+            },
+            required: ['kind'],
+          },
+        ],
+      },
       prompt: { type: 'string', description: 'Task prompt/instruction (for create/update)' },
       mode: {
         type: 'string',

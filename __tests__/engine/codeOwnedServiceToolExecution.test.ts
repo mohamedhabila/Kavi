@@ -53,13 +53,13 @@ afterEach(() => {
 });
 
 describe('code-owned service tool execution', () => {
-  it('keeps reviewed weather, finance, and communication definitions code-owned', async () => {
+  it('keeps reviewed weather, finance, and media definitions code-owned', async () => {
     await expect(
       Promise.all(
         [
           'skill__weather__current',
           'skill__finance__crypto_price',
-          'skill__communication__draft_email',
+          'skill__media__generate_qr',
         ].map((name) => buildCodeOwnedToolContractIdentity(name)),
       ),
     ).resolves.toEqual([
@@ -67,7 +67,7 @@ describe('code-owned service tool execution', () => {
       expect.objectContaining({ kind: 'code_owned', toolName: 'skill__finance__crypto_price' }),
       expect.objectContaining({
         kind: 'code_owned',
-        toolName: 'skill__communication__draft_email',
+        toolName: 'skill__media__generate_qr',
       }),
     ]);
   });
@@ -102,12 +102,11 @@ describe('code-owned service tool execution', () => {
       coinId: 'bitcoin',
       vsCurrency: 'USD',
     });
-    const communication = await executeCodeOwnedServiceTool('skill__communication__draft_email', {
-      subject: 'Hello',
-      context: 'Follow up',
+    const media = await executeCodeOwnedServiceTool('skill__media__generate_qr', {
+      data: 'https://example.com',
     });
 
-    for (const execution of [weather, finance, communication]) {
+    for (const execution of [weather, finance, media]) {
       expect(execution.result.status).toBe('completed');
       expect(JSON.parse(execution.result.content)).not.toHaveProperty(
         'code',
