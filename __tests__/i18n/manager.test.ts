@@ -4,9 +4,24 @@
 
 import { clearLocaleCache } from '../../src/i18n/registry';
 
+jest.mock('expo-localization', () => ({
+  getLocales: jest.fn(() => [{ languageTag: 'en-US' }]),
+}));
+
 // We need a fresh manager for each test, so we use dynamic import and jest.resetModules
 let i18n: (typeof import('../../src/i18n/manager'))['i18n'];
 let AsyncStorage: { getItem: jest.Mock; setItem: jest.Mock };
+let mockGetLocales: jest.Mock;
+
+function setDeviceLocaleTag(languageTag: string | null): void {
+  if (languageTag === null) {
+    mockGetLocales.mockImplementation(() => {
+      throw new Error('device locale unavailable');
+    });
+    return;
+  }
+  mockGetLocales.mockReturnValue([{ languageTag }]);
+}
 
 beforeEach(() => {
   jest.resetModules();
@@ -16,6 +31,10 @@ beforeEach(() => {
   AsyncStorage = require('@react-native-async-storage/async-storage').default;
   AsyncStorage.getItem.mockReset().mockResolvedValue(null);
   AsyncStorage.setItem.mockReset().mockResolvedValue(undefined);
+
+  mockGetLocales = require('expo-localization').getLocales as jest.Mock;
+  mockGetLocales.mockReset();
+  setDeviceLocaleTag('en-US');
 
   const mod = require('../../src/i18n/manager');
   i18n = mod.i18n;
@@ -27,19 +46,47 @@ afterEach(() => {
 
 describe('I18nManager', () => {
   describe('init', () => {
-    it('defaults to English locale', () => {
+    it('defaults to English locale before init resolves', () => {
       expect(i18n.locale).toBe('en');
+      expect(i18n.localePreference).toBe('system');
     });
 
-    it('loads persisted locale from AsyncStorage', async () => {
+    it('loads a persisted explicit locale from AsyncStorage and keeps it (no surprise switch)', async () => {
       AsyncStorage.getItem.mockResolvedValue('fr');
+      setDeviceLocaleTag('de-DE');
       await i18n.init();
       expect(i18n.locale).toBe('fr');
+      expect(i18n.localePreference).toBe('fr');
     });
 
-    it('stays en if AsyncStorage has no value', async () => {
+    it('follows the device locale when nothing is stored (fresh install)', async () => {
+      setDeviceLocaleTag('ar-EG');
       await i18n.init();
-      expect(i18n.locale).toBe('en');
+      expect(i18n.locale).toBe('ar');
+      expect(i18n.localePreference).toBe('system');
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith('kavi_locale', 'system');
+    });
+
+    it('maps a device tag with a script subtag to the right supported locale (zh-Hant-TW → zh-TW)', async () => {
+      setDeviceLocaleTag('zh-Hant-TW');
+      await i18n.init();
+      expect(i18n.locale).toBe('zh-TW');
+    });
+
+    it('resolves via the device locale when the stored preference is the "system" sentinel', async () => {
+      AsyncStorage.getItem.mockResolvedValue('system');
+      setDeviceLocaleTag('ja-JP');
+      await i18n.init();
+      expect(i18n.locale).toBe('ja');
+      expect(i18n.localePreference).toBe('system');
+    });
+
+    it('recovers to following the device locale on an unrecognized stored value', async () => {
+      AsyncStorage.getItem.mockResolvedValue('xx-not-a-locale');
+      setDeviceLocaleTag('es-MX');
+      await i18n.init();
+      expect(i18n.locale).toBe('es');
+      expect(i18n.localePreference).toBe('system');
     });
 
     it('init is idempotent', async () => {
@@ -61,9 +108,10 @@ describe('I18nManager', () => {
   });
 
   describe('setLocale', () => {
-    it('changes the locale', async () => {
+    it('changes the locale and pins the preference to that locale', async () => {
       await i18n.setLocale('fr');
       expect(i18n.locale).toBe('fr');
+      expect(i18n.localePreference).toBe('fr');
     });
 
     it('persists locale to AsyncStorage', async () => {
@@ -81,6 +129,34 @@ describe('I18nManager', () => {
       i18n.subscribe(listener);
       await i18n.setLocale('ja');
       expect(listener).toHaveBeenCalled();
+    });
+  });
+
+  describe('setLocalePreference', () => {
+    it('re-resolves the device locale each time "system" is set', async () => {
+      await i18n.setLocale('fr');
+      expect(i18n.locale).toBe('fr');
+
+      setDeviceLocaleTag('de-DE');
+      await i18n.setLocalePreference('system');
+      expect(i18n.locale).toBe('de');
+      expect(i18n.localePreference).toBe('system');
+      expect(AsyncStorage.setItem).toHaveBeenLastCalledWith('kavi_locale', 'system');
+
+      // A later device-locale change is picked up the next time "system" is (re)applied.
+      setDeviceLocaleTag('ja-JP');
+      await i18n.setLocalePreference('system');
+      expect(i18n.locale).toBe('ja');
+    });
+
+    it('an explicit locale selection clears a prior "system" preference', async () => {
+      setDeviceLocaleTag('ar-EG');
+      await i18n.setLocalePreference('system');
+      expect(i18n.localePreference).toBe('system');
+
+      await i18n.setLocale('de');
+      expect(i18n.localePreference).toBe('de');
+      expect(i18n.locale).toBe('de');
     });
   });
 

@@ -144,6 +144,7 @@
     "expo-font": "~55.0.8",
     "expo-haptics": "~55.0.18",
     "expo-image-picker": "~55.0.24",
+    "expo-localization": "~55.0.19",
     "expo-location": "~55.1.14",
     "expo-mail-composer": "~55.0.18",
     "expo-network": "~55.0.18",

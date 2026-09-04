@@ -54,11 +54,11 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | Apache-2.0 | 28 |
 | BlueOak-1.0.0 | 6 |
 | BSD-2-Clause | 22 |
-| BSD-3-Clause | 26 |
+| BSD-3-Clause | 27 |
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 46 |
-| MIT | 896 |
+| MIT | 897 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -578,6 +578,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | expo-image-picker | 55.0.24 | runtime | MIT |
 | expo-keep-awake | 55.0.8 | transitive | MIT |
 | expo-linking | 55.0.17 | transitive | MIT |
+| expo-localization | 55.0.19 | runtime | MIT |
 | expo-location | 55.1.14 | runtime | MIT |
 | expo-mail-composer | 55.0.18 | runtime | MIT |
 | expo-modules-autolinking | 55.0.27 | transitive | MIT |
@@ -962,6 +963,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | retry | 0.12.0 | transitive | MIT |
 | rimraf | 3.0.2 | transitive | ISC |
 | router | 2.2.0 | transitive | MIT |
+| rtl-detect | 1.1.2 | transitive | BSD-3-Clause |
 | safe-buffer | 5.2.1 | transitive | MIT |
 | safer-buffer | 2.1.2 | transitive | MIT |
 | sax | 1.5.0 | transitive | BlueOak-1.0.0 |

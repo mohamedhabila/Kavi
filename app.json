@@ -111,7 +111,23 @@
       "expo-web-browser",
       "expo-sqlite",
       "expo-font",
-      "expo-mail-composer"
+      "expo-mail-composer",
+      [
+        "expo-localization",
+        {
+          "supportedLocales": [
+            "en-US",
+            "ar",
+            "de-DE",
+            "es-ES",
+            "fr-FR",
+            "ja-JP",
+            "pt-BR",
+            "zh-CN",
+            "zh-TW"
+          ]
+        }
+      ]
     ]
   }
 }

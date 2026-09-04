@@ -1,7 +1,10 @@
-import { Check, ChevronRight, Languages, Monitor, Moon, Sun } from 'lucide-react-native';
-import React from 'react';
+import { Check, ChevronRight, Languages, Monitor, Moon, Smartphone, Sun } from 'lucide-react-native';
+import React, { useCallback, useSyncExternalStore } from 'react';
 import { Modal, Text, TouchableOpacity, View } from 'react-native';
 
+import { getDeviceLocaleTag } from '../../i18n/deviceLocale';
+import { i18n, SYSTEM_LOCALE_PREFERENCE } from '../../i18n/manager';
+import { resolveDeviceLocale } from '../../i18n/registry';
 import type { Locale } from '../../i18n/types';
 import type { AppPalette, ThemePreference } from '../../theme/useAppTheme';
 
@@ -35,6 +38,19 @@ export const SettingsAppearanceControls: React.FC<SettingsAppearanceControlsProp
   t,
   theme,
 }) => {
+  const localePreference = useSyncExternalStore(
+    useCallback((onStoreChange) => i18n.subscribe(onStoreChange), []),
+    () => i18n.localePreference,
+    () => i18n.localePreference,
+  );
+  const isFollowingSystemLocale = localePreference === SYSTEM_LOCALE_PREFERENCE;
+  const resolvedSystemLocale = resolveDeviceLocale(getDeviceLocaleTag());
+
+  const handleFollowSystemLocalePress = useCallback(() => {
+    void i18n.setLocalePreference(SYSTEM_LOCALE_PREFERENCE);
+    setShowLanguagePicker(false);
+  }, [setShowLanguagePicker]);
+
   const ThemeButton: React.FC<{
     icon: React.ReactNode;
     label: string;
@@ -86,7 +102,9 @@ export const SettingsAppearanceControls: React.FC<SettingsAppearanceControlsProp
       >
         <Languages size={18} color={colors.primary} />
         <View style={styles.listItemContent}>
-          <Text style={styles.listItemTitle}>{localeDisplayNames[locale]}</Text>
+          <Text style={styles.listItemTitle}>
+            {isFollowingSystemLocale ? t('settings.languageFollowSystem') : localeDisplayNames[locale]}
+          </Text>
           <Text style={styles.listItemSubtitle}>{t('settings.languageHint')}</Text>
         </View>
         <ChevronRight size={18} color={colors.textTertiary} />
@@ -101,6 +119,29 @@ export const SettingsAppearanceControls: React.FC<SettingsAppearanceControlsProp
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{t('settings.language')}</Text>
+            <TouchableOpacity
+              accessibilityLabel={t('settings.languageFollowSystem')}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isFollowingSystemLocale }}
+              onPress={handleFollowSystemLocalePress}
+              style={styles.langItem}
+            >
+              <Smartphone size={18} color={colors.textSecondary} />
+              <View style={styles.listItemContent}>
+                <Text
+                  style={[
+                    styles.langItemText,
+                    isFollowingSystemLocale && { color: colors.primary, fontWeight: '700' },
+                  ]}
+                >
+                  {t('settings.languageFollowSystem')}
+                </Text>
+                <Text style={styles.listItemSubtitle}>
+                  {localeDisplayNames[resolvedSystemLocale]}
+                </Text>
+              </View>
+              {isFollowingSystemLocale ? <Check size={18} color={colors.primary} /> : null}
+            </TouchableOpacity>
             {supportedLocales.map((supportedLocale) => (
               <TouchableOpacity
                 accessibilityLabel={localeDisplayNames[supportedLocale]}
@@ -112,12 +153,15 @@ export const SettingsAppearanceControls: React.FC<SettingsAppearanceControlsProp
                 <Text
                   style={[
                     styles.langItemText,
-                    locale === supportedLocale && { color: colors.primary, fontWeight: '700' },
+                    !isFollowingSystemLocale &&
+                      locale === supportedLocale && { color: colors.primary, fontWeight: '700' },
                   ]}
                 >
                   {localeDisplayNames[supportedLocale]}
                 </Text>
-                {locale === supportedLocale ? <Check size={18} color={colors.primary} /> : null}
+                {!isFollowingSystemLocale && locale === supportedLocale ? (
+                  <Check size={18} color={colors.primary} />
+                ) : null}
               </TouchableOpacity>
             ))}
             <TouchableOpacity

@@ -4,6 +4,8 @@ import { resolveSpeechBackend } from './voiceBackend';
 import { setVoiceAudioMode } from './voiceAudioMode';
 import { getErrorMessageWithCauses } from './voiceErrors';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import { i18n } from '../../i18n/manager';
+import { getLocaleBcp47Tag } from '../../i18n/localeBcp47';
 
 interface PlaybackConfig {
   playbackRate?: number;
@@ -61,13 +63,22 @@ export async function speakWithPreferredProvider(text: string): Promise<void> {
   }
 }
 
-export async function speakWithSystem(text: string): Promise<void> {
+/**
+ * Speak `text` using the platform's built-in TTS engine.
+ *
+ * @param language Optional explicit BCP-47 language override (e.g. `'ja-JP'`),
+ *   for a caller that already knows what language the text is in. Defaults to
+ *   the app's current effective locale (`i18n.locale`), so replies are spoken
+ *   in the language the user is reading, not a hard-coded one.
+ */
+export async function speakWithSystem(text: string, language?: string): Promise<void> {
   try {
     const Speech = require('expo-speech');
     await setVoiceAudioMode('playback');
+    const spokenLanguage = language?.trim() || getLocaleBcp47Tag(i18n.locale);
     await new Promise<void>((resolve, reject) => {
       Speech.speak(text, {
-        language: 'en-US',
+        language: spokenLanguage,
         pitch: 1.0,
         rate: 1.08,
         onDone: () => resolve(),
