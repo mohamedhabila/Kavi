@@ -265,7 +265,7 @@ describe('Orchestrator', () => {
 
       const [apiMessages, streamOptions] = mockStreamMessage.mock.calls[0];
       expect(apiMessages[0]?.content).toContain(
-        'Use the runtime_context block for request time and timezone.',
+        'Use the runtime_context block for request time, timezone, locale, and measurement system.',
       );
       expect(apiMessages[0]?.content).not.toContain('Current time (UTC):');
       expect(apiMessages[0]?.content).toContain('<runtime_context>');

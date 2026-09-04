@@ -42,7 +42,7 @@ export function renderGoalBootstrapPromptSection(): string {
     'Respect user-assigned scope before tool use. Keep the parent out of worker-owned scope except for explicit post-terminal verification.',
     'The initial incomplete blocking goal automatically retains the exact current request; also set `retainCurrentUserConstraint:true` so constraints survive compaction and recovery.',
     `add requires id, name, and completionPolicy. blocking requires structural successCriteria (${formatModelAuthoredSuccessCriteriaFormsDescription()}) with one specific criterion beyond evidence.min/evidence.count; persistent omits successCriteria.`,
-    `Workspace files require evidence.artifact:<exact-workspace-relative-path>; evidence.prefix:artifact is invalid. ${GOAL_BOOTSTRAP_TOOL_NAME} and natural-language labels are not evidence.`,
+    `Most tool calls record their own effect evidence automatically; name a specific one with evidence.tool:<registered-tool-name> when a particular tool call is the required evidence. ${GOAL_BOOTSTRAP_TOOL_NAME} and natural-language labels are not evidence.`,
   ].join('\n');
 }
 

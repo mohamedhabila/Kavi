@@ -29,6 +29,8 @@ export const DEFAULT_PERSONA_ID = 'default';
 
 export const SUPER_AGENT_SYSTEM_PROMPT = `You are SuperAgent, a mobile everyday-task orchestrator.
 
+Reply to the user in the language of their latest message. Never narrate your internal tools, goals, workers, sessions, or other mechanics to the user; report outcomes and blockers in plain terms.
+
 Use tools and workers only when they materially improve completion.
 
 ## Agent Contract
@@ -62,10 +64,23 @@ export const BUILT_IN_PERSONAS: AgentPersona[] = [
   SUPER_AGENT_PERSONA,
   {
     id: DEFAULT_PERSONA_ID,
-    name: 'Assistant',
-    description: 'General-purpose helpful AI assistant (chitchat mode)',
-    systemPrompt:
-      "You are a personal AI assistant running on the user's phone. Everyday work is your primary job: messages, calendar, reminders, contacts, places, web lookups, media, files, and device actions, alongside ordinary questions, writing, and analysis. Use a tool when the request needs live state or a real-world change; answer directly when it does not. Prefer the tool that acts on the request over a preparatory one. Never claim an action succeeded without a result that shows it did. Reserve files and canvases for concrete artifacts, previews, or an explicit export request. Finish with a clear, concise answer stating what you did or what is blocking.",
+    name: 'Kavi',
+    description: 'Personal assistant for everyday life (chitchat mode)',
+    systemPrompt: [
+      "You are Kavi, a personal assistant on the user's phone.",
+      '',
+      "Always reply in the language of the user's latest message, matching their tone and formality, unless they ask you to switch. Treat dictated or terse messages generously: fill in missing punctuation, and read past a likely misheard word or homophone for the most sensible meaning.",
+      '',
+      'Be warm and plain, never corporate or jargon-heavy. Keep replies short enough for a phone screen: a few sentences or a short list, not a wall of text. Reach for a list only when it genuinely helps; otherwise just talk. Never mention tools, goals, runs, personas, or any other internal mechanics in a reply — just answer the way a capable friend would.',
+      '',
+      'Act directly on everyday, low-stakes requests: messages, reminders, calendar, contacts, quick lookups, small write-ups, simple planning. If one missing piece of information would change what you do, ask exactly one focused question; otherwise make the sensible call and go.',
+      '',
+      'For health, legal, financial, or safety questions, share useful general information and note when it is worth talking to a professional, but never invent a specific fact, number, dosage, or legal conclusion you do not actually know.',
+      '',
+      'When something cannot be done — a missing capability, a blocked action, information you do not have — say so plainly and offer the closest alternative instead of a long explanation.',
+      '',
+      'You may offer at most one relevant follow-up suggestion when it clearly helps; do not pile on.',
+    ].join('\n'),
     icon: '🤖',
   },
   {
@@ -114,25 +129,28 @@ export function getPersona(id: string): AgentPersona | undefined {
 }
 
 /**
- * A persona owns the assistant's operating instructions; the user setting is an
- * additive customization layer, not a replacement. `default` is resolved the same
- * way as every other persona so that editing it in the agent roster actually takes
- * effect. An empty or duplicated customization is dropped so a persona never ends
- * up carrying two competing identity statements.
+ * A persona owns the assistant's operating instructions. A non-empty user-authored
+ * system prompt fully replaces the persona's own prompt — a custom persona is meant
+ * to own the assistant's identity, not layer onto a built-in one — while the
+ * code-owned runtime guidance section (tool policy, language mirroring, no narrating
+ * mechanics) is rendered separately and always applies regardless of which prompt
+ * wins here. `default` is resolved the same way as every other persona so that
+ * editing it in the agent roster actually takes effect. An existing install's old
+ * generic one-liner was migrated to an empty system prompt (settings schema v16), so
+ * this replacement is migration-safe: an untouched install falls straight through to
+ * the persona's own prompt exactly as before.
  */
 export function resolvePersonaSystemPrompt(
   persona: AgentPersona | undefined,
   userSystemPrompt: string,
 ): string {
   const customization = typeof userSystemPrompt === 'string' ? userSystemPrompt.trim() : '';
-  const personaPrompt = (
+  if (customization) return customization;
+  return (
     persona?.systemPrompt ??
     BUILT_IN_PERSONAS.find((entry) => entry.id === DEFAULT_PERSONA_ID)?.systemPrompt ??
     ''
   ).trim();
-  if (!personaPrompt) return customization;
-  if (!customization || personaPrompt.includes(customization)) return personaPrompt;
-  return `${personaPrompt}\n\n${customization}`;
 }
 
 export function resolvePersonaModel(

@@ -2,7 +2,13 @@ import { SUPER_AGENT_SYSTEM_PROMPT } from '../../src/services/agents/personas';
 
 describe('agent persona prompts', () => {
   it('keeps the SuperAgent durable prompt lean while preserving workflow contracts', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT.length).toBeLessThan(2600);
+    expect(SUPER_AGENT_SYSTEM_PROMPT.length).toBeLessThan(2900);
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'Reply to the user in the language of their latest message',
+    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'Never narrate your internal tools, goals, workers, sessions, or other mechanics',
+    );
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
       'do not emit a formal workstream plan before the first tool call',
     );

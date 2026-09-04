@@ -59,8 +59,13 @@ describe('orchestratorPromptSections', () => {
     expect(prompt).toContain(
       'compare result fields and verified effects with every explicit requested outcome and constraint',
     );
-    expect(prompt).toContain('When the user provides exact file paths, read those paths directly');
-    expect(prompt).toContain('do not list parent directories');
+    expect(prompt).toContain(
+      "Always reply in the language of the user's latest message, matching their register",
+    );
+    expect(prompt).toContain('This holds for every persona, including a fully custom one');
+    expect(prompt).toContain(
+      'Never narrate internal tools, goals, runs, personas, or other mechanics to the user',
+    );
     expect(prompt).toContain('Fetch known URLs directly');
     expect(prompt).toContain('batch independent fetches');
     expect(prompt).not.toContain('site:host');
@@ -144,5 +149,26 @@ describe('orchestratorPromptSections', () => {
     expect(splitCacheableSystemPromptSections(textOnly).dynamicText).toContain(
       'Execution mode for this turn: no registered executable tools',
     );
+  });
+
+  it('derives US customary units for an en-US locale and metric for de', () => {
+    const now = new Date('2026-05-29T10:00:00.000Z');
+    const enNote = buildRuntimeContextNote(now, { locale: 'en', timeZone: 'America/New_York' });
+    const deNote = buildRuntimeContextNote(now, { locale: 'de', timeZone: 'Europe/Berlin' });
+
+    expect(enNote).toContain('device_timezone: America/New_York');
+    expect(enNote).toContain('device_locale: en-US');
+    expect(enNote).toContain('measurement_system: us_customary');
+
+    expect(deNote).toContain('device_timezone: Europe/Berlin');
+    expect(deNote).toContain('device_locale: de-DE');
+    expect(deNote).toContain('measurement_system: metric');
+  });
+
+  it('falls back to the runtime IANA zone and active app locale when no override is given', () => {
+    const note = buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z'));
+    expect(note).toMatch(/device_timezone: \S+/);
+    expect(note).toMatch(/device_locale: [a-z]{2}(-[A-Za-z]+)*/);
+    expect(note).toMatch(/measurement_system: (metric|us_customary)/);
   });
 });

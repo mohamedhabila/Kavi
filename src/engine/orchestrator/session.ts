@@ -110,6 +110,15 @@ export async function runOrchestratorGraphSession(params: {
       return options.workflowTaskAnchor;
     }
     if (!isSuperAgent) return undefined;
+    // The anchor protects task fidelity across long, delegation-capable execution; a
+    // plain interactive agentic turn that cannot delegate does not need it. A run
+    // that can spawn workers (sessions_spawn on its surface), or is itself a
+    // delegated worker, does. Every interactive foreground chat turn carries a
+    // workflowScopeUserMessageId; a worker run (see subAgentOrchestratorRun.ts)
+    // never sets one, so its absence is the in-scope signal for "this is a worker".
+    const canDelegateOrIsDelegatedWorker =
+      availableToolNames.has('sessions_spawn') || !options.workflowScopeUserMessageId;
+    if (!canDelegateOrIsDelegatedWorker) return undefined;
     const resolution = resolveWorkflowTaskAnchor({
       messages: options.messages,
       sourceMessageId: options.workflowScopeUserMessageId,

@@ -347,7 +347,7 @@ describe('assemblePrompt - product memory groups', () => {
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('Incident Mobile');
     expect(text).not.toContain('RootWebArea');
-    expect(text.indexOf('evidenceSlices')).toBeLessThan(text.indexOf('sources'));
+    expect(text.indexOf('"steps"')).toBeLessThan(text.indexOf('sources'));
   });
 
   it('renders exact delimited request-anchor evidence before generic step matches', () => {

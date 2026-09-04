@@ -81,7 +81,7 @@ const L3_DECISIONS_RISKS_HEADER = '#### Decisions and Risks';
 const L3_ARTIFACTS_SOURCES_HEADER = '#### Artifacts and Sources';
 const L3_SUMMARIES_HEADER = '#### Summaries';
 const L3_AGENT_RUNS_NOTE =
-  'Agent-run memories are compact records of completed assistant work. Treat evidenceSlices as grounded local observations from the actual tool/action flow; prefer direct observations, tool results, artifacts, decisions, risks, and source references over inferred behavior. Preserve exact control roles, labels, values, and source order. Do not substitute a semantically similar control or value for an exact requested identity.';
+  'Agent-run memories are compact records of completed assistant work. Treat the recorded steps as grounded local observations from the actual tool/action flow; prefer direct observations, tool results, artifacts, decisions, risks, and source references over inferred behavior. Preserve exact control roles, labels, values, and source order. Do not substitute a semantically similar control or value for an exact requested identity.';
 const L3_EVIDENCE_SPANS_NOTE =
   'Observed evidence spans are compact excerpts from actual tool results or agent observations. Use them as primary grounding when they directly match the current request. Preserve exact roles, labels, values, and source order: a nearby non-input control is not a field, and a similar label is not the requested label. When a complete relevant inventory omits the requested control or value, treat the premise as unsupported or impossible instead of inventing an action.';
 const L3_ARTIFACTS_SOURCES_NOTE =
@@ -445,14 +445,14 @@ function compactAgentRunPromptFields(
 ): string | null {
   if (!parsed) return null;
   const compact = dropEmptyPromptRecord({
-    sourceRunId: parsed.sourceRunId,
+    runId: parsed.sourceRunId,
     goal: fitPromptValue(parsed.goal),
     status: fitPromptValue(parsed.status, 240),
     outcome: fitPromptValue(parsed.outcome),
     domain: fitPromptValue(parsed.domain, 160),
     environment: fitPromptValue(parsed.environment, 160),
     tools: fitPromptValue(parsed.tools, 160),
-    evidenceSlices: compactAgentSteps(parsed.evidenceSlices, queryUnits, anchorUnitSets, {
+    steps: compactAgentSteps(parsed.evidenceSlices, queryUnits, anchorUnitSets, {
       prioritizeQueryMatches: true,
     }),
     sources: fitPromptValue(parsed.sources, 260),
@@ -472,7 +472,7 @@ function compactEvidenceSpanPromptFields(
   if (!parsed) return null;
   const step = compactProcedureStep(parsed, queryUnits, anchorUnitSets);
   const compact = dropEmptyPromptRecord({
-    sourceRunId: parsed.sourceRunId,
+    runId: parsed.sourceRunId,
     goal: fitPromptValue(parsed.goal),
     domain: fitPromptValue(parsed.domain, 120),
     environment: fitPromptValue(parsed.environment, 160),

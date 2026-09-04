@@ -98,7 +98,8 @@ export function buildCapabilityIndexPromptSection(params: {
   const lines = [
     '## Capability Index',
     'Available this run. If one is not on this turn’s surface, expose it with tool_catalog using',
-    'the category shown, then call it. Never call a listed capability unavailable without trying that.',
+    'the category shown, then call it. If the user asks for something a listed capability covers,',
+    'look it up with tool_catalog before saying it is unavailable.',
     ...shownCategories.map((category) =>
       renderCategoryLine(category, byCategory.get(category) ?? []),
     ),

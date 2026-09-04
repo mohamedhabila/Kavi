@@ -43,14 +43,41 @@ describe('BUILT_IN_PERSONAS', () => {
     expect(coder?.systemPrompt).toContain('persisted files');
   });
 
-  it('leads the default persona with everyday mobile work, not files or code', () => {
+  it('gives the default persona a plain, phone-first assistant identity for ordinary people', () => {
     const assistant = BUILT_IN_PERSONAS.find((persona) => persona.id === 'default');
-    expect(assistant?.systemPrompt).toContain('Everyday work is your primary job');
-    expect(assistant?.systemPrompt).toContain('calendar');
-    expect(assistant?.systemPrompt).toContain('Reserve files and canvases');
-    // Completion honesty has to survive prompt edits: it is the guard against
-    // reporting an action as done without a result that shows it.
-    expect(assistant?.systemPrompt).toContain('Never claim an action succeeded');
+    expect(assistant?.name).toBe('Kavi');
+    expect(assistant?.systemPrompt).toContain("You are Kavi, a personal assistant on the user's phone");
+    // Language mirroring must survive prompt edits: it is the guard against
+    // replying in the wrong language for the user's own message.
+    expect(assistant?.systemPrompt).toContain(
+      "Always reply in the language of the user's latest message",
+    );
+    expect(assistant?.systemPrompt).toContain('matching their tone and formality');
+    expect(assistant?.systemPrompt).toContain('dictated or terse messages generously');
+    // No leaking of internal mechanics into a reply.
+    expect(assistant?.systemPrompt).toContain(
+      'Never mention tools, goals, runs, personas, or any other internal mechanics',
+    );
+    expect(assistant?.systemPrompt).toContain('short enough for a phone screen');
+    expect(assistant?.systemPrompt).toContain('ask exactly one focused question');
+    expect(assistant?.systemPrompt).toContain('worth talking to a professional');
+    expect(assistant?.systemPrompt).toContain('never invent a specific fact');
+    expect(assistant?.systemPrompt).toContain('offer the closest alternative');
+    expect(assistant?.systemPrompt).toContain('at most one relevant follow-up suggestion');
+  });
+
+  it('keeps the default persona concise enough for a phone screen', () => {
+    const assistant = BUILT_IN_PERSONAS.find((persona) => persona.id === 'default');
+    const estimatedTokens = (assistant?.systemPrompt.length ?? 0) / 4;
+    expect(estimatedTokens).toBeLessThanOrEqual(450);
+  });
+
+  it('gives SuperAgent the same language-mirroring and no-mechanics-narration rules', () => {
+    const superAgent = BUILT_IN_PERSONAS.find((persona) => persona.id === 'super-agent');
+    expect(superAgent?.systemPrompt).toContain(
+      'Reply to the user in the language of their latest message',
+    );
+    expect(superAgent?.systemPrompt).toContain('Never narrate your internal tools, goals, workers');
   });
 
   it('limits researcher and writer canvases to explicitly relevant cases', () => {
@@ -108,50 +135,53 @@ describe('getPersona', () => {
 });
 
 describe('resolvePersonaSystemPrompt', () => {
-  it('keeps the default persona prompt as the base and appends user customization', () => {
+  it('replaces the default persona prompt entirely with a non-empty user customization', () => {
     const persona = getPersona('default')!;
     const result = resolvePersonaSystemPrompt(persona, 'Custom prompt');
-    // Regression guard: this used to discard the persona entirely, which made
-    // editing the Assistant persona in the agent roster a silent no-op.
-    expect(result).toContain(persona.systemPrompt);
-    expect(result).toContain('Custom prompt');
+    // A user-authored persona is meant to own the assistant's identity, not layer
+    // onto the built-in one; the code-owned runtime guidance section (rendered
+    // separately by buildSystemPromptSections) still applies regardless.
+    expect(result).toBe('Custom prompt');
+    expect(result).not.toContain(persona.systemPrompt);
   });
 
-  it('falls back to the default persona prompt when no persona resolves', () => {
+  it('falls back to the default persona prompt when no persona resolves and no customization is set', () => {
     const defaultPersona = getPersona('default')!;
-    const result = resolvePersonaSystemPrompt(undefined, 'Custom prompt');
-    expect(result).toContain(defaultPersona.systemPrompt);
-    expect(result).toContain('Custom prompt');
+    const result = resolvePersonaSystemPrompt(undefined, '');
+    expect(result).toBe(defaultPersona.systemPrompt);
   });
 
-  it('drops empty customization instead of leaving a trailing separator', () => {
+  it('a customization still replaces even when no persona resolves', () => {
+    const result = resolvePersonaSystemPrompt(undefined, 'Custom prompt');
+    expect(result).toBe('Custom prompt');
+  });
+
+  it('drops empty or whitespace-only customization and keeps the persona prompt', () => {
     const persona = getPersona('default')!;
     expect(resolvePersonaSystemPrompt(persona, '   ')).toBe(persona.systemPrompt);
+    expect(resolvePersonaSystemPrompt(persona, '')).toBe(persona.systemPrompt);
   });
 
-  it('never emits two competing identity statements', () => {
-    for (const persona of BUILT_IN_PERSONAS) {
-      const resolved = resolvePersonaSystemPrompt(persona, 'You are a helpful assistant.');
-      expect(resolved.match(/\bYou are\b/g)?.length ?? 0).toBeLessThanOrEqual(2);
-    }
-    // The shipped default is empty, so a stock install carries exactly one identity.
-    for (const persona of BUILT_IN_PERSONAS) {
-      const resolved = resolvePersonaSystemPrompt(persona, '');
-      expect(resolved.match(/\bYou are\b/g)?.length ?? 0).toBe(1);
-    }
-  });
-
-  it('prepends persona prompt for non-default', () => {
+  it('replaces the persona prompt for non-default personas too', () => {
     const persona = getPersona('coder')!;
     const result = resolvePersonaSystemPrompt(persona, 'Additional instructions');
-    expect(result).toContain(persona.systemPrompt);
-    expect(result).toContain('Additional instructions');
+    expect(result).toBe('Additional instructions');
+    expect(result).not.toContain(persona.systemPrompt);
   });
 
   it('uses only persona prompt when user prompt is empty', () => {
     const persona = getPersona('researcher')!;
     const result = resolvePersonaSystemPrompt(persona, '');
     expect(result).toBe(persona.systemPrompt);
+  });
+
+  it('is migration-safe: an untouched install (empty settings prompt) is unaffected by the replace semantics', () => {
+    // The pre-existing generic one-liner was migrated to an empty system prompt
+    // (settings schema v16), so every built-in persona resolves to exactly its own
+    // prompt on a stock install, same as before this change.
+    for (const persona of BUILT_IN_PERSONAS) {
+      expect(resolvePersonaSystemPrompt(persona, '')).toBe(persona.systemPrompt);
+    }
   });
 });
 

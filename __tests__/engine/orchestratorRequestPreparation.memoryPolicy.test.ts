@@ -34,7 +34,6 @@ function baseParams() {
     conversationId: 'source-thread-1',
     graphOwnedRun: false,
     internalUserMessageCount: 0,
-    isSuperAgent: false,
     linkUnderstandingEnabled: false,
     logger: { devLog: jest.fn(), devWarn: jest.fn() },
     maxLinks: 3,

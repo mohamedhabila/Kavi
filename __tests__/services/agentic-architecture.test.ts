@@ -128,11 +128,11 @@ describe('getPersona with super-agent', () => {
 });
 
 describe('resolvePersonaSystemPrompt with super-agent', () => {
-  it('uses super-agent prompt and appends user instructions', () => {
+  it('replaces the super-agent prompt with a user-authored prompt', () => {
     const persona = getPersona('super-agent')!;
     const result = resolvePersonaSystemPrompt(persona, 'Focus on backend tasks');
-    expect(result).toContain('SuperAgent');
-    expect(result).toContain('Focus on backend tasks');
+    expect(result).toBe('Focus on backend tasks');
+    expect(result).not.toContain('SuperAgent');
   });
 
   it('uses super-agent prompt alone when user prompt is empty', () => {

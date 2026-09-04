@@ -57,8 +57,12 @@ describe('goals/bootstrap', () => {
     expect(section).toContain('evidence.min:<n>');
     expect(section).toContain('"id":"stable-id"');
     expect(section).toContain('"name":"Name"');
-    expect(section).toContain('evidence.artifact:<exact-workspace-relative-path>');
-    expect(section).toContain('evidence.prefix:artifact is invalid');
+    // The bootstrap prose leads with general-purpose evidence, not a workspace-file
+    // example — most tool calls record their own effect evidence automatically, and
+    // evidence.tool: is what a model actually authors when it needs to name one.
+    expect(section).toContain('Most tool calls record their own effect evidence automatically');
+    expect(section).toContain('evidence.tool:<registered-tool-name>');
+    expect(section).not.toContain('Workspace files require evidence.artifact');
     // The batched form is now what bootstrap teaches. Traced live: the provider's strict
     // mode rewrites every property into `required` with a nullable type, so the schema
     // carries no signal that `goals` is an alternative to the flat fields — the prompt and

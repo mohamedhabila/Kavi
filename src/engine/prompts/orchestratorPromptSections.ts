@@ -1,5 +1,8 @@
 import type { Message } from '../../types/message';
 import { isToolRuntimeAvailable } from '../tools/runtimeAvailability';
+import { i18n } from '../../i18n/manager';
+import { getLocaleBcp47Tag } from '../../i18n/localeBcp47';
+import type { Locale } from '../../i18n/types';
 
 export type SystemPromptSectionPurpose =
   | 'base_prompt'
@@ -62,7 +65,9 @@ export function buildRuntimePromptSection(options: {
 }): string {
   const universalGuidance = [
     'Runtime: mobile (React Native / Expo), channel mobile-app.',
-    'Use the runtime_context block for request time and timezone.',
+    'Use the runtime_context block for request time, timezone, locale, and measurement system.',
+    "Always reply in the language of the user's latest message, matching their register, unless they ask you to switch. This holds for every persona, including a fully custom one.",
+    'Never narrate internal tools, goals, runs, personas, or other mechanics to the user; report outcomes and blockers in plain terms. This holds for every persona, including a fully custom one.',
     'Use external-state tools only when the requested answer or action requires live data; mentioning a meeting, deadline, person, or schedule alone does not request inspection.',
     DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT,
     MEMORY_MINIMAL_DISCLOSURE_CONTRACT,
@@ -84,7 +89,6 @@ export function buildRuntimePromptSection(options: {
     'When a durable artifact or external update is requested, create or update it before final delivery once content is available.',
     'Reading, search, recall, or verification is not completion when the request also requires action; continue to the action tool.',
     'A successful tool call proves only the exact result it returned. Before final delivery, compare result fields and verified effects with every explicit requested outcome and constraint; if any remains unsatisfied, continue with a corrected action or report the concrete blocker.',
-    'When the user provides exact file paths, read those paths directly; do not list parent directories merely to confirm that the named files exist.',
     options.webSearchAvailable === false
       ? 'For web research, no search provider is configured, so web_search is unavailable: reach pages directly with web_fetch. Batch independent fetches and compare sources.'
       : 'For web research, web_search discovers and web_fetch reads. Fetch known URLs directly, batch independent fetches, compare sources, and re-search only if needed.',
@@ -106,13 +110,38 @@ function buildExecutionModePromptSection(options: {
   ].join('\n');
 }
 
-export function buildRuntimeContextNote(now: Date = new Date()): string {
+/** Locale regions that use US customary units instead of metric. */
+const US_CUSTOMARY_BCP47_REGIONS = new Set(['US', 'LR', 'MM']);
+
+function resolveDeviceTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+function resolveMeasurementSystem(bcp47Tag: string): 'metric' | 'us_customary' {
+  const region = bcp47Tag.split('-')[1]?.toUpperCase();
+  return region && US_CUSTOMARY_BCP47_REGIONS.has(region) ? 'us_customary' : 'metric';
+}
+
+export function buildRuntimeContextNote(
+  now: Date = new Date(),
+  overrides: { locale?: Locale; timeZone?: string } = {},
+): string {
   const currentTimeIso = now.toISOString();
+  const locale = overrides.locale ?? i18n.locale;
+  const timeZone = overrides.timeZone ?? resolveDeviceTimeZone();
+  const bcp47Tag = getLocaleBcp47Tag(locale);
 
   return [
     'Runtime context:',
     `request_timestamp_utc: ${currentTimeIso}`,
     `device_local_timezone_offset: ${formatUtcOffset(now.getTimezoneOffset())}`,
+    `device_timezone: ${timeZone}`,
+    `device_locale: ${bcp47Tag}`,
+    `measurement_system: ${resolveMeasurementSystem(bcp47Tag)}`,
     'Treat this runtime context as authoritative for time-sensitive reasoning in this request.',
   ].join('\n');
 }
@@ -212,9 +241,7 @@ export function buildSystemPromptSections(
   toolingEnabled = true,
   textOnlyTurn = false,
 ): SystemPromptSection[] {
-  const prompt =
-    systemPrompt ||
-    "You are a personal AI assistant operating in the user's current mobile workspace.";
+  const prompt = systemPrompt || "You are Kavi, a personal assistant on the user's phone.";
   const normalizedSkillsPrompt = typeof skillsPrompt === 'string' ? skillsPrompt : '';
   const sections: SystemPromptSection[] = [];
 

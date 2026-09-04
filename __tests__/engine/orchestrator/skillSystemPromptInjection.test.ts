@@ -45,8 +45,7 @@ describe('Orchestrator', () => {
 
       const apiMessages = mockStreamMessage.mock.calls[0][0];
       expect(apiMessages[0].role).toBe('system');
-      expect(apiMessages[0].content).toContain('mobile workspace');
-      expect(apiMessages[0].content).not.toContain('Kavi');
+      expect(apiMessages[0].content).toContain("a personal assistant on the user's phone");
     });
 
     it('keeps the SuperAgent runtime system prompt product-neutral', async () => {
@@ -90,7 +89,11 @@ describe('Orchestrator', () => {
 
       const apiMessages = mockStreamMessage.mock.calls[0][0];
       expect(apiMessages[0].role).toBe('system');
-      expect(apiMessages[0].content).not.toContain('Kavi');
+      // This harness mocks resolvePersonaSystemPrompt to ignore the persona and
+      // return the raw (here empty) caller-supplied systemPrompt, so this exercises
+      // buildSystemPromptSections' own degenerate no-identity-at-all fallback,
+      // which now always names Kavi rather than leaving the model unbranded.
+      expect(apiMessages[0].content).toContain("a personal assistant on the user's phone");
     });
 
     it('keeps the SuperAgent runtime prompt compact while preserving graph-critical contracts', async () => {
