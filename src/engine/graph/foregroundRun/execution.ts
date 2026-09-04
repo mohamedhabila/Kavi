@@ -629,6 +629,10 @@ async function executeReservedForegroundConversationRun(
           agentRunId: bootstrapResult.trackedAgentRunId,
           memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
           memoryContextStrategy: options?.memoryContextStrategy,
+          // This is the interactive chat entry point: a person is watching the screen
+          // wait for a reply, so this run gets the tighter foreground iteration/wall-clock
+          // budget and inactivity timeout instead of the full background ceiling.
+          isForegroundRun: true,
           ...(mobileController
             ? {
                 mobileController: {

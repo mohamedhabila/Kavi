@@ -42,6 +42,7 @@ import {
   type RuntimeToolAvailabilityContext,
 } from '../tools/runtimeAvailability';
 import {
+  FOREGROUND_MAX_TOOL_ITERATIONS,
   MAX_TOOL_ITERATIONS,
   MAX_TOOL_ITERATIONS_SUPERAGENT,
   resolveToolIterationBudget,
@@ -167,6 +168,8 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   };
   messages: Message[];
   maxToolIterations?: number;
+  /** See OrchestratorOptions.isForegroundRun; clamps the default iteration budget. */
+  isForegroundRun?: boolean;
   model: string;
   personaId?: string;
   provider: LlmProviderConfig;
@@ -213,13 +216,30 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   const personaIterationBudget = isSuperAgent
     ? MAX_TOOL_ITERATIONS_SUPERAGENT
     : MAX_TOOL_ITERATIONS;
+  // A foreground interactive run (a person waiting on the screen) never earns the
+  // full persona ceiling as its *default* budget; an explicit caller-supplied
+  // `maxToolIterations` still passes through resolveToolIterationBudget unclamped,
+  // since explicit caller limits remain fixed (see orchestrator/constants.ts).
+  const defaultIterationBudget = params.isForegroundRun
+    ? Math.min(personaIterationBudget, FOREGROUND_MAX_TOOL_ITERATIONS)
+    : personaIterationBudget;
   const maxToolIterations = resolveToolIterationBudget(
     params.maxToolIterations,
-    personaIterationBudget,
+    defaultIterationBudget,
   );
   params.logger.debug(
     `conversationId=${params.conversationId}, persona=${persona?.name || 'none'} (superAgent=${isSuperAgent}), maxIterations=${maxToolIterations}`,
   );
+  // Mode is a conversation property, not a persona flag: read the conversation's own
+  // persisted mode (falling back to the persona signal only for worker sessions that
+  // are never registered as a UI conversation) instead of gating the tool surface on
+  // `isSuperAgent` directly. Resolved once here so every downstream consumer of "does
+  // this run start agentic" (the tool surface below, and the caller's memory-access
+  // mode) reuses the same value instead of re-resolving it.
+  const startsAgentic = resolveConversationStartsAgentic({
+    conversationId: params.conversationId,
+    personaIsSuperAgent: isSuperAgent,
+  });
   const resolvedPrompt = resolvePersonaSystemPrompt(persona, params.systemPrompt);
   const { providerId: resolvedProviderId, model: resolvedModel } = resolvePersonaModel(
     persona,

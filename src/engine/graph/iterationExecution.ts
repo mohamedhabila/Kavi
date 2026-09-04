@@ -10,6 +10,7 @@ import {
 import { prepareAgentControlGraphModelTurn } from './prepareAgentControlGraphModelTurn';
 import { buildConversationModeEscalationDetail } from './conversation/modeEscalation';
 import { resolveConversationStartsAgentic } from './conversation/resolveConversationRuntimeMode';
+import { evaluateForegroundInteractionBudgetCheckpoint } from './foregroundRun/foregroundInteractionBudget';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
 import { executePreparedAgentControlGraphTurn } from './iterationReadyTurnExecution';
 import type {
@@ -26,7 +27,26 @@ export async function executeAgentControlGraphIteration(
   };
   const livingMemory = runtime.admittedMemoryContext.livingMemory;
 
-  if (!params.graph.getCurrentTurnDirectives().forceFinalText) {
+  // A foreground interactive run is bounded far tighter than a background or
+  // delegated-worker run: reaching the iteration or wall-clock ceiling forces a
+  // text-only checkpoint turn instead of continuing to call tools, and the run
+  // ends as a clean, resumable turn rather than grinding on unseen. This check
+  // takes precedence over the ordinary post-tool final-text directive below, and
+  // fires at most once per run (`runtime.foregroundCheckpointed`); a model-turn
+  // inactivity timeout can also arm it once (see iterationReadyTurnExecution.ts).
+  const foregroundCheckpoint = evaluateForegroundInteractionBudgetCheckpoint({
+    isForegroundRun: params.isForegroundRun === true,
+    iteration: params.iteration,
+    elapsedMs: Date.now() - (params.runStartedAtMs ?? Date.now()),
+    alreadyCheckpointedThisRun: runtime.foregroundCheckpointed === true,
+  });
+  if (foregroundCheckpoint.shouldCheckpoint) {
+    runtime.foregroundCheckpointed = true;
+    params.graph.recordTurnDirectives(
+      { forceFinalText: true, forcedTextReason: 'foreground_budget_checkpoint' },
+      foregroundCheckpoint.reason ?? 'foreground_interaction_budget',
+    );
+  } else if (!params.graph.getCurrentTurnDirectives().forceFinalText) {
     params.graph.recordPostToolFinalTextDirective({
       pendingAsyncCount: getPendingTrackedAsyncOperations(params.trackedAsyncOperations).length,
     });

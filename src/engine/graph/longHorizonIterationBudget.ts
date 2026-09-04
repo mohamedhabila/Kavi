@@ -1,5 +1,8 @@
 import type { ToolCallRecord } from '../loopDetection';
-import { MAX_TOOL_ITERATIONS_OVERRIDE } from '../orchestrator/constants';
+import {
+  FOREGROUND_MAX_TOOL_ITERATIONS,
+  MAX_TOOL_ITERATIONS_OVERRIDE,
+} from '../orchestrator/constants';
 
 const RECENT_PROGRESS_WINDOW_SIZE = 12;
 const MIN_RECENT_COMPLETED_TOOL_CALLS = 2;
@@ -30,20 +33,28 @@ export function resolveNextLongHorizonIterationLimit(params: {
   extensionSize: number;
   toolCallHistory: ReadonlyArray<ToolCallRecord>;
   hardLimit?: number;
+  /**
+   * True only for a foreground interactive run (a person waiting on the
+   * screen), never for a delegated worker or a scheduled/background run. When
+   * set, the resolved ceiling is clamped to FOREGROUND_MAX_TOOL_ITERATIONS
+   * regardless of `hardLimit`, so a caller that forgets to lower its own
+   * ceiling for a foreground run still cannot extend past the foreground
+   * budget. The foreground checkpoint (see foregroundRun/foregroundInteractionBudget.ts)
+   * forces a text-only turn once that ceiling is reached.
+   */
+  isForegroundRun?: boolean;
 }): number | null {
   if (!params.enabled) return null;
 
   const currentLimit = normalizePositiveInteger(params.currentLimit, 1);
   const extensionSize = normalizePositiveInteger(params.extensionSize, 1);
-  const hardLimit = Math.max(
-    1,
-    Math.min(
-      Number.isFinite(params.hardLimit)
-        ? Math.floor(Number(params.hardLimit))
-        : MAX_TOOL_ITERATIONS_OVERRIDE,
-      MAX_TOOL_ITERATIONS_OVERRIDE,
-    ),
-  );
+  const requestedHardLimit = Number.isFinite(params.hardLimit)
+    ? Math.floor(Number(params.hardLimit))
+    : MAX_TOOL_ITERATIONS_OVERRIDE;
+  const foregroundClampedHardLimit = params.isForegroundRun
+    ? Math.min(requestedHardLimit, FOREGROUND_MAX_TOOL_ITERATIONS)
+    : requestedHardLimit;
+  const hardLimit = Math.max(1, Math.min(foregroundClampedHardLimit, MAX_TOOL_ITERATIONS_OVERRIDE));
 
   if (currentLimit >= hardLimit) return null;
   if (!hasRecentCompletedToolProgress(params.toolCallHistory)) return null;

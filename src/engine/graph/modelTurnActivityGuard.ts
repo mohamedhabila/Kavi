@@ -1,18 +1,30 @@
 import { createAgentRunAbortError } from '../../services/runtimeError';
 
 export const MODEL_TURN_INACTIVITY_TIMEOUT_MS = 15 * 60_000;
+// Foreground interactive runs (a person watching the screen) are bounded far
+// tighter than background or delegated-worker runs: a multi-minute silent gap
+// with no streamed token reads as a hung app, not useful background work.
+// Background/delegated callers must keep passing the 15-minute default above;
+// only a genuinely foreground caller should pass this value as `timeoutMs`.
+export const FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS = 60_000;
 
 export type ModelTurnActivityGuard = {
   signal: AbortSignal;
+  readonly timeoutMs: number;
   didTimeOut(): boolean;
   markActivity(): void;
   dispose(): void;
 };
 
-export function createModelTurnActivityGuard(parentSignal?: AbortSignal): ModelTurnActivityGuard {
+export function createModelTurnActivityGuard(
+  parentSignal?: AbortSignal,
+  timeoutMs: number = MODEL_TURN_INACTIVITY_TIMEOUT_MS,
+): ModelTurnActivityGuard {
+  const normalizedTimeoutMs =
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : MODEL_TURN_INACTIVITY_TIMEOUT_MS;
   const controller = new AbortController();
   let timedOut = false;
-  let activityDeadline = Date.now() + MODEL_TURN_INACTIVITY_TIMEOUT_MS;
+  let activityDeadline = Date.now() + normalizedTimeoutMs;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const scheduleDeadline = () => {
@@ -40,10 +52,11 @@ export function createModelTurnActivityGuard(parentSignal?: AbortSignal): ModelT
 
   return {
     signal: controller.signal,
+    timeoutMs: normalizedTimeoutMs,
     didTimeOut: () => timedOut,
     markActivity: () => {
       if (!controller.signal.aborted) {
-        activityDeadline = Date.now() + MODEL_TURN_INACTIVITY_TIMEOUT_MS;
+        activityDeadline = Date.now() + normalizedTimeoutMs;
       }
     },
     dispose: () => {
@@ -59,7 +72,7 @@ export function normalizeModelTurnActivityError(
 ): Error {
   if (guard.didTimeOut()) {
     const timeoutError = new Error(
-      `Model response timed out after ${MODEL_TURN_INACTIVITY_TIMEOUT_MS}ms without provider activity.`,
+      `Model response timed out after ${guard.timeoutMs}ms without provider activity.`,
     );
     timeoutError.name = 'ModelTurnInactivityTimeoutError';
     return timeoutError;

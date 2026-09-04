@@ -25,6 +25,7 @@ import {
 } from '../authority/modelTurnMemoryPolicyBinding';
 import {
   createModelTurnActivityGuard,
+  FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS,
   normalizeModelTurnActivityError,
   waitForPromiseOrAbort,
 } from './modelTurnActivityGuard';
@@ -346,6 +347,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
     ExecuteAgentControlGraphModelTurnParams,
     | 'applyGraphEvents'
     | 'callbacks'
+    | 'isForegroundRun'
     | 'iteration'
     | 'llm'
     | 'recordPerformanceMetrics'
@@ -382,7 +384,10 @@ export async function executeAgentControlGraphModelTurnStreaming(
       pendingToolCalls.splice(0);
     },
   });
-  const activityGuard = createModelTurnActivityGuard(params.signal?.signal);
+  const activityGuard = createModelTurnActivityGuard(
+    params.signal?.signal,
+    params.isForegroundRun ? FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS : undefined,
+  );
   let streamIterator: AsyncIterator<any> | undefined;
 
   try {
@@ -548,6 +553,7 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
     ExecuteAgentControlGraphModelTurnParams,
     | 'applyGraphEvents'
     | 'callbacks'
+    | 'isForegroundRun'
     | 'iteration'
     | 'llm'
     | 'recordPerformanceMetrics'
@@ -573,7 +579,10 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
     memoryPolicyBinding: params.memoryPolicyBinding,
     onInvalidated: () => undefined,
   });
-  const activityGuard = createModelTurnActivityGuard(params.signal?.signal);
+  const activityGuard = createModelTurnActivityGuard(
+    params.signal?.signal,
+    params.isForegroundRun ? FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS : undefined,
+  );
 
   params.applyGraphEvents([
     {

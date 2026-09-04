@@ -1,6 +1,9 @@
 import { resolveNextLongHorizonIterationLimit } from '../../src/engine/graph/longHorizonIterationBudget';
 import type { ToolCallRecord } from '../../src/engine/loopDetection';
-import { MAX_TOOL_ITERATIONS_OVERRIDE } from '../../src/engine/orchestrator/constants';
+import {
+  FOREGROUND_MAX_TOOL_ITERATIONS,
+  MAX_TOOL_ITERATIONS_OVERRIDE,
+} from '../../src/engine/orchestrator/constants';
 
 function toolOutcome(status: ToolCallRecord['status'], timestamp: number): ToolCallRecord {
   return {
@@ -66,5 +69,56 @@ describe('long-horizon iteration budget', () => {
         toolCallHistory: [toolOutcome('completed', 1), toolOutcome('completed', 2)],
       }),
     ).toBeNull();
+  });
+
+  describe('foreground interaction budget', () => {
+    it('never extends a foreground run past FOREGROUND_MAX_TOOL_ITERATIONS', () => {
+      expect(
+        resolveNextLongHorizonIterationLimit({
+          enabled: true,
+          currentLimit: FOREGROUND_MAX_TOOL_ITERATIONS - 4,
+          extensionSize: 40,
+          toolCallHistory: [toolOutcome('completed', 1), toolOutcome('completed', 2)],
+          isForegroundRun: true,
+        }),
+      ).toBe(FOREGROUND_MAX_TOOL_ITERATIONS);
+    });
+
+    it('refuses to extend a foreground run already at the foreground ceiling', () => {
+      expect(
+        resolveNextLongHorizonIterationLimit({
+          enabled: true,
+          currentLimit: FOREGROUND_MAX_TOOL_ITERATIONS,
+          extensionSize: 40,
+          toolCallHistory: [toolOutcome('completed', 1), toolOutcome('completed', 2)],
+          isForegroundRun: true,
+        }),
+      ).toBeNull();
+    });
+
+    it('clamps to the foreground ceiling even if a caller passes a higher explicit hardLimit', () => {
+      expect(
+        resolveNextLongHorizonIterationLimit({
+          enabled: true,
+          currentLimit: FOREGROUND_MAX_TOOL_ITERATIONS - 1,
+          extensionSize: 40,
+          toolCallHistory: [toolOutcome('completed', 1), toolOutcome('completed', 2)],
+          hardLimit: MAX_TOOL_ITERATIONS_OVERRIDE,
+          isForegroundRun: true,
+        }),
+      ).toBe(FOREGROUND_MAX_TOOL_ITERATIONS);
+    });
+
+    it('does not clamp a delegated worker or background run to the foreground ceiling', () => {
+      expect(
+        resolveNextLongHorizonIterationLimit({
+          enabled: true,
+          currentLimit: 30,
+          extensionSize: 40,
+          toolCallHistory: [toolOutcome('completed', 1), toolOutcome('completed', 2)],
+          isForegroundRun: false,
+        }),
+      ).toBe(70);
+    });
   });
 });

@@ -81,6 +81,16 @@ export interface OrchestratorOptions {
    * guardrail is larger than the persona default.
    */
   maxToolIterations?: number;
+  /**
+   * True only for a foreground interactive run — a person waiting on the screen —
+   * as opposed to a delegated worker, a scheduled job, or any other background run.
+   * Set exclusively by the interactive chat entry point
+   * (graph/foregroundRun/execution.ts); delegated workers and scheduled/boot runs
+   * must omit it. Bounds the tool-iteration and wall-clock budget far tighter (see
+   * orchestrator/constants.ts) and forces a text-only checkpoint turn instead of an
+   * unbroken multi-minute tool-calling grind or a hard failure on a stalled model turn.
+   */
+  isForegroundRun?: boolean;
   temperature?: number;
   signal?: AbortController;
   thinkingLevel?: ThinkingLevel;

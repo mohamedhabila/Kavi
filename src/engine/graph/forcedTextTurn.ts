@@ -30,6 +30,8 @@ export function buildAgentControlGraphForcedTextOnlyTurnPrompt(
       return '[SYSTEM WAITING FOR VERIFIED RESULT]\nTool use is disabled for this turn.\nState what is still pending and that no verified completion is available yet; do not repeat or invent the side effect.';
     case 'execution_loop_recovery':
       return '[SYSTEM EXECUTION BLOCKED]\nTool use is disabled for this turn.\nState the unverified requested side effect, the blocker, and the smallest missing input if autonomous progress is no longer possible.';
+    case 'foreground_budget_checkpoint':
+      return '[SYSTEM FOREGROUND CHECKPOINT]\nTool use is disabled for this turn.\nThis foreground turn has reached its bounded work window before finishing. In the user\'s own language, concisely report what has been done so far, what remains, and ask whether to continue. Do not claim the task is complete if work remains, and do not invent a tool result. The next message can resume the work.';
     case 'loop_recovery':
     default:
       return '[SYSTEM DIRECT RESPONSE REQUIRED]\nTool use is disabled for this turn.\nAnswer from gathered evidence, or state the blocker clearly if the evidence is still insufficient.';

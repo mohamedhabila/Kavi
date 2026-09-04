@@ -229,6 +229,14 @@ export type AgentRunControlGraphForcedTextReason =
   | 'background_session_started'
   | 'empty_delivery_recovery'
   | 'execution_loop_recovery'
+  /**
+   * A foreground interactive run (a person watching the screen) hit its
+   * bounded work window — FOREGROUND_MAX_TOOL_ITERATIONS or
+   * FOREGROUND_MAX_WALL_CLOCK_MS in orchestrator/constants.ts — with the run
+   * still incomplete. Distinct from loop_recovery: this is not a stall, it is
+   * a deliberate checkpoint so a long foreground turn cannot run unbounded.
+   */
+  | 'foreground_budget_checkpoint'
   | 'incomplete_delivery_continuation'
   | 'loop_recovery'
   | 'persistent_context_settled'

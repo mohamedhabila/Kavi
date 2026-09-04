@@ -63,6 +63,12 @@ export interface AgentControlGraphIterationRuntimeState {
   llm: LlmService;
   lastModelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   lastModelTurnMemoryRetrievalEventId?: string;
+  /**
+   * Set once a foreground run has forced its one budget-checkpoint text turn (from
+   * either the iteration/wall-clock ceiling or a model-turn inactivity timeout), so
+   * the run never checkpoints twice. See foregroundRun/foregroundInteractionBudget.ts.
+   */
+  foregroundCheckpointed?: boolean;
   warningInjectedThisRound: boolean;
   workingMessages: Message[];
 }
@@ -182,6 +188,15 @@ export interface ExecuteAgentControlGraphIterationParams {
   failoverState: FailoverState | null;
   graph: GraphIterationBindings;
   isSuperAgent: boolean;
+  /**
+   * True only for a foreground interactive run (a person waiting on the screen);
+   * never for a delegated worker, scheduled job, or other background run. Bounds
+   * the iteration/wall-clock budget and the model-turn inactivity timeout far
+   * tighter. See orchestrator/constants.ts and foregroundRun/foregroundInteractionBudget.ts.
+   */
+  isForegroundRun?: boolean;
+  /** Code-owned wall-clock start of this run, for the foreground budget checkpoint. */
+  runStartedAtMs?: number;
   iteration: number;
   maxToolIterations: number;
   maxTokens: number;
