@@ -94,6 +94,41 @@ function craftJxlWithZeroSizeBox(): Buffer {
   return jxl;
 }
 
+/** Builds a single ISO-BMFF box: a 4-byte big-endian size, a 4-byte type, then the payload. */
+function isoBox(type: string, payload: Buffer): Buffer {
+  const box = Buffer.alloc(8 + payload.length);
+  box.writeUInt32BE(box.length, 0);
+  box.write(type, 4, 'ascii');
+  payload.copy(box, 8);
+  return box;
+}
+
+/** Minimal well-formed HEIC container: ftyp + meta/iprp/ipco/ispe declaring `width`x`height`. */
+function craftHeif(width: number, height: number): { bytes: Buffer; metaSizeOffset: number } {
+  const ftyp = isoBox('ftyp', Buffer.concat([Buffer.from('heic', 'ascii'), Buffer.alloc(4)]));
+  const ispePayload = Buffer.alloc(12); // version/flags(4) + width(4) + height(4)
+  ispePayload.writeUInt32BE(width, 4);
+  ispePayload.writeUInt32BE(height, 8);
+  const ipco = isoBox('ipco', isoBox('ispe', ispePayload));
+  const iprp = isoBox('iprp', ipco);
+  const meta = isoBox('meta', Buffer.concat([Buffer.alloc(4), iprp])); // version/flags(4) + iprp
+  return { bytes: Buffer.concat([ftyp, meta]), metaSizeOffset: ftyp.length };
+}
+
+/** HEIC container whose `meta` box declares a size of 0 — never advances a naive box walk. */
+function craftHeifWithZeroSizeMetaBox(): Buffer {
+  const { bytes, metaSizeOffset } = craftHeif(640, 480);
+  bytes.writeUInt32BE(0, metaSizeOffset);
+  return bytes;
+}
+
+/** HEIC container whose `meta` box declares a size larger than the whole buffer. */
+function craftHeifWithOversizedMetaBox(): Buffer {
+  const { bytes, metaSizeOffset } = craftHeif(640, 480);
+  bytes.writeUInt32BE(0xffffffff, metaSizeOffset);
+  return bytes;
+}
+
 describe('image-size infinite-loop hardening', () => {
   it('keeps the patch that upstream has not released a fix for', () => {
     const patchPath = join(projectRoot, 'patches/image-size+1.2.1.patch');
@@ -102,6 +137,7 @@ describe('image-size infinite-loop hardening', () => {
     const patch = readFileSync(patchPath, 'utf8');
     expect(patch).toContain('dist/types/icns.js');
     expect(patch).toContain('dist/types/jxl.js');
+    expect(patch).toContain('dist/types/heif.js');
   });
 
   it('terminates on an ICNS entry that declares a zero data length', () => {
@@ -112,6 +148,24 @@ describe('image-size infinite-loop hardening', () => {
     const outcome = parseUnderTimeout(craftJxlWithZeroSizeBox());
     expect(outcome.status).toBe('threw');
     expect(outcome.detail).toContain('Reached end of input');
+  });
+
+  it('terminates on a HEIF container with a zero-size meta box', () => {
+    const outcome = parseUnderTimeout(craftHeifWithZeroSizeMetaBox());
+    expect(outcome.status).toBe('threw');
+    expect(outcome.detail).toContain('Invalid HEIF');
+  });
+
+  it('terminates on a HEIF container whose meta box size exceeds the buffer', () => {
+    const outcome = parseUnderTimeout(craftHeifWithOversizedMetaBox());
+    expect(outcome.status).toBe('threw');
+    expect(outcome.detail).toContain('Invalid HEIF');
+  });
+
+  it('still reports correct dimensions for a well-formed minimal HEIF container', () => {
+    const outcome = parseUnderTimeout(craftHeif(640, 480).bytes);
+    expect(outcome.status).toBe('returned');
+    expect(JSON.parse(outcome.detail)).toMatchObject({ type: 'heic', width: 640, height: 480 });
   });
 
   it('still reports correct dimensions for a well-formed asset', () => {

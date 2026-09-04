@@ -50,3 +50,38 @@ index f557b0a..faf15fe 100644
      }
      return partialStreams;
  }
+diff --git a/node_modules/image-size/dist/types/heif.js b/node_modules/image-size/dist/types/heif.js
+index 7997d3f1..cb341786 100644
+--- a/node_modules/image-size/dist/types/heif.js
++++ b/node_modules/image-size/dist/types/heif.js
+@@ -2,6 +2,8 @@
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.HEIF = void 0;
+ const utils_1 = require("./utils");
++/** Minimum bytes any box can declare: a 4-byte size plus a 4-byte type. */
++const BOX_HEADER_SIZE = 8;
+ const brandMap = {
+     avif: 'avif',
+     mif1: 'heif',
+@@ -24,9 +26,18 @@ exports.HEIF = {
+     },
+     calculate(input) {
+         // Based on https://nokiatech.github.io/heif/technical.html
+-        const metaBox = (0, utils_1.findBox)(input, 'meta', 0);
+-        const iprpBox = metaBox && (0, utils_1.findBox)(input, 'iprp', metaBox.offset + 12);
+-        const ipcoBox = iprpBox && (0, utils_1.findBox)(input, 'ipco', iprpBox.offset + 8);
++        // Each box below is used only to derive the *next* search's starting
++        // offset. A box that declares a size smaller than its own 8-byte
++        // header (including the spec's "extends to EOF" value of 0) cannot
++        // bound anything derived from it, so treat it as absent rather than
++        // handing a bogus offset to the next search.
++        const requireBox = (name, offset) => {
++            const box = (0, utils_1.findBox)(input, name, offset);
++            return box && box.size >= BOX_HEADER_SIZE ? box : undefined;
++        };
++        const metaBox = requireBox('meta', 0);
++        const iprpBox = metaBox && requireBox('iprp', metaBox.offset + 12);
++        const ipcoBox = iprpBox && requireBox('ipco', iprpBox.offset + 8);
+         const ispeBox = ipcoBox && (0, utils_1.findBox)(input, 'ispe', ipcoBox.offset + 8);
+         if (ispeBox) {
+             return {
