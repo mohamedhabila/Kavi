@@ -3,10 +3,12 @@ import {
   dispatchSearchProvider,
   type SearchProvider,
 } from '../../services/browser/core/providerDispatch';
+import { searchAnthropic } from './webSearchAnthropic';
 import { searchBrave } from './webSearchBrave';
 import { searchGemini } from './web-searchGemini';
 import { searchGrok } from './webSearchGrok';
 import { searchKimi } from './webSearchKimi';
+import { searchOpenAI } from './webSearchOpenAI';
 import { searchPerplexity } from './webSearchPerplexity';
 
 export async function searchRemoteWebProvider(params: {
@@ -28,6 +30,8 @@ export async function searchRemoteWebProvider(params: {
       perplexity: () => searchPerplexity(params),
       grok: () => searchGrok(params),
       kimi: () => searchKimi(params),
+      anthropic: () => searchAnthropic(params),
+      openai: () => searchOpenAI(params),
     },
   });
 }

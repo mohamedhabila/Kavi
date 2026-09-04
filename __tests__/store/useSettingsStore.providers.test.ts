@@ -237,6 +237,21 @@ describe('useSettingsStore preference settings', () => {
     expect(useSettingsStore.getState().webSearchProvider).toBe('brave');
   });
 
+  it('keeps an LLM-key-backed web search provider pin through normalization', () => {
+    // 'anthropic' and 'openai' reuse the LLM provider key instead of a dedicated search
+    // key; a pin to either must not be reset to 'auto' when settings are hydrated.
+    useSettingsStore.getState().replaceAllSettings({ webSearchProvider: 'anthropic' });
+    expect(useSettingsStore.getState().webSearchProvider).toBe('anthropic');
+
+    useSettingsStore.getState().replaceAllSettings({ webSearchProvider: 'openai' });
+    expect(useSettingsStore.getState().webSearchProvider).toBe('openai');
+
+    useSettingsStore
+      .getState()
+      .replaceAllSettings({ webSearchProvider: 'not-a-provider' as never });
+    expect(useSettingsStore.getState().webSearchProvider).toBe('auto');
+  });
+
   it('toggles link understanding', () => {
     expect(useSettingsStore.getState().linkUnderstandingEnabled).toBe(true);
 
@@ -273,6 +288,31 @@ describe('useSettingsStore preference settings', () => {
   it('updates the default conversation mode', () => {
     useSettingsStore.getState().setDefaultConversationMode('chitchat');
     expect(useSettingsStore.getState().defaultConversationMode).toBe('chitchat');
+  });
+
+  it('defaults to chitchat and toggles developer mode', () => {
+    expect(useSettingsStore.getState().defaultConversationMode).toBe('chitchat');
+    expect(useSettingsStore.getState().developerModeEnabled).toBe(false);
+
+    useSettingsStore.getState().setDeveloperModeEnabled(true);
+    expect(useSettingsStore.getState().developerModeEnabled).toBe(true);
+
+    useSettingsStore.getState().setDeveloperModeEnabled(false);
+    expect(useSettingsStore.getState().developerModeEnabled).toBe(false);
+
+    // Coerces non-boolean input the same way other boolean setters do.
+    useSettingsStore.getState().setDeveloperModeEnabled(1 as any);
+    expect(useSettingsStore.getState().developerModeEnabled).toBe(true);
+  });
+
+  it('replaces developerModeEnabled only when explicitly provided', () => {
+    useSettingsStore.getState().setDeveloperModeEnabled(true);
+
+    useSettingsStore.getState().replaceAllSettings({ theme: 'light' });
+    expect(useSettingsStore.getState().developerModeEnabled).toBe(true);
+
+    useSettingsStore.getState().replaceAllSettings({ developerModeEnabled: false });
+    expect(useSettingsStore.getState().developerModeEnabled).toBe(false);
   });
 
   it('sets memory consolidation provider and mode preferences', () => {

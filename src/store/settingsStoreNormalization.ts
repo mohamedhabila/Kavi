@@ -20,6 +20,8 @@ const VALID_WEB_SEARCH_PROVIDERS: readonly WebSearchProvider[] = [
   'perplexity',
   'grok',
   'kimi',
+  'anthropic',
+  'openai',
 ];
 
 export function sanitizeWebSearchProvider(provider: unknown): WebSearchProvider {

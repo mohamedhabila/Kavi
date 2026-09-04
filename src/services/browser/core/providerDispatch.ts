@@ -1,11 +1,29 @@
 import { useSettingsStore } from '../../../store/useSettingsStore';
 import { getSecure } from '../../storage/SecureStorage';
+import { hydrateProviderForRequest } from '../../llm/support/providerSupport';
+import { resolveProviderFamily } from '../../llm/catalog/providerFamilies';
 import type { WebSearchProvider } from '../../../types/tool';
+import type { LlmProviderFamily } from '../../../types/provider';
 
-export const SEARCH_PROVIDERS = ['brave', 'perplexity', 'grok', 'kimi', 'gemini'] as const;
+export const SEARCH_PROVIDERS = [
+  'brave',
+  'perplexity',
+  'grok',
+  'kimi',
+  'gemini',
+  'anthropic',
+  'openai',
+] as const;
 export type SearchProvider = Exclude<WebSearchProvider, 'auto'>;
 
-const SEARCH_PROVIDER_KEYS: Record<SearchProvider, string> = {
+/**
+ * Dedicated secure-storage keys, for providers the user can configure with a search-only
+ * API key entered in Settings. `anthropic` and `openai` are deliberately absent — those
+ * two are reachable only by reusing an enabled LLM provider's own key (see
+ * `resolveSearchProvider`'s `resolveAnthropicApiKey`/`resolveOpenAIApiKey` params), so
+ * there is no dedicated key to look up for them.
+ */
+const SEARCH_PROVIDER_KEYS: Partial<Record<SearchProvider, string>> = {
   brave: 'BRAVE_API_KEY',
   gemini: 'GOOGLE_API_KEY',
   perplexity: 'PERPLEXITY_API_KEY',
@@ -14,7 +32,11 @@ const SEARCH_PROVIDER_KEYS: Record<SearchProvider, string> = {
 };
 
 export async function getSearchProviderApiKey(provider: SearchProvider): Promise<string | null> {
-  return getSecure(SEARCH_PROVIDER_KEYS[provider]);
+  const storageKey = SEARCH_PROVIDER_KEYS[provider];
+  if (!storageKey) {
+    return null;
+  }
+  return getSecure(storageKey);
 }
 
 export async function detectSearchProvider(): Promise<{
@@ -48,8 +70,43 @@ export type ResolvedSearchProvider = {
   apiKey: string;
 };
 
+/**
+ * LLM provider families that can also serve keyless web search by reusing their own
+ * chat/completion API key instead of a dedicated search key.
+ */
+const LLM_KEY_BACKED_SEARCH_FAMILIES = new Set<LlmProviderFamily>(['gemini', 'anthropic', 'openai']);
+
+/**
+ * Whether any enabled LLM provider (Gemini, Anthropic, or OpenAI) can also serve as a
+ * keyless web search provider right now — i.e. it has a resolvable API key, whether
+ * stored in secure storage against the provider id or held directly on the provider
+ * config. Used by `searchProviderReadiness.ts` to keep the synchronous "is search
+ * available" snapshot honest: without this, a user who enabled only, say, an Anthropic
+ * provider (no dedicated Brave/Perplexity/Grok/Kimi/Google key) would have `web_search`
+ * hidden from the tool surface even though `resolveSearchProvider`'s LLM-key fallback
+ * below could serve every request.
+ */
+export async function hasLlmKeyBackedSearchProvider(): Promise<boolean> {
+  const candidateProviders = useSettingsStore
+    .getState()
+    .providers.filter(
+      (provider) => provider.enabled && LLM_KEY_BACKED_SEARCH_FAMILIES.has(resolveProviderFamily(provider)),
+    );
+
+  for (const provider of candidateProviders) {
+    const hydrated = await hydrateProviderForRequest(provider);
+    if ((hydrated.apiKey || '').trim()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function resolveSearchProvider(params: {
   resolveGeminiApiKey: () => Promise<string | null | undefined>;
+  resolveAnthropicApiKey: () => Promise<string | null | undefined>;
+  resolveOpenAIApiKey: () => Promise<string | null | undefined>;
 }): Promise<ResolvedSearchProvider | null> {
   let resolved: ResolvedSearchProvider | null = null;
   const requestedProvider = resolveConfiguredSearchProvider();
@@ -57,7 +114,11 @@ export async function resolveSearchProvider(params: {
     const apiKey =
       requestedProvider === 'gemini'
         ? await params.resolveGeminiApiKey()
-        : await getSearchProviderApiKey(requestedProvider);
+        : requestedProvider === 'anthropic'
+          ? await params.resolveAnthropicApiKey()
+          : requestedProvider === 'openai'
+            ? await params.resolveOpenAIApiKey()
+            : await getSearchProviderApiKey(requestedProvider);
     if (apiKey) {
       resolved = { provider: requestedProvider, apiKey };
     }
@@ -71,6 +132,20 @@ export async function resolveSearchProvider(params: {
     const apiKey = await params.resolveGeminiApiKey();
     if (apiKey) {
       resolved = { provider: 'gemini', apiKey };
+    }
+  }
+
+  if (!resolved) {
+    const apiKey = await params.resolveAnthropicApiKey();
+    if (apiKey) {
+      resolved = { provider: 'anthropic', apiKey };
+    }
+  }
+
+  if (!resolved) {
+    const apiKey = await params.resolveOpenAIApiKey();
+    if (apiKey) {
+      resolved = { provider: 'openai', apiKey };
     }
   }
 

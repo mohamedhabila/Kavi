@@ -1,4 +1,4 @@
-import { detectSearchProvider } from './providerDispatch';
+import { detectSearchProvider, hasLlmKeyBackedSearchProvider } from './providerDispatch';
 
 /**
  * Synchronous view of whether any web search provider is configured.
@@ -30,9 +30,9 @@ export function refreshSearchProviderReadiness(): Promise<void> {
   if (probeInFlight) {
     return probeInFlight;
   }
-  probeInFlight = detectSearchProvider()
-    .then((resolved) => {
-      configuredSnapshot = resolved !== null;
+  probeInFlight = Promise.all([detectSearchProvider(), hasLlmKeyBackedSearchProvider()])
+    .then(([dedicatedResolved, llmKeyBacked]) => {
+      configuredSnapshot = dedicatedResolved !== null || llmKeyBacked;
     })
     .catch(() => {
       // A probe failure is not evidence either way, so a settled snapshot stands and an

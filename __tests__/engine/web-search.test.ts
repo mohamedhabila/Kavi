@@ -7,8 +7,10 @@ import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 const mockGetSecure = jest.fn();
+const mockGetProviderApiKey = jest.fn();
 jest.mock('../../src/services/storage/SecureStorage', () => ({
   getSecure: (...args: any[]) => mockGetSecure(...args),
+  getProviderApiKey: (...args: any[]) => mockGetProviderApiKey(...args),
 }));
 
 const mockFetch = jest.fn();
@@ -24,8 +26,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockFetch.mockReset();
   mockGetSecure.mockReset();
+  mockGetProviderApiKey.mockReset();
   global.fetch = mockFetch;
   mockGetSecure.mockResolvedValue(null);
+  mockGetProviderApiKey.mockResolvedValue(null);
   clearWebSearchCaches();
   useSettingsStore.setState({
     activeProviderId: null,
@@ -73,7 +77,8 @@ describe('executeWebSearch', () => {
   it('fails closed when no search provider is configured', async () => {
     const parsed = parseFailedToolOutcome(await executeWebSearch({ queries: ['test query'] }));
     expect(parsed.error).toBe(
-      'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi.',
+      'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi. ' +
+        'An enabled Anthropic, OpenAI, or Gemini provider also enables search.',
     );
   });
 
@@ -446,6 +451,115 @@ describe('executeWebSearch', () => {
       },
     ]);
     expect(body.input).toBe('site:docs.anthropic.com "Claude Code" overview');
+  });
+
+  it('auto-selects Anthropic search when only an Anthropic LLM provider is enabled', async () => {
+    useSettingsStore.setState({
+      providers: [
+        {
+          id: 'anthropic-1',
+          name: 'Anthropic',
+          enabled: true,
+          providerFamily: 'anthropic',
+          baseUrl: 'https://api.anthropic.com/v1',
+          apiKey: 'sk-ant-test',
+          model: 'claude-opus-5',
+        },
+      ],
+      activeProviderId: 'anthropic-1',
+      activeModel: 'claude-opus-5',
+    } as any);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        content: [
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srvtoolu_1',
+            content: [
+              {
+                type: 'web_search_result',
+                url: 'https://docs.anthropic.com/x',
+                title: 'Anthropic docs',
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const parsed = parseCompletedToolOutcome(
+      await executeWebSearch({ queries: ['anthropic web search auto selection'] }),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [requestUrl] = mockFetch.mock.calls[0];
+    expect(requestUrl).toBe('https://api.anthropic.com/v1/messages');
+    expect(parsed.provider).toBe('anthropic');
+    expect(parsed.searches).toEqual([
+      {
+        query: 'anthropic web search auto selection',
+        results: [{ title: 'Anthropic docs', url: 'https://docs.anthropic.com/x' }],
+      },
+    ]);
+  });
+
+  it('auto-selects OpenAI search when only an OpenAI LLM provider is enabled', async () => {
+    useSettingsStore.setState({
+      providers: [
+        {
+          id: 'openai-1',
+          name: 'OpenAI',
+          enabled: true,
+          providerFamily: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-openai-test',
+          model: 'gpt-5.4',
+        },
+      ],
+      activeProviderId: 'openai-1',
+      activeModel: 'gpt-5.4',
+    } as any);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        output: [
+          {
+            type: 'message',
+            content: [
+              {
+                type: 'output_text',
+                text: 'found it',
+                annotations: [
+                  {
+                    type: 'url_citation',
+                    url: 'https://platform.openai.com/x',
+                    title: 'OpenAI docs',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const parsed = parseCompletedToolOutcome(
+      await executeWebSearch({ queries: ['openai web search auto selection'] }),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [requestUrl] = mockFetch.mock.calls[0];
+    expect(requestUrl).toBe('https://api.openai.com/v1/responses');
+    expect(parsed.provider).toBe('openai');
+    expect(parsed.searches).toEqual([
+      {
+        query: 'openai web search auto selection',
+        results: [{ title: 'OpenAI docs', url: 'https://platform.openai.com/x' }],
+      },
+    ]);
   });
 
   it('retries abort-like transport failures once', async () => {

@@ -26,7 +26,9 @@ import {
   runWithTimeoutRetries,
   writeCache,
 } from './web-shared';
+import { resolveAnthropicSearchTransport } from './webSearchAnthropicTransport';
 import { resolveGeminiSearchTransport } from './webSearchGeminiTransport';
+import { resolveOpenAISearchTransport } from './webSearchOpenAITransport';
 import { searchRemoteWebProvider } from './webSearchRemote';
 
 const SEARCH_RESULTS_PER_QUERY = 5;
@@ -149,12 +151,16 @@ export async function executeWebSearch(
           fallbackApiKey: await getSearchProviderApiKey('gemini'),
         })
       )?.apiKey,
+    resolveAnthropicApiKey: async () =>
+      (await resolveAnthropicSearchTransport({ context }))?.provider.apiKey,
+    resolveOpenAIApiKey: async () => (await resolveOpenAISearchTransport({ context }))?.provider.apiKey,
   });
   if (!resolved) {
     return failedToolOutcome(
       JSON.stringify({
         error:
-          'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi.',
+          'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi. ' +
+          'An enabled Anthropic, OpenAI, or Gemini provider also enables search.',
       }),
     );
   }

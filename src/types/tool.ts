@@ -1,4 +1,12 @@
-export type WebSearchProvider = 'auto' | 'brave' | 'gemini' | 'perplexity' | 'grok' | 'kimi';
+export type WebSearchProvider =
+  | 'auto'
+  | 'brave'
+  | 'gemini'
+  | 'perplexity'
+  | 'grok'
+  | 'kimi'
+  | 'anthropic'
+  | 'openai';
 
 export interface ModelCapabilities {
   vision: boolean;

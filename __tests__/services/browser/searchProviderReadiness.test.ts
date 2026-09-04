@@ -1,10 +1,17 @@
-import { detectSearchProvider } from '../../../src/services/browser/core/providerDispatch';
+import {
+  detectSearchProvider,
+  hasLlmKeyBackedSearchProvider,
+} from '../../../src/services/browser/core/providerDispatch';
 
 jest.mock('../../../src/services/browser/core/providerDispatch', () => ({
   detectSearchProvider: jest.fn(),
+  hasLlmKeyBackedSearchProvider: jest.fn(),
 }));
 
 const mockedDetect = detectSearchProvider as jest.MockedFunction<typeof detectSearchProvider>;
+const mockedLlmKeyBacked = hasLlmKeyBackedSearchProvider as jest.MockedFunction<
+  typeof hasLlmKeyBackedSearchProvider
+>;
 
 // Observed on-device: `web_search` was offered and failed on runs with no provider
 // configured — the wasted round-trip this gate exists to prevent. The snapshot started
@@ -21,6 +28,8 @@ function loadFresh(): typeof import('../../../src/services/browser/core/searchPr
 
 beforeEach(() => {
   mockedDetect.mockReset();
+  mockedLlmKeyBacked.mockReset();
+  mockedLlmKeyBacked.mockResolvedValue(false);
 });
 
 describe('a search tool is advertised only once a provider is known to exist', () => {
@@ -77,5 +86,23 @@ describe('a search tool is advertised only once a provider is known to exist', (
     await mod.refreshSearchProviderReadiness();
 
     expect(mod.isSearchProviderConfiguredSnapshot()).toBe(true);
+  });
+
+  it('reports available when only an enabled LLM provider can serve search (no dedicated key)', async () => {
+    mockedDetect.mockResolvedValue(null);
+    mockedLlmKeyBacked.mockResolvedValue(true);
+    const mod = loadFresh();
+    await mod.refreshSearchProviderReadiness();
+
+    expect(mod.isSearchProviderConfiguredSnapshot()).toBe(true);
+  });
+
+  it('never treats an LLM-key-backed probe error as evidence that a provider exists', async () => {
+    mockedDetect.mockResolvedValue(null);
+    mockedLlmKeyBacked.mockRejectedValue(new Error('secure storage unavailable'));
+    const mod = loadFresh();
+    await mod.refreshSearchProviderReadiness();
+
+    expect(mod.isSearchProviderConfiguredSnapshot()).toBe(false);
   });
 });
