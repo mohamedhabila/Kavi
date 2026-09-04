@@ -58,6 +58,8 @@ jest.mock('expo-notifications', () => ({
 
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
+  launchCameraAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
+  requestCameraPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
   MediaTypeOptions: { Images: 'Images' },
 }));
 

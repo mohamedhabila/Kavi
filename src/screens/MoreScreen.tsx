@@ -16,10 +16,12 @@ import {
   type NavigationHubSection,
 } from '../components/navigation/NavigationHubScreen';
 import { useTranslation } from '../i18n/useTranslation';
+import { useSettingsStore } from '../store/useSettingsStore';
 
 export const MoreScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const developerModeEnabled = useSettingsStore((s) => s.developerModeEnabled);
 
   const sections: NavigationHubSection[] = [
     {
@@ -46,7 +48,10 @@ export const MoreScreen: React.FC = () => {
       items: [
         {
           id: 'mcp-servers',
-          title: t('nav.mcpStatus'),
+          // MCP servers are a consumer integration, not a developer tool, so
+          // the row always stays reachable — only its framing changes: the
+          // more technical label surfaces once Developer Mode is on.
+          title: developerModeEnabled ? t('nav.mcpStatus') : t('nav.connectedServices'),
           icon: Server,
           onPress: () => navigation.navigate('McpStatus', { returnTo: { name: 'More' } }),
         },
@@ -56,12 +61,16 @@ export const MoreScreen: React.FC = () => {
           icon: Globe,
           onPress: () => navigation.navigate('BrowserSession', { returnTo: { name: 'More' } }),
         },
-        {
-          id: 'gateway',
-          title: t('nav.gateway'),
-          icon: Radio,
-          onPress: () => navigation.navigate('Gateway', { returnTo: { name: 'More' } }),
-        },
+        ...(developerModeEnabled
+          ? [
+              {
+                id: 'gateway',
+                title: t('nav.gateway'),
+                icon: Radio,
+                onPress: () => navigation.navigate('Gateway', { returnTo: { name: 'More' } }),
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -96,18 +105,23 @@ export const MoreScreen: React.FC = () => {
         },
       ],
     },
-    {
-      id: 'advanced',
-      title: t('navigationHub.advanced'),
-      items: [
-        {
-          id: 'developer-remote-work',
-          title: t('nav.developerAndRemoteWork'),
-          icon: MonitorCog,
-          onPress: () => navigation.navigate('DeveloperWork', { returnTo: { name: 'More' } }),
-        },
-      ],
-    },
+    ...(developerModeEnabled
+      ? [
+          {
+            id: 'advanced',
+            title: t('navigationHub.advanced'),
+            items: [
+              {
+                id: 'developer-remote-work',
+                title: t('nav.developerAndRemoteWork'),
+                icon: MonitorCog,
+                onPress: () =>
+                  navigation.navigate('DeveloperWork', { returnTo: { name: 'More' } }),
+              },
+            ],
+          },
+        ]
+      : []),
   ];
 
   return (

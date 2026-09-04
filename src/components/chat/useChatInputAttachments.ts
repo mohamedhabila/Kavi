@@ -50,6 +50,34 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
     }
   }, [attachments, clearVoiceError, onChangeAttachments]);
 
+  const handleTakePhoto = useCallback(async () => {
+    clearVoiceError();
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t('chat.cameraPermissionTitle'), t('chat.cameraPermissionMessage'));
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      onChangeAttachments([
+        ...attachments,
+        {
+          id: generateId(),
+          type: 'image',
+          uri: asset.uri,
+          name: asset.fileName || 'photo.jpg',
+          mimeType: asset.mimeType || 'image/jpeg',
+          size: asset.fileSize || 0,
+        },
+      ]);
+    }
+  }, [attachments, clearVoiceError, onChangeAttachments, t]);
+
   const handlePickDocument = useCallback(async () => {
     clearVoiceError();
     const result = await DocumentPicker.getDocumentAsync({
@@ -84,6 +112,10 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
 
     Alert.alert(t('chat.attach'), undefined, [
       {
+        text: t('chat.takePhoto'),
+        onPress: () => handleTakePhoto(),
+      },
+      {
         text: t('common.image'),
         onPress: () => {
           void handlePickImage();
@@ -100,7 +132,15 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
         style: 'cancel',
       },
     ]);
-  }, [handlePickDocument, handlePickImage, isInputDisabled, isVoiceActive, supportsVision, t]);
+  }, [
+    handlePickDocument,
+    handlePickImage,
+    handleTakePhoto,
+    isInputDisabled,
+    isVoiceActive,
+    supportsVision,
+    t,
+  ]);
 
   const removeAttachment = useCallback(
     (id: string) => {

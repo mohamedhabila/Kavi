@@ -44,6 +44,7 @@ export const en: TranslationMap = {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
+    technicalDetails: 'Technical details',
   },
 
   // ── Navigation ─────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ export const en: TranslationMap = {
     memory: 'Memory',
     voice: 'Voice conversation',
     mcpStatus: 'MCP Servers',
+    connectedServices: 'Connected services',
     gateway: 'Gateway',
     remoteWork: 'Remote Work',
     terminal: 'Terminal',
@@ -154,6 +156,14 @@ export const en: TranslationMap = {
     advancedHint: 'View worker hierarchy, sessions, and tool counts.',
   },
 
+  // ── Developer Mode ─────────────────────────────────────────────────────
+  developerMode: {
+    lockedTitle: 'Developer mode is off',
+    lockedMessage: 'Turn on Developer Mode in Settings to use terminal, remote-machine, code, and automation tools.',
+    openSettings: 'Open Settings',
+    openSettingsAccessibility: 'Open developer mode settings',
+  },
+
   // ── Chat Screen ────────────────────────────────────────────────────────
   chat: {
     responseInterruptedBeforeStart: 'Response interrupted before generation could start. Please retry when you are ready.',
@@ -184,6 +194,9 @@ export const en: TranslationMap = {
     send: 'Send message',
     stop: 'Stop generating',
     attach: 'Attach file',
+    takePhoto: 'Take Photo',
+    cameraPermissionTitle: 'Camera access needed',
+    cameraPermissionMessage: 'Turn on camera access for Kavi in your device settings to take a photo.',
     inputOptions: 'Input options',
     openInputOptions: 'Open input options',
     exactText: 'Exact text',
@@ -707,6 +720,10 @@ export const en: TranslationMap = {
       noResultsTitle: 'No matching settings',
       noResultsHint: 'Try a broader term or clear the search.',
     },
+    developerMode: {
+      title: 'Developer mode',
+      description: 'Reveals terminal, remote-machine, code, and automation tools for advanced workflows.',
+    },
     notificationsVoice: {
       voiceHint: 'Start a spoken conversation and review microphone or speech setup.',
       automationHint: 'Manage reminders, automations, and their notification readiness.',
@@ -719,6 +736,8 @@ export const en: TranslationMap = {
     defaultConversationModeChitchat: '💬 Chitchat',
     defaultConversationModeAgenticAccessibility: 'Set default mode to agentic',
     defaultConversationModeChitchatAccessibility: 'Set default mode to chitchat',
+    showAdvancedOptions: 'Show advanced options',
+    hideAdvancedOptions: 'Hide advanced options',
     useTheme: 'Use {name} theme',
     reasoningTitle: 'Reasoning',
     thinkingLevelTitle: 'Thinking Level',
@@ -1269,6 +1288,7 @@ export const en: TranslationMap = {
     setupSkillHint: 'Store the required secrets securely on-device so this skill can run.',
     secretSaveFailed: 'Failed to save the skill secrets. Please try again.',
     installBlocked: 'Install blocked',
+    installFailedGeneric: "We couldn't install this skill. Check your connection and try again.",
   },
 
   // ── Voice Screen ───────────────────────────────────────────────────────
@@ -1388,6 +1408,7 @@ export const en: TranslationMap = {
     installFailed: 'Failed to install MCP server.',
     authenticate: 'Authenticate',
     authenticateServer: 'Authenticate {name}',
+    authenticateFailedGeneric: "We couldn't sign in to this server. Try again.",
     reconnectServer: 'Reconnect {name}',
     endpoint: 'Endpoint',
     remoteCount: '{count} endpoints',
@@ -1443,11 +1464,14 @@ export const en: TranslationMap = {
     online: 'online',
     disconnectConfirm: 'Are you sure you want to disconnect from the gateway?',
     connectionFailed: 'Connection Failed',
+    connectionFailedGeneric: "We couldn't connect to the gateway. Check the URL and try again.",
     pairingFailed: 'Pairing Failed',
+    pairingFailedGeneric: "We couldn't create a pairing code. Try again in a moment.",
     codeCopied: 'Pairing code copied to clipboard',
     enterUrl: 'Please enter a gateway URL',
     copyPairingCode: 'Copy pairing code',
     refreshNodesList: 'Refresh nodes list',
+    listNodesFailedGeneric: "We couldn't load the connected nodes. Try again in a moment.",
   },
 
   // ── Remote Work Screen ───────────────────────────────────────────────
@@ -1874,6 +1898,7 @@ export const en: TranslationMap = {
     getStarted: 'Get Started',
     startChatting: 'Start Chatting',
     customProvider: 'Use a custom provider',
+    advancedToggle: 'Advanced',
     enterApiKey: 'Enter {provider} API Key',
     providerNamePlaceholder: 'Provider name (e.g. My OpenAI)',
     baseUrlPlaceholder: 'Base URL (e.g. https://api.openai.com/v1)',
@@ -1931,6 +1956,15 @@ export const en: TranslationMap = {
     onDeviceNoteTitle: 'On-device note',
     onDeviceNoteBody:
       'Choose a supported on-device model, download it to your device, and then save the provider. This requires substantial storage and can take time on slower networks.',
+    localModelDisclosure: {
+      offline: 'Works offline.',
+      capabilitiesBoth: 'Can use tools and see images.',
+      capabilitiesToolsOnly: 'Can use tools but cannot see images.',
+      capabilitiesVisionOnly: 'Can see images but cannot use tools.',
+      capabilitiesNeither: 'Cannot use tools or see images.',
+      sizeAndMemory: 'Downloads {size} and needs at least {memory} GB of device memory.',
+      simplerAnswers: 'Answers are simpler than cloud models.',
+    },
     selectModel: 'Select model {name}',
     saveProvider: 'Save provider',
     skipProvider: 'Skip provider for now',
@@ -2051,6 +2085,14 @@ export const en: TranslationMap = {
       kimi: {
         title: 'Kimi',
         detail: 'Moonshot Kimi access and pricing can vary by region and account status.',
+      },
+      anthropic: {
+        title: 'Anthropic',
+        detail: 'Uses the Anthropic API key you already configured for web search grounding.',
+      },
+      openai: {
+        title: 'OpenAI',
+        detail: 'Uses the OpenAI API key you already configured for web search grounding.',
       },
     },
     services: {

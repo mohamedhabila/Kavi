@@ -26,6 +26,7 @@ import type { GatewayConnectionState } from '../types/gateway';
 import { emitGatewayEvent } from '../services/events/bus';
 import * as Clipboard from 'expo-clipboard';
 import { useBackToChat } from '../navigation/useBackToChat';
+import { extractTechnicalErrorMessage, showLocalizedErrorAlert } from '../utils/errorAlert';
 
 export const GatewayScreen: React.FC = () => {
   const handleBack = useBackToChat();
@@ -60,9 +61,16 @@ export const GatewayScreen: React.FC = () => {
       c.connect();
       void emitGatewayEvent('connected', { gatewayUrl: url });
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      void emitGatewayEvent('error', { gatewayUrl: url, error: errMsg });
-      Alert.alert(t('gateway.connectionFailed'), errMsg);
+      void emitGatewayEvent('error', {
+        gatewayUrl: url,
+        error: extractTechnicalErrorMessage(err),
+      });
+      showLocalizedErrorAlert({
+        title: t('gateway.connectionFailed'),
+        message: t('gateway.connectionFailedGeneric'),
+        error: err,
+        technicalDetailsLabel: t('common.technicalDetails'),
+      });
     }
   }, [gatewayToken, gatewayUrl, t]);
 
@@ -91,9 +99,13 @@ export const GatewayScreen: React.FC = () => {
       setPairingCode(code);
       void emitGatewayEvent('paired');
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      void emitGatewayEvent('error', { error: errMsg });
-      Alert.alert(t('gateway.pairingFailed'), errMsg);
+      void emitGatewayEvent('error', { error: extractTechnicalErrorMessage(err) });
+      showLocalizedErrorAlert({
+        title: t('gateway.pairingFailed'),
+        message: t('gateway.pairingFailedGeneric'),
+        error: err,
+        technicalDetailsLabel: t('common.technicalDetails'),
+      });
     }
   }, [t]);
 
@@ -112,7 +124,12 @@ export const GatewayScreen: React.FC = () => {
       setNodes(list);
       list.forEach((n) => void emitGatewayEvent('node_registered', { nodeId: n.id }));
     } catch (err: unknown) {
-      Alert.alert(t('common.error'), err instanceof Error ? err.message : String(err));
+      showLocalizedErrorAlert({
+        title: t('common.error'),
+        message: t('gateway.listNodesFailedGeneric'),
+        error: err,
+        technicalDetailsLabel: t('common.technicalDetails'),
+      });
     }
   }, [t]);
 

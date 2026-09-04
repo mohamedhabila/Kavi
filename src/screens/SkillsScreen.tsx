@@ -24,6 +24,7 @@ import { installSkillFromHub, installSkillFromUrl } from '../services/clawhub/in
 import type { SkillEntry } from '../services/skills/types';
 import type { ClawHubSkill } from '../types/clawhub';
 import { useBackToChat } from '../navigation/useBackToChat';
+import { showLocalizedErrorAlert } from '../utils/errorAlert';
 
 type AddSkillMode = 'url' | 'manual';
 const BROWSE_PAGE_SIZE = 20;
@@ -236,7 +237,12 @@ export const SkillsScreen: React.FC = () => {
           Alert.alert(alertTitle, result.error);
         }
       } catch (err: unknown) {
-        Alert.alert(t('common.error'), err instanceof Error ? err.message : String(err));
+        showLocalizedErrorAlert({
+          title: t('common.error'),
+          message: t('skills.installFailedGeneric'),
+          error: err,
+          technicalDetailsLabel: t('common.technicalDetails'),
+        });
       }
       setInstallingId(null);
     },
@@ -286,8 +292,13 @@ export const SkillsScreen: React.FC = () => {
             Alert.alert(alertTitle, result.error);
           }
         })
-        .catch((err: any) => {
-          Alert.alert(t('common.error'), err.message);
+        .catch((err: unknown) => {
+          showLocalizedErrorAlert({
+            title: t('common.error'),
+            message: t('skills.installFailedGeneric'),
+            error: err,
+            technicalDetailsLabel: t('common.technicalDetails'),
+          });
         })
         .finally(() => setInstallingId(null));
       return;

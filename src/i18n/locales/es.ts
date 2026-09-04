@@ -45,6 +45,7 @@ export const es: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
+    technicalDetails: 'Detalles técnicos',
   },
   nav: {
     chat: 'Chat',
@@ -75,6 +76,7 @@ export const es: TranslationMap = mergeTranslations(en, {
     memory: 'Memoria',
     voice: 'Conversación por voz',
     mcpStatus: 'Estado MCP',
+    connectedServices: 'Servicios conectados',
     gateway: 'Pasarela',
     remoteWork: 'Trabajo remoto',
     terminal: 'Terminal',
@@ -157,6 +159,12 @@ export const es: TranslationMap = mergeTranslations(en, {
     advancedTitle: 'Detalles avanzados del trabajo',
     advancedHint: 'Ver jerarquía de agentes, sesiones y recuentos de herramientas.',
   },
+  developerMode: {
+    lockedTitle: 'El modo desarrollador está desactivado',
+    lockedMessage: 'Activa el modo desarrollador en Ajustes para usar la terminal, máquinas remotas, código y herramientas de automatización.',
+    openSettings: 'Abrir ajustes',
+    openSettingsAccessibility: 'Abrir los ajustes del modo desarrollador',
+  },
   chat: {
     responseInterruptedBeforeStart: 'La respuesta se interrumpió antes de que pudiera comenzar a generarse. Vuelve a intentarlo cuando estés listo.',
     responseInterruptedByAppRestartBeforeStart:
@@ -186,6 +194,9 @@ export const es: TranslationMap = mergeTranslations(en, {
     send: 'Enviar',
     stop: 'Detener generación',
     attach: 'Adjuntar archivo',
+    takePhoto: 'Tomar foto',
+    cameraPermissionTitle: 'Se necesita acceso a la cámara',
+    cameraPermissionMessage: 'Activa el acceso a la cámara para Kavi en los ajustes de tu dispositivo para tomar una foto.',
     inputOptions: 'Opciones de entrada',
     openInputOptions: 'Abrir opciones de entrada',
     exactText: 'Texto exacto',
@@ -716,6 +727,10 @@ export const es: TranslationMap = mergeTranslations(en, {
       noResultsTitle: 'No hay ajustes coincidentes',
       noResultsHint: 'Prueba un término más general o borra la búsqueda.',
     },
+    developerMode: {
+      title: 'Modo desarrollador',
+      description: 'Muestra herramientas de terminal, máquina remota, código y automatización para flujos de trabajo avanzados.',
+    },
     notificationsVoice: {
       voiceHint: 'Inicia una conversación hablada y revisa el micrófono o la configuración de voz.',
       automationHint: 'Administra recordatorios, automatizaciones y sus notificaciones.',
@@ -728,6 +743,8 @@ export const es: TranslationMap = mergeTranslations(en, {
     defaultConversationModeChitchat: '💬 Chitchat',
     defaultConversationModeAgenticAccessibility: 'Set default mode to agentic',
     defaultConversationModeChitchatAccessibility: 'Set default mode to chitchat',
+    showAdvancedOptions: 'Mostrar opciones avanzadas',
+    hideAdvancedOptions: 'Ocultar opciones avanzadas',
     useTheme: 'Usar tema {name}',
     reasoningTitle: 'Razonamiento',
     thinkingLevelTitle: 'Nivel de razonamiento',
@@ -1277,6 +1294,7 @@ export const es: TranslationMap = mergeTranslations(en, {
       'Guarda los secretos requeridos de forma segura en el dispositivo para que esta habilidad pueda ejecutarse.',
     secretSaveFailed: 'No se pudieron guardar los secretos de la habilidad. Inténtalo de nuevo.',
     installBlocked: 'Instalación bloqueada',
+    installFailedGeneric: 'No se pudo instalar esta habilidad. Revisa tu conexión y vuelve a intentarlo.',
   },
   voice: {
     title: 'Conversación por voz',
@@ -1392,6 +1410,7 @@ export const es: TranslationMap = mergeTranslations(en, {
     installFailed: 'Error al instalar el servidor MCP.',
     authenticate: 'Authenticate',
     authenticateServer: 'Authenticate {name}',
+    authenticateFailedGeneric: 'No se pudo iniciar sesión en este servidor. Vuelve a intentarlo.',
     reconnectServer: 'Reconnect {name}',
     endpoint: 'Endpoint',
     remoteCount: '{count} endpoints',
@@ -1446,11 +1465,14 @@ export const es: TranslationMap = mergeTranslations(en, {
     online: 'en línea',
     disconnectConfirm: '¿Estás seguro de que deseas desconectarte de la pasarela?',
     connectionFailed: 'Conexión fallida',
+    connectionFailedGeneric: 'No se pudo conectar con el gateway. Revisa la URL y vuelve a intentarlo.',
     pairingFailed: 'Emparejamiento fallido',
+    pairingFailedGeneric: 'No se pudo crear un código de emparejamiento. Vuelve a intentarlo en un momento.',
     codeCopied: 'Código de emparejamiento copiado al portapapeles',
     enterUrl: 'Ingresa una URL de pasarela',
     copyPairingCode: 'Copiar código de emparejamiento',
     refreshNodesList: 'Actualizar lista de nodos',
+    listNodesFailedGeneric: 'No se pudieron cargar los nodos conectados. Vuelve a intentarlo en un momento.',
   },
   remoteWork: {
     title: 'Trabajo remoto',
@@ -1873,6 +1895,7 @@ export const es: TranslationMap = mergeTranslations(en, {
     getStarted: 'Comenzar',
     startChatting: 'Comenzar a chatear',
     customProvider: 'Usar un proveedor personalizado',
+    advancedToggle: 'Avanzado',
     enterApiKey: 'Ingresa la clave API de {provider}',
     providerNamePlaceholder: 'Nombre del proveedor (ej. My OpenAI)',
     baseUrlPlaceholder: 'URL base (ej. https://api.openai.com/v1)',
@@ -1932,6 +1955,15 @@ export const es: TranslationMap = mergeTranslations(en, {
     onDeviceNoteTitle: 'Nota sobre el dispositivo',
     onDeviceNoteBody:
       'Elige un modelo compatible para ejecución en el dispositivo, descárgalo y después guarda el proveedor. Esto requiere bastante almacenamiento y puede tardar en redes lentas.',
+    localModelDisclosure: {
+      offline: 'Funciona sin conexión.',
+      capabilitiesBoth: 'Puede usar herramientas y ver imágenes.',
+      capabilitiesToolsOnly: 'Puede usar herramientas, pero no puede ver imágenes.',
+      capabilitiesVisionOnly: 'Puede ver imágenes, pero no puede usar herramientas.',
+      capabilitiesNeither: 'No puede usar herramientas ni ver imágenes.',
+      sizeAndMemory: 'Descarga {size} y necesita al menos {memory} GB de memoria del dispositivo.',
+      simplerAnswers: 'Las respuestas son más simples que las de los modelos en la nube.',
+    },
     selectModel: 'Seleccionar modelo {name}',
     saveProvider: 'Guardar proveedor',
     skipProvider: 'Omitir proveedor por ahora',
@@ -2053,6 +2085,14 @@ export const es: TranslationMap = mergeTranslations(en, {
         title: 'Kimi',
         detail:
           'El acceso y el precio de Moonshot Kimi pueden variar según la región y el estado de la cuenta.',
+      },
+      anthropic: {
+        title: 'Anthropic',
+        detail: 'Usa la clave de API de Anthropic que ya configuraste para el grounding de búsqueda web.',
+      },
+      openai: {
+        title: 'OpenAI',
+        detail: 'Usa la clave de API de OpenAI que ya configuraste para el grounding de búsqueda web.',
       },
     },
     services: {

@@ -118,6 +118,7 @@ export const SettingsToolsSection: React.FC<SettingsToolsSectionProps> = ({
             accessibilityRole="button"
             accessibilityLabel={t('settings.useWebSearchProvider', { name: option.label })}
             accessibilityState={{ selected: webSearchProvider === option.value }}
+            testID={`websearch-provider-${option.value}`}
           >
             <Search
               size={14}

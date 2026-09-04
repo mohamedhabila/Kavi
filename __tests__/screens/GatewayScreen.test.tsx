@@ -5,6 +5,7 @@
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { Alert, StyleSheet } from 'react-native';
 import { GatewayScreen } from '../../src/screens/GatewayScreen';
+import { i18n } from '../../src/i18n/manager';
 
 // Mock safe area
 jest.mock('react-native-safe-area-context', () => ({
@@ -203,7 +204,11 @@ describe('GatewayScreen', () => {
       gatewayUrl: 'wss://test.example.com',
       error: 'gateway boom',
     });
-    expect(alertSpy).toHaveBeenCalledWith('Connection Failed', 'gateway boom');
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Connection Failed',
+      i18n.t('gateway.connectionFailedGeneric'),
+      undefined,
+    );
     alertSpy.mockRestore();
   });
 
@@ -294,7 +299,13 @@ describe('GatewayScreen', () => {
         fireEvent.press(getByText('Request Pairing Code'));
       });
 
-      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Pairing Failed', 'pairing boom'));
+      await waitFor(() =>
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Pairing Failed',
+          i18n.t('gateway.pairingFailedGeneric'),
+          undefined,
+        ),
+      );
       expect(mockEmitGatewayEvent).toHaveBeenCalledWith('error', { error: 'pairing boom' });
       alertSpy.mockRestore();
     });
@@ -330,7 +341,13 @@ describe('GatewayScreen', () => {
         fireEvent.press(getByLabelText('Refresh nodes list'));
       });
 
-      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Error', 'nodes boom'));
+      await waitFor(() =>
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Error',
+          i18n.t('gateway.listNodesFailedGeneric'),
+          undefined,
+        ),
+      );
       alertSpy.mockRestore();
     });
   });

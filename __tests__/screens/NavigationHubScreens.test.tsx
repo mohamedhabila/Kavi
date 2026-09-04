@@ -4,6 +4,7 @@ import { ActivityScreen } from '../../src/screens/ActivityScreen';
 import { DeveloperWorkScreen } from '../../src/screens/DeveloperWorkScreen';
 import { LibraryScreen } from '../../src/screens/LibraryScreen';
 import { MoreScreen } from '../../src/screens/MoreScreen';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 const mockNavigation = {
   navigate: jest.fn(),
@@ -140,6 +141,11 @@ describe('navigation hub screens', () => {
     jest.clearAllMocks();
     mockRouteName = 'More';
     mockRouteParams = {};
+    useSettingsStore.setState({ developerModeEnabled: false } as any);
+  });
+
+  afterAll(() => {
+    useSettingsStore.setState({ developerModeEnabled: false } as any);
   });
 
   it('routes Activity choices to decisions, reminders, and detailed work', () => {
@@ -177,6 +183,7 @@ describe('navigation hub screens', () => {
   });
 
   it('keeps specialist destinations nested under More', () => {
+    useSettingsStore.setState({ developerModeEnabled: true } as any);
     const { getByTestId } = render(<MoreScreen />);
 
     fireEvent.press(getByTestId('more-hub-skills'));
@@ -194,6 +201,26 @@ describe('navigation hub screens', () => {
     expect(mockNavigation.navigate).toHaveBeenLastCalledWith('DeveloperWork', {
       returnTo: { name: 'More' },
     });
+  });
+
+  it('hides the developer surface and uses the consumer-facing MCP label when Developer Mode is off', () => {
+    useSettingsStore.setState({ developerModeEnabled: false } as any);
+    const { queryByTestId, getByTestId, getByText } = render(<MoreScreen />);
+
+    expect(queryByTestId('more-hub-developer-remote-work')).toBeNull();
+    expect(queryByTestId('more-hub-gateway')).toBeNull();
+    expect(queryByTestId('more-hub-advanced')).toBeNull();
+    expect(getByTestId('more-hub-mcp-servers')).toBeTruthy();
+    expect(getByText('nav.connectedServices')).toBeTruthy();
+  });
+
+  it('reveals the developer surface and the technical MCP label when Developer Mode is on', () => {
+    useSettingsStore.setState({ developerModeEnabled: true } as any);
+    const { getByTestId, getByText } = render(<MoreScreen />);
+
+    expect(getByTestId('more-hub-developer-remote-work')).toBeTruthy();
+    expect(getByTestId('more-hub-gateway')).toBeTruthy();
+    expect(getByText('nav.mcpStatus')).toBeTruthy();
   });
 
   it('keeps developer tools reachable from their dedicated hub', () => {

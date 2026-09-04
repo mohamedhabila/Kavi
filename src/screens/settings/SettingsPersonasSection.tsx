@@ -24,6 +24,7 @@ type PersonaThinkingOption = {
 type SettingsPersonasSectionProps = {
   CollapsibleSectionComponent: CollapsibleSectionComponentType;
   colors: AppPalette;
+  developerModeEnabled: boolean;
   styles: StyleMap;
   t: TranslationFn;
   onLayout?: (event: any) => void;
@@ -42,6 +43,7 @@ type SettingsPersonasSectionProps = {
 export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = ({
   CollapsibleSectionComponent,
   colors,
+  developerModeEnabled,
   styles,
   t,
   onLayout,
@@ -198,22 +200,29 @@ export const SettingsPersonasSection: React.FC<SettingsPersonasSectionProps> = (
               ))}
             </ScrollView>
 
-            <Text style={styles.label}>{t('settings.personaTemperature')}</Text>
-            <TextInput
-              accessibilityLabel={t('settings.personaTemperature')}
-              style={styles.input}
-              value={personaDraft.temperature !== undefined ? String(personaDraft.temperature) : ''}
-              onChangeText={(value) => {
-                const parsed = value.trim() === '' ? undefined : Number.parseFloat(value);
-                setPersonaDraft((current) => ({
-                  ...current,
-                  temperature: Number.isFinite(parsed as number) ? parsed : undefined,
-                }));
-              }}
-              placeholder={t('settings.personaTemperaturePlaceholder')}
-              placeholderTextColor={colors.placeholder}
-              keyboardType="decimal-pad"
-            />
+            {developerModeEnabled ? (
+              <>
+                <Text style={styles.label}>{t('settings.personaTemperature')}</Text>
+                <TextInput
+                  accessibilityLabel={t('settings.personaTemperature')}
+                  style={styles.input}
+                  value={
+                    personaDraft.temperature !== undefined ? String(personaDraft.temperature) : ''
+                  }
+                  onChangeText={(value) => {
+                    const parsed = value.trim() === '' ? undefined : Number.parseFloat(value);
+                    setPersonaDraft((current) => ({
+                      ...current,
+                      temperature: Number.isFinite(parsed as number) ? parsed : undefined,
+                    }));
+                  }}
+                  placeholder={t('settings.personaTemperaturePlaceholder')}
+                  placeholderTextColor={colors.placeholder}
+                  keyboardType="decimal-pad"
+                  testID="settings-persona-temperature"
+                />
+              </>
+            ) : null}
 
             <Text style={styles.label}>{t('settings.systemPrompt')}</Text>
             <TextInput

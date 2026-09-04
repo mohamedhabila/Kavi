@@ -45,6 +45,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}ث',
     millisecondsShort: '{count}مللي ث',
     versionShort: 'v{version}',
+    technicalDetails: 'التفاصيل التقنية',
   },
   nav: {
     chat: 'المحادثة',
@@ -75,6 +76,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     memory: 'الذاكرة',
     voice: 'محادثة صوتية',
     mcpStatus: 'حالة MCP',
+    connectedServices: 'الخدمات المتصلة',
     gateway: 'البوابة',
     remoteWork: 'العمل عن بُعد',
     terminal: 'الطرفية',
@@ -154,6 +156,12 @@ export const ar: TranslationMap = mergeTranslations(en, {
     advancedTitle: 'تفاصيل العمل المتقدمة',
     advancedHint: 'اعرض بنية العاملين والجلسات وعدد الأدوات.',
   },
+  developerMode: {
+    lockedTitle: 'وضع المطوّر متوقف',
+    lockedMessage: 'فعّل وضع المطوّر من الإعدادات لاستخدام الطرفية، والجهاز البعيد، والشيفرة، وأدوات الأتمتة.',
+    openSettings: 'فتح الإعدادات',
+    openSettingsAccessibility: 'فتح إعدادات وضع المطوّر',
+  },
   chat: {
     responseInterruptedBeforeStart: 'تم إيقاف الرد قبل أن يبدأ التوليد. يُرجى إعادة المحاولة عندما تكون مستعدًا.',
     responseInterruptedByAppRestartBeforeStart:
@@ -183,6 +191,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
     send: 'إرسال',
     stop: 'إيقاف التوليد',
     attach: 'إرفاق ملف',
+    takePhoto: 'التقاط صورة',
+    cameraPermissionTitle: 'الوصول إلى الكاميرا مطلوب',
+    cameraPermissionMessage: 'فعّل الوصول إلى الكاميرا لتطبيق Kavi من إعدادات جهازك لالتقاط صورة.',
     inputOptions: 'خيارات الإدخال',
     openInputOptions: 'فتح خيارات الإدخال',
     exactText: 'نص دقيق',
@@ -689,6 +700,10 @@ export const ar: TranslationMap = mergeTranslations(en, {
       noResultsTitle: 'لا توجد إعدادات مطابقة',
       noResultsHint: 'جرّب مصطلحًا أوسع أو امسح البحث.',
     },
+    developerMode: {
+      title: 'وضع المطوّر',
+      description: 'يكشف أدوات الطرفية، والجهاز البعيد، والشيفرة، والأتمتة لسير العمل المتقدم.',
+    },
     notificationsVoice: {
       voiceHint: 'ابدأ محادثة صوتية وراجع إعداد الميكروفون أو الكلام.',
       automationHint: 'أدِر التذكيرات والمهام الآلية وجاهزية إشعاراتها.',
@@ -701,6 +716,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
     defaultConversationModeChitchat: '💬 دردشة',
     defaultConversationModeAgenticAccessibility: 'عيّن الوضع الافتراضي إلى الوكيل',
     defaultConversationModeChitchatAccessibility: 'عيّن الوضع الافتراضي إلى الدردشة',
+    showAdvancedOptions: 'إظهار الخيارات المتقدمة',
+    hideAdvancedOptions: 'إخفاء الخيارات المتقدمة',
     useTheme: 'استخدم سمة {name}',
     reasoningTitle: 'الاستدلال',
     thinkingLevelTitle: 'مستوى التفكير',
@@ -1229,6 +1246,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     setupSkillHint: 'احفظ الأسرار المطلوبة بأمان على الجهاز حتى تعمل هذه المهارة.',
     secretSaveFailed: 'تعذر حفظ أسرار المهارة. حاول مرة أخرى.',
     installBlocked: 'تم حظر التثبيت',
+    installFailedGeneric: 'تعذّر تثبيت هذه المهارة. تحقّق من اتصالك وحاول مرة أخرى.',
   },
   voice: {
     title: 'محادثة صوتية',
@@ -1340,6 +1358,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     installFailed: 'فشل في تثبيت خادم MCP.',
     authenticate: 'مصادقة',
     authenticateServer: 'مصادقة {name}',
+    authenticateFailedGeneric: 'تعذّر تسجيل الدخول إلى هذا الخادم. حاول مرة أخرى.',
     reconnectServer: 'إعادة ربط {name}',
     endpoint: 'نقطة النهاية',
     remoteCount: '{count} نقاط نهاية',
@@ -1394,11 +1413,14 @@ export const ar: TranslationMap = mergeTranslations(en, {
     online: 'متصل',
     disconnectConfirm: 'هل أنت متأكد أنك تريد قطع الاتصال بالبوابة؟',
     connectionFailed: 'فشل الاتصال',
+    connectionFailedGeneric: 'تعذّر الاتصال بالبوابة. تحقّق من الرابط وحاول مرة أخرى.',
     pairingFailed: 'فشل الاقتران',
+    pairingFailedGeneric: 'تعذّر إنشاء رمز اقتران. أعد المحاولة بعد قليل.',
     codeCopied: 'تم نسخ رمز الاقتران إلى الحافظة',
     enterUrl: 'الرجاء إدخال رابط البوابة',
     copyPairingCode: 'نسخ رمز الاقتران',
     refreshNodesList: 'تحديث قائمة العقد',
+    listNodesFailedGeneric: 'تعذّر تحميل العُقد المتصلة. أعد المحاولة بعد قليل.',
   },
   remoteWork: {
     title: 'العمل عن بُعد',
@@ -1808,6 +1830,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     getStarted: 'ابدأ',
     startChatting: 'ابدأ المحادثة',
     customProvider: 'استخدام مزود مخصص',
+    advancedToggle: 'متقدم',
     enterApiKey: 'أدخل مفتاح API لـ {provider}',
     providerNamePlaceholder: 'اسم المزود (مثلاً My OpenAI)',
     baseUrlPlaceholder: 'الرابط الأساسي (مثلاً https://api.openai.com/v1)',
@@ -1861,6 +1884,15 @@ export const ar: TranslationMap = mergeTranslations(en, {
     onDeviceNoteTitle: 'ملاحظة حول التشغيل على الجهاز',
     onDeviceNoteBody:
       'اختر نموذجاً متوافقاً للعمل على الجهاز ثم نزّله إلى جهازك وبعدها احفظ المزود. هذا يحتاج إلى مساحة تخزين ملحوظة وقد يستغرق وقتاً على الشبكات البطيئة.',
+    localModelDisclosure: {
+      offline: 'يعمل بلا اتصال بالإنترنت.',
+      capabilitiesBoth: 'يمكنه استخدام الأدوات ورؤية الصور.',
+      capabilitiesToolsOnly: 'يمكنه استخدام الأدوات لكن لا يمكنه رؤية الصور.',
+      capabilitiesVisionOnly: 'يمكنه رؤية الصور لكن لا يمكنه استخدام الأدوات.',
+      capabilitiesNeither: 'لا يمكنه استخدام الأدوات أو رؤية الصور.',
+      sizeAndMemory: 'يُنزّل {size} ويحتاج إلى {memory} جيجابايت على الأقل من ذاكرة الجهاز.',
+      simplerAnswers: 'الإجابات أبسط مقارنةً بالنماذج السحابية.',
+    },
     selectModel: 'اختيار النموذج {name}',
     saveProvider: 'حفظ المزود',
     skipProvider: 'تخطي المزود الآن',
@@ -1974,6 +2006,14 @@ export const ar: TranslationMap = mergeTranslations(en, {
       kimi: {
         title: 'Kimi',
         detail: 'قد يختلف الوصول إلى Moonshot Kimi وتسعيره حسب المنطقة وحالة الحساب.',
+      },
+      anthropic: {
+        title: 'Anthropic',
+        detail: 'يستخدم مفتاح Anthropic API الذي أعددته مسبقاً لتفعيل البحث المُرتكز على الويب.',
+      },
+      openai: {
+        title: 'OpenAI',
+        detail: 'يستخدم مفتاح OpenAI API الذي أعددته مسبقاً لتفعيل البحث المُرتكز على الويب.',
       },
     },
     services: {

@@ -127,6 +127,8 @@ export const SettingsScreen: React.FC = () => {
   const setCompactionProvider = useSettingsStore((s) => s.setCompactionProvider);
   const setCompactionModel = useSettingsStore((s) => s.setCompactionModel);
   const activeProviderId = useSettingsStore((s) => s.activeProviderId ?? null);
+  const developerModeEnabled = useSettingsStore((s) => s.developerModeEnabled);
+  const setDeveloperModeEnabled = useSettingsStore((s) => s.setDeveloperModeEnabled);
   const consolidationStatus = useMemo(
     () =>
       deriveConsolidationStatusSnapshot({
@@ -507,6 +509,7 @@ export const SettingsScreen: React.FC = () => {
               <SettingsPersonasSection
                 CollapsibleSectionComponent={SettingsCollapsibleSection}
                 colors={colors}
+                developerModeEnabled={developerModeEnabled}
                 styles={styles}
                 t={t}
                 expandedPersonas={expandedPanels.personas}
@@ -525,6 +528,8 @@ export const SettingsScreen: React.FC = () => {
             {destination === 'connections' || destination === 'developer-remote-work' ? (
               <SettingsSurfacesSection
                 colors={colors}
+                developerModeEnabled={developerModeEnabled}
+                setDeveloperModeEnabled={setDeveloperModeEnabled}
                 styles={styles}
                 t={t}
                 sshTargets={sshTargets}

@@ -11,32 +11,15 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useAppTheme } from '../theme/useAppTheme';
 import { createCodeEditorScreenStyles as createStyles } from './codeEditor/codeEditorScreenStyles';
 import { CodeEditorScreenView } from './codeEditor/CodeEditorScreenView';
+import { useCodeEditorFileWorkflow } from './codeEditor/useCodeEditorFileWorkflow';
 import { useTranslation } from '../i18n/useTranslation';
 import { useSettingsStore } from '../store/useSettingsStore';
-import type { FileEntry } from '../components/files/FileBrowser';
 import {
   type CodeEditorWebViewRef,
   detectEditorLanguage,
   type EditorLanguage,
 } from '../components/editor/CodeEditorWebView';
-import {
-  getSshTargetLabel,
-  listSshDirectory,
-  readSshTextFile,
-  writeSshTextFile,
-} from '../services/ssh/connector';
-import { getWorkspaceProviderLabel } from '../services/workspaces/connector';
-import {
-  listWorkspaceDirectory,
-  readWorkspaceFile,
-  writeWorkspaceFile,
-} from '../services/workspaces/files';
-import {
-  readConversationWorkspaceTextFile,
-  writeConversationWorkspaceTextFile,
-} from '../services/conversationWorkspace/files';
 import { useBackToChat } from '../navigation/useBackToChat';
-import type { SshTargetConfig, WorkspaceTargetConfig } from '../types/remote';
 import {
   getConversationFilesBrowseState,
   type ConversationFileFilter,
@@ -78,8 +61,6 @@ export const CodeEditorScreen: React.FC = () => {
   const openFailedMessage = t('codeEditor.openFailedMessage');
   const styles = useMemo(() => createStyles(colors), [colors]);
   const editorRef = useRef<CodeEditorWebViewRef>(null);
-  const isMountedRef = useRef(true);
-  const remoteOpenRequestIdRef = useRef(0);
   const sshTargets = useSettingsStore((state) => state.sshTargets ?? []);
   const workspaceTargets = useSettingsStore((state) => state.workspaceTargets ?? []);
 
@@ -211,119 +192,54 @@ export const CodeEditorScreen: React.FC = () => {
     ? t('common.files')
     : t('codeEditor.scratchLabel');
 
-  const cancelPendingFileOpen = useCallback(() => {
-    remoteOpenRequestIdRef.current += 1;
-    if (isMountedRef.current) {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    return () => {
-      isMountedRef.current = false;
-      remoteOpenRequestIdRef.current += 1;
-    };
-  }, []);
-
-  const resetEditorDocument = useCallback(
-    (nextContent: string, nextPath: string, nextLanguage: EditorLanguage) => {
-      setEditorSeedContent(nextContent);
-      setEditorKey((value) => value + 1);
-      setActivePath(nextPath);
-      setPathDraft(nextPath || untitledPathLabel);
-      setLanguage(nextLanguage);
-      setIsDirty(false);
-    },
-    [untitledPathLabel],
-  );
-
-  const openPersistedFile = useCallback(
-    async (
-      request:
-        | { source: 'workspace'; targetId: string; path: string }
-        | { source: 'ssh'; targetId: string; path: string }
-        | { source: 'local'; conversationId: string; path: string },
-    ) => {
-      const requestId = remoteOpenRequestIdRef.current + 1;
-      remoteOpenRequestIdRef.current = requestId;
-      setLoading(true);
-      try {
-        let nextDocument: {
-          content: string;
-          path: string;
-          language: EditorLanguage;
-        } | null = null;
-
-        if (request.source === 'ssh') {
-          const target = enabledSshTargets.find((entry) => entry.id === request.targetId);
-          if (!target) {
-            throw new Error('SSH target not found');
-          }
-          const content = await readSshTextFile(target, request.path);
-          nextDocument = {
-            content,
-            path: request.path,
-            language: detectEditorLanguage(request.path.split('/').pop() || request.path),
-          };
-        } else if (request.source === 'workspace') {
-          const target = enabledWorkspaceTargets.find((entry) => entry.id === request.targetId);
-          if (!target) {
-            throw new Error('Workspace target not found');
-          }
-          const result = await readWorkspaceFile(target, request.path);
-          nextDocument = {
-            content: result.content,
-            path: result.path,
-            language: detectEditorLanguage(result.path.split('/').pop() || result.path),
-          };
-        } else {
-          const result = await readConversationWorkspaceTextFile(
-            request.conversationId,
-            request.path,
-          );
-          nextDocument = {
-            content: result.content,
-            path: result.path,
-            language: detectEditorLanguage(result.path.split('/').pop() || result.path),
-          };
-        }
-
-        if (
-          !nextDocument ||
-          requestId !== remoteOpenRequestIdRef.current ||
-          !isMountedRef.current
-        ) {
-          return;
-        }
-
-        resetEditorDocument(nextDocument.content, nextDocument.path, nextDocument.language);
-        setSource(request.source);
-        setTargetId(request.source === 'local' ? undefined : request.targetId);
-        setBrowserVisible(false);
-      } catch (err: unknown) {
-        if (requestId !== remoteOpenRequestIdRef.current || !isMountedRef.current) {
-          return;
-        }
-        Alert.alert(
-          openFailedTitle,
-          (err instanceof Error ? err.message : '') || openFailedMessage,
-        );
-      } finally {
-        if (requestId === remoteOpenRequestIdRef.current && isMountedRef.current) {
-          setLoading(false);
-        }
+  const confirmDiscardIfNeeded = useCallback(
+    (action: () => void) => {
+      if (!isDirty) {
+        action();
+        return;
       }
+
+      Alert.alert(t('codeEditor.discardChangesTitle'), t('codeEditor.discardChangesMessage'), [
+        { text: t('codeEditor.cancelAction'), style: 'cancel' },
+        { text: t('codeEditor.discardAction'), style: 'destructive', onPress: action },
+      ]);
     },
-    [
-      enabledSshTargets,
-      enabledWorkspaceTargets,
-      openFailedMessage,
-      openFailedTitle,
-      resetEditorDocument,
-    ],
+    [isDirty, t],
   );
+
+  const fileWorkflow = useCodeEditorFileWorkflow({
+    editorRef,
+    source,
+    targetId,
+    activeSshTarget,
+    activeWorkspaceTarget,
+    enabledSshTargets,
+    enabledWorkspaceTargets,
+    conversationWorkspaceId,
+    pathDraft,
+    activeTargetRoot,
+    localSourceLabel,
+    saving,
+    t,
+    openFailedTitle,
+    openFailedMessage,
+    newFileNameLabel,
+    untitledPathLabel,
+    confirmDiscardIfNeeded,
+    setLoading,
+    setSaving,
+    setActivePath,
+    setPathDraft,
+    setLanguage,
+    setEditorSeedContent,
+    setEditorKey,
+    setIsDirty,
+    setSource,
+    setTargetId,
+    setBrowserVisible,
+    setReadOnly,
+  });
+  const { cancelPendingFileOpen, resetEditorDocument, openPersistedFile } = fileWorkflow;
 
   useEffect(() => {
     setReadOnly(params.readOnly ?? false);
@@ -418,70 +334,13 @@ export const CodeEditorScreen: React.FC = () => {
     // Content will arrive via onContent callback
   }, [readOnly]);
 
-  const handleContent = useCallback(
-    async (content: string) => {
-      if (saving) return;
-      setSaving(true);
-
-      try {
-        // Save via the appropriate backend
-        const nextPath = pathDraft.trim();
-        if (source === 'ssh' && activeSshTarget) {
-          await writeSshTextFile(activeSshTarget, nextPath, content);
-          setActivePath(nextPath);
-          setLanguage(detectEditorLanguage(nextPath.split('/').pop() || nextPath));
-        } else if (source === 'workspace' && activeWorkspaceTarget) {
-          await writeWorkspaceFile(activeWorkspaceTarget, nextPath, content);
-          setActivePath(nextPath);
-          setLanguage(detectEditorLanguage(nextPath.split('/').pop() || nextPath));
-        } else if (source === 'local' && conversationWorkspaceId) {
-          const result = await writeConversationWorkspaceTextFile(
-            conversationWorkspaceId,
-            nextPath,
-            content,
-          );
-          setActivePath(result.path);
-          setPathDraft(result.path);
-          setLanguage(detectEditorLanguage(result.path.split('/').pop() || result.path));
-        } else if (source === 'local') {
-          throw new Error(t('codeEditor.scratchSaveHint'));
-        } else {
-          throw new Error(t('codeEditor.targetRequired'));
-        }
-        // Mark clean after successful save
-        editorRef.current?.markClean();
-      } catch (err: unknown) {
-        Alert.alert(
-          t('codeEditor.saveFailedTitle'),
-          (err instanceof Error ? err.message : '') || t('codeEditor.saveFailedMessage'),
-        );
-      } finally {
-        setSaving(false);
-      }
-    },
-    [activeSshTarget, activeWorkspaceTarget, conversationWorkspaceId, pathDraft, saving, source, t],
-  );
+  const { handleContent } = fileWorkflow;
 
   const toggleReadOnly = useCallback(() => {
     const next = !readOnly;
     setReadOnly(next);
     editorRef.current?.setReadOnly(next);
   }, [readOnly]);
-
-  const confirmDiscardIfNeeded = useCallback(
-    (action: () => void) => {
-      if (!isDirty) {
-        action();
-        return;
-      }
-
-      Alert.alert(t('codeEditor.discardChangesTitle'), t('codeEditor.discardChangesMessage'), [
-        { text: t('codeEditor.cancelAction'), style: 'cancel' },
-        { text: t('codeEditor.discardAction'), style: 'destructive', onPress: action },
-      ]);
-    },
-    [isDirty, t],
-  );
 
   const handleBack = useBackToChat({
     targetRoute: conversationFilesTarget
@@ -548,93 +407,11 @@ export const CodeEditorScreen: React.FC = () => {
     [cancelPendingFileOpen, confirmDiscardIfNeeded, resetEditorDocument, targetId],
   );
 
-  const handleReload = useCallback(() => {
-    if (!activePath) {
-      return;
-    }
-    confirmDiscardIfNeeded(() => {
-      if (source === 'local' && conversationWorkspaceId) {
-        void openPersistedFile({
-          source: 'local',
-          conversationId: conversationWorkspaceId,
-          path: activePath,
-        });
-        return;
-      }
-
-      if (!targetId || (source !== 'ssh' && source !== 'workspace')) {
-        return;
-      }
-
-      void openPersistedFile({ source, targetId, path: activePath });
-    });
-  }, [
-    activePath,
-    confirmDiscardIfNeeded,
-    conversationWorkspaceId,
-    openPersistedFile,
-    source,
-    targetId,
-  ]);
-
-  const handleNewFile = useCallback(() => {
-    confirmDiscardIfNeeded(() => {
-      cancelPendingFileOpen();
-      const root = activeTargetRoot === '/' ? '' : activeTargetRoot.replace(/\/+$/g, '');
-      const nextPath =
-        source === 'local'
-          ? conversationWorkspaceId
-            ? newFileNameLabel
-            : untitledPathLabel
-          : `${root}/${newFileNameLabel}`.replace(/\/\//g, '/');
-      resetEditorDocument(
-        '',
-        nextPath,
-        detectEditorLanguage(nextPath.split('/').pop() || nextPath),
-      );
-      setBrowserVisible(false);
-      setReadOnly(false);
-    });
-  }, [
-    activeTargetRoot,
-    cancelPendingFileOpen,
-    confirmDiscardIfNeeded,
-    conversationWorkspaceId,
-    newFileNameLabel,
-    resetEditorDocument,
-    source,
-    untitledPathLabel,
-  ]);
-
-  const listCurrentDirectory = useCallback(
-    async (path: string): Promise<FileEntry[]> => {
-      if (source === 'ssh' && activeSshTarget) {
-        const entries = await listSshDirectory(activeSshTarget, path);
-        return entries.map((entry) => ({
-          name: entry.filename,
-          isDirectory: entry.isDirectory,
-          size: entry.fileSize,
-          modifiedAt: entry.modificationDate,
-        }));
-      }
-      if (source === 'workspace' && activeWorkspaceTarget) {
-        const result = await listWorkspaceDirectory(activeWorkspaceTarget, path);
-        return result.entries;
-      }
-      return [];
-    },
-    [activeSshTarget, activeWorkspaceTarget, source],
+  const handleReload = useCallback(
+    () => fileWorkflow.handleReload(activePath),
+    [activePath, fileWorkflow],
   );
-
-  const targetLabel = useMemo(() => {
-    if (source === 'ssh' && activeSshTarget) {
-      return getSshTargetLabel(activeSshTarget as SshTargetConfig);
-    }
-    if (source === 'workspace' && activeWorkspaceTarget) {
-      return `${activeWorkspaceTarget.name} · ${getWorkspaceProviderLabel(activeWorkspaceTarget.provider as WorkspaceTargetConfig['provider'])}`;
-    }
-    return localSourceLabel;
-  }, [activeSshTarget, activeWorkspaceTarget, localSourceLabel, source]);
+  const { handleNewFile, listCurrentDirectory, targetLabel } = fileWorkflow;
 
   const modeBannerText = editorMode === 'fallback' ? t('codeEditor.fallbackModeMessage') : null;
 

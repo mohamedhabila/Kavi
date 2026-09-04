@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ChevronRight, ExternalLink, Key, Server } from 'lucide-react-native';
+import { ChevronRight, ExternalLink, Key, Server, Settings2 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { buildLocalModelDisclosureSentence } from '../../../services/localLlm/modelDisclosure';
 import { LocalModelDownloadPanel } from '../../localLlm/LocalModelDownloadPanel';
 import { useOnboardingWizardContext } from '../OnboardingWizardContext';
 
 export function ProviderKeyStep() {
+  const [showAdvancedConnection, setShowAdvancedConnection] = useState(false);
   const {
     apiKey,
     canSaveProvider,
@@ -81,7 +83,7 @@ export function ProviderKeyStep() {
           />
         ) : null}
 
-        {!selectedGuideIsOnDevice ? (
+        {!selectedGuideIsOnDevice && !selectedGuide.preset ? (
           <TextInput
             accessibilityLabel={t('settings.baseUrl')}
             style={styles.input}
@@ -95,10 +97,47 @@ export function ProviderKeyStep() {
           />
         ) : null}
 
+        {!selectedGuideIsOnDevice && selectedGuide.preset ? (
+          <>
+            {!showAdvancedConnection ? (
+              <TouchableOpacity
+                accessibilityLabel={t('onboarding.advancedToggle')}
+                accessibilityRole="button"
+                onPress={() => setShowAdvancedConnection(true)}
+                style={styles.secondaryBtn}
+              >
+                <Settings2 size={16} color={colors.primary} />
+                <Text style={styles.secondaryBtnText}>{t('onboarding.advancedToggle')}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TextInput
+                accessibilityLabel={t('settings.baseUrl')}
+                style={styles.input}
+                value={customBaseUrl}
+                onChangeText={setCustomBaseUrl}
+                placeholder={t('onboarding.baseUrlPlaceholder')}
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+            )}
+          </>
+        ) : null}
+
         {selectedGuideIsOnDevice ? (
           <View style={styles.optionWrap}>
             {localCatalog.map(
-              (entry: { id: string; name: string; sizeLabel: string; summary?: string }) => {
+              (entry: {
+                id: string;
+                name: string;
+                sizeLabel: string;
+                sizeBytes: number;
+                minDeviceMemoryGb?: number;
+                supportsTools: boolean;
+                supportsVision: boolean;
+                summary?: string;
+              }) => {
                 const active = customModel === entry.id;
                 return (
                   <TouchableOpacity
@@ -113,6 +152,9 @@ export function ProviderKeyStep() {
                     <Text
                       style={styles.optionText}
                     >{`${entry.sizeLabel} · ${entry.summary || ''}`}</Text>
+                    <Text style={styles.optionText} testID={`onboarding-model-disclosure-${entry.id}`}>
+                      {buildLocalModelDisclosureSentence(entry, t)}
+                    </Text>
                   </TouchableOpacity>
                 );
               },

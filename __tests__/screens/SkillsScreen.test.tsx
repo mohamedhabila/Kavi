@@ -1,132 +1,26 @@
 // ---------------------------------------------------------------------------
-// Tests — SkillsScreen
+// Tests — SkillsScreen list rendering, secret setup, and manual creation
 // ---------------------------------------------------------------------------
+//
+// Split out when the original single file crossed the repository's 700-line
+// maintainability limit. ClawHub browse/search/install coverage lives in
+// SkillsScreen.clawhub.test.tsx. Both share fixtures and jest.mock
+// registrations from __tests__/helpers/skillsScreenFixtures.ts.
 
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Alert, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import {
+  mockAddEntry,
+  mockEntries,
+  mockExecutionSettings,
+  mockGetSecure,
+  mockSaveSecure,
+  resetSkillsScreenFixtures,
+} from '../helpers/skillsScreenFixtures';
 import { SkillsScreen } from '../../src/screens/SkillsScreen';
 
-const mockListClawHubSkills = jest.fn();
-const mockSearchClawHub = jest.fn();
-const mockInstallSkillFromHub = jest.fn();
-const mockInstallSkillFromUrl = jest.fn();
-const mockGetSecure = jest.fn();
-const mockSaveSecure = jest.fn();
-const mockDeleteSecure = jest.fn();
-const mockToggleEntry = jest.fn();
-const mockRemoveEntry = jest.fn();
-const mockAddEntry = jest.fn();
-let mockExecutionSettings = {
-  mcpServers: [],
-  sshTargets: [],
-  workspaceTargets: [],
-};
-
-jest.mock('../../src/services/ssh/connector', () => ({
-  getSshTargetReadiness: (target: any) => ({
-    launchable: Boolean(target?.enabled && target?.host && target?.username),
-    reason: target?.enabled ? 'ready' : 'disabled',
-  }),
-  getSshTargetLabel: (target: any) => `${target?.host || 'unknown'}:${target?.port || 22}`,
-}));
-
-// Mock safe area
-jest.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({ children, ...props }: any) => {
-    const React = require('react');
-    const { View } = require('react-native');
-    return React.createElement(View, props, children);
-  },
-}));
-
-// Mock navigation
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),
-  useRoute: () => ({ name: 'Skills' }),
-  useFocusEffect: jest.fn(),
-}));
-
-// Mock theme
-jest.mock('../../src/theme/useAppTheme', () => ({
-  useAppTheme: () => ({
-    colors: {
-      background: '#000',
-      surface: '#111',
-      surfaceAlt: '#222',
-      header: '#111',
-      border: '#333',
-      subtleBorder: '#444',
-      text: '#fff',
-      textSecondary: '#aaa',
-      textTertiary: '#777',
-      placeholder: '#555',
-      primary: '#0f0',
-      onPrimary: '#fff',
-      primarySoft: '#030',
-      danger: '#f00',
-      warning: '#ff0',
-      success: '#0f0',
-    },
-  }),
-  AppPalette: {},
-}));
-
-// Mock skills store
-const mockEntries: any[] = [];
-jest.mock('../../src/services/skills/manager', () => ({
-  useSkillsStore: (selector: any) =>
-    selector({
-      entries: mockEntries,
-      toggleEntry: mockToggleEntry,
-      removeEntry: mockRemoveEntry,
-      addEntry: mockAddEntry,
-    }),
-}));
-
-jest.mock('../../src/store/useSettingsStore', () => ({
-  useSettingsStore: (selector: any) => selector(mockExecutionSettings),
-}));
-
-jest.mock('../../src/services/clawhub/apiClient', () => ({
-  listClawHubSkills: (...args: any[]) => mockListClawHubSkills(...args),
-  searchClawHub: (...args: any[]) => mockSearchClawHub(...args),
-}));
-
-jest.mock('../../src/services/clawhub/installWorkflow', () => ({
-  installSkillFromHub: (...args: any[]) => mockInstallSkillFromHub(...args),
-  installSkillFromUrl: (...args: any[]) => mockInstallSkillFromUrl(...args),
-}));
-
-jest.mock('../../src/services/storage/SecureStorage', () => ({
-  getSecure: (...args: any[]) => mockGetSecure(...args),
-  saveSecure: (...args: any[]) => mockSaveSecure(...args),
-  deleteSecure: (...args: any[]) => mockDeleteSecure(...args),
-}));
-
 beforeEach(() => {
-  mockEntries.length = 0;
-  mockExecutionSettings = {
-    mcpServers: [],
-    sshTargets: [],
-    workspaceTargets: [],
-  };
-  mockListClawHubSkills.mockReset();
-  mockSearchClawHub.mockReset();
-  mockInstallSkillFromHub.mockReset();
-  mockInstallSkillFromUrl.mockReset();
-  mockGetSecure.mockReset();
-  mockSaveSecure.mockReset();
-  mockDeleteSecure.mockReset();
-  mockToggleEntry.mockReset();
-  mockRemoveEntry.mockReset();
-  mockAddEntry.mockReset();
-  mockListClawHubSkills.mockResolvedValue({ skills: [], nextCursor: null });
-  mockSearchClawHub.mockResolvedValue({ skills: [], total: 0, page: 1, pageSize: 20 });
-  mockInstallSkillFromHub.mockResolvedValue({ success: true });
-  mockInstallSkillFromUrl.mockResolvedValue({ success: true });
-  mockGetSecure.mockResolvedValue(null);
-  mockSaveSecure.mockResolvedValue(undefined);
-  mockDeleteSecure.mockResolvedValue(undefined);
+  resetSkillsScreenFixtures();
 });
 
 describe('SkillsScreen', () => {
@@ -244,125 +138,6 @@ describe('SkillsScreen', () => {
     expect(getByText('Skill B')).toBeTruthy();
   });
 
-  it('loads ClawHub skills on the browse tab', async () => {
-    mockListClawHubSkills.mockResolvedValueOnce({
-      skills: [
-        {
-          id: 'find-skills',
-          name: 'Find Skills',
-          description: 'Browse registry',
-          version: '0.1.0',
-          author: 'ClawHub',
-          tags: [],
-          downloads: 120,
-          rating: 12,
-          installUrl: 'https://example.com',
-        },
-      ],
-      nextCursor: 'cursor-2',
-    });
-
-    const { getByText } = render(<SkillsScreen />);
-    fireEvent.press(getByText('Browse'));
-
-    await waitFor(() => {
-      expect(getByText('Find Skills')).toBeTruthy();
-    });
-    expect(mockListClawHubSkills).toHaveBeenCalledWith({
-      limit: 20,
-      cursor: null,
-      sort: 'downloads',
-    });
-  });
-
-  it('appends the next ClawHub page on infinite scroll', async () => {
-    mockListClawHubSkills
-      .mockResolvedValueOnce({
-        skills: [
-          {
-            id: 'find-skills',
-            name: 'Find Skills',
-            description: 'Browse registry',
-            version: '0.1.0',
-            author: 'ClawHub',
-            tags: [],
-            downloads: 120,
-            rating: 12,
-            installUrl: 'https://example.com/find',
-          },
-        ],
-        nextCursor: 'cursor-2',
-      })
-      .mockResolvedValueOnce({
-        skills: [
-          {
-            id: 'summarize',
-            name: 'Summarize',
-            description: 'Summarize web pages',
-            version: '1.0.0',
-            author: 'ClawHub',
-            tags: [],
-            downloads: 99,
-            rating: 10,
-            installUrl: 'https://example.com/summarize',
-          },
-        ],
-        nextCursor: null,
-      });
-
-    const { getByText, UNSAFE_getByType } = render(<SkillsScreen />);
-    fireEvent.press(getByText('Browse'));
-
-    await waitFor(() => {
-      expect(getByText('Find Skills')).toBeTruthy();
-    });
-
-    const flatList = UNSAFE_getByType(require('react-native').FlatList);
-    fireEvent(flatList, 'onEndReached');
-
-    await waitFor(() => {
-      expect(getByText('Summarize')).toBeTruthy();
-    });
-
-    expect(mockListClawHubSkills).toHaveBeenNthCalledWith(2, {
-      limit: 20,
-      cursor: 'cursor-2',
-      sort: 'downloads',
-    });
-  });
-
-  it('uses search instead of browse pagination when a query is present', async () => {
-    mockSearchClawHub.mockResolvedValueOnce({
-      skills: [
-        {
-          id: 'memory-tiering',
-          name: 'Memory Tiering',
-          description: 'Automated memory management.',
-          version: '1.0.0',
-          author: 'ClawHub',
-          tags: [],
-          downloads: 20,
-          rating: 4,
-          installUrl: 'https://example.com/memory',
-        },
-      ],
-      total: 1,
-      page: 1,
-      pageSize: 20,
-    });
-
-    const { getByPlaceholderText, getByLabelText, getByText } = render(<SkillsScreen />);
-    fireEvent.press(getByText('Browse'));
-    fireEvent.changeText(getByPlaceholderText('Search skills…'), 'memory');
-    fireEvent.press(getByLabelText('Search'));
-
-    await waitFor(() => {
-      expect(getByText('Memory Tiering')).toBeTruthy();
-    });
-
-    expect(mockSearchClawHub).toHaveBeenCalledWith('memory');
-  });
-
   it('shows configure state for skills with required secrets', async () => {
     mockEntries.push({
       id: 'github-skill',
@@ -419,8 +194,7 @@ describe('SkillsScreen', () => {
   });
 
   it('marks desktop-dependent skills as runnable when an SSH target is configured', () => {
-    mockExecutionSettings = {
-      ...mockExecutionSettings,
+    Object.assign(mockExecutionSettings, {
       sshTargets: [
         {
           id: 'ssh-1',
@@ -433,7 +207,7 @@ describe('SkillsScreen', () => {
           enabled: true,
         },
       ],
-    };
+    });
     mockEntries.push({
       id: 'cli-skill',
       enabled: true,
@@ -452,126 +226,6 @@ describe('SkillsScreen', () => {
     expect(getByText('Runs here')).toBeTruthy();
     expect(getByText('SSH')).toBeTruthy();
     expect(queryByText('Needs external surface')).toBeNull();
-  });
-
-  it('opens the setup modal after installing a skill that needs secrets', async () => {
-    mockInstallSkillFromHub.mockResolvedValueOnce({
-      success: true,
-      skillEntry: {
-        id: 'github-skill',
-        enabled: true,
-        installedAt: Date.now(),
-        source: { source: 'clawhub', id: 'github', url: 'https://example.com/github' },
-        metadata: {
-          name: 'GitHub Skill',
-          description: 'Manage repositories and issues',
-          version: '1.0.0',
-          primaryEnv: 'GITHUB_TOKEN',
-          requiredSecrets: ['GITHUB_TOKEN'],
-        },
-      },
-    });
-    mockListClawHubSkills.mockResolvedValueOnce({
-      skills: [
-        {
-          id: 'github',
-          name: 'GitHub Skill',
-          description: 'Manage repositories and issues',
-          version: '1.0.0',
-          author: 'ClawHub',
-          tags: [],
-          downloads: 120,
-          rating: 12,
-          installUrl: 'https://example.com/github',
-        },
-      ],
-      nextCursor: null,
-    });
-
-    const { getByLabelText, getByText, findByText } = render(<SkillsScreen />);
-    fireEvent.press(getByText('Browse'));
-
-    await waitFor(() => {
-      expect(getByText('GitHub Skill')).toBeTruthy();
-    });
-
-    fireEvent.press(getByLabelText('Install GitHub Skill'));
-
-    expect(await findByText('Set Up GitHub Skill')).toBeTruthy();
-    expect(await findByText('GitHub Personal Access Token')).toBeTruthy();
-  });
-
-  it('uses the typed compatibility failure for the blocked-install presentation', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    mockInstallSkillFromHub.mockResolvedValueOnce({
-      success: false,
-      failureKind: 'compatibility',
-      error: 'هذه المهارة تتطلب سطح تنفيذ آخر.',
-    });
-    mockListClawHubSkills.mockResolvedValueOnce({
-      skills: [
-        {
-          id: 'external-runtime',
-          name: 'External Runtime',
-          description: 'Requires another execution surface',
-          version: '1.0.0',
-          author: 'ClawHub',
-          tags: [],
-          downloads: 1,
-          rating: 1,
-          installUrl: 'https://example.com/external-runtime',
-        },
-      ],
-      nextCursor: null,
-    });
-
-    const { getByLabelText, getByText } = render(<SkillsScreen />);
-    fireEvent.press(getByText('Browse'));
-    await waitFor(() => expect(getByText('External Runtime')).toBeTruthy());
-    fireEvent.press(getByLabelText('Install External Runtime'));
-
-    await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith('Install blocked', 'هذه المهارة تتطلب سطح تنفيذ آخر.'),
-    );
-    alertSpy.mockRestore();
-  });
-
-  it('does not infer an install category from provider prose', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    mockInstallSkillFromHub.mockResolvedValueOnce({
-      success: false,
-      failureKind: 'transport',
-      error: 'The compatible registry endpoint is temporarily unavailable.',
-    });
-    mockListClawHubSkills.mockResolvedValueOnce({
-      skills: [
-        {
-          id: 'registry-timeout',
-          name: 'Registry Timeout',
-          description: 'Fixture',
-          version: '1.0.0',
-          author: 'ClawHub',
-          tags: [],
-          downloads: 1,
-          rating: 1,
-          installUrl: 'https://example.com/registry-timeout',
-        },
-      ],
-      nextCursor: null,
-    });
-
-    const { getByLabelText, getByText } = render(<SkillsScreen />);
-    fireEvent.press(getByText('Browse'));
-    await waitFor(() => expect(getByText('Registry Timeout')).toBeTruthy());
-    fireEvent.press(getByLabelText('Install Registry Timeout'));
-
-    await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Error',
-        'The compatible registry endpoint is temporarily unavailable.',
-      ),
-    );
-    alertSpy.mockRestore();
   });
 
   it('saves configured skill secrets from the setup modal', async () => {

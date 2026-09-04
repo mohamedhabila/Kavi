@@ -45,6 +45,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
+    technicalDetails: '技术详情',
   },
   nav: {
     chat: '聊天',
@@ -75,6 +76,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     memory: '记忆',
     voice: '语音对话',
     mcpStatus: 'MCP 服务',
+    connectedServices: '已连接的服务',
     gateway: '网关',
     remoteWork: '远程工作',
     terminal: '终端',
@@ -153,6 +155,12 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     advancedTitle: '高级任务详情',
     advancedHint: '查看工作单元层级、会话和工具调用数量。',
   },
+  developerMode: {
+    lockedTitle: '开发者模式已关闭',
+    lockedMessage: '请在设置中开启开发者模式，以使用终端、远程主机、代码和自动化工具。',
+    openSettings: '打开设置',
+    openSettingsAccessibility: '打开开发者模式设置',
+  },
   chat: {
     responseInterruptedBeforeStart: '在开始生成之前响应被中断。请在准备好后重试。',
     responseInterruptedByAppRestartBeforeStart:
@@ -182,6 +190,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     send: '发送',
     stop: '停止生成',
     attach: '附加文件',
+    takePhoto: '拍照',
+    cameraPermissionTitle: '需要访问相机',
+    cameraPermissionMessage: '请在设备设置中为 Kavi 开启相机权限以拍照。',
     inputOptions: '输入选项',
     openInputOptions: '打开输入选项',
     exactText: '精确文本',
@@ -680,6 +691,10 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       noResultsTitle: '没有匹配的设置',
       noResultsHint: '请尝试更宽泛的关键词或清除搜索。',
     },
+    developerMode: {
+      title: '开发者模式',
+      description: '为高级工作流显示终端、远程主机、代码和自动化工具。',
+    },
     notificationsVoice: {
       voiceHint: '开始语音对话并检查麦克风或语音设置。',
       automationHint: '管理提醒、自动化及其通知状态。',
@@ -692,6 +707,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     defaultConversationModeChitchat: '💬 Chitchat',
     defaultConversationModeAgenticAccessibility: 'Set default mode to agentic',
     defaultConversationModeChitchatAccessibility: 'Set default mode to chitchat',
+    showAdvancedOptions: '显示高级选项',
+    hideAdvancedOptions: '隐藏高级选项',
     useTheme: '使用 {name} 主题',
     reasoningTitle: '推理',
     thinkingLevelTitle: '推理级别',
@@ -1205,6 +1222,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     setupSkillHint: '请将所需密钥安全地保存在设备上，以便该技能可以运行。',
     secretSaveFailed: '保存技能密钥失败。请重试。',
     installBlocked: '安装已阻止',
+    installFailedGeneric: '无法安装此技能。请检查网络连接后重试。',
   },
   voice: {
     title: '语音对话',
@@ -1312,6 +1330,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     installFailed: 'MCP 服务器安装失败。',
     authenticate: 'Authenticate',
     authenticateServer: 'Authenticate {name}',
+    authenticateFailedGeneric: '无法登录此服务器。请重试。',
     reconnectServer: 'Reconnect {name}',
     endpoint: '端点',
     remoteCount: '{count} 个端点',
@@ -1364,11 +1383,14 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     online: '在线',
     disconnectConfirm: '确定要断开与网关的连接吗？',
     connectionFailed: '连接失败',
+    connectionFailedGeneric: '无法连接到网关。请检查 URL 后重试。',
     pairingFailed: '配对失败',
+    pairingFailedGeneric: '无法生成配对码。请稍后重试。',
     codeCopied: '配对码已复制到剪贴板',
     enterUrl: '请输入网关 URL',
     copyPairingCode: '复制配对码',
     refreshNodesList: '刷新节点列表',
+    listNodesFailedGeneric: '无法加载已连接的节点。请稍后重试。',
   },
   remoteWork: {
     title: '远程工作',
@@ -1771,6 +1793,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     getStarted: '开始使用',
     startChatting: '开始聊天',
     customProvider: '使用自定义提供商',
+    advancedToggle: '高级',
     enterApiKey: '输入 {provider} API 密钥',
     providerNamePlaceholder: '提供商名称（例如 My OpenAI）',
     baseUrlPlaceholder: '基础 URL（例如 https://api.openai.com/v1）',
@@ -1820,6 +1843,15 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     onDeviceNoteTitle: '设备端提示',
     onDeviceNoteBody:
       '选择一个兼容的设备端模型，先下载到设备，再保存提供商。这需要较多存储空间，在较慢网络下也可能需要一些时间。',
+    localModelDisclosure: {
+      offline: '可离线使用。',
+      capabilitiesBoth: '既能使用工具，也能识别图像。',
+      capabilitiesToolsOnly: '能使用工具，但无法识别图像。',
+      capabilitiesVisionOnly: '能识别图像，但无法使用工具。',
+      capabilitiesNeither: '既不能使用工具，也无法识别图像。',
+      sizeAndMemory: '需下载 {size}，且设备内存至少为 {memory} GB。',
+      simplerAnswers: '回答会比云端模型更简单。',
+    },
     selectModel: '选择模型 {name}',
     saveProvider: '保存提供商',
     skipProvider: '暂时跳过',
@@ -1921,6 +1953,14 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       kimi: {
         title: 'Kimi',
         detail: 'Moonshot Kimi 的可用性和定价会因地区和账户状态而变化。',
+      },
+      anthropic: {
+        title: 'Anthropic',
+        detail: '使用你已配置的 Anthropic API 密钥，为网页搜索提供依据。',
+      },
+      openai: {
+        title: 'OpenAI',
+        detail: '使用你已配置的 OpenAI API 密钥，为网页搜索提供依据。',
       },
     },
     services: {

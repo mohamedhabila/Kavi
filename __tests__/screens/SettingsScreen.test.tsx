@@ -5,6 +5,7 @@ import { LOCALE_DISPLAY_NAMES } from '../../src/i18n/registry';
 import {
   renderSettingsScreen,
   settingsMocks,
+  settingsTestState,
   setupSettingsScreenTestSuite,
 } from './SettingsScreen.testSupport';
 
@@ -71,6 +72,8 @@ describe('SettingsScreen general', () => {
 
   it('keeps Assistant and appearance controls in distinct destinations', () => {
     const assistant = renderSettingsScreen({ destination: 'assistant-personalization' });
+    expect(assistant.queryByText('Thinking Level')).toBeNull();
+    fireEvent.press(assistant.getByTestId('assistant-advanced-toggle'));
     expect(assistant.getByText('Thinking Level')).toBeTruthy();
     expect(assistant.getByText('Configure Personas')).toBeTruthy();
     expect(assistant.getByTestId('settings-persona-default').props.accessibilityRole).toBe('radio');
@@ -196,17 +199,19 @@ describe('SettingsScreen general', () => {
   });
 
   it('should render system prompt section', () => {
-    const { getAllByText, getByDisplayValue } = renderSettingsScreen({
+    const { getAllByText, getByDisplayValue, getByTestId } = renderSettingsScreen({
       destination: 'assistant-personalization',
     });
+    fireEvent.press(getByTestId('assistant-advanced-toggle'));
     expect(getAllByText('System Prompt').length).toBeGreaterThan(0);
     expect(getByDisplayValue('You are helpful')).toBeTruthy();
   });
 
   it('should update system prompt', () => {
-    const { getByDisplayValue } = renderSettingsScreen({
+    const { getByDisplayValue, getByTestId } = renderSettingsScreen({
       destination: 'assistant-personalization',
     });
+    fireEvent.press(getByTestId('assistant-advanced-toggle'));
     fireEvent.changeText(getByDisplayValue('You are helpful'), 'New prompt');
     expect(settingsMocks.setSystemPrompt).toHaveBeenCalledWith('New prompt');
   });
@@ -310,12 +315,13 @@ describe('SettingsScreen general', () => {
   });
 
   it('names assistant behavior fields and switches', () => {
-    const { getByLabelText } = renderSettingsScreen({
+    const { getByLabelText, getByTestId } = renderSettingsScreen({
       destination: 'assistant-personalization',
     });
 
     expect(getByLabelText('Link Understanding').props.accessibilityRole).toBe('switch');
     expect(getByLabelText('Media Understanding').props.accessibilityRole).toBe('switch');
+    fireEvent.press(getByTestId('assistant-advanced-toggle'));
     expect(getByLabelText('Assistant system prompt')).toBeTruthy();
   });
 
@@ -326,17 +332,19 @@ describe('SettingsScreen general', () => {
   });
 
   it('should update the thinking level', () => {
-    const { getByLabelText } = renderSettingsScreen({
+    const { getByLabelText, getByTestId } = renderSettingsScreen({
       destination: 'assistant-personalization',
     });
+    fireEvent.press(getByTestId('assistant-advanced-toggle'));
     fireEvent.press(getByLabelText('Use High thinking level'));
     expect(settingsMocks.setThinkingLevel).toHaveBeenCalledWith('high');
   });
 
   it('should support selecting every thinking level option', () => {
-    const { getByLabelText } = renderSettingsScreen({
+    const { getByLabelText, getByTestId } = renderSettingsScreen({
       destination: 'assistant-personalization',
     });
+    fireEvent.press(getByTestId('assistant-advanced-toggle'));
 
     fireEvent.press(getByLabelText('Use Off thinking level'));
     fireEvent.press(getByLabelText('Use Minimal thinking level'));
@@ -412,5 +420,45 @@ describe('SettingsScreen general', () => {
     const { getByText } = renderSettingsScreen({ destination: 'memory-privacy' });
     fireEvent.press(getByText('Clear All Conversations'));
     expect(settingsMocks.clearAllConversations).toHaveBeenCalled();
+  });
+
+  it('keeps the advanced assistant options collapsed until expanded', () => {
+    const { queryByTestId, getByTestId, queryByText } = renderSettingsScreen({
+      destination: 'assistant-personalization',
+    });
+
+    expect(queryByText('Thinking Level')).toBeNull();
+    expect(queryByTestId('assistant-advanced-toggle')).toBeTruthy();
+
+    fireEvent.press(getByTestId('assistant-advanced-toggle'));
+    expect(getByTestId('assistant-advanced-toggle')).toBeTruthy();
+  });
+
+  it('lists Anthropic and OpenAI as web search providers using the configured LLM key', () => {
+    const { getByTestId } = renderSettingsScreen({ destination: 'tools-permissions' });
+    expect(getByTestId('websearch-provider-anthropic')).toBeTruthy();
+    expect(getByTestId('websearch-provider-openai')).toBeTruthy();
+  });
+
+  it('hides persona Temperature unless Developer Mode is on', () => {
+    settingsTestState.developerModeEnabled = false;
+    const off = renderSettingsScreen({ destination: 'assistant-personalization' });
+    expect(off.queryByTestId('settings-persona-temperature')).toBeNull();
+    off.unmount();
+
+    settingsTestState.developerModeEnabled = true;
+    const on = renderSettingsScreen({ destination: 'assistant-personalization' });
+    expect(on.getByTestId('settings-persona-temperature')).toBeTruthy();
+    on.unmount();
+    settingsTestState.developerModeEnabled = false;
+  });
+
+  it('exposes a Developer Mode switch under Developer & remote work with an explanation', () => {
+    const { getByTestId } = renderSettingsScreen({ destination: 'developer-remote-work' });
+    const toggle = getByTestId('settings-developer-mode-switch');
+    expect(toggle.props.value).toBe(false);
+
+    fireEvent(toggle, 'valueChange', true);
+    expect(settingsMocks.setDeveloperModeEnabled).toHaveBeenCalledWith(true);
   });
 });

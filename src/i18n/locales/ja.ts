@@ -45,6 +45,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
+    technicalDetails: '技術的な詳細',
   },
   nav: {
     chat: 'チャット',
@@ -75,6 +76,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     memory: 'メモリー',
     voice: '音声で会話',
     mcpStatus: 'MCP ステータス',
+    connectedServices: '連携サービス',
     gateway: 'ゲートウェイ',
     remoteWork: 'リモート作業',
     terminal: 'ターミナル',
@@ -154,6 +156,12 @@ export const ja: TranslationMap = mergeTranslations(en, {
     advancedTitle: '作業の詳細情報',
     advancedHint: 'ワーカー階層、セッション、ツール数を表示します。',
   },
+  developerMode: {
+    lockedTitle: 'デベロッパーモードはオフです',
+    lockedMessage: 'ターミナル、リモートマシン、コード、自動化ツールを使うには、設定でデベロッパーモードをオンにしてください。',
+    openSettings: '設定を開く',
+    openSettingsAccessibility: 'デベロッパーモードの設定を開く',
+  },
   chat: {
     responseInterruptedBeforeStart: '生成が始まる前に応答が中断されました。準備ができたら再試行してください。',
     responseInterruptedByAppRestartBeforeStart:
@@ -183,6 +191,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     send: '送信',
     stop: '生成を停止',
     attach: 'ファイルを添付',
+    takePhoto: '写真を撮る',
+    cameraPermissionTitle: 'カメラへのアクセスが必要です',
+    cameraPermissionMessage: '写真を撮るには、デバイスの設定で Kavi のカメラアクセスをオンにしてください。',
     inputOptions: '入力オプション',
     openInputOptions: '入力オプションを開く',
     exactText: '正確なテキスト',
@@ -705,6 +716,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
       noResultsTitle: '一致する設定がありません',
       noResultsHint: 'より広い言葉を試すか、検索をクリアしてください。',
     },
+    developerMode: {
+      title: 'デベロッパーモード',
+      description: '上級者向けのワークフロー用に、ターミナル、リモートマシン、コード、自動化ツールを表示します。',
+    },
     notificationsVoice: {
       voiceHint: '音声会話を開始し、マイクや音声設定を確認します。',
       automationHint: 'リマインダー、自動化、通知の準備状況を管理します。',
@@ -717,6 +732,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
     defaultConversationModeChitchat: '💬 Chitchat',
     defaultConversationModeAgenticAccessibility: 'Set default mode to agentic',
     defaultConversationModeChitchatAccessibility: 'Set default mode to chitchat',
+    showAdvancedOptions: '詳細オプションを表示',
+    hideAdvancedOptions: '詳細オプションを非表示',
     useTheme: '{name} テーマを使用',
     reasoningTitle: '推論',
     thinkingLevelTitle: '推論レベル',
@@ -1249,6 +1266,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     setupSkillHint: 'このスキルを実行できるように、必要なシークレットを端末に安全に保存します。',
     secretSaveFailed: 'スキルのシークレットを保存できませんでした。もう一度お試しください。',
     installBlocked: 'インストールがブロックされました',
+    installFailedGeneric: 'このスキルをインストールできませんでした。接続を確認して、もう一度お試しください。',
   },
   voice: {
     title: '音声で会話',
@@ -1363,6 +1381,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     installFailed: 'MCP サーバーのインストールに失敗しました',
     authenticate: 'Authenticate',
     authenticateServer: 'Authenticate {name}',
+    authenticateFailedGeneric: 'このサーバーにサインインできませんでした。もう一度お試しください。',
     reconnectServer: 'Reconnect {name}',
     endpoint: 'エンドポイント',
     remoteCount: '{count} エンドポイント',
@@ -1416,11 +1435,14 @@ export const ja: TranslationMap = mergeTranslations(en, {
     online: 'オンライン',
     disconnectConfirm: 'ゲートウェイから切断してもよろしいですか？',
     connectionFailed: '接続に失敗',
+    connectionFailedGeneric: 'ゲートウェイに接続できませんでした。URL を確認して、もう一度お試しください。',
     pairingFailed: 'ペアリングに失敗',
+    pairingFailedGeneric: 'ペアリングコードを作成できませんでした。しばらくしてから再試行してください。',
     codeCopied: 'ペアリングコードをクリップボードにコピーしました',
     enterUrl: 'ゲートウェイ URL を入力してください',
     copyPairingCode: 'ペアリングコードをコピー',
     refreshNodesList: 'ノード一覧を更新',
+    listNodesFailedGeneric: '接続済みのノードを読み込めませんでした。しばらくしてから再試行してください。',
   },
   remoteWork: {
     title: 'リモート作業',
@@ -1838,6 +1860,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     getStarted: '始める',
     startChatting: 'チャットを開始',
     customProvider: 'カスタムプロバイダーを使用',
+    advancedToggle: '詳細設定',
     enterApiKey: '{provider} API キーを入力',
     providerNamePlaceholder: 'プロバイダー名（例：My OpenAI）',
     baseUrlPlaceholder: 'ベース URL（例：https://api.openai.com/v1）',
@@ -1897,6 +1920,15 @@ export const ja: TranslationMap = mergeTranslations(en, {
     onDeviceNoteTitle: 'オンデバイス利用の注意',
     onDeviceNoteBody:
       '対応するオンデバイスモデルを選択し、端末にダウンロードしてからプロバイダーを保存してください。十分な保存容量が必要で、低速なネットワークでは時間がかかる場合があります。',
+    localModelDisclosure: {
+      offline: 'オフラインで動作します。',
+      capabilitiesBoth: 'ツールの使用と画像の認識の両方に対応しています。',
+      capabilitiesToolsOnly: 'ツールは使用できますが、画像は認識できません。',
+      capabilitiesVisionOnly: '画像は認識できますが、ツールは使用できません。',
+      capabilitiesNeither: 'ツールの使用にも画像の認識にも対応していません。',
+      sizeAndMemory: '{size} をダウンロードし、少なくとも {memory} GB のデバイスメモリが必要です。',
+      simplerAnswers: 'クラウドモデルより回答はシンプルになります。',
+    },
     selectModel: 'モデル {name} を選択',
     saveProvider: 'プロバイダーを保存',
     skipProvider: '今回はスキップ',
@@ -2014,6 +2046,14 @@ export const ja: TranslationMap = mergeTranslations(en, {
       kimi: {
         title: 'Kimi',
         detail: 'Moonshot Kimi の利用可否や料金は地域やアカウント状態で変わることがあります。',
+      },
+      anthropic: {
+        title: 'Anthropic',
+        detail: '設定済みの Anthropic API キーを使って、Web 検索のグラウンディングを行います。',
+      },
+      openai: {
+        title: 'OpenAI',
+        detail: '設定済みの OpenAI API キーを使って、Web 検索のグラウンディングを行います。',
       },
     },
     services: {

@@ -6,6 +6,7 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { File } from 'expo-file-system';
 import { ScrollView, StyleSheet } from 'react-native';
 import { OnboardingWizard } from '../../src/components/onboarding/OnboardingWizard';
+import { i18n } from '../../src/i18n/manager';
 import { getLocalLlmCatalogEntry } from '../../src/services/localLlm/catalog';
 
 // Mock safe area
@@ -184,15 +185,28 @@ describe('OnboardingWizard', () => {
   });
 
   it('shows provider setup guidance on provider selection', () => {
-    const { getByLabelText, getByText } = render(<OnboardingWizard onComplete={jest.fn()} />);
+    const { getByLabelText, getByText, queryByLabelText } = render(
+      <OnboardingWizard onComplete={jest.fn()} />,
+    );
     fireEvent.press(getByText('Get Started'));
     fireEvent.press(getByText('OpenAI'));
     expect(getByText('How to get access')).toBeTruthy();
     expect(getByText(/OpenAI dashboard/)).toBeTruthy();
+    // Base URL is a preset default — hidden by default for known providers,
+    // reachable behind the Advanced disclosure.
+    expect(queryByLabelText('Base URL')).toBeNull();
+    fireEvent.press(getByLabelText(i18n.t('onboarding.advancedToggle')));
     expect(getByLabelText('Base URL')).toBeTruthy();
     expect(getByLabelText('Default Model')).toBeTruthy();
     expect(getByLabelText('API Key')).toBeTruthy();
     expect(getByText('Save provider')).toBeTruthy();
+  });
+
+  it('reveals the Base URL field by default for a custom provider', () => {
+    const { getByLabelText, getByText } = render(<OnboardingWizard onComplete={jest.fn()} />);
+    fireEvent.press(getByText('Get Started'));
+    fireEvent.press(getByText('Custom compatible API'));
+    expect(getByLabelText('Base URL')).toBeTruthy();
   });
 
   it('requires an explicit download before saving the on-device Gemma provider', async () => {

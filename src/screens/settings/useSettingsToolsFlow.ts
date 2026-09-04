@@ -32,6 +32,10 @@ const WEB_SEARCH_PROVIDER_VALUES = [
   'perplexity',
   'grok',
   'kimi',
+  // Anthropic and OpenAI reuse the LLM provider key already configured
+  // elsewhere in Settings, so they need no dedicated secure-key field.
+  'anthropic',
+  'openai',
 ] as const;
 
 export function useSettingsToolsFlow({

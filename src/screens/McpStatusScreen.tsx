@@ -23,6 +23,7 @@ import { removeCredentialBackedConfiguration } from '../services/storage/credent
 import { deleteSecure } from '../services/storage/SecureStorage';
 import type { McpServerConfig } from '../types/remote';
 import { useBackToChat } from '../navigation/useBackToChat';
+import { showLocalizedErrorAlert } from '../utils/errorAlert';
 
 const BROWSE_PAGE_SIZE = 20;
 
@@ -229,10 +230,12 @@ export const McpStatusScreen: React.FC = () => {
       try {
         await mcpManager.authenticateServer(server);
       } catch (error: unknown) {
-        Alert.alert(
-          t('common.error'),
-          error instanceof Error ? error.message : 'Authentication failed.',
-        );
+        showLocalizedErrorAlert({
+          title: t('common.error'),
+          message: t('mcpStatus.authenticateFailedGeneric'),
+          error,
+          technicalDetailsLabel: t('common.technicalDetails'),
+        });
       }
 
       await refresh();
@@ -429,28 +432,31 @@ export const McpStatusScreen: React.FC = () => {
           err != null && typeof err === 'object' ? (err as Record<string, unknown>) : {};
         setActiveTab('installed');
         refresh(useSettingsStore.getState().mcpServers);
-        Alert.alert(
-          t('common.error'),
-          err instanceof Error ? err.message : t('mcpStatus.installFailed'),
-          errObj.code === 'configuration_required'
-            ? [
-                { text: t('common.cancel'), style: 'cancel' },
-                {
-                  text: t('common.edit'),
-                  onPress: () => {
-                    const latestServer = useSettingsStore
-                      .getState()
-                      .mcpServers.find(
-                        (server) => server.name === entry.name || server.url === remote.url,
-                      );
-                    if (latestServer) {
-                      handleEditServer(latestServer.id);
-                    }
+        showLocalizedErrorAlert({
+          title: t('common.error'),
+          message: t('mcpStatus.installFailed'),
+          error: err,
+          technicalDetailsLabel: t('common.technicalDetails'),
+          buttons:
+            errObj.code === 'configuration_required'
+              ? [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  {
+                    text: t('common.edit'),
+                    onPress: () => {
+                      const latestServer = useSettingsStore
+                        .getState()
+                        .mcpServers.find(
+                          (server) => server.name === entry.name || server.url === remote.url,
+                        );
+                      if (latestServer) {
+                        handleEditServer(latestServer.id);
+                      }
+                    },
                   },
-                },
-              ]
-            : undefined,
-        );
+                ]
+              : undefined,
+        });
       } finally {
         setInstallingId(null);
         setInstallingLabel(null);

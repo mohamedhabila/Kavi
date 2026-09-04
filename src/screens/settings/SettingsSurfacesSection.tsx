@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Switch, Text, View } from 'react-native';
 
 import type { AppPalette } from '../../theme/useAppTheme';
 import type {
@@ -20,6 +20,7 @@ type StyleMap = Record<string, any>;
 type SettingsSurfacesSectionProps = {
   browserProviders: BrowserProviderConfig[];
   colors: AppPalette;
+  developerModeEnabled: boolean;
   expoAccounts: ExpoAccountConfig[];
   expoProjects: ExpoProjectConfig[];
   getBrowserProviderAuthLabel: (authMode?: BrowserProviderConfig['authMode']) => string;
@@ -41,6 +42,7 @@ type SettingsSurfacesSectionProps = {
   mcpServers: McpServerConfig[];
   mode: 'connections' | 'developer';
   onLayout?: (event: any) => void;
+  setDeveloperModeEnabled: (enabled: boolean) => void;
   sshTargets: SshTargetConfig[];
   styles: StyleMap;
   t: TranslationFn;
@@ -50,6 +52,7 @@ type SettingsSurfacesSectionProps = {
 export const SettingsSurfacesSection: React.FC<SettingsSurfacesSectionProps> = ({
   browserProviders,
   colors,
+  developerModeEnabled,
   expoAccounts,
   expoProjects,
   getBrowserProviderAuthLabel,
@@ -71,6 +74,7 @@ export const SettingsSurfacesSection: React.FC<SettingsSurfacesSectionProps> = (
   mcpServers,
   mode,
   onLayout,
+  setDeveloperModeEnabled,
   sshTargets,
   styles,
   t,
@@ -96,6 +100,22 @@ export const SettingsSurfacesSection: React.FC<SettingsSurfacesSectionProps> = (
           )}
         </Text>
       </View>
+
+      {!isConnections ? (
+        <View style={styles.featureRow} testID="settings-developer-mode-row">
+          <View style={styles.featureContent}>
+            <Text style={styles.switchLabel}>{t('settings.developerMode.title')}</Text>
+            <Text style={styles.featureHint}>{t('settings.developerMode.description')}</Text>
+          </View>
+          <Switch
+            accessibilityLabel={t('settings.developerMode.title')}
+            onValueChange={setDeveloperModeEnabled}
+            testID="settings-developer-mode-switch"
+            trackColor={{ true: colors.primary }}
+            value={developerModeEnabled}
+          />
+        </View>
+      ) : null}
 
       {isConnections ? (
         <SettingsConnectionsSurfaces

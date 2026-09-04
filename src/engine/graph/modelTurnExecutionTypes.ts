@@ -42,6 +42,8 @@ export interface ExecuteAgentControlGraphModelTurnParams {
   conversationId: string;
   effectiveForceTextReasonThisTurn?: AgentControlGraphForcedTextReason;
   hasPendingAsyncOperations: boolean;
+  /** True only for a foreground interactive run; selects the tighter inactivity timeout. */
+  isForegroundRun?: boolean;
   iteration: number;
   livingMemory?: LivingMemoryBridgeOutput | null;
   llm: {

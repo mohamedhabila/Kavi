@@ -1,5 +1,5 @@
-import { Brain, Image, Link2 } from 'lucide-react-native';
-import React from 'react';
+import { Brain, ChevronDown, ChevronRight, Image, Link2 } from 'lucide-react-native';
+import React, { useState } from 'react';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { AppPalette } from '../../theme/useAppTheme';
@@ -46,7 +46,10 @@ export const SettingsAssistantBehaviorControls: React.FC<
   t,
   thinkingLevel,
   thinkingLevelOptions,
-}) => (
+}) => {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  return (
   <>
     <Text style={styles.sectionTitle}>{t('settings.features')}</Text>
 
@@ -153,54 +156,84 @@ export const SettingsAssistantBehaviorControls: React.FC<
       </TouchableOpacity>
     </ScrollView>
 
-    <Text style={styles.sectionTitle}>{t('settings.reasoningTitle')}</Text>
-    <View style={styles.listItem}>
-      <Brain size={18} color={colors.primary} />
+    <TouchableOpacity
+      accessibilityLabel={t(
+        showAdvanced ? 'settings.hideAdvancedOptions' : 'settings.showAdvancedOptions',
+      )}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: showAdvanced }}
+      onPress={() => setShowAdvanced((current) => !current)}
+      style={styles.listItem}
+      testID="assistant-advanced-toggle"
+    >
       <View style={styles.listItemContent}>
-        <Text style={styles.listItemTitle}>{t('settings.thinkingLevelTitle')}</Text>
-        <Text style={styles.listItemSubtitle}>{t('settings.thinkingLevelHint')}</Text>
+        <Text style={styles.listItemTitle}>
+          {t(showAdvanced ? 'settings.hideAdvancedOptions' : 'settings.showAdvancedOptions')}
+        </Text>
       </View>
-    </View>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetRow}>
-      {thinkingLevelOptions.map((option) => (
-        <TouchableOpacity
-          accessibilityLabel={t('settings.useThinkingLevel', { name: option.label })}
-          accessibilityRole="button"
-          accessibilityState={{ selected: thinkingLevel === option.value }}
-          key={option.value}
-          onPress={() => setThinkingLevel(option.value)}
-          style={[styles.presetChip, thinkingLevel === option.value && styles.presetChipActive]}
-        >
-          <Brain
-            size={14}
-            color={thinkingLevel === option.value ? colors.onPrimary : colors.primary}
-          />
-          <Text
-            style={[
-              styles.presetChipText,
-              thinkingLevel === option.value && styles.presetChipTextActive,
-            ]}
-          >
-            {option.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
-    <Text style={styles.listItemSubtitle}>
-      {thinkingLevelOptions.find((option) => option.value === thinkingLevel)?.hint}
-    </Text>
+      {showAdvanced ? (
+        <ChevronDown size={18} color={colors.textSecondary} />
+      ) : (
+        <ChevronRight size={18} color={colors.textSecondary} />
+      )}
+    </TouchableOpacity>
 
-    <Text style={styles.sectionTitle}>{t('settings.systemPrompt')}</Text>
-    <TextInput
-      accessibilityLabel={t('settings.assistantSystemPromptAccessibility')}
-      multiline
-      numberOfLines={4}
-      onChangeText={setSystemPrompt}
-      placeholder={t('settings.systemPromptPlaceholder')}
-      placeholderTextColor={colors.placeholder}
-      style={[styles.input, styles.textArea]}
-      textAlignVertical="top"
-      value={systemPrompt}
-    />
+    {showAdvanced ? (
+      <>
+        <Text style={styles.sectionTitle}>{t('settings.reasoningTitle')}</Text>
+        <View style={styles.listItem}>
+          <Brain size={18} color={colors.primary} />
+          <View style={styles.listItemContent}>
+            <Text style={styles.listItemTitle}>{t('settings.thinkingLevelTitle')}</Text>
+            <Text style={styles.listItemSubtitle}>{t('settings.thinkingLevelHint')}</Text>
+          </View>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetRow}>
+          {thinkingLevelOptions.map((option) => (
+            <TouchableOpacity
+              accessibilityLabel={t('settings.useThinkingLevel', { name: option.label })}
+              accessibilityRole="button"
+              accessibilityState={{ selected: thinkingLevel === option.value }}
+              key={option.value}
+              onPress={() => setThinkingLevel(option.value)}
+              style={[
+                styles.presetChip,
+                thinkingLevel === option.value && styles.presetChipActive,
+              ]}
+            >
+              <Brain
+                size={14}
+                color={thinkingLevel === option.value ? colors.onPrimary : colors.primary}
+              />
+              <Text
+                style={[
+                  styles.presetChipText,
+                  thinkingLevel === option.value && styles.presetChipTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <Text style={styles.listItemSubtitle}>
+          {thinkingLevelOptions.find((option) => option.value === thinkingLevel)?.hint}
+        </Text>
+
+        <Text style={styles.sectionTitle}>{t('settings.systemPrompt')}</Text>
+        <TextInput
+          accessibilityLabel={t('settings.assistantSystemPromptAccessibility')}
+          multiline
+          numberOfLines={4}
+          onChangeText={setSystemPrompt}
+          placeholder={t('settings.systemPromptPlaceholder')}
+          placeholderTextColor={colors.placeholder}
+          style={[styles.input, styles.textArea]}
+          textAlignVertical="top"
+          value={systemPrompt}
+        />
+      </>
+    ) : null}
   </>
-);
+  );
+};

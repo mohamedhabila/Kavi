@@ -10,6 +10,15 @@ import { ChatInput } from '../../src/components/chat/ChatInput';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Attachment } from '../../src/types/attachment';
+import { i18n } from '../../src/i18n/manager';
+
+function pressAlertButtonByLabel(
+  buttons: Array<{ text?: string; onPress?: () => void }> | undefined,
+  label: string,
+) {
+  const button = buttons?.find((candidate) => candidate.text === label);
+  button?.onPress?.();
+}
 
 const mockUseChatVoiceRecorder = jest.fn();
 const mockVoiceRecorderOverlay = jest.fn();
@@ -292,7 +301,7 @@ describe('ChatInput', () => {
 
   it('should pick image when attachment button is pressed and supportsVision', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_, __, buttons) => {
-      buttons?.[0]?.onPress?.();
+      pressAlertButtonByLabel(buttons, i18n.t('common.image'));
     });
     (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValueOnce({
       canceled: false,
@@ -337,7 +346,7 @@ describe('ChatInput', () => {
 
   it('should allow picking a document when attachment button is pressed with vision support', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_, __, buttons) => {
-      buttons?.[1]?.onPress?.();
+      pressAlertButtonByLabel(buttons, i18n.t('common.file'));
     });
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValueOnce({
       canceled: false,
@@ -356,6 +365,53 @@ describe('ChatInput', () => {
         copyToCacheDirectory: true,
       });
     });
+
+    alertSpy.mockRestore();
+  });
+
+  it('should take a photo when the take-photo button is pressed', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_, __, buttons) => {
+      pressAlertButtonByLabel(buttons, i18n.t('chat.takePhoto'));
+    });
+    (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValueOnce({
+      granted: true,
+    });
+    (ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValueOnce({
+      canceled: false,
+      assets: [
+        { uri: 'file://camera.jpg', fileName: 'camera.jpg', mimeType: 'image/jpeg', fileSize: 1500 },
+      ],
+    });
+
+    const onSend = jest.fn();
+    const { getByTestId } = renderControlledChatInput({ onSend, supportsVision: true });
+
+    const paperclipIcon = getByTestId('icon-Paperclip');
+    fireEvent.press(paperclipIcon.parent || paperclipIcon);
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalled();
+      expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalled();
+      expect(ImagePicker.launchCameraAsync).toHaveBeenCalledWith({
+        mediaTypes: ['images'],
+        quality: 0.8,
+      });
+    });
+
+    const sendIcon = getByTestId('icon-Send');
+    fireEvent.press(sendIcon.parent || sendIcon);
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    const [, sentAttachments] = onSend.mock.calls[0];
+    expect(sentAttachments).toEqual([
+      expect.objectContaining({
+        type: 'image',
+        uri: 'file://camera.jpg',
+        name: 'camera.jpg',
+        mimeType: 'image/jpeg',
+        size: 1500,
+      }),
+    ]);
 
     alertSpy.mockRestore();
   });

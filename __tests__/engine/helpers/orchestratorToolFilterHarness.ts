@@ -6,6 +6,7 @@ import type { LlmProviderConfig } from '../../../src/types/provider';
 export const mockStreamMessage = jest.fn();
 let mockWorkspaceTargets: any[] = [];
 let mockDisableLongTermMemory = false;
+let mockDeveloperModeEnabled = false;
 const mockMemoryAuthoritySnapshot = Object.freeze({
   processEpochs: Object.freeze({ restrictive: 0, projection: 0 }),
   restrictiveRevision: Object.freeze({
@@ -135,6 +136,7 @@ jest.mock('../../../src/store/useSettingsStore', () => ({
     getState: () => ({
       workspaceTargets: mockWorkspaceTargets,
       disableLongTermMemory: mockDisableLongTermMemory,
+      developerModeEnabled: mockDeveloperModeEnabled,
     }),
   },
 }));
@@ -205,6 +207,10 @@ export function setMockDisableLongTermMemory(disabled: boolean): void {
   mockDisableLongTermMemory = disabled;
 }
 
+export function setMockDeveloperModeEnabled(enabled: boolean): void {
+  mockDeveloperModeEnabled = enabled;
+}
+
 export function resetOrchestratorToolFilterHarness(): void {
   jest.clearAllMocks();
   mockStreamMessage.mockReset();
@@ -212,6 +218,7 @@ export function resetOrchestratorToolFilterHarness(): void {
   mockExecuteTool.mockResolvedValue({ status: 'completed', content: 'tool result' });
   mockWorkspaceTargets = [];
   mockDisableLongTermMemory = false;
+  mockDeveloperModeEnabled = false;
 }
 
 export type { OrchestratorOptions };

@@ -45,6 +45,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
+    technicalDetails: '技術詳情',
   },
   nav: {
     chat: '聊天',
@@ -75,6 +76,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     memory: '記憶',
     voice: '語音對話',
     mcpStatus: 'MCP 伺服器',
+    connectedServices: '已連線的服務',
     gateway: '閘道',
     remoteWork: '遠端工作',
     terminal: '終端',
@@ -153,6 +155,12 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     advancedTitle: '進階工作詳情',
     advancedHint: '查看工作單元階層、工作階段和工具呼叫數量。',
   },
+  developerMode: {
+    lockedTitle: '開發者模式已關閉',
+    lockedMessage: '請在設定中開啟開發者模式，以使用終端機、遠端主機、程式碼與自動化工具。',
+    openSettings: '開啟設定',
+    openSettingsAccessibility: '開啟開發者模式設定',
+  },
   chat: {
     responseInterruptedBeforeStart: '在開始產生之前回應被中斷。請在準備好後重試。',
     responseInterruptedByAppRestartBeforeStart:
@@ -182,6 +190,9 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     send: '傳送',
     stop: '停止生成',
     attach: '附加檔案',
+    takePhoto: '拍照',
+    cameraPermissionTitle: '需要相機存取權限',
+    cameraPermissionMessage: '請在裝置設定中開啟 Kavi 的相機存取權限以拍照。',
     inputOptions: '輸入選項',
     openInputOptions: '開啟輸入選項',
     exactText: '精確文字',
@@ -679,6 +690,10 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       noResultsTitle: '沒有相符的設定',
       noResultsHint: '請嘗試較廣泛的關鍵字或清除搜尋。',
     },
+    developerMode: {
+      title: '開發者模式',
+      description: '為進階工作流程顯示終端機、遠端主機、程式碼與自動化工具。',
+    },
     notificationsVoice: {
       voiceHint: '開始語音對話並檢查麥克風或語音設定。',
       automationHint: '管理提醒、自動化及其通知狀態。',
@@ -691,6 +706,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     defaultConversationModeChitchat: '💬 Chitchat',
     defaultConversationModeAgenticAccessibility: 'Set default mode to agentic',
     defaultConversationModeChitchatAccessibility: 'Set default mode to chitchat',
+    showAdvancedOptions: '顯示進階選項',
+    hideAdvancedOptions: '隱藏進階選項',
     useTheme: '使用 {name} 主題',
     reasoningTitle: '推理',
     thinkingLevelTitle: '推理等級',
@@ -1204,6 +1221,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     setupSkillHint: '請將所需密鑰安全地儲存在裝置上，讓此技能可以執行。',
     secretSaveFailed: '無法儲存技能密鑰。請再試一次。',
     installBlocked: '安裝已遭封鎖',
+    installFailedGeneric: '無法安裝此技能。請檢查網路連線後再試一次。',
   },
   voice: {
     title: '語音對話',
@@ -1311,6 +1329,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     installFailed: 'MCP 伺服器安裝失敗。',
     authenticate: 'Authenticate',
     authenticateServer: 'Authenticate {name}',
+    authenticateFailedGeneric: '無法登入此伺服器。請再試一次。',
     reconnectServer: 'Reconnect {name}',
     endpoint: '端點',
     remoteCount: '{count} 個端點',
@@ -1363,11 +1382,14 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     online: '線上',
     disconnectConfirm: '確定要中斷與閘道的連線嗎？',
     connectionFailed: '連線失敗',
+    connectionFailedGeneric: '無法連線至閘道器。請檢查網址後再試一次。',
     pairingFailed: '配對失敗',
+    pairingFailedGeneric: '無法建立配對碼。請稍後再試。',
     codeCopied: '配對碼已複製到剪貼簿',
     enterUrl: '請輸入閘道 URL',
     copyPairingCode: '複製配對碼',
     refreshNodesList: '重新整理節點列表',
+    listNodesFailedGeneric: '無法載入已連線的節點。請稍後再試。',
   },
   remoteWork: {
     title: '遠端工作',
@@ -1769,6 +1791,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     getStarted: '開始使用',
     startChatting: '開始聊天',
     customProvider: '使用自訂供應商',
+    advancedToggle: '進階',
     enterApiKey: '輸入 {provider} API 金鑰',
     providerNamePlaceholder: '供應商名稱（例如 My OpenAI）',
     baseUrlPlaceholder: '基礎 URL（例如 https://api.openai.com/v1）',
@@ -1818,6 +1841,15 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     onDeviceNoteTitle: '裝置端提示',
     onDeviceNoteBody:
       '選擇一個相容的裝置端模型，先下載到裝置，再儲存供應商。這需要相當的儲存空間，在較慢網路下也可能花一些時間。',
+    localModelDisclosure: {
+      offline: '可離線使用。',
+      capabilitiesBoth: '既能使用工具，也能辨識圖片。',
+      capabilitiesToolsOnly: '能使用工具，但無法辨識圖片。',
+      capabilitiesVisionOnly: '能辨識圖片，但無法使用工具。',
+      capabilitiesNeither: '既無法使用工具，也無法辨識圖片。',
+      sizeAndMemory: '需下載 {size}，且裝置記憶體至少要有 {memory} GB。',
+      simplerAnswers: '回答會比雲端模型更簡單。',
+    },
     selectModel: '選擇模型 {name}',
     saveProvider: '儲存供應商',
     skipProvider: '先略過',
@@ -1916,6 +1948,14 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       kimi: {
         title: 'Kimi',
         detail: 'Moonshot Kimi 的可用性與定價會因地區及帳戶狀態而不同。',
+      },
+      anthropic: {
+        title: 'Anthropic',
+        detail: '使用你已設定的 Anthropic API 金鑰，為網頁搜尋提供依據。',
+      },
+      openai: {
+        title: 'OpenAI',
+        detail: '使用你已設定的 OpenAI API 金鑰，為網頁搜尋提供依據。',
       },
     },
     services: {
