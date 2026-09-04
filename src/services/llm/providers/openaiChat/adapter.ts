@@ -3,6 +3,7 @@ import { resolveModelOutputTokenBudget } from '../../../context/outputTokenBudge
 import { normalizeToolInputSchema } from '../../../../utils/toolSchema';
 import { tryParseJson } from '../../core/json';
 import { splitCacheableSystemPromptSections } from '../../core/systemPromptSections';
+import { createProviderRequestError } from '../../support/providerErrorClassification';
 import type {
   ChatCompletionMessage,
   MessageRequestOptions,
@@ -215,7 +216,11 @@ export async function sendOpenAICompatibleChat(args: {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => response.statusText);
-    throw new Error(`LLM API error ${response.status}: ${errorText}`);
+    throw createProviderRequestError({
+      providerFamily: 'openai',
+      status: response.status,
+      bodyText: errorText,
+    });
   }
 
   if (args.options.stream) {

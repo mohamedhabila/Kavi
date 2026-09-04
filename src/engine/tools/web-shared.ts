@@ -3,6 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import { unrefTimerIfSupported } from '../../utils/timers';
+import {
+  classifyNativeTransportErrorIdentity,
+  logProseFallbackClassification,
+} from '../../services/llm/support/providerErrorClassification';
 
 export type CacheEntry<T> = {
   value: T;
@@ -113,17 +117,20 @@ export function withTimeout(signal: AbortSignal | undefined, timeoutMs: number):
   };
 }
 
+const ABORT_OR_TIMEOUT_PROSE_RE = /\babort(ed|error)?\b|\btime(?:d)?\s*out\b/i;
+
 export function isAbortLikeTransportError(error: unknown): boolean {
-  if (
-    typeof DOMException !== 'undefined' &&
-    error instanceof DOMException &&
-    error.name === 'AbortError'
-  ) {
+  const nativeKind = classifyNativeTransportErrorIdentity(error);
+  if (nativeKind === 'aborted' || nativeKind === 'timeout') {
     return true;
   }
 
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  return /\babort(ed|error)?\b/i.test(message) || /\btime(?:d)?\s*out\b/i.test(message);
+  const matched = ABORT_OR_TIMEOUT_PROSE_RE.test(message);
+  if (matched) {
+    logProseFallbackClassification('web-shared.isAbortLikeTransportError', error, 'aborted');
+  }
+  return matched;
 }
 
 export async function runWithTimeoutRetries<T>(params: {

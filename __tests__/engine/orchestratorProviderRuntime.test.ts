@@ -1,7 +1,9 @@
 import {
   isDirectAnthropicProvider,
   isIncompleteAssistantCompletion,
+  shouldFailoverOnError,
 } from '../../src/engine/orchestratorProviderRuntime';
+import { createProviderRequestError } from '../../src/services/llm/support/providerErrorClassification';
 import type { LlmProviderConfig } from '../../src/types/provider';
 
 function makeProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProviderConfig {
@@ -65,6 +67,33 @@ describe('orchestratorProviderRuntime', () => {
           providerFamily: 'openai',
           baseUrl: 'https://proxy.example.com/v1',
         }),
+      ),
+    ).toBe(false);
+  });
+
+  it('fails over on network and 5xx errors regardless of message language', () => {
+    expect(shouldFailoverOnError(new TypeError('Network request failed'))).toBe(true);
+    expect(
+      shouldFailoverOnError(
+        createProviderRequestError({ providerFamily: 'openai', status: 503, bodyText: '服务不可用' }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldFailoverOnError(
+        createProviderRequestError({ providerFamily: 'openai', status: 429, bodyText: 'zu viele Anfragen' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('does not fail over on 400 or 401 errors', () => {
+    expect(
+      shouldFailoverOnError(
+        createProviderRequestError({ providerFamily: 'openai', status: 400, bodyText: 'bad request' }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldFailoverOnError(
+        createProviderRequestError({ providerFamily: 'openai', status: 401, bodyText: 'unauthorized' }),
       ),
     ).toBe(false);
   });

@@ -17,7 +17,34 @@ export function bindLlmPerformFetchDispatchGuard(
   };
 }
 
-function createAbortError(): Error {
+function isTimeoutAbortReason(reason: unknown): boolean {
+  return (
+    Boolean(reason) &&
+    typeof reason === 'object' &&
+    (reason as { name?: unknown }).name === 'TimeoutError'
+  );
+}
+
+/**
+ * Builds the error thrown when a request is aborted. `signal.reason` — set
+ * by `AbortSignal.timeout()` natively, or by our own fallback in
+ * `createTimeoutSignal` (src/utils/runtime.ts) — is the only thing that may
+ * distinguish a timeout from a caller-initiated cancellation; never guess
+ * from message text. `signal.reason` is not guaranteed to be a real
+ * `Error`/`DOMException` across engines (a caller's own bare
+ * `controller.abort()`, a custom reason object, ...), so its `name` is read
+ * defensively rather than rethrowing the reason itself or relying on
+ * `instanceof`.
+ */
+function createAbortError(reason?: unknown): Error {
+  if (isTimeoutAbortReason(reason)) {
+    const message =
+      reason instanceof Error && reason.message ? reason.message : 'The operation timed out';
+    const error = new Error(message);
+    error.name = 'TimeoutError';
+    return error;
+  }
+
   const error = new Error('Request cancelled');
   error.name = 'AbortError';
   return error;
@@ -31,7 +58,7 @@ async function raceFetchWithAbort(
     return requestPromise;
   }
   if (signal.aborted) {
-    throw createAbortError();
+    throw createAbortError(signal.reason);
   }
 
   let settled = false;
@@ -47,7 +74,7 @@ async function raceFetchWithAbort(
       if (!settled) {
         requestPromise.catch(() => undefined);
       }
-      reject(createAbortError());
+      reject(createAbortError(signal.reason));
     };
     signal.addEventListener('abort', abortHandler, { once: true });
   });

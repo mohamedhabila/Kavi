@@ -9,10 +9,14 @@ import {
   listScheduledLocalNotifications,
   sendLocalNotification,
 } from '../notifications/service';
+import { isPermanentLocalNotificationError } from '../notifications/errors';
 import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import type { CronJob } from '../cron/types';
+import { createLogger } from '../../utils/logger';
 import { flushSchedulerStorePersistenceNow } from './persistence';
 import { useSchedulerStore } from './store';
+
+const logger = createLogger('scheduler.wakeNotifications');
 
 const MIN_WAKE_DELAY_SECONDS = 1;
 const PERMISSION_DENIAL_SUPPRESSION_MS = 60 * 60 * 1000;
@@ -85,8 +89,27 @@ async function buildSchedulerWakeNotificationId(
 }
 
 function shouldSuppressWakeScheduling(error: unknown): boolean {
+  // The permission check is performed by our own `ensurePermissions()` before
+  // scheduling, which throws this typed error — prefer it over guessing from
+  // whatever the underlying notification library's message happens to say.
+  if (isPermanentLocalNotificationError(error)) {
+    return true;
+  }
+
+  // expo-notifications itself only ever throws generic Errors for other
+  // native failures, so there is no further structured signal to read here.
+  // Keep a narrow prose fallback for those (e.g. an OS-level permission
+  // revocation surfaced mid-schedule) and log it so we can see how often it
+  // is still needed.
   const message = error instanceof Error ? error.message : String(error);
-  return message.toLowerCase().includes('permission');
+  const matched = message.toLowerCase().includes('permission');
+  if (matched) {
+    logger.warn(
+      '[shouldSuppressWakeScheduling] classified a wake-scheduling failure from message prose — no structured permission error was thrown',
+      { message },
+    );
+  }
+  return matched;
 }
 
 async function recordWakeWarning(jobId: string, warning: string, timestamp: number): Promise<void> {

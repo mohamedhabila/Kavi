@@ -3,6 +3,7 @@ import { resolveModelOutputTokenBudget } from '../../../context/outputTokenBudge
 import { normalizeUsage } from '../../../usage/tracker';
 import { isPlainRecord, tryParseJson } from '../../core/json';
 import { splitCacheableSystemPromptSections } from '../../core/systemPromptSections';
+import { createProviderRequestError } from '../../support/providerErrorClassification';
 import type {
   ChatCompletionMessage,
   MessageRequestOptions,
@@ -414,11 +415,19 @@ export async function sendAnthropicMessages(args: {
 
     if (!response.ok) {
       const retryErrorText = await response.text().catch(() => response.statusText);
-      throw new Error(`LLM API error ${response.status}: ${retryErrorText}`);
+      throw createProviderRequestError({
+        providerFamily: 'anthropic',
+        status: response.status,
+        bodyText: retryErrorText,
+      });
     }
   } else if (!response.ok) {
     const errorText = await response.text().catch(() => response.statusText);
-    throw new Error(`LLM API error ${response.status}: ${errorText}`);
+    throw createProviderRequestError({
+      providerFamily: 'anthropic',
+      status: response.status,
+      bodyText: errorText,
+    });
   }
 
   if (args.options.stream) {

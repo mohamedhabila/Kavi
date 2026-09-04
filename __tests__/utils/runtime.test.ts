@@ -49,6 +49,21 @@ describe('runtime utils', () => {
     expect(signal.aborted).toBe(true);
   });
 
+  it('gives the fallback timeout signal a structured TimeoutError reason, not a bare abort', () => {
+    jest.useFakeTimers();
+
+    Object.defineProperty(globalThis, 'AbortSignal', {
+      configurable: true,
+      value: undefined,
+    });
+
+    const signal = createTimeoutSignal(100);
+    jest.advanceTimersByTime(100);
+
+    expect(signal.aborted).toBe(true);
+    expect((signal.reason as { name?: unknown })?.name).toBe('TimeoutError');
+  });
+
   it('detects whether the current runtime is Jest', () => {
     runtimeGlobal.jest = undefined;
     delete process.env.JEST_WORKER_ID;

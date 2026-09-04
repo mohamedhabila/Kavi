@@ -6,6 +6,7 @@ import {
   resolveFinalizationMaxTokens,
   resolveSubAgentMaxTokens,
 } from '../services/context/tokenOptimization';
+import { classifyProviderError } from '../services/llm/support/providerErrorClassification';
 
 const MIN_PROVIDER_OVERFLOW_RETRY_MAX_TOKENS = 1024;
 
@@ -21,16 +22,7 @@ export async function hydrateProviderApiKey(
 }
 
 export function shouldFailoverOnError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const statusMatch = message.match(/LLM API error\s+(\d{3})/i);
-  if (statusMatch) {
-    const status = Number(statusMatch[1]);
-    return status === 408 || status === 409 || status === 429 || status >= 500;
-  }
-
-  return /network request failed|failed to fetch|fetch failed|timeout|timed out|econn|enotfound|software caused connection abort|connection (?:aborted|reset|closed|lost)|socket hang up|broken pipe|network connection (?:was )?lost/i.test(
-    message,
-  );
+  return classifyProviderError(error).failoverEligible;
 }
 
 export function isIncompleteAssistantCompletion(completion?: AssistantCompletionMetadata): boolean {

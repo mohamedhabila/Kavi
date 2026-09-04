@@ -3,6 +3,7 @@ import {
   listScheduledLocalNotifications,
   sendLocalNotification,
 } from '../../src/services/notifications/service';
+import { NotificationPermissionDeniedError } from '../../src/services/notifications/errors';
 import { useSchedulerStore } from '../../src/services/scheduler/store';
 import {
   consumeSchedulerJobWake,
@@ -417,6 +418,43 @@ describe('scheduler wake notifications', () => {
     expect(useSchedulerStore.getState().getJob(jobId)).toMatchObject({
       pendingWakeNotificationId: trackedRaceWakeId,
       lastWakeError: expect.stringContaining('cleanup cancellation failed'),
+    });
+    warnSpy.mockRestore();
+  });
+
+  it('suppresses further wake scheduling after a structured notification-permission error', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const now = 1_700_001_900_000;
+    const firstJobId = useSchedulerStore.getState().addJob({
+      name: 'Denied wake',
+      schedule: { kind: 'every', everyMs: 60_000 },
+      prompt: 'wake me',
+    });
+    setJobRuntime(firstJobId, { nextRunAtMs: now + 60_000 });
+    mockSendLocalNotification.mockRejectedValueOnce(new NotificationPermissionDeniedError());
+
+    await syncSchedulerWakeNotifications({ nowMs: now, force: true });
+
+    expect(useSchedulerStore.getState().getJob(firstJobId)).toMatchObject({
+      lastWakeError: expect.stringContaining('Notification permission denied'),
+    });
+    mockSendLocalNotification.mockClear();
+
+    // A second job scheduled moments later, still within the suppression
+    // window, must not even attempt to call the notification service —
+    // the structured permission error suppresses scheduling entirely.
+    const secondJobId = useSchedulerStore.getState().addJob({
+      name: 'Still denied',
+      schedule: { kind: 'every', everyMs: 60_000 },
+      prompt: 'wake me too',
+    });
+    setJobRuntime(secondJobId, { nextRunAtMs: now + 120_000 });
+
+    await syncSchedulerWakeNotifications({ nowMs: now + 1_000, force: true });
+
+    expect(mockSendLocalNotification).not.toHaveBeenCalled();
+    expect(useSchedulerStore.getState().getJob(secondJobId)).toMatchObject({
+      lastWakeError: expect.stringContaining('temporarily suppressed'),
     });
     warnSpy.mockRestore();
   });

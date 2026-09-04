@@ -1,4 +1,5 @@
 import type { ChatCompletionMessage, MessageRequestOptions } from '../../support/contracts';
+import { createProviderRequestError } from '../../support/providerErrorClassification';
 
 export async function sendOpenAIResponses(args: {
   baseUrl: string;
@@ -33,7 +34,11 @@ export async function sendOpenAIResponses(args: {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => response.statusText);
-    throw new Error(`LLM API error ${response.status}: ${errorText}`);
+    throw createProviderRequestError({
+      providerFamily: 'openai',
+      status: response.status,
+      bodyText: errorText,
+    });
   }
 
   if (args.options.stream) {

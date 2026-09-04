@@ -11,6 +11,7 @@ import {
   readResponseText,
   CacheEntry,
   withTimeout,
+  isAbortLikeTransportError,
 } from '../../src/engine/tools/web-shared';
 
 describe('resolveTimeoutSeconds', () => {
@@ -107,6 +108,31 @@ describe('readResponseText', () => {
     const res = { text: jest.fn().mockRejectedValue(new Error('fail')) } as any;
     const result = await readResponseText(res);
     expect(result).toEqual({ text: '', truncated: false, bytesRead: 0 });
+  });
+});
+
+describe('isAbortLikeTransportError', () => {
+  it('recognizes a DOMException AbortError from its name, not its message', () => {
+    const error =
+      typeof DOMException !== 'undefined'
+        ? new DOMException('取消されました', 'AbortError')
+        : Object.assign(new Error('取消されました'), { name: 'AbortError' });
+    expect(isAbortLikeTransportError(error)).toBe(true);
+  });
+
+  it('recognizes a Node ETIMEDOUT error code', () => {
+    const error = Object.assign(new Error('upstream closed'), { code: 'ETIMEDOUT' });
+    expect(isAbortLikeTransportError(error)).toBe(true);
+  });
+
+  it('falls back to prose matching for an abort-shaped message with no structured identity', () => {
+    expect(isAbortLikeTransportError(new Error('the request timed out'))).toBe(true);
+    expect(isAbortLikeTransportError(new Error('operation aborted'))).toBe(true);
+  });
+
+  it('returns false for unrelated errors', () => {
+    expect(isAbortLikeTransportError(new Error('invalid response body'))).toBe(false);
+    expect(isAbortLikeTransportError('not an error')).toBe(false);
   });
 });
 

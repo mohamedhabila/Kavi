@@ -1,5 +1,6 @@
 import type { ChatCompletionMessage, MessageRequestOptions } from '../../support/contracts';
 import { buildDeclaredToolNameSet } from '../../core/toolNameFilter';
+import { createProviderRequestError } from '../../support/providerErrorClassification';
 
 type GeminiImplicitPromptCacheEvent = {
   event: 'provider_managed' | 'skip';
@@ -117,9 +118,17 @@ export async function sendGeminiNative(args: {
       }
 
       const retryErrorText = await response.text().catch(() => response.statusText);
-      throw new Error(`LLM API error ${response.status}: ${retryErrorText}`);
+      throw createProviderRequestError({
+        providerFamily: 'gemini',
+        status: response.status,
+        bodyText: retryErrorText,
+      });
     }
-    throw new Error(`LLM API error ${response.status}: ${errorText}`);
+    throw createProviderRequestError({
+      providerFamily: 'gemini',
+      status: response.status,
+      bodyText: errorText,
+    });
   }
 
   if (args.options.stream) {

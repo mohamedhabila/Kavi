@@ -1,4 +1,8 @@
+import { OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import type { McpServerConfig } from '../../types/remote';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('mcp.oauthErrors');
 
 export type OAuthOperation = 'client registration' | 'token exchange' | 'token refresh';
 
@@ -35,12 +39,35 @@ function shouldSuppressOAuthDetail(value?: string): boolean {
   );
 }
 
-function parseOAuthSdkFailure(error: unknown): {
+interface ParsedOAuthSdkFailure {
   message: string;
   statusCode?: number;
-  rawBody?: string;
+  errorCode?: string;
   detail?: string;
-} {
+  classifiedBy: 'structured' | 'prose_fallback';
+}
+
+/**
+ * The MCP SDK parses a spec-compliant OAuth error response body into a typed
+ * `OAuthError` subclass (`error.errorCode` is the RFC 6749 error code, e.g.
+ * `invalid_client`, `invalid_grant`, `server_error`) — that structured code
+ * is what should drive classification. It only ever falls back to a plain
+ * `Error` with prose like "HTTP 403: Invalid OAuth error response: ...
+ * Raw body: ..." when the server's response wasn't valid OAuth-error JSON in
+ * the first place (an HTML error page, a blank body, ...); the SDK does not
+ * preserve an HTTP status code on the structured path at all, so a status is
+ * only ever available via that prose fallback.
+ */
+function parseOAuthSdkFailure(error: unknown): ParsedOAuthSdkFailure {
+  if (error instanceof OAuthError) {
+    return {
+      message: error.message,
+      errorCode: error.errorCode,
+      detail: trimOAuthDetail(error.message ? `${error.errorCode}: ${error.message}` : error.errorCode),
+      classifiedBy: 'structured',
+    };
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   const statusCode = Number(message.match(/\bHTTP\s+(\d{3})\b/i)?.[1] || '') || undefined;
   const rawBody = trimOAuthDetail(message.match(/Raw body:\s*([\s\S]*)$/i)?.[1]);
@@ -52,12 +79,16 @@ function parseOAuthSdkFailure(error: unknown): {
             ? message
             : undefined,
         );
+  logger.warn(
+    '[parseOAuthSdkFailure] the OAuth SDK failure carried no structured OAuthError — falling back to message prose',
+    { message: message.length > 240 ? `${message.slice(0, 237)}...` : message },
+  );
 
   return {
     message,
     statusCode,
-    rawBody,
     detail,
+    classifiedBy: 'prose_fallback',
   };
 }
 
@@ -86,6 +117,12 @@ function normalizeOAuthOperationError(params: {
 
   const parsed = parseOAuthSdkFailure(params.error);
   const statusSuffix = parsed.statusCode ? ` (HTTP ${parsed.statusCode})` : '';
+  const deniedByErrorCode =
+    parsed.errorCode === 'invalid_client' ||
+    parsed.errorCode === 'unauthorized_client' ||
+    parsed.errorCode === 'access_denied';
+  const unsupportedByErrorCode =
+    parsed.errorCode === 'invalid_client_metadata' || parsed.errorCode === 'unsupported_grant_type';
 
   if (params.operation === 'client registration') {
     if (/does not support dynamic client registration/i.test(parsed.message)) {
@@ -96,9 +133,10 @@ function normalizeOAuthOperationError(params: {
     }
 
     let message = `This server rejected automatic OAuth client registration${statusSuffix}.`;
-    if (parsed.statusCode === 401 || parsed.statusCode === 403) {
+    if (deniedByErrorCode || parsed.statusCode === 401 || parsed.statusCode === 403) {
       message += ' It may only allow pre-registered or allow-listed OAuth clients.';
     } else if (
+      unsupportedByErrorCode ||
       parsed.statusCode === 404 ||
       parsed.statusCode === 405 ||
       parsed.statusCode === 501
@@ -125,6 +163,9 @@ function normalizeOAuthOperationError(params: {
   if (parsed.detail) {
     message += ` Server response: ${parsed.detail}.`;
   } else if (parsed.statusCode === 403) {
+    message += ' The provider refused this client or redirect configuration.';
+  }
+  if (deniedByErrorCode) {
     message += ' The provider refused this client or redirect configuration.';
   }
 
