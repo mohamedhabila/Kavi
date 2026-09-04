@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { runMediaUnderstanding } from '../../src/services/media/service';
+import { i18n } from '../../src/i18n/manager';
 import type { Attachment } from '../../src/types/attachment';
 import type { LlmProviderConfig } from '../../src/types/provider';
 
@@ -24,14 +25,16 @@ jest.mock('../../src/services/voice/voice', () => ({
   transcribeAudio: (...args: any[]) => mockTranscribeAudio(...args),
 }));
 
-const makeProvider = (caps?: Record<string, any>): LlmProviderConfig => ({
+const makeProvider = (
+  overrides: Partial<Pick<LlmProviderConfig, 'model' | 'availableModels' | 'modelCapabilities'>> = {},
+): LlmProviderConfig => ({
   id: 'test',
   name: 'Test Provider',
   baseUrl: 'https://api.test.com/v1',
   apiKey: 'sk-test',
-  model: 'gpt-5.4',
+  model: 'chat-model',
   enabled: true,
-  modelCapabilities: caps,
+  ...overrides,
 });
 
 const makeImageAttachment = (overrides: Partial<Attachment> = {}): Attachment => ({
@@ -55,11 +58,12 @@ const makeAudioAttachment = (overrides: Partial<Attachment> = {}): Attachment =>
   ...overrides,
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   mockSendMessage.mockReset();
   mockTranscribeAudio.mockReset();
   legacyFileSystem.readAsStringAsync.mockReset();
   require('expo-file-system').__resetStore?.();
+  await i18n.setLocale('en');
 });
 
 describe('runMediaUnderstanding', () => {
@@ -67,7 +71,7 @@ describe('runMediaUnderstanding', () => {
     const result = await runMediaUnderstanding('Hello', [makeImageAttachment()], {
       enabled: false,
       provider: makeProvider(),
-      model: 'gpt-5.4',
+      model: 'chat-model',
     });
     expect(result.enrichedBody).toBe('Hello');
     expect(result.processedCount).toBe(0);
@@ -77,94 +81,200 @@ describe('runMediaUnderstanding', () => {
     const result = await runMediaUnderstanding('Hello', [], {
       enabled: true,
       provider: makeProvider(),
-      model: 'gpt-5.4',
+      model: 'chat-model',
     });
     expect(result.enrichedBody).toBe('Hello');
     expect(result.processedCount).toBe(0);
   });
 
-  it('describes images using vision LLM', async () => {
-    const provider = makeProvider({ 'gpt-5.4': { vision: true, tools: true } });
-    mockSendMessage.mockResolvedValue({
-      choices: [{ message: { content: 'A sunset over the ocean.' } }],
-    });
-    legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
+  describe('when the active model already has vision', () => {
+    it('skips the description call entirely and leaves the raw image to the existing vision path', async () => {
+      const provider = makeProvider({
+        modelCapabilities: { 'chat-model': { vision: true, tools: true } },
+      });
 
-    const result = await runMediaUnderstanding('What is this?', [makeImageAttachment()], {
-      enabled: true,
-      provider,
-      model: 'gpt-5.4',
-    });
+      const result = await runMediaUnderstanding('What is this?', [makeImageAttachment()], {
+        enabled: true,
+        provider,
+        model: 'chat-model',
+      });
 
-    expect(result.processedCount).toBe(1);
-    expect(result.enrichedBody).toContain('A sunset over the ocean.');
-    expect(result.enrichedBody).toContain('<media_context>');
-    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(result.processedCount).toBe(0);
+      expect(result.enrichedBody).toBe('What is this?');
+      expect(result.enrichedBody).not.toContain('<media_context>');
+      expect(mockSendMessage).not.toHaveBeenCalled();
+    });
   });
 
-  it('treats image attachments with generic mime types as images when the extension or type says so', async () => {
-    const provider = makeProvider({ 'gpt-5.4': { vision: true, tools: true } });
-    mockSendMessage.mockResolvedValue({
-      choices: [{ message: { content: 'A diagram screenshot.' } }],
-    });
-    legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
+  describe('when the active model lacks vision', () => {
+    it('describes the image using another vision-capable model on the same provider', async () => {
+      const provider = makeProvider({
+        availableModels: ['chat-model', 'vision-model'],
+        modelCapabilities: {
+          'chat-model': { vision: false, tools: true },
+          'vision-model': { vision: true, tools: true },
+        },
+      });
+      mockSendMessage.mockResolvedValue({
+        choices: [{ message: { content: 'A sunset over the ocean.' } }],
+      });
+      legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
 
-    const result = await runMediaUnderstanding(
-      'Describe this',
-      [makeImageAttachment({ name: 'diagram.png', mimeType: 'application/octet-stream' })],
-      { enabled: true, provider, model: 'gpt-5.4' },
-    );
+      const result = await runMediaUnderstanding('What is this?', [makeImageAttachment()], {
+        enabled: true,
+        provider,
+        model: 'chat-model',
+      });
 
-    expect(result.processedCount).toBe(1);
-    expect(result.enrichedBody).toContain('A diagram screenshot.');
-    expect(mockSendMessage).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns error when model has no vision capability', async () => {
-    const provider = makeProvider({ 'gpt-5.4': { vision: false, tools: true } });
-
-    const result = await runMediaUnderstanding('Describe this', [makeImageAttachment()], {
-      enabled: true,
-      provider,
-      model: 'gpt-5.4',
-    });
-
-    expect(result.processedCount).toBe(0);
-    // Body should not have media context since the image failed
-    expect(result.enrichedBody).toBe('Describe this');
-  });
-
-  it('loads image bytes from local storage when inline base64 is absent', async () => {
-    const provider = makeProvider({ 'gpt-5.4': { vision: true } });
-    legacyFileSystem.readAsStringAsync.mockResolvedValue('fromfilebase64');
-    mockSendMessage.mockResolvedValue({
-      choices: [{ message: { content: 'Loaded from file.' } }],
+      expect(result.processedCount).toBe(1);
+      expect(result.enrichedBody).toContain('A sunset over the ocean.');
+      expect(result.enrichedBody).toContain('<media_context>');
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[1]?.model).toBe('vision-model');
     });
 
-    const result = await runMediaUnderstanding(
-      'Check image',
-      [makeImageAttachment({ base64: undefined })],
-      { enabled: true, provider, model: 'gpt-5.4' },
-    );
+    it('prefers the provider default model over an active model when the default has vision', async () => {
+      const provider = makeProvider({
+        model: 'vision-default',
+        availableModels: ['vision-default', 'other-vision-model'],
+        modelCapabilities: {
+          'chat-model': { vision: false, tools: true },
+          'vision-default': { vision: true, tools: true },
+          'other-vision-model': { vision: true, tools: true },
+        },
+      });
+      mockSendMessage.mockResolvedValue({
+        choices: [{ message: { content: 'A mountain range.' } }],
+      });
+      legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
 
-    expect(result.processedCount).toBe(1);
-    expect(mockSendMessage).toHaveBeenCalledTimes(1);
-    expect(mockSendMessage.mock.calls[0]?.[0]?.[0]?.content?.[1]?.image_url?.url).toBe(
-      'data:image/jpeg;base64,fromfilebase64',
-    );
-  });
+      const result = await runMediaUnderstanding('What is this?', [makeImageAttachment()], {
+        enabled: true,
+        provider,
+        model: 'chat-model',
+      });
 
-  it('returns error when image payload is unavailable', async () => {
-    const provider = makeProvider({ 'gpt-5.4': { vision: true } });
-    legacyFileSystem.readAsStringAsync.mockRejectedValue(new Error('missing file'));
+      expect(result.processedCount).toBe(1);
+      expect(mockSendMessage.mock.calls[0]?.[1]?.model).toBe('vision-default');
+    });
 
-    const result = await runMediaUnderstanding(
-      'Check image',
-      [makeImageAttachment({ base64: undefined })],
-      { enabled: true, provider, model: 'gpt-5.4' },
-    );
+    it('treats image attachments with generic mime types as images when the extension or type says so', async () => {
+      const provider = makeProvider({
+        availableModels: ['chat-model', 'vision-model'],
+        modelCapabilities: {
+          'chat-model': { vision: false },
+          'vision-model': { vision: true, tools: true },
+        },
+      });
+      mockSendMessage.mockResolvedValue({
+        choices: [{ message: { content: 'A diagram screenshot.' } }],
+      });
+      legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
 
-    expect(result.processedCount).toBe(0);
+      const result = await runMediaUnderstanding(
+        'Describe this',
+        [makeImageAttachment({ name: 'diagram.png', mimeType: 'application/octet-stream' })],
+        { enabled: true, provider, model: 'chat-model' },
+      );
+
+      expect(result.processedCount).toBe(1);
+      expect(result.enrichedBody).toContain('A diagram screenshot.');
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns no output and skips the call when the provider has no vision-capable model at all', async () => {
+      const provider = makeProvider({
+        availableModels: ['chat-model'],
+        modelCapabilities: { 'chat-model': { vision: false, tools: true } },
+      });
+
+      const result = await runMediaUnderstanding('Describe this', [makeImageAttachment()], {
+        enabled: true,
+        provider,
+        model: 'chat-model',
+      });
+
+      expect(result.processedCount).toBe(0);
+      expect(result.enrichedBody).toBe('Describe this');
+      expect(mockSendMessage).not.toHaveBeenCalled();
+    });
+
+    it('loads image bytes from local storage when inline base64 is absent', async () => {
+      const provider = makeProvider({
+        availableModels: ['chat-model', 'vision-model'],
+        modelCapabilities: { 'chat-model': { vision: false }, 'vision-model': { vision: true } },
+      });
+      legacyFileSystem.readAsStringAsync.mockResolvedValue('fromfilebase64');
+      mockSendMessage.mockResolvedValue({
+        choices: [{ message: { content: 'Loaded from file.' } }],
+      });
+
+      const result = await runMediaUnderstanding(
+        'Check image',
+        [makeImageAttachment({ base64: undefined })],
+        { enabled: true, provider, model: 'chat-model' },
+      );
+
+      expect(result.processedCount).toBe(1);
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]?.[0]?.content?.[1]?.image_url?.url).toBe(
+        'data:image/jpeg;base64,fromfilebase64',
+      );
+    });
+
+    it('returns error when image payload is unavailable', async () => {
+      const provider = makeProvider({
+        availableModels: ['chat-model', 'vision-model'],
+        modelCapabilities: { 'chat-model': { vision: false }, 'vision-model': { vision: true } },
+      });
+      legacyFileSystem.readAsStringAsync.mockRejectedValue(new Error('missing file'));
+
+      const result = await runMediaUnderstanding(
+        'Check image',
+        [makeImageAttachment({ base64: undefined })],
+        { enabled: true, provider, model: 'chat-model' },
+      );
+
+      expect(result.processedCount).toBe(0);
+    });
+
+    it('handles LLM errors gracefully', async () => {
+      const provider = makeProvider({
+        availableModels: ['chat-model', 'vision-model'],
+        modelCapabilities: { 'chat-model': { vision: false }, 'vision-model': { vision: true } },
+      });
+      legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
+      mockSendMessage.mockRejectedValue(new Error('API error'));
+
+      const result = await runMediaUnderstanding('Describe image', [makeImageAttachment()], {
+        enabled: true,
+        provider,
+        model: 'chat-model',
+      });
+
+      expect(result.processedCount).toBe(0);
+    });
+
+    it('asks for the description in the active app language (fr → français)', async () => {
+      await i18n.setLocale('fr');
+      const provider = makeProvider({
+        availableModels: ['chat-model', 'vision-model'],
+        modelCapabilities: { 'chat-model': { vision: false }, 'vision-model': { vision: true } },
+      });
+      mockSendMessage.mockResolvedValue({
+        choices: [{ message: { content: 'Une plage.' } }],
+      });
+      legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
+
+      await runMediaUnderstanding('Décris cette image', [makeImageAttachment()], {
+        enabled: true,
+        provider,
+        model: 'chat-model',
+      });
+
+      const promptText = mockSendMessage.mock.calls[0]?.[0]?.[0]?.content?.[0]?.text as string;
+      expect(promptText).toContain('français');
+    });
   });
 
   it('transcribes audio using Whisper', async () => {
@@ -173,7 +283,7 @@ describe('runMediaUnderstanding', () => {
     const result = await runMediaUnderstanding('What does this say?', [makeAudioAttachment()], {
       enabled: true,
       provider: makeProvider(),
-      model: 'gpt-5.4',
+      model: 'chat-model',
     });
 
     expect(result.processedCount).toBe(1);
@@ -191,7 +301,7 @@ describe('runMediaUnderstanding', () => {
           transcript: 'Ship the production voice-note flow.',
         }),
       ],
-      { enabled: true, provider: makeProvider(), model: 'gpt-5.4' },
+      { enabled: true, provider: makeProvider(), model: 'chat-model' },
     );
 
     expect(result.processedCount).toBe(0);
@@ -207,7 +317,7 @@ describe('runMediaUnderstanding', () => {
           transcript: 'Deploy the hotfix after tests pass.',
         }),
       ],
-      { enabled: true, provider: makeProvider(), model: 'gpt-5.4' },
+      { enabled: true, provider: makeProvider(), model: 'chat-model' },
     );
 
     expect(result.processedCount).toBe(0);
@@ -221,7 +331,7 @@ describe('runMediaUnderstanding', () => {
     const result = await runMediaUnderstanding(
       'Transcribe this',
       [makeAudioAttachment({ name: 'voice.m4a', mimeType: 'application/octet-stream' })],
-      { enabled: true, provider: makeProvider(), model: 'gpt-5.4' },
+      { enabled: true, provider: makeProvider(), model: 'chat-model' },
     );
 
     expect(result.processedCount).toBe(1);
@@ -230,7 +340,10 @@ describe('runMediaUnderstanding', () => {
   });
 
   it('handles mixed image and audio attachments', async () => {
-    const provider = makeProvider({ 'gpt-5.4': { vision: true } });
+    const provider = makeProvider({
+      availableModels: ['chat-model', 'vision-model'],
+      modelCapabilities: { 'chat-model': { vision: false }, 'vision-model': { vision: true } },
+    });
     legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
     mockSendMessage.mockResolvedValue({
       choices: [{ message: { content: 'A cat photo.' } }],
@@ -240,7 +353,7 @@ describe('runMediaUnderstanding', () => {
     const result = await runMediaUnderstanding(
       'Analyze these',
       [makeImageAttachment(), makeAudioAttachment()],
-      { enabled: true, provider, model: 'gpt-5.4' },
+      { enabled: true, provider, model: 'chat-model' },
     );
 
     expect(result.processedCount).toBe(2);
@@ -264,7 +377,7 @@ describe('runMediaUnderstanding', () => {
           size: 128,
         },
       ],
-      { enabled: true, provider: makeProvider(), model: 'gpt-5.4' },
+      { enabled: true, provider: makeProvider(), model: 'chat-model' },
     );
 
     expect(result.processedCount).toBe(1);
@@ -285,26 +398,12 @@ describe('runMediaUnderstanding', () => {
           size: 500,
         },
       ],
-      { enabled: true, provider: makeProvider(), model: 'gpt-5.4' },
+      { enabled: true, provider: makeProvider(), model: 'chat-model' },
     );
 
     expect(result.processedCount).toBe(1);
     expect(result.enrichedBody).toContain('[Document Attachment #1]');
     expect(result.enrichedBody).toContain('Attached PDF: doc.pdf');
-  });
-
-  it('handles LLM errors gracefully', async () => {
-    const provider = makeProvider({ 'gpt-5.4': { vision: true } });
-    legacyFileSystem.readAsStringAsync.mockResolvedValue('abc123base64data');
-    mockSendMessage.mockRejectedValue(new Error('API error'));
-
-    const result = await runMediaUnderstanding('Describe image', [makeImageAttachment()], {
-      enabled: true,
-      provider,
-      model: 'gpt-5.4',
-    });
-
-    expect(result.processedCount).toBe(0);
   });
 
   it('handles transcription errors gracefully', async () => {
@@ -313,7 +412,7 @@ describe('runMediaUnderstanding', () => {
     const result = await runMediaUnderstanding('Transcribe audio', [makeAudioAttachment()], {
       enabled: true,
       provider: makeProvider(),
-      model: 'gpt-5.4',
+      model: 'chat-model',
     });
 
     expect(result.processedCount).toBe(0);

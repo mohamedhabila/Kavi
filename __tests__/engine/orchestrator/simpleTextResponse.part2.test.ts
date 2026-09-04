@@ -97,9 +97,20 @@ describe('Orchestrator', () => {
 
       const callbacks = makeCallbacks();
       callbacks.onUserMessageEnriched = jest.fn();
+      // Image description only runs when the active model cannot see the image itself;
+      // a vision-capable model receives the raw image and no description is produced.
+      // Drive the conversation with a text-only model that has a vision-capable sibling
+      // so the enrichment path (and its use for memory retrieval) is what gets exercised.
       const options: OrchestratorOptions = {
-        provider: makeProvider(),
-        model: 'gpt-5.4',
+        provider: makeProvider({
+          model: 'text-only-model',
+          availableModels: ['text-only-model', 'gpt-5.4'],
+          modelCapabilities: {
+            'text-only-model': { vision: false, tools: true, fileInput: false },
+            'gpt-5.4': { vision: true, tools: true, fileInput: true },
+          },
+        }),
+        model: 'text-only-model',
         conversationId: 'conv-image-memory',
         systemPrompt: 'You are helpful',
         mediaUnderstandingEnabled: true,

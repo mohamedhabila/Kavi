@@ -18,6 +18,8 @@ import {
   isAudioAttachment as isRenderableAudioAttachment,
   isModelVisibleAttachment,
 } from '../../utils/messageAttachments';
+import { i18n } from '../../i18n/manager';
+import { getLocaleLanguageName } from '../../i18n/localeBcp47';
 
 export interface MediaUnderstandingOptions {
   enabled: boolean;
@@ -279,18 +281,53 @@ async function processAttachment(
   return extractDocumentAttachment(attachment, index, mime);
 }
 
+function hasVisionCapability(provider: LlmProviderConfig, model: string): boolean {
+  return provider.modelCapabilities?.[model]?.vision === true;
+}
+
+/**
+ * Pick a vision-capable model on `provider` to describe an image with, given that
+ * `activeModel` (the model actually driving the conversation) lacks vision.
+ *
+ * Prefers the provider's own default model when it has vision, since that's the
+ * model the user picked for this provider; otherwise falls back to the first
+ * other vision-capable model the provider advertises. There's no per-model
+ * pricing data in the provider catalog to rank by actual cost, so "first
+ * advertised" is the best available proxy for "cheapest" here. Returns `null`
+ * when the provider has no vision-capable model at all.
+ */
+function resolveVisionDescriberModel(provider: LlmProviderConfig, activeModel: string): string | null {
+  if (provider.model && provider.model !== activeModel && hasVisionCapability(provider, provider.model)) {
+    return provider.model;
+  }
+
+  const fallback = (provider.availableModels || []).find(
+    (candidate) => candidate !== activeModel && hasVisionCapability(provider, candidate),
+  );
+  return fallback ?? null;
+}
+
 /**
  * Use a vision-capable LLM to describe an image attachment.
+ *
+ * Only runs when the active chat model itself lacks vision: when it has
+ * vision, the raw image already reaches it as an `image_url` content block
+ * (see orchestratorMessageFormatting), so a second, separate description call
+ * would just duplicate the cost and latency for no benefit. Returns `null` in
+ * that case so the attachment is silently left to the existing vision path.
  */
 async function describeImage(
   attachment: Attachment,
   index: number,
   options: MediaUnderstandingOptions,
-): Promise<MediaUnderstandingOutput> {
+): Promise<MediaUnderstandingOutput | null> {
+  if (hasVisionCapability(options.provider, options.model)) {
+    return null;
+  }
+
   try {
-    // Check model has vision capability
-    const caps = options.provider.modelCapabilities?.[options.model];
-    if (!caps?.vision) {
+    const describerModel = resolveVisionDescriberModel(options.provider, options.model);
+    if (!describerModel) {
       return {
         kind: 'image.description',
         attachmentIndex: index,
@@ -314,6 +351,7 @@ async function describeImage(
     }
 
     const llm = new LlmService(options.provider);
+    const languageName = getLocaleLanguageName(i18n.locale);
 
     const messages = [
       {
@@ -321,7 +359,7 @@ async function describeImage(
         content: [
           {
             type: 'text',
-            text: 'Describe this image concisely. Focus on the key content, text visible in the image, and any relevant details. Keep the description under 200 words.',
+            text: `Describe this image concisely. Focus on the key content, text visible in the image, and any relevant details. Keep the description under 200 words. Write the description in ${languageName}.`,
           },
           {
             type: 'image_url',
@@ -334,7 +372,7 @@ async function describeImage(
     ];
 
     const response = await llm.sendMessage(messages, {
-      model: options.model,
+      model: describerModel,
       maxTokens: 512,
       temperature: 0.2,
     });
@@ -346,7 +384,7 @@ async function describeImage(
       attachmentIndex: index,
       text,
       provider: options.provider.name,
-      model: options.model,
+      model: describerModel,
     };
   } catch (err: unknown) {
     return {
