@@ -39,17 +39,25 @@ function resolveImageSize(): string {
 
 /** Parses `bytes` in a child process, failing the test if it does not terminate. */
 function parseUnderTimeout(bytes: Buffer): ParseOutcome {
+  // The image bytes travel over stdin, not argv: Linux caps a single argument at
+  // 128 KiB, so a real asset passed as a base64 argument fails to spawn there
+  // while the same call succeeds on macOS.
   const script = `
     const imageSize = require(${JSON.stringify(resolveImageSize())});
-    const input = new Uint8Array(Buffer.from(process.argv[1], 'base64'));
-    try {
-      process.stdout.write('returned ' + JSON.stringify(imageSize(input)));
-    } catch (error) {
-      process.stdout.write('threw ' + error.message);
-    }
+    const chunks = [];
+    process.stdin.on('data', (chunk) => chunks.push(chunk));
+    process.stdin.on('end', () => {
+      const input = new Uint8Array(Buffer.concat(chunks));
+      try {
+        process.stdout.write('returned ' + JSON.stringify(imageSize(input)));
+      } catch (error) {
+        process.stdout.write('threw ' + error.message);
+      }
+    });
   `;
 
-  const child = spawnSync(process.execPath, ['-e', script, bytes.toString('base64')], {
+  const child = spawnSync(process.execPath, ['-e', script], {
+    input: bytes,
     timeout: parseTimeoutMs,
     encoding: 'utf8',
   });
