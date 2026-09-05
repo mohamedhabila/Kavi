@@ -1,10 +1,6 @@
-async function loadCalendarModule() {
-  try {
-    return await import('expo-calendar');
-  } catch {
-    return null;
-  }
-}
+import { createLogger } from '../../../../utils/logger';
+
+const logger = createLogger('CalendarExecutor');
 
 export type CalendarMutationRuntime = Pick<
   typeof import('expo-calendar'),
@@ -16,6 +12,37 @@ export type CalendarMutationRuntime = Pick<
   | 'updateEventAsync'
   | 'getEventAsync'
 >;
+
+interface LoadedCalendarModule {
+  module: CalendarMutationRuntime | null;
+  error?: string;
+}
+
+async function loadCalendarModule(): Promise<LoadedCalendarModule> {
+  try {
+    const module = (await import('expo-calendar')) as unknown as CalendarMutationRuntime;
+    return { module };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('Failed to load the expo-calendar native module', err);
+    return { module: null, error: message };
+  }
+}
+
+function unavailableCalendarOutcome(loadError: string | undefined): ToolRuntimeOutcome {
+  return failedCalendarOutcome({
+    status: 'unavailable',
+    error: loadError
+      ? `Calendar module not available: ${loadError}`
+      : 'Calendar module not available',
+  });
+}
+
+async function resolveCalendarRuntime(
+  runtime?: CalendarMutationRuntime,
+): Promise<LoadedCalendarModule> {
+  return runtime ? { module: runtime } : loadCalendarModule();
+}
 
 function calendarDateMatches(actual: unknown, expected: Date): boolean {
   const actualDate = actual instanceof Date ? actual : new Date(String(actual));
@@ -61,12 +88,8 @@ function calendarEventMatches(
 }
 
 export async function executeCalendarList(): Promise<ToolRuntimeOutcome> {
-  const Calendar = await loadCalendarModule();
-  if (!Calendar)
-    return failedCalendarOutcome({
-      status: 'unavailable',
-      error: 'Calendar module not available',
-    });
+  const { module: Calendar, error: loadError } = await loadCalendarModule();
+  if (!Calendar) return unavailableCalendarOutcome(loadError);
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
   if (status !== 'granted')
@@ -95,12 +118,8 @@ export async function executeCalendarEvents(
   },
   runtime?: CalendarMutationRuntime,
 ): Promise<ToolRuntimeOutcome> {
-  const Calendar = runtime ?? (await loadCalendarModule());
-  if (!Calendar)
-    return failedCalendarOutcome({
-      status: 'unavailable',
-      error: 'Calendar module not available',
-    });
+  const { module: Calendar, error: loadError } = await resolveCalendarRuntime(runtime);
+  if (!Calendar) return unavailableCalendarOutcome(loadError);
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
   if (status !== 'granted')
@@ -159,12 +178,8 @@ export async function executeCalendarCreate(
   },
   runtime?: CalendarMutationRuntime,
 ): Promise<ToolRuntimeOutcome> {
-  const Calendar = runtime ?? (await loadCalendarModule());
-  if (!Calendar)
-    return failedCalendarOutcome({
-      status: 'unavailable',
-      error: 'Calendar module not available',
-    });
+  const { module: Calendar, error: loadError } = await resolveCalendarRuntime(runtime);
+  if (!Calendar) return unavailableCalendarOutcome(loadError);
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
   if (status !== 'granted')
@@ -276,12 +291,8 @@ export async function executeCalendarUpdate(
   },
   runtime?: CalendarMutationRuntime,
 ): Promise<ToolRuntimeOutcome> {
-  const Calendar = runtime ?? (await loadCalendarModule());
-  if (!Calendar)
-    return failedCalendarOutcome({
-      status: 'unavailable',
-      error: 'Calendar module not available',
-    });
+  const { module: Calendar, error: loadError } = await resolveCalendarRuntime(runtime);
+  if (!Calendar) return unavailableCalendarOutcome(loadError);
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
   if (status !== 'granted')
