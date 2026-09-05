@@ -1,5 +1,6 @@
 import {
   buildRuntimeContextNote,
+  buildRuntimePromptSection,
   buildSystemPromptSections,
   DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT,
   getUserMessagePromptContent,
@@ -74,6 +75,47 @@ describe('orchestratorPromptSections', () => {
     expect(prompt).toContain('re-search only if needed');
     expect(prompt).toContain("Safety: no independent goals beyond the user's request.");
     expect(prompt).not.toContain('## Tool Call Style');
+  });
+
+  it('adds the keyless public-sources note only when web_search is off the tool surface', () => {
+    const unavailable = buildRuntimePromptSection({
+      toolExecutionAvailable: true,
+      webSearchAvailable: false,
+    });
+
+    expect(unavailable).toContain(
+      'For web research, no search provider is configured, so web_search is unavailable',
+    );
+    expect(unavailable).toContain('Keyless web_fetch sources');
+    expect(unavailable).toContain(
+      'https://geocoding-api.open-meteo.com/v1/search?name=',
+    );
+    expect(unavailable).toContain(
+      'https://api.open-meteo.com/v1/forecast?latitude=',
+    );
+    expect(unavailable).toContain('daily=');
+    expect(unavailable).toContain('timezone=auto');
+    expect(unavailable).toContain(
+      'https://<lang>.wikipedia.org/api/rest_v1/page/summary/<title>',
+    );
+    expect(unavailable).toContain('only mention it after a fetch fails');
+
+    const available = buildRuntimePromptSection({
+      toolExecutionAvailable: true,
+      webSearchAvailable: true,
+    });
+    expect(available).not.toContain('Keyless web_fetch sources');
+
+    const unknown = buildRuntimePromptSection({ toolExecutionAvailable: true });
+    expect(unknown).not.toContain('Keyless web_fetch sources');
+
+    // When tool execution itself is unavailable, the search-specific fallback guidance
+    // (and this note with it) is meaningless — no tool call happens on this turn.
+    const noTools = buildRuntimePromptSection({
+      toolExecutionAvailable: false,
+      webSearchAvailable: false,
+    });
+    expect(noTools).not.toContain('Keyless web_fetch sources');
   });
 
   it('keeps graph-owned turns on runtime guidance instead of a second tool-style policy block', () => {

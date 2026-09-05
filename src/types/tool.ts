@@ -6,7 +6,8 @@ export type WebSearchProvider =
   | 'grok'
   | 'kimi'
   | 'anthropic'
-  | 'openai';
+  | 'openai'
+  | 'openrouter';
 
 export interface ModelCapabilities {
   vision: boolean;
@@ -78,4 +79,29 @@ export interface ToolDefinition {
     inputExamples?: Array<Record<string, unknown>>;
     outputSchema?: Record<string, unknown>;
   };
+}
+
+const SECRET_RUNTIME_REQUIREMENT_PREFIX = 'secret:';
+
+/**
+ * Builds the `contract.runtimeRequirements` entry for a tool that can only work once a
+ * named secure-storage secret (an API key or token entered in Settings) is configured.
+ * Resolved by `engine/tools/runtimeAvailability.ts`.
+ *
+ * Lives in this leaf types module — not in `runtimeAvailability.ts` itself — so a
+ * code-owned service skill (`services/integrations/**`) can declare it without a cycle:
+ * those skill files are themselves aggregated into `TOOL_DEFINITIONS`
+ * (`engine/tools/domains/index.ts` -> `codeOwnedServiceTools.ts`), which
+ * `runtimeAvailability.ts` transitively imports, so a skill file importing back from
+ * `runtimeAvailability.ts` would close that cycle.
+ */
+export function secretRuntimeRequirement(secretName: string): string {
+  return `${SECRET_RUNTIME_REQUIREMENT_PREFIX}${secretName}`;
+}
+
+/** Extracts the secret name from a `secretRuntimeRequirement` string, if it is one. */
+export function parseSecretRuntimeRequirement(requirement: string): string | undefined {
+  return requirement.startsWith(SECRET_RUNTIME_REQUIREMENT_PREFIX)
+    ? requirement.slice(SECRET_RUNTIME_REQUIREMENT_PREFIX.length)
+    : undefined;
 }

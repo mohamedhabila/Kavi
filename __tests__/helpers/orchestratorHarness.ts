@@ -138,6 +138,8 @@ jest.mock('../../src/services/agents/registry', () => ({
 }));
 jest.mock('../../src/services/storage/SecureStorage', () => ({
   getProviderApiKey: jest.fn().mockResolvedValue('sk-test'),
+  // Tool runtime availability probes service-skill secrets; the harness has none configured.
+  getSecure: jest.fn().mockResolvedValue(null),
 }));
 
 import { LlmService } from '../../src/services/llm/LlmService';

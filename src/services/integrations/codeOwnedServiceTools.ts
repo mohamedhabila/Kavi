@@ -33,9 +33,14 @@ function defaultEffectFreeContract(skillId: string): NonNullable<ToolDefinition[
 }
 
 function normalizeTool(skillId: string, tool: SkillToolDefinition): SkillToolDefinition {
+  // A tool's own `contract` (e.g. a `runtimeRequirements` gate for a secret it needs)
+  // is merged over the skill's default rather than replacing it outright, so declaring
+  // one field never silently drops the others (category, capabilities, sideEffects, ...).
   return {
     ...tool,
-    contract: tool.contract ?? defaultEffectFreeContract(skillId),
+    contract: tool.contract
+      ? { ...defaultEffectFreeContract(skillId), ...tool.contract }
+      : defaultEffectFreeContract(skillId),
   };
 }
 

@@ -20,7 +20,6 @@ const mockedLlmKeyBacked = hasLlmKeyBackedSearchProvider as jest.MockedFunction<
 function loadFresh(): typeof import('../../../src/services/browser/core/searchProviderReadiness') {
   let mod!: typeof import('../../../src/services/browser/core/searchProviderReadiness');
   jest.isolateModules(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     mod = require('../../../src/services/browser/core/searchProviderReadiness');
   });
   return mod;

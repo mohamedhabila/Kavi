@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../../types/tool';
+import { parseSecretRuntimeRequirement, type ToolDefinition } from '../../types/tool';
 import type { WorkspaceTargetConfig } from '../../types/remote';
 import { getBrowserProviderReadiness } from '../../services/browser/providers/readiness';
 import { getSshTargetReadiness } from '../../services/ssh/connector';
@@ -8,6 +8,10 @@ import {
   supportsWorkspaceBrowserAutomation,
 } from '../../services/workspaces/connector';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('ToolRuntimeAvailability');
+import { getSecure } from '../../services/storage/SecureStorage';
 import {
   isSearchProviderConfiguredSnapshot,
   refreshSearchProviderReadiness,
@@ -21,6 +25,13 @@ export interface RuntimeToolAvailabilityContext {
   hasMobileController: boolean;
   hasWebSearchProvider: boolean;
   hasDeveloperModeEnabled: boolean;
+  /**
+   * Resolves whether a named secure-storage secret (e.g. `OPENWEATHER_API_KEY`) is
+   * currently configured. Backs `secret:<NAME>` runtime requirements so a code-owned
+   * service skill tool that needs a secret is never advertised before that secret is
+   * configured — see `secretRuntimeRequirement` below.
+   */
+  hasConfiguredSecret: (secretName: string) => boolean;
 }
 
 /**
@@ -45,6 +56,11 @@ function isRequirementSatisfied(
   requirement: string,
   context: RuntimeToolAvailabilityContext,
 ): boolean {
+  const secretName = parseSecretRuntimeRequirement(requirement);
+  if (secretName !== undefined) {
+    return context.hasConfiguredSecret(secretName);
+  }
+
   switch (requirement) {
     case RUNTIME_TOOL_REQUIREMENTS.WORKSPACE_TARGETS:
       return context.hasWorkspaceTargets;
@@ -62,6 +78,60 @@ function isRequirementSatisfied(
       // An unrecognized requirement must not silently hide a working tool.
       return true;
   }
+}
+
+/**
+ * Synchronous view of which secure-storage secrets are configured, mirroring
+ * `searchProviderReadiness.ts`'s snapshot: tool-surface selection is synchronous but
+ * secrets live behind an async `getSecure` read, so each secret name is probed once in
+ * the background and the last-settled snapshot is read back immediately. Unknown (not
+ * yet probed) counts as unconfigured — advertising a tool that cannot work costs a
+ * guaranteed failed call, while withholding one briefly costs at most the turns before
+ * the probe settles, and the probe re-fires on every surface build.
+ */
+const configuredSecretSnapshots = new Map<string, boolean>();
+const secretProbesInFlight = new Map<string, Promise<void>>();
+
+function refreshSecretConfiguredSnapshot(secretName: string): Promise<void> {
+  const inFlight = secretProbesInFlight.get(secretName);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  // Start inside a promise chain so a store that throws synchronously (a host without a
+  // usable keychain, or a partial test double) is handled exactly like a rejected probe
+  // instead of crashing the surface build that called us.
+  const probe = Promise.resolve()
+    .then(() => getSecure(secretName))
+    .then((value) => {
+      configuredSecretSnapshots.set(secretName, Boolean((value ?? '').trim()));
+    })
+    .catch((error: unknown) => {
+      // A probe failure is not evidence either way; leave any settled value standing.
+      logger.warn('secret configuration probe failed; tool stays withheld until it succeeds', {
+        secretName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    })
+    .finally(() => {
+      secretProbesInFlight.delete(secretName);
+    });
+  secretProbesInFlight.set(secretName, probe);
+  return probe;
+}
+
+function isSecretConfiguredSnapshot(secretName: string): boolean {
+  return configuredSecretSnapshots.get(secretName) === true;
+}
+
+function hasConfiguredSecret(secretName: string): boolean {
+  void refreshSecretConfiguredSnapshot(secretName);
+  return isSecretConfiguredSnapshot(secretName);
+}
+
+/** Test seam; also lets a settings write invalidate a secret's snapshot immediately. */
+export function setSecretConfiguredSnapshot(secretName: string, configured: boolean): void {
+  configuredSecretSnapshots.set(secretName, configured);
 }
 
 function normalizeWorkspaceTargets(targets?: WorkspaceTargetConfig[]): WorkspaceTargetConfig[] {
@@ -127,6 +197,7 @@ export function getRuntimeToolAvailabilityContext(
     hasMobileController: false,
     hasWebSearchProvider: isSearchProviderConfiguredSnapshot(),
     hasDeveloperModeEnabled: useSettingsStore.getState().developerModeEnabled === true,
+    hasConfiguredSecret,
   };
 }
 

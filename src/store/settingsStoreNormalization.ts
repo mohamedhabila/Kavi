@@ -22,6 +22,7 @@ const VALID_WEB_SEARCH_PROVIDERS: readonly WebSearchProvider[] = [
   'kimi',
   'anthropic',
   'openai',
+  'openrouter',
 ];
 
 export function sanitizeWebSearchProvider(provider: unknown): WebSearchProvider {

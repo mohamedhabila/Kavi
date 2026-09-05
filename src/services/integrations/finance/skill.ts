@@ -1,7 +1,14 @@
 import type { Skill } from '../../skills/types';
+import { secretRuntimeRequirement } from '../../../types/tool';
 import { createApiTool } from '../shared/toolFactory';
 import { fetchCryptoPrice } from './coinGecko';
 import { fetchExchangeRate, fetchLatestStockQuote } from './alphaVantage';
+
+// stock_quote and exchange_rate call Alpha Vantage directly and fail without an API
+// key. crypto_price calls the keyless CoinGecko API and stays unconditional.
+const ALPHA_VANTAGE_CONTRACT = {
+  runtimeRequirements: [secretRuntimeRequirement('ALPHA_VANTAGE_API_KEY')],
+};
 
 export function createFinanceSkill(): Skill {
   return {
@@ -24,6 +31,7 @@ export function createFinanceSkill(): Skill {
         },
         ['symbol'],
         fetchLatestStockQuote,
+        { contract: ALPHA_VANTAGE_CONTRACT },
       ),
       createApiTool(
         'crypto_price',
@@ -56,6 +64,7 @@ export function createFinanceSkill(): Skill {
         },
         ['fromCurrency', 'toCurrency'],
         fetchExchangeRate,
+        { contract: ALPHA_VANTAGE_CONTRACT },
       ),
     ],
   };

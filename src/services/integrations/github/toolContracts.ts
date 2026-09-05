@@ -1,6 +1,10 @@
-import type { ToolDefinition } from '../../../types/tool';
+import { secretRuntimeRequirement, type ToolDefinition } from '../../../types/tool';
 
 type ToolContract = NonNullable<ToolDefinition['contract']>;
+
+// Every GitHub tool calls the GitHub API directly and fails without a token, so each
+// contract's runtimeRequirements below also gates on the secret alongside developer_mode.
+const GITHUB_TOKEN_REQUIREMENT = secretRuntimeRequirement('GITHUB_TOKEN');
 
 const GITHUB_COMMIT_OUTPUT_SCHEMA = {
   type: 'object',
@@ -14,7 +18,7 @@ const GITHUB_COMMIT_OUTPUT_SCHEMA = {
 
 const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
   repos: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['discover'],
     resourceKinds: ['github_repo'],
@@ -25,7 +29,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     workflowStages: ['discover_resource'],
   },
   branches: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['discover', 'read'],
     resourceKinds: ['github_repo', 'github_branch'],
@@ -36,7 +40,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     workflowStages: ['discover_resource', 'inspect_resource'],
   },
   list_files: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['discover', 'read'],
     resourceKinds: ['github_repo'],
@@ -47,7 +51,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     workflowStages: ['discover_resource', 'inspect_resource'],
   },
   read_file: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['read'],
     resourceKinds: ['github_repo'],
@@ -58,7 +62,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     workflowStages: ['inspect_resource'],
   },
   create_branch: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['write'],
     resourceKinds: ['github_repo', 'github_branch'],
@@ -68,7 +72,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     workflowStages: ['mutate_remote_state', 'verify_evidence'],
   },
   commit_files: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['write', 'commit', 'push'],
     resourceKinds: ['github_repo', 'github_branch', 'conversation_workspace'],
@@ -88,7 +92,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     outputSchema: GITHUB_COMMIT_OUTPUT_SCHEMA,
   },
   issues: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['read'],
     resourceKinds: ['github_repo'],
@@ -99,7 +103,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     workflowStages: ['inspect_resource', 'verify_evidence'],
   },
   create_issue: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['write'],
     resourceKinds: ['github_repo'],
@@ -110,7 +114,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     workflowStages: ['mutate_remote_state', 'verify_evidence'],
   },
   create_pull_request: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['write', 'verify'],
     resourceKinds: ['github_repo'],
@@ -119,7 +123,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     providesEvidence: ['verification'],
   },
   workflow_runs: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['monitor', 'verify'],
     resourceKinds: ['github_repo', 'github_workflow'],
@@ -130,7 +134,7 @@ const GITHUB_TOOL_CONTRACTS: Record<string, ToolContract> = {
     workflowStages: ['monitor_external_execution', 'verify_evidence'],
   },
   checks_status: {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['developer_mode', GITHUB_TOKEN_REQUIREMENT],
     category: 'github',
     capabilities: ['monitor', 'verify'],
     resourceKinds: ['github_repo', 'github_workflow'],

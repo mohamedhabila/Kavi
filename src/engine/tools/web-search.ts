@@ -29,6 +29,7 @@ import {
 import { resolveAnthropicSearchTransport } from './webSearchAnthropicTransport';
 import { resolveGeminiSearchTransport } from './webSearchGeminiTransport';
 import { resolveOpenAISearchTransport } from './webSearchOpenAITransport';
+import { resolveOpenRouterSearchTransport } from './webSearchOpenRouterTransport';
 import { searchRemoteWebProvider } from './webSearchRemote';
 
 const SEARCH_RESULTS_PER_QUERY = 5;
@@ -154,13 +155,22 @@ export async function executeWebSearch(
     resolveAnthropicApiKey: async () =>
       (await resolveAnthropicSearchTransport({ context }))?.provider.apiKey,
     resolveOpenAIApiKey: async () => (await resolveOpenAISearchTransport({ context }))?.provider.apiKey,
+    resolveOpenRouterApiKey: async () =>
+      (await resolveOpenRouterSearchTransport({ context }))?.provider.apiKey,
   });
   if (!resolved) {
+    // This is a model-facing tool result, not a user-facing message: it must tell the
+    // model what to do next, not point the user at Settings (that hint already lives in
+    // the UI). web_fetch needs no key and reaches the same keyless public sources named
+    // in the runtime guidance, so it is always the correct next step.
     return failedToolOutcome(
       JSON.stringify({
         error:
-          'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi. ' +
-          'An enabled Anthropic, OpenAI, or Gemini provider also enables search.',
+          'Web search is unavailable: no search provider is configured. Use web_fetch on a public ' +
+          'source instead of asking about setup — for example Open-Meteo for weather/geocoding ' +
+          '(https://geocoding-api.open-meteo.com/v1/search?name=… then ' +
+          'https://api.open-meteo.com/v1/forecast?latitude=…&longitude=…&daily=…&timezone=auto) or ' +
+          'Wikipedia (https://<lang>.wikipedia.org/api/rest_v1/page/summary/<title>).',
       }),
     );
   }

@@ -13,15 +13,16 @@ export const SEARCH_PROVIDERS = [
   'gemini',
   'anthropic',
   'openai',
+  'openrouter',
 ] as const;
 export type SearchProvider = Exclude<WebSearchProvider, 'auto'>;
 
 /**
  * Dedicated secure-storage keys, for providers the user can configure with a search-only
- * API key entered in Settings. `anthropic` and `openai` are deliberately absent — those
- * two are reachable only by reusing an enabled LLM provider's own key (see
- * `resolveSearchProvider`'s `resolveAnthropicApiKey`/`resolveOpenAIApiKey` params), so
- * there is no dedicated key to look up for them.
+ * API key entered in Settings. `anthropic`, `openai`, and `openrouter` are deliberately
+ * absent — those are reachable only by reusing an enabled LLM provider's own key (see
+ * `resolveSearchProvider`'s `resolveAnthropicApiKey`/`resolveOpenAIApiKey`/
+ * `resolveOpenRouterApiKey` params), so there is no dedicated key to look up for them.
  */
 const SEARCH_PROVIDER_KEYS: Partial<Record<SearchProvider, string>> = {
   brave: 'BRAVE_API_KEY',
@@ -74,11 +75,16 @@ export type ResolvedSearchProvider = {
  * LLM provider families that can also serve keyless web search by reusing their own
  * chat/completion API key instead of a dedicated search key.
  */
-const LLM_KEY_BACKED_SEARCH_FAMILIES = new Set<LlmProviderFamily>(['gemini', 'anthropic', 'openai']);
+const LLM_KEY_BACKED_SEARCH_FAMILIES = new Set<LlmProviderFamily>([
+  'gemini',
+  'anthropic',
+  'openai',
+  'openrouter',
+]);
 
 /**
- * Whether any enabled LLM provider (Gemini, Anthropic, or OpenAI) can also serve as a
- * keyless web search provider right now — i.e. it has a resolvable API key, whether
+ * Whether any enabled LLM provider (Gemini, Anthropic, OpenAI, or OpenRouter) can also
+ * serve as a keyless web search provider right now — i.e. it has a resolvable API key, whether
  * stored in secure storage against the provider id or held directly on the provider
  * config. Used by `searchProviderReadiness.ts` to keep the synchronous "is search
  * available" snapshot honest: without this, a user who enabled only, say, an Anthropic
@@ -107,6 +113,7 @@ export async function resolveSearchProvider(params: {
   resolveGeminiApiKey: () => Promise<string | null | undefined>;
   resolveAnthropicApiKey: () => Promise<string | null | undefined>;
   resolveOpenAIApiKey: () => Promise<string | null | undefined>;
+  resolveOpenRouterApiKey: () => Promise<string | null | undefined>;
 }): Promise<ResolvedSearchProvider | null> {
   let resolved: ResolvedSearchProvider | null = null;
   const requestedProvider = resolveConfiguredSearchProvider();
@@ -118,7 +125,9 @@ export async function resolveSearchProvider(params: {
           ? await params.resolveAnthropicApiKey()
           : requestedProvider === 'openai'
             ? await params.resolveOpenAIApiKey()
-            : await getSearchProviderApiKey(requestedProvider);
+            : requestedProvider === 'openrouter'
+              ? await params.resolveOpenRouterApiKey()
+              : await getSearchProviderApiKey(requestedProvider);
     if (apiKey) {
       resolved = { provider: requestedProvider, apiKey };
     }
@@ -146,6 +155,13 @@ export async function resolveSearchProvider(params: {
     const apiKey = await params.resolveOpenAIApiKey();
     if (apiKey) {
       resolved = { provider: 'openai', apiKey };
+    }
+  }
+
+  if (!resolved) {
+    const apiKey = await params.resolveOpenRouterApiKey();
+    if (apiKey) {
+      resolved = { provider: 'openrouter', apiKey };
     }
   }
 

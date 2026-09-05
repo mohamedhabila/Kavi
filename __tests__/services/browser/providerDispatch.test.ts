@@ -16,6 +16,7 @@ function neverResolverSet() {
     resolveGeminiApiKey: async () => undefined,
     resolveAnthropicApiKey: async () => undefined,
     resolveOpenAIApiKey: async () => undefined,
+    resolveOpenRouterApiKey: async () => undefined,
   };
 }
 
@@ -42,16 +43,18 @@ describe('resolveSearchProvider selection order', () => {
       resolveGeminiApiKey: async () => 'gemini-llm-key',
       resolveAnthropicApiKey: async () => 'anthropic-llm-key',
       resolveOpenAIApiKey: async () => 'openai-llm-key',
+      resolveOpenRouterApiKey: async () => 'openrouter-llm-key',
     });
 
     expect(resolved).toEqual({ provider: 'brave', apiKey: 'brave-key' });
   });
 
-  it('falls back to Gemini via the LLM key before Anthropic or OpenAI', async () => {
+  it('falls back to Gemini via the LLM key before Anthropic, OpenAI, or OpenRouter', async () => {
     const resolved = await resolveSearchProvider({
       resolveGeminiApiKey: async () => 'gemini-llm-key',
       resolveAnthropicApiKey: async () => 'anthropic-llm-key',
       resolveOpenAIApiKey: async () => 'openai-llm-key',
+      resolveOpenRouterApiKey: async () => 'openrouter-llm-key',
     });
 
     expect(resolved).toEqual({ provider: 'gemini', apiKey: 'gemini-llm-key' });
@@ -62,18 +65,29 @@ describe('resolveSearchProvider selection order', () => {
       ...neverResolverSet(),
       resolveAnthropicApiKey: async () => 'anthropic-llm-key',
       resolveOpenAIApiKey: async () => 'openai-llm-key',
+      resolveOpenRouterApiKey: async () => 'openrouter-llm-key',
     });
 
     expect(resolved).toEqual({ provider: 'anthropic', apiKey: 'anthropic-llm-key' });
   });
 
-  it('falls back to OpenAI via the LLM key only once Gemini and Anthropic have none', async () => {
+  it('falls back to OpenAI via the LLM key once Gemini and Anthropic have none', async () => {
     const resolved = await resolveSearchProvider({
       ...neverResolverSet(),
       resolveOpenAIApiKey: async () => 'openai-llm-key',
+      resolveOpenRouterApiKey: async () => 'openrouter-llm-key',
     });
 
     expect(resolved).toEqual({ provider: 'openai', apiKey: 'openai-llm-key' });
+  });
+
+  it('falls back to OpenRouter via the LLM key only once Gemini, Anthropic, and OpenAI have none', async () => {
+    const resolved = await resolveSearchProvider({
+      ...neverResolverSet(),
+      resolveOpenRouterApiKey: async () => 'openrouter-llm-key',
+    });
+
+    expect(resolved).toEqual({ provider: 'openrouter', apiKey: 'openrouter-llm-key' });
   });
 
   it('resolves to null when no dedicated key or LLM provider key is available', async () => {
@@ -88,6 +102,7 @@ describe('resolveSearchProvider selection order', () => {
       resolveGeminiApiKey: async () => 'gemini-llm-key',
       resolveAnthropicApiKey: async () => 'anthropic-llm-key',
       resolveOpenAIApiKey: async () => 'openai-llm-key',
+      resolveOpenRouterApiKey: async () => 'openrouter-llm-key',
     });
 
     expect(resolved).toEqual({ provider: 'anthropic', apiKey: 'anthropic-llm-key' });
@@ -100,9 +115,23 @@ describe('resolveSearchProvider selection order', () => {
       resolveGeminiApiKey: async () => 'gemini-llm-key',
       resolveAnthropicApiKey: async () => 'anthropic-llm-key',
       resolveOpenAIApiKey: async () => 'openai-llm-key',
+      resolveOpenRouterApiKey: async () => 'openrouter-llm-key',
     });
 
     expect(resolved).toEqual({ provider: 'openai', apiKey: 'openai-llm-key' });
+  });
+
+  it('routes an explicit "openrouter" pin through resolveOpenRouterApiKey, bypassing the dedicated-key map', async () => {
+    useSettingsStore.setState({ webSearchProvider: 'openrouter' } as any);
+
+    const resolved = await resolveSearchProvider({
+      resolveGeminiApiKey: async () => 'gemini-llm-key',
+      resolveAnthropicApiKey: async () => 'anthropic-llm-key',
+      resolveOpenAIApiKey: async () => 'openai-llm-key',
+      resolveOpenRouterApiKey: async () => 'openrouter-llm-key',
+    });
+
+    expect(resolved).toEqual({ provider: 'openrouter', apiKey: 'openrouter-llm-key' });
   });
 
   it('falls through to auto-detection when the explicitly pinned provider has no key', async () => {
@@ -137,6 +166,24 @@ describe('hasLlmKeyBackedSearchProvider', () => {
     } as any);
 
     await expect(hasLlmKeyBackedSearchProvider()).resolves.toBe(false);
+  });
+
+  it('is true when an enabled OpenRouter provider has a resolvable key', async () => {
+    useSettingsStore.setState({
+      providers: [
+        {
+          id: 'p1',
+          name: 'OpenRouter',
+          enabled: true,
+          providerFamily: 'openrouter',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          apiKey: 'sk-or-test',
+          model: 'openai/gpt-5.4',
+        },
+      ],
+    } as any);
+
+    await expect(hasLlmKeyBackedSearchProvider()).resolves.toBe(true);
   });
 
   it('is true when an enabled Anthropic provider has a resolvable key', async () => {

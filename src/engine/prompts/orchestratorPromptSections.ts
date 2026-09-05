@@ -35,6 +35,20 @@ export const MEMORY_MINIMAL_DISCLOSURE_CONTRACT =
 
 const WEB_SEARCH_TOOL_NAME = 'web_search';
 
+/**
+ * Shown only when web_search is off the turn surface (no provider configured). Without
+ * it, a model with no search tool and an unfamiliar domain (e.g. current weather) had no
+ * code-owned path to a keyless source and told the user the capability needed setup,
+ * even though web_fetch — already on the surface — could reach one directly. Verified
+ * against each provider's own docs on 2026-09-05.
+ */
+const KEYLESS_PUBLIC_SOURCES_GUIDANCE =
+  'Keyless web_fetch sources: weather — Open-Meteo geocoding ' +
+  '(https://geocoding-api.open-meteo.com/v1/search?name=…) then forecast ' +
+  '(https://api.open-meteo.com/v1/forecast?latitude=…&longitude=…&daily=…&timezone=auto); ' +
+  'facts — Wikipedia (https://<lang>.wikipedia.org/api/rest_v1/page/summary/<title>); many sites are ' +
+  'readable directly. Try one before mentioning setup; only mention it after a fetch fails.';
+
 export function formatUtcOffset(offsetMinutesWestOfUtc: number): string {
   const totalMinutes = -offsetMinutesWestOfUtc;
   const sign = totalMinutes >= 0 ? '+' : '-';
@@ -92,6 +106,7 @@ export function buildRuntimePromptSection(options: {
     options.webSearchAvailable === false
       ? 'For web research, no search provider is configured, so web_search is unavailable: reach pages directly with web_fetch. Batch independent fetches and compare sources.'
       : 'For web research, web_search discovers and web_fetch reads. Fetch known URLs directly, batch independent fetches, compare sources, and re-search only if needed.',
+    ...(options.webSearchAvailable === false ? [KEYLESS_PUBLIC_SOURCES_GUIDANCE] : []),
   ].join('\n');
 }
 

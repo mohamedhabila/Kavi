@@ -9,6 +9,7 @@ import { searchGemini } from './web-searchGemini';
 import { searchGrok } from './webSearchGrok';
 import { searchKimi } from './webSearchKimi';
 import { searchOpenAI } from './webSearchOpenAI';
+import { searchOpenRouter } from './webSearchOpenRouter';
 import { searchPerplexity } from './webSearchPerplexity';
 
 export async function searchRemoteWebProvider(params: {
@@ -32,6 +33,7 @@ export async function searchRemoteWebProvider(params: {
       kimi: () => searchKimi(params),
       anthropic: () => searchAnthropic(params),
       openai: () => searchOpenAI(params),
+      openrouter: () => searchOpenRouter(params),
     },
   });
 }

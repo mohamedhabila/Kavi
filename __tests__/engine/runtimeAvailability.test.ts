@@ -1,10 +1,12 @@
 import {
+  getRuntimeToolAvailabilityContext,
   hasBrowserControllableWorkspaceTargets,
   hasDelegableWorkspaceTargets,
   filterRuntimeAvailableToolNames,
   filterToolsByRuntimeAvailability,
   isToolRuntimeAvailable,
   resolveRuntimeExplicitToolSurfaceToolNames,
+  setSecretConfiguredSnapshot,
   type RuntimeToolAvailabilityContext,
 } from '../../src/engine/tools/runtimeAvailability';
 import { resolveToolRuntimeRequirements } from '../../src/engine/tools/toolRuntimeRequirements';
@@ -107,6 +109,7 @@ describe('runtimeAvailability', () => {
       hasMobileController: false,
       hasWebSearchProvider: false,
       hasDeveloperModeEnabled: true,
+      hasConfiguredSecret: () => false,
     });
     const filteredNames = new Set(filtered.map((tool) => tool.name));
 
@@ -131,6 +134,7 @@ describe('runtimeAvailability', () => {
       hasMobileController: false,
       hasWebSearchProvider: false,
       hasDeveloperModeEnabled: true,
+      hasConfiguredSecret: () => false,
     });
 
     expect(filtered.map((tool) => tool.name)).toEqual([
@@ -153,6 +157,7 @@ describe('runtimeAvailability', () => {
       hasMobileController: false,
       hasWebSearchProvider: false,
       hasDeveloperModeEnabled: true,
+      hasConfiguredSecret: () => false,
     });
 
     expect(filtered.map((tool) => tool.name)).toEqual([
@@ -176,6 +181,7 @@ describe('runtimeAvailability', () => {
       hasMobileController: false,
       hasWebSearchProvider: false,
       hasDeveloperModeEnabled: false,
+      hasConfiguredSecret: () => false,
     });
 
     expect(filtered).toEqual([]);
@@ -191,6 +197,7 @@ describe('runtimeAvailability', () => {
         hasMobileController: false,
         hasWebSearchProvider: false,
         hasDeveloperModeEnabled: true,
+        hasConfiguredSecret: () => false,
       },
     );
 
@@ -207,6 +214,7 @@ describe('runtimeAvailability', () => {
         hasMobileController: false,
         hasWebSearchProvider: false,
         hasDeveloperModeEnabled: true,
+        hasConfiguredSecret: () => false,
       },
     );
 
@@ -221,6 +229,7 @@ describe('runtimeAvailability', () => {
       hasMobileController: true,
       hasWebSearchProvider: false,
       hasDeveloperModeEnabled: true,
+      hasConfiguredSecret: () => false,
     });
 
     expect(resolved).toEqual(['request_clarification', 'mobile_ui_action']);
@@ -234,6 +243,7 @@ describe('runtimeAvailability', () => {
       hasMobileController: false,
       hasWebSearchProvider: false,
       hasDeveloperModeEnabled: true,
+      hasConfiguredSecret: () => false,
     });
 
     expect(resolved).toBeUndefined();
@@ -252,6 +262,7 @@ describe('contract-declared runtime requirements', () => {
     hasMobileController: true,
     hasWebSearchProvider: true,
     hasDeveloperModeEnabled: true,
+    hasConfiguredSecret: () => true,
   };
   const UNSATISFIED: RuntimeToolAvailabilityContext = {
     hasWorkspaceTargets: false,
@@ -260,6 +271,7 @@ describe('contract-declared runtime requirements', () => {
     hasMobileController: false,
     hasWebSearchProvider: false,
     hasDeveloperModeEnabled: false,
+    hasConfiguredSecret: () => false,
   };
 
   it('hides web_search when no provider is configured', () => {
@@ -350,5 +362,99 @@ describe('search provider readiness snapshot', () => {
   it('reflects an unconfigured provider once probed', () => {
     setSearchProviderReadinessSnapshot(false);
     expect(isSearchProviderConfiguredSnapshot()).toBe(false);
+  });
+});
+
+describe('secret-gated code-owned service skill tools', () => {
+  // A code-owned service skill that calls a keyed third-party API (OpenWeather, Alpha
+  // Vantage, GitHub) must never be advertised before its secret is configured — the
+  // model otherwise picks it, spends a round-trip on a call that can only fail, and
+  // ends by telling the user the capability "needs setup" for a request a keyless
+  // public source could have answered directly.
+  const BASE: RuntimeToolAvailabilityContext = {
+    hasWorkspaceTargets: false,
+    hasBrowserControllableWorkspaceTargets: false,
+    hasDelegableWorkspaceTargets: false,
+    hasMobileController: false,
+    hasWebSearchProvider: false,
+    hasDeveloperModeEnabled: true,
+    hasConfiguredSecret: () => false,
+  };
+
+  it('hides both weather tools without OPENWEATHER_API_KEY and offers them once it is configured', () => {
+    for (const toolName of ['skill__weather__current', 'skill__weather__forecast']) {
+      expect(resolveToolRuntimeRequirements(toolName)).toEqual(['secret:OPENWEATHER_API_KEY']);
+      expect(isToolRuntimeAvailable(toolName, BASE)).toBe(false);
+      expect(
+        isToolRuntimeAvailable(toolName, {
+          ...BASE,
+          hasConfiguredSecret: (name) => name === 'OPENWEATHER_API_KEY',
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it('hides the keyed finance tools without ALPHA_VANTAGE_API_KEY but leaves crypto_price unconditional', () => {
+    for (const toolName of ['skill__finance__stock_quote', 'skill__finance__exchange_rate']) {
+      expect(resolveToolRuntimeRequirements(toolName)).toEqual(['secret:ALPHA_VANTAGE_API_KEY']);
+      expect(isToolRuntimeAvailable(toolName, BASE)).toBe(false);
+      expect(
+        isToolRuntimeAvailable(toolName, {
+          ...BASE,
+          hasConfiguredSecret: (name) => name === 'ALPHA_VANTAGE_API_KEY',
+        }),
+      ).toBe(true);
+    }
+
+    expect(resolveToolRuntimeRequirements('skill__finance__crypto_price')).toEqual([]);
+    expect(isToolRuntimeAvailable('skill__finance__crypto_price', BASE)).toBe(true);
+  });
+
+  it('hides GitHub tools without GITHUB_TOKEN even with developer mode on', () => {
+    for (const toolName of ['skill__github__repos', 'skill__github__commit_files']) {
+      expect(resolveToolRuntimeRequirements(toolName)).toEqual(
+        expect.arrayContaining(['developer_mode', 'secret:GITHUB_TOKEN']),
+      );
+      expect(isToolRuntimeAvailable(toolName, BASE)).toBe(false);
+      expect(
+        isToolRuntimeAvailable(toolName, {
+          ...BASE,
+          hasConfiguredSecret: (name) => name === 'GITHUB_TOKEN',
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it('leaves keyless service skill tools unconditionally available', () => {
+    for (const toolName of [
+      'skill__productivity__timer',
+      'skill__productivity__unit_convert',
+      'skill__productivity__calculate',
+      'skill__knowledge__wikipedia_summary',
+      'skill__knowledge__define_word',
+      'skill__media__generate_qr',
+    ]) {
+      expect(resolveToolRuntimeRequirements(toolName)).toEqual([]);
+      expect(isToolRuntimeAvailable(toolName, BASE)).toBe(true);
+    }
+  });
+});
+
+describe('hasConfiguredSecret snapshot on the real context', () => {
+  afterEach(() => {
+    setSecretConfiguredSnapshot('OPENWEATHER_API_KEY', false);
+  });
+
+  it('treats an unprobed secret as unconfigured, and reflects a settled snapshot immediately', () => {
+    const context = getRuntimeToolAvailabilityContext();
+
+    // Unknown until probed counts as unavailable — never a false "configured".
+    expect(context.hasConfiguredSecret('KAVI_TEST_UNPROBED_SECRET')).toBe(false);
+
+    setSecretConfiguredSnapshot('OPENWEATHER_API_KEY', true);
+    expect(context.hasConfiguredSecret('OPENWEATHER_API_KEY')).toBe(true);
+
+    setSecretConfiguredSnapshot('OPENWEATHER_API_KEY', false);
+    expect(context.hasConfiguredSecret('OPENWEATHER_API_KEY')).toBe(false);
   });
 });

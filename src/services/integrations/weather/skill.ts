@@ -1,6 +1,14 @@
 import type { Skill } from '../../skills/types';
+import { secretRuntimeRequirement } from '../../../types/tool';
 import { createApiTool } from '../shared/toolFactory';
 import { fetchCurrentWeather, fetchForecast } from './openWeatherClient';
+
+// Both tools call OpenWeather directly and fail without an API key, so each declares
+// the same secret gate — otherwise the tool is advertised, the model calls it, and the
+// call can only fail with "OPENWEATHER_API_KEY not configured".
+const WEATHER_CONTRACT = {
+  runtimeRequirements: [secretRuntimeRequirement('OPENWEATHER_API_KEY')],
+};
 
 export function createWeatherSkill(): Skill {
   return {
@@ -28,6 +36,7 @@ export function createWeatherSkill(): Skill {
         },
         [],
         fetchCurrentWeather,
+        { contract: WEATHER_CONTRACT },
       ),
       createApiTool(
         'forecast',
@@ -47,6 +56,7 @@ export function createWeatherSkill(): Skill {
         },
         [],
         fetchForecast,
+        { contract: WEATHER_CONTRACT },
       ),
     ],
   };
