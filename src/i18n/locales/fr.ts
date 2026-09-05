@@ -182,6 +182,9 @@ export const fr: TranslationMap = mergeTranslations(en, {
       laterThatDay: 'Plus tard ce jour-là · {time}',
       conversationBegan: 'Conversation commencée le {date}',
       continuingLastSpoke: 'Reprise — dernier échange {phrase}',
+      minutesAgo: 'il y a {count} minutes',
+      hoursAgo: 'il y a {count} heures',
+      daysAgo: 'il y a {count} jours',
     },
     logKind: {
       state: 'État',

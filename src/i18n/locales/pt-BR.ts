@@ -175,6 +175,9 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       laterThatDay: 'Mais tarde no mesmo dia · {time}',
       conversationBegan: 'Conversa iniciada em {date}',
       continuingLastSpoke: 'Continuando — última conversa {phrase}',
+      minutesAgo: 'há {count} minutos',
+      hoursAgo: 'há {count} horas',
+      daysAgo: 'há {count} dias',
     },
     logKind: {
       state: 'Estado',

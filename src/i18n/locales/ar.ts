@@ -176,6 +176,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
       laterThatDay: 'لاحقًا في اليوم نفسه · {time}',
       conversationBegan: 'بدأت المحادثة في {date}',
       continuingLastSpoke: 'متابعة — آخر حديث {phrase}',
+      minutesAgo: 'قبل {count} دقيقة',
+      hoursAgo: 'قبل {count} ساعة',
+      daysAgo: 'قبل {count} يوم',
     },
     logKind: {
       state: 'الحالة',

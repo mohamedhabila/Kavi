@@ -174,6 +174,9 @@ export const de: TranslationMap = mergeTranslations(en, {
       laterThatDay: 'Später am selben Tag · {time}',
       conversationBegan: 'Unterhaltung begann am {date}',
       continuingLastSpoke: "Weiter geht's — zuletzt gesprochen {phrase}",
+      minutesAgo: 'vor {count} Minuten',
+      hoursAgo: 'vor {count} Stunden',
+      daysAgo: 'vor {count} Tagen',
     },
     logKind: {
       state: 'Status',

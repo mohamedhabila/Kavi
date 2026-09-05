@@ -179,6 +179,9 @@ export const es: TranslationMap = mergeTranslations(en, {
       laterThatDay: 'Más tarde ese día · {time}',
       conversationBegan: 'La conversación comenzó el {date}',
       continuingLastSpoke: 'Continuando — última conversación {phrase}',
+      minutesAgo: 'hace {count} minutos',
+      hoursAgo: 'hace {count} horas',
+      daysAgo: 'hace {count} días',
     },
     logKind: {
       state: 'Estado',

@@ -176,6 +176,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
       laterThatDay: '同日の後刻 · {time}',
       conversationBegan: '会話開始日: {date}',
       continuingLastSpoke: '再開 — 最後の会話{phrase}',
+      minutesAgo: '{count}分前',
+      hoursAgo: '{count}時間前',
+      daysAgo: '{count}日前',
     },
     logKind: {
       state: '状態',

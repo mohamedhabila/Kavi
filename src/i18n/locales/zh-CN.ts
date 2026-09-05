@@ -175,6 +175,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       laterThatDay: '当天稍晚 · {time}',
       conversationBegan: '对话开始于 {date}',
       continuingLastSpoke: '继续对话 — 上次交流{phrase}',
+      minutesAgo: '{count}分钟前',
+      hoursAgo: '{count}小时前',
+      daysAgo: '{count}天前',
     },
     logKind: {
       state: '状态',

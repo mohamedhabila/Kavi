@@ -179,6 +179,9 @@ export const en: TranslationMap = {
       laterThatDay: 'Later that day · {time}',
       conversationBegan: 'Conversation began {date}',
       continuingLastSpoke: 'Continuing — last spoke {phrase}',
+      minutesAgo: '{count} minutes ago',
+      hoursAgo: '{count} hours ago',
+      daysAgo: '{count} days ago',
     },
     logKind: {
       state: 'State',

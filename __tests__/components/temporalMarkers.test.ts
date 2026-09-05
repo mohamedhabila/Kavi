@@ -152,3 +152,32 @@ describe('computeTemporalMarkers', () => {
     expect(markers[0].kind).toBe('thread-start');
   });
 });
+
+describe('computeTemporalMarkers without Intl.RelativeTimeFormat', () => {
+  // Hermes on Android does not ship Intl.RelativeTimeFormat, and the markers render inside
+  // the chat screen, so the missing constructor must degrade to translated unit strings
+  // instead of throwing on the first screen a user sees.
+  const intl = Intl as { RelativeTimeFormat?: typeof Intl.RelativeTimeFormat };
+  let original: typeof Intl.RelativeTimeFormat | undefined;
+
+  beforeEach(() => {
+    original = intl.RelativeTimeFormat;
+    delete intl.RelativeTimeFormat;
+  });
+
+  afterEach(() => {
+    if (original) intl.RelativeTimeFormat = original;
+  });
+
+  it('falls back to localized unit strings for the cold-start cue', () => {
+    const now = ts('2026-05-01T18:00:00');
+    const markers = computeTemporalMarkers([msg('m1', 'user', ts('2026-05-01T12:00:00'))], {
+      now,
+      locale: 'en-US',
+      coldStartGapMs: 6 * 3_600_000,
+    });
+    const cue = markers.find((marker: TemporalMarker) => marker.kind === 'cold-start-cue');
+    expect(cue?.text).toContain(i18n.t('chat.temporal.hoursAgo', { count: 6 }));
+    expect(cue?.text).not.toMatch(/undefined|NaN/);
+  });
+});

@@ -96,17 +96,44 @@ function formatTime(ts: number, locale: string): string {
   }).format(new Date(ts));
 }
 
-/** Localized "N units ago" phrase for the gap, via Intl.RelativeTimeFormat. */
-function formatRelativeGapPhrase(gapMs: number, locale: string): string {
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'always', style: 'long' });
+type RelativeGap = { unit: 'minute' | 'hour' | 'day'; count: number };
+
+function resolveRelativeGap(gapMs: number): RelativeGap {
   const hours = Math.round(gapMs / 3_600_000);
   if (hours < 1) {
-    const minutes = Math.max(1, Math.round(gapMs / 60_000));
-    return rtf.format(-minutes, 'minute');
+    return { unit: 'minute', count: Math.max(1, Math.round(gapMs / 60_000)) };
   }
-  if (hours < 24) return rtf.format(-hours, 'hour');
-  const days = Math.max(1, Math.round(gapMs / 86_400_000));
-  return rtf.format(-days, 'day');
+  if (hours < 24) return { unit: 'hour', count: hours };
+  return { unit: 'day', count: Math.max(1, Math.round(gapMs / 86_400_000)) };
+}
+
+const RELATIVE_GAP_FALLBACK_KEYS: Record<RelativeGap['unit'], string> = {
+  minute: 'chat.temporal.minutesAgo',
+  hour: 'chat.temporal.hoursAgo',
+  day: 'chat.temporal.daysAgo',
+};
+
+/**
+ * Localized "N units ago" phrase for the gap. `Intl.RelativeTimeFormat` gives the
+ * best grammar where the engine ships it, but Hermes on Android does not, and this
+ * runs inside the chat screen's render, so the absence must degrade to translated
+ * unit strings rather than throw.
+ */
+function formatRelativeGapPhrase(gapMs: number, locale: string): string {
+  const gap = resolveRelativeGap(gapMs);
+  const RelativeTimeFormat = (Intl as { RelativeTimeFormat?: typeof Intl.RelativeTimeFormat })
+    .RelativeTimeFormat;
+  if (typeof RelativeTimeFormat === 'function') {
+    try {
+      return new RelativeTimeFormat(locale, { numeric: 'always', style: 'long' }).format(
+        -gap.count,
+        gap.unit,
+      );
+    } catch {
+      // Constructor present but unusable for this locale (missing ICU data); fall through.
+    }
+  }
+  return i18n.t(RELATIVE_GAP_FALLBACK_KEYS[gap.unit], { count: gap.count });
 }
 
 export function computeTemporalMarkers(
