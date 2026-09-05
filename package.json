@@ -280,6 +280,10 @@
         "lines": 84.3,
         "statements": 83.8
       }
-    }
+    },
+    "reporters": [
+      "default",
+      "github-actions"
+    ]
   }
 }
