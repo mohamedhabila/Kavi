@@ -35,4 +35,15 @@ jobs:
         run: npm ci
 
       - name: Run contributor verification gate
-        run: npm run verify
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run verify 2>&1 | tee verify.log
+
+      - name: Annotate failing suites
+        # Job logs need repository auth to read; check-run annotations do not.
+        # Surface the failing Jest suites and tests so a red check names its
+        # cause on the run page and through the API for every contributor.
+        if: failure()
+        shell: bash
+        run: node scripts/ci/annotate-verify-failures.js verify.log

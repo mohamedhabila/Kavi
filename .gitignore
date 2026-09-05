@@ -40,3 +40,4 @@ ios/.xcode.env.local
 android/keystore.properties
 **/keystore.properties
 Kavi-simulator.app
+verify.log
