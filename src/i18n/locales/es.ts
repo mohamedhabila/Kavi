@@ -170,6 +170,7 @@ export const es: TranslationMap = mergeTranslations(en, {
     responseInterruptedByAppRestartBeforeStart:
       'La respuesta se interrumpió porque la aplicación se reinició antes de que pudiera comenzar a generarse. Vuelve a intentarlo cuando estés listo.',
     responseStoppedBeforeGenerated: 'Detenido antes de generar una respuesta.',
+    memoryHandoffNotReady: 'La memoria de la conversación anterior aún no está lista. Vuelve a intentarlo o repite el detalle que necesitas.',
     responseStoppedBeforeGenerationTitle: 'Respuesta detenida antes de generarse',
     responseInterruptedByAppRestartTitle: 'Respuesta interrumpida por el reinicio de la aplicación',
     responseInterruptedBeforeGenerationTitle: 'Respuesta interrumpida antes de generarse',

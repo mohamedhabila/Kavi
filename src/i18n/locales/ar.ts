@@ -167,6 +167,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     responseInterruptedByAppRestartBeforeStart:
       'تم إيقاف الرد بسبب إعادة تشغيل التطبيق قبل أن يبدأ التوليد. يُرجى إعادة المحاولة عندما تكون مستعدًا.',
     responseStoppedBeforeGenerated: 'تم الإيقاف قبل توليد أي رد.',
+    memoryHandoffNotReady: 'ذاكرة المحادثة السابقة ليست جاهزة بعد. يُرجى إعادة المحاولة أو إعادة ذكر التفصيل الذي تحتاجه.',
     responseStoppedBeforeGenerationTitle: 'تم إيقاف الرد قبل التوليد',
     responseInterruptedByAppRestartTitle: 'تم إيقاف الرد بسبب إعادة تشغيل التطبيق',
     responseInterruptedBeforeGenerationTitle: 'تم مقاطعة الرد قبل التوليد',

@@ -165,6 +165,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     responseInterruptedByAppRestartBeforeStart:
       'Die Antwort wurde unterbrochen, weil die App neu gestartet wurde, bevor die Erstellung beginnen konnte. Bitte versuche es erneut, wenn du bereit bist.',
     responseStoppedBeforeGenerated: 'Gestoppt, bevor eine Antwort erstellt wurde.',
+    memoryHandoffNotReady: 'Das Gedächtnis aus dem vorherigen Gespräch ist noch nicht bereit. Bitte erneut versuchen oder das benötigte Detail noch einmal nennen.',
     responseStoppedBeforeGenerationTitle: 'Antwort vor der Erstellung gestoppt',
     responseInterruptedByAppRestartTitle: 'Antwort durch App-Neustart unterbrochen',
     responseInterruptedBeforeGenerationTitle: 'Antwort vor der Erstellung unterbrochen',

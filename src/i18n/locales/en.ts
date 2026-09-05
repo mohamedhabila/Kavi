@@ -170,6 +170,7 @@ export const en: TranslationMap = {
     responseInterruptedByAppRestartBeforeStart:
       'Response interrupted when the app restarted before generation could start. Please retry when you are ready.',
     responseStoppedBeforeGenerated: 'Stopped before a response was generated.',
+    memoryHandoffNotReady: 'Memory from the previous conversation is not ready yet. Please retry, or restate the detail you need.',
     responseStoppedBeforeGenerationTitle: 'Response stopped before generation',
     responseInterruptedByAppRestartTitle: 'Response interrupted by app restart',
     responseInterruptedBeforeGenerationTitle: 'Response interrupted before generation',

@@ -173,6 +173,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
     responseInterruptedByAppRestartBeforeStart:
       "La réponse a été interrompue car l'application a redémarré avant que la génération ne puisse commencer. Réessayez quand vous serez prêt.",
     responseStoppedBeforeGenerated: "Arrêté avant qu'une réponse ne soit générée.",
+    memoryHandoffNotReady: 'La mémoire de la conversation précédente n\'est pas encore prête. Réessayez ou reformulez le détail dont vous avez besoin.',
     responseStoppedBeforeGenerationTitle: 'Réponse arrêtée avant la génération',
     responseInterruptedByAppRestartTitle: "Réponse interrompue par le redémarrage de l'application",
     responseInterruptedBeforeGenerationTitle: 'Réponse interrompue avant la génération',

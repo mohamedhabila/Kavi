@@ -167,6 +167,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     responseInterruptedByAppRestartBeforeStart:
       '生成が始まる前にアプリが再起動したため、応答が中断されました。準備ができたら再試行してください。',
     responseStoppedBeforeGenerated: '応答が生成される前に停止しました。',
+    memoryHandoffNotReady: '前の会話のメモリーがまだ準備できていません。もう一度お試しいただくか、必要な内容を改めてお伝えください。',
     responseStoppedBeforeGenerationTitle: '生成前に応答を停止しました',
     responseInterruptedByAppRestartTitle: 'アプリの再起動により応答が中断されました',
     responseInterruptedBeforeGenerationTitle: '生成前に応答が中断されました',

@@ -166,6 +166,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     responseInterruptedByAppRestartBeforeStart:
       '由於應用程式在產生開始前重新啟動，回應被中斷。請在準備好後重試。',
     responseStoppedBeforeGenerated: '在產生回應之前已停止。',
+    memoryHandoffNotReady: '上一段對話的記憶尚未準備好。請重試，或重新說明你需要的細節。',
     responseStoppedBeforeGenerationTitle: '回應在產生前已停止',
     responseInterruptedByAppRestartTitle: '回應因應用程式重新啟動而中斷',
     responseInterruptedBeforeGenerationTitle: '回應在產生前被中斷',
