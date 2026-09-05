@@ -13,6 +13,7 @@ import {
 import {
   parseReminderWhen,
   resolveReminderTimezone,
+  type ReminderRepairFields,
 } from '../../../../services/scheduler/reminders/input';
 import { formatZonedIso } from '../../../../services/scheduler/reminders/format';
 import type { ReminderRecord } from '../../../../services/scheduler/reminders/types';
@@ -28,6 +29,11 @@ function rejectedOutcome(
   extra?: Readonly<Record<string, unknown>>,
 ): ToolRuntimeOutcome {
   return failedToolOutcome(JSON.stringify({ status: 'rejected', code, error, ...extra }));
+}
+
+/** Builds a truthful repair payload: only fields genuinely absent go under missingFields. */
+function repairFor(fields: ReminderRepairFields): { retryable: true } & ReminderRepairFields {
+  return { retryable: true, missingFields: fields.missingFields, invalidFields: fields.invalidFields };
 }
 
 function reminderErrorOutcome(error: unknown): ToolRuntimeOutcome {
@@ -68,13 +74,13 @@ async function handleCreate(args: Record<string, unknown>): Promise<ToolRuntimeO
   const whenResult = parseReminderWhen(args.when);
   if (!whenResult.ok) {
     return rejectedOutcome('reminder_when_invalid', whenResult.error, {
-      repair: { retryable: true, missingFields: whenResult.missingFields },
+      repair: repairFor(whenResult),
     });
   }
   const tzResult = resolveReminderTimezone(args.timezone);
   if (!tzResult.ok) {
     return rejectedOutcome('reminder_timezone_invalid', tzResult.error, {
-      repair: { retryable: true, missingFields: tzResult.missingFields },
+      repair: repairFor(tzResult),
     });
   }
   const notes = typeof args.notes === 'string' && args.notes.trim() ? args.notes.trim() : undefined;
@@ -126,7 +132,7 @@ async function handleUpdate(args: Record<string, unknown>): Promise<ToolRuntimeO
     const whenResult = parseReminderWhen(args.when);
     if (!whenResult.ok) {
       return rejectedOutcome('reminder_when_invalid', whenResult.error, {
-        repair: { retryable: true, missingFields: whenResult.missingFields },
+        repair: repairFor(whenResult),
       });
     }
     updates.recurrence = whenResult.recurrence;
@@ -135,7 +141,7 @@ async function handleUpdate(args: Record<string, unknown>): Promise<ToolRuntimeO
     const tzResult = resolveReminderTimezone(args.timezone);
     if (!tzResult.ok) {
       return rejectedOutcome('reminder_timezone_invalid', tzResult.error, {
-        repair: { retryable: true, missingFields: tzResult.missingFields },
+        repair: repairFor(tzResult),
       });
     }
     updates.timezone = tzResult.timezone;

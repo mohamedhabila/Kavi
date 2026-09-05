@@ -11,7 +11,9 @@ export const REMINDER_TOOL: ToolDefinition = {
     'weekday at 9am to check standup notes", "remind me on the 1st of each month to pay rent"). Use ' +
     'the cron tool instead for an automated assistant task that should run a prompt on a schedule. ' +
     'This tool never parses natural language: resolve relative phrases like "tomorrow" or "in an ' +
-    'hour" to an explicit ISO-8601 date-time or 24-hour "HH:MM" yourself before calling. ' +
+    'hour" to an explicit ISO-8601 date-time or 24-hour "HH:MM" yourself before calling. For kind ' +
+    '"once", prefer an offset-less local date-time in "when.at" plus an IANA "timezone" over ' +
+    'computing a UTC offset yourself. ' +
     'The "list" action is read-only and returns all pending reminders sorted by next fire time; ' +
     'create, update, and cancel change device state and ask the user to confirm first.',
   input_schema: {
@@ -48,8 +50,12 @@ export const REMINDER_TOOL: ToolDefinition = {
           at: {
             type: 'string',
             description:
-              'ISO-8601 date-time with an explicit UTC offset or "Z" (e.g. "2026-09-10T14:00:00-04:00"). ' +
-              'Required when kind is "once".',
+              'ISO-8601 date-time. Required when kind is "once". Preferred form: an offset-less local ' +
+              'date-time paired with "timezone" (e.g. "2026-09-10T14:00:00" with timezone ' +
+              '"Europe/Amsterdam") — it is resolved against that IANA zone, DST-corrected. An explicit ' +
+              'UTC offset or "Z" (e.g. "2026-09-10T14:00:00-04:00") also works and names an absolute ' +
+              'instant independent of "timezone". A local time that falls in a DST spring-forward gap ' +
+              'is shifted forward to the first valid instant, the same way calendar apps handle it.',
           },
           time: {
             type: 'string',
@@ -72,7 +78,9 @@ export const REMINDER_TOOL: ToolDefinition = {
       },
       timezone: {
         type: 'string',
-        description: 'IANA time zone, e.g. "Europe/Berlin". Defaults to the device time zone.',
+        description:
+          'IANA time zone, e.g. "Europe/Berlin". Defaults to the device time zone. Also the zone an ' +
+          'offset-less "when.at" is resolved against for kind "once".',
       },
     },
     required: ['action'],

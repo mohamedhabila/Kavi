@@ -6,7 +6,11 @@
 // native trigger, so delivery does not depend on the app being foregrounded.
 
 /**
- * `at` is an ISO-8601 date-time carrying an explicit UTC offset (or `Z`).
+ * `at` is an ISO-8601 date-time, either carrying an explicit UTC offset (or
+ * `Z`) — in which case it names an absolute instant independent of
+ * `timezone` — or offset-less (e.g. "2026-09-10T14:00:00"), in which case it
+ * is a local wall-clock time resolved against `timezone` (DST-correct; see
+ * recurrence.ts's resolveOnceSchedule / zonedTime.ts).
  * `time` is a 24-hour `HH:MM` wall-clock time evaluated in `timezone`.
  * `weekday` is ISO-8601 (1=Monday .. 7=Sunday). `dayOfMonth` is 1-31; months
  * shorter than the requested day are skipped, matching standard cron semantics.

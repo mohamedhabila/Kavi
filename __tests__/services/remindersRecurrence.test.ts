@@ -49,6 +49,54 @@ describe('computeReminderNextFireAtMs', () => {
     expect(next).toBeUndefined();
   });
 
+  it('once: resolves an offset-less local "at" against "timezone" (Europe/Amsterdam, CEST)', () => {
+    const recurrence: ReminderRecurrence = { kind: 'once', at: '2026-09-06T09:00:00' };
+    const nowMs = Date.parse('2026-09-01T00:00:00Z');
+    const next = computeReminderNextFireAtMs(recurrence, 'Europe/Amsterdam', nowMs);
+    // 2026-09-06 is well clear of any DST transition: CEST is UTC+2.
+    expect(next).toBe(Date.parse('2026-09-06T07:00:00Z'));
+  });
+
+  it('once: resolves an offset-less local "at" against "timezone" (America/New_York, EDT)', () => {
+    const recurrence: ReminderRecurrence = { kind: 'once', at: '2026-09-06T09:00:00' };
+    const nowMs = Date.parse('2026-09-01T00:00:00Z');
+    const next = computeReminderNextFireAtMs(recurrence, 'America/New_York', nowMs);
+    expect(next).toBe(Date.parse('2026-09-06T13:00:00Z'));
+  });
+
+  it('once: resolves an offset-less local "at" on the far side of a DST spring-forward in Europe/Amsterdam', () => {
+    // DST begins 2026-03-29 at 02:00 CET -> 03:00 CEST; 09:00 local that day is already CEST.
+    const recurrence: ReminderRecurrence = { kind: 'once', at: '2026-03-29T09:00:00' };
+    const nowMs = Date.parse('2026-03-01T00:00:00Z');
+    const next = computeReminderNextFireAtMs(recurrence, 'Europe/Amsterdam', nowMs);
+    expect(next).toBe(Date.parse('2026-03-29T07:00:00Z'));
+  });
+
+  it('once: resolves an offset-less local "at" on the far side of a DST fall-back in America/New_York', () => {
+    // DST ends 2026-11-01 at 02:00 EDT -> 01:00 EST; 09:00 local that day is already back to EST.
+    const recurrence: ReminderRecurrence = { kind: 'once', at: '2026-11-01T09:00:00' };
+    const nowMs = Date.parse('2026-10-01T00:00:00Z');
+    const next = computeReminderNextFireAtMs(recurrence, 'America/New_York', nowMs);
+    expect(next).toBe(Date.parse('2026-11-01T14:00:00Z'));
+  });
+
+  it('once: shifts an offset-less local "at" inside a DST spring-forward gap forward (Europe/Amsterdam)', () => {
+    // 02:30 local on 2026-03-29 does not exist (clocks jump 02:00 -> 03:00 CEST).
+    const recurrence: ReminderRecurrence = { kind: 'once', at: '2026-03-29T02:30:00' };
+    const nowMs = Date.parse('2026-03-01T00:00:00Z');
+    const next = computeReminderNextFireAtMs(recurrence, 'Europe/Amsterdam', nowMs);
+    // Shifted forward past the gap: local reads 03:30 CEST (UTC+2).
+    expect(next).toBe(Date.parse('2026-03-29T01:30:00Z'));
+  });
+
+  it('once: an "at" carrying an explicit offset is unaffected by "timezone"', () => {
+    const recurrence: ReminderRecurrence = { kind: 'once', at: '2026-09-06T09:00:00+02:00' };
+    const nowMs = Date.parse('2026-09-01T00:00:00Z');
+    // A different IANA zone must not change the resolved instant.
+    const next = computeReminderNextFireAtMs(recurrence, 'America/New_York', nowMs);
+    expect(next).toBe(Date.parse('2026-09-06T07:00:00Z'));
+  });
+
   it('daily: computes the next occurrence at the given time', () => {
     const recurrence: ReminderRecurrence = { kind: 'daily', time: '09:00' };
     const nowMs = Date.parse('2026-06-01T00:00:00Z');

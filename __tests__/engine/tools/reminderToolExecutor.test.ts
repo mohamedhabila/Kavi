@@ -58,10 +58,25 @@ describe('executeReminderTool: create', () => {
       when: { kind: 'monthly', time: '09:00' },
     });
     expect(result.status).toBe('failed');
-    expect(parse(result.content).code).toBe('reminder_when_invalid');
+    const parsed = parse(result.content);
+    expect(parsed.code).toBe('reminder_when_invalid');
+    // dayOfMonth was genuinely absent: truthfully "missing", not "invalid".
+    expect(parsed.repair).toEqual({ retryable: true, missingFields: ['when.dayOfMonth'], invalidFields: [] });
   });
 
-  it('rejects an invalid timezone', async () => {
+  it('rejects an unparsable "when.at" as invalid, not missing', async () => {
+    const result = await executeReminderTool({
+      action: 'create',
+      title: 'x',
+      when: { kind: 'once', at: 'not a date' },
+    });
+    expect(result.status).toBe('failed');
+    const parsed = parse(result.content);
+    expect(parsed.code).toBe('reminder_when_invalid');
+    expect(parsed.repair).toEqual({ retryable: true, missingFields: [], invalidFields: ['when.at'] });
+  });
+
+  it('rejects an invalid timezone as invalid, not missing (it was supplied, just unrecognized)', async () => {
     const result = await executeReminderTool({
       action: 'create',
       title: 'x',
@@ -69,7 +84,29 @@ describe('executeReminderTool: create', () => {
       timezone: 'Not/AZone',
     });
     expect(result.status).toBe('failed');
-    expect(parse(result.content).code).toBe('reminder_timezone_invalid');
+    const parsed = parse(result.content);
+    expect(parsed.code).toBe('reminder_timezone_invalid');
+    expect(parsed.repair).toEqual({ retryable: true, missingFields: [], invalidFields: ['timezone'] });
+  });
+
+  it('accepts an offset-less "when.at" with "timezone" and passes it through unresolved to createReminder', async () => {
+    (createReminder as jest.Mock).mockResolvedValue(baseReminder);
+    await executeReminderTool({
+      action: 'create',
+      title: 'Call mom',
+      when: { kind: 'once', at: '2026-09-06T09:00:00' },
+      timezone: 'Europe/Amsterdam',
+    });
+    // The executor's job is structural validation + passing the effective timezone
+    // through; resolving the offset-less local time to an instant happens inside
+    // computeReminderNextFireAtMs (recurrence.ts), which createReminder (mocked
+    // here) owns — see remindersRecurrence.test.ts for that resolution behavior.
+    expect(createReminder).toHaveBeenCalledWith({
+      title: 'Call mom',
+      notes: undefined,
+      recurrence: { kind: 'once', at: '2026-09-06T09:00:00' },
+      timezone: 'Europe/Amsterdam',
+    });
   });
 
   it('creates a reminder and formats the response with a zoned next-fire time', async () => {

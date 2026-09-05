@@ -9,6 +9,7 @@
 import { computeNextRunAtMs } from '../../cron/schedule';
 import type { CronSchedule } from '../../cron/types';
 import type { ReminderRecurrence } from './types';
+import { hasExplicitOffset, parseLocalDateTimeParts, resolveLocalDateTimeToUtcMs } from './zonedTime';
 
 const TIME_OF_DAY_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -52,18 +53,39 @@ function recurrenceToCronExpr(recurrence: Exclude<ReminderRecurrence, { kind: 'o
 }
 
 /**
+ * Builds the `at`-kind cron schedule for a `once` reminder. `at` either
+ * already carries an explicit UTC offset (passed through unchanged — its
+ * instant does not depend on `timezone`), or is an offset-less local
+ * date-time that must be resolved against `timezone` using the same
+ * DST-correct machinery `resolveLocalDateTimeToUtcMs` provides. Returns
+ * undefined only if `at` is neither (validation upstream in input.ts should
+ * already have rejected that, so this is a defense-in-depth fallback).
+ */
+function resolveOnceSchedule(at: string, timezone: string): CronSchedule | undefined {
+  if (hasExplicitOffset(at)) {
+    return { kind: 'at', at };
+  }
+  const parts = parseLocalDateTimeParts(at);
+  if (!parts) return undefined;
+  const { utcMs } = resolveLocalDateTimeToUtcMs(parts, timezone);
+  return { kind: 'at', atMs: utcMs };
+}
+
+/**
  * Next fire time in epoch ms for a reminder recurrence, evaluated in
  * `timezone`. Returns undefined when the schedule has no future occurrence
- * (e.g. a `once` reminder whose `at` has already passed).
+ * (e.g. a `once` reminder whose `at` has already passed) or, for `once`,
+ * when `at` cannot be resolved at all.
  */
 export function computeReminderNextFireAtMs(
   recurrence: ReminderRecurrence,
   timezone: string,
   nowMs: number,
 ): number | undefined {
-  const schedule: CronSchedule =
+  const schedule =
     recurrence.kind === 'once'
-      ? { kind: 'at', at: recurrence.at }
-      : { kind: 'cron', expr: recurrenceToCronExpr(recurrence), tz: timezone };
+      ? resolveOnceSchedule(recurrence.at, timezone)
+      : ({ kind: 'cron', expr: recurrenceToCronExpr(recurrence), tz: timezone } satisfies CronSchedule);
+  if (!schedule) return undefined;
   return computeNextRunAtMs(schedule, nowMs);
 }
