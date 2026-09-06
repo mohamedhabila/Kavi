@@ -28,43 +28,32 @@ import type {
   RecallCandidateStrategy,
   RecallLocalSimilarityInput,
 } from './factRecallCandidateContract';
-import {
-  orchestrateMemoryRetrieval,
-  type RetrievalOrchestratorTimings,
-} from './retrievalOrchestrator';
+import type { RetrievalOrchestratorTimings } from './retrievalOrchestrator';
 import type { NextTurnMemoryConsistencyResult } from './nextTurnConsistency';
 import { renderFocusBlock, type FocusGap } from './focus';
 import { assemblePrompt, type PromptMemoryFact, type SystemPromptSection } from './promptAssembly';
 import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
 import { readTaskStack } from './taskStack';
 import { getApplicableLatestReflectionContent } from './reflections';
-import { createLlmMemoryFactSelector } from './llmFactSelector';
 import {
   recordPromptAssemblyRetrievalEvent,
   type PromptAssemblyRetrievalEventResult,
-  type PromptAssemblyRetrievalState,
 } from './promptAssemblyRetrievalEvent';
 import {
   buildLocalEvidencePrompt,
   type LocalEvidencePromptDiagnostics,
 } from './localEvidencePromptBuilder';
-import {
-  applyMemoryApplicabilityPolicy,
-  emptyMemoryApplicabilitySummary,
-} from './memoryApplicabilityPolicy';
+import { emptyMemoryApplicabilitySummary } from './memoryApplicabilityPolicy';
 import type {
   MemoryApplicabilitySummary,
   MemoryApplicabilityUseIntent,
   MemoryExternalEvidenceSignal,
 } from './memoryApplicabilityTypes';
-import { selectMemoryApplicabilityResolutionFactIds } from './memoryApplicabilityPrompt';
-import { loadActiveMemoryFactConflictSignals } from './facts/observations';
 import type { RequiredMemoryAccessScopeIdentity } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 import { markFactsRecalled } from './facts/factAccessMutations';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
-import { revalidateAutomaticPromptEpisodeSelection } from './episodes/automaticPromptAccess';
 import type { EpisodeRecallSelection } from './episodes/accessPolicyTypes';
 import {
   earliestFutureMemoryValidityDeadline,
@@ -72,9 +61,9 @@ import {
 } from './memoryValidityDeadline';
 import {
   isReceiptBackedProcedureLearningFact,
-  resolveApplicableReceiptBackedProcedure,
   type ReceiptBackedProcedureRuntime,
 } from './receiptBackedProcedureRecall';
+import { resolveLivingMemoryEligibility } from './livingMemoryEligibility';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -423,157 +412,39 @@ export async function buildLivingMemorySections(
   timings.focusRenderMs += Date.now() - focusStarted;
 
   const query = buildRecentUserRetrievalQuery(messages);
-  let recalledFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['facts'] = [];
-  let resolutionFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['resolutionFacts'] =
-    [];
-  let recalledEpisodes: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['episodes'] = [];
-  let recalledEpisodeSelections: Awaited<
-    ReturnType<typeof orchestrateMemoryRetrieval>
-  >['episodeSelections'] = [];
-  let retrievalTimings: RetrievalOrchestratorTimings | undefined;
-  let retrievalState: PromptAssemblyRetrievalState = disableRecall ? 'disabled' : 'completed';
-  const factSelector = !disableRecall
-    ? createLlmMemoryFactSelector(
-        retrievalLlm ? { ...retrievalLlm, memoryReadEpoch, memoryAuthoritySnapshot } : undefined,
-      )
-    : null;
-  if (!disableRecall) {
-    const retrievalStarted = Date.now();
-    try {
-      const retrieval = await orchestrateMemoryRetrieval({
-        userMessage: query,
-        focusText: focusBlockText,
-        goals,
-        activeTaskId: activeTaskId ?? resolvedTaskId ?? undefined,
-        asyncWork,
-        ...(factSelector ? { factSelector } : {}),
-        memoryScope: applicabilityScope,
-        memoryUseIntent,
-        limit: recallLimit,
-        now,
-        ...(candidateStrategy ? { candidateStrategy } : {}),
-        ...(localSimilarity ? { localSimilarity } : {}),
-        memoryReadEpoch,
-      });
-      if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) {
-        return EMPTY_OUTPUT;
-      }
-      recalledFacts = retrieval.facts;
-      resolutionFacts = retrieval.resolutionFacts;
-      recalledEpisodeSelections = retrieval.episodeSelections.flatMap((selection) => {
-        const authorized = revalidateAutomaticPromptEpisodeSelection({
-          currentScope: applicabilityScope,
-          selection,
-          asOf: now,
-        });
-        return authorized ? [authorized] : [];
-      });
-      recalledEpisodes = recalledEpisodeSelections.map((selection) => selection.episode);
-      retrievalTimings = retrieval.timings;
-    } catch (error) {
-      if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) {
-        return EMPTY_OUTPUT;
-      }
-      logger.devWarn(
-        'livingMemoryBridge.orchestrateMemoryRetrieval failed:',
-        error instanceof Error ? error.message : String(error),
-      );
-      recalledFacts = [];
-      resolutionFacts = [];
-      recalledEpisodes = [];
-      recalledEpisodeSelections = [];
-      retrievalState = 'degraded';
-    }
-    timings.retrievalMs += Date.now() - retrievalStarted;
-  }
-
-  const policyStarted = Date.now();
-  let persistedConflictEvidence: MemoryExternalEvidenceSignal[] = [];
-  let conflictObservationReadState: 'available' | 'failed' = 'available';
-  const policyCandidateFacts = [...recalledFacts, ...resolutionFacts];
-  if (policyCandidateFacts.length > 0) {
-    try {
-      persistedConflictEvidence = loadActiveMemoryFactConflictSignals({
-        factIds: policyCandidateFacts.map((fact) => fact.id),
-        currentScope: applicabilityScope,
-        asOf: now,
-      });
-    } catch (error) {
-      conflictObservationReadState = 'failed';
-      retrievalState = 'degraded';
-      logger.devWarn(
-        'livingMemoryBridge.conflict observation read failed:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }
-  const applicability = applyMemoryApplicabilityPolicy({
-    facts: policyCandidateFacts,
-    context: {
-      enabled: !disableRecall,
-      now,
-      useIntent: memoryUseIntent,
-      scope: applicabilityScope,
-      conflictObservationReadState,
-      ...(persistedConflictEvidence.length > 0 || externalMemoryEvidence
-        ? {
-            externalEvidence: [...persistedConflictEvidence, ...(externalMemoryEvidence ?? [])],
-          }
-        : {}),
-    },
+  const eligibility = await resolveLivingMemoryEligibility({
+    query,
+    focusBlockText,
+    goals,
+    activeTaskId,
+    resolvedTaskId,
+    asyncWork,
+    retrievalLlm,
+    memoryReadEpoch,
+    memoryAuthoritySnapshot,
+    applicabilityScope,
+    memoryUseIntent,
+    recallLimit,
+    now,
+    candidateStrategy,
+    localSimilarity,
+    disableRecall,
+    externalMemoryEvidence,
+    disableExperienceLearningRecall: options.disableExperienceLearningRecall,
+    receiptBackedProcedureRuntime: options.receiptBackedProcedureRuntime,
   });
-  const factDecisions = new Map(
-    applicability.factDecisions.map((decision) => [decision.factId, decision] as const),
-  );
-  const applicableFacts: PromptMemoryFact[] = policyCandidateFacts.flatMap((fact) => {
-    const decision = factDecisions.get(fact.id);
-    if (!decision || decision.action === 'silent') return [];
-    return [
-      {
-        ...fact,
-        applicability: { action: decision.action, reason: decision.reason },
-      },
-    ];
-  });
-  const resolutionFactIds = selectMemoryApplicabilityResolutionFactIds(applicableFacts);
-  let assemblyVisibleFacts = applicableFacts.filter(
-    (fact) => fact.applicability?.action === 'use' || resolutionFactIds.has(fact.id),
-  );
-  const applicableProcedureSections: string[] = [];
-  const procedureFactIds = new Set(
-    assemblyVisibleFacts.filter(isReceiptBackedProcedureLearningFact).map((fact) => fact.id),
-  );
-  if (procedureFactIds.size > 0) {
-    const validProcedureFactIds = new Set<string>();
-    if (!options.disableExperienceLearningRecall) {
-      for (const fact of assemblyVisibleFacts) {
-        if (!procedureFactIds.has(fact.id) || fact.applicability?.action !== 'use') continue;
-        const applicable = await resolveApplicableReceiptBackedProcedure({
-          fact,
-          memoryOwnerId: applicabilityScope.memoryOwnerId,
-          asOf: now,
-          ...(options.receiptBackedProcedureRuntime
-            ? { runtime: options.receiptBackedProcedureRuntime }
-            : {}),
-        });
-        if (!isMemoryReadEpochCurrent(memoryReadEpoch) || !isProjectionCurrent()) {
-          return EMPTY_OUTPUT;
-        }
-        if (!applicable) continue;
-        validProcedureFactIds.add(fact.id);
-        applicableProcedureSections.push(applicable.section);
-      }
-    }
-    assemblyVisibleFacts = assemblyVisibleFacts.filter(
-      (fact) => !procedureFactIds.has(fact.id) || validProcedureFactIds.has(fact.id),
-    );
-  }
-  const applicabilitySummary: MemoryApplicabilitySummary = {
-    ...applicability.summary,
-    promptVisibleFactCount: assemblyVisibleFacts.length,
-    promptBudgetDroppedFactCount: applicableFacts.length - assemblyVisibleFacts.length,
-  };
-  timings.applicabilityPolicyMs += Date.now() - policyStarted;
+  if (eligibility.aborted) return EMPTY_OUTPUT;
+  const {
+    assemblyVisibleFacts,
+    recalledEpisodeSelections,
+    recalledEpisodes,
+    applicableProcedureSections,
+    applicabilitySummary,
+    retrievalTimings,
+  } = eligibility;
+  let retrievalState = eligibility.retrievalState;
+  timings.retrievalMs += eligibility.retrievalMs;
+  timings.applicabilityPolicyMs += eligibility.applicabilityPolicyMs;
 
   const directlyUsableFacts = assemblyVisibleFacts.filter(
     (fact) => fact.applicability?.action === 'use',
