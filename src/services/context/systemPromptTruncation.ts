@@ -12,7 +12,8 @@
 // `src/utils/graphemes.ts`), and prefer a sentence or whitespace boundary
 // near the target cut over an exact character count.
 
-import { CHARS_PER_TOKEN, SAFETY_MARGIN, estimateTokens } from './tokenCounter';
+import { CHARS_PER_TOKEN, estimateTokens } from './tokenCounter';
+import { SAFETY_MARGIN } from './tokenCalibration';
 import {
   exceedsGraphemeLength,
   graphemeLength,
@@ -25,7 +26,11 @@ import {
  * Preserves the beginning (base prompt + persona) and end (tool guidelines).
  * Trims the middle (memory, skills details) using head+tail strategy.
  */
-export function truncateSystemPrompt(prompt: string, budgetTokens: number, family?: string): string {
+export function truncateSystemPrompt(
+  prompt: string,
+  budgetTokens: number,
+  family?: string,
+): string {
   const currentTokens = estimateTokens(prompt, family);
   if (currentTokens <= budgetTokens) return prompt;
 

@@ -32,6 +32,7 @@ import { useApprovalStore } from './remote/approvalStore';
 import { emitAppEvent } from './events/bus';
 import { unrefTimerIfSupported } from '../utils/timers';
 import { runMemoryMigrationTick, runMemoryBackgroundFlush } from './memory/lifecycle';
+import { hydrateTokenCalibrationFromStorage } from './usage/tracker';
 import { initializeMemoryPolicyObservation } from './memory/policy';
 import { removeRetiredMemoryArtifacts } from './memory/retiredMemoryCleanup';
 import {
@@ -178,6 +179,12 @@ async function registerStartupHooks(): Promise<void> {
           onToolMessage: () => {},
           onError: terminalOutcome.recordError,
           onDone: () => {},
+          // `onUserMessageAttachmentsUpdated` is intentionally omitted: this hook prompt is a
+          // synthesized, attachment-less message (no `mediaUnderstandingEnabled` flag is passed),
+          // so `runMediaUnderstanding` never runs and a document-input refusal can never be
+          // discovered here. The run's own transcript is discarded entirely (every content
+          // callback above is a no-op) — hooks act only through tool side effects, so there is no
+          // chat-store message this callback could write a refusal onto.
         },
       );
       terminalOutcome.throwIfFailed();
@@ -258,6 +265,16 @@ export function initializeServices(): void {
 
   initializeAndroidLongHorizonCancellationHandler();
   initializeDurableRecoveryLifecycle();
+
+  // Rehydrate the token-estimator calibration factors learned in a previous
+  // session as early as possible, well before the user's first turn can reach
+  // a model request. This is a best-effort, async hydration: a turn that
+  // completes before it resolves simply records against the in-memory
+  // default and persists that instead — see `hydrateTokenCalibrationFromStorage`'s
+  // doc comment in `./usage/tracker.ts` for why that race is safe.
+  void hydrateTokenCalibrationFromStorage().catch((e) =>
+    console.warn('[startup] hydrateTokenCalibrationFromStorage failed:', e),
+  );
 
   if (!initializeMemoryPolicyObservation()) {
     console.warn('[startup] memory policy observation unavailable; durable memory is disabled');

@@ -17,6 +17,7 @@ jest.mock('../../src/services/events/bus', () => ({
 }));
 
 jest.mock('../../src/services/usage/tracker', () => ({
+  recordAndPersistTokenCalibrationObservation: jest.fn(),
   formatUsageReport: jest.fn().mockReturnValue('**Usage Report**\nTotal: 1000 tokens'),
 }));
 

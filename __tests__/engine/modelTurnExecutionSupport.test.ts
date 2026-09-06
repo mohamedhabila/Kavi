@@ -7,12 +7,24 @@
 // provider usage -> recorded observation -> next estimate reflects it) is
 // covered separately in modelTurnExecutionAttempt.tokenCalibration.test.ts.
 
+jest.mock('../../src/services/usage/tracker', () => {
+  const actual = jest.requireActual('../../src/services/usage/tracker');
+  return {
+    ...actual,
+    recordAndPersistTokenCalibrationObservation: jest.fn(
+      (...args: Parameters<typeof actual.recordAndPersistTokenCalibrationObservation>) =>
+        actual.recordAndPersistTokenCalibrationObservation(...args),
+    ),
+  };
+});
+
 import { createModelTurnUsageTracker } from '../../src/engine/graph/modelTurnExecutionSupport';
+import { recordAndPersistTokenCalibrationObservation } from '../../src/services/usage/tracker';
+import { estimateTokens } from '../../src/services/context/tokenCounter';
 import {
-  estimateTokens,
   getObservedTokenCalibrationFactor,
   resetTokenCalibrationForTests,
-} from '../../src/services/context/tokenCounter';
+} from '../../src/services/context/tokenCalibration';
 
 const FAMILY = 'anthropic';
 
@@ -57,6 +69,33 @@ describe('createModelTurnUsageTracker token calibration', () => {
     // The learned factor now feeds forward into estimateTokens for this family.
     const text = 'Sample text used to compare the calibrated estimate against the baseline.';
     expect(estimateTokens(text, FAMILY)).toBeGreaterThan(estimateTokens(text));
+  });
+
+  it('still reports usage when the calibration side channel throws', () => {
+    // Regression: the record used to run before the usage report, so a failure in the
+    // calibration persistence path silently dropped the turn's usage accounting.
+    const persist = recordAndPersistTokenCalibrationObservation as jest.Mock;
+    persist.mockClear();
+    persist.mockImplementationOnce(() => {
+      throw new Error('storage unavailable');
+    });
+    const { tracker, reportUsage } = makeTracker();
+    tracker.mergeSnapshot({
+      inputTokens: 500,
+      outputTokens: 20,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 520,
+    });
+
+    expect(() =>
+      tracker.flush({ allowFallback: true, budgetTools: [], requestMessages: [] }),
+    ).not.toThrow();
+
+    expect(reportUsage).toHaveBeenCalledTimes(1);
+    expect(reportUsage).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 500 }));
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(getObservedTokenCalibrationFactor(FAMILY)).toBe(1);
   });
 
   it('does not record when no provider family is known', () => {

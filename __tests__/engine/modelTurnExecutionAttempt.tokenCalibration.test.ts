@@ -8,11 +8,11 @@
 
 import { executeAgentControlGraphModelTurnAttempt } from '../../src/engine/graph/modelTurnExecutionAttempt';
 import { finalizeProviderConfig } from '../../src/constants/api';
+import { estimateTokens } from '../../src/services/context/tokenCounter';
 import {
-  estimateTokens,
   getObservedTokenCalibrationFactor,
   resetTokenCalibrationForTests,
-} from '../../src/services/context/tokenCounter';
+} from '../../src/services/context/tokenCalibration';
 import type { Message } from '../../src/types/message';
 
 async function* usageTurnStream(usage: {

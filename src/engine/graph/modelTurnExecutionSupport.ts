@@ -1,10 +1,7 @@
 import { estimateAllToolTokens } from '../tools/toolManagerTokenBudget';
-import {
-  estimateMessageTokens,
-  estimateTokens,
-  getObservedTokenCalibrationFactor,
-  recordObservedTokenRatio,
-} from '../../services/context/tokenCounter';
+import { estimateMessageTokens, estimateTokens } from '../../services/context/tokenCounter';
+import { getObservedTokenCalibrationFactor } from '../../services/context/tokenCalibration';
+import { recordAndPersistTokenCalibrationObservation } from '../../services/usage/tracker';
 import type { TokenUsage, UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
 import type { ToolDefinition } from '../../types/tool';
 import { createLogger } from '../../utils/logger';
@@ -13,10 +10,11 @@ const logger = createLogger('ModelTurnTokenCalibration');
 
 /**
  * Guard + record one (pre-flight estimate, provider-reported actual) observation for the
- * per-provider-family online calibration EMA in `tokenCounter.ts`. Called at most once per
- * completed model request, only when the usage backing it was actually reported by the
- * provider (never for the synthesized fallback usage `flush()` builds when a request never
- * reports usage at all).
+ * per-provider-family online calibration EMA in `services/context/tokenCalibration.ts`, and
+ * durably persist the result via `recordAndPersistTokenCalibrationObservation` in
+ * `services/usage/tracker.ts`. Called at most once per completed model request, only when the
+ * usage backing it was actually reported by the provider (never for the synthesized fallback
+ * usage `flush()` builds when a request never reports usage at all).
  *
  * Guards, in order:
  *  - `family` unresolved: no calibration bucket to fold this observation into.
@@ -71,7 +69,7 @@ function recordModelTurnTokenCalibration(observation: {
   }
   if (observation.requestHasImageAttachment) return;
 
-  recordObservedTokenRatio(
+  recordAndPersistTokenCalibrationObservation(
     observation.family,
     observation.estimatedTokens as number,
     observation.actualTokens,
@@ -193,7 +191,8 @@ export function createModelTurnUsageTracker(
                     : JSON.stringify(message.content),
               })),
               params.calibrationFamily,
-            ) + estimateAllToolTokens([...options.budgetTools], { family: params.calibrationFamily }),
+            ) +
+            estimateAllToolTokens([...options.budgetTools], { family: params.calibrationFamily }),
           outputTokens:
             estimateTokens(snapshot.fullContent, params.calibrationFamily) +
             estimateTokens(snapshot.reasoning, params.calibrationFamily),
@@ -208,19 +207,6 @@ export function createModelTurnUsageTracker(
         return;
       }
 
-      // Only a genuinely provider-reported usage is trustworthy ground truth; the fallback
-      // above is itself built from this module's own estimator, so folding it back in would
-      // just tautologically confirm whatever factor is already in effect.
-      if (hasRealProviderUsage) {
-        recordModelTurnTokenCalibration({
-          family: params.calibrationFamily,
-          estimatedTokens: params.preflightEstimatedInputTokens,
-          actualTokens: latestUsage.inputTokens,
-          appliedFactor: params.appliedCalibrationFactor,
-          requestHasImageAttachment: params.requestHasImageAttachment === true,
-        });
-      }
-
       usageReported = true;
       params.reportUsage({
         ...latestUsage,
@@ -231,6 +217,27 @@ export function createModelTurnUsageTracker(
           ? { promptCache: params.usageTelemetry.promptCache }
           : {}),
       });
+
+      // Only a genuinely provider-reported usage is trustworthy ground truth; the fallback
+      // above is itself built from this module's own estimator, so folding it back in would
+      // just tautologically confirm whatever factor is already in effect. Calibration is a
+      // side channel: it runs after the usage report and can never withhold it.
+      if (hasRealProviderUsage) {
+        try {
+          recordModelTurnTokenCalibration({
+            family: params.calibrationFamily,
+            estimatedTokens: params.preflightEstimatedInputTokens,
+            actualTokens: latestUsage.inputTokens,
+            appliedFactor: params.appliedCalibrationFactor,
+            requestHasImageAttachment: params.requestHasImageAttachment === true,
+          });
+        } catch (error: unknown) {
+          logger.warn('Token calibration observation was not recorded', {
+            family: params.calibrationFamily,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     },
   };
 }

@@ -41,6 +41,7 @@ jest.mock('../../src/services/events/bus', () => ({
 }));
 
 jest.mock('../../src/services/usage/tracker', () => ({
+  recordAndPersistTokenCalibrationObservation: jest.fn(),
   recordUsage: jest.fn(),
   normalizeUsage: jest.fn().mockReturnValue({
     inputTokens: 0,

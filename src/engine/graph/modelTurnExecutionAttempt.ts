@@ -18,7 +18,7 @@ import type {
 } from '../../types/message';
 import { getThinkingParams } from '../thinking';
 import { canContinueAnthropicThinking } from '../orchestratorMessageFormatting';
-import { getObservedTokenCalibrationFactor } from '../../services/context/tokenCounter';
+import { getObservedTokenCalibrationFactor } from '../../services/context/tokenCalibration';
 import { estimateWorkingMessageTokens } from '../orchestratorCompaction';
 import {
   getProviderOverflowRetryMaxTokens,

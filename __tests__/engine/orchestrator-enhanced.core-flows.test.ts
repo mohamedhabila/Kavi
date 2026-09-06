@@ -38,6 +38,7 @@ jest.mock('../../src/services/events/bus', () => ({
   emitAgentEvent: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/services/usage/tracker', () => ({
+  recordAndPersistTokenCalibrationObservation: jest.fn(),
   recordUsage: jest.fn(),
   normalizeUsage: jest.fn().mockReturnValue({
     inputTokens: 0,

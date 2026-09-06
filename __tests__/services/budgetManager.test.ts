@@ -12,11 +12,11 @@ import {
   MAX_SYSTEM_PROMPT_TOKENS,
   MAX_TOOL_DEFINITION_TOKENS,
 } from '../../src/services/context/budgetManager';
+import { estimateTokens } from '../../src/services/context/tokenCounter';
 import {
-  estimateTokens,
   recordObservedTokenRatio,
   resetTokenCalibrationForTests,
-} from '../../src/services/context/tokenCounter';
+} from '../../src/services/context/tokenCalibration';
 import { ToolDefinition } from '../../src/types/tool';
 
 function makeTool(name: string, description = 'Test tool.'): ToolDefinition {
@@ -151,7 +151,12 @@ describe('inspectContextBudget', () => {
       });
 
       for (let i = 0; i < 30; i += 1) {
-        recordObservedTokenRatio(calibratedFamily, baseline.totalTokens, baseline.totalTokens * 2, 1);
+        recordObservedTokenRatio(
+          calibratedFamily,
+          baseline.totalTokens,
+          baseline.totalTokens * 2,
+          1,
+        );
       }
 
       const afterOtherFamily = inspectContextBudget('gpt-5.4', systemPrompt, [], messages, 8000, {

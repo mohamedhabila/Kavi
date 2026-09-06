@@ -10,17 +10,23 @@ import {
   getWorkingContextWindow,
   getCompactionThreshold,
   getCompactionThresholds,
-  getObservedTokenCalibrationFactor,
-  getTokenCalibrationSampleCount,
-  recordObservedTokenRatio,
-  resetTokenCalibrationForTests,
   MODEL_CONTEXT_WINDOWS,
   MAX_ROUTINE_COMPACTION_WORKING_CONTEXT,
   SELECTIVE_COMPACTION_THRESHOLD_SHARE,
   TOOL_CLEARING_THRESHOLD_SHARE,
   AGGRESSIVE_COMPACTION_THRESHOLD_SHARE,
-  SAFETY_MARGIN,
 } from '../../src/services/context/tokenCounter';
+import {
+  exportTokenCalibrationState,
+  getObservedTokenCalibrationFactor,
+  getTokenCalibrationSampleCount,
+  importTokenCalibrationState,
+  isValidTokenCalibrationState,
+  recordObservedTokenRatio,
+  resetTokenCalibrationForTests,
+  MAX_TRACKED_CALIBRATION_FAMILIES,
+  SAFETY_MARGIN,
+} from '../../src/services/context/tokenCalibration';
 
 // `recordObservedTokenRatio`'s `appliedFactor` recovers the uncalibrated base as
 // `estimatedTokens / (appliedFactor * SAFETY_MARGIN)`. Passing `1 / SAFETY_MARGIN` makes that
@@ -410,5 +416,123 @@ describe('getCompactionThresholds', () => {
     const thresholds = getCompactionThresholds('claude-sonnet-4-6');
     expect(thresholds.toolClearing).toBeLessThan(thresholds.selective);
     expect(thresholds.selective).toBeLessThan(thresholds.aggressive);
+  });
+});
+
+describe('token calibration export/import (persistence wiring)', () => {
+  afterEach(() => {
+    resetTokenCalibrationForTests();
+  });
+
+  it('round-trips: record, export, reset, import restores factor and sample count', () => {
+    recordObservedTokenRatio('anthropic', 100, 150, NEUTRAL_APPLIED_FACTOR);
+    recordObservedTokenRatio('anthropic', 100, 150, getObservedTokenCalibrationFactor('anthropic'));
+    const factorBeforeReset = getObservedTokenCalibrationFactor('anthropic');
+    const sampleCountBeforeReset = getTokenCalibrationSampleCount('anthropic');
+    expect(sampleCountBeforeReset).toBe(2);
+
+    const exported = exportTokenCalibrationState();
+    resetTokenCalibrationForTests();
+    expect(getObservedTokenCalibrationFactor('anthropic')).toBe(1);
+    expect(getTokenCalibrationSampleCount('anthropic')).toBe(0);
+
+    importTokenCalibrationState(exported);
+    expect(getObservedTokenCalibrationFactor('anthropic')).toBeCloseTo(factorBeforeReset, 10);
+    expect(getTokenCalibrationSampleCount('anthropic')).toBe(sampleCountBeforeReset);
+  });
+
+  it('export keys are already the normalized (trimmed, lower-cased) family key', () => {
+    recordObservedTokenRatio('  OpenAI  ', 100, 150, NEUTRAL_APPLIED_FACTOR);
+    const exported = exportTokenCalibrationState();
+    expect(Object.keys(exported)).toEqual(['openai']);
+  });
+
+  it('merge precedence: import keeps the higher-sampleCount side per family', () => {
+    // Simulate three live observations recorded before hydration finished.
+    recordObservedTokenRatio('gemini', 100, 150, NEUTRAL_APPLIED_FACTOR);
+    recordObservedTokenRatio('gemini', 100, 150, getObservedTokenCalibrationFactor('gemini'));
+    recordObservedTokenRatio('gemini', 100, 150, getObservedTokenCalibrationFactor('gemini'));
+    const liveFactor = getObservedTokenCalibrationFactor('gemini');
+    expect(getTokenCalibrationSampleCount('gemini')).toBe(3);
+
+    // A stale persisted snapshot from a previous run with fewer samples must not win.
+    importTokenCalibrationState({ gemini: { factor: 2.5, sampleCount: 1 } });
+    expect(getObservedTokenCalibrationFactor('gemini')).toBe(liveFactor);
+    expect(getTokenCalibrationSampleCount('gemini')).toBe(3);
+
+    // A persisted snapshot with a strictly higher sample count wins.
+    importTokenCalibrationState({ gemini: { factor: 1.75, sampleCount: 10 } });
+    expect(getObservedTokenCalibrationFactor('gemini')).toBe(1.75);
+    expect(getTokenCalibrationSampleCount('gemini')).toBe(10);
+  });
+
+  it('import adopts a brand-new family with no live entry yet', () => {
+    importTokenCalibrationState({ mistral: { factor: 1.6, sampleCount: 4 } });
+    expect(getObservedTokenCalibrationFactor('mistral')).toBe(1.6);
+    expect(getTokenCalibrationSampleCount('mistral')).toBe(4);
+  });
+
+  it('isValidTokenCalibrationState rejects out-of-range, non-finite, and malformed shapes', () => {
+    expect(isValidTokenCalibrationState({ factor: 1, sampleCount: 1 })).toBe(true);
+    expect(isValidTokenCalibrationState({ factor: 0.1, sampleCount: 1 })).toBe(false); // below MIN
+    expect(isValidTokenCalibrationState({ factor: 10, sampleCount: 1 })).toBe(false); // above MAX
+    expect(isValidTokenCalibrationState({ factor: NaN, sampleCount: 1 })).toBe(false);
+    expect(isValidTokenCalibrationState({ factor: Infinity, sampleCount: 1 })).toBe(false);
+    expect(isValidTokenCalibrationState({ factor: 1, sampleCount: -1 })).toBe(false); // negative
+    expect(isValidTokenCalibrationState({ factor: 1, sampleCount: 1.5 })).toBe(false); // fractional
+    expect(isValidTokenCalibrationState({ factor: 1, sampleCount: NaN })).toBe(false);
+    expect(isValidTokenCalibrationState({ factor: '1', sampleCount: 1 })).toBe(false);
+    expect(isValidTokenCalibrationState(null)).toBe(false);
+    expect(isValidTokenCalibrationState(undefined)).toBe(false);
+    expect(isValidTokenCalibrationState('not-an-object')).toBe(false);
+    expect(isValidTokenCalibrationState([])).toBe(false);
+  });
+
+  it('import silently discards malformed or out-of-range entries instead of applying them', () => {
+    importTokenCalibrationState({
+      valid: { factor: 1.3, sampleCount: 2 },
+      outOfRange: { factor: 99, sampleCount: 2 },
+      negativeSamples: { factor: 1.1, sampleCount: -3 },
+      fractionalSamples: { factor: 1.1, sampleCount: 2.5 },
+      notFinite: { factor: NaN, sampleCount: 2 },
+      wrongShape: 'not-an-object',
+      missingFields: {},
+    });
+
+    expect(getObservedTokenCalibrationFactor('valid')).toBe(1.3);
+    expect(getTokenCalibrationSampleCount('valid')).toBe(2);
+    for (const key of [
+      'outOfRange',
+      'negativeSamples',
+      'fractionalSamples',
+      'notFinite',
+      'wrongShape',
+      'missingFields',
+    ]) {
+      expect(getObservedTokenCalibrationFactor(key)).toBe(1);
+      expect(getTokenCalibrationSampleCount(key)).toBe(0);
+    }
+  });
+
+  it('bounds the tracked-family map: importing past the limit evicts the least-sampled entry', () => {
+    const entries: Record<string, { factor: number; sampleCount: number }> = {};
+    for (let index = 0; index < MAX_TRACKED_CALIBRATION_FAMILIES; index += 1) {
+      // Ascending sample counts so `family-0` is unambiguously the least-sampled entry.
+      entries[`family-${index}`] = { factor: 1.1, sampleCount: index + 1 };
+    }
+    importTokenCalibrationState(entries);
+    expect(Object.keys(exportTokenCalibrationState())).toHaveLength(
+      MAX_TRACKED_CALIBRATION_FAMILIES,
+    );
+    expect(getTokenCalibrationSampleCount('family-0')).toBe(1);
+
+    // One more family, sampled more than the current least-sampled tracked entry
+    // (`family-0`, sampleCount 1), must evict `family-0` rather than grow past the bound.
+    importTokenCalibrationState({ overflow: { factor: 1.2, sampleCount: 500 } });
+
+    const exported = exportTokenCalibrationState();
+    expect(Object.keys(exported)).toHaveLength(MAX_TRACKED_CALIBRATION_FAMILIES);
+    expect(exported['family-0']).toBeUndefined();
+    expect(exported.overflow).toEqual({ factor: 1.2, sampleCount: 500 });
   });
 });

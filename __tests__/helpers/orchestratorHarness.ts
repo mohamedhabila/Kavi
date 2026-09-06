@@ -63,6 +63,7 @@ jest.mock('../../src/services/executionJournal/externalToolDurabilityLifecycle',
   };
 });
 jest.mock('../../src/services/usage/tracker', () => ({
+  recordAndPersistTokenCalibrationObservation: jest.fn(),
   recordUsage: jest.fn(),
   normalizeUsage: jest.fn().mockReturnValue({
     inputTokens: 0,

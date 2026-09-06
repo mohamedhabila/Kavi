@@ -1,11 +1,24 @@
 import type { NormalizedUsage, SessionUsage, TokenUsage } from '../../types/usage';
 import { estimateCost } from './usagePricing';
+import { STORAGE_KEYS } from '../../constants/storage';
+import { throttledAsyncStorage } from '../../store/throttledStorage';
+import { createLogger } from '../../utils/logger';
+import {
+  exportTokenCalibrationState,
+  importTokenCalibrationState,
+  isValidTokenCalibrationState,
+  recordObservedTokenRatio,
+  type TokenCalibrationState,
+} from '../context/tokenCalibration';
 
 // ---------------------------------------------------------------------------
 // Usage Tracker
 // ---------------------------------------------------------------------------
 // Tracks cumulative session usage, cache summary reporting, and public tracker
-// compatibility exports.
+// compatibility exports. Also owns durable persistence of the token-estimator
+// calibration state learned in `../context/tokenCalibration.ts` (see the
+// "Token calibration persistence" section below), since this module already
+// owns the app's other durable usage accounting.
 
 type CacheUsageSummary = {
   cacheReadTokens: number;
@@ -154,4 +167,146 @@ export function formatUsageReport(conversationId?: string): string {
 
 export function clearUsageData(): void {
   sessionUsageMap.clear();
+}
+
+// ── Token calibration persistence ────────────────────────────────────────
+// `../context/tokenCalibration.ts` learns a per-provider-family token
+// estimator correction factor online, purely in memory — it resets to the
+// uncorrected default on every process restart. That module exposes
+// `exportTokenCalibrationState`/`importTokenCalibrationState` as its
+// persistence seam rather than a private map; the functions below are the
+// other half of that seam: they read and write the app's existing
+// debounced, file-backed `throttledAsyncStorage` (the same mechanism
+// `src/services/agents/subAgentRegistryPersistence.ts` and
+// `src/store/chatStorePersistence.ts` use), so calibration state survives a
+// restart the same way the rest of Kavi's durable state does — no new
+// storage dependency.
+//
+// Write path: `recordAndPersistTokenCalibrationObservation` — the drop-in
+// replacement for calling `recordObservedTokenRatio` directly, used by
+// `recordModelTurnTokenCalibration` in
+// `src/engine/graph/modelTurnExecutionSupport.ts` — records the observation
+// then schedules a write. `throttledAsyncStorage.setItem` itself coalesces
+// bursts of writes into one file write roughly every
+// `WRITE_THROTTLE_MS` (`src/store/throttledStorage.ts`), so calling it once
+// per completed model turn never costs a synchronous disk write per turn.
+//
+// Read path: `hydrateTokenCalibrationFromStorage` — called once from
+// `src/services/startup.ts#initializeServices` on app launch, before any
+// conversation can reach a model turn. It's still async relative to that
+// call site (a `void ...().catch(...)` fire-and-forget, matching every
+// other best-effort startup read there), so a turn that completes before it
+// resolves records its observation against the in-memory default (factor 1,
+// sample count 0) for that family. That's safe: `importTokenCalibrationState`
+// merges by keeping whichever side — the persisted snapshot or whatever was
+// already recorded live — has the higher `sampleCount` per family, so a
+// late hydration can only add families it hasn't seen yet or fill in a
+// family with strictly less live history than what was persisted; it can
+// never overwrite a fresher live observation with a stale persisted one.
+const logger = createLogger('usage.tokenCalibration');
+
+/** Bumped whenever the persisted shape below changes; a stored payload from a
+ * different version is discarded outright rather than migrated, since the
+ * calibration map is a self-healing cache, not a source of truth. */
+const TOKEN_CALIBRATION_SCHEMA_VERSION = 1;
+
+interface PersistedTokenCalibrationSnapshot {
+  version: number;
+  families: Record<string, TokenCalibrationState>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Validate a raw, parsed-JSON `families` map at the trust boundary: only
+ * entries that pass {@link isValidTokenCalibrationState} survive. Anything
+ * else — a non-object payload, an out-of-range or non-finite factor, a
+ * fractional or negative sample count — is dropped rather than applied, so a
+ * corrupted or hand-edited storage file can't push a bad calibration factor
+ * back into the live estimator.
+ */
+function sanitizePersistedTokenCalibrationFamilies(
+  value: unknown,
+): Record<string, TokenCalibrationState> {
+  if (!isPlainObject(value)) return {};
+
+  const sanitized: Record<string, TokenCalibrationState> = {};
+  for (const [family, candidate] of Object.entries(value)) {
+    if (isValidTokenCalibrationState(candidate)) {
+      sanitized[family] = candidate;
+    }
+  }
+  return sanitized;
+}
+
+/**
+ * Hydrate the in-memory calibration map from durable storage. Safe to call
+ * even when nothing has ever been persisted (first launch) or when the
+ * stored payload is missing, unparsable, shaped wrong, or from a different
+ * schema version — every one of those is logged and treated as "nothing to
+ * hydrate" rather than thrown.
+ */
+export async function hydrateTokenCalibrationFromStorage(): Promise<void> {
+  let raw: string | null;
+  try {
+    raw = await throttledAsyncStorage.getItem(STORAGE_KEYS.TOKEN_CALIBRATION);
+  } catch (error) {
+    logger.warn('Failed to read persisted token calibration state', error);
+    return;
+  }
+  if (!raw) return;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    logger.warn('Discarding unparsable persisted token calibration state', error);
+    return;
+  }
+
+  if (!isPlainObject(parsed) || parsed.version !== TOKEN_CALIBRATION_SCHEMA_VERSION) {
+    logger.warn('Discarding persisted token calibration state with an unknown shape or version', {
+      version: isPlainObject(parsed) ? parsed.version : typeof parsed,
+    });
+    return;
+  }
+
+  importTokenCalibrationState(sanitizePersistedTokenCalibrationFamilies(parsed.families));
+}
+
+async function persistTokenCalibrationSnapshot(): Promise<void> {
+  const snapshot: PersistedTokenCalibrationSnapshot = {
+    version: TOKEN_CALIBRATION_SCHEMA_VERSION,
+    families: exportTokenCalibrationState() as Record<string, TokenCalibrationState>,
+  };
+
+  try {
+    await throttledAsyncStorage.setItem(STORAGE_KEYS.TOKEN_CALIBRATION, JSON.stringify(snapshot));
+  } catch (error) {
+    logger.warn('Failed to persist token calibration state', error);
+  }
+}
+
+/**
+ * Record one token-calibration observation and durably persist the updated
+ * calibration map. Use this instead of calling `recordObservedTokenRatio`
+ * (from `../context/tokenCalibration.ts`) directly whenever an observation
+ * should survive an app restart — currently every production call site, via
+ * `recordModelTurnTokenCalibration` in
+ * `src/engine/graph/modelTurnExecutionSupport.ts`.
+ *
+ * The write itself is fire-and-forget and debounced (see the module doc
+ * comment above): this function never blocks or throws on a storage
+ * failure, it only logs one.
+ */
+export function recordAndPersistTokenCalibrationObservation(
+  family: string | undefined | null,
+  estimatedTokens: number,
+  actualTokens: number,
+  appliedFactor: number,
+): void {
+  recordObservedTokenRatio(family, estimatedTokens, actualTokens, appliedFactor);
+  void persistTokenCalibrationSnapshot();
 }
