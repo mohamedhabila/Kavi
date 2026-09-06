@@ -1,5 +1,6 @@
 import type { Skill } from '../../skills/types';
 import { createApiTool } from '../shared/toolFactory';
+import { truncateGraphemesTo } from '../../../utils/graphemes';
 
 export function createKnowledgeSkill(): Skill {
   return {
@@ -27,7 +28,10 @@ export function createKnowledgeSkill(): Skill {
             const data = await res.json();
             return JSON.stringify({
               title: data.title,
-              extract: data.extract?.slice(0, 2000),
+              extract:
+                typeof data.extract === 'string'
+                  ? truncateGraphemesTo(data.extract, 2000)
+                  : data.extract,
               thumbnail: data.thumbnail?.source,
               url: data.content_urls?.desktop?.page,
             });

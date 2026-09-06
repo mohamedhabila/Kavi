@@ -4,6 +4,11 @@ import {
   REDACTION_MARKER,
   redactSensitiveText,
 } from '../../src/services/security/toolDetailRedaction';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../helpers/graphemeTestFixtures';
 
 describe('tool detail redaction', () => {
   it('redacts nested credentials while preserving useful diagnostic fields', () => {
@@ -97,4 +102,25 @@ describe('tool detail redaction', () => {
     expect(formatRedactedToolDetail(undefined)).toBeNull();
     expect(formatRedactedToolDetail('   ')).toBeNull();
   });
+
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`formatRedactedToolDetail never splits ${name} straddling the char budget`, () => {
+      const boundary = 80;
+      const text = buildBoundaryStraddlingText(boundary, cluster, 100);
+      const detail = formatRedactedToolDetail(text, boundary);
+
+      expect(detail?.truncated).toBe(true);
+      expectGraphemeSafe(detail!.text);
+    });
+
+    it(`limitRedactedToolDetail never splits ${name} straddling a tighter re-limit`, () => {
+      const boundary = 80;
+      const text = buildBoundaryStraddlingText(boundary, cluster, 200);
+      const detail = formatRedactedToolDetail(text, 4000);
+      const relimited = limitRedactedToolDetail(detail, boundary);
+
+      expect(relimited?.truncated).toBe(true);
+      expectGraphemeSafe(relimited!.text);
+    });
+  }
 });

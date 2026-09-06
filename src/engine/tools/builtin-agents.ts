@@ -7,6 +7,7 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export async function executeAgentsList(): Promise<ToolRuntimeOutcome> {
   const personas = getAvailablePersonas();
@@ -64,7 +65,10 @@ export async function executeAgentsConfigure(args: {
     const created: AgentPersona = {
       id: args.personaId,
       name: args.name || args.personaId,
-      description: args.description || args.systemPrompt?.slice(0, 100) || 'Custom agent',
+      description:
+        args.description ||
+        (args.systemPrompt ? truncateGraphemesTo(args.systemPrompt, 100) : undefined) ||
+        'Custom agent',
       systemPrompt: args.systemPrompt || 'You are a helpful AI assistant.',
       model: args.model,
       providerId: args.providerId,

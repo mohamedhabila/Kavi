@@ -1,3 +1,5 @@
+import { exceedsGraphemeLength, graphemeLength, truncateGraphemesFromEnd } from './graphemes';
+
 export interface StreamingPreviewOptions {
   charWindow?: number;
   maxLines?: number;
@@ -28,19 +30,21 @@ export function buildStreamingPreview(text: string, options?: StreamingPreviewOp
     ? Math.max(1, Math.floor(options!.maxChars!))
     : DEFAULT_STREAMING_PREVIEW_MAX_CHARS;
 
-  let preview = normalized.length > charWindow ? normalized.slice(-charWindow) : normalized;
+  let preview = exceedsGraphemeLength(normalized, charWindow)
+    ? truncateGraphemesFromEnd(normalized, charWindow)
+    : normalized;
 
   const lines = preview.split('\n');
   if (lines.length > maxLines) {
     preview = lines.slice(-maxLines).join('\n');
   }
 
-  if (preview.length > maxChars) {
-    preview = preview.slice(-maxChars);
+  if (exceedsGraphemeLength(preview, maxChars)) {
+    preview = truncateGraphemesFromEnd(preview, maxChars);
   }
 
   preview = preview.trimStart();
-  if (preview.length >= normalized.length) {
+  if (graphemeLength(preview) >= graphemeLength(normalized)) {
     return preview;
   }
 

@@ -9,6 +9,7 @@ import { writeConversationWorkspaceTextFile } from '../../services/conversationW
 import { normalizeToolName } from './toolNameNormalization';
 import { TOOL_DEFINITIONS } from './definitions';
 import { extractToolOutputStructuralMetadata } from './toolOutputStructuralMetadata';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
 export const TOOL_OUTPUT_SPILL_BYTE_THRESHOLD = 8 * 1024;
 export const TOOL_OUTPUT_DISCOVERY_SPILL_BYTE_THRESHOLD = 64 * 1024;
@@ -123,10 +124,7 @@ export async function maybeSpillToolOutput(params: {
   const byteLength = new TextEncoder().encode(params.result).length;
   const spillByteThreshold = resolveToolOutputSpillByteThreshold(params.toolName);
   const previewSource = selectPreviewSource(params.result);
-  const preview =
-    previewSource.length <= TOOL_OUTPUT_SPILL_PREVIEW_CHARS
-      ? previewSource
-      : `${previewSource.slice(0, TOOL_OUTPUT_SPILL_PREVIEW_CHARS).trimEnd()}…`;
+  const preview = truncateGraphemesWithSuffix(previewSource, TOOL_OUTPUT_SPILL_PREVIEW_CHARS, '…');
 
   if (byteLength <= spillByteThreshold) {
     return {

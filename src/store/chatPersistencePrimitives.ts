@@ -1,3 +1,5 @@
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../utils/graphemes';
+
 export function sanitizeNonNegativeNumber(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
@@ -12,11 +14,11 @@ export function truncateText(value: string | undefined, maxChars: number): strin
     return undefined;
   }
 
-  if (normalized.length <= maxChars) {
+  if (!exceedsGraphemeLength(normalized, maxChars)) {
     return normalized;
   }
 
-  return `${normalized.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`;
+  return `${truncateGraphemesTo(normalized, Math.max(1, maxChars - 1)).trimEnd()}…`;
 }
 
 export function normalizeText(value: string | undefined): string | undefined {

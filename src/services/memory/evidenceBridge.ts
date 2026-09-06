@@ -17,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentRunEvidenceEntry, AgentRunEvidenceRecorder } from '../../types/agentRun';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { runMemoryTransaction } from './access/transaction';
 import { addFactEvidence } from './episodes/mutations';
 import { recordFactWithContribution } from './facts/mutations';
@@ -84,7 +85,7 @@ export interface BridgeEvidenceResult {
 
 function buildPredicate(entry: AgentRunEvidenceEntry): string {
   const dedupe = entry.dedupeKey?.trim();
-  if (dedupe) return dedupe.slice(0, 80);
+  if (dedupe) return truncateGraphemesTo(dedupe, 80);
   return `evidence_${entry.kind}`;
 }
 
@@ -93,13 +94,13 @@ function buildObjectText(entry: AgentRunEvidenceEntry): string {
   const content = entry.content?.trim();
   if (title && content && title !== content) {
     const merged = `${title}: ${content}`;
-    return merged.length > MAX_BRIDGED_OBJECT_TEXT_CHARS
-      ? `${merged.slice(0, MAX_BRIDGED_OBJECT_TEXT_CHARS - 1).trimEnd()}\u2026`
+    return exceedsGraphemeLength(merged, MAX_BRIDGED_OBJECT_TEXT_CHARS)
+      ? `${truncateGraphemesTo(merged, MAX_BRIDGED_OBJECT_TEXT_CHARS - 1).trimEnd()}\u2026`
       : merged;
   }
   const value = (title || content || '').trim();
-  return value.length > MAX_BRIDGED_OBJECT_TEXT_CHARS
-    ? `${value.slice(0, MAX_BRIDGED_OBJECT_TEXT_CHARS - 1).trimEnd()}\u2026`
+  return exceedsGraphemeLength(value, MAX_BRIDGED_OBJECT_TEXT_CHARS)
+    ? `${truncateGraphemesTo(value, MAX_BRIDGED_OBJECT_TEXT_CHARS - 1).trimEnd()}\u2026`
     : value;
 }
 
@@ -265,7 +266,9 @@ export function mapGraphGoalEvidenceToEntries(
       recorder,
       title: prefix,
       content: evidence,
-      dedupeKey: evidence.length > 120 ? evidence.slice(0, 120) : evidence,
+      dedupeKey: exceedsGraphemeLength(evidence, 120)
+        ? truncateGraphemesTo(evidence, 120)
+        : evidence,
       createdAt: now,
       updatedAt: now,
       tags: ['graph', 'goal-evidence'],

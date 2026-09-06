@@ -27,6 +27,12 @@ import {
   isMemorySourceWithdrawn,
   MemoryPersistenceSourceWithdrawnError,
 } from '../../src/services/memory/withdrawalFence';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../helpers/graphemeSafetyProbes';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -371,6 +377,36 @@ describe('bridgeEvidenceToFacts', () => {
     expect(entries[0].kind).toBe('fact');
     expect(entries[0].status).toBe('verified');
     expect(entries[0].dedupeKey).toBe('python:artifact:reports/analysis.json');
+  });
+
+  it('never splits a grapheme cluster when the 120-char dedupeKey cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      // Repeat the probe near the 120-char dedupeKey cut boundary.
+      const evidence = `graph:${'e'.repeat(105)}${probe.repeat(15)}`;
+      const [entry] = mapGraphGoalEvidenceToEntries([evidence]);
+      expectGraphemeSafe(entry.dedupeKey ?? '');
+    }
+  });
+
+  it('never splits a grapheme cluster when the 3200-char bridged object-text cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      closeMemoryDb();
+      expoSqlite.__resetExpoSqliteForTests();
+      resetFactSchemaCacheForTests();
+      ensureFactSchema();
+      // Repeat the probe near the 3200-char MAX_BRIDGED_OBJECT_TEXT_CHARS cut
+      // boundary. title is blank so buildObjectText takes the single-value
+      // (content-only) path instead of merging "title: content".
+      const content = `${'c'.repeat(3190)}${probe.repeat(15)}`;
+      const result = bridgeEvidenceToFacts(
+        [makeEntry({ title: '', content })],
+        bridgeOptions({ subjectName: 'run-001' }),
+      );
+      expect(result.bridged).toHaveLength(1);
+      expectGraphemeSafe(result.bridged[0].fact.objectText);
+    }
   });
 
   it('bridges graph goal evidence with task and run provenance', () => {

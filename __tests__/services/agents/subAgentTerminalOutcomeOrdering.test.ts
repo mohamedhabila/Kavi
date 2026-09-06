@@ -19,6 +19,12 @@ import {
   finalizeCompletedSubAgentRun,
   finalizeFailedSubAgentRun,
 } from '../../../src/services/agents/lifecycle/terminalizePhase';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../../helpers/graphemeSafetyProbes';
 
 const MEMORY_LINEAGE = {
   sourceMessageId: 'worker-request-1',
@@ -284,5 +290,22 @@ describe('terminal worker outcome ordering', () => {
     await Promise.resolve();
 
     expect(mockCommitPendingVerifiedProcedureObservation).not.toHaveBeenCalled();
+  });
+
+  it('never splits a grapheme cluster when the outputTruncation cut lands inside a probe', async () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const order: string[] = [];
+      const agent = makeAgent();
+      const output = `${'o'.repeat(1990)}${probe.repeat(15)}`;
+
+      await finalizeCompletedSubAgentRun({
+        ...commonParams(agent, order),
+        output,
+        outputTruncation: 2_000,
+      });
+
+      expectGraphemeSafe(agent.output ?? '');
+    }
   });
 });

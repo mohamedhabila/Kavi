@@ -4,6 +4,7 @@ import {
   isValidAssistantMessageMetadata,
 } from '../../utils/assistantMessageMetadata';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { segmentGraphemes } from '../../utils/graphemes';
 import {
   resolvePriorUserMessageIdentity,
   resolveUniqueMessageIdentity,
@@ -72,31 +73,29 @@ function takeUtf8Prefix(value: string, maxBytes: number): string {
   if (maxBytes <= 0) return '';
   const output: string[] = [];
   let used = 0;
-  for (const character of value) {
-    const bytes = utf8IngestionSourceSnapshotByteLength(character);
+  // Iterate by extended grapheme cluster (not raw codepoint) so the byte
+  // budget cut never splits a ZWJ emoji sequence, a combining mark from its
+  // base letter, or a Brahmic virama conjunct — only a whole cluster is ever
+  // admitted or dropped.
+  for (const grapheme of segmentGraphemes(value)) {
+    const bytes = utf8IngestionSourceSnapshotByteLength(grapheme);
     if (used + bytes > maxBytes) break;
-    output.push(character);
+    output.push(grapheme);
     used += bytes;
   }
   return output.join('');
 }
 function takeUtf8Suffix(value: string, maxBytes: number): string {
   if (maxBytes <= 0) return '';
+  const graphemes = segmentGraphemes(value);
   const output: string[] = [];
   let used = 0;
-  for (let index = value.length; index > 0; ) {
-    let start = index - 1;
-    const current = value.charCodeAt(start);
-    if (current >= 0xdc00 && current <= 0xdfff && start > 0) {
-      const prior = value.charCodeAt(start - 1);
-      if (prior >= 0xd800 && prior <= 0xdbff) start -= 1;
-    }
-    const character = value.slice(start, index);
-    const bytes = utf8IngestionSourceSnapshotByteLength(character);
+  for (let index = graphemes.length - 1; index >= 0; index -= 1) {
+    const grapheme = graphemes[index];
+    const bytes = utf8IngestionSourceSnapshotByteLength(grapheme);
     if (used + bytes > maxBytes) break;
-    output.push(character);
+    output.push(grapheme);
     used += bytes;
-    index = start;
   }
   return output.reverse().join('');
 }

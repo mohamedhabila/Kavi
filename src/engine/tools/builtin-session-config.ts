@@ -1,6 +1,7 @@
 import { generateId } from '../../utils/id';
 import type { Message } from '../../types/message';
 import type { SubAgentConfig } from '../../types/subAgent';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 function normalizeSessionDepthValue(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -60,8 +61,7 @@ export function sanitizeWorkerName(name?: unknown): string | undefined {
   }
 
   return (
-    name
-      .slice(0, 256)
+    truncateGraphemesTo(name, 256)
       .replace(/[\x00-\x1f\x7f]/g, '_')
       .trim() || undefined
   );

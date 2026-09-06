@@ -11,6 +11,12 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../../helpers/graphemeSafetyProbes';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -110,5 +116,23 @@ describe('management memory search', () => {
     expect(result.totalCurrentFacts).toBe(1);
     expect(result.totalMatches).toBe(1);
     expect(result.facts.map((fact) => fact.id)).toEqual([pinned.id]);
+  });
+
+  it('never splits a grapheme cluster when the 200-char query cut lands inside a probe', () => {
+    const subject = upsertEntity({ name: 'Probe Project', type: 'project' });
+    recordFact({
+      subjectId: subject.id,
+      predicate: 'note',
+      objectText: 'unrelated value',
+      scope: 'global',
+      now: 1,
+    });
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const rawQuery = `${'q'.repeat(190)}${probe.repeat(15)}`;
+      expect(() => searchMemoryFactsForManagement(rawQuery, 10)).not.toThrow();
+      const result = searchMemoryFactsForManagement(rawQuery, 10);
+      expectGraphemeSafe(result.query);
+    }
   });
 });

@@ -1,4 +1,5 @@
 import { tokenizeLexicalUnits } from './ranking/lexical';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 
 const MAX_OBSERVED_AFFORDANCE_COMPLEMENT_ITEMS = 8;
 
@@ -6,7 +7,9 @@ function trimString(value: unknown, maxChars: number): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  return trimmed.length <= maxChars ? trimmed : `${trimmed.slice(0, maxChars - 3).trimEnd()}...`;
+  return !exceedsGraphemeLength(trimmed, maxChars)
+    ? trimmed
+    : `${truncateGraphemesTo(trimmed, maxChars - 3).trimEnd()}...`;
 }
 
 function dropEmptyRecord(value: Record<string, unknown>): Record<string, unknown> {

@@ -1,6 +1,15 @@
-import { buildStructuredSummary } from '../../src/services/context/compactionSummary';
+import {
+  buildStructuredSummary,
+  normalizePriorCompactionContext,
+} from '../../src/services/context/compactionSummary';
 import { parseReadFileContinuationSummaryLine } from '../../src/utils/readFileContinuation';
 import type { Message } from '../../src/types/message';
+import {
+  buildBoundaryStraddlingText,
+  buildTailBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../helpers/graphemeTestFixtures';
 
 function makeMessage(role: Message['role'], content: string): Message {
   return { id: `${role}-${content}`, role, content, timestamp: 1 };
@@ -178,4 +187,32 @@ describe('compaction summary continuity', () => {
       nextOffset: 7_000,
     });
   });
+});
+
+describe('buildStructuredSummary — grapheme safety', () => {
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the 320-char user-request budget`, () => {
+      const content = buildBoundaryStraddlingText(320, cluster, 100);
+      const summary = buildStructuredSummary([makeMessage('user', content)], 'selective');
+      expectGraphemeSafe(summary);
+    });
+
+    it(`never splits ${name} straddling the 400-char assistant-conclusion budget`, () => {
+      const content = buildBoundaryStraddlingText(400, cluster, 100);
+      const summary = buildStructuredSummary([makeMessage('assistant', content)], 'selective');
+      expectGraphemeSafe(summary);
+    });
+  }
+});
+
+describe('normalizePriorCompactionContext — grapheme safety', () => {
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the tail-truncation budget`, () => {
+      // Aggressive tier keeps the last 599 chars (maxChars - 1); place the cluster so
+      // that boundary lands one code unit inside it.
+      const priorContext = buildTailBoundaryStraddlingText(599, cluster, 300);
+      const result = normalizePriorCompactionContext(priorContext, 'aggressive');
+      expectGraphemeSafe(result);
+    });
+  }
 });

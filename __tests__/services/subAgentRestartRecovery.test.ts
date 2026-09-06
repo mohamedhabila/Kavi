@@ -2,6 +2,12 @@ import { buildSubAgentRestartRecoveryPlan } from '../../src/services/agents/subA
 import type { SubAgentSessionContext } from '../../src/services/agents/lifecycle/sessionContext';
 import type { Message } from '../../src/types/message';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../helpers/graphemeSafetyProbes';
 
 const NOW = 10_000;
 const ORIGINAL_TASK = 'Wait for checkpoint one, then checkpoint two, and report exact evidence.';
@@ -417,6 +423,27 @@ describe('sub-agent restart recovery', () => {
       'retained summary and durable read checkpoints as orientation only, not as proof',
     );
     expect(recoveryMessages.at(-1)?.content).toContain('Two sources were partially inspected.');
+  });
+
+  it('never splits a grapheme cluster when the 4000-char retained-summary cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const completedBatch: Message[] = [
+        { id: 'user-1', role: 'user', content: ORIGINAL_TASK, timestamp: 1_000 },
+      ];
+      const compactedContext = context(completedBatch, false, ['read_file']);
+      compactedContext.conversationSummary = `${'s'.repeat(3990)}${probe.repeat(15)}`;
+
+      const plan = buildSubAgentRestartRecoveryPlan({
+        agent: runningAgent(),
+        context: compactedContext,
+        now: NOW,
+      });
+
+      expect(plan).not.toBeNull();
+      const recoveryMessages = plan!.config.initialMessages!;
+      expectGraphemeSafe(recoveryMessages.at(-1)?.content ?? '');
+    }
   });
 
   it('fails closed for compacted state when any allowed tool can cause effects', () => {

@@ -4,6 +4,7 @@ import {
   type MemoryAccessScopeIdentity,
 } from '../memoryScopeIdentity';
 import { isExactMemoryProvenanceId } from '../memoryProvenanceIdentity';
+import { exceedsGraphemeLength } from '../../../utils/graphemes';
 import type { EpisodeRow } from './types';
 import {
   EPISODE_SENSITIVITY,
@@ -122,7 +123,7 @@ export function hasCompleteEpisodeSource(row: EpisodeRow): boolean {
     !isExactMemoryProvenanceId(row.source_end_message_id) ||
     typeof row.summary !== 'string' ||
     !row.summary.trim() ||
-    row.summary.length > 1_200 ||
+    exceedsGraphemeLength(row.summary, 1_200) ||
     !hasStrictToolNames(row.tool_names_json)
   ) {
     return false;

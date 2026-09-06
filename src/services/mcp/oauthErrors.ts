@@ -1,6 +1,7 @@
 import { OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import type { McpServerConfig } from '../../types/remote';
 import { createLogger } from '../../utils/logger';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
 const logger = createLogger('mcp.oauthErrors');
 
@@ -22,7 +23,7 @@ function trimOAuthDetail(value?: string): string | undefined {
     return undefined;
   }
 
-  return trimmed.length > 240 ? `${trimmed.slice(0, 237)}...` : trimmed;
+  return truncateGraphemesWithSuffix(trimmed, 240, '...');
 }
 
 function shouldSuppressOAuthDetail(value?: string): boolean {

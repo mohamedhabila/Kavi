@@ -15,6 +15,8 @@ import {
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
 import { failedSessionNotFoundOutcome } from './builtin-session-errors';
+import { truncateGraphemesTo } from '../../utils/graphemes';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
 type SessionHistoryMessage = {
   role: Message['role'] | 'system';
@@ -77,7 +79,11 @@ function serializeSessionHistory(
   }
 
   if (serialized.length > maxSize && bounded.conversationSummary) {
-    bounded.conversationSummary = `${bounded.conversationSummary.slice(0, 317).trimEnd()}...`;
+    bounded.conversationSummary = truncateGraphemesWithSuffix(
+      bounded.conversationSummary,
+      317,
+      '...',
+    );
     serialized = JSON.stringify(bounded);
   }
 
@@ -86,7 +92,7 @@ function serializeSessionHistory(
     bounded.messages = [
       {
         ...lastMessage,
-        content: `${lastMessage.content.slice(0, 1021).trimEnd()}...`,
+        content: truncateGraphemesWithSuffix(lastMessage.content, 1021, '...'),
       },
     ];
     serialized = JSON.stringify(bounded);
@@ -120,7 +126,7 @@ export async function executeSessionList(): Promise<ToolRuntimeOutcome> {
         depth: agent.depth,
         startedAt: agent.startedAt,
         launchState: agent.launchState,
-        output: agent.output?.slice(0, 500),
+        output: agent.output ? truncateGraphemesTo(agent.output, 500) : agent.output,
         currentActivity: agent.currentActivity,
         activeToolName: agent.activeToolName,
         lastToolResultPreview: agent.lastToolResultPreview,
@@ -146,7 +152,7 @@ export async function executeSessionHistory(args: {
   const maxSize = 80 * 1024;
   const maxPerMessage = 4000;
   const maxMessages = Math.max(1, Math.floor(args.maxMessages || 8));
-  const output = (agent.output || '').slice(0, maxPerMessage);
+  const output = truncateGraphemesTo(agent.output || '', maxPerMessage);
   const sessionContext = getSessionContext(args.sessionId);
   const activityEntries = agent.activityLog?.slice(-maxMessages) || [];
   const transcriptMessages =

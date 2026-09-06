@@ -1,6 +1,7 @@
 import { ToolDefinition } from '../../types/tool';
 import { estimateTokens } from '../../services/context/tokenCounter';
 import { DEFAULT_CORE_TOOL_NAMES } from '../goals/toolSurface';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
 /**
  * Never-evicted tools. This deliberately mirrors the default turn-1 surface rather
@@ -11,6 +12,7 @@ import { DEFAULT_CORE_TOOL_NAMES } from '../goals/toolSurface';
  */
 const CORE_TOOL_TOKEN_BUDGET_NAMES: ReadonlySet<string> = DEFAULT_CORE_TOOL_NAMES;
 const MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT = 60;
+const TOOL_DESCRIPTION_CHARACTER_LIMIT = 240;
 
 export interface CompactToolDefinitionOptions {
   pinnedToolNames?: ReadonlySet<string>;
@@ -112,7 +114,7 @@ export function compressToolDescription(description: string): string {
 
   const condensed = sentences.length <= 2 ? description.trim() : sentences.slice(0, 2).join(' ');
 
-  return condensed.length <= 240 ? condensed : `${condensed.slice(0, 237).trimEnd()}...`;
+  return truncateGraphemesWithSuffix(condensed, TOOL_DESCRIPTION_CHARACTER_LIMIT, '...');
 }
 
 export function compressToolDescriptionMinimal(description: string): string {
@@ -124,9 +126,11 @@ export function compressToolDescriptionMinimal(description: string): string {
       .map((sentence) => sentence.trim())
       .find(Boolean) ?? description.trim();
 
-  return firstSentence.length <= MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT
-    ? firstSentence
-    : `${firstSentence.slice(0, MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT - 1).trimEnd()}\u2026`;
+  return truncateGraphemesWithSuffix(
+    firstSentence,
+    MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT,
+    '\u2026',
+  );
 }
 
 function isPlainRecord(value: unknown): value is Record<string, any> {

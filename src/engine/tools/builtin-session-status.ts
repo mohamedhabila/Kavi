@@ -13,6 +13,7 @@ import {
 import { TERMINAL_SESSION_OUTPUT_GUIDANCE } from './builtin-session-resultSupport';
 import { completedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 import { failedSessionNotFoundOutcome } from './builtin-session-errors';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export async function executeSessionStatus(args: {
   sessionId: string;
@@ -61,7 +62,7 @@ export async function executeSessionStatus(args: {
       hasDeadline: statusPayload.deadlineAt != null,
       remainingDeadlineMs: statusPayload.remainingDeadlineMs,
       hasOutput: !!agent.output,
-      outputPreview: agent.output?.slice(0, 320),
+      outputPreview: agent.output ? truncateGraphemesTo(agent.output, 320) : agent.output,
       hasNewActivity: statusPayload.hasNewActivity,
       currentActivity: agent.currentActivity,
       activeToolName: agent.activeToolName,

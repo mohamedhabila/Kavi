@@ -5,10 +5,12 @@ import {
   splitCacheableSystemPromptSections,
 } from '../../core/systemPromptSections';
 import { buildPromptCachingToolOrder } from '../../core/toolCaching';
+import { truncateToUtf16BudgetGraphemeSafe } from '../../../../utils/graphemes';
 
 export const MAX_ANTHROPIC_STRICT_TOOLS = 4;
 export const ANTHROPIC_INTERLEAVED_THINKING_BETA = 'interleaved-thinking-2025-05-14';
 export const ANTHROPIC_EPHEMERAL_CACHE_CONTROL = { type: 'ephemeral' } as const;
+const ANTHROPIC_TOOL_DESCRIPTION_CHAR_LIMIT = 2000;
 
 export function strictifySchema(schema: Record<string, any>): Record<string, any> {
   if (!schema || typeof schema !== 'object') return schema;
@@ -33,8 +35,13 @@ export function strictifySchema(schema: Record<string, any>): Record<string, any
 export function simplifyAnthropicToolDescription(description: string | undefined): string {
   const trimmed = (description || '').trim();
   if (!trimmed) return '';
-  if (trimmed.length <= 2000) return trimmed;
-  return `${trimmed.slice(0, 1997).trimEnd()}...`;
+  if (trimmed.length <= ANTHROPIC_TOOL_DESCRIPTION_CHAR_LIMIT) return trimmed;
+  const suffix = '...';
+  const truncated = truncateToUtf16BudgetGraphemeSafe(
+    trimmed,
+    ANTHROPIC_TOOL_DESCRIPTION_CHAR_LIMIT - suffix.length,
+  );
+  return `${truncated.trimEnd()}${suffix}`;
 }
 
 export function buildAnthropicSystemPromptContent(args: {

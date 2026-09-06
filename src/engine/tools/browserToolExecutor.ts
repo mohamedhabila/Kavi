@@ -1,4 +1,5 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 import {
   browserNavigate,
   browserAct,
@@ -91,7 +92,7 @@ function buildBrowserTraceDescription(name: string, args: any): string {
     case 'browser_click':
       return `Click element ref=${args.ref || ''}`;
     case 'browser_type':
-      return `Type "${(args.text || '').slice(0, 30)}" into ref=${args.ref || ''}`;
+      return `Type "${truncateGraphemesTo(args.text || '', 30)}" into ref=${args.ref || ''}`;
     case 'browser_press_key':
       return `Press key "${args.key || ''}"`;
     case 'browser_hover':

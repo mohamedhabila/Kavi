@@ -1,4 +1,12 @@
 import { buildConsolidatorPrompt } from '../../src/services/memory/consolidator';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../helpers/graphemeSafetyProbes';
+
+const PROBES = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
 
 describe('buildConsolidatorPrompt', () => {
   it('includes thread title, persona, user, assistant blocks', () => {
@@ -21,6 +29,42 @@ describe('buildConsolidatorPrompt', () => {
     });
     expect(prompt.length).toBeLessThan(12_000);
     expect(prompt).toMatch(/\u2026/);
+  });
+
+  it('never splits a grapheme cluster at the head+tail cut of an over-long user/assistant message', () => {
+    for (const probe of PROBES) {
+      // DIRECT_USER_PROMPT_CHARACTER_LIMIT is 4200 and DIRECT_ASSISTANT is
+      // 2200; head+tail split puts the probe near both cut boundaries when
+      // repeated across the whole message.
+      const userMessage = `${'u'.repeat(4190)}${probe.repeat(20)}${'u'.repeat(4190)}`;
+      const assistantMessage = `${'a'.repeat(2190)}${probe.repeat(20)}${'a'.repeat(2190)}`;
+      const prompt = buildConsolidatorPrompt({ userMessage, assistantMessage });
+      expectGraphemeSafe(prompt);
+    }
+  });
+
+  it('never splits a grapheme cluster when the 400-char persona cut lands inside a probe', () => {
+    for (const probe of PROBES) {
+      const personaSummary = `${'p'.repeat(390)}${probe.repeat(15)}`;
+      const prompt = buildConsolidatorPrompt({
+        userMessage: 'hi',
+        assistantMessage: 'hello',
+        personaSummary,
+      });
+      expectGraphemeSafe(prompt);
+    }
+  });
+
+  it('never splits a grapheme cluster when the 1200-char message-window cut lands inside a probe', () => {
+    for (const probe of PROBES) {
+      const content = `${'m'.repeat(1190)}${probe.repeat(15)}`;
+      const prompt = buildConsolidatorPrompt({
+        userMessage: 'ignored',
+        assistantMessage: 'ignored',
+        messages: [{ id: 'u1', role: 'user', content, timestamp: 1 }],
+      });
+      expectGraphemeSafe(prompt);
+    }
   });
 
   it('prefers enriched user content in message windows', () => {

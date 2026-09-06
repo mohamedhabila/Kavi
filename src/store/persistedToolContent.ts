@@ -1,4 +1,5 @@
 import { buildHeadTailExcerpt } from '../utils/headTailExcerpt';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../utils/graphemes';
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -39,11 +40,13 @@ const COMPACTION_PROFILES: CompactionProfile[] = [
 ];
 
 function truncateText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) {
+  if (!exceedsGraphemeLength(value, maxChars)) {
     return value;
   }
   const excerpt = buildHeadTailExcerpt(value, maxChars);
-  return excerpt.length <= maxChars ? excerpt : value.slice(0, maxChars);
+  return !exceedsGraphemeLength(excerpt, maxChars)
+    ? excerpt
+    : truncateGraphemesTo(value, maxChars);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -126,7 +129,7 @@ function buildFallbackEnvelope(content: string, maxChars: number): string {
 }
 
 export function compactPersistedToolContent(content: string, maxChars: number): string {
-  if (content.length <= maxChars) {
+  if (!exceedsGraphemeLength(content, maxChars)) {
     return content;
   }
 

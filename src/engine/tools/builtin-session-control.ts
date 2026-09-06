@@ -1,6 +1,7 @@
 import { cancelSubAgent, getSubAgent, getSubAgentsByParent } from '../../services/agents/subAgent';
 import { completedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 import { failedSessionNotFoundOutcome } from './builtin-session-errors';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export async function executeSessionCancel(args: {
   sessionId: string;
@@ -18,7 +19,7 @@ export async function executeSessionCancel(args: {
         terminationCause: agent.terminationCause,
         sessionId: args.sessionId,
         message: 'Session is already in a terminal state.',
-        outputPreview: agent.output?.slice(0, 1000),
+        outputPreview: agent.output ? truncateGraphemesTo(agent.output, 1000) : agent.output,
       }),
     );
   }

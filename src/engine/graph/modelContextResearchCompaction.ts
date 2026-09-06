@@ -1,5 +1,6 @@
 import type { Message } from '../../types/message';
 import { buildHeadTailExcerpt } from '../../utils/headTailExcerpt';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 
 const WEB_CONTEXT_COMPACT_TOOL_NAMES = new Set(['web_search', 'web_fetch']);
@@ -10,9 +11,7 @@ const MAX_WEB_FIELD_CHARS = 320;
 const MAX_WEB_FETCH_EXCERPT_CHARS = 1600;
 
 function truncateText(value: string, maxChars: number): string {
-  return value.length <= maxChars
-    ? value
-    : `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+  return truncateGraphemesWithSuffix(value, maxChars, '...');
 }
 
 function normalizeText(value: unknown, maxChars = MAX_WEB_FIELD_CHARS): string | undefined {

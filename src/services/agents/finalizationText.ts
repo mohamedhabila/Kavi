@@ -1,3 +1,5 @@
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
+
 export const FINALIZATION_OUTPUT_TRUNCATION = 8_000;
 export const FINALIZATION_RESULT_PREVIEW_CHARS = 320;
 const FINALIZATION_STRUCTURED_SCALAR_CHARS = 96;
@@ -17,8 +19,8 @@ export function normalizeFinalizationOutputText(
     return undefined;
   }
 
-  if (typeof maxLength === 'number' && normalized.length > maxLength) {
-    return normalized.slice(0, maxLength).trimEnd();
+  if (typeof maxLength === 'number' && exceedsGraphemeLength(normalized, maxLength)) {
+    return truncateGraphemesTo(normalized, maxLength).trimEnd();
   }
 
   return normalized;
@@ -33,11 +35,11 @@ export function truncateFinalizationText(
     return undefined;
   }
 
-  if (normalized.length <= maxLength) {
+  if (!exceedsGraphemeLength(normalized, maxLength)) {
     return normalized;
   }
 
-  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+  return `${truncateGraphemesTo(normalized, maxLength - 3).trimEnd()}...`;
 }
 
 export function normalizeFinalizationPreviewText(
@@ -53,9 +55,9 @@ export function normalizeFinalizationPreviewText(
     return undefined;
   }
 
-  return normalized.length <= maxLength
+  return !exceedsGraphemeLength(normalized, maxLength)
     ? normalized
-    : `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+    : `${truncateGraphemesTo(normalized, maxLength - 3).trimEnd()}...`;
 }
 
 type StructuredPreviewQueueEntry = Readonly<{

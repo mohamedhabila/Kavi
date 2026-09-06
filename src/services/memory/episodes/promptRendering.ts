@@ -1,4 +1,5 @@
 import type { EpisodeRecallSelection } from './accessPolicyTypes';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
 
 export const MAX_RENDERED_EPISODE_SUMMARY_CHARS = 200;
 export const MAX_RENDERED_EPISODE_TOOL_NAMES = 8;
@@ -32,8 +33,8 @@ interface EpisodePromptRecord {
 
 function fitEpisodeSummary(summary: string): string {
   const trimmed = summary.trim();
-  if (trimmed.length <= MAX_RENDERED_EPISODE_SUMMARY_CHARS) return trimmed;
-  return `${trimmed.slice(0, MAX_RENDERED_EPISODE_SUMMARY_CHARS - 1).trimEnd()}\u2026`;
+  if (!exceedsGraphemeLength(trimmed, MAX_RENDERED_EPISODE_SUMMARY_CHARS)) return trimmed;
+  return `${truncateGraphemesTo(trimmed, MAX_RENDERED_EPISODE_SUMMARY_CHARS - 1).trimEnd()}\u2026`;
 }
 
 function hasAutomaticPromptAuthorization(selection: EpisodePromptSelection): boolean {

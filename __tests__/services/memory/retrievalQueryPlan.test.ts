@@ -1,4 +1,10 @@
 import { planRetrievalSignals } from '../../../src/services/memory/retrievalQueryPlan';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../../helpers/graphemeSafetyProbes';
 
 describe('planRetrievalSignals', () => {
   it('extracts quoted content from user intent lines, not machine-dense action schemas', () => {
@@ -81,5 +87,18 @@ describe('planRetrievalSignals', () => {
       'qimage-detail-line describes the visible destination state.',
     ]);
     expect(plan.droppedSignals).toEqual(['<attachment>', '[1]', 'metadata:']);
+  });
+
+  it('never splits a grapheme cluster when the 1200-char signal cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const line = `Find qtarget evidence: ${'w'.repeat(1170)}${probe.repeat(15)}`;
+      const plan = planRetrievalSignals([line]);
+      const allSignals = [...plan.primarySignals, ...plan.supportingSignals];
+      expect(allSignals.length).toBeGreaterThan(0);
+      for (const signal of allSignals) {
+        expectGraphemeSafe(signal);
+      }
+    }
   });
 });

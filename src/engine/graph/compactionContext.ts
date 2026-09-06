@@ -10,6 +10,7 @@
 import type { AgentGoal } from '../../types/agentRun';
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
 export const MAX_COMPACTION_OPEN_THREADS = 8;
 const MAX_OPEN_THREAD_CHARS = 160;
@@ -22,9 +23,7 @@ const LIVE_GOAL_STATUSES: ReadonlySet<AgentGoal['status']> = new Set<AgentGoal['
 
 function truncate(value: string): string {
   const normalized = value.replace(/\s+/gu, ' ').trim();
-  return normalized.length > MAX_OPEN_THREAD_CHARS
-    ? `${normalized.slice(0, MAX_OPEN_THREAD_CHARS - 1)}…`
-    : normalized;
+  return truncateGraphemesWithSuffix(normalized, MAX_OPEN_THREAD_CHARS, '…');
 }
 
 function goalOpenThread(goal: AgentGoal): string | null {

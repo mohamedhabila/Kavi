@@ -1,4 +1,5 @@
 import { buildStreamingPreview } from '../../../utils/streamingPreview';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
 
 const DEFAULT_ACTIVITY_TEXT_CHARS = 220;
 const TOOL_ACTIVITY_ARGUMENT_KEYS = [
@@ -26,9 +27,9 @@ export function normalizePreviewText(
     return undefined;
   }
 
-  return normalized.length <= maxLength
+  return !exceedsGraphemeLength(normalized, maxLength)
     ? normalized
-    : `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+    : `${truncateGraphemesTo(normalized, maxLength - 3).trimEnd()}...`;
 }
 
 export function buildSubAgentResponsePreview(

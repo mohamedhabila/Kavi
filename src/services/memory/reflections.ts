@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { createLogger } from '../../utils/logger';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import type { MemoryEpisode } from './episodes/types';
 import type { MemoryFact } from './facts/types';
 import { getFactByIdForRecallCandidate, listFactsForRecallPeriod } from './facts/queries';
@@ -128,14 +129,14 @@ export function buildReflectionContent(params: {
   for (const episode of params.episodes.slice(0, MAX_EPISODE_LINES)) {
     const summary = episode.summary.trim();
     if (!summary) continue;
-    lines.push(`episode:${episode.id} ${summary.slice(0, 240)}`);
+    lines.push(`episode:${episode.id} ${truncateGraphemesTo(summary, 240)}`);
   }
 
   const rankedFacts = [...params.facts].sort((left, right) => right.importance - left.importance);
   for (const fact of rankedFacts.slice(0, MAX_FACT_LINES)) {
     const objectText = fact.objectText.trim();
     if (!objectText) continue;
-    lines.push(`fact:${fact.id} ${fact.predicate}:${objectText.slice(0, 120)}`);
+    lines.push(`fact:${fact.id} ${fact.predicate}:${truncateGraphemesTo(objectText, 120)}`);
   }
 
   if (lines.length === 0) {
@@ -143,8 +144,8 @@ export function buildReflectionContent(params: {
   }
 
   const content = lines.join('\n');
-  return content.length > MAX_REFLECTION_CONTENT_CHARS
-    ? `${content.slice(0, MAX_REFLECTION_CONTENT_CHARS - 3).trimEnd()}...`
+  return exceedsGraphemeLength(content, MAX_REFLECTION_CONTENT_CHARS)
+    ? `${truncateGraphemesTo(content, MAX_REFLECTION_CONTENT_CHARS - 3).trimEnd()}...`
     : content;
 }
 

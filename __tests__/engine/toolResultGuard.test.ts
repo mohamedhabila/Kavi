@@ -14,6 +14,11 @@ import {
   COMPACTION_PLACEHOLDER,
 } from '../../src/engine/toolResultGuard';
 import type { Message } from '../../src/types/message';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../helpers/graphemeTestFixtures';
 
 const makeToolMsg = (id: string, content: string): Message => ({
   id,
@@ -135,6 +140,24 @@ describe('enforceToolResultBudget', () => {
     expect(compacted).toContain('lastItems');
   });
 
+  // Regression test — a duplicate grapheme-safety migration subtracted the
+  // "… (N chars omitted)" suffix's length from the nested scalar preview
+  // budget (240 chars for a first-level object field) before truncating, so
+  // the kept content shrank by the suffix's length. The pre-migration
+  // behaviour kept the full budget's worth of content and appended the
+  // suffix after it (an unbounded total), and callers pass this exact
+  // budget expecting that much content back.
+  it('keeps the full nested scalar preview budget as content, not shrunk by the suffix length', () => {
+    const summary = 'A'.repeat(2000);
+    const result = JSON.stringify({ summary, filler: 'x'.repeat(20_000) });
+
+    const compacted = enforceToolResultBudget(result, 4000);
+    const parsed = JSON.parse(compacted);
+    const summaryContent = String(parsed.summary).split('… (')[0];
+
+    expect(summaryContent).toBe('A'.repeat(240));
+  });
+
   it('preserves structured summary and failureLogs when compacting large JSON', () => {
     const result = JSON.stringify({
       summary:
@@ -242,4 +265,42 @@ describe('compactToolResults', () => {
     const userMsg = result.find((m) => m.id === 'u1')!;
     expect(userMsg.content).toBe('A'.repeat(10_000));
   });
+});
+
+describe('truncateToolResult — head/tail seam grapheme safety', () => {
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} at the head cut`, () => {
+      const limit = MIN_KEEP_CHARS;
+      const headBoundary = Math.floor(limit * 0.7);
+      const value = `${buildBoundaryStraddlingText(headBoundary, cluster, 0)}${'m'.repeat(limit * 3)}${'t'.repeat(200)}`;
+
+      const result = truncateToolResult(value, limit);
+      expectGraphemeSafe(result);
+    });
+
+    it(`never splits ${name} at the tail cut`, () => {
+      const limit = MIN_KEEP_CHARS;
+      const tailBoundary = Math.floor(limit * 0.3);
+      const value = `${'h'.repeat(200)}${'m'.repeat(limit * 3)}${buildBoundaryStraddlingText(tailBoundary, cluster, 0)}`;
+
+      const result = truncateToolResult(value, limit);
+      expectGraphemeSafe(result);
+    });
+  }
+});
+
+describe('enforceToolResultBudget — structured scalar truncation grapheme safety', () => {
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the top-level scalar preview budget`, () => {
+      const value = buildBoundaryStraddlingText(600, cluster, 200);
+      const oversized = JSON.stringify({
+        summary: value,
+        filler: 'x'.repeat(20_000),
+      });
+
+      const result = enforceToolResultBudget(oversized, 1000);
+      const parsed = JSON.parse(result);
+      expectGraphemeSafe(String(parsed.summary ?? ''));
+    });
+  }
 });

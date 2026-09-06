@@ -17,6 +17,12 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/database';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../../helpers/graphemeSafetyProbes';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const NOW = 10_000;
@@ -146,5 +152,39 @@ describe('least-privilege worker memory bundle', () => {
         personaId: 'persona',
       }),
     ).toBeUndefined();
+  });
+
+  it('never splits a grapheme cluster when the 520-char fact objectText cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const objectText = `${'v'.repeat(510)}${probe.repeat(15)}`;
+      const bundle = sanitizeSubAgentMemoryBundle({
+        version: 1,
+        source: {
+          memoryOwnerId: 'owner',
+          memoryConversationId: 'root',
+          sourceThreadId: 'thread',
+          personaId: 'persona',
+          taskId: null,
+        },
+        createdAt: NOW,
+        facts: [
+          {
+            factId: 'fact-probe',
+            subjectId: 'subject-probe',
+            predicate: 'note',
+            objectText,
+            memoryKind: 'semantic_fact',
+            sourceAuthority: 'tool_observed',
+            sourceMessageId: null,
+            sourceRunId: null,
+            validAt: NOW,
+          },
+        ],
+        episodes: [],
+      });
+      expect(bundle?.facts).toHaveLength(1);
+      expectGraphemeSafe(bundle?.facts[0]?.objectText ?? '');
+    }
   });
 });

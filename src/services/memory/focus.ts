@@ -17,6 +17,8 @@
 //   • Empty subsections are omitted to keep the block tight.
 // ---------------------------------------------------------------------------
 
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
+
 export type FocusGapBucket =
   | 'live'
   | 'short_break'
@@ -166,7 +168,7 @@ export function composeActiveFocusContent(params: {
     threadTitle && activeFocus && !activeFocus.includes(threadTitle)
       ? `${threadTitle}\n${activeFocus}`
       : activeFocus || threadTitle;
-  return content.slice(0, maxChars).trim();
+  return truncateGraphemesTo(content, maxChars).trim();
 }
 
 /**
@@ -197,10 +199,9 @@ export function renderFocusBlock(input: FocusBlockInput): FocusBlockOutput {
 
   const activeFocus = (input.activeFocus ?? '').trim();
   if (activeFocus) {
-    const trimmed =
-      activeFocus.length > ACTIVE_FOCUS_MAX_CHARS
-        ? `${activeFocus.slice(0, ACTIVE_FOCUS_MAX_CHARS - 1).trimEnd()}\u2026`
-        : activeFocus;
+    const trimmed = exceedsGraphemeLength(activeFocus, ACTIVE_FOCUS_MAX_CHARS)
+      ? `${truncateGraphemesTo(activeFocus, ACTIVE_FOCUS_MAX_CHARS - 1).trimEnd()}\u2026`
+      : activeFocus;
     lines.push(`Recently we were: ${trimmed}`);
   }
 

@@ -1,13 +1,12 @@
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
+
 const MAX_TOOL_EVIDENCE_EXCERPT_CHARS = 200;
 const MAX_SCALAR_PATH_EVIDENCE_STRINGS = 32;
 const MAX_SCALAR_PATH_EVIDENCE_DEPTH = 5;
 const MAX_SCALAR_PATH_STRING_CHARS = 160;
 
 function truncateExcerpt(content: string): string {
-  if (content.length <= MAX_TOOL_EVIDENCE_EXCERPT_CHARS) {
-    return content;
-  }
-  return `${content.slice(0, MAX_TOOL_EVIDENCE_EXCERPT_CHARS)}…`;
+  return truncateGraphemesWithSuffix(content, MAX_TOOL_EVIDENCE_EXCERPT_CHARS, '…');
 }
 
 function buildPythonGoalEvidenceStrings(content: string): string[] {
@@ -94,9 +93,7 @@ function normalizeScalarEvidenceValue(value: string | number | boolean): string 
   if (typeof value !== 'string') {
     return value;
   }
-  return value.length > MAX_SCALAR_PATH_STRING_CHARS
-    ? `${value.slice(0, MAX_SCALAR_PATH_STRING_CHARS)}…`
-    : value;
+  return truncateGraphemesWithSuffix(value, MAX_SCALAR_PATH_STRING_CHARS, '…');
 }
 
 function assignNestedScalarPath(

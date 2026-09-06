@@ -30,6 +30,7 @@ import {
   buildFollowUpSubAgentConfig,
   resolveFollowUpSessionDepth,
 } from './builtin-session-config';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 import {
   mergeWorkerProviderIntoCatalog,
   resolveFollowUpWorkerModel,
@@ -127,7 +128,9 @@ export async function executeSessionSend(
     });
     const settings = useSettingsStore.getState();
     const previousOutput =
-      previousContext?.conversationSummary || agent.output?.slice(0, 4000) || '';
+      previousContext?.conversationSummary ||
+      (agent.output ? truncateGraphemesTo(agent.output, 4000) : '') ||
+      '';
     const followUpMessages: Message[] | undefined = buildFollowUpMessages(
       previousContext?.messages,
       message,

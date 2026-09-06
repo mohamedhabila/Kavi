@@ -6,6 +6,7 @@ import {
   READ_FILE_CONTINUATION_TOOL,
 } from '../../../utils/readFileContinuation';
 import { normalizeFinalizationOutputText } from '../finalizationText';
+import { graphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
 
 type TranscriptSanitizationOptions = {
   finalizationMessageCharLimit: number;
@@ -45,9 +46,9 @@ export function truncateTranscriptText(
     return undefined;
   }
 
-  return normalized.length < maxLength
+  return graphemeLength(normalized) < maxLength
     ? normalized
-    : `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+    : `${truncateGraphemesTo(normalized, maxLength - 3).trimEnd()}...`;
 }
 
 function buildDurableReadFileCheckpoint(content: string): string | undefined {

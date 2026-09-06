@@ -3,6 +3,7 @@ import type {
   MemoryApplicabilityReason,
 } from './memoryApplicabilityTypes';
 import type { MemoryFact } from './facts/types';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 
 export interface MemoryApplicabilityPromptFact {
   id: string;
@@ -32,8 +33,8 @@ function actionHeader(action: MemoryApplicabilityPromptEntry['action']): string 
 }
 
 function fitLine(value: string, maximum: number): string {
-  if (value.length <= maximum) return value;
-  return `${value.slice(0, Math.max(0, maximum - 1)).trimEnd()}…`;
+  if (!exceedsGraphemeLength(value, maximum)) return value;
+  return `${truncateGraphemesTo(value, Math.max(0, maximum - 1)).trimEnd()}…`;
 }
 
 function prioritizedResolutionFacts<T extends MemoryApplicabilityPromptFact>(

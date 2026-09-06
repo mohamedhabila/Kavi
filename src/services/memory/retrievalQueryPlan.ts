@@ -6,6 +6,8 @@
 // machine tokens without matching task-language phrases.
 // ---------------------------------------------------------------------------
 
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
+
 export interface RetrievalQueryPlan {
   primarySignals: string[];
   supportingSignals: string[];
@@ -158,8 +160,8 @@ function isStructuralMarkerLine(line: string): boolean {
 }
 
 function fitSignal(value: string): string {
-  if (value.length <= MAX_SIGNAL_CHARS) return value;
-  return value.slice(0, MAX_SIGNAL_CHARS).trimEnd();
+  if (!exceedsGraphemeLength(value, MAX_SIGNAL_CHARS)) return value;
+  return truncateGraphemesTo(value, MAX_SIGNAL_CHARS).trimEnd();
 }
 
 function addUniqueSignal(signals: string[], signal: string, limit: number): void {

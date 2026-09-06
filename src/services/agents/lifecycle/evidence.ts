@@ -4,6 +4,7 @@ import {
   AgentRunEvidenceStatus,
 } from '../../../types/agentRun';
 import { generateId } from '../../../utils/id';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
 import {
   AGENT_RUN_EVIDENCE_KIND_VALUES,
   AGENT_RUN_EVIDENCE_RECORDER_VALUES,
@@ -22,11 +23,11 @@ function truncateText(value: string | undefined, maxChars: number): string | und
     return undefined;
   }
 
-  if (normalized.length <= maxChars) {
+  if (!exceedsGraphemeLength(normalized, maxChars)) {
     return normalized;
   }
 
-  return `${normalized.slice(0, Math.max(1, maxChars - 3)).trimEnd()}...`;
+  return `${truncateGraphemesTo(normalized, Math.max(1, maxChars - 3)).trimEnd()}...`;
 }
 
 function normalizeEnumValue<T extends string>(

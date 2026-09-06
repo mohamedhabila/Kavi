@@ -20,6 +20,12 @@
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
+import {
+  exceedsGraphemeLength,
+  graphemeLength,
+  truncateGraphemesFromEnd,
+  truncateGraphemesTo,
+} from '../../utils/graphemes';
 import type { MemoryFactScope } from './facts/types';
 import type { SealedFactApplicabilityProvenance } from './facts/applicabilityProvenance';
 import {
@@ -253,7 +259,7 @@ export function buildConsolidatorPrompt(input: ConsolidatorPromptInput): string 
     lines.push(`<thread_title>${input.threadTitle.trim()}</thread_title>`);
   }
   if (input.personaSummary && input.personaSummary.trim()) {
-    lines.push(`<persona>${input.personaSummary.trim().slice(0, 400)}</persona>`);
+    lines.push(`<persona>${truncateGraphemesTo(input.personaSummary.trim(), 400)}</persona>`);
   }
   if (input.messages && input.messages.length > 0) {
     lines.push(
@@ -325,14 +331,15 @@ function getPromptVisibleMessageContent(message: Message): string {
 
 function truncateForPrompt(value: string, max: number): string {
   const trimmed = value.trim();
-  if (trimmed.length <= max) return trimmed;
+  if (!exceedsGraphemeLength(trimmed, max)) return trimmed;
   const marker = '\n\u2026\n';
-  const retainedCharacters = max - marker.length;
+  const retainedCharacters = max - graphemeLength(marker);
   const leadingCharacters = Math.ceil(retainedCharacters / 2);
   const trailingCharacters = retainedCharacters - leadingCharacters;
-  return `${trimmed.slice(0, leadingCharacters).trimEnd()}${marker}${trimmed
-    .slice(-trailingCharacters)
-    .trimStart()}`;
+  return `${truncateGraphemesTo(trimmed, leadingCharacters).trimEnd()}${marker}${truncateGraphemesFromEnd(
+    trimmed,
+    trailingCharacters,
+  ).trimStart()}`;
 }
 
 const TOP_LEVEL_FIELDS = new Set([

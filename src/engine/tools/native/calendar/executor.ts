@@ -1,4 +1,5 @@
 import { createLogger } from '../../../../utils/logger';
+import { truncateGraphemesTo } from '../../../../utils/graphemes';
 
 const logger = createLogger('CalendarExecutor');
 
@@ -160,7 +161,7 @@ export async function executeCalendarEvents(
       startDate: e.startDate,
       endDate: e.endDate,
       location: e.location,
-      notes: e.notes?.slice(0, 200),
+      notes: typeof e.notes === 'string' ? truncateGraphemesTo(e.notes, 200) : e.notes,
       allDay: e.allDay,
     })),
   );

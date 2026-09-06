@@ -5,6 +5,7 @@ import type {
   SubAgentTerminationCause,
 } from '../../../types/subAgent';
 import { generateId } from '../../../utils/id';
+import { truncateGraphemesTo } from '../../../utils/graphemes';
 import { createSubAgentExecutionSession } from '../subAgentExecutionSession';
 import type { SubAgentExecutionRuntimeState } from '../subAgentOrchestratorCallbacks';
 import { runSubAgentOrchestratorLoop } from '../subAgentOrchestratorRun';
@@ -230,7 +231,9 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
   let taskStackEntry: ReturnType<typeof pushTask> | null = null;
   if (params.config.parentConversationId) {
     const title =
-      params.config.name?.trim() || currentTaskPrompt.trim().slice(0, 80) || 'Sub-agent task';
+      params.config.name?.trim() ||
+      truncateGraphemesTo(currentTaskPrompt.trim(), 80) ||
+      'Sub-agent task';
     try {
       taskStackEntry = pushTask(params.config.parentConversationId, title);
     } catch {

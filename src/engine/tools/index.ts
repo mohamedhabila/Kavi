@@ -30,6 +30,7 @@ import {
 import { canSettleAfterModelAuthorityChange } from '../toolExecution/modelAuthorityIndependentCompletion';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { executeMobileControllerTool } from '../mobileController/toolExecution';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 import { isMobileControllerDeferredExecution } from '../mobileController/runtimeExecution';
 import { isEffectFreeToolPolicy } from '../durability/toolEffectPolicy';
 import { classifyNativeTransportErrorIdentity } from '../../services/llm/support/providerErrorClassification';
@@ -200,7 +201,7 @@ export async function executeTool(
         effectFreeInvocation,
       });
     }
-    const truncatedArgs = argsString.length > 200 ? argsString.slice(0, 200) + '…' : argsString;
+    const truncatedArgs = truncateGraphemesWithSuffix(argsString, 200, '…');
     const decision = await requestToolApproval({
       toolName: normalizedName,
       targetId: parsedArgs?.targetId,

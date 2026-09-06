@@ -4,6 +4,9 @@ import {
   dedupeSchemaVariants,
   normalizeGeminiNullableType,
 } from '../../core/schemaTransforms';
+import { truncateToUtf16BudgetGraphemeSafe } from '../../../../utils/graphemes';
+
+const GEMINI_TOOL_DESCRIPTION_CHAR_LIMIT = 2000;
 
 /**
  * Preserve detailed Gemini tool descriptions.
@@ -13,8 +16,13 @@ import {
 export function simplifyGeminiToolDescription(description: string | undefined): string {
   const trimmed = (description || '').trim();
   if (!trimmed) return '';
-  if (trimmed.length <= 2000) return trimmed;
-  return `${trimmed.slice(0, 1997).trimEnd()}...`;
+  if (trimmed.length <= GEMINI_TOOL_DESCRIPTION_CHAR_LIMIT) return trimmed;
+  const suffix = '...';
+  const truncated = truncateToUtf16BudgetGraphemeSafe(
+    trimmed,
+    GEMINI_TOOL_DESCRIPTION_CHAR_LIMIT - suffix.length,
+  );
+  return `${truncated.trimEnd()}${suffix}`;
 }
 
 export function cleanGeminiSchema(

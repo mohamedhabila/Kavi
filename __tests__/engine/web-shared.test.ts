@@ -13,6 +13,11 @@ import {
   withTimeout,
   isAbortLikeTransportError,
 } from '../../src/engine/tools/web-shared';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../helpers/graphemeTestFixtures';
 
 describe('resolveTimeoutSeconds', () => {
   it('returns value for valid number', () => {
@@ -109,6 +114,20 @@ describe('readResponseText', () => {
     const result = await readResponseText(res);
     expect(result).toEqual({ text: '', truncated: false, bytesRead: 0 });
   });
+
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling maxBytes`, async () => {
+      const boundary = 40;
+      const body = buildBoundaryStraddlingText(boundary, cluster, 50);
+      const res = { text: jest.fn().mockResolvedValue(body) } as any;
+      const result = await readResponseText(res, { maxBytes: boundary });
+
+      expect(result.truncated).toBe(true);
+      expect(result.text.length).toBeLessThanOrEqual(boundary);
+      expect(result.bytesRead).toBe(result.text.length);
+      expectGraphemeSafe(result.text);
+    });
+  }
 });
 
 describe('isAbortLikeTransportError', () => {

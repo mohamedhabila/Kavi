@@ -1,4 +1,5 @@
 import type { RequestFrame, RequiredRequestInformation } from './requestFrame';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { requestDecisionIsPolicyReachable } from './requestDecisionPolicy';
 import { projectRequestUnderstandingUserConstraints } from './requestUnderstandingUserConstraints';
 import type { AgentGoal } from '../../engine/goals/types';
@@ -36,15 +37,11 @@ const conflict = (
 
 function boundedText(value: string): { value: string; truncated: boolean } {
   const normalized = value.replace(/\s+/gu, ' ').trim();
-  const characters = Array.from(normalized);
-  if (characters.length <= MAX_TEXT_CHARACTERS) {
+  if (!exceedsGraphemeLength(normalized, MAX_TEXT_CHARACTERS)) {
     return { value: normalized, truncated: false };
   }
   return {
-    value: `${characters
-      .slice(0, MAX_TEXT_CHARACTERS - 1)
-      .join('')
-      .trimEnd()}…`,
+    value: `${truncateGraphemesTo(normalized, MAX_TEXT_CHARACTERS - 1).trimEnd()}…`,
     truncated: true,
   };
 }

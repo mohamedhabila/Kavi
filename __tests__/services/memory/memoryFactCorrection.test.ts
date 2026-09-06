@@ -16,6 +16,7 @@ import {
   correctMemoryFactForManagement,
   MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH,
 } from '../../../src/services/memory/memoryTools';
+import { ZWJ_FAMILY_EMOJI } from '../../helpers/graphemeSafetyProbes';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -208,5 +209,19 @@ describe('correctMemoryFactForManagement', () => {
     });
     expect(JSON.stringify(result)).not.toContain(restrictedValue);
     expect(getFactById(fact.id)).toMatchObject({ objectText: 'Amsterdam', invalidAt: null });
+  });
+
+  it('measures the value length limit in graphemes, not UTF-16 code units', () => {
+    // 182 ZWJ-family-emoji clusters is 182 graphemes but 2002 UTF-16 code
+    // units — comfortably within MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH (2000)
+    // by grapheme count. Before the fix this value was measured with
+    // `.length` and wrongly rejected as "too long".
+    const value = ZWJ_FAMILY_EMOJI.repeat(182);
+    expect(value.length).toBeGreaterThan(MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH);
+    const fact = currentFact();
+
+    const result = correctMemoryFactForManagement({ factId: fact.id, value });
+
+    expect(result).toMatchObject({ ok: true, status: 'corrected' });
   });
 });

@@ -24,6 +24,14 @@ import {
   refreshThreadReflection,
   upsertReflection,
 } from '../../../src/services/memory/reflections';
+import type { MemoryEpisode } from '../../../src/services/memory/episodes/types';
+import type { MemoryFact } from '../../../src/services/memory/facts/types';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../../helpers/graphemeSafetyProbes';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -359,5 +367,116 @@ describe('memory reflections', () => {
       now: dayPeriodBounds(1_700_000_000_000).start + 1_000,
     });
     expect(reflection).toBeNull();
+  });
+});
+
+function makeReflectionEpisode(overrides: Partial<MemoryEpisode> = {}): MemoryEpisode {
+  return {
+    id: 'episode-1',
+    conversationId: 'conv-1',
+    threadId: 'conv-1',
+    taskId: null,
+    startedAt: 10,
+    endedAt: 20,
+    summary: 'Wrote projects/atlas/metadata.json',
+    entities: [],
+    messageIds: [],
+    toolNames: ['write_file'],
+    importance: 0.7,
+    localSimilarity: null,
+    createdAt: 20,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+function makeReflectionFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
+  return {
+    id: 'fact-1',
+    subjectId: 'entity-1',
+    predicate: 'wrote_file',
+    objectText: 'projects/atlas/metadata.json',
+    objectEntityId: null,
+    attributes: {},
+    confidence: 1,
+    sourceMessageId: null,
+    sourceRunId: null,
+    memoryOwnerId: 'owner-1',
+    personaId: null,
+    factClass: 'workflow',
+    sourceAuthority: 'tool_observed',
+    scope: 'conversation',
+    originConversationId: 'conv-1',
+    originThreadId: 'conv-1',
+    originTaskId: null,
+    sourceTurnId: null,
+    sourceSummary: null,
+    importance: 0.8,
+    accessCount: 0,
+    repeatedMentionCount: 0,
+    lastRecalledAt: null,
+    lastReinforcedAt: null,
+    lastAccessedAt: null,
+    decayPolicy: 'normal',
+    expiresAt: null,
+    contentHash: 'hash-1',
+    localSimilarity: null,
+    validAt: 20,
+    invalidAt: null,
+    createdAt: 20,
+    updatedAt: 20,
+    deletedAt: null,
+    pinned: false,
+    sourceActorId: null,
+    taskId: null,
+    retrievability: 1,
+    stability: 0.5,
+    decayRate: 0.03,
+    lastPresentedAt: null,
+    lastConfirmedAt: null,
+    lastConflictedAt: null,
+    reviewState: 'auto',
+    sensitivity: 'normal',
+    memoryKind: 'semantic',
+    ...overrides,
+  };
+}
+
+describe('buildReflectionContent grapheme safety', () => {
+  const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+
+  it('never splits a grapheme cluster when the 240-char episode-line cut lands inside a probe', () => {
+    for (const probe of probes) {
+      const summary = `${'s'.repeat(230)}${probe.repeat(15)}`;
+      const content = buildReflectionContent({
+        episodes: [makeReflectionEpisode({ summary })],
+        facts: [],
+      });
+      expect(content).not.toBeNull();
+      expectGraphemeSafe(content as string);
+    }
+  });
+
+  it('never splits a grapheme cluster when the 120-char fact-line cut lands inside a probe', () => {
+    for (const probe of probes) {
+      const objectText = `${'o'.repeat(110)}${probe.repeat(15)}`;
+      const content = buildReflectionContent({
+        episodes: [],
+        facts: [makeReflectionFact({ objectText })],
+      });
+      expect(content).not.toBeNull();
+      expectGraphemeSafe(content as string);
+    }
+  });
+
+  it('never splits a grapheme cluster when the overall 2400-char content cut lands inside a probe', () => {
+    for (const probe of probes) {
+      const episodes = Array.from({ length: 6 }, (_, index) =>
+        makeReflectionEpisode({ id: `episode-${index}`, summary: `${probe.repeat(10)}` }),
+      );
+      const content = buildReflectionContent({ episodes, facts: [] });
+      expect(content).not.toBeNull();
+      expectGraphemeSafe(content as string);
+    }
   });
 });

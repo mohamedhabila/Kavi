@@ -8,6 +8,11 @@ import {
   executeCreateTask,
   normalizeCronScheduleArg,
 } from '../../../src/engine/tools/toolScheduledJobExecution';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../../helpers/graphemeTestFixtures';
 
 function parse(content: string): any {
   return JSON.parse(content);
@@ -125,4 +130,16 @@ describe('executeCreateTask', () => {
     expect(result.status).toBe('failed');
     expect(parse(result.content).repair.missingFields).toEqual(['schedule', 'prompt']);
   });
+
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the 60-char name-fallback budget`, async () => {
+      (createScheduledJob as jest.Mock).mockResolvedValue({ id: 'job-3' });
+      const prompt = buildBoundaryStraddlingText(60, cluster, 100);
+
+      await executeCreateTask({ schedule: '0 8 * * *', prompt });
+
+      const passedName = (createScheduledJob as jest.Mock).mock.calls[0][0].name as string;
+      expectGraphemeSafe(passedName);
+    });
+  }
 });

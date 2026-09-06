@@ -22,6 +22,7 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 export { getLastWorkingDirectory } from './sshWorkingDirectoryPersistence';
 
 export async function executeSshExec(args: {
@@ -70,11 +71,7 @@ function buildSshBackgroundJobResult(
   },
 ): string {
   const output = typeof options?.output === 'string' ? options.output.trim() : '';
-  const outputExcerpt = output
-    ? output.length <= 2000
-      ? output
-      : `${output.slice(0, 1997).trimEnd()}...`
-    : undefined;
+  const outputExcerpt = output ? truncateGraphemesWithSuffix(output, 2000, '...') : undefined;
   const normalizedStatus = typeof options?.status === 'string' ? options.status : 'unknown';
   const summary =
     normalizedStatus === 'running'

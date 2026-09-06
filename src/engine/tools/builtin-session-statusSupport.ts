@@ -1,5 +1,6 @@
 import type { Attachment } from '../../types/attachment';
 import type { CommandPollState } from '../../services/agents/commandPollBackoff';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export const sessionStatusPollState: CommandPollState = {};
 export const sessionStatusFingerprints = new Map<string, string>();
@@ -22,7 +23,7 @@ function buildSessionStatusFingerprint(agent: {
     lastProgressAt: agent.lastProgressAt,
     modelResponsePendingSince: agent.modelResponsePendingSince,
     launchState: agent.launchState || '',
-    outputPreview: agent.output?.slice(0, 1000) || '',
+    outputPreview: agent.output ? truncateGraphemesTo(agent.output, 1000) : '',
     currentActivity: agent.currentActivity || '',
     activeToolName: agent.activeToolName || '',
     lastToolResultPreview: agent.lastToolResultPreview || '',

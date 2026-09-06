@@ -13,6 +13,7 @@ import {
   DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
 } from '../../engine/goals/delegation';
 import { buildAutomaticSubAgentEvidenceEntries } from './automaticEvidence';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 
 const MAX_GOAL_EVIDENCE_CHARS = 480;
 const DELEGATION_WORKER_SUCCESS_CRITERIA = [
@@ -21,10 +22,10 @@ const DELEGATION_WORKER_SUCCESS_CRITERIA = [
 ];
 
 function truncateEvidence(value: string): string {
-  if (value.length <= MAX_GOAL_EVIDENCE_CHARS) {
+  if (!exceedsGraphemeLength(value, MAX_GOAL_EVIDENCE_CHARS)) {
     return value;
   }
-  return `${value.slice(0, MAX_GOAL_EVIDENCE_CHARS - 1).trimEnd()}…`;
+  return `${truncateGraphemesTo(value, MAX_GOAL_EVIDENCE_CHARS - 1).trimEnd()}…`;
 }
 
 function buildWorkerGoalEvidence(

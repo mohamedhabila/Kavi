@@ -1,5 +1,10 @@
 import type { Message } from '../../../types/message';
 import { createLogger } from '../../../utils/logger';
+import {
+  exceedsGraphemeLength,
+  truncateGraphemesFromEnd,
+  truncateGraphemesTo,
+} from '../../../utils/graphemes';
 import { runMemoryTransaction } from '../access/transaction';
 import { upsertEntity } from '../entities';
 import { addFactEvidence, recordEpisode, recordThreadLocalEpisode } from '../episodes/mutations';
@@ -432,12 +437,12 @@ function boundedEpisodeSensitivityField(value: string | undefined): {
   truncated: boolean;
 } {
   if (!value) return { content: '', truncated: false };
-  if (value.length <= EPISODE_SENSITIVITY_FIELD_LIMIT) {
+  if (!exceedsGraphemeLength(value, EPISODE_SENSITIVITY_FIELD_LIMIT)) {
     return { content: value, truncated: false };
   }
   const side = Math.floor(EPISODE_SENSITIVITY_FIELD_LIMIT / 2);
   return {
-    content: `${value.slice(0, side)}\n${value.slice(-side)}`,
+    content: `${truncateGraphemesTo(value, side)}\n${truncateGraphemesFromEnd(value, side)}`,
     truncated: true,
   };
 }

@@ -1,4 +1,5 @@
 import type { SubAgentLifecycleEvent, SubAgentSnapshot } from '../../../types/subAgent';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
 
 const MAX_SESSION_LABEL_CHARS = 18;
 const MAX_OUTPUT_SUMMARY_CHARS = 220;
@@ -55,9 +56,9 @@ export function summarizeSubAgentOutput(
     return undefined;
   }
 
-  return normalized.length <= maxLength
+  return !exceedsGraphemeLength(normalized, maxLength)
     ? normalized
-    : `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+    : `${truncateGraphemesTo(normalized, maxLength - 3).trimEnd()}...`;
 }
 
 export function summarizeSubAgentVisibleActivity(

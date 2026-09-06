@@ -4,6 +4,7 @@ import {
   sanitizeExperienceLearningArtifact,
   type ExperienceProcedureObservation,
 } from '../../../src/services/memory/experienceLearningArtifact';
+import { ZWJ_FAMILY_EMOJI } from '../../helpers/graphemeSafetyProbes';
 
 function observation(
   runId: string,
@@ -153,5 +154,34 @@ describe('experience learning artifacts', () => {
 
     expect(result.diagnostics.invalidObservationCount).toBe(1);
     expect(result.artifact.records).toEqual([]);
+  });
+
+  it('measures the 120-char evidence-term limit in graphemes, not UTF-16 code units', () => {
+    // Before the fix this term (120 ZWJ-family-emoji clusters, 1320 UTF-16
+    // code units) was measured with `.length` and wrongly rejected as
+    // "too long", dropping the whole observation as invalid.
+    const term = ZWJ_FAMILY_EMOJI.repeat(120);
+    expect(term.length).toBeGreaterThan(120);
+    const result = buildExperienceLearningArtifact([
+      observation('run-1', { evidenceTerms: [term] }),
+      observation('run-2', { evidenceTerms: [term] }),
+      observation('run-3', { evidenceTerms: [term] }),
+    ]);
+    expect(result.diagnostics.invalidObservationCount).toBe(0);
+    expect(result.artifact.records[0]?.commonEvidenceTerms).toEqual([term]);
+  });
+
+  it('measures the 2000-char query limit in graphemes, not UTF-16 code units', () => {
+    // 182 ZWJ-family-emoji clusters is 182 graphemes but 2002 UTF-16 code
+    // units. Before the fix this query was measured with `.length` and
+    // wrongly rejected outright (empty result) as "too long".
+    const query = `cancellation_fee ${ZWJ_FAMILY_EMOJI.repeat(182)}`;
+    expect(query.length).toBeGreaterThan(2000);
+    const artifact = buildExperienceLearningArtifact([
+      observation('run-1'),
+      observation('run-2'),
+      observation('run-3'),
+    ]).artifact;
+    expect(retrieveExperienceLearnings({ artifact, query })).not.toEqual([]);
   });
 });

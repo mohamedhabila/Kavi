@@ -10,6 +10,7 @@ import { listScheduledJobs } from '../scheduler/commands';
 import { useSkillsStore } from '../skills/manager';
 import { searchMemoryFactsForManagement } from '../memory/facts/managementSearch';
 import { serializeMemoryFact } from '../memory/memoryFactSerialization';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export type CommandContext = {
   conversationId: string | null;
@@ -103,7 +104,7 @@ registerCommand('export', 'Export current conversation', () => {
 });
 
 registerCommand('memory', 'Search remembered facts', (ctx) => {
-  const query = ctx.args.trim().slice(0, 200);
+  const query = truncateGraphemesTo(ctx.args.trim(), 200);
   if (!query) {
     return { response: 'Use `/memory <query>` to search memory.', shouldDisplay: true };
   }
@@ -117,7 +118,7 @@ registerCommand('memory', 'Search remembered facts', (ctx) => {
   }
   const preview = result.facts.map((memoryFact) => {
     const fact = serializeMemoryFact(memoryFact);
-    const value = fact.value.replace(/\s+/g, ' ').trim().slice(0, 300);
+    const value = truncateGraphemesTo(fact.value.replace(/\s+/g, ' ').trim(), 300);
     return `- **${fact.subject} · ${fact.predicate}**: ${value}`;
   });
   return {

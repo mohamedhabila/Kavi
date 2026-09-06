@@ -39,6 +39,7 @@ import {
   resolveScheduledJobTarget,
 } from './toolScheduledJobExecution';
 import { executeReminderTool } from './native/reminders/executor';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
 import {
   completedToolOutcome,
@@ -141,7 +142,7 @@ export async function executeToolInner(
   try {
     args = parseToolArgumentsJson(argsString);
   } catch {
-    const preview = argsString.length > 300 ? argsString.slice(0, 300) + '…' : argsString;
+    const preview = truncateGraphemesWithSuffix(argsString, 300, '…');
     return failedToolOutcome(
       `Error: tool "${name}" received malformed JSON arguments that could not be parsed. Raw input: ${preview}\nPlease retry the tool call with valid JSON arguments.`,
     );

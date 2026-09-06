@@ -7,6 +7,12 @@ import type { AgentRun } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
 import type { Message } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../helpers/graphemeSafetyProbes';
 
 const provider: LlmProviderConfig = {
   id: 'provider-1',
@@ -259,5 +265,14 @@ describe('clarification reply admission', () => {
         }),
       }),
     ).rejects.toThrow('clarification_reply_admission_output_invalid');
+  });
+
+  it('never splits a grapheme cluster when the 8000-char reply-text cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const reply = `${'r'.repeat(7990)}${probe.repeat(15)}`;
+      const context = buildPendingClarificationReplyContext(conversationWithReply(reply));
+      expectGraphemeSafe(context?.reply.text ?? '');
+    }
   });
 });

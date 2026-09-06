@@ -6,6 +6,7 @@
 import { McpClient, McpToolInfo, McpToolCallResult } from './client';
 import type { ToolDefinition } from '../../types/tool';
 import { normalizeToolInputSchema } from '../../utils/toolSchema';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 import {
   addRemoteArtifact,
   closeRemoteSession,
@@ -187,7 +188,7 @@ export async function executeMcpTool(
     addRemoteArtifact(jobId, {
       kind: 'log-snippet',
       title: 'MCP result',
-      value: formatted.slice(0, 2000),
+      value: truncateGraphemesTo(formatted, 2000),
     });
     closeRemoteSession(
       sessionId,

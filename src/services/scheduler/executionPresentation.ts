@@ -1,4 +1,5 @@
 import type { CronJob } from '../cron/types';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 
 export function shouldDeliverScheduledJobNotification(job: CronJob): boolean {
   const mode = job.delivery?.mode || 'both';
@@ -8,7 +9,7 @@ export function shouldDeliverScheduledJobNotification(job: CronJob): boolean {
 export function summarizeScheduledJobNotification(text: string): string {
   const compact = text.replace(/\s+/g, ' ').trim();
   if (!compact) return 'Task completed.';
-  return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
+  return exceedsGraphemeLength(compact, 180) ? `${truncateGraphemesTo(compact, 177)}...` : compact;
 }
 
 export function extractScheduledJobMessageEffect(

@@ -1,4 +1,5 @@
 import { findEntityByName } from '../entities';
+import { truncateGraphemesTo } from '../../../utils/graphemes';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { tokenizeLexicalUnits } from '../ranking/lexical';
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
@@ -57,7 +58,7 @@ export function searchMemoryFactsForManagement(
   limitOrOptions?: number | MemoryFactManagementSearchOptions,
 ): MemoryFactManagementSearchResult {
   const options = searchOptions(limitOrOptions);
-  const query = normalizeQuery(rawQuery.slice(0, MAX_MANAGEMENT_SEARCH_QUERY_CHARS));
+  const query = normalizeQuery(truncateGraphemesTo(rawQuery, MAX_MANAGEMENT_SEARCH_QUERY_CHARS));
   if (!query) return { query, facts: [], totalCurrentFacts: 0, totalMatches: 0 };
 
   const db = getSchemaReadyMemoryDb();

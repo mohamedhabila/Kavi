@@ -7,6 +7,7 @@ import {
   classifyNativeTransportErrorIdentity,
   logProseFallbackClassification,
 } from '../../services/llm/support/providerErrorClassification';
+import { truncateToUtf16BudgetGraphemeSafe } from '../../utils/graphemes';
 
 export type CacheEntry<T> = {
   value: T;
@@ -174,7 +175,8 @@ export async function readResponseText(
     try {
       const text = await res.text();
       if (text.length > maxBytes) {
-        return { text: text.slice(0, maxBytes), truncated: true, bytesRead: maxBytes };
+        const truncatedText = truncateToUtf16BudgetGraphemeSafe(text, maxBytes);
+        return { text: truncatedText, truncated: true, bytesRead: truncatedText.length };
       }
       return { text, truncated: false, bytesRead: text.length };
     } catch {

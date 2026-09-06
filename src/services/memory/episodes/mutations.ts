@@ -1,3 +1,4 @@
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { assertMemoryTransactionActive, runMemoryTransaction } from '../access/transaction';
 import { newId } from '../schemaValues';
@@ -81,7 +82,9 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
   const conversationId = input.conversationId ?? null;
   const threadId = input.threadId ?? input.conversationId ?? null;
   const normalizedSummary =
-    summary.length > 1200 ? `${summary.slice(0, 1199).trimEnd()}…` : summary;
+    exceedsGraphemeLength(summary, 1200)
+      ? `${truncateGraphemesTo(summary, 1199).trimEnd()}…`
+      : summary;
   const existing = sourceEndMessageId
     ? db.getFirstSync<EpisodeRow>(
         `SELECT * FROM memory_episodes
@@ -304,7 +307,7 @@ export function addFactEvidenceInTransaction(
     if (existing) {
       const episodeId = existing.episode_id ?? input.episodeId ?? null;
       const role = existing.role ?? input.role ?? null;
-      const quote = existing.quote ?? (input.quote ? input.quote.trim().slice(0, 400) : null);
+      const quote = existing.quote ?? (input.quote ? truncateGraphemesTo(input.quote.trim(), 400) : null);
       if (episodeId !== existing.episode_id || role !== existing.role || quote !== existing.quote) {
         const updated = db.runSync(
           `UPDATE memory_fact_evidence
@@ -333,7 +336,7 @@ export function addFactEvidenceInTransaction(
     episodeId: input.episodeId ?? null,
     messageId,
     role: input.role ?? null,
-    quote: input.quote ? input.quote.trim().slice(0, 400) : null,
+    quote: input.quote ? truncateGraphemesTo(input.quote.trim(), 400) : null,
     createdAt: now,
   };
   const inserted = db.runSync(

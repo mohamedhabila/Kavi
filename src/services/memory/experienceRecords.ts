@@ -1,4 +1,5 @@
 import type { MemoryFact } from './facts/types';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 
@@ -73,7 +74,9 @@ function boundedText(value: unknown, maxChars = MAX_VALUE_CHARS): string | null 
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  return trimmed.length <= maxChars ? trimmed : `${trimmed.slice(0, maxChars - 1).trimEnd()}…`;
+  return !exceedsGraphemeLength(trimmed, maxChars)
+    ? trimmed
+    : `${truncateGraphemesTo(trimmed, maxChars - 1).trimEnd()}…`;
 }
 
 function boundedStringList(value: unknown): string[] {

@@ -1,4 +1,5 @@
 import { normalizeToolName } from './toolNameNormalization';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
 const DELEGATION_SESSION_TOOL_NAMES = new Set(['sessions_spawn', 'sessions_send', 'sessions_wait']);
 const MAX_STRUCTURAL_SESSION_RECORDS = 8;
@@ -21,9 +22,7 @@ function truncate(value: unknown, maxChars: number): string | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim();
   if (!normalized) return undefined;
-  return normalized.length <= maxChars
-    ? normalized
-    : `${normalized.slice(0, maxChars - 1).trimEnd()}…`;
+  return truncateGraphemesWithSuffix(normalized, maxChars, '…');
 }
 
 function copyString(record: Record<string, unknown>, key: string): string | undefined {

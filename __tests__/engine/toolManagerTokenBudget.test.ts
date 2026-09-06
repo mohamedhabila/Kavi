@@ -8,6 +8,11 @@ import {
   estimateToolTokens,
 } from '../../src/engine/tools/toolManagerTokenBudget';
 import type { ToolDefinition } from '../../src/types/tool';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../helpers/graphemeTestFixtures';
 
 function makeTool(name: string, description = 'Test tool.'): ToolDefinition {
   return {
@@ -166,4 +171,40 @@ describe('toolManagerTokenBudget', () => {
     });
     expect(result.description).toBe('Sentence one. Sentence two.');
   });
+});
+
+describe('compressToolDescription / compressToolDescriptionMinimal — grapheme safety', () => {
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`compressToolDescription never splits ${name} straddling its 240-char budget`, () => {
+      const description = buildBoundaryStraddlingText(240, cluster, 100);
+      const result = compressToolDescription(description);
+
+      expect(result.endsWith('...')).toBe(true);
+      expectGraphemeSafe(result);
+    });
+
+    it(`compressToolDescriptionMinimal never splits ${name} straddling its 60-char budget`, () => {
+      const description = buildBoundaryStraddlingText(60, cluster, 100);
+      const result = compressToolDescriptionMinimal(description);
+
+      expect(result.endsWith('…')).toBe(true);
+      expectGraphemeSafe(result);
+    });
+
+    it('compactToolDefinitionForPrompt produces a grapheme-safe description that estimateToolTokens then measures', () => {
+      const description = buildBoundaryStraddlingText(60, cluster, 200);
+      // Not a core/pinned tool, so compactToolDefinitionForPrompt takes the minimal
+      // (60-char) description path.
+      const tool = makeTool('custom_tool', description);
+      const compacted = compactToolDefinitionForPrompt(tool);
+
+      expectGraphemeSafe(compacted.description);
+      // estimateToolTokens compacts internally before estimating (see source), so
+      // its token count must match estimating on the already-compacted description
+      // directly — never on the far-longer raw one.
+      expect(estimateToolTokens(tool)).toBe(
+        estimateToolTokens({ ...tool, description: compacted.description }, { precompacted: true }),
+      );
+    });
+  }
 });

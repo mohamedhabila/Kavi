@@ -1,0 +1,45 @@
+import { clearWebFetchDocumentCache, directFetch } from '../../../src/engine/tools/webFetchTransports';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../../helpers/graphemeTestFixtures';
+
+const fetchMock = jest.fn();
+(globalThis as unknown as { fetch: unknown }).fetch = fetchMock;
+
+jest.mock('expo/fetch', () => ({
+  fetch: (...args: unknown[]) =>
+    (globalThis as unknown as { fetch: (...a: unknown[]) => unknown }).fetch(...args),
+}));
+
+beforeEach(() => {
+  clearWebFetchDocumentCache();
+  fetchMock.mockReset();
+});
+
+describe('directFetch — HTTP error body detail grapheme safety', () => {
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the 160-char error detail budget`, async () => {
+      const body = buildBoundaryStraddlingText(160, cluster, 100);
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        url: 'https://example.com/unavailable',
+        headers: { get: () => 'text/plain' },
+        text: async () => body,
+        body: null,
+      });
+
+      const error = await directFetch({
+        url: 'https://example.com/unavailable',
+        extractMode: 'text',
+        maxChars: 1000,
+      }).catch((caught: unknown) => caught as Error);
+
+      expect(error).toBeInstanceOf(Error);
+      expectGraphemeSafe(error.message);
+    });
+  }
+});

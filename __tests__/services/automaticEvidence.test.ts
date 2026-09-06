@@ -3,6 +3,12 @@ import {
   buildAutomaticSubAgentEvidenceEntries,
 } from '../../src/services/agents/automaticEvidence';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../helpers/graphemeSafetyProbes';
 
 function makeWorker(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot {
   return {
@@ -128,5 +134,16 @@ describe('automatic workflow evidence helpers', () => {
         }),
       ]),
     );
+  });
+
+  it('never splits a grapheme cluster when the 640-char summary content cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const output = `${'o'.repeat(630)}${probe.repeat(15)}`;
+      const entries = buildAutomaticSubAgentEvidenceEntries(makeWorker({ output }), 'completed');
+      const summary = entries.find((entry) => entry.kind === 'summary');
+      expect(summary?.content).toBeDefined();
+      expectGraphemeSafe(summary?.content ?? '');
+    }
   });
 });

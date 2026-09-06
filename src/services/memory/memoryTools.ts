@@ -18,6 +18,7 @@
 // structured living-memory fact store.
 // ---------------------------------------------------------------------------
 
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { findEntityByName } from './entities';
 import { markFactsRecalled } from './facts/factAccessMutations';
 import { listFacts, listFactsForRecallEligibleScan } from './facts/queries';
@@ -134,7 +135,7 @@ function trimNonEmpty(value: unknown, max = 200): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+  return exceedsGraphemeLength(trimmed, max) ? truncateGraphemesTo(trimmed, max) : trimmed;
 }
 
 // ── memory_recall ────────────────────────────────────────────────────────

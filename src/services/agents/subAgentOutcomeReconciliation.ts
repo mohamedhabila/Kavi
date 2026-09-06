@@ -6,6 +6,7 @@ import type {
   SubAgentSnapshot,
 } from '../../types/subAgent';
 import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { recordAgentRunEvidenceMemory } from '../memory/agentRunEvidenceMemory';
 import { isExactMemoryProvenanceId } from '../memory/memoryProvenanceIdentity';
 import { canWriteLongTermMemory } from '../memory/policy';
@@ -37,9 +38,9 @@ function boundedText(value: unknown, limit: number): string | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
   if (!normalized) return undefined;
-  return normalized.length <= limit
+  return !exceedsGraphemeLength(normalized, limit)
     ? normalized
-    : `${normalized.slice(0, Math.max(1, limit - 1)).trimEnd()}\u2026`;
+    : `${truncateGraphemesTo(normalized, Math.max(1, limit - 1)).trimEnd()}\u2026`;
 }
 
 function cloneState(state: SubAgentOutcomeReconciliationState): SubAgentOutcomeReconciliationState {

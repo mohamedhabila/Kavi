@@ -1,3 +1,5 @@
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
+
 const EXPO_ADVISORY_CHAR_LIMIT = 320;
 const EXPO_FAILURE_LOG_LIMIT = 3;
 const EXPO_FAILURE_LOG_LINE_LIMIT = 4;
@@ -16,12 +18,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function truncateExpoText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) {
-    return value;
-  }
-
-  const ellipsis = '...';
-  return `${value.slice(0, Math.max(0, maxChars - ellipsis.length)).trimEnd()}${ellipsis}`;
+  return truncateGraphemesWithSuffix(value, maxChars, '...');
 }
 
 export function trimExpoAdvisoryText(

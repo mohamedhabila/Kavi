@@ -7,6 +7,7 @@ import type {
   SubAgentMemorySelectionScope,
 } from '../../types/subAgent';
 import { createLogger } from '../../utils/logger';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { getEntityById } from '../memory/entities';
 import { revalidateAutomaticPromptEpisodeSelection } from '../memory/episodes/automaticPromptAccess';
 import { loadActiveMemoryFactConflictSignals } from '../memory/facts/observations';
@@ -78,9 +79,9 @@ function boundedText(value: unknown, limit: number): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
   if (!normalized) return null;
-  return normalized.length <= limit
+  return !exceedsGraphemeLength(normalized, limit)
     ? normalized
-    : `${normalized.slice(0, Math.max(1, limit - 1)).trimEnd()}\u2026`;
+    : `${truncateGraphemesTo(normalized, Math.max(1, limit - 1)).trimEnd()}\u2026`;
 }
 
 function validTimestamp(value: unknown): value is number {

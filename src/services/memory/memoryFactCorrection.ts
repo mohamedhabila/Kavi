@@ -9,6 +9,7 @@ import { codeOwnedMemorySensitivityDeclaration } from './memorySensitivityPolicy
 import { canWriteLongTermMemory } from './policy';
 import { ensureFactSchema } from './schema';
 import { newId } from './schemaValues';
+import { exceedsGraphemeLength } from '../../utils/graphemes';
 
 export const MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH = 2_000;
 
@@ -66,7 +67,7 @@ function exactCorrectionArgs(args: MemoryFactCorrectionArgs): {
     !factId ||
     factId.length > 64 ||
     !value ||
-    value.length > MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH
+    exceedsGraphemeLength(value, MAX_MANAGED_MEMORY_FACT_VALUE_LENGTH)
   ) {
     return null;
   }

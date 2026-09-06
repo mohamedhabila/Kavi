@@ -2,6 +2,7 @@ import type { Message } from '../../../types/message';
 import type { SubAgentConfig } from '../../../types/subAgent';
 import { normalizeToolName } from '../../../engine/tools/toolNameNormalization';
 import { generateId } from '../../../utils/id';
+import { truncateGraphemesTo } from '../../../utils/graphemes';
 import {
   FINALIZATION_OUTPUT_TRUNCATION,
   normalizeFinalizationOutputText,
@@ -193,7 +194,7 @@ ${
 
   const rawSystemPrompt = config.systemPrompt?.trim();
   if (rawSystemPrompt) {
-    return `${rawSystemPrompt.slice(0, 50_000)}
+    return `${truncateGraphemesTo(rawSystemPrompt, 50_000)}
 
 ${scopedContext ? `${scopedContext}\n\n` : ''}
 ${workerContract}`;

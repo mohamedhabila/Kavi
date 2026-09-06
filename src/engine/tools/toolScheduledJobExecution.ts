@@ -5,6 +5,7 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 type ScheduledJob = Awaited<ReturnType<typeof listScheduledJobs>>[number];
 type ScheduledJobTargetResolution =
@@ -223,7 +224,7 @@ export async function executeCreateTask(args: {
 
   try {
     const created = await createScheduledJob({
-      name: name || prompt.slice(0, 60),
+      name: name || truncateGraphemesTo(prompt, 60),
       schedule: normalized.schedule,
       prompt,
       mode,

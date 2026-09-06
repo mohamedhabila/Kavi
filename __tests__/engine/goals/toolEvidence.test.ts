@@ -1,5 +1,10 @@
 import { buildToolGoalEvidenceStrings } from '../../../src/engine/goals/toolEvidence';
 import { routeToolEvidenceToActiveGoals } from '../../../src/engine/goals/evidenceRouting';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../../helpers/graphemeTestFixtures';
 
 describe('toolEvidence', () => {
   it('builds structural python evidence from normalized tool results', () => {
@@ -202,4 +207,30 @@ describe('toolEvidence', () => {
 
     expect(routed).toEqual([]);
   });
+
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the 200-char python fallback excerpt budget`, () => {
+      const content = buildBoundaryStraddlingText(200, cluster, 100);
+      const evidence = buildToolGoalEvidenceStrings({ toolName: 'python', content });
+
+      expect(evidence).toHaveLength(1);
+      expectGraphemeSafe(evidence[0]);
+    });
+
+    it(`never splits ${name} straddling the 160-char nested-scalar evidence budget`, () => {
+      const value = buildBoundaryStraddlingText(160, cluster, 50);
+      const evidence = buildToolGoalEvidenceStrings({
+        toolName: 'memory_remember',
+        content: JSON.stringify({
+          ok: true,
+          status: 'created',
+          fact: { id: 'fact-1', subject: 'user', predicate: 'note', value },
+        }),
+      });
+
+      const valueEvidence = evidence.find((entry) => entry.includes('"value"'));
+      expect(valueEvidence).toBeDefined();
+      expectGraphemeSafe(valueEvidence!);
+    });
+  }
 });

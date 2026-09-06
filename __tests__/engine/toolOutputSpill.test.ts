@@ -7,6 +7,11 @@ import {
   TOOL_OUTPUT_SPILL_PREVIEW_CHARS,
 } from '../../src/engine/tools/toolOutputSpill';
 import { writeConversationWorkspaceTextFile } from '../../src/services/conversationWorkspace/files';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../helpers/graphemeTestFixtures';
 
 jest.mock('../../src/services/conversationWorkspace/files', () => ({
   writeConversationWorkspaceTextFile: jest.fn().mockResolvedValue({
@@ -228,4 +233,12 @@ describe('spill preview content selection', () => {
 
     expect(spilled.payload).toContain('only if the preview does not already answer');
   });
+
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the 1200-char preview budget`, async () => {
+      const value = buildBoundaryStraddlingText(TOOL_OUTPUT_SPILL_PREVIEW_CHARS, cluster, 3000);
+      const spilled = await spill(value);
+      expectGraphemeSafe(spilled.preview);
+    });
+  }
 });

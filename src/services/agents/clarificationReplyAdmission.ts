@@ -4,6 +4,7 @@ import type { LlmProviderConfig } from '../../types/provider';
 import type { TokenUsage } from '../../types/usage';
 import { LlmService } from '../llm/LlmService';
 import { extractResponseTokenUsage } from '../usage/conversationUsage';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 const CLARIFICATION_REPLY_ADMISSION_TIMEOUT_MS = 15_000;
 const CLARIFICATION_REPLY_ADMISSION_MAX_TOKENS = 256;
@@ -44,10 +45,8 @@ type AdmissionOutput = Readonly<{
 type SendMessage = LlmService['sendMessage'];
 
 function boundedText(value: string): string {
-  const characters = Array.from(value.trim());
-  return characters.length <= MAX_ADMISSION_TEXT_CHARACTERS
-    ? characters.join('')
-    : characters.slice(0, MAX_ADMISSION_TEXT_CHARACTERS).join('');
+  const trimmed = value.trim();
+  return truncateGraphemesTo(trimmed, MAX_ADMISSION_TEXT_CHARACTERS);
 }
 
 function findClarificationQuestion(

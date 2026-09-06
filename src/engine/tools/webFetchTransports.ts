@@ -1,5 +1,6 @@
 import { fetch as expoFetch } from 'expo/fetch';
 
+import { truncateGraphemesTo } from '../../utils/graphemes';
 import {
   extractFetchedLinksFromHtml,
   extractFetchedLinksFromMarkdown,
@@ -119,9 +120,10 @@ export function describeFetchError(error: unknown): string {
 }
 
 function truncateDetail(value: string, maxChars = 160): string {
-  return value.length <= maxChars
-    ? value
-    : `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+  if (value.length <= maxChars) return value;
+  const suffix = '...';
+  const available = Math.max(0, maxChars - suffix.length);
+  return `${truncateGraphemesTo(value, available).trimEnd()}${suffix}`;
 }
 
 function summarizeFetchErrorBody(bodyText: string, contentType: string | null): string {

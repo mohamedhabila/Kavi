@@ -1,5 +1,6 @@
 import { sha256HexUtf8 } from '../../utils/sha256';
 import { tokenizeLexicalUnits } from './ranking/lexical';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 
 export const PRESERVED_SOURCE_RECORD_VERSION = 1 as const;
 export const PRESERVED_SOURCE_PROVIDER_EXCERPT_MAX_CHARS = 2_600;
@@ -21,12 +22,8 @@ export interface PreservedSourceProviderProjection {
 }
 
 function fitText(value: string, maxChars: number): string {
-  const codePoints = Array.from(value);
-  if (codePoints.length <= maxChars) return value;
-  return `${codePoints
-    .slice(0, Math.max(0, maxChars - 1))
-    .join('')
-    .trimEnd()}\u2026`;
+  if (!exceedsGraphemeLength(value, maxChars)) return value;
+  return `${truncateGraphemesTo(value, Math.max(0, maxChars - 1)).trimEnd()}\u2026`;
 }
 
 function parseRecord(objectText: string): PreservedSourceRecordV1 | null {

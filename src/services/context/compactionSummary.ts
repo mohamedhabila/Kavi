@@ -7,6 +7,7 @@
 
 import type { Message } from '../../types/message';
 import { extractToolResultSummary } from '../../utils/toolResultSummary';
+import { truncateGraphemesTo, truncateGraphemesFromEnd } from '../../utils/graphemes';
 import {
   parseReadFileContinuationResult,
   parseReadFileContinuationSummaryLine,
@@ -107,7 +108,7 @@ export function normalizePriorCompactionContext(
   const maxChars =
     tier === 'aggressive' ? PRIOR_CONTEXT_MAX_CHARS_AGGRESSIVE : PRIOR_CONTEXT_MAX_CHARS_SELECTIVE;
   if (cleaned.length <= maxChars) return cleaned;
-  return `…${cleaned.slice(-(maxChars - 1))}`;
+  return `…${truncateGraphemesFromEnd(cleaned, maxChars - 1)}`;
 }
 
 function readToolName(message: Message): string {
@@ -183,11 +184,11 @@ export function buildStructuredSummary(
     if (msg.role === 'user') {
       const cleaned = content.replace(/\n{2,}/g, '\n').trim();
       if (cleaned.length > 0) {
-        userRequests.push(cleaned.slice(0, USER_REQUEST_SUMMARY_CHARS));
+        userRequests.push(truncateGraphemesTo(cleaned, USER_REQUEST_SUMMARY_CHARS));
       }
     } else if (msg.role === 'assistant' && msg.content) {
       const lines = msg.content.split('\n').filter((line) => line.trim());
-      const conclusion = lines.slice(0, 3).join(' ').slice(0, ASSISTANT_CONCLUSION_CHARS);
+      const conclusion = truncateGraphemesTo(lines.slice(0, 3).join(' '), ASSISTANT_CONCLUSION_CHARS);
       if (conclusion) assistantConclusions.push(conclusion);
     } else if (msg.role === 'tool') {
       toolCallCount += 1;

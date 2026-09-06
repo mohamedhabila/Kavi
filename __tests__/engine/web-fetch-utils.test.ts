@@ -9,6 +9,11 @@ import {
   sliceTextWindow,
   truncateText,
 } from '../../src/engine/tools/web-fetch-utils';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../helpers/graphemeTestFixtures';
 
 describe('htmlToMarkdown', () => {
   it('extracts title', () => {
@@ -298,4 +303,32 @@ describe('selectMatchingRegions', () => {
   it('treats a blank query as no query rather than matching everything', () => {
     expect(selectMatchingRegions(DOC, '   ', 5_000).matchCount).toBe(0);
   });
+
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} at the context-window boundary around a match`, () => {
+      // Places the cluster exactly `contextChars` (600) before the needle, so the
+      // computed region start lands one code unit inside it.
+      const before = buildBoundaryStraddlingText(600, cluster, 0);
+      const doc = `${'p'.repeat(20_000)}${before}needle-term${'q'.repeat(20_000)}`;
+
+      const result = selectMatchingRegions(doc, 'needle-term', 5_000);
+      expectGraphemeSafe(result.text);
+    });
+
+    it(`never splits ${name} at the caller-budget clamp`, () => {
+      const dense = `${buildBoundaryStraddlingText(100, cluster, 300)}marker`;
+      const result = selectMatchingRegions(dense, 'marker', 100);
+      expectGraphemeSafe(result.text);
+    });
+  }
+});
+
+describe('truncateText — grapheme safety', () => {
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the head/tail excerpt seams`, () => {
+      const value = `${'H'.repeat(500)}${'M'.repeat(3000)}${cluster}${'T'.repeat(500)}`;
+      const result = truncateText(value, 400);
+      expectGraphemeSafe(result.text);
+    });
+  }
 });

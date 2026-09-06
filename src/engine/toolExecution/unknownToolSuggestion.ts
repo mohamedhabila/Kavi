@@ -2,6 +2,7 @@ import { TOOL_DEFINITIONS } from '../tools/definitions';
 import { TOOL_CATALOG_TOOL } from '../tools/builtin-definitions-coordination';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import type { ToolDefinition } from '../../types/tool';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
 /**
  * The result for a call naming a tool that does not exist.
@@ -103,7 +104,7 @@ export function findNearestRegisteredTool(
 function renderToolContract(tool: ToolDefinition): string {
   const schema = JSON.stringify(tool.input_schema ?? {});
   const description = (tool.description ?? '').trim();
-  const summary = description.length > 400 ? `${description.slice(0, 400)}…` : description;
+  const summary = truncateGraphemesWithSuffix(description, 400, '…');
   return `${tool.name}: ${summary}\ninput_schema: ${schema}`;
 }
 

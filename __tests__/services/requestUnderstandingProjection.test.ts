@@ -18,6 +18,12 @@ import {
   reduceAgentControlGraph,
 } from '../../src/engine/graph/agentControlGraph';
 import { createInitialAgentRunControlGraphState } from '../../src/services/agents/agentControlGraphState';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../helpers/graphemeSafetyProbes';
 
 function frame(): RequestFrame {
   return buildGraphEntryRequestFrame({
@@ -656,5 +662,19 @@ describe('request understanding projection', () => {
       'runtime\n\nprojection',
     );
     expect(appendRequestUnderstandingToRuntimeContext(null, null)).toBeNull();
+  });
+
+  it('never splits a grapheme cluster when the 160-char goal title cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const title = `${'t'.repeat(150)}${probe.repeat(15)}`;
+      const projection = projectRequestUnderstanding({ goals: [blockingGoal({ title })] });
+      expect(projection.declaredObjectives.status).toBe('known');
+      const items =
+        projection.declaredObjectives.status === 'known'
+          ? projection.declaredObjectives.value.items
+          : [];
+      expectGraphemeSafe(items[0]?.title ?? '');
+    }
   });
 });

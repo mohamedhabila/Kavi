@@ -12,6 +12,8 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 function resolveWorkspaceTarget(targetId: string): WorkspaceTargetConfig {
   const targets: WorkspaceTargetConfig[] = useSettingsStore.getState().workspaceTargets || [];
@@ -85,8 +87,7 @@ export async function executeWorkspaceTool(name: string, args: any): Promise<Too
         mode,
         settings: useSettingsStore.getState(),
       });
-      const outputPreview =
-        result.output.length > 4000 ? `${result.output.slice(0, 4000)}...` : result.output;
+      const outputPreview = truncateGraphemesWithSuffix(result.output, 4000, '...');
 
       return completedToolOutcome(
         JSON.stringify({
@@ -94,7 +95,7 @@ export async function executeWorkspaceTool(name: string, args: any): Promise<Too
           targetId: result.targetId,
           sshTargetId: result.sshTargetId,
           mode: result.mode,
-          commandPreview: result.command.slice(0, 240),
+          commandPreview: truncateGraphemesTo(result.command, 240),
           output: outputPreview,
           outputChars: result.output.length,
           truncated: outputPreview.length !== result.output.length,

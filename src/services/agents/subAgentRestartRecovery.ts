@@ -7,6 +7,7 @@ import { isCodeOwnedEffectFreeInvocation } from '../executionJournal/toolEffectD
 import type { Message, ToolCall } from '../../types/message';
 import type { SubAgentConfig, SubAgentSnapshot } from '../../types/subAgent';
 import { generateId } from '../../utils/id';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 import type { SubAgentSessionContext } from './lifecycle/sessionContext';
 import { cloneStoredMessages, normalizeSubAgentPrompt } from './lifecycle/sessionContextMessages';
 
@@ -201,7 +202,7 @@ function buildRecoveryInstruction(params: {
     : ' Earlier transcript content was compacted. Treat the retained summary and durable read checkpoints as orientation only, not as proof; re-read any source content required for final claims.';
   const summary = params.conversationSummary.trim();
   const summarySection = summary
-    ? `\n\nRetained worker summary (orientation only):\n${summary.slice(0, 4_000)}`
+    ? `\n\nRetained worker summary (orientation only):\n${truncateGraphemesTo(summary, 4_000)}`
     : '';
   return `Resume the original task after an app restart. ${boundaryInstruction}${compactionInstruction} Continue from successful retained tool results without redoing or recounting them unless re-reading is required to restore omitted evidence. Preserve every original constraint, and do not infer success without tool evidence.\n\nOriginal task:\n${params.originalPrompt}${summarySection}`;
 }

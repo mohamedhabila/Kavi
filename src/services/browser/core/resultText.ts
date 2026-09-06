@@ -1,4 +1,5 @@
 import { decodeHtmlEntities } from './htmlEntityDecoding';
+import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
 
 const DEFAULT_RESULT_DESCRIPTION_CHARS = 320;
 const MAX_DERIVED_TITLE_PATH_SEGMENTS = 4;
@@ -19,9 +20,7 @@ export function truncateSearchText(
   value: string,
   maxChars = DEFAULT_RESULT_DESCRIPTION_CHARS,
 ): string {
-  return value.length <= maxChars
-    ? value
-    : `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+  return truncateGraphemesWithSuffix(value, maxChars, '...');
 }
 
 export function sanitizeSearchUrlText(value: string): string {

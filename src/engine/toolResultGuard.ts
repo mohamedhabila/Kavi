@@ -7,6 +7,11 @@
 
 import type { Message } from '../types/message';
 import { buildToolResultPlaceholder, isToolResultPlaceholder } from '../utils/toolResultSummary';
+import { truncateToUtf16BudgetGraphemeSafe } from '../utils/graphemes';
+import {
+  snapIndexDownToGraphemeBoundary,
+  snapIndexUpToGraphemeBoundary,
+} from '../utils/graphemeBoundary';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -39,7 +44,14 @@ function truncateScalar(value: string, maxChars = 400): string {
   if (value.length <= maxChars) {
     return value;
   }
-  return `${value.slice(0, maxChars)}… (${value.length - maxChars} chars omitted)`;
+  const omitted = value.length - maxChars;
+  const suffix = `… (${omitted} chars omitted)`;
+  // Keeps the full `maxChars` worth of content and appends the suffix after
+  // it (matching the pre-grapheme-safety `value.slice(0, maxChars) + suffix`
+  // behaviour): the suffix reports how much was omitted, so it must not
+  // itself eat into the reported budget by being subtracted from it first.
+  const truncated = truncateToUtf16BudgetGraphemeSafe(value, maxChars);
+  return `${truncated}${suffix}`;
 }
 
 function summarizeStructuredValue(value: unknown, depth = 0): unknown {
@@ -163,7 +175,7 @@ export function truncateToolResult(
 
   const noticeLen = TRUNCATION_NOTICE.length;
   const available = limit - noticeLen;
-  if (available <= 0) return result.slice(0, limit);
+  if (available <= 0) return truncateToUtf16BudgetGraphemeSafe(result, limit);
 
   // Truncate at a newline boundary (Kavi pattern: if we're past 70%)
   let headSize = Math.floor(available * 0.7);
@@ -173,11 +185,13 @@ export function truncateToolResult(
   if (lastNewline > headSize * 0.7) {
     headSize = lastNewline;
   }
+  headSize = snapIndexDownToGraphemeBoundary(result, headSize);
 
   const tailSize = available - headSize;
+  const tailStart = snapIndexUpToGraphemeBoundary(result, result.length - tailSize);
 
   const head = result.slice(0, headSize);
-  const tail = result.slice(result.length - tailSize);
+  const tail = result.slice(tailStart);
 
   return head + TRUNCATION_NOTICE + tail;
 }

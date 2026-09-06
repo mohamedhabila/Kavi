@@ -13,7 +13,12 @@
 // near the target cut over an exact character count.
 
 import { CHARS_PER_TOKEN, SAFETY_MARGIN, estimateTokens } from './tokenCounter';
-import { graphemeLength, truncateGraphemesFromEnd, truncateGraphemesTo } from '../../utils/graphemes';
+import {
+  exceedsGraphemeLength,
+  graphemeLength,
+  truncateGraphemesFromEnd,
+  truncateGraphemesTo,
+} from '../../utils/graphemes';
 
 /**
  * Truncate a system prompt to fit within the token budget.
@@ -34,7 +39,7 @@ export function truncateSystemPrompt(prompt: string, budgetTokens: number, famil
 }
 
 function truncateSystemPromptToChars(prompt: string, budgetGraphemes: number): string {
-  if (graphemeLength(prompt) <= budgetGraphemes) return prompt;
+  if (!exceedsGraphemeLength(prompt, budgetGraphemes)) return prompt;
 
   // Head+tail: 60% from beginning (base prompt), 40% from end (guidelines).
   // Grapheme-safe: never splits a surrogate pair, an emoji ZWJ sequence, or a

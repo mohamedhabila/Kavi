@@ -1,6 +1,7 @@
 import type { Attachment } from '../../types/attachment';
 import { getSubAgent, startSubAgent } from '../../services/agents/subAgent';
 import { selectRecentSubAgentEvidenceActivity } from '../../services/agents/subAgentEvidence';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 function serializeSessionArtifacts(
   artifacts?: Attachment[],
@@ -47,7 +48,10 @@ function serializeBlockingSessionOutput(output: string | undefined): Record<stri
     outputChars: normalizedOutput.length,
     ...(normalizedOutput.length > INLINE_BLOCKING_SESSION_OUTPUT_PREVIEW_CHARS
       ? {
-          outputPreview: normalizedOutput.slice(0, INLINE_BLOCKING_SESSION_OUTPUT_PREVIEW_CHARS),
+          outputPreview: truncateGraphemesTo(
+            normalizedOutput,
+            INLINE_BLOCKING_SESSION_OUTPUT_PREVIEW_CHARS,
+          ),
         }
       : {}),
   };
@@ -125,7 +129,9 @@ export function serializeRunningSessionWaitEntry(agent: SessionSnapshot): Record
             : 'active',
     currentActivity: agent.currentActivity,
     activeToolName: agent.activeToolName,
-    outputPreview: agent.output?.slice(0, RUNNING_SESSION_OUTPUT_PREVIEW_CHARS),
+    outputPreview: agent.output
+      ? truncateGraphemesTo(agent.output, RUNNING_SESSION_OUTPUT_PREVIEW_CHARS)
+      : agent.output,
     lastToolResultPreview: agent.lastToolResultPreview,
     artifactCount: agent.artifacts?.length || 0,
     artifacts: serializeSessionArtifacts(agent.artifacts),

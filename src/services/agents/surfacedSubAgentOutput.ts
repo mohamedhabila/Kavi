@@ -1,3 +1,5 @@
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
+
 export const SURFACED_SUB_AGENT_OUTPUT_GUIDANCE =
   'This output is intended to be surfaced directly to the user by the runtime. Do not restate the same content in assistant text unless you are adding materially new information.';
 
@@ -244,8 +246,8 @@ export function createSurfacedSubAgentOutputPayload(params: {
 
   let selectedOutput = selection.result.selectedOutput;
   let truncated = false;
-  if (maxChars && selectedOutput.length > maxChars) {
-    selectedOutput = selectedOutput.slice(0, maxChars).trimEnd();
+  if (maxChars && exceedsGraphemeLength(selectedOutput, maxChars)) {
+    selectedOutput = truncateGraphemesTo(selectedOutput, maxChars).trimEnd();
     truncated = true;
   }
 

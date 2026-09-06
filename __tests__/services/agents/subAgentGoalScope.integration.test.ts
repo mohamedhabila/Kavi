@@ -4,6 +4,12 @@ import { reduceAgentControlGraph } from '../../../src/engine/graph/agentControlG
 import { createInitialAgentRunControlGraphState } from '../../../src/services/agents/agentControlGraphState';
 import { applySubAgentTerminalControlGraphEffects } from '../../../src/services/agents/subAgentGoalGraphEffects';
 import { resolveSpawnGoalScope } from '../../../src/services/agents/mobileSpawnPolicy';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../../helpers/graphemeSafetyProbes';
 
 function buildWorker(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot {
   return {
@@ -88,6 +94,56 @@ describe('subAgent goal scope integration', () => {
 
     expect(nextGraph?.goals?.[0]?.evidence.length).toBe(1);
     expect(nextGraph?.goals?.[0]?.evidence[0]).toContain('Fallback worker output.');
+  });
+
+  it('never splits a grapheme cluster when the 480-char goal-evidence cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const baseGraph = reduceAgentControlGraph(
+        createInitialAgentRunControlGraphState({ updatedAt: 100 }),
+        [
+          {
+            type: 'GOALS_UPDATED',
+            goals: [
+              {
+                id: 'goal-active',
+                title: 'Collect sources',
+                status: 'active',
+                dependencies: [],
+                evidence: [],
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            timestamp: 100,
+          },
+        ],
+      );
+      const run: AgentRun = {
+        id: 'run-1',
+        status: 'running',
+        createdAt: 1,
+        updatedAt: 1,
+        controlGraph: baseGraph,
+      };
+      // Repeat the probe throughout a long output so at least one occurrence
+      // straddles the exact 480-char MAX_GOAL_EVIDENCE_CHARS cut regardless
+      // of the "worker:<label>:" prefix length.
+      const worker = buildWorker({
+        workstreamId: undefined,
+        output: probe.repeat(60),
+      });
+
+      const nextGraph = applySubAgentTerminalControlGraphEffects({
+        run,
+        agent: worker,
+        event: 'completed',
+        timestamp: 200,
+      });
+
+      expect(nextGraph?.goals?.[0]?.evidence.length).toBe(1);
+      expectGraphemeSafe(nextGraph?.goals?.[0]?.evidence[0] ?? '');
+    }
   });
 
   it('records GOAL_EVIDENCE_ADDED and clears terminal async work on child completion', () => {

@@ -1,4 +1,6 @@
 import { buildHeadTailExcerpt } from '../../../utils/headTailExcerpt';
+import { exceedsGraphemeLength, graphemeLength } from '../../../utils/graphemes';
+import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
 
 export const MAX_BROWSER_SNAPSHOT_CHARS = 8_000;
 export const MAX_FILE_CONTENT_CHARS = 12_000;
@@ -8,13 +10,21 @@ export const MAX_BROWSER_MESSAGES = 12;
 export const MAX_SEARCH_MATCHES = 40;
 
 export function truncateText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) {
+  // Cheap early exit before paying for the exact count this hot path only
+  // needs when truncation is actually going to happen.
+  if (!exceedsGraphemeLength(value, maxChars)) {
     return value;
   }
+  const totalGraphemes = graphemeLength(value);
 
-  const omittedChars = value.length - maxChars;
-  const suffix = `... (${omittedChars} chars omitted)`;
-  return `${value.slice(0, Math.max(0, maxChars - suffix.length)).trimEnd()}${suffix}`;
+  const omittedChars = totalGraphemes - maxChars;
+  // `truncateGraphemesWithSuffix` cuts to the reserved budget exactly (no
+  // sentence/whitespace boundary search): this used to be a raw
+  // `.slice(0, maxChars - suffix.length)`, and searching for a "nicer"
+  // boundary on top of a budget already narrowed for the suffix could drop
+  // far more than intended (see the `builtin-expoCompaction.ts` regression
+  // this duplicated).
+  return truncateGraphemesWithSuffix(value, maxChars, `... (${omittedChars} chars omitted)`);
 }
 
 export function countLines(value: string): number {

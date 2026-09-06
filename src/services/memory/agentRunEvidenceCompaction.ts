@@ -3,6 +3,7 @@ import {
   agentRunTransitionStepIndexes,
 } from './agentRunEvidenceRouteAnchors';
 import { tokenizeLexicalUnits } from './ranking/lexical';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 
 export interface AgentRunStep {
   stateIndex?: string | number;
@@ -122,8 +123,8 @@ interface LabelAnnotation {
 
 function fitLine(value: string, maxChars: number): string {
   const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, Math.max(0, maxChars - 1)).trimEnd()}\u2026`;
+  if (!exceedsGraphemeLength(trimmed, maxChars)) return trimmed;
+  return `${truncateGraphemesTo(trimmed, Math.max(0, maxChars - 1)).trimEnd()}\u2026`;
 }
 
 interface MultilineSampleLine {
@@ -222,10 +223,10 @@ function fitMultilineText(value: string, maxChars: number): string | null {
 
 export function fitAgentRunText(value: string, maxChars = MAX_TEXT_CHARS): string {
   const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
+  if (!exceedsGraphemeLength(trimmed, maxChars)) return trimmed;
   const multiline = fitMultilineText(trimmed, maxChars);
   if (multiline) return multiline;
-  return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
+  return `${truncateGraphemesTo(trimmed, maxChars - 1).trimEnd()}\u2026`;
 }
 
 export function observedAgentRunText(record: JsonRecord): string | undefined {

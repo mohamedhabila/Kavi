@@ -8,6 +8,7 @@ import type {
   SubAgentTerminationCause,
 } from '../../../types/subAgent';
 import { cloneAttachments } from '../../../utils/messageAttachments';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
 import type { PersistRegistryBestEffortOutcome, SessionContextStoreParams } from './sessionContext';
 import type { TerminalAnnouncement } from './phases';
 import {
@@ -26,8 +27,8 @@ type PendingSubAgentVerifiedProcedureCommit = Readonly<{
 }>;
 
 function truncateSubAgentOutput(output: string, outputTruncation: number): string {
-  return output.length > outputTruncation
-    ? output.slice(0, outputTruncation) + '\n\n[Output truncated]'
+  return exceedsGraphemeLength(output, outputTruncation)
+    ? truncateGraphemesTo(output, outputTruncation) + '\n\n[Output truncated]'
     : output;
 }
 

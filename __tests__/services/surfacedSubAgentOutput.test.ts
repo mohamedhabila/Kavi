@@ -4,6 +4,12 @@ import {
   parseSurfacedSubAgentOutputResult,
   SURFACED_SUB_AGENT_OUTPUT_GUIDANCE,
 } from '../../src/services/agents/surfacedSubAgentOutput';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../helpers/graphemeSafetyProbes';
 
 describe('surfacedSubAgentOutput', () => {
   it('surfaces the full worker output by default', () => {
@@ -121,5 +127,19 @@ describe('surfacedSubAgentOutput', () => {
         guidance: SURFACED_SUB_AGENT_OUTPUT_GUIDANCE,
       }),
     ).toBe('Full worker output from worker-6 was surfaced to the user in the assistant response.');
+  });
+
+  it('never splits a grapheme cluster when maxChars truncates the surfaced output', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const sourceOutput = `${'o'.repeat(90)}${probe.repeat(15)}`;
+      const result = createSurfacedSubAgentOutputPayload({
+        sessionId: 'worker-probe',
+        sourceOutput,
+        options: { maxChars: 100 },
+      });
+      expect(result.payload?.selectionApplied === false).toBeDefined();
+      expectGraphemeSafe(result.payload?.output ?? '');
+    }
   });
 });

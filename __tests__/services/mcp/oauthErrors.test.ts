@@ -6,6 +6,11 @@ import {
 } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { McpOAuthError, runOAuthOperation } from '../../../src/services/mcp/oauthErrors';
 import type { McpServerConfig } from '../../../src/types/remote';
+import {
+  buildBoundaryStraddlingText,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+} from '../../helpers/graphemeTestFixtures';
 
 function makeServer(overrides: Partial<McpServerConfig> = {}): McpServerConfig {
   return {
@@ -101,4 +106,22 @@ describe('oauthErrors — structured SDK OAuthError classification', () => {
     expect((error as McpOAuthError).message).toContain('(HTTP 403)');
     expect((error as McpOAuthError).message).not.toContain('Invalid OAuth error response');
   });
+
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} in the trimmed "Server response" detail (straddling its 240-char budget)`, async () => {
+      // "invalid_grant: " is 15 code units; place the cluster so it straddles the
+      // 240-char trim budget once that prefix is prepended.
+      const longMessage = buildBoundaryStraddlingText(240 - 'invalid_grant: '.length, cluster, 200);
+      const error = await runOAuthOperation({
+        server: makeServer(),
+        operation: 'token exchange',
+        execute: () => {
+          throw new InvalidGrantError(longMessage);
+        },
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(McpOAuthError);
+      expectGraphemeSafe((error as McpOAuthError).message);
+    });
+  }
 });

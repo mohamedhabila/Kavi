@@ -4,6 +4,7 @@ import { resolveSpeechBackend } from './voiceBackend';
 import { setVoiceAudioMode } from './voiceAudioMode';
 import { getErrorMessageWithCauses } from './voiceErrors';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import { truncateToUtf16BudgetGraphemeSafe } from '../../utils/graphemes';
 import { i18n } from '../../i18n/manager';
 import { getLocaleBcp47Tag } from '../../i18n/localeBcp47';
 
@@ -195,7 +196,7 @@ export async function speakWithSpeechBackend(
     },
     body: JSON.stringify({
       model: 'tts-1',
-      input: text.slice(0, 4096),
+      input: truncateToUtf16BudgetGraphemeSafe(text, 4096),
       voice: 'alloy',
       response_format: 'mp3',
     }),
@@ -230,7 +231,7 @@ export async function speakWithElevenLabs(text: string, providedApiKey?: string)
       'xi-api-key': apiKey,
     },
     body: JSON.stringify({
-      text: text.slice(0, 5000),
+      text: truncateToUtf16BudgetGraphemeSafe(text, 5000),
       model_id: 'eleven_turbo_v2_5',
       output_format: 'mp3_44100_128',
     }),

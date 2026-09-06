@@ -1,4 +1,5 @@
 import type { Message } from '../../types/message';
+import { truncateGraphemesFromEnd } from '../../utils/graphemes';
 
 const RECENT_USER_QUERY_WINDOW_TURNS = 4;
 const RECENT_USER_QUERY_WINDOW_CHARS = 2_000;
@@ -17,6 +18,5 @@ export function buildRecentUserRetrievalQuery(
     if (turns.length >= maxTurns) break;
   }
   const joined = turns.reverse().join('\n');
-  if (joined.length <= maxChars) return joined;
-  return joined.slice(joined.length - maxChars).trimStart();
+  return truncateGraphemesFromEnd(joined, maxChars).trimStart();
 }

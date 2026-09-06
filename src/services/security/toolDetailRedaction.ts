@@ -1,3 +1,5 @@
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
+
 const REDACTION_MARKER = '[REDACTED]';
 const DEFAULT_MAX_DETAIL_CHARACTERS = 4_000;
 
@@ -168,7 +170,7 @@ export function formatRedactedToolDetail(
   }
 
   return {
-    text: `${formatted.slice(0, safeLimit).trimEnd()}\n…`,
+    text: truncateGraphemesWithSuffix(formatted, safeLimit, '\n…'),
     truncated: true,
   };
 }
@@ -187,7 +189,7 @@ export function limitRedactedToolDetail(
   }
 
   return {
-    text: `${detail.text.slice(0, safeLimit).trimEnd()}\n…`,
+    text: truncateGraphemesWithSuffix(detail.text, safeLimit, '\n…'),
     truncated: true,
   };
 }

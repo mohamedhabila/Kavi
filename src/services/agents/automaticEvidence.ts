@@ -1,4 +1,5 @@
 import type { AgentRunEvidenceDraft } from './lifecycle/evidenceTypes';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import type { Attachment } from '../../types/attachment';
 import type { SubAgentLifecycleEvent, SubAgentSnapshot } from '../../types/subAgent';
 
@@ -25,11 +26,11 @@ function truncateText(value: string | undefined, maxChars: number): string | und
     return undefined;
   }
 
-  if (normalized.length <= maxChars) {
+  if (!exceedsGraphemeLength(normalized, maxChars)) {
     return normalized;
   }
 
-  return `${normalized.slice(0, Math.max(1, maxChars - 3)).trimEnd()}...`;
+  return `${truncateGraphemesTo(normalized, Math.max(1, maxChars - 3)).trimEnd()}...`;
 }
 
 function summarizeUniqueTools(toolsUsed: string[] | undefined): string | undefined {

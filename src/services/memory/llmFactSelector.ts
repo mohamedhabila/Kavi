@@ -1,5 +1,6 @@
 import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { createTimeoutSignal } from '../../utils/runtime';
 import { performLlmFetch } from '../llm/core/fetchTransport';
 import { sendLlmMessage } from '../llm/messageService';
@@ -65,8 +66,8 @@ const SELECTION_SCHEMA: StructuredOutputOptions = {
 
 function fitText(value: string, maxChars: number): string {
   const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
+  if (!exceedsGraphemeLength(trimmed, maxChars)) return trimmed;
+  return `${truncateGraphemesTo(trimmed, maxChars - 1).trimEnd()}\u2026`;
 }
 
 function textHitCount(value: string, queryUnits: ReadonlySet<string>): number {

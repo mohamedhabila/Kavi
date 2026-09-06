@@ -3,6 +3,9 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import { truncateGraphemesTo } from '../../utils/graphemes';
+
+const EXTRACTED_TEXT_CONTENT_CHAR_LIMIT = 50000;
 
 function sleepAsync(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -60,12 +63,13 @@ export async function executePdfRead(args: {
             .replace(/\s+/g, ' ')
             .trim();
           if (text.length > 100) {
+            const content = truncateGraphemesTo(text, EXTRACTED_TEXT_CONTENT_CHAR_LIMIT);
             return completedToolOutcome(
               JSON.stringify({
                 status: 'extracted',
                 url: args.path,
-                content: text.slice(0, 50000),
-                charCount: Math.min(text.length, 50000),
+                content,
+                charCount: content.length,
                 method: 'html_rendition',
               }),
             );
@@ -90,12 +94,13 @@ export async function executePdfRead(args: {
         }
 
         const text = await htmlRes.text();
+        const content = truncateGraphemesTo(text, EXTRACTED_TEXT_CONTENT_CHAR_LIMIT);
         return completedToolOutcome(
           JSON.stringify({
             status: 'extracted',
             url: args.path,
-            content: text.slice(0, 50000),
-            charCount: Math.min(text.length, 50000),
+            content,
+            charCount: content.length,
             method: 'direct_text',
           }),
         );

@@ -2,6 +2,7 @@ import { useChatStore } from '../../store/useChatStore';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { generateId } from '../../utils/id';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
 import type { AgentRun } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
@@ -52,7 +53,9 @@ function truncateLogDetail(value?: string, maxLength = MAX_LOG_DETAIL_CHARS): st
     return undefined;
   }
 
-  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 1)}…`;
+  return !exceedsGraphemeLength(normalized, maxLength)
+    ? normalized
+    : `${truncateGraphemesTo(normalized, maxLength - 1)}…`;
 }
 
 function isPlainAgentRunAssistantMessage(message: Message): boolean {

@@ -1,4 +1,5 @@
 import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
+import { exceedsGraphemeLength } from '../../utils/graphemes';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import {
   evaluateExperienceLearning,
@@ -64,7 +65,7 @@ export interface ExperienceLearningArtifactBuildResult {
 function boundedEvidenceTerm(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
-  if (!normalized || normalized.length > MAX_TERM_CHARS) return null;
+  if (!normalized || exceedsGraphemeLength(normalized, MAX_TERM_CHARS)) return null;
   return normalized;
 }
 
@@ -372,7 +373,7 @@ export function retrieveExperienceLearnings(input: {
   const artifact = sanitizeExperienceLearningArtifact(input.artifact);
   if (!artifact || typeof input.query !== 'string') return [];
   const query = input.query.normalize('NFKC').trim();
-  if (!query || query.length > MAX_QUERY_CHARS) return [];
+  if (!query || exceedsGraphemeLength(query, MAX_QUERY_CHARS)) return [];
   if (input.domainId !== undefined && !isExactDurableScopeId(input.domainId)) return [];
   if (input.environmentId !== undefined && !isExactDurableScopeId(input.environmentId)) return [];
   const topK = Math.max(1, Math.min(MAX_TOP_K, Math.floor(input.topK ?? 3)));

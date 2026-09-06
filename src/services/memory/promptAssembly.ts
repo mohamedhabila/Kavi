@@ -13,6 +13,7 @@ import {
   type EpisodePromptSelection,
 } from './episodes/promptRendering';
 import { compactJsonFields, parseJsonRecord } from './factJson';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { promptFieldsForMemoryKind } from './promptFactFields';
 import { tokenizeLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
@@ -127,8 +128,8 @@ function renderL2(input: AssemblePromptInput): string {
 
 function fitText(value: string, maxChars: number): string {
   const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
+  if (!exceedsGraphemeLength(trimmed, maxChars)) return trimmed;
+  return `${truncateGraphemesTo(trimmed, maxChars - 1).trimEnd()}\u2026`;
 }
 
 function dropEmptyPromptRecord(value: Record<string, unknown>): Record<string, unknown> {

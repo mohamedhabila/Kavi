@@ -1,4 +1,5 @@
 import { selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
+import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { parseJsonRecord } from './factJson';
 import type { MemoryFactKind } from './facts/types';
 
@@ -13,9 +14,9 @@ export function boundLocalEvidenceText(
 ): BoundedLocalEvidenceText {
   const normalized = value?.trim() ?? '';
   if (!normalized) return { value: null, truncated: false };
-  if (normalized.length <= maxChars) return { value: normalized, truncated: false };
+  if (!exceedsGraphemeLength(normalized, maxChars)) return { value: normalized, truncated: false };
   return {
-    value: `${normalized.slice(0, maxChars - 1).trimEnd()}\u2026`,
+    value: `${truncateGraphemesTo(normalized, maxChars - 1).trimEnd()}\u2026`,
     truncated: true,
   };
 }

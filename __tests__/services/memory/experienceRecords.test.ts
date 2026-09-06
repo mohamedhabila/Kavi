@@ -1,5 +1,11 @@
 import { projectAgentRunExperienceViews } from '../../../src/services/memory/experienceRecords';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../../helpers/graphemeSafetyProbes';
 
 function agentRunFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
   return {
@@ -170,5 +176,20 @@ describe('typed experience record projection', () => {
     expect(
       procedureView?.kind === 'procedure' ? procedureView.steps[0]?.action?.length : 0,
     ).toBeLessThanOrEqual(800);
+  });
+
+  it('never splits a grapheme cluster when the 800-char outcome cut lands inside a probe', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const outcome = `${'o'.repeat(790)}${probe.repeat(15)}`;
+      const views = projectAgentRunExperienceViews(
+        agentRunFact({ objectText: JSON.stringify({ outcome }) }),
+      );
+      const outcomeView = views.find((view) => view.kind === 'outcome');
+      expect(outcomeView?.kind === 'outcome' ? outcomeView.value : undefined).toBeDefined();
+      expectGraphemeSafe(
+        outcomeView?.kind === 'outcome' ? (outcomeView.value as string) : '',
+      );
+    }
   });
 });

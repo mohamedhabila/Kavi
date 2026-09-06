@@ -4,6 +4,12 @@ import {
   renderFocusBlock,
   type FocusBlockInput,
 } from '../../src/services/memory/focus';
+import {
+  DEVANAGARI_COMBINING_TEXT,
+  SURROGATE_PAIR_EMOJI,
+  ZWJ_FAMILY_EMOJI,
+  expectGraphemeSafe,
+} from '../helpers/graphemeSafetyProbes';
 
 const T0 = Date.parse('2026-04-29T15:00:00Z');
 const MIN = 60_000;
@@ -79,6 +85,15 @@ describe('composeActiveFocusContent', () => {
         activeFocus: 'longmem-delayed-thread\nRunning: memory_recall',
       }),
     ).toBe('longmem-delayed-thread\nRunning: memory_recall');
+  });
+
+  it('never splits a grapheme cluster when clamping to maxChars', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      const activeFocus = `${'y'.repeat(795)}${probe.repeat(10)}`;
+      const result = composeActiveFocusContent({ activeFocus, maxChars: 800 });
+      expectGraphemeSafe(result);
+    }
   });
 });
 
@@ -160,5 +175,16 @@ describe('renderFocusBlock', () => {
     const result = renderFocusBlock(buildInput({ activeFocus: long }));
     expect(result.text.length).toBeLessThan(900);
     expect(result.text).toMatch(/\u2026/);
+  });
+
+  it('never splits a grapheme cluster when truncating an over-long active_focus block', () => {
+    const probes = [SURROGATE_PAIR_EMOJI, ZWJ_FAMILY_EMOJI, DEVANAGARI_COMBINING_TEXT];
+    for (const probe of probes) {
+      // Repeat the probe near the 600-char cut boundary so at least one
+      // occurrence lands exactly where the truncation would cut.
+      const activeFocus = `${'y'.repeat(590)}${probe.repeat(20)}`;
+      const result = renderFocusBlock(buildInput({ activeFocus }));
+      expectGraphemeSafe(result.text);
+    }
   });
 });

@@ -9,6 +9,7 @@ import { useRemoteStore } from '../../services/remote/store';
 import { needsApprovalWithContext, requestToolApproval } from '../../services/remote/approvalStore';
 import { executeSshCommand, resolveSshTarget } from '../../services/ssh/connector';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 import {
   completedToolOutcome,
   failedToolOutcome,
@@ -189,7 +190,7 @@ async function execInBackground(
 
     useRemoteStore.getState().updateJob(jobId, {
       status: 'completed',
-      progressText: output.slice(0, 200),
+      progressText: truncateGraphemesTo(output, 200),
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

@@ -4,6 +4,11 @@
 // Pure regex-based HTML→Markdown (no DOM required).
 
 import { buildHeadTailExcerpt } from '../../utils/headTailExcerpt';
+import { truncateGraphemesTo } from '../../utils/graphemes';
+import {
+  snapIndexDownToGraphemeBoundary,
+  snapIndexUpToGraphemeBoundary,
+} from '../../utils/graphemeBoundary';
 
 function decodeEntities(value: string): string {
   return value
@@ -192,7 +197,7 @@ export function truncateText(
   if (value.length <= maxChars) return { text: value, truncated: false };
   const excerpt = buildHeadTailExcerpt(value, maxChars);
   return {
-    text: excerpt.length <= maxChars ? excerpt : value.slice(0, maxChars),
+    text: excerpt.length <= maxChars ? excerpt : truncateGraphemesTo(value, maxChars),
     truncated: true,
   };
 }
@@ -241,8 +246,11 @@ export function selectMatchingRegions(
   while (ranges.length < 50) {
     const index = haystack.indexOf(needle, cursor);
     if (index < 0) break;
-    const start = Math.max(0, index - contextChars);
-    const end = Math.min(value.length, index + needle.length + contextChars);
+    const start = snapIndexUpToGraphemeBoundary(value, Math.max(0, index - contextChars));
+    const end = snapIndexDownToGraphemeBoundary(
+      value,
+      Math.min(value.length, index + needle.length + contextChars),
+    );
     const previous = ranges[ranges.length - 1];
     if (previous && start <= previous.end) {
       previous.end = Math.max(previous.end, end);
@@ -261,7 +269,7 @@ export function selectMatchingRegions(
   for (const range of ranges) {
     const segment = value.slice(range.start, range.end);
     if (used + segment.length > maxChars) {
-      segments.push(segment.slice(0, Math.max(0, maxChars - used)));
+      segments.push(truncateGraphemesTo(segment, Math.max(0, maxChars - used)));
       break;
     }
     segments.push(segment);
