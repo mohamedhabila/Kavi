@@ -16,6 +16,7 @@ jest.mock('../../../src/services/workspaces/control', () => ({
 import { executeWorkspaceTool } from '../../../src/engine/tools/workspaceToolExecutor';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -38,7 +39,10 @@ describe('executeWorkspaceTool(workspace_delegate_task) — output/command previ
       });
 
       const parsed = JSON.parse((outcome as any).content);
-      expectGraphemeSafe(String(parsed.output ?? ''));
+      const parsedOutput = String(parsed.output ?? '');
+      expectGraphemeSafe(parsedOutput);
+      // parsed.output is truncateGraphemesWithSuffix(result.output, 4000, '...').
+      expect(endsOnGraphemeBoundary(output, parsedOutput.slice(0, -'...'.length))).toBe(true);
     });
 
     it(`never splits ${name} straddling the 240-char command preview budget`, async () => {
@@ -57,7 +61,9 @@ describe('executeWorkspaceTool(workspace_delegate_task) — output/command previ
       });
 
       const parsed = JSON.parse((outcome as any).content);
-      expectGraphemeSafe(String(parsed.commandPreview ?? ''));
+      const commandPreview = String(parsed.commandPreview ?? '');
+      expectGraphemeSafe(commandPreview);
+      expect(endsOnGraphemeBoundary(command, commandPreview)).toBe(true);
     });
   }
 });

@@ -1,5 +1,10 @@
 import { normalizeRemoteReadResult } from '../../../../src/engine/tools/resultNormalization/remoteResult';
-import { expectGraphemeSafe, GRAPHEME_CLUSTER_FIXTURES } from '../../../helpers/graphemeTestFixtures';
+import {
+  endsOnGraphemeBoundary,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+  startsOnGraphemeBoundary,
+} from '../../../helpers/graphemeTestFixtures';
 
 describe('normalizeRemoteReadResult — content excerpt grapheme safety', () => {
   for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
@@ -12,7 +17,15 @@ describe('normalizeRemoteReadResult — content excerpt grapheme safety', () => 
       });
 
       const parsed = JSON.parse(result);
-      expectGraphemeSafe(String(parsed.contentExcerpt ?? ''));
+      const contentExcerpt = String(parsed.contentExcerpt ?? '');
+      expectGraphemeSafe(contentExcerpt);
+      // contentExcerpt is buildHeadTailExcerpt(content, MAX_FILE_CONTENT_CHARS) —
+      // head + a fixed notice marker + tail.
+      const [head, tail] = contentExcerpt.split(/\n\.\.\. \[truncated \d+ chars\] \.\.\.\n/);
+      expect(endsOnGraphemeBoundary(content, head ?? '')).toBe(true);
+      if (tail !== undefined) {
+        expect(startsOnGraphemeBoundary(content, tail)).toBe(true);
+      }
     });
   }
 });

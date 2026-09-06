@@ -19,6 +19,7 @@ import { Wifi } from 'lucide-react-native';
 import { useTranslation } from '../i18n/useTranslation';
 import { useAppTheme } from '../theme/useAppTheme';
 import { executeJavaScriptWithResult, formatJavaScriptResult } from '../utils/javascript';
+import { segmentGraphemes } from '../utils/graphemes';
 import {
   executeLocalShellCommand,
   getLocalRuntimeCapabilities,
@@ -391,7 +392,7 @@ export const TerminalScreen: React.FC = () => {
         writePrompt(mode);
       } else if (data === '\x7f') {
         if (lineBufferRef.current.length > 0) {
-          lineBufferRef.current = lineBufferRef.current.slice(0, -1);
+          lineBufferRef.current = segmentGraphemes(lineBufferRef.current).slice(0, -1).join('');
           termRef.current?.write('\b \b');
         }
       } else if (data.charCodeAt(0) >= 32) {

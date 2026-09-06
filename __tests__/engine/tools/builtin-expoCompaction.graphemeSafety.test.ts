@@ -1,6 +1,7 @@
 import { truncateExpoText } from '../../../src/engine/tools/builtin-expoCompaction';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -18,6 +19,7 @@ describe('truncateExpoText — grapheme safety', () => {
 
       expect(result.endsWith('...')).toBe(true);
       expectGraphemeSafe(result);
+      expect(endsOnGraphemeBoundary(text, result.slice(0, -'...'.length))).toBe(true);
     });
   }
 });

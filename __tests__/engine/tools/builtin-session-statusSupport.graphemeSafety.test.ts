@@ -1,6 +1,7 @@
 import { buildSessionStatusPayload } from '../../../src/engine/tools/builtin-session-statusSupport';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -20,6 +21,7 @@ describe('buildSessionStatusPayload — outputPreview grapheme safety', () => {
 
       const fingerprint = JSON.parse(payload.fingerprint) as { outputPreview: string };
       expectGraphemeSafe(fingerprint.outputPreview);
+      expect(endsOnGraphemeBoundary(output, fingerprint.outputPreview)).toBe(true);
     });
   }
 });

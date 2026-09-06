@@ -1,6 +1,7 @@
 import { truncateText } from '../../../../src/engine/tools/resultNormalization/transformers';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../../helpers/graphemeTestFixtures';
@@ -18,6 +19,10 @@ describe('resultNormalization/transformers truncateText — grapheme safety', ()
 
       expect(result).toContain('chars omitted');
       expectGraphemeSafe(result);
+      // result is truncateGraphemesWithSuffix(text, boundary, `... (${N} chars omitted)`);
+      // strip that dynamic-length suffix to recover the underlying cut.
+      const cutText = result.replace(/\.\.\. \(\d+ chars omitted\)$/, '');
+      expect(endsOnGraphemeBoundary(text, cutText)).toBe(true);
     });
   }
 

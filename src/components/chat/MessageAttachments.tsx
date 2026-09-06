@@ -15,6 +15,9 @@ import { useTranslation } from '../../i18n/useTranslation';
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import type { Attachment } from '../../types/attachment';
+import { truncateGraphemesTo } from '../../utils/graphemes';
+
+const ATTACHMENT_NAME_MAX_CHARS = 160;
 
 interface MessageAttachmentsProps {
   attachments: Attachment[];
@@ -31,11 +34,11 @@ function getAttachmentWorkspacePath(attachment: Attachment): string | undefined 
 
 function getSafeAttachmentName(attachment: Attachment, fallback: string): string {
   const name = typeof attachment.name === 'string' ? attachment.name : '';
-  const safeName = redactSensitiveText(name)
+  const normalized = redactSensitiveText(name)
     .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
     .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, 160);
+    .trim();
+  const safeName = truncateGraphemesTo(normalized, ATTACHMENT_NAME_MAX_CHARS);
   return safeName || fallback;
 }
 

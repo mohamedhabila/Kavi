@@ -1,6 +1,7 @@
 import { extractToolOutputStructuralMetadata } from '../../../src/engine/tools/toolOutputStructuralMetadata';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -17,6 +18,9 @@ describe('extractToolOutputStructuralMetadata — output preview grapheme safety
       const preview = String(metadata?.sessions[0]?.outputPreview ?? '');
       expect(preview.length).toBeGreaterThan(0);
       expectGraphemeSafe(preview);
+      // preview is truncateGraphemesWithSuffix(output.trim(), 600, '…') — strip
+      // the single-character ellipsis suffix to recover the underlying cut.
+      expect(endsOnGraphemeBoundary(output, preview.slice(0, -'…'.length))).toBe(true);
     });
   }
 });

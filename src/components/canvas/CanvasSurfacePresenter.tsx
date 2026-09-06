@@ -122,11 +122,41 @@ export const CanvasSurfacePresenter: React.FC = () => {
       const maxChars = Math.max(1000, Math.floor(options.maxChars));
       const readScript = `
       (function() {
+        // The DOM lives only inside this WebView's own JS engine, so the read
+        // result has to be cut to budget here rather than after the bridge
+        // hands it to the RN side — there is no way to call this app's
+        // grapheme-safe utils (src/utils/graphemes.ts) from injected script.
+        // This mirrors truncateToUtf16BudgetGraphemeSafe's contract (an exact
+        // UTF-16 budget, never splitting a grapheme cluster): modern WebView
+        // engines (Chromium on Android, JavaScriptCore/WebKit on iOS) ship
+        // Intl.Segmenter, so prefer that; otherwise fall back to dropping a
+        // trailing lone high surrogate, the one split that a raw slice can
+        // introduce for BMP-adjacent text.
+        function kaviGraphemeSafeCut(source, limit) {
+          if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+            var segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+            var used = 0;
+            var out = '';
+            var iterator = segmenter.segment(source)[Symbol.iterator]();
+            var step = iterator.next();
+            while (!step.done) {
+              var cluster = step.value.segment;
+              if (used + cluster.length > limit) break;
+              out += cluster;
+              used += cluster.length;
+              step = iterator.next();
+            }
+            return out;
+          }
+          var cut = source.slice(0, limit);
+          var lastCode = cut.charCodeAt(cut.length - 1);
+          return (lastCode >= 0xd800 && lastCode <= 0xdbff) ? cut.slice(0, cut.length - 1) : cut;
+        }
         try {
           var docEl = document.documentElement;
           var html = docEl ? docEl.outerHTML : '';
           var truncated = html.length > ${maxChars};
-          var content = truncated ? html.slice(0, ${maxChars}) : html;
+          var content = truncated ? kaviGraphemeSafeCut(html, ${maxChars}) : html;
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'readResult',
             surfaceId: ${safeSurfaceId},

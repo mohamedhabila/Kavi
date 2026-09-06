@@ -10,6 +10,7 @@ import {
 } from '../../../src/engine/tools/toolScheduledJobExecution';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -140,6 +141,7 @@ describe('executeCreateTask', () => {
 
       const passedName = (createScheduledJob as jest.Mock).mock.calls[0][0].name as string;
       expectGraphemeSafe(passedName);
+      expect(endsOnGraphemeBoundary(prompt, passedName)).toBe(true);
     });
   }
 });

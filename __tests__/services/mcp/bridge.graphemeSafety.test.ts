@@ -11,6 +11,7 @@ import { executeMcpTool } from '../../../src/services/mcp/bridge';
 import type { McpClient } from '../../../src/services/mcp/client';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -39,7 +40,9 @@ describe('executeMcpTool — remote artifact log-snippet grapheme safety', () =>
 
       expect(mockAddRemoteArtifact).toHaveBeenCalledTimes(1);
       const artifact = mockAddRemoteArtifact.mock.calls[0][1];
-      expectGraphemeSafe(String(artifact.value ?? ''));
+      const artifactValue = String(artifact.value ?? '');
+      expectGraphemeSafe(artifactValue);
+      expect(endsOnGraphemeBoundary(resultText, artifactValue)).toBe(true);
     });
   }
 });

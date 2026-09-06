@@ -13,6 +13,7 @@ import {
 } from '../../src/utils/graphemes';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../helpers/graphemeTestFixtures';
@@ -398,6 +399,7 @@ describe('truncateToUtf16BudgetGraphemeSafe', () => {
 
       expect(result.length).toBeLessThanOrEqual(boundary);
       expectGraphemeSafe(result);
+      expect(endsOnGraphemeBoundary(text, result)).toBe(true);
       // The cluster itself must be either fully included or fully excluded.
       expect(result.includes(cluster) || !result.includes(cluster.charAt(0))).toBe(true);
     });
@@ -409,6 +411,7 @@ describe('truncateToUtf16BudgetGraphemeSafe', () => {
       const result = truncateToUtf16BudgetGraphemeSafe(text, budget);
       expect(result.length).toBeLessThanOrEqual(budget);
       expectGraphemeSafe(result);
+      expect(endsOnGraphemeBoundary(text, result)).toBe(true);
     }
   });
 

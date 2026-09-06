@@ -2,6 +2,7 @@ import { buildCompactionOpenThreads } from '../../../src/engine/graph/compaction
 import type { AgentGoal } from '../../../src/types/agentRun';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -20,6 +21,10 @@ describe('buildCompactionOpenThreads — goal title/criteria grapheme safety', (
       const threads = buildCompactionOpenThreads({ goals: [goal] });
       expect(threads.length).toBe(1);
       expectGraphemeSafe(threads[0]);
+      // threads[0] is `[active] ${truncateGraphemesWithSuffix(title, 160, '…')}`.
+      const prefix = '[active] ';
+      const cutText = threads[0].slice(prefix.length, -'…'.length);
+      expect(endsOnGraphemeBoundary(title, cutText)).toBe(true);
     });
   }
 });

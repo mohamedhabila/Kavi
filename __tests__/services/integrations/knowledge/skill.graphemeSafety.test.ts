@@ -1,6 +1,7 @@
 import { createKnowledgeSkill } from '../../../../src/services/integrations/knowledge/skill';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../../helpers/graphemeTestFixtures';
@@ -30,7 +31,9 @@ describe('knowledge skill (wikipedia_summary) — extract grapheme safety', () =
       const outcome = await tool.handler({ topic: 'Test Topic' }, {} as any);
 
       const parsed = JSON.parse((outcome as any).content);
-      expectGraphemeSafe(String(parsed.extract ?? ''));
+      const parsedExtract = String(parsed.extract ?? '');
+      expectGraphemeSafe(parsedExtract);
+      expect(endsOnGraphemeBoundary(extract, parsedExtract)).toBe(true);
     });
   }
 });

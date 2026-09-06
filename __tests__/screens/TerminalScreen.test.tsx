@@ -111,6 +111,7 @@ import {
   getLocalRuntimeCapabilities,
 } from '../../src/services/terminal/localRuntime';
 import { executeJavaScriptWithResult, formatJavaScriptResult } from '../../src/utils/javascript';
+import { GRAPHEME_CLUSTER_FIXTURES } from '../helpers/graphemeTestFixtures';
 
 const mockGetCapabilities = getLocalRuntimeCapabilities as jest.MockedFunction<
   typeof getLocalRuntimeCapabilities
@@ -327,6 +328,32 @@ describe('TerminalScreen', () => {
 
     expect(mockTerminalRef.write).toHaveBeenCalledWith('\b \b');
     expect(mockExecuteJavaScriptWithResult).toHaveBeenCalledWith('a');
+  });
+
+  describe('backspace grapheme safety', () => {
+    for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+      it(`removes the whole ${name} grapheme cluster on backspace instead of splitting its code units`, async () => {
+        await renderTerminal();
+
+        await act(async () => {
+          mockTerminalProps.onReady(80, 24);
+          await mockTerminalProps.onInput('a');
+          // xterm delivers a pasted/composed character as one onInput chunk, so a
+          // multi-code-unit cluster (surrogate pair, ZWJ sequence, or a base plus
+          // its combining marks) arrives as a single `data` string here, exactly
+          // as it would for a real emoji-keyboard or IME composition.
+          await mockTerminalProps.onInput(cluster);
+          await mockTerminalProps.onInput('\x7f');
+          await mockTerminalProps.onInput('\r');
+        });
+
+        // A naive `slice(0, -1)` would strip only the last UTF-16 code unit of
+        // `cluster`, leaving the rest of it (a lone surrogate, a dangling ZWJ, or
+        // a stray combining mark) appended after 'a'. The fix removes the whole
+        // cluster, so the executed line is exactly the 'a' that came before it.
+        expect(mockExecuteJavaScriptWithResult).toHaveBeenCalledWith('a');
+      });
+    }
   });
 
   it('clears the terminal immediately for the clear command', async () => {

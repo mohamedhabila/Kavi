@@ -17,6 +17,7 @@ import {
   requestNotificationPermission,
 } from '../services/notifications/service';
 import { redactSensitiveText } from '../services/security/toolDetailRedaction';
+import { truncateGraphemesWithSuffix } from '../utils/graphemeBoundary';
 import { RouteLeadingButton } from '../components/navigation/RouteLeadingButton';
 import { SchedulerCreateSheet } from '../components/scheduler/SchedulerCreateSheet';
 import {
@@ -43,10 +44,12 @@ type ScreenNotice = {
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
+const SCHEDULER_SCREEN_MESSAGE_MAX_CHARS = 300;
+
 function safeMessage(value: unknown): string {
   const text = value instanceof Error ? value.message : String(value);
   const redacted = redactSensitiveText(text).replace(/\s+/gu, ' ').trim();
-  return redacted.length > 300 ? `${redacted.slice(0, 297)}…` : redacted;
+  return truncateGraphemesWithSuffix(redacted, SCHEDULER_SCREEN_MESSAGE_MAX_CHARS, '…');
 }
 
 function safeMutationMessage(value: unknown, t: Translate): string {

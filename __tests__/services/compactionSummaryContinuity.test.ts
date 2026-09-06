@@ -7,8 +7,10 @@ import type { Message } from '../../src/types/message';
 import {
   buildBoundaryStraddlingText,
   buildTailBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
+  startsOnGraphemeBoundary,
 } from '../helpers/graphemeTestFixtures';
 
 function makeMessage(role: Message['role'], content: string): Message {
@@ -195,12 +197,22 @@ describe('buildStructuredSummary — grapheme safety', () => {
       const content = buildBoundaryStraddlingText(320, cluster, 100);
       const summary = buildStructuredSummary([makeMessage('user', content)], 'selective');
       expectGraphemeSafe(summary);
+      // With only this one user message (no priorContext/hints), '## Task Overview\n'
+      // is the last section: summary ends with truncateGraphemesTo(content, 320).
+      const marker = '## Task Overview\n';
+      const cutText = summary.slice(summary.indexOf(marker) + marker.length);
+      expect(endsOnGraphemeBoundary(content, cutText)).toBe(true);
     });
 
     it(`never splits ${name} straddling the 400-char assistant-conclusion budget`, () => {
       const content = buildBoundaryStraddlingText(400, cluster, 100);
       const summary = buildStructuredSummary([makeMessage('assistant', content)], 'selective');
       expectGraphemeSafe(summary);
+      // With only this one assistant message, 'Progress: ' is the last thing
+      // appended: summary ends with truncateGraphemesTo(content, 400).
+      const marker = 'Progress: ';
+      const cutText = summary.slice(summary.lastIndexOf(marker) + marker.length);
+      expect(endsOnGraphemeBoundary(content, cutText)).toBe(true);
     });
   }
 });
@@ -213,6 +225,9 @@ describe('normalizePriorCompactionContext — grapheme safety', () => {
       const priorContext = buildTailBoundaryStraddlingText(599, cluster, 300);
       const result = normalizePriorCompactionContext(priorContext, 'aggressive');
       expectGraphemeSafe(result);
+      // result is `…${truncateGraphemesFromEnd(cleaned, 599)}` where cleaned === priorContext
+      // here (no marker lines, no continuation section, no leading/trailing whitespace).
+      expect(startsOnGraphemeBoundary(priorContext, result.slice('…'.length))).toBe(true);
     });
   }
 });

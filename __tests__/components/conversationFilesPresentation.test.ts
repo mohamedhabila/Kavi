@@ -6,6 +6,15 @@ import {
   getVisibleConversationFileEntries,
 } from '../../src/components/files/conversationFilesPresentation';
 import type { FileEntry } from '../../src/services/files/contracts';
+import {
+  GRAPHEME_CLUSTER_FIXTURES,
+  buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
+  expectGraphemeSafe,
+} from '../helpers/graphemeTestFixtures';
+
+const MAX_SAFE_FILE_NAME_CHARS = 160;
+const MAX_RESTORED_SEARCH_LENGTH = 160;
 
 const entries: FileEntry[] = [
   { name: 'folder', isDirectory: true },
@@ -69,5 +78,27 @@ describe('conversation files presentation', () => {
       fileFilter: 'all',
       fileSort: 'recent',
     });
+  });
+
+  describe('grapheme safety', () => {
+    for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+      it(`never splits ${name} straddling the ${MAX_SAFE_FILE_NAME_CHARS}-char safe file name budget`, () => {
+        const longName = buildBoundaryStraddlingText(MAX_SAFE_FILE_NAME_CHARS, cluster, 40);
+        const safeName = getSafeConversationFileName(longName, 'Untitled item');
+
+        expect(safeName.length).toBeLessThan(longName.length);
+        expectGraphemeSafe(safeName);
+        expect(endsOnGraphemeBoundary(longName, safeName)).toBe(true);
+      });
+
+      it(`never splits ${name} straddling the ${MAX_RESTORED_SEARCH_LENGTH}-char restored search query budget`, () => {
+        const longQuery = buildBoundaryStraddlingText(MAX_RESTORED_SEARCH_LENGTH, cluster, 40);
+        const { searchQuery } = getConversationFilesBrowseState({ searchQuery: longQuery });
+
+        expect(searchQuery.length).toBeLessThan(longQuery.length);
+        expectGraphemeSafe(searchQuery);
+        expect(endsOnGraphemeBoundary(longQuery, searchQuery)).toBe(true);
+      });
+    }
   });
 });

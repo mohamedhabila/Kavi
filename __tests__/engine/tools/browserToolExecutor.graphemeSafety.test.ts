@@ -44,6 +44,7 @@ jest.mock('../../../src/services/browser/jobs', () => ({
 import { executeBrowserTool } from '../../../src/engine/tools/browserToolExecutor';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -65,6 +66,11 @@ describe('executeBrowserTool(browser_type) — trace description grapheme safety
       expect(mockStartBrowserTrace).toHaveBeenCalledTimes(1);
       const description = mockStartBrowserTrace.mock.calls[0][2] as string;
       expectGraphemeSafe(description);
+      // description is `Type "<cut>" into ref=...` — pull the cut text out from
+      // between the quote and the known ` into ref=` marker.
+      const afterOpenQuote = description.slice('Type "'.length);
+      const cutText = afterOpenQuote.slice(0, afterOpenQuote.indexOf('" into ref='));
+      expect(endsOnGraphemeBoundary(text, cutText)).toBe(true);
     });
   }
 });

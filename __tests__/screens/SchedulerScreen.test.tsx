@@ -1,8 +1,14 @@
 import React from 'react';
-import { Alert, Linking, StyleSheet } from 'react-native';
+import { Alert, Linking, StyleSheet, Text } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { CronJob } from '../../src/services/cron/types';
 import { SchedulerScreen } from '../../src/screens/SchedulerScreen';
+import {
+  GRAPHEME_CLUSTER_FIXTURES,
+  buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
+  expectGraphemeSafe,
+} from '../helpers/graphemeTestFixtures';
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {
@@ -419,5 +425,43 @@ describe('SchedulerScreen', () => {
     expect(buttonStyle).toEqual(expect.objectContaining({ minHeight: 48, width: 48 }));
     fireEvent.press(deleteButton);
     await waitFor(() => expect(mockDeleteScheduledJob).toHaveBeenCalledWith('job-delete'));
+  });
+
+  describe('run-failure message grapheme safety', () => {
+    const SCHEDULER_SCREEN_MESSAGE_MAX_CHARS = 300;
+
+    for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+      it(`never splits ${name} straddling the ${SCHEDULER_SCREEN_MESSAGE_MAX_CHARS}-char run-failure message budget`, async () => {
+        mockJobs.push(job());
+        const longMessage = buildBoundaryStraddlingText(
+          SCHEDULER_SCREEN_MESSAGE_MAX_CHARS,
+          cluster,
+          40,
+        );
+        mockRunJobNow.mockRejectedValueOnce(new Error(longMessage));
+        const { getByTestId, UNSAFE_getAllByType } = render(<SchedulerScreen />);
+
+        fireEvent.press(getByTestId('scheduler-run-job-1'));
+        await waitFor(() => expect(mockRunJobNow).toHaveBeenCalled());
+
+        const renderedTexts = UNSAFE_getAllByType(Text)
+          .map((element) => element.props.children)
+          .filter((children): children is string => typeof children === 'string');
+        const truncatedMessage = renderedTexts.find((text) => text.includes('a'.repeat(20)));
+
+        expect(truncatedMessage).toBeTruthy();
+        expect(truncatedMessage!.length).toBeLessThan(longMessage.length);
+        expectGraphemeSafe(truncatedMessage!);
+        // The rendered text is `${t('scheduler.runFailed')} ${safeMessage(error)}` — a
+        // localized label followed by the cut message. Locate the cut by its
+        // known content (the 'a' filler run) rather than assuming the label text.
+        const safeMessagePart = truncatedMessage!.slice(
+          truncatedMessage!.indexOf('a'.repeat(20)),
+        );
+        expect(
+          endsOnGraphemeBoundary(longMessage, safeMessagePart.slice(0, -'…'.length)),
+        ).toBe(true);
+      });
+    }
   });
 });

@@ -4,6 +4,7 @@ import type {
   RemoteApprovalRequest,
   RemoteApprovalScope,
 } from '../../types/remote';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export type ApprovalRiskLevel = NonNullable<RemoteApprovalRequest['riskLevel']>;
 export type ApprovalReviewReason =
@@ -34,11 +35,11 @@ const RISK_LEVELS = new Set<ApprovalRiskLevel>(['low', 'medium', 'high', 'critic
 
 function safeSingleLine(value: unknown, maximumLength: number): string {
   if (typeof value !== 'string' || !value) return '';
-  return redactSensitiveText(value)
+  const normalized = redactSensitiveText(value)
     .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
     .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, maximumLength);
+    .trim();
+  return truncateGraphemesTo(normalized, maximumLength);
 }
 
 /**

@@ -18,6 +18,7 @@ jest.mock('../../../src/services/ssh/connector', () => ({
 import { executeSshBackgroundJobStatus } from '../../../src/engine/tools/builtin-ssh';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -36,7 +37,10 @@ describe('executeSshBackgroundJobStatus — output excerpt grapheme safety', () 
 
       const outcome = await executeSshBackgroundJobStatus({ jobId: 'job-1' });
       const parsed = JSON.parse((outcome as any).content);
-      expectGraphemeSafe(String(parsed.outputExcerpt ?? ''));
+      const outputExcerpt = String(parsed.outputExcerpt ?? '');
+      expectGraphemeSafe(outputExcerpt);
+      // outputExcerpt is truncateGraphemesWithSuffix(output, 2000, '...').
+      expect(endsOnGraphemeBoundary(output, outputExcerpt.slice(0, -'...'.length))).toBe(true);
     });
   }
 });

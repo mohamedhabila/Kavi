@@ -22,6 +22,7 @@ import {
 } from '../../../src/engine/tools/builtin-session-history';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -40,7 +41,9 @@ describe('executeSessionList — output preview grapheme safety', () => {
 
       const outcome = await executeSessionList();
       const parsed = JSON.parse((outcome as any).content);
-      expectGraphemeSafe(String(parsed.sessions[0].output ?? ''));
+      const parsedOutput = String(parsed.sessions[0].output ?? '');
+      expectGraphemeSafe(parsedOutput);
+      expect(endsOnGraphemeBoundary(output, parsedOutput)).toBe(true);
     });
   }
 });
@@ -60,7 +63,9 @@ describe('executeSessionHistory — bounded-output preview grapheme safety', () 
       const outcome = await executeSessionHistory({ sessionId: 'session-1' });
       const parsed = JSON.parse((outcome as any).content);
       const lastMessage = parsed.messages[parsed.messages.length - 1];
-      expectGraphemeSafe(String(lastMessage?.content ?? ''));
+      const lastMessageContent = String(lastMessage?.content ?? '');
+      expectGraphemeSafe(lastMessageContent);
+      expect(endsOnGraphemeBoundary(output, lastMessageContent)).toBe(true);
     });
   }
 });
@@ -84,7 +89,12 @@ describe('executeSessionHistory — byte-budget fallback grapheme safety', () =>
 
       const outcome = await executeSessionHistory({ sessionId: 'session-1' });
       const parsed = JSON.parse((outcome as any).content);
-      expectGraphemeSafe(String(parsed.conversationSummary ?? ''));
+      const parsedSummary = String(parsed.conversationSummary ?? '');
+      expectGraphemeSafe(parsedSummary);
+      // parsedSummary is truncateGraphemesWithSuffix(conversationSummary, 317, '...').
+      expect(
+        endsOnGraphemeBoundary(conversationSummary, parsedSummary.slice(0, -'...'.length)),
+      ).toBe(true);
     });
 
     it(`never splits ${name} straddling the 1021-char last-message fallback budget`, async () => {
@@ -107,7 +117,12 @@ describe('executeSessionHistory — byte-budget fallback grapheme safety', () =>
       const outcome = await executeSessionHistory({ sessionId: 'session-1' });
       const parsed = JSON.parse((outcome as any).content);
       const lastMessage = parsed.messages[parsed.messages.length - 1];
-      expectGraphemeSafe(String(lastMessage?.content ?? ''));
+      const lastMessageContent = String(lastMessage?.content ?? '');
+      expectGraphemeSafe(lastMessageContent);
+      // lastMessageContent is truncateGraphemesWithSuffix(messageContent, 1021, '...').
+      expect(
+        endsOnGraphemeBoundary(messageContent, lastMessageContent.slice(0, -'...'.length)),
+      ).toBe(true);
     });
   }
 });

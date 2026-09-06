@@ -16,8 +16,10 @@ import {
 import type { Message } from '../../src/types/message';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
+  startsOnGraphemeBoundary,
 } from '../helpers/graphemeTestFixtures';
 
 const makeToolMsg = (id: string, content: string): Message => ({
@@ -276,6 +278,10 @@ describe('truncateToolResult — head/tail seam grapheme safety', () => {
 
       const result = truncateToolResult(value, limit);
       expectGraphemeSafe(result);
+      // result is `${head}\n[truncated: output exceeded context limit]${tail}`.
+      const [headPart] = result.split('[truncated: output exceeded context limit]');
+      const head = (headPart ?? '').slice(0, -1); // strip the notice's leading '\n'
+      expect(endsOnGraphemeBoundary(value, head)).toBe(true);
     });
 
     it(`never splits ${name} at the tail cut`, () => {
@@ -285,6 +291,10 @@ describe('truncateToolResult — head/tail seam grapheme safety', () => {
 
       const result = truncateToolResult(value, limit);
       expectGraphemeSafe(result);
+      // result is `${head}\n[truncated: output exceeded context limit]${tail}`.
+      const parts = result.split('[truncated: output exceeded context limit]');
+      const tail = parts[parts.length - 1] ?? '';
+      expect(startsOnGraphemeBoundary(value, tail)).toBe(true);
     });
   }
 });
@@ -300,7 +310,12 @@ describe('enforceToolResultBudget — structured scalar truncation grapheme safe
 
       const result = enforceToolResultBudget(oversized, 1000);
       const parsed = JSON.parse(result);
-      expectGraphemeSafe(String(parsed.summary ?? ''));
+      const summary = String(parsed.summary ?? '');
+      expectGraphemeSafe(summary);
+      // summary is truncateScalar's cut plus a dynamic-length
+      // `… (N chars omitted)` suffix — strip it to recover the underlying cut.
+      const cutText = summary.replace(/… \(\d+ chars omitted\)$/, '');
+      expect(endsOnGraphemeBoundary(value, cutText)).toBe(true);
     });
   }
 });

@@ -1,5 +1,11 @@
 import { render } from '@testing-library/react-native';
 import { CanvasSurfacePresenter } from '../../../src/components/canvas/CanvasSurfacePresenter';
+import {
+  GRAPHEME_CLUSTER_FIXTURES,
+  buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
+  expectGraphemeSafe,
+} from '../../helpers/graphemeTestFixtures';
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {
@@ -171,5 +177,48 @@ describe('CanvasSurfacePresenter', () => {
     expect(injectedScript).toContain('Function(__candidates[__i])()');
     expect(injectedScript).toContain('document.title');
     expect(injectedScript).toContain('window.ReactNativeWebView.postMessage');
+  });
+
+  describe('onRead — injected script grapheme safety', () => {
+    const READ_MAX_CHARS = 1000;
+
+    // The DOM read happens inside the WebView's own JS engine, so the truncation
+    // this test is guarding lives entirely in the injected script string — there
+    // is no RN-side function to import. This runs that captured script for real
+    // (via `new Function`) against a stubbed `document`/`window`, exactly like the
+    // WebView's global scope, and reads back the posted message it produces.
+    function runInjectedReadScript(script: string, html: string): { truncated: boolean; content: string } {
+      const postMessage = jest.fn();
+      const documentStub = { documentElement: { outerHTML: html }, title: 'Surface' };
+      const windowStub = { ReactNativeWebView: { postMessage } };
+      const locationStub = { href: '' };
+      const runScript = new Function('document', 'window', 'location', script);
+      runScript(documentStub, windowStub, locationStub);
+      expect(postMessage).toHaveBeenCalledTimes(1);
+      return JSON.parse(postMessage.mock.calls[0][0]);
+    }
+
+    for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+      it(`never splits ${name} straddling the read-request maxChars budget`, () => {
+        const { getByTestId } = render(<CanvasSurfacePresenter />);
+        getByTestId('global-canvas-webview').props.onLoadEnd();
+
+        const latestHandlerCall =
+          mockSetCanvasEventHandler.mock.calls[mockSetCanvasEventHandler.mock.calls.length - 1];
+        const handler = latestHandlerCall[0];
+        handler.onRead('bundle-surface', { mode: 'auto', maxChars: READ_MAX_CHARS });
+
+        expect(mockInjectJavaScript).toHaveBeenCalledTimes(1);
+        const script = String(mockInjectJavaScript.mock.calls[0][0]);
+        const html = buildBoundaryStraddlingText(READ_MAX_CHARS, cluster, 40);
+
+        const message = runInjectedReadScript(script, html);
+
+        expect(message.truncated).toBe(true);
+        expect(message.content.length).toBeLessThan(html.length);
+        expectGraphemeSafe(message.content);
+        expect(endsOnGraphemeBoundary(html, message.content)).toBe(true);
+      });
+    }
   });
 });

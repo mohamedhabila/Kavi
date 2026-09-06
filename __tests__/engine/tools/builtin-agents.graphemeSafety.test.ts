@@ -16,6 +16,7 @@ jest.mock('../../../src/services/agents/store', () => ({
 import { executeAgentsConfigure } from '../../../src/engine/tools/builtin-agents';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -36,6 +37,7 @@ describe('executeAgentsConfigure — description fallback grapheme safety', () =
       expect(mockUpsertCustomPersona).toHaveBeenCalledTimes(1);
       const created = mockUpsertCustomPersona.mock.calls[0][0];
       expectGraphemeSafe(String(created.description ?? ''));
+      expect(endsOnGraphemeBoundary(systemPrompt, String(created.description ?? ''))).toBe(true);
     });
   }
 });

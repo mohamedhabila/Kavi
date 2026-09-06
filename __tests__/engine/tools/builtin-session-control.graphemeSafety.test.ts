@@ -8,6 +8,7 @@ jest.mock('../../../src/services/agents/subAgent', () => ({
 import { executeSessionCancel } from '../../../src/engine/tools/builtin-session-control';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -25,6 +26,7 @@ describe('executeSessionCancel — outputPreview grapheme safety', () => {
       const outcome = await executeSessionCancel({ sessionId: 'session-1' });
       const parsed = JSON.parse((outcome as any).content);
       expectGraphemeSafe(String(parsed.outputPreview ?? ''));
+      expect(endsOnGraphemeBoundary(output, String(parsed.outputPreview ?? ''))).toBe(true);
     });
   }
 });

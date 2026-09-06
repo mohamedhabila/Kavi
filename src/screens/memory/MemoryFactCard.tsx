@@ -7,6 +7,7 @@ import type {
   MemoryScreenPalette,
   MemoryScreenTranslation,
 } from './memoryScreenTypes';
+import { segmentGraphemes } from '../../utils/graphemes';
 
 type MemoryFactCardProps = {
   colors: MemoryScreenPalette;
@@ -20,7 +21,9 @@ type MemoryFactCardProps = {
 
 function readableLabel(value: string): string {
   const normalized = value.replace(/[_-]+/gu, ' ').replace(/\s+/gu, ' ').trim();
-  return normalized ? normalized.charAt(0).toLocaleUpperCase() + normalized.slice(1) : value;
+  if (!normalized) return value;
+  const [firstGrapheme, ...restGraphemes] = segmentGraphemes(normalized);
+  return `${firstGrapheme.toLocaleUpperCase()}${restGraphemes.join('')}`;
 }
 
 export function MemoryFactCard({

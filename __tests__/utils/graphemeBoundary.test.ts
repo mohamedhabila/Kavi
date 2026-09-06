@@ -6,8 +6,10 @@ import {
 } from '../../src/utils/graphemeBoundary';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
+  startsOnGraphemeBoundary,
   SURROGATE_PAIR_EMOJI,
 } from '../helpers/graphemeTestFixtures';
 
@@ -25,6 +27,8 @@ describe('snapIndexDownToGraphemeBoundary / snapIndexUpToGraphemeBoundary', () =
       expect(up).toBe(prefix.length + cluster.length);
       expectGraphemeSafe(text.slice(0, down));
       expectGraphemeSafe(text.slice(up));
+      expect(endsOnGraphemeBoundary(text, text.slice(0, down))).toBe(true);
+      expect(startsOnGraphemeBoundary(text, text.slice(up))).toBe(true);
     });
   }
 
@@ -55,6 +59,8 @@ describe('truncateGraphemesWithSuffix', () => {
 
       expect(result.endsWith('...')).toBe(true);
       expectGraphemeSafe(result);
+      const cutText = result.slice(0, -'...'.length);
+      expect(endsOnGraphemeBoundary(text, cutText)).toBe(true);
     });
   }
 
@@ -115,6 +121,7 @@ describe('findGraphemeSafeOverlapLength', () => {
 
       expectGraphemeSafe(incoming.slice(overlap));
       expectGraphemeSafe(merged);
+      expect(startsOnGraphemeBoundary(incoming, incoming.slice(overlap))).toBe(true);
     });
   }
 });

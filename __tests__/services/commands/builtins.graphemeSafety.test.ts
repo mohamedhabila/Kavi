@@ -10,6 +10,7 @@ jest.mock('../../../src/services/memory/memoryFactSerialization', () => ({
 import { getCommand } from '../../../src/services/commands/builtins';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -37,6 +38,7 @@ describe('/memory command — query and fact-value grapheme safety', () => {
       expect(mockSearchMemoryFacts).toHaveBeenCalledTimes(1);
       const passedQuery = mockSearchMemoryFacts.mock.calls[0][0] as string;
       expectGraphemeSafe(passedQuery);
+      expect(endsOnGraphemeBoundary(query, passedQuery)).toBe(true);
     });
 
     it(`never splits ${name} straddling the 300-char fact-value budget`, async () => {
@@ -52,7 +54,12 @@ describe('/memory command — query and fact-value grapheme safety', () => {
         args: 'query',
       });
 
-      expectGraphemeSafe(String(result.response ?? ''));
+      const response = String(result.response ?? '');
+      expectGraphemeSafe(response);
+      // response ends with `- **user · likes**: ${truncateGraphemesTo(value, 300)}`.
+      const marker = '- **user · likes**: ';
+      const cutText = response.slice(response.lastIndexOf(marker) + marker.length);
+      expect(endsOnGraphemeBoundary(value, cutText)).toBe(true);
     });
   }
 });

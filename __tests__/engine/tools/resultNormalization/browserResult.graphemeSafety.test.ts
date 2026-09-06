@@ -1,8 +1,10 @@
 import { normalizeBrowserToolResult } from '../../../../src/engine/tools/resultNormalization/browserResult';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
+  startsOnGraphemeBoundary,
 } from '../../../helpers/graphemeTestFixtures';
 
 describe('normalizeBrowserToolResult(browser_snapshot) — snapshot excerpt grapheme safety', () => {
@@ -13,7 +15,14 @@ describe('normalizeBrowserToolResult(browser_snapshot) — snapshot excerpt grap
 
       const result = normalizeBrowserToolResult('browser_snapshot', raw);
       const parsed = JSON.parse(result);
-      expectGraphemeSafe(String(parsed.snapshot ?? ''));
+      const parsedSnapshot = String(parsed.snapshot ?? '');
+      expectGraphemeSafe(parsedSnapshot);
+      // parsedSnapshot is buildHeadTailExcerpt(snapshot, MAX_BROWSER_SNAPSHOT_CHARS).
+      const [head, tail] = parsedSnapshot.split(/\n\.\.\. \[truncated \d+ chars\] \.\.\.\n/);
+      expect(endsOnGraphemeBoundary(snapshot, head ?? '')).toBe(true);
+      if (tail !== undefined) {
+        expect(startsOnGraphemeBoundary(snapshot, tail)).toBe(true);
+      }
     });
   }
 });
@@ -29,7 +38,12 @@ describe('normalizeBrowserToolResult(browser_console) — message text grapheme 
 
       const result = normalizeBrowserToolResult('browser_console', raw);
       const parsed = JSON.parse(result);
-      expectGraphemeSafe(String(parsed.messages[0].text ?? ''));
+      const messageText = String(parsed.messages[0].text ?? '');
+      expectGraphemeSafe(messageText);
+      // messageText is transformers' truncateText(text, 240), which appends a
+      // dynamic-length `... (N chars omitted)` suffix.
+      const cutText = messageText.replace(/\.\.\. \(\d+ chars omitted\)$/, '');
+      expect(endsOnGraphemeBoundary(text, cutText)).toBe(true);
     });
   }
 });

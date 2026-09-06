@@ -15,6 +15,7 @@ import {
 } from '../../src/engine/tools/web-shared';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../helpers/graphemeTestFixtures';
@@ -126,6 +127,7 @@ describe('readResponseText', () => {
       expect(result.text.length).toBeLessThanOrEqual(boundary);
       expect(result.bytesRead).toBe(result.text.length);
       expectGraphemeSafe(result.text);
+      expect(endsOnGraphemeBoundary(body, result.text)).toBe(true);
     });
   }
 });

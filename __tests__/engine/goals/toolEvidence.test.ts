@@ -2,6 +2,7 @@ import { buildToolGoalEvidenceStrings } from '../../../src/engine/goals/toolEvid
 import { routeToolEvidenceToActiveGoals } from '../../../src/engine/goals/evidenceRouting';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -215,6 +216,9 @@ describe('toolEvidence', () => {
 
       expect(evidence).toHaveLength(1);
       expectGraphemeSafe(evidence[0]);
+      // evidence[0] is `python:${truncateGraphemesWithSuffix(content, 200, '…')}`.
+      const cutText = evidence[0].slice('python:'.length, -'…'.length);
+      expect(endsOnGraphemeBoundary(content, cutText)).toBe(true);
     });
 
     it(`never splits ${name} straddling the 160-char nested-scalar evidence budget`, () => {
@@ -228,9 +232,19 @@ describe('toolEvidence', () => {
         }),
       });
 
-      const valueEvidence = evidence.find((entry) => entry.includes('"value"'));
+      // Match the compact nested-scalar-path entry specifically — the raw
+      // (still-JSON-shaped) excerpt entry earlier in the array can also
+      // contain the substring `"value"` mid-cut, but isn't parseable JSON.
+      const valueEvidence = evidence.find((entry) =>
+        entry.startsWith('memory_remember:{"fact":{"value":'),
+      );
       expect(valueEvidence).toBeDefined();
       expectGraphemeSafe(valueEvidence!);
+      // valueEvidence is `memory_remember:${JSON.stringify({fact:{value: truncateGraphemesWithSuffix(value, 160, '…')}})}`.
+      const jsonPart = valueEvidence!.slice('memory_remember:'.length);
+      const parsedRoot = JSON.parse(jsonPart) as { fact: { value: string } };
+      const cutText = parsedRoot.fact.value.slice(0, -'…'.length);
+      expect(endsOnGraphemeBoundary(value, cutText)).toBe(true);
     });
   }
 });

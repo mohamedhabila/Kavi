@@ -17,7 +17,10 @@ import { useTranslation } from '../../i18n/useTranslation';
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import type { Attachment } from '../../types/attachment';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 import { AudioAttachmentCard } from '../chat/AudioAttachmentCard';
+
+const ARTIFACT_NAME_MAX_CHARS = 160;
 
 type ArtifactKind =
   | 'image'
@@ -41,11 +44,11 @@ interface ArtifactCardProps {
 
 function safeArtifactName(name: unknown): string {
   if (typeof name !== 'string') return '';
-  return redactSensitiveText(name)
+  const normalized = redactSensitiveText(name)
     .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
     .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, 160);
+    .trim();
+  return truncateGraphemesTo(normalized, ARTIFACT_NAME_MAX_CHARS);
 }
 
 function getExtension(name: string): string {

@@ -1,5 +1,10 @@
 import { compactResearchToolResultContent } from '../../../src/engine/graph/modelContextResearchCompaction';
-import { expectGraphemeSafe, GRAPHEME_CLUSTER_FIXTURES } from '../../helpers/graphemeTestFixtures';
+import {
+  endsOnGraphemeBoundary,
+  expectGraphemeSafe,
+  GRAPHEME_CLUSTER_FIXTURES,
+  startsOnGraphemeBoundary,
+} from '../../helpers/graphemeTestFixtures';
 
 describe('compactResearchToolResultContent (web_fetch) — content excerpt grapheme safety', () => {
   for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
@@ -11,7 +16,14 @@ describe('compactResearchToolResultContent (web_fetch) — content excerpt graph
 
       const result = compactResearchToolResultContent('web_fetch', raw);
       const parsed = JSON.parse(result);
-      expectGraphemeSafe(String(parsed.fetches[0].contentExcerpt ?? ''));
+      const contentExcerpt = String(parsed.fetches[0].contentExcerpt ?? '');
+      expectGraphemeSafe(contentExcerpt);
+      // contentExcerpt is buildHeadTailExcerpt(content, MAX_WEB_FETCH_EXCERPT_CHARS).
+      const [head, tail] = contentExcerpt.split(/\n\.\.\. \[truncated \d+ chars\] \.\.\.\n/);
+      expect(endsOnGraphemeBoundary(content, head ?? '')).toBe(true);
+      if (tail !== undefined) {
+        expect(startsOnGraphemeBoundary(content, tail)).toBe(true);
+      }
     });
   }
 });

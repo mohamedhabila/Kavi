@@ -12,6 +12,7 @@ jest.mock('../../../src/services/agents/commandPollBackoff', () => ({
 import { executeSessionStatus } from '../../../src/engine/tools/builtin-session-status';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -30,6 +31,7 @@ describe('executeSessionStatus — outputPreview grapheme safety', () => {
       const outcome = await executeSessionStatus({ sessionId: 'session-1' });
       const parsed = JSON.parse((outcome as any).content);
       expectGraphemeSafe(String(parsed.outputPreview ?? ''));
+      expect(endsOnGraphemeBoundary(output, String(parsed.outputPreview ?? ''))).toBe(true);
     });
   }
 });

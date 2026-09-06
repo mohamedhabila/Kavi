@@ -4,6 +4,7 @@ import {
   buildStreamingPreview as buildSharedStreamingPreview,
   trimRenderableContent,
 } from '../../utils/streamingPreview';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export { trimRenderableContent };
 
@@ -36,7 +37,7 @@ function truncateText(value: string, maxChars: number): TruncateResult {
   }
 
   return {
-    text: value.slice(0, maxChars),
+    text: truncateGraphemesTo(value, maxChars),
     total: value.length,
     truncated: true,
   };

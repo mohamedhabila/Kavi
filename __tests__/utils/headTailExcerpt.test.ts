@@ -11,8 +11,10 @@ import { buildHeadTailExcerpt } from '../../src/utils/headTailExcerpt';
 import { segmentGraphemes } from '../../src/utils/graphemes';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
+  startsOnGraphemeBoundary,
 } from '../helpers/graphemeTestFixtures';
 
 const FAMILY_EMOJI = '👨‍👩‍👧‍👦'; // man ZWJ woman ZWJ girl ZWJ boy
@@ -106,6 +108,11 @@ describe('buildHeadTailExcerpt', () => {
 
       const result = buildHeadTailExcerpt(value, maxChars);
       expectGraphemeSafe(result);
+      const [head, tail] = result.split(/\n\.\.\. \[truncated \d+ chars\] \.\.\.\n/);
+      expect(endsOnGraphemeBoundary(value, head ?? '')).toBe(true);
+      if (tail !== undefined) {
+        expect(startsOnGraphemeBoundary(value, tail)).toBe(true);
+      }
     });
 
     it(`never splits ${name} at the tail cut (fixture sweep)`, () => {
@@ -115,6 +122,11 @@ describe('buildHeadTailExcerpt', () => {
 
       const result = buildHeadTailExcerpt(value, maxChars);
       expectGraphemeSafe(result);
+      const [head, tail] = result.split(/\n\.\.\. \[truncated \d+ chars\] \.\.\.\n/);
+      expect(endsOnGraphemeBoundary(value, head ?? '')).toBe(true);
+      if (tail !== undefined) {
+        expect(startsOnGraphemeBoundary(value, tail)).toBe(true);
+      }
     });
   }
 });

@@ -1,7 +1,15 @@
 import { fireEvent, render } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { AudioAttachmentCard } from '../../src/components/chat/AudioAttachmentCard';
 import type { Attachment } from '../../src/types/attachment';
+import {
+  GRAPHEME_CLUSTER_FIXTURES,
+  buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
+  expectGraphemeSafe,
+} from '../helpers/graphemeTestFixtures';
+
+const AUDIO_ATTACHMENT_NAME_MAX_CHARS = 160;
 
 jest.mock('../../src/theme/useAppTheme', () => ({
   useAppTheme: () => ({
@@ -73,5 +81,26 @@ describe('AudioAttachmentCard', () => {
     fireEvent.press(getByTestId('audio-attachment-toggle-audio-1'));
 
     expect(player.pause).toHaveBeenCalled();
+  });
+
+  describe('name grapheme safety', () => {
+    for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+      it(`never splits ${name} straddling the ${AUDIO_ATTACHMENT_NAME_MAX_CHARS}-char name budget`, () => {
+        const longName = buildBoundaryStraddlingText(AUDIO_ATTACHMENT_NAME_MAX_CHARS, cluster, 40);
+        const { UNSAFE_getAllByType } = render(
+          <AudioAttachmentCard attachment={makeAttachment({ name: longName })} />,
+        );
+
+        const renderedTexts = UNSAFE_getAllByType(Text)
+          .map((element) => element.props.children)
+          .filter((children): children is string => typeof children === 'string');
+        const truncatedName = renderedTexts.find((text) => text.startsWith('a'));
+
+        expect(truncatedName).toBeTruthy();
+        expect(truncatedName!.length).toBeLessThan(longName.length);
+        expectGraphemeSafe(truncatedName!);
+        expect(endsOnGraphemeBoundary(longName, truncatedName!)).toBe(true);
+      });
+    }
   });
 });

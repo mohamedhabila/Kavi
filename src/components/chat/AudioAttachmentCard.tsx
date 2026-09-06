@@ -7,6 +7,9 @@ import { AppPalette, useAppTheme } from '../../theme/useAppTheme';
 import { compactVoiceWaveformLevels } from '../../services/voice/voiceNote';
 import { useTranslation } from '../../i18n/useTranslation';
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
+import { truncateGraphemesTo } from '../../utils/graphemes';
+
+const AUDIO_ATTACHMENT_NAME_MAX_CHARS = 160;
 
 interface AudioAttachmentCardProps {
   attachment: Attachment;
@@ -50,11 +53,13 @@ export const AudioAttachmentCard: React.FC<AudioAttachmentCardProps> = ({
   const status = useAudioPlayerStatus(player);
   const transcript = attachment.transcript?.trim() || '';
   const safeName =
-    redactSensitiveText(attachment.name || '')
-      .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
-      .replace(/\s+/gu, ' ')
-      .trim()
-      .slice(0, 160) || t('artifactCard.voiceNote');
+    truncateGraphemesTo(
+      redactSensitiveText(attachment.name || '')
+        .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
+        .replace(/\s+/gu, ' ')
+        .trim(),
+      AUDIO_ATTACHMENT_NAME_MAX_CHARS,
+    ) || t('artifactCard.voiceNote');
   const waveformLevels = useMemo(
     () => compactVoiceWaveformLevels(attachment.waveformLevels ?? [], compact ? 14 : 24),
     [attachment.waveformLevels, compact],

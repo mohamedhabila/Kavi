@@ -1,6 +1,7 @@
 import { simplifyGeminiToolDescription } from '../../../../../src/services/llm/providers/gemini/schema';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../../../helpers/graphemeTestFixtures';
@@ -18,6 +19,7 @@ describe('simplifyGeminiToolDescription — grapheme safety', () => {
       expect(result.length).toBeLessThanOrEqual(2000);
       expect(result.endsWith('...')).toBe(true);
       expectGraphemeSafe(result);
+      expect(endsOnGraphemeBoundary(description, result.slice(0, -'...'.length))).toBe(true);
     });
   }
 });

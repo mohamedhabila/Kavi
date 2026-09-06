@@ -41,6 +41,7 @@ jest.mock('../../../src/services/agents/workerMemoryBundle', () => ({
 import { executeSessionSend } from '../../../src/engine/tools/builtin-session-send';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -67,7 +68,15 @@ describe('executeSessionSend — previousOutput grapheme safety', () => {
 
       expect(mockLaunchSubAgent).toHaveBeenCalledTimes(1);
       const followUpConfig = mockLaunchSubAgent.mock.calls[0][0];
-      expectGraphemeSafe(String(followUpConfig.prompt ?? followUpConfig.workerPrompt ?? ''));
+      const prompt = String(followUpConfig.prompt ?? followUpConfig.workerPrompt ?? '');
+      expectGraphemeSafe(prompt);
+      // No previous context and no follow-up messages, so buildFollowUpPrompt takes
+      // its `Previous conversation output:\n<cut>\n\nFollow-up message: ...` branch.
+      const prefix = 'Previous conversation output:\n';
+      const marker = '\n\nFollow-up message: ';
+      const afterPrefix = prompt.slice(prefix.length);
+      const cutText = afterPrefix.slice(0, afterPrefix.indexOf(marker));
+      expect(endsOnGraphemeBoundary(output, cutText)).toBe(true);
     });
   }
 });

@@ -1,6 +1,7 @@
 import { executeToolInner } from '../../../src/engine/tools/toolDispatchRouter';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -14,7 +15,17 @@ describe('executeToolInner — malformed-JSON preview grapheme safety', () => {
       const malformed = `{"note": "${filler}"`;
 
       const outcome = await executeToolInner('some_tool', malformed, 'conversation-1');
-      expectGraphemeSafe((outcome as any).content as string);
+      const content = (outcome as any).content as string;
+      expectGraphemeSafe(content);
+      // content is `Error: tool "<name>" received malformed JSON arguments that
+      // could not be parsed. Raw input: <cut>…\nPlease retry ...` where <cut> is
+      // truncateGraphemesWithSuffix(malformed, 300, '…').
+      const rawInputMarker = 'Raw input: ';
+      const suffixMarker = '\nPlease retry the tool call with valid JSON arguments.';
+      const afterMarker = content.slice(content.indexOf(rawInputMarker) + rawInputMarker.length);
+      const preview = afterMarker.slice(0, afterMarker.length - suffixMarker.length);
+      const cutText = preview.slice(0, -'…'.length);
+      expect(endsOnGraphemeBoundary(malformed, cutText)).toBe(true);
     });
   }
 });

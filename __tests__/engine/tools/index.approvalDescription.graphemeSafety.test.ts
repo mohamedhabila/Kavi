@@ -82,6 +82,7 @@ jest.mock('../../../src/engine/toolExecution/toolArgumentJsonRecovery', () => ({
 import { executeTool } from '../../../src/engine/tools/index';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -103,6 +104,12 @@ describe('executeTool — approval description grapheme safety', () => {
       expect(mockRequestToolApproval).toHaveBeenCalledTimes(1);
       const description = mockRequestToolApproval.mock.calls[0][0].description as string;
       expectGraphemeSafe(description);
+      // description is `Execute some_tool(<cut>)` where <cut> is
+      // truncateGraphemesWithSuffix(argsString, 200, '…').
+      const prefix = 'Execute some_tool(';
+      const withoutWrapper = description.slice(prefix.length, -')'.length);
+      const cutText = withoutWrapper.slice(0, -'…'.length);
+      expect(endsOnGraphemeBoundary(argsString, cutText)).toBe(true);
     });
   }
 });

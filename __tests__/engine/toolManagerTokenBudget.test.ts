@@ -10,6 +10,7 @@ import {
 import type { ToolDefinition } from '../../src/types/tool';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../helpers/graphemeTestFixtures';
@@ -181,6 +182,7 @@ describe('compressToolDescription / compressToolDescriptionMinimal — grapheme 
 
       expect(result.endsWith('...')).toBe(true);
       expectGraphemeSafe(result);
+      expect(endsOnGraphemeBoundary(description, result.slice(0, -'...'.length))).toBe(true);
     });
 
     it(`compressToolDescriptionMinimal never splits ${name} straddling its 60-char budget`, () => {
@@ -189,6 +191,7 @@ describe('compressToolDescription / compressToolDescriptionMinimal — grapheme 
 
       expect(result.endsWith('…')).toBe(true);
       expectGraphemeSafe(result);
+      expect(endsOnGraphemeBoundary(description, result.slice(0, -'…'.length))).toBe(true);
     });
 
     it('compactToolDefinitionForPrompt produces a grapheme-safe description that estimateToolTokens then measures', () => {
@@ -199,6 +202,10 @@ describe('compressToolDescription / compressToolDescriptionMinimal — grapheme 
       const compacted = compactToolDefinitionForPrompt(tool);
 
       expectGraphemeSafe(compacted.description);
+      // The minimal path is compressToolDescriptionMinimal, which ends with '…'.
+      expect(
+        endsOnGraphemeBoundary(description, compacted.description.slice(0, -'…'.length)),
+      ).toBe(true);
       // estimateToolTokens compacts internally before estimating (see source), so
       // its token count must match estimating on the already-compacted description
       // directly — never on the far-longer raw one.

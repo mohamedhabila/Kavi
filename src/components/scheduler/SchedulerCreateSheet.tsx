@@ -15,6 +15,7 @@ import type { CronSchedule } from '../../services/cron/types';
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 import { useAppTheme } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 import { createSchedulerStyles } from './Scheduler.styles';
 import type { SchedulerPermissionState } from './SchedulerPermissionCard';
 
@@ -38,6 +39,8 @@ const UNIT_KEYS: Record<IntervalUnit, string> = {
   hours: 'scheduler.hours',
   days: 'scheduler.days',
 };
+
+const SCHEDULER_FORM_ERROR_MAX_CHARS = 300;
 
 function getPermissionHintKey(state: SchedulerPermissionState): string {
   switch (state.status) {
@@ -80,7 +83,7 @@ function safeError(error: unknown, t: Translate): string {
   if (code === 'scheduler_persistence_failed') return t('scheduler.saveFailed');
   const value = error instanceof Error ? error.message : String(error);
   const redacted = redactSensitiveText(value).replace(/\s+/gu, ' ').trim();
-  return redacted.length > 300 ? `${redacted.slice(0, 297)}…` : redacted;
+  return truncateGraphemesWithSuffix(redacted, SCHEDULER_FORM_ERROR_MAX_CHARS, '…');
 }
 
 export function SchedulerCreateSheet({

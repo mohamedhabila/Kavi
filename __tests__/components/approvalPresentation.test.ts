@@ -8,6 +8,14 @@
 
 import { buildApprovalPresentation } from '../../src/components/approval/approvalPresentation';
 import type { RemoteApprovalRequest } from '../../src/types/remote';
+import {
+  GRAPHEME_CLUSTER_FIXTURES,
+  buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
+  expectGraphemeSafe,
+} from '../helpers/graphemeTestFixtures';
+
+const DESCRIPTION_MAX_CHARS = 500;
 
 const baseRequest = (
   overrides: Partial<RemoteApprovalRequest> = {},
@@ -96,4 +104,19 @@ describe('buildApprovalPresentation reviewReason classification', () => {
     const presentation = buildApprovalPresentation(baseRequest());
     expect(presentation.reviewReason).toBeUndefined();
   });
+});
+
+describe('buildApprovalPresentation description grapheme safety', () => {
+  for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
+    it(`never splits ${name} straddling the ${DESCRIPTION_MAX_CHARS}-char description budget`, () => {
+      const longDescription = buildBoundaryStraddlingText(DESCRIPTION_MAX_CHARS, cluster, 40);
+      const presentation = buildApprovalPresentation(
+        baseRequest({ description: longDescription }),
+      );
+
+      expect(presentation.description.length).toBeLessThan(longDescription.length);
+      expectGraphemeSafe(presentation.description);
+      expect(endsOnGraphemeBoundary(longDescription, presentation.description)).toBe(true);
+    });
+  }
 });

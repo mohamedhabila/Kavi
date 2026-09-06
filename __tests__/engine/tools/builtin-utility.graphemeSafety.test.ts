@@ -1,6 +1,7 @@
 import { executePdfRead } from '../../../src/engine/tools/builtin-utility';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -25,6 +26,7 @@ describe('executePdfRead (non-PDF URL) — extracted content grapheme safety', (
       const outcome = await executePdfRead({ path: 'https://example.com/doc.txt' });
       const parsed = JSON.parse((outcome as any).content);
       expectGraphemeSafe(String(parsed.content ?? ''));
+      expect(endsOnGraphemeBoundary(text, String(parsed.content ?? ''))).toBe(true);
     });
   }
 });

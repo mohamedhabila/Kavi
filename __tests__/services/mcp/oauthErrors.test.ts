@@ -8,6 +8,7 @@ import { McpOAuthError, runOAuthOperation } from '../../../src/services/mcp/oaut
 import type { McpServerConfig } from '../../../src/types/remote';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -121,7 +122,14 @@ describe('oauthErrors — structured SDK OAuthError classification', () => {
       }).catch((caught: unknown) => caught);
 
       expect(error).toBeInstanceOf(McpOAuthError);
-      expectGraphemeSafe((error as McpOAuthError).message);
+      const message = (error as McpOAuthError).message;
+      expectGraphemeSafe(message);
+      // message is `The OAuth provider rejected the authorization exchange. Server
+      // response: <cut>.` where <cut> is truncateGraphemesWithSuffix(`invalid_grant: ${longMessage}`, 240, '...').
+      const prefix = 'The OAuth provider rejected the authorization exchange. Server response: ';
+      const detail = message.slice(prefix.length, -'.'.length);
+      const cutText = detail.slice(0, -'...'.length);
+      expect(endsOnGraphemeBoundary(`invalid_grant: ${longMessage}`, cutText)).toBe(true);
     });
   }
 });

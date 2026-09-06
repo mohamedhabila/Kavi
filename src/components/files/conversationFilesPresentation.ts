@@ -1,6 +1,7 @@
 import type { FileEntry } from '../../services/files/contracts';
 import { normalizeConversationWorkspacePath } from '../../services/files/pathUtils';
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
+import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export type ConversationFileFilter = 'all' | 'documents' | 'images' | 'audio' | 'code' | 'other';
 
@@ -33,6 +34,7 @@ const FILE_FILTERS = new Set<ConversationFileFilter>([
 const FILE_SORTS = new Set<ConversationFileSort>(['recent', 'name']);
 const MAX_RESTORED_SCROLL_OFFSET = 10_000_000;
 const MAX_RESTORED_SEARCH_LENGTH = 160;
+const MAX_SAFE_FILE_NAME_CHARS = 160;
 
 const DOCUMENT_EXTENSIONS = new Set([
   'doc',
@@ -103,9 +105,10 @@ export function getConversationFilesBrowseState(
       : 0;
   const searchQuery =
     typeof input.searchQuery === 'string'
-      ? input.searchQuery
-          .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
-          .slice(0, MAX_RESTORED_SEARCH_LENGTH)
+      ? truncateGraphemesTo(
+          input.searchQuery.replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' '),
+          MAX_RESTORED_SEARCH_LENGTH,
+        )
       : '';
 
   return {
@@ -125,11 +128,11 @@ export function getConversationFilesBrowseState(
 
 export function getSafeConversationFileName(name: unknown, fallback: string): string {
   if (typeof name !== 'string') return fallback;
-  const safeName = redactSensitiveText(name)
+  const normalized = redactSensitiveText(name)
     .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
     .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, 160);
+    .trim();
+  const safeName = truncateGraphemesTo(normalized, MAX_SAFE_FILE_NAME_CHARS);
   return safeName || fallback;
 }
 

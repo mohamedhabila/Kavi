@@ -9,6 +9,7 @@ import {
 import { writeConversationWorkspaceTextFile } from '../../src/services/conversationWorkspace/files';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../helpers/graphemeTestFixtures';
@@ -239,6 +240,8 @@ describe('spill preview content selection', () => {
       const value = buildBoundaryStraddlingText(TOOL_OUTPUT_SPILL_PREVIEW_CHARS, cluster, 3000);
       const spilled = await spill(value);
       expectGraphemeSafe(spilled.preview);
+      // preview is truncateGraphemesWithSuffix(value, TOOL_OUTPUT_SPILL_PREVIEW_CHARS, '…').
+      expect(endsOnGraphemeBoundary(value, spilled.preview.slice(0, -'…'.length))).toBe(true);
     });
   }
 });

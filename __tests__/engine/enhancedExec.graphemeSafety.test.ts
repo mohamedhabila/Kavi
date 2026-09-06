@@ -23,6 +23,7 @@ jest.mock('../../src/services/ssh/connector', () => ({
 import { enhancedExec } from '../../src/engine/tools/enhancedExec';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../helpers/graphemeTestFixtures';
@@ -47,7 +48,9 @@ describe('enhancedExec (background) — progressText grapheme safety', () => {
         (call) => call[1]?.status === 'completed',
       );
       expect(completedCall).toBeDefined();
-      expectGraphemeSafe(String(completedCall![1].progressText ?? ''));
+      const progressText = String(completedCall![1].progressText ?? '');
+      expectGraphemeSafe(progressText);
+      expect(endsOnGraphemeBoundary(output, progressText)).toBe(true);
     });
   }
 });

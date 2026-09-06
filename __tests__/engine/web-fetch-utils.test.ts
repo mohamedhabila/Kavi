@@ -11,8 +11,10 @@ import {
 } from '../../src/engine/tools/web-fetch-utils';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
+  startsOnGraphemeBoundary,
 } from '../helpers/graphemeTestFixtures';
 
 describe('htmlToMarkdown', () => {
@@ -329,6 +331,16 @@ describe('truncateText — grapheme safety', () => {
       const value = `${'H'.repeat(500)}${'M'.repeat(3000)}${cluster}${'T'.repeat(500)}`;
       const result = truncateText(value, 400);
       expectGraphemeSafe(result.text);
+      // result.text is buildHeadTailExcerpt(value, 400) (head + notice + tail) unless
+      // that excerpt itself overflowed the budget, in which case it falls back to a
+      // plain keep-first-N cut — either way, check the shape that's actually there.
+      const [head, tail] = result.text.split(/\n\.\.\. \[truncated \d+ chars\] \.\.\.\n/);
+      if (tail !== undefined) {
+        expect(endsOnGraphemeBoundary(value, head ?? '')).toBe(true);
+        expect(startsOnGraphemeBoundary(value, tail)).toBe(true);
+      } else {
+        expect(endsOnGraphemeBoundary(value, result.text)).toBe(true);
+      }
     });
   }
 });

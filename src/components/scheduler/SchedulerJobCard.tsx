@@ -11,12 +11,15 @@ import type { ExecutionTrace } from '../../services/scheduler/traceStore';
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 import { createSchedulerStyles } from './Scheduler.styles';
 
 export type SchedulerJobFeedback = {
   message: string;
   tone: 'info' | 'success' | 'warning' | 'error';
 };
+
+const SCHEDULER_JOB_DETAIL_MAX_CHARS = 240;
 
 export type SchedulerJobPendingAction = 'toggle' | 'run' | 'delete';
 
@@ -62,7 +65,7 @@ function formatDateTime(timestamp: number, locale: string): string {
 function safeDetail(value: string | undefined): string {
   if (!value) return '';
   const redacted = redactSensitiveText(value).replace(/\s+/gu, ' ').trim();
-  return redacted.length > 240 ? `${redacted.slice(0, 237)}…` : redacted;
+  return truncateGraphemesWithSuffix(redacted, SCHEDULER_JOB_DETAIL_MAX_CHARS, '…');
 }
 
 function getStatusTone(state: SchedulerJobDisplayState, colors: AppPalette) {

@@ -13,6 +13,7 @@ import {
 } from '../../../src/engine/tools/builtin-session-resultSupport';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../helpers/graphemeTestFixtures';
@@ -29,7 +30,9 @@ describe('builtin-session-resultSupport — output preview grapheme safety', () 
         iterations: 1,
       } as any);
 
-      expectGraphemeSafe(String((payload as any).outputPreview));
+      const outputPreview = String((payload as any).outputPreview);
+      expectGraphemeSafe(outputPreview);
+      expect(endsOnGraphemeBoundary(output, outputPreview)).toBe(true);
     });
 
     it(`serializeRunningSessionWaitEntry never splits ${name} at the 320-char preview budget`, () => {
@@ -41,7 +44,9 @@ describe('builtin-session-resultSupport — output preview grapheme safety', () 
         output,
       } as any);
 
-      expectGraphemeSafe(String((payload as any).outputPreview));
+      const outputPreview = String((payload as any).outputPreview);
+      expectGraphemeSafe(outputPreview);
+      expect(endsOnGraphemeBoundary(output, outputPreview)).toBe(true);
     });
   }
 });

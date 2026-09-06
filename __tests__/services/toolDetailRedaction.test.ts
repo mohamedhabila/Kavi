@@ -6,6 +6,7 @@ import {
 } from '../../src/services/security/toolDetailRedaction';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../helpers/graphemeTestFixtures';
@@ -111,6 +112,9 @@ describe('tool detail redaction', () => {
 
       expect(detail?.truncated).toBe(true);
       expectGraphemeSafe(detail!.text);
+      // text has no JSON/secret-pattern matches, so formatted === text; detail.text
+      // is truncateGraphemesWithSuffix(text, boundary, '\n…').
+      expect(endsOnGraphemeBoundary(text, detail!.text.slice(0, -'\n…'.length))).toBe(true);
     });
 
     it(`limitRedactedToolDetail never splits ${name} straddling a tighter re-limit`, () => {
@@ -121,6 +125,9 @@ describe('tool detail redaction', () => {
 
       expect(relimited?.truncated).toBe(true);
       expectGraphemeSafe(relimited!.text);
+      // detail.text (below the 4000 budget) is unchanged from text; relimited.text
+      // is truncateGraphemesWithSuffix(text, boundary, '\n…').
+      expect(endsOnGraphemeBoundary(text, relimited!.text.slice(0, -'\n…'.length))).toBe(true);
     });
   }
 });

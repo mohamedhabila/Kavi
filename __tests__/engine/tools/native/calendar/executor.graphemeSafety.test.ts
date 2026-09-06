@@ -1,6 +1,7 @@
 import { executeCalendarEvents } from '../../../../../src/engine/tools/native/calendar/executor';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../../../helpers/graphemeTestFixtures';
@@ -28,6 +29,7 @@ describe('executeCalendarEvents — notes preview grapheme safety', () => {
 
       const parsed = JSON.parse((outcome as any).content);
       expectGraphemeSafe(String(parsed[0].notes ?? ''));
+      expect(endsOnGraphemeBoundary(notes, String(parsed[0].notes ?? ''))).toBe(true);
     });
   }
 });

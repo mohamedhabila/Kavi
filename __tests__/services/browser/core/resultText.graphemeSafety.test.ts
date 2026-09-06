@@ -1,6 +1,7 @@
 import { truncateSearchText } from '../../../../src/services/browser/core/resultText';
 import {
   buildBoundaryStraddlingText,
+  endsOnGraphemeBoundary,
   expectGraphemeSafe,
   GRAPHEME_CLUSTER_FIXTURES,
 } from '../../../helpers/graphemeTestFixtures';
@@ -17,6 +18,7 @@ describe('truncateSearchText — grapheme safety', () => {
 
       expect(result.endsWith('...')).toBe(true);
       expectGraphemeSafe(result);
+      expect(endsOnGraphemeBoundary(value, result.slice(0, -'...'.length))).toBe(true);
     });
   }
 });
