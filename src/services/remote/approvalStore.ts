@@ -35,12 +35,18 @@ import {
 import {
   assessToolRisk,
   getApprovalScope,
+  type ApprovalRiskReasonCode,
   type ApprovalScope,
   type RiskLevel,
 } from './approvalRisk';
 
 export { analyzeCommandRisk, assessToolRisk } from './approvalRisk';
-export type { ApprovalScope, CommandRiskAssessment, RiskLevel } from './approvalRisk';
+export type {
+  ApprovalRiskReasonCode,
+  ApprovalScope,
+  CommandRiskAssessment,
+  RiskLevel,
+} from './approvalRisk';
 export type { ApprovalAnalytics } from './approvalAnalytics';
 export type { AllowlistEntry } from './approvalGrants';
 export type { ApprovalPolicy, PersonaPolicyOverride } from './approvalPolicy';
@@ -152,6 +158,7 @@ interface ApprovalStoreState {
     description: string;
     riskLevel?: RiskLevel;
     riskReasons?: string[];
+    riskReasonCodes?: ApprovalRiskReasonCode[];
     decisionPolicy?: RemoteApprovalDecisionPolicy;
     grantCandidate?: RemoteApprovalGrantCandidate;
   }) => string;
@@ -222,6 +229,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
           expiresAt: now + timeoutMs,
           riskLevel: params.riskLevel,
           riskReasons: params.riskReasons,
+          riskReasonCodes: params.riskReasonCodes,
           decisionPolicy,
           grantCandidate,
         };
@@ -631,6 +639,7 @@ export function requestToolApproval(params: {
     description: resolvedPresentation.description,
     riskLevel: risk.level,
     riskReasons: risk.reasons,
+    riskReasonCodes: risk.reasonCodes,
     decisionPolicy,
     grantCandidate,
   });

@@ -1,4 +1,5 @@
 import { sha256HexUtf8 } from '../utils/sha256';
+import type { ToolCallFailureKind } from './message';
 
 /**
  * Terminal status is owned by the executor. Result content is opaque and must
@@ -12,10 +13,12 @@ export type ToolRuntimeOutcome =
   | Readonly<{
       status: 'failed';
       content: string;
-      failureKind?:
-        | 'authority_revoked'
-        | 'controller_action_review_unavailable'
-        | 'user_takeover_required';
+      /**
+       * Structured failure classification, set by the executor at the point the
+       * failure is known. This is the sole source `ToolCall.failureKind` is
+       * populated from — never re-derived from `content` text downstream.
+       */
+      failureKind?: ToolCallFailureKind;
     }>;
 
 export type ExactToolResultEvidence = Readonly<{

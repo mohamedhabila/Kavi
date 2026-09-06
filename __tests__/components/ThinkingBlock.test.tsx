@@ -33,9 +33,21 @@ describe('ThinkingBlock', () => {
     expect(toJSON()).toBeNull();
   });
 
-  it('should render nothing for synthetic tool-status reasoning', () => {
-    const { toJSON } = render(<ThinkingBlock reasoning="Using read_file…" isStreaming={true} />);
+  it('should render nothing when isSyntheticPlaceholder is set, regardless of the text', () => {
+    const { toJSON } = render(
+      <ThinkingBlock reasoning="Using read_file…" isStreaming={true} isSyntheticPlaceholder />,
+    );
     expect(toJSON()).toBeNull();
+  });
+
+  it('should render text that used to be sniffed as a synthetic placeholder when the flag is false', () => {
+    // The old regex suppressed any "Using <tool>…" text outright. Suppression is now
+    // driven only by the structured flag — text alone must never hide reasoning again.
+    const { getByText } = render(
+      <ThinkingBlock reasoning="Using read_file…" isStreaming={true} isSyntheticPlaceholder={false} />,
+    );
+    fireEvent.press(getByText('Thinking...'));
+    expect(getByText('Using read_file…')).toBeTruthy();
   });
 
   it('should show "Thinking" label when not streaming', () => {

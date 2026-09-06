@@ -1,5 +1,9 @@
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
-import type { RemoteApprovalRequest, RemoteApprovalScope } from '../../types/remote';
+import type {
+  ApprovalRiskReasonCode,
+  RemoteApprovalRequest,
+  RemoteApprovalScope,
+} from '../../types/remote';
 
 export type ApprovalRiskLevel = NonNullable<RemoteApprovalRequest['riskLevel']>;
 export type ApprovalReviewReason =
@@ -37,19 +41,48 @@ function safeSingleLine(value: unknown, maximumLength: number): string {
     .slice(0, maximumLength);
 }
 
-function classifyReviewReason(reasons: unknown): ApprovalReviewReason | undefined {
-  if (!Array.isArray(reasons)) return undefined;
-  const summary = reasons
-    .filter((reason): reason is string => typeof reason === 'string')
-    .join(' ')
-    .toLowerCase();
-  if (!summary) return undefined;
+/**
+ * Closed, exhaustive mapping from each structured risk-reason code
+ * (`ApprovalRiskReasonCode` in `types/remote.ts`) to the user-facing
+ * review-reason category; adding a code without a row here fails typecheck. Never derived from the human-readable
+ * `riskReasons` sentences, which may be reworded independently of this list.
+ */
+const REASON_CODE_CATEGORY: Record<ApprovalRiskReasonCode, ApprovalReviewReason> = {
+  destructive_executable: 'destructive',
+  destructive_operation: 'destructive',
+  sensitive_path: 'sensitiveData',
+  compound_operators: 'compoundAction',
+  system_executable: 'systemAccess',
+  unparseable_command: 'systemAccess',
+  host_reviewed_action: 'systemAccess',
+  code_execution: 'unverified',
+  network_access: 'unverified',
+  custom_package_index: 'unverified',
+  url_shaped_package: 'unverified',
+};
 
-  if (/destructive|critical|delete|remove|purge/u.test(summary)) return 'destructive';
-  if (/sensitive|credential|private|personal/u.test(summary)) return 'sensitiveData';
-  if (/operator|pipe|compound/u.test(summary)) return 'compoundAction';
-  if (/executable|command|host-reviewed|system/u.test(summary)) return 'systemAccess';
-  return 'unverified';
+// Priority order when multiple reason codes apply to one request — matches the
+// severity ordering the UI previously derived from prose pattern precedence.
+const REVIEW_REASON_PRIORITY: ApprovalReviewReason[] = [
+  'destructive',
+  'sensitiveData',
+  'compoundAction',
+  'systemAccess',
+  'unverified',
+];
+
+function classifyReviewReason(reasonCodes: unknown): ApprovalReviewReason | undefined {
+  if (!Array.isArray(reasonCodes) || reasonCodes.length === 0) return undefined;
+  const categories = new Set(
+    reasonCodes
+      .filter(
+        (code): code is ApprovalRiskReasonCode =>
+          typeof code === 'string' && code in REASON_CODE_CATEGORY,
+      )
+      .map((code) => REASON_CODE_CATEGORY[code]),
+  );
+  if (categories.size === 0) return undefined;
+  return REVIEW_REASON_PRIORITY.find((category) => categories.has(category));
 }
 
 export function buildApprovalPresentation(request: RemoteApprovalRequest): ApprovalPresentation {
@@ -68,7 +101,7 @@ export function buildApprovalPresentation(request: RemoteApprovalRequest): Appro
     ...(target ? { target } : {}),
     scope,
     riskLevel,
-    reviewReason: classifyReviewReason(request.riskReasons),
+    reviewReason: classifyReviewReason(request.riskReasonCodes),
   };
 }
 

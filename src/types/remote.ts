@@ -223,6 +223,25 @@ export interface RemoteApprovalGrantCandidate {
   personaId?: string;
 }
 
+/**
+ * Closed classification of why an approval request carries risk, set by the
+ * analyzer (`services/remote/approvalRisk.ts`) at the point a reason is
+ * recorded. Presentation maps each code to user-facing copy — the
+ * human-readable `riskReasons` sentences are never parsed.
+ */
+export type ApprovalRiskReasonCode =
+  | 'destructive_executable'
+  | 'destructive_operation'
+  | 'sensitive_path'
+  | 'compound_operators'
+  | 'system_executable'
+  | 'unparseable_command'
+  | 'host_reviewed_action'
+  | 'code_execution'
+  | 'network_access'
+  | 'custom_package_index'
+  | 'url_shaped_package';
+
 export interface RemoteApprovalRequest {
   id: string;
   targetId?: string;
@@ -237,6 +256,12 @@ export interface RemoteApprovalRequest {
   resolvedAt?: number;
   riskLevel?: 'low' | 'medium' | 'high' | 'critical';
   riskReasons?: string[];
+  /**
+   * Structured classification for each entry in `riskReasons`, same order and
+   * length. `approvalPresentation.ts` derives the review-reason category from
+   * this, never from matching `riskReasons` prose.
+   */
+  riskReasonCodes?: ApprovalRiskReasonCode[];
   decisionPolicy: RemoteApprovalDecisionPolicy;
   /** Present only when product code can derive a bounded reusable grant. */
   grantCandidate?: RemoteApprovalGrantCandidate;

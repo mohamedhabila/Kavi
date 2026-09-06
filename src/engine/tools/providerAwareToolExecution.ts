@@ -30,6 +30,7 @@ export async function executeProviderAwareTool(params: {
             status: 'error',
             error: 'No enabled provider configured for sub-agent sessions.',
           }),
+          'unavailable',
         );
       }
       return executeSessionSpawn(
@@ -54,6 +55,7 @@ export async function executeProviderAwareTool(params: {
             status: 'error',
             error: 'No enabled provider configured for sub-agent sessions.',
           }),
+          'unavailable',
         );
       }
       return params.context?.executionSignal

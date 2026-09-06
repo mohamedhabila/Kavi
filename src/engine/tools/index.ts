@@ -11,12 +11,7 @@ import {
   ONE_SHOT_APPROVAL_DECISION_POLICY,
   requestToolApproval,
 } from '../../services/remote/approvalStore';
-import {
-  dispatchAuthorizedToolEffect,
-  isCodeOwnedEffectFreeInvocation,
-  type ToolEffectDispatchNotClaimedReason,
-  type ToolEffectDispatchObservation,
-} from '../../services/executionJournal/toolEffectDispatchLifecycle';
+import { dispatchAuthorizedToolEffect, isCodeOwnedEffectFreeInvocation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import {
   isRegisteredToolName,
   normalizeToolName,
@@ -27,139 +22,33 @@ import type { ToolExecutionContext } from './toolExecutionContext';
 import { buildToolEffectReceipt } from '../toolExecution/toolEffectReceipt';
 import { resolveRuntimeExternalToolBinding } from '../toolExecution/runtimeExternalToolBinding';
 import { isCodeOwnedExecutionRunId } from '../../services/executionJournal/executionRunEffectBarrier';
-import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import {
   completedToolOutcome,
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
-import {
-  buildModelTurnMemoryPolicyExpiredToolResult,
-  isModelTurnMemoryPolicyBindingDurablyCurrent,
-} from '../authority/modelTurnMemoryPolicyBinding';
 import { canSettleAfterModelAuthorityChange } from '../toolExecution/modelAuthorityIndependentCompletion';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { executeMobileControllerTool } from '../mobileController/toolExecution';
 import { isMobileControllerDeferredExecution } from '../mobileController/runtimeExecution';
 import { isEffectFreeToolPolicy } from '../durability/toolEffectPolicy';
+import { classifyNativeTransportErrorIdentity } from '../../services/llm/support/providerErrorClassification';
+import {
+  buildEffectReconciliationRequiredResult,
+  finalizeEffectReceiptCapture,
+  isModelTurnAuthorityCurrent,
+  isolateExecutorContext,
+  markEffectReconciliationRequired,
+  rejectExpiredModelTurnAuthority,
+  resolveMobileControllerPreDispatchReason,
+  withEffectDispatchObservation,
+  withPreDispatchObservation,
+  type ToolExecutionOutcome,
+} from './toolExecutionDispatchSupport';
 
 // ── Central dispatcher ───────────────────────────────────────────────────
 
-function isolateExecutorContext(
-  context: ToolExecutionContext | undefined,
-): ToolExecutionContext | undefined {
-  if (!context) return undefined;
-  const isolated = { ...context };
-  delete isolated.toolCallId;
-  delete isolated.executionRunId;
-  delete isolated.runtimeToolDeclaration;
-  delete isolated.captureEffectReceipt;
-  delete isolated.finalizeEffectReceiptCapture;
-  delete isolated.captureEffectReconciliationRequired;
-  delete isolated.modelTurnMemoryPolicyBinding;
-  return isolated;
-}
-
-function buildEffectReconciliationRequiredResult(untrustedResult: string): string {
-  return JSON.stringify({
-    status: 'error',
-    code: 'tool_effect_reconciliation_required',
-    error:
-      'The tool may have changed external state, but the app could not verify the outcome. Do not retry automatically.',
-    retryAllowed: false,
-    untrustedToolResult: untrustedResult,
-  });
-}
-
-function finalizeEffectReceiptCapture(context: ToolExecutionContext | undefined): void {
-  try {
-    context?.finalizeEffectReceiptCapture?.();
-  } catch {
-    // Receipt consumers are ancillary and cannot alter the authoritative execution outcome.
-  }
-}
-
-function markEffectReconciliationRequired(context: ToolExecutionContext | undefined): void {
-  try {
-    context?.captureEffectReconciliationRequired?.();
-  } catch {
-    // Graph notification is ancillary to the durable journal barrier.
-  }
-}
-
-function isModelTurnAuthorityCurrent(context: ToolExecutionContext | undefined): boolean {
-  const binding = context?.modelTurnMemoryPolicyBinding;
-  if (!binding) return context?.toolCallId === undefined;
-  return isModelTurnMemoryPolicyBindingDurablyCurrent(binding);
-}
-
-export type ToolExecutionOutcome =
-  | (ToolRuntimeOutcome & Readonly<{ effectDispatchObservation: ToolEffectDispatchObservation }>)
-  | Readonly<{
-      status: 'deferred';
-      deferredHandoff: PersistedMobileControllerHandoff;
-      effectDispatchObservation: Extract<ToolEffectDispatchObservation, { kind: 'deferred' }>;
-    }>;
-
-function withEffectDispatchObservation(
-  outcome: ToolRuntimeOutcome,
-  observation: ToolEffectDispatchObservation,
-): ToolExecutionOutcome {
-  return Object.freeze({
-    ...outcome,
-    effectDispatchObservation: Object.freeze(observation),
-  });
-}
-
-function withPreDispatchObservation(
-  outcome: ToolRuntimeOutcome,
-  effectFreeInvocation: boolean,
-  reason: ToolEffectDispatchNotClaimedReason,
-): ToolExecutionOutcome {
-  return withEffectDispatchObservation(
-    outcome,
-    effectFreeInvocation ? { kind: 'not_applicable' } : { kind: 'not_claimed', reason },
-  );
-}
-
-function resolveMobileControllerPreDispatchReason(
-  outcome: ToolRuntimeOutcome,
-  hasBinding: boolean,
-): ToolEffectDispatchNotClaimedReason {
-  if (outcome.status === 'failed') {
-    if (outcome.failureKind === 'controller_action_review_unavailable') {
-      return 'controller_action_review_unavailable';
-    }
-    if (outcome.failureKind === 'user_takeover_required') {
-      return 'user_takeover_required';
-    }
-  }
-  return hasBinding ? 'tool_arguments_invalid' : 'runtime_binding_unavailable';
-}
-
-function rejectExpiredModelTurnAuthority(params: {
-  context: ToolExecutionContext | undefined;
-  normalizedName: string;
-  argsString: string;
-  conversationId: string;
-  effectFreeInvocation: boolean;
-}): ToolExecutionOutcome {
-  const result = buildModelTurnMemoryPolicyExpiredToolResult();
-  finalizeEffectReceiptCapture(params.context);
-  logToolCall(
-    params.normalizedName,
-    params.argsString,
-    'denied',
-    0,
-    params.conversationId,
-    'model_turn_memory_epoch_expired',
-  );
-  return withPreDispatchObservation(
-    failedToolOutcome(result, 'authority_revoked'),
-    params.effectFreeInvocation,
-    'model_authority_changed',
-  );
-}
+export type { ToolExecutionOutcome } from './toolExecutionDispatchSupport';
 
 export async function executeTool(
   name: string,
@@ -187,6 +76,7 @@ export async function executeTool(
     return withPreDispatchObservation(
       failedToolOutcome(
         `Error: tool "${normalizedName}" is not allowed by your permission settings`,
+        'permission',
       ),
       effectFreeInvocation,
       'tool_permission_denied',
@@ -200,7 +90,7 @@ export async function executeTool(
     finalizeEffectReceiptCapture(context);
     logToolCall(normalizedName, argsString, 'error', 0, conversationId, 'unknown_tool');
     return withPreDispatchObservation(
-      failedToolOutcome(result),
+      failedToolOutcome(result, 'unknown_tool'),
       effectFreeInvocation,
       'tool_unknown',
     );
@@ -227,7 +117,7 @@ export async function executeTool(
       'execution_run_identity_required',
     );
     return withPreDispatchObservation(
-      failedToolOutcome(result),
+      failedToolOutcome(result, 'internal'),
       effectFreeInvocation,
       'execution_run_identity_required',
     );
@@ -245,7 +135,7 @@ export async function executeTool(
       'execution_run_identity_required',
     );
     return withPreDispatchObservation(
-      failedToolOutcome(result),
+      failedToolOutcome(result, 'internal'),
       effectFreeInvocation,
       'execution_run_identity_required',
     );
@@ -263,7 +153,7 @@ export async function executeTool(
       'tool_call_identity_required',
     );
     return withPreDispatchObservation(
-      failedToolOutcome(result),
+      failedToolOutcome(result, 'internal'),
       effectFreeInvocation,
       'tool_call_identity_required',
     );
@@ -326,7 +216,10 @@ export async function executeTool(
     if (decision !== 'approved') {
       logToolCall(normalizedName, argsString, 'denied', 0, conversationId);
       return withPreDispatchObservation(
-        failedToolOutcome(`Error: tool "${normalizedName}" was ${decision} by user approval`),
+        failedToolOutcome(
+          `Error: tool "${normalizedName}" was ${decision} by user approval`,
+          'approval_denied',
+        ),
         effectFreeInvocation,
         'user_approval_denied',
       );
@@ -374,7 +267,7 @@ export async function executeTool(
       result,
     );
     return withPreDispatchObservation(
-      failedToolOutcome(result),
+      failedToolOutcome(result, 'unavailable'),
       resolvedEffectFreeInvocation,
       'runtime_binding_unavailable',
     );
@@ -393,7 +286,7 @@ export async function executeTool(
       'runtime_external_tool_call_identity_required',
     );
     return withPreDispatchObservation(
-      failedToolOutcome(result),
+      failedToolOutcome(result, 'internal'),
       resolvedEffectFreeInvocation,
       'tool_call_identity_required',
     );
@@ -471,9 +364,15 @@ export async function executeTool(
             : undefined,
       );
       return withEffectDispatchObservation(
-        dispatched.requiresReconciliation || dispatched.status === 'failed'
-          ? failedToolOutcome(visibleResult)
-          : completedToolOutcome(visibleResult),
+        dispatched.requiresReconciliation
+          ? failedToolOutcome(visibleResult, 'reconciliation_required')
+          : dispatched.status === 'failed'
+            ? // The executor's own failureKind is threaded unchanged through
+              // AuthorizedToolEffectDispatchResult's 'executed' variant (see
+              // toolEffectDispatchLifecycle.ts). Fall back to the closed
+              // taxonomy's 'unknown' only when the executor genuinely set none.
+              failedToolOutcome(visibleResult, dispatched.failureKind ?? 'unknown')
+            : completedToolOutcome(visibleResult),
         {
           kind: 'settled',
           disposition: dispatched.disposition,
@@ -508,7 +407,10 @@ export async function executeTool(
       );
     }
     return withEffectDispatchObservation(
-      failedToolOutcome(dispatched.result),
+      failedToolOutcome(
+        dispatched.result,
+        dispatched.kind === 'reconciliation_required' ? 'reconciliation_required' : 'internal',
+      ),
       dispatched.kind === 'blocked'
         ? { kind: 'not_claimed', reason: dispatched.reason }
         : { kind: 'durable_outcome_unknown', reason: dispatched.reason },
@@ -560,7 +462,7 @@ export async function executeTool(
       message,
     );
     return withPreDispatchObservation(
-      failedToolOutcome(`Error: ${message}`),
+      failedToolOutcome(`Error: ${message}`, classifyNativeTransportErrorIdentity(err) ?? 'internal'),
       resolvedEffectFreeInvocation,
       'runtime_binding_unavailable',
     );
@@ -580,6 +482,7 @@ export async function executeTool(
         executionRunId: context.executionRunId,
         recordedAt: Date.now(),
         runtimeExternalEvidence,
+        failureKind: outcome.status === 'failed' ? outcome.failureKind : undefined,
       });
       if (
         !isModelTurnAuthorityCurrent(context) &&

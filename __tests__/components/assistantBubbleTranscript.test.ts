@@ -153,4 +153,28 @@ describe('assistantBubbleTranscript', () => {
       'assistant-response-2026-04-16T12-34-56Z.md',
     );
   });
+
+  it('omits a synthetic placeholder reasoning from the exported transcript', () => {
+    const message = makeAssistantMessage();
+
+    const markdown = buildAssistantBubbleTranscriptMarkdown({
+      message,
+      assistantLabel: 'Assistant',
+      t: translate,
+      responseSegments: [
+        {
+          id: 'segment-1',
+          messageId: 'assistant-1',
+          content: 'Final answer',
+          reasoning: 'Using read_file…',
+          isSyntheticReasoningPlaceholder: true,
+          timestamp: message.timestamp,
+        },
+      ],
+    });
+
+    expect(markdown).not.toContain('### Thinking');
+    expect(markdown).not.toContain('Using read_file…');
+    expect(markdown).toContain('Final answer');
+  });
 });

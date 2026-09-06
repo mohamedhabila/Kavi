@@ -226,6 +226,7 @@ describe('ApprovalBanner', () => {
         expiresAt: Date.now() + 60_000,
         riskLevel: 'medium',
         riskReasons: ['Sensitive path: /etc/shadow'],
+        riskReasonCodes: ['sensitive_path'],
         targetId: `server.example.test?token=${apiKey}`,
         scope: 'ssh',
       },

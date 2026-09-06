@@ -11,17 +11,29 @@ import { useTranslation } from '../../i18n/useTranslation';
 interface ThinkingBlockProps {
   reasoning: string;
   isStreaming?: boolean;
+  /**
+   * True when `reasoning` holds an app-generated stand-in (e.g. a "Using
+   * <tool>\u2026" progress label written while no genuine model reasoning has
+   * streamed yet) rather than real model reasoning. Set by the producer that
+   * wrote the placeholder \u2014 never inferred by matching the text itself, since
+   * a reworded or non-English placeholder would otherwise leak through.
+   */
+  isSyntheticPlaceholder?: boolean;
 }
 
 const THINKING_COLLAPSED_HEIGHT = 30;
+// Purely structural: reasoning made only of dots/ellipsis/whitespace carries no
+// content regardless of who wrote it, so this check stays text-based by design.
 const PLACEHOLDER_ONLY_REASONING_RE = /^[.\u2026\s]+$/u;
-const SYNTHETIC_TOOL_REASONING_RE = /^Using [A-Za-z0-9_./:-]+(?:\u2026|\.\.\.)$/u;
 
 function collapseThinkingLabel(label: string): string {
   return label.replace(/\s*(?:\.\.\.|\u2026)\s*$/u, '');
 }
 
-export function getRenderableThinkingText(reasoning?: string | null): string | null {
+export function getRenderableThinkingText(
+  reasoning?: string | null,
+  isSyntheticPlaceholder?: boolean,
+): string | null {
   if (typeof reasoning !== 'string') {
     return null;
   }
@@ -31,24 +43,25 @@ export function getRenderableThinkingText(reasoning?: string | null): string | n
     return null;
   }
 
-  if (
-    PLACEHOLDER_ONLY_REASONING_RE.test(normalized) ||
-    SYNTHETIC_TOOL_REASONING_RE.test(normalized)
-  ) {
+  if (isSyntheticPlaceholder || PLACEHOLDER_ONLY_REASONING_RE.test(normalized)) {
     return null;
   }
 
   return normalized;
 }
 
-export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ reasoning, isStreaming }) => {
+export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
+  reasoning,
+  isStreaming,
+  isSyntheticPlaceholder,
+}) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = createStyles(colors);
   const [expanded, setExpanded] = useState(false);
   const opacity = useRef(new Animated.Value(0.5)).current;
   const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  const renderableReasoning = getRenderableThinkingText(reasoning);
+  const renderableReasoning = getRenderableThinkingText(reasoning, isSyntheticPlaceholder);
   const thinkingLabel = isStreaming
     ? t('chat.thinking')
     : collapseThinkingLabel(t('chat.thinking'));

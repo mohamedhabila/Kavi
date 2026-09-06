@@ -1,3 +1,15 @@
+// ---------------------------------------------------------------------------
+// Tests — executeToolCallLifecycle core control flow and failureKind
+// classification.
+//
+// Effect-receipt capture, verified-procedure observation, durability, and
+// interpreter effect-state coverage lives in the sibling suite
+// toolCallLifecycle.effectReceipts.test.ts (split out to stay under the
+// project's maintainability line limit). Both share the same lifecycle
+// fixture-builder shape by convention with the other toolCallLifecycle.*.test.ts
+// files in this directory.
+// ---------------------------------------------------------------------------
+
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
   return makeExpoSqliteMock();
@@ -7,8 +19,6 @@ import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCal
 import { executeTool } from '../../src/engine/tools';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import type { ToolDefinition } from '../../src/types/tool';
-import type { VerifiedProcedureExecutionSession } from '../../src/services/memory/verifiedProcedure/executionSession';
-import * as toolOutputSpill from '../../src/engine/tools/toolOutputSpill';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileController/toolDefinition';
@@ -269,377 +279,38 @@ describe('executeToolCallLifecycle', () => {
         },
       },
     });
+    // Preflight schema validation blocks this before the (mocked) executor is ever
+    // called, so the structured kind comes from the argument validator.
     expect(result.toolMessage.toolCalls?.[0]).toEqual(
       expect.objectContaining({
         name: 'calendar_create_event',
         status: 'failed',
-        failureKind: 'tool_error',
+        failureKind: 'invalid_arguments',
       }),
     );
   });
 
-  it('records a code-owned calendar receipt without exposing it to the provider transcript', async () => {
+  it('propagates the executor-supplied failureKind unchanged, regardless of result text', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
+      failedToolOutcome(JSON.stringify({ error: 'La conexión ha caducado.' }), 'timeout'),
     );
-    const onToolCallComplete = jest.fn();
-    const result = await executeToolCallLifecycle(
-      buildLifecycle({
-        tc: {
-          id: 'tc-calendar-uncontracted',
-          name: calendarCreateTool.name,
-          arguments: JSON.stringify({
-            title: 'Planning',
-            startDate: '2026-06-14T09:00:00',
-            endDate: '2026-06-14T10:00:00',
-          }),
-        },
-        callbacks: {
-          onToolCallStart: jest.fn(),
-          onToolCallComplete,
-        },
-        agentRunId: 'run-uncontracted-1',
-        executionRunId: 'execution-run-uncontracted-1',
-      }),
-    );
-
-    expect(onToolCallComplete).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'completed',
-        effectReceipts: [
-          expect.objectContaining({
-            executionRunId: 'execution-run-uncontracted-1',
-            transportState: 'returned',
-            effectKind: 'calendar.create',
-            effectState: 'applied',
-            verificationState: 'verified',
-            resource: { kind: 'calendar_event', id: 'event-1' },
-          }),
-        ],
-      }),
-    );
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        effectState: 'applied',
-        verificationState: 'verified',
-      }),
-    );
-    expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
-  });
-
-  it('preserves the primary receipt when the awaited procedure observer fails unexpectedly', async () => {
-    mockedExecuteTool.mockResolvedValueOnce(
-      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
-    );
-    const markReconciliationRequired = jest.fn();
-    const verifiedProcedureSession = {
-      observeRawOutcome: jest.fn().mockRejectedValue(new Error('observer unavailable')),
-      markReconciliationRequired,
-    } as unknown as VerifiedProcedureExecutionSession;
-
+    // Valid arguments so preflight schema validation does not short-circuit before
+    // the (mocked) executor's own classification is ever consulted.
     const result = await executeToolCallLifecycle(
       buildLifecycle({
         tc: {
           id: 'tc-calendar-create',
-          name: calendarCreateTool.name,
+          name: 'calendar_create_event',
           arguments: JSON.stringify({
             title: 'Planning',
             startDate: '2026-06-14T09:00:00',
             endDate: '2026-06-14T10:00:00',
           }),
         },
-        memoryConversationId: 'memory-conversation-1',
-        conversationId: 'source-thread-1',
-        agentRunId: 'agent-run-1',
-        executionRunId: 'execution-run-1',
-        verifiedProcedureSession,
       }),
     );
-
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        executionRunId: 'execution-run-1',
-        effectKind: 'calendar.create',
-        effectState: 'applied',
-        verificationState: 'verified',
-      }),
-    );
-    expect(result.toolMessage.isError).not.toBe(true);
-    expect(markReconciliationRequired).toHaveBeenCalledTimes(1);
-  });
-
-  it('awaits raw procedure observation before lifecycle completion', async () => {
-    mockedExecuteTool.mockResolvedValueOnce(
-      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
-    );
-    let releaseObserver!: () => void;
-    let observerStarted!: () => void;
-    const observerStartedPromise = new Promise<void>((resolve) => {
-      observerStarted = resolve;
-    });
-    const verifiedProcedureSession = {
-      observeRawOutcome: jest.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            releaseObserver = resolve;
-            observerStarted();
-          }),
-      ),
-      markReconciliationRequired: jest.fn(),
-    } as unknown as VerifiedProcedureExecutionSession;
-    let completed = false;
-    const execution = executeToolCallLifecycle(
-      buildLifecycle({
-        tc: {
-          id: 'tc-calendar-create',
-          name: calendarCreateTool.name,
-          arguments: JSON.stringify({
-            title: 'Planning',
-            startDate: '2026-06-14T09:00:00',
-            endDate: '2026-06-14T10:00:00',
-          }),
-        },
-        memoryConversationId: 'memory-conversation-1',
-        conversationId: 'source-thread-1',
-        agentRunId: 'agent-run-1',
-        executionRunId: 'execution-run-1',
-        verifiedProcedureSession,
-      }),
-    ).then((value) => {
-      completed = true;
-      return value;
-    });
-
-    await observerStartedPromise;
-    expect(completed).toBe(false);
-    releaseObserver();
-    const result = await execution;
-
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        effectState: 'applied',
-        verificationState: 'verified',
-      }),
-    );
-    expect(result.toolMessage.isError).not.toBe(true);
-  });
-
-  it('observes authoritative raw output before spill transforms model-visible content', async () => {
-    const rawResult = JSON.stringify({
-      status: 'created_verified',
-      eventId: 'event-raw',
-      calendarId: 'calendar-raw',
-      privatePayload: 'RAW-ONLY-EVIDENCE',
-    });
-    const spilledPayload = JSON.stringify({ status: 'spilled', path: '.kavi/spill/result.txt' });
-    mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome(rawResult));
-    jest.spyOn(toolOutputSpill, 'maybeSpillToolOutput').mockResolvedValueOnce({
-      spilled: true,
-      path: '.kavi/spill/result.txt',
-      byteLength: rawResult.length,
-      preview: 'redacted preview',
-      payload: spilledPayload,
-    });
-    const observeRawOutcome = jest.fn().mockResolvedValue(undefined);
-    const verifiedProcedureSession = {
-      observeRawOutcome,
-      markReconciliationRequired: jest.fn(),
-    } as unknown as VerifiedProcedureExecutionSession;
-
-    const result = await executeToolCallLifecycle(
-      buildLifecycle({
-        tc: {
-          id: 'tc-calendar-create',
-          name: calendarCreateTool.name,
-          arguments: JSON.stringify({
-            title: 'Planning',
-            startDate: '2026-06-14T09:00:00',
-            endDate: '2026-06-14T10:00:00',
-            calendarId: 'calendar-raw',
-          }),
-        },
-        executionRunId: 'execution-run-raw-seam',
-        verifiedProcedureSession,
-      }),
-    );
-
-    expect(observeRawOutcome).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resultText: rawResult,
-        receipt: expect.objectContaining({ resultDigest: expect.stringMatching(/^sha256:/u) }),
-      }),
-    );
-    expect(result.result).toBe(spilledPayload);
-    expect(result.result).not.toContain('RAW-ONLY-EVIDENCE');
-  });
-
-  it('records a code-owned workspace artifact ref and digest end to end', async () => {
-    mockedExecuteTool.mockResolvedValueOnce(
-      completedToolOutcome(
-        JSON.stringify({
-          status: 'written',
-          path: 'reports/final.md',
-          size: 4,
-          sha256: 'a'.repeat(64),
-        }),
-      ),
-    );
-    const onToolCallComplete = jest.fn();
-    const result = await executeToolCallLifecycle(
-      buildLifecycle({
-        tc: {
-          id: 'tc-write-file',
-          name: 'write_file',
-          arguments: JSON.stringify({ path: 'reports/final.md', content: 'done' }),
-        },
-        availableToolNames: new Set(['write_file']),
-        groundedRequestScopedTools: [
-          {
-            name: 'write_file',
-            description: 'Write a workspace file.',
-            input_schema: {
-              type: 'object',
-              properties: { path: { type: 'string' }, content: { type: 'string' } },
-              required: ['path', 'content'],
-            },
-          },
-        ],
-        callbacks: { onToolCallStart: jest.fn(), onToolCallComplete },
-      }),
-    );
-
-    expect(onToolCallComplete).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'completed',
-        effectReceipts: [
-          expect.objectContaining({
-            effectKind: 'artifact.write',
-            effectState: 'applied',
-            verificationState: 'verified',
-            resource: {
-              kind: 'workspace_file',
-              id: 'reports/final.md',
-              digest: `sha256:${'a'.repeat(64)}`,
-            },
-          }),
-        ],
-      }),
-    );
-    expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
-  });
-
-  it.each([
-    ['javascript', 'applied', 'verified'],
-    ['python', 'unknown', 'unverified'],
-  ] as const)(
-    'records %s interpreter completion with the appropriate effect authority',
-    async (toolName, effectState, verificationState) => {
-      mockedExecuteTool.mockResolvedValueOnce(
-        completedToolOutcome(
-          JSON.stringify({
-            status: 'completed',
-            workspaceMutationState: 'none_observed',
-            output: '42',
-          }),
-        ),
-      );
-
-      const result = await executeToolCallLifecycle(codeLifecycle(toolName));
-
-      expect(result.effectReceipt).toEqual(
-        expect.objectContaining({
-          transportState: 'returned',
-          executionState: 'completed',
-          effectKind: 'compute.execute',
-          effectState,
-          verificationState,
-        }),
-      );
-      expect(result.effectReceipt?.resource).toBeUndefined();
-      expect(result.effectReceipt?.operationHandle).toBeUndefined();
-    },
-  );
-
-  it('keeps a returned Python timeout distinct from transport failure', async () => {
-    mockedExecuteTool.mockResolvedValueOnce(
-      failedToolOutcome(
-        JSON.stringify({
-          status: 'timed_out',
-          isError: true,
-          failureKind: 'timed_out',
-          executionEffectState: 'none_observed',
-          error: 'Python execution timed out after 1000ms',
-        }),
-      ),
-    );
-
-    const result = await executeToolCallLifecycle(codeLifecycle('python'));
-
-    expect(result.toolMessage.isError).toBe(true);
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        transportState: 'returned',
-        executionState: 'timed_out',
-        effectState: 'failed',
-        verificationState: 'unverified',
-      }),
-    );
-  });
-
-  it('keeps interpreter completion when returned workspace persistence fails', async () => {
-    mockedExecuteTool.mockResolvedValueOnce(
-      failedToolOutcome(
-        JSON.stringify({
-          status: 'effect_failed',
-          isError: true,
-          failureKind: 'workspace_persistence_failed',
-          error: 'storage unavailable',
-        }),
-      ),
-    );
-
-    const result = await executeToolCallLifecycle(codeLifecycle('javascript'));
-
-    expect(result.toolMessage.isError).toBe(true);
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        transportState: 'returned',
-        executionState: 'completed',
-        effectState: 'unknown',
-        verificationState: 'unverified',
-      }),
-    );
-  });
-
-  it('keeps an unexpected JavaScript bridge throw execution-unknown', async () => {
-    mockedExecuteTool.mockRejectedValueOnce(new Error('bridge crashed'));
-
-    const result = await executeToolCallLifecycle(codeLifecycle('javascript'));
-
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        transportState: 'threw',
-        executionState: 'unknown',
-        effectState: 'unknown',
-        verificationState: 'unverified',
-      }),
-    );
-  });
-
-  it('records pre-execution Python cancellation without invoking the runtime', async () => {
-    const signal = new AbortController();
-    signal.abort();
-
-    const result = await executeToolCallLifecycle(codeLifecycle('python', { signal }));
-
-    expect(mockedExecuteTool).not.toHaveBeenCalled();
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        transportState: 'rejected',
-        executionState: 'cancelled',
-        effectState: 'cancelled',
-        verificationState: 'unverified',
-      }),
+    expect(result.toolMessage.toolCalls?.[0]).toEqual(
+      expect.objectContaining({ status: 'failed', failureKind: 'timeout' }),
     );
   });
 

@@ -22,15 +22,49 @@ export interface ToolCall {
   effectReceipts?: ReadonlyArray<ToolEffectReceipt>;
 }
 
-export type ToolCallFailureKind =
-  | 'authority_revoked'
-  | 'workflow_guard'
-  | 'tool_filter'
-  | 'unknown_tool'
-  | 'tool_error'
-  | 'runtime_error'
+/**
+ * Closed failure taxonomy for a tool call, set by the producer at the point the
+ * failure is known — never inferred by matching `result`/`error` text. UI
+ * presentation (see `toolCallOutcomePresentation.ts`) renders tone and copy from
+ * this field alone; a tool call with no `failureKind` renders generic failure
+ * copy rather than falling back to text sniffing. The runtime list is the single
+ * source: the type derives from it, and persisted receipts are validated against it.
+ */
+export const TOOL_CALL_FAILURE_KINDS = [
+  // Legacy/structural kinds — set before or independent of the executor's own
+  // result, by the preflight and lifecycle layers. Left in place unchanged.
+  'authority_revoked',
+  'workflow_guard',
+  'tool_filter',
+  'unknown_tool',
+  'tool_error',
+  'runtime_error',
   /** Still in flight when the run finished; never started failing. */
-  | 'not_awaited';
+  'not_awaited',
+  /** Mobile-controller runtime outcomes — see `engine/mobileController/toolExecution.ts`. */
+  'controller_action_review_unavailable',
+  'user_takeover_required',
+  // Structured failure taxonomy — set by the producer (approval gate, native
+  // executors, the provider error classifier, the argument validator, or the
+  // generic catch) at the point the failure is known.
+  'approval_denied',
+  'permission',
+  'auth',
+  'network',
+  'timeout',
+  'aborted',
+  'invalid_arguments',
+  'not_found',
+  'unavailable',
+  'rate_limited',
+  'provider',
+  'internal',
+  /** The tool may have changed external state but the outcome could not be verified; do not retry automatically. */
+  'reconciliation_required',
+  'unknown',
+] as const;
+
+export type ToolCallFailureKind = (typeof TOOL_CALL_FAILURE_KINDS)[number];
 
 export interface MessageProviderReplay {
   /** OpenAI Responses response ID retained for traceability and diagnostics. */
@@ -105,6 +139,13 @@ export interface Message {
   attachments?: Attachment[];
   isError?: boolean;
   reasoning?: string;
+  /**
+   * True when `reasoning` holds an app-generated stand-in rather than real
+   * model reasoning (e.g. a "Using <tool>…" progress label written before any
+   * genuine reasoning has streamed). Consumers such as `ThinkingBlock` must
+   * suppress rendering from this flag, never by matching `reasoning` text.
+   */
+  isSyntheticReasoningPlaceholder?: boolean;
   providerReplay?: MessageProviderReplay;
   assistantMetadata?: AssistantMessageMetadata;
   memoryPublication?: MessageMemoryPublication;

@@ -11,6 +11,8 @@ export interface DisplayResponseSegment {
   messageId: string;
   content: string;
   reasoning?: string;
+  /** See `Message.isSyntheticReasoningPlaceholder`. */
+  isSyntheticReasoningPlaceholder?: boolean;
   attachments?: Message['attachments'];
   toolCalls?: Message['toolCalls'];
   assistantMetadata?: Message['assistantMetadata'];
@@ -38,6 +40,7 @@ function buildResponseSegment(
     messageId: message.id,
     content: message.content,
     reasoning: message.reasoning,
+    isSyntheticReasoningPlaceholder: message.isSyntheticReasoningPlaceholder,
     attachments: getMessageDisplayAttachments(message),
     toolCalls: message.toolCalls?.length ? message.toolCalls : undefined,
     assistantMetadata: message.assistantMetadata,

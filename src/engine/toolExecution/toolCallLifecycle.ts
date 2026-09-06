@@ -23,9 +23,11 @@ import {
 import { resolveToolCallPreflight } from './toolCallLifecyclePreflight';
 import { buildRepeatedToolCallNotice } from './repeatedToolCallNotice';
 import { enrichToolResultWithSchemaRepair } from './toolResultRepair';
-import { buildToolEffectReceipt } from './toolEffectReceipt';
-import { appendToolEffectReceipt } from '../../utils/toolEffectReceipt';
-import type { ToolCall } from '../../types/message';
+import {
+  appendExecutionReceipt,
+  attachExecutionReceipt,
+  observeVerifiedProcedureRawOutcome,
+} from './toolCallLifecycleReceipts';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type {
   ToolExecutionLifecycleParams,
@@ -40,6 +42,7 @@ import {
   type ToolEffectDispatchObservation,
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
+import { classifyNativeTransportErrorIdentity } from '../../services/llm/support/providerErrorClassification';
 import { canSettleAfterModelAuthorityChange } from './modelAuthorityIndependentCompletion';
 import {
   buildModelTurnMemoryPolicyExpiredToolResult,
@@ -50,72 +53,6 @@ function runtimeToolDeclaration(lifecycle: ToolExecutionLifecycleParams, toolNam
   return lifecycle.groundedRequestScopedTools?.find(
     (tool) => resolveRegisteredToolName(tool.name) === toolName,
   );
-}
-
-async function appendExecutionReceipt(params: {
-  lifecycle: ToolExecutionLifecycleParams;
-  toolCall: ToolCall;
-  result: string;
-  transportState: 'returned' | 'rejected' | 'threw';
-  resultIsError?: boolean;
-  terminalEffectState?: 'cancelled' | 'failed';
-  recordedAt: number;
-}): Promise<ToolEffectReceipt | undefined> {
-  let receipt: ToolEffectReceipt;
-  try {
-    receipt = await buildToolEffectReceipt({
-      toolCallId: params.toolCall.id,
-      toolName: params.toolCall.name,
-      argumentsText: params.toolCall.arguments,
-      resultText: params.result,
-      transportState: params.transportState,
-      resultIsError: params.resultIsError,
-      terminalEffectState: params.terminalEffectState,
-      executionRunId: params.lifecycle.executionRunId,
-      recordedAt: params.recordedAt,
-    });
-  } catch {
-    // Receipt creation is fail-closed: absence remains unknown and never becomes success evidence.
-    return undefined;
-  }
-
-  attachExecutionReceipt({ lifecycle: params.lifecycle, toolCall: params.toolCall, receipt });
-  return receipt;
-}
-
-function attachExecutionReceipt(params: {
-  lifecycle: ToolExecutionLifecycleParams;
-  toolCall: ToolCall;
-  receipt: ToolEffectReceipt;
-}): void {
-  params.toolCall.effectReceipts = appendToolEffectReceipt(
-    params.toolCall.effectReceipts,
-    params.receipt,
-    { toolCallId: params.toolCall.id, toolName: params.toolCall.name },
-  );
-}
-
-async function observeVerifiedProcedureRawOutcome(params: {
-  lifecycle: ToolExecutionLifecycleParams;
-  toolCall: ToolCall;
-  resultText: string;
-  receipt?: ToolEffectReceipt;
-  reconciliationRequired?: boolean;
-}): Promise<void> {
-  try {
-    await params.lifecycle.verifiedProcedureSession?.observeRawOutcome({
-      iteration: params.lifecycle.iteration,
-      batchIndex: params.lifecycle.batchIndex,
-      toolCallId: params.toolCall.id,
-      toolName: params.toolCall.name,
-      argumentsText: params.toolCall.arguments,
-      resultText: params.resultText,
-      receipt: params.receipt,
-      reconciliationRequired: params.reconciliationRequired,
-    });
-  } catch {
-    params.lifecycle.verifiedProcedureSession?.markReconciliationRequired();
-  }
 }
 
 async function completeUnstartedMemoryPolicyRevocation(params: {
@@ -264,7 +201,7 @@ export async function executeToolCallLifecycle(
   const completeCancellation = async (): Promise<ToolExecutionLifecycleResult> => {
     const cancellationMessage = 'Error: Request cancelled';
     const completedAt = Date.now();
-    failRunningToolCall(toolCall, 'Request cancelled', completedAt);
+    failRunningToolCall(toolCall, 'Request cancelled', completedAt, 'aborted');
     const effectReceipt = await appendExecutionReceipt({
       lifecycle: params,
       toolCall,
@@ -447,7 +384,13 @@ export async function executeToolCallLifecycle(
         return completeMemoryPolicyRevocation();
       }
       if (durability.kind === 'untracked_external' || durability.kind === 'persistence_failed') {
-        outcome = failedToolOutcome(buildUntrackedExternalToolResult(durability));
+        // The effect may already have happened but durable tracking of it did
+        // not — the same "do not retry blindly" outcome as an effect-dispatch
+        // reconciliation requirement, so it renders with the same UI tone.
+        outcome = failedToolOutcome(
+          buildUntrackedExternalToolResult(durability),
+          'reconciliation_required',
+        );
         result = outcome.content;
       } else if (
         durability.kind === 'persisted' &&
@@ -499,7 +442,10 @@ export async function executeToolCallLifecycle(
       result,
       toolResultIsError,
       completedAt,
-      toolResultIsError ? 'tool_error' : undefined,
+      // Propagate the executor's own classification rather than flattening
+      // every failure into one generic kind — the UI renders tone from this
+      // field alone, so losing it here would force it back to text sniffing.
+      outcome.status === 'failed' ? outcome.failureKind : undefined,
     );
     recordLifecyclePerformanceMetrics({
       enabled: params.usePerformanceMetrics,
@@ -586,7 +532,12 @@ export async function executeToolCallLifecycle(
     ) {
       return completeMemoryPolicyRevocation();
     }
-    failRunningToolCall(toolCall, errMsg, completedAt, 'runtime_error');
+    failRunningToolCall(
+      toolCall,
+      errMsg,
+      completedAt,
+      classifyNativeTransportErrorIdentity(err) ?? 'internal',
+    );
     applyTrackedAsyncToolResult(
       params.trackedAsyncOperations,
       effectiveToolCall.name,

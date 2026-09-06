@@ -1,15 +1,19 @@
 import { parse as shellParse } from 'shell-quote';
 
-import type { RemoteApprovalRequest } from '../../types/remote';
+import type { ApprovalRiskReasonCode, RemoteApprovalRequest } from '../../types/remote';
 import { extractPackageSpecUrl } from '../python/requestNormalization';
 
 export type ApprovalScope = NonNullable<RemoteApprovalRequest['scope']>;
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
+export type { ApprovalRiskReasonCode } from '../../types/remote';
+
 export interface CommandRiskAssessment {
   level: RiskLevel;
   reasons: string[];
+  /** Structured classification for each entry in `reasons`, same order and length. */
+  reasonCodes: ApprovalRiskReasonCode[];
   /** Parsed executable name from the first command token. */
   executable: string;
   /** Whether destructive flags, operators, or targets were detected. */
@@ -127,6 +131,7 @@ const SENSITIVE_PATH_PATTERNS = [
 
 export function analyzeCommandRisk(command: string): CommandRiskAssessment {
   const reasons: string[] = [];
+  const reasonCodes: ApprovalRiskReasonCode[] = [];
   let level: RiskLevel = 'low';
   let destructive = false;
 
@@ -134,7 +139,13 @@ export function analyzeCommandRisk(command: string): CommandRiskAssessment {
   try {
     tokens = shellParse(command);
   } catch {
-    return { level: 'high', reasons: ['Unparseable command'], executable: '', destructive: true };
+    return {
+      level: 'high',
+      reasons: ['Unparseable command'],
+      reasonCodes: ['unparseable_command'],
+      executable: '',
+      destructive: true,
+    };
   }
 
   const stringTokens = tokens.filter((t): t is string => typeof t === 'string');
@@ -143,13 +154,16 @@ export function analyzeCommandRisk(command: string): CommandRiskAssessment {
   if (CRITICAL_EXECUTABLES.has(executable)) {
     level = 'critical';
     reasons.push(`Critical executable: ${executable}`);
+    reasonCodes.push('destructive_executable');
     destructive = true;
   } else if (HIGH_RISK_EXECUTABLES.has(executable)) {
     level = 'high';
     reasons.push(`High-risk executable: ${executable}`);
+    reasonCodes.push('system_executable');
   } else if (MEDIUM_RISK_EXECUTABLES.has(executable)) {
     level = level === 'low' ? 'medium' : level;
     reasons.push(`Medium-risk executable: ${executable}`);
+    reasonCodes.push('system_executable');
   }
 
   for (const token of tokens) {
@@ -165,6 +179,7 @@ export function analyzeCommandRisk(command: string): CommandRiskAssessment {
         if (level === 'low') level = 'medium';
         if (level === 'medium' && CRITICAL_EXECUTABLES.has(executable)) level = 'critical';
         reasons.push(`Destructive flag/operator: ${str}`);
+        reasonCodes.push('destructive_operation');
         break;
       }
     }
@@ -176,6 +191,7 @@ export function analyzeCommandRisk(command: string): CommandRiskAssessment {
         if (level === 'low') level = 'medium';
         if (executable === 'rm' || executable === 'chmod') level = 'critical';
         reasons.push(`Sensitive path: ${token}`);
+        reasonCodes.push('sensitive_path');
         break;
       }
     }
@@ -187,9 +203,10 @@ export function analyzeCommandRisk(command: string): CommandRiskAssessment {
   if (opTokens.length > 0 && level === 'low') {
     level = 'medium';
     reasons.push('Command contains operators/pipes');
+    reasonCodes.push('compound_operators');
   }
 
-  return { level, reasons, executable, destructive };
+  return { level, reasons, reasonCodes, executable, destructive };
 }
 
 export function getApprovalScope(toolName: string): ApprovalScope {
@@ -245,6 +262,7 @@ export function assessToolRisk(
     return {
       level: 'high',
       reasons: ['Host-reviewed external mobile action'],
+      reasonCodes: ['host_reviewed_action'],
       executable: '',
       destructive: false,
     };
@@ -254,6 +272,7 @@ export function assessToolRisk(
     return {
       level: PER_CALL_CONFIRMATION_LEVEL,
       reasons: ['Runs model-written code in the app runtime'],
+      reasonCodes: ['code_execution'],
       executable: '',
       destructive: false,
     };
@@ -271,6 +290,7 @@ export function assessToolRisk(
       return {
         level: PER_CALL_CONFIRMATION_LEVEL,
         reasons: ['Network access requested via allowNetwork'],
+        reasonCodes: ['network_access'],
         executable: '',
         destructive: false,
       };
@@ -279,6 +299,7 @@ export function assessToolRisk(
       return {
         level: PER_CALL_CONFIRMATION_LEVEL,
         reasons: ['Custom package index requested via indexUrls'],
+        reasonCodes: ['custom_package_index'],
         executable: '',
         destructive: false,
       };
@@ -287,6 +308,7 @@ export function assessToolRisk(
       return {
         level: PER_CALL_CONFIRMATION_LEVEL,
         reasons: [`URL-shaped package spec requested: ${urlShapedPackage}`],
+        reasonCodes: ['url_shaped_package'],
         executable: '',
         destructive: false,
       };
@@ -304,5 +326,5 @@ export function assessToolRisk(
           : scope === 'browser'
             ? 'low'
             : 'low';
-  return { level, reasons: [], executable: '', destructive: false };
+  return { level, reasons: [], reasonCodes: [], executable: '', destructive: false };
 }

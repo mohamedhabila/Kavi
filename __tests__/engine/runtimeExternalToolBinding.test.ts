@@ -51,6 +51,7 @@ describe('runtime-external tool binding', () => {
       status: 'failed',
       content:
         'Error: Tool effect was not executed because a code-owned tool-call identity is required.',
+      failureKind: 'internal',
       effectDispatchObservation: {
         kind: 'not_claimed',
         reason: 'tool_call_identity_required',

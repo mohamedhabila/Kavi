@@ -1,4 +1,4 @@
-import { render, within } from '@testing-library/react-native';
+import { fireEvent, render, within } from '@testing-library/react-native';
 import {
   MessageBubble,
   installMessageBubbleTestHarness,
@@ -52,17 +52,35 @@ describe('MessageBubble status and tool states', () => {
     expect(getByLabelText('Assistant is typing')).toBeTruthy();
   });
 
-  it('should hide the inline reasoning block for synthetic tool-status reasoning', () => {
+  it('renders reasoning text that used to be sniffed as a synthetic tool-status placeholder', () => {
+    // ThinkingBlock now suppresses only on the structured isSyntheticPlaceholder
+    // flag (unwired from Message here), never by matching "Using <tool>…" text —
+    // a reworded or non-English placeholder must not silently disappear either.
     const msg = makeMessage({
       role: 'assistant',
       content: 'Answer',
       reasoning: 'Using read_file…',
     });
-    const { getByText, queryByTestId, queryByText } = render(<MessageBubble message={msg} />);
+    const { getByText } = render(<MessageBubble message={msg} />);
 
+    expect(getByText('Answer')).toBeTruthy();
+    fireEvent.press(getByText('Thinking'));
+    expect(getByText('Using read_file…')).toBeTruthy();
+  });
+
+  it('hides reasoning text flagged as a synthetic placeholder, even though it reads like real reasoning', () => {
+    const msg = makeMessage({
+      role: 'assistant',
+      content: 'Answer',
+      reasoning: 'Using read_file…',
+      isSyntheticReasoningPlaceholder: true,
+    });
+    const { getByText, queryByText, queryByTestId } = render(<MessageBubble message={msg} />);
+
+    expect(getByText('Answer')).toBeTruthy();
     expect(queryByTestId('assistant-inline-reasoning')).toBeNull();
     expect(queryByText('Thinking')).toBeNull();
-    expect(getByText('Answer')).toBeTruthy();
+    expect(queryByText('Using read_file…')).toBeNull();
   });
 
   it('should render assistant reasoning inline within the response bubble content', () => {

@@ -258,11 +258,13 @@ describe('typed native actions', () => {
   });
 
   it('rejects disallowed open_url schemes', async () => {
-    const parsed = parseFailedToolOutcome(
-      await executeOpenUrl({ url: 'ftp://example.com/archive' }),
-    );
+    const outcome = await executeOpenUrl({ url: 'ftp://example.com/archive' });
+    const parsed = parseFailedToolOutcome(outcome);
     expect(parsed.code).toBe('disallowed_url_scheme');
     expect(mockOpenURL).not.toHaveBeenCalled();
+    // The native action layer's own validator code classifies this as a bad
+    // argument, not a generic/unknown failure.
+    expect((outcome as { failureKind?: string }).failureKind).toBe('invalid_arguments');
   });
 
   it('composes email with the native composer when available', async () => {
@@ -488,13 +490,19 @@ describe('legacy native utilities', () => {
         title: 'Updated meeting',
       }),
     );
-    const location = parseFailedToolOutcome(await executeLocationCurrent());
+    const locationOutcome = await executeLocationCurrent();
+    const location = parseFailedToolOutcome(locationOutcome);
 
     expect(calendarList.error || calendarList.status).toBeDefined();
     expect(calendarEvents.error || calendarEvents.status).toBeDefined();
     expect(calendarCreate.error || calendarCreate.status).toBeDefined();
     expect(calendarUpdate.error || calendarUpdate.status).toBeDefined();
     expect(location.error || location.latitude).toBeDefined();
+    // The dynamic `import('expo-location')` in loadLocationModule does not
+    // resolve through this file's jest.mock, so this exercises the
+    // module-unavailable branch — classified from that outcome, not from the
+    // error text.
+    expect((locationOutcome as { failureKind?: string }).failureKind).toBe('unavailable');
   });
 });
 
@@ -530,6 +538,8 @@ describe('executeNativeTool', () => {
   it('rejects composite share calls without an explicit kind', async () => {
     const result = await executeNativeTool('share', '{}');
     expect(failedToolContent(result)).toContain('share requires kind');
+    expect(result.status).toBe('failed');
+    expect((result as { failureKind?: string }).failureKind).toBe('invalid_arguments');
   });
 
   it('routes calendar update through the dispatcher', async () => {
@@ -546,10 +556,20 @@ describe('executeNativeTool', () => {
   it('returns error for unknown native tools', async () => {
     const result = await executeNativeTool('nonexistent', '{}');
     expect(failedToolContent(result)).toContain('unknown native tool');
+    expect((result as { failureKind?: string }).failureKind).toBe('not_found');
   });
 
   it('returns error for invalid JSON', async () => {
     const result = await executeNativeTool('clipboard_read', 'not-json');
     expect(failedToolContent(result)).toContain('invalid tool arguments JSON');
+    expect((result as { failureKind?: string }).failureKind).toBe('invalid_arguments');
+  });
+
+  it('classifies a cancelled request distinctly from an invalid-argument failure', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const result = await executeNativeTool('clipboard_read', '{}', controller.signal);
+    expect(failedToolContent(result)).toContain('Request cancelled');
+    expect((result as { failureKind?: string }).failureKind).toBe('aborted');
   });
 });

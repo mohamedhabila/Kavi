@@ -1,10 +1,15 @@
 import type { ToolDefinition } from '../../types/tool';
+import type { ToolCallFailureKind } from '../../types/message';
 import type { ToolProviderContextInput } from './toolProviderContext';
 import {
   completedToolOutcome,
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
+import {
+  classifyProviderError,
+  type ProviderErrorKind,
+} from '../../services/llm/support/providerErrorClassification';
 import {
   getSearchProviderApiKey,
   resolveConfiguredSearchProvider,
@@ -141,7 +146,10 @@ export async function executeWebSearch(
 ): Promise<ToolRuntimeOutcome> {
   const normalizedSearches = normalizeWebSearchRequests(args);
   if ('error' in normalizedSearches) {
-    return failedToolOutcome(JSON.stringify({ error: normalizedSearches.error }));
+    return failedToolOutcome(
+      JSON.stringify({ error: normalizedSearches.error }),
+      'invalid_arguments',
+    );
   }
 
   const resolved = await resolveSearchProvider({
@@ -172,10 +180,12 @@ export async function executeWebSearch(
           'https://api.open-meteo.com/v1/forecast?latitude=…&longitude=…&daily=…&timezone=auto) or ' +
           'Wikipedia (https://<lang>.wikipedia.org/api/rest_v1/page/summary/<title>).',
       }),
+      'unavailable',
     );
   }
 
   try {
+    const failureKinds: ToolCallFailureKind[] = [];
     const searches = await Promise.all(
       normalizedSearches.searches.map(async (search) => {
         try {
@@ -190,6 +200,7 @@ export async function executeWebSearch(
             context,
           });
         } catch (error: unknown) {
+          failureKinds.push(mapProviderErrorKindToFailureKind(classifyProviderError(error).kind));
           return {
             query: search.query,
             error: `Search failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -202,15 +213,49 @@ export async function executeWebSearch(
       provider: resolved.provider,
       searches,
     });
+    // Several independent queries can fail differently; the first failure's
+    // classification stands in for the batch rather than sniffing the
+    // aggregated JSON text.
     return searches.some((search) => 'error' in search)
-      ? failedToolOutcome(content)
+      ? failedToolOutcome(content, failureKinds[0])
       : completedToolOutcome(content);
   } catch (error: unknown) {
     return failedToolOutcome(
       JSON.stringify({
         error: `Search failed: ${error instanceof Error ? error.message : String(error)}`,
       }),
+      mapProviderErrorKindToFailureKind(classifyProviderError(error).kind),
     );
+  }
+}
+
+/**
+ * Maps the structured provider-error classification (native identity, HTTP
+ * status, or provider-typed error body — never message prose) onto the tool
+ * call's own closed failure taxonomy.
+ */
+function mapProviderErrorKindToFailureKind(kind: ProviderErrorKind): ToolCallFailureKind {
+  switch (kind) {
+    case 'network':
+      return 'network';
+    case 'timeout':
+      return 'timeout';
+    case 'aborted':
+      return 'aborted';
+    case 'rate_limited':
+      return 'rate_limited';
+    case 'auth':
+      return 'auth';
+    case 'permission':
+      return 'permission';
+    case 'invalid_request':
+      return 'invalid_arguments';
+    case 'context_overflow':
+    case 'server':
+      return 'provider';
+    case 'unknown':
+    default:
+      return 'unknown';
   }
 }
 

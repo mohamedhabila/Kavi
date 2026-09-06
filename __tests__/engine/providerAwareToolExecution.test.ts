@@ -22,4 +22,32 @@ describe('executeProviderAwareTool', () => {
     expect(result).toBeNull();
     expect(mockResolveToolProviderContext).not.toHaveBeenCalled();
   });
+
+  it('fails sessions_spawn with a structured unavailable failureKind when no provider is configured', async () => {
+    mockResolveToolProviderContext.mockResolvedValue({ provider: null, allProviders: [] });
+
+    const result = await executeProviderAwareTool({
+      name: 'sessions_spawn',
+      args: { task: 'Investigate the failing build' },
+      conversationId: 'conversation-1',
+      workspaceConversationId: 'workspace-1',
+    });
+
+    expect(result?.status).toBe('failed');
+    expect((result as { failureKind?: string })?.failureKind).toBe('unavailable');
+  });
+
+  it('fails sessions_send with a structured unavailable failureKind when no provider is configured', async () => {
+    mockResolveToolProviderContext.mockResolvedValue({ provider: null, allProviders: [] });
+
+    const result = await executeProviderAwareTool({
+      name: 'sessions_send',
+      args: { sessionId: 'session-1', message: 'status?' },
+      conversationId: 'conversation-1',
+      workspaceConversationId: 'workspace-1',
+    });
+
+    expect(result?.status).toBe('failed');
+    expect((result as { failureKind?: string })?.failureKind).toBe('unavailable');
+  });
 });

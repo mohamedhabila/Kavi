@@ -52,13 +52,13 @@ export async function executeNativeTool(
   executionSignal?: AbortSignal,
 ): Promise<ToolRuntimeOutcome> {
   if (executionSignal?.aborted) {
-    return failedToolOutcome('Error: Request cancelled');
+    return failedToolOutcome('Error: Request cancelled', 'aborted');
   }
   let args: any;
   try {
     args = JSON.parse(argsString);
   } catch {
-    return failedToolOutcome('Error: invalid tool arguments JSON');
+    return failedToolOutcome('Error: invalid tool arguments JSON', 'invalid_arguments');
   }
 
   switch (name) {
@@ -93,7 +93,10 @@ export async function executeNativeTool(
       if (action === 'view') return executeContactsView(args);
       if (action === 'edit') return executeContactsEdit(args);
       if (action === 'create') return executeContactsCreate(args);
-      return failedToolOutcome('Error: contacts_form requires action ∈ {view, edit, create}');
+      return failedToolOutcome(
+        'Error: contacts_form requires action ∈ {view, edit, create}',
+        'invalid_arguments',
+      );
     }
     case 'contacts_share':
       return executeContactsShare(args);
@@ -115,7 +118,10 @@ export async function executeNativeTool(
       const action = typeof args?.action === 'string' ? args.action.toLowerCase() : '';
       if (action === 'read') return executeClipboardRead();
       if (action === 'write') return executeClipboardWrite(args);
-      return failedToolOutcome('Error: clipboard requires action ∈ {read, write}');
+      return failedToolOutcome(
+        'Error: clipboard requires action ∈ {read, write}',
+        'invalid_arguments',
+      );
     }
     case 'share_text':
       return executeShareText(args);
@@ -131,7 +137,10 @@ export async function executeNativeTool(
       if (kind === 'url') return executeShareUrl(args);
       if (kind === 'file') return executeShareFile(args);
       if (kind === 'contact') return executeShareContact(args);
-      return failedToolOutcome('Error: share requires kind ∈ {text, url, file, contact}');
+      return failedToolOutcome(
+        'Error: share requires kind ∈ {text, url, file, contact}',
+        'invalid_arguments',
+      );
     }
     case 'open_url':
       return executeOpenUrl(args);
@@ -157,6 +166,7 @@ export async function executeNativeTool(
       if (kind === 'health') return executeDeviceHealth();
       return failedToolOutcome(
         'Error: device_query kind must be one of {status, info, permissions, health}',
+        'invalid_arguments',
       );
     }
     case 'photos_pick':
@@ -168,6 +178,6 @@ export async function executeNativeTool(
     case 'haptic_feedback':
       return executeHapticFeedback(args);
     default:
-      return failedToolOutcome(`Error: unknown native tool "${name}"`);
+      return failedToolOutcome(`Error: unknown native tool "${name}"`, 'not_found');
   }
 }

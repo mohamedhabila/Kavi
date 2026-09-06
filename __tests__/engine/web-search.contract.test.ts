@@ -188,4 +188,39 @@ describe('executeWebSearch contract and Brave request shaping', () => {
       },
     ]);
   });
+
+  it('classifies a per-query transport failure with a structured failureKind, not a text guess', async () => {
+    mockSecureKey(mockGetSecure, 'BRAVE_API_KEY', 'brave-key-123');
+    // A TypeError from fetch is the native identity for "request never reached a
+    // server" and is not abort-like, so it fails on the first attempt without
+    // retrying — classifyProviderError maps it to 'network' from the error's
+    // own type, never from matching its message text.
+    mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const outcome = await executeWebSearch({ queries: ['transport failure classification'] });
+
+    expect(outcome.status).toBe('failed');
+    expect((outcome as { failureKind?: string }).failureKind).toBe('network');
+    const parsed = parseFailedToolOutcome(outcome);
+    expect(parsed.searches).toEqual([
+      {
+        query: 'transport failure classification',
+        error: expect.stringContaining('Search failed'),
+      },
+    ]);
+  });
+
+  it('reports an unconfigured search provider as unavailable, distinct from a transport failure', async () => {
+    const outcome = await executeWebSearch({ queries: ['no provider configured'] });
+
+    expect(outcome.status).toBe('failed');
+    expect((outcome as { failureKind?: string }).failureKind).toBe('unavailable');
+  });
+
+  it('classifies missing queries as invalid_arguments', async () => {
+    const outcome = await executeWebSearch({});
+
+    expect(outcome.status).toBe('failed');
+    expect((outcome as { failureKind?: string }).failureKind).toBe('invalid_arguments');
+  });
 });

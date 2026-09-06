@@ -53,7 +53,12 @@ export function completeRunningToolCall(
   toolCall.completedAt = timestamp;
   toolCall.result = result;
   if (failed) {
-    toolCall.failureKind = failureKind ?? 'tool_error';
+    // Only set when the caller supplies a structured kind — an undefined
+    // failureKind is a legitimate outcome, rendered as generic failure copy
+    // by the UI rather than papered over with a fabricated default.
+    if (failureKind) {
+      toolCall.failureKind = failureKind;
+    }
     toolCall.error = result;
   }
   return toolCall;
@@ -66,7 +71,9 @@ export function failRunningToolCall(
   failureKind?: ToolCallFailureKind,
 ): ToolCall {
   toolCall.status = 'failed';
-  toolCall.failureKind = failureKind ?? 'runtime_error';
+  // 'internal' is a deliberate, structured fallback (not a text-sniffed guess)
+  // for the rare caller that fails a running call without classifying why.
+  toolCall.failureKind = failureKind ?? 'internal';
   toolCall.updatedAt = timestamp;
   toolCall.completedAt = timestamp;
   toolCall.error = error;

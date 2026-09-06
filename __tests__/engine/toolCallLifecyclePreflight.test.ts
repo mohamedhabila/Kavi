@@ -229,7 +229,7 @@ describe('resolveToolCallPreflight', () => {
       expect.objectContaining({
         name: 'calendar_create_event',
         status: 'failed',
-        failureKind: 'tool_error',
+        failureKind: 'invalid_arguments',
       }),
     );
     expect(lifecycle.callbacks.onToolCallStart).toHaveBeenCalledWith(
@@ -242,7 +242,7 @@ describe('resolveToolCallPreflight', () => {
       expect.objectContaining({
         name: 'calendar_create_event',
         status: 'failed',
-        failureKind: 'tool_error',
+        failureKind: 'invalid_arguments',
       }),
     );
     expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('schema_validation');
@@ -304,7 +304,7 @@ describe('resolveToolCallPreflight', () => {
       expect.objectContaining({
         name: 'sessions_spawn',
         status: 'failed',
-        failureKind: 'tool_error',
+        failureKind: 'invalid_arguments',
       }),
     );
     expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('schema_validation');

@@ -15,6 +15,7 @@ import {
   type ToolEffectVerificationState,
   type ToolExecutionState,
 } from '../types/toolEffectReceipt';
+import { TOOL_CALL_FAILURE_KINDS } from '../types/message';
 
 const RECEIPT_ID_PATTERN = /^ter_[a-f0-9]{32}$/u;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
@@ -37,6 +38,7 @@ const RECEIPT_KEYS = new Set([
   'resource',
   'operationHandle',
   'recordedAt',
+  'failureKind',
 ]);
 const RESOURCE_REFERENCE_KEYS = new Set(['kind', 'id', 'digest']);
 const OPERATION_HANDLE_KEYS = new Set(['kind', 'id']);
@@ -304,6 +306,12 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
   const requestDigest = boundedString(value.requestDigest, 71);
   const resultDigest = boundedString(value.resultDigest, 71);
   const recordedAt = value.recordedAt;
+  // A kind this build does not know (a receipt written by a newer app) is dropped, not
+  // fatal: the field annotates the outcome and is not part of the receipt's identity.
+  const failureKind =
+    value.failureKind === undefined
+      ? undefined
+      : enumValue(value.failureKind, TOOL_CALL_FAILURE_KINDS);
 
   if (
     !receiptId ||
@@ -325,6 +333,7 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
     !SHA256_PATTERN.test(resultDigest) ||
     !Number.isSafeInteger(recordedAt) ||
     (recordedAt as number) < 0 ||
+    (value.failureKind !== undefined && typeof value.failureKind !== 'string') ||
     !isToolEffectStateCombinationValid({ transportState, effectState, verificationState })
   ) {
     return undefined;
@@ -387,6 +396,7 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
     ...(resource ? { resource } : {}),
     ...(operationHandle ? { operationHandle } : {}),
     recordedAt: recordedAt as number,
+    ...(failureKind ? { failureKind } : {}),
   });
 }
 

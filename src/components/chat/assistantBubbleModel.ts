@@ -69,6 +69,7 @@ function buildOrderedAssistantSegments(params: {
           content: message.content,
           attachments: message.attachments,
           reasoning: message.reasoning,
+          isSyntheticReasoningPlaceholder: message.isSyntheticReasoningPlaceholder,
           toolCalls: message.toolCalls,
           assistantMetadata: message.assistantMetadata,
           timestamp: message.timestamp,
@@ -335,7 +336,13 @@ function resolveContentWarnings(segments: AssistantBubbleSegment[]) {
 function buildTimelineItems(segments: AssistantBubbleSegment[]): AssistantBubbleTimelineItem[] {
   return segments.flatMap<AssistantBubbleTimelineItem>((segment) => {
     const timelineItems: AssistantBubbleTimelineItem[] = [];
-    const reasoning = getRenderableThinkingText(segment.reasoning);
+    // Suppression happens here, once, from the structured flag: a segment whose
+    // reasoning is an app-generated placeholder never becomes a timeline item, so
+    // downstream renderers (ThinkingBlock) never need to re-derive it from text.
+    const reasoning = getRenderableThinkingText(
+      segment.reasoning,
+      segment.isSyntheticReasoningPlaceholder,
+    );
 
     if (reasoning) {
       timelineItems.push({

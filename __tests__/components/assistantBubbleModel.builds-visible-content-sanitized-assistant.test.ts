@@ -498,4 +498,50 @@ describe('buildAssistantBubbleViewModel', () => {
       }),
     ]);
   });
+  it('suppresses reasoning flagged as a synthetic placeholder even when the text looks like real reasoning', () => {
+    const model = buildAssistantBubbleViewModel({
+      message: makeAssistantMessage({ content: 'Second answer' }),
+      responseSegments: [
+        {
+          id: 'segment-1',
+          messageId: 'assistant-1',
+          content: 'First answer',
+          reasoning: 'Using read_file…',
+          isSyntheticReasoningPlaceholder: true,
+          timestamp,
+        },
+        {
+          id: 'segment-2',
+          messageId: 'assistant-2',
+          content: 'Second answer',
+          reasoning: 'Using read_file…',
+          isSyntheticReasoningPlaceholder: false,
+          timestamp: timestamp + 1,
+        },
+      ],
+    });
+
+    expect(
+      model.timelineItems.map((item) =>
+        item.kind === 'reasoning'
+          ? `${item.kind}:${item.sourceSegmentId}:${item.reasoning}`
+          : `${item.kind}:${item.segment.id}:${item.segment.content}`,
+      ),
+    ).toEqual([
+      'content:segment-1:First answer',
+      'reasoning:segment-2:Using read_file…',
+      'content:segment-2:Second answer',
+    ]);
+  });
+  it('suppresses a synthetic placeholder from message.reasoning when no responseSegments are supplied', () => {
+    const model = buildAssistantBubbleViewModel({
+      message: makeAssistantMessage({
+        content: 'Answer',
+        reasoning: 'Using read_file…',
+        isSyntheticReasoningPlaceholder: true,
+      }),
+    });
+
+    expect(model.timelineItems.some((item) => item.kind === 'reasoning')).toBe(false);
+  });
 });

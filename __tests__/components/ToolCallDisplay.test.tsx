@@ -178,7 +178,7 @@ describe('ToolCallDisplay', () => {
   });
 
   it('should explain a failed action before showing its technical error', () => {
-    const tc = makeToolCall({ status: 'failed', error: 'Permission denied' });
+    const tc = makeToolCall({ status: 'failed', failureKind: 'permission', error: 'Permission denied' });
     const { getByText, getByTestId, queryByText } = render(<ToolCallDisplay toolCall={tc} />);
     fireEvent.press(getByTestId('tool-call-disclosure-tc1'));
     expect(getByText('Access is needed')).toBeTruthy();

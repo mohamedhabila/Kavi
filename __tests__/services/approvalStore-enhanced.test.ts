@@ -8,6 +8,7 @@ import {
   ONE_SHOT_APPROVAL_DECISION_POLICY,
   assessToolRisk,
   analyzeCommandRisk,
+  requestToolApproval,
 } from '../../src/services/remote/approvalStore';
 import { buildApprovalGrantCandidate } from '../../src/services/remote/approvalGrants';
 
@@ -39,6 +40,11 @@ describe('analyzeCommandRisk', () => {
     expect(result.destructive).toBe(true);
     expect(result.executable).toBe('rm');
     expect(result.reasons.length).toBeGreaterThan(0);
+    // Every reason carries a structured code in the same order — presentation
+    // classifies from this, never by matching the reasons prose.
+    expect(result.reasonCodes).toHaveLength(result.reasons.length);
+    expect(result.reasonCodes).toContain('destructive_executable');
+    expect(result.reasonCodes).toContain('destructive_operation');
   });
 
   it('detects high-risk executables', () => {
@@ -66,6 +72,7 @@ describe('analyzeCommandRisk', () => {
   it('detects sensitive paths', () => {
     const result = analyzeCommandRisk('cat /etc/shadow');
     expect(result.reasons.some((r) => r.toLowerCase().includes('sensitive'))).toBe(true);
+    expect(result.reasonCodes).toContain('sensitive_path');
   });
 
   it('handles empty command', () => {
@@ -100,6 +107,7 @@ describe('assessToolRisk', () => {
     const result = assessToolRisk('javascript', { code: 'return 1 + 1;' });
     expect(result.level).toBe('high');
     expect(result.reasons).toContain('Runs model-written code in the app runtime');
+    expect(result.reasonCodes).toEqual(['code_execution']);
 
     const grantCandidate = buildApprovalGrantCandidate({
       toolName: 'javascript',
@@ -393,5 +401,37 @@ describe('risk-aware request creation', () => {
     const req = useApprovalStore.getState().getRequest(id);
     expect(req!.riskLevel).toBe('critical');
     expect(req!.riskReasons).toEqual(['destructive command', 'targets root']);
+  });
+
+  it('stores structured riskReasonCodes alongside riskReasons on request', () => {
+    const id = useApprovalStore.getState().createRequest({
+      title: 'Dangerous',
+      description: 'rm command',
+      toolName: 'ssh_exec',
+      riskLevel: 'critical',
+      riskReasons: ['destructive command'],
+      riskReasonCodes: ['destructive_executable'],
+    });
+
+    const req = useApprovalStore.getState().getRequest(id);
+    expect(req!.riskReasonCodes).toEqual(['destructive_executable']);
+  });
+
+  it('propagates the analyzer-computed reasonCodes end to end from requestToolApproval', async () => {
+    const promise = requestToolApproval({
+      toolName: 'ssh_exec',
+      args: { command: 'rm -rf /' },
+      description: 'Run rm -rf / on staging',
+    });
+
+    const pending = useApprovalStore.getState().getPendingRequests();
+    expect(pending).toHaveLength(1);
+    expect(pending[0].riskReasonCodes).toEqual(
+      expect.arrayContaining(['destructive_executable', 'destructive_operation']),
+    );
+    expect(pending[0].riskReasonCodes).toHaveLength(pending[0].riskReasons!.length);
+
+    useApprovalStore.getState().rejectRequest(pending[0].id);
+    await expect(promise).resolves.toBe('rejected');
   });
 });

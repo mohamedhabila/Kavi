@@ -138,6 +138,14 @@ export type AuthorizedToolEffectDispatchResult =
       kind: 'executed';
       status: ToolRuntimeOutcome['status'];
       result: string;
+      /**
+       * The executor's own structured failure classification, threaded
+       * unchanged from `ToolRuntimeOutcome.failureKind`. Present only when
+       * `status === 'failed'` and the executor set one; callers must not
+       * substitute a generic kind when this is absent from a genuinely
+       * unclassified failure.
+       */
+      failureKind: Extract<ToolRuntimeOutcome, { status: 'failed' }>['failureKind'];
       receipt: ToolEffectReceipt;
       disposition: import('./effectDispatchCoordinator').EffectDispatchReceiptDisposition;
       retryPolicy: ExecutionRetryPolicy;
@@ -553,6 +561,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
           dispatchRunId: claim.identity.runId,
           recordedAt: Math.max(claim.claimedAt, (options.now ?? Date.now)()),
           preparedContractIdentity: receiptContractIdentity,
+          failureKind: rawOutcome.status === 'failed' ? rawOutcome.failureKind : undefined,
         });
         return { kind: 'terminal_receipt', receipt: exactReceipt };
       },
@@ -587,6 +596,7 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
       kind: 'executed',
       status: rawOutcome.status,
       result: rawOutcome.content,
+      failureKind: rawOutcome.status === 'failed' ? rawOutcome.failureKind : undefined,
       receipt: exactReceipt,
       disposition: dispatchResult.disposition,
       retryPolicy: retryPolicyFor(policy),

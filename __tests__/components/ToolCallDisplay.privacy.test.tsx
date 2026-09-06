@@ -119,6 +119,7 @@ describe('ToolCallDisplay privacy and recovery', () => {
       <ToolCallDisplay
         toolCall={makeToolCall({
           status: 'failed',
+          failureKind: 'reconciliation_required',
           error: JSON.stringify({
             code: 'tool_effect_reconciliation_required',
             error: 'The app could not verify the outcome.',
@@ -134,17 +135,45 @@ describe('ToolCallDisplay privacy and recovery', () => {
   });
 
   it.each([
-    [{ error: 'user_approval_denied' }, 'toolCall.outcomes.declinedTitle', 'warning'],
-    [{ error: 'HTTP 403 forbidden' }, 'toolCall.outcomes.accessTitle', 'danger'],
+    [{ failureKind: 'approval_denied' }, 'toolCall.outcomes.declinedTitle', 'warning'],
+    [{ failureKind: 'permission' }, 'toolCall.outcomes.accessTitle', 'danger'],
+    [{ failureKind: 'auth' }, 'toolCall.outcomes.accessTitle', 'danger'],
     [{ failureKind: 'tool_filter' }, 'toolCall.outcomes.unavailableTitle', 'danger'],
-    [{ error: 'Network connection timed out' }, 'toolCall.outcomes.connectionTitle', 'danger'],
+    [{ failureKind: 'not_found' }, 'toolCall.outcomes.unavailableTitle', 'danger'],
+    [{ failureKind: 'network' }, 'toolCall.outcomes.connectionTitle', 'danger'],
+    [{ failureKind: 'timeout' }, 'toolCall.outcomes.connectionTitle', 'danger'],
     [{ failureKind: 'authority_revoked' }, 'toolCall.outcomes.stoppedTitle', 'warning'],
-    [{ error: 'Unexpected provider response' }, 'toolCall.outcomes.failedTitle', 'danger'],
-  ] as const)('maps failure evidence to actionable recovery copy', (overrides, titleKey, tone) => {
+    [{ failureKind: 'aborted' }, 'toolCall.outcomes.stoppedTitle', 'warning'],
+    [{ failureKind: 'internal' }, 'toolCall.outcomes.failedTitle', 'danger'],
+    [{}, 'toolCall.outcomes.failedTitle', 'danger'],
+  ] as const)('maps a structured failureKind to actionable recovery copy', (overrides, titleKey, tone) => {
     expect(
       getToolCallFailurePresentation(
         makeToolCall({ status: 'failed', ...overrides } as Partial<ToolCall>),
       ),
     ).toEqual(expect.objectContaining({ titleKey, tone }));
+  });
+
+  it('never infers tone from result/error text — a non-English message with an explicit kind renders that kind', () => {
+    expect(
+      getToolCallFailurePresentation(
+        makeToolCall({
+          status: 'failed',
+          failureKind: 'network',
+          error: 'La conexión ha caducado. Vuelve a intentarlo.',
+        }),
+      ),
+    ).toEqual(expect.objectContaining({ titleKey: 'toolCall.outcomes.connectionTitle' }));
+  });
+
+  it('ignores prose that used to be sniffed when no matching failureKind is set', () => {
+    expect(
+      getToolCallFailurePresentation(
+        makeToolCall({
+          status: 'failed',
+          error: 'user_approval_denied: permission denied, network timeout',
+        }),
+      ),
+    ).toEqual(expect.objectContaining({ titleKey: 'toolCall.outcomes.failedTitle', tone: 'danger' }));
   });
 });

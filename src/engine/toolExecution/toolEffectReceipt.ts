@@ -18,6 +18,7 @@ import {
   type ToolEffectVerificationState,
   type ToolExecutionState,
 } from '../../types/toolEffectReceipt';
+import type { ToolCallFailureKind } from '../../types/message';
 import { sha256HexUtf8Async } from '../../utils/sha256Async';
 import {
   decodeToolEffectReceipt,
@@ -54,6 +55,8 @@ type BuildToolEffectReceiptParams = {
   recordedAt?: number;
   runtimeExternalEvidence?: RuntimeExternalToolEvidence;
   preparedContractIdentity?: ToolContractIdentity;
+  /** Executor's own failureKind, threaded unchanged; meaningful only with `resultIsError`. */
+  failureKind?: ToolCallFailureKind;
 };
 
 type ResolvedEffectOutcome = {
@@ -461,6 +464,7 @@ async function finalizeToolEffectReceipt(params: {
   requestDigest: ToolEffectDigest;
   resultDigest: ToolEffectDigest;
   recordedAt: number;
+  failureKind?: ToolCallFailureKind;
 }): Promise<ToolEffectReceipt> {
   const identityDigest = await digestToolEffectText(
     JSON.stringify(
@@ -497,6 +501,7 @@ async function finalizeToolEffectReceipt(params: {
     requestDigest: params.requestDigest,
     resultDigest: params.resultDigest,
     recordedAt: params.recordedAt,
+    ...(params.failureKind ? { failureKind: params.failureKind } : {}),
   });
   if (!receipt) {
     throw new TypeError('Tool effect receipt inputs did not satisfy the durable receipt contract.');
@@ -589,6 +594,7 @@ export async function buildToolEffectReceipt(
     requestDigest,
     resultDigest,
     recordedAt,
+    ...(params.resultIsError && params.failureKind ? { failureKind: params.failureKind } : {}),
   });
 }
 

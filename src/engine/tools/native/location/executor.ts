@@ -9,12 +9,18 @@ async function loadLocationModule() {
 export async function executeLocationCurrent(): Promise<ToolRuntimeOutcome> {
   const Location = await loadLocationModule();
   if (!Location) {
-    return failedToolOutcome(JSON.stringify({ error: 'Location module not available' }));
+    return failedToolOutcome(
+      JSON.stringify({ error: 'Location module not available' }),
+      'unavailable',
+    );
   }
 
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== 'granted') {
-    return failedToolOutcome(JSON.stringify({ error: 'Location permission denied' }));
+    return failedToolOutcome(
+      JSON.stringify({ error: 'Location permission denied' }),
+      'permission',
+    );
   }
 
   const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });

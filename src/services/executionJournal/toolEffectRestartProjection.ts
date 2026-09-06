@@ -32,7 +32,13 @@ export function projectToolCallAfterRestart(input: {
     toolCall: {
       ...input.toolCall,
       status: 'failed',
-      failureKind: 'runtime_error',
+      // An ambiguous durable dispatch is the one restart outcome the reader must not
+      // retry blindly; it renders with the same "uncertain" tone as an in-process
+      // reconciliation requirement. Everything else is a plain interruption.
+      failureKind:
+        input.disposition.kind === 'reconciliation_required'
+          ? 'reconciliation_required'
+          : 'runtime_error',
       updatedAt: input.timestamp,
       startedAt: input.toolCall.startedAt ?? input.timestamp,
       completedAt: input.timestamp,

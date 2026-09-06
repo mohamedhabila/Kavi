@@ -187,6 +187,32 @@ describe('authorized durable tool effect dispatch', () => {
     });
   });
 
+  it('threads the executor-classified failureKind through the executed result and receipt', async () => {
+    const result = await dispatchAuthorizedToolEffect(
+      writeInput(async () =>
+        failedToolOutcome('Error: path must be a non-empty string', 'invalid_arguments'),
+      ),
+      { now: () => 100 },
+    );
+
+    expect(result).toMatchObject({
+      kind: 'executed',
+      status: 'failed',
+      failureKind: 'invalid_arguments',
+      receipt: { failureKind: 'invalid_arguments' },
+    });
+  });
+
+  it('leaves failureKind absent for a failure the executor did not classify', async () => {
+    const result = await dispatchAuthorizedToolEffect(
+      writeInput(async () => failedToolOutcome('Error: unspecified failure')),
+      { now: () => 100 },
+    );
+
+    expect(result).toMatchObject({ kind: 'executed', status: 'failed' });
+    expect((result as { failureKind?: unknown }).failureKind).toBeUndefined();
+  });
+
   it('hands the executor only the exact persisted claim after authorization', async () => {
     const execute = jest.fn(async () => verifiedWriteResult());
     const input = writeInput(execute);

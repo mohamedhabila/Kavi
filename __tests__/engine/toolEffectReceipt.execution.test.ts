@@ -473,4 +473,165 @@ describe('ToolEffectReceipt code execution truth', () => {
       appendToolEffectReceipt(receipts, { ...first, executionState: 'failed' }, parent),
     ).toThrow(/Conflicting tool effect receipt identity/u);
   });
+
+  it('threads the executor failureKind onto a failed receipt and ignores it on success', async () => {
+    const failed = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-failure-kind',
+      toolName: 'python',
+      argumentsText: '{"code":"await get()","allowNetwork":true}',
+      resultText: JSON.stringify({
+        status: 'failed',
+        isError: true,
+        failureKind: 'execution_failed',
+        executionEffectState: 'none_observed',
+        networkMutationState: 'none_observed',
+        error: 'bad input',
+      }),
+      transportState: 'returned',
+      resultIsError: true,
+      recordedAt: 20,
+      failureKind: 'invalid_arguments',
+    });
+    expect(failed.failureKind).toBe('invalid_arguments');
+
+    const succeeded = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-ignored-kind',
+      toolName: 'python',
+      argumentsText: '{"code":"await get()","allowNetwork":true}',
+      resultText: JSON.stringify({
+        status: 'completed',
+        executionEffectState: 'none_observed',
+        networkMutationState: 'none_observed',
+      }),
+      transportState: 'returned',
+      resultIsError: false,
+      recordedAt: 21,
+      // A success outcome carries no failureKind on ToolRuntimeOutcome, but a
+      // stray value must never leak onto a non-failed receipt.
+      failureKind: 'invalid_arguments',
+    });
+    expect(succeeded.failureKind).toBeUndefined();
+  });
+
+  it('keeps receiptId and integrity verification unaffected by the new failureKind field', async () => {
+    const withoutKind = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-digest-stability',
+      toolName: 'python',
+      argumentsText: '{"code":"await get()","allowNetwork":true}',
+      resultText: JSON.stringify({
+        status: 'failed',
+        isError: true,
+        failureKind: 'execution_failed',
+        executionEffectState: 'none_observed',
+        networkMutationState: 'none_observed',
+        error: 'bad input',
+      }),
+      transportState: 'returned',
+      resultIsError: true,
+      recordedAt: 22,
+    });
+    const withKind = await buildToolEffectReceipt({
+      toolCallId: 'tc-python-digest-stability',
+      toolName: 'python',
+      argumentsText: '{"code":"await get()","allowNetwork":true}',
+      resultText: JSON.stringify({
+        status: 'failed',
+        isError: true,
+        failureKind: 'execution_failed',
+        executionEffectState: 'none_observed',
+        networkMutationState: 'none_observed',
+        error: 'bad input',
+      }),
+      transportState: 'returned',
+      resultIsError: true,
+      recordedAt: 22,
+      failureKind: 'invalid_arguments',
+    });
+
+    expect(withKind.receiptId).toBe(withoutKind.receiptId);
+    expect(await verifyToolEffectReceiptIntegrity(withoutKind)).toBe(true);
+    expect(await verifyToolEffectReceiptIntegrity(withKind)).toBe(true);
+  });
+
+  it('decodes a legacy receipt with no failureKind and a current one with the field', () => {
+    const base = {
+      version: 2 as const,
+      receiptId: `ter_${'a'.repeat(32)}`,
+      toolCallId: 'tc-legacy-receipt',
+      toolName: 'javascript',
+      contractIdentity: {
+        kind: 'code_owned' as const,
+        version: 1 as const,
+        toolName: 'javascript',
+        schemaDigest: `sha256:${'1'.repeat(64)}`,
+        capabilityContractDigest: `sha256:${'2'.repeat(64)}`,
+        workflowContractDigest: `sha256:${'3'.repeat(64)}`,
+        effectContractDigest: `sha256:${'4'.repeat(64)}`,
+        executionPolicyDigest: `sha256:${'5'.repeat(64)}`,
+      },
+      executionRunId: EXECUTION_RUN_ID,
+      transportState: 'returned' as const,
+      effectKind: 'compute.execute' as const,
+      effectState: 'failed' as const,
+      verificationState: 'unverified' as const,
+      requestDigest: `sha256:${'b'.repeat(64)}`,
+      resultDigest: `sha256:${'c'.repeat(64)}`,
+      recordedAt: 1_700_000_000_000,
+    };
+
+    // Round-trip through JSON exactly as the durable store does, to prove the
+    // decoder tolerates rows written before this field existed.
+    const legacy = decodeToolEffectReceipt(JSON.parse(JSON.stringify(base)));
+    expect(legacy).toBeDefined();
+    expect(legacy?.failureKind).toBeUndefined();
+
+    const current = decodeToolEffectReceipt(
+      JSON.parse(JSON.stringify({ ...base, failureKind: 'invalid_arguments' })),
+    );
+    expect(current).toBeDefined();
+    expect(current?.failureKind).toBe('invalid_arguments');
+
+    // A kind outside this build's closed taxonomy (a receipt written by a newer
+    // app, or an empty string) is dropped, not fatal — the field annotates the
+    // outcome and is not part of the receipt's identity. A non-string is malformed.
+    const futureKind = decodeToolEffectReceipt(
+      JSON.parse(JSON.stringify({ ...base, failureKind: 'kind_from_a_newer_build' })),
+    );
+    expect(futureKind).toBeDefined();
+    expect(futureKind?.failureKind).toBeUndefined();
+    expect(decodeToolEffectReceipt({ ...base, failureKind: '' })?.failureKind).toBeUndefined();
+    expect(decodeToolEffectReceipt({ ...base, failureKind: 123 })).toBeUndefined();
+  });
+
+  it('does not treat a missing failureKind on a stored copy as a conflicting receipt identity', () => {
+    const base = {
+      version: 2 as const,
+      receiptId: `ter_${'d'.repeat(32)}`,
+      toolCallId: 'tc-annotation-only',
+      toolName: 'javascript',
+      contractIdentity: {
+        kind: 'code_owned' as const,
+        version: 1 as const,
+        toolName: 'javascript',
+        schemaDigest: `sha256:${'1'.repeat(64)}`,
+        capabilityContractDigest: `sha256:${'2'.repeat(64)}`,
+        workflowContractDigest: `sha256:${'3'.repeat(64)}`,
+        effectContractDigest: `sha256:${'4'.repeat(64)}`,
+        executionPolicyDigest: `sha256:${'5'.repeat(64)}`,
+      },
+      executionRunId: EXECUTION_RUN_ID,
+      transportState: 'returned' as const,
+      effectKind: 'compute.execute' as const,
+      effectState: 'failed' as const,
+      verificationState: 'unverified' as const,
+      requestDigest: `sha256:${'b'.repeat(64)}`,
+      resultDigest: `sha256:${'c'.repeat(64)}`,
+      recordedAt: 1_700_000_000_000,
+    };
+    const stored = decodeToolEffectReceipt(base);
+    const current = decodeToolEffectReceipt({ ...base, failureKind: 'invalid_arguments' });
+    expect(stored && current).toBeTruthy();
+    const parent = { toolCallId: base.toolCallId, toolName: base.toolName };
+    expect(() => appendToolEffectReceipt([stored!], current!, parent)).not.toThrow();
+  });
 });

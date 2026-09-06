@@ -37,7 +37,7 @@ function completePreflightFailure(params: {
     | 'workflow_guard'
     | 'tool_filter'
     | 'unknown_tool'
-    | 'tool_error';
+    | 'invalid_arguments';
   preflightBlockedKind?: PreflightBlockedKind;
   notifyBlocked?: boolean;
   notifyStart?: boolean;
@@ -254,7 +254,7 @@ export function resolveToolCallPreflight(
       effectiveToolCall: canonicalToolCall,
       idPrefix: params.idPrefixes.error,
       content: schemaValidationError,
-      failureKind: 'tool_error',
+      failureKind: 'invalid_arguments',
       preflightBlockedKind: 'schema_validation',
       notifyStart: true,
       notifyComplete: true,

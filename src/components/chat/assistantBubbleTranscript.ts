@@ -131,7 +131,10 @@ export function buildAssistantBubbleTranscriptMarkdown(params: {
       `- ${params.t('assistantExport.timestampLine', { timestamp: formatTimestamp(segment.timestamp) })}`,
     );
 
-    const reasoning = getRenderableThinkingText(segment.reasoning);
+    const reasoning = getRenderableThinkingText(
+      segment.reasoning,
+      segment.isSyntheticReasoningPlaceholder,
+    );
     if (reasoning) {
       lines.push('');
       lines.push(`### ${params.t('assistantExport.thinkingHeading')}`);

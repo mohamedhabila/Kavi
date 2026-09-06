@@ -1,3 +1,5 @@
+import type { ToolCallFailureKind } from './message';
+
 export const TOOL_EFFECT_TRANSPORT_STATES = ['returned', 'rejected', 'threw'] as const;
 export type ToolEffectTransportState = (typeof TOOL_EFFECT_TRANSPORT_STATES)[number];
 
@@ -131,6 +133,14 @@ export interface ToolEffectReceipt {
   readonly resource?: ToolEffectResourceRef;
   readonly operationHandle?: ToolEffectOperationHandle;
   readonly recordedAt: number;
+  /**
+   * Structured failure classification threaded unchanged from the executor's
+   * `ToolRuntimeOutcome.failureKind` at the point the failure was known.
+   * Absent on receipts written before this field existed, or when the
+   * executor's outcome carried no classification (e.g. success, or a
+   * transport-level throw the dispatcher classified generically).
+   */
+  readonly failureKind?: ToolCallFailureKind;
 }
 
 export interface ToolEffectResultOutcome {

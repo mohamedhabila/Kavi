@@ -271,6 +271,34 @@ describe('production tool lifecycle durable effect wiring', () => {
     ).toEqual({ run_status: 'failed', effect_status: 'failed' });
   });
 
+  // Regression: the durable dispatch boundary used to flatten the executor's
+  // outcome to {status, result}, so a failed dispatch always surfaced a
+  // hardcoded 'internal' failureKind. It must thread the executor's own kind.
+  it('surfaces the executor-classified failureKind through the durable dispatch boundary', async () => {
+    mockedNeedsApproval.mockReturnValue(false);
+    mockedExecuteToolInner.mockResolvedValue(
+      failedToolOutcome(JSON.stringify({ status: 'rejected' }), 'invalid_arguments'),
+    );
+    const captureEffectReceipt = jest.fn();
+    const result = await executeTool(
+      'memory_remember',
+      JSON.stringify({ subject: '', predicate: 'preferred_channel', value: 'Signal', scope: 'global' }),
+      'conversation-1',
+      {
+        toolCallId: 'tool-call-memory-invalid-arguments',
+        executionRunId: 'execution-run-memory-invalid-arguments',
+        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
+        captureEffectReceipt,
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(result.failureKind).toBe('invalid_arguments');
+    expect(captureEffectReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({ failureKind: 'invalid_arguments' }),
+    );
+  });
+
   it('keeps a scheduled-task precondition rejection repairable without reconciliation', async () => {
     mockedNeedsApproval.mockReturnValue(false);
     mockedExecuteToolInner.mockResolvedValue(
