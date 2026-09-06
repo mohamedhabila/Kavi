@@ -1821,6 +1821,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     failed: '附件分析失败',
     unsupported: '不支持的文件类型',
     noVisionModel: '无可用的视觉模型来分析图片',
+    documentUnsupportedProvider: '此提供商无法读取 PDF“{name}”；仅将文件名和大小分享给了模型。',
+    documentExceedsSizeLimit: 'PDF“{name}”超过了此提供商 {limit} 的限制；仅将文件名和大小分享给了模型。',
   },
   localModels: {
     downloadRequiredTitle: '下载所选模型',

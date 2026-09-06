@@ -2000,6 +2000,10 @@ export const es: TranslationMap = mergeTranslations(en, {
     failed: 'Error al analizar adjunto',
     unsupported: 'Tipo de archivo no compatible',
     noVisionModel: 'Sin modelo de visión disponible para analizar imágenes',
+    documentUnsupportedProvider:
+      'Este proveedor no puede leer el PDF “{name}”; solo se compartieron su nombre y tamaño con el modelo.',
+    documentExceedsSizeLimit:
+      'El PDF “{name}” supera el límite de {limit} de este proveedor; solo se compartieron su nombre y tamaño con el modelo.',
   },
   localModels: {
     downloadRequiredTitle: 'Descarga el modelo seleccionado',

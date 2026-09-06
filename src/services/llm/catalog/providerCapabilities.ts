@@ -1,5 +1,5 @@
 import type { LlmProviderConfig } from '../../../types/provider';
-import { resolveProviderRouting } from './providerProtocols';
+import { resolveProviderRouting, resolveProviderTransport, type ProviderTransport } from './providerProtocols';
 import { normalizeHostedModelId, resolveModelHostedFamily } from './providerFamilies';
 
 const GEMINI_STRUCTURED_OUTPUT_WITH_TOOLS_PATTERNS = [
@@ -211,6 +211,44 @@ export function supportsGeminiStructuredOutputWithTools(
   }
 
   return GEMINI_STRUCTURED_OUTPUT_WITH_TOOLS_PATTERNS.some((pattern) => pattern.test(model));
+}
+
+/**
+ * Transports whose request shape has a provider-native document content block: Anthropic's
+ * `document` block, Gemini's `inlineData`, and OpenAI's Responses `input_file`. OpenAI Chat
+ * Completions (transport `'compatible'`), on-device runtimes (`'local'`), and any other
+ * OpenAI-compatible provider have no such block — a document sent there would either be
+ * silently ignored by the wire format or rejected by the endpoint, so they're excluded even
+ * when the model's own `fileInput` flag is true.
+ */
+const DOCUMENT_INPUT_TRANSPORTS: ReadonlySet<ProviderTransport> = new Set(['anthropic', 'gemini', 'openai']);
+
+/**
+ * True when `model` on `provider` can receive a document (PDF) attachment as a provider-native
+ * content block rather than only a filename/size summary. Mirrors the `vision` capability gate
+ * used for images (`provider.modelCapabilities?.[model]?.vision === true`), reusing the
+ * already-discovered `fileInput` flag (see `modelDiscovery.ts`) plus a transport check, since
+ * `fileInput` alone doesn't distinguish "this model understands documents" from "this specific
+ * wire protocol has a document content block to carry one in".
+ */
+export function supportsDocumentInput(
+  provider: Pick<
+    LlmProviderConfig,
+    | 'kind'
+    | 'local'
+    | 'name'
+    | 'baseUrl'
+    | 'protocol'
+    | 'providerFamily'
+    | 'capabilityHints'
+    | 'modelCapabilities'
+  >,
+  model: string,
+): boolean {
+  if (provider.modelCapabilities?.[model]?.fileInput !== true) {
+    return false;
+  }
+  return DOCUMENT_INPUT_TRANSPORTS.has(resolveProviderTransport(provider));
 }
 
 export function resolveProviderCapabilities(

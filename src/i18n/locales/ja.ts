@@ -1883,6 +1883,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
     failed: '添付ファイルの分析に失敗',
     unsupported: 'サポートされていないファイルタイプ',
     noVisionModel: '画像分析用のビジョンモデルが利用できません',
+    documentUnsupportedProvider:
+      'このプロバイダーは PDF「{name}」を読み取れません。ファイル名とサイズのみがモデルに共有されました。',
+    documentExceedsSizeLimit:
+      'PDF「{name}」はこのプロバイダーの上限（{limit}）を超えています。ファイル名とサイズのみがモデルに共有されました。',
   },
   localModels: {
     downloadRequiredTitle: '選択したモデルをダウンロード',

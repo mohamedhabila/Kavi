@@ -136,7 +136,7 @@ export function mergeAnthropicAssistantContent(
     : mergedBlocks;
 }
 
-function parseAnthropicImageDataUrl(value: unknown): { mediaType: string; data: string } | null {
+function parseAnthropicDataUrl(value: unknown): { mediaType: string; data: string } | null {
   const url =
     typeof value === 'string'
       ? value
@@ -153,15 +153,29 @@ function parseAnthropicImageDataUrl(value: unknown): { mediaType: string; data: 
     return null;
   }
 
-  const mediaType = match[1].trim().toLowerCase();
-  if (!mediaType.startsWith('image/')) {
-    return null;
-  }
-
   return {
-    mediaType,
+    mediaType: match[1].trim().toLowerCase(),
     data: match[2].replace(/\s+/g, ''),
   };
+}
+
+function parseAnthropicImageDataUrl(value: unknown): { mediaType: string; data: string } | null {
+  const parsed = parseAnthropicDataUrl(value);
+  return parsed && parsed.mediaType.startsWith('image/') ? parsed : null;
+}
+
+const ANTHROPIC_DOCUMENT_MEDIA_TYPE = 'application/pdf';
+
+/**
+ * Parses the generic `{ type: 'file' | 'input_file', file_data: <data URI> }` content part
+ * (the same shape `orchestratorMessageFormatting.ts` builds for a PDF attachment, and the one
+ * the OpenAI Responses and Gemini adapters already accept) into Anthropic's PDF `document`
+ * source. Only `application/pdf` is recognized — this project's document content-block support
+ * is PDF-only; anything else falls through to the caller's existing text/summary handling.
+ */
+function parseAnthropicDocumentDataUrl(value: unknown): { mediaType: string; data: string } | null {
+  const parsed = parseAnthropicDataUrl(value);
+  return parsed && parsed.mediaType === ANTHROPIC_DOCUMENT_MEDIA_TYPE ? parsed : null;
 }
 
 export function normalizeAnthropicAssistantBlock(block: unknown): Record<string, any> | null {
@@ -279,6 +293,23 @@ export function normalizeAnthropicUserContent(content: unknown): string | any[] 
 
       blocks.push({
         type: 'image',
+        source: {
+          type: 'base64',
+          media_type: parsed.mediaType,
+          data: parsed.data,
+        },
+      });
+      continue;
+    }
+
+    if (block.type === 'file' || block.type === 'input_file') {
+      const parsed = parseAnthropicDocumentDataUrl(block.file_data ?? block.fileData);
+      if (!parsed) {
+        continue;
+      }
+
+      blocks.push({
+        type: 'document',
         source: {
           type: 'base64',
           media_type: parsed.mediaType,

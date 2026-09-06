@@ -112,6 +112,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
 
   const onDeviceProvider = isOnDeviceLlmProvider(params.activeProvider);
   const preparedRequestBudget = await prepareAgentTurnRequestBudget({
+    activeProvider: params.activeProvider,
     compactionEngine: params.compactionEngine,
     ...(params.compactionContext ? { compactionContext: params.compactionContext } : {}),
     onDeviceProvider,

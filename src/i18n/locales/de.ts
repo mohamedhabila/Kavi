@@ -1965,6 +1965,10 @@ export const de: TranslationMap = mergeTranslations(en, {
     failed: 'Anhang-Analyse fehlgeschlagen',
     unsupported: 'Nicht unterstützter Dateityp',
     noVisionModel: 'Kein Vision-Modell für Bildanalyse verfügbar',
+    documentUnsupportedProvider:
+      'Dieser Anbieter kann das PDF „{name}“ nicht lesen; dem Modell wurden nur Name und Größe übermittelt.',
+    documentExceedsSizeLimit:
+      'Das PDF „{name}“ überschreitet das {limit}-Limit dieses Anbieters; dem Modell wurden nur Name und Größe übermittelt.',
   },
   localModels: {
     downloadRequiredTitle: 'Ausgewähltes Modell herunterladen',

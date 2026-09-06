@@ -2007,6 +2007,10 @@ export const fr: TranslationMap = mergeTranslations(en, {
     failed: "Échec de l'analyse du fichier joint",
     unsupported: 'Type de fichier non pris en charge',
     noVisionModel: 'Aucun modèle vision disponible pour analyser les images',
+    documentUnsupportedProvider:
+      'Ce fournisseur ne peut pas lire le PDF « {name} » ; seuls son nom et sa taille ont été transmis au modèle.',
+    documentExceedsSizeLimit:
+      'Le PDF « {name} » dépasse la limite de {limit} de ce fournisseur ; seuls son nom et sa taille ont été transmis au modèle.',
   },
   localModels: {
     downloadRequiredTitle: 'Télécharger le modèle sélectionné',

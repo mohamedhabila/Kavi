@@ -2059,6 +2059,10 @@ export const ar: TranslationMap = mergeTranslations(en, {
     failed: 'فشل تحليل المرفق',
     unsupported: 'نوع مرفق غير مدعوم',
     noVisionModel: 'لا يوجد نموذج يدعم الرؤية لتحليل الصور',
+    documentUnsupportedProvider:
+      'لا يمكن لهذا المزوّد قراءة ملف PDF ‏"{name}"‏؛ تمت مشاركة الاسم والحجم فقط مع النموذج.',
+    documentExceedsSizeLimit:
+      'ملف PDF ‏"{name}"‏ أكبر من الحد المسموح به لدى هذا المزوّد ({limit})؛ تمت مشاركة الاسم والحجم فقط مع النموذج.',
   },
   localModels: {
     downloadRequiredTitle: 'نزّل النموذج المحدد',

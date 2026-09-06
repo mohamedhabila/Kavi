@@ -1962,6 +1962,10 @@ export const en: TranslationMap = {
     failed: 'Failed to analyze attachment',
     unsupported: 'Unsupported attachment type',
     noVisionModel: 'No vision-capable model available for image analysis',
+    documentUnsupportedProvider:
+      'This provider can’t read the PDF “{name}”; only its name and size were shared with the model.',
+    documentExceedsSizeLimit:
+      'The PDF “{name}” is larger than this provider’s {limit} limit; only its name and size were shared with the model.',
   },
 
   // ── Onboarding ─────────────────────────────────────────────────────────

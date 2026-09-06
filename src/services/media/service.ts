@@ -11,7 +11,7 @@ import type { Attachment } from '../../types/attachment';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { MediaUnderstandingOutput } from './types';
 import { formatMediaUnderstandingBody } from './format';
-import { buildImageAttachmentDataUri } from './attachmentPayloads';
+import { buildImageAttachmentDataUri, isPdfAttachment } from './attachmentPayloads';
 import { LlmService } from '../llm/LlmService';
 import { transcribeAudio } from '../voice/voice';
 import {
@@ -20,6 +20,10 @@ import {
 } from '../../utils/messageAttachments';
 import { i18n } from '../../i18n/manager';
 import { getLocaleLanguageName } from '../../i18n/localeBcp47';
+import {
+  formatDocumentSizeLimitMB,
+  resolveDocumentInputDecision,
+} from '../llm/catalog/documentCapabilities';
 
 export interface MediaUnderstandingOptions {
   enabled: boolean;
@@ -153,10 +157,6 @@ function resolveImageMimeType(attachment: Attachment, mime: string): string {
   return IMAGE_MIME_BY_EXTENSION[getAttachmentExtension(attachment)] || 'image/jpeg';
 }
 
-function isPdfAttachment(attachment: Attachment, mime: string): boolean {
-  return mime === 'application/pdf' || getAttachmentExtension(attachment) === 'pdf';
-}
-
 function isTextDocumentAttachment(attachment: Attachment, mime: string): boolean {
   if (mime.startsWith('text/')) {
     return true;
@@ -278,7 +278,7 @@ async function processAttachment(
     return transcribeAttachment(attachment, index);
   }
 
-  return extractDocumentAttachment(attachment, index, mime);
+  return extractDocumentAttachment(attachment, index, mime, options);
 }
 
 function hasVisionCapability(provider: LlmProviderConfig, model: string): boolean {
@@ -422,11 +422,23 @@ async function transcribeAttachment(
   }
 }
 
+/**
+ * Runs on any attachment that isn't image or audio.
+ *
+ * PDFs are handled by `resolveDocumentInputDecision`, the same decision
+ * `orchestratorMessageFormatting.ts` makes when it builds the actual outgoing content block:
+ * when the active provider/model can take the PDF as a provider-native document block, this
+ * returns `null` so no redundant text summary is added — mirroring `describeImage`'s early
+ * return once the raw bytes already reach the model directly. When it can't (unsupported
+ * provider/protocol, or the file is over that provider's documented size limit), this
+ * produces a localized notice instead of embedding the raw bytes anyway.
+ */
 async function extractDocumentAttachment(
   attachment: Attachment,
   index: number,
   mime: string,
-): Promise<MediaUnderstandingOutput> {
+  options: MediaUnderstandingOptions,
+): Promise<MediaUnderstandingOutput | null> {
   const descriptor = describeAttachment(attachment);
 
   if (isTextDocumentAttachment(attachment, mime)) {
@@ -450,11 +462,31 @@ async function extractDocumentAttachment(
     };
   }
 
-  if (isPdfAttachment(attachment, mime)) {
+  if (isPdfAttachment(attachment)) {
+    const decision = resolveDocumentInputDecision({
+      provider: options.provider,
+      model: options.model,
+      sizeBytes: attachment.size,
+    });
+
+    if (decision.supported) {
+      return null;
+    }
+
+    const name = attachment.name?.trim() || descriptor;
+    const text =
+      decision.refusalReason === 'exceeds_size_limit' && decision.maxBytes !== undefined
+        ? i18n.t('mediaUnderstanding.documentExceedsSizeLimit', {
+            name,
+            limit: formatDocumentSizeLimitMB(decision.maxBytes),
+          })
+        : i18n.t('mediaUnderstanding.documentUnsupportedProvider', { name });
+
     return {
       kind: 'document.extraction',
       attachmentIndex: index,
-      text: `Attached PDF: ${descriptor}\n\nDirect text extraction is limited for local PDFs on mobile, so only file metadata is available automatically.`,
+      text,
+      documentInputRefusalReason: decision.refusalReason,
     };
   }
 

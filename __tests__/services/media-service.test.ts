@@ -26,7 +26,9 @@ jest.mock('../../src/services/voice/voice', () => ({
 }));
 
 const makeProvider = (
-  overrides: Partial<Pick<LlmProviderConfig, 'model' | 'availableModels' | 'modelCapabilities'>> = {},
+  overrides: Partial<
+    Pick<LlmProviderConfig, 'model' | 'availableModels' | 'modelCapabilities' | 'protocol'>
+  > = {},
 ): LlmProviderConfig => ({
   id: 'test',
   name: 'Test Provider',
@@ -385,25 +387,65 @@ describe('runMediaUnderstanding', () => {
     expect(result.enrichedBody).toContain('Ship the fix today.');
   });
 
-  it('summarizes pdf attachments instead of dropping them', async () => {
-    const result = await runMediaUnderstanding(
-      'What is this?',
-      [
-        {
-          id: 'f1',
-          type: 'file',
-          name: 'doc.pdf',
-          mimeType: 'application/pdf',
-          uri: 'file:///doc.pdf',
-          size: 500,
-        },
-      ],
-      { enabled: true, provider: makeProvider(), model: 'chat-model' },
-    );
+  describe('pdf attachments', () => {
+    const makePdfAttachment = (overrides: Partial<Attachment> = {}): Attachment => ({
+      id: 'f1',
+      type: 'file',
+      name: 'doc.pdf',
+      mimeType: 'application/pdf',
+      uri: 'file:///doc.pdf',
+      size: 500,
+      ...overrides,
+    });
 
-    expect(result.processedCount).toBe(1);
-    expect(result.enrichedBody).toContain('[Document Attachment #1]');
-    expect(result.enrichedBody).toContain('Attached PDF: doc.pdf');
+    it('notes the provider cannot read PDFs, localized, instead of dropping the attachment', async () => {
+      const result = await runMediaUnderstanding('What is this?', [makePdfAttachment()], {
+        enabled: true,
+        provider: makeProvider(),
+        model: 'chat-model',
+      });
+
+      expect(result.processedCount).toBe(1);
+      expect(result.enrichedBody).toContain('[Document Attachment #1]');
+      expect(result.enrichedBody).toContain(
+        i18n.t('mediaUnderstanding.documentUnsupportedProvider', { name: 'doc.pdf' }),
+      );
+    });
+
+    it('skips enrichment entirely once the active model can read the PDF natively', async () => {
+      const provider = makeProvider({
+        protocol: 'anthropic-messages',
+        modelCapabilities: { 'chat-model': { vision: false, tools: true, fileInput: true } },
+      });
+
+      const result = await runMediaUnderstanding('What is this?', [makePdfAttachment()], {
+        enabled: true,
+        provider,
+        model: 'chat-model',
+      });
+
+      expect(result.processedCount).toBe(0);
+      expect(result.enrichedBody).toBe('What is this?');
+      expect(result.enrichedBody).not.toContain('<media_context>');
+    });
+
+    it('refuses an oversized PDF with a localized size-limit notice', async () => {
+      const provider = makeProvider({
+        protocol: 'anthropic-messages',
+        modelCapabilities: { 'chat-model': { vision: false, tools: true, fileInput: true } },
+      });
+
+      const result = await runMediaUnderstanding(
+        'What is this?',
+        [makePdfAttachment({ size: 40 * 1024 * 1024 })],
+        { enabled: true, provider, model: 'chat-model' },
+      );
+
+      expect(result.processedCount).toBe(1);
+      expect(result.enrichedBody).toContain(
+        i18n.t('mediaUnderstanding.documentExceedsSizeLimit', { name: 'doc.pdf', limit: '32 MB' }),
+      );
+    });
   });
 
   it('handles transcription errors gracefully', async () => {

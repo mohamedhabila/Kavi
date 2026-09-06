@@ -1984,6 +1984,10 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     failed: 'Falha ao analisar anexo',
     unsupported: 'Tipo de arquivo não suportado',
     noVisionModel: 'Nenhum modelo de visão disponível para analisar imagens',
+    documentUnsupportedProvider:
+      'Este provedor não consegue ler o PDF “{name}”; apenas o nome e o tamanho foram compartilhados com o modelo.',
+    documentExceedsSizeLimit:
+      'O PDF “{name}” é maior que o limite de {limit} deste provedor; apenas o nome e o tamanho foram compartilhados com o modelo.',
   },
   localModels: {
     downloadRequiredTitle: 'Baixe o modelo selecionado',

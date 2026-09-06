@@ -1,10 +1,21 @@
 import { extractGeminiToolCallThoughtSignature } from '../services/llm/core/reasoningExtraction';
 import { borrowThoughtSignatureFromReplayParts } from '../services/llm/providers/gemini/contentParts';
-import { buildImageAttachmentDataUri } from '../services/media/attachmentPayloads';
+import {
+  buildDocumentAttachmentDataUri,
+  buildImageAttachmentDataUri,
+  isPdfAttachment,
+} from '../services/media/attachmentPayloads';
+import {
+  formatDocumentSizeLimitMB,
+  resolveDocumentInputDecision,
+  type DocumentInputDecision,
+} from '../services/llm/catalog/documentCapabilities';
 import { filterModelVisibleAttachments } from '../utils/messageAttachments';
+import { i18n } from '../i18n/manager';
 import { normalizeToolName } from './tools/index';
 import { Attachment } from '../types/attachment';
 import { Message, MessageProviderReplay, ToolCall } from '../types/message';
+import type { LlmProviderConfig } from '../types/provider';
 
 type ApiMessage = {
   role: string;
@@ -13,6 +24,18 @@ type ApiMessage = {
   name?: string;
   providerReplay?: MessageProviderReplay;
 };
+
+/**
+ * The active model/provider for this request, used only to gate whether a PDF attachment can
+ * be sent as a provider-native document content block (see `resolveDocumentInputDecision`).
+ * Optional and defaulting to "no document capability" so every existing caller that only cares
+ * about text/tool-call formatting keeps working unchanged; the real request path threads this
+ * through so the gate is actually enforced.
+ */
+export interface FormatMessagesForApiContext {
+  provider: LlmProviderConfig;
+  model: string;
+}
 
 function formatAttachmentPromptSize(size: number): string | null {
   if (!Number.isFinite(size) || size <= 0) {
@@ -44,6 +67,63 @@ function buildAttachmentPromptLine(attachment: Attachment): string {
     attachment.workspacePath?.trim() ? `workspace: ${attachment.workspacePath.trim()}` : null,
   ].filter((value): value is string => Boolean(value));
   return metadata.length > 0 ? `${label} (${metadata.join(', ')})` : label;
+}
+
+/**
+ * Localized "this provider can't read the document" text part. `decision` carries the exact
+ * refusal reason (unsupported provider/protocol vs. over the provider's size limit) when a
+ * decision was actually computed; `undefined` means no capability context was available at
+ * all (a caller that didn't thread one through `formatMessagesForApi`'s `context` param), in
+ * which case the generic "unsupported" copy is the safe default — never embed raw PDF bytes
+ * without first confirming the target can take them.
+ */
+function buildPdfUnsupportedTextPart(
+  attachment: Attachment,
+  decision: DocumentInputDecision | undefined,
+): Record<string, any> {
+  const name = attachment.name?.trim() || buildAttachmentPromptLine(attachment);
+  const text =
+    decision?.refusalReason === 'exceeds_size_limit' && decision.maxBytes !== undefined
+      ? i18n.t('mediaUnderstanding.documentExceedsSizeLimit', {
+          name,
+          limit: formatDocumentSizeLimitMB(decision.maxBytes),
+        })
+      : i18n.t('mediaUnderstanding.documentUnsupportedProvider', { name });
+  return { type: 'text', text };
+}
+
+/**
+ * Builds the generic `{ type: 'file', file_data, filename }` content part for a PDF attachment
+ * when `context.provider`/`context.model` support taking it as a provider-native document
+ * block and it fits inside that provider's documented size limit (see
+ * `resolveDocumentInputDecision`) — the Anthropic, Gemini, and OpenAI Responses adapters each
+ * convert this generic shape into their own request format (see `contentBlocks.ts`,
+ * `contentParts.ts`, `content.ts` respectively). Falls back to a localized text notice when
+ * the document isn't supported, over the size limit, or the file couldn't be read.
+ */
+async function buildPdfAttachmentContentPart(
+  attachment: Attachment,
+  context: FormatMessagesForApiContext,
+): Promise<Record<string, any>> {
+  const decision = resolveDocumentInputDecision({
+    provider: context.provider,
+    model: context.model,
+    sizeBytes: attachment.size,
+  });
+
+  if (!decision.supported) {
+    return buildPdfUnsupportedTextPart(attachment, decision);
+  }
+
+  const dataUri = await buildDocumentAttachmentDataUri(attachment);
+  if (!dataUri) {
+    return buildPdfUnsupportedTextPart(attachment, {
+      supported: false,
+      refusalReason: 'unsupported_provider',
+    });
+  }
+
+  return { type: 'file', file_data: dataUri, filename: attachment.name };
 }
 
 function isPlainRecordValue(value: unknown): value is Record<string, any> {
@@ -233,6 +313,7 @@ export function canContinueAnthropicThinking(messages: Message[]): boolean {
 export async function formatMessagesForApi(
   systemPrompt: string,
   messages: Message[],
+  context?: FormatMessagesForApiContext,
 ): Promise<ApiMessage[]> {
   const apiMessages: ApiMessage[] = [{ role: 'system', content: systemPrompt }];
 
@@ -309,6 +390,14 @@ export async function formatMessagesForApi(
             type: 'text',
             text: `Attached image: ${buildAttachmentPromptLine(attachment)}`,
           });
+          continue;
+        }
+
+        if (isPdfAttachment(attachment)) {
+          const documentPart = context
+            ? await buildPdfAttachmentContentPart(attachment, context)
+            : undefined;
+          parts.push(documentPart ?? buildPdfUnsupportedTextPart(attachment, undefined));
           continue;
         }
 

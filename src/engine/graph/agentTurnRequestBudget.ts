@@ -10,6 +10,7 @@ import type {
 import { estimateTokens, getWorkingContextWindow } from '../../services/context/tokenCounter';
 import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { Message } from '../../types/message';
+import type { LlmProviderConfig } from '../../types/provider';
 import type { ToolDefinition } from '../../types/tool';
 import type { UsageTokenBuckets } from '../../types/usage';
 import { formatMessagesForApi } from '../orchestratorMessageFormatting';
@@ -27,6 +28,10 @@ type BudgetCompactionEngine = Pick<ContextEngine, 'compact'> | null;
 export type AgentTurnCompactionEngine = BudgetCompactionEngine;
 
 export interface PrepareAgentTurnRequestBudgetParams {
+  /** Threaded through to `formatMessagesForApi` so a PDF attachment's document-capability
+   *  gate (see `documentCapabilities.ts`) is evaluated against the model actually serving
+   *  this turn. Omit only where no request will actually be sent (e.g. a pure estimate). */
+  activeProvider?: LlmProviderConfig;
   compactionEngine: BudgetCompactionEngine;
   conversationId: string;
   enrichedSystemPrompt: string;
@@ -131,6 +136,7 @@ export async function compactAgentTurnWorkingMessages(
 }
 
 async function previewRequestBudget(params: {
+  activeProvider?: LlmProviderConfig;
   enrichedSystemPrompt: string;
   candidateMessages: Message[];
   onDeviceProvider?: boolean;
@@ -142,6 +148,9 @@ async function previewRequestBudget(params: {
   const candidateApiMessages = await formatMessagesForApi(
     params.enrichedSystemPrompt,
     params.candidateMessages,
+    params.activeProvider
+      ? { provider: params.activeProvider, model: params.requestModel }
+      : undefined,
   );
   const nonSystemCandidateApiMessages =
     candidateApiMessages[0]?.role === 'system'
@@ -257,6 +266,7 @@ export async function prepareAgentTurnRequestBudget(
 
   let modelVisibleMessages = sanitizeModelVisibleWorkingMessages(workingMessages);
   let budgetPreview = await previewRequestBudget({
+    activeProvider: params.activeProvider,
     enrichedSystemPrompt: params.enrichedSystemPrompt,
     candidateMessages: modelVisibleMessages,
     onDeviceProvider: params.onDeviceProvider === true,
@@ -295,6 +305,7 @@ export async function prepareAgentTurnRequestBudget(
       workingMessages = repairModelVisibleToolResultTranscript(budgetCompaction.messages);
       modelVisibleMessages = sanitizeModelVisibleWorkingMessages(workingMessages);
       budgetPreview = await previewRequestBudget({
+        activeProvider: params.activeProvider,
         enrichedSystemPrompt: params.enrichedSystemPrompt,
         candidateMessages: modelVisibleMessages,
         onDeviceProvider: params.onDeviceProvider === true,
@@ -314,6 +325,7 @@ export async function prepareAgentTurnRequestBudget(
       },
     );
     const placeholderCompactionPreview = await previewRequestBudget({
+      activeProvider: params.activeProvider,
       enrichedSystemPrompt: params.enrichedSystemPrompt,
       candidateMessages: placeholderCompactedModelVisibleMessages,
       onDeviceProvider: params.onDeviceProvider === true,

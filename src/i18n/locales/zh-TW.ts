@@ -1819,6 +1819,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     failed: '附件分析失敗',
     unsupported: '不支援的檔案類型',
     noVisionModel: '無可用的視覺模型來分析圖片',
+    documentUnsupportedProvider: '此供應商無法讀取 PDF「{name}」；僅將檔名和大小分享給模型。',
+    documentExceedsSizeLimit: 'PDF「{name}」超過此供應商 {limit} 的限制；僅將檔名和大小分享給模型。',
   },
   localModels: {
     downloadRequiredTitle: '下載所選模型',
