@@ -1,8 +1,9 @@
-import { ChevronRight, Clock3, Mic } from 'lucide-react-native';
+import { Clock3, Mic } from 'lucide-react-native';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 
 import type { AppPalette } from '../../theme/useAppTheme';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -41,7 +42,7 @@ export const SettingsNotificationsVoiceSection: React.FC<
         <Text style={styles.switchLabel}>{t('nav.voice')}</Text>
         <Text style={styles.featureHint}>{t('settings.notificationsVoice.voiceHint')}</Text>
       </View>
-      <ChevronRight size={18} color={colors.textTertiary} />
+      <ForwardChevronIcon size={18} color={colors.textTertiary} />
     </TouchableOpacity>
 
     <TouchableOpacity
@@ -57,7 +58,7 @@ export const SettingsNotificationsVoiceSection: React.FC<
         <Text style={styles.switchLabel}>{t('scheduler.title')}</Text>
         <Text style={styles.featureHint}>{t('settings.notificationsVoice.automationHint')}</Text>
       </View>
-      <ChevronRight size={18} color={colors.textTertiary} />
+      <ForwardChevronIcon size={18} color={colors.textTertiary} />
     </TouchableOpacity>
   </View>
 );

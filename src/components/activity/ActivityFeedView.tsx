@@ -3,7 +3,6 @@ import { FlatList, Platform, ScrollView, Text, TouchableOpacity, View } from 're
 import {
   AlarmClock,
   Bot,
-  ChevronRight,
   FileText,
   ListTree,
   ShieldCheck,
@@ -21,6 +20,7 @@ import {
   type ActivityItemStatus,
 } from '../../services/activity/activityFeed';
 import { createActivityFeedStyles } from './ActivityFeed.styles';
+import { ForwardChevronIcon } from '../navigation/DirectionalIcons';
 
 interface ActivityFeedViewProps {
   filter: ActivityFilter;
@@ -299,7 +299,7 @@ export const ActivityFeedView: React.FC<ActivityFeedViewProps> = ({
                     </Text>
                   ) : null}
                 </View>
-                <ChevronRight color={colors.textTertiary} size={18} style={styles.rowChevron} />
+                <ForwardChevronIcon color={colors.textTertiary} size={18} style={styles.rowChevron} />
               </TouchableOpacity>
               {artifactPath ? (
                 <TouchableOpacity
@@ -354,7 +354,7 @@ export const ActivityFeedView: React.FC<ActivityFeedViewProps> = ({
               <Text style={styles.advancedTitle}>{t('activity.advancedTitle')}</Text>
               <Text style={styles.advancedHint}>{t('activity.advancedHint')}</Text>
             </View>
-            <ChevronRight size={18} color={colors.textTertiary} />
+            <ForwardChevronIcon size={18} color={colors.textTertiary} />
           </TouchableOpacity>
         }
       />

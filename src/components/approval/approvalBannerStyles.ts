@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { I18nManager, StyleSheet } from 'react-native';
 import type { AppPalette } from '../../theme/useAppTheme';
 
 export const createApprovalBannerStyles = (colors: AppPalette) =>
@@ -75,7 +75,10 @@ export const createApprovalBannerStyles = (colors: AppPalette) =>
       color: colors.textSecondary,
       flex: 1,
       fontSize: 12,
-      textAlign: 'right',
+      // Not `textAlign: 'auto'`: this label's own script (a digits-and-units
+      // countdown) doesn't reliably signal layout direction, and the intent
+      // is "trailing edge of this row", which `auto` cannot express.
+      textAlign: I18nManager.isRTL ? 'left' : 'right',
     },
     detailPanel: {
       backgroundColor: colors.surfaceAlt,

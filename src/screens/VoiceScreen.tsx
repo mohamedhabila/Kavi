@@ -8,7 +8,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import {
   AlertCircle,
-  ArrowLeft,
   Keyboard,
   Mic,
   PauseCircle,
@@ -36,6 +35,7 @@ import { emitVoiceEvent } from '../services/events/bus';
 import { useBackToChat } from '../navigation/useBackToChat';
 import { useChatStore } from '../store/useChatStore';
 import { createVoiceScreenStyles } from './VoiceScreen.styles';
+import { BackIcon } from '../components/navigation/DirectionalIcons';
 
 const defaultConfig: TalkModeConfig = {
   // System speech keeps assistant replies on-device by default. Recorded audio
@@ -390,7 +390,7 @@ export const VoiceScreen: React.FC = () => {
           style={styles.headerAction}
           testID="voice-back-button"
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('voice.title')}</Text>
         <View style={styles.headerAction} />

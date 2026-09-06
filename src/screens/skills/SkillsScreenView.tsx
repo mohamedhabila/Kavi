@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, FlatList, Text, TextInput, View } from 'react-native';
-import { ArrowLeft, Plus, Puzzle, Search } from 'lucide-react-native';
+import { Plus, Puzzle, Search } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { SkillEntry } from '../../services/skills/types';
@@ -15,6 +15,7 @@ import { BrowseSkillCard, InstalledSkillCard } from './SkillCards';
 import { AddSkillModal, SkillSetupModal } from './SkillModals';
 import { AppIconButton } from '../../components/navigation/AppIconButton';
 import { AppTabButton } from '../../components/navigation/AppTabButton';
+import { BackIcon } from '../../components/navigation/DirectionalIcons';
 import type {
   SkillEligibilityContext,
   SkillsScreenPalette,
@@ -134,7 +135,7 @@ export function SkillsScreenView({
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <AppIconButton onPress={handleBack} label={t('common.back')} testID="skills-back">
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </AppIconButton>
         <Text style={styles.headerTitle}>{t('skills.title')}</Text>
         <AppIconButton

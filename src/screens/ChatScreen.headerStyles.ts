@@ -84,7 +84,7 @@ export const createChatHeaderStyles = (colors: AppPalette) =>
       minHeight: 52,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingLeft: 8,
+      paddingStart: 8,
     },
     conversationMenuTitle: {
       flex: 1,

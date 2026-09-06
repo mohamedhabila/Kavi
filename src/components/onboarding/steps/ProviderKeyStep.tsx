@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ChevronRight, ExternalLink, Key, Server, Settings2 } from 'lucide-react-native';
+import { ExternalLink, Key, Server, Settings2 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { buildLocalModelDisclosureSentence } from '../../../services/localLlm/modelDisclosure';
 import { LocalModelDownloadPanel } from '../../localLlm/LocalModelDownloadPanel';
 import { useOnboardingWizardContext } from '../OnboardingWizardContext';
+import { ForwardChevronIcon } from '../../navigation/DirectionalIcons';
 
 export function ProviderKeyStep() {
   const [showAdvancedConnection, setShowAdvancedConnection] = useState(false);
@@ -239,7 +240,7 @@ export function ProviderKeyStep() {
           accessibilityRole="button"
           accessibilityLabel={t('onboarding.skipProvider')}
         >
-          <ChevronRight size={16} color={colors.primary} />
+          <ForwardChevronIcon size={16} color={colors.primary} />
           <Text style={styles.secondaryBtnText}>{t('onboarding.skipProvider')}</Text>
         </TouchableOpacity>
 

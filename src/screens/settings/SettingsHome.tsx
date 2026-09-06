@@ -3,7 +3,6 @@ import {
   Bot,
   Brain,
   BrainCircuit,
-  ChevronRight,
   Languages,
   MonitorCog,
   Search,
@@ -17,6 +16,7 @@ import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-nativ
 
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { SettingsDestination } from './settingsDestination';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 
@@ -242,7 +242,7 @@ export const SettingsHome: React.FC<SettingsHomeProps> = ({
                     </View>
                     <Text style={styles.rowDescription}>{item.description}</Text>
                   </View>
-                  <ChevronRight size={18} color={colors.textTertiary} />
+                  <ForwardChevronIcon size={18} color={colors.textTertiary} />
                 </TouchableOpacity>
               );
             })}
@@ -270,8 +270,8 @@ const createStyles = (colors: AppPalette) =>
     },
     searchWrap: {
       minHeight: 48,
-      paddingLeft: 14,
-      paddingRight: 4,
+      paddingStart: 14,
+      paddingEnd: 4,
       flexDirection: 'row',
       alignItems: 'center',
       borderWidth: 1,

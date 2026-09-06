@@ -124,7 +124,7 @@ export const createOnboardingWizardStyles = (colors: AppPalette) =>
     },
     featureList: {
       alignSelf: 'flex-start',
-      marginLeft: 20,
+      marginStart: 20,
       marginBottom: 32,
     },
     featureItem: {

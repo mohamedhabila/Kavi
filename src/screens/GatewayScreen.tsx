@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Radio, Wifi, WifiOff, RefreshCw, Copy } from 'lucide-react-native';
+import { Radio, Wifi, WifiOff, RefreshCw, Copy } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 import {
@@ -27,6 +27,7 @@ import { emitGatewayEvent } from '../services/events/bus';
 import * as Clipboard from 'expo-clipboard';
 import { useBackToChat } from '../navigation/useBackToChat';
 import { extractTechnicalErrorMessage, showLocalizedErrorAlert } from '../utils/errorAlert';
+import { BackIcon } from '../components/navigation/DirectionalIcons';
 
 export const GatewayScreen: React.FC = () => {
   const handleBack = useBackToChat();
@@ -159,7 +160,7 @@ export const GatewayScreen: React.FC = () => {
           onPress={handleBack}
           style={styles.headerSide}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('gateway.title')}</Text>
         <View style={styles.headerSide} />

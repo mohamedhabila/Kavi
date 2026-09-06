@@ -124,14 +124,14 @@ export const createActivityFeedStyles = (colors: AppPalette) =>
     },
     metadataText: { color: colors.textTertiary, fontSize: 12, lineHeight: 16 },
     nextOccurrence: { color: colors.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 4 },
-    rowChevron: { alignSelf: 'center', marginLeft: 2 },
+    rowChevron: { alignSelf: 'center', marginStart: 2 },
     artifactAction: {
       width: 48,
       minHeight: 88,
       alignItems: 'center',
       justifyContent: 'center',
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderLeftColor: colors.border,
+      borderStartWidth: StyleSheet.hairlineWidth,
+      borderStartColor: colors.border,
     },
     emptyState: {
       flex: 1,

@@ -1,7 +1,8 @@
-import { Brain, ChevronDown, ChevronRight, Image, Link2 } from 'lucide-react-native';
+import { Brain, Image, Link2 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
+import { ExpandCollapseChevronIcon } from '../../components/navigation/DirectionalIcons';
 import type { AppPalette } from '../../theme/useAppTheme';
 
 type TranslationFn = (key: string, params?: any) => string;
@@ -171,11 +172,7 @@ export const SettingsAssistantBehaviorControls: React.FC<
           {t(showAdvanced ? 'settings.hideAdvancedOptions' : 'settings.showAdvancedOptions')}
         </Text>
       </View>
-      {showAdvanced ? (
-        <ChevronDown size={18} color={colors.textSecondary} />
-      ) : (
-        <ChevronRight size={18} color={colors.textSecondary} />
-      )}
+      <ExpandCollapseChevronIcon expanded={showAdvanced} size={18} color={colors.textSecondary} />
     </TouchableOpacity>
 
     {showAdvanced ? (

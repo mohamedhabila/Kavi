@@ -97,7 +97,7 @@ export function createSettingsRemoteConfigModalStyles(colors: AppPalette): {
     },
     horizontalChipRow: {
       gap: 8,
-      paddingRight: 4,
+      paddingEnd: 4,
     },
     optionChip: {
       minHeight: 48,

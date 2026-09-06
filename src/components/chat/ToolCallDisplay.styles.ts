@@ -70,8 +70,8 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
       gap: 3,
       alignSelf: 'stretch',
       paddingHorizontal: 10,
-      borderLeftWidth: 1,
-      borderLeftColor: colors.border,
+      borderStartWidth: 1,
+      borderStartColor: colors.border,
       backgroundColor: colors.primarySoft,
     },
     viewResultBtnText: {
@@ -179,7 +179,7 @@ export const createToolCallDisplayStyles = (colors: AppPalette) =>
       color: colors.text,
       fontSize: 12,
       flex: 1,
-      paddingRight: 12,
+      paddingEnd: 12,
     },
     pollOptionVotes: {
       color: colors.textSecondary,

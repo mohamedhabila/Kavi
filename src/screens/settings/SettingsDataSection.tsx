@@ -1,4 +1,4 @@
-import { Brain, ChevronRight, ShieldCheck, Trash2 } from 'lucide-react-native';
+import { Brain, ShieldCheck, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -8,6 +8,7 @@ import type { CompactionSummarizerMode } from '../../types/settings';
 import type { ConsolidationStatusSnapshot } from '../../services/memory/consolidationStatus';
 import type { MemoryConsolidationMode } from '../../services/memory/memoryConsolidationMode';
 import { consolidationTierLabel } from '../memory/consolidationStatusLabel';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -263,7 +264,7 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
         <View style={styles.featureContent}>
           <Text style={styles.switchLabel}>{t('settings.manageMemory')}</Text>
         </View>
-        <ChevronRight size={18} color={colors.textTertiary} />
+        <ForwardChevronIcon size={18} color={colors.textTertiary} />
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -277,7 +278,7 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
           <Text style={styles.switchLabel}>{t('approvalHistory.permissions.settingsTitle')}</Text>
           <Text style={styles.featureHint}>{t('approvalHistory.permissions.settingsHint')}</Text>
         </View>
-        <ChevronRight size={18} color={colors.textTertiary} />
+        <ForwardChevronIcon size={18} color={colors.textTertiary} />
       </TouchableOpacity>
 
       <TouchableOpacity

@@ -13,8 +13,6 @@ import {
 import {
   ArrowDownAZ,
   CalendarClock,
-  ChevronLeft,
-  ChevronRight,
   File as FileIcon,
   Folder,
   RefreshCw,
@@ -36,6 +34,7 @@ import {
   type ConversationFileSort,
 } from './conversationFilesPresentation';
 import { getConversationFileTypeLabel } from './filePresentation';
+import { BackChevronIcon, ForwardChevronIcon } from '../navigation/DirectionalIcons';
 
 type DirectoryStatus = 'loading' | 'ready' | 'error';
 
@@ -160,7 +159,7 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
           testID={currentPath ? 'conversation-files-up' : 'conversation-files-close'}
         >
           {currentPath || presentation === 'screen' ? (
-            <ChevronLeft size={24} color={colors.text} />
+            <BackChevronIcon size={24} color={colors.text} />
           ) : (
             <X size={24} color={colors.text} />
           )}
@@ -353,7 +352,7 @@ export const ConversationFilesDirectory: React.FC<ConversationFilesDirectoryProp
                 </View>
               </TouchableOpacity>
               {item.isDirectory ? (
-                <ChevronRight size={18} color={colors.textTertiary} />
+                <ForwardChevronIcon size={18} color={colors.textTertiary} />
               ) : (
                 <TouchableOpacity
                   accessibilityLabel={t('conversationFiles.shareFileLabel', {

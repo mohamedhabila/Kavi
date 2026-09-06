@@ -10,9 +10,10 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, X } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 
 import { useAppTheme } from '../../theme/useAppTheme';
+import { BackIcon } from '../../components/navigation/DirectionalIcons';
 
 export type ConfigEditorModalShellStyles = {
   container: StyleProp<ViewStyle>;
@@ -62,7 +63,7 @@ export const ConfigEditorModal: React.FC<ConfigEditorModalProps> = ({
             accessibilityLabel={closeAccessibilityLabel}
           >
             {closeIcon === 'back' ? (
-              <ArrowLeft size={24} color={colors.text} />
+              <BackIcon size={24} color={colors.text} />
             ) : (
               <X size={24} color={colors.text} />
             )}

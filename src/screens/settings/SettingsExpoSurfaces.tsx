@@ -1,10 +1,11 @@
-import { ChevronRight, CloudSun, Globe, Plus } from 'lucide-react-native';
+import { CloudSun, Globe, Plus } from 'lucide-react-native';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 
 import { buildExpoProjectSurfaces } from '../../features/expo/projectSurfaces';
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { ExpoAccountConfig, ExpoProjectConfig, SshTargetConfig } from '../../types/remote';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -73,7 +74,7 @@ export const SettingsExpoSurfaces: React.FC<SettingsExpoSurfacesProps> = ({
                 : `Projects synced · ${account.syncedProjectCount || 0}`}
             </Text>
           </View>
-          <ChevronRight size={18} color={colors.textTertiary} />
+          <ForwardChevronIcon size={18} color={colors.textTertiary} />
         </TouchableOpacity>
       ))}
 
@@ -113,7 +114,7 @@ export const SettingsExpoSurfaces: React.FC<SettingsExpoSurfacesProps> = ({
             </Text>
             {surface.webUrl ? <Text style={styles.listItemSubtitle}>{surface.webUrl}</Text> : null}
           </View>
-          <ChevronRight size={18} color={colors.textTertiary} />
+          <ForwardChevronIcon size={18} color={colors.textTertiary} />
         </TouchableOpacity>
       ))}
 

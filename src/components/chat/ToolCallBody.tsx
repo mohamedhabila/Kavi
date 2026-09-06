@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { ChevronDown, ChevronRight, ShieldCheck } from 'lucide-react-native';
+import { ShieldCheck } from 'lucide-react-native';
+import { ExpandCollapseChevronIcon } from '../navigation/DirectionalIcons';
 import type { ToolCall } from '../../types/message';
 import {
   formatRedactedToolDetail,
@@ -81,11 +82,7 @@ export const ToolCallBody: React.FC<ToolCallBodyProps> = ({ toolCall, styles, ic
       >
         <ShieldCheck size={17} color={iconColor} />
         <Text style={styles.technicalTitle}>{t('toolCall.technicalDetails')}</Text>
-        {technicalExpanded ? (
-          <ChevronDown size={18} color={iconColor} />
-        ) : (
-          <ChevronRight size={18} color={iconColor} />
-        )}
+        <ExpandCollapseChevronIcon expanded={technicalExpanded} size={18} color={iconColor} />
       </TouchableOpacity>
 
       {technicalExpanded ? (

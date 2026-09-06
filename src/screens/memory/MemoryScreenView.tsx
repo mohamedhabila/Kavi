@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { ArrowLeft, Brain, Compass, RefreshCw, Settings2 } from 'lucide-react-native';
+import { Brain, Compass, RefreshCw, Settings2 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FactsSection } from './FactsSection';
@@ -8,6 +8,7 @@ import { OverviewSection } from './OverviewSection';
 import { AdvancedSection } from './AdvancedSection';
 import { MemoryCorrectionModal } from './MemoryCorrectionModal';
 import type { MemoryFactManagementController } from './useMemoryFactManagement';
+import { BackIcon } from '../../components/navigation/DirectionalIcons';
 import type {
   MemoryDiagnostics,
   MemoryEpisodeRow,
@@ -89,7 +90,7 @@ export function MemoryScreenView({
           onPress={handleBack}
           style={styles.headerButton}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{t('memory.title')}</Text>
         <View style={styles.headerActions}>

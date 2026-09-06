@@ -1,4 +1,4 @@
-import { ChevronRight, Plus, ShieldCheck } from 'lucide-react-native';
+import { Plus, ShieldCheck } from 'lucide-react-native';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 
@@ -6,6 +6,7 @@ import { getBrowserProviderLabel } from '../../services/browser/providers/labels
 import { getBrowserProviderReadiness } from '../../services/browser/providers/readiness';
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { BrowserProviderConfig } from '../../types/remote';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -63,7 +64,7 @@ export const SettingsBrowserSurfaces: React.FC<SettingsBrowserSurfacesProps> = (
               : t('remoteWork.statusSetupRequired')}
           </Text>
         </View>
-        <ChevronRight size={18} color={colors.textTertiary} />
+        <ForwardChevronIcon size={18} color={colors.textTertiary} />
       </TouchableOpacity>
     ))}
 

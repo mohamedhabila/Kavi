@@ -169,7 +169,7 @@ export const createRemoteWorkScreenWorkspaceStyleFragments = (colors: AppPalette
   },
   workspaceSelectorRail: {
     gap: 10,
-    paddingRight: 4,
+    paddingEnd: 4,
   },
   workspaceSelectorCard: {
     width: 236,

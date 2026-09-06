@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Cpu, Eye, EyeOff, Trash2 } from 'lucide-react-native';
+import { Cpu, Eye, EyeOff, Trash2 } from 'lucide-react-native';
 
 import { CapabilityGate, type CapabilityGateState } from '../../../components/CapabilityGate';
 import type {
@@ -15,6 +15,7 @@ import type {
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { AppPalette } from '../../../theme/useAppTheme';
 import { SettingsLocalModelControls } from './SettingsLocalModelControls';
+import { BackIcon } from '../../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -58,7 +59,7 @@ const SettingsEditorFrame: React.FC<SettingsEditorFrameProps> = ({
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{title}</Text>
         <TouchableOpacity

@@ -235,7 +235,7 @@ const createStyles = (colors: AppPalette, isUser: boolean, attachmentViewportWid
     content: {
       gap: 10,
       paddingVertical: 2,
-      paddingRight: 8,
+      paddingEnd: 8,
     },
     singleContent: {
       alignItems: isUser ? 'flex-end' : 'flex-start',

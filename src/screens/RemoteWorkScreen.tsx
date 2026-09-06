@@ -3,7 +3,7 @@ import { ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useShallow } from 'zustand/react/shallow';
-import { ArrowLeft, ShieldCheck } from 'lucide-react-native';
+import { ShieldCheck } from 'lucide-react-native';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { RemoteWorkExpoWorkflowPromptModal } from './remoteWork/RemoteWorkExpoWorkflowPromptModal';
 import { RemoteWorkWorkspaceHubSection } from './remoteWork/RemoteWorkWorkspaceHubSection';
@@ -49,6 +49,7 @@ import { useRemoteWorkRuntimeActions } from './remoteWork/useRemoteWorkRuntimeAc
 import { useRemoteWorkSshSessionFlow } from './remoteWork/useRemoteWorkSshSessionFlow';
 import { createRemoteWorkScreenStyles } from './remoteWork/remoteWorkScreenStyles';
 import { RemoteWorkSetupGuide } from './remoteWork/RemoteWorkSetupGuide';
+import { BackIcon } from '../components/navigation/DirectionalIcons';
 
 // Lazy-load WebView to prevent crash when the native module is missing
 let WebView: any = null;
@@ -265,7 +266,7 @@ const RemoteWorkScreenInner: React.FC = () => {
           accessibilityLabel={t('common.back')}
           style={styles.headerButton}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('remoteWork.title')}</Text>
         <TouchableOpacity

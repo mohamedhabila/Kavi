@@ -114,7 +114,7 @@ export const createAgentWorkflowSummaryStyles = (colors: AppPalette) =>
     },
     traceEventRow: {
       gap: 1,
-      paddingLeft: 8,
+      paddingStart: 8,
     },
     traceEventType: {
       color: colors.textSecondary,

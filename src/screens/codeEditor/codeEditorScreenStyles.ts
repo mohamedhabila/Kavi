@@ -101,7 +101,7 @@ export const createCodeEditorScreenStyles = (colors: AppPalette) =>
       height: 8,
       borderRadius: 4,
       backgroundColor: colors.warning,
-      marginLeft: 4,
+      marginStart: 4,
     },
     headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     headerBtn: {

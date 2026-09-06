@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft,
   Edit3,
   Eye,
   FileCode,
@@ -23,6 +22,7 @@ import {
 
 import { CodeEditorWebView } from '../../components/editor/CodeEditorWebView';
 import { FileBrowser } from '../../components/files/FileBrowser';
+import { BackIcon } from '../../components/navigation/DirectionalIcons';
 import type {
   CodeEditorFileEntry,
   CodeEditorLanguage,
@@ -217,7 +217,7 @@ export function CodeEditorScreenView({
           onPress={handleBack}
           style={styles.headerBtn}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <FileCode size={16} color={colors.textSecondary} />

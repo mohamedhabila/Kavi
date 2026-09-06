@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   BarChart3,
-  ChevronRight,
   FolderOpen,
   GitBranch,
   Menu,
@@ -17,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStyles } from '../ChatScreen.styles';
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { Conversation } from '../../types/conversation';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -67,7 +67,7 @@ function ConversationMenuRow({ Icon, danger, label, onPress, props, testID }: Me
       >
         {label}
       </Text>
-      <ChevronRight size={18} color={props.colors.textTertiary} />
+      <ForwardChevronIcon size={18} color={props.colors.textTertiary} />
     </Pressable>
   );
 }

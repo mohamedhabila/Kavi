@@ -1,10 +1,11 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ArrowLeft, Menu } from 'lucide-react-native';
+import { Menu } from 'lucide-react-native';
 import { useAppTheme } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 import { getRouteReturnTarget, useBackToChat } from '../../navigation/useBackToChat';
+import { BackIcon } from './DirectionalIcons';
 
 type RouteLeadingButtonProps = {
   style?: StyleProp<ViewStyle>;
@@ -29,7 +30,7 @@ export const RouteLeadingButton: React.FC<RouteLeadingButtonProps> = ({ style, t
       testID={testID ?? (hasParent ? 'route-leading-back' : 'route-leading-menu')}
     >
       {hasParent ? (
-        <ArrowLeft size={24} color={colors.text} />
+        <BackIcon size={24} color={colors.text} />
       ) : (
         <Menu size={24} color={colors.text} />
       )}

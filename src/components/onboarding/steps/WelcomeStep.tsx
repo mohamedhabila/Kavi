@@ -1,9 +1,10 @@
 import React from 'react';
 import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { Check, ChevronRight } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOnboardingWizardContext } from '../OnboardingWizardContext';
+import { ForwardChevronIcon } from '../../navigation/DirectionalIcons';
 
 const ONBOARDING_BRAND_ICON = require('../../../../assets/icon.png');
 
@@ -54,7 +55,7 @@ export function WelcomeStep() {
           accessibilityLabel={t('onboarding.getStarted')}
         >
           <Text style={styles.primaryBtnText}>{t('onboarding.getStarted')}</Text>
-          <ChevronRight size={18} color={colors.onPrimary} />
+          <ForwardChevronIcon size={18} color={colors.onPrimary} />
         </TouchableOpacity>
 
         <TouchableOpacity

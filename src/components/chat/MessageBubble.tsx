@@ -110,8 +110,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
     };
 
     return (
-      <View style={[styles.wrapper, styles.userWrapper]}>
-        <View style={[styles.bubble, styles.userBubble]}>
+      <View style={[styles.wrapper, styles.userWrapper]} testID="message-user-wrapper">
+        <View style={[styles.bubble, styles.userBubble]} testID="message-user-bubble">
           <View style={styles.contentStack}>
             {message.attachments?.length ? (
               <MessageAttachments
@@ -183,7 +183,13 @@ const createStyles = (colors: AppPalette) =>
     },
     userBubble: {
       backgroundColor: colors.userBubble,
-      borderBottomRightRadius: 4,
+      // Logical (not `borderBottomRightRadius`): the "tail" corner must
+      // stay on the trailing edge of the bubble, which Yoga resolves to
+      // the physical left in RTL — this bubble already sits on the
+      // trailing edge via `userWrapper`'s `alignItems: 'flex-end'`, which
+      // Yoga mirrors the same way (see FlexDirection.h's
+      // `resolveCrossDirection`), so both stay in sync automatically.
+      borderBottomEndRadius: 4,
     },
     contentStack: {
       gap: 10,

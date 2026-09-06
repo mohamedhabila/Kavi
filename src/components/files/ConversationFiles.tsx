@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { File as FileIcon, ChevronLeft, Copy, Share2 } from 'lucide-react-native';
+import { File as FileIcon, Copy, Share2 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme } from '../../theme/useAppTheme';
@@ -29,6 +29,7 @@ import {
   type ConversationFileSort,
 } from './conversationFilesPresentation';
 import { getConversationFileTypeLabel } from './filePresentation';
+import { BackChevronIcon } from '../navigation/DirectionalIcons';
 
 interface ConversationFilesProps {
   visible: boolean;
@@ -464,7 +465,7 @@ export const ConversationFiles: React.FC<ConversationFilesProps> = ({
               style={styles.headerIconButton}
               testID="conversation-file-back"
             >
-              <ChevronLeft size={24} color={colors.text} />
+              <BackChevronIcon size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={styles.headerTitleWrap}>
               <Text style={styles.headerTitle} numberOfLines={1}>

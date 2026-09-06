@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ArrowRight, Sparkles, X } from 'lucide-react-native';
+import { Sparkles, X } from 'lucide-react-native';
+import { ForwardArrowIcon } from '../navigation/DirectionalIcons';
 import type { Conversation } from '../../types/conversation';
 import {
   isStoreHydrated,
@@ -125,7 +126,7 @@ export const ProactiveTaskSuggestionBanner: React.FC<ProactiveTaskSuggestionBann
             testID="proactive-task-suggestion-continue"
           >
             <Text style={styles.continueText}>{t('chat.proactiveTaskSuggestionContinue')}</Text>
-            <ArrowRight size={14} color={colors.onPrimary} />
+            <ForwardArrowIcon size={14} color={colors.onPrimary} />
           </TouchableOpacity>
         </View>
       </View>

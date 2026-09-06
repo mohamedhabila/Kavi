@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { ExpandCollapseChevronIcon } from '../../components/navigation/DirectionalIcons';
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import type { AppPalette } from '../../theme/useAppTheme';
@@ -37,11 +37,7 @@ export const SettingsCollapsibleSection: React.FC<SettingsCollapsibleSectionProp
         accessibilityState={{ expanded: open }}
       >
         <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{title}</Text>
-        {open ? (
-          <ChevronDown size={18} color={colors.textSecondary} />
-        ) : (
-          <ChevronRight size={18} color={colors.textSecondary} />
-        )}
+        <ExpandCollapseChevronIcon expanded={open} size={18} color={colors.textSecondary} />
       </TouchableOpacity>
       {open && <View style={{ paddingTop: 4 }}>{children}</View>}
     </View>

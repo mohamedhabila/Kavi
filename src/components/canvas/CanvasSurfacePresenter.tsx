@@ -450,7 +450,7 @@ const createStyles = (colors: AppPalette) =>
       color: colors.text,
       fontSize: 17,
       fontWeight: '700',
-      marginRight: 16,
+      marginEnd: 16,
     },
     closeLink: {
       color: colors.primary,

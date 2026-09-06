@@ -2,11 +2,12 @@ import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useNavigation } from '@react-navigation/native';
-import { ChevronRight, Sparkles, type LucideIcon } from 'lucide-react-native';
+import { Sparkles, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 import { RouteLeadingButton } from './RouteLeadingButton';
+import { ForwardChevronIcon } from './DirectionalIcons';
 
 export type NavigationHubItem = {
   id: string;
@@ -94,7 +95,7 @@ export const NavigationHubScreen: React.FC<NavigationHubScreenProps> = ({
                         <Text style={styles.badgeText}>{item.badge}</Text>
                       </View>
                     ) : null}
-                    <ChevronRight size={18} color={colors.textTertiary} />
+                    <ForwardChevronIcon size={18} color={colors.textTertiary} />
                   </TouchableOpacity>
                 );
               })}

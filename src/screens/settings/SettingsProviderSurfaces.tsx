@@ -1,4 +1,4 @@
-import { ChevronRight, Cpu, Globe, Plus } from 'lucide-react-native';
+import { Cpu, Globe, Plus } from 'lucide-react-native';
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
@@ -10,6 +10,7 @@ import {
 } from '../../services/llm/support/providerReadiness';
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { LlmProviderConfig } from '../../types/provider';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -153,7 +154,7 @@ export const SettingsProviderSurfaces: React.FC<SettingsProviderSurfacesProps> =
               </Text>
             ) : null}
           </View>
-          <ChevronRight size={18} color={colors.textTertiary} />
+          <ForwardChevronIcon size={18} color={colors.textTertiary} />
         </TouchableOpacity>
       );
     })}

@@ -14,8 +14,6 @@ import {
   View,
 } from 'react-native';
 import {
-  ArrowLeft,
-  ChevronRight,
   File as FileIcon,
   Folder,
   FolderOpen,
@@ -25,6 +23,7 @@ import {
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 import { AppIconButton } from '../navigation/AppIconButton';
+import { BackIcon, ForwardChevronIcon } from '../navigation/DirectionalIcons';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -186,7 +185,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             <Text style={styles.entryMeta}>{formatSize(item.size)}</Text>
           )}
         </View>
-        {item.isDirectory && <ChevronRight size={16} color={colors.textTertiary} />}
+        {item.isDirectory && <ForwardChevronIcon size={16} color={colors.textTertiary} />}
       </TouchableOpacity>
     ),
     [colors, handleNavigate, handleLongPress, styles, t],
@@ -205,7 +204,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           style={styles.navBtn}
           testID="file-browser-up"
         >
-          <ArrowLeft size={16} color={canGoUp ? colors.primary : colors.textTertiary} />
+          <BackIcon size={16} color={canGoUp ? colors.primary : colors.textTertiary} />
         </AppIconButton>
         <FlatList
           horizontal

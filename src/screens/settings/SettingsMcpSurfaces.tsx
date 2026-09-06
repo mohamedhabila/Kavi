@@ -1,10 +1,11 @@
-import { ChevronRight, Plus, Server } from 'lucide-react-native';
+import { Plus, Server } from 'lucide-react-native';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 
 import { normalizeMcpServerConfigMetadata } from '../../services/mcp/metadata';
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { McpServerConfig } from '../../types/remote';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -58,7 +59,7 @@ export const SettingsMcpSurfaces: React.FC<SettingsMcpSurfacesProps> = ({
               {getMcpMetadataChips(normalizedServer).join(' · ')}
             </Text>
           </View>
-          <ChevronRight size={18} color={colors.textTertiary} />
+          <ForwardChevronIcon size={18} color={colors.textTertiary} />
         </TouchableOpacity>
       );
     })}

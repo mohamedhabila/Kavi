@@ -1,7 +1,8 @@
-import { Check, ChevronRight, Languages, Monitor, Moon, Smartphone, Sun } from 'lucide-react-native';
+import { Check, Languages, Monitor, Moon, Smartphone, Sun } from 'lucide-react-native';
 import React, { useCallback, useSyncExternalStore } from 'react';
 import { Modal, Text, TouchableOpacity, View } from 'react-native';
 
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 import { getDeviceLocaleTag } from '../../i18n/deviceLocale';
 import { i18n, SYSTEM_LOCALE_PREFERENCE } from '../../i18n/manager';
 import { resolveDeviceLocale } from '../../i18n/registry';
@@ -107,7 +108,7 @@ export const SettingsAppearanceControls: React.FC<SettingsAppearanceControlsProp
           </Text>
           <Text style={styles.listItemSubtitle}>{t('settings.languageHint')}</Text>
         </View>
-        <ChevronRight size={18} color={colors.textTertiary} />
+        <ForwardChevronIcon size={18} color={colors.textTertiary} />
       </TouchableOpacity>
 
       <Modal
@@ -119,6 +120,7 @@ export const SettingsAppearanceControls: React.FC<SettingsAppearanceControlsProp
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{t('settings.language')}</Text>
+            <Text style={styles.listItemSubtitle}>{t('settings.languageRestartHint')}</Text>
             <TouchableOpacity
               accessibilityLabel={t('settings.languageFollowSystem')}
               accessibilityRole="button"

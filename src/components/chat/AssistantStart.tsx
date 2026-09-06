@@ -4,7 +4,6 @@ import {
   Brain,
   CalendarClock,
   CheckCircle2,
-  ChevronRight,
   FilePlus2,
   History,
   MessageCircleQuestion,
@@ -16,6 +15,7 @@ import {
 
 import { useTranslation } from '../../i18n/useTranslation';
 import { type AppPalette, useAppTheme } from '../../theme/useAppTheme';
+import { ForwardChevronIcon } from '../navigation/DirectionalIcons';
 
 type RecentConversation = {
   id: string;
@@ -101,7 +101,7 @@ export function AssistantStart({
             accessibilityLabel={t('chat.providerSetupAction')}
           >
             <Text style={styles.primaryButtonText}>{t('chat.providerSetupAction')}</Text>
-            <ChevronRight size={18} color={colors.onPrimary} />
+            <ForwardChevronIcon size={18} color={colors.onPrimary} />
           </TouchableOpacity>
         </View>
       ) : (
@@ -130,7 +130,7 @@ export function AssistantStart({
                     <Icon size={19} color={colors.primary} />
                   </View>
                   <Text style={styles.starterText}>{title}</Text>
-                  <ChevronRight size={17} color={colors.textTertiary} />
+                  <ForwardChevronIcon size={17} color={colors.textTertiary} />
                 </TouchableOpacity>
               );
             })}
@@ -155,7 +155,7 @@ export function AssistantStart({
               {recentConversation.title}
             </Text>
           </View>
-          <ChevronRight size={17} color={colors.textTertiary} />
+          <ForwardChevronIcon size={17} color={colors.textTertiary} />
         </TouchableOpacity>
       ) : null}
     </View>

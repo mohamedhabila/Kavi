@@ -45,8 +45,8 @@ export const createConversationFilesStyles = (colors: AppPalette) =>
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.inputBackground,
-      paddingLeft: 12,
-      paddingRight: 4,
+      paddingStart: 12,
+      paddingEnd: 4,
     },
     searchInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 15, paddingVertical: 10 },
     searchClearButton: {
@@ -57,7 +57,7 @@ export const createConversationFilesStyles = (colors: AppPalette) =>
     },
     filterToolbar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     filterScroll: { flex: 1, minWidth: 0 },
-    filterContent: { gap: 8, paddingRight: 4 },
+    filterContent: { gap: 8, paddingEnd: 4 },
     filterChip: {
       minHeight: 48,
       justifyContent: 'center',

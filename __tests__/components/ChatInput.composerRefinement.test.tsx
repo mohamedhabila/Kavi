@@ -86,7 +86,9 @@ describe('ChatInput composer refinement', () => {
       expect.objectContaining({
         minHeight: 56,
         backgroundColor: '#030',
-        borderLeftColor: '#0f0',
+        // Logical property (RTL-safe): the selected-row accent bar tracks
+        // the reading-start edge, not a hardcoded physical left.
+        borderStartColor: '#0f0',
       }),
     );
     expect(selectedCommand.props.accessibilityState).toEqual({

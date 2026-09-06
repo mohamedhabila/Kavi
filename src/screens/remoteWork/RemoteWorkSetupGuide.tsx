@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ChevronRight, Cloud, Globe2, Server } from 'lucide-react-native';
+import { Cloud, Globe2, Server } from 'lucide-react-native';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type RemoteWorkSetupGuideProps = {
   onCreateBrowser: () => void;
@@ -67,7 +68,7 @@ export const RemoteWorkSetupGuide = React.memo(function RemoteWorkSetupGuide(
                 <Text style={styles.choiceTitle}>{choice.title}</Text>
                 <Text style={styles.choiceHint}>{choice.hint}</Text>
               </View>
-              <ChevronRight color={colors.textTertiary} size={19} />
+              <ForwardChevronIcon color={colors.textTertiary} size={19} />
             </TouchableOpacity>
           );
         })}

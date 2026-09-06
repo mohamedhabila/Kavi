@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { I18nManager, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   Archive,
   Code2,
@@ -303,7 +303,9 @@ const createStyles = (colors: AppPalette, isUser: boolean, width: number) =>
       flex: 1,
       color: isUser ? 'rgba(255,255,255,0.8)' : colors.textSecondary,
       fontSize: 11,
-      textAlign: 'right',
+      // Not `textAlign: 'auto'`: the intent is "trailing edge of this row",
+      // which `auto` (content-script-based) cannot express.
+      textAlign: I18nManager.isRTL ? 'left' : 'right',
     },
     imagePreview: {
       borderRadius: 11,

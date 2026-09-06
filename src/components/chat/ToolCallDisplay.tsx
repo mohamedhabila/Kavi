@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { ChevronDown, ChevronRight, Eye } from 'lucide-react-native';
+import { Eye } from 'lucide-react-native';
+import { ExpandCollapseChevronIcon } from '../navigation/DirectionalIcons';
 import type { ToolCall } from '../../types/message';
 import { useAppTheme } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
@@ -171,11 +172,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({
             <Text style={styles.statusText} numberOfLines={1}>
               {completedDurationText ? `${statusText} · ${completedDurationText}` : statusText}
             </Text>
-            {expanded ? (
-              <ChevronDown size={18} color={colors.textTertiary} />
-            ) : (
-              <ChevronRight size={18} color={colors.textTertiary} />
-            )}
+            <ExpandCollapseChevronIcon expanded={expanded} size={18} color={colors.textTertiary} />
           </View>
         </TouchableOpacity>
         {fileToolPath && onViewFile ? (

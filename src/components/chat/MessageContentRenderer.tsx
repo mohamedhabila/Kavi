@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { ExpandCollapseChevronIcon } from '../navigation/DirectionalIcons';
 import { useMarkdown, type MarkedStyles } from 'react-native-marked';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
@@ -81,11 +81,11 @@ const CollapsibleCodeBlock: React.FC<{
             {expanded ? t('chat.hideCode') : t('chat.showCode')}
           </Text>
         </View>
-        {expanded ? (
-          <ChevronDown size={14} color={isUser ? colors.onPrimary : colors.textSecondary} />
-        ) : (
-          <ChevronRight size={14} color={isUser ? colors.onPrimary : colors.textSecondary} />
-        )}
+        <ExpandCollapseChevronIcon
+          expanded={expanded}
+          size={14}
+          color={isUser ? colors.onPrimary : colors.textSecondary}
+        />
       </TouchableOpacity>
       {expanded ? (
         <ScrollView
@@ -134,10 +134,10 @@ export const MessageContentRenderer: React.FC<MessageContentRendererProps> = Rea
         h2: { color: isUser ? colors.onPrimary : colors.text, fontSize: 18, fontWeight: '600' },
         h3: { color: isUser ? colors.onPrimary : colors.text, fontSize: 16, fontWeight: '600' },
         blockquote: {
-          borderLeftWidth: 3,
-          borderLeftColor: isUser ? 'rgba(255,255,255,0.3)' : colors.subtleBorder,
-          paddingLeft: 10,
-          marginLeft: 0,
+          borderStartWidth: 3,
+          borderStartColor: isUser ? 'rgba(255,255,255,0.3)' : colors.subtleBorder,
+          paddingStart: 10,
+          marginStart: 0,
         },
         li: { color: isUser ? colors.onPrimary : colors.text },
         list: {

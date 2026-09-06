@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ArrowLeft, RefreshCw, Search, Server, Settings } from 'lucide-react-native';
+import { RefreshCw, Search, Server, Settings } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { McpHubEntry, McpHubInputSpec } from '../../services/mcp/registryClient';
@@ -11,6 +11,7 @@ import { McpInstallModal } from './McpInstallModal';
 import type { McpStatusPalette, McpStatusStyles, McpStatusTranslation } from './mcpStatusTypes';
 import { AppIconButton } from '../../components/navigation/AppIconButton';
 import { AppTabButton } from '../../components/navigation/AppTabButton';
+import { BackIcon } from '../../components/navigation/DirectionalIcons';
 
 type McpStatusScreenViewProps = {
   activeTab: 'installed' | 'browse';
@@ -93,7 +94,7 @@ export function McpStatusScreenView({
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <AppIconButton onPress={handleBack} label={t('common.back')} testID="mcp-status-back">
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </AppIconButton>
         <Text style={styles.headerTitle}>{t('mcpStatus.title')}</Text>
         <AppIconButton

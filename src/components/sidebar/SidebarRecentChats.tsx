@@ -74,8 +74,8 @@ const createStyles = (colors: AppPalette) =>
     },
     header: {
       minHeight: 40,
-      paddingLeft: 16,
-      paddingRight: 8,
+      paddingStart: 16,
+      paddingEnd: 8,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',

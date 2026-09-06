@@ -75,7 +75,7 @@ const createStyles = (colors: AppPalette) =>
     },
     item: {
       position: 'relative',
-      marginRight: 8,
+      marginEnd: 8,
     },
     imageThumb: {
       width: 60,
@@ -125,7 +125,7 @@ const createStyles = (colors: AppPalette) =>
     removeBtn: {
       position: 'absolute',
       top: -4,
-      right: -4,
+      end: -4,
       backgroundColor: colors.danger,
       borderRadius: 10,
       width: 20,

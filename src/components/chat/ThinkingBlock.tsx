@@ -4,7 +4,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ChevronDown, ChevronRight, Brain } from 'lucide-react-native';
+import { Brain } from 'lucide-react-native';
+import { ExpandCollapseChevronIcon } from '../navigation/DirectionalIcons';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 
@@ -118,11 +119,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
         >
           {thinkingLabel}
         </Text>
-        {expanded ? (
-          <ChevronDown size={14} color={colors.textTertiary} />
-        ) : (
-          <ChevronRight size={14} color={colors.textTertiary} />
-        )}
+        <ExpandCollapseChevronIcon expanded={expanded} size={14} color={colors.textTertiary} />
       </TouchableOpacity>
       {expanded && (
         <View style={styles.contentContainer}>
@@ -139,9 +136,9 @@ const createStyles = (colors: AppPalette) =>
   StyleSheet.create({
     container: {
       marginVertical: 4,
-      borderLeftWidth: 2,
-      borderLeftColor: colors.subtleBorder,
-      paddingLeft: 8,
+      borderStartWidth: 2,
+      borderStartColor: colors.subtleBorder,
+      paddingStart: 8,
       minWidth: 0,
       alignSelf: 'stretch',
     },

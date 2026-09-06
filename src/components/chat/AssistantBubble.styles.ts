@@ -22,7 +22,10 @@ export const createAssistantBubbleStyles = (colors: AppPalette) =>
       backgroundColor: colors.assistantBubble,
       borderWidth: 1,
       borderColor: colors.border,
-      borderBottomLeftRadius: 8,
+      // Logical (not `borderBottomLeftRadius`): the "tail" corner tracks
+      // the leading edge, matching `assistantWrapper`'s
+      // `alignItems: 'flex-start'`, which Yoga mirrors the same way in RTL.
+      borderBottomStartRadius: 8,
       minWidth: '78%',
       maxWidth: '96%',
       shadowColor: colors.mode === 'dark' ? '#000000' : colors.text,

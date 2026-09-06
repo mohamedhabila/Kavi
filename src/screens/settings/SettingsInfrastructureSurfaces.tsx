@@ -1,4 +1,4 @@
-import { ChevronRight, Cpu, Plus, Server } from 'lucide-react-native';
+import { Cpu, Plus, Server } from 'lucide-react-native';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 
@@ -14,6 +14,7 @@ import type {
   WorkspaceTargetConfig,
 } from '../../types/remote';
 import { SettingsBrowserSurfaces } from './SettingsBrowserSurfaces';
+import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -94,7 +95,7 @@ export const SettingsInfrastructureSurfaces: React.FC<SettingsInfrastructureSurf
             <Text style={styles.listItemSubtitle}>{target.trustedHostFingerprint}</Text>
           ) : null}
         </View>
-        <ChevronRight size={18} color={colors.textTertiary} />
+        <ForwardChevronIcon size={18} color={colors.textTertiary} />
       </TouchableOpacity>
     ))}
 
@@ -142,7 +143,7 @@ export const SettingsInfrastructureSurfaces: React.FC<SettingsInfrastructureSurf
             </Text>
           ) : null}
         </View>
-        <ChevronRight size={18} color={colors.textTertiary} />
+        <ForwardChevronIcon size={18} color={colors.textTertiary} />
       </TouchableOpacity>
     ))}
 

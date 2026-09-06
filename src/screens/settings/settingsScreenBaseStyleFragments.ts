@@ -216,7 +216,7 @@ export const createSettingsScreenBaseStyleFragments = (colors: AppPalette) => ({
     minHeight: 48,
     borderRadius: 16,
     backgroundColor: colors.primarySoft,
-    marginRight: 8,
+    marginEnd: 8,
   },
   presetChipActive: {
     backgroundColor: colors.primary,

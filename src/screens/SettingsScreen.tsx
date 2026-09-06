@@ -6,7 +6,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ArrowLeft } from 'lucide-react-native';
+
 import { useSettingsStore } from '../store/useSettingsStore';
 import { SettingsAssistantSection } from './settings/SettingsAssistantSection';
 import { SettingsDataSection } from './settings/SettingsDataSection';
@@ -51,6 +51,7 @@ import { useSettingsToolsFlow } from './settings/useSettingsToolsFlow';
 import { useSettingsThinkingAndLocale } from './settings/useSettingsThinkingAndLocale';
 import { useSettingsLocalRuntimeStatuses } from './settings/useSettingsLocalRuntimeStatuses';
 import { useSettingsRemoteConfigDraftHydration } from './settings/useSettingsRemoteConfigDraftHydration';
+import { BackIcon } from '../components/navigation/DirectionalIcons';
 
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -417,7 +418,7 @@ export const SettingsScreen: React.FC = () => {
               style={styles.headerAction}
               testID="settings-back"
             >
-              <ArrowLeft size={24} color={colors.text} />
+              <BackIcon size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{settingsTitle}</Text>
             <View style={styles.headerAction} />

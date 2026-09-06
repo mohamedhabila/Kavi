@@ -208,7 +208,7 @@ export const createRemoteWorkScreenOverviewStyleFragments = (colors: AppPalette)
   configSurfaceRow: {
     flexDirection: 'row',
     gap: 10,
-    paddingRight: 4,
+    paddingEnd: 4,
   },
   surfaceChip: {
     borderRadius: 999,

@@ -86,7 +86,7 @@ export const createModelSelectorStyles = (colors: AppPalette) =>
       backgroundColor: colors.surfaceAlt,
       borderRadius: 16,
       justifyContent: 'center',
-      marginRight: 8,
+      marginEnd: 8,
       minHeight: 44,
       paddingHorizontal: 14,
       paddingVertical: 8,
@@ -112,7 +112,7 @@ export const createModelSelectorStyles = (colors: AppPalette) =>
       marginBottom: 10,
       marginHorizontal: 16,
       minHeight: 48,
-      paddingLeft: 12,
+      paddingStart: 12,
     },
     searchInput: {
       color: colors.text,

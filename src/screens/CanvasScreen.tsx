@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { ArrowLeft, Layers, MessageSquare, Trash2, RefreshCw } from 'lucide-react-native';
+import { Layers, MessageSquare, Trash2, RefreshCw } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 import {
@@ -19,6 +19,7 @@ import {
 } from '../services/canvas/renderer';
 import type { CanvasSurface } from '../types/canvas';
 import { useBackToChat } from '../navigation/useBackToChat';
+import { BackIcon } from '../components/navigation/DirectionalIcons';
 
 function formatSurfaceDestination(url: string, maxLength = 56): string {
   try {
@@ -122,7 +123,7 @@ export const CanvasScreen: React.FC = () => {
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <BackIcon size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('canvas.title')}</Text>
         <TouchableOpacity
@@ -245,7 +246,7 @@ const createStyles = (colors: AppPalette) =>
       flex: 1,
       fontSize: 12,
       color: colors.textSecondary,
-      marginRight: 12,
+      marginEnd: 12,
     },
     openLink: {
       fontSize: 13,
@@ -271,7 +272,7 @@ const createStyles = (colors: AppPalette) =>
       fontSize: 17,
       fontWeight: '700',
       color: colors.text,
-      marginRight: 12,
+      marginEnd: 12,
     },
     closeLink: {
       fontSize: 14,
