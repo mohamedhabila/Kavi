@@ -155,6 +155,11 @@ export async function runBootOnce(
             reportedOrchestratorError = err;
           },
           onDone: () => {},
+          // `onUserMessageAttachmentsUpdated` is intentionally omitted: the boot prompt built
+          // above is a synthesized, attachment-less message with no `mediaUnderstandingEnabled`
+          // flag set, so `runMediaUnderstanding` never runs and a document-input refusal can
+          // never be discovered here. There is also no chat-store conversation for this ephemeral
+          // boot session — `outputText` is a local variable, not a persisted transcript.
         },
       );
 
